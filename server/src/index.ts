@@ -1,4 +1,7 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+import path from "path";
+// Load .env from the monorepo root regardless of which directory npm runs from
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 import express from "express";
 import session from "express-session";
 import cors from "cors";
