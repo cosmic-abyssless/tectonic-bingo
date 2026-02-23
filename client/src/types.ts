@@ -1,3 +1,59 @@
+export type BadgeCategory = 'demonic' | 'draconic' | 'spectral' | 'animalistic' | 'god_wars' | 'vampyric' | 'desert';
+
+export interface TileSideItem {
+  id: string;
+  itemName: string;
+  quantity: number;
+  optionsGroup: string | null;
+  sortOrder: number;
+}
+
+export interface TileWildcard {
+  id: string;
+  itemName: string;
+  description: string | null;
+  maxRedemptionsPerTeam: number;
+  applicableToSide: 'A' | 'B' | null;
+}
+
+export interface TileSide {
+  id: string;
+  side: 'A' | 'B';
+  points: number;
+  description: string;
+  requiresNoDuplicates: boolean;
+  allowsPreviouslyAcquired: boolean;
+  allowsPreLoad: boolean;
+  notes: string | null;
+  items: TileSideItem[];
+}
+
+export interface BoardTile {
+  id: string;
+  name: string;
+  badgeCategory: BadgeCategory;
+  boardRow: number;
+  boardCol: number;
+  totalPoints: number;
+  hasFreezePeriod: boolean;
+  freezeDurationMinutes: number;
+  sides: { A?: TileSide; B?: TileSide };
+  wildcards: TileWildcard[];
+}
+
+export interface BingoEvent {
+  id: string;
+  name: string;
+  startsAt: number;
+  endsAt: number;
+  potAmount: number | null;
+}
+
+export interface BoardResponse {
+  event: BingoEvent;
+  tiles: BoardTile[];
+}
+
 export interface DiscordUser {
   id: string;
   username: string;
