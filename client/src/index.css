@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-base: #0f172a;
+  --color-bg-card: #1e293b;
+  --color-bg-raised: #273548;
+}
