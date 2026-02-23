@@ -60,6 +60,12 @@ export interface BoardTile {
   wildcards: TileWildcard[];
 }
 
+export interface TeamInfo {
+  id: string;
+  name: string;
+  color: string | null;
+}
+
 export interface BingoEvent {
   id: string;
   name: string;

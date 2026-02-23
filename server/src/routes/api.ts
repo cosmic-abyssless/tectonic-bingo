@@ -135,12 +135,36 @@ router.get("/board", async (_req: Request, res: Response) => {
   res.json({ event: activeEvent, tiles: tilesWithDetails });
 });
 
+// GET /api/teams — list all teams for the active event
+router.get("/teams", requireAuth, async (_req: Request, res: Response) => {
+  const [event] = await db
+    .select()
+    .from(bingoEvents)
+    .where(eq(bingoEvents.isActive, true))
+    .limit(1);
+  const activeEvent = event ?? (await db.select().from(bingoEvents).limit(1))[0];
+  if (!activeEvent) {
+    res.status(404).json({ error: "No bingo event found" });
+    return;
+  }
+  const allTeams = await db
+    .select({ id: teams.id, name: teams.name, color: teams.color })
+    .from(teams)
+    .where(eq(teams.bingoEventId, activeEvent.id));
+  res.json({ teams: allTeams });
+});
+
 // GET /api/team/progress — points and per-tile progress for the user's team
+// Mods may pass ?viewAsTeam=<name> to inspect any team
 router.get("/team/progress", requireAuth, async (req: Request, res: Response) => {
   const user = req.user as DiscordUser | undefined;
-  const userTeamName = user?.team;
 
-  if (!userTeamName) {
+  // Resolve which team to look up
+  const viewAs = user?.isModerator && typeof req.query.viewAsTeam === "string"
+    ? req.query.viewAsTeam
+    : user?.team;
+
+  if (!viewAs) {
     res.status(403).json({ error: "You are not on a team" });
     return;
   }
@@ -159,7 +183,7 @@ router.get("/team/progress", requireAuth, async (req: Request, res: Response) =>
   const [team] = await db
     .select()
     .from(teams)
-    .where(and(eq(teams.bingoEventId, activeEvent.id), eq(teams.name, userTeamName)))
+    .where(and(eq(teams.bingoEventId, activeEvent.id), eq(teams.name, viewAs)))
     .limit(1);
 
   if (!team) {
@@ -191,9 +215,15 @@ router.get("/team/progress", requireAuth, async (req: Request, res: Response) =>
 });
 
 // GET /api/team/submissions — all submissions for the user's team
+// Mods may pass ?viewAsTeam=<name> to inspect any team
 router.get("/team/submissions", requireAuth, async (req: Request, res: Response) => {
   const user = req.user as DiscordUser | undefined;
-  if (!user?.team) {
+
+  const viewAs = user?.isModerator && typeof req.query.viewAsTeam === "string"
+    ? req.query.viewAsTeam
+    : user?.team;
+
+  if (!viewAs) {
     res.status(403).json({ error: "You are not on a team" });
     return;
   }
@@ -212,7 +242,7 @@ router.get("/team/submissions", requireAuth, async (req: Request, res: Response)
   const [team] = await db
     .select()
     .from(teams)
-    .where(and(eq(teams.bingoEventId, activeEvent.id), eq(teams.name, user.team)))
+    .where(and(eq(teams.bingoEventId, activeEvent.id), eq(teams.name, viewAs)))
     .limit(1);
   if (!team) {
     res.status(404).json({ error: "Team not found" });

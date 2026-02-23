@@ -33,7 +33,7 @@ function timeAgo(iso: string): string {
 interface Props {
   submissions: SubmissionSummary[];
   onClose: () => void;
-  onSubmit: () => void;
+  onSubmit?: () => void;
 }
 
 export function TeamSubmissionsModal({ submissions, onClose, onSubmit }: Props) {
@@ -63,12 +63,14 @@ export function TeamSubmissionsModal({ submissions, onClose, onSubmit }: Props) 
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={onSubmit}
-              className="text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded px-3 py-1 transition-colors cursor-pointer"
-            >
-              Submit
-            </button>
+            {onSubmit && (
+              <button
+                onClick={onSubmit}
+                className="text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded px-3 py-1 transition-colors cursor-pointer"
+              >
+                Submit
+              </button>
+            )}
             <button
               onClick={onClose}
               className="text-slate-400 hover:text-white text-lg leading-none p-1 cursor-pointer"
