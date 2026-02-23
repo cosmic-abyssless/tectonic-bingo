@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import path from "path";
+import fs from "fs";
 // Load .env from the monorepo root regardless of which directory npm runs from
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 import express from "express";
@@ -64,6 +65,11 @@ app.use(
 configurePassport();
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Uploads — serve screenshots stored locally
+const UPLOADS_DIR = path.join(__dirname, "../uploads");
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+app.use("/uploads", express.static(UPLOADS_DIR));
 
 // Routes
 app.use("/auth", authRouter);

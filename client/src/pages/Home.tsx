@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
-import { avatarUrl, displayName, type TeamProgressResponse, type TileProgress } from "../types";
+import { avatarUrl, displayName, type TeamProgressResponse, type TileProgress, type SubmissionSummary } from "../types";
 import { BingoBoard } from "../components/BingoBoard";
+import { SubmissionModal } from "../components/SubmissionModal";
+import { TeamSubmissionsModal } from "../components/TeamSubmissionsModal";
 
 const TEAM_COLORS: Record<string, { bg: string; border: string; text: string; dot: string }> = {
   "Red Team":    { bg: "bg-red-950/60",    border: "border-red-500",    text: "text-red-400",    dot: "bg-red-500"    },
@@ -15,8 +17,12 @@ const TEAM_COLORS: Record<string, { bg: string; border: string; text: string; do
 export function Home() {
   const { user, logout } = useAuth();
   const [teamProgress, setTeamProgress] = useState<TeamProgressResponse | null>(null);
+  const [teamSubmissions, setTeamSubmissions] = useState<SubmissionSummary[]>([]);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [submitInitialTileId, setSubmitInitialTileId] = useState<string | undefined>();
+  const [showSubmissionsModal, setShowSubmissionsModal] = useState(false);
 
-  useEffect(() => {
+  const refreshProgress = useCallback(() => {
     if (!user?.team) return;
     fetch("/api/team/progress")
       .then(r => r.ok ? r.json() : null)
@@ -24,12 +30,32 @@ export function Home() {
       .catch(() => {});
   }, [user?.team]);
 
+  const refreshSubmissions = useCallback(() => {
+    if (!user?.team) return;
+    fetch("/api/team/submissions")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setTeamSubmissions(data.submissions); })
+      .catch(() => {});
+  }, [user?.team]);
+
+  useEffect(() => {
+    refreshProgress();
+    refreshSubmissions();
+  }, [refreshProgress, refreshSubmissions]);
+
   if (!user) return null;
 
   const teamStyle = user.team ? TEAM_COLORS[user.team] : null;
   const progressMap = new Map<string, TileProgress>(
     teamProgress?.tileProgress.map(p => [p.tileId, p]) ?? []
   );
+
+  const submissionsMap = new Map<string, SubmissionSummary[]>();
+  for (const sub of teamSubmissions) {
+    const list = submissionsMap.get(sub.tileId) ?? [];
+    list.push(sub);
+    submissionsMap.set(sub.tileId, list);
+  }
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
@@ -42,6 +68,27 @@ export function Home() {
               <span className={`w-2 h-2 rounded-full ${teamStyle.dot}`} />
               {user.team}
             </span>
+          )}
+          {user.team && (
+            <>
+              <button
+                onClick={() => setShowSubmissionsModal(true)}
+                className="text-sm text-slate-300 hover:text-white border border-slate-600 hover:border-slate-400 rounded px-3 py-1 transition-colors cursor-pointer"
+              >
+                Submissions
+                {teamSubmissions.length > 0 && (
+                  <span className="ml-1.5 text-xs bg-slate-600 text-slate-300 rounded-full px-1.5 py-0.5">
+                    {teamSubmissions.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => { setSubmitInitialTileId(undefined); setShowSubmitModal(true); }}
+                className="text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded px-3 py-1 transition-colors cursor-pointer"
+              >
+                Submit
+              </button>
+            </>
           )}
           <img src={avatarUrl(user)} alt="avatar" className="w-8 h-8 rounded-full border-2 border-indigo-500" />
           <span className="text-sm text-slate-300">{displayName(user)}</span>
@@ -83,7 +130,14 @@ export function Home() {
                 )}
               </div>
             )}
-            <BingoBoard tileProgress={progressMap} />
+            <BingoBoard
+              tileProgress={progressMap}
+              tileSubmissions={submissionsMap}
+              onSubmitTile={(tileId) => {
+                setSubmitInitialTileId(tileId);
+                setShowSubmitModal(true);
+              }}
+            />
           </>
         ) : (
           <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
@@ -95,6 +149,26 @@ export function Home() {
           </div>
         )}
       </main>
+
+      {showSubmitModal && (
+        <SubmissionModal
+          initialTileId={submitInitialTileId}
+          onClose={() => { setShowSubmitModal(false); setSubmitInitialTileId(undefined); }}
+          onSuccess={() => { refreshProgress(); refreshSubmissions(); }}
+        />
+      )}
+
+      {showSubmissionsModal && (
+        <TeamSubmissionsModal
+          submissions={teamSubmissions}
+          onClose={() => setShowSubmissionsModal(false)}
+          onSubmit={() => {
+            setSubmitInitialTileId(undefined);
+            setShowSubmissionsModal(false);
+            setShowSubmitModal(true);
+          }}
+        />
+      )}
     </div>
   );
 }

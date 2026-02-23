@@ -3,6 +3,8 @@ import { Strategy as DiscordStrategy } from "passport-discord";
 import { REST } from "@discordjs/rest";
 import type { APIGuildMember } from "discord-api-types/v10";
 import { DiscordUser } from "../types";
+import { db } from "../db";
+import { users } from "../db/schema";
 
 interface GuildMemberInfo {
   team: string | null;
@@ -53,6 +55,28 @@ export function configurePassport(): void {
       async (accessToken, _refreshToken, profile, done) => {
         try {
           const { team, guild_nick } = await fetchGuildMemberInfo(accessToken);
+
+          // Upsert the user record so the rest of the app can FK against users.id
+          await db
+            .insert(users)
+            .values({
+              discordId: profile.id,
+              discordUsername: profile.username,
+              discordGlobalName: profile.global_name ?? null,
+              discordGuildNick: guild_nick,
+              discordAvatar: profile.avatar ?? null,
+            })
+            .onConflictDoUpdate({
+              target: users.discordId,
+              set: {
+                discordUsername: profile.username,
+                discordGlobalName: profile.global_name ?? null,
+                discordGuildNick: guild_nick,
+                discordAvatar: profile.avatar ?? null,
+                updatedAt: new Date(),
+              },
+            });
+
           const user: DiscordUser = {
             id: profile.id,
             username: profile.username,

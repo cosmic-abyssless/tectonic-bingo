@@ -8,6 +8,13 @@
       "when": 1771828298686,
       "tag": "0000_outstanding_living_mummy",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1771880468902,
+      "tag": "0001_mature_fabian_cortez",
+      "breakpoints": true
     }
   ]
 }
