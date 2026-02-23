@@ -63,8 +63,8 @@ export interface BoardTile {
 export interface BingoEvent {
   id: string;
   name: string;
-  startsAt: number;
-  endsAt: number;
+  startsAt: string; // ISO 8601 from JSON.stringify(Date)
+  endsAt: string;
   potAmount: number | null;
 }
 
