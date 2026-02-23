@@ -5,6 +5,7 @@ import { avatarUrl, displayName, type TeamProgressResponse, type TileProgress, t
 import { BingoBoard } from "../components/BingoBoard";
 import { SubmissionModal } from "../components/SubmissionModal";
 import { TeamSubmissionsModal } from "../components/TeamSubmissionsModal";
+import { useWebSocket } from "../hooks/useWebSocket";
 
 const TEAM_COLORS: Record<string, { bg: string; border: string; text: string; dot: string }> = {
   "Red Team":    { bg: "bg-red-950/60",    border: "border-red-500",    text: "text-red-400",    dot: "bg-red-500"    },
@@ -44,6 +45,16 @@ export function Home() {
     refreshProgress();
     refreshSubmissions();
   }, [refreshProgress, refreshSubmissions]);
+
+  useWebSocket(useCallback((msg) => {
+    if (
+      (msg.type === "submission_created" || msg.type === "submission_reviewed") &&
+      msg.teamName === user?.team
+    ) {
+      refreshProgress();
+      refreshSubmissions();
+    }
+  }, [user?.team, refreshProgress, refreshSubmissions]));
 
   if (!user) return null;
 

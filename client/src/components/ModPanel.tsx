@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ModSubmission } from "../types";
+import { useWebSocket } from "../hooks/useWebSocket";
 
 const STATUS_STYLE: Record<
   ModSubmission["status"],
@@ -72,6 +73,12 @@ export function ModPanel() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [navigate]);
+
+  useWebSocket(useCallback((msg) => {
+    if (msg.type === "submission_created" || msg.type === "submission_reviewed") {
+      load();
+    }
+  }, [load]));
 
   const counts: Record<Filter, number> = {
     pending:         submissions.filter((s) => s.status === "pending").length,

@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
+import http from "http";
 // Load .env from the monorepo root regardless of which directory npm runs from
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 import express from "express";
@@ -10,6 +11,7 @@ import passport from "passport";
 import { configurePassport } from "./auth/discord";
 import authRouter from "./routes/auth";
 import apiRouter from "./routes/api";
+import { initWebSocketServer } from "./ws";
 
 const REQUIRED_ENV = [
   "DISCORD_CLIENT_ID",
@@ -76,6 +78,9 @@ app.use("/uploads", express.static(UPLOADS_DIR));
 app.use("/auth", authRouter);
 app.use("/api", apiRouter);
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+initWebSocketServer(server);
+
+server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
