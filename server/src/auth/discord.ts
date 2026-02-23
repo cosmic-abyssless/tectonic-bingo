@@ -26,16 +26,19 @@ async function fetchUserTeam(userId: string): Promise<string | null> {
 
   if (!memberRes.ok || !rolesRes.ok) return null;
 
-  const [member, roles] = await Promise.all([memberRes.json(), rolesRes.json()]);
+  const [member, roles] = await Promise.all([
+    memberRes.json(),
+    rolesRes.json(),
+  ]);
   const memberRoleIds = new Set<string>(member.roles);
   const teamRole = (roles as { id: string; name: string }[]).find(
-    (r) => memberRoleIds.has(r.id) && TEAM_ROLES.includes(r.name)
+    (r) => memberRoleIds.has(r.id) && TEAM_ROLES.includes(r.name),
   );
 
   return teamRole?.name ?? null;
 }
 
-const scopes = ["identify", "email"];
+const scopes = ["identify", "guilds", "guilds.members.read"];
 
 export function configurePassport(): void {
   passport.use(
@@ -63,8 +66,8 @@ export function configurePassport(): void {
         } catch (err) {
           return done(err as Error);
         }
-      }
-    )
+      },
+    ),
   );
 
   passport.serializeUser((user, done) => {
