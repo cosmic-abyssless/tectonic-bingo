@@ -7,6 +7,22 @@ import { configurePassport } from "./auth/discord";
 import authRouter from "./routes/auth";
 import apiRouter from "./routes/api";
 
+const REQUIRED_ENV = [
+  "DISCORD_CLIENT_ID",
+  "DISCORD_CLIENT_SECRET",
+  "DISCORD_CALLBACK_URL",
+  "SESSION_SECRET",
+  "CLIENT_URL",
+] as const;
+
+const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
+if (missing.length > 0) {
+  console.error(
+    `\n[ERROR] Missing required environment variables:\n  ${missing.join("\n  ")}\n\nCopy .env.example to .env and fill in the values.\n`
+  );
+  process.exit(1);
+}
+
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 
