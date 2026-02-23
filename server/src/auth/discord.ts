@@ -4,16 +4,6 @@ import { REST } from "@discordjs/rest";
 import type { APIGuildMember } from "discord-api-types/v10";
 import { DiscordUser } from "../types";
 
-// Maps team name → env-configured role ID
-const TEAM_ROLE_MAP: Record<string, string | undefined> = {
-  "Red Team": process.env.TEAM_ROLE_RED,
-  "Blue Team": process.env.TEAM_ROLE_BLUE,
-  "Green Team": process.env.TEAM_ROLE_GREEN,
-  "Yellow Team": process.env.TEAM_ROLE_YELLOW,
-  "Orange Team": process.env.TEAM_ROLE_ORANGE,
-  "Pink Team": process.env.TEAM_ROLE_PINK,
-};
-
 async function fetchUserTeam(accessToken: string): Promise<string | null> {
   try {
     // Use the user's own OAuth token — no bot required
@@ -22,8 +12,18 @@ async function fetchUserTeam(accessToken: string): Promise<string | null> {
       `/users/@me/guilds/${process.env.DISCORD_GUILD_ID}/member`
     )) as APIGuildMember;
 
+    // Read env vars here (not at module load) so dotenv has already run
+    const teamRoleMap: Record<string, string | undefined> = {
+      "Red Team": process.env.TEAM_ROLE_RED,
+      "Blue Team": process.env.TEAM_ROLE_BLUE,
+      "Green Team": process.env.TEAM_ROLE_GREEN,
+      "Yellow Team": process.env.TEAM_ROLE_YELLOW,
+      "Orange Team": process.env.TEAM_ROLE_ORANGE,
+      "Pink Team": process.env.TEAM_ROLE_PINK,
+    };
+
     const memberRoleIds = new Set(member.roles);
-    const entry = Object.entries(TEAM_ROLE_MAP).find(
+    const entry = Object.entries(teamRoleMap).find(
       ([, roleId]) => roleId && memberRoleIds.has(roleId)
     );
     return entry?.[0] ?? null;
