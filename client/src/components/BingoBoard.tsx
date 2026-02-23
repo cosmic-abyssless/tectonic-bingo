@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { BoardTile, BoardResponse, BadgeCategory, TileProgress, SideStatus } from "../types";
+import type { BoardTile, BoardResponse, BadgeCategory, TileProgress, SideStatus, SubmissionSummary } from "../types";
 import { TileModal } from "./TileModal";
 import { TILE_IMAGES } from "../tileImages";
 
@@ -112,7 +112,15 @@ function TileCell({
   );
 }
 
-export function BingoBoard({ tileProgress }: { tileProgress?: Map<string, TileProgress> }) {
+export function BingoBoard({
+  tileProgress,
+  tileSubmissions,
+  onSubmitTile,
+}: {
+  tileProgress?: Map<string, TileProgress>;
+  tileSubmissions?: Map<string, SubmissionSummary[]>;
+  onSubmitTile?: (tileId: string) => void;
+}) {
   const [board, setBoard] = useState<BoardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -201,7 +209,12 @@ export function BingoBoard({ tileProgress }: { tileProgress?: Map<string, TilePr
       </div>
 
       {selected && (
-        <TileModal tile={selected} onClose={() => setSelected(null)} />
+        <TileModal
+          tile={selected}
+          onClose={() => setSelected(null)}
+          onSubmit={onSubmitTile ? () => onSubmitTile(selected.id) : undefined}
+          submissions={tileSubmissions?.get(selected.id)}
+        />
       )}
     </div>
   );

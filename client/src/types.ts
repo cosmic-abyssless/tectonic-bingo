@@ -73,6 +73,29 @@ export interface BoardResponse {
   tiles: BoardTile[];
 }
 
+export interface SubmissionScreenshot {
+  url: string;
+  type: "main" | "pre_screenshot" | "bank" | "collection_log" | "other";
+}
+
+export interface SubmissionSummary {
+  id: string;
+  status: "pending" | "approved" | "rejected" | "needs_more_info";
+  submittedAt: string; // ISO timestamp
+  reviewerNotes: string | null;
+  tileId: string;
+  tileName: string;
+  badgeCategory: BadgeCategory;
+  side: "A" | "B";
+  submittedBy: string;
+  items: { itemName: string; quantity: number }[];
+  screenshots: SubmissionScreenshot[];
+}
+
+export interface TeamSubmissionsResponse {
+  submissions: SubmissionSummary[];
+}
+
 export interface DiscordUser {
   id: string;
   username: string;

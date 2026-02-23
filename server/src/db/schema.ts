@@ -9,6 +9,8 @@ export const users = sqliteTable('users', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   discordId: text('discord_id').notNull().unique(),
   discordUsername: text('discord_username').notNull(),
+  discordGlobalName: text('discord_global_name'),
+  discordGuildNick: text('discord_guild_nick'),
   discordAvatar: text('discord_avatar'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),

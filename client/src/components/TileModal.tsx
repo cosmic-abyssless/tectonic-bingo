@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import type { BoardTile, TileSide, TileSideItem } from "../types";
+import type {
+  BoardTile,
+  TileSide,
+  TileSideItem,
+  SubmissionSummary,
+} from "../types";
 import { TILE_IMAGES } from "../tileImages";
 
 const BADGE_COLORS: Record<string, string> = {
@@ -127,12 +132,99 @@ function SidePanel({ side, label }: { side: TileSide; label: string }) {
   );
 }
 
+const STATUS_STYLE: Record<
+  SubmissionSummary["status"],
+  { label: string; cls: string }
+> = {
+  pending: {
+    label: "Pending",
+    cls: "bg-yellow-900/50 text-yellow-300 border-yellow-700",
+  },
+  approved: {
+    label: "Approved",
+    cls: "bg-green-900/50  text-green-300  border-green-700",
+  },
+  rejected: {
+    label: "Rejected",
+    cls: "bg-red-900/50    text-red-300    border-red-700",
+  },
+  needs_more_info: {
+    label: "Needs Info",
+    cls: "bg-blue-900/50   text-blue-300   border-blue-700",
+  },
+};
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function SubmissionRow({ sub }: { sub: SubmissionSummary }) {
+  const { label, cls } = STATUS_STYLE[sub.status];
+  const thumb = sub.screenshots[0]?.url;
+  return (
+    <div className="flex items-start gap-3 py-2.5 border-b border-slate-700/50 last:border-0">
+      {/* Thumbnail */}
+      {thumb ? (
+        <a
+          href={thumb}
+          target="_blank"
+          rel="noreferrer"
+          className="shrink-0"
+          title="View screenshot"
+        >
+          <img
+            src={thumb}
+            alt="screenshot"
+            className="w-12 h-12 object-cover rounded border border-slate-600 hover:border-indigo-400 transition-colors"
+          />
+        </a>
+      ) : (
+        <div className="w-12 h-12 rounded border border-slate-700 bg-slate-900/50 shrink-0 flex items-center justify-center text-slate-600 text-xs">
+          —
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+          <span
+            className={`text-xs font-semibold border rounded-full px-2 py-0.5 ${cls}`}
+          >
+            {label}
+          </span>
+          <span className="text-xs text-slate-500">
+            {timeAgo(sub.submittedAt)}
+          </span>
+        </div>
+        <p className="text-sm text-slate-200 truncate">
+          {sub.items
+            .map((i) =>
+              i.quantity > 1 ? `${i.quantity}× ${i.itemName}` : i.itemName,
+            )
+            .join(", ")}
+        </p>
+        <p className="text-xs text-slate-500 mt-0.5">by {sub.submittedBy}</p>
+        {sub.reviewerNotes && (
+          <p className="text-xs text-amber-400 mt-0.5 truncate">
+            {sub.reviewerNotes}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   tile: BoardTile;
   onClose: () => void;
+  onSubmit?: () => void;
+  submissions?: SubmissionSummary[];
 }
 
-export function TileModal({ tile, onClose }: Props) {
+export function TileModal({ tile, onClose, onSubmit, submissions }: Props) {
   const badgeColor =
     BADGE_COLORS[tile.badgeCategory] ??
     "text-slate-400 border-slate-500 bg-slate-500/10";
@@ -189,12 +281,22 @@ export function TileModal({ tile, onClose }: Props) {
               </div>
             </div>
           </div>
-          <button
-            className="text-slate-400 hover:text-white text-lg leading-none p-1 cursor-pointer"
-            onClick={onClose}
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {onSubmit && (
+              <button
+                onClick={onSubmit}
+                className="text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded px-3 py-1 transition-colors cursor-pointer"
+              >
+                Submit
+              </button>
+            )}
+            <button
+              className="text-slate-400 hover:text-white text-lg leading-none p-1 cursor-pointer"
+              onClick={onClose}
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Sides */}
@@ -202,6 +304,29 @@ export function TileModal({ tile, onClose }: Props) {
           {tile.sides.A && <SidePanel side={tile.sides.A} label="Part A" />}
           {tile.sides.B && <SidePanel side={tile.sides.B} label="Part B" />}
         </div>
+
+        {/* Team submissions summary */}
+        {submissions && submissions.length > 0 && (
+          <div className="p-5 border-t border-slate-700">
+            <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-3">
+              Submissions
+            </h4>
+            {(["A", "B"] as const).map((side) => {
+              const sideSubs = submissions.filter((s) => s.side === side);
+              if (!sideSubs.length) return null;
+              return (
+                <div key={side} className="mb-3 last:mb-0">
+                  <p className="text-xs font-semibold text-slate-400 mb-1">
+                    Part {side}
+                  </p>
+                  {sideSubs.map((sub) => (
+                    <SubmissionRow key={sub.id} sub={sub} />
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Wildcards */}
         {tile.wildcards.length > 0 && (
