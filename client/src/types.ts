@@ -86,7 +86,7 @@ export interface SubmissionScreenshot {
 
 export interface SubmissionSummary {
   id: string;
-  status: "pending" | "approved" | "rejected" | "needs_more_info";
+  status: "pending" | "approved" | "rejected";
   submittedAt: string; // ISO timestamp
   reviewerNotes: string | null;
   tileId: string;
@@ -100,7 +100,7 @@ export interface SubmissionSummary {
 
 export interface ModSubmission {
   id: string;
-  status: "pending" | "approved" | "rejected" | "needs_more_info";
+  status: "pending" | "approved" | "rejected";
   submittedAt: string;
   reviewerNotes: string | null;
   pointsAwarded: number | null;
@@ -112,8 +112,22 @@ export interface ModSubmission {
   side: "A" | "B";
   sidePoints: number;
   submittedBy: string;
+  codewordVerified: boolean | null;
   items: { itemName: string; quantity: number }[];
   screenshots: SubmissionScreenshot[];
+}
+
+export interface ScreenshotAnalysis {
+  codewordFound: boolean;
+  codeword: string;
+  detectedMatch: {
+    tileId: string;
+    tileName: string;
+    tileSideItemId: string;
+    side: "A" | "B";
+    itemName: string;
+  } | null;
+  warnings: string[];
 }
 
 export interface TeamSubmissionsResponse {

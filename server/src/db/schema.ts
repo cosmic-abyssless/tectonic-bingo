@@ -159,7 +159,7 @@ export const submissions = sqliteTable('submissions', {
   tileSideId: text('tile_side_id').notNull().references(() => tileSides.id),
   submittedByUserId: text('submitted_by_user_id').notNull().references(() => users.id),
   status: text('status', {
-    enum: ['pending', 'approved', 'rejected', 'needs_more_info'],
+    enum: ['pending', 'approved', 'rejected'],
   }).notNull().default('pending'),
   submittedAt: integer('submitted_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   reviewedAt: integer('reviewed_at', { mode: 'timestamp' }),

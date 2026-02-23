@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import type { BoardResponse, BoardTile } from "../types";
+import type { BoardResponse, BoardTile, ScreenshotAnalysis } from "../types";
 
 const ROW_ORDER = [
   "demonic",
@@ -30,13 +30,14 @@ interface Props {
 export function SubmissionModal({ onClose, onSuccess, initialTileId }: Props) {
   const [board, setBoard] = useState<BoardResponse | null>(null);
   const [selectedTileId, setSelectedTileId] = useState(initialTileId ?? "");
-  // Combined value encodes side + itemId as "A:uuid" / "B:uuid"
   const [selectedSideItem, setSelectedSideItem] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<ScreenshotAnalysis | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -54,14 +55,41 @@ export function SubmissionModal({ onClose, onSuccess, initialTileId }: Props) {
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // Reset item selection when tile changes
-  useEffect(() => {
-    setSelectedSideItem("");
-  }, [selectedTileId]);
-
   const selectedTile: BoardTile | undefined = board?.tiles.find(
     (t) => t.id === selectedTileId
   );
+
+  // Auto-prefill tile + item from AI match — only if the user hasn't already chosen
+  useEffect(() => {
+    const match = analysis?.detectedMatch;
+    if (!match) return;
+    if (!selectedTileId) {
+      // Nothing chosen yet — set both
+      setSelectedTileId(match.tileId);
+      setSelectedSideItem(`${match.side}:${match.tileSideItemId}`);
+    } else if (selectedTileId === match.tileId && !selectedSideItem) {
+      // Correct tile already selected, just fill the item
+      setSelectedSideItem(`${match.side}:${match.tileSideItemId}`);
+    }
+  // Only re-run when a new analysis result arrives
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysis]);
+
+  const analyzeScreenshot = async (file: File) => {
+    setAnalyzing(true);
+    setAnalysis(null);
+    try {
+      const fd = new FormData();
+      fd.append("screenshot", file);
+      const r = await fetch("/api/submissions/analyze", { method: "POST", body: fd });
+      if (r.ok) setAnalysis(await r.json());
+      // silently ignore errors — analysis is best-effort
+    } catch {
+      // ignore
+    } finally {
+      setAnalyzing(false);
+    }
+  };
 
   const handleFile = (file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -73,6 +101,7 @@ export function SubmissionModal({ onClose, onSuccess, initialTileId }: Props) {
     const reader = new FileReader();
     reader.onload = (e) => setImagePreview(e.target?.result as string);
     reader.readAsDataURL(file);
+    analyzeScreenshot(file);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -96,6 +125,9 @@ export function SubmissionModal({ onClose, onSuccess, initialTileId }: Props) {
     formData.append("tileId", selectedTileId);
     formData.append("side", side);
     formData.append("itemId", itemId);
+    if (analysis !== null) {
+      formData.append("codewordFound", String(analysis.codewordFound));
+    }
 
     try {
       const r = await fetch("/api/submissions", {
@@ -157,14 +189,8 @@ export function SubmissionModal({ onClose, onSuccess, initialTileId }: Props) {
                   ? "border-indigo-400 bg-indigo-500/10"
                   : "border-slate-600 hover:border-slate-500"
               } ${imagePreview ? "h-52" : "h-40"}`}
-              onDragEnter={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
+              onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
@@ -177,16 +203,8 @@ export function SubmissionModal({ onClose, onSuccess, initialTileId }: Props) {
                 />
               ) : (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 gap-2">
-                  <svg
-                    className="w-10 h-10"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
+                  <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                       d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
                     />
                   </svg>
@@ -205,8 +223,44 @@ export function SubmissionModal({ onClose, onSuccess, initialTileId }: Props) {
                 if (f) handleFile(f);
               }}
             />
-            {imageFile && (
-              <p className="mt-1 text-xs text-slate-400 truncate">{imageFile.name}</p>
+
+            {/* Analysis result */}
+            {(analyzing || analysis) && (
+              <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2.5 space-y-1.5 text-sm">
+                {analyzing && (
+                  <p className="flex items-center gap-2 text-slate-400">
+                    <span className="inline-block w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                    Analyzing screenshot…
+                  </p>
+                )}
+                {analysis && (
+                  <>
+                    {/* Codeword check */}
+                    <p className={`flex items-center gap-1.5 font-medium ${analysis.codewordFound ? "text-green-400" : "text-yellow-400"}`}>
+                      <span>{analysis.codewordFound ? "✓" : "⚠"}</span>
+                      {analysis.codewordFound
+                        ? `Codeword '${analysis.codeword}' found`
+                        : `Codeword '${analysis.codeword}' not visible`}
+                    </p>
+
+                    {/* Warnings */}
+                    {analysis.warnings.map((w, i) => (
+                      <p key={i} className="text-yellow-300/80 text-xs leading-snug">{w}</p>
+                    ))}
+
+                    {/* Detected item */}
+                    {analysis.detectedMatch ? (
+                      <p className="text-slate-400 text-xs">
+                        Detected:{" "}
+                        <span className="text-slate-300 font-medium">{analysis.detectedMatch.itemName}</span>
+                        <span className="text-slate-500"> — {analysis.detectedMatch.tileName} Part {analysis.detectedMatch.side}</span>
+                      </p>
+                    ) : (
+                      <p className="text-slate-500 text-xs">No matching bingo item detected</p>
+                    )}
+                  </>
+                )}
+              </div>
             )}
           </div>
 
@@ -217,7 +271,7 @@ export function SubmissionModal({ onClose, onSuccess, initialTileId }: Props) {
             </label>
             <select
               value={selectedTileId}
-              onChange={(e) => setSelectedTileId(e.target.value)}
+              onChange={(e) => { setSelectedTileId(e.target.value); setSelectedSideItem(""); }}
               className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
             >
               <option value="">Select a tile…</option>

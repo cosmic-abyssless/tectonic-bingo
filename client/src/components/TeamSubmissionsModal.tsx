@@ -5,10 +5,9 @@ const STATUS_STYLE: Record<
   SubmissionSummary["status"],
   { label: string; cls: string }
 > = {
-  pending:         { label: "Pending",    cls: "bg-yellow-900/50 text-yellow-300 border-yellow-700" },
-  approved:        { label: "Approved",   cls: "bg-green-900/50  text-green-300  border-green-700"  },
-  rejected:        { label: "Rejected",   cls: "bg-red-900/50    text-red-300    border-red-700"    },
-  needs_more_info: { label: "Needs Info", cls: "bg-blue-900/50   text-blue-300   border-blue-700"   },
+  pending:  { label: "Pending",  cls: "bg-yellow-900/50 text-yellow-300 border-yellow-700" },
+  approved: { label: "Approved", cls: "bg-green-900/50  text-green-300  border-green-700"  },
+  rejected: { label: "Rejected", cls: "bg-red-900/50    text-red-300    border-red-700"    },
 };
 
 const BADGE_DOT: Record<string, string> = {
