@@ -82,7 +82,10 @@ event_moderators (
 ---
 
 ### `teams`
-Each team has a unique codeword used to verify submissions belong to the correct team.
+Each team has a unique codeword assigned at event start. The codeword is:
+- **Displayed on the bingo board** so any team member can look it up without leaving the site
+- **Visible in every submission screenshot** (via the Clan Events plugin or typed in chatbox) so moderators can verify the drop belongs to the correct team
+- **Stored here** to support a future AI screenshot scraping feature that reads the codeword directly from screenshots to automate verification
 
 ```sql
 teams (
@@ -267,15 +270,23 @@ submissions (
 ### `submission_screenshots`
 One submission may require multiple screenshots (e.g. a main screenshot + a bank pre-screenshot).
 
+The `extracted_text`, `codeword_verified`, and `scrape_status` columns are reserved for a future AI screenshot scraping feature. When implemented, an async job will analyse each uploaded screenshot, extract visible text, and check whether the team's codeword appears — allowing automated pre-screening of submissions before a human moderator reviews them.
+
 ```sql
 CREATE TYPE screenshot_type AS ENUM ('main', 'pre_screenshot', 'bank', 'collection_log', 'other');
+CREATE TYPE scrape_status AS ENUM ('pending', 'processing', 'completed', 'failed');
 
 submission_screenshots (
-  id               uuid            PRIMARY KEY DEFAULT gen_random_uuid(),
-  submission_id    uuid            NOT NULL REFERENCES submissions(id),
-  screenshot_type  screenshot_type NOT NULL DEFAULT 'main',
-  storage_url      varchar(512)    NOT NULL,
-  uploaded_at      timestamptz     NOT NULL DEFAULT now()
+  id                uuid            PRIMARY KEY DEFAULT gen_random_uuid(),
+  submission_id     uuid            NOT NULL REFERENCES submissions(id),
+  screenshot_type   screenshot_type NOT NULL DEFAULT 'main',
+  storage_url       varchar(512)    NOT NULL,
+  -- AI scraping fields (populated asynchronously; NULL until processed)
+  scrape_status     scrape_status   NOT NULL DEFAULT 'pending',
+  extracted_text    text,           -- raw text extracted from the screenshot
+  codeword_verified boolean,        -- true if the team's codeword was found in extracted_text
+  scraped_at        timestamptz,    -- when scraping completed
+  uploaded_at       timestamptz     NOT NULL DEFAULT now()
 )
 ```
 
@@ -476,7 +487,7 @@ These constraints are too complex for the DB alone and must be enforced in busin
 
 5. **Alt account rule:** Only one account per player counts. Enforced at submission review — moderators can reject if an alt was used for DPS.
 
-6. **Codeword verification:** Every submission screenshot must show the team's codeword via the Clan Events plugin or in chatbox. Moderators verify this visually.
+6. **Codeword verification:** Every submission screenshot must show the team's codeword via the Clan Events plugin or in chatbox. Moderators verify this visually. The `codeword_verified` flag on `submission_screenshots` is populated by the future AI scraping job to assist (not replace) moderator review — e.g. the UI can surface a warning if the codeword was not detected in a screenshot.
 
 7. **Line completion check:** After every submission approval, the server should recheck whether any new bingo lines have been completed by that team and insert into `team_completed_lines` if so.
 
