@@ -2,3 +2,6 @@ node_modules/
 dist/
 .env
 *.js.map
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
