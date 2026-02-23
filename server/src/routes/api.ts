@@ -1,8 +1,19 @@
 import { Router, Request, Response } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { db } from "../db";
-import { bingoEvents, tiles, tileSides, tileSideItems, tileWildcards } from "../db/schema";
-import { eq, inArray } from "drizzle-orm";
+import {
+  bingoEvents,
+  tiles,
+  tileSides,
+  tileSideItems,
+  tileWildcards,
+  teams,
+  teamTileProgress,
+  teamCompletedLines,
+  teamPointAdjustments,
+} from "../db/schema";
+import { eq, and, inArray } from "drizzle-orm";
+import type { DiscordUser } from "../types";
 
 const router = Router();
 
@@ -89,6 +100,61 @@ router.get("/board", async (_req: Request, res: Response) => {
   });
 
   res.json({ event: activeEvent, tiles: tilesWithDetails });
+});
+
+// GET /api/team/progress — points and per-tile progress for the user's team
+router.get("/team/progress", requireAuth, async (req: Request, res: Response) => {
+  const user = req.user as DiscordUser | undefined;
+  const userTeamName = user?.team;
+
+  if (!userTeamName) {
+    res.status(403).json({ error: "You are not on a team" });
+    return;
+  }
+
+  const [event] = await db
+    .select()
+    .from(bingoEvents)
+    .where(eq(bingoEvents.isActive, true))
+    .limit(1);
+  const activeEvent = event ?? (await db.select().from(bingoEvents).limit(1))[0];
+  if (!activeEvent) {
+    res.status(404).json({ error: "No bingo event found" });
+    return;
+  }
+
+  const [team] = await db
+    .select()
+    .from(teams)
+    .where(and(eq(teams.bingoEventId, activeEvent.id), eq(teams.name, userTeamName)))
+    .limit(1);
+
+  if (!team) {
+    res.status(404).json({ error: "Team not found in event" });
+    return;
+  }
+
+  const [progress, completedLines, adjustments] = await Promise.all([
+    db.select().from(teamTileProgress).where(eq(teamTileProgress.teamId, team.id)),
+    db.select().from(teamCompletedLines).where(eq(teamCompletedLines.teamId, team.id)),
+    db.select().from(teamPointAdjustments).where(eq(teamPointAdjustments.teamId, team.id)),
+  ]);
+
+  const tilePoints = progress.reduce(
+    (sum, p) => sum + p.sideAPointsAwarded + p.sideBPointsAwarded,
+    0
+  );
+  const lineBonus = completedLines.length * 15;
+  const adjustment = adjustments.reduce((sum, a) => sum + a.amount, 0);
+
+  res.json({
+    team: { id: team.id, name: team.name, color: team.color },
+    totalPoints: tilePoints + lineBonus + adjustment,
+    tilePoints,
+    lineBonus,
+    adjustments: adjustment,
+    tileProgress: progress,
+  });
 });
 
 export default router;

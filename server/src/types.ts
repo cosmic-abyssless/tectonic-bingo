@@ -6,6 +6,7 @@ export interface DiscordUser {
   email?: string;
   verified?: boolean;
   global_name?: string | null;
+  guild_nick: string | null;
   team: string | null;
 }
 

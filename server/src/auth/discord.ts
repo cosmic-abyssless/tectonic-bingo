@@ -4,34 +4,38 @@ import { REST } from "@discordjs/rest";
 import type { APIGuildMember } from "discord-api-types/v10";
 import { DiscordUser } from "../types";
 
-async function fetchUserTeam(accessToken: string): Promise<string | null> {
+interface GuildMemberInfo {
+  team: string | null;
+  guild_nick: string | null;
+}
+
+async function fetchGuildMemberInfo(accessToken: string): Promise<GuildMemberInfo> {
   try {
-    // Use the user's own OAuth token — no bot required
-    const rest = new REST({ version: "10", authPrefix: "Bearer" }).setToken(
-      accessToken,
-    );
+    const rest = new REST({ version: "10", authPrefix: "Bearer" }).setToken(accessToken);
     const member = (await rest.get(
       `/users/@me/guilds/${process.env.DISCORD_GUILD_ID}/member`,
     )) as APIGuildMember;
 
-    // Read env vars here (not at module load) so dotenv has already run
     const teamRoleMap: Record<string, string | undefined> = {
-      "Red Team": process.env.TEAM_ROLE_RED,
-      "Blue Team": process.env.TEAM_ROLE_BLUE,
-      "Green Team": process.env.TEAM_ROLE_GREEN,
+      "Red Team":    process.env.TEAM_ROLE_RED,
+      "Blue Team":   process.env.TEAM_ROLE_BLUE,
+      "Green Team":  process.env.TEAM_ROLE_GREEN,
       "Yellow Team": process.env.TEAM_ROLE_YELLOW,
       "Orange Team": process.env.TEAM_ROLE_ORANGE,
-      "Pink Team": process.env.TEAM_ROLE_PINK,
+      "Pink Team":   process.env.TEAM_ROLE_PINK,
     };
 
     const memberRoleIds = new Set(member.roles);
     const entry = Object.entries(teamRoleMap).find(
       ([, roleId]) => roleId && memberRoleIds.has(roleId),
     );
-    return entry?.[0] ?? null;
+
+    return {
+      team: entry?.[0] ?? null,
+      guild_nick: member.nick ?? null,
+    };
   } catch {
-    // User is not in the guild or API error — no team
-    return null;
+    return { team: null, guild_nick: null };
   }
 }
 
@@ -48,7 +52,7 @@ export function configurePassport(): void {
       },
       async (accessToken, _refreshToken, profile, done) => {
         try {
-          const team = await fetchUserTeam(accessToken);
+          const { team, guild_nick } = await fetchGuildMemberInfo(accessToken);
           const user: DiscordUser = {
             id: profile.id,
             username: profile.username,
@@ -57,6 +61,7 @@ export function configurePassport(): void {
             email: profile.email,
             verified: profile.verified,
             global_name: profile.global_name ?? null,
+            guild_nick,
             team,
           };
           return done(null, user);

@@ -1,5 +1,24 @@
 export type BadgeCategory = 'demonic' | 'draconic' | 'spectral' | 'animalistic' | 'god_wars' | 'vampyric' | 'desert';
 
+export type SideStatus = 'not_started' | 'in_progress' | 'pending_approval' | 'completed';
+
+export interface TileProgress {
+  tileId: string;
+  sideAStatus: SideStatus;
+  sideAPointsAwarded: number;
+  sideBStatus: SideStatus;
+  sideBPointsAwarded: number;
+}
+
+export interface TeamProgressResponse {
+  team: { id: string; name: string; color: string | null };
+  totalPoints: number;
+  tilePoints: number;
+  lineBonus: number;
+  adjustments: number;
+  tileProgress: TileProgress[];
+}
+
 export interface TileSideItem {
   id: string;
   itemName: string;
@@ -62,7 +81,13 @@ export interface DiscordUser {
   email?: string;
   verified?: boolean;
   global_name?: string | null;
+  guild_nick: string | null;
   team: string | null;
+}
+
+/** guild nick → global display name → username */
+export function displayName(user: DiscordUser): string {
+  return user.guild_nick ?? user.global_name ?? user.username;
 }
 
 export function avatarUrl(user: DiscordUser): string {

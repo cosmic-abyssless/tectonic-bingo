@@ -15,7 +15,8 @@
     "db:seed:tile-side-items": "tsx src/db/seeds/04-tile-side-items.ts",
     "db:seed:wildcards": "tsx src/db/seeds/05-wildcards.ts",
     "db:seed:bingo-lines": "tsx src/db/seeds/06-bingo-lines.ts",
-    "db:seed:all": "npm run db:seed:event && npm run db:seed:tiles && npm run db:seed:tile-sides && npm run db:seed:tile-side-items && npm run db:seed:wildcards && npm run db:seed:bingo-lines"
+    "db:seed:teams": "tsx src/db/seeds/07-teams.ts",
+    "db:seed:all": "npm run db:seed:event && npm run db:seed:tiles && npm run db:seed:tile-sides && npm run db:seed:tile-side-items && npm run db:seed:wildcards && npm run db:seed:bingo-lines && npm run db:seed:teams"
   },
   "dependencies": {
     "@discordjs/rest": "^2.6.0",
