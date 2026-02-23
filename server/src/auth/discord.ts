@@ -1,44 +1,39 @@
 import passport from "passport";
 import { Strategy as DiscordStrategy } from "passport-discord";
+import { REST } from "@discordjs/rest";
+import type { APIGuildMember } from "discord-api-types/v10";
 import { DiscordUser } from "../types";
 
-const TEAM_ROLES = [
-  "Pink Team",
-  "Yellow Team",
-  "Orange Team",
-  "Red Team",
-  "Green Team",
-  "Blue Team",
-];
+// Maps team name → env-configured role ID
+const TEAM_ROLE_MAP: Record<string, string | undefined> = {
+  "Red Team": process.env.TEAM_ROLE_RED,
+  "Blue Team": process.env.TEAM_ROLE_BLUE,
+  "Green Team": process.env.TEAM_ROLE_GREEN,
+  "Yellow Team": process.env.TEAM_ROLE_YELLOW,
+  "Orange Team": process.env.TEAM_ROLE_ORANGE,
+  "Pink Team": process.env.TEAM_ROLE_PINK,
+};
 
-async function fetchUserTeam(userId: string): Promise<string | null> {
-  const guildId = process.env.DISCORD_GUILD_ID!;
-  const botToken = process.env.DISCORD_BOT_TOKEN!;
+async function fetchUserTeam(accessToken: string): Promise<string | null> {
+  try {
+    // Use the user's own OAuth token — no bot required
+    const rest = new REST({ version: "10", authPrefix: "Bearer" }).setToken(accessToken);
+    const member = (await rest.get(
+      `/users/@me/guilds/${process.env.DISCORD_GUILD_ID}/member`
+    )) as APIGuildMember;
 
-  const [memberRes, rolesRes] = await Promise.all([
-    fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${userId}`, {
-      headers: { Authorization: `Bot ${botToken}` },
-    }),
-    fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
-      headers: { Authorization: `Bot ${botToken}` },
-    }),
-  ]);
-
-  if (!memberRes.ok || !rolesRes.ok) return null;
-
-  const [member, roles] = await Promise.all([
-    memberRes.json(),
-    rolesRes.json(),
-  ]);
-  const memberRoleIds = new Set<string>(member.roles);
-  const teamRole = (roles as { id: string; name: string }[]).find(
-    (r) => memberRoleIds.has(r.id) && TEAM_ROLES.includes(r.name),
-  );
-
-  return teamRole?.name ?? null;
+    const memberRoleIds = new Set(member.roles);
+    const entry = Object.entries(TEAM_ROLE_MAP).find(
+      ([, roleId]) => roleId && memberRoleIds.has(roleId)
+    );
+    return entry?.[0] ?? null;
+  } catch {
+    // User is not in the guild or API error — no team
+    return null;
+  }
 }
 
-const scopes = ["identify", "guilds", "guilds.members.read"];
+const scopes = ["identify", "email", "guilds.members.read"];
 
 export function configurePassport(): void {
   passport.use(
@@ -49,9 +44,9 @@ export function configurePassport(): void {
         callbackURL: process.env.DISCORD_CALLBACK_URL!,
         scope: scopes,
       },
-      async (_accessToken, _refreshToken, profile, done) => {
+      async (accessToken, _refreshToken, profile, done) => {
         try {
-          const team = await fetchUserTeam(profile.id);
+          const team = await fetchUserTeam(accessToken);
           const user: DiscordUser = {
             id: profile.id,
             username: profile.username,
@@ -66,8 +61,8 @@ export function configurePassport(): void {
         } catch (err) {
           return done(err as Error);
         }
-      },
-    ),
+      }
+    )
   );
 
   passport.serializeUser((user, done) => {
