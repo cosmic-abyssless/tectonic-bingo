@@ -8,6 +8,7 @@ export interface DiscordUser {
   global_name?: string | null;
   guild_nick: string | null;
   team: string | null;
+  isModerator: boolean;
 }
 
 // Extend express-session to include our user type

@@ -9,6 +9,7 @@ import { users } from "../db/schema";
 interface GuildMemberInfo {
   team: string | null;
   guild_nick: string | null;
+  isModerator: boolean;
 }
 
 async function fetchGuildMemberInfo(accessToken: string): Promise<GuildMemberInfo> {
@@ -32,12 +33,15 @@ async function fetchGuildMemberInfo(accessToken: string): Promise<GuildMemberInf
       ([, roleId]) => roleId && memberRoleIds.has(roleId),
     );
 
+    const isModerator = !!process.env.MOD_ROLE_ID && memberRoleIds.has(process.env.MOD_ROLE_ID);
+
     return {
       team: entry?.[0] ?? null,
       guild_nick: member.nick ?? null,
+      isModerator,
     };
   } catch {
-    return { team: null, guild_nick: null };
+    return { team: null, guild_nick: null, isModerator: false };
   }
 }
 
@@ -54,7 +58,7 @@ export function configurePassport(): void {
       },
       async (accessToken, _refreshToken, profile, done) => {
         try {
-          const { team, guild_nick } = await fetchGuildMemberInfo(accessToken);
+          const { team, guild_nick, isModerator } = await fetchGuildMemberInfo(accessToken);
 
           // Upsert the user record so the rest of the app can FK against users.id
           await db
@@ -65,6 +69,7 @@ export function configurePassport(): void {
               discordGlobalName: profile.global_name ?? null,
               discordGuildNick: guild_nick,
               discordAvatar: profile.avatar ?? null,
+              isModerator,
             })
             .onConflictDoUpdate({
               target: users.discordId,
@@ -73,6 +78,7 @@ export function configurePassport(): void {
                 discordGlobalName: profile.global_name ?? null,
                 discordGuildNick: guild_nick,
                 discordAvatar: profile.avatar ?? null,
+                isModerator,
                 updatedAt: new Date(),
               },
             });
@@ -87,6 +93,7 @@ export function configurePassport(): void {
             global_name: profile.global_name ?? null,
             guild_nick,
             team,
+            isModerator,
           };
           return done(null, user);
         } catch (err) {

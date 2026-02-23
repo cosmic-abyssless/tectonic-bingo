@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { avatarUrl, displayName, type TeamProgressResponse, type TileProgress, type SubmissionSummary } from "../types";
 import { BingoBoard } from "../components/BingoBoard";
@@ -16,6 +17,7 @@ const TEAM_COLORS: Record<string, { bg: string; border: string; text: string; do
 
 export function Home() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [teamProgress, setTeamProgress] = useState<TeamProgressResponse | null>(null);
   const [teamSubmissions, setTeamSubmissions] = useState<SubmissionSummary[]>([]);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
@@ -68,6 +70,14 @@ export function Home() {
               <span className={`w-2 h-2 rounded-full ${teamStyle.dot}`} />
               {user.team}
             </span>
+          )}
+          {user.isModerator && (
+            <button
+              onClick={() => navigate("/mod")}
+              className="text-sm text-yellow-400 hover:text-yellow-300 border border-yellow-700 hover:border-yellow-500 rounded px-3 py-1 transition-colors cursor-pointer font-semibold"
+            >
+              Mod Panel
+            </button>
           )}
           {user.team && (
             <>

@@ -15,6 +15,13 @@
       "when": 1771880468902,
       "tag": "0001_mature_fabian_cortez",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1771881410418,
+      "tag": "0002_special_vulcan",
+      "breakpoints": true
     }
   ]
 }

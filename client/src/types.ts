@@ -92,6 +92,24 @@ export interface SubmissionSummary {
   screenshots: SubmissionScreenshot[];
 }
 
+export interface ModSubmission {
+  id: string;
+  status: "pending" | "approved" | "rejected" | "needs_more_info";
+  submittedAt: string;
+  reviewerNotes: string | null;
+  pointsAwarded: number | null;
+  teamId: string;
+  teamName: string;
+  tileId: string;
+  tileName: string;
+  badgeCategory: BadgeCategory;
+  side: "A" | "B";
+  sidePoints: number;
+  submittedBy: string;
+  items: { itemName: string; quantity: number }[];
+  screenshots: SubmissionScreenshot[];
+}
+
 export interface TeamSubmissionsResponse {
   submissions: SubmissionSummary[];
 }
@@ -106,6 +124,7 @@ export interface DiscordUser {
   global_name?: string | null;
   guild_nick: string | null;
   team: string | null;
+  isModerator: boolean;
 }
 
 /** guild nick → global display name → username */
