@@ -4,6 +4,7 @@ import fs from "fs";
 import multer from "multer";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireMod } from "../middleware/requireMod";
+import { broadcast } from "../ws";
 import { db } from "../db";
 import {
   bingoEvents,
@@ -450,6 +451,7 @@ router.post(
         .where(eq(teamTileProgress.id, existing.id));
     }
 
+    broadcast({ type: "submission_created", teamName: team.name });
     res.json({ success: true, submissionId });
   }
 );
@@ -683,6 +685,14 @@ router.patch("/mod/submissions/:id", requireAuth, requireMod, async (req: Reques
       }
     }
   }
+
+  // Broadcast the review so clients can update in real-time
+  const [reviewedTeam] = await db
+    .select({ name: teams.name })
+    .from(teams)
+    .where(eq(teams.id, sub.teamId))
+    .limit(1);
+  broadcast({ type: "submission_reviewed", teamName: reviewedTeam?.name ?? null });
 
   res.json({ success: true });
 });

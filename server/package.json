@@ -21,6 +21,7 @@
   "dependencies": {
     "@discordjs/rest": "^2.6.0",
     "@types/multer": "^2.0.0",
+    "@types/ws": "^8.18.1",
     "better-sqlite3": "^12.6.2",
     "cors": "^2.8.5",
     "discord-api-types": "^0.38.40",
@@ -30,7 +31,8 @@
     "express-session": "^1.18.1",
     "multer": "^2.0.2",
     "passport": "^0.7.0",
-    "passport-discord": "^0.1.4"
+    "passport-discord": "^0.1.4",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
