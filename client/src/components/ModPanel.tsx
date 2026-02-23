@@ -50,6 +50,7 @@ export function ModPanel() {
   const [submissions, setSubmissions] = useState<ModSubmission[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("pending");
+  const [teamFilter, setTeamFilter] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [forms, setForms] = useState<Record<string, ReviewForm>>({});
   const [submitting, setSubmitting] = useState<string | null>(null);
@@ -78,6 +79,11 @@ export function ModPanel() {
     }
   }, [load]));
 
+  // Sorted unique team names derived from loaded submissions
+  const allTeams = [...new Set(submissions.map((s) => s.teamName))].sort();
+
+  const byStatus = filter === "all" ? submissions : submissions.filter((s) => s.status === filter);
+
   const counts: Record<Filter, number> = {
     pending:  submissions.filter((s) => s.status === "pending").length,
     approved: submissions.filter((s) => s.status === "approved").length,
@@ -85,7 +91,9 @@ export function ModPanel() {
     all:      submissions.length,
   };
 
-  const visible = filter === "all" ? submissions : submissions.filter((s) => s.status === filter);
+  const byTeam = teamFilter ? byStatus.filter((s) => s.teamName === teamFilter) : byStatus;
+  // Pending uses FIFO (oldest first); all other views keep newest-first from the server
+  const visible = filter === "pending" ? [...byTeam].reverse() : byTeam;
 
   function getForm(sub: ModSubmission): ReviewForm {
     return forms[sub.id] ?? { points: String(sub.sidePoints), notes: "" };
@@ -138,7 +146,7 @@ export function ModPanel() {
         </button>
       </header>
 
-      {/* Filter tabs */}
+      {/* Status filter tabs */}
       <div className="flex gap-1 px-6 pt-4 pb-2 shrink-0 overflow-x-auto">
         {FILTERS.map(({ key, label }) => (
           <button
@@ -161,6 +169,36 @@ export function ModPanel() {
           </button>
         ))}
       </div>
+
+      {/* Team filter tabs */}
+      {allTeams.length > 0 && (
+        <div className="flex gap-1 px-6 pb-3 shrink-0 overflow-x-auto">
+          <button
+            onClick={() => setTeamFilter(null)}
+            className={`shrink-0 text-xs font-medium rounded-full px-3 py-1 transition-colors cursor-pointer ${
+              teamFilter === null
+                ? "bg-slate-500 text-white"
+                : "bg-slate-700 text-slate-400 hover:bg-slate-600"
+            }`}
+          >
+            All teams
+          </button>
+          {allTeams.map((team) => (
+            <button
+              key={team}
+              onClick={() => setTeamFilter(teamFilter === team ? null : team)}
+              className={`shrink-0 text-xs font-medium rounded-full px-3 py-1 transition-colors cursor-pointer ${
+                teamFilter === team
+                  ? "bg-slate-500 text-white"
+                  : "bg-slate-700 text-slate-400 hover:bg-slate-600"
+              }`}
+            >
+              {team}
+            </button>
+          ))}
+        </div>
+      )}
+
 
       {/* List */}
       <div className="flex-1 overflow-y-auto px-6 pb-6">
