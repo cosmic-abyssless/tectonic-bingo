@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs";
 import multer from "multer";
 import { requireAuth } from "../middleware/requireAuth";
+import { requireMod } from "../middleware/requireMod";
 import { db } from "../db";
 import {
   bingoEvents,
@@ -19,7 +20,7 @@ import {
   submissionScreenshots,
   submissionItemClaims,
 } from "../db/schema";
-import { eq, and, inArray, desc } from "drizzle-orm";
+import { eq, and, inArray, desc, ne, sql } from "drizzle-orm";
 import type { DiscordUser } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -452,5 +453,238 @@ router.post(
     res.json({ success: true, submissionId });
   }
 );
+
+// ---------------------------------------------------------------------------
+// MOD ROUTES
+// ---------------------------------------------------------------------------
+
+// GET /api/mod/submissions — all submissions across all teams
+router.get("/mod/submissions", requireAuth, requireMod, async (_req: Request, res: Response) => {
+  const allSubs = await db
+    .select()
+    .from(submissions)
+    .orderBy(desc(submissions.submittedAt));
+
+  if (!allSubs.length) {
+    res.json({ submissions: [] });
+    return;
+  }
+
+  const subIds = allSubs.map((s) => s.id);
+  const tileSideIds = [...new Set(allSubs.map((s) => s.tileSideId))];
+  const teamIds = [...new Set(allSubs.map((s) => s.teamId))];
+  const submitterIds = [...new Set(allSubs.map((s) => s.submittedByUserId))];
+
+  const [sidesData, claimsData, screenshotsData, teamsData, submittersData] = await Promise.all([
+    db.select().from(tileSides).where(inArray(tileSides.id, tileSideIds)),
+    db.select().from(submissionItemClaims).where(inArray(submissionItemClaims.submissionId, subIds)),
+    db.select().from(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, subIds)),
+    db.select({ id: teams.id, name: teams.name }).from(teams).where(inArray(teams.id, teamIds)),
+    db.select({
+      id: users.id,
+      username: users.discordUsername,
+      globalName: users.discordGlobalName,
+      guildNick: users.discordGuildNick,
+    }).from(users).where(inArray(users.id, submitterIds)),
+  ]);
+
+  const tileIds = [...new Set(sidesData.map((s) => s.tileId))];
+  const tilesData = tileIds.length
+    ? await db.select().from(tiles).where(inArray(tiles.id, tileIds))
+    : [];
+
+  const sideById = new Map(sidesData.map((s) => [s.id, s]));
+  const tileById = new Map(tilesData.map((t) => [t.id, t]));
+  const teamById = new Map(teamsData.map((t) => [t.id, t.name]));
+  const submitterById = new Map(
+    submittersData.map((u) => [u.id, u.guildNick ?? u.globalName ?? u.username])
+  );
+
+  const claimsBySubId = new Map<string, typeof claimsData>();
+  for (const c of claimsData) {
+    const list = claimsBySubId.get(c.submissionId) ?? [];
+    list.push(c);
+    claimsBySubId.set(c.submissionId, list);
+  }
+  const screenshotsBySubId = new Map<string, typeof screenshotsData>();
+  for (const ss of screenshotsData) {
+    const list = screenshotsBySubId.get(ss.submissionId) ?? [];
+    list.push(ss);
+    screenshotsBySubId.set(ss.submissionId, list);
+  }
+
+  const result = allSubs.map((sub) => {
+    const ts = sideById.get(sub.tileSideId)!;
+    const tile = tileById.get(ts.tileId)!;
+    return {
+      id: sub.id,
+      status: sub.status,
+      submittedAt: sub.submittedAt instanceof Date
+        ? sub.submittedAt.toISOString()
+        : new Date((sub.submittedAt as unknown as number) * 1000).toISOString(),
+      reviewerNotes: sub.reviewerNotes,
+      pointsAwarded: sub.pointsAwarded,
+      teamId: sub.teamId,
+      teamName: teamById.get(sub.teamId) ?? "Unknown",
+      tileId: tile.id,
+      tileName: tile.name,
+      badgeCategory: tile.badgeCategory,
+      side: ts.side,
+      sidePoints: ts.points,
+      submittedBy: submitterById.get(sub.submittedByUserId) ?? "Unknown",
+      items: (claimsBySubId.get(sub.id) ?? []).map((c) => ({
+        itemName: c.itemName,
+        quantity: c.quantity,
+      })),
+      screenshots: (screenshotsBySubId.get(sub.id) ?? []).map((ss) => ({
+        url: ss.storageUrl,
+        type: ss.screenshotType,
+      })),
+    };
+  });
+
+  res.json({ submissions: result });
+});
+
+// PATCH /api/mod/submissions/:id — review a submission
+router.patch("/mod/submissions/:id", requireAuth, requireMod, async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const { action, pointsAwarded, reviewerNotes } = req.body as {
+    action?: string;
+    pointsAwarded?: number;
+    reviewerNotes?: string;
+  };
+
+  if (!action || !["approve", "reject", "needs_more_info"].includes(action)) {
+    res.status(400).json({ error: "action must be approve, reject, or needs_more_info" });
+    return;
+  }
+  if (action === "approve" && (pointsAwarded == null || pointsAwarded < 0)) {
+    res.status(400).json({ error: "pointsAwarded is required for approval" });
+    return;
+  }
+
+  const [sub] = await db.select().from(submissions).where(eq(submissions.id, id)).limit(1);
+  if (!sub) {
+    res.status(404).json({ error: "Submission not found" });
+    return;
+  }
+
+  const mod = req.user as DiscordUser;
+  const [modUser] = await db.select().from(users).where(eq(users.discordId, mod.id)).limit(1);
+  if (!modUser) {
+    res.status(404).json({ error: "Moderator user record not found" });
+    return;
+  }
+
+  const now = new Date();
+  const newStatus = action === "approve" ? "approved"
+    : action === "reject" ? "rejected"
+    : "needs_more_info";
+
+  await db.update(submissions).set({
+    status: newStatus,
+    pointsAwarded: action === "approve" ? (pointsAwarded ?? 0) : null,
+    reviewedByUserId: modUser.id,
+    reviewedAt: now,
+    reviewerNotes: reviewerNotes ?? null,
+    updatedAt: now,
+  }).where(eq(submissions.id, id));
+
+  // Get the tile side to determine which side (A/B) and its tile
+  const [ts] = await db.select().from(tileSides).where(eq(tileSides.id, sub.tileSideId)).limit(1);
+  if (!ts) {
+    res.json({ success: true });
+    return;
+  }
+
+  // Fetch or prepare teamTileProgress upsert
+  const [existing] = await db
+    .select()
+    .from(teamTileProgress)
+    .where(and(eq(teamTileProgress.teamId, sub.teamId), eq(teamTileProgress.tileId, ts.tileId)))
+    .limit(1);
+
+  if (action === "approve") {
+    const pts = pointsAwarded ?? 0;
+
+    if (ts.side === "A") {
+      let sideBPoints: number | undefined;
+
+      // If Part B is already completed but points were withheld, release them now
+      if (existing?.sideBStatus === "completed" && existing.sideBPointsAwarded === 0) {
+        // Find the approved Part B submission to get its awarded points
+        const bSideIds = await db
+          .select({ id: tileSides.id })
+          .from(tileSides)
+          .where(and(eq(tileSides.tileId, ts.tileId), eq(tileSides.side, "B")));
+
+        if (bSideIds.length) {
+          const [approvedB] = await db
+            .select()
+            .from(submissions)
+            .where(and(
+              eq(submissions.teamId, sub.teamId),
+              inArray(submissions.tileSideId, bSideIds.map((s) => s.id)),
+              eq(submissions.status, "approved"),
+            ))
+            .orderBy(desc(submissions.reviewedAt))
+            .limit(1);
+          sideBPoints = approvedB?.pointsAwarded ?? 0;
+        }
+      }
+
+      const updateFields = {
+        sideAStatus: "completed" as const,
+        sideAPointsAwarded: pts,
+        sideACompletedAt: now,
+        ...(sideBPoints != null ? { sideBPointsAwarded: sideBPoints } : {}),
+      };
+
+      if (!existing) {
+        await db.insert(teamTileProgress).values({ teamId: sub.teamId, tileId: ts.tileId, ...updateFields });
+      } else {
+        await db.update(teamTileProgress).set(updateFields).where(eq(teamTileProgress.id, existing.id));
+      }
+    } else {
+      // Part B — only award points if Part A is already complete
+      const aComplete = existing?.sideAStatus === "completed";
+      const updateFields = {
+        sideBStatus: "completed" as const,
+        sideBPointsAwarded: aComplete ? pts : 0,
+        sideBCompletedAt: now,
+      };
+
+      if (!existing) {
+        await db.insert(teamTileProgress).values({ teamId: sub.teamId, tileId: ts.tileId, ...updateFields });
+      } else {
+        await db.update(teamTileProgress).set(updateFields).where(eq(teamTileProgress.id, existing.id));
+      }
+    }
+  } else {
+    // Reject / needs_more_info — revert side status if no other pending subs remain
+    const [{ remaining }] = await db
+      .select({ remaining: sql<number>`count(*)` })
+      .from(submissions)
+      .where(and(
+        eq(submissions.teamId, sub.teamId),
+        eq(submissions.tileSideId, sub.tileSideId),
+        eq(submissions.status, "pending"),
+        ne(submissions.id, id),
+      ));
+
+    if (remaining === 0 && existing) {
+      const sideField = ts.side === "A" ? ("sideAStatus" as const) : ("sideBStatus" as const);
+      if (existing[sideField] === "pending_approval") {
+        await db
+          .update(teamTileProgress)
+          .set({ [sideField]: "in_progress" })
+          .where(eq(teamTileProgress.id, existing.id));
+      }
+    }
+  }
+
+  res.json({ success: true });
+});
 
 export default router;

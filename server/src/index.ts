@@ -22,6 +22,7 @@ const REQUIRED_ENV = [
   "TEAM_ROLE_YELLOW",
   "TEAM_ROLE_ORANGE",
   "TEAM_ROLE_PINK",
+  "MOD_ROLE_ID",
   "SESSION_SECRET",
   "CLIENT_URL",
 ] as const;

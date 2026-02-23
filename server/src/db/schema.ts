@@ -12,6 +12,7 @@ export const users = sqliteTable('users', {
   discordGlobalName: text('discord_global_name'),
   discordGuildNick: text('discord_guild_nick'),
   discordAvatar: text('discord_avatar'),
+  isModerator: integer('is_moderator', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
@@ -30,14 +31,6 @@ export const bingoEvents = sqliteTable('bingo_events', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
 
-export const eventModerators = sqliteTable('event_moderators', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  bingoEventId: text('bingo_event_id').notNull().references(() => bingoEvents.id),
-  userId: text('user_id').notNull().references(() => users.id),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
-}, (t) => [
-  uniqueIndex('event_moderators_event_user_unq').on(t.bingoEventId, t.userId),
-]);
 
 // ---------------------------------------------------------------------------
 // TEAMS & MEMBERS
