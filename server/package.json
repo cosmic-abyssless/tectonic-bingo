@@ -5,25 +5,32 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@discordjs/rest": "^2.6.0",
+    "better-sqlite3": "^12.6.2",
     "cors": "^2.8.5",
     "discord-api-types": "^0.38.40",
     "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.1",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
     "passport": "^0.7.0",
     "passport-discord": "^0.1.4"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/express-session": "^1.18.1",
     "@types/node": "^22.13.4",
     "@types/passport": "^1.0.17",
     "@types/passport-discord": "^0.1.12",
+    "drizzle-kit": "^0.31.9",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   }
