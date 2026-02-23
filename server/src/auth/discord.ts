@@ -7,9 +7,11 @@ import { DiscordUser } from "../types";
 async function fetchUserTeam(accessToken: string): Promise<string | null> {
   try {
     // Use the user's own OAuth token — no bot required
-    const rest = new REST({ version: "10", authPrefix: "Bearer" }).setToken(accessToken);
+    const rest = new REST({ version: "10", authPrefix: "Bearer" }).setToken(
+      accessToken,
+    );
     const member = (await rest.get(
-      `/users/@me/guilds/${process.env.DISCORD_GUILD_ID}/member`
+      `/users/@me/guilds/${process.env.DISCORD_GUILD_ID}/member`,
     )) as APIGuildMember;
 
     // Read env vars here (not at module load) so dotenv has already run
@@ -24,7 +26,7 @@ async function fetchUserTeam(accessToken: string): Promise<string | null> {
 
     const memberRoleIds = new Set(member.roles);
     const entry = Object.entries(teamRoleMap).find(
-      ([, roleId]) => roleId && memberRoleIds.has(roleId)
+      ([, roleId]) => roleId && memberRoleIds.has(roleId),
     );
     return entry?.[0] ?? null;
   } catch {
@@ -33,7 +35,7 @@ async function fetchUserTeam(accessToken: string): Promise<string | null> {
   }
 }
 
-const scopes = ["identify", "email", "guilds.members.read"];
+const scopes = ["identify", "guilds", "guilds.members.read"];
 
 export function configurePassport(): void {
   passport.use(
@@ -61,8 +63,8 @@ export function configurePassport(): void {
         } catch (err) {
           return done(err as Error);
         }
-      }
-    )
+      },
+    ),
   );
 
   passport.serializeUser((user, done) => {
