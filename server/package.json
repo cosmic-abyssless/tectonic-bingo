@@ -5,25 +5,39 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "db:seed:event": "tsx src/db/seeds/01-event.ts",
+    "db:seed:tiles": "tsx src/db/seeds/02-tiles.ts",
+    "db:seed:tile-sides": "tsx src/db/seeds/03-tile-sides.ts",
+    "db:seed:tile-side-items": "tsx src/db/seeds/04-tile-side-items.ts",
+    "db:seed:wildcards": "tsx src/db/seeds/05-wildcards.ts",
+    "db:seed:bingo-lines": "tsx src/db/seeds/06-bingo-lines.ts",
+    "db:seed:all": "npm run db:seed:event && npm run db:seed:tiles && npm run db:seed:tile-sides && npm run db:seed:tile-side-items && npm run db:seed:wildcards && npm run db:seed:bingo-lines"
   },
   "dependencies": {
     "@discordjs/rest": "^2.6.0",
+    "better-sqlite3": "^12.6.2",
     "cors": "^2.8.5",
     "discord-api-types": "^0.38.40",
     "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.1",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
     "passport": "^0.7.0",
     "passport-discord": "^0.1.4"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/express-session": "^1.18.1",
     "@types/node": "^22.13.4",
     "@types/passport": "^1.0.17",
     "@types/passport-discord": "^0.1.12",
+    "drizzle-kit": "^0.31.9",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   }
