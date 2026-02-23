@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { avatarUrl, displayName, type TeamProgressResponse, type TileProgress, type SubmissionSummary } from "../types";
+import { avatarUrl, displayName, type BingoEvent, type TeamProgressResponse, type TileProgress, type SubmissionSummary } from "../types";
 import { BingoBoard } from "../components/BingoBoard";
 import { SubmissionModal } from "../components/SubmissionModal";
 import { TeamSubmissionsModal } from "../components/TeamSubmissionsModal";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { formatDuration } from "../utils";
 
 const TEAM_COLORS: Record<string, { bg: string; border: string; text: string; dot: string }> = {
   "Red Team":    { bg: "bg-red-950/60",    border: "border-red-500",    text: "text-red-400",    dot: "bg-red-500"    },
@@ -16,6 +17,31 @@ const TEAM_COLORS: Record<string, { bg: string; border: string; text: string; do
   "Pink Team":   { bg: "bg-pink-950/60",   border: "border-pink-500",   text: "text-pink-400",   dot: "bg-pink-500"   },
 };
 
+
+function EventCountdown({ event }: { event: BingoEvent }) {
+  const [remaining, setRemaining] = useState(() =>
+    Math.max(0, new Date(event.endsAt).getTime() - Date.now())
+  );
+
+  useEffect(() => {
+    const endsAt = new Date(event.endsAt).getTime();
+    const tick = () => setRemaining(Math.max(0, endsAt - Date.now()));
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [event.endsAt]);
+
+  if (remaining <= 0) return null;
+
+  return (
+    <div className="leading-tight">
+      <div className="font-bold text-lg tracking-tight">Tectonic Bingo</div>
+      <div className="text-xs text-slate-400 tabular-nums">
+        {formatDuration(remaining)} remaining
+      </div>
+    </div>
+  );
+}
+
 export function Home() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -24,6 +50,7 @@ export function Home() {
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [submitInitialTileId, setSubmitInitialTileId] = useState<string | undefined>();
   const [showSubmissionsModal, setShowSubmissionsModal] = useState(false);
+  const [event, setEvent] = useState<BingoEvent | null>(null);
 
   const refreshProgress = useCallback(() => {
     if (!user?.team) return;
@@ -74,7 +101,11 @@ export function Home() {
     <div className="min-h-screen bg-slate-900 text-white">
       {/* Nav */}
       <header className="flex items-center justify-between px-6 py-3 bg-slate-800 border-b border-slate-700">
-        <span className="font-bold text-lg tracking-tight">Tectonic Bingo</span>
+        {event ? (
+          <EventCountdown event={event} />
+        ) : (
+          <span className="font-bold text-lg tracking-tight">Tectonic Bingo</span>
+        )}
         <div className="flex items-center gap-3">
           {teamStyle && (
             <span className={`hidden sm:flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${teamStyle.bg} ${teamStyle.border} ${teamStyle.text}`}>
@@ -154,6 +185,7 @@ export function Home() {
             <BingoBoard
               tileProgress={progressMap}
               tileSubmissions={submissionsMap}
+              onEvent={setEvent}
               onSubmitTile={(tileId) => {
                 setSubmitInitialTileId(tileId);
                 setShowSubmitModal(true);

@@ -1,9 +1,9 @@
 TODOs
 
-- [ ] Add a start time to the event object
-- [ ] Display localized start time
-- [ ] Grey out a tile with a freeze if its within the freeze window based on the start time of the event
-- [ ] Show freeze countdown on relevant tiles
+- [x] Add a start time to the event object
+- [x] Display localized start time
+- [x] Grey out a tile with a freeze if its within the freeze window based on the start time of the event
+- [x] Show freeze countdown on relevant tiles
 - [x] Add submission review mode for mods
 - [ ] Ability to switch between boards as a mod
 - [ ] "You are viewing a team other than your own" indicator for mods
