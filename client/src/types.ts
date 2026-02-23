@@ -6,6 +6,7 @@ export interface DiscordUser {
   email?: string;
   verified?: boolean;
   global_name?: string | null;
+  team: string | null;
 }
 
 export function avatarUrl(user: DiscordUser): string {

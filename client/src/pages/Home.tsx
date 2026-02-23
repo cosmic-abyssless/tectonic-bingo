@@ -1,10 +1,21 @@
 import { useAuth } from "../context/AuthContext";
 import { avatarUrl } from "../types";
 
+const TEAM_COLORS: Record<string, string> = {
+  "Pink Team": "#ec4899",
+  "Yellow Team": "#eab308",
+  "Orange Team": "#f97316",
+  "Red Team": "#ef4444",
+  "Green Team": "#22c55e",
+  "Blue Team": "#3b82f6",
+};
+
 export function Home() {
   const { user, logout } = useAuth();
 
   if (!user) return null;
+
+  const teamColor = user.team ? TEAM_COLORS[user.team] : null;
 
   return (
     <div style={styles.container}>
@@ -21,6 +32,20 @@ export function Home() {
           <p style={styles.tag}>@{user.username}</p>
           {user.email && <p style={styles.email}>{user.email}</p>}
         </div>
+        {teamColor ? (
+          <div
+            style={{
+              ...styles.teamBadge,
+              background: teamColor + "33",
+              border: `1px solid ${teamColor}`,
+              color: teamColor,
+            }}
+          >
+            {user.team}
+          </div>
+        ) : (
+          <p style={styles.noTeam}>No team assigned</p>
+        )}
         <button onClick={logout} style={styles.logoutButton}>
           Log out
         </button>
@@ -72,6 +97,18 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#b9bbbe",
     margin: "4px 0 0",
     fontSize: 13,
+  },
+  teamBadge: {
+    borderRadius: 20,
+    padding: "6px 16px",
+    fontSize: 14,
+    fontWeight: 600,
+    letterSpacing: "0.02em",
+  },
+  noTeam: {
+    color: "#4f545c",
+    fontSize: 13,
+    margin: 0,
   },
   logoutButton: {
     background: "transparent",
