@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { BoardTile, BoardResponse, BadgeCategory } from "../types";
+import type { BoardTile, BoardResponse, BadgeCategory, TileProgress, SideStatus } from "../types";
 import { TileModal } from "./TileModal";
 import { TILE_IMAGES } from "../tileImages";
 
@@ -43,16 +43,46 @@ const ROW_ORDER: BadgeCategory[] = [
   "desert",
 ];
 
-function TileCell({ tile, onClick }: { tile: BoardTile; onClick: () => void }) {
+const STATUS_DOT: Record<SideStatus, string> = {
+  not_started:      "bg-slate-600",
+  in_progress:      "bg-yellow-400",
+  pending_approval: "bg-blue-400",
+  completed:        "bg-green-500",
+};
+
+function SideDot({ label, status }: { label: "A" | "B"; status: SideStatus }) {
+  if (status === "not_started") return null;
+  return (
+    <span
+      title={`Part ${label}: ${status.replace(/_/g, " ")}`}
+      className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold text-white leading-none ${STATUS_DOT[status]}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function TileCell({
+  tile,
+  progress,
+  onClick,
+}: {
+  tile: BoardTile;
+  progress?: TileProgress;
+  onClick: () => void;
+}) {
   const hover = BADGE_TILE_HOVER[tile.badgeCategory];
   const imgSrc = TILE_IMAGES[tile.name];
   const [imgFailed, setImgFailed] = useState(false);
+
+  const bothComplete =
+    progress?.sideAStatus === "completed" && progress?.sideBStatus === "completed";
 
   return (
     <button
       onClick={onClick}
       title={tile.name}
-      className={`group relative overflow-hidden bg-slate-800 border-2 border-slate-700 rounded-md cursor-pointer transition-all duration-150 w-full aspect-square ${hover}`}
+      className={`group relative overflow-hidden bg-slate-800 border-2 border-slate-700 rounded-md cursor-pointer transition-all duration-150 w-full aspect-square ${hover} ${bothComplete ? "border-green-600" : ""}`}
     >
       {imgSrc && !imgFailed && (
         <img
@@ -62,16 +92,27 @@ function TileCell({ tile, onClick }: { tile: BoardTile; onClick: () => void }) {
           className="absolute inset-0 w-full h-full object-contain p-1 group-hover:scale-105 transition-transform duration-150"
         />
       )}
+      {/* Full-tile green tint for both sides complete */}
+      {bothComplete && (
+        <div className="absolute inset-0 bg-green-500/15 pointer-events-none" />
+      )}
       {tile.hasFreezePeriod && (
         <span className="absolute top-1 left-1 text-blue-400 text-base z-10 drop-shadow leading-none">
           ⏱
         </span>
       )}
+      {/* A / B status dots — bottom-right corner */}
+      {progress && (
+        <div className="absolute bottom-1 right-1 flex gap-0.5 z-10">
+          <SideDot label="A" status={progress.sideAStatus} />
+          <SideDot label="B" status={progress.sideBStatus} />
+        </div>
+      )}
     </button>
   );
 }
 
-export function BingoBoard() {
+export function BingoBoard({ tileProgress }: { tileProgress?: Map<string, TileProgress> }) {
   const [board, setBoard] = useState<BoardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +185,7 @@ export function BingoBoard() {
                   <TileCell
                     key={tile.id}
                     tile={tile}
+                    progress={tileProgress?.get(tile.id)}
                     onClick={() => setSelected(tile)}
                   />
                 ) : (
