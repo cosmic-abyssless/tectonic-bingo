@@ -7,10 +7,9 @@ const STATUS_STYLE: Record<
   ModSubmission["status"],
   { label: string; cls: string }
 > = {
-  pending:         { label: "Pending",    cls: "bg-yellow-900/50 text-yellow-300 border-yellow-700" },
-  approved:        { label: "Approved",   cls: "bg-green-900/50  text-green-300  border-green-700"  },
-  rejected:        { label: "Rejected",   cls: "bg-red-900/50    text-red-300    border-red-700"    },
-  needs_more_info: { label: "Needs Info", cls: "bg-blue-900/50   text-blue-300   border-blue-700"   },
+  pending:  { label: "Pending",  cls: "bg-yellow-900/50 text-yellow-300 border-yellow-700" },
+  approved: { label: "Approved", cls: "bg-green-900/50  text-green-300  border-green-700"  },
+  rejected: { label: "Rejected", cls: "bg-red-900/50    text-red-300    border-red-700"    },
 };
 
 const BADGE_DOT: Record<string, string> = {
@@ -23,14 +22,13 @@ const BADGE_DOT: Record<string, string> = {
   desert:      "bg-amber-500",
 };
 
-type Filter = "pending" | "needs_more_info" | "approved" | "rejected" | "all";
+type Filter = "pending" | "approved" | "rejected" | "all";
 
 const FILTERS: { key: Filter; label: string }[] = [
-  { key: "pending",         label: "Pending"    },
-  { key: "needs_more_info", label: "Needs Info" },
-  { key: "approved",        label: "Approved"   },
-  { key: "rejected",        label: "Rejected"   },
-  { key: "all",             label: "All"        },
+  { key: "pending",  label: "Pending"  },
+  { key: "approved", label: "Approved" },
+  { key: "rejected", label: "Rejected" },
+  { key: "all",      label: "All"      },
 ];
 
 function timeAgo(iso: string): string {
@@ -81,11 +79,10 @@ export function ModPanel() {
   }, [load]));
 
   const counts: Record<Filter, number> = {
-    pending:         submissions.filter((s) => s.status === "pending").length,
-    needs_more_info: submissions.filter((s) => s.status === "needs_more_info").length,
-    approved:        submissions.filter((s) => s.status === "approved").length,
-    rejected:        submissions.filter((s) => s.status === "rejected").length,
-    all:             submissions.length,
+    pending:  submissions.filter((s) => s.status === "pending").length,
+    approved: submissions.filter((s) => s.status === "approved").length,
+    rejected: submissions.filter((s) => s.status === "rejected").length,
+    all:      submissions.length,
   };
 
   const visible = filter === "all" ? submissions : submissions.filter((s) => s.status === filter);
@@ -101,7 +98,7 @@ export function ModPanel() {
     }));
   }
 
-  async function submitReview(sub: ModSubmission, action: "approve" | "reject" | "needs_more_info") {
+  async function submitReview(sub: ModSubmission, action: "approve" | "reject") {
     const form = getForm(sub);
     setSubmitting(sub.id);
     setError(null);
@@ -180,7 +177,7 @@ export function ModPanel() {
               const { label, cls } = STATUS_STYLE[sub.status];
               const thumb = sub.screenshots[0]?.url;
               const isExpanded = expandedId === sub.id;
-              const canReview = sub.status === "pending" || sub.status === "needs_more_info";
+              const canReview = sub.status === "pending";
               const form = getForm(sub);
 
               return (
@@ -219,6 +216,12 @@ export function ModPanel() {
                         <span className="text-white text-sm font-semibold">{sub.tileName}</span>
                         <span className="text-xs text-slate-500 bg-slate-700 rounded-full px-2 py-0.5">Part {sub.side}</span>
                         <span className="text-xs text-slate-500 bg-slate-700 rounded-full px-2 py-0.5">{sub.teamName}</span>
+                        {sub.codewordVerified === true && (
+                          <span className="text-xs font-semibold border rounded-full px-2 py-0.5 bg-green-900/50 text-green-300 border-green-700">✓ codeword</span>
+                        )}
+                        {sub.codewordVerified === false && (
+                          <span className="text-xs font-semibold border rounded-full px-2 py-0.5 bg-red-900/50 text-red-300 border-red-700">✗ codeword</span>
+                        )}
                       </div>
                       <p className="text-sm text-slate-300 truncate">
                         {sub.items.map((i) => i.quantity > 1 ? `${i.quantity}× ${i.itemName}` : i.itemName).join(", ")}
@@ -302,13 +305,6 @@ export function ModPanel() {
                           className="flex-1 bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded transition-colors cursor-pointer disabled:cursor-not-allowed"
                         >
                           {submitting === sub.id ? "…" : "Approve"}
-                        </button>
-                        <button
-                          onClick={() => submitReview(sub, "needs_more_info")}
-                          disabled={submitting === sub.id}
-                          className="flex-1 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded transition-colors cursor-pointer disabled:cursor-not-allowed"
-                        >
-                          Needs Info
                         </button>
                         <button
                           onClick={() => submitReview(sub, "reject")}

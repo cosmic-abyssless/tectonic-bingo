@@ -19,6 +19,7 @@
     "db:seed:all": "npm run db:seed:event && npm run db:seed:tiles && npm run db:seed:tile-sides && npm run db:seed:tile-side-items && npm run db:seed:wildcards && npm run db:seed:bingo-lines && npm run db:seed:teams"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@discordjs/rest": "^2.6.0",
     "@types/multer": "^2.0.0",
     "@types/ws": "^8.18.1",

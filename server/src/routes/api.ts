@@ -5,6 +5,7 @@ import multer from "multer";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireMod } from "../middleware/requireMod";
 import { broadcast } from "../ws";
+import { getAIClient } from "../ai";
 import { db } from "../db";
 import {
   bingoEvents,
@@ -39,6 +40,19 @@ const upload = multer({
     },
   }),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith("image/")) {
+      cb(new Error("Only image files are allowed"));
+      return;
+    }
+    cb(null, true);
+  },
+});
+
+// Separate multer instance for analysis — memory only, nothing saved to disk
+const analyzeUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
   fileFilter: (_req, file, cb) => {
     if (!file.mimetype.startsWith("image/")) {
       cb(new Error("Only image files are allowed"));
@@ -331,6 +345,148 @@ router.get("/team/submissions", requireAuth, async (req: Request, res: Response)
   res.json({ submissions: result });
 });
 
+// POST /api/submissions/analyze — AI screenshot analysis (codeword check + item detection)
+router.post(
+  "/submissions/analyze",
+  requireAuth,
+  analyzeUpload.single("screenshot"),
+  async (req: Request, res: Response) => {
+    const user = req.user as DiscordUser | undefined;
+    if (!user?.team) {
+      res.status(403).json({ error: "You are not on a team" });
+      return;
+    }
+    if (!req.file) {
+      res.status(400).json({ error: "Screenshot is required" });
+      return;
+    }
+
+    const ai = getAIClient();
+    if (!ai) {
+      res.status(503).json({ error: "AI analysis is not configured on this server" });
+      return;
+    }
+
+    // Look up the team's codeword
+    const [event] = await db
+      .select()
+      .from(bingoEvents)
+      .where(eq(bingoEvents.isActive, true))
+      .limit(1);
+    const activeEvent = event ?? (await db.select().from(bingoEvents).limit(1))[0];
+    if (!activeEvent) {
+      res.status(404).json({ error: "No bingo event found" });
+      return;
+    }
+
+    const [team] = await db
+      .select({ codeword: teams.codeword })
+      .from(teams)
+      .where(and(eq(teams.bingoEventId, activeEvent.id), eq(teams.name, user.team)))
+      .limit(1);
+    if (!team) {
+      res.status(404).json({ error: "Team not found" });
+      return;
+    }
+
+    const base64 = req.file.buffer.toString("base64");
+    const mediaType = (req.file.mimetype || "image/png") as
+      | "image/jpeg"
+      | "image/png"
+      | "image/gif"
+      | "image/webp";
+
+    try {
+      // Step 1 — ask Claude to extract visible text and check for the codeword
+      const message = await ai.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 512,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: mediaType, data: base64 },
+              },
+              {
+                type: "text",
+                text: `This is an Old School RuneScape screenshot submitted for a bingo competition.
+
+The player's team codeword is: "${team.codeword}"
+
+Do two things:
+1. Look for the exact text "${team.codeword}" literally visible anywhere in the image (e.g. in the chatbox). Only return true if those exact characters are present — do not guess or infer.
+2. Extract every piece of text you can read from the image. Focus on: drop notifications, collection log pop-ups, item names in chat, loot beam labels, NPC drop messages, and item tooltips.
+
+Respond ONLY with a JSON object, no markdown:
+{
+  "codewordFound": <true | false>,
+  "extractedText": ["<every string of text you can read from the image>"]
+}`,
+              },
+            ],
+          },
+        ],
+      });
+
+      const raw = message.content[0].type === "text" ? message.content[0].text.trim() : "{}";
+      const json = raw.replace(/^```[a-z]*\n?/i, "").replace(/```$/, "").trim();
+      const parsed = JSON.parse(json);
+
+      const codewordFound = !!parsed.codewordFound;
+      const extractedText: string[] = Array.isArray(parsed.extractedText) ? parsed.extractedText : [];
+
+      // Step 2 — match extracted strings against every item in the DB
+      const allItems = await db
+        .select({
+          id: tileSideItems.id,
+          itemName: tileSideItems.itemName,
+          side: tileSides.side,
+          tileId: tiles.id,
+          tileName: tiles.name,
+        })
+        .from(tileSideItems)
+        .innerJoin(tileSides, eq(tileSideItems.tileSideId, tileSides.id))
+        .innerJoin(tiles, eq(tileSides.tileId, tiles.id))
+        .where(eq(tiles.bingoEventId, activeEvent.id));
+
+      let detectedMatch: {
+        tileId: string; tileName: string; tileSideItemId: string;
+        side: "A" | "B"; itemName: string;
+      } | null = null;
+
+      outer: for (const item of allItems) {
+        const needle = item.itemName.toLowerCase();
+        for (const text of extractedText) {
+          if (text.toLowerCase().includes(needle)) {
+            detectedMatch = {
+              tileId: item.tileId,
+              tileName: item.tileName,
+              tileSideItemId: item.id,
+              side: item.side as "A" | "B",
+              itemName: item.itemName,
+            };
+            break outer;
+          }
+        }
+      }
+
+      const warnings: string[] = [];
+      if (!codewordFound) {
+        warnings.push(
+          `Codeword '${team.codeword}' was not found in your screenshot. Make sure it's visible on screen before submitting.`
+        );
+      }
+
+      res.json({ codewordFound, codeword: team.codeword, detectedMatch, warnings });
+    } catch (err) {
+      console.error("[AI analyze] failed:", err);
+      res.status(500).json({ error: "Analysis failed" });
+    }
+  }
+);
+
 // POST /api/submissions — submit a screenshot for review
 router.post(
   "/submissions",
@@ -344,10 +500,11 @@ router.post(
       return;
     }
 
-    const { tileId, side, itemId } = req.body as {
+    const { tileId, side, itemId, codewordFound } = req.body as {
       tileId?: string;
       side?: string;
       itemId?: string;
+      codewordFound?: string; // "true" | "false" | undefined (if no analysis was run)
     };
 
     if (!tileId || !side || !itemId) {
@@ -443,11 +600,14 @@ router.post(
       status: "pending",
     });
 
+    const analysisRan = codewordFound !== undefined;
     await db.insert(submissionScreenshots).values({
       submissionId,
       screenshotType: "main",
       storageUrl: fileUrl,
-      scrapeStatus: "pending",
+      scrapeStatus: analysisRan ? "completed" : "pending",
+      codewordVerified: analysisRan ? codewordFound === "true" : null,
+      scrapedAt: analysisRan ? new Date() : null,
     });
 
     await db.insert(submissionItemClaims).values({
@@ -548,6 +708,8 @@ router.get("/mod/submissions", requireAuth, requireMod, async (_req: Request, re
   const result = allSubs.map((sub) => {
     const ts = sideById.get(sub.tileSideId)!;
     const tile = tileById.get(ts.tileId)!;
+    const subScreenshots = screenshotsBySubId.get(sub.id) ?? [];
+    const mainScreenshot = subScreenshots.find((ss) => ss.screenshotType === "main");
     return {
       id: sub.id,
       status: sub.status,
@@ -564,11 +726,12 @@ router.get("/mod/submissions", requireAuth, requireMod, async (_req: Request, re
       side: ts.side,
       sidePoints: ts.points,
       submittedBy: submitterById.get(sub.submittedByUserId) ?? "Unknown",
+      codewordVerified: mainScreenshot?.codewordVerified ?? null,
       items: (claimsBySubId.get(sub.id) ?? []).map((c) => ({
         itemName: c.itemName,
         quantity: c.quantity,
       })),
-      screenshots: (screenshotsBySubId.get(sub.id) ?? []).map((ss) => ({
+      screenshots: subScreenshots.map((ss) => ({
         url: ss.storageUrl,
         type: ss.screenshotType,
       })),
@@ -587,8 +750,8 @@ router.patch("/mod/submissions/:id", requireAuth, requireMod, async (req: Reques
     reviewerNotes?: string;
   };
 
-  if (!action || !["approve", "reject", "needs_more_info"].includes(action)) {
-    res.status(400).json({ error: "action must be approve, reject, or needs_more_info" });
+  if (!action || !["approve", "reject"].includes(action)) {
+    res.status(400).json({ error: "action must be approve or reject" });
     return;
   }
   if (action === "approve" && (pointsAwarded == null || pointsAwarded < 0)) {
@@ -610,9 +773,7 @@ router.patch("/mod/submissions/:id", requireAuth, requireMod, async (req: Reques
   }
 
   const now = new Date();
-  const newStatus = action === "approve" ? "approved"
-    : action === "reject" ? "rejected"
-    : "needs_more_info";
+  const newStatus = action === "approve" ? "approved" : "rejected";
 
   await db.update(submissions).set({
     status: newStatus,
@@ -694,7 +855,7 @@ router.patch("/mod/submissions/:id", requireAuth, requireMod, async (req: Reques
       }
     }
   } else {
-    // Reject / needs_more_info — revert side status if no other pending subs remain
+    // Reject — revert side status if no other pending subs remain
     const [{ remaining }] = await db
       .select({ remaining: sql<number>`count(*)` })
       .from(submissions)

@@ -148,10 +148,6 @@ const STATUS_STYLE: Record<
     label: "Rejected",
     cls: "bg-red-900/50    text-red-300    border-red-700",
   },
-  needs_more_info: {
-    label: "Needs Info",
-    cls: "bg-blue-900/50   text-blue-300   border-blue-700",
-  },
 };
 
 function timeAgo(iso: string): string {
