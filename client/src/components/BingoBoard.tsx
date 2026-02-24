@@ -125,7 +125,7 @@ function TileCell({
 
       {/* Full-tile green tint for both sides complete */}
       {bothComplete && !isFrozen && (
-        <div className="absolute inset-0 bg-green-500/15 pointer-events-none" />
+        <div className="absolute inset-0 bg-green-500/50 pointer-events-none" />
       )}
 
       {/* Freeze overlay — shown while frozen */}

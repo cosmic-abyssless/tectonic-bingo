@@ -14,6 +14,9 @@ type SideDef = {
   allowsPreviouslyAcquired?: boolean;
   allowsPreLoad?: boolean;
   requiresPartA?: boolean;
+  // How many approved submissions are required before this side is marked complete.
+  // Defaults to 1. Use >1 for "obtain N of these" tiles where each item is qty=1 in an optgroup.
+  minSubmissions?: number;
   notes?: string;
 };
 
@@ -52,6 +55,7 @@ const DEFS: TileSideDef[] = [
         points: 25,
         description:
           "Obtain any 2 uniques from Cerberus. Duplicates are allowed.",
+        minSubmissions: 2,
       },
       {
         side: "B",
@@ -140,6 +144,7 @@ const DEFS: TileSideDef[] = [
         points: 35,
         description:
           "Obtain any 3 drops from Demonic Gorillas (dupes fine): Zenyte, Ballista Limbs, Ballista Spring, or Light Frame.",
+        minSubmissions: 3,
       },
       {
         side: "B",
@@ -211,6 +216,7 @@ const DEFS: TileSideDef[] = [
         side: "A",
         points: 25,
         description: "Obtain any 2 Zulrah uniques. Duplicates are allowed.",
+        minSubmissions: 2,
       },
       {
         side: "B",
@@ -230,6 +236,7 @@ const DEFS: TileSideDef[] = [
         points: 40,
         description:
           "Obtain any 3 COX purples. Duplicates are allowed. Items must be separate drops from those submitted for COX 1.",
+        minSubmissions: 3,
       },
       {
         side: "B",
@@ -247,6 +254,7 @@ const DEFS: TileSideDef[] = [
         points: 25,
         description:
           "Obtain any 2 Hydra uniques. Duplicates are allowed. Options: Brimstone Ring piece, Hydra Tail, Hydra Leather, Hydra Claw, Hydra Heads, Hydra Jar.",
+        minSubmissions: 2,
       },
       {
         side: "B",
@@ -254,6 +262,7 @@ const DEFS: TileSideDef[] = [
         description:
           "Obtain 3 additional Hydra uniques. Duplicates are allowed.",
         requiresPartA: true,
+        minSubmissions: 3,
       },
     ],
   },
@@ -312,6 +321,7 @@ const DEFS: TileSideDef[] = [
         points: 35,
         description: "Obtain 5 Moons of Peril uniques. Duplicates are allowed.",
         allowsPreLoad: true,
+        minSubmissions: 5,
       },
       {
         side: "B",
@@ -320,6 +330,7 @@ const DEFS: TileSideDef[] = [
           "Obtain 5 additional Moons of Peril uniques. Duplicates are allowed.",
         allowsPreLoad: true,
         requiresPartA: true,
+        minSubmissions: 5,
       },
     ],
   },
@@ -384,12 +395,14 @@ const DEFS: TileSideDef[] = [
         description:
           "Obtain any 3 Gauntlet seeds (Armour seed, Weapon seed, or Enhanced Weapon seed).",
         allowsPreLoad: true,
+        minSubmissions: 3,
       },
       {
         side: "B",
         points: 35,
         description: "Obtain an additional 3 Gauntlet seeds.",
         requiresPartA: true,
+        minSubmissions: 3,
       },
     ],
   },
@@ -443,12 +456,14 @@ const DEFS: TileSideDef[] = [
         side: "A",
         points: 25,
         description: "Obtain any 4 DKS rings. Duplicates are allowed.",
+        minSubmissions: 4,
       },
       {
         side: "B",
         points: 40,
         description: "Obtain 6 more DKS rings. Duplicates are allowed.",
         requiresPartA: true,
+        minSubmissions: 6,
       },
     ],
   },
@@ -498,6 +513,7 @@ const DEFS: TileSideDef[] = [
         description:
           "Obtain 2 different drops from K'ril Tsutsaroth (Steam Battlestaff, Zamorakian Spear, or Staff of the Dead).",
         requiresNoDuplicates: true,
+        minSubmissions: 2,
       },
       {
         side: "B",
@@ -517,6 +533,7 @@ const DEFS: TileSideDef[] = [
         description:
           "Obtain 2 different drops from Commander Zilyana (Saradomin Sword, Saradomin's Light, or Armadyl Crossbow).",
         requiresNoDuplicates: true,
+        minSubmissions: 2,
       },
       {
         side: "B",
@@ -567,6 +584,7 @@ const DEFS: TileSideDef[] = [
         description:
           "Obtain 2 different drops from Kree'arra (Armadyl Chestplate, Armadyl Chainskirt, or Armadyl Helmet).",
         requiresNoDuplicates: true,
+        minSubmissions: 2,
       },
       {
         side: "B",
@@ -586,6 +604,7 @@ const DEFS: TileSideDef[] = [
         description:
           "Obtain 2 different drops from General Graardor (Bandos Chestplate, Bandos Tassets, or Bandos Boots).",
         requiresNoDuplicates: true,
+        minSubmissions: 2,
       },
       {
         side: "B",
@@ -659,12 +678,14 @@ const DEFS: TileSideDef[] = [
         points: 25,
         description:
           "Obtain any 2 Araxxor uniques. Duplicates are allowed. Options: Noxious Halberd piece, Araxyte Fang, Araxyte Head, Jar of Venom.",
+        minSubmissions: 2,
       },
       {
         side: "B",
         points: 40,
         description: "Obtain 2 more Araxxor uniques. Duplicates are allowed.",
         requiresPartA: true,
+        minSubmissions: 2,
       },
     ],
   },
@@ -750,6 +771,7 @@ const DEFS: TileSideDef[] = [
         points: 60,
         description:
           "Obtain 2 Sunfire pieces (Sunfire Fanatic helm, cuirass, or chausses). Must complete the wave and claim the item.",
+        minSubmissions: 2,
       },
     ],
   },
@@ -881,6 +903,7 @@ async function seed() {
       allowsPreviouslyAcquired: s.allowsPreviouslyAcquired ?? false,
       allowsPreLoad: s.allowsPreLoad ?? false,
       requiresPartA: s.requiresPartA ?? false,
+      minSubmissions: s.minSubmissions ?? 1,
       notes: s.notes ?? null,
     }));
   });

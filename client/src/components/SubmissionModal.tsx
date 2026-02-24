@@ -3,6 +3,7 @@ import type {
   BoardResponse,
   BoardTile,
   ScreenshotAnalysis,
+  SubmissionSummary,
   TileProgress,
 } from "../types";
 
@@ -31,6 +32,7 @@ interface Props {
   onSuccess: () => void;
   initialTileId?: string;
   progressMap?: Map<string, TileProgress>;
+  submissions?: SubmissionSummary[];
 }
 
 export function SubmissionModal({
@@ -38,6 +40,7 @@ export function SubmissionModal({
   onSuccess,
   initialTileId,
   progressMap,
+  submissions,
 }: Props) {
   const [board, setBoard] = useState<BoardResponse | null>(null);
   const [selectedTileId, setSelectedTileId] = useState(initialTileId ?? "");
@@ -87,6 +90,31 @@ export function SubmissionModal({
   const selectedItem = currentSideData?.items.find(
     (i) => i.id === selectedItemId,
   );
+
+  // Items already submitted (non-rejected) for this tile — used to filter
+  // out options when requiresNoDuplicates is true.
+  const excludedItemNames = (() => {
+    const excluded = new Set<string>();
+    if (!currentSideData?.requiresNoDuplicates) return excluded;
+    const tileSubmissions = (submissions ?? []).filter(
+      (s) => s.tileId === selectedTileId && s.status !== "rejected",
+    );
+    for (const sub of tileSubmissions) {
+      // Always exclude items already submitted for the current side
+      if (sub.side === selectedPart) {
+        for (const item of sub.items) excluded.add(item.itemName);
+      }
+      // For Part B: also exclude Part A submissions if Part A also requires no duplicates
+      if (
+        selectedPart === "B" &&
+        sub.side === "A" &&
+        selectedTile?.sides.A?.requiresNoDuplicates
+      ) {
+        for (const item of sub.items) excluded.add(item.itemName);
+      }
+    }
+    return excluded;
+  })();
 
   // Auto-prefill tile + part + item from AI match — only if the user hasn't already chosen
   useEffect(() => {
@@ -440,12 +468,14 @@ export function SubmissionModal({
                 className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
               >
                 <option value="">Select an item…</option>
-                {currentSideData.items.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.quantity > 1 ? `${item.quantity}× ` : ""}
-                    {item.itemName}
-                  </option>
-                ))}
+                {currentSideData.items
+                  .filter((item) => !excludedItemNames.has(item.itemName))
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.quantity > 1 ? `${item.quantity}× ` : ""}
+                      {item.itemName}
+                    </option>
+                  ))}
               </select>
             </div>
           )}
