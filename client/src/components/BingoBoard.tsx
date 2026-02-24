@@ -242,15 +242,21 @@ export function BingoBoard({
         )}
       </div>
 
-      {selected && (
-        <TileModal
-          tile={selected}
-          onClose={() => setSelected(null)}
-          onSubmit={onSubmitTile ? () => onSubmitTile(selected.id) : undefined}
-          progress={tileProgress?.get(selected.id)}
-          submissions={tileSubmissions?.get(selected.id)}
-        />
-      )}
+      {selected && (() => {
+        const freezeUnlocksAt = selected.hasFreezePeriod
+          ? eventStart + selected.freezeDurationMinutes * 60_000
+          : undefined;
+        return (
+          <TileModal
+            tile={selected}
+            onClose={() => setSelected(null)}
+            onSubmit={onSubmitTile ? () => onSubmitTile(selected.id) : undefined}
+            progress={tileProgress?.get(selected.id)}
+            submissions={tileSubmissions?.get(selected.id)}
+            isFrozen={!!(freezeUnlocksAt && now < freezeUnlocksAt)}
+          />
+        );
+      })()}
     </div>
   );
 }

@@ -235,13 +235,23 @@ export function SubmissionModal({
     list.sort((a, b) => a.boardCol - b.boardCol);
   }
 
-  // Build flat option arrays for SearchableSelect
+  // Compute freeze/complete state for each tile to disable in dropdown
+  const eventStart = board ? new Date(board.event.startsAt).getTime() : 0;
+  const now = Date.now();
+
+  // Build flat option arrays for SearchableSelect, excluding complete/frozen tiles
   const tileOptions = ROW_ORDER.flatMap((cat) =>
-    (tilesByCategory.get(cat) ?? []).map((t) => ({
-      id: t.id,
-      label: t.name,
-      group: BADGE_LABEL[cat],
-    })),
+    (tilesByCategory.get(cat) ?? []).flatMap((t) => {
+      const p = progressMap?.get(t.id);
+      const complete =
+        p?.sideAStatus === "completed" && p?.sideBStatus === "completed";
+      const freezeUnlocksAt = t.hasFreezePeriod
+        ? eventStart + t.freezeDurationMinutes * 60_000
+        : undefined;
+      const frozen = !!(freezeUnlocksAt && now < freezeUnlocksAt);
+      if (complete || frozen) return [];
+      return [{ id: t.id, label: t.name, group: BADGE_LABEL[cat] }];
+    }),
   );
 
   const itemOptions = currentSideData
