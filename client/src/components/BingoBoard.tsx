@@ -84,12 +84,14 @@ function TileCell({
   progress,
   now,
   freezeUnlocksAt,
+  dimmed,
   onClick,
 }: {
   tile: BoardTile;
   progress?: TileProgress;
   now: number;
   freezeUnlocksAt?: number;
+  dimmed?: boolean;
   onClick: () => void;
 }) {
   const hover = BADGE_TILE_HOVER[tile.badgeCategory];
@@ -109,7 +111,9 @@ function TileCell({
       title={tile.name}
       className={`group relative overflow-hidden bg-slate-800 border-2 rounded-md cursor-pointer transition-all duration-150 w-full aspect-square ${
         isFrozen ? "border-blue-800" : `border-slate-700 ${hover}`
-      } ${bothComplete && !isFrozen ? "border-green-600" : ""}`}
+      } ${bothComplete && !isFrozen ? "border-green-600" : ""} ${
+        dimmed ? "opacity-20 saturate-0 pointer-events-none" : ""
+      }`}
     >
       {/* Tile image */}
       {imgSrc && !imgFailed && (
@@ -123,9 +127,13 @@ function TileCell({
         />
       )}
 
-      {/* Full-tile green tint for both sides complete */}
+      {/* Full-tile green tint + checkmark for both sides complete */}
       {bothComplete && !isFrozen && (
-        <div className="absolute inset-0 bg-green-500/50 pointer-events-none" />
+        <div className="absolute inset-0 bg-green-500/50 pointer-events-none flex items-center justify-center">
+          <svg className="w-1/2 h-1/2 text-green-300 drop-shadow" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z" clipRule="evenodd" />
+          </svg>
+        </div>
       )}
 
       {/* Freeze overlay — shown while frozen */}
@@ -149,7 +157,8 @@ function TileCell({
       {progress && (
         <div className="absolute bottom-1 left-1 z-20">
           <span className="text-[9px] font-semibold tabular-nums leading-none text-slate-300 bg-slate-900/80 rounded px-1 py-0.5">
-            {progress.sideAPointsAwarded + progress.sideBPointsAwarded}/{tile.totalPoints}
+            {progress.sideAPointsAwarded + progress.sideBPointsAwarded}/
+            {tile.totalPoints}
           </span>
         </div>
       )}
@@ -170,11 +179,19 @@ export function BingoBoard({
   tileSubmissions,
   onSubmitTile,
   onEvent,
+  onBoardLoaded,
+  searchQuery,
+  openTileId,
+  onOpenTileHandled,
 }: {
   tileProgress?: Map<string, TileProgress>;
   tileSubmissions?: Map<string, SubmissionSummary[]>;
   onSubmitTile?: (tileId: string) => void;
   onEvent?: (event: BoardResponse["event"]) => void;
+  onBoardLoaded?: (tiles: BoardTile[]) => void;
+  searchQuery?: string;
+  openTileId?: string | null;
+  onOpenTileHandled?: () => void;
 }) {
   const [board, setBoard] = useState<BoardResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -183,7 +200,7 @@ export function BingoBoard({
   const [now, setNow] = useState(() => Date.now());
   // DEV ONLY — remove before deploy
   const [devOverride, setDevOverride] = useState(
-    () => localStorage.getItem("dev_board_override") === "true"
+    () => localStorage.getItem("dev_board_override") === "true",
   );
 
   useEffect(() => {
@@ -195,11 +212,23 @@ export function BingoBoard({
       .then((data: BoardResponse) => {
         setBoard(data);
         onEvent?.(data.event);
+        onBoardLoaded?.(data.tiles);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Open a tile selected from the search dropdown in Home
+  useEffect(() => {
+    if (!openTileId || !board) return;
+    const tile = board.tiles.find((t) => t.id === openTileId);
+    if (tile) {
+      setSelected(tile);
+      onOpenTileHandled?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openTileId]);
 
   // Tick every second from now until event start + max freeze expiry
   useEffect(() => {
@@ -237,7 +266,7 @@ export function BingoBoard({
   if (!board) return null;
 
   const eventStart = new Date(board.event.startsAt).getTime();
-  // DEV ONLY — remove before deploy
+  // TODO — remove devOverride before deploy
   const isPreEvent = now < eventStart && !devOverride;
 
   const grid = new Map<number, Map<number, BoardTile>>();
@@ -246,15 +275,27 @@ export function BingoBoard({
     grid.get(tile.boardRow)!.set(tile.boardCol, tile);
   }
 
+  const q = (searchQuery ?? "").trim().toLowerCase();
+  const matchingTileIds = q
+    ? new Set(
+        board.tiles
+          .filter((tile) => {
+            if (tile.name.toLowerCase().includes(q)) return true;
+            for (const side of Object.values(tile.sides)) {
+              if (!side) continue;
+              if (side.description.toLowerCase().includes(q)) return true;
+              for (const item of side.items) {
+                if (item.itemName.toLowerCase().includes(q)) return true;
+              }
+            }
+            return false;
+          })
+          .map((t) => t.id),
+      )
+    : null; // null = no active search, all tiles shown normally
+
   return (
     <div className="w-full">
-      <h1 className="text-white text-2xl font-bold text-center mb-1">
-        {board.event.name}
-      </h1>
-      <p className="text-slate-400 text-sm text-center mb-4">
-        Click any tile to view its challenges
-      </p>
-
       {/* Board grid + optional pre-event overlay */}
       <div className="relative">
         {/* Grid — dimmed and non-interactive before event starts */}
@@ -292,6 +333,10 @@ export function BingoBoard({
                       progress={tileProgress?.get(tile.id)}
                       now={now}
                       freezeUnlocksAt={freezeUnlocksAt}
+                      dimmed={
+                        matchingTileIds !== null &&
+                        !matchingTileIds.has(tile.id)
+                      }
                       onClick={() => setSelected(tile)}
                     />
                   ) : (
@@ -306,7 +351,7 @@ export function BingoBoard({
           </div>
         </div>
 
-        {/* Pre-event overlay — DEV ONLY block, remove before deploy */}
+        {/* Pre-event overlay */}
         {isPreEvent && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="flex flex-col items-center gap-3 bg-slate-900/90 border border-slate-700 rounded-xl px-10 py-8 shadow-xl">
@@ -316,6 +361,7 @@ export function BingoBoard({
               <p className="text-white text-3xl font-bold text-center">
                 {formatDuration(eventStart - now)}
               </p>
+              {/* DEV ONLY override, remove before deploy */}
               <button
                 onClick={() => {
                   localStorage.setItem("dev_board_override", "true");
