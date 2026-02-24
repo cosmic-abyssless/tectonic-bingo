@@ -1,9 +1,5 @@
 import { useEffect, useState } from "react";
-import type {
-  BoardTile,
-  TileProgress,
-  SubmissionSummary,
-} from "../types";
+import type { BoardTile, TileProgress, SubmissionSummary } from "../types";
 import { TILE_IMAGES } from "../tileImages";
 import { SidePanel } from "./SidePanel";
 import { SubmissionRow } from "./SubmissionRow";
@@ -168,7 +164,6 @@ export function TileModal({
                 approvedQtyBySideAndItem.get("A") ?? new Map()
               }
               submittedItemNames={submittedNamesBySide.get("A") ?? new Set()}
-              approvedSubmissionCount={approvedSubCountBySide.get("A") ?? 0}
               complete={progress?.sideAStatus === "completed"}
             />
           )}
@@ -193,7 +188,6 @@ export function TileModal({
                   label="Part B"
                   approvedByItemName={bApproved}
                   submittedItemNames={effectiveSubmitted}
-                  approvedSubmissionCount={approvedSubCountBySide.get("B") ?? 0}
                   locked={progress?.sideAStatus !== "completed"}
                   complete={progress?.sideBStatus === "completed"}
                 />

@@ -38,7 +38,6 @@ export function SidePanel({
   label,
   approvedByItemName,
   submittedItemNames,
-  approvedSubmissionCount,
   locked,
   complete,
 }: {
@@ -46,7 +45,6 @@ export function SidePanel({
   label: string;
   approvedByItemName: Map<string, number>;
   submittedItemNames: Set<string>;
-  approvedSubmissionCount: number;
   locked?: boolean;
   complete?: boolean;
 }) {
@@ -92,23 +90,9 @@ export function SidePanel({
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          {side.minSubmissions > 1 && !complete && (
-            <span
-              className={`text-xs tabular-nums font-semibold ${
-                approvedSubmissionCount >= side.minSubmissions
-                  ? "text-green-400"
-                  : "text-yellow-400"
-              }`}
-              title={`${approvedSubmissionCount} of ${side.minSubmissions} required submissions approved`}
-            >
-              {approvedSubmissionCount}/{side.minSubmissions}
-            </span>
-          )}
-          <span className="text-yellow-400 font-semibold text-sm">
-            {side.points} pts
-          </span>
-        </div>
+        <span className="text-yellow-400 font-semibold text-sm">
+          {side.points} pts
+        </span>
       </div>
 
       <p className="text-slate-300 text-sm leading-relaxed mb-3">
