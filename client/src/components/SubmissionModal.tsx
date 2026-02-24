@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type {
   BoardResponse,
   BoardTile,
@@ -55,7 +55,9 @@ export function SubmissionModal({
   const [submissionQty, setSubmissionQty] = useState(1);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<ScreenshotAnalysis | null>(null);
+  const [analysisFailed, setAnalysisFailed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragCounter = useRef(0);
 
   useEffect(() => {
     fetch("/api/board")
@@ -122,6 +124,41 @@ export function SubmissionModal({
     const match = analysis?.detectedMatch;
     if (!match) return;
 
+    // Don't apply if the tile is frozen
+    const matchedTile = board?.tiles.find((t) => t.id === match.tileId);
+    if (matchedTile?.hasFreezePeriod) {
+      const eventStartTs = board ? new Date(board.event.startsAt).getTime() : 0;
+      const freezeUnlocksAt = eventStartTs + matchedTile.freezeDurationMinutes * 60_000;
+      if (Date.now() < freezeUnlocksAt) return;
+    }
+
+    // Don't apply if the matched side is already completed
+    const matchedProgress = progressMap?.get(match.tileId);
+    const matchedSideStatus =
+      match.side === "A" ? matchedProgress?.sideAStatus : matchedProgress?.sideBStatus;
+    if (matchedSideStatus === "completed") return;
+
+    // Don't apply if the item has already been used and duplicates are invalid
+    const matchedSideData = matchedTile?.sides[match.side];
+    if (matchedSideData?.requiresNoDuplicates) {
+      const usedItems = new Set<string>();
+      for (const sub of (submissions ?? []).filter(
+        (s) => s.tileId === match.tileId && s.status !== "rejected",
+      )) {
+        if (sub.side === match.side) {
+          for (const item of sub.items) usedItems.add(item.itemName);
+        }
+        if (
+          match.side === "B" &&
+          sub.side === "A" &&
+          matchedTile?.sides.A?.requiresNoDuplicates
+        ) {
+          for (const item of sub.items) usedItems.add(item.itemName);
+        }
+      }
+      if (usedItems.has(match.itemName)) return;
+    }
+
     if (!selectedTileId) {
       // Nothing chosen yet — set tile, part, and item
       setSelectedTileId(match.tileId);
@@ -149,11 +186,12 @@ export function SubmissionModal({
       setSubmissionQty(1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTileId, selectedPart]);
+  }, [selectedTileId, selectedPart, currentSideData]);
 
   const analyzeScreenshot = async (file: File) => {
     setAnalyzing(true);
     setAnalysis(null);
+    setAnalysisFailed(false);
     try {
       const fd = new FormData();
       fd.append("screenshot", file);
@@ -162,33 +200,57 @@ export function SubmissionModal({
         body: fd,
       });
       if (r.ok) setAnalysis(await r.json());
-      // silently ignore errors — analysis is best-effort
+      else setAnalysisFailed(true);
     } catch {
-      // ignore
+      setAnalysisFailed(true);
     } finally {
       setAnalyzing(false);
     }
   };
 
-  const handleFile = (file: File) => {
+  const handleFile = useCallback((file: File) => {
     if (!file.type.startsWith("image/")) {
       setError("Please upload an image file (PNG, JPG, WebP, etc.)");
       return;
     }
     setError(null);
+    setAnalysisFailed(false);
     setImageFile(file);
     const reader = new FileReader();
     reader.onload = (e) => setImagePreview(e.target?.result as string);
     reader.readAsDataURL(file);
     analyzeScreenshot(file);
-  };
+  }, []);
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  };
+  useEffect(() => {
+    const onDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      if (dragCounter.current === 0) setDragOver(true);
+      dragCounter.current++;
+    };
+    const onDragOver = (e: DragEvent) => e.preventDefault();
+    const onDragLeave = () => {
+      dragCounter.current--;
+      if (dragCounter.current === 0) setDragOver(false);
+    };
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter.current = 0;
+      setDragOver(false);
+      const file = e.dataTransfer?.files[0];
+      if (file) handleFile(file);
+    };
+    window.addEventListener("dragenter", onDragEnter);
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragenter", onDragEnter);
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, [handleFile]);
 
   const isValid = imageFile && selectedTileId && selectedItemId;
 
@@ -295,16 +357,6 @@ export function SubmissionModal({
                   ? "border-indigo-400 bg-indigo-500/10"
                   : "border-slate-600 hover:border-slate-500"
               } ${imagePreview ? "h-52" : "h-40"}`}
-              onDragEnter={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
             >
               {imagePreview ? (
@@ -347,8 +399,13 @@ export function SubmissionModal({
             />
 
             {/* Analysis result */}
-            {(analyzing || analysis) && (
+            {(analyzing || analysis || analysisFailed) && (
               <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2.5 space-y-1.5 text-sm">
+                {analysisFailed && (
+                  <p className="text-slate-500 text-xs">
+                    Screenshot analysis unavailable — select your tile and item manually.
+                  </p>
+                )}
                 {analyzing && (
                   <p className="flex items-center gap-2 text-slate-400">
                     <span className="inline-block w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin shrink-0" />
@@ -389,6 +446,23 @@ export function SubmissionModal({
                           — {analysis.detectedMatch.tileName} Part{" "}
                           {analysis.detectedMatch.side}
                         </span>
+                        {(() => {
+                          const match = analysis.detectedMatch;
+                          const matchedTile = board?.tiles.find((t) => t.id === match.tileId);
+                          const eventStartTs = board ? new Date(board.event.startsAt).getTime() : 0;
+                          const freezeUnlocksAt = matchedTile?.hasFreezePeriod
+                            ? eventStartTs + matchedTile.freezeDurationMinutes * 60_000
+                            : undefined;
+                          if (freezeUnlocksAt && Date.now() < freezeUnlocksAt) {
+                            return <span className="text-blue-400 ml-1">(Frozen)</span>;
+                          }
+                          const p = progressMap?.get(match.tileId);
+                          const sideStatus = match.side === "A" ? p?.sideAStatus : p?.sideBStatus;
+                          if (sideStatus === "completed") {
+                            return <span className="text-green-400 ml-1">(Completed)</span>;
+                          }
+                          return null;
+                        })()}
                       </p>
                     ) : (
                       <p className="text-slate-500 text-xs">
@@ -528,10 +602,10 @@ export function SubmissionModal({
           {/* Submit button */}
           <button
             onClick={handleSubmit}
-            disabled={!isValid || submitting}
+            disabled={!isValid || submitting || analyzing}
             className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold py-2.5 rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed"
           >
-            {submitting ? "Submitting…" : "Submit for Review"}
+            {submitting ? "Submitting…" : analyzing ? "Analyzing…" : "Submit for Review"}
           </button>
         </div>
       </div>

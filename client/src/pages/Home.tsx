@@ -193,6 +193,28 @@ export function Home() {
     ),
   );
 
+  // Derived before early return so hooks below can reference it
+  const canSubmit = !isViewingOtherTeam && !!user?.team;
+
+  // Open submit modal when an image file is dragged over the page
+  useEffect(() => {
+    if (!canSubmit) return;
+    const handler = (e: DragEvent) => {
+      if (showSubmitModal) return;
+      const items = e.dataTransfer?.items;
+      if (!items) return;
+      const hasImage = Array.from(items).some(
+        (item) => item.kind === "file" && item.type.startsWith("image/"),
+      );
+      if (hasImage) {
+        setSubmitInitialTileId(undefined);
+        setShowSubmitModal(true);
+      }
+    };
+    window.addEventListener("dragenter", handler);
+    return () => window.removeEventListener("dragenter", handler);
+  }, [canSubmit, showSubmitModal]);
+
   if (!user) return null;
 
   const teamStyle = viewingTeam ? TEAM_COLORS[viewingTeam] : null;
@@ -206,8 +228,6 @@ export function Home() {
     list.push(sub);
     submissionsMap.set(sub.tileId, list);
   }
-
-  const canSubmit = !isViewingOtherTeam && !!user.team;
 
   // Search
   const SUGGESTION_CAP = 8;
