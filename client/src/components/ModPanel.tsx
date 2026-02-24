@@ -63,6 +63,12 @@ export function ModPanel() {
   const [forms, setForms] = useState<Record<string, ReviewForm>>({});
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showNotifPrompt, setShowNotifPrompt] = useState(
+    () =>
+      "Notification" in window &&
+      Notification.permission === "default" &&
+      !localStorage.getItem("mod_notif_prompted"),
+  );
 
   const load = useCallback(() => {
     setLoading(true);
@@ -93,6 +99,17 @@ export function ModPanel() {
           msg.type === "submission_reviewed"
         ) {
           load();
+        }
+        if (
+          msg.type === "submission_created" &&
+          "Notification" in window &&
+          Notification.permission === "granted"
+        ) {
+          new Notification("New bingo submission", {
+            body: msg.teamName
+              ? `${msg.teamName} submitted for review`
+              : "A new submission is pending review",
+          });
         }
       },
       [load],
@@ -178,7 +195,7 @@ export function ModPanel() {
           Back to board
         </button>
       </header>
-      <div className="w-full flex flex-col items-center">
+      <div className="flex-1 w-full flex flex-col items-center overflow-y-auto">
         <div className="w-full max-w-6xl">
           {/* Status filter tabs */}
           <div className="flex gap-1 px-6 pt-4 pb-2 shrink-0 overflow-x-auto">
@@ -433,6 +450,41 @@ export function ModPanel() {
           </div>
         </div>
       </div>
+
+      {showNotifPrompt && (
+        <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-xl w-full max-w-sm shadow-2xl p-6 space-y-4">
+            <h2 className="text-white font-bold text-lg">
+              Enable notifications?
+            </h2>
+            <p className="text-slate-300 text-sm leading-relaxed">
+              Get a browser notification whenever a new submission arrives for
+              review, even if this tab is in the background.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  localStorage.setItem("mod_notif_prompted", "true");
+                  setShowNotifPrompt(false);
+                }}
+                className="text-sm text-slate-400 hover:text-white border border-slate-600 hover:border-slate-400 rounded px-3 py-1.5 transition-colors cursor-pointer"
+              >
+                No thanks
+              </button>
+              <button
+                onClick={async () => {
+                  localStorage.setItem("mod_notif_prompted", "true");
+                  setShowNotifPrompt(false);
+                  await Notification.requestPermission();
+                }}
+                className="text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded px-3 py-1.5 transition-colors cursor-pointer"
+              >
+                Enable
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

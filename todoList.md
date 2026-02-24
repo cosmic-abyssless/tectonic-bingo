@@ -11,5 +11,5 @@ TODOs
 - [ ] View for full rules (or at least a link to the doc)
 - [x] Global search
 - [x] Websockets to get live updates on progress/submissions
-- [ ] Notification for mods when there are new submissions to approve
+- [x] Notification for mods when there are new submissions to approve
 - [ ] Support wildcards for submissions
