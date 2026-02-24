@@ -660,6 +660,15 @@ router.post(
 // MOD ROUTES
 // ---------------------------------------------------------------------------
 
+// GET /api/mod/pending-count — lightweight count of pending submissions
+router.get("/mod/pending-count", requireAuth, requireMod, async (_req: Request, res: Response) => {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(submissions)
+    .where(eq(submissions.status, "pending"));
+  res.json({ count: Number(row?.count ?? 0) });
+});
+
 // GET /api/mod/submissions — all submissions across all teams
 router.get("/mod/submissions", requireAuth, requireMod, async (_req: Request, res: Response) => {
   const allSubs = await db

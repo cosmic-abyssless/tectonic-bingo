@@ -99,6 +99,7 @@ export function Home() {
   const [showSubmissionsModal, setShowSubmissionsModal] = useState(false);
   const [event, setEvent] = useState<BingoEvent | null>(null);
   const [allTeams, setAllTeams] = useState<TeamInfo[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
   // Which team's board is currently displayed
   const [viewingTeam, setViewingTeam] = useState<string | null>(
     user?.team ?? null,
@@ -132,6 +133,20 @@ export function Home() {
 
   const isViewingOtherTeam =
     !!user?.isModerator && !!viewingTeam && viewingTeam !== user?.team;
+
+  const refreshPendingCount = useCallback(() => {
+    if (!user?.isModerator) return;
+    fetch("/api/mod/pending-count")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) setPendingCount(data.count);
+      })
+      .catch(() => {});
+  }, [user?.isModerator]);
+
+  useEffect(() => {
+    refreshPendingCount();
+  }, [refreshPendingCount]);
 
   // Fetch team list for mod switcher
   useEffect(() => {
@@ -181,15 +196,36 @@ export function Home() {
     useCallback(
       (msg) => {
         if (
-          (msg.type === "submission_created" ||
-            msg.type === "submission_reviewed") &&
-          msg.teamName === viewingTeam
+          msg.type === "submission_created" ||
+          msg.type === "submission_reviewed"
         ) {
-          refreshProgress();
-          refreshSubmissions();
+          if (msg.teamName === viewingTeam) {
+            refreshProgress();
+            refreshSubmissions();
+          }
+          refreshPendingCount();
+        }
+        if (
+          msg.type === "submission_created" &&
+          user?.isModerator &&
+          "Notification" in window &&
+          Notification.permission === "granted" &&
+          document.visibilityState !== "visible"
+        ) {
+          new Notification("New bingo submission", {
+            body: msg.teamName
+              ? `${msg.teamName} submitted for review`
+              : "A new submission is pending review",
+          });
         }
       },
-      [viewingTeam, refreshProgress, refreshSubmissions],
+      [
+        viewingTeam,
+        refreshProgress,
+        refreshSubmissions,
+        refreshPendingCount,
+        user?.isModerator,
+      ],
     ),
   );
 
@@ -369,9 +405,14 @@ export function Home() {
           {user.isModerator && (
             <button
               onClick={() => navigate("/mod")}
-              className="text-sm text-yellow-400 hover:text-yellow-300 border border-yellow-700 hover:border-yellow-500 rounded px-3 py-1 transition-colors cursor-pointer font-semibold"
+              className="relative text-sm text-yellow-400 hover:text-yellow-300 border border-yellow-700 hover:border-yellow-500 rounded px-3 py-1 transition-colors cursor-pointer font-semibold"
             >
               Mod Panel
+              {pendingCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full px-1 leading-none">
+                  {pendingCount}
+                </span>
+              )}
             </button>
           )}
           {viewingTeam && (
