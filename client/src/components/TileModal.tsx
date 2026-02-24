@@ -34,6 +34,7 @@ interface Props {
   onSubmit?: () => void;
   progress?: TileProgress;
   submissions?: SubmissionSummary[];
+  isFrozen?: boolean;
 }
 
 export function TileModal({
@@ -42,6 +43,7 @@ export function TileModal({
   onSubmit,
   progress,
   submissions,
+  isFrozen,
 }: Props) {
   const badgeColor =
     BADGE_COLORS[tile.badgeCategory] ??
@@ -52,6 +54,11 @@ export function TileModal({
 
   const claimedPts =
     (progress?.sideAPointsAwarded ?? 0) + (progress?.sideBPointsAwarded ?? 0);
+
+  const bothComplete =
+    progress?.sideAStatus === "completed" &&
+    progress?.sideBStatus === "completed";
+  const submitDisabled = bothComplete || isFrozen;
 
   // Approved quantity per side+itemName, used by SidePanel for item progress
   const approvedQtyBySideAndItem = new Map<string, Map<string, number>>();
@@ -135,8 +142,9 @@ export function TileModal({
           <div className="flex items-center gap-2 shrink-0">
             {onSubmit && (
               <button
-                onClick={onSubmit}
-                className="text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded px-3 py-1 transition-colors cursor-pointer"
+                onClick={submitDisabled ? undefined : onSubmit}
+                disabled={submitDisabled}
+                className="text-sm bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold rounded px-3 py-1 transition-colors cursor-pointer disabled:cursor-not-allowed"
               >
                 Submit
               </button>
