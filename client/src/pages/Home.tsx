@@ -14,6 +14,7 @@ import {
 import { BingoBoard } from "../components/BingoBoard";
 import { SubmissionModal } from "../components/SubmissionModal";
 import { TeamSubmissionsModal } from "../components/TeamSubmissionsModal";
+import { RulesModal } from "../components/RulesModal";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { formatDuration } from "../utils";
 
@@ -97,6 +98,7 @@ export function Home() {
     string | undefined
   >();
   const [showSubmissionsModal, setShowSubmissionsModal] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState(false);
   const [event, setEvent] = useState<BingoEvent | null>(null);
   const [allTeams, setAllTeams] = useState<TeamInfo[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
@@ -402,6 +404,12 @@ export function Home() {
                 </span>
               ) : null;
             })()}
+          <button
+            onClick={() => setShowRulesModal(true)}
+            className="text-sm text-slate-300 hover:text-white border border-slate-600 hover:border-slate-400 rounded px-3 py-1 transition-colors cursor-pointer"
+          >
+            Rules
+          </button>
           {user.isModerator && (
             <button
               onClick={() => navigate("/mod")}
@@ -641,6 +649,8 @@ export function Home() {
           }}
         />
       )}
+
+      {showRulesModal && <RulesModal onClose={() => setShowRulesModal(false)} />}
 
       {showSubmissionsModal && (
         <TeamSubmissionsModal
