@@ -262,7 +262,7 @@ export function ModPanel() {
                         )}
                       </div>
                       <p className="text-sm text-slate-300 truncate">
-                        {sub.items.map((i) => i.quantity > 1 ? `${i.quantity}× ${i.itemName}` : i.itemName).join(", ")}
+                        {sub.items.map((i) => i.targetQuantity > 1 ? `${i.quantity}× ${i.itemName}` : i.itemName).join(", ")}
                       </p>
                       <p className="text-xs text-slate-500 mt-0.5">by {sub.submittedBy}</p>
                       {sub.reviewerNotes && (

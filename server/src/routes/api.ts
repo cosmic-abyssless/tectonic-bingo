@@ -281,7 +281,14 @@ router.get("/team/submissions", requireAuth, async (req: Request, res: Response)
 
   const [sidesData, claimsData, screenshotsData, submittersData] = await Promise.all([
     db.select().from(tileSides).where(inArray(tileSides.id, tileSideIds)),
-    db.select().from(submissionItemClaims).where(inArray(submissionItemClaims.submissionId, subIds)),
+    db.select({
+      submissionId: submissionItemClaims.submissionId,
+      itemName: submissionItemClaims.itemName,
+      quantity: submissionItemClaims.quantity,
+      targetQuantity: tileSideItems.quantity,
+    }).from(submissionItemClaims)
+      .leftJoin(tileSideItems, eq(submissionItemClaims.tileSideItemId, tileSideItems.id))
+      .where(inArray(submissionItemClaims.submissionId, subIds)),
     db.select().from(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, subIds)),
     db.select({
       id: users.id,
@@ -334,6 +341,7 @@ router.get("/team/submissions", requireAuth, async (req: Request, res: Response)
       items: (claimsBySubId.get(sub.id) ?? []).map((c) => ({
         itemName: c.itemName,
         quantity: c.quantity,
+        targetQuantity: c.targetQuantity ?? 1,
       })),
       screenshots: (screenshotsBySubId.get(sub.id) ?? []).map((ss) => ({
         url: ss.storageUrl,
@@ -500,12 +508,14 @@ router.post(
       return;
     }
 
-    const { tileId, side, itemId, codewordFound } = req.body as {
+    const { tileId, side, itemId, quantity: quantityRaw, codewordFound } = req.body as {
       tileId?: string;
       side?: string;
       itemId?: string;
+      quantity?: string;
       codewordFound?: string; // "true" | "false" | undefined (if no analysis was run)
     };
+    const quantity = Math.max(1, parseInt(quantityRaw ?? "1") || 1);
 
     if (!tileId || !side || !itemId) {
       if (req.file) fs.unlinkSync(req.file.path);
@@ -613,7 +623,7 @@ router.post(
     await db.insert(submissionItemClaims).values({
       submissionId,
       itemName: item.itemName,
-      quantity: 1,
+      quantity,
       tileSideItemId: item.id,
     });
 
@@ -669,7 +679,14 @@ router.get("/mod/submissions", requireAuth, requireMod, async (_req: Request, re
 
   const [sidesData, claimsData, screenshotsData, teamsData, submittersData] = await Promise.all([
     db.select().from(tileSides).where(inArray(tileSides.id, tileSideIds)),
-    db.select().from(submissionItemClaims).where(inArray(submissionItemClaims.submissionId, subIds)),
+    db.select({
+      submissionId: submissionItemClaims.submissionId,
+      itemName: submissionItemClaims.itemName,
+      quantity: submissionItemClaims.quantity,
+      targetQuantity: tileSideItems.quantity,
+    }).from(submissionItemClaims)
+      .leftJoin(tileSideItems, eq(submissionItemClaims.tileSideItemId, tileSideItems.id))
+      .where(inArray(submissionItemClaims.submissionId, subIds)),
     db.select().from(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, subIds)),
     db.select({ id: teams.id, name: teams.name }).from(teams).where(inArray(teams.id, teamIds)),
     db.select({
@@ -730,6 +747,7 @@ router.get("/mod/submissions", requireAuth, requireMod, async (_req: Request, re
       items: (claimsBySubId.get(sub.id) ?? []).map((c) => ({
         itemName: c.itemName,
         quantity: c.quantity,
+        targetQuantity: c.targetQuantity ?? 1,
       })),
       screenshots: subScreenshots.map((ss) => ({
         url: ss.storageUrl,
@@ -801,7 +819,73 @@ router.patch("/mod/submissions/:id", requireAuth, requireMod, async (req: Reques
   if (action === "approve") {
     const pts = pointsAwarded ?? 0;
 
-    if (ts.side === "A") {
+    // ---- Check if approving this submission completes the side ----
+    // For items with quantity > 1, the side is only complete once the cumulative
+    // total of approved claim quantities reaches the item's target quantity.
+    let sideIsComplete = true;
+
+    const [claim] = await db
+      .select({ tileSideItemId: submissionItemClaims.tileSideItemId })
+      .from(submissionItemClaims)
+      .where(eq(submissionItemClaims.submissionId, id))
+      .limit(1);
+
+    if (claim?.tileSideItemId) {
+      const [targetItem] = await db
+        .select({ targetQty: tileSideItems.quantity })
+        .from(tileSideItems)
+        .where(eq(tileSideItems.id, claim.tileSideItemId))
+        .limit(1);
+
+      if (targetItem && targetItem.targetQty > 1) {
+        // Sum all approved claim quantities for this (team, tileSide, item).
+        // The current submission is already marked "approved" above, so it is included.
+        const approvedSubIds = (await db
+          .select({ id: submissions.id })
+          .from(submissions)
+          .where(and(
+            eq(submissions.teamId, sub.teamId),
+            eq(submissions.tileSideId, sub.tileSideId),
+            eq(submissions.status, "approved"),
+          ))
+        ).map((s) => s.id);
+
+        let approvedTotal = 0;
+        if (approvedSubIds.length > 0) {
+          const [{ total }] = await db
+            .select({ total: sql<number>`coalesce(sum(${submissionItemClaims.quantity}), 0)` })
+            .from(submissionItemClaims)
+            .where(and(
+              inArray(submissionItemClaims.submissionId, approvedSubIds),
+              eq(submissionItemClaims.tileSideItemId, claim.tileSideItemId),
+            ));
+          approvedTotal = total ?? 0;
+        }
+
+        sideIsComplete = approvedTotal >= targetItem.targetQty;
+      }
+    }
+    // ----------------------------------------------------------------
+
+    if (!sideIsComplete) {
+      // Partial progress — check for any other pending subs to determine new status
+      const [{ remaining }] = await db
+        .select({ remaining: sql<number>`count(*)` })
+        .from(submissions)
+        .where(and(
+          eq(submissions.teamId, sub.teamId),
+          eq(submissions.tileSideId, sub.tileSideId),
+          eq(submissions.status, "pending"),
+        ));
+      const partialStatus = remaining > 0 ? ("pending_approval" as const) : ("in_progress" as const);
+      const sideField = ts.side === "A" ? ("sideAStatus" as const) : ("sideBStatus" as const);
+
+      if (!existing) {
+        await db.insert(teamTileProgress).values({ teamId: sub.teamId, tileId: ts.tileId, [sideField]: partialStatus });
+      } else {
+        await db.update(teamTileProgress).set({ [sideField]: partialStatus }).where(eq(teamTileProgress.id, existing.id));
+      }
+    } else if (ts.side === "A") {
       let sideBPoints: number | undefined;
 
       // If Part B is already completed but points were withheld, release them now
@@ -840,7 +924,7 @@ router.patch("/mod/submissions/:id", requireAuth, requireMod, async (req: Reques
         await db.update(teamTileProgress).set(updateFields).where(eq(teamTileProgress.id, existing.id));
       }
     } else {
-      // Part B — only award points if Part A is already complete
+      // Part B complete — only award points if Part A is already complete
       const aComplete = existing?.sideAStatus === "completed";
       const updateFields = {
         sideBStatus: "completed" as const,

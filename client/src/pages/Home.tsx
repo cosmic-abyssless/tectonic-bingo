@@ -285,6 +285,7 @@ export function Home() {
       {showSubmitModal && (
         <SubmissionModal
           initialTileId={submitInitialTileId}
+          progressMap={progressMap}
           onClose={() => { setShowSubmitModal(false); setSubmitInitialTileId(undefined); }}
           onSuccess={() => { refreshProgress(); refreshSubmissions(); }}
         />

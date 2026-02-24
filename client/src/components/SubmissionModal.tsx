@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import type { BoardResponse, BoardTile, ScreenshotAnalysis } from "../types";
+import type { BoardResponse, BoardTile, ScreenshotAnalysis, TileProgress } from "../types";
 
 const ROW_ORDER = [
   "demonic",
@@ -25,17 +25,20 @@ interface Props {
   onClose: () => void;
   onSuccess: () => void;
   initialTileId?: string;
+  progressMap?: Map<string, TileProgress>;
 }
 
-export function SubmissionModal({ onClose, onSuccess, initialTileId }: Props) {
+export function SubmissionModal({ onClose, onSuccess, initialTileId, progressMap }: Props) {
   const [board, setBoard] = useState<BoardResponse | null>(null);
   const [selectedTileId, setSelectedTileId] = useState(initialTileId ?? "");
-  const [selectedSideItem, setSelectedSideItem] = useState("");
+  const [partBSelected, setPartBSelected] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submissionQty, setSubmissionQty] = useState(1);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<ScreenshotAnalysis | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -59,17 +62,28 @@ export function SubmissionModal({ onClose, onSuccess, initialTileId }: Props) {
     (t) => t.id === selectedTileId
   );
 
-  // Auto-prefill tile + item from AI match — only if the user hasn't already chosen
+  const tileProgress = progressMap?.get(selectedTileId);
+  const isPartAComplete = tileProgress?.sideAStatus === "completed";
+
+  // If Part A is complete, always submit Part B regardless of toggle state
+  const selectedPart: "A" | "B" = isPartAComplete ? "B" : partBSelected ? "B" : "A";
+  const currentSideData = selectedTile?.sides[selectedPart];
+  const selectedItem = currentSideData?.items.find((i) => i.id === selectedItemId);
+
+  // Auto-prefill tile + part + item from AI match — only if the user hasn't already chosen
   useEffect(() => {
     const match = analysis?.detectedMatch;
     if (!match) return;
+
     if (!selectedTileId) {
-      // Nothing chosen yet — set both
+      // Nothing chosen yet — set tile, part, and item
       setSelectedTileId(match.tileId);
-      setSelectedSideItem(`${match.side}:${match.tileSideItemId}`);
-    } else if (selectedTileId === match.tileId && !selectedSideItem) {
-      // Correct tile already selected, just fill the item
-      setSelectedSideItem(`${match.side}:${match.tileSideItemId}`);
+      if (!isPartAComplete) setPartBSelected(match.side === "B");
+      if (!isPartAComplete || match.side === "B") setSelectedItemId(match.tileSideItemId);
+    } else if (selectedTileId === match.tileId && !selectedItemId) {
+      // Correct tile already selected, fill part + item
+      if (!isPartAComplete) setPartBSelected(match.side === "B");
+      if (!isPartAComplete || match.side === "B") setSelectedItemId(match.tileSideItemId);
     }
   // Only re-run when a new analysis result arrives
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -111,20 +125,19 @@ export function SubmissionModal({ onClose, onSuccess, initialTileId }: Props) {
     if (file) handleFile(file);
   };
 
-  const isValid = imageFile && selectedTileId && selectedSideItem;
+  const isValid = imageFile && selectedTileId && selectedItemId;
 
   const handleSubmit = async () => {
     if (!isValid) return;
     setSubmitting(true);
     setError(null);
 
-    const [side, itemId] = selectedSideItem.split(":") as ["A" | "B", string];
-
     const formData = new FormData();
     formData.append("screenshot", imageFile);
     formData.append("tileId", selectedTileId);
-    formData.append("side", side);
-    formData.append("itemId", itemId);
+    formData.append("side", selectedPart);
+    formData.append("itemId", selectedItemId);
+    formData.append("quantity", String(submissionQty));
     if (analysis !== null) {
       formData.append("codewordFound", String(analysis.codewordFound));
     }
@@ -271,7 +284,12 @@ export function SubmissionModal({ onClose, onSuccess, initialTileId }: Props) {
             </label>
             <select
               value={selectedTileId}
-              onChange={(e) => { setSelectedTileId(e.target.value); setSelectedSideItem(""); }}
+              onChange={(e) => {
+                setSelectedTileId(e.target.value);
+                setPartBSelected(false);
+                setSelectedItemId("");
+                setSubmissionQty(1);
+              }}
               className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
             >
               <option value="">Select a tile…</option>
@@ -291,34 +309,84 @@ export function SubmissionModal({ onClose, onSuccess, initialTileId }: Props) {
             </select>
           </div>
 
-          {/* Combined part + item dropdown */}
+          {/* Part selector */}
           {selectedTile && (
+            isPartAComplete ? (
+              <div className="flex items-center gap-2 text-sm text-slate-400">
+                <svg className="w-3.5 h-3.5 text-green-400 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z" clipRule="evenodd" />
+                </svg>
+                Part A complete — submitting Part B
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Part</label>
+                <div className="flex rounded-md overflow-hidden border border-slate-600">
+                  <button
+                    type="button"
+                    onClick={() => { setPartBSelected(false); setSelectedItemId(""); setSubmissionQty(1); }}
+                    className={`flex-1 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                      !partBSelected
+                        ? "bg-indigo-600 text-white"
+                        : "bg-slate-900 text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Part A
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setPartBSelected(true); setSelectedItemId(""); setSubmissionQty(1); }}
+                    className={`flex-1 py-2 text-sm font-medium transition-colors cursor-pointer border-l border-slate-600 ${
+                      partBSelected
+                        ? "bg-indigo-600 text-white"
+                        : "bg-slate-900 text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Part B
+                  </button>
+                </div>
+              </div>
+            )
+          )}
+
+          {/* Item dropdown */}
+          {selectedTile && currentSideData && (
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
                 What are you submitting?
               </label>
               <select
-                value={selectedSideItem}
-                onChange={(e) => setSelectedSideItem(e.target.value)}
+                value={selectedItemId}
+                onChange={(e) => { setSelectedItemId(e.target.value); setSubmissionQty(1); }}
                 className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
               >
-                <option value="">Select part & item…</option>
-                {(["A", "B"] as const).map((side) => {
-                  const sideData = selectedTile.sides[side];
-                  if (!sideData) return null;
-                  return (
-                    <optgroup key={side} label={`Part ${side} — ${sideData.points} pts`}>
-                      {sideData.items.map((item) => (
-                        <option key={item.id} value={`${side}:${item.id}`}>
-                          {item.quantity > 1 ? `${item.quantity}× ` : ""}
-                          {item.itemName}
-                          {item.optionsGroup ? " (choose one)" : ""}
-                        </option>
-                      ))}
-                    </optgroup>
-                  );
-                })}
+                <option value="">Select an item…</option>
+                {currentSideData.items.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.quantity > 1 ? `${item.quantity}× ` : ""}
+                    {item.itemName}
+                    {item.optionsGroup ? " (choose one)" : ""}
+                  </option>
+                ))}
               </select>
+            </div>
+          )}
+
+          {/* Quantity input — only for items requiring more than 1 */}
+          {selectedItem && selectedItem.quantity > 1 && (
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                How many are you submitting?
+                <span className="ml-2 text-slate-500 font-normal">({selectedItem.quantity} needed in total)</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={selectedItem.quantity}
+                value={submissionQty}
+                onChange={(e) => setSubmissionQty(Math.max(1, parseInt(e.target.value) || 1))}
+                className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+              />
             </div>
           )}
 
