@@ -50,7 +50,6 @@ function timeAgo(iso: string): string {
 }
 
 interface ReviewForm {
-  points: string;
   notes: string;
 }
 
@@ -122,7 +121,7 @@ export function ModPanel() {
   const visible = filter === "pending" ? [...byTeam].reverse() : byTeam;
 
   function getForm(sub: ModSubmission): ReviewForm {
-    return forms[sub.id] ?? { points: String(sub.sidePoints), notes: "" };
+    return forms[sub.id] ?? { notes: "" };
   }
 
   function setForm(id: string, patch: Partial<ReviewForm>) {
@@ -149,7 +148,6 @@ export function ModPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action,
-          pointsAwarded: action === "approve" ? Number(form.points) : undefined,
           reviewerNotes: form.notes || undefined,
         }),
       });
@@ -389,27 +387,6 @@ export function ModPanel() {
                               ))}
                             </div>
                           )}
-
-                          <div className="flex gap-3">
-                            <div className="flex-1">
-                              <label className="block text-xs font-medium text-slate-400 mb-1">
-                                Points to award
-                                <span className="text-slate-600 ml-1">
-                                  (max {sub.sidePoints})
-                                </span>
-                              </label>
-                              <input
-                                type="number"
-                                min={0}
-                                max={sub.sidePoints}
-                                value={form.points}
-                                onChange={(e) =>
-                                  setForm(sub.id, { points: e.target.value })
-                                }
-                                className="w-full bg-slate-800 border border-slate-600 text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
-                              />
-                            </div>
-                          </div>
 
                           <div>
                             <label className="block text-xs font-medium text-slate-400 mb-1">

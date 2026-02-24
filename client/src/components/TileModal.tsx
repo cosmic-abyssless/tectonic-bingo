@@ -121,18 +121,6 @@ function SidePanel({
           )}
         </div>
         <div className="flex items-center gap-2">
-          {side.minSubmissions > 1 && !complete && (
-            <span
-              className={`text-xs tabular-nums font-semibold ${
-                approvedSubmissionCount >= side.minSubmissions
-                  ? "text-green-400"
-                  : "text-yellow-400"
-              }`}
-              title={`${approvedSubmissionCount} of ${side.minSubmissions} required submissions approved`}
-            >
-              {approvedSubmissionCount}/{side.minSubmissions}
-            </span>
-          )}
           <span className="text-yellow-400 font-semibold text-sm">
             {side.points} pts
           </span>
@@ -160,8 +148,16 @@ function SidePanel({
                 />
                 {item.itemName}
                 {approved && (
-                  <svg className="w-3 h-3 text-green-400 shrink-0 no-underline" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z" clipRule="evenodd" />
+                  <svg
+                    className="w-3 h-3 text-green-400 shrink-0 no-underline"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z"
+                      clipRule="evenodd"
+                    />
                   </svg>
                 )}
               </li>
@@ -191,8 +187,16 @@ function SidePanel({
                   />
                   {item.itemName}
                   {approved && (
-                    <svg className="w-3 h-3 text-green-400 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z" clipRule="evenodd" />
+                    <svg
+                      className="w-3 h-3 text-green-400 shrink-0"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                   )}
                 </li>
@@ -452,29 +456,37 @@ export function TileModal({
               complete={progress?.sideAStatus === "completed"}
             />
           )}
-          {tile.sides.B && (() => {
-            const crossSide = tile.sides.B.requiresNoDuplicates && tile.sides.A?.requiresNoDuplicates;
-            const bSubmitted = submittedNamesBySide.get("B") ?? new Set<string>();
-            const bApproved = approvedQtyBySideAndItem.get("B") ?? new Map<string, number>();
-            // Cross-side strikethrough: show Part A submitted items as struck in Part B
-            // so it's clear they can't be re-selected.
-            const effectiveSubmitted = crossSide
-              ? new Set([...bSubmitted, ...(submittedNamesBySide.get("A") ?? [])])
-              : bSubmitted;
-            // Do NOT merge Part A approved quantities — the green check should only
-            // appear for items actually approved for Part B, not Part A carries-over.
-            return (
-              <SidePanel
-                side={tile.sides.B}
-                label="Part B"
-                approvedByItemName={bApproved}
-                submittedItemNames={effectiveSubmitted}
-                approvedSubmissionCount={approvedSubCountBySide.get("B") ?? 0}
-                locked={progress?.sideAStatus !== "completed"}
-                complete={progress?.sideBStatus === "completed"}
-              />
-            );
-          })()}
+          {tile.sides.B &&
+            (() => {
+              const crossSide =
+                tile.sides.B.requiresNoDuplicates &&
+                tile.sides.A?.requiresNoDuplicates;
+              const bSubmitted =
+                submittedNamesBySide.get("B") ?? new Set<string>();
+              const bApproved =
+                approvedQtyBySideAndItem.get("B") ?? new Map<string, number>();
+              // Cross-side strikethrough: show Part A submitted items as struck in Part B
+              // so it's clear they can't be re-selected.
+              const effectiveSubmitted = crossSide
+                ? new Set([
+                    ...bSubmitted,
+                    ...(submittedNamesBySide.get("A") ?? []),
+                  ])
+                : bSubmitted;
+              // Do NOT merge Part A approved quantities — the green check should only
+              // appear for items actually approved for Part B, not Part A carries-over.
+              return (
+                <SidePanel
+                  side={tile.sides.B}
+                  label="Part B"
+                  approvedByItemName={bApproved}
+                  submittedItemNames={effectiveSubmitted}
+                  approvedSubmissionCount={approvedSubCountBySide.get("B") ?? 0}
+                  locked={progress?.sideAStatus !== "completed"}
+                  complete={progress?.sideBStatus === "completed"}
+                />
+              );
+            })()}
         </div>
 
         {/* Team submissions summary */}

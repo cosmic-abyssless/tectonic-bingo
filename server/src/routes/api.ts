@@ -762,18 +762,13 @@ router.get("/mod/submissions", requireAuth, requireMod, async (_req: Request, re
 // PATCH /api/mod/submissions/:id — review a submission
 router.patch("/mod/submissions/:id", requireAuth, requireMod, async (req: Request, res: Response) => {
   const id = String(req.params.id);
-  const { action, pointsAwarded, reviewerNotes } = req.body as {
+  const { action, reviewerNotes } = req.body as {
     action?: string;
-    pointsAwarded?: number;
     reviewerNotes?: string;
   };
 
   if (!action || !["approve", "reject"].includes(action)) {
     res.status(400).json({ error: "action must be approve or reject" });
-    return;
-  }
-  if (action === "approve" && (pointsAwarded == null || pointsAwarded < 0)) {
-    res.status(400).json({ error: "pointsAwarded is required for approval" });
     return;
   }
 
@@ -790,24 +785,24 @@ router.patch("/mod/submissions/:id", requireAuth, requireMod, async (req: Reques
     return;
   }
 
-  const now = new Date();
-  const newStatus = action === "approve" ? "approved" : "rejected";
-
-  await db.update(submissions).set({
-    status: newStatus,
-    pointsAwarded: action === "approve" ? (pointsAwarded ?? 0) : null,
-    reviewedByUserId: modUser.id,
-    reviewedAt: now,
-    reviewerNotes: reviewerNotes ?? null,
-    updatedAt: now,
-  }).where(eq(submissions.id, id));
-
-  // Get the tile side to determine which side (A/B) and its tile
+  // Get the tile side to determine which side (A/B) and its points
   const [ts] = await db.select().from(tileSides).where(eq(tileSides.id, sub.tileSideId)).limit(1);
   if (!ts) {
     res.json({ success: true });
     return;
   }
+
+  const now = new Date();
+  const newStatus = action === "approve" ? "approved" : "rejected";
+
+  await db.update(submissions).set({
+    status: newStatus,
+    pointsAwarded: action === "approve" ? ts.points : null,
+    reviewedByUserId: modUser.id,
+    reviewedAt: now,
+    reviewerNotes: reviewerNotes ?? null,
+    updatedAt: now,
+  }).where(eq(submissions.id, id));
 
   // Fetch or prepare teamTileProgress upsert
   const [existing] = await db
@@ -817,7 +812,7 @@ router.patch("/mod/submissions/:id", requireAuth, requireMod, async (req: Reques
     .limit(1);
 
   if (action === "approve") {
-    const pts = pointsAwarded ?? 0;
+    const pts = ts.points;
 
     // ---- Check if approving this submission completes the side ----
     // Two independent checks — both must pass for sideIsComplete:
