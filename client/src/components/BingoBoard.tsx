@@ -145,6 +145,15 @@ function TileCell({
         </span>
       )}
 
+      {/* Points progress — bottom-left, shown when the team has started this tile */}
+      {progress && (
+        <div className="absolute bottom-1 left-1 z-20">
+          <span className="text-[9px] font-semibold tabular-nums leading-none text-slate-300 bg-slate-900/80 rounded px-1 py-0.5">
+            {progress.sideAPointsAwarded + progress.sideBPointsAwarded}/{tile.totalPoints}
+          </span>
+        </div>
+      )}
+
       {/* A / B status dots — bottom-right corner, above freeze overlay */}
       {progress && (
         <div className="absolute bottom-1 right-1 flex gap-0.5 z-20">
@@ -326,6 +335,7 @@ export function BingoBoard({
           tile={selected}
           onClose={() => setSelected(null)}
           onSubmit={onSubmitTile ? () => onSubmitTile(selected.id) : undefined}
+          progress={tileProgress?.get(selected.id)}
           submissions={tileSubmissions?.get(selected.id)}
         />
       )}

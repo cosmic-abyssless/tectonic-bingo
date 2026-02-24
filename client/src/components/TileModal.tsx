@@ -3,6 +3,7 @@ import type {
   BoardTile,
   TileSide,
   TileSideItem,
+  TileProgress,
   SubmissionSummary,
 } from "../types";
 import { TILE_IMAGES } from "../tileImages";
@@ -42,13 +43,61 @@ function groupItems(items: TileSideItem[]) {
   return { required, grouped };
 }
 
-function SidePanel({ side, label }: { side: TileSide; label: string }) {
+function ItemProgress({ item, approvedQty }: { item: TileSideItem; approvedQty: number }) {
+  if (item.quantity <= 1) return null;
+  const done = approvedQty >= item.quantity;
+  return (
+    <span className={`font-semibold text-xs tabular-nums ${done ? "text-green-400" : "text-yellow-400"}`}>
+      {approvedQty}/{item.quantity}
+    </span>
+  );
+}
+
+function SidePanel({
+  side,
+  label,
+  approvedByItemName,
+  locked,
+  complete,
+}: {
+  side: TileSide;
+  label: string;
+  approvedByItemName: Map<string, number>;
+  locked?: boolean;
+  complete?: boolean;
+}) {
   const { required, grouped } = groupItems(side.items);
 
   return (
     <div className="p-5">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-white font-bold text-sm">{label}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-white font-bold text-sm">{label}</span>
+          {complete && (
+            <svg className="w-3.5 h-3.5 text-green-400 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z" clipRule="evenodd" />
+            </svg>
+          )}
+          {locked && (
+            <div className="relative group/lock">
+              <svg
+                className="w-3.5 h-3.5 text-slate-400 cursor-default"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 hidden group-hover/lock:block bg-slate-900 border border-slate-600 text-slate-200 text-xs rounded-lg px-3 py-2 shadow-xl z-30 leading-relaxed">
+                Points for Part B are only awarded after Part A is completed. You can still submit early.
+                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-600" />
+              </div>
+            </div>
+          )}
+        </div>
         <span className="text-yellow-400 font-semibold text-sm">
           {side.points} pts
         </span>
@@ -66,11 +115,7 @@ function SidePanel({ side, label }: { side: TileSide; label: string }) {
               className="flex items-baseline gap-2 text-sm text-slate-200"
             >
               <span className="text-indigo-400 text-xs">▸</span>
-              {item.quantity > 1 && (
-                <span className="text-yellow-400 font-semibold text-xs">
-                  {item.quantity}×
-                </span>
-              )}
+              <ItemProgress item={item} approvedQty={approvedByItemName.get(item.itemName) ?? 0} />
               {item.itemName}
             </li>
           ))}
@@ -89,11 +134,7 @@ function SidePanel({ side, label }: { side: TileSide; label: string }) {
                 className="flex items-baseline gap-2 text-sm text-slate-300"
               >
                 <span className="text-slate-500 text-xs">◦</span>
-                {item.quantity > 1 && (
-                  <span className="text-yellow-400 font-semibold text-xs">
-                    {item.quantity}×
-                  </span>
-                )}
+                <ItemProgress item={item} approvedQty={approvedByItemName.get(item.itemName) ?? 0} />
                 {item.itemName}
               </li>
             ))}
@@ -198,7 +239,7 @@ function SubmissionRow({ sub }: { sub: SubmissionSummary }) {
         <p className="text-sm text-slate-200 truncate">
           {sub.items
             .map((i) =>
-              i.quantity > 1 ? `${i.quantity}× ${i.itemName}` : i.itemName,
+              i.targetQuantity > 1 ? `${i.quantity}× ${i.itemName}` : i.itemName,
             )
             .join(", ")}
         </p>
@@ -217,16 +258,30 @@ interface Props {
   tile: BoardTile;
   onClose: () => void;
   onSubmit?: () => void;
+  progress?: TileProgress;
   submissions?: SubmissionSummary[];
 }
 
-export function TileModal({ tile, onClose, onSubmit, submissions }: Props) {
+export function TileModal({ tile, onClose, onSubmit, progress, submissions }: Props) {
   const badgeColor =
     BADGE_COLORS[tile.badgeCategory] ??
     "text-slate-400 border-slate-500 bg-slate-500/10";
   const borderColor = BADGE_BORDER[tile.badgeCategory] ?? "border-slate-500";
   const imgSrc = TILE_IMAGES[tile.name];
   const [imgFailed, setImgFailed] = useState(false);
+
+  const claimedPts = (progress?.sideAPointsAwarded ?? 0) + (progress?.sideBPointsAwarded ?? 0);
+
+  // Approved quantity per side+itemName, used by SidePanel for item progress
+  const approvedQtyBySideAndItem = new Map<string, Map<string, number>>();
+  for (const sub of submissions ?? []) {
+    if (sub.status !== "approved") continue;
+    const byItem = approvedQtyBySideAndItem.get(sub.side) ?? new Map<string, number>();
+    for (const item of sub.items) {
+      byItem.set(item.itemName, (byItem.get(item.itemName) ?? 0) + item.quantity);
+    }
+    approvedQtyBySideAndItem.set(sub.side, byItem);
+  }
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -267,7 +322,7 @@ export function TileModal({ tile, onClose, onSubmit, submissions }: Props) {
                   {tile.badgeCategory.replace("_", " ")}
                 </span>
                 <span className="text-yellow-400 text-sm font-semibold">
-                  {tile.totalPoints} pts
+                  {progress ? `${claimedPts}/` : ""}{tile.totalPoints} pts
                 </span>
                 {tile.hasFreezePeriod && (
                   <span className="text-xs bg-blue-900/40 text-blue-300 border border-blue-600 rounded-full px-2.5 py-0.5">
@@ -297,8 +352,8 @@ export function TileModal({ tile, onClose, onSubmit, submissions }: Props) {
 
         {/* Sides */}
         <div className="grid grid-cols-2 divide-x divide-slate-700">
-          {tile.sides.A && <SidePanel side={tile.sides.A} label="Part A" />}
-          {tile.sides.B && <SidePanel side={tile.sides.B} label="Part B" />}
+          {tile.sides.A && <SidePanel side={tile.sides.A} label="Part A" approvedByItemName={approvedQtyBySideAndItem.get("A") ?? new Map()} complete={progress?.sideAStatus === "completed"} />}
+          {tile.sides.B && <SidePanel side={tile.sides.B} label="Part B" approvedByItemName={approvedQtyBySideAndItem.get("B") ?? new Map()} locked={progress?.sideAStatus !== "completed"} complete={progress?.sideBStatus === "completed"} />}
         </div>
 
         {/* Team submissions summary */}

@@ -136,7 +136,7 @@ export function TeamSubmissionsModal({ submissions, onClose, onSubmit }: Props) 
                       <p className="text-sm text-slate-300 truncate">
                         {sub.items
                           .map((i) =>
-                            i.quantity > 1 ? `${i.quantity}× ${i.itemName}` : i.itemName
+                            i.targetQuantity > 1 ? `${i.quantity}× ${i.itemName}` : i.itemName
                           )
                           .join(", ")}
                       </p>

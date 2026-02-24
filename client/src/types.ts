@@ -94,7 +94,7 @@ export interface SubmissionSummary {
   badgeCategory: BadgeCategory;
   side: "A" | "B";
   submittedBy: string;
-  items: { itemName: string; quantity: number }[];
+  items: { itemName: string; quantity: number; targetQuantity: number }[];
   screenshots: SubmissionScreenshot[];
 }
 
@@ -113,7 +113,7 @@ export interface ModSubmission {
   sidePoints: number;
   submittedBy: string;
   codewordVerified: boolean | null;
-  items: { itemName: string; quantity: number }[];
+  items: { itemName: string; quantity: number; targetQuantity: number }[];
   screenshots: SubmissionScreenshot[];
 }
 
