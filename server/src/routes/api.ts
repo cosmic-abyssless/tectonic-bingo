@@ -820,8 +820,9 @@ router.patch("/mod/submissions/:id", requireAuth, requireMod, async (req: Reques
     const pts = pointsAwarded ?? 0;
 
     // ---- Check if approving this submission completes the side ----
-    // For items with quantity > 1, the side is only complete once the cumulative
-    // total of approved claim quantities reaches the item's target quantity.
+    // Two independent checks — both must pass for sideIsComplete:
+    //   1. For items with quantity > 1: cumulative approved quantity must reach the target.
+    //   2. For sides with minSubmissions > 1: total approved submission count must reach the minimum.
     let sideIsComplete = true;
 
     const [claim] = await db
@@ -864,6 +865,19 @@ router.patch("/mod/submissions/:id", requireAuth, requireMod, async (req: Reques
 
         sideIsComplete = approvedTotal >= targetItem.targetQty;
       }
+    }
+
+    // Check 2: minSubmissions — for "obtain N of these" tiles where each item is qty=1
+    if (sideIsComplete && ts.minSubmissions > 1) {
+      const [{ approvedCount }] = await db
+        .select({ approvedCount: sql<number>`count(*)` })
+        .from(submissions)
+        .where(and(
+          eq(submissions.teamId, sub.teamId),
+          eq(submissions.tileSideId, sub.tileSideId),
+          eq(submissions.status, "approved"),
+        ));
+      sideIsComplete = (approvedCount ?? 0) >= ts.minSubmissions;
     }
     // ----------------------------------------------------------------
 

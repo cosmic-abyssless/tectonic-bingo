@@ -44,6 +44,7 @@ export interface TileSide {
   allowsPreviouslyAcquired: boolean;
   allowsPreLoad: boolean;
   requiresPartA: boolean;
+  minSubmissions: number;
   notes: string | null;
   items: TileSideItem[];
 }

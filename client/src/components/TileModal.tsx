@@ -65,12 +65,16 @@ function SidePanel({
   side,
   label,
   approvedByItemName,
+  submittedItemNames,
+  approvedSubmissionCount,
   locked,
   complete,
 }: {
   side: TileSide;
   label: string;
   approvedByItemName: Map<string, number>;
+  submittedItemNames: Set<string>;
+  approvedSubmissionCount: number;
   locked?: boolean;
   complete?: boolean;
 }) {
@@ -116,9 +120,23 @@ function SidePanel({
             </div>
           )}
         </div>
-        <span className="text-yellow-400 font-semibold text-sm">
-          {side.points} pts
-        </span>
+        <div className="flex items-center gap-2">
+          {side.minSubmissions > 1 && !complete && (
+            <span
+              className={`text-xs tabular-nums font-semibold ${
+                approvedSubmissionCount >= side.minSubmissions
+                  ? "text-green-400"
+                  : "text-yellow-400"
+              }`}
+              title={`${approvedSubmissionCount} of ${side.minSubmissions} required submissions approved`}
+            >
+              {approvedSubmissionCount}/{side.minSubmissions}
+            </span>
+          )}
+          <span className="text-yellow-400 font-semibold text-sm">
+            {side.points} pts
+          </span>
+        </div>
       </div>
 
       <p className="text-slate-300 text-sm leading-relaxed mb-3">
@@ -127,19 +145,28 @@ function SidePanel({
 
       {required.length > 0 && (
         <ul className="space-y-1 mb-2">
-          {required.map((item) => (
-            <li
-              key={item.id}
-              className="flex items-baseline gap-2 text-sm text-slate-200"
-            >
-              <span className="text-indigo-400 text-xs">▸</span>
-              <ItemProgress
-                item={item}
-                approvedQty={approvedByItemName.get(item.itemName) ?? 0}
-              />
-              {item.itemName}
-            </li>
-          ))}
+          {required.map((item) => {
+            const submitted = submittedItemNames.has(item.itemName);
+            const approved = (approvedByItemName.get(item.itemName) ?? 0) > 0;
+            return (
+              <li
+                key={item.id}
+                className={`flex items-baseline gap-2 text-sm ${submitted ? "text-slate-500 line-through" : "text-slate-200"}`}
+              >
+                <span className="text-indigo-400 text-xs">▸</span>
+                <ItemProgress
+                  item={item}
+                  approvedQty={approvedByItemName.get(item.itemName) ?? 0}
+                />
+                {item.itemName}
+                {approved && (
+                  <svg className="w-3 h-3 text-green-400 shrink-0 no-underline" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -149,19 +176,28 @@ function SidePanel({
             Choose one:
           </span>
           <ul className="space-y-1 mt-1">
-            {opts.map((item) => (
-              <li
-                key={item.id}
-                className="flex items-baseline gap-2 text-sm text-slate-300"
-              >
-                <span className="text-slate-500 text-xs">◦</span>
-                <ItemProgress
-                  item={item}
-                  approvedQty={approvedByItemName.get(item.itemName) ?? 0}
-                />
-                {item.itemName}
-              </li>
-            ))}
+            {opts.map((item) => {
+              const submitted = submittedItemNames.has(item.itemName);
+              const approved = (approvedByItemName.get(item.itemName) ?? 0) > 0;
+              return (
+                <li
+                  key={item.id}
+                  className={`flex items-baseline gap-2 text-sm ${submitted ? "text-slate-500 line-through" : "text-slate-300"}`}
+                >
+                  <span className="text-slate-500 text-xs">◦</span>
+                  <ItemProgress
+                    item={item}
+                    approvedQty={approvedByItemName.get(item.itemName) ?? 0}
+                  />
+                  {item.itemName}
+                  {approved && (
+                    <svg className="w-3 h-3 text-green-400 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       ))}
@@ -307,8 +343,22 @@ export function TileModal({
 
   // Approved quantity per side+itemName, used by SidePanel for item progress
   const approvedQtyBySideAndItem = new Map<string, Map<string, number>>();
+  // Submitted item names (non-rejected) per side, used for strikethrough
+  const submittedNamesBySide = new Map<string, Set<string>>();
+  // Approved submission count per side, used for minSubmissions progress
+  const approvedSubCountBySide = new Map<string, number>();
   for (const sub of submissions ?? []) {
+    if (sub.status === "rejected") continue;
+    const submitted = submittedNamesBySide.get(sub.side) ?? new Set<string>();
+    for (const item of sub.items) {
+      submitted.add(item.itemName);
+    }
+    submittedNamesBySide.set(sub.side, submitted);
     if (sub.status !== "approved") continue;
+    approvedSubCountBySide.set(
+      sub.side,
+      (approvedSubCountBySide.get(sub.side) ?? 0) + 1,
+    );
     const byItem =
       approvedQtyBySideAndItem.get(sub.side) ?? new Map<string, number>();
     for (const item of sub.items) {
@@ -397,20 +447,34 @@ export function TileModal({
               approvedByItemName={
                 approvedQtyBySideAndItem.get("A") ?? new Map()
               }
+              submittedItemNames={submittedNamesBySide.get("A") ?? new Set()}
+              approvedSubmissionCount={approvedSubCountBySide.get("A") ?? 0}
               complete={progress?.sideAStatus === "completed"}
             />
           )}
-          {tile.sides.B && (
-            <SidePanel
-              side={tile.sides.B}
-              label="Part B"
-              approvedByItemName={
-                approvedQtyBySideAndItem.get("B") ?? new Map()
-              }
-              locked={progress?.sideAStatus !== "completed"}
-              complete={progress?.sideBStatus === "completed"}
-            />
-          )}
+          {tile.sides.B && (() => {
+            const crossSide = tile.sides.B.requiresNoDuplicates && tile.sides.A?.requiresNoDuplicates;
+            const bSubmitted = submittedNamesBySide.get("B") ?? new Set<string>();
+            const bApproved = approvedQtyBySideAndItem.get("B") ?? new Map<string, number>();
+            // Cross-side strikethrough: show Part A submitted items as struck in Part B
+            // so it's clear they can't be re-selected.
+            const effectiveSubmitted = crossSide
+              ? new Set([...bSubmitted, ...(submittedNamesBySide.get("A") ?? [])])
+              : bSubmitted;
+            // Do NOT merge Part A approved quantities — the green check should only
+            // appear for items actually approved for Part B, not Part A carries-over.
+            return (
+              <SidePanel
+                side={tile.sides.B}
+                label="Part B"
+                approvedByItemName={bApproved}
+                submittedItemNames={effectiveSubmitted}
+                approvedSubmissionCount={approvedSubCountBySide.get("B") ?? 0}
+                locked={progress?.sideAStatus !== "completed"}
+                complete={progress?.sideBStatus === "completed"}
+              />
+            );
+          })()}
         </div>
 
         {/* Team submissions summary */}

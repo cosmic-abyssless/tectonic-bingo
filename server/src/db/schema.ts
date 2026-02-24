@@ -96,6 +96,9 @@ export const tileSides = sqliteTable('tile_sides', {
   allowsPreviouslyAcquired: integer('allows_previously_acquired', { mode: 'boolean' }).notNull().default(false),
   allowsPreLoad: integer('allows_pre_load', { mode: 'boolean' }).notNull().default(false),
   requiresPartA: integer('requires_part_a', { mode: 'boolean' }).notNull().default(false),
+  // Minimum number of approved submissions required before this side is marked complete.
+  // Covers tiles like K'ril Part A where you need "2 different drops" but each is a qty=1 optgroup item.
+  minSubmissions: integer('min_submissions').notNull().default(1),
   notes: text('notes'),
 }, (t) => [
   uniqueIndex('tile_sides_tile_side_unq').on(t.tileId, t.side),
