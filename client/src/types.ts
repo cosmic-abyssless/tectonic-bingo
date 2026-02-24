@@ -43,6 +43,7 @@ export interface TileSide {
   requiresNoDuplicates: boolean;
   allowsPreviouslyAcquired: boolean;
   allowsPreLoad: boolean;
+  requiresPartA: boolean;
   notes: string | null;
   items: TileSideItem[];
 }

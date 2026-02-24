@@ -95,6 +95,7 @@ export const tileSides = sqliteTable('tile_sides', {
   requiresNoDuplicates: integer('requires_no_duplicates', { mode: 'boolean' }).notNull().default(false),
   allowsPreviouslyAcquired: integer('allows_previously_acquired', { mode: 'boolean' }).notNull().default(false),
   allowsPreLoad: integer('allows_pre_load', { mode: 'boolean' }).notNull().default(false),
+  requiresPartA: integer('requires_part_a', { mode: 'boolean' }).notNull().default(false),
   notes: text('notes'),
 }, (t) => [
   uniqueIndex('tile_sides_tile_side_unq').on(t.tileId, t.side),
