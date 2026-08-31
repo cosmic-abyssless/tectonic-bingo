@@ -45,6 +45,7 @@ export interface TileSide {
   allowsPreLoad: boolean;
   requiresPartA: boolean;
   minSubmissions: number;
+  requiresCompleteSet: boolean;
   notes: string | null;
   items: TileSideItem[];
 }
@@ -96,6 +97,8 @@ export interface SubmissionSummary {
   badgeCategory: BadgeCategory;
   side: "A" | "B";
   submittedBy: string;
+  isWildcardRedemption: boolean;
+  wildcardItemName: string | null;
   items: { itemName: string; quantity: number; targetQuantity: number }[];
   screenshots: SubmissionScreenshot[];
 }
@@ -115,6 +118,8 @@ export interface ModSubmission {
   sidePoints: number;
   submittedBy: string;
   codewordVerified: boolean | null;
+  isWildcardRedemption: boolean;
+  wildcardItemName: string | null;
   items: { itemName: string; quantity: number; targetQuantity: number }[];
   screenshots: SubmissionScreenshot[];
 }
@@ -128,6 +133,13 @@ export interface ScreenshotAnalysis {
     tileSideItemId: string;
     side: "A" | "B";
     itemName: string;
+  } | null;
+  detectedWildcard: {
+    tileId: string;
+    tileName: string;
+    wildcardId: string;
+    itemName: string;
+    applicableToSide: "A" | "B" | null;
   } | null;
   warnings: string[];
 }

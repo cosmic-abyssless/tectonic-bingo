@@ -334,6 +334,11 @@ export function ModPanel() {
                                 ✗ codeword
                               </span>
                             )}
+                            {sub.isWildcardRedemption && (
+                              <span className="text-xs font-semibold border rounded-full px-2 py-0.5 bg-amber-900/50 text-amber-300 border-amber-700">
+                                ✦ wildcard
+                              </span>
+                            )}
                           </div>
                           <p className="text-sm text-slate-300 truncate">
                             {sub.items
@@ -343,6 +348,9 @@ export function ModPanel() {
                                   : i.itemName,
                               )
                               .join(", ")}
+                            {sub.isWildcardRedemption && sub.wildcardItemName && (
+                              <span className="text-slate-500"> via {sub.wildcardItemName}</span>
+                            )}
                           </p>
                           <p className="text-xs text-slate-500 mt-0.5">
                             by {sub.submittedBy}

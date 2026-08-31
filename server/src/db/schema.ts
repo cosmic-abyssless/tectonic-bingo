@@ -99,6 +99,9 @@ export const tileSides = sqliteTable('tile_sides', {
   // Minimum number of approved submissions required before this side is marked complete.
   // Covers tiles like K'ril Part A where you need "2 different drops" but each is a qty=1 optgroup item.
   minSubmissions: integer('min_submissions').notNull().default(1),
+  // When true, completion requires ALL items in at least ONE options group to be approved.
+  // Used by Barrows Part B: submit a complete set (all 4 items from one brother).
+  requiresCompleteSet: integer('requires_complete_set', { mode: 'boolean' }).notNull().default(false),
   notes: text('notes'),
 }, (t) => [
   uniqueIndex('tile_sides_tile_side_unq').on(t.tileId, t.side),

@@ -176,8 +176,14 @@ export function SidePanel({
 
       {(side.requiresNoDuplicates ||
         side.allowsPreviouslyAcquired ||
-        side.allowsPreLoad) && (
+        side.allowsPreLoad ||
+        side.requiresCompleteSet) && (
         <div className="flex gap-2 flex-wrap mt-3">
+          {side.requiresCompleteSet && (
+            <span className="text-xs bg-amber-900/40 text-amber-300 border border-amber-600 rounded-full px-2 py-0.5">
+              Complete a full set
+            </span>
+          )}
           {side.requiresNoDuplicates && (
             <span className="text-xs bg-blue-900/40 text-blue-300 border border-blue-600 rounded-full px-2 py-0.5">
               No duplicates

@@ -169,9 +169,7 @@ export function TileModal({
           )}
           {tile.sides.B &&
             (() => {
-              const crossSide =
-                tile.sides.B.requiresNoDuplicates &&
-                tile.sides.A?.requiresNoDuplicates;
+              const crossSide = tile.sides.B.requiresNoDuplicates;
               const bSubmitted =
                 submittedNamesBySide.get("B") ?? new Set<string>();
               const bApproved =

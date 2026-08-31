@@ -52,6 +52,8 @@ export function SubmissionModal({
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isWildcardMode, setIsWildcardMode] = useState(false);
+  const [selectedWildcardId, setSelectedWildcardId] = useState("");
   const [submissionQty, setSubmissionQty] = useState(1);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<ScreenshotAnalysis | null>(null);
@@ -94,6 +96,13 @@ export function SubmissionModal({
     (i) => i.id === selectedItemId,
   );
 
+  // Wildcards applicable to the current part (null applicableToSide = either part)
+  const availableWildcards = (selectedTile?.wildcards ?? []).filter(
+    (wc) => wc.applicableToSide === null || wc.applicableToSide === selectedPart,
+  );
+  const hasTileWildcards = availableWildcards.length > 0;
+  const selectedWildcard = availableWildcards.find((wc) => wc.id === selectedWildcardId);
+
   // Items already submitted (non-rejected) for this tile — used to filter
   // out options when requiresNoDuplicates is true.
   const excludedItemNames = (() => {
@@ -107,12 +116,8 @@ export function SubmissionModal({
       if (sub.side === selectedPart) {
         for (const item of sub.items) excluded.add(item.itemName);
       }
-      // For Part B: also exclude Part A submissions if Part A also requires no duplicates
-      if (
-        selectedPart === "B" &&
-        sub.side === "A" &&
-        selectedTile?.sides.A?.requiresNoDuplicates
-      ) {
+      // For Part B with no-dupes: also exclude items already submitted for Part A
+      if (selectedPart === "B" && sub.side === "A") {
         for (const item of sub.items) excluded.add(item.itemName);
       }
     }
@@ -171,7 +176,35 @@ export function SubmissionModal({
       if (!isPartAComplete || match.side === "B")
         setSelectedItemId(match.tileSideItemId);
     }
+
+    // If a wildcard was also detected, don't apply it — regular match takes priority
     // Only re-run when a new analysis result arrives
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysis]);
+
+  // Auto-fill wildcard from AI detection (only when no regular item was matched)
+  useEffect(() => {
+    const wc = analysis?.detectedWildcard;
+    if (!wc || analysis?.detectedMatch) return;
+
+    // Don't apply if tile is frozen
+    const matchedTile = board?.tiles.find((t) => t.id === wc.tileId);
+    if (matchedTile?.hasFreezePeriod) {
+      const eventStartTs = board ? new Date(board.event.startsAt).getTime() : 0;
+      const freezeUnlocksAt = eventStartTs + matchedTile.freezeDurationMinutes * 60_000;
+      if (Date.now() < freezeUnlocksAt) return;
+    }
+
+    if (!selectedTileId) {
+      setSelectedTileId(wc.tileId);
+      if (wc.applicableToSide) setPartBSelected(wc.applicableToSide === "B");
+      setIsWildcardMode(true);
+      setSelectedWildcardId(wc.wildcardId);
+    } else if (selectedTileId === wc.tileId && !selectedWildcardId) {
+      if (wc.applicableToSide) setPartBSelected(wc.applicableToSide === "B");
+      setIsWildcardMode(true);
+      setSelectedWildcardId(wc.wildcardId);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysis]);
 
@@ -187,6 +220,13 @@ export function SubmissionModal({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTileId, selectedPart, currentSideData]);
+
+  // Auto-select the wildcard when there is only one available option
+  useEffect(() => {
+    if (!isWildcardMode || availableWildcards.length !== 1) return;
+    setSelectedWildcardId(availableWildcards[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWildcardMode, selectedTileId, selectedPart]);
 
   const analyzeScreenshot = async (file: File) => {
     setAnalyzing(true);
@@ -252,7 +292,8 @@ export function SubmissionModal({
     };
   }, [handleFile]);
 
-  const isValid = imageFile && selectedTileId && selectedItemId;
+  const isValid =
+    imageFile && selectedTileId && selectedItemId && (!isWildcardMode || selectedWildcardId);
 
   const handleSubmit = async () => {
     if (!isValid) return;
@@ -265,6 +306,10 @@ export function SubmissionModal({
     formData.append("side", selectedPart);
     formData.append("itemId", selectedItemId);
     formData.append("quantity", String(submissionQty));
+    if (isWildcardMode) {
+      formData.append("isWildcardRedemption", "true");
+      formData.append("wildcardId", selectedWildcardId);
+    }
     if (analysis !== null) {
       formData.append("codewordFound", String(analysis.codewordFound));
     }
@@ -464,6 +509,20 @@ export function SubmissionModal({
                           return null;
                         })()}
                       </p>
+                    ) : analysis.detectedWildcard ? (
+                      <p className="text-slate-400 text-xs">
+                        Detected wildcard:{" "}
+                        <span className="text-amber-300 font-medium">
+                          {analysis.detectedWildcard.itemName}
+                        </span>
+                        <span className="text-slate-500">
+                          {" "}
+                          — {analysis.detectedWildcard.tileName}
+                          {analysis.detectedWildcard.applicableToSide
+                            ? ` Part ${analysis.detectedWildcard.applicableToSide}`
+                            : ""}
+                        </span>
+                      </p>
                     ) : (
                       <p className="text-slate-500 text-xs">
                         No matching bingo item detected
@@ -488,6 +547,8 @@ export function SubmissionModal({
                 setSelectedTileId(id);
                 setPartBSelected(false);
                 setSelectedItemId("");
+                setSelectedWildcardId("");
+                setIsWildcardMode(false);
                 setSubmissionQty(1);
               }}
             />
@@ -526,6 +587,8 @@ export function SubmissionModal({
                     onClick={() => {
                       setPartBSelected(false);
                       setSelectedItemId("");
+                      setSelectedWildcardId("");
+                      setIsWildcardMode(false);
                       setSubmissionQty(1);
                     }}
                     className={`flex-1 py-2 text-sm font-medium transition-colors cursor-pointer ${
@@ -541,6 +604,8 @@ export function SubmissionModal({
                     onClick={() => {
                       setPartBSelected(true);
                       setSelectedItemId("");
+                      setSelectedWildcardId("");
+                      setIsWildcardMode(false);
                       setSubmissionQty(1);
                     }}
                     className={`flex-1 py-2 text-sm font-medium transition-colors border-l border-slate-600 cursor-pointer ${
@@ -555,14 +620,58 @@ export function SubmissionModal({
               </div>
             ))}
 
-          {/* Item searchable select */}
+          {/* Wildcard toggle — shown when the tile has wildcards applicable to this part */}
+          {selectedTile && currentSideData && hasTileWildcards && (
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isWildcardMode}
+                onChange={(e) => {
+                  setIsWildcardMode(e.target.checked);
+                  setSelectedItemId("");
+                  setSelectedWildcardId("");
+                }}
+                className="w-4 h-4 accent-indigo-500 cursor-pointer"
+              />
+              <span className="text-sm text-slate-300">Submit with a wildcard</span>
+            </label>
+          )}
+
+          {/* Wildcard select (wildcard mode) */}
+          {selectedTile && isWildcardMode && (
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Wildcard drop
+              </label>
+              <SearchableSelect
+                key={selectedTileId + "-" + selectedPart + "-wc"}
+                value={selectedWildcardId}
+                options={availableWildcards.map((wc) => ({ id: wc.id, label: wc.itemName }))}
+                placeholder="Select wildcard…"
+                readOnly={availableWildcards.length === 1}
+                onChange={(id) => {
+                  setSelectedWildcardId(id);
+                  setSelectedItemId("");
+                }}
+              />
+              {selectedWildcard?.description && (
+                <p className="mt-1.5 text-xs text-slate-500 leading-snug">
+                  {selectedWildcard.description}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Item searchable select — normal mode, or wildcard mode to pick the target item */}
           {selectedTile && currentSideData && (
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                What are you submitting?
+                {isWildcardMode
+                  ? "Which item does the wildcard count towards?"
+                  : "What are you submitting?"}
               </label>
               <SearchableSelect
-                key={selectedTileId + "-" + selectedPart}
+                key={selectedTileId + "-" + selectedPart + (isWildcardMode ? "-wc-item" : "")}
                 value={selectedItemId}
                 options={itemOptions}
                 placeholder="Search items…"

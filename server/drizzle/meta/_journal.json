@@ -36,6 +36,13 @@
       "when": 1771901011074,
       "tag": "0004_long_boomer",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1771963160998,
+      "tag": "0005_talented_starhawk",
+      "breakpoints": true
     }
   ]
 }
