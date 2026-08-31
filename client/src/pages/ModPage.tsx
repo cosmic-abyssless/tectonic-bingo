@@ -4,12 +4,16 @@ import { useBingo } from "../api/queries";
 import { useWebSocketEvent } from "../context/WebSocketContext";
 import { ReviewQueue } from "../core/mod/ReviewQueue";
 import { StageControls } from "../core/mod/StageControls";
+import { SignupRoster } from "../core/mod/SignupRoster";
+
+type Tab = "submissions" | "signups";
 
 // Mod surfaces never theme — always core/, regardless of bingo.theme.
 export function ModPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { data: shell } = useBingo(slug);
+  const [tab, setTab] = useState<Tab>("submissions");
 
   const [showNotifPrompt, setShowNotifPrompt] = useState(
     () => "Notification" in window && Notification.permission === "default" && !localStorage.getItem("mod_notif_prompted"),
@@ -52,7 +56,22 @@ export function ModPage() {
         <div className="w-full max-w-6xl px-6 pt-4">
           <StageControls slug={slug!} bingo={shell.bingo} />
         </div>
-        <ReviewQueue slug={slug!} />
+
+        <div className="w-full max-w-6xl px-6 pt-4 flex gap-1 border-b border-slate-700">
+          {(["submissions", "signups"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`text-sm font-medium px-3 py-2 border-b-2 -mb-px transition-colors cursor-pointer capitalize ${
+                tab === t ? "border-indigo-500 text-white" : "border-transparent text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {tab === "submissions" ? <ReviewQueue slug={slug!} /> : <SignupRoster slug={slug!} />}
       </div>
 
       {showNotifPrompt && (

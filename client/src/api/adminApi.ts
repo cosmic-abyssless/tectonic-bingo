@@ -35,7 +35,7 @@ export function addMod(slug: string, userId: string) {
   return api.post<{ mod: BingoModerator }>(`${base(slug)}/mods`, { userId });
 }
 export function removeMod(slug: string, userId: string) {
-  return fetchDelete(`${base(slug)}/mods/${userId}`);
+  return api.delete(`${base(slug)}/mods/${userId}`);
 }
 
 export function createCategory(slug: string, payload: { label: string; colorHex?: string; sortOrder?: number }) {
@@ -45,7 +45,7 @@ export function updateCategory(slug: string, id: string, payload: Partial<TileCa
   return api.patch<{ category: TileCategory }>(`${base(slug)}/categories/${id}`, payload);
 }
 export function deleteCategory(slug: string, id: string) {
-  return fetchDelete(`${base(slug)}/categories/${id}`);
+  return api.delete(`${base(slug)}/categories/${id}`);
 }
 
 export function createTile(slug: string, payload: { name: string; boardRow: number; boardCol: number; categoryId?: string | null; hasFreezePeriod?: boolean; freezeDurationMinutes?: number; notes?: string }) {
@@ -55,7 +55,7 @@ export function updateTile(slug: string, id: string, payload: Partial<Tile>) {
   return api.patch<{ tile: Tile }>(`${base(slug)}/tiles/${id}`, payload);
 }
 export function deleteTile(slug: string, id: string) {
-  return fetchDelete(`${base(slug)}/tiles/${id}`);
+  return api.delete(`${base(slug)}/tiles/${id}`);
 }
 export async function uploadTileImage(slug: string, id: string, file: File) {
   const fd = new FormData();
@@ -70,7 +70,7 @@ export function updateTask(slug: string, id: string, payload: Partial<TileTask>)
   return api.patch<{ task: TileTask }>(`${base(slug)}/tasks/${id}`, payload);
 }
 export function deleteTask(slug: string, id: string) {
-  return fetchDelete(`${base(slug)}/tasks/${id}`);
+  return api.delete(`${base(slug)}/tasks/${id}`);
 }
 
 export function createTaskItem(slug: string, taskId: string, payload: { itemName: string; quantity?: number; optionsGroup?: string | null; sortOrder?: number }) {
@@ -80,7 +80,7 @@ export function updateTaskItem(slug: string, id: string, payload: Partial<TileTa
   return api.patch<{ item: TileTaskItem }>(`${base(slug)}/items/${id}`, payload);
 }
 export function deleteTaskItem(slug: string, id: string) {
-  return fetchDelete(`${base(slug)}/items/${id}`);
+  return api.delete(`${base(slug)}/items/${id}`);
 }
 
 export function createWildcard(slug: string, tileId: string, payload: { itemName: string; maxRedemptionsPerTeam?: number; description?: string; applicableTaskId?: string | null }) {
@@ -90,7 +90,7 @@ export function updateWildcard(slug: string, id: string, payload: Partial<TileWi
   return api.patch<{ wildcard: TileWildcard }>(`${base(slug)}/wildcards/${id}`, payload);
 }
 export function deleteWildcard(slug: string, id: string) {
-  return fetchDelete(`${base(slug)}/wildcards/${id}`);
+  return api.delete(`${base(slug)}/wildcards/${id}`);
 }
 
 export function getLines(slug: string) {
@@ -103,7 +103,7 @@ export function updateLine(slug: string, id: string, points: number) {
   return api.patch<{ line: BingoLine }>(`${base(slug)}/lines/${id}`, { points });
 }
 export function deleteLine(slug: string, id: string) {
-  return fetchDelete(`${base(slug)}/lines/${id}`);
+  return api.delete(`${base(slug)}/lines/${id}`);
 }
 
 export function getQuestions(slug: string) {
@@ -116,7 +116,7 @@ export function updateQuestion(slug: string, id: string, payload: Partial<Signup
   return api.patch<{ question: SignupQuestion }>(`${base(slug)}/questions/${id}`, payload);
 }
 export function deleteQuestion(slug: string, id: string) {
-  return fetchDelete(`${base(slug)}/questions/${id}`);
+  return api.delete(`${base(slug)}/questions/${id}`);
 }
 export function reorderQuestions(slug: string, orderedIds: string[]) {
   return api.post<{ questions: SignupQuestion[] }>(`${base(slug)}/questions/reorder`, { orderedIds });
@@ -132,13 +132,6 @@ export function addTeamMember(slug: string, teamId: string, userId: string) {
   return api.post<{ member: TeamMember }>(`${base(slug)}/teams/${teamId}/members`, { userId });
 }
 export function removeTeamMember(slug: string, teamId: string, userId: string) {
-  return fetchDelete(`${base(slug)}/teams/${teamId}/members/${userId}`);
+  return api.delete(`${base(slug)}/teams/${teamId}/members/${userId}`);
 }
 
-async function fetchDelete(path: string): Promise<void> {
-  const res = await fetch(path, { method: "DELETE", credentials: "include" });
-  if (!res.ok && res.status !== 204) {
-    const data = await res.json().catch(() => null);
-    throw new Error(data?.error ?? `HTTP ${res.status}`);
-  }
-}

@@ -6,6 +6,7 @@ import { db } from './index';
 import {
   users, bingos, bingoModerators, tileCategories, tiles, tileTasks,
   tileTaskItems, tileWildcards, bingoLines, bingoLineTiles, teams, teamMembers,
+  signupQuestions,
 } from './schema';
 
 async function main() {
@@ -254,6 +255,12 @@ async function main() {
   await db.insert(teamMembers).values([
     { teamId: teamBeta.id, userId: captainB.id, isCaptain: true },
     { teamId: teamBeta.id, userId: memberB.id, isCaptain: false },
+  ]);
+
+  await db.insert(signupQuestions).values([
+    { bingoId: bingo.id, prompt: 'What is your preferred combat style?', type: 'select', optionsJson: JSON.stringify(['Melee', 'Ranged', 'Magic']), required: true, sortOrder: 0 },
+    { bingoId: bingo.id, prompt: 'Are you available on weekends?', type: 'boolean', required: false, sortOrder: 1 },
+    { bingoId: bingo.id, prompt: 'Anything else we should know?', type: 'textarea', required: false, sortOrder: 2 },
   ]);
 
   console.log(`Seeded bingo "${bingo.name}" (slug: ${bingo.slug}) with ${tileDefs.length} tiles, 2 teams, 8 lines.`);
