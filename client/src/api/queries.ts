@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   BingoListResponse, BingoShellResponse, BoardResponse, CreateSubmissionResponse,
-  ModSubmissionsResponse, PendingCountResponse, ReviewSubmissionResponse,
-  ScreenshotAnalysis, Stage, TeamProgressSummary, TeamSubmissionsResponse,
+  ModSubmissionsResponse, MySignupResponse, PendingCountResponse, ReviewSubmissionResponse,
+  RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupQuestion, Stage,
+  TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
 import { api } from "./client";
 
@@ -15,6 +16,9 @@ export const queryKeys = {
   teamSubmissions: (slug: string, teamId: string) => ["teamSubmissions", slug, teamId] as const,
   modSubmissions: (slug: string) => ["modSubmissions", slug] as const,
   pendingCount: (slug: string) => ["pendingCount", slug] as const,
+  signupRoster: (slug: string) => ["signupRoster", slug] as const,
+  signupQuestions: (slug: string) => ["signupQuestions", slug] as const,
+  mySignup: (slug: string) => ["mySignup", slug] as const,
 };
 
 export function useBingos() {
@@ -105,6 +109,66 @@ export function useReviewSubmission(slug: string) {
       queryClient.invalidateQueries({ queryKey: ["teamProgress", slug] });
       queryClient.invalidateQueries({ queryKey: ["teamSubmissions", slug] });
     },
+  });
+}
+
+export function useSignupRoster(slug: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.signupRoster(slug ?? ""),
+    queryFn: () => api.get<RosterResponse>(`/api/bingos/${slug}/mod/signups`),
+    enabled: !!slug,
+  });
+}
+
+export function useMarkBuyin(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { signupId: string; received: boolean; collectedByUserId?: string | null }) =>
+      api.patch<{ signup: Signup }>(`/api/bingos/${slug}/mod/signups/${params.signupId}/buyin`, {
+        received: params.received,
+        collectedByUserId: params.collectedByUserId,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
+  });
+}
+
+export function useSignupQuestions(slug: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.signupQuestions(slug ?? ""),
+    queryFn: () => api.get<{ questions: SignupQuestion[] }>(`/api/bingos/${slug}/signup/questions`),
+    enabled: !!slug,
+  });
+}
+
+export function useMySignup(slug: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.mySignup(slug ?? ""),
+    queryFn: () => api.get<MySignupResponse>(`/api/bingos/${slug}/signup`),
+    enabled: !!slug,
+  });
+}
+
+export function useCreateSignup(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { rsn: string; answers: SignupAnswerInput[] }) => api.post<{ signup: Signup }>(`/api/bingos/${slug}/signup`, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.mySignup(slug) }),
+  });
+}
+
+export function useUpdateSignup(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { rsn?: string; answers?: SignupAnswerInput[] }) => api.patch<{ signup: Signup }>(`/api/bingos/${slug}/signup`, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.mySignup(slug) }),
+  });
+}
+
+export function useWithdrawSignup(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete<{ signup: Signup }>(`/api/bingos/${slug}/signup`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.mySignup(slug) }),
   });
 }
 

@@ -8,6 +8,7 @@ import { ThemeRoot } from "../themes/ThemeRoot";
 import { BoardGrid } from "../core/board/BoardGrid";
 import { SubmissionModal } from "../core/submissions/SubmissionModal";
 import { TeamSubmissionsList } from "../core/submissions/TeamSubmissionsList";
+import { SignupForm } from "../core/signup/SignupForm";
 import { Markdown } from "../core/ui/Markdown";
 import { displayName, avatarUrl } from "../core/ui/user";
 import { CountdownTimer } from "../core/ui/CountdownTimer";
@@ -238,15 +239,22 @@ export function BingoPage() {
         </header>
 
         <main className="px-3 py-4 sm:px-6 sm:py-6 max-w-6xl mx-auto">
-          {!boardRevealed ? (
+          {bingo.stage === "signup" ? (
+            <SignupForm slug={slug!} />
+          ) : !boardRevealed ? (
             <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
               <div className="text-5xl">🎯</div>
               <h2 className="text-xl font-bold text-white capitalize">{bingo.stage} stage</h2>
-              <p className="text-slate-400 max-w-sm">The board hasn't been revealed yet — check back once the mods advance this bingo to the reveal stage.</p>
-              {bingo.revealScheduledAt && (
-                <p className="text-slate-500 text-sm">
-                  Scheduled for {new Date(bingo.revealScheduledAt).toLocaleString()}
-                </p>
+              <p className="text-slate-400 max-w-sm">
+                {bingo.stage === "planning"
+                  ? "Signups haven't opened yet — check back soon."
+                  : "The board hasn't been revealed yet — check back once the mods advance this bingo to the reveal stage."}
+              </p>
+              {bingo.stage === "planning" && bingo.signupOpensAt && (
+                <p className="text-slate-500 text-sm">Signups open {new Date(bingo.signupOpensAt).toLocaleString()}</p>
+              )}
+              {bingo.stage === "draft" && (
+                <p className="text-slate-500 text-sm">The draft is underway — teams will be revealed soon.</p>
               )}
             </div>
           ) : !viewingTeamId ? (

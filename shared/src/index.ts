@@ -277,6 +277,47 @@ export interface SignupQuestion {
   sortOrder: number;
 }
 
+export type SignupStatus = "active" | "withdrawn";
+
+export interface Signup {
+  id: string;
+  bingoId: string;
+  userId: string;
+  rsn: string;
+  status: SignupStatus;
+  buyinReceivedAt: string | null;
+  buyinCollectedByUserId: string | null;
+  buyinRecordedByUserId: string | null;
+  createdAt: string;
+}
+
+export interface SignupAnswer {
+  id: string;
+  signupId: string;
+  questionId: string;
+  value: string;
+}
+
+export interface SignupAnswerInput {
+  questionId: string;
+  value: string;
+}
+
+export interface MySignupResponse {
+  signup: Signup | null;
+  answers: SignupAnswer[];
+}
+
+export interface RosterEntry {
+  signup: Signup;
+  user: User;
+  answers: SignupAnswer[];
+}
+
+export interface RosterResponse {
+  signups: RosterEntry[];
+}
+
 export interface BingoLine {
   id: string;
   bingoId: string;
