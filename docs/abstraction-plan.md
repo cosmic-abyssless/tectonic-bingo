@@ -1,0 +1,24 @@
+I want to make the bingo service more generic to allow moderators to set up bingo boards and manage different stages of planning via an admin panel.
+
+- Bingo planning features
+  - Generic rulesets that admins can choose from to set up a bingo tile
+  - Select specific users as bingo mods and captains
+  - Bingo stages Planning -> Signup/Buyin -> Draft -> Board reveal -> Start of bingo
+    - with dates for each
+  - After draft is complete, have the service create team roles and team channels (could be de-scoped/implemented last)
+- Signup UX
+  - Users can sign up for the bingo after authenticating with discord
+  - They will answer a series of questions that will be saved to the DB
+  - Signed up users can be tracked by mods via the admin panel, and can be marked if the buyin has been received, and by who
+- Draft UX
+  - All users who have signed up and/or are a moderator can view the draft
+  - A mod will start the draft, upon it starting the captains will be ordered randomly
+  - Captains will take turns drafting players in a snake style draft
+  - After draft is complete and before bingo starts, captains can set their team name
+  - Mods can assign colors to each team
+- Bingo UX
+  - Ideally I want to make the FE separate the functionality from the UI
+  - For example I would love to have unstyled, utility components and reusable libraries/skeletons that could be used by the sub-page for each bingo
+  - For example, the last bingo was pokemon themed and had very specific one-off UI elements for that theme, I would like a sub-folder in the UI for each bingo where we can use custom styling, and if none match the current bingo it can default to generic components.
+  - There should be many principles that apply to all bingos, suchas the admin panel which should look the same regardless of the theme
+  - Lets make sure to build the datamodel in a way where we can easily support statistics and a timeline view for an overview post-bingo
