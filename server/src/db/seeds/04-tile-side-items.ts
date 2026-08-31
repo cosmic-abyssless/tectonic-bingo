@@ -482,18 +482,18 @@ const DEFS: SideItemsDef[] = [
     tileName: "Gauntlet",
     side: "A",
     items: opts("gauntlet_seed", [
-      "Armour seed",
-      "Weapon seed",
-      "Enhanced weapon seed",
+      "Crystal armour seed",
+      "Crystal weapon seed",
+      "Enhanced crystal weapon seed	",
     ]),
   },
   {
     tileName: "Gauntlet",
     side: "B",
     items: opts("gauntlet_seed", [
-      "Armour seed",
-      "Weapon seed",
-      "Enhanced weapon seed",
+      "Crystal armour seed",
+      "Crystal weapon seed",
+      "Enhanced crystal weapon seed	",
     ]),
   },
 
@@ -829,7 +829,7 @@ const DEFS: SideItemsDef[] = [
   {
     tileName: "Venenatis",
     side: "B",
-    items: req("Fang of Venenatis", "Voidwaker gem", "Treasonous ring"),
+    items: req("Voidwaker gem", "Treasonous ring"),
   },
 
   // ── DESERT ───────────────────────────────────────────────────────────────

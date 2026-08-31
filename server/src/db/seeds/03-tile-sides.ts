@@ -17,6 +17,9 @@ type SideDef = {
   // How many approved submissions are required before this side is marked complete.
   // Defaults to 1. Use >1 for "obtain N of these" tiles where each item is qty=1 in an optgroup.
   minSubmissions?: number;
+  // When true, completion requires ALL items in at least ONE options group to be approved.
+  // Used by Barrows Part B: must submit a complete set from one brother.
+  requiresCompleteSet?: boolean;
   notes?: string;
 };
 
@@ -63,6 +66,7 @@ const DEFS: TileSideDef[] = [
         description:
           "Obtain all 4 Cerberus uniques: Primordial crystal, Pegasian crystal, Eternal crystal, and Smouldering stone. Previously acquired uniques count.",
         allowsPreviouslyAcquired: true,
+        requiresNoDuplicates: true,
         requiresPartA: true,
       },
     ],
@@ -74,13 +78,15 @@ const DEFS: TileSideDef[] = [
         side: "A",
         points: 40,
         description:
-          "Obtain a piece of Oathplate Armor (helm, chest, or legs). Oathplate via forgotten lockbox counts — screenshot the reward message or provide a pre-clog screenshot.",
+          "Obtain a piece of Oathplate Armor (helm, chest, or legs). Oathplate via forgotten lockbox counts.",
+        notes:
+          "Screenshot the reward message or provide a pre-clog screenshot. Contracts of acquisition may not be used.",
       },
       {
         side: "B",
         points: 60,
         description:
-          "Obtain another piece of Oathplate Armor. Duplicates are allowed. Contracts of acquisition may not be used.",
+          "Obtain another piece of Oathplate Armor. Duplicates are allowed.",
         requiresPartA: true,
       },
     ],
@@ -114,6 +120,8 @@ const DEFS: TileSideDef[] = [
         points: 40,
         description:
           "Obtain the other item (whichever was not obtained for Part A).",
+        allowsPreviouslyAcquired: true,
+        requiresNoDuplicates: true,
         requiresPartA: true,
       },
     ],
@@ -205,6 +213,8 @@ const DEFS: TileSideDef[] = [
         points: 35,
         description:
           "Obtain the other item (whichever was not obtained for Part A).",
+        allowsPreviouslyAcquired: true,
+        requiresNoDuplicates: true,
         requiresPartA: true,
       },
     ],
@@ -224,6 +234,7 @@ const DEFS: TileSideDef[] = [
         description:
           "Obtain all 4 Zulrah uniques: Serpentine Visage, Tanzanite Fang, Magic Fang, and Uncut Onyx. Previously acquired uniques count.",
         allowsPreviouslyAcquired: true,
+        requiresNoDuplicates: true,
         requiresPartA: true,
       },
     ],
@@ -278,14 +289,17 @@ const DEFS: TileSideDef[] = [
         description:
           "Obtain 12 pieces of Barrows armour. Duplicates are allowed.",
         allowsPreLoad: true,
+        minSubmissions: 12,
       },
       {
         side: "B",
         points: 35,
         description:
           "Obtain any complete set of Barrows armour (helmet, torso, legs, weapon).",
-        allowsPreLoad: true,
+        allowsPreviouslyAcquired: true,
+        requiresNoDuplicates: true,
         requiresPartA: true,
+        requiresCompleteSet: true,
       },
     ],
   },
@@ -296,7 +310,9 @@ const DEFS: TileSideDef[] = [
         side: "A",
         points: 25,
         description:
-          "Obtain 2 Venator shards. Shards from a frozen cache count — screenshot the reward or provide a pre-clog screenshot.",
+          "Obtain 2 Venator shards. Shards from a frozen cache count.",
+        notes:
+          "Screenshot the reward message or provide a pre-clog screenshot.",
       },
       {
         side: "B",
@@ -328,7 +344,6 @@ const DEFS: TileSideDef[] = [
         points: 35,
         description:
           "Obtain 5 additional Moons of Peril uniques. Duplicates are allowed.",
-        allowsPreLoad: true,
         requiresPartA: true,
         minSubmissions: 5,
       },
@@ -343,6 +358,7 @@ const DEFS: TileSideDef[] = [
         points: 40,
         description:
           "Obtain all of Vet'ion's uniques: Skull of Vet'ion (Part A counts), Voidwaker Blade, and Ring of the Gods.",
+        allowsPreviouslyAcquired: true,
         requiresPartA: true,
       },
     ],
@@ -415,6 +431,7 @@ const DEFS: TileSideDef[] = [
         points: 40,
         description:
           "Obtain all of Callisto's uniques: Claw of Callisto (Part A counts), Voidwaker Hilt, and Tyrannical Ring.",
+        allowsPreviouslyAcquired: true,
         requiresPartA: true,
       },
     ],
@@ -497,6 +514,8 @@ const DEFS: TileSideDef[] = [
         points: 45,
         description:
           "Obtain all items from the Sailing list: Broken Dragon Hook, Dragon Cannon Barrel, and Bottled Storm.",
+        allowsPreviouslyAcquired: true,
+        requiresNoDuplicates: true,
         requiresPartA: true,
       },
     ],
@@ -551,7 +570,7 @@ const DEFS: TileSideDef[] = [
         side: "A",
         points: 25,
         description:
-          "Obtain 200 burnt pages. Each Pyromancer piece, Bruma Torch, or duplicate Tome of Fire counts as 25 pages. Pre-screenshot of an empty WT cart required.",
+          "Obtain 200 burnt pages. Each Pyromancer piece, Bruma Torch, or duplicate Tome of Fire counts as 25 pages.",
         notes: "Pre-screenshot of empty WT cart required before starting.",
       },
       { side: "B", points: 40, description: "Obtain a Tome of Fire." },
@@ -627,6 +646,7 @@ const DEFS: TileSideDef[] = [
         side: "B",
         points: 40,
         description: "Obtain 2 more Burning Claws and/or Synapses.",
+        minSubmissions: 2,
         requiresPartA: true,
       },
     ],
@@ -640,8 +660,9 @@ const DEFS: TileSideDef[] = [
       {
         side: "A",
         points: 20,
-        description:
-          "Obtain 2 Blood Shards. If thieving, submit a pre-screenshot of your collection log showing your current blood shard count.",
+        description: "Obtain 2 Blood Shards.",
+        notes:
+          "If thieving, submit a pre-screenshot of your collection log showing your current blood shard count.",
       },
       {
         side: "B",
@@ -840,7 +861,7 @@ const DEFS: TileSideDef[] = [
         side: "A",
         points: 25,
         description:
-          "Obtain 200 soaked pages. A duplicate Tome of Water or a Big Harpoonfish each counts as 25 pages. Pre-screenshot of an empty reward pool required.",
+          "Obtain 200 soaked pages. A duplicate Tome of Water or a Big Harpoonfish each counts as 25 pages.",
         notes: "Pre-screenshot of empty reward pool required before starting.",
       },
       { side: "B", points: 40, description: "Obtain a Tome of Water." },
@@ -904,6 +925,7 @@ async function seed() {
       allowsPreLoad: s.allowsPreLoad ?? false,
       requiresPartA: s.requiresPartA ?? false,
       minSubmissions: s.minSubmissions ?? 1,
+      requiresCompleteSet: s.requiresCompleteSet ?? false,
       notes: s.notes ?? null,
     }));
   });

@@ -13,6 +13,7 @@ import {
   tileSides,
   tileSideItems,
   tileWildcards,
+  teamWildcardUsage,
   teams,
   users,
   teamTileProgress,
@@ -299,15 +300,22 @@ router.get("/team/submissions", requireAuth, async (req: Request, res: Response)
   ]);
 
   const tileIds = [...new Set(sidesData.map((s) => s.tileId))];
-  const tilesData = tileIds.length
-    ? await db.select().from(tiles).where(inArray(tiles.id, tileIds))
-    : [];
+  const wildcardIds = [...new Set(teamSubs.map((s) => s.wildcardId).filter(Boolean))] as string[];
+
+  const [tilesData, wildcardData] = await Promise.all([
+    tileIds.length ? db.select().from(tiles).where(inArray(tiles.id, tileIds)) : [],
+    wildcardIds.length
+      ? db.select({ id: tileWildcards.id, itemName: tileWildcards.itemName })
+          .from(tileWildcards).where(inArray(tileWildcards.id, wildcardIds))
+      : [],
+  ]);
 
   const submitterById = new Map(
     submittersData.map((u) => [u.id, u.guildNick ?? u.globalName ?? u.username])
   );
   const sideById = new Map(sidesData.map((s) => [s.id, s]));
   const tileById = new Map(tilesData.map((t) => [t.id, t]));
+  const wildcardById = new Map(wildcardData.map((w) => [w.id, w.itemName]));
 
   const claimsBySubId = new Map<string, typeof claimsData>();
   for (const claim of claimsData) {
@@ -338,6 +346,8 @@ router.get("/team/submissions", requireAuth, async (req: Request, res: Response)
       badgeCategory: tile.badgeCategory,
       side: ts.side,
       submittedBy: submitterById.get(sub.submittedByUserId) ?? "Unknown",
+      isWildcardRedemption: sub.isWildcardRedemption,
+      wildcardItemName: sub.wildcardId ? (wildcardById.get(sub.wildcardId) ?? null) : null,
       items: (claimsBySubId.get(sub.id) ?? []).map((c) => ({
         itemName: c.itemName,
         quantity: c.quantity,
@@ -445,19 +455,32 @@ Respond ONLY with a JSON object, no markdown:
       const codewordFound = !!parsed.codewordFound;
       const extractedText: string[] = Array.isArray(parsed.extractedText) ? parsed.extractedText : [];
 
-      // Step 2 — match extracted strings against every item in the DB
-      const allItems = await db
-        .select({
-          id: tileSideItems.id,
-          itemName: tileSideItems.itemName,
-          side: tileSides.side,
-          tileId: tiles.id,
-          tileName: tiles.name,
-        })
-        .from(tileSideItems)
-        .innerJoin(tileSides, eq(tileSideItems.tileSideId, tileSides.id))
-        .innerJoin(tiles, eq(tileSides.tileId, tiles.id))
-        .where(eq(tiles.bingoEventId, activeEvent.id));
+      // Step 2 — match extracted strings against every tile side item and wildcard in the DB
+      const [allItems, allWildcards] = await Promise.all([
+        db
+          .select({
+            id: tileSideItems.id,
+            itemName: tileSideItems.itemName,
+            side: tileSides.side,
+            tileId: tiles.id,
+            tileName: tiles.name,
+          })
+          .from(tileSideItems)
+          .innerJoin(tileSides, eq(tileSideItems.tileSideId, tileSides.id))
+          .innerJoin(tiles, eq(tileSides.tileId, tiles.id))
+          .where(eq(tiles.bingoEventId, activeEvent.id)),
+        db
+          .select({
+            id: tileWildcards.id,
+            itemName: tileWildcards.itemName,
+            applicableToSide: tileWildcards.applicableToSide,
+            tileId: tiles.id,
+            tileName: tiles.name,
+          })
+          .from(tileWildcards)
+          .innerJoin(tiles, eq(tileWildcards.tileId, tiles.id))
+          .where(eq(tiles.bingoEventId, activeEvent.id)),
+      ]);
 
       let detectedMatch: {
         tileId: string; tileName: string; tileSideItemId: string;
@@ -480,6 +503,30 @@ Respond ONLY with a JSON object, no markdown:
         }
       }
 
+      // Only check wildcards if no regular item was matched
+      let detectedWildcard: {
+        tileId: string; tileName: string; wildcardId: string;
+        itemName: string; applicableToSide: "A" | "B" | null;
+      } | null = null;
+
+      if (!detectedMatch) {
+        outerWc: for (const wc of allWildcards) {
+          const needle = wc.itemName.toLowerCase();
+          for (const text of extractedText) {
+            if (text.toLowerCase().includes(needle)) {
+              detectedWildcard = {
+                tileId: wc.tileId,
+                tileName: wc.tileName,
+                wildcardId: wc.id,
+                itemName: wc.itemName,
+                applicableToSide: wc.applicableToSide as "A" | "B" | null,
+              };
+              break outerWc;
+            }
+          }
+        }
+      }
+
       const warnings: string[] = [];
       if (!codewordFound) {
         warnings.push(
@@ -487,7 +534,7 @@ Respond ONLY with a JSON object, no markdown:
         );
       }
 
-      res.json({ codewordFound, codeword: team.codeword, detectedMatch, warnings });
+      res.json({ codewordFound, codeword: team.codeword, detectedMatch, detectedWildcard, warnings });
     } catch (err) {
       console.error("[AI analyze] failed:", err);
       res.status(500).json({ error: "Analysis failed" });
@@ -508,18 +555,31 @@ router.post(
       return;
     }
 
-    const { tileId, side, itemId, quantity: quantityRaw, codewordFound } = req.body as {
+    const {
+      tileId, side, itemId, wildcardId,
+      isWildcardRedemption: isWildcardRaw,
+      quantity: quantityRaw, codewordFound,
+    } = req.body as {
       tileId?: string;
       side?: string;
       itemId?: string;
+      wildcardId?: string;
+      isWildcardRedemption?: string; // "true" | "false"
       quantity?: string;
       codewordFound?: string; // "true" | "false" | undefined (if no analysis was run)
     };
+    const isWildcard = isWildcardRaw === "true";
     const quantity = Math.max(1, parseInt(quantityRaw ?? "1") || 1);
 
     if (!tileId || !side || !itemId) {
       if (req.file) fs.unlinkSync(req.file.path);
       res.status(400).json({ error: "Missing required fields: tileId, side, itemId" });
+      return;
+    }
+
+    if (isWildcard && !wildcardId) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      res.status(400).json({ error: "wildcardId is required for wildcard redemptions" });
       return;
     }
 
@@ -587,11 +647,11 @@ router.post(
       return;
     }
 
-    // Verify the item belongs to this tile side
+    // Verify the item belongs to this tile side (required in both regular and wildcard paths)
     const [item] = await db
       .select()
       .from(tileSideItems)
-      .where(eq(tileSideItems.id, itemId))
+      .where(eq(tileSideItems.id, itemId!))
       .limit(1);
     if (!item || item.tileSideId !== ts.tileSideId) {
       fs.unlinkSync(req.file.path);
@@ -601,31 +661,92 @@ router.post(
 
     const fileUrl = `/uploads/${req.file.filename}`;
     const submissionId = crypto.randomUUID();
-
-    await db.insert(submissions).values({
-      id: submissionId,
-      teamId: team.id,
-      tileSideId: ts.tileSideId,
-      submittedByUserId: dbUser.id,
-      status: "pending",
-    });
-
     const analysisRan = codewordFound !== undefined;
-    await db.insert(submissionScreenshots).values({
-      submissionId,
-      screenshotType: "main",
-      storageUrl: fileUrl,
-      scrapeStatus: analysisRan ? "completed" : "pending",
-      codewordVerified: analysisRan ? codewordFound === "true" : null,
-      scrapedAt: analysisRan ? new Date() : null,
-    });
 
-    await db.insert(submissionItemClaims).values({
-      submissionId,
-      itemName: item.itemName,
-      quantity,
-      tileSideItemId: item.id,
-    });
+    if (isWildcard) {
+      // --- Wildcard redemption path ---
+      const [wc] = await db
+        .select()
+        .from(tileWildcards)
+        .where(eq(tileWildcards.id, wildcardId!))
+        .limit(1);
+      if (!wc || wc.tileId !== tileId) {
+        fs.unlinkSync(req.file.path);
+        res.status(400).json({ error: "Wildcard not found or does not belong to this tile" });
+        return;
+      }
+
+      // Enforce usage cap
+      const usages = await db
+        .select()
+        .from(teamWildcardUsage)
+        .where(and(
+          eq(teamWildcardUsage.teamId, team.id),
+          eq(teamWildcardUsage.tileWildcardId, wc.id),
+        ));
+      if (usages.length >= wc.maxRedemptionsPerTeam) {
+        fs.unlinkSync(req.file.path);
+        res.status(400).json({ error: `Your team has already used the "${wc.itemName}" wildcard the maximum number of times` });
+        return;
+      }
+
+      await db.insert(submissions).values({
+        id: submissionId,
+        teamId: team.id,
+        tileSideId: ts.tileSideId,
+        submittedByUserId: dbUser.id,
+        status: "pending",
+        isWildcardRedemption: true,
+        wildcardId: wc.id,
+      });
+
+      await db.insert(submissionScreenshots).values({
+        submissionId,
+        screenshotType: "main",
+        storageUrl: fileUrl,
+        scrapeStatus: analysisRan ? "completed" : "pending",
+        codewordVerified: analysisRan ? codewordFound === "true" : null,
+        scrapedAt: analysisRan ? new Date() : null,
+      });
+
+      await db.insert(submissionItemClaims).values({
+        submissionId,
+        itemName: item.itemName,
+        quantity: 1,
+        tileSideItemId: item.id,
+      });
+
+      await db.insert(teamWildcardUsage).values({
+        teamId: team.id,
+        tileWildcardId: wc.id,
+        submissionId,
+      });
+    } else {
+      // --- Regular item path ---
+      await db.insert(submissions).values({
+        id: submissionId,
+        teamId: team.id,
+        tileSideId: ts.tileSideId,
+        submittedByUserId: dbUser.id,
+        status: "pending",
+      });
+
+      await db.insert(submissionScreenshots).values({
+        submissionId,
+        screenshotType: "main",
+        storageUrl: fileUrl,
+        scrapeStatus: analysisRan ? "completed" : "pending",
+        codewordVerified: analysisRan ? codewordFound === "true" : null,
+        scrapedAt: analysisRan ? new Date() : null,
+      });
+
+      await db.insert(submissionItemClaims).values({
+        submissionId,
+        itemName: item.itemName,
+        quantity,
+        tileSideItemId: item.id,
+      });
+    }
 
     // Upsert teamTileProgress — set side to pending_approval (don't downgrade completed)
     const sideStatusField = side === "A" ? ("sideAStatus" as const) : ("sideBStatus" as const);
@@ -707,9 +828,15 @@ router.get("/mod/submissions", requireAuth, requireMod, async (_req: Request, re
   ]);
 
   const tileIds = [...new Set(sidesData.map((s) => s.tileId))];
-  const tilesData = tileIds.length
-    ? await db.select().from(tiles).where(inArray(tiles.id, tileIds))
-    : [];
+  const wildcardIds = [...new Set(allSubs.map((s) => s.wildcardId).filter(Boolean))] as string[];
+
+  const [tilesData, wildcardData] = await Promise.all([
+    tileIds.length ? db.select().from(tiles).where(inArray(tiles.id, tileIds)) : [],
+    wildcardIds.length
+      ? db.select({ id: tileWildcards.id, itemName: tileWildcards.itemName })
+          .from(tileWildcards).where(inArray(tileWildcards.id, wildcardIds))
+      : [],
+  ]);
 
   const sideById = new Map(sidesData.map((s) => [s.id, s]));
   const tileById = new Map(tilesData.map((t) => [t.id, t]));
@@ -717,6 +844,7 @@ router.get("/mod/submissions", requireAuth, requireMod, async (_req: Request, re
   const submitterById = new Map(
     submittersData.map((u) => [u.id, u.guildNick ?? u.globalName ?? u.username])
   );
+  const wildcardById = new Map(wildcardData.map((w) => [w.id, w.itemName]));
 
   const claimsBySubId = new Map<string, typeof claimsData>();
   for (const c of claimsData) {
@@ -753,6 +881,8 @@ router.get("/mod/submissions", requireAuth, requireMod, async (_req: Request, re
       sidePoints: ts.points,
       submittedBy: submitterById.get(sub.submittedByUserId) ?? "Unknown",
       codewordVerified: mainScreenshot?.codewordVerified ?? null,
+      isWildcardRedemption: sub.isWildcardRedemption,
+      wildcardItemName: sub.wildcardId ? (wildcardById.get(sub.wildcardId) ?? null) : null,
       items: (claimsBySubId.get(sub.id) ?? []).map((c) => ({
         itemName: c.itemName,
         quantity: c.quantity,
@@ -824,64 +954,128 @@ router.patch("/mod/submissions/:id", requireAuth, requireMod, async (req: Reques
     const pts = ts.points;
 
     // ---- Check if approving this submission completes the side ----
-    // Two independent checks — both must pass for sideIsComplete:
-    //   1. For items with quantity > 1: cumulative approved quantity must reach the target.
-    //   2. For sides with minSubmissions > 1: total approved submission count must reach the minimum.
+    // Rules (all must pass):
+    //   1. Each required item (no optionsGroup, qty=1): must have >= 1 approved submission.
+    //   2. Each required item (no optionsGroup, qty>1): cumulative approved qty >= target.
+    //   3. Each options group: >= 1 item from the group must have an approved submission.
+    //   4. minSubmissions: total approved submission count >= ts.minSubmissions.
+    //      (Covers "need N different drops from options groups" like K'ril Part A.)
     let sideIsComplete = true;
 
-    const [claim] = await db
-      .select({ tileSideItemId: submissionItemClaims.tileSideItemId })
-      .from(submissionItemClaims)
-      .where(eq(submissionItemClaims.submissionId, id))
-      .limit(1);
-
-    if (claim?.tileSideItemId) {
-      const [targetItem] = await db
-        .select({ targetQty: tileSideItems.quantity })
-        .from(tileSideItems)
-        .where(eq(tileSideItems.id, claim.tileSideItemId))
-        .limit(1);
-
-      if (targetItem && targetItem.targetQty > 1) {
-        // Sum all approved claim quantities for this (team, tileSide, item).
-        // The current submission is already marked "approved" above, so it is included.
-        const approvedSubIds = (await db
-          .select({ id: submissions.id })
-          .from(submissions)
-          .where(and(
-            eq(submissions.teamId, sub.teamId),
-            eq(submissions.tileSideId, sub.tileSideId),
-            eq(submissions.status, "approved"),
-          ))
-        ).map((s) => s.id);
-
-        let approvedTotal = 0;
-        if (approvedSubIds.length > 0) {
-          const [{ total }] = await db
-            .select({ total: sql<number>`coalesce(sum(${submissionItemClaims.quantity}), 0)` })
-            .from(submissionItemClaims)
-            .where(and(
-              inArray(submissionItemClaims.submissionId, approvedSubIds),
-              eq(submissionItemClaims.tileSideItemId, claim.tileSideItemId),
-            ));
-          approvedTotal = total ?? 0;
-        }
-
-        sideIsComplete = approvedTotal >= targetItem.targetQty;
-      }
-    }
-
-    // Check 2: minSubmissions — for "obtain N of these" tiles where each item is qty=1
-    if (sideIsComplete && ts.minSubmissions > 1) {
-      const [{ approvedCount }] = await db
-        .select({ approvedCount: sql<number>`count(*)` })
+    // Fetch all items for this tile side and all approved submissions (including the one just approved).
+    const [sideItems, approvedSubRows] = await Promise.all([
+      db.select().from(tileSideItems).where(eq(tileSideItems.tileSideId, sub.tileSideId)),
+      db.select({ id: submissions.id })
         .from(submissions)
         .where(and(
           eq(submissions.teamId, sub.teamId),
           eq(submissions.tileSideId, sub.tileSideId),
           eq(submissions.status, "approved"),
-        ));
-      sideIsComplete = (approvedCount ?? 0) >= ts.minSubmissions;
+        )),
+    ]);
+    const approvedSubIds = approvedSubRows.map((s) => s.id);
+
+    // Fetch all claims for those approved submissions.
+    const approvedClaims = approvedSubIds.length
+      ? await db.select().from(submissionItemClaims)
+          .where(inArray(submissionItemClaims.submissionId, approvedSubIds))
+      : [];
+
+    // Build approved qty map: tileSideItemId → cumulative approved quantity
+    const approvedQtyById = new Map<string, number>();
+    for (const claim of approvedClaims) {
+      if (!claim.tileSideItemId) continue;
+      approvedQtyById.set(
+        claim.tileSideItemId,
+        (approvedQtyById.get(claim.tileSideItemId) ?? 0) + claim.quantity,
+      );
+    }
+
+    // If this side allows previously acquired items (Part B where Part A drops count),
+    // also fold in approved Part A claims matched to Part B items by itemName.
+    if (ts.allowsPreviouslyAcquired && ts.side === "B") {
+      const [partASide] = await db
+        .select({ id: tileSides.id })
+        .from(tileSides)
+        .where(and(eq(tileSides.tileId, ts.tileId), eq(tileSides.side, "A")))
+        .limit(1);
+
+      if (partASide) {
+        const partAApprovedSubIds = (await db
+          .select({ id: submissions.id })
+          .from(submissions)
+          .where(and(
+            eq(submissions.teamId, sub.teamId),
+            eq(submissions.tileSideId, partASide.id),
+            eq(submissions.status, "approved"),
+          ))
+        ).map((s) => s.id);
+
+        if (partAApprovedSubIds.length > 0) {
+          const partAClaims = await db
+            .select()
+            .from(submissionItemClaims)
+            .where(inArray(submissionItemClaims.submissionId, partAApprovedSubIds));
+
+          // Map Part B items by lowercase name so we can match by name across sides
+          const partBItemIdByName = new Map(
+            sideItems.map((i) => [i.itemName.toLowerCase(), i.id]),
+          );
+
+          for (const claim of partAClaims) {
+            const partBItemId = partBItemIdByName.get(claim.itemName.toLowerCase());
+            if (partBItemId) {
+              approvedQtyById.set(
+                partBItemId,
+                (approvedQtyById.get(partBItemId) ?? 0) + claim.quantity,
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // Check 1 & 2: every required item (no optionsGroup) must meet its quantity target.
+    for (const item of sideItems.filter((i) => !i.optionsGroup)) {
+      if ((approvedQtyById.get(item.id) ?? 0) < item.quantity) {
+        sideIsComplete = false;
+        break;
+      }
+    }
+
+    // Check 3: options group completion.
+    // Default: every group must have at least one item approved ("pick any one from each group").
+    // requiresCompleteSet: at least ONE group must have ALL its items approved (e.g. Barrows Part B).
+    if (sideIsComplete) {
+      const groups = new Map<string, string[]>();
+      for (const item of sideItems) {
+        if (!item.optionsGroup) continue;
+        const list = groups.get(item.optionsGroup) ?? [];
+        list.push(item.id);
+        groups.set(item.optionsGroup, list);
+      }
+      if (groups.size > 0) {
+        if (ts.requiresCompleteSet) {
+          // At least one group must be fully complete
+          const anyGroupComplete = [...groups.values()].some((itemIds) =>
+            itemIds.every((itemId) => (approvedQtyById.get(itemId) ?? 0) > 0),
+          );
+          if (!anyGroupComplete) sideIsComplete = false;
+        } else {
+          // Every group must have at least one item approved
+          for (const itemIds of groups.values()) {
+            if (!itemIds.some((itemId) => (approvedQtyById.get(itemId) ?? 0) > 0)) {
+              sideIsComplete = false;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Check 4: minSubmissions (e.g. K'ril needs 2 different drops from the options group).
+    if (sideIsComplete && ts.minSubmissions > 1) {
+      sideIsComplete = approvedSubIds.length >= ts.minSubmissions;
     }
     // ----------------------------------------------------------------
 
@@ -905,6 +1099,7 @@ router.patch("/mod/submissions/:id", requireAuth, requireMod, async (req: Reques
       }
     } else if (ts.side === "A") {
       let sideBPoints: number | undefined;
+      let sideBAutoComplete: { points: number } | undefined;
 
       // If Part B is already completed but points were withheld, release them now
       if (existing?.sideBStatus === "completed" && existing.sideBPointsAwarded === 0) {
@@ -927,6 +1122,111 @@ router.patch("/mod/submissions/:id", requireAuth, requireMod, async (req: Reques
             .limit(1);
           sideBPoints = approvedB?.pointsAwarded ?? 0;
         }
+      } else if (existing?.sideBStatus !== "completed") {
+        // Part B not yet completed — check if Part A completion now satisfies Part B conditions.
+        // This applies when Part B has allowsPreviouslyAcquired = true (e.g. Cerberus, where
+        // all 4 uniques from Part A automatically satisfy Part B once Part A is done).
+        const [partBSide] = await db
+          .select()
+          .from(tileSides)
+          .where(and(eq(tileSides.tileId, ts.tileId), eq(tileSides.side, "B")))
+          .limit(1);
+
+        if (partBSide?.allowsPreviouslyAcquired) {
+          const partBItems = await db
+            .select()
+            .from(tileSideItems)
+            .where(eq(tileSideItems.tileSideId, partBSide.id));
+
+          // Fetch any explicit Part B approved submissions
+          const partBApprovedSubIds = (await db
+            .select({ id: submissions.id })
+            .from(submissions)
+            .where(and(
+              eq(submissions.teamId, sub.teamId),
+              eq(submissions.tileSideId, partBSide.id),
+              eq(submissions.status, "approved"),
+            ))
+          ).map((s) => s.id);
+
+          const partBClaims = partBApprovedSubIds.length
+            ? await db.select().from(submissionItemClaims)
+                .where(inArray(submissionItemClaims.submissionId, partBApprovedSubIds))
+            : [];
+
+          // Build approved qty map from explicit Part B submissions
+          const bApprovedQtyById = new Map<string, number>();
+          for (const claim of partBClaims) {
+            if (!claim.tileSideItemId) continue;
+            bApprovedQtyById.set(
+              claim.tileSideItemId,
+              (bApprovedQtyById.get(claim.tileSideItemId) ?? 0) + claim.quantity,
+            );
+          }
+
+          // Fold in Part A approved claims (approvedClaims already fetched above)
+          // matched to Part B items by item name
+          const partBItemIdByName = new Map(
+            partBItems.map((i) => [i.itemName.toLowerCase(), i.id]),
+          );
+          for (const claim of approvedClaims) {
+            const partBItemId = partBItemIdByName.get(claim.itemName.toLowerCase());
+            if (partBItemId) {
+              bApprovedQtyById.set(
+                partBItemId,
+                (bApprovedQtyById.get(partBItemId) ?? 0) + claim.quantity,
+              );
+            }
+          }
+
+          // Run the same completion checks as for a normal Part B submission
+          let partBIsComplete = true;
+
+          // Check 1 & 2: every required item must meet its quantity target
+          for (const item of partBItems.filter((i) => !i.optionsGroup)) {
+            if ((bApprovedQtyById.get(item.id) ?? 0) < item.quantity) {
+              partBIsComplete = false;
+              break;
+            }
+          }
+
+          // Check 3: options group completion
+          if (partBIsComplete) {
+            const bGroups = new Map<string, string[]>();
+            for (const item of partBItems) {
+              if (!item.optionsGroup) continue;
+              const list = bGroups.get(item.optionsGroup) ?? [];
+              list.push(item.id);
+              bGroups.set(item.optionsGroup, list);
+            }
+            if (bGroups.size > 0) {
+              if (partBSide.requiresCompleteSet) {
+                const anyGroupComplete = [...bGroups.values()].some((itemIds) =>
+                  itemIds.every((itemId) => (bApprovedQtyById.get(itemId) ?? 0) > 0),
+                );
+                if (!anyGroupComplete) partBIsComplete = false;
+              } else {
+                for (const itemIds of bGroups.values()) {
+                  if (!itemIds.some((itemId) => (bApprovedQtyById.get(itemId) ?? 0) > 0)) {
+                    partBIsComplete = false;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          // Check 4: minSubmissions — count explicit Part B submissions
+          if (partBIsComplete && partBSide.minSubmissions > 1) {
+            if (partBApprovedSubIds.length < partBSide.minSubmissions) {
+              partBIsComplete = false;
+            }
+          }
+
+          if (partBIsComplete) {
+            sideBAutoComplete = { points: partBSide.points };
+          }
+        }
       }
 
       const updateFields = {
@@ -934,6 +1234,11 @@ router.patch("/mod/submissions/:id", requireAuth, requireMod, async (req: Reques
         sideAPointsAwarded: pts,
         sideACompletedAt: now,
         ...(sideBPoints != null ? { sideBPointsAwarded: sideBPoints } : {}),
+        ...(sideBAutoComplete != null ? {
+          sideBStatus: "completed" as const,
+          sideBPointsAwarded: sideBAutoComplete.points,
+          sideBCompletedAt: now,
+        } : {}),
       };
 
       if (!existing) {
