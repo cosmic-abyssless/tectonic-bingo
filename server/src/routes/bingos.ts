@@ -61,12 +61,15 @@ router.get(
     const bingo = req.bingo!;
     const isMod = req.user ? bingoService.isBingoMod(db, bingo.id, req.user.id, req.user.isAdmin) : false;
     const myTeam = req.user ? teamService.getUserTeamForBingo(db, bingo.id, req.user.id) : null;
+    const paidSignupCount = signupService.getPaidSignupCount(db, bingo.id);
     res.json({
       bingo,
       categories: boardService.getCategories(db, bingo.id),
       teams: teamService.getTeamsForBingo(db, bingo.id),
       isMod,
       myTeam,
+      paidSignupCount,
+      potTotal: bingoService.calculatePotTotal(bingo, paidSignupCount),
     });
   }),
 );

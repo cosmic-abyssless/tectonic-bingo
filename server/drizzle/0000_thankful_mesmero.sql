@@ -36,7 +36,7 @@ CREATE TABLE `bingos` (
 	`board_rows` integer NOT NULL,
 	`board_cols` integer NOT NULL,
 	`buyin_amount` integer,
-	`pot_amount` integer,
+	`bonus_pot_amount` integer DEFAULT 0 NOT NULL,
 	`rules_markdown` text,
 	`ai_hint` text,
 	`signup_opens_at` integer,

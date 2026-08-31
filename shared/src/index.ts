@@ -32,7 +32,7 @@ export interface Bingo {
   boardRows: number;
   boardCols: number;
   buyinAmount: number | null;
-  potAmount: number | null;
+  bonusPotAmount: number;
   rulesMarkdown: string | null;
   aiHint: string | null;
   signupOpensAt: string | null;
@@ -232,6 +232,8 @@ export interface BingoShellResponse {
   teams: Team[];
   isMod: boolean;
   myTeam: Team | null;
+  paidSignupCount: number;
+  potTotal: number;
 }
 
 export interface BoardResponse {

@@ -34,8 +34,11 @@ export const bingos = sqliteTable('bingos', {
   }).notNull().default('planning'),
   boardRows: integer('board_rows').notNull(),
   boardCols: integer('board_cols').notNull(),
-  buyinAmount: integer('buyin_amount'), // GP, nullable until decided
-  potAmount: integer('pot_amount'), // GP, nullable until confirmed
+  buyinAmount: integer('buyin_amount'), // GP per player, nullable until decided
+  // Extra GP added to the pot on top of buy-ins (sponsorships, donations to
+  // raise the stakes). The actual pot total is buyinAmount × paid signups +
+  // this — computed in bingoService.calculatePotTotal, not stored.
+  bonusPotAmount: integer('bonus_pot_amount').notNull().default(0),
   rulesMarkdown: text('rules_markdown'),
   // Extra context appended to the AI screenshot-analysis prompt for this bingo
   // (e.g. "This is an Old School RuneScape screenshot...").

@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { signupAnswers, signupQuestions, signups, users } from "../db/schema";
@@ -146,6 +146,16 @@ export function getAllSignups(db: Db, bingoId: string) {
   const signupIds = rows.map((r) => r.signup.id);
   const answers = signupIds.length ? db.select().from(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).all() : [];
   return rows.map((r) => ({ ...r, answers: answers.filter((a) => a.signupId === r.signup.id) }));
+}
+
+// Active (non-withdrawn) signups with buy-in marked received — the basis
+// for bingoService.calculatePotTotal.
+export function getPaidSignupCount(db: Db, bingoId: string): number {
+  return db
+    .select()
+    .from(signups)
+    .where(and(eq(signups.bingoId, bingoId), eq(signups.status, "active"), isNotNull(signups.buyinReceivedAt)))
+    .all().length;
 }
 
 const BUYIN_STAGES: Bingo["stage"][] = ["signup", "draft", "reveal"];

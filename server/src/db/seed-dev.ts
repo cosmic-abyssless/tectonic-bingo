@@ -31,7 +31,7 @@ async function main() {
     boardRows: 3,
     boardCols: 3,
     buyinAmount: 10_000_000,
-    potAmount: 300_000_000,
+    bonusPotAmount: 50_000_000,
     rulesMarkdown: '# Demo Bingo Rules\n\nThis is seed data for local development.',
     signupOpensAt: now,
     draftScheduledAt: now,
