@@ -6,6 +6,8 @@ import { Login } from "./pages/Login";
 import { BingoList } from "./pages/BingoList";
 import { BingoPage } from "./pages/BingoPage";
 import { ModPage } from "./pages/ModPage";
+import { AdminPage } from "./pages/AdminPage";
+import { SiteAdminPage } from "./pages/SiteAdminPage";
 
 export default function App() {
   return (
@@ -35,6 +37,22 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <ModPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/b/:slug/admin"
+              element={
+                <ProtectedRoute>
+                  <AdminPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <SiteAdminPage />
                 </ProtectedRoute>
               }
             />

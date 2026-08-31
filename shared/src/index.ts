@@ -265,6 +265,42 @@ export interface ReviewSubmissionResponse {
   completedLineIds: string[];
 }
 
+export type SignupQuestionType = "text" | "textarea" | "select" | "boolean";
+
+export interface SignupQuestion {
+  id: string;
+  bingoId: string;
+  prompt: string;
+  type: SignupQuestionType;
+  optionsJson: string | null;
+  required: boolean;
+  sortOrder: number;
+}
+
+export interface BingoLine {
+  id: string;
+  bingoId: string;
+  lineType: "row" | "column" | "diagonal" | "custom";
+  lineIndex: number;
+  points: number;
+}
+
+export interface BingoModerator {
+  id: string;
+  bingoId: string;
+  userId: string;
+  createdAt: string;
+  user: User;
+}
+
+export interface TeamMember {
+  id: string;
+  teamId: string;
+  userId: string;
+  isCaptain: boolean;
+  joinedAt: string;
+}
+
 // ---------------------------------------------------------------------------
 // WebSocket envelope, matching server/src/ws.ts
 // ---------------------------------------------------------------------------

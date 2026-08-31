@@ -1,0 +1,144 @@
+import type {
+  Bingo, BingoLine, BingoModerator, SignupQuestion, Team, TeamMember, Tile, TileCategory, TileTask,
+  TileTaskItem, TileWildcard, User,
+} from "@bingo/shared";
+import { api } from "./client";
+
+// Plain typed wrappers around the admin API — not TanStack mutations, since
+// most admin forms just need pending/error state local to the component and
+// a refetch of whichever list changed. Every function here maps 1:1 to an
+// admin route in server/src/routes/admin.ts or siteAdmin.ts.
+
+export function createBingo(payload: { slug: string; name: string; description?: string; theme?: string; boardRows: number; boardCols: number }) {
+  return api.post<{ bingo: Bingo }>("/api/admin/bingos", payload);
+}
+export function setUserAdmin(userId: string, isAdmin: boolean) {
+  return api.patch<{ user: User }>(`/api/admin/users/${userId}`, { isAdmin });
+}
+export function searchAllUsers(q: string) {
+  return api.get<{ users: User[] }>(`/api/admin/users?q=${encodeURIComponent(q)}`);
+}
+
+const base = (slug: string) => `/api/bingos/${slug}/admin`;
+
+export function updateBingoSettings(slug: string, payload: Partial<Bingo>) {
+  return api.patch<{ bingo: Bingo }>(`${base(slug)}/settings`, payload);
+}
+export function searchBingoUsers(slug: string, q: string) {
+  return api.get<{ users: User[] }>(`${base(slug)}/users?q=${encodeURIComponent(q)}`);
+}
+
+export function getMods(slug: string) {
+  return api.get<{ mods: BingoModerator[] }>(`${base(slug)}/mods`);
+}
+export function addMod(slug: string, userId: string) {
+  return api.post<{ mod: BingoModerator }>(`${base(slug)}/mods`, { userId });
+}
+export function removeMod(slug: string, userId: string) {
+  return fetchDelete(`${base(slug)}/mods/${userId}`);
+}
+
+export function createCategory(slug: string, payload: { label: string; colorHex?: string; sortOrder?: number }) {
+  return api.post<{ category: TileCategory }>(`${base(slug)}/categories`, payload);
+}
+export function updateCategory(slug: string, id: string, payload: Partial<TileCategory>) {
+  return api.patch<{ category: TileCategory }>(`${base(slug)}/categories/${id}`, payload);
+}
+export function deleteCategory(slug: string, id: string) {
+  return fetchDelete(`${base(slug)}/categories/${id}`);
+}
+
+export function createTile(slug: string, payload: { name: string; boardRow: number; boardCol: number; categoryId?: string | null; hasFreezePeriod?: boolean; freezeDurationMinutes?: number; notes?: string }) {
+  return api.post<{ tile: Tile }>(`${base(slug)}/tiles`, payload);
+}
+export function updateTile(slug: string, id: string, payload: Partial<Tile>) {
+  return api.patch<{ tile: Tile }>(`${base(slug)}/tiles/${id}`, payload);
+}
+export function deleteTile(slug: string, id: string) {
+  return fetchDelete(`${base(slug)}/tiles/${id}`);
+}
+export async function uploadTileImage(slug: string, id: string, file: File) {
+  const fd = new FormData();
+  fd.append("image", file);
+  return api.postForm<{ tile: Tile }>(`${base(slug)}/tiles/${id}/image`, fd);
+}
+
+export function createTask(slug: string, tileId: string, payload: Partial<TileTask> & { label: string; sortOrder: number; points: number; description: string }) {
+  return api.post<{ task: TileTask }>(`${base(slug)}/tiles/${tileId}/tasks`, payload);
+}
+export function updateTask(slug: string, id: string, payload: Partial<TileTask>) {
+  return api.patch<{ task: TileTask }>(`${base(slug)}/tasks/${id}`, payload);
+}
+export function deleteTask(slug: string, id: string) {
+  return fetchDelete(`${base(slug)}/tasks/${id}`);
+}
+
+export function createTaskItem(slug: string, taskId: string, payload: { itemName: string; quantity?: number; optionsGroup?: string | null; sortOrder?: number }) {
+  return api.post<{ item: TileTaskItem }>(`${base(slug)}/tasks/${taskId}/items`, payload);
+}
+export function updateTaskItem(slug: string, id: string, payload: Partial<TileTaskItem>) {
+  return api.patch<{ item: TileTaskItem }>(`${base(slug)}/items/${id}`, payload);
+}
+export function deleteTaskItem(slug: string, id: string) {
+  return fetchDelete(`${base(slug)}/items/${id}`);
+}
+
+export function createWildcard(slug: string, tileId: string, payload: { itemName: string; maxRedemptionsPerTeam?: number; description?: string; applicableTaskId?: string | null }) {
+  return api.post<{ wildcard: TileWildcard }>(`${base(slug)}/tiles/${tileId}/wildcards`, payload);
+}
+export function updateWildcard(slug: string, id: string, payload: Partial<TileWildcard>) {
+  return api.patch<{ wildcard: TileWildcard }>(`${base(slug)}/wildcards/${id}`, payload);
+}
+export function deleteWildcard(slug: string, id: string) {
+  return fetchDelete(`${base(slug)}/wildcards/${id}`);
+}
+
+export function getLines(slug: string) {
+  return api.get<{ lines: BingoLine[] }>(`${base(slug)}/lines`);
+}
+export function generateLines(slug: string, pointsPerLine?: number) {
+  return api.post<{ lines: BingoLine[] }>(`${base(slug)}/lines/generate`, { pointsPerLine });
+}
+export function updateLine(slug: string, id: string, points: number) {
+  return api.patch<{ line: BingoLine }>(`${base(slug)}/lines/${id}`, { points });
+}
+export function deleteLine(slug: string, id: string) {
+  return fetchDelete(`${base(slug)}/lines/${id}`);
+}
+
+export function getQuestions(slug: string) {
+  return api.get<{ questions: SignupQuestion[] }>(`${base(slug)}/questions`);
+}
+export function createQuestion(slug: string, payload: { prompt: string; type: SignupQuestion["type"]; optionsJson?: string; required?: boolean; sortOrder?: number }) {
+  return api.post<{ question: SignupQuestion }>(`${base(slug)}/questions`, payload);
+}
+export function updateQuestion(slug: string, id: string, payload: Partial<SignupQuestion>) {
+  return api.patch<{ question: SignupQuestion }>(`${base(slug)}/questions/${id}`, payload);
+}
+export function deleteQuestion(slug: string, id: string) {
+  return fetchDelete(`${base(slug)}/questions/${id}`);
+}
+export function reorderQuestions(slug: string, orderedIds: string[]) {
+  return api.post<{ questions: SignupQuestion[] }>(`${base(slug)}/questions/reorder`, { orderedIds });
+}
+
+export function createTeam(slug: string, payload: { captainUserId: string; name?: string }) {
+  return api.post<{ team: Team }>(`${base(slug)}/teams`, payload);
+}
+export function updateTeam(slug: string, id: string, payload: Partial<Team>) {
+  return api.patch<{ team: Team }>(`${base(slug)}/teams/${id}`, payload);
+}
+export function addTeamMember(slug: string, teamId: string, userId: string) {
+  return api.post<{ member: TeamMember }>(`${base(slug)}/teams/${teamId}/members`, { userId });
+}
+export function removeTeamMember(slug: string, teamId: string, userId: string) {
+  return fetchDelete(`${base(slug)}/teams/${teamId}/members/${userId}`);
+}
+
+async function fetchDelete(path: string): Promise<void> {
+  const res = await fetch(path, { method: "DELETE", credentials: "include" });
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error ?? `HTTP ${res.status}`);
+  }
+}
