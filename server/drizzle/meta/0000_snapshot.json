@@ -1,70 +1,9 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c5fd62c9-227e-4c6d-811e-003f6850ffa5",
+  "id": "bc34c970-c392-4322-b050-4d978ed7261e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "bingo_events": {
-      "name": "bingo_events",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "starts_at": {
-          "name": "starts_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "ends_at": {
-          "name": "ends_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "pot_amount": {
-          "name": "pot_amount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "is_active": {
-          "name": "is_active",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "bingo_line_tiles": {
       "name": "bingo_line_tiles",
       "columns": {
@@ -142,8 +81,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "bingo_event_id": {
-          "name": "bingo_event_id",
+        "bingo_id": {
+          "name": "bingo_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -174,12 +113,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "bingo_lines_bingo_event_id_bingo_events_id_fk": {
-          "name": "bingo_lines_bingo_event_id_bingo_events_id_fk",
+        "bingo_lines_bingo_id_bingos_id_fk": {
+          "name": "bingo_lines_bingo_id_bingos_id_fk",
           "tableFrom": "bingo_lines",
-          "tableTo": "bingo_events",
+          "tableTo": "bingos",
           "columnsFrom": [
-            "bingo_event_id"
+            "bingo_id"
           ],
           "columnsTo": [
             "id"
@@ -192,8 +131,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "event_moderators": {
-      "name": "event_moderators",
+    "bingo_moderators": {
+      "name": "bingo_moderators",
       "columns": {
         "id": {
           "name": "id",
@@ -202,8 +141,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "bingo_event_id": {
-          "name": "bingo_event_id",
+        "bingo_id": {
+          "name": "bingo_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -226,22 +165,22 @@
         }
       },
       "indexes": {
-        "event_moderators_event_user_unq": {
-          "name": "event_moderators_event_user_unq",
+        "bingo_moderators_bingo_user_unq": {
+          "name": "bingo_moderators_bingo_user_unq",
           "columns": [
-            "bingo_event_id",
+            "bingo_id",
             "user_id"
           ],
           "isUnique": true
         }
       },
       "foreignKeys": {
-        "event_moderators_bingo_event_id_bingo_events_id_fk": {
-          "name": "event_moderators_bingo_event_id_bingo_events_id_fk",
-          "tableFrom": "event_moderators",
-          "tableTo": "bingo_events",
+        "bingo_moderators_bingo_id_bingos_id_fk": {
+          "name": "bingo_moderators_bingo_id_bingos_id_fk",
+          "tableFrom": "bingo_moderators",
+          "tableTo": "bingos",
           "columnsFrom": [
-            "bingo_event_id"
+            "bingo_id"
           ],
           "columnsTo": [
             "id"
@@ -249,12 +188,676 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "event_moderators_user_id_users_id_fk": {
-          "name": "event_moderators_user_id_users_id_fk",
-          "tableFrom": "event_moderators",
+        "bingo_moderators_user_id_users_id_fk": {
+          "name": "bingo_moderators_user_id_users_id_fk",
+          "tableFrom": "bingo_moderators",
           "tableTo": "users",
           "columnsFrom": [
             "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "bingos": {
+      "name": "bingos",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "theme": {
+          "name": "theme",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'default'"
+        },
+        "stage": {
+          "name": "stage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'planning'"
+        },
+        "board_rows": {
+          "name": "board_rows",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "board_cols": {
+          "name": "board_cols",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "buyin_amount": {
+          "name": "buyin_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pot_amount": {
+          "name": "pot_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rules_markdown": {
+          "name": "rules_markdown",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ai_hint": {
+          "name": "ai_hint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "signup_opens_at": {
+          "name": "signup_opens_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "draft_scheduled_at": {
+          "name": "draft_scheduled_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reveal_scheduled_at": {
+          "name": "reveal_scheduled_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "starts_at": {
+          "name": "starts_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ends_at": {
+          "name": "ends_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        }
+      },
+      "indexes": {
+        "bingos_slug_unique": {
+          "name": "bingos_slug_unique",
+          "columns": [
+            "slug"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "bingos_created_by_user_id_users_id_fk": {
+          "name": "bingos_created_by_user_id_users_id_fk",
+          "tableFrom": "bingos",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "draft_picks": {
+      "name": "draft_picks",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bingo_id": {
+          "name": "bingo_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pick_number": {
+          "name": "pick_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "team_id": {
+          "name": "team_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "picked_by_user_id": {
+          "name": "picked_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        }
+      },
+      "indexes": {
+        "draft_picks_bingo_pick_unq": {
+          "name": "draft_picks_bingo_pick_unq",
+          "columns": [
+            "bingo_id",
+            "pick_number"
+          ],
+          "isUnique": true
+        },
+        "draft_picks_bingo_user_unq": {
+          "name": "draft_picks_bingo_user_unq",
+          "columns": [
+            "bingo_id",
+            "user_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "draft_picks_bingo_id_bingos_id_fk": {
+          "name": "draft_picks_bingo_id_bingos_id_fk",
+          "tableFrom": "draft_picks",
+          "tableTo": "bingos",
+          "columnsFrom": [
+            "bingo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "draft_picks_team_id_teams_id_fk": {
+          "name": "draft_picks_team_id_teams_id_fk",
+          "tableFrom": "draft_picks",
+          "tableTo": "teams",
+          "columnsFrom": [
+            "team_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "draft_picks_user_id_users_id_fk": {
+          "name": "draft_picks_user_id_users_id_fk",
+          "tableFrom": "draft_picks",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "draft_picks_picked_by_user_id_users_id_fk": {
+          "name": "draft_picks_picked_by_user_id_users_id_fk",
+          "tableFrom": "draft_picks",
+          "tableTo": "users",
+          "columnsFrom": [
+            "picked_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "signup_answers": {
+      "name": "signup_answers",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "signup_id": {
+          "name": "signup_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "question_id": {
+          "name": "question_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "signup_answers_signup_question_unq": {
+          "name": "signup_answers_signup_question_unq",
+          "columns": [
+            "signup_id",
+            "question_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "signup_answers_signup_id_signups_id_fk": {
+          "name": "signup_answers_signup_id_signups_id_fk",
+          "tableFrom": "signup_answers",
+          "tableTo": "signups",
+          "columnsFrom": [
+            "signup_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "signup_answers_question_id_signup_questions_id_fk": {
+          "name": "signup_answers_question_id_signup_questions_id_fk",
+          "tableFrom": "signup_answers",
+          "tableTo": "signup_questions",
+          "columnsFrom": [
+            "question_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "signup_questions": {
+      "name": "signup_questions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bingo_id": {
+          "name": "bingo_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "prompt": {
+          "name": "prompt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "options_json": {
+          "name": "options_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "required": {
+          "name": "required",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "signup_questions_bingo_id_bingos_id_fk": {
+          "name": "signup_questions_bingo_id_bingos_id_fk",
+          "tableFrom": "signup_questions",
+          "tableTo": "bingos",
+          "columnsFrom": [
+            "bingo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "signups": {
+      "name": "signups",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bingo_id": {
+          "name": "bingo_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rsn": {
+          "name": "rsn",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "buyin_received_at": {
+          "name": "buyin_received_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "buyin_collected_by_user_id": {
+          "name": "buyin_collected_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "buyin_recorded_by_user_id": {
+          "name": "buyin_recorded_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        }
+      },
+      "indexes": {
+        "signups_bingo_user_unq": {
+          "name": "signups_bingo_user_unq",
+          "columns": [
+            "bingo_id",
+            "user_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "signups_bingo_id_bingos_id_fk": {
+          "name": "signups_bingo_id_bingos_id_fk",
+          "tableFrom": "signups",
+          "tableTo": "bingos",
+          "columnsFrom": [
+            "bingo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "signups_user_id_users_id_fk": {
+          "name": "signups_user_id_users_id_fk",
+          "tableFrom": "signups",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "signups_buyin_collected_by_user_id_users_id_fk": {
+          "name": "signups_buyin_collected_by_user_id_users_id_fk",
+          "tableFrom": "signups",
+          "tableTo": "users",
+          "columnsFrom": [
+            "buyin_collected_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "signups_buyin_recorded_by_user_id_users_id_fk": {
+          "name": "signups_buyin_recorded_by_user_id_users_id_fk",
+          "tableFrom": "signups",
+          "tableTo": "users",
+          "columnsFrom": [
+            "buyin_recorded_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "stage_transitions": {
+      "name": "stage_transitions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bingo_id": {
+          "name": "bingo_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "from_stage": {
+          "name": "from_stage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "to_stage": {
+          "name": "to_stage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "changed_by_user_id": {
+          "name": "changed_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "stage_transitions_bingo_id_bingos_id_fk": {
+          "name": "stage_transitions_bingo_id_bingos_id_fk",
+          "tableFrom": "stage_transitions",
+          "tableTo": "bingos",
+          "columnsFrom": [
+            "bingo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "stage_transitions_changed_by_user_id_users_id_fk": {
+          "name": "stage_transitions_changed_by_user_id_users_id_fk",
+          "tableFrom": "stage_transitions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "changed_by_user_id"
           ],
           "columnsTo": [
             "id"
@@ -299,8 +902,8 @@
           "autoincrement": false,
           "default": 1
         },
-        "tile_side_item_id": {
-          "name": "tile_side_item_id",
+        "task_item_id": {
+          "name": "task_item_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -322,12 +925,12 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "submission_item_claims_tile_side_item_id_tile_side_items_id_fk": {
-          "name": "submission_item_claims_tile_side_item_id_tile_side_items_id_fk",
+        "submission_item_claims_task_item_id_tile_task_items_id_fk": {
+          "name": "submission_item_claims_task_item_id_tile_task_items_id_fk",
           "tableFrom": "submission_item_claims",
-          "tableTo": "tile_side_items",
+          "tableTo": "tile_task_items",
           "columnsFrom": [
-            "tile_side_item_id"
+            "task_item_id"
           ],
           "columnsTo": [
             "id"
@@ -447,8 +1050,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "tile_side_id": {
-          "name": "tile_side_id",
+        "task_id": {
+          "name": "task_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -552,12 +1155,12 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "submissions_tile_side_id_tile_sides_id_fk": {
-          "name": "submissions_tile_side_id_tile_sides_id_fk",
+        "submissions_task_id_tile_tasks_id_fk": {
+          "name": "submissions_task_id_tile_tasks_id_fk",
           "tableFrom": "submissions",
-          "tableTo": "tile_sides",
+          "tableTo": "tile_tasks",
           "columnsFrom": [
-            "tile_side_id"
+            "task_id"
           ],
           "columnsTo": [
             "id"
@@ -708,13 +1311,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "rsn": {
-          "name": "rsn",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "is_captain": {
           "name": "is_captain",
           "type": "integer",
@@ -791,8 +1387,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "bingo_event_id": {
-          "name": "bingo_event_id",
+        "bingo_id": {
+          "name": "bingo_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -843,12 +1439,12 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "team_point_adjustments_bingo_event_id_bingo_events_id_fk": {
-          "name": "team_point_adjustments_bingo_event_id_bingo_events_id_fk",
+        "team_point_adjustments_bingo_id_bingos_id_fk": {
+          "name": "team_point_adjustments_bingo_id_bingos_id_fk",
           "tableFrom": "team_point_adjustments",
-          "tableTo": "bingo_events",
+          "tableTo": "bingos",
           "columnsFrom": [
-            "bingo_event_id"
+            "bingo_id"
           ],
           "columnsTo": [
             "id"
@@ -874,8 +1470,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "team_tile_progress": {
-      "name": "team_tile_progress",
+    "team_task_progress": {
+      "name": "team_task_progress",
       "columns": {
         "id": {
           "name": "id",
@@ -891,54 +1487,31 @@
           "notNull": true,
           "autoincrement": false
         },
-        "tile_id": {
-          "name": "tile_id",
+        "task_id": {
+          "name": "task_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "side_a_status": {
-          "name": "side_a_status",
+        "status": {
+          "name": "status",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": "'not_started'"
         },
-        "side_a_points_awarded": {
-          "name": "side_a_points_awarded",
+        "points_awarded": {
+          "name": "points_awarded",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": 0
         },
-        "side_a_completed_at": {
-          "name": "side_a_completed_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "side_b_status": {
-          "name": "side_b_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'not_started'"
-        },
-        "side_b_points_awarded": {
-          "name": "side_b_points_awarded",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "side_b_completed_at": {
-          "name": "side_b_completed_at",
+        "completed_at": {
+          "name": "completed_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
@@ -946,19 +1519,19 @@
         }
       },
       "indexes": {
-        "team_tile_progress_team_tile_unq": {
-          "name": "team_tile_progress_team_tile_unq",
+        "team_task_progress_team_task_unq": {
+          "name": "team_task_progress_team_task_unq",
           "columns": [
             "team_id",
-            "tile_id"
+            "task_id"
           ],
           "isUnique": true
         }
       },
       "foreignKeys": {
-        "team_tile_progress_team_id_teams_id_fk": {
-          "name": "team_tile_progress_team_id_teams_id_fk",
-          "tableFrom": "team_tile_progress",
+        "team_task_progress_team_id_teams_id_fk": {
+          "name": "team_task_progress_team_id_teams_id_fk",
+          "tableFrom": "team_task_progress",
           "tableTo": "teams",
           "columnsFrom": [
             "team_id"
@@ -969,12 +1542,12 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "team_tile_progress_tile_id_tiles_id_fk": {
-          "name": "team_tile_progress_tile_id_tiles_id_fk",
-          "tableFrom": "team_tile_progress",
-          "tableTo": "tiles",
+        "team_task_progress_task_id_tile_tasks_id_fk": {
+          "name": "team_task_progress_task_id_tile_tasks_id_fk",
+          "tableFrom": "team_task_progress",
+          "tableTo": "tile_tasks",
           "columnsFrom": [
-            "tile_id"
+            "task_id"
           ],
           "columnsTo": [
             "id"
@@ -1027,16 +1600,7 @@
           "default": "(unixepoch())"
         }
       },
-      "indexes": {
-        "team_wildcard_usage_team_wildcard_unq": {
-          "name": "team_wildcard_usage_team_wildcard_unq",
-          "columns": [
-            "team_id",
-            "tile_wildcard_id"
-          ],
-          "isUnique": true
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "team_wildcard_usage_team_id_teams_id_fk": {
           "name": "team_wildcard_usage_team_id_teams_id_fk",
@@ -1092,8 +1656,15 @@
           "notNull": true,
           "autoincrement": false
         },
-        "bingo_event_id": {
-          "name": "bingo_event_id",
+        "bingo_id": {
+          "name": "bingo_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "captain_user_id": {
+          "name": "captain_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -1120,6 +1691,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "draft_order": {
+          "name": "draft_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "integer",
@@ -1138,22 +1716,43 @@
         }
       },
       "indexes": {
-        "teams_event_codeword_unq": {
-          "name": "teams_event_codeword_unq",
+        "teams_bingo_captain_unq": {
+          "name": "teams_bingo_captain_unq",
           "columns": [
-            "bingo_event_id",
+            "bingo_id",
+            "captain_user_id"
+          ],
+          "isUnique": true
+        },
+        "teams_bingo_codeword_unq": {
+          "name": "teams_bingo_codeword_unq",
+          "columns": [
+            "bingo_id",
             "codeword"
           ],
           "isUnique": true
         }
       },
       "foreignKeys": {
-        "teams_bingo_event_id_bingo_events_id_fk": {
-          "name": "teams_bingo_event_id_bingo_events_id_fk",
+        "teams_bingo_id_bingos_id_fk": {
+          "name": "teams_bingo_id_bingos_id_fk",
           "tableFrom": "teams",
-          "tableTo": "bingo_events",
+          "tableTo": "bingos",
           "columnsFrom": [
-            "bingo_event_id"
+            "bingo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "teams_captain_user_id_users_id_fk": {
+          "name": "teams_captain_user_id_users_id_fk",
+          "tableFrom": "teams",
+          "tableTo": "users",
+          "columnsFrom": [
+            "captain_user_id"
           ],
           "columnsTo": [
             "id"
@@ -1166,8 +1765,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "tile_side_items": {
-      "name": "tile_side_items",
+    "tile_categories": {
+      "name": "tile_categories",
       "columns": {
         "id": {
           "name": "id",
@@ -1176,8 +1775,68 @@
           "notNull": true,
           "autoincrement": false
         },
-        "tile_side_id": {
-          "name": "tile_side_id",
+        "bingo_id": {
+          "name": "bingo_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "color_hex": {
+          "name": "color_hex",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "tile_categories_bingo_id_bingos_id_fk": {
+          "name": "tile_categories_bingo_id_bingos_id_fk",
+          "tableFrom": "tile_categories",
+          "tableTo": "bingos",
+          "columnsFrom": [
+            "bingo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "tile_task_items": {
+      "name": "tile_task_items",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "task_id": {
+          "name": "task_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -1216,12 +1875,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "tile_side_items_tile_side_id_tile_sides_id_fk": {
-          "name": "tile_side_items_tile_side_id_tile_sides_id_fk",
-          "tableFrom": "tile_side_items",
-          "tableTo": "tile_sides",
+        "tile_task_items_task_id_tile_tasks_id_fk": {
+          "name": "tile_task_items_task_id_tile_tasks_id_fk",
+          "tableFrom": "tile_task_items",
+          "tableTo": "tile_tasks",
           "columnsFrom": [
-            "tile_side_id"
+            "task_id"
           ],
           "columnsTo": [
             "id"
@@ -1234,8 +1893,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "tile_sides": {
-      "name": "tile_sides",
+    "tile_tasks": {
+      "name": "tile_tasks",
       "columns": {
         "id": {
           "name": "id",
@@ -1251,12 +1910,20 @@
           "notNull": true,
           "autoincrement": false
         },
-        "side": {
-          "name": "side",
+        "label": {
+          "name": "label",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         },
         "points": {
           "name": "points",
@@ -1271,6 +1938,22 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "submit_requires_previous": {
+          "name": "submit_requires_previous",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "points_require_previous": {
+          "name": "points_require_previous",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         },
         "requires_no_duplicates": {
           "name": "requires_no_duplicates",
@@ -1296,6 +1979,22 @@
           "autoincrement": false,
           "default": false
         },
+        "min_submissions": {
+          "name": "min_submissions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "requires_complete_set": {
+          "name": "requires_complete_set",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
         "notes": {
           "name": "notes",
           "type": "text",
@@ -1305,19 +2004,19 @@
         }
       },
       "indexes": {
-        "tile_sides_tile_side_unq": {
-          "name": "tile_sides_tile_side_unq",
+        "tile_tasks_tile_sort_unq": {
+          "name": "tile_tasks_tile_sort_unq",
           "columns": [
             "tile_id",
-            "side"
+            "sort_order"
           ],
           "isUnique": true
         }
       },
       "foreignKeys": {
-        "tile_sides_tile_id_tiles_id_fk": {
-          "name": "tile_sides_tile_id_tiles_id_fk",
-          "tableFrom": "tile_sides",
+        "tile_tasks_tile_id_tiles_id_fk": {
+          "name": "tile_tasks_tile_id_tiles_id_fk",
+          "tableFrom": "tile_tasks",
           "tableTo": "tiles",
           "columnsFrom": [
             "tile_id"
@@ -1372,8 +2071,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "applicable_to_side": {
-          "name": "applicable_to_side",
+        "applicable_task_id": {
+          "name": "applicable_task_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -1388,6 +2087,19 @@
           "tableTo": "tiles",
           "columnsFrom": [
             "tile_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "tile_wildcards_applicable_task_id_tile_tasks_id_fk": {
+          "name": "tile_wildcards_applicable_task_id_tile_tasks_id_fk",
+          "tableFrom": "tile_wildcards",
+          "tableTo": "tile_tasks",
+          "columnsFrom": [
+            "applicable_task_id"
           ],
           "columnsTo": [
             "id"
@@ -1410,8 +2122,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "bingo_event_id": {
-          "name": "bingo_event_id",
+        "bingo_id": {
+          "name": "bingo_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -1424,11 +2136,18 @@
           "notNull": true,
           "autoincrement": false
         },
-        "badge_category": {
-          "name": "badge_category",
+        "image_url": {
+          "name": "image_url",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "category_id": {
+          "name": "category_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "board_row": {
@@ -1440,13 +2159,6 @@
         },
         "board_col": {
           "name": "board_col",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "total_points": {
-          "name": "total_points",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -1485,10 +2197,10 @@
         }
       },
       "indexes": {
-        "tiles_event_position_unq": {
-          "name": "tiles_event_position_unq",
+        "tiles_bingo_position_unq": {
+          "name": "tiles_bingo_position_unq",
           "columns": [
-            "bingo_event_id",
+            "bingo_id",
             "board_row",
             "board_col"
           ],
@@ -1496,12 +2208,25 @@
         }
       },
       "foreignKeys": {
-        "tiles_bingo_event_id_bingo_events_id_fk": {
-          "name": "tiles_bingo_event_id_bingo_events_id_fk",
+        "tiles_bingo_id_bingos_id_fk": {
+          "name": "tiles_bingo_id_bingos_id_fk",
           "tableFrom": "tiles",
-          "tableTo": "bingo_events",
+          "tableTo": "bingos",
           "columnsFrom": [
-            "bingo_event_id"
+            "bingo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "tiles_category_id_tile_categories_id_fk": {
+          "name": "tiles_category_id_tile_categories_id_fk",
+          "tableFrom": "tiles",
+          "tableTo": "tile_categories",
+          "columnsFrom": [
+            "category_id"
           ],
           "columnsTo": [
             "id"
@@ -1538,12 +2263,34 @@
           "notNull": true,
           "autoincrement": false
         },
+        "discord_global_name": {
+          "name": "discord_global_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "discord_guild_nick": {
+          "name": "discord_guild_nick",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "discord_avatar": {
           "name": "discord_avatar",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "is_admin": {
+          "name": "is_admin",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         },
         "created_at": {
           "name": "created_at",

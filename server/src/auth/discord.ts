@@ -2,50 +2,73 @@ import passport from "passport";
 import { Strategy as DiscordStrategy } from "passport-discord";
 import { REST } from "@discordjs/rest";
 import type { APIGuildMember } from "discord-api-types/v10";
-import { DiscordUser } from "../types";
+import { eq } from "drizzle-orm";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { db } from "../db";
 import { users } from "../db/schema";
+import * as schema from "../db/schema";
+import { isAdminDiscordId } from "../config";
+import type { SessionUser } from "../types";
 
-interface GuildMemberInfo {
-  team: string | null;
-  guild_nick: string | null;
-  isModerator: boolean;
+interface LoginProfile {
+  id: string;
+  username: string;
+  global_name?: string | null;
+  avatar?: string | null;
 }
 
-async function fetchGuildMemberInfo(accessToken: string): Promise<GuildMemberInfo> {
+// Upserts the user row for a Discord login and applies the ADMIN_DISCORD_IDS
+// bootstrap (elevate-only — never demotes an admin granted via the admin
+// panel just because they later drop off the env var). Factored out of the
+// passport verify callback so it's testable without a real OAuth round trip.
+export async function upsertLoginUser(
+  dbInstance: BetterSQLite3Database<typeof schema>,
+  profile: LoginProfile,
+  guildNick: string | null,
+): Promise<SessionUser> {
+  const bootstrapAdmin = isAdminDiscordId(profile.id);
+  const values = {
+    discordId: profile.id,
+    discordUsername: profile.username,
+    discordGlobalName: profile.global_name ?? null,
+    discordGuildNick: guildNick,
+    discordAvatar: profile.avatar ?? null,
+  };
+
+  const [dbUser] = await dbInstance
+    .insert(users)
+    .values({ ...values, isAdmin: bootstrapAdmin })
+    .onConflictDoUpdate({
+      target: users.discordId,
+      set: { ...values, updatedAt: new Date() },
+    })
+    .returning();
+
+  if (bootstrapAdmin && !dbUser.isAdmin) {
+    await dbInstance.update(users).set({ isAdmin: true }).where(eq(users.id, dbUser.id));
+    dbUser.isAdmin = true;
+  }
+
+  return dbUser;
+}
+
+// Only fetched when DISCORD_GUILD_ID is configured — purely cosmetic (display
+// the clan's in-guild nickname). Team membership and mod status no longer
+// come from Discord; they're DB data (bingo_moderators, team_members).
+async function fetchGuildNick(accessToken: string): Promise<string | null> {
+  if (!process.env.DISCORD_GUILD_ID) return null;
   try {
     const rest = new REST({ version: "10", authPrefix: "Bearer" }).setToken(accessToken);
     const member = (await rest.get(
       `/users/@me/guilds/${process.env.DISCORD_GUILD_ID}/member`,
     )) as APIGuildMember;
-
-    const teamRoleMap: Record<string, string | undefined> = {
-      "Red Team":    process.env.TEAM_ROLE_RED,
-      "Blue Team":   process.env.TEAM_ROLE_BLUE,
-      "Green Team":  process.env.TEAM_ROLE_GREEN,
-      "Yellow Team": process.env.TEAM_ROLE_YELLOW,
-      "Orange Team": process.env.TEAM_ROLE_ORANGE,
-      "Pink Team":   process.env.TEAM_ROLE_PINK,
-    };
-
-    const memberRoleIds = new Set(member.roles);
-    const entry = Object.entries(teamRoleMap).find(
-      ([, roleId]) => roleId && memberRoleIds.has(roleId),
-    );
-
-    const isModerator = !!process.env.MOD_ROLE_ID && memberRoleIds.has(process.env.MOD_ROLE_ID);
-
-    return {
-      team: entry?.[0] ?? null,
-      guild_nick: member.nick ?? null,
-      isModerator,
-    };
+    return member.nick ?? null;
   } catch {
-    return { team: null, guild_nick: null, isModerator: false };
+    return null;
   }
 }
 
-const scopes = ["identify", "guilds", "guilds.members.read"];
+const scopes = process.env.DISCORD_GUILD_ID ? ["identify", "guilds.members.read"] : ["identify"];
 
 export function configurePassport(): void {
   passport.use(
@@ -58,44 +81,9 @@ export function configurePassport(): void {
       },
       async (accessToken, _refreshToken, profile, done) => {
         try {
-          const { team, guild_nick, isModerator } = await fetchGuildMemberInfo(accessToken);
-
-          // Upsert the user record so the rest of the app can FK against users.id
-          await db
-            .insert(users)
-            .values({
-              discordId: profile.id,
-              discordUsername: profile.username,
-              discordGlobalName: profile.global_name ?? null,
-              discordGuildNick: guild_nick,
-              discordAvatar: profile.avatar ?? null,
-              isModerator,
-            })
-            .onConflictDoUpdate({
-              target: users.discordId,
-              set: {
-                discordUsername: profile.username,
-                discordGlobalName: profile.global_name ?? null,
-                discordGuildNick: guild_nick,
-                discordAvatar: profile.avatar ?? null,
-                isModerator,
-                updatedAt: new Date(),
-              },
-            });
-
-          const user: DiscordUser = {
-            id: profile.id,
-            username: profile.username,
-            discriminator: profile.discriminator,
-            avatar: profile.avatar ?? null,
-            email: profile.email,
-            verified: profile.verified,
-            global_name: profile.global_name ?? null,
-            guild_nick,
-            team,
-            isModerator,
-          };
-          return done(null, user);
+          const guildNick = await fetchGuildNick(accessToken);
+          const dbUser = await upsertLoginUser(db, profile, guildNick);
+          return done(null, dbUser);
         } catch (err) {
           return done(err as Error);
         }
@@ -103,11 +91,19 @@ export function configurePassport(): void {
     ),
   );
 
+  // Only the user ID is persisted in the session cookie — deserializeUser
+  // loads the current DB row on every request, so role/profile changes take
+  // effect immediately instead of being frozen until the next login.
   passport.serializeUser((user, done) => {
-    done(null, user);
+    done(null, (user as SessionUser).id);
   });
 
-  passport.deserializeUser((user, done) => {
-    done(null, user as DiscordUser);
+  passport.deserializeUser(async (id: string, done) => {
+    try {
+      const [dbUser] = await db.select().from(users).where(eq(users.id, id));
+      done(null, dbUser ?? false);
+    } catch (err) {
+      done(err as Error);
+    }
   });
 }
