@@ -11,7 +11,10 @@ import cors from "cors";
 import passport from "passport";
 import { configurePassport } from "./auth/discord";
 import authRouter from "./routes/auth";
-import apiRouter from "./routes/api";
+import meRouter from "./routes/me";
+import bingosRouter from "./routes/bingos";
+import modRouter from "./routes/mod";
+import { errorHandler } from "./middleware/errorHandler";
 import { initWebSocketServer } from "./ws";
 import { sqlite } from "./db";
 import { getAdminDiscordIds } from "./config";
@@ -87,7 +90,10 @@ app.use("/uploads", express.static(UPLOADS_DIR));
 
 // Routes
 app.use("/auth", authRouter);
-app.use("/api", apiRouter);
+app.use("/api/me", meRouter);
+app.use("/api/bingos", bingosRouter);
+app.use("/api/bingos/:slug/mod", modRouter);
+app.use(errorHandler);
 
 const server = http.createServer(app);
 initWebSocketServer(server);

@@ -1,23 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import Database from "better-sqlite3";
-import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import fs from "fs";
-import path from "path";
+import type Database from "better-sqlite3";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
+import { createTestDb } from "../testUtils/testDb";
 import { upsertLoginUser } from "./discord";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
 
 beforeEach(() => {
-  sqlite = new Database(":memory:");
-  const migrationsDir = path.resolve(__dirname, "../../drizzle");
-  const migrationFiles = fs.readdirSync(migrationsDir).filter((f) => f.endsWith(".sql")).sort();
-  for (const file of migrationFiles) {
-    const migrationSql = fs.readFileSync(path.join(migrationsDir, file), "utf8");
-    sqlite.exec(migrationSql.replace(/--> statement-breakpoint/g, ""));
-  }
-  db = drizzle(sqlite, { schema });
+  ({ sqlite, db } = createTestDb());
   delete process.env.ADMIN_DISCORD_IDS;
 });
 
