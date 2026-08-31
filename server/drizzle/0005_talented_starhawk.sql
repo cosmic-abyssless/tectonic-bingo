@@ -1,1 +1,0 @@
-ALTER TABLE `tile_sides` ADD `requires_complete_set` integer DEFAULT false NOT NULL;

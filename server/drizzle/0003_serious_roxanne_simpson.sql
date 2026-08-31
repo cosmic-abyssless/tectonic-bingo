@@ -1,1 +1,0 @@
-ALTER TABLE `tile_sides` ADD `requires_part_a` integer DEFAULT false NOT NULL;

@@ -1,19 +1,12 @@
-export interface DiscordUser {
-  id: string;
-  username: string;
-  discriminator: string;
-  avatar: string | null;
-  email?: string;
-  verified?: boolean;
-  global_name?: string | null;
-  guild_nick: string | null;
-  team: string | null;
-  isModerator: boolean;
-}
+import type { InferSelectModel } from "drizzle-orm";
+import type { users } from "./db/schema";
 
-// Extend express-session to include our user type
-declare module "express-session" {
-  interface SessionData {
-    user?: DiscordUser;
+// req.user is the full users row, loaded fresh from the DB on every request
+// by deserializeUser (see auth/discord.ts) — the session only stores userId.
+export type SessionUser = InferSelectModel<typeof users>;
+
+declare global {
+  namespace Express {
+    interface User extends SessionUser {}
   }
 }
