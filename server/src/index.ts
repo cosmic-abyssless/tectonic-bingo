@@ -6,25 +6,21 @@ import http from "http";
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 import express from "express";
 import session from "express-session";
+import createSqliteStoreFactory from "better-sqlite3-session-store";
 import cors from "cors";
 import passport from "passport";
 import { configurePassport } from "./auth/discord";
 import authRouter from "./routes/auth";
 import apiRouter from "./routes/api";
 import { initWebSocketServer } from "./ws";
+import { sqlite } from "./db";
+import { getAdminDiscordIds } from "./config";
 
 const REQUIRED_ENV = [
   "DISCORD_CLIENT_ID",
   "DISCORD_CLIENT_SECRET",
   "DISCORD_CALLBACK_URL",
   "DISCORD_GUILD_ID",
-  "TEAM_ROLE_RED",
-  "TEAM_ROLE_BLUE",
-  "TEAM_ROLE_GREEN",
-  "TEAM_ROLE_YELLOW",
-  "TEAM_ROLE_ORANGE",
-  "TEAM_ROLE_PINK",
-  "MOD_ROLE_ID",
   "SESSION_SECRET",
   "CLIENT_URL",
 ] as const;
@@ -35,6 +31,12 @@ if (missing.length > 0) {
     `\n[ERROR] Missing required environment variables:\n  ${missing.join("\n  ")}\n\nCopy .env.example to .env and fill in the values.\n`
   );
   process.exit(1);
+}
+
+if (getAdminDiscordIds().length === 0) {
+  console.warn(
+    "[WARN] ADMIN_DISCORD_IDS is not set — no user will bootstrap as a site admin."
+  );
 }
 
 const app = express();
@@ -50,9 +52,18 @@ app.use(
 
 app.use(express.json());
 
-// Session middleware
+// Session middleware — backed by SQLite so sessions survive a server restart
+// (the express-session default MemoryStore does not).
+const SqliteStore = createSqliteStoreFactory(session);
 app.use(
   session({
+    store: new SqliteStore({
+      client: sqlite,
+      expired: {
+        clear: true,
+        intervalMs: 15 * 60 * 1000, // 15 min
+      },
+    }),
     secret: process.env.SESSION_SECRET!,
     resave: false,
     saveUninitialized: false,

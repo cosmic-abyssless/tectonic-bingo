@@ -9,7 +9,7 @@ const DB_PATH = process.env.DB_PATH ?? path.join(process.cwd(), 'data', 'bingo.d
 // Ensure the data directory exists before opening the file
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
-const sqlite = new Database(DB_PATH);
+export const sqlite = new Database(DB_PATH);
 
 // WAL mode gives much better read concurrency (multiple readers, one writer).
 // Foreign key enforcement is off by default in SQLite — turn it on.
