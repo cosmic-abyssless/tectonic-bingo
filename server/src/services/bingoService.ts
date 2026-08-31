@@ -17,6 +17,14 @@ export function getBingoBySlug(db: Db, slug: string) {
   return db.select().from(bingos).where(eq(bingos.slug, slug)).get();
 }
 
+// Board/task/question edits are only allowed before the board is revealed —
+// once players can see it, structural changes would be confusing or unfair.
+export function assertBoardEditable(bingo: typeof bingos.$inferSelect): void {
+  if (bingo.stage !== "planning" && bingo.stage !== "signup") {
+    throw new ServiceError(400, `The board can only be edited during planning or signup (current stage: ${bingo.stage})`);
+  }
+}
+
 export function isBingoMod(db: Db, bingoId: string, userId: string, isSiteAdmin: boolean): boolean {
   if (isSiteAdmin) return true;
   return !!db
@@ -96,4 +104,29 @@ export function removeModerator(db: Db, params: { bingoId: string; userId: strin
   db.delete(bingoModerators)
     .where(and(eq(bingoModerators.bingoId, params.bingoId), eq(bingoModerators.userId, params.userId)))
     .run();
+}
+
+export function getModerators(db: Db, bingoId: string) {
+  return db.select().from(bingoModerators).where(eq(bingoModerators.bingoId, bingoId)).all();
+}
+
+export interface UpdateBingoSettingsParams {
+  name?: string;
+  description?: string | null;
+  theme?: string;
+  buyinAmount?: number | null;
+  potAmount?: number | null;
+  rulesMarkdown?: string | null;
+  aiHint?: string | null;
+  signupOpensAt?: Date | null;
+  draftScheduledAt?: Date | null;
+  revealScheduledAt?: Date | null;
+  startsAt?: Date | null;
+  endsAt?: Date | null;
+}
+
+export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingoSettingsParams) {
+  const existing = db.select().from(bingos).where(eq(bingos.id, bingoId)).get();
+  if (!existing) throw new ServiceError(404, "Bingo not found");
+  return db.update(bingos).set(params).where(eq(bingos.id, bingoId)).returning().get();
 }

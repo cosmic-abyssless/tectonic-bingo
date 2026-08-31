@@ -14,6 +14,8 @@ import authRouter from "./routes/auth";
 import meRouter from "./routes/me";
 import bingosRouter from "./routes/bingos";
 import modRouter from "./routes/mod";
+import adminRouter from "./routes/admin";
+import siteAdminRouter from "./routes/siteAdmin";
 import { errorHandler } from "./middleware/errorHandler";
 import { initWebSocketServer } from "./ws";
 import { sqlite } from "./db";
@@ -91,8 +93,10 @@ app.use("/uploads", express.static(UPLOADS_DIR));
 // Routes
 app.use("/auth", authRouter);
 app.use("/api/me", meRouter);
+app.use("/api/admin", siteAdminRouter);
 app.use("/api/bingos", bingosRouter);
 app.use("/api/bingos/:slug/mod", modRouter);
+app.use("/api/bingos/:slug/admin", adminRouter);
 app.use(errorHandler);
 
 const server = http.createServer(app);
