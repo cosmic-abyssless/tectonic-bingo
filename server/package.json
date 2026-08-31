@@ -17,7 +17,8 @@
     "db:seed:bingo-lines": "tsx src/db/seeds/06-bingo-lines.ts",
     "db:seed:teams": "tsx src/db/seeds/07-teams.ts",
     "db:seed:all": "npm run db:seed:event && npm run db:seed:tiles && npm run db:seed:tile-sides && npm run db:seed:tile-side-items && npm run db:seed:wildcards && npm run db:seed:bingo-lines && npm run db:seed:teams",
-    "db:reset": "npm run db:generate && npm run db:migrate && npm run db:seed:all"
+    "db:reset": "npm run db:generate && npm run db:migrate && npm run db:seed:all",
+    "test": "vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
@@ -25,6 +26,7 @@
     "@types/multer": "^2.0.0",
     "@types/ws": "^8.18.1",
     "better-sqlite3": "^12.6.2",
+    "better-sqlite3-session-store": "^0.1.0",
     "cors": "^2.8.5",
     "discord-api-types": "^0.38.40",
     "dotenv": "^16.4.7",
@@ -46,6 +48,7 @@
     "@types/passport-discord": "^0.1.12",
     "drizzle-kit": "^0.31.9",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
   }
 }
