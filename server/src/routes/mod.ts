@@ -6,6 +6,7 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { db } from "../db";
 import * as bingoService from "../services/bingoService";
 import * as submissionService from "../services/submissionService";
+import * as signupService from "../services/signupService";
 import { approveSubmission, rejectSubmission } from "../services/scoringService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
@@ -83,6 +84,27 @@ router.post(
     const bingo = bingoService.advanceStage(db, { bingoId: req.bingo!.id, toStage, changedByUserId: req.user!.id });
     broadcast({ type: "stage_changed", bingoId: bingo.id, payload: { stage: bingo.stage } });
     res.json({ bingo });
+  }),
+);
+
+router.get(
+  "/signups",
+  asyncHandler(async (req, res) => {
+    res.json({ signups: signupService.getAllSignups(db, req.bingo!.id) });
+  }),
+);
+
+router.patch(
+  "/signups/:id/buyin",
+  asyncHandler(async (req, res) => {
+    const { received, collectedByUserId } = req.body as { received?: boolean; collectedByUserId?: string | null };
+    if (typeof received !== "boolean") throw new ServiceError(400, "received must be a boolean");
+    const signup = signupService.markBuyin(db, req.bingo!, req.params.id as string, {
+      received,
+      collectedByUserId,
+      recordedByUserId: req.user!.id,
+    });
+    res.json({ signup });
   }),
 );
 

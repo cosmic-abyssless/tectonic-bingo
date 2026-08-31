@@ -1,10 +1,11 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { signupQuestions } from "../db/schema";
+import { signupAnswers, signupQuestions, signups, users } from "../db/schema";
 import { ServiceError } from "./errors";
 
 type Db = BetterSQLite3Database<typeof schema>;
+type Bingo = typeof schema.bingos.$inferSelect;
 
 export function getQuestions(db: Db, bingoId: string) {
   return db.select().from(signupQuestions).where(eq(signupQuestions.bingoId, bingoId)).orderBy(signupQuestions.sortOrder).all();
@@ -45,4 +46,130 @@ export function reorderQuestions(db: Db, bingoId: string, orderedIds: string[]):
         .run();
     }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Signups (player-facing) & roster (mod-facing)
+// ---------------------------------------------------------------------------
+
+function assertSignupOpen(bingo: Bingo): void {
+  if (bingo.stage !== "signup") {
+    throw new ServiceError(400, `Signups are only open during the signup stage (current stage: ${bingo.stage})`);
+  }
+}
+
+export interface SignupAnswerInput {
+  questionId: string;
+  value: string;
+}
+
+export function getSignupForUser(db: Db, bingoId: string, userId: string) {
+  const signup = db.select().from(signups).where(and(eq(signups.bingoId, bingoId), eq(signups.userId, userId))).get();
+  if (!signup) return null;
+  const answers = db.select().from(signupAnswers).where(eq(signupAnswers.signupId, signup.id)).all();
+  return { signup, answers };
+}
+
+export interface CreateSignupParams {
+  bingoId: string;
+  userId: string;
+  rsn: string;
+  answers: SignupAnswerInput[];
+}
+
+export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
+  assertSignupOpen(bingo);
+  if (!params.rsn.trim()) throw new ServiceError(400, "RSN is required");
+
+  return db.transaction((tx) => {
+    const existing = tx.select().from(signups).where(and(eq(signups.bingoId, params.bingoId), eq(signups.userId, params.userId))).get();
+    if (existing) throw new ServiceError(409, "You've already signed up for this bingo");
+
+    const questions = tx.select().from(signupQuestions).where(eq(signupQuestions.bingoId, params.bingoId)).all();
+    const answeredIds = new Set(params.answers.map((a) => a.questionId));
+    const missingRequired = questions.some((q) => q.required && !answeredIds.has(q.id));
+    if (missingRequired) throw new ServiceError(400, "Please answer every required question");
+
+    const signup = tx.insert(signups).values({ bingoId: params.bingoId, userId: params.userId, rsn: params.rsn.trim() }).returning().get();
+    for (const a of params.answers) {
+      tx.insert(signupAnswers).values({ signupId: signup.id, questionId: a.questionId, value: a.value }).run();
+    }
+    return signup;
+  });
+}
+
+export interface UpdateSignupParams {
+  rsn?: string;
+  answers?: SignupAnswerInput[];
+}
+
+export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: UpdateSignupParams) {
+  assertSignupOpen(bingo);
+  return db.transaction((tx) => {
+    const existing = tx.select().from(signups).where(eq(signups.id, signupId)).get();
+    if (!existing) throw new ServiceError(404, "Signup not found");
+
+    if (params.rsn !== undefined) {
+      if (!params.rsn.trim()) throw new ServiceError(400, "RSN is required");
+      tx.update(signups).set({ rsn: params.rsn.trim() }).where(eq(signups.id, signupId)).run();
+    }
+    for (const a of params.answers ?? []) {
+      const existingAnswer = tx
+        .select()
+        .from(signupAnswers)
+        .where(and(eq(signupAnswers.signupId, signupId), eq(signupAnswers.questionId, a.questionId)))
+        .get();
+      if (existingAnswer) {
+        tx.update(signupAnswers).set({ value: a.value }).where(eq(signupAnswers.id, existingAnswer.id)).run();
+      } else {
+        tx.insert(signupAnswers).values({ signupId, questionId: a.questionId, value: a.value }).run();
+      }
+    }
+    return tx.select().from(signups).where(eq(signups.id, signupId)).get()!;
+  });
+}
+
+export function withdrawSignup(db: Db, bingo: Bingo, signupId: string) {
+  assertSignupOpen(bingo);
+  const existing = db.select().from(signups).where(eq(signups.id, signupId)).get();
+  if (!existing) throw new ServiceError(404, "Signup not found");
+  return db.update(signups).set({ status: "withdrawn" }).where(eq(signups.id, signupId)).returning().get();
+}
+
+export function getAllSignups(db: Db, bingoId: string) {
+  const rows = db
+    .select({ signup: signups, user: users })
+    .from(signups)
+    .innerJoin(users, eq(signups.userId, users.id))
+    .where(eq(signups.bingoId, bingoId))
+    .all();
+  const signupIds = rows.map((r) => r.signup.id);
+  const answers = signupIds.length ? db.select().from(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).all() : [];
+  return rows.map((r) => ({ ...r, answers: answers.filter((a) => a.signupId === r.signup.id) }));
+}
+
+const BUYIN_STAGES: Bingo["stage"][] = ["signup", "draft", "reveal"];
+
+export interface MarkBuyinParams {
+  received: boolean;
+  collectedByUserId?: string | null;
+  recordedByUserId: string;
+}
+
+export function markBuyin(db: Db, bingo: Bingo, signupId: string, params: MarkBuyinParams) {
+  if (!BUYIN_STAGES.includes(bingo.stage)) {
+    throw new ServiceError(400, `Buy-in can only be marked during signup, draft, or reveal (current stage: ${bingo.stage})`);
+  }
+  const existing = db.select().from(signups).where(eq(signups.id, signupId)).get();
+  if (!existing) throw new ServiceError(404, "Signup not found");
+  return db
+    .update(signups)
+    .set({
+      buyinReceivedAt: params.received ? new Date() : null,
+      buyinCollectedByUserId: params.received ? (params.collectedByUserId ?? null) : null,
+      buyinRecordedByUserId: params.received ? params.recordedByUserId : null,
+    })
+    .where(eq(signups.id, signupId))
+    .returning()
+    .get();
 }
