@@ -1,9 +1,9 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import {
-  submissionItemClaims, submissions, submissionScreenshots, teamTaskProgress,
-  tileTasks, tiles, tileWildcards,
+  submissionItemClaims, submissions, submissionScreenshots, teams, teamTaskProgress,
+  tileTasks, tiles, tileWildcards, users,
 } from "../db/schema";
 import { ServiceError } from "./errors";
 
@@ -123,14 +123,59 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
   });
 }
 
-export function getAllSubmissionsForBingo(db: Db, bingoId: string) {
-  return db
-    .select({ submission: submissions, task: tileTasks, tile: tiles })
+export type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">;
+
+export interface SubmissionDetails {
+  submission: typeof submissions.$inferSelect;
+  screenshots: (typeof submissionScreenshots.$inferSelect)[];
+  claims: (typeof submissionItemClaims.$inferSelect)[];
+  submittedByUser: MinimalUser | null;
+}
+
+// Attaches screenshots, item claims, and the submitter's (minimal) user row
+// to a set of submissions — every submission list the client renders needs
+// all three to be reviewable/displayable.
+function attachDetails(db: Db, subs: (typeof submissions.$inferSelect)[]): SubmissionDetails[] {
+  if (subs.length === 0) return [];
+  const submissionIds = subs.map((s) => s.id);
+  const screenshots = db.select().from(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, submissionIds)).all();
+  const claims = db.select().from(submissionItemClaims).where(inArray(submissionItemClaims.submissionId, submissionIds)).all();
+  const userIds = [...new Set(subs.map((s) => s.submittedByUserId))];
+  const userRows = db
+    .select({ id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick })
+    .from(users)
+    .where(inArray(users.id, userIds))
+    .all();
+  const userById = new Map(userRows.map((u) => [u.id, u]));
+
+  return subs.map((s) => ({
+    submission: s,
+    screenshots: screenshots.filter((sc) => sc.submissionId === s.id),
+    claims: claims.filter((c) => c.submissionId === s.id),
+    submittedByUser: userById.get(s.submittedByUserId) ?? null,
+  }));
+}
+
+export interface ModSubmissionRow extends SubmissionDetails {
+  task: typeof tileTasks.$inferSelect;
+  tile: typeof tiles.$inferSelect;
+  team: Pick<typeof teams.$inferSelect, "id" | "name" | "color">;
+}
+
+export function getAllSubmissionsForBingo(db: Db, bingoId: string): ModSubmissionRow[] {
+  const rows = db
+    .select({ submission: submissions, task: tileTasks, tile: tiles, team: { id: teams.id, name: teams.name, color: teams.color } })
     .from(submissions)
     .innerJoin(tileTasks, eq(submissions.taskId, tileTasks.id))
     .innerJoin(tiles, eq(tileTasks.tileId, tiles.id))
+    .innerJoin(teams, eq(submissions.teamId, teams.id))
     .where(eq(tiles.bingoId, bingoId))
     .all();
+
+  const details = attachDetails(db, rows.map((r) => r.submission));
+  const detailsById = new Map(details.map((d) => [d.submission.id, d]));
+
+  return rows.map((r) => ({ ...detailsById.get(r.submission.id)!, task: r.task, tile: r.tile, team: r.team }));
 }
 
 export function getPendingSubmissions(db: Db, bingoId: string) {
@@ -145,14 +190,6 @@ export function getSubmissionById(db: Db, submissionId: string) {
   return db.select().from(submissions).where(eq(submissions.id, submissionId)).get();
 }
 
-export function getTeamSubmissions(db: Db, teamId: string) {
-  return db.select().from(submissions).where(eq(submissions.teamId, teamId)).all();
-}
-
-export function getSubmissionScreenshots(db: Db, submissionId: string) {
-  return db.select().from(submissionScreenshots).where(eq(submissionScreenshots.submissionId, submissionId)).all();
-}
-
-export function getSubmissionClaims(db: Db, submissionId: string) {
-  return db.select().from(submissionItemClaims).where(eq(submissionItemClaims.submissionId, submissionId)).all();
+export function getTeamSubmissions(db: Db, teamId: string): SubmissionDetails[] {
+  return attachDetails(db, db.select().from(submissions).where(eq(submissions.teamId, teamId)).all());
 }

@@ -4,7 +4,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { teamTaskProgress, tileTaskItems, tileTasks, tiles } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { createSubmission } from "./submissionService";
+import { createSubmission, getAllSubmissionsForBingo, getTeamSubmissions } from "./submissionService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -145,5 +145,39 @@ describe("createSubmission", () => {
         screenshotUrl: "/x.png", now: NOW, isWildcardRedemption: true, wildcardId: wildcard.id,
       }),
     ).toThrow(/does not belong/);
+  });
+});
+
+describe("getTeamSubmissions / getAllSubmissionsForBingo", () => {
+  it("attaches screenshots, item claims, and the submitter's user row", () => {
+    const { bingo, teamId, memberUserId } = seed();
+    const tile = addTile(bingo.id);
+    const task = addTask(tile.id, { sortOrder: 0, points: 20 });
+    createSubmission(db, bingo, {
+      teamId, taskId: task.id, submittedByUserId: memberUserId,
+      itemClaims: [{ itemName: "Bruma torch", quantity: 2 }], screenshotUrl: "/uploads/x.png", now: NOW,
+    });
+
+    const [detail] = getTeamSubmissions(db, teamId);
+    expect(detail.screenshots).toHaveLength(1);
+    expect(detail.screenshots[0].storageUrl).toBe("/uploads/x.png");
+    expect(detail.claims).toEqual([expect.objectContaining({ itemName: "Bruma torch", quantity: 2 })]);
+    expect(detail.submittedByUser?.discordUsername).toBe("member");
+  });
+
+  it("includes task, tile, and team info scoped to the bingo", () => {
+    const { bingo, teamId, memberUserId } = seed();
+    const tile = addTile(bingo.id, { name: "Wintertodt" });
+    const task = addTask(tile.id, { sortOrder: 0, points: 20 });
+    createSubmission(db, bingo, {
+      teamId, taskId: task.id, submittedByUserId: memberUserId,
+      itemClaims: [{ itemName: "Bruma torch" }], screenshotUrl: "/uploads/x.png", now: NOW,
+    });
+
+    const [row] = getAllSubmissionsForBingo(db, bingo.id);
+    expect(row.tile.name).toBe("Wintertodt");
+    expect(row.task.id).toBe(task.id);
+    expect(row.team).toEqual(expect.objectContaining({ id: teamId, name: "Team A" }));
+    expect(row.screenshots).toHaveLength(1);
   });
 });
