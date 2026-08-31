@@ -22,6 +22,11 @@ export function BingoList() {
         <span className="font-bold text-lg tracking-tight">Bingo Platform</span>
         {user && (
           <div className="flex items-center gap-3">
+            {user.isAdmin && (
+              <Link to="/admin" className="text-sm text-yellow-400 hover:text-yellow-300 border border-yellow-700 hover:border-yellow-500 rounded px-3 py-1 transition-colors font-semibold">
+                Site Admin
+              </Link>
+            )}
             <img src={avatarUrl(user)} alt="avatar" className="w-8 h-8 rounded-full border-2 border-indigo-500" />
             <span className="text-sm text-slate-300">{displayName(user)}</span>
             <button

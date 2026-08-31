@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { bingoModerators, bingos, stageTransitions } from "../db/schema";
+import { bingoModerators, bingos, stageTransitions, users } from "../db/schema";
 import { ServiceError } from "./errors";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -107,7 +107,12 @@ export function removeModerator(db: Db, params: { bingoId: string; userId: strin
 }
 
 export function getModerators(db: Db, bingoId: string) {
-  return db.select().from(bingoModerators).where(eq(bingoModerators.bingoId, bingoId)).all();
+  return db
+    .select({ id: bingoModerators.id, bingoId: bingoModerators.bingoId, userId: bingoModerators.userId, createdAt: bingoModerators.createdAt, user: users })
+    .from(bingoModerators)
+    .innerJoin(users, eq(bingoModerators.userId, users.id))
+    .where(eq(bingoModerators.bingoId, bingoId))
+    .all();
 }
 
 export interface UpdateBingoSettingsParams {

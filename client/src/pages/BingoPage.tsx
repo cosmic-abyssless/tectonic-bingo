@@ -188,6 +188,14 @@ export function BingoPage() {
             )}
             {isMod && (
               <button
+                onClick={() => navigate(`/b/${slug}/admin`)}
+                className="text-sm text-slate-300 hover:text-white border border-slate-600 hover:border-slate-400 rounded px-3 py-1 transition-colors cursor-pointer"
+              >
+                Admin
+              </button>
+            )}
+            {isMod && (
+              <button
                 onClick={() => navigate(`/b/${slug}/mod`)}
                 className="relative text-sm text-yellow-400 hover:text-yellow-300 border border-yellow-700 hover:border-yellow-500 rounded px-3 py-1 transition-colors cursor-pointer font-semibold"
               >
