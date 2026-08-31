@@ -34,10 +34,11 @@ router.patch(
     const submission = submissionService.getSubmissionById(db, submissionId);
     if (!submission) throw new ServiceError(404, "Submission not found");
 
-    const { action, reviewerNotes, pointsAwardedOverride } = req.body as {
+    const { action, reviewerNotes, pointsAwardedOverride, taskCompleted } = req.body as {
       action?: "approve" | "reject";
       reviewerNotes?: string;
       pointsAwardedOverride?: number;
+      taskCompleted?: boolean; // required when the task's scoringMode is 'manual'
     };
 
     if (action === "approve") {
@@ -46,6 +47,7 @@ router.patch(
         reviewedByUserId: req.user!.id,
         reviewerNotes,
         pointsAwardedOverride,
+        taskCompleted,
       });
       broadcast({
         type: "submission_reviewed",

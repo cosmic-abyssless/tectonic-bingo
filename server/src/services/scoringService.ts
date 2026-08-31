@@ -229,6 +229,10 @@ export interface ApproveSubmissionParams {
   reviewedByUserId: string;
   reviewerNotes?: string;
   pointsAwardedOverride?: number;
+  // Required when the task's scoringMode is 'manual' — the mod decides
+  // completion directly instead of it being computed from item claims.
+  // Ignored for 'automatic' tasks.
+  taskCompleted?: boolean;
 }
 
 export interface ApproveSubmissionResult {
@@ -246,6 +250,9 @@ export function approveSubmission(db: Db, params: ApproveSubmissionParams): Appr
 
     const task = tx.select().from(tileTasks).where(eq(tileTasks.id, submission.taskId)).get();
     if (!task) throw new ServiceError(404, "Task not found");
+    if (task.scoringMode === "manual" && params.taskCompleted === undefined) {
+      throw new ServiceError(400, "taskCompleted is required when approving a manual-scoring task");
+    }
 
     if (submission.isWildcardRedemption) {
       if (!submission.wildcardId) throw new ServiceError(400, "Wildcard redemption is missing a wildcardId");
@@ -298,11 +305,15 @@ export function approveSubmission(db: Db, params: ApproveSubmissionParams): Appr
       task.allowsPreviouslyAcquired && prevTask
         ? getApprovedSubmissionIds(tx, submission.teamId, prevTask.id).length + getApprovedSubmissionIds(tx, submission.teamId, task.id).length
         : getApprovedSubmissionIds(tx, submission.teamId, task.id).length;
-    const complete = evaluateTaskCompletion(items, claims, {
-      minSubmissions: task.minSubmissions,
-      requiresCompleteSet: task.requiresCompleteSet,
-      approvedSubmissionCount,
-    });
+
+    const complete =
+      task.scoringMode === "manual"
+        ? params.taskCompleted!
+        : evaluateTaskCompletion(items, claims, {
+            minSubmissions: task.minSubmissions,
+            requiresCompleteSet: task.requiresCompleteSet,
+            approvedSubmissionCount,
+          });
 
     const progress = getOrCreateProgress(tx, submission.teamId, task.id);
     let completedLineIds: string[] = [];

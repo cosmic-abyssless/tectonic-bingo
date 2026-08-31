@@ -60,6 +60,7 @@ async function main() {
     hasFreezePeriod?: boolean; freezeDurationMinutes?: number;
     tasks: Array<{
       label: string; points: number; description: string;
+      scoringMode?: 'automatic' | 'manual';
       submitRequiresPrevious?: boolean; pointsRequirePrevious?: boolean;
       requiresNoDuplicates?: boolean; allowsPreviouslyAcquired?: boolean;
       allowsPreLoad?: boolean; minSubmissions?: number; requiresCompleteSet?: boolean;
@@ -149,8 +150,15 @@ async function main() {
       tasks: [{ label: 'Part A', points: 20, description: 'Complete a Wintertodt kill.', items: [{ itemName: 'Bruma torch' }] }],
     },
     {
-      row: 2, col: 2, categoryIndex: 2, name: 'Guardians of the Rift',
-      tasks: [{ label: 'Part A', points: 20, description: 'Complete a GOTR run.', items: [{ itemName: 'Guardian essence' }] }],
+      // Manual-scoring example: a one-off custom challenge with no item list
+      // to codify. Mods judge the screenshot directly and decide completion
+      // + points when reviewing each submission.
+      row: 2, col: 2, categoryIndex: 2, name: 'Custom Challenge: GOTR Speedrun',
+      tasks: [{
+        label: 'Part A', points: 20, scoringMode: 'manual',
+        description: 'Complete a Guardians of the Rift run in under 6 minutes. Submit a screenshot of the post-game reward screen showing the completion time — a mod will judge and award points manually.',
+        items: [],
+      }],
     },
   ];
 
@@ -176,6 +184,7 @@ async function main() {
         sortOrder: i,
         points: taskDef.points,
         description: taskDef.description,
+        scoringMode: taskDef.scoringMode ?? 'automatic',
         submitRequiresPrevious: taskDef.submitRequiresPrevious ?? false,
         pointsRequirePrevious: taskDef.pointsRequirePrevious ?? false,
         requiresNoDuplicates: taskDef.requiresNoDuplicates ?? false,

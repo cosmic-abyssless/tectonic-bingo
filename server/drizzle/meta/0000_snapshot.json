@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "bc34c970-c392-4322-b050-4d978ed7261e",
+  "id": "7b0afe6a-27f4-439d-ada1-aabccc22d1cb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "bingo_line_tiles": {
@@ -1938,6 +1938,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "scoring_mode": {
+          "name": "scoring_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'automatic'"
         },
         "submit_requires_previous": {
           "name": "submit_requires_previous",

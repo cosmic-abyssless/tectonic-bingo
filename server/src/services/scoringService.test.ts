@@ -282,4 +282,56 @@ describe("approveSubmission / rejectSubmission (integration)", () => {
     approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId });
     expect(() => approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId })).toThrow(/already been reviewed/);
   });
+
+  it("requires an explicit taskCompleted decision when approving a manual-scoring task", () => {
+    const fx = seedBaseFixture();
+    const task = addTask(fx.tileId, { sortOrder: 0, points: 50, scoringMode: "manual" });
+    const sub = submitAndReturn(fx.teamId, task.id, fx.memberUserId, []);
+    expect(() => approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId })).toThrow(/taskCompleted is required/);
+  });
+
+  it("lets a mod directly decide completion and points on a manual-scoring task", () => {
+    const fx = seedBaseFixture();
+    const task = addTask(fx.tileId, { sortOrder: 0, points: 50, scoringMode: "manual" });
+    const sub = submitAndReturn(fx.teamId, task.id, fx.memberUserId, []);
+
+    const result = approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId, taskCompleted: true, pointsAwardedOverride: 35 });
+    expect(result.taskCompleted).toBe(true);
+    expect(result.pointsAwarded).toBe(35);
+
+    const progress = findProgress(fx.teamId, task.id)!;
+    expect(progress.status).toBe("completed");
+    expect(progress.pointsAwarded).toBe(35);
+  });
+
+  it("approves a manual-scoring submission without completing the task when the mod says it's not done yet", () => {
+    const fx = seedBaseFixture();
+    const task = addTask(fx.tileId, { sortOrder: 0, points: 50, scoringMode: "manual" });
+    const sub = submitAndReturn(fx.teamId, task.id, fx.memberUserId, []);
+
+    const result = approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId, taskCompleted: false });
+    expect(result.submission.status).toBe("approved");
+    expect(result.taskCompleted).toBe(false);
+
+    const progress = findProgress(fx.teamId, task.id)!;
+    expect(progress.status).toBe("in_progress");
+  });
+
+  it("still withholds and releases points on a manual task chained with pointsRequirePrevious", () => {
+    const fx = seedBaseFixture();
+    const task1 = addTask(fx.tileId, { sortOrder: 0, points: 25 });
+    addItem(task1.id, "Bruma torch");
+    const task2 = addTask(fx.tileId, { sortOrder: 1, points: 50, scoringMode: "manual", pointsRequirePrevious: true });
+
+    const sub2 = submitAndReturn(fx.teamId, task2.id, fx.memberUserId, []);
+    const result2 = approveSubmission(db, { submissionId: sub2.id, reviewedByUserId: fx.modUserId, taskCompleted: true });
+    expect(result2.pointsAwarded).toBe(0);
+
+    const sub1 = submitAndReturn(fx.teamId, task1.id, fx.memberUserId, [{ itemName: "Bruma torch" }]);
+    approveSubmission(db, { submissionId: sub1.id, reviewedByUserId: fx.modUserId });
+
+    const progress2 = findProgress(fx.teamId, task2.id)!;
+    expect(progress2.status).toBe("completed");
+    expect(progress2.pointsAwarded).toBe(50);
+  });
 });
