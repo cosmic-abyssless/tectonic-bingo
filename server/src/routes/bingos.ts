@@ -10,6 +10,7 @@ import * as bingoService from "../services/bingoService";
 import * as boardService from "../services/boardService";
 import * as teamService from "../services/teamService";
 import * as submissionService from "../services/submissionService";
+import * as signupService from "../services/signupService";
 import { getAIClient, analyzeSubmissionScreenshot } from "../ai";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
@@ -187,6 +188,65 @@ router.post(
 
     const result = await analyzeSubmissionScreenshot(ai, db, bingo, team, req.file);
     res.json(result);
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Signup
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/:slug/signup/questions",
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    res.json({ questions: signupService.getQuestions(db, req.bingo!.id) });
+  }),
+);
+
+router.get(
+  "/:slug/signup",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const result = signupService.getSignupForUser(db, req.bingo!.id, req.user!.id);
+    res.json({ signup: result?.signup ?? null, answers: result?.answers ?? [] });
+  }),
+);
+
+router.post(
+  "/:slug/signup",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const { rsn, answers } = req.body as { rsn?: string; answers?: signupService.SignupAnswerInput[] };
+    if (!rsn) throw new ServiceError(400, "rsn is required");
+    const signup = signupService.createSignup(db, req.bingo!, { bingoId: req.bingo!.id, userId: req.user!.id, rsn, answers: answers ?? [] });
+    res.status(201).json({ signup });
+  }),
+);
+
+router.patch(
+  "/:slug/signup",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const existing = signupService.getSignupForUser(db, req.bingo!.id, req.user!.id);
+    if (!existing) throw new ServiceError(404, "You haven't signed up for this bingo");
+    const { rsn, answers } = req.body as { rsn?: string; answers?: signupService.SignupAnswerInput[] };
+    const signup = signupService.updateSignup(db, req.bingo!, existing.signup.id, { rsn, answers });
+    res.json({ signup });
+  }),
+);
+
+router.delete(
+  "/:slug/signup",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const existing = signupService.getSignupForUser(db, req.bingo!.id, req.user!.id);
+    if (!existing) throw new ServiceError(404, "You haven't signed up for this bingo");
+    const signup = signupService.withdrawSignup(db, req.bingo!, existing.signup.id);
+    res.json({ signup });
   }),
 );
 
