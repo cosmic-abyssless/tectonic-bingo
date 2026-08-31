@@ -27,7 +27,7 @@ router.patch(
     const body = req.body as Record<string, unknown>;
     const dateFields = ["signupOpensAt", "draftScheduledAt", "revealScheduledAt", "startsAt", "endsAt"] as const;
     const params: bingoService.UpdateBingoSettingsParams = {};
-    for (const key of ["name", "description", "theme", "buyinAmount", "potAmount", "rulesMarkdown", "aiHint"] as const) {
+    for (const key of ["name", "description", "theme", "buyinAmount", "bonusPotAmount", "rulesMarkdown", "aiHint"] as const) {
       if (key in body) (params as Record<string, unknown>)[key] = body[key];
     }
     for (const key of dateFields) {

@@ -120,7 +120,7 @@ export interface UpdateBingoSettingsParams {
   description?: string | null;
   theme?: string;
   buyinAmount?: number | null;
-  potAmount?: number | null;
+  bonusPotAmount?: number;
   rulesMarkdown?: string | null;
   aiHint?: string | null;
   signupOpensAt?: Date | null;
@@ -134,4 +134,12 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
   const existing = db.select().from(bingos).where(eq(bingos.id, bingoId)).get();
   if (!existing) throw new ServiceError(404, "Bingo not found");
   return db.update(bingos).set(params).where(eq(bingos.id, bingoId)).returning().get();
+}
+
+// The pot is derived, not stored: what's actually been collected (buy-in x
+// paid signups) plus any extra stakes an admin adds on top (sponsorships,
+// donations). Recomputed on every read so it's always accurate as people
+// sign up and pay.
+export function calculatePotTotal(bingo: typeof bingos.$inferSelect, paidSignupCount: number): number {
+  return (bingo.buyinAmount ?? 0) * paidSignupCount + bingo.bonusPotAmount;
 }

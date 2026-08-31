@@ -23,14 +23,24 @@ const DATE_FIELDS: { key: keyof Bingo; label: string }[] = [
   { key: "endsAt", label: "Bingo ends" },
 ];
 
-export function BingoSettingsForm({ slug, bingo }: { slug: string; bingo: Bingo }) {
+export function BingoSettingsForm({
+  slug,
+  bingo,
+  paidSignupCount,
+  potTotal,
+}: {
+  slug: string;
+  bingo: Bingo;
+  paidSignupCount: number;
+  potTotal: number;
+}) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
     name: bingo.name,
     description: bingo.description ?? "",
     theme: bingo.theme,
     buyinAmount: bingo.buyinAmount?.toString() ?? "",
-    potAmount: bingo.potAmount?.toString() ?? "",
+    bonusPotAmount: bingo.bonusPotAmount.toString(),
     rulesMarkdown: bingo.rulesMarkdown ?? "",
     aiHint: bingo.aiHint ?? "",
     signupOpensAt: toLocalInput(bingo.signupOpensAt),
@@ -54,7 +64,7 @@ export function BingoSettingsForm({ slug, bingo }: { slug: string; bingo: Bingo 
         description: form.description || null,
         theme: form.theme,
         buyinAmount: form.buyinAmount ? Number(form.buyinAmount) : null,
-        potAmount: form.potAmount ? Number(form.potAmount) : null,
+        bonusPotAmount: Number(form.bonusPotAmount) || 0,
         rulesMarkdown: form.rulesMarkdown || null,
         aiHint: form.aiHint || null,
         signupOpensAt: fromLocalInput(form.signupOpensAt) as never,
@@ -96,10 +106,20 @@ export function BingoSettingsForm({ slug, bingo }: { slug: string; bingo: Bingo 
           <input type="number" value={form.buyinAmount} onChange={(e) => setForm({ ...form, buyinAmount: e.target.value })} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-1">Pot (GP)</label>
-          <input type="number" value={form.potAmount} onChange={(e) => setForm({ ...form, potAmount: e.target.value })} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+          <label className="block text-sm font-medium text-slate-300 mb-1">Bonus pot / extra donations (GP)</label>
+          <input
+            type="number"
+            value={form.bonusPotAmount}
+            onChange={(e) => setForm({ ...form, bonusPotAmount: e.target.value })}
+            className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+          />
         </div>
       </div>
+
+      <p className="text-sm text-slate-400">
+        Total pot: <span className="text-white font-semibold">{potTotal.toLocaleString()} GP</span> — {paidSignupCount} paid signup
+        {paidSignupCount === 1 ? "" : "s"} × {(bingo.buyinAmount ?? 0).toLocaleString()} GP buy-in, plus bonus
+      </p>
 
       <div className="grid grid-cols-2 gap-4">
         {DATE_FIELDS.map(({ key, label }) => (

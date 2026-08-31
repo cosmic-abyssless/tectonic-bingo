@@ -63,7 +63,9 @@ export function AdminPage() {
           ))}
         </div>
 
-        {tab === "settings" && <BingoSettingsForm slug={slug} bingo={shell.bingo} />}
+        {tab === "settings" && (
+          <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} />
+        )}
         {tab === "board" && <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />}
         {tab === "lines" && <LineEditor slug={slug} />}
         {tab === "questions" && <QuestionBuilder slug={slug} />}
