@@ -193,6 +193,15 @@ export const tileTasks = sqliteTable('tile_tasks', {
   sortOrder: integer('sort_order').notNull().default(0),
   points: integer('points').notNull(),
   description: text('description').notNull(),
+  // 'automatic' (default) completes via evaluateTaskCompletion against
+  // tileTaskItems/submission claims, same as every other task. 'manual' is
+  // the escape hatch for a one-off custom challenge an admin can't codify as
+  // an item list — items are optional/ignored, and a mod directly decides
+  // completion + points when reviewing each submission (scoringService
+  // requires an explicit taskCompleted flag on approval instead of computing
+  // it). Everything downstream — withheld points, claim folding on a later
+  // task, line completion — behaves identically either way.
+  scoringMode: text('scoring_mode', { enum: ['automatic', 'manual'] }).notNull().default('automatic'),
   // Server rejects a submission for this task until the previous task in the
   // chain is completed.
   submitRequiresPrevious: integer('submit_requires_previous', { mode: 'boolean' }).notNull().default(false),

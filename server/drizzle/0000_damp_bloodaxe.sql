@@ -259,6 +259,7 @@ CREATE TABLE `tile_tasks` (
 	`sort_order` integer DEFAULT 0 NOT NULL,
 	`points` integer NOT NULL,
 	`description` text NOT NULL,
+	`scoring_mode` text DEFAULT 'automatic' NOT NULL,
 	`submit_requires_previous` integer DEFAULT false NOT NULL,
 	`points_require_previous` integer DEFAULT false NOT NULL,
 	`requires_no_duplicates` integer DEFAULT false NOT NULL,

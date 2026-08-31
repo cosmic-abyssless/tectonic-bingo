@@ -69,7 +69,9 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
       }
     }
 
-    if (params.itemClaims.length === 0) {
+    // Manual-scoring tasks have no item list to claim against — the mod
+    // judges the screenshot directly, so an empty claim list is fine.
+    if (task.scoringMode === "automatic" && params.itemClaims.length === 0) {
       throw new ServiceError(400, "At least one item claim is required");
     }
 

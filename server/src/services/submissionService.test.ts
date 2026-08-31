@@ -66,6 +66,20 @@ describe("createSubmission", () => {
     expect(progress?.status).toBe("pending_approval");
   });
 
+  it("allows an empty item claim list for a manual-scoring task, but not an automatic one", () => {
+    const { bingo, teamId, memberUserId } = seed();
+    const tile = addTile(bingo.id);
+    const manualTask = addTask(tile.id, { sortOrder: 0, points: 20, scoringMode: "manual" });
+    const autoTask = addTask(tile.id, { sortOrder: 1, points: 20 });
+
+    expect(() =>
+      createSubmission(db, bingo, { teamId, taskId: manualTask.id, submittedByUserId: memberUserId, itemClaims: [], screenshotUrl: "/x.png", now: NOW }),
+    ).not.toThrow();
+    expect(() =>
+      createSubmission(db, bingo, { teamId, taskId: autoTask.id, submittedByUserId: memberUserId, itemClaims: [], screenshotUrl: "/x.png", now: NOW }),
+    ).toThrow(/At least one item claim/);
+  });
+
   it("rejects when the bingo is not live", () => {
     const { bingo, teamId, memberUserId } = seed({ stage: "reveal" });
     const tile = addTile(bingo.id);
