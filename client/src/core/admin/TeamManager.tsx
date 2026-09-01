@@ -7,6 +7,23 @@ import * as adminApi from "../../api/adminApi";
 import { UserSearchInput } from "./UserSearchInput";
 import { displayName } from "../ui/user";
 
+// Forward-looking estimate while captains are still being assigned — teams
+// don't have their non-captain members yet, so this is just
+// totalParticipants / teamCount, not an actual roster count.
+function teamSizeSummary(teamCount: number, totalParticipants: number): string | null {
+  if (teamCount === 0 || totalParticipants === 0) return null;
+  const base = Math.floor(totalParticipants / teamCount);
+  const remainder = totalParticipants % teamCount;
+  const teamWord = teamCount === 1 ? "team" : "teams";
+  const participantWord = totalParticipants === 1 ? "participant" : "participants";
+  let summary = `There will be ${teamCount} ${teamWord} of ${base} based on the ${totalParticipants} total ${participantWord}.`;
+  if (remainder > 0) {
+    const extraTeamWord = remainder === 1 ? "team" : "teams";
+    summary += ` ${remainder} ${extraTeamWord} will have an extra player.`;
+  }
+  return summary;
+}
+
 function TeamCard({ slug, team }: { slug: string; team: Team }) {
   const queryClient = useQueryClient();
   const [members, setMembers] = useState<User[] | null>(null);
@@ -51,6 +68,9 @@ export function TeamManager({ slug }: { slug: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const candidates = candidatesData?.candidates ?? [];
+  const teamCount = data?.teams.length ?? 0;
+  const totalParticipants = teamCount + candidates.length;
+  const summary = teamSizeSummary(teamCount, totalParticipants);
 
   async function createTeam() {
     const candidate = candidates.find((c) => c.user.id === selectedCaptainId);
@@ -75,6 +95,7 @@ export function TeamManager({ slug }: { slug: string }) {
     <div className="max-w-2xl space-y-4">
       <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
         <p className="text-sm font-medium text-slate-300 mb-2">Assign a captain</p>
+        {summary && <p className="text-sm text-indigo-300 mb-3">{summary}</p>}
         {candidates.length === 0 ? (
           <p className="text-sm text-slate-500">No eligible signups — everyone who signed up is already a captain, or no one has signed up yet.</p>
         ) : (
