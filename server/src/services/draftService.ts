@@ -34,8 +34,8 @@ export interface DraftPoolEntry {
 }
 
 export interface DraftState {
-  teams: (typeof teams.$inferSelect)[]; // sorted by draftOrder once the draft has started
-  picks: ((typeof draftPicks.$inferSelect) & { user: MinimalUser })[];
+  teams: ((typeof teams.$inferSelect) & { captainRsn: string })[]; // sorted by draftOrder once the draft has started
+  picks: ((typeof draftPicks.$inferSelect) & { user: MinimalUser; rsn: string })[];
   pool: DraftPoolEntry[];
   draftStarted: boolean;
   currentPick: { pickNumber: number; round: number; teamId: string } | null;
@@ -46,13 +46,26 @@ export interface DraftState {
 export function getDraftState(db: Db, bingoId: string, opts: { includeAnswers: boolean }): DraftState {
   const teamRows = db.select().from(teams).where(eq(teams.bingoId, bingoId)).all();
   const draftStarted = teamRows.length > 0 && teamRows.every((t) => t.draftOrder != null);
-  const orderedTeams = draftStarted ? [...teamRows].sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0)) : teamRows;
+  const sortedTeamRows = draftStarted ? [...teamRows].sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0)) : teamRows;
+
+  // Captains never go through draftPicks (they're assigned pre-draft), so
+  // their RSN has to come from signups directly, same as pool entries.
+  const captainUserIds = sortedTeamRows.map((t) => t.captainUserId);
+  const captainSignupRows = captainUserIds.length
+    ? db.select({ userId: signups.userId, rsn: signups.rsn }).from(signups).where(and(eq(signups.bingoId, bingoId), inArray(signups.userId, captainUserIds))).all()
+    : [];
+  const captainRsnByUserId = new Map(captainSignupRows.map((s) => [s.userId, s.rsn]));
+  const orderedTeams = sortedTeamRows.map((t) => ({ ...t, captainRsn: captainRsnByUserId.get(t.captainUserId) ?? "" }));
 
   const pickRows = db.select().from(draftPicks).where(eq(draftPicks.bingoId, bingoId)).orderBy(draftPicks.pickNumber).all();
   const pickedUserIds = pickRows.map((p) => p.userId);
   const pickedUserRows = pickedUserIds.length ? db.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, pickedUserIds)).all() : [];
   const pickedUserById = new Map(pickedUserRows.map((u) => [u.id, u]));
-  const picks = pickRows.map((p) => ({ ...p, user: pickedUserById.get(p.userId)! }));
+  const pickedSignupRows = pickedUserIds.length
+    ? db.select({ userId: signups.userId, rsn: signups.rsn }).from(signups).where(and(eq(signups.bingoId, bingoId), inArray(signups.userId, pickedUserIds))).all()
+    : [];
+  const pickedRsnByUserId = new Map(pickedSignupRows.map((s) => [s.userId, s.rsn]));
+  const picks = pickRows.map((p) => ({ ...p, user: pickedUserById.get(p.userId)!, rsn: pickedRsnByUserId.get(p.userId) ?? "" }));
 
   const draftedUserIds = getDraftedUserIds(db, bingoId);
   const activeSignups = db.select().from(signups).where(and(eq(signups.bingoId, bingoId), eq(signups.status, "active"))).all();
@@ -114,14 +127,16 @@ export interface MakePickParams {
   bingo: Bingo;
   pickedUserId: string;
   actingUserId: string;
-  actingIsMod: boolean;
+  actingIsAdmin: boolean;
 }
 
 // The captain of the team currently on the clock picks a signed-up player
-// out of the undrafted pool. Mods can pick on behalf of whichever team is
-// currently on the clock (they don't get to jump the queue either).
+// out of the undrafted pool. Site admins can pick on behalf of whichever
+// team is currently on the clock (they don't get to jump the queue either)
+// — a regular per-bingo mod who isn't also a site admin does not get this
+// override, only the acting captain does.
 export function makePick(db: Db, params: MakePickParams) {
-  const { bingo, pickedUserId, actingUserId, actingIsMod } = params;
+  const { bingo, pickedUserId, actingUserId, actingIsAdmin } = params;
   if (bingo.stage !== "draft") {
     throw new ServiceError(400, `Picks can only be made during the draft stage (current stage: ${bingo.stage})`);
   }
@@ -137,7 +152,7 @@ export function makePick(db: Db, params: MakePickParams) {
     const pickNumber = pickCount + 1;
     const currentTeam = orderedTeams[pickOrderTeamIndex(orderedTeams.length, pickNumber)]!;
 
-    if (!actingIsMod && currentTeam.captainUserId !== actingUserId) {
+    if (!actingIsAdmin && currentTeam.captainUserId !== actingUserId) {
       throw new ServiceError(403, "It's not your team's turn to pick");
     }
 

@@ -1,86 +1,133 @@
 import { useState } from "react";
-import type { DraftPoolEntry, SignupQuestion, Team } from "@bingo/shared";
+import type { DraftPick, DraftPoolEntry, DraftTeam, SignupQuestion } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
-import { useBingo, useDraftState, useMakePick, useRenameTeam, useSignupQuestions, useStartDraft } from "../../api/queries";
+import { useBingo, useDraftState, useMakePick, useSignupQuestions, useStartDraft } from "../../api/queries";
 import { displayName } from "../ui/user";
 
-function TeamRow({ slug, team, isCurrent, isMine }: { slug: string; team: Team; isCurrent: boolean; isMine: boolean }) {
-  const renameTeam = useRenameTeam(slug);
-
-  async function rename(name: string) {
-    if (name.trim() && name.trim() !== team.name) await renameTeam.mutateAsync({ teamId: team.id, name: name.trim() });
-  }
-
+// One column per team: captain's RSN up top (with an "on the clock"
+// indicator above it while it's their turn), that team's picks listed below
+// in draft order.
+function CaptainColumn({ team, picks, isCurrent }: { team: DraftTeam; picks: DraftPick[]; isCurrent: boolean }) {
   return (
-    <div
-      className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors ${
-        isCurrent ? "border-indigo-500 bg-indigo-950/40" : "border-slate-700 bg-slate-800"
-      }`}
-    >
-      {team.color && <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: team.color }} />}
-      {isMine ? (
-        <input
-          defaultValue={team.name}
-          onBlur={(e) => rename(e.target.value)}
-          className="flex-1 min-w-0 bg-transparent text-white font-medium text-sm focus:outline-none border-b border-transparent focus:border-slate-600"
-        />
-      ) : (
-        <span className="flex-1 min-w-0 text-white font-medium text-sm truncate">{team.name}</span>
-      )}
-      <span className="text-xs text-slate-500 shrink-0">#{team.draftOrder}</span>
-      {isCurrent && <span className="text-xs text-indigo-400 font-semibold shrink-0">on the clock</span>}
+    <div className="flex flex-col items-center text-center gap-1 min-w-0">
+      <div className="h-4 text-xs font-bold text-indigo-400 uppercase tracking-wide">{isCurrent && "▼ On the clock"}</div>
+      <div
+        className={`w-full rounded-lg border px-2 py-2 transition-colors ${
+          isCurrent ? "border-indigo-500 bg-indigo-950/40" : "border-slate-700 bg-slate-800"
+        }`}
+      >
+        <div className="flex items-center justify-center gap-1.5 min-w-0">
+          {team.color && <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: team.color }} />}
+          <span className="text-white font-semibold text-sm truncate">{team.captainRsn || "?"}</span>
+        </div>
+      </div>
+      <div className="w-full space-y-1">
+        {picks.map((p) => (
+          <div key={p.id} className="bg-slate-800/60 rounded px-2 py-1 text-slate-300 text-sm truncate">
+            {p.rsn || displayName(p.user)}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function PoolRow({
-  entry,
+// "rsn" | "discord" | a signup question's id — anything the pool table can sort by.
+type SortKey = string;
+
+function poolSortValue(entry: DraftPoolEntry, key: SortKey): string {
+  if (key === "rsn") return entry.signup.rsn.toLowerCase();
+  if (key === "discord") return displayName(entry.user).toLowerCase();
+  return (entry.answers?.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
+}
+
+function PoolTable({
+  pool,
   questions,
   canPick,
   onPick,
   picking,
 }: {
-  entry: DraftPoolEntry;
+  pool: DraftPoolEntry[];
   questions: SignupQuestion[];
   canPick: boolean;
-  onPick: () => void;
+  onPick: (userId: string) => void;
   picking: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const answerByQ = new Map((entry.answers ?? []).map((a) => [a.questionId, a.value]));
+  const [sortKey, setSortKey] = useState<SortKey>("rsn");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  // Answers are only sent to mods/captains (see draftService.getDraftState) —
+  // everyone else's pool entries have answers: null, so skip those columns
+  // entirely rather than render a table full of "—".
+  const showAnswers = pool.some((e) => e.answers !== null);
+
+  function toggleSort(key: SortKey) {
+    if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
+  const sorted = [...pool].sort((a, b) => {
+    const cmp = poolSortValue(a, sortKey).localeCompare(poolSortValue(b, sortKey));
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
+  function SortHeader({ label, sortKeyValue }: { label: string; sortKeyValue: SortKey }) {
+    const active = sortKey === sortKeyValue;
+    return (
+      <th
+        onClick={() => toggleSort(sortKeyValue)}
+        className={`pb-2 pr-4 whitespace-nowrap cursor-pointer select-none hover:text-slate-300 transition-colors ${active ? "text-slate-300" : ""}`}
+      >
+        {label} {active && (sortDir === "asc" ? "▲" : "▼")}
+      </th>
+    );
+  }
+
+  if (pool.length === 0) return <p className="text-slate-500 text-sm">No one left to draft.</p>;
 
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
-      <div className="flex items-center gap-2">
-        <div className="flex-1 min-w-0">
-          <p className="text-white text-sm font-medium truncate">{entry.signup.rsn}</p>
-          <p className="text-slate-500 text-xs truncate">{displayName(entry.user)}</p>
-        </div>
-        {entry.answers && questions.length > 0 && (
-          <button onClick={() => setExpanded((e) => !e)} className="text-xs text-slate-400 hover:text-white cursor-pointer shrink-0">
-            {expanded ? "Hide" : "Info"}
-          </button>
-        )}
-        {canPick && (
-          <button
-            onClick={onPick}
-            disabled={picking}
-            className="text-xs bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold rounded px-2.5 py-1 cursor-pointer shrink-0"
-          >
-            Draft
-          </button>
-        )}
-      </div>
-      {expanded && entry.answers && (
-        <dl className="mt-2 pt-2 border-t border-slate-700 space-y-1">
-          {questions.map((q) => (
-            <div key={q.id} className="text-xs">
-              <dt className="text-slate-500">{q.prompt}</dt>
-              <dd className="text-slate-300">{answerByQ.get(q.id) ?? "—"}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-slate-500 text-xs uppercase border-b border-slate-700">
+            <SortHeader label="RSN" sortKeyValue="rsn" />
+            <SortHeader label="Discord" sortKeyValue="discord" />
+            {showAnswers && questions.map((q) => <SortHeader key={q.id} label={q.prompt} sortKeyValue={q.id} />)}
+            {canPick && <th className="pb-2" />}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-800">
+          {sorted.map((entry) => {
+            const answerByQ = new Map((entry.answers ?? []).map((a) => [a.questionId, a.value]));
+            return (
+              <tr key={entry.signup.id}>
+                <td className="py-2 pr-4 text-white font-medium whitespace-nowrap">{entry.signup.rsn}</td>
+                <td className="py-2 pr-4 text-slate-300 whitespace-nowrap">{displayName(entry.user)}</td>
+                {showAnswers &&
+                  questions.map((q) => (
+                    <td key={q.id} className="py-2 pr-4 text-slate-300">
+                      {answerByQ.get(q.id) ?? "—"}
+                    </td>
+                  ))}
+                {canPick && (
+                  <td className="py-2">
+                    <button
+                      onClick={() => onPick(entry.user.id)}
+                      disabled={picking}
+                      className="text-xs bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold rounded px-2.5 py-1 cursor-pointer shrink-0"
+                    >
+                      Draft
+                    </button>
+                  </td>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -107,9 +154,14 @@ export function DraftRoom({ slug }: { slug: string }) {
   }
 
   const isMod = shell.isMod;
+  // The pick-on-behalf-of override is site-admin only — a regular per-bingo
+  // mod who isn't also a site admin doesn't get it, only the acting captain
+  // does. Matches the server-side check in draftService.makePick.
+  const isAdmin = !!user.isAdmin;
   const myCaptainTeam = state.teams.find((t) => t.captainUserId === user.id) ?? null;
   const currentTeam = state.currentPick ? (state.teams.find((t) => t.id === state.currentPick!.teamId) ?? null) : null;
-  const canAct = !!state.currentPick && (isMod || (!!myCaptainTeam && currentTeam?.id === myCaptainTeam.id));
+  const isMyTurn = !!myCaptainTeam && currentTeam?.id === myCaptainTeam.id;
+  const canAct = !!state.currentPick && (isAdmin || isMyTurn);
 
   async function handleStart() {
     setStartError(null);
@@ -160,9 +212,7 @@ export function DraftRoom({ slug }: { slug: string }) {
               <p className="text-xs text-slate-500 uppercase tracking-wide">
                 Round {state.currentPick.round} — Pick {state.currentPick.pickNumber}
               </p>
-              <p className="text-white font-bold text-lg">
-                {currentTeam?.name ?? "…"}'s turn{canAct ? " — you're up!" : ""}
-              </p>
+              <p className="text-white font-bold text-lg">{currentTeam?.name ?? "…"}'s turn</p>
             </>
           ) : (
             <p className="text-green-400 font-bold text-lg">
@@ -172,51 +222,37 @@ export function DraftRoom({ slug }: { slug: string }) {
         </div>
       )}
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <div>
-          <h3 className="text-white font-semibold mb-2">Teams</h3>
-          <div className="space-y-2">
-            {state.teams.map((team) => (
-              <TeamRow key={team.id} slug={slug} team={team} isCurrent={currentTeam?.id === team.id} isMine={team.captainUserId === user.id} />
-            ))}
-            {state.teams.length === 0 && <p className="text-slate-500 text-sm">No teams yet.</p>}
-          </div>
-
-          {state.picks.length > 0 && (
-            <>
-              <h3 className="text-white font-semibold mt-6 mb-2">Picks</h3>
-              <ol className="space-y-1 text-sm">
-                {state.picks.map((p) => {
-                  const team = state.teams.find((t) => t.id === p.teamId);
-                  return (
-                    <li key={p.id} className="text-slate-300">
-                      <span className="text-slate-500">#{p.pickNumber}</span> {team?.name ?? "?"} picked{" "}
-                      <span className="text-white">{displayName(p.user)}</span>
-                    </li>
-                  );
-                })}
-              </ol>
-            </>
-          )}
+      {isMyTurn && (
+        <div className="bg-indigo-600 border border-indigo-400 rounded-lg px-4 py-3 flex items-center gap-3">
+          <span className="text-2xl">🎯</span>
+          <p className="text-white font-bold text-lg">It's your turn to pick!</p>
         </div>
+      )}
 
-        <div>
-          <h3 className="text-white font-semibold mb-2">Undrafted players ({state.pool.length})</h3>
-          {pickError && <p className="text-red-400 text-sm mb-2">{pickError}</p>}
-          <div className="space-y-2">
-            {state.pool.map((entry) => (
-              <PoolRow
-                key={entry.signup.id}
-                entry={entry}
-                questions={questionsData?.questions ?? []}
-                canPick={canAct}
-                onPick={() => handlePick(entry.user.id)}
-                picking={makePick.isPending}
+      <div>
+        <h3 className="text-white font-semibold mb-3">Teams</h3>
+        {/* grid-flow-col + a minimum column width, in a scrollable row —
+            handles a handful of teams (spread to fill width) and a large
+            number of teams (scrolls instead of squeezing RSNs unreadable). */}
+        <div className="overflow-x-auto">
+          <div className="grid grid-flow-col auto-cols-[minmax(110px,1fr)] gap-3">
+            {state.teams.map((team) => (
+              <CaptainColumn
+                key={team.id}
+                team={team}
+                picks={state.picks.filter((p) => p.teamId === team.id)}
+                isCurrent={currentTeam?.id === team.id}
               />
             ))}
-            {state.pool.length === 0 && <p className="text-slate-500 text-sm">No one left to draft.</p>}
           </div>
         </div>
+        {state.teams.length === 0 && <p className="text-slate-500 text-sm">No teams yet.</p>}
+      </div>
+
+      <div>
+        <h3 className="text-white font-semibold mb-2">Undrafted players ({state.pool.length})</h3>
+        {pickError && <p className="text-red-400 text-sm mb-2">{pickError}</p>}
+        <PoolTable pool={state.pool} questions={questionsData?.questions ?? []} canPick={canAct} onPick={handlePick} picking={makePick.isPending} />
       </div>
     </div>
   );

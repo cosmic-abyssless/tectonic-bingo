@@ -120,45 +120,45 @@ describe("makePick", () => {
     createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
     createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
     const p1 = seedUser("p1");
-    expect(() => makePick(db, { bingo, pickedUserId: p1.id, actingUserId: c1.id, actingIsMod: false })).toThrow(/hasn't started/i);
+    expect(() => makePick(db, { bingo, pickedUserId: p1.id, actingUserId: c1.id, actingIsAdmin: false })).toThrow(/hasn't started/i);
   });
 
   it("rejects a pick from the captain whose team isn't on the clock", () => {
     const { bingo, second, p1 } = setup();
-    expect(() => makePick(db, { bingo, pickedUserId: p1.id, actingUserId: second.captainUserId, actingIsMod: false })).toThrow(/not your team's turn/i);
+    expect(() => makePick(db, { bingo, pickedUserId: p1.id, actingUserId: second.captainUserId, actingIsAdmin: false })).toThrow(/not your team's turn/i);
   });
 
-  it("rejects a pick from someone who isn't a captain or a mod", () => {
+  it("rejects a pick from someone who isn't the captain or a site admin", () => {
     const { bingo, p1, p2 } = setup();
-    expect(() => makePick(db, { bingo, pickedUserId: p1.id, actingUserId: p2.id, actingIsMod: false })).toThrow(/not your team's turn/i);
+    expect(() => makePick(db, { bingo, pickedUserId: p1.id, actingUserId: p2.id, actingIsAdmin: false })).toThrow(/not your team's turn/i);
   });
 
   it("allows the on-the-clock captain to pick, advancing to the next team", () => {
     const { bingo, first, second, p1, p2 } = setup();
-    const pick1 = makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsMod: false });
+    const pick1 = makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
     expect(pick1).toMatchObject({ pickNumber: 1, teamId: first.id, userId: p1.id });
 
-    const pick2 = makePick(db, { bingo, pickedUserId: p2.id, actingUserId: second.captainUserId, actingIsMod: false });
+    const pick2 = makePick(db, { bingo, pickedUserId: p2.id, actingUserId: second.captainUserId, actingIsAdmin: false });
     expect(pick2).toMatchObject({ pickNumber: 2, teamId: second.id, userId: p2.id });
   });
 
-  it("allows a mod to pick on behalf of whichever team is on the clock", () => {
+  it("allows a site admin to pick on behalf of whichever team is on the clock", () => {
     const { bingo, first, p1 } = setup();
-    const admin = seedUser("mod");
-    const pick = makePick(db, { bingo, pickedUserId: p1.id, actingUserId: admin.id, actingIsMod: true });
+    const admin = seedUser("admin-actor");
+    const pick = makePick(db, { bingo, pickedUserId: p1.id, actingUserId: admin.id, actingIsAdmin: true });
     expect(pick).toMatchObject({ teamId: first.id, pickedByUserId: admin.id });
   });
 
   it("rejects picking someone not signed up for this bingo", () => {
     const { bingo, first } = setup();
     const outsider = seedUser("outsider");
-    expect(() => makePick(db, { bingo, pickedUserId: outsider.id, actingUserId: first.captainUserId, actingIsMod: false })).toThrow(/isn't signed up/i);
+    expect(() => makePick(db, { bingo, pickedUserId: outsider.id, actingUserId: first.captainUserId, actingIsAdmin: false })).toThrow(/isn't signed up/i);
   });
 
   it("rejects drafting the same player twice", () => {
     const { bingo, first, second, p1 } = setup();
-    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsMod: false });
-    expect(() => makePick(db, { bingo, pickedUserId: p1.id, actingUserId: second.captainUserId, actingIsMod: false })).toThrow(/already been drafted/i);
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    expect(() => makePick(db, { bingo, pickedUserId: p1.id, actingUserId: second.captainUserId, actingIsAdmin: false })).toThrow(/already been drafted/i);
   });
 });
 
@@ -181,7 +181,7 @@ describe("getDraftState", () => {
     startDraft(db, bingo);
     const teams = db.select().from(schema.teams).where(eq(schema.teams.bingoId, bingo.id)).all();
     const first = teams.find((t) => t.draftOrder === 1)!;
-    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsMod: false });
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
 
     const after = getDraftState(db, bingo.id, { includeAnswers: false });
     expect(after.draftStarted).toBe(true);
@@ -189,6 +189,25 @@ describe("getDraftState", () => {
     expect(after.currentPick?.pickNumber).toBe(2);
     expect(after.picks).toHaveLength(1);
     expect(after.pool[0]!.answers).toBeNull();
+  });
+
+  it("includes each team's captain RSN and each pick's RSN", () => {
+    const bingo = seedBingo();
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
+    createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
+    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
+    const p1 = seedUser("p1");
+    createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p1.id, rsn: "PlayerOneRsn", answers: [] });
+
+    startDraft(db, bingo);
+    const teams = db.select().from(schema.teams).where(eq(schema.teams.bingoId, bingo.id)).all();
+    const first = teams.find((t) => t.draftOrder === 1)!;
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+
+    const state = getDraftState(db, bingo.id, { includeAnswers: false });
+    expect(state.teams.every((t) => t.captainRsn === "c1" || t.captainRsn === "c2")).toBe(true);
+    expect(state.picks[0]).toMatchObject({ userId: p1.id, rsn: "PlayerOneRsn" });
   });
 
   it("includes signup answers only when requested", () => {
