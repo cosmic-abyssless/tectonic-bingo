@@ -3,7 +3,7 @@ import type {
   BingoListResponse, BingoShellResponse, BoardResponse, CreateSubmissionResponse, DraftState,
   ModSubmissionsResponse, MySignupResponse, PendingCountResponse, ReviewSubmissionResponse,
   RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupQuestion, Stage,
-  Team, TeamProgressSummary, TeamSubmissionsResponse,
+  StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
 import { api } from "./client";
 
@@ -20,6 +20,7 @@ export const queryKeys = {
   signupQuestions: (slug: string) => ["signupQuestions", slug] as const,
   mySignup: (slug: string) => ["mySignup", slug] as const,
   draftState: (slug: string) => ["draftState", slug] as const,
+  stats: (slug: string) => ["stats", slug] as const,
 };
 
 export function useBingos() {
@@ -205,6 +206,14 @@ export function useRenameTeam(slug: string) {
       queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
       queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) });
     },
+  });
+}
+
+export function useStats(slug: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.stats(slug ?? ""),
+    queryFn: () => api.get<StatsResponse>(`/api/bingos/${slug}/stats`),
+    enabled: !!slug,
   });
 }
 

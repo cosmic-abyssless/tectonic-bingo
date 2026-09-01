@@ -187,6 +187,14 @@ export function BingoPage() {
                 Rules
               </button>
             )}
+            {boardRevealed && (
+              <button
+                onClick={() => navigate(`/b/${slug}/stats`)}
+                className="text-sm text-slate-300 hover:text-white border border-slate-600 hover:border-slate-400 rounded px-3 py-1 transition-colors cursor-pointer"
+              >
+                Stats
+              </button>
+            )}
             {isMod && (
               <button
                 onClick={() => navigate(`/b/${slug}/admin`)}

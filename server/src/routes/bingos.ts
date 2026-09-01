@@ -12,6 +12,7 @@ import * as teamService from "../services/teamService";
 import * as submissionService from "../services/submissionService";
 import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
+import * as statsService from "../services/statsService";
 import { getAIClient, analyzeSubmissionScreenshot } from "../ai";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
@@ -83,6 +84,26 @@ router.get(
     const isMod = req.user ? bingoService.isBingoMod(db, bingo.id, req.user.id, req.user.isAdmin) : false;
     const canView = bingoService.canViewTiles(bingo, isMod);
     res.json({ tiles: canView ? boardService.getBoardTiles(db, bingo.id) : [] });
+  }),
+);
+
+// Same visibility rule as the board itself — read-only and entirely derived,
+// so there's no reason to gate it any tighter.
+router.get(
+  "/:slug/stats",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const bingo = req.bingo!;
+    const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
+    if (!bingoService.canViewTiles(bingo, isMod)) throw new ServiceError(403, "Stats aren't visible until the board is revealed");
+
+    res.json({
+      pointsOverTime: statsService.getPointsOverTime(db, bingo.id),
+      timeline: statsService.getTimeline(db, bingo.id),
+      contributions: statsService.getContributionCounts(db, bingo.id),
+      heatmap: statsService.getTileHeatmap(db, bingo.id),
+    });
   }),
 );
 

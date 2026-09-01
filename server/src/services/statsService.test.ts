@@ -1,0 +1,180 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type Database from "better-sqlite3";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { and, eq } from "drizzle-orm";
+import * as schema from "../db/schema";
+import {
+  bingoLines, bingoLineTiles, draftPicks, stageTransitions, submissionItemClaims, submissions,
+  teamPointAdjustments, teamTaskProgress, tileTaskItems, tileTasks, tiles,
+} from "../db/schema";
+import { createTestDb } from "../testUtils/testDb";
+import { approveSubmission } from "./scoringService";
+import { getTeamProgress } from "./teamService";
+import { getContributionCounts, getPointsOverTime, getTileHeatmap, getTimeline } from "./statsService";
+
+let sqlite: Database.Database;
+let db: BetterSQLite3Database<typeof schema>;
+
+interface Fixture {
+  bingoId: string;
+  teamAId: string;
+  teamBId: string;
+  modUserId: string;
+  memberUserId: string;
+  tileId: string;
+}
+
+function seedFixture(): Fixture {
+  const [admin] = db.insert(schema.users).values({ discordId: "mod", discordUsername: "mod" }).returning().all();
+  const [member] = db.insert(schema.users).values({ discordId: "member", discordUsername: "member" }).returning().all();
+  const [captainA] = db.insert(schema.users).values({ discordId: "captainA", discordUsername: "captainA" }).returning().all();
+  const [captainB] = db.insert(schema.users).values({ discordId: "captainB", discordUsername: "captainB" }).returning().all();
+  const [bingo] = db.insert(schema.bingos).values({ slug: "test", name: "Test Bingo", boardRows: 2, boardCols: 2, createdByUserId: admin.id }).returning().all();
+  const [teamA] = db.insert(schema.teams).values({ bingoId: bingo.id, captainUserId: captainA.id, name: "Team A", codeword: "word-a" }).returning().all();
+  const [teamB] = db.insert(schema.teams).values({ bingoId: bingo.id, captainUserId: captainB.id, name: "Team B", codeword: "word-b" }).returning().all();
+  const [tile] = db.insert(tiles).values({ bingoId: bingo.id, name: "Test Tile", boardRow: 0, boardCol: 0 }).returning().all();
+  return { bingoId: bingo.id, teamAId: teamA.id, teamBId: teamB.id, modUserId: admin.id, memberUserId: member.id, tileId: tile.id };
+}
+
+function addTask(tileId: string, opts: Partial<typeof tileTasks.$inferInsert> & { sortOrder: number; points: number }) {
+  return db.insert(tileTasks).values({ tileId, label: `Task ${opts.sortOrder}`, description: "desc", ...opts }).returning().get();
+}
+function addItem(taskId: string, itemName: string) {
+  db.insert(tileTaskItems).values({ taskId, itemName }).run();
+}
+function submitAndApprove(teamId: string, taskId: string, submittedByUserId: string, modUserId: string, itemName: string) {
+  const [submission] = db.insert(submissions).values({ teamId, taskId, submittedByUserId }).returning().all();
+  db.insert(submissionItemClaims).values({ submissionId: submission.id, itemName }).run();
+  return approveSubmission(db, { submissionId: submission.id, reviewedByUserId: modUserId });
+}
+
+beforeEach(() => {
+  ({ sqlite, db } = createTestDb());
+});
+afterEach(() => {
+  sqlite.close();
+});
+
+describe("getPointsOverTime", () => {
+  it("reconciles the final cumulative total with teamService.getTeamProgress", () => {
+    const fx = seedFixture();
+    const task = addTask(fx.tileId, { sortOrder: 0, points: 20 });
+    addItem(task.id, "Bruma torch");
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId, "Bruma torch");
+
+    const [line] = db.insert(bingoLines).values({ bingoId: fx.bingoId, lineType: "row", lineIndex: 0, points: 15 }).returning().all();
+    db.insert(bingoLineTiles).values({ bingoLineId: line.id, tileId: fx.tileId }).run();
+    db.insert(schema.teamCompletedLines).values({ teamId: fx.teamAId, bingoLineId: line.id }).run();
+
+    db.insert(teamPointAdjustments).values({ teamId: fx.teamAId, bingoId: fx.bingoId, amount: -5, reason: "penalty", createdByUserId: fx.modUserId }).run();
+
+    const series = getPointsOverTime(db, fx.bingoId);
+    const teamAEvents = series.filter((e) => e.teamId === fx.teamAId);
+    expect(teamAEvents).toHaveLength(3);
+    expect(teamAEvents.map((e) => e.source)).toEqual(["task", "line", "adjustment"]);
+
+    const finalCumulative = teamAEvents.at(-1)!.cumulativePoints;
+    const progress = getTeamProgress(db, fx.teamAId);
+    expect(finalCumulative).toBe(progress.totalPoints);
+    expect(finalCumulative).toBe(20 + 15 - 5);
+  });
+
+  it("tracks separate running totals per team", () => {
+    const fx = seedFixture();
+    const task = addTask(fx.tileId, { sortOrder: 0, points: 20 });
+    addItem(task.id, "Bruma torch");
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId, "Bruma torch");
+    submitAndApprove(fx.teamBId, task.id, fx.memberUserId, fx.modUserId, "Bruma torch");
+
+    const series = getPointsOverTime(db, fx.bingoId);
+    expect(series.filter((e) => e.teamId === fx.teamAId).at(-1)!.cumulativePoints).toBe(20);
+    expect(series.filter((e) => e.teamId === fx.teamBId).at(-1)!.cumulativePoints).toBe(20);
+  });
+
+  it("returns an empty series for a bingo with no teams", () => {
+    const [admin] = db.insert(schema.users).values({ discordId: "solo", discordUsername: "solo" }).returning().all();
+    const [bingo] = db.insert(schema.bingos).values({ slug: "empty", name: "Empty", boardRows: 2, boardCols: 2, createdByUserId: admin.id }).returning().all();
+    expect(getPointsOverTime(db, bingo.id)).toEqual([]);
+  });
+});
+
+describe("getTimeline", () => {
+  it("includes stage changes, draft picks, line completions, and first-completions, sorted chronologically", () => {
+    const fx = seedFixture();
+    const task = addTask(fx.tileId, { sortOrder: 0, points: 20 });
+    addItem(task.id, "Bruma torch");
+
+    db.insert(stageTransitions).values({ bingoId: fx.bingoId, fromStage: "signup", toStage: "draft", changedByUserId: fx.modUserId }).run();
+    db.insert(draftPicks).values({ bingoId: fx.bingoId, pickNumber: 1, teamId: fx.teamAId, userId: fx.memberUserId, pickedByUserId: fx.modUserId }).run();
+
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId, "Bruma torch");
+
+    const [line] = db.insert(bingoLines).values({ bingoId: fx.bingoId, lineType: "row", lineIndex: 0, points: 15 }).returning().all();
+    db.insert(bingoLineTiles).values({ bingoLineId: line.id, tileId: fx.tileId }).run();
+    db.insert(schema.teamCompletedLines).values({ teamId: fx.teamAId, bingoLineId: line.id }).run();
+
+    const timeline = getTimeline(db, fx.bingoId);
+    const types = timeline.map((e) => e.type);
+    expect(types).toContain("stage_changed");
+    expect(types).toContain("draft_pick");
+    expect(types).toContain("line_completed");
+    expect(types).toContain("first_completion");
+
+    // Chronological order preserved.
+    const times = timeline.map((e) => e.at.getTime());
+    expect(times).toEqual([...times].sort((a, b) => a - b));
+  });
+
+  it("only credits the earliest team as the first to complete a task", () => {
+    const fx = seedFixture();
+    const task = addTask(fx.tileId, { sortOrder: 0, points: 20 });
+    addItem(task.id, "Bruma torch");
+
+    // completedAt is stored at 1-second resolution, so two approvals in the
+    // same test tick can otherwise land in the same second — force a clear
+    // gap so the "earliest" comparison isn't a coin flip on DB row order.
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId, "Bruma torch");
+    db.update(teamTaskProgress).set({ completedAt: new Date(Date.now() - 60_000) }).where(and(eq(teamTaskProgress.teamId, fx.teamAId), eq(teamTaskProgress.taskId, task.id))).run();
+
+    submitAndApprove(fx.teamBId, task.id, fx.memberUserId, fx.modUserId, "Bruma torch");
+    db.update(teamTaskProgress).set({ completedAt: new Date() }).where(and(eq(teamTaskProgress.teamId, fx.teamBId), eq(teamTaskProgress.taskId, task.id))).run();
+
+    const firstCompletions = getTimeline(db, fx.bingoId).filter((e) => e.type === "first_completion");
+    expect(firstCompletions).toHaveLength(1);
+    expect(firstCompletions[0]!.teamId).toBe(fx.teamAId);
+  });
+});
+
+describe("getContributionCounts", () => {
+  it("counts only approved submissions, per submitter", () => {
+    const fx = seedFixture();
+    const task = addTask(fx.tileId, { sortOrder: 0, points: 20, minSubmissions: 1 });
+    addItem(task.id, "Bruma torch");
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId, "Bruma torch");
+
+    // A rejected submission from the same user shouldn't count.
+    const [rejected] = db.insert(submissions).values({ teamId: fx.teamAId, taskId: task.id, submittedByUserId: fx.memberUserId }).returning().all();
+    db.update(submissions).set({ status: "rejected" }).where(eq(submissions.id, rejected.id)).run();
+
+    const counts = getContributionCounts(db, fx.bingoId);
+    expect(counts).toHaveLength(1);
+    expect(counts[0]).toMatchObject({ userId: fx.memberUserId, teamId: fx.teamAId, approvedSubmissions: 1 });
+  });
+});
+
+describe("getTileHeatmap", () => {
+  it("reports completedTasks/totalTasks per team per tile", () => {
+    const fx = seedFixture();
+    const task1 = addTask(fx.tileId, { sortOrder: 0, points: 20 });
+    addItem(task1.id, "Bruma torch");
+    addTask(fx.tileId, { sortOrder: 1, points: 30 }); // never completed by anyone
+
+    submitAndApprove(fx.teamAId, task1.id, fx.memberUserId, fx.modUserId, "Bruma torch");
+
+    const cells = getTileHeatmap(db, fx.bingoId);
+    const teamACell = cells.find((c) => c.teamId === fx.teamAId && c.tileId === fx.tileId)!;
+    const teamBCell = cells.find((c) => c.teamId === fx.teamBId && c.tileId === fx.tileId)!;
+    expect(teamACell).toMatchObject({ completedTasks: 1, totalTasks: 2 });
+    expect(teamBCell).toMatchObject({ completedTasks: 0, totalTasks: 2 });
+  });
+});
