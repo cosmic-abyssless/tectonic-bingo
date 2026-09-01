@@ -387,8 +387,11 @@ export interface DraftPick {
   rsn: string; // the drafted player's RSN for this bingo
 }
 
+export type WomAccountType = "regular" | "ironman" | "hardcore" | "ultimate" | "unknown";
+
 export interface WomPlayerStats {
   ehb: number;
+  accountType: WomAccountType;
 }
 
 export interface DraftPoolEntry {

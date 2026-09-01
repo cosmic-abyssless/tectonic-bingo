@@ -1,8 +1,43 @@
 import { useState } from "react";
-import type { DraftPick, DraftPoolEntry, DraftTeam, SignupQuestion } from "@bingo/shared";
+import type { DraftPick, DraftPoolEntry, DraftTeam, SignupQuestion, WomAccountType } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
 import { useBingo, useDraftState, useMakePick, useSignupQuestions, useStartDraft } from "../../api/queries";
 import { displayName } from "../ui/user";
+
+const ACCOUNT_TYPE_LABEL: Record<WomAccountType, string> = {
+  regular: "Main",
+  ironman: "Ironman",
+  hardcore: "Hardcore Ironman",
+  ultimate: "Ultimate Ironman",
+  unknown: "Unranked",
+};
+
+const ACCOUNT_TYPE_COLOR: Record<WomAccountType, string> = {
+  regular: "",
+  ironman: "#9ca3af", // steel grey
+  hardcore: "#ef4444", // red
+  ultimate: "#eab308", // gold
+  unknown: "",
+};
+
+// Small helmet glyph next to a player's RSN, colored by WOM account type.
+// No icon at all for a main (regular) or unranked account.
+function AccountTypeIcon({ accountType }: { accountType: WomAccountType | undefined }) {
+  if (!accountType || accountType === "regular" || accountType === "unknown") return null;
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={13}
+      height={13}
+      fill={ACCOUNT_TYPE_COLOR[accountType]}
+      className="inline-block shrink-0 align-[-1px]"
+      aria-label={ACCOUNT_TYPE_LABEL[accountType]}
+    >
+      <title>{ACCOUNT_TYPE_LABEL[accountType]}</title>
+      <path d="M12 2.5C7.5 2.5 4.5 6 4.5 10.5v4.3c0 .66.53 1.2 1.19 1.2H7l.9-2.7a1 1 0 0 1 .95-.68h6.3a1 1 0 0 1 .95.68l.9 2.7h1.31c.66 0 1.19-.54 1.19-1.2v-4.3c0-4.5-3-8-7.5-8z" />
+    </svg>
+  );
+}
 
 // One column per team: captain's RSN up top (with an "on the clock"
 // indicator above it while it's their turn), that team's picks listed below
@@ -113,7 +148,9 @@ function PoolTable({
             const answerByQ = new Map((entry.answers ?? []).map((a) => [a.questionId, a.value]));
             return (
               <tr key={entry.signup.id}>
-                <td className="py-2 pr-4 text-white font-medium whitespace-nowrap">{entry.signup.rsn}</td>
+                <td className="py-2 pr-4 text-white font-medium whitespace-nowrap">
+                  {entry.signup.rsn} <AccountTypeIcon accountType={entry.womStats?.accountType} />
+                </td>
                 <td className="py-2 pr-4 text-slate-300 whitespace-nowrap">{displayName(entry.user)}</td>
                 {showWomStats && <td className="py-2 pr-4 text-slate-300 whitespace-nowrap">{entry.womStats ? Math.round(entry.womStats.ehb).toLocaleString() : "—"}</td>}
                 {showAnswers &&

@@ -345,15 +345,15 @@ router.get(
     const isCaptain = teamService.getTeamsForBingo(db, bingo.id).some((t) => t.captainUserId === req.user!.id);
     const state = draftService.getDraftState(db, bingo.id, { includeAnswers: isMod || isCaptain });
 
-    // Enrich the pool with WOM EHB for players whose signup RSN matched a
-    // tectonic-linked account (signups.womId, Phase T2) — one bulk request
+    // Enrich the pool with WOM EHB + account type for players whose signup
+    // RSN matched a tectonic-linked account (signups.womId, Phase T2) — one bulk request
     // for the whole WOM_GROUP_ID group covers every pool entry at once
     // (instead of one WOM request per player, which blew through WOM's
     // 20 req/min unauthenticated limit for any pool bigger than ~20). Null
     // (WOM_GROUP_ID unset, WOM unreachable, or this player unlinked/not a
     // group member there) degrades to no stats shown, same as tectonic.
     const groupId = getWomGroupId();
-    const womStatsById = groupId ? await getWomClient().getGroupEhb(groupId) : null;
+    const womStatsById = groupId ? await getWomClient().getGroupStats(groupId) : null;
     const pool = state.pool.map((entry) => ({
       ...entry,
       womStats: entry.signup.womId ? (womStatsById?.get(entry.signup.womId) ?? null) : null,
