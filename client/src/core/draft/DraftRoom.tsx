@@ -1,29 +1,39 @@
 import { useState } from "react";
-import type { DraftPick, DraftPoolEntry, DraftTeam, SignupQuestion, WomAccountType } from "@bingo/shared";
+import type { DraftPick, DraftPoolEntry, DraftTeam, RuneProfileAccountType, SignupQuestion } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
 import { useBingo, useDraftState, useMakePick, useSignupQuestions, useStartDraft } from "../../api/queries";
 import { displayName } from "../ui/user";
 import ironmanBadge from "../ui/icons/Ironman_chat_badge.png";
-import hardcoreBadge from "../ui/icons/Hardcore_ironman_chat_badge.png";
 import ultimateBadge from "../ui/icons/Ultimate_ironman_chat_badge.png";
+import hardcoreBadge from "../ui/icons/Hardcore_ironman_chat_badge.png";
+import groupBadge from "../ui/icons/Group_ironman_chat_badge.png";
+import hardcoreGroupBadge from "../ui/icons/Hardcore_group_ironman_chat_badge.png";
+import unrankedGroupBadge from "../ui/icons/Unranked_group_ironman_chat_badge.png";
 
-const ACCOUNT_TYPE_LABEL: Record<WomAccountType, string> = {
-  regular: "Main",
+const ACCOUNT_TYPE_LABEL: Record<RuneProfileAccountType, string> = {
+  normal: "Main",
   ironman: "Ironman",
-  hardcore: "Hardcore Ironman",
-  ultimate: "Ultimate Ironman",
+  ultimate_ironman: "Ultimate Ironman",
+  hardcore_ironman: "Hardcore Ironman",
+  group_ironman: "Group Ironman",
+  hardcore_group_ironman: "Hardcore Group Ironman",
+  unranked_group_ironman: "Unranked Group Ironman",
   unknown: "Unranked",
 };
 
-// OSRS's own in-game chat badges (client/src/core/ui/icons) — no icon at
-// all for a main (regular) or unranked account.
-const ACCOUNT_TYPE_BADGE: Partial<Record<WomAccountType, string>> = {
+// OSRS's own in-game chat badges (client/src/core/ui/icons), from
+// RuneProfile — unlike WOM, it distinguishes group ironman variants. No
+// icon at all for a main (normal) or unranked account.
+const ACCOUNT_TYPE_BADGE: Partial<Record<RuneProfileAccountType, string>> = {
   ironman: ironmanBadge,
-  hardcore: hardcoreBadge,
-  ultimate: ultimateBadge,
+  ultimate_ironman: ultimateBadge,
+  hardcore_ironman: hardcoreBadge,
+  group_ironman: groupBadge,
+  hardcore_group_ironman: hardcoreGroupBadge,
+  unranked_group_ironman: unrankedGroupBadge,
 };
 
-function AccountTypeIcon({ accountType }: { accountType: WomAccountType | undefined }) {
+function AccountTypeIcon({ accountType }: { accountType: RuneProfileAccountType | null | undefined }) {
   const badge = accountType && ACCOUNT_TYPE_BADGE[accountType];
   if (!badge) return null;
   return <img src={badge} alt={ACCOUNT_TYPE_LABEL[accountType]} title={ACCOUNT_TYPE_LABEL[accountType]} className="inline-block align-[-2px]" />;
@@ -139,7 +149,7 @@ function PoolTable({
             return (
               <tr key={entry.signup.id}>
                 <td className="py-2 pr-4 text-white font-medium whitespace-nowrap">
-                  <AccountTypeIcon accountType={entry.womStats?.accountType} /> {entry.signup.rsn}
+                  <AccountTypeIcon accountType={entry.accountType} /> {entry.signup.rsn}
                 </td>
                 <td className="py-2 pr-4 text-slate-300 whitespace-nowrap">{displayName(entry.user)}</td>
                 {showWomStats && <td className="py-2 pr-4 text-slate-300 whitespace-nowrap">{entry.womStats ? Math.round(entry.womStats.ehb).toLocaleString() : "—"}</td>}

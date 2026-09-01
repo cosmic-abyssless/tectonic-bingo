@@ -16,6 +16,7 @@ import * as statsService from "../services/statsService";
 import { getAIClient, analyzeSubmissionScreenshot } from "../ai";
 import { getTectonicClient, type TectonicDetailedUser } from "../services/tectonicService";
 import { getWomClient, getWomGroupId } from "../services/womService";
+import { getRuneProfileClient, getRuneProfileClanName } from "../services/runeProfileService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
 
@@ -345,18 +346,22 @@ router.get(
     const isCaptain = teamService.getTeamsForBingo(db, bingo.id).some((t) => t.captainUserId === req.user!.id);
     const state = draftService.getDraftState(db, bingo.id, { includeAnswers: isMod || isCaptain });
 
-    // Enrich the pool with WOM EHB + account type for players whose signup
-    // RSN matched a tectonic-linked account (signups.womId, Phase T2) — one bulk request
-    // for the whole WOM_GROUP_ID group covers every pool entry at once
-    // (instead of one WOM request per player, which blew through WOM's
-    // 20 req/min unauthenticated limit for any pool bigger than ~20). Null
-    // (WOM_GROUP_ID unset, WOM unreachable, or this player unlinked/not a
-    // group member there) degrades to no stats shown, same as tectonic.
+    // Enrich the pool with WOM EHB (keyed by signups.womId, Phase T2) and
+    // RuneProfile account type (keyed by RSN — RuneProfile's clan endpoint
+    // has no id to persist the way womId was). Each is one bulk request
+    // covering the whole pool at once, not one request per player — see
+    // womService.ts / runeProfileService.ts for why that matters. Null in
+    // either case (integration unconfigured, unreachable, or this player
+    // unlinked/not a member there) degrades to nothing shown, same as
+    // tectonic.
     const groupId = getWomGroupId();
     const womStatsById = groupId ? await getWomClient().getGroupStats(groupId) : null;
+    const clanName = getRuneProfileClanName();
+    const accountTypeByRsn = clanName ? await getRuneProfileClient().getClanAccountTypes(clanName) : null;
     const pool = state.pool.map((entry) => ({
       ...entry,
       womStats: entry.signup.womId ? (womStatsById?.get(entry.signup.womId) ?? null) : null,
+      accountType: accountTypeByRsn?.get(entry.signup.rsn.toLowerCase()) ?? null,
     }));
 
     res.json({ ...state, pool });
