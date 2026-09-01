@@ -15,8 +15,9 @@ import * as draftService from "../services/draftService";
 import * as statsService from "../services/statsService";
 import { getAIClient, analyzeSubmissionScreenshot } from "../ai";
 import { getTectonicClient, type TectonicDetailedUser } from "../services/tectonicService";
-import { getWomClient, getWomGroupId } from "../services/womService";
-import { getRuneProfileClient, getRuneProfileClanName } from "../services/runeProfileService";
+import { parseWomSummary } from "../services/womService";
+import { parseAccountType } from "../services/runeProfileService";
+import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
 
@@ -298,6 +299,10 @@ router.post(
       womId,
       rsnVerified,
     });
+    // Fire-and-forget: WOM/RuneProfile data is a reference display, not
+    // load-bearing — never let a flaky third-party API slow down or fail a
+    // signup. See playerStatsService.ts.
+    void fetchAndPersistPlayerStats(db, signup.id, signup.rsn);
     res.status(201).json({ signup });
   }),
 );
@@ -312,6 +317,9 @@ router.patch(
     const { rsn, answers } = req.body as { rsn?: string; answers?: signupService.SignupAnswerInput[] };
     const verification = rsn !== undefined ? matchRsn((await getTectonicMembership(req.user!.discordId)).member, rsn) : {};
     const signup = signupService.updateSignup(db, req.bingo!, existing.signup.id, { rsn, answers, ...verification });
+    // Re-fetch on any update, not just an RSN change — cheap, and keeps the
+    // stored snapshot from going stale if someone edits other fields.
+    void fetchAndPersistPlayerStats(db, signup.id, signup.rsn);
     res.json({ signup });
   }),
 );
@@ -346,28 +354,24 @@ router.get(
     const isCaptain = teamService.getTeamsForBingo(db, bingo.id).some((t) => t.captainUserId === req.user!.id);
     const state = draftService.getDraftState(db, bingo.id, { includeAnswers: isMod || isCaptain });
 
-    // Enrich the pool with WOM EHB (keyed by signups.womId, Phase T2) and
-    // account type. Each is one bulk request covering the whole pool at
-    // once, not one request per player — see womService.ts /
-    // runeProfileService.ts for why that matters.
-    //
-    // Account type prefers RuneProfile (keyed by RSN — its clan endpoint has
-    // no id to persist the way womId was) over WOM's coarser type, falling
-    // back to WOM for a player who syncs to WOM but isn't set up with the
-    // RuneProfile RuneLite plugin — RuneProfile is the only one of the two
-    // that distinguishes group ironman variants, so it wins when both know
-    // about a player. Null from both (or unconfigured/unreachable/unlinked)
-    // degrades to nothing shown, same as tectonic.
-    const groupId = getWomGroupId();
-    const womStatsById = groupId ? await getWomClient().getGroupStats(groupId) : null;
-    const clanName = getRuneProfileClanName();
-    const accountTypeByRsn = clanName ? await getRuneProfileClient().getClanAccountTypes(clanName) : null;
+    // WOM EHB + account type and RuneProfile's account type were fetched
+    // once at signup time (playerStatsService.ts) and persisted on the
+    // signup row — no live external calls here, just parsing already-stored
+    // JSON. Account type prefers RuneProfile (it distinguishes group
+    // ironman variants; WOM just reports "ironman" for a GIM member),
+    // falling back to WOM for a player who syncs to WOM but isn't set up
+    // with the RuneProfile RuneLite plugin. The raw JSON blobs are internal
+    // only — stripped off `signup` here rather than sent to the client.
     const pool = state.pool.map((entry) => {
-      const womStats = entry.signup.womId ? (womStatsById?.get(entry.signup.womId) ?? null) : null;
+      const { womDataJson, runeProfileDataJson, statsFetchedAt, ...signup } = entry.signup;
+      void statsFetchedAt;
+      const womSummary = parseWomSummary(womDataJson ? JSON.parse(womDataJson) : null);
+      const accountType = parseAccountType(runeProfileDataJson ? JSON.parse(runeProfileDataJson) : null) ?? womSummary?.accountType ?? null;
       return {
         ...entry,
-        womStats,
-        accountType: accountTypeByRsn?.get(entry.signup.rsn.toLowerCase()) ?? womStats?.accountType ?? null,
+        signup,
+        womStats: womSummary ? { ehb: womSummary.ehb } : null,
+        accountType,
       };
     });
 

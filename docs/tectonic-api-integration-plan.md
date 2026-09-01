@@ -183,6 +183,33 @@ Zero console errors in the browser check.
 
 ### Phase T3 — Roster & draft enrichment
 
+**What actually shipped (2026-09-01), diverging from the plan below:** the user asked for EHB and
+account-type icons specifically, sourced from two APIs outside this doc's original tectonic-only
+scope — Wise Old Man (EHB) and RuneProfile (account type, including group ironman variants WOM
+can't distinguish). Went through three iterations before landing:
+1. Live per-player WOM lookups at draft time — hit WOM's 20 req/min unauthenticated limit for any
+   pool bigger than ~20 (`server/src/services/womService.ts`'s 429-backoff logic is a relic of this).
+2. Live bulk-group (WOM) / bulk-clan (RuneProfile) fetches at draft time, one request for the whole
+   pool — worked, but needed `WOM_GROUP_ID`/`RUNEPROFILE_CLAN_NAME` config and still hit external
+   APIs on every draft-room load.
+3. **Final: fetch once per signup, at signup time, persist raw JSON on the signup row**
+   (`signups.womDataJson`/`runeProfileDataJson`/`statsFetchedAt`), fired fire-and-forget from
+   `POST`/`PATCH /:slug/signup` and the dev seed-signups tool
+   (`server/src/services/playerStatsService.ts`). The draft route
+   (`GET /:slug/draft` in `routes/bingos.ts`) just parses the stored JSON — zero live external
+   calls in that hot path, no clan/group config needed, no rate-limit exposure at draft time.
+   Accepted tradeoff: data can go stale between signup and draft day (fine for a reference display).
+   Account type is `RuneProfile ?? WOM`, unified onto shared `AccountType`.
+   **Important:** the raw JSON blobs (RuneProfile's can be 100KB+) are internal-only —
+   `signupService.PUBLIC_SIGNUP_COLS` excludes them from every response-facing signup query
+   (roster, candidates, the signer's own signup). Only draftService's own pool query selects them,
+   and the draft route strips them back off before `res.json()`, using them only to derive the
+   small `womStats`/`accountType` summary the client actually renders. If a future change adds
+   a new signup column, check whether it needs adding to `PUBLIC_SIGNUP_COLS` too.
+
+Original plan below (tectonic points/tier enrichment) — not built; the WOM/RuneProfile work above
+covered the actual priority instead. Revisit if tectonic-sourced clan points/rank ever matter too.
+
 The user's stated priority here: **give captains real signal at draft time to evaluate picks.**
 Tectonic's detailed user data is rich — points, rank tier, boss PB records, past event placements,
 achievements — surface enough of it without turning the pool table into a wall.

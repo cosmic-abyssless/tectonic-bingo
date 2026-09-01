@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "dec44e6d-2261-4860-895e-49196e19becf",
+  "id": "bafe0034-5614-4e7d-aaa7-87eb7f82685b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "bingo_line_tiles": {
@@ -692,6 +692,27 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
+        },
+        "wom_data_json": {
+          "name": "wom_data_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rune_profile_data_json": {
+          "name": "rune_profile_data_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "stats_fetched_at": {
+          "name": "stats_fetched_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "status": {
           "name": "status",

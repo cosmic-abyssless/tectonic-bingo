@@ -3,6 +3,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingoLines, signupAnswers, signups, teamCompletedLines, teamMembers, teamPointAdjustments, teamTaskProgress, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
+import { PUBLIC_SIGNUP_COLS } from "./signupService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -153,7 +154,7 @@ export function getCaptainCandidates(db: Db, bingoId: string) {
   const onATeam = teamIds.length ? new Set(db.select({ userId: teamMembers.userId }).from(teamMembers).where(inArray(teamMembers.teamId, teamIds)).all().map((m) => m.userId)) : new Set<string>();
 
   const rows = db
-    .select({ signup: signups, user: users })
+    .select({ signup: PUBLIC_SIGNUP_COLS, user: users })
     .from(signups)
     .innerJoin(users, eq(signups.userId, users.id))
     .where(and(eq(signups.bingoId, bingoId), eq(signups.status, "active")))
