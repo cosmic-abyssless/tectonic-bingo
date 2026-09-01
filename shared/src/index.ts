@@ -312,14 +312,20 @@ export interface MySignupResponse {
   answers: SignupAnswer[];
 }
 
-// A tectonic-api-linked RSN. Always [] when the integration is unconfigured
-// or the signer isn't a registered clan member there.
+// A tectonic-api-linked RSN.
 export interface TectonicRsn {
   rsn: string;
   womId: string;
 }
 
 export interface MyTectonicRsnsResponse {
+  // False when the integration isn't configured — isMember/rsns are
+  // meaningless in that case and no membership gating should apply.
+  enabled: boolean;
+  // Only meaningful when enabled: true. False means the signer isn't a
+  // registered member of the clan's tectonic-api guild (or the lookup
+  // failed — tectonic-api never distinguishes the two).
+  isMember: boolean;
   rsns: TectonicRsn[];
 }
 

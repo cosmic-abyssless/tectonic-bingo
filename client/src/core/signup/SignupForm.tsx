@@ -65,7 +65,7 @@ function QuestionField({ question, value, onChange }: { question: SignupQuestion
 export function SignupForm({ slug }: { slug: string }) {
   const { data: questionsData } = useSignupQuestions(slug);
   const { data: mySignup, isLoading } = useMySignup(slug);
-  const { data: tectonicRsnsData } = useMyTectonicRsns(slug);
+  const { data: tectonicRsnsData, isLoading: tectonicLoading } = useMyTectonicRsns(slug);
   const createSignup = useCreateSignup(slug);
   const updateSignup = useUpdateSignup(slug);
   const withdrawSignup = useWithdrawSignup(slug);
@@ -96,7 +96,21 @@ export function SignupForm({ slug }: { slug: string }) {
     }
   }, [existing, mySignup, tectonicRsns]);
 
-  if (isLoading) return null;
+  // Only gate NEW signups — someone who signed up before the integration
+  // was turned on (or before they were registered) keeps their spot, so
+  // wait for the membership check only when there's no existing signup.
+  if (isLoading || (!existing && tectonicLoading)) return null;
+
+  if (!existing && tectonicRsnsData?.enabled && !tectonicRsnsData.isMember) {
+    return (
+      <div className="max-w-lg mx-auto bg-slate-800 border border-slate-700 rounded-xl p-6 text-center space-y-2">
+        <h2 className="text-xl font-bold text-white">Clan members only</h2>
+        <p className="text-slate-400 text-sm">
+          This bingo is only open to registered members of the clan. If you believe this is a mistake, ask a moderator to check your clan registration.
+        </p>
+      </div>
+    );
+  }
 
   const answerList: SignupAnswerInput[] = questions.map((q) => ({ questionId: q.id, value: answers[q.id] ?? "" }));
   const missingRequired = questions.some((q) => q.required && !(answers[q.id] ?? "").trim());
