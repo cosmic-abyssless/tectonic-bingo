@@ -4,7 +4,7 @@ import path from "path";
 import fs from "fs";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireBingo } from "../middleware/requireBingo";
-import { requireBingoMod } from "../middleware/requireBingoMod";
+import { requireAdmin } from "../middleware/requireAdmin";
 import { asyncHandler } from "../middleware/errorHandler";
 import { db } from "../db";
 import * as bingoService from "../services/bingoService";
@@ -14,8 +14,12 @@ import * as teamService from "../services/teamService";
 import * as userService from "../services/userService";
 import { ServiceError } from "../services/errors";
 
+// Site-admin only — not just any bingo mod. Board/settings/team/moderator
+// management is structural setup, distinct from mod.ts's day-of operational
+// routes (submissions, signups, stage, draft) which stay open to every
+// per-bingo mod.
 const router = Router({ mergeParams: true });
-router.use(requireAuth, requireBingo, requireBingoMod);
+router.use(requireAuth, requireBingo, requireAdmin);
 
 // ---------------------------------------------------------------------------
 // Bingo settings

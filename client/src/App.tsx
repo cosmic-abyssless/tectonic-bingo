@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { WebSocketProvider } from "./context/WebSocketContext";
 import { ProtectedRoute } from "./core/ui/ProtectedRoute";
@@ -8,8 +8,16 @@ import { BingoPage } from "./pages/BingoPage";
 import { ModPage } from "./pages/ModPage";
 import { DraftPage } from "./pages/DraftPage";
 import { StatsPage } from "./pages/StatsPage";
-import { AdminPage } from "./pages/AdminPage";
 import { SiteAdminPage } from "./pages/SiteAdminPage";
+
+// Admin was folded into the Mod Panel — redirect any old /b/:slug/admin
+// links there. Builds an absolute path explicitly since relative Navigate
+// resolution for a flat (non-nested) route doesn't reliably land on the
+// sibling path.
+function AdminRedirect() {
+  const { slug } = useParams<{ slug: string }>();
+  return <Navigate to={`/b/${slug}/mod`} replace />;
+}
 
 export default function App() {
   return (
@@ -58,14 +66,7 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/b/:slug/admin"
-              element={
-                <ProtectedRoute>
-                  <AdminPage />
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/b/:slug/admin" element={<AdminRedirect />} />
             <Route
               path="/admin"
               element={
