@@ -12,7 +12,7 @@ function mockFetch(responses: Record<string, { status?: number; body?: unknown; 
   }) as unknown as typeof fetch;
 }
 
-const groupBody = (members: Array<{ id: number; ehb: number }>) => ({
+const groupBody = (members: Array<{ id: number; ehb: number; type?: string }>) => ({
   memberships: members.map((player) => ({ player })),
 });
 
@@ -29,24 +29,45 @@ describe("getWomGroupId", () => {
   });
 });
 
-describe("WomClient.getGroupEhb", () => {
-  it("sends a User-Agent header and returns EHB keyed by wom id", async () => {
-    const fetchImpl = mockFetch({ "/groups/2921": { body: groupBody([{ id: 1135, ehb: 42 }, { id: 999, ehb: 7 }]) } });
+describe("WomClient.getGroupStats", () => {
+  it("sends a User-Agent header and returns EHB + account type keyed by wom id", async () => {
+    const fetchImpl = mockFetch({
+      "/groups/2921": { body: groupBody([{ id: 1135, ehb: 42, type: "ironman" }, { id: 999, ehb: 7, type: "regular" }]) },
+    });
     const client = new WomClient(fetchImpl);
 
-    const stats = await client.getGroupEhb("2921");
-    expect(stats?.get("1135")).toEqual({ ehb: 42 });
-    expect(stats?.get("999")).toEqual({ ehb: 7 });
+    const stats = await client.getGroupStats("2921");
+    expect(stats?.get("1135")).toEqual({ ehb: 42, accountType: "ironman" });
+    expect(stats?.get("999")).toEqual({ ehb: 7, accountType: "regular" });
 
     const call = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(String(call[0])).toBe("https://api.wiseoldman.net/v2/groups/2921");
     expect((call[1].headers as Record<string, string>)["User-Agent"]).toBeTruthy();
   });
 
+  it("recognizes hardcore and ultimate, and falls back to unknown for a missing/unrecognized type", async () => {
+    const fetchImpl = mockFetch({
+      "/groups/2921": {
+        body: groupBody([
+          { id: 1, ehb: 1, type: "hardcore" },
+          { id: 2, ehb: 2, type: "ultimate" },
+          { id: 3, ehb: 3, type: "some_future_wom_type" },
+          { id: 4, ehb: 4 },
+        ]),
+      },
+    });
+    const client = new WomClient(fetchImpl);
+    const stats = await client.getGroupStats("2921");
+    expect(stats?.get("1")?.accountType).toBe("hardcore");
+    expect(stats?.get("2")?.accountType).toBe("ultimate");
+    expect(stats?.get("3")?.accountType).toBe("unknown");
+    expect(stats?.get("4")?.accountType).toBe("unknown");
+  });
+
   it("returns null on a non-2xx response instead of throwing", async () => {
     const fetchImpl = mockFetch({ "/groups/999": { status: 404 } });
     const client = new WomClient(fetchImpl);
-    expect(await client.getGroupEhb("999")).toBeNull();
+    expect(await client.getGroupStats("999")).toBeNull();
   });
 
   it("returns null on a network failure instead of throwing", async () => {
@@ -54,22 +75,22 @@ describe("WomClient.getGroupEhb", () => {
       throw new Error("ECONNREFUSED");
     }) as unknown as typeof fetch;
     const client = new WomClient(fetchImpl);
-    expect(await client.getGroupEhb("2921")).toBeNull();
+    expect(await client.getGroupStats("2921")).toBeNull();
   });
 
   it("skips memberships with a missing/malformed player and still returns the rest", async () => {
-    const fetchImpl = mockFetch({ "/groups/2921": { body: { memberships: [{ player: { id: 1, ehb: 5 } }, { player: {} }, {}] } } });
+    const fetchImpl = mockFetch({ "/groups/2921": { body: { memberships: [{ player: { id: 1, ehb: 5, type: "regular" } }, { player: {} }, {}] } } });
     const client = new WomClient(fetchImpl);
-    const stats = await client.getGroupEhb("2921");
+    const stats = await client.getGroupStats("2921");
     expect(stats?.size).toBe(1);
-    expect(stats?.get("1")).toEqual({ ehb: 5 });
+    expect(stats?.get("1")).toEqual({ ehb: 5, accountType: "regular" });
   });
 
   it("caches a successful fetch — one request covers the whole group for the TTL", async () => {
-    const fetchImpl = mockFetch({ "/groups/2921": { body: groupBody([{ id: 1, ehb: 1 }]) } });
+    const fetchImpl = mockFetch({ "/groups/2921": { body: groupBody([{ id: 1, ehb: 1, type: "regular" }]) } });
     const client = new WomClient(fetchImpl);
-    await client.getGroupEhb("2921");
-    await client.getGroupEhb("2921");
+    await client.getGroupStats("2921");
+    await client.getGroupStats("2921");
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
   });
 
@@ -77,8 +98,8 @@ describe("WomClient.getGroupEhb", () => {
     const fetchImpl = vi.fn(async () => new Response(null, { status: 429, headers: { "retry-after": "30" } })) as unknown as typeof fetch;
     const client = new WomClient(fetchImpl);
 
-    expect(await client.getGroupEhb("2921")).toBeNull();
-    expect(await client.getGroupEhb("2921")).toBeNull();
+    expect(await client.getGroupStats("2921")).toBeNull();
+    expect(await client.getGroupStats("2921")).toBeNull();
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
   });
 
@@ -88,13 +109,13 @@ describe("WomClient.getGroupEhb", () => {
       const fetchImpl = vi
         .fn()
         .mockResolvedValueOnce(new Response(null, { status: 429, headers: { "retry-after": "1" } }))
-        .mockResolvedValueOnce(new Response(JSON.stringify(groupBody([{ id: 1, ehb: 5 }])), { status: 200 })) as unknown as typeof fetch;
+        .mockResolvedValueOnce(new Response(JSON.stringify(groupBody([{ id: 1, ehb: 5, type: "regular" }])), { status: 200 })) as unknown as typeof fetch;
       const client = new WomClient(fetchImpl);
 
-      expect(await client.getGroupEhb("2921")).toBeNull();
+      expect(await client.getGroupStats("2921")).toBeNull();
       vi.advanceTimersByTime(1_500);
-      const stats = await client.getGroupEhb("2921");
-      expect(stats?.get("1")).toEqual({ ehb: 5 });
+      const stats = await client.getGroupStats("2921");
+      expect(stats?.get("1")).toEqual({ ehb: 5, accountType: "regular" });
       expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(2);
     } finally {
       vi.useRealTimers();
