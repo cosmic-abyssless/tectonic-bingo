@@ -104,18 +104,23 @@ export function ModPage() {
           ))}
         </div>
 
-        <div className="w-full max-w-6xl px-6 py-4">
-          {tab === "submissions" && <ReviewQueue slug={slug} />}
-          {tab === "signups" && <SignupRoster slug={slug} />}
-          {isAdmin && tab === "settings" && (
-            <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} />
-          )}
-          {isAdmin && tab === "board" && <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />}
-          {isAdmin && tab === "lines" && <LineEditor slug={slug} />}
-          {isAdmin && tab === "questions" && <QuestionBuilder slug={slug} />}
-          {isAdmin && tab === "teams" && <TeamManager slug={slug} />}
-          {isAdmin && tab === "mods" && <ModsManager slug={slug} />}
-        </div>
+        {/* Submissions/Signups already carry their own max-w-6xl + padding —
+            an outer wrapper here would double up and squeeze them. The
+            admin-only panels don't self-pad, so they get one. */}
+        {tab === "submissions" && <ReviewQueue slug={slug} />}
+        {tab === "signups" && <SignupRoster slug={slug} />}
+        {isAdmin && tab !== "submissions" && tab !== "signups" && (
+          <div className="w-full max-w-6xl px-6 py-4">
+            {tab === "settings" && (
+              <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} />
+            )}
+            {tab === "board" && <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />}
+            {tab === "lines" && <LineEditor slug={slug} />}
+            {tab === "questions" && <QuestionBuilder slug={slug} />}
+            {tab === "teams" && <TeamManager slug={slug} />}
+            {tab === "mods" && <ModsManager slug={slug} />}
+          </div>
+        )}
       </div>
 
       {showNotifPrompt && (
