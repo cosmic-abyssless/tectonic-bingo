@@ -158,7 +158,7 @@ export function getPaidSignupCount(db: Db, bingoId: string): number {
     .all().length;
 }
 
-const BUYIN_STAGES: Bingo["stage"][] = ["signup", "draft", "reveal"];
+const BUYIN_STAGES: Bingo["stage"][] = ["signup", "captains", "draft", "reveal"];
 
 export interface MarkBuyinParams {
   received: boolean;

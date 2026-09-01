@@ -6,7 +6,7 @@ import { ServiceError } from "./errors";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
-export const STAGE_ORDER = ["planning", "signup", "draft", "reveal", "live", "complete"] as const;
+export const STAGE_ORDER = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"] as const;
 export type Stage = (typeof STAGE_ORDER)[number];
 
 export function listBingos(db: Db) {

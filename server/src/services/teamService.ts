@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { bingoLines, teamCompletedLines, teamMembers, teamPointAdjustments, teamTaskProgress, teams } from "../db/schema";
+import { bingoLines, signupAnswers, signups, teamCompletedLines, teamMembers, teamPointAdjustments, teamTaskProgress, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -90,6 +90,13 @@ export interface CreateTeamParams {
 }
 export function createTeam(db: Db, params: CreateTeamParams) {
   return db.transaction((tx) => {
+    const signup = tx
+      .select()
+      .from(signups)
+      .where(and(eq(signups.bingoId, params.bingoId), eq(signups.userId, params.captainUserId), eq(signups.status, "active")))
+      .get();
+    if (!signup) throw new ServiceError(400, "A captain must have an active signup for this bingo");
+
     const existingCaptaincy = tx
       .select()
       .from(teams)
@@ -135,4 +142,25 @@ export function removeTeamMember(db: Db, teamId: string, userId: string): void {
   if (!team) throw new ServiceError(404, "Team not found");
   if (team.captainUserId === userId) throw new ServiceError(400, "Cannot remove the captain — reassign the captaincy or delete the team instead");
   db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).run();
+}
+
+// Active signups not already on a team for this bingo — the pool mods pick
+// captains from during the `captains` stage. Joined with the user row and
+// every signup answer (e.g. "willing to captain?") so the admin UI can show
+// context without a second round trip.
+export function getCaptainCandidates(db: Db, bingoId: string) {
+  const teamIds = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.id);
+  const onATeam = teamIds.length ? new Set(db.select({ userId: teamMembers.userId }).from(teamMembers).where(inArray(teamMembers.teamId, teamIds)).all().map((m) => m.userId)) : new Set<string>();
+
+  const rows = db
+    .select({ signup: signups, user: users })
+    .from(signups)
+    .innerJoin(users, eq(signups.userId, users.id))
+    .where(and(eq(signups.bingoId, bingoId), eq(signups.status, "active")))
+    .all()
+    .filter((r) => !onATeam.has(r.signup.userId));
+
+  const signupIds = rows.map((r) => r.signup.id);
+  const answers = signupIds.length ? db.select().from(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).all() : [];
+  return rows.map((r) => ({ ...r, answers: answers.filter((a) => a.signupId === r.signup.id) }));
 }

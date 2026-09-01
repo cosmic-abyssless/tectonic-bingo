@@ -256,7 +256,9 @@ export function BingoPage() {
               <p className="text-slate-400 max-w-sm">
                 {bingo.stage === "planning"
                   ? "Signups haven't opened yet — check back soon."
-                  : "The board hasn't been revealed yet — check back once the mods advance this bingo to the reveal stage."}
+                  : bingo.stage === "captains"
+                    ? "Signups are closed — mods are assigning team captains."
+                    : "The board hasn't been revealed yet — check back once the mods advance this bingo to the reveal stage."}
               </p>
               {bingo.stage === "planning" && bingo.signupOpensAt && (
                 <p className="text-slate-500 text-sm">Signups open {new Date(bingo.signupOpensAt).toLocaleString()}</p>

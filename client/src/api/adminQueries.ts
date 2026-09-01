@@ -6,6 +6,7 @@ export const adminQueryKeys = {
   lines: (slug: string) => ["adminLines", slug] as const,
   questions: (slug: string) => ["adminQuestions", slug] as const,
   userSearch: (scope: string, q: string) => ["adminUserSearch", scope, q] as const,
+  captainCandidates: (slug: string) => ["adminCaptainCandidates", slug] as const,
 };
 
 export function useMods(slug: string) {
@@ -18,6 +19,10 @@ export function useLines(slug: string) {
 
 export function useQuestions(slug: string) {
   return useQuery({ queryKey: adminQueryKeys.questions(slug), queryFn: () => adminApi.getQuestions(slug) });
+}
+
+export function useCaptainCandidates(slug: string) {
+  return useQuery({ queryKey: adminQueryKeys.captainCandidates(slug), queryFn: () => adminApi.getCaptainCandidates(slug) });
 }
 
 // scope is either a bingo slug (search within that bingo's admin routes) or

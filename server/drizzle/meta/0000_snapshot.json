@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ffdc7628-8eba-4e08-8779-8a456512b2e1",
+  "id": "d88314a9-09aa-4404-abe8-c06cd7ae5c11",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "bingo_line_tiles": {

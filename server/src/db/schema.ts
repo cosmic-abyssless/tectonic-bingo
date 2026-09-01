@@ -30,7 +30,7 @@ export const bingos = sqliteTable('bingos', {
   // the neutral, always-available theme.
   theme: text('theme').notNull().default('default'),
   stage: text('stage', {
-    enum: ['planning', 'signup', 'draft', 'reveal', 'live', 'complete'],
+    enum: ['planning', 'signup', 'captains', 'draft', 'reveal', 'live', 'complete'],
   }).notNull().default('planning'),
   boardRows: integer('board_rows').notNull(),
   boardCols: integer('board_cols').notNull(),
@@ -64,10 +64,10 @@ export const stageTransitions = sqliteTable('stage_transitions', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
   fromStage: text('from_stage', {
-    enum: ['planning', 'signup', 'draft', 'reveal', 'live', 'complete'],
+    enum: ['planning', 'signup', 'captains', 'draft', 'reveal', 'live', 'complete'],
   }).notNull(),
   toStage: text('to_stage', {
-    enum: ['planning', 'signup', 'draft', 'reveal', 'live', 'complete'],
+    enum: ['planning', 'signup', 'captains', 'draft', 'reveal', 'live', 'complete'],
   }).notNull(),
   changedByUserId: text('changed_by_user_id').notNull().references(() => users.id),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
