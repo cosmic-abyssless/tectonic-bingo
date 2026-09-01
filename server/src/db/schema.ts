@@ -97,6 +97,16 @@ export const signups = sqliteTable('signups', {
   // RSNs at signup time. Never set from a client-supplied claim.
   womId: text('wom_id'),
   rsnVerified: integer('rsn_verified', { mode: 'boolean' }).notNull().default(false),
+  // Raw WOM (/players/{rsn}) and RuneProfile (/accounts/{rsn}/full) API
+  // responses, fetched once at signup time and reused as-is at draft time —
+  // no live external calls in the draft room's hot path. May go stale
+  // between signup and draft day; that's an accepted tradeoff for a
+  // reference-only display. Internal only — never exposed on the shared
+  // Signup type / getAllSignups roster; only the draft route parses these
+  // into the small summary shape the client actually renders.
+  womDataJson: text('wom_data_json'),
+  runeProfileDataJson: text('rune_profile_data_json'),
+  statsFetchedAt: integer('stats_fetched_at', { mode: 'timestamp' }),
   status: text('status', { enum: ['active', 'withdrawn'] }).notNull().default('active'),
   buyinReceivedAt: integer('buyin_received_at', { mode: 'timestamp' }),
   buyinCollectedByUserId: text('buyin_collected_by_user_id').references(() => users.id), // who physically collected the GP

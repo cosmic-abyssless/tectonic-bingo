@@ -7,6 +7,27 @@ import { ServiceError } from "./errors";
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
 
+// Every signup query whose result reaches a client response uses this
+// column list — excludes womDataJson/runeProfileDataJson/statsFetchedAt,
+// the raw external-API blobs playerStatsService.ts persists (the
+// RuneProfile one alone can be 100KB+ per signup). Those are read directly
+// by draftService's own query (see routes/bingos.ts's /:slug/draft, the one
+// place that actually needs them) and written directly by
+// playerStatsService.ts — signupService never touches them.
+export const PUBLIC_SIGNUP_COLS = {
+  id: signups.id,
+  bingoId: signups.bingoId,
+  userId: signups.userId,
+  rsn: signups.rsn,
+  womId: signups.womId,
+  rsnVerified: signups.rsnVerified,
+  status: signups.status,
+  buyinReceivedAt: signups.buyinReceivedAt,
+  buyinCollectedByUserId: signups.buyinCollectedByUserId,
+  buyinRecordedByUserId: signups.buyinRecordedByUserId,
+  createdAt: signups.createdAt,
+};
+
 export function getQuestions(db: Db, bingoId: string) {
   return db.select().from(signupQuestions).where(eq(signupQuestions.bingoId, bingoId)).orderBy(signupQuestions.sortOrder).all();
 }
@@ -64,7 +85,7 @@ export interface SignupAnswerInput {
 }
 
 export function getSignupForUser(db: Db, bingoId: string, userId: string) {
-  const signup = db.select().from(signups).where(and(eq(signups.bingoId, bingoId), eq(signups.userId, userId))).get();
+  const signup = db.select(PUBLIC_SIGNUP_COLS).from(signups).where(and(eq(signups.bingoId, bingoId), eq(signups.userId, userId))).get();
   if (!signup) return null;
   const answers = db.select().from(signupAnswers).where(eq(signupAnswers.signupId, signup.id)).all();
   return { signup, answers };
@@ -103,7 +124,7 @@ export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
         womId: params.womId ?? null,
         rsnVerified: params.rsnVerified ?? false,
       })
-      .returning()
+      .returning(PUBLIC_SIGNUP_COLS)
       .get();
     for (const a of params.answers) {
       tx.insert(signupAnswers).values({ signupId: signup.id, questionId: a.questionId, value: a.value }).run();
@@ -149,7 +170,7 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
         tx.insert(signupAnswers).values({ signupId, questionId: a.questionId, value: a.value }).run();
       }
     }
-    return tx.select().from(signups).where(eq(signups.id, signupId)).get()!;
+    return tx.select(PUBLIC_SIGNUP_COLS).from(signups).where(eq(signups.id, signupId)).get()!;
   });
 }
 
@@ -157,12 +178,12 @@ export function withdrawSignup(db: Db, bingo: Bingo, signupId: string) {
   assertSignupOpen(bingo);
   const existing = db.select().from(signups).where(eq(signups.id, signupId)).get();
   if (!existing) throw new ServiceError(404, "Signup not found");
-  return db.update(signups).set({ status: "withdrawn" }).where(eq(signups.id, signupId)).returning().get();
+  return db.update(signups).set({ status: "withdrawn" }).where(eq(signups.id, signupId)).returning(PUBLIC_SIGNUP_COLS).get();
 }
 
 export function getAllSignups(db: Db, bingoId: string) {
   const rows = db
-    .select({ signup: signups, user: users })
+    .select({ signup: PUBLIC_SIGNUP_COLS, user: users })
     .from(signups)
     .innerJoin(users, eq(signups.userId, users.id))
     .where(eq(signups.bingoId, bingoId))
@@ -213,6 +234,6 @@ export function markBuyin(db: Db, bingo: Bingo, signupId: string, params: MarkBu
       buyinRecordedByUserId: params.received ? params.recordedByUserId : null,
     })
     .where(eq(signups.id, signupId))
-    .returning()
+    .returning(PUBLIC_SIGNUP_COLS)
     .get();
 }

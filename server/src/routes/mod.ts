@@ -10,6 +10,7 @@ import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
 import * as devSeedService from "../services/devSeedService";
 import { getTectonicClient } from "../services/tectonicService";
+import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
 import { approveSubmission, rejectSubmission } from "../services/scoringService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
@@ -131,6 +132,11 @@ if (process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "
       const n = Math.min(Math.max(Math.trunc(count ?? 8), 1), 50);
       const roster = (await getTectonicClient()?.getRoster(1000)) ?? [];
       const signups = devSeedService.seedTestSignups(db, req.bingo!, n, roster);
+      // Same fire-and-forget WOM/RuneProfile fetch a real signup gets —
+      // otherwise seeded players (the whole point of this tool: exercising
+      // the draft UI with realistic-looking pool data) would never show
+      // stats/account-type badges.
+      for (const signup of signups) void fetchAndPersistPlayerStats(db, signup.id, signup.rsn);
       res.status(201).json({ signups });
     }),
   );
