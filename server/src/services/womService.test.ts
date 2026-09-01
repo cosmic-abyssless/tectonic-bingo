@@ -1,38 +1,52 @@
-import { describe, expect, it, vi } from "vitest";
-import { WomClient } from "./womService";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { WomClient, getWomGroupId } from "./womService";
 
-function mockFetch(responses: Record<string, { status?: number; body?: unknown }>) {
+function mockFetch(responses: Record<string, { status?: number; body?: unknown; headers?: Record<string, string> }>) {
   return vi.fn(async (input: string | URL, init?: RequestInit) => {
     const url = String(input);
     const match = Object.entries(responses).find(([path]) => url.includes(path));
     if (!match) throw new Error(`Unexpected fetch: ${url}`);
-    const { status = 200, body = null } = match[1];
-    return new Response(JSON.stringify(body), { status, headers: init?.headers as Record<string, string> | undefined });
+    const { status = 200, body = null, headers } = match[1];
+    void init;
+    return new Response(JSON.stringify(body), { status, headers });
   }) as unknown as typeof fetch;
 }
 
-const playerBody = (ehb: number, level: number) => ({
-  ehb,
-  latestSnapshot: { data: { skills: { overall: { level } } } },
+const groupBody = (members: Array<{ id: number; ehb: number }>) => ({
+  memberships: members.map((player) => ({ player })),
 });
 
-describe("WomClient", () => {
-  it("sends a User-Agent header and parses ehb + overall level", async () => {
-    const fetchImpl = mockFetch({ "/players/id/1135": { body: playerBody(42, 1466) } });
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+describe("getWomGroupId", () => {
+  it("returns null unless WOM_GROUP_ID is set", () => {
+    vi.stubEnv("WOM_GROUP_ID", "");
+    expect(getWomGroupId()).toBeNull();
+    vi.stubEnv("WOM_GROUP_ID", "2921");
+    expect(getWomGroupId()).toBe("2921");
+  });
+});
+
+describe("WomClient.getGroupEhb", () => {
+  it("sends a User-Agent header and returns EHB keyed by wom id", async () => {
+    const fetchImpl = mockFetch({ "/groups/2921": { body: groupBody([{ id: 1135, ehb: 42 }, { id: 999, ehb: 7 }]) } });
     const client = new WomClient(fetchImpl);
 
-    const stats = await client.getPlayerStats("1135");
-    expect(stats).toEqual({ ehb: 42, totalLevel: 1466 });
+    const stats = await client.getGroupEhb("2921");
+    expect(stats?.get("1135")).toEqual({ ehb: 42 });
+    expect(stats?.get("999")).toEqual({ ehb: 7 });
 
     const call = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
-    expect(String(call[0])).toBe("https://api.wiseoldman.net/v2/players/id/1135");
+    expect(String(call[0])).toBe("https://api.wiseoldman.net/v2/groups/2921");
     expect((call[1].headers as Record<string, string>)["User-Agent"]).toBeTruthy();
   });
 
   it("returns null on a non-2xx response instead of throwing", async () => {
-    const fetchImpl = mockFetch({ "/players/id/999": { status: 404, body: { message: "not found" } } });
+    const fetchImpl = mockFetch({ "/groups/999": { status: 404 } });
     const client = new WomClient(fetchImpl);
-    expect(await client.getPlayerStats("999")).toBeNull();
+    expect(await client.getGroupEhb("999")).toBeNull();
   });
 
   it("returns null on a network failure instead of throwing", async () => {
@@ -40,56 +54,31 @@ describe("WomClient", () => {
       throw new Error("ECONNREFUSED");
     }) as unknown as typeof fetch;
     const client = new WomClient(fetchImpl);
-    expect(await client.getPlayerStats("1135")).toBeNull();
+    expect(await client.getGroupEhb("2921")).toBeNull();
   });
 
-  it("returns null when the response is missing ehb or the overall level", async () => {
-    const fetchImpl = mockFetch({ "/players/id/1": { body: { ehb: 5 } } });
+  it("skips memberships with a missing/malformed player and still returns the rest", async () => {
+    const fetchImpl = mockFetch({ "/groups/2921": { body: { memberships: [{ player: { id: 1, ehb: 5 } }, { player: {} }, {}] } } });
     const client = new WomClient(fetchImpl);
-    expect(await client.getPlayerStats("1")).toBeNull();
+    const stats = await client.getGroupEhb("2921");
+    expect(stats?.size).toBe(1);
+    expect(stats?.get("1")).toEqual({ ehb: 5 });
   });
 
-  it("caches both hits and misses within the TTL", async () => {
-    const fetchImpl = mockFetch({ "/players/id/1135": { body: playerBody(1, 100) } });
+  it("caches a successful fetch — one request covers the whole group for the TTL", async () => {
+    const fetchImpl = mockFetch({ "/groups/2921": { body: groupBody([{ id: 1, ehb: 1 }]) } });
     const client = new WomClient(fetchImpl);
-    await client.getPlayerStats("1135");
-    await client.getPlayerStats("1135");
+    await client.getGroupEhb("2921");
+    await client.getGroupEhb("2921");
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
-
-    const failFetch = mockFetch({ "/players/id/999": { status: 500 } });
-    const failClient = new WomClient(failFetch);
-    await failClient.getPlayerStats("999");
-    await failClient.getPlayerStats("999");
-    expect((failFetch as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
-  });
-
-  it("getManyPlayerStats de-duplicates ids and fetches in parallel", async () => {
-    const fetchImpl = mockFetch({
-      "/players/id/1": { body: playerBody(1, 10) },
-      "/players/id/2": { body: playerBody(2, 20) },
-    });
-    const client = new WomClient(fetchImpl);
-
-    const results = await client.getManyPlayerStats(["1", "2", "1"]);
-    expect(results.get("1")).toEqual({ ehb: 1, totalLevel: 10 });
-    expect(results.get("2")).toEqual({ ehb: 2, totalLevel: 20 });
-    expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(2);
-  });
-
-  it("getManyPlayerStats returns an empty map for no ids without calling the API", async () => {
-    const fetchImpl = mockFetch({});
-    const client = new WomClient(fetchImpl);
-    const results = await client.getManyPlayerStats([]);
-    expect(results.size).toBe(0);
-    expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
   });
 
   it("backs off after a 429 and short-circuits further calls locally instead of hitting fetch again", async () => {
     const fetchImpl = vi.fn(async () => new Response(null, { status: 429, headers: { "retry-after": "30" } })) as unknown as typeof fetch;
     const client = new WomClient(fetchImpl);
 
-    expect(await client.getPlayerStats("1")).toBeNull();
-    expect(await client.getPlayerStats("2")).toBeNull(); // different id — still backed off
+    expect(await client.getGroupEhb("2921")).toBeNull();
+    expect(await client.getGroupEhb("2921")).toBeNull();
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
   });
 
@@ -99,12 +88,13 @@ describe("WomClient", () => {
       const fetchImpl = vi
         .fn()
         .mockResolvedValueOnce(new Response(null, { status: 429, headers: { "retry-after": "1" } }))
-        .mockResolvedValueOnce(new Response(JSON.stringify(playerBody(5, 50)), { status: 200 })) as unknown as typeof fetch;
+        .mockResolvedValueOnce(new Response(JSON.stringify(groupBody([{ id: 1, ehb: 5 }])), { status: 200 })) as unknown as typeof fetch;
       const client = new WomClient(fetchImpl);
 
-      expect(await client.getPlayerStats("1")).toBeNull();
+      expect(await client.getGroupEhb("2921")).toBeNull();
       vi.advanceTimersByTime(1_500);
-      expect(await client.getPlayerStats("1")).toEqual({ ehb: 5, totalLevel: 50 });
+      const stats = await client.getGroupEhb("2921");
+      expect(stats?.get("1")).toEqual({ ehb: 5 });
       expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(2);
     } finally {
       vi.useRealTimers();
