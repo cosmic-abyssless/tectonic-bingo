@@ -86,11 +86,17 @@ export function ModPage() {
       </header>
 
       <div className="flex-1 w-full flex flex-col items-center overflow-y-auto">
-        <div className="w-full max-w-6xl px-6 pt-4">
+        <div className="w-full max-w-6xl px-6 pt-4 shrink-0">
           <StageControls slug={slug} bingo={shell.bingo} />
         </div>
 
-        <div className="w-full max-w-6xl px-6 pt-4 flex gap-1 border-b border-slate-700 overflow-x-auto">
+        {/* shrink-0 matters here: overflow-x-auto (needed so many tabs can
+            scroll horizontally instead of wrapping) gets browser-normalized
+            to overflow-y: auto too, which zeroes this item's flexbox
+            automatic min-height — without shrink-0, a tall tab's content
+            (e.g. a big signups table) can squeeze this bar down toward 0
+            instead of just scrolling past it. */}
+        <div className="w-full max-w-6xl px-6 pt-4 flex gap-1 border-b border-slate-700 overflow-x-auto shrink-0">
           {visibleTabs.map((t) => (
             <button
               key={t.key}
