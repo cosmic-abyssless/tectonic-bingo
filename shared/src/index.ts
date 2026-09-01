@@ -365,6 +365,7 @@ export interface DraftPick {
   pickedByUserId: string;
   createdAt: string;
   user: MinimalUser;
+  rsn: string; // the drafted player's RSN for this bingo
 }
 
 export interface DraftPoolEntry {
@@ -373,8 +374,12 @@ export interface DraftPoolEntry {
   answers: SignupAnswer[] | null; // null unless the requester is a mod or captain
 }
 
+export interface DraftTeam extends Team {
+  captainRsn: string; // captains aren't in `picks` (assigned pre-draft, not drafted) — this is the only source for their RSN
+}
+
 export interface DraftState {
-  teams: Team[]; // sorted by draftOrder once the draft has started
+  teams: DraftTeam[]; // sorted by draftOrder once the draft has started
   picks: DraftPick[];
   pool: DraftPoolEntry[];
   draftStarted: boolean;

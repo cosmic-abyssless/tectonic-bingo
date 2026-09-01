@@ -302,11 +302,10 @@ router.post(
   requireBingo,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
-    const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
     const { userId } = req.body as { userId?: string };
     if (!userId) throw new ServiceError(400, "userId is required");
 
-    const pick = draftService.makePick(db, { bingo, pickedUserId: userId, actingUserId: req.user!.id, actingIsMod: isMod });
+    const pick = draftService.makePick(db, { bingo, pickedUserId: userId, actingUserId: req.user!.id, actingIsAdmin: req.user!.isAdmin });
     broadcast({ type: "draft_pick", bingoId: bingo.id, payload: { pickNumber: pick.pickNumber, teamId: pick.teamId, userId: pick.userId } });
     res.status(201).json({ pick });
   }),
