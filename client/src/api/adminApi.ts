@@ -1,5 +1,5 @@
 import type {
-  Bingo, BingoLine, BingoModerator, SignupQuestion, Team, TeamMember, Tile, TileCategory, TileTask,
+  Bingo, BingoLine, BingoModerator, CaptainCandidatesResponse, SignupQuestion, Team, TeamMember, Tile, TileCategory, TileTask,
   TileTaskItem, TileWildcard, User,
 } from "@bingo/shared";
 import { api } from "./client";
@@ -122,6 +122,9 @@ export function reorderQuestions(slug: string, orderedIds: string[]) {
   return api.post<{ questions: SignupQuestion[] }>(`${base(slug)}/questions/reorder`, { orderedIds });
 }
 
+export function getCaptainCandidates(slug: string) {
+  return api.get<CaptainCandidatesResponse>(`${base(slug)}/captain-candidates`);
+}
 export function createTeam(slug: string, payload: { captainUserId: string; name?: string }) {
   return api.post<{ team: Team }>(`${base(slug)}/teams`, payload);
 }

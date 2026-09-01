@@ -358,6 +358,12 @@ router.post(
 // Teams (manual creation — stopgap until the Phase 7 draft flow exists)
 // ---------------------------------------------------------------------------
 
+router.get(
+  "/captain-candidates",
+  asyncHandler(async (req, res) => {
+    res.json({ candidates: teamService.getCaptainCandidates(db, req.bingo!.id) });
+  }),
+);
 router.post(
   "/teams",
   asyncHandler(async (req, res) => {

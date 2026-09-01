@@ -25,6 +25,13 @@ function seedUser(discordId: string) {
   return db.insert(schema.users).values({ discordId, discordUsername: discordId }).returning().get();
 }
 
+// createTeam now requires the captain to have an active signup — seed one directly.
+function seedCaptain(bingoId: string, discordId: string) {
+  const user = seedUser(discordId);
+  db.insert(schema.signups).values({ bingoId, userId: user.id, rsn: discordId }).run();
+  return user;
+}
+
 beforeEach(() => {
   ({ sqlite, db } = createTestDb());
 });
@@ -51,15 +58,15 @@ describe("pickOrderTeamIndex", () => {
 describe("startDraft", () => {
   it("rejects fewer than 2 teams", () => {
     const bingo = seedBingo();
-    const captain = seedUser("captain");
+    const captain = seedCaptain(bingo.id, "captain");
     createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
     expect(() => startDraft(db, bingo)).toThrow(/at least 2 teams/i);
   });
 
   it("rejects starting outside the draft stage", () => {
     const bingo = seedBingo({ stage: "signup" });
-    const c1 = seedUser("c1");
-    const c2 = seedUser("c2");
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
     createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
     createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
     expect(() => startDraft(db, bingo)).toThrow(ServiceError);
@@ -67,9 +74,9 @@ describe("startDraft", () => {
 
   it("assigns a distinct draftOrder 1..N to every team", () => {
     const bingo = seedBingo();
-    const c1 = seedUser("c1");
-    const c2 = seedUser("c2");
-    const c3 = seedUser("c3");
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
+    const c3 = seedCaptain(bingo.id, "c3");
     createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
     createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
     createTeam(db, { bingoId: bingo.id, captainUserId: c3.id });
@@ -80,8 +87,8 @@ describe("startDraft", () => {
 
   it("rejects starting twice", () => {
     const bingo = seedBingo();
-    const c1 = seedUser("c1");
-    const c2 = seedUser("c2");
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
     createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
     createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
     startDraft(db, bingo);
@@ -92,8 +99,8 @@ describe("startDraft", () => {
 describe("makePick", () => {
   function setup() {
     const bingo = seedBingo();
-    const c1 = seedUser("c1");
-    const c2 = seedUser("c2");
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
     const teamA = createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, name: "A" });
     const teamB = createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
     const p1 = seedUser("p1");
@@ -108,8 +115,8 @@ describe("makePick", () => {
 
   it("rejects a pick before the draft has started", () => {
     const bingo = seedBingo();
-    const c1 = seedUser("c1");
-    const c2 = seedUser("c2");
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
     createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
     createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
     const p1 = seedUser("p1");
@@ -158,8 +165,8 @@ describe("makePick", () => {
 describe("getDraftState", () => {
   it("excludes drafted players from the pool and reports the current pick", () => {
     const bingo = seedBingo();
-    const c1 = seedUser("c1");
-    const c2 = seedUser("c2");
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
     createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
     createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
     const p1 = seedUser("p1");
@@ -186,7 +193,7 @@ describe("getDraftState", () => {
 
   it("includes signup answers only when requested", () => {
     const bingo = seedBingo();
-    const c1 = seedUser("c1");
+    const c1 = seedCaptain(bingo.id, "c1");
     createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
     const p1 = seedUser("p1");
     const [question] = db.insert(schema.signupQuestions).values({ bingoId: bingo.id, prompt: "RSN?", type: "text" }).returning().all();

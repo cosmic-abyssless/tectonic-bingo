@@ -3,8 +3,8 @@
 // server/src/db/schema.ts field-for-field; nest/derived shapes match what
 // each route actually returns.
 
-export type Stage = "planning" | "signup" | "draft" | "reveal" | "live" | "complete";
-export const STAGE_ORDER: Stage[] = ["planning", "signup", "draft", "reveal", "live", "complete"];
+export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
+export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
 
 export type TaskStatus = "not_started" | "in_progress" | "pending_approval" | "completed";
 export type SubmissionStatus = "pending" | "approved" | "rejected";
@@ -317,6 +317,10 @@ export interface RosterEntry {
 
 export interface RosterResponse {
   signups: RosterEntry[];
+}
+
+export interface CaptainCandidatesResponse {
+  candidates: RosterEntry[];
 }
 
 export interface BingoLine {

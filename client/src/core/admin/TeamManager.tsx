@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Team, User } from "@bingo/shared";
 import { useBingo, queryKeys } from "../../api/queries";
+import { adminQueryKeys, useCaptainCandidates } from "../../api/adminQueries";
 import * as adminApi from "../../api/adminApi";
 import { UserSearchInput } from "./UserSearchInput";
 import { displayName } from "../ui/user";
@@ -43,19 +44,26 @@ function TeamCard({ slug, team }: { slug: string; team: Team }) {
 
 export function TeamManager({ slug }: { slug: string }) {
   const { data } = useBingo(slug);
+  const { data: candidatesData } = useCaptainCandidates(slug);
   const queryClient = useQueryClient();
-  const [selectedCaptain, setSelectedCaptain] = useState<User | null>(null);
+  const [selectedCaptainId, setSelectedCaptainId] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const candidates = candidatesData?.candidates ?? [];
+
   async function createTeam() {
-    if (!selectedCaptain) return;
+    const candidate = candidates.find((c) => c.user.id === selectedCaptainId);
+    if (!candidate) return;
     setCreating(true);
     setError(null);
     try {
-      await adminApi.createTeam(slug, { captainUserId: selectedCaptain.id, name: `${displayName(selectedCaptain)}'s Team` });
-      setSelectedCaptain(null);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
+      await adminApi.createTeam(slug, { captainUserId: candidate.user.id, name: `${displayName(candidate.user)}'s Team` });
+      setSelectedCaptainId("");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) }),
+        queryClient.invalidateQueries({ queryKey: adminQueryKeys.captainCandidates(slug) }),
+      ]);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to create team");
     } finally {
@@ -66,16 +74,32 @@ export function TeamManager({ slug }: { slug: string }) {
   return (
     <div className="max-w-2xl space-y-4">
       <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-        <p className="text-sm font-medium text-slate-300 mb-2">Create a team</p>
-        <div className="flex items-start gap-2">
-          <div className="flex-1">
-            <UserSearchInput scope={slug} onSelect={setSelectedCaptain} placeholder="Search for a captain…" />
-            {selectedCaptain && <p className="text-xs text-slate-400 mt-1">Captain: {displayName(selectedCaptain)}</p>}
+        <p className="text-sm font-medium text-slate-300 mb-2">Assign a captain</p>
+        {candidates.length === 0 ? (
+          <p className="text-sm text-slate-500">No eligible signups — everyone who signed up is already a captain, or no one has signed up yet.</p>
+        ) : (
+          <div className="flex items-start gap-2">
+            <select
+              value={selectedCaptainId}
+              onChange={(e) => setSelectedCaptainId(e.target.value)}
+              className="flex-1 bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+            >
+              <option value="">Select a signed-up player…</option>
+              {candidates.map((c) => (
+                <option key={c.user.id} value={c.user.id}>
+                  {c.signup.rsn} ({displayName(c.user)})
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={createTeam}
+              disabled={!selectedCaptainId || creating}
+              className="text-sm bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold rounded-md px-4 py-2 transition-colors cursor-pointer shrink-0"
+            >
+              {creating ? "Creating…" : "Make captain"}
+            </button>
           </div>
-          <button onClick={createTeam} disabled={!selectedCaptain || creating} className="text-sm bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold rounded-md px-4 py-2 transition-colors cursor-pointer shrink-0">
-            {creating ? "Creating…" : "Create team"}
-          </button>
-        </div>
+        )}
         {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
       </div>
 

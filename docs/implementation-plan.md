@@ -37,7 +37,7 @@ Fresh Drizzle migration set: delete `server/drizzle/*` and the dev DB, rewrite `
 ### Identity & platform
 
 - **`users`** — as v1 (`discordId` unique, username/globalName/guildNick/avatar) **minus `isModerator`**, plus `isAdmin` (boolean, default false). On login upsert, set `isAdmin = true` if the Discord ID is in the `ADMIN_DISCORD_IDS` env var (comma-separated). Admins can create bingos and grant mod/admin from the UI; `ADMIN_DISCORD_IDS` is only the bootstrap.
-- **`bingos`** (replaces `bingo_events`) — `slug` (unique, URL-safe, admin-set), `name`, `description`, `theme` (text, default `'default'`; selects the client theme folder), `stage` (enum: `planning | signup | draft | reveal | live | complete`, default `planning`), `boardRows`, `boardCols` (ints), `buyinAmount` (GP, nullable), `bonusPotAmount` (int, default 0 — extra GP added on top of buy-ins, e.g. sponsorships; the actual pot total is computed as `buyinAmount × paid signups + bonusPotAmount`, not stored), `rulesMarkdown` (text, nullable — replaces the hardcoded RulesModal), scheduled dates: `signupOpensAt`, `draftScheduledAt`, `revealScheduledAt`, `startsAt`, `endsAt` (all nullable timestamps), `createdByUserId`.
+- **`bingos`** (replaces `bingo_events`) — `slug` (unique, URL-safe, admin-set), `name`, `description`, `theme` (text, default `'default'`; selects the client theme folder), `stage` (enum: `planning | signup | captains | draft | reveal | live | complete`, default `planning`), `boardRows`, `boardCols` (ints), `buyinAmount` (GP, nullable), `bonusPotAmount` (int, default 0 — extra GP added on top of buy-ins, e.g. sponsorships; the actual pot total is computed as `buyinAmount × paid signups + bonusPotAmount`, not stored), `rulesMarkdown` (text, nullable — replaces the hardcoded RulesModal), scheduled dates: `signupOpensAt`, `draftScheduledAt`, `revealScheduledAt`, `startsAt`, `endsAt` (all nullable timestamps), `createdByUserId`.
 - **`bingo_moderators`** — `bingoId`, `userId`, unique pair. Mod is **per-bingo**, not global (fixes v1's global boolean).
 - **`stage_transitions`** — `bingoId`, `fromStage`, `toStage`, `changedByUserId`, `createdAt`. Append-only audit log; feeds the timeline view.
 
@@ -112,13 +112,16 @@ server/src/
 
 ### Stage machine (`bingoService`)
 
-Allowed forward transitions: `planning → signup → draft → reveal → live → complete`. Mods may also step **backward one stage** (confirmation required in UI). Every transition writes a `stage_transitions` row and broadcasts `stage_changed`. Stage gates enforced **server-side** in services:
+Allowed forward transitions: `planning → signup → captains → draft → reveal → live → complete`. Mods may also step **backward one stage** (confirmation required in UI). Every transition writes a `stage_transitions` row and broadcasts `stage_changed`. Stage gates enforced **server-side** in services:
+
+`captains` sits between `signup` and `draft`: signups close (the `signup`-only gate on create/withdraw means they're automatically closed the moment a mod advances past it) and mods assign team captains from the pool of active signups (`teamService.getCaptainCandidates`) before the snake draft starts. A captain must have an active signup for the bingo — enforced in `teamService.createTeam`, not just this stage's UI. Admins typically add a boolean signup question ("willing to captain?") to help pick, but that's just an ordinary admin-authored question — there's no structured flag for it.
 
 | Action | Allowed stages |
 |---|---|
 | Edit board/tasks/questions | `planning`, `signup` (admin routes; warn in UI after signup opens) |
 | Create/withdraw signup | `signup` |
-| Mark buy-in | `signup`, `draft`, `reveal` |
+| Assign a captain (create team) | any stage — but the captain must have an active signup; `captains` is just the intended UI window |
+| Mark buy-in | `signup`, `captains`, `draft`, `reveal` |
 | Draft picks | `draft` |
 | Captain renames team | `draft`, `reveal` |
 | Mod assigns colors | any stage before `complete` |
