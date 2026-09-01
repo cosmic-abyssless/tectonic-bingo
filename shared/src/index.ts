@@ -373,6 +373,49 @@ export interface DraftState {
 }
 
 // ---------------------------------------------------------------------------
+// Stats & timeline
+// ---------------------------------------------------------------------------
+
+export interface PointsOverTimePoint {
+  at: string;
+  teamId: string;
+  source: "task" | "line" | "adjustment";
+  label: string;
+  delta: number;
+  cumulativePoints: number;
+}
+
+export type TimelineEventType = "stage_changed" | "draft_pick" | "line_completed" | "first_completion";
+
+export interface TimelineEvent {
+  at: string;
+  type: TimelineEventType;
+  label: string;
+  teamId: string | null;
+}
+
+export interface ContributionCount {
+  userId: string;
+  user: MinimalUser;
+  teamId: string;
+  approvedSubmissions: number;
+}
+
+export interface TileHeatmapCell {
+  tileId: string;
+  teamId: string;
+  completedTasks: number;
+  totalTasks: number;
+}
+
+export interface StatsResponse {
+  pointsOverTime: PointsOverTimePoint[];
+  timeline: TimelineEvent[];
+  contributions: ContributionCount[];
+  heatmap: TileHeatmapCell[];
+}
+
+// ---------------------------------------------------------------------------
 // WebSocket envelope, matching server/src/ws.ts
 // ---------------------------------------------------------------------------
 

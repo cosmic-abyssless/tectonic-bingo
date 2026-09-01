@@ -7,6 +7,7 @@ import { BingoList } from "./pages/BingoList";
 import { BingoPage } from "./pages/BingoPage";
 import { ModPage } from "./pages/ModPage";
 import { DraftPage } from "./pages/DraftPage";
+import { StatsPage } from "./pages/StatsPage";
 import { AdminPage } from "./pages/AdminPage";
 import { SiteAdminPage } from "./pages/SiteAdminPage";
 
@@ -46,6 +47,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <DraftPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/b/:slug/stats"
+              element={
+                <ProtectedRoute>
+                  <StatsPage />
                 </ProtectedRoute>
               }
             />
