@@ -391,9 +391,14 @@ export interface WomPlayerStats {
   ehb: number;
 }
 
-// From RuneProfile, not WOM — WOM's account type just says "ironman" for a
-// group ironman member; RuneProfile distinguishes the group variants.
-export type RuneProfileAccountType = "normal" | "ironman" | "ultimate_ironman" | "hardcore_ironman" | "group_ironman" | "hardcore_group_ironman" | "unranked_group_ironman" | "unknown";
+// Unified account type — sourced from RuneProfile when it has the player
+// set up there (it distinguishes group ironman variants; WOM just reports
+// "ironman" for a GIM member), falling back to WOM's coarser type when
+// RuneProfile doesn't know the player (not everyone runs the RuneProfile
+// RuneLite plugin, but WOM sync is far more common). WOM's four raw values
+// (regular/ironman/hardcore/ultimate) map onto this same enum — see
+// womService.ts's parseAccountType.
+export type AccountType = "normal" | "ironman" | "ultimate_ironman" | "hardcore_ironman" | "group_ironman" | "hardcore_group_ironman" | "unranked_group_ironman" | "unknown";
 
 export interface DraftPoolEntry {
   signup: Signup;
@@ -402,10 +407,8 @@ export interface DraftPoolEntry {
   // Null when signup.womId is unset, the WOM lookup failed, or the response
   // didn't have the fields expected — never distinguishes those cases.
   womStats: WomPlayerStats | null;
-  // Matched against RuneProfile by RSN (case-insensitive), not signup.womId
-  // — RuneProfile's clan endpoint has no id to persist the way Phase T2
-  // stored womId. Null when unmatched/unconfigured/lookup failed.
-  accountType: RuneProfileAccountType | null;
+  // RuneProfile (by RSN) ?? WOM (by womId) ?? null. See AccountType.
+  accountType: AccountType | null;
 }
 
 export interface DraftTeam extends Team {

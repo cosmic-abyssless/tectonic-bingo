@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { DraftPick, DraftPoolEntry, DraftTeam, RuneProfileAccountType, SignupQuestion } from "@bingo/shared";
+import type { DraftPick, DraftPoolEntry, DraftTeam, AccountType, SignupQuestion } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
 import { useBingo, useDraftState, useMakePick, useSignupQuestions, useStartDraft } from "../../api/queries";
 import { displayName } from "../ui/user";
@@ -10,7 +10,7 @@ import groupBadge from "../ui/icons/Group_ironman_chat_badge.png";
 import hardcoreGroupBadge from "../ui/icons/Hardcore_group_ironman_chat_badge.png";
 import unrankedGroupBadge from "../ui/icons/Unranked_group_ironman_chat_badge.png";
 
-const ACCOUNT_TYPE_LABEL: Record<RuneProfileAccountType, string> = {
+const ACCOUNT_TYPE_LABEL: Record<AccountType, string> = {
   normal: "Main",
   ironman: "Ironman",
   ultimate_ironman: "Ultimate Ironman",
@@ -24,7 +24,7 @@ const ACCOUNT_TYPE_LABEL: Record<RuneProfileAccountType, string> = {
 // OSRS's own in-game chat badges (client/src/core/ui/icons), from
 // RuneProfile — unlike WOM, it distinguishes group ironman variants. No
 // icon at all for a main (normal) or unranked account.
-const ACCOUNT_TYPE_BADGE: Partial<Record<RuneProfileAccountType, string>> = {
+const ACCOUNT_TYPE_BADGE: Partial<Record<AccountType, string>> = {
   ironman: ironmanBadge,
   ultimate_ironman: ultimateBadge,
   hardcore_ironman: hardcoreBadge,
@@ -33,7 +33,7 @@ const ACCOUNT_TYPE_BADGE: Partial<Record<RuneProfileAccountType, string>> = {
   unranked_group_ironman: unrankedGroupBadge,
 };
 
-function AccountTypeIcon({ accountType }: { accountType: RuneProfileAccountType | null | undefined }) {
+function AccountTypeIcon({ accountType }: { accountType: AccountType | null | undefined }) {
   const badge = accountType && ACCOUNT_TYPE_BADGE[accountType];
   if (!badge) return null;
   return <img src={badge} alt={ACCOUNT_TYPE_LABEL[accountType]} title={ACCOUNT_TYPE_LABEL[accountType]} className="inline-block align-[-2px]" />;

@@ -347,22 +347,29 @@ router.get(
     const state = draftService.getDraftState(db, bingo.id, { includeAnswers: isMod || isCaptain });
 
     // Enrich the pool with WOM EHB (keyed by signups.womId, Phase T2) and
-    // RuneProfile account type (keyed by RSN — RuneProfile's clan endpoint
-    // has no id to persist the way womId was). Each is one bulk request
-    // covering the whole pool at once, not one request per player — see
-    // womService.ts / runeProfileService.ts for why that matters. Null in
-    // either case (integration unconfigured, unreachable, or this player
-    // unlinked/not a member there) degrades to nothing shown, same as
-    // tectonic.
+    // account type. Each is one bulk request covering the whole pool at
+    // once, not one request per player — see womService.ts /
+    // runeProfileService.ts for why that matters.
+    //
+    // Account type prefers RuneProfile (keyed by RSN — its clan endpoint has
+    // no id to persist the way womId was) over WOM's coarser type, falling
+    // back to WOM for a player who syncs to WOM but isn't set up with the
+    // RuneProfile RuneLite plugin — RuneProfile is the only one of the two
+    // that distinguishes group ironman variants, so it wins when both know
+    // about a player. Null from both (or unconfigured/unreachable/unlinked)
+    // degrades to nothing shown, same as tectonic.
     const groupId = getWomGroupId();
     const womStatsById = groupId ? await getWomClient().getGroupStats(groupId) : null;
     const clanName = getRuneProfileClanName();
     const accountTypeByRsn = clanName ? await getRuneProfileClient().getClanAccountTypes(clanName) : null;
-    const pool = state.pool.map((entry) => ({
-      ...entry,
-      womStats: entry.signup.womId ? (womStatsById?.get(entry.signup.womId) ?? null) : null,
-      accountType: accountTypeByRsn?.get(entry.signup.rsn.toLowerCase()) ?? null,
-    }));
+    const pool = state.pool.map((entry) => {
+      const womStats = entry.signup.womId ? (womStatsById?.get(entry.signup.womId) ?? null) : null;
+      return {
+        ...entry,
+        womStats,
+        accountType: accountTypeByRsn?.get(entry.signup.rsn.toLowerCase()) ?? womStats?.accountType ?? null,
+      };
+    });
 
     res.json({ ...state, pool });
   }),

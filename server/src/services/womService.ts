@@ -13,16 +13,30 @@
 // Requires WOM_GROUP_ID (the clan's group at wiseoldman.net/groups/<id>) —
 // off entirely, same nullable pattern as tectonicService, when unset.
 //
-// Only surfaces EHB. The group payload also has a per-member `type`, but
-// runeProfileService.ts is the account-type source now — RuneProfile
-// distinguishes group ironman variants (WOM just reports "ironman" for a
-// GIM member), which is the whole reason for that account-type icon. Total
-// level isn't here either: that only exists on the single-player
-// `/players/id/{id}` endpoint's snapshot, which would put us back to one
-// request per player.
+// EHB is WOM-only (total level isn't in this payload — that only exists on
+// the single-player `/players/id/{id}` endpoint's snapshot, which would put
+// us back to one request per player). Account type is also surfaced here,
+// but it's the *fallback* source: routes/bingos.ts prefers RuneProfile's
+// account type (runeProfileService.ts), which distinguishes group ironman
+// variants that WOM's `type` just reports as plain "ironman" — WOM only
+// steps in for a player who isn't set up with the RuneProfile RuneLite
+// plugin but does sync to WOM (far more common).
+import type { AccountType } from "@bingo/shared";
 
 export interface WomPlayerStats {
   ehb: number;
+  accountType: AccountType;
+}
+
+// WOM's four raw values, mapped onto the shared AccountType enum.
+const WOM_TYPE_MAP: Record<string, AccountType> = {
+  regular: "normal",
+  ironman: "ironman",
+  hardcore: "hardcore_ironman",
+  ultimate: "ultimate_ironman",
+};
+function mapAccountType(womType: unknown): AccountType {
+  return (typeof womType === "string" && WOM_TYPE_MAP[womType]) || "unknown";
 }
 
 const WOM_BASE_URL = "https://api.wiseoldman.net/v2";
@@ -38,7 +52,7 @@ export function getWomGroupId(): string | null {
 }
 
 interface WomGroupMember {
-  player: { id: number; ehb: number };
+  player: { id: number; ehb: number; type?: string };
 }
 
 interface WomGroupResponse {
@@ -53,7 +67,7 @@ export class WomClient {
 
   constructor(private fetchImpl: FetchLike = fetch) {}
 
-  /** EHB for every member of the given WOM group, keyed by WOM player id (as a string, matching signups.womId). */
+  /** EHB + account type for every member of the given WOM group, keyed by WOM player id (as a string, matching signups.womId). */
   async getGroupStats(groupId: string): Promise<Map<string, WomPlayerStats> | null> {
     if (this.cache && this.cache.expiresAt > Date.now()) return this.cache.value;
     if (Date.now() < this.rateLimitedUntil) return null;
@@ -67,7 +81,7 @@ export class WomClient {
         const byWomId = new Map<string, WomPlayerStats>();
         for (const m of body.memberships ?? []) {
           if (typeof m.player?.id === "number" && typeof m.player?.ehb === "number") {
-            byWomId.set(String(m.player.id), { ehb: m.player.ehb });
+            byWomId.set(String(m.player.id), { ehb: m.player.ehb, accountType: mapAccountType(m.player.type) });
           }
         }
         this.cache = { value: byWomId, expiresAt: Date.now() + CACHE_TTL_MS };
