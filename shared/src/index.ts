@@ -387,12 +387,13 @@ export interface DraftPick {
   rsn: string; // the drafted player's RSN for this bingo
 }
 
-export type WomAccountType = "regular" | "ironman" | "hardcore" | "ultimate" | "unknown";
-
 export interface WomPlayerStats {
   ehb: number;
-  accountType: WomAccountType;
 }
+
+// From RuneProfile, not WOM — WOM's account type just says "ironman" for a
+// group ironman member; RuneProfile distinguishes the group variants.
+export type RuneProfileAccountType = "normal" | "ironman" | "ultimate_ironman" | "hardcore_ironman" | "group_ironman" | "hardcore_group_ironman" | "unranked_group_ironman" | "unknown";
 
 export interface DraftPoolEntry {
   signup: Signup;
@@ -401,6 +402,10 @@ export interface DraftPoolEntry {
   // Null when signup.womId is unset, the WOM lookup failed, or the response
   // didn't have the fields expected — never distinguishes those cases.
   womStats: WomPlayerStats | null;
+  // Matched against RuneProfile by RSN (case-insensitive), not signup.womId
+  // — RuneProfile's clan endpoint has no id to persist the way Phase T2
+  // stored womId. Null when unmatched/unconfigured/lookup failed.
+  accountType: RuneProfileAccountType | null;
 }
 
 export interface DraftTeam extends Team {

@@ -13,25 +13,16 @@
 // Requires WOM_GROUP_ID (the clan's group at wiseoldman.net/groups/<id>) —
 // off entirely, same nullable pattern as tectonicService, when unset.
 //
-// The tradeoff: the group payload has EHB and account type per member but
-// not a pre-computed total level (that only exists on the single-player
-// `/players/id/{id}` endpoint's latestSnapshot, which would put us back to
-// one request per player) — so this only surfaces EHB and account type.
-
-// Confirmed against the real clan's WOM group (2921, 411 members): the
-// values actually present are "regular", "ironman", "hardcore", "ultimate".
-// "unknown" is defensive — an unranked/not-yet-tracked account, or any
-// future WOM type this doesn't recognize yet.
-export type WomAccountType = "regular" | "ironman" | "hardcore" | "ultimate" | "unknown";
+// Only surfaces EHB. The group payload also has a per-member `type`, but
+// runeProfileService.ts is the account-type source now — RuneProfile
+// distinguishes group ironman variants (WOM just reports "ironman" for a
+// GIM member), which is the whole reason for that account-type icon. Total
+// level isn't here either: that only exists on the single-player
+// `/players/id/{id}` endpoint's snapshot, which would put us back to one
+// request per player.
 
 export interface WomPlayerStats {
   ehb: number;
-  accountType: WomAccountType;
-}
-
-const KNOWN_ACCOUNT_TYPES: readonly WomAccountType[] = ["regular", "ironman", "hardcore", "ultimate"];
-function parseAccountType(type: unknown): WomAccountType {
-  return KNOWN_ACCOUNT_TYPES.includes(type as WomAccountType) ? (type as WomAccountType) : "unknown";
 }
 
 const WOM_BASE_URL = "https://api.wiseoldman.net/v2";
@@ -47,7 +38,7 @@ export function getWomGroupId(): string | null {
 }
 
 interface WomGroupMember {
-  player: { id: number; ehb: number; type?: string };
+  player: { id: number; ehb: number };
 }
 
 interface WomGroupResponse {
@@ -62,7 +53,7 @@ export class WomClient {
 
   constructor(private fetchImpl: FetchLike = fetch) {}
 
-  /** EHB + account type for every member of the given WOM group, keyed by WOM player id (as a string, matching signups.womId). */
+  /** EHB for every member of the given WOM group, keyed by WOM player id (as a string, matching signups.womId). */
   async getGroupStats(groupId: string): Promise<Map<string, WomPlayerStats> | null> {
     if (this.cache && this.cache.expiresAt > Date.now()) return this.cache.value;
     if (Date.now() < this.rateLimitedUntil) return null;
@@ -76,7 +67,7 @@ export class WomClient {
         const byWomId = new Map<string, WomPlayerStats>();
         for (const m of body.memberships ?? []) {
           if (typeof m.player?.id === "number" && typeof m.player?.ehb === "number") {
-            byWomId.set(String(m.player.id), { ehb: m.player.ehb, accountType: parseAccountType(m.player.type) });
+            byWomId.set(String(m.player.id), { ehb: m.player.ehb });
           }
         }
         this.cache = { value: byWomId, expiresAt: Date.now() + CACHE_TTL_MS };
