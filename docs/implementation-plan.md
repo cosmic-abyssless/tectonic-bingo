@@ -118,7 +118,7 @@ Allowed forward transitions: `planning → signup → captains → draft → rev
 
 | Action | Allowed stages |
 |---|---|
-| Edit board/tasks/questions | `planning`, `signup` (admin routes; warn in UI after signup opens) |
+| Edit board/tasks/questions | `planning`, `signup`; site admin only, not just any bingo mod (`admin.ts` requires `requireAdmin`, not `requireBingoMod`) |
 | Create/withdraw signup | `signup` |
 | Assign a captain (create team) | any stage — but the captain must have an active signup; `captains` is just the intended UI window |
 | Mark buy-in | `signup`, `captains`, `draft`, `reveal` |
@@ -204,7 +204,9 @@ client/src/
 
 **Theme contract:** `bingos.theme` selects a folder. A theme exports design tokens (CSS variables set on the bingo page root: category palette fallback, surfaces, accents) and *optional* component overrides; `useThemeComponent('TileCell')` returns the override or the core default. Admin and mod surfaces **never** theme — they always use core components directly (requirement: admin panel looks the same regardless of theme). A future themed bingo (e.g. another Pokémon one) is a new folder overriding `TileCell`/`BoardGrid` visuals; nothing else changes.
 
-**Routing:** `/` bingo list · `/login` · `/b/:slug` stage-aware page (planning: countdown + rules; signup: form/roster; draft: link or embedded draft room; reveal: board preview + countdown to start; live/complete: board) · `/b/:slug/draft` · `/b/:slug/mod` · `/b/:slug/admin` · `/b/:slug/stats` · `/admin`. Auth: viewing is public where the API allows; acting requires login (v1's blanket ProtectedRoute on `/` goes away).
+**Routing:** `/` bingo list · `/login` · `/b/:slug` stage-aware page (planning: countdown + rules; signup: form/roster; draft: link or embedded draft room; reveal: board preview + countdown to start; live/complete: board) · `/b/:slug/draft` · `/b/:slug/mod` (unified panel — see below) · `/b/:slug/stats` · `/admin`. Auth: viewing is public where the API allows; acting requires login (v1's blanket ProtectedRoute on `/` goes away).
+
+**Mod Panel consolidation (post-Phase-5):** `/b/:slug/admin` was folded into `/b/:slug/mod` as a single page with 8 tabs — Submissions and Signups are visible to every bingo mod; Settings/Board/Lines/Signup Questions/Teams/Moderators are visible (and their content only rendered) for site admins only, hidden entirely for a per-bingo mod who isn't. This mirrors a real server-side split, not just a UI one: `admin.ts` now requires `requireAdmin` (site admin) instead of `requireBingoMod`, while `mod.ts` (submissions, signups, stage, draft, dev-seed) stays open to every per-bingo mod. `/b/:slug/admin` redirects to `/b/:slug/mod` for old links.
 
 **Styling:** stay Tailwind, but the five duplicated badge/status color maps collapse into: category colors from `tile_categories.colorHex` (inline CSS vars) and one `StatusBadge`. Delete `tileImages.ts` (images come from `tiles.imageUrl`); delete the Login page's inline-style object (use Tailwind).
 

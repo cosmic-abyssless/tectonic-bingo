@@ -33,7 +33,7 @@ function CreateBingoForm() {
     try {
       const { bingo } = await adminApi.createBingo({ slug: slug || slugify(name), name, boardRows: boardSize, boardCols: boardSize });
       await queryClient.invalidateQueries({ queryKey: queryKeys.bingos() });
-      navigate(`/b/${bingo.slug}/admin`);
+      navigate(`/b/${bingo.slug}/mod`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to create bingo");
     } finally {

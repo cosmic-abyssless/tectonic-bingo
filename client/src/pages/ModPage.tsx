@@ -1,18 +1,42 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useBingo } from "../api/queries";
+import { useAuth } from "../context/AuthContext";
 import { useWebSocketEvent } from "../context/WebSocketContext";
 import { ReviewQueue } from "../core/mod/ReviewQueue";
 import { StageControls } from "../core/mod/StageControls";
 import { SignupRoster } from "../core/mod/SignupRoster";
+import { BingoSettingsForm } from "../core/admin/BingoSettingsForm";
+import { ModsManager } from "../core/admin/ModsManager";
+import { BoardEditor } from "../core/admin/BoardEditor";
+import { LineEditor } from "../core/admin/LineEditor";
+import { QuestionBuilder } from "../core/admin/QuestionBuilder";
+import { TeamManager } from "../core/admin/TeamManager";
 
-type Tab = "submissions" | "signups";
+// adminOnly tabs are hidden from — and their content never rendered for — a
+// mod who isn't a site admin. The server enforces the same split on the
+// underlying routes (requireAdmin on admin.ts vs requireBingoMod on mod.ts),
+// so this is UX decluttering on top of a real boundary, not the boundary
+// itself.
+const TABS = [
+  { key: "submissions", label: "Submissions", adminOnly: false },
+  { key: "signups", label: "Signups", adminOnly: false },
+  { key: "settings", label: "Settings", adminOnly: true },
+  { key: "board", label: "Board", adminOnly: true },
+  { key: "lines", label: "Lines", adminOnly: true },
+  { key: "questions", label: "Signup Questions", adminOnly: true },
+  { key: "teams", label: "Teams", adminOnly: true },
+  { key: "mods", label: "Moderators", adminOnly: true },
+] as const;
+type Tab = (typeof TABS)[number]["key"];
 
 // Mod surfaces never theme — always core/, regardless of bingo.theme.
 export function ModPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { data: shell } = useBingo(slug);
+  const { user } = useAuth();
+  const isAdmin = !!user?.isAdmin;
   const [tab, setTab] = useState<Tab>("submissions");
 
   const [showNotifPrompt, setShowNotifPrompt] = useState(
@@ -38,7 +62,16 @@ export function ModPage() {
     if (shell && !shell.isMod) navigate(`/b/${slug}`, { replace: true });
   }, [shell, navigate, slug]);
 
-  if (!shell || !shell.isMod) return null;
+  // A tab the user can no longer see (e.g. isAdmin resolved to false after
+  // mount) shouldn't leave stale admin-only content selected.
+  useEffect(() => {
+    const current = TABS.find((t) => t.key === tab);
+    if (current?.adminOnly && !isAdmin) setTab("submissions");
+  }, [isAdmin, tab]);
+
+  if (!shell || !shell.isMod || !slug) return null;
+
+  const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
 
   return (
     <div className="fixed inset-0 bg-slate-900 z-50 flex flex-col">
@@ -54,24 +87,35 @@ export function ModPage() {
 
       <div className="flex-1 w-full flex flex-col items-center overflow-y-auto">
         <div className="w-full max-w-6xl px-6 pt-4">
-          <StageControls slug={slug!} bingo={shell.bingo} />
+          <StageControls slug={slug} bingo={shell.bingo} />
         </div>
 
-        <div className="w-full max-w-6xl px-6 pt-4 flex gap-1 border-b border-slate-700">
-          {(["submissions", "signups"] as const).map((t) => (
+        <div className="w-full max-w-6xl px-6 pt-4 flex gap-1 border-b border-slate-700 overflow-x-auto">
+          {visibleTabs.map((t) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`text-sm font-medium px-3 py-2 border-b-2 -mb-px transition-colors cursor-pointer capitalize ${
-                tab === t ? "border-indigo-500 text-white" : "border-transparent text-slate-400 hover:text-slate-200"
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`shrink-0 text-sm font-medium px-3 py-2 border-b-2 -mb-px transition-colors cursor-pointer ${
+                tab === t.key ? "border-indigo-500 text-white" : "border-transparent text-slate-400 hover:text-slate-200"
               }`}
             >
-              {t}
+              {t.label}
             </button>
           ))}
         </div>
 
-        {tab === "submissions" ? <ReviewQueue slug={slug!} /> : <SignupRoster slug={slug!} />}
+        <div className="w-full max-w-6xl px-6 py-4">
+          {tab === "submissions" && <ReviewQueue slug={slug} />}
+          {tab === "signups" && <SignupRoster slug={slug} />}
+          {isAdmin && tab === "settings" && (
+            <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} />
+          )}
+          {isAdmin && tab === "board" && <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />}
+          {isAdmin && tab === "lines" && <LineEditor slug={slug} />}
+          {isAdmin && tab === "questions" && <QuestionBuilder slug={slug} />}
+          {isAdmin && tab === "teams" && <TeamManager slug={slug} />}
+          {isAdmin && tab === "mods" && <ModsManager slug={slug} />}
+        </div>
       </div>
 
       {showNotifPrompt && (
