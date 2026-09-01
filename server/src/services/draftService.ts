@@ -1,0 +1,163 @@
+import { and, eq, inArray } from "drizzle-orm";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import * as schema from "../db/schema";
+import { draftPicks, signupAnswers, signups, teamMembers, teams, users } from "../db/schema";
+import { ServiceError } from "./errors";
+
+type Db = BetterSQLite3Database<typeof schema>;
+type Bingo = typeof schema.bingos.$inferSelect;
+
+type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">;
+const MINIMAL_USER_COLS = { id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick };
+
+// Snake order: odd rounds go draftOrder ascending, even rounds descending.
+// pickNumber is 1-based overall draft position. Pure so it's unit-testable
+// without a DB.
+export function pickOrderTeamIndex(teamCount: number, pickNumber: number): number {
+  const round = Math.ceil(pickNumber / teamCount);
+  const posInRound = (pickNumber - 1) % teamCount;
+  return round % 2 === 1 ? posInRound : teamCount - 1 - posInRound;
+}
+
+function getDraftedUserIds(db: Db, bingoId: string): Set<string> {
+  const teamRows = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all();
+  const teamIds = teamRows.map((t) => t.id);
+  if (teamIds.length === 0) return new Set();
+  const memberRows = db.select({ userId: teamMembers.userId }).from(teamMembers).where(inArray(teamMembers.teamId, teamIds)).all();
+  return new Set(memberRows.map((m) => m.userId));
+}
+
+export interface DraftPoolEntry {
+  signup: typeof signups.$inferSelect;
+  user: MinimalUser;
+  answers: (typeof signupAnswers.$inferSelect)[] | null; // null unless the requester may see answers
+}
+
+export interface DraftState {
+  teams: (typeof teams.$inferSelect)[]; // sorted by draftOrder once the draft has started
+  picks: ((typeof draftPicks.$inferSelect) & { user: MinimalUser })[];
+  pool: DraftPoolEntry[];
+  draftStarted: boolean;
+  currentPick: { pickNumber: number; round: number; teamId: string } | null;
+}
+
+// includeAnswers gates signup-answer visibility — only mods and captains
+// should see what a prospective draftee wrote on the signup form.
+export function getDraftState(db: Db, bingoId: string, opts: { includeAnswers: boolean }): DraftState {
+  const teamRows = db.select().from(teams).where(eq(teams.bingoId, bingoId)).all();
+  const draftStarted = teamRows.length > 0 && teamRows.every((t) => t.draftOrder != null);
+  const orderedTeams = draftStarted ? [...teamRows].sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0)) : teamRows;
+
+  const pickRows = db.select().from(draftPicks).where(eq(draftPicks.bingoId, bingoId)).orderBy(draftPicks.pickNumber).all();
+  const pickedUserIds = pickRows.map((p) => p.userId);
+  const pickedUserRows = pickedUserIds.length ? db.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, pickedUserIds)).all() : [];
+  const pickedUserById = new Map(pickedUserRows.map((u) => [u.id, u]));
+  const picks = pickRows.map((p) => ({ ...p, user: pickedUserById.get(p.userId)! }));
+
+  const draftedUserIds = getDraftedUserIds(db, bingoId);
+  const activeSignups = db.select().from(signups).where(and(eq(signups.bingoId, bingoId), eq(signups.status, "active"))).all();
+  const poolSignups = activeSignups.filter((s) => !draftedUserIds.has(s.userId));
+  const poolUserIds = poolSignups.map((s) => s.userId);
+  const poolUserRows = poolUserIds.length ? db.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, poolUserIds)).all() : [];
+  const poolUserById = new Map(poolUserRows.map((u) => [u.id, u]));
+  const poolAnswers =
+    opts.includeAnswers && poolSignups.length
+      ? db.select().from(signupAnswers).where(inArray(signupAnswers.signupId, poolSignups.map((s) => s.id))).all()
+      : [];
+
+  const pool: DraftPoolEntry[] = poolSignups.map((s) => ({
+    signup: s,
+    user: poolUserById.get(s.userId)!,
+    answers: opts.includeAnswers ? poolAnswers.filter((a) => a.signupId === s.id) : null,
+  }));
+
+  let currentPick: DraftState["currentPick"] = null;
+  if (draftStarted && pool.length > 0) {
+    const pickNumber = picks.length + 1;
+    const round = Math.ceil(pickNumber / orderedTeams.length);
+    const teamIndex = pickOrderTeamIndex(orderedTeams.length, pickNumber);
+    currentPick = { pickNumber, round, teamId: orderedTeams[teamIndex]!.id };
+  }
+
+  return { teams: orderedTeams, picks, pool, draftStarted, currentPick };
+}
+
+function shuffled<T>(arr: T[]): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j] as T, copy[i] as T];
+  }
+  return copy;
+}
+
+// Randomizes team draft order. Requires at least 2 teams (already created
+// via the admin team manager, each with a captain) and no picks/order yet —
+// re-running after picks exist would desync the pool from what's displayed.
+export function startDraft(db: Db, bingo: Bingo) {
+  if (bingo.stage !== "draft") {
+    throw new ServiceError(400, `The draft can only be started during the draft stage (current stage: ${bingo.stage})`);
+  }
+  return db.transaction((tx) => {
+    const teamRows = tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
+    if (teamRows.length < 2) throw new ServiceError(400, "At least 2 teams are required to start the draft");
+    if (teamRows.some((t) => t.draftOrder != null)) throw new ServiceError(400, "The draft has already started");
+
+    shuffled(teamRows).forEach((team, i) => {
+      tx.update(teams).set({ draftOrder: i + 1 }).where(eq(teams.id, team.id)).run();
+    });
+    return tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
+  });
+}
+
+export interface MakePickParams {
+  bingo: Bingo;
+  pickedUserId: string;
+  actingUserId: string;
+  actingIsMod: boolean;
+}
+
+// The captain of the team currently on the clock picks a signed-up player
+// out of the undrafted pool. Mods can pick on behalf of whichever team is
+// currently on the clock (they don't get to jump the queue either).
+export function makePick(db: Db, params: MakePickParams) {
+  const { bingo, pickedUserId, actingUserId, actingIsMod } = params;
+  if (bingo.stage !== "draft") {
+    throw new ServiceError(400, `Picks can only be made during the draft stage (current stage: ${bingo.stage})`);
+  }
+
+  return db.transaction((tx) => {
+    const teamRows = tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
+    if (teamRows.length === 0 || teamRows.some((t) => t.draftOrder == null)) {
+      throw new ServiceError(400, "The draft hasn't started yet");
+    }
+    const orderedTeams = [...teamRows].sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0));
+
+    const pickCount = tx.select().from(draftPicks).where(eq(draftPicks.bingoId, bingo.id)).all().length;
+    const pickNumber = pickCount + 1;
+    const currentTeam = orderedTeams[pickOrderTeamIndex(orderedTeams.length, pickNumber)]!;
+
+    if (!actingIsMod && currentTeam.captainUserId !== actingUserId) {
+      throw new ServiceError(403, "It's not your team's turn to pick");
+    }
+
+    const signup = tx
+      .select()
+      .from(signups)
+      .where(and(eq(signups.bingoId, bingo.id), eq(signups.userId, pickedUserId), eq(signups.status, "active")))
+      .get();
+    if (!signup) throw new ServiceError(400, "That player isn't signed up for this bingo");
+
+    const teamIds = teamRows.map((t) => t.id);
+    const alreadyDrafted = tx.select({ id: teamMembers.id }).from(teamMembers).where(and(inArray(teamMembers.teamId, teamIds), eq(teamMembers.userId, pickedUserId))).get();
+    if (alreadyDrafted) throw new ServiceError(400, "That player has already been drafted");
+
+    const pick = tx
+      .insert(draftPicks)
+      .values({ bingoId: bingo.id, pickNumber, teamId: currentTeam.id, userId: pickedUserId, pickedByUserId: actingUserId })
+      .returning()
+      .get();
+    tx.insert(teamMembers).values({ teamId: currentTeam.id, userId: pickedUserId, isCaptain: false }).run();
+    return pick;
+  });
+}

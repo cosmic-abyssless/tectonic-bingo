@@ -24,7 +24,9 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       break;
     case "draft_started":
     case "draft_pick":
-      // Wired up in Phase 7 once draft state has a query key of its own.
+      queryClient.invalidateQueries({ queryKey: ["draftState"] });
+      // A drafted player now has a team, so their bingo shell's myTeam changes.
+      queryClient.invalidateQueries({ queryKey: ["bingo"] });
       break;
   }
 }

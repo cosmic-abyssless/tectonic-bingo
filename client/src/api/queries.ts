@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  BingoListResponse, BingoShellResponse, BoardResponse, CreateSubmissionResponse,
+  BingoListResponse, BingoShellResponse, BoardResponse, CreateSubmissionResponse, DraftState,
   ModSubmissionsResponse, MySignupResponse, PendingCountResponse, ReviewSubmissionResponse,
   RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupQuestion, Stage,
-  TeamProgressSummary, TeamSubmissionsResponse,
+  Team, TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
 import { api } from "./client";
 
@@ -19,6 +19,7 @@ export const queryKeys = {
   signupRoster: (slug: string) => ["signupRoster", slug] as const,
   signupQuestions: (slug: string) => ["signupQuestions", slug] as const,
   mySignup: (slug: string) => ["mySignup", slug] as const,
+  draftState: (slug: string) => ["draftState", slug] as const,
 };
 
 export function useBingos() {
@@ -169,6 +170,41 @@ export function useWithdrawSignup(slug: string) {
   return useMutation({
     mutationFn: () => api.delete<{ signup: Signup }>(`/api/bingos/${slug}/signup`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.mySignup(slug) }),
+  });
+}
+
+export function useDraftState(slug: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.draftState(slug ?? ""),
+    queryFn: () => api.get<DraftState>(`/api/bingos/${slug}/draft`),
+    enabled: !!slug,
+  });
+}
+
+export function useStartDraft(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ teams: Team[] }>(`/api/bingos/${slug}/mod/draft/start`, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) }),
+  });
+}
+
+export function useMakePick(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => api.post<{ pick: { id: string; pickNumber: number; teamId: string; userId: string } }>(`/api/bingos/${slug}/draft/pick`, { userId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) }),
+  });
+}
+
+export function useRenameTeam(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { teamId: string; name: string }) => api.patch<{ team: Team }>(`/api/bingos/${slug}/teams/${params.teamId}`, { name: params.name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) });
+    },
   });
 }
 
