@@ -254,7 +254,15 @@ export function BingoPage() {
                 <p className="text-slate-500 text-sm">Signups open {new Date(bingo.signupOpensAt).toLocaleString()}</p>
               )}
               {bingo.stage === "draft" && (
-                <p className="text-slate-500 text-sm">The draft is underway — teams will be revealed soon.</p>
+                <>
+                  <p className="text-slate-500 text-sm">The draft is underway — teams will be revealed soon.</p>
+                  <button
+                    onClick={() => navigate(`/b/${slug}/draft`)}
+                    className="text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg px-4 py-2 transition-colors cursor-pointer"
+                  >
+                    Open Draft Room
+                  </button>
+                </>
               )}
             </div>
           ) : !viewingTeamId ? (

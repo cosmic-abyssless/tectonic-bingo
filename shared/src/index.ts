@@ -344,6 +344,35 @@ export interface TeamMember {
 }
 
 // ---------------------------------------------------------------------------
+// Draft
+// ---------------------------------------------------------------------------
+
+export interface DraftPick {
+  id: string;
+  bingoId: string;
+  pickNumber: number;
+  teamId: string;
+  userId: string;
+  pickedByUserId: string;
+  createdAt: string;
+  user: MinimalUser;
+}
+
+export interface DraftPoolEntry {
+  signup: Signup;
+  user: MinimalUser;
+  answers: SignupAnswer[] | null; // null unless the requester is a mod or captain
+}
+
+export interface DraftState {
+  teams: Team[]; // sorted by draftOrder once the draft has started
+  picks: DraftPick[];
+  pool: DraftPoolEntry[];
+  draftStarted: boolean;
+  currentPick: { pickNumber: number; round: number; teamId: string } | null;
+}
+
+// ---------------------------------------------------------------------------
 // WebSocket envelope, matching server/src/ws.ts
 // ---------------------------------------------------------------------------
 

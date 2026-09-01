@@ -6,6 +6,7 @@ import { Login } from "./pages/Login";
 import { BingoList } from "./pages/BingoList";
 import { BingoPage } from "./pages/BingoPage";
 import { ModPage } from "./pages/ModPage";
+import { DraftPage } from "./pages/DraftPage";
 import { AdminPage } from "./pages/AdminPage";
 import { SiteAdminPage } from "./pages/SiteAdminPage";
 
@@ -37,6 +38,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <ModPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/b/:slug/draft"
+              element={
+                <ProtectedRoute>
+                  <DraftPage />
                 </ProtectedRoute>
               }
             />

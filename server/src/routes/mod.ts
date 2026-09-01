@@ -7,6 +7,7 @@ import { db } from "../db";
 import * as bingoService from "../services/bingoService";
 import * as submissionService from "../services/submissionService";
 import * as signupService from "../services/signupService";
+import * as draftService from "../services/draftService";
 import { approveSubmission, rejectSubmission } from "../services/scoringService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
@@ -84,6 +85,15 @@ router.post(
     const bingo = bingoService.advanceStage(db, { bingoId: req.bingo!.id, toStage, changedByUserId: req.user!.id });
     broadcast({ type: "stage_changed", bingoId: bingo.id, payload: { stage: bingo.stage } });
     res.json({ bingo });
+  }),
+);
+
+router.post(
+  "/draft/start",
+  asyncHandler(async (req, res) => {
+    const teams = draftService.startDraft(db, req.bingo!);
+    broadcast({ type: "draft_started", bingoId: req.bingo!.id, payload: {} });
+    res.json({ teams });
   }),
 );
 

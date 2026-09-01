@@ -11,6 +11,7 @@ import * as boardService from "../services/boardService";
 import * as teamService from "../services/teamService";
 import * as submissionService from "../services/submissionService";
 import * as signupService from "../services/signupService";
+import * as draftService from "../services/draftService";
 import { getAIClient, analyzeSubmissionScreenshot } from "../ai";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
@@ -250,6 +251,62 @@ router.delete(
     if (!existing) throw new ServiceError(404, "You haven't signed up for this bingo");
     const signup = signupService.withdrawSignup(db, req.bingo!, existing.signup.id);
     res.json({ signup });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Draft
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/:slug/draft",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const bingo = req.bingo!;
+    const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
+    // Visible to mods, captains, and anyone signed up for this bingo — not the general public.
+    const canView = isMod || !!teamService.getUserTeamForBingo(db, bingo.id, req.user!.id) || !!signupService.getSignupForUser(db, bingo.id, req.user!.id)?.signup;
+    if (!canView) throw new ServiceError(403, "The draft room is only visible to signed-up players and mods");
+
+    const isCaptain = teamService.getTeamsForBingo(db, bingo.id).some((t) => t.captainUserId === req.user!.id);
+    const state = draftService.getDraftState(db, bingo.id, { includeAnswers: isMod || isCaptain });
+    res.json(state);
+  }),
+);
+
+router.post(
+  "/:slug/draft/pick",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const bingo = req.bingo!;
+    const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
+    const { userId } = req.body as { userId?: string };
+    if (!userId) throw new ServiceError(400, "userId is required");
+
+    const pick = draftService.makePick(db, { bingo, pickedUserId: userId, actingUserId: req.user!.id, actingIsMod: isMod });
+    broadcast({ type: "draft_pick", bingoId: bingo.id, payload: { pickNumber: pick.pickNumber, teamId: pick.teamId, userId: pick.userId } });
+    res.status(201).json({ pick });
+  }),
+);
+
+// Captain self-service rename — mods can already rename any team from the
+// admin panel; this is the player-facing equivalent, name-only.
+router.patch(
+  "/:slug/teams/:teamId",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const team = teamService.getTeamById(db, req.params.teamId as string);
+    if (!team || team.bingoId !== req.bingo!.id) throw new ServiceError(404, "Team not found");
+    if (team.captainUserId !== req.user!.id) throw new ServiceError(403, "Only the captain can rename this team");
+
+    const { name } = req.body as { name?: string };
+    if (!name || !name.trim()) throw new ServiceError(400, "name is required");
+    const updated = teamService.updateTeam(db, team.id, { name: name.trim() });
+    broadcast({ type: "team_updated", bingoId: req.bingo!.id, payload: { teamId: team.id } });
+    res.json({ team: updated });
   }),
 );
 
