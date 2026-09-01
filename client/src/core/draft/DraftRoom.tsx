@@ -32,7 +32,7 @@ function CaptainColumn({ team, picks, isCurrent }: { team: DraftTeam; picks: Dra
   );
 }
 
-// "rsn" | "discord" | "ehb" | "totalLevel" | a signup question's id — anything the pool table can sort by.
+// "rsn" | "discord" | "ehb" | a signup question's id — anything the pool table can sort by.
 type SortKey = string;
 
 // Numeric columns must sort numerically, not with localeCompare (which
@@ -41,7 +41,6 @@ function poolSortValue(entry: DraftPoolEntry, key: SortKey): string | number {
   if (key === "rsn") return entry.signup.rsn.toLowerCase();
   if (key === "discord") return displayName(entry.user).toLowerCase();
   if (key === "ehb") return entry.womStats?.ehb ?? -1;
-  if (key === "totalLevel") return entry.womStats?.totalLevel ?? -1;
   return (entry.answers?.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
 }
 
@@ -105,7 +104,6 @@ function PoolTable({
             <SortHeader label="RSN" sortKeyValue="rsn" />
             <SortHeader label="Discord" sortKeyValue="discord" />
             {showWomStats && <SortHeader label="EHB" sortKeyValue="ehb" />}
-            {showWomStats && <SortHeader label="Total Level" sortKeyValue="totalLevel" />}
             {showAnswers && questions.map((q) => <SortHeader key={q.id} label={q.prompt} sortKeyValue={q.id} />)}
             {canPick && <th className="pb-2" />}
           </tr>
@@ -118,7 +116,6 @@ function PoolTable({
                 <td className="py-2 pr-4 text-white font-medium whitespace-nowrap">{entry.signup.rsn}</td>
                 <td className="py-2 pr-4 text-slate-300 whitespace-nowrap">{displayName(entry.user)}</td>
                 {showWomStats && <td className="py-2 pr-4 text-slate-300 whitespace-nowrap">{entry.womStats ? Math.round(entry.womStats.ehb).toLocaleString() : "—"}</td>}
-                {showWomStats && <td className="py-2 pr-4 text-slate-300 whitespace-nowrap">{entry.womStats ? entry.womStats.totalLevel.toLocaleString() : "—"}</td>}
                 {showAnswers &&
                   questions.map((q) => (
                     <td key={q.id} className="py-2 pr-4 text-slate-300">

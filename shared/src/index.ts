@@ -389,7 +389,6 @@ export interface DraftPick {
 
 export interface WomPlayerStats {
   ehb: number;
-  totalLevel: number;
 }
 
 export interface DraftPoolEntry {
