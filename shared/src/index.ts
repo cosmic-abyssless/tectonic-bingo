@@ -253,6 +253,7 @@ export interface PendingCountResponse {
 
 export interface MeResponse {
   user: User;
+  devMode: boolean;
 }
 
 export interface CreateSubmissionResponse {

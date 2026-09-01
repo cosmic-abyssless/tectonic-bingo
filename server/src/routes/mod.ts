@@ -8,6 +8,7 @@ import * as bingoService from "../services/bingoService";
 import * as submissionService from "../services/submissionService";
 import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
+import * as devSeedService from "../services/devSeedService";
 import { approveSubmission, rejectSubmission } from "../services/scoringService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
@@ -117,5 +118,20 @@ router.patch(
     res.json({ signup });
   }),
 );
+
+// Dev-only test data helper — route only exists at all when explicitly
+// enabled, same gate as /auth/dev-login, so it's not reachable in production
+// even by a mod who knows the URL.
+if (process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "true") {
+  router.post(
+    "/dev/seed-signups",
+    asyncHandler(async (req, res) => {
+      const { count } = req.body as { count?: number };
+      const n = Math.min(Math.max(Math.trunc(count ?? 8), 1), 50);
+      const signups = devSeedService.seedTestSignups(db, req.bingo!, n);
+      res.status(201).json({ signups });
+    }),
+  );
+}
 
 export default router;
