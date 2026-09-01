@@ -27,6 +27,52 @@ function shuffled<T>(arr: T[]): T[] {
   return copy;
 }
 
+function weightedPick<T extends string>(weights: Array<[T, number]>): T {
+  const total = weights.reduce((sum, [, w]) => sum + w, 0);
+  let roll = Math.random() * total;
+  for (const [value, w] of weights) {
+    roll -= w;
+    if (roll <= 0) return value;
+  }
+  return weights[weights.length - 1]![0];
+}
+
+// Fabricated WOM/RuneProfile data for seeded test signups — never a real
+// network call. This is purely for exercising the draft pool table's
+// EHB/account-type columns with realistic-looking variety; hitting the real
+// APIs for up to 50 signups at once (routes/mod.ts's per-call cap) would be
+// both slow and pointless rate-limit exposure for throwaway test data. Real
+// signups (routes/bingos.ts POST/PATCH /:slug/signup) still fetch real data
+// via playerStatsService.ts — this only applies to this dev tool.
+// Weighted roughly like a real clan's composition: mostly mains, then
+// ironmen, then progressively rarer hardcore/ultimate/group variants —
+// close to what the actual clan's WOM group looked like when checked.
+const FAKE_RUNEPROFILE_TYPE_WEIGHTS: Array<[string, number]> = [
+  ["normal", 55],
+  ["ironman", 25],
+  ["group_ironman", 10],
+  ["unranked_group_ironman", 5],
+  ["hardcore_ironman", 3],
+  ["ultimate_ironman", 1],
+  ["hardcore_group_ironman", 1],
+];
+const FAKE_WOM_TYPE_WEIGHTS: Array<[string, number]> = [
+  ["regular", 60],
+  ["ironman", 30],
+  ["hardcore", 6],
+  ["ultimate", 4],
+];
+
+function fakePlayerStats(rsn: string): { womDataJson: string; runeProfileDataJson: string } {
+  const ehb = Math.round(Math.random() * 2000 * 100) / 100;
+  const womType = weightedPick(FAKE_WOM_TYPE_WEIGHTS);
+  const runeProfileType = weightedPick(FAKE_RUNEPROFILE_TYPE_WEIGHTS);
+  return {
+    womDataJson: JSON.stringify({ ehb, type: womType }),
+    runeProfileDataJson: JSON.stringify({ username: rsn, accountType: { id: 0, key: runeProfileType, name: runeProfileType } }),
+  };
+}
+
 // Dev-only test data generator, for exercising the draft with a realistic
 // pool of players without manually signing up a dozen browser tabs. Only
 // reachable via the route gate in routes/mod.ts (same NODE_ENV/
@@ -72,20 +118,26 @@ export function seedTestSignups(db: Db, bingo: Bingo, count: number, tectonicRos
     }));
 
     const real = realCandidates[i - 1];
+    let signup;
+    let rsnForStats: string;
     if (real) {
       const rsn = real.rsns[0]!;
       // Reuse the existing user row if this real member already exists in
       // our DB (e.g. from a real login, or a prior seed run in another
       // bingo) — discordId is unique, a second insert would throw.
       const user = db.select().from(users).where(eq(users.discordId, real.user_id)).get() ?? db.insert(users).values({ discordId: real.user_id, discordUsername: rsn.rsn }).returning().get();
-      created.push(
-        signupService.createSignup(db, bingo, { bingoId: bingo.id, userId: user.id, rsn: rsn.rsn, answers, womId: rsn.wom_id, rsnVerified: true }),
-      );
+      signup = signupService.createSignup(db, bingo, { bingoId: bingo.id, userId: user.id, rsn: rsn.rsn, answers, womId: rsn.wom_id, rsnVerified: true });
+      rsnForStats = rsn.rsn;
     } else {
       const discordId = `dev-seed-${runSuffix}-${i}`;
       const user = db.insert(users).values({ discordId, discordUsername: `testbot_${runSuffix}_${i}` }).returning().get();
-      created.push(signupService.createSignup(db, bingo, { bingoId: bingo.id, userId: user.id, rsn: `TestBot${i}`, answers }));
+      rsnForStats = `TestBot${i}`;
+      signup = signupService.createSignup(db, bingo, { bingoId: bingo.id, userId: user.id, rsn: rsnForStats, answers });
     }
+
+    const { womDataJson, runeProfileDataJson } = fakePlayerStats(rsnForStats);
+    db.update(signups).set({ womDataJson, runeProfileDataJson, statsFetchedAt: new Date() }).where(eq(signups.id, signup.id)).run();
+    created.push(signup);
   }
   return created;
 }
