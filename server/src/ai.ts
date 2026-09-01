@@ -31,11 +31,14 @@ export interface AnalyzeResult {
   warnings: string[];
 }
 
+// Hardcoded for now — every bingo on this platform is an OSRS event. If we
+// ever host a non-OSRS bingo this'll need to move back to a per-bingo field.
+const AI_HINT =
+  "This screenshot is from Old School RuneScape (OSRS), a fantasy MMORPG. Look for chat box messages, kill count trackers, loot/drop notifications, and inventory or bank interfaces.\n\n";
+
 // Two steps: (1) ask Claude what's visible in the screenshot and whether the
 // team's codeword appears, (2) match the extracted text against every item
-// and wildcard on this bingo's board. bingo.aiHint lets each bingo steer the
-// prompt (e.g. "this is an Old School RuneScape screenshot...") without
-// hardcoding a game into this module.
+// and wildcard on this bingo's board.
 export async function analyzeSubmissionScreenshot(
   client: Anthropic,
   db: Db,
@@ -45,7 +48,6 @@ export async function analyzeSubmissionScreenshot(
 ): Promise<AnalyzeResult> {
   const base64 = file.buffer.toString("base64");
   const mediaType = (file.mimetype || "image/png") as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
-  const hint = bingo.aiHint ? `${bingo.aiHint}\n\n` : "";
 
   const message = await client.messages.create({
     model: "claude-haiku-4-5-20251001",
@@ -57,7 +59,7 @@ export async function analyzeSubmissionScreenshot(
           { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
           {
             type: "text",
-            text: `${hint}This screenshot was submitted as proof for a bingo competition.
+            text: `${AI_HINT}This screenshot was submitted as proof for a bingo competition.
 
 The player's team codeword is: "${team.codeword}"
 

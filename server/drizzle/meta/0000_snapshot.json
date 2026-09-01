@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "691ce4a5-07e1-4d37-9b68-57449dad3af7",
+  "id": "ffdc7628-8eba-4e08-8779-8a456512b2e1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "bingo_line_tiles": {
@@ -284,13 +284,6 @@
         },
         "rules_markdown": {
           "name": "rules_markdown",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "ai_hint": {
-          "name": "ai_hint",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

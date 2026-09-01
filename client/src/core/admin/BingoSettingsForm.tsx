@@ -42,7 +42,6 @@ export function BingoSettingsForm({
     buyinAmount: bingo.buyinAmount?.toString() ?? "",
     bonusPotAmount: bingo.bonusPotAmount.toString(),
     rulesMarkdown: bingo.rulesMarkdown ?? "",
-    aiHint: bingo.aiHint ?? "",
     signupOpensAt: toLocalInput(bingo.signupOpensAt),
     draftScheduledAt: toLocalInput(bingo.draftScheduledAt),
     revealScheduledAt: toLocalInput(bingo.revealScheduledAt),
@@ -66,7 +65,6 @@ export function BingoSettingsForm({
         buyinAmount: form.buyinAmount ? Number(form.buyinAmount) : null,
         bonusPotAmount: Number(form.bonusPotAmount) || 0,
         rulesMarkdown: form.rulesMarkdown || null,
-        aiHint: form.aiHint || null,
         signupOpensAt: fromLocalInput(form.signupOpensAt) as never,
         draftScheduledAt: fromLocalInput(form.draftScheduledAt) as never,
         revealScheduledAt: fromLocalInput(form.revealScheduledAt) as never,
@@ -149,17 +147,6 @@ export function BingoSettingsForm({
         ) : (
           <textarea value={form.rulesMarkdown} onChange={(e) => setForm({ ...form, rulesMarkdown: e.target.value })} rows={6} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-indigo-500" />
         )}
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1">AI screenshot-analysis hint</label>
-        <textarea
-          value={form.aiHint}
-          onChange={(e) => setForm({ ...form, aiHint: e.target.value })}
-          rows={2}
-          placeholder='e.g. "This is an Old School RuneScape screenshot..."'
-          className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 resize-none placeholder:text-slate-600"
-        />
       </div>
 
       {error && <p className="text-red-400 text-sm">{error}</p>}
