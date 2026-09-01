@@ -387,10 +387,18 @@ export interface DraftPick {
   rsn: string; // the drafted player's RSN for this bingo
 }
 
+export interface WomPlayerStats {
+  ehb: number;
+  totalLevel: number;
+}
+
 export interface DraftPoolEntry {
   signup: Signup;
   user: MinimalUser;
   answers: SignupAnswer[] | null; // null unless the requester is a mod or captain
+  // Null when signup.womId is unset, the WOM lookup failed, or the response
+  // didn't have the fields expected — never distinguishes those cases.
+  womStats: WomPlayerStats | null;
 }
 
 export interface DraftTeam extends Team {
