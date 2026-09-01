@@ -83,4 +83,31 @@ describe("WomClient", () => {
     expect(results.size).toBe(0);
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
   });
+
+  it("backs off after a 429 and short-circuits further calls locally instead of hitting fetch again", async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 429, headers: { "retry-after": "30" } })) as unknown as typeof fetch;
+    const client = new WomClient(fetchImpl);
+
+    expect(await client.getPlayerStats("1")).toBeNull();
+    expect(await client.getPlayerStats("2")).toBeNull(); // different id — still backed off
+    expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+  });
+
+  it("does not poison the cache on a 429 — resumes fetching once the backoff window passes", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi
+        .fn()
+        .mockResolvedValueOnce(new Response(null, { status: 429, headers: { "retry-after": "1" } }))
+        .mockResolvedValueOnce(new Response(JSON.stringify(playerBody(5, 50)), { status: 200 })) as unknown as typeof fetch;
+      const client = new WomClient(fetchImpl);
+
+      expect(await client.getPlayerStats("1")).toBeNull();
+      vi.advanceTimersByTime(1_500);
+      expect(await client.getPlayerStats("1")).toEqual({ ehb: 5, totalLevel: 50 });
+      expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
