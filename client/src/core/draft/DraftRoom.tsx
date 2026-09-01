@@ -32,12 +32,16 @@ function CaptainColumn({ team, picks, isCurrent }: { team: DraftTeam; picks: Dra
   );
 }
 
-// "rsn" | "discord" | a signup question's id — anything the pool table can sort by.
+// "rsn" | "discord" | "ehb" | "totalLevel" | a signup question's id — anything the pool table can sort by.
 type SortKey = string;
 
-function poolSortValue(entry: DraftPoolEntry, key: SortKey): string {
+// Numeric columns must sort numerically, not with localeCompare (which
+// would put "100" before "9" — string-lexicographic order, not magnitude).
+function poolSortValue(entry: DraftPoolEntry, key: SortKey): string | number {
   if (key === "rsn") return entry.signup.rsn.toLowerCase();
   if (key === "discord") return displayName(entry.user).toLowerCase();
+  if (key === "ehb") return entry.womStats?.ehb ?? -1;
+  if (key === "totalLevel") return entry.womStats?.totalLevel ?? -1;
   return (entry.answers?.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
 }
 
@@ -60,6 +64,9 @@ function PoolTable({
   // everyone else's pool entries have answers: null, so skip those columns
   // entirely rather than render a table full of "—".
   const showAnswers = pool.some((e) => e.answers !== null);
+  // Skip the WOM columns entirely if nobody in the pool has stats (WOM
+  // integration effectively unused for this bingo), same reasoning.
+  const showWomStats = pool.some((e) => e.womStats !== null);
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -70,7 +77,9 @@ function PoolTable({
   }
 
   const sorted = [...pool].sort((a, b) => {
-    const cmp = poolSortValue(a, sortKey).localeCompare(poolSortValue(b, sortKey));
+    const va = poolSortValue(a, sortKey);
+    const vb = poolSortValue(b, sortKey);
+    const cmp = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
     return sortDir === "asc" ? cmp : -cmp;
   });
 
@@ -95,6 +104,8 @@ function PoolTable({
           <tr className="text-left text-slate-500 text-xs uppercase border-b border-slate-700">
             <SortHeader label="RSN" sortKeyValue="rsn" />
             <SortHeader label="Discord" sortKeyValue="discord" />
+            {showWomStats && <SortHeader label="EHB" sortKeyValue="ehb" />}
+            {showWomStats && <SortHeader label="Total Level" sortKeyValue="totalLevel" />}
             {showAnswers && questions.map((q) => <SortHeader key={q.id} label={q.prompt} sortKeyValue={q.id} />)}
             {canPick && <th className="pb-2" />}
           </tr>
@@ -106,6 +117,8 @@ function PoolTable({
               <tr key={entry.signup.id}>
                 <td className="py-2 pr-4 text-white font-medium whitespace-nowrap">{entry.signup.rsn}</td>
                 <td className="py-2 pr-4 text-slate-300 whitespace-nowrap">{displayName(entry.user)}</td>
+                {showWomStats && <td className="py-2 pr-4 text-slate-300 whitespace-nowrap">{entry.womStats ? Math.round(entry.womStats.ehb).toLocaleString() : "—"}</td>}
+                {showWomStats && <td className="py-2 pr-4 text-slate-300 whitespace-nowrap">{entry.womStats ? entry.womStats.totalLevel.toLocaleString() : "—"}</td>}
                 {showAnswers &&
                   questions.map((q) => (
                     <td key={q.id} className="py-2 pr-4 text-slate-300">
