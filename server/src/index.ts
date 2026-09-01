@@ -104,4 +104,6 @@ initWebSocketServer(server);
 
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  const devModeActive = process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "true";
+  console.log(`Dev mode (dev-login, seed-signups): ${devModeActive ? "ENABLED" : "disabled"} (NODE_ENV=${process.env.NODE_ENV ?? "<unset>"}, DEV_LOGIN_ENABLED=${process.env.DEV_LOGIN_ENABLED ?? "<unset>"})`);
 });
