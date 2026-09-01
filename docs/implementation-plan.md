@@ -276,6 +276,10 @@ Mod pre-draft: designate captains from signups (creates teams). `POST /mod/draft
 ### Phase 9 — Discord bot (de-scoped; design sketch only until user green-lights)
 Separate bot token (`DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`); on a mod-triggered action post-draft, create a role + text channel per team and assign members; store created `discordRoleId`/`discordChannelId` on `teams` for idempotent re-runs and cleanup. Requires the bot invited with Manage Roles/Channels. **Ask the user before implementing.**
 
+## Backlog (not scheduled)
+
+- **Guild-wide Discord user search.** `userService.searchUsers` (used by `UserSearchInput` for picking mods/captains) only queries the local `users` table — rows only exist for people who have logged into the site at least once via Discord OAuth. It cannot find someone who hasn't logged in yet, even if they're in the clan's Discord server. Fix: reuse (or add) `DISCORD_BOT_TOKEN` to call `GET /guilds/{guild.id}/members/search?query=` server-side and merge/dedupe those results with local `users` rows in the search response. Same bot token Phase 9 needs, so worth doing alongside it.
+
 ---
 
 # 6. Env vars (v2)
