@@ -112,4 +112,17 @@ describe("getAllSignups / markBuyin", () => {
     const liveBingo = { ...bingo, stage: "live" as const };
     expect(() => markBuyin(db, liveBingo, signup.id, { received: true, recordedByUserId: adminId })).toThrow(ServiceError);
   });
+
+  it("joins the collector's user info onto the roster, and clears it when unmarked", () => {
+    const { bingo, memberId, adminId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "MyRsn", answers: [] });
+
+    markBuyin(db, bingo, signup.id, { received: true, collectedByUserId: adminId, recordedByUserId: adminId });
+    const withCollector = getAllSignups(db, bingo.id);
+    expect(withCollector[0].collectedByUser?.discordUsername).toBe("admin");
+
+    markBuyin(db, bingo, signup.id, { received: false, recordedByUserId: adminId });
+    const withoutCollector = getAllSignups(db, bingo.id);
+    expect(withoutCollector[0].collectedByUser).toBeNull();
+  });
 });

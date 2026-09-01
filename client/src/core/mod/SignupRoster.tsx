@@ -11,7 +11,7 @@ function csvEscape(value: string): string {
 }
 
 function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: string }[]): string {
-  const headers = ["RSN", "Discord", "Status", "Buy-in", ...questionPrompts.map((q) => q.prompt)];
+  const headers = ["RSN", "Discord", "Status", "Buy-in", "Collected by", ...questionPrompts.map((q) => q.prompt)];
   const rows = roster.map((entry) => {
     const answerByQ = new Map(entry.answers.map((a) => [a.questionId, a.value]));
     return [
@@ -19,6 +19,7 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
       displayName(entry.user),
       entry.signup.status,
       entry.signup.buyinReceivedAt ? "received" : "not received",
+      entry.collectedByUser ? displayName(entry.collectedByUser) : "",
       ...questionPrompts.map((q) => answerByQ.get(q.id) ?? ""),
     ];
   });
@@ -27,36 +28,45 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
 
 function BuyinCell({ slug, entry }: { slug: string; entry: RosterEntry }) {
   const markBuyin = useMarkBuyin(slug);
-  const [pickingCollector, setPickingCollector] = useState(false);
   const received = !!entry.signup.buyinReceivedAt;
 
-  async function toggle() {
-    if (received) {
-      await markBuyin.mutateAsync({ signupId: entry.signup.id, received: false });
-    } else {
-      setPickingCollector(true);
-    }
-  }
-
-  async function confirmCollector(user: User | null) {
-    await markBuyin.mutateAsync({ signupId: entry.signup.id, received: true, collectedByUserId: user?.id ?? null });
-    setPickingCollector(false);
+  function toggle() {
+    markBuyin.mutate({ signupId: entry.signup.id, received: !received });
   }
 
   return (
-    <div>
-      <label className="flex items-center gap-2 cursor-pointer select-none">
-        <input type="checkbox" checked={received} onChange={toggle} disabled={markBuyin.isPending} className="w-4 h-4 accent-green-500 cursor-pointer" />
-        <span className={`text-xs ${received ? "text-green-400" : "text-slate-500"}`}>{received ? "Received" : "Not received"}</span>
-      </label>
-      {pickingCollector && (
-        <div className="mt-1.5 w-48">
-          <UserSearchInput scope={slug} onSelect={confirmCollector} placeholder="Who collected it? (optional)" />
-          <button onClick={() => confirmCollector(null)} className="text-xs text-slate-500 hover:text-slate-300 mt-1 cursor-pointer">
-            Skip
+    <label className="flex items-center gap-2 cursor-pointer select-none">
+      <input type="checkbox" checked={received} onChange={toggle} disabled={markBuyin.isPending} className="w-4 h-4 accent-green-500 cursor-pointer" />
+      <span className={`text-xs ${received ? "text-green-400" : "text-slate-500"}`}>{received ? "Received" : "Not received"}</span>
+    </label>
+  );
+}
+
+// Independent of the buy-in checkbox — a mod can set/change the collector at
+// any time while received is true. Disabled (via fieldset, so both the input
+// and its dropdown buttons are inert) once buy-in is unmarked, since
+// markBuyin always clears the collector when received goes false.
+function CollectedByCell({ slug, entry }: { slug: string; entry: RosterEntry }) {
+  const markBuyin = useMarkBuyin(slug);
+  const received = !!entry.signup.buyinReceivedAt;
+
+  function setCollector(user: User | null) {
+    markBuyin.mutate({ signupId: entry.signup.id, received: true, collectedByUserId: user?.id ?? null });
+  }
+
+  return (
+    <div className="w-48">
+      {entry.collectedByUser && (
+        <div className="flex items-center gap-1.5 mb-1">
+          <span className="text-xs text-slate-300 truncate">{displayName(entry.collectedByUser)}</span>
+          <button onClick={() => setCollector(null)} disabled={!received} className="text-xs text-slate-500 hover:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0">
+            ✕
           </button>
         </div>
       )}
+      <fieldset disabled={!received}>
+        <UserSearchInput scope={slug} onSelect={setCollector} placeholder="Who collected it?" />
+      </fieldset>
     </div>
   );
 }
@@ -136,6 +146,7 @@ export function SignupRoster({ slug }: { slug: string }) {
               <th className="pb-2 pr-4">Discord</th>
               <th className="pb-2 pr-4">Status</th>
               <th className="pb-2 pr-4">Buy-in</th>
+              <th className="pb-2 pr-4">Collected by</th>
               {questions.map((q) => (
                 <th key={q.id} className="pb-2 pr-4">
                   {q.prompt}
@@ -157,6 +168,9 @@ export function SignupRoster({ slug }: { slug: string }) {
                   </td>
                   <td className="py-2 pr-4">
                     <BuyinCell slug={slug} entry={entry} />
+                  </td>
+                  <td className="py-2 pr-4">
+                    <CollectedByCell slug={slug} entry={entry} />
                   </td>
                   {questions.map((q) => (
                     <td key={q.id} className="py-2 pr-4 text-slate-300">

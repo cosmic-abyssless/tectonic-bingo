@@ -314,6 +314,10 @@ export interface RosterEntry {
   signup: Signup;
   user: User;
   answers: SignupAnswer[];
+  // Only populated by the mod-facing roster (GET .../mod/signups) — who
+  // marked buy-in received for this signup. Absent from other RosterEntry
+  // uses like the captain-candidates list.
+  collectedByUser?: User | null;
 }
 
 export interface RosterResponse {

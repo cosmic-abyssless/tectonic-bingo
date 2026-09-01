@@ -145,7 +145,16 @@ export function getAllSignups(db: Db, bingoId: string) {
     .all();
   const signupIds = rows.map((r) => r.signup.id);
   const answers = signupIds.length ? db.select().from(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).all() : [];
-  return rows.map((r) => ({ ...r, answers: answers.filter((a) => a.signupId === r.signup.id) }));
+
+  const collectorIds = [...new Set(rows.map((r) => r.signup.buyinCollectedByUserId).filter((id): id is string => !!id))];
+  const collectors = collectorIds.length ? db.select().from(users).where(inArray(users.id, collectorIds)).all() : [];
+  const collectorById = new Map(collectors.map((u) => [u.id, u]));
+
+  return rows.map((r) => ({
+    ...r,
+    answers: answers.filter((a) => a.signupId === r.signup.id),
+    collectedByUser: r.signup.buyinCollectedByUserId ? (collectorById.get(r.signup.buyinCollectedByUserId) ?? null) : null,
+  }));
 }
 
 // Active (non-withdrawn) signups with buy-in marked received — the basis
