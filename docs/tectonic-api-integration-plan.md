@@ -84,34 +84,98 @@ correlate identities.
 
 ## 8. Refactor plan (phased, in order)
 
-### Phase T1 — Tectonic client + config
-`server/src/services/tectonicService.ts`: typed fetch client for the four read endpoints. Env:
-`TECTONIC_API_URL`, `TECTONIC_API_KEY`, `TECTONIC_GUILD_ID` — all optional; any missing ⇒
-`getTectonicClient()` returns null and the integration is off everywhere. Small in-memory TTL cache
-(~60s) for roster/leaderboard and per-id lookups. Startup log line. Unit tests with an injected
-fetch mock (no live API in tests). Document the env vars + local `docker compose` workflow in
-`.env.example`.
-**DoD:** with tectonic-api running locally, a smoke call round-trips real data; with env unset,
-server boots clean and logs "disabled".
+### Phase T1 — Tectonic client + config — DONE
+Implemented in `server/src/services/tectonicService.ts` (+ `.test.ts`, 10 tests, fetch injected as
+a constructor arg — no live API in tests). What exists, for the phases below to build on:
+
+- `getTectonicClient(): TectonicClient | null` — memoized singleton, null unless
+  `TECTONIC_API_URL`, `TECTONIC_API_KEY`, `TECTONIC_GUILD_ID` are all set. **Every consumer must
+  handle null** (integration off) — that's the entire feature-flag mechanism.
+- `client.getRoster(limit?)` → `TectonicRosterUser[] | null` — full guild roster (user_id =
+  Discord snowflake, points, rsns), leaderboard-ordered, capped 1000.
+- `client.getDetailedUsers(discordIds)` → `TectonicDetailedUser[] | null` — RSNs, points, rank,
+  tier, records (boss PBs), events, achievements. IDs unknown to tectonic are absent from the
+  result (absence = not a clan member).
+- `client.getDetailedUser(discordId)` → single-user convenience, null when absent/failed.
+- All methods return **null on any failure** (logged `[tectonic]` warning) — never throw. 60s
+  in-memory TTL cache per URL; failures are not cached.
+- Types (`TectonicDetailedUser` etc.) mirror tectonic-api's snake_case JSON exactly.
+- Startup log line in `index.ts` states ENABLED/disabled; env vars documented in `.env.example`
+  (also removed the long-dead v1 `TEAM_ROLE_*`/`MOD_ROLE_ID` block while in there).
+
+**DoD met:** unit-tested with mocked fetch; boots clean and logs "disabled" with env unset. A live
+smoke test against a locally running tectonic-api is still worth doing at the start of T2.
 
 ### Phase T2 — Verified signups
-Schema (fresh migration regen per repo convention): `signups` gains `womId text` (nullable) and
-`rsnVerified boolean not null default false`. New player-facing endpoint `GET /:slug/signup/rsns`
-returning the logged-in user's linked RSNs from tectonic (empty when integration off / not a
-member). `SignupForm`: when RSNs come back, render a select (auto-picked when exactly one) instead
-of the free-text input; free-text fallback otherwise, stored unverified. `createSignup`
-re-validates the chosen RSN server-side (never trust the client's claim) and stamps
-`rsnVerified`/`womId`. Roster + captain candidates + draft pool show a verified badge.
+
+Implementation notes (repo conventions apply throughout: fresh migration regen — delete
+`server/drizzle/` + the dev DB file, `drizzle-kit generate`, never layer a new migration;
+kill dev-server processes with `taskkill //PID <pid> //T //F` (tree kill); NEVER run a full
+`db:reset` as cleanup if the dev DB may hold the user's own test bingos — it wipes everything):
+
+1. **Schema** (`server/src/db/schema.ts`): `signups` gains `womId: text('wom_id')` (nullable) and
+   `rsnVerified: integer('rsn_verified', { mode: 'boolean' }).notNull().default(false)`.
+   Update `shared/src/index.ts`'s `Signup` interface to match (`womId: string | null`,
+   `rsnVerified: boolean`). Regenerate the migration.
+2. **Server** — new function in `signupService.ts` or a thin route handler in
+   `routes/bingos.ts`: `GET /:slug/signup/rsns` (requireAuth + requireBingo). Body:
+   `const client = getTectonicClient(); if (!client) return res.json({ rsns: [] });` then
+   `client.getDetailedUser(req.user!.discordId)` → `res.json({ rsns: user?.rsns ?? [] })`.
+3. **Server** — `createSignup`/`updateSignup` in `signupService.ts`: accept the chosen RSN as
+   today, but the ROUTE handler (not the service — the service stays sync/DB-pure; do the async
+   tectonic call in the route before invoking the service) looks up the user's tectonic RSNs and,
+   if the submitted RSN case-insensitively matches one, passes `womId` + `rsnVerified: true` into
+   the service params. Never trust a client-sent "verified" claim. Service param interfaces gain
+   the two optional fields.
+4. **Client** — `core/signup/SignupForm.tsx`: new query hook (`useMyTectonicRsns(slug)` in
+   `api/queries.ts`, key `["myTectonicRsns", slug]`) hitting the new endpoint. If ≥1 RSN comes
+   back: render a `<select>` of them (auto-select when exactly one) in place of the free-text RSN
+   input, with a small "verified" note. If 0 come back: current free-text input unchanged.
+5. **Badges** — `core/mod/SignupRoster.tsx` (roster table) and the captain-candidates dropdown in
+   `core/admin/TeamManager.tsx`: a small green "✓" / "verified" marker where `signup.rsnVerified`.
+   `RosterEntry.signup` already carries the full Signup row so no new plumbing needed.
+6. **Tests** — signupService tests for the new params passing through; route-level behavior is
+   covered by the live DoD run (this repo doesn't do route-level unit tests).
+
 **DoD:** live browser run — a member with a linked RSN gets it auto-filled and badge-verified; a
 user unknown to tectonic falls back to free text and shows unverified; with the integration
-unconfigured, signup behaves exactly as today.
+unconfigured, signup behaves exactly as today. Verify with the real tectonic-api via
+`docker compose --profile dev up` in `../tectonic-api` (matching `API_KEY`), or note explicitly if
+verified against a mocked/unavailable API.
 
 ### Phase T3 — Roster & draft enrichment
-Mod-facing user pickers (captain assignment etc.) gain a tectonic-roster-backed search/merge so
-mods can find any clan member, not just prior log-ins. Draft pool: `getDraftState` enriches pool
-entries with clan points + tier (when integration on), surfaced as sortable columns in PoolTable.
-**DoD:** captains can sort the pool by clan points in a live draft; a non-configured environment
-shows the table unchanged.
+
+The user's stated priority here: **give captains real signal at draft time to evaluate picks.**
+Tectonic's detailed user data is rich — points, rank tier, boss PB records, past event placements,
+achievements — surface enough of it without turning the pool table into a wall.
+
+Implementation notes:
+
+1. **Draft pool enrichment** — `draftService.getDraftState` is sync/DB-pure; keep it that way.
+   Instead, the ROUTE handler for `GET /:slug/draft` (in `routes/bingos.ts`) makes one batched
+   `client.getDetailedUsers(poolDiscordIds)` call after getting the state, and merges a new
+   optional `tectonic` field onto each pool entry:
+   `{ points, tierName, records: topN, events: recentN } | null`. Add the matching optional field
+   to `DraftPoolEntry` in `shared/src/index.ts`. Gate it the same as `answers` (mods/captains
+   only) or show to everyone — captains and mods are the audience that matters; simplest is to
+   include it whenever the integration is on.
+2. **Pool table columns** — `core/draft/DraftRoom.tsx`'s `PoolTable` already has generic
+   sortable headers (`SortKey` is a string; `poolSortValue` maps key → comparable string). Add
+   "Clan pts" (numeric sort — pad or compare numerically, don't localeCompare numbers!) and
+   "Rank" (tier name) columns when any pool entry carries tectonic data. For deeper detail
+   (PBs/events), an expandable row or hover popover per player beats more columns.
+3. **Mod user pickers** — captain-candidate flow already lists signups, which is correct (captains
+   must be signed up). The roster-backed search matters for the general-purpose
+   `UserSearchInput`/mod tooling ("guild-wide Discord user search" backlog item in
+   `docs/implementation-plan.md`): merge `client.getRoster()` results (matched on
+   `users.discordId`) into `GET /:slug/admin/users` search results, labeling entries that have no
+   local account yet (they can be shown but not selected for roles requiring a login).
+4. **Numeric sorting gotcha** — `PoolTable` currently sorts everything with `localeCompare`;
+   clan points needs a numeric comparator branch keyed on the tectonic sort keys.
+
+**DoD:** in a live draft with the integration on, captains see and can sort by clan points; a
+player row can be expanded/hovered for PBs and event history; with the integration off, the table
+renders exactly as today. Zero console errors.
 
 ### Phase T4 — Write-back (optional; ask before building)
 Mod-triggered action on bingo completion: award custom points per placement and/or register the

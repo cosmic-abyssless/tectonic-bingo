@@ -20,6 +20,7 @@ import { errorHandler } from "./middleware/errorHandler";
 import { initWebSocketServer } from "./ws";
 import { sqlite } from "./db";
 import { getAdminDiscordIds } from "./config";
+import { getTectonicConfig } from "./services/tectonicService";
 
 const REQUIRED_ENV = [
   "DISCORD_CLIENT_ID",
@@ -106,4 +107,7 @@ server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   const devModeActive = process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "true";
   console.log(`Dev mode (dev-login, seed-signups): ${devModeActive ? "ENABLED" : "disabled"} (NODE_ENV=${process.env.NODE_ENV ?? "<unset>"}, DEV_LOGIN_ENABLED=${process.env.DEV_LOGIN_ENABLED ?? "<unset>"})`);
+  console.log(
+    `Tectonic API integration: ${getTectonicConfig() ? "ENABLED" : "disabled"} (requires TECTONIC_API_URL, TECTONIC_API_KEY, TECTONIC_GUILD_ID)`,
+  );
 });
