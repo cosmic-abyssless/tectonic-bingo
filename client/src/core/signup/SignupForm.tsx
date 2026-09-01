@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { SignupAnswerInput, SignupQuestion } from "@bingo/shared";
-import { useCreateSignup, useMySignup, useSignupQuestions, useUpdateSignup, useWithdrawSignup } from "../../api/queries";
+import { useCreateSignup, useMySignup, useMyTectonicRsns, useSignupQuestions, useUpdateSignup, useWithdrawSignup } from "../../api/queries";
 
 function parseOptions(question: SignupQuestion): string[] {
   try {
@@ -65,12 +65,20 @@ function QuestionField({ question, value, onChange }: { question: SignupQuestion
 export function SignupForm({ slug }: { slug: string }) {
   const { data: questionsData } = useSignupQuestions(slug);
   const { data: mySignup, isLoading } = useMySignup(slug);
+  const { data: tectonicRsnsData } = useMyTectonicRsns(slug);
   const createSignup = useCreateSignup(slug);
   const updateSignup = useUpdateSignup(slug);
   const withdrawSignup = useWithdrawSignup(slug);
 
   const questions = questionsData?.questions ?? [];
   const existing = mySignup?.signup && mySignup.signup.status === "active" ? mySignup.signup : null;
+  const tectonicRsns = tectonicRsnsData?.rsns ?? [];
+  // If the currently-saved RSN isn't (or is no longer) one of the signer's
+  // linked RSNs, keep it selectable rather than silently dropping it.
+  const rsnOptions =
+    existing && !tectonicRsns.some((r) => r.rsn.toLowerCase() === existing.rsn.toLowerCase())
+      ? [{ rsn: existing.rsn, womId: "" }, ...tectonicRsns]
+      : tectonicRsns;
 
   const [rsn, setRsn] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -80,12 +88,13 @@ export function SignupForm({ slug }: { slug: string }) {
 
   useEffect(() => {
     if (existing) setRsn(existing.rsn);
+    else if (tectonicRsns.length === 1) setRsn(tectonicRsns[0].rsn);
     if (mySignup?.answers) {
       const map: Record<string, string> = {};
       for (const a of mySignup.answers) map[a.questionId] = a.value;
       setAnswers(map);
     }
-  }, [existing, mySignup]);
+  }, [existing, mySignup, tectonicRsns]);
 
   if (isLoading) return null;
 
@@ -131,7 +140,25 @@ export function SignupForm({ slug }: { slug: string }) {
         <label className="block text-sm font-medium text-slate-300 mb-1.5">
           RuneScape name <span className="text-red-400">*</span>
         </label>
-        <input value={rsn} onChange={(e) => setRsn(e.target.value)} maxLength={12} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+        {rsnOptions.length > 0 ? (
+          <>
+            <select value={rsn} onChange={(e) => setRsn(e.target.value)} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+              <option value="">Select…</option>
+              {rsnOptions.map((r) => (
+                <option key={r.rsn} value={r.rsn}>
+                  {r.rsn}
+                </option>
+              ))}
+            </select>
+            {tectonicRsns.some((r) => r.rsn === rsn) ? (
+              <p className="text-xs text-emerald-400 mt-1">✓ Verified against your linked clan account</p>
+            ) : (
+              <p className="text-xs text-amber-400 mt-1">This RSN isn't currently linked to your clan account</p>
+            )}
+          </>
+        ) : (
+          <input value={rsn} onChange={(e) => setRsn(e.target.value)} maxLength={12} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+        )}
       </div>
 
       {questions.map((q) => (

@@ -286,6 +286,8 @@ export interface Signup {
   bingoId: string;
   userId: string;
   rsn: string;
+  womId: string | null;
+  rsnVerified: boolean;
   status: SignupStatus;
   buyinReceivedAt: string | null;
   buyinCollectedByUserId: string | null;
@@ -308,6 +310,17 @@ export interface SignupAnswerInput {
 export interface MySignupResponse {
   signup: Signup | null;
   answers: SignupAnswer[];
+}
+
+// A tectonic-api-linked RSN. Always [] when the integration is unconfigured
+// or the signer isn't a registered clan member there.
+export interface TectonicRsn {
+  rsn: string;
+  womId: string;
+}
+
+export interface MyTectonicRsnsResponse {
+  rsns: TectonicRsn[];
 }
 
 export interface RosterEntry {

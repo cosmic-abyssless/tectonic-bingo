@@ -91,6 +91,8 @@ CREATE TABLE `signups` (
 	`bingo_id` text NOT NULL,
 	`user_id` text NOT NULL,
 	`rsn` text NOT NULL,
+	`wom_id` text,
+	`rsn_verified` integer DEFAULT false NOT NULL,
 	`status` text DEFAULT 'active' NOT NULL,
 	`buyin_received_at` integer,
 	`buyin_collected_by_user_id` text,

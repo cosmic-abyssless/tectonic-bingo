@@ -14,8 +14,21 @@ import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
 import * as statsService from "../services/statsService";
 import { getAIClient, analyzeSubmissionScreenshot } from "../ai";
+import { getTectonicClient } from "../services/tectonicService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
+
+// Async tectonic lookup lives at the route layer (not signupService, which
+// stays sync/DB-pure) — matches the submitted RSN against the signer's
+// tectonic-api RSNs case-insensitively. A client-sent "verified" claim is
+// never trusted; this is the only path that can set rsnVerified: true.
+async function resolveRsnVerification(discordId: string, rsn: string): Promise<{ womId: string | null; rsnVerified: boolean }> {
+  const client = getTectonicClient();
+  if (!client) return { womId: null, rsnVerified: false };
+  const user = await client.getDetailedUser(discordId);
+  const match = user?.rsns.find((r) => r.rsn.toLowerCase() === rsn.trim().toLowerCase());
+  return match ? { womId: match.wom_id, rsnVerified: true } : { womId: null, rsnVerified: false };
+}
 
 const UPLOADS_DIR = path.join(__dirname, "../../uploads");
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -238,6 +251,23 @@ router.get(
   }),
 );
 
+// The signer's tectonic-api RSNs, for the signup form to offer as a select
+// instead of free text. Empty array when unconfigured or not a clan member.
+router.get(
+  "/:slug/signup/rsns",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const client = getTectonicClient();
+    if (!client) {
+      res.json({ rsns: [] });
+      return;
+    }
+    const user = await client.getDetailedUser(req.user!.discordId);
+    res.json({ rsns: (user?.rsns ?? []).map((r) => ({ rsn: r.rsn, womId: r.wom_id })) });
+  }),
+);
+
 router.post(
   "/:slug/signup",
   requireAuth,
@@ -245,7 +275,15 @@ router.post(
   asyncHandler(async (req, res) => {
     const { rsn, answers } = req.body as { rsn?: string; answers?: signupService.SignupAnswerInput[] };
     if (!rsn) throw new ServiceError(400, "rsn is required");
-    const signup = signupService.createSignup(db, req.bingo!, { bingoId: req.bingo!.id, userId: req.user!.id, rsn, answers: answers ?? [] });
+    const { womId, rsnVerified } = await resolveRsnVerification(req.user!.discordId, rsn);
+    const signup = signupService.createSignup(db, req.bingo!, {
+      bingoId: req.bingo!.id,
+      userId: req.user!.id,
+      rsn,
+      answers: answers ?? [],
+      womId,
+      rsnVerified,
+    });
     res.status(201).json({ signup });
   }),
 );
@@ -258,7 +296,8 @@ router.patch(
     const existing = signupService.getSignupForUser(db, req.bingo!.id, req.user!.id);
     if (!existing) throw new ServiceError(404, "You haven't signed up for this bingo");
     const { rsn, answers } = req.body as { rsn?: string; answers?: signupService.SignupAnswerInput[] };
-    const signup = signupService.updateSignup(db, req.bingo!, existing.signup.id, { rsn, answers });
+    const verification = rsn !== undefined ? await resolveRsnVerification(req.user!.discordId, rsn) : {};
+    const signup = signupService.updateSignup(db, req.bingo!, existing.signup.id, { rsn, answers, ...verification });
     res.json({ signup });
   }),
 );

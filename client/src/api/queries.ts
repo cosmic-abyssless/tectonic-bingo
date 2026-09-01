@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   BingoListResponse, BingoShellResponse, BoardResponse, CreateSubmissionResponse, DraftState,
-  ModSubmissionsResponse, MySignupResponse, PendingCountResponse, ReviewSubmissionResponse,
+  ModSubmissionsResponse, MySignupResponse, MyTectonicRsnsResponse, PendingCountResponse, ReviewSubmissionResponse,
   RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupQuestion, Stage,
   StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
@@ -19,6 +19,7 @@ export const queryKeys = {
   signupRoster: (slug: string) => ["signupRoster", slug] as const,
   signupQuestions: (slug: string) => ["signupQuestions", slug] as const,
   mySignup: (slug: string) => ["mySignup", slug] as const,
+  myTectonicRsns: (slug: string) => ["myTectonicRsns", slug] as const,
   draftState: (slug: string) => ["draftState", slug] as const,
   stats: (slug: string) => ["stats", slug] as const,
 };
@@ -156,6 +157,16 @@ export function useMySignup(slug: string | undefined) {
   return useQuery({
     queryKey: queryKeys.mySignup(slug ?? ""),
     queryFn: () => api.get<MySignupResponse>(`/api/bingos/${slug}/signup`),
+    enabled: !!slug,
+  });
+}
+
+// Empty array when the tectonic-api integration is off or the signer isn't
+// a registered clan member there — the signup form falls back to free text.
+export function useMyTectonicRsns(slug: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.myTectonicRsns(slug ?? ""),
+    queryFn: () => api.get<MyTectonicRsnsResponse>(`/api/bingos/${slug}/signup/rsns`),
     enabled: !!slug,
   });
 }

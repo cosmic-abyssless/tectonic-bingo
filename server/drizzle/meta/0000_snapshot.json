@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d88314a9-09aa-4404-abe8-c06cd7ae5c11",
+  "id": "dec44e6d-2261-4860-895e-49196e19becf",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "bingo_line_tiles": {
@@ -677,6 +677,21 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "wom_id": {
+          "name": "wom_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rsn_verified": {
+          "name": "rsn_verified",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         },
         "status": {
           "name": "status",
