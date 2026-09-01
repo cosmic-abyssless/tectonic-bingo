@@ -134,6 +134,16 @@ export function useMarkBuyin(slug: string) {
   });
 }
 
+// Dev-only — the server route only exists at all outside production with
+// DEV_LOGIN_ENABLED set, matching AuthContext's devMode flag.
+export function useSeedTestSignups(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (count: number) => api.post<{ signups: Signup[] }>(`/api/bingos/${slug}/mod/dev/seed-signups`, { count }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
+  });
+}
+
 export function useSignupQuestions(slug: string | undefined) {
   return useQuery({
     queryKey: queryKeys.signupQuestions(slug ?? ""),

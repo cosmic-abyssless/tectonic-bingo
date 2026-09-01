@@ -4,6 +4,7 @@ import type { User } from "@bingo/shared";
 interface AuthState {
   user: User | null;
   loading: boolean;
+  devMode: boolean;
   logout: () => Promise<void>;
 }
 
@@ -11,12 +12,16 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [devMode, setDevMode] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/me", { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setUser(data?.user ?? null))
+      .then((data) => {
+        setUser(data?.user ?? null);
+        setDevMode(data?.devMode ?? false);
+      })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
@@ -26,7 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  return <AuthContext.Provider value={{ user, loading, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, loading, devMode, logout }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthState {

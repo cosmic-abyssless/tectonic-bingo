@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { RosterEntry, User } from "@bingo/shared";
-import { useMarkBuyin, useSignupRoster, useSignupQuestions } from "../../api/queries";
+import { useBingo, useMarkBuyin, useSeedTestSignups, useSignupRoster, useSignupQuestions } from "../../api/queries";
+import { useAuth } from "../../context/AuthContext";
 import { displayName } from "../ui/user";
 import { UserSearchInput } from "../admin/UserSearchInput";
 
@@ -60,9 +61,52 @@ function BuyinCell({ slug, entry }: { slug: string; entry: RosterEntry }) {
   );
 }
 
+// Dev-only — hidden unless AuthContext.devMode is true (the server route
+// this calls doesn't even exist outside that same dev gate). Lets a mod
+// populate a bunch of fake signups to exercise the draft without manually
+// signing up a dozen browser tabs.
+function DevSeedPanel({ slug }: { slug: string }) {
+  const seedTestSignups = useSeedTestSignups(slug);
+  const [count, setCount] = useState(8);
+  const [error, setError] = useState<string | null>(null);
+
+  async function seed() {
+    setError(null);
+    try {
+      await seedTestSignups.mutateAsync(count);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to seed test signups");
+    }
+  }
+
+  return (
+    <div className="bg-amber-950/30 border border-amber-800/60 rounded-lg px-3 py-2 mb-4 flex items-center gap-2 flex-wrap">
+      <span className="text-xs text-amber-400 font-semibold uppercase tracking-wide shrink-0">Dev tools</span>
+      <input
+        type="number"
+        min={1}
+        max={50}
+        value={count}
+        onChange={(e) => setCount(Number(e.target.value) || 1)}
+        className="w-16 bg-slate-900 border border-slate-600 text-white rounded-md px-2 py-1 text-sm focus:outline-none focus:border-indigo-500"
+      />
+      <button
+        onClick={seed}
+        disabled={seedTestSignups.isPending}
+        className="text-sm bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold rounded-md px-3 py-1 transition-colors cursor-pointer"
+      >
+        {seedTestSignups.isPending ? "Seeding…" : "Seed test signups"}
+      </button>
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+    </div>
+  );
+}
+
 export function SignupRoster({ slug }: { slug: string }) {
   const { data } = useSignupRoster(slug);
   const { data: questionsData } = useSignupQuestions(slug);
+  const { data: bingoData } = useBingo(slug);
+  const { devMode } = useAuth();
   const roster = data?.signups ?? [];
   const questions = questionsData?.questions ?? [];
   const [copied, setCopied] = useState(false);
@@ -76,6 +120,7 @@ export function SignupRoster({ slug }: { slug: string }) {
 
   return (
     <div className="w-full max-w-6xl mx-auto px-6">
+      {devMode && bingoData?.bingo.stage === "signup" && <DevSeedPanel slug={slug} />}
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-slate-400">{roster.length} signup{roster.length !== 1 ? "s" : ""}</p>
         <button onClick={copyCsv} className="text-sm bg-slate-700 hover:bg-slate-600 text-white rounded px-3 py-1.5 transition-colors cursor-pointer">
