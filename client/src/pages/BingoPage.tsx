@@ -241,6 +241,22 @@ export function BingoPage() {
         <main className="px-3 py-4 sm:px-6 sm:py-6 max-w-6xl mx-auto">
           {bingo.stage === "signup" ? (
             <SignupForm slug={slug!} />
+          ) : bingo.stage === "draft" ? (
+            // Its own branch, above the boardRevealed check — mods always
+            // have boardRevealed=true (they can preview the board pre-reveal
+            // for setup), which would otherwise skip straight past this and
+            // render the still-empty board instead of pointing at the draft.
+            <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+              <div className="text-5xl">🎯</div>
+              <h2 className="text-xl font-bold text-white">Draft stage</h2>
+              <p className="text-slate-400 max-w-sm">The draft is underway — teams will be revealed soon.</p>
+              <button
+                onClick={() => navigate(`/b/${slug}/draft`)}
+                className="text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg px-4 py-2 transition-colors cursor-pointer"
+              >
+                Open Draft Room
+              </button>
+            </div>
           ) : !boardRevealed ? (
             <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
               <div className="text-5xl">🎯</div>
@@ -254,17 +270,6 @@ export function BingoPage() {
               </p>
               {bingo.stage === "planning" && bingo.signupOpensAt && (
                 <p className="text-slate-500 text-sm">Signups open {new Date(bingo.signupOpensAt).toLocaleString()}</p>
-              )}
-              {bingo.stage === "draft" && (
-                <>
-                  <p className="text-slate-500 text-sm">The draft is underway — teams will be revealed soon.</p>
-                  <button
-                    onClick={() => navigate(`/b/${slug}/draft`)}
-                    className="text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg px-4 py-2 transition-colors cursor-pointer"
-                  >
-                    Open Draft Room
-                  </button>
-                </>
               )}
             </div>
           ) : !viewingTeamId ? (
