@@ -159,7 +159,14 @@ export function SignupRoster({ slug }: { slug: string }) {
               const answerByQ = new Map(entry.answers.map((a) => [a.questionId, a.value]));
               return (
                 <tr key={entry.signup.id}>
-                  <td className="py-2 pr-4 text-white font-medium">{entry.signup.rsn}</td>
+                  <td className="py-2 pr-4 text-white font-medium">
+                    {entry.signup.rsn}
+                    {entry.signup.rsnVerified && (
+                      <span title="Verified against the linked clan account" className="ml-1.5 text-emerald-400">
+                        ✓
+                      </span>
+                    )}
+                  </td>
                   <td className="py-2 pr-4 text-slate-300">{displayName(entry.user)}</td>
                   <td className="py-2 pr-4">
                     <span className={`text-xs rounded-full px-2 py-0.5 ${entry.signup.status === "active" ? "bg-green-900/50 text-green-300" : "bg-slate-700 text-slate-400"}`}>

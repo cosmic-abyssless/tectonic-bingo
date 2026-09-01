@@ -1,9 +1,9 @@
-import dotenv from "dotenv";
+// Must be the first import — see env.ts for why a plain dotenv.config() call
+// positioned before these other imports does not actually run first.
+import "./env";
 import path from "path";
 import fs from "fs";
 import http from "http";
-// Load .env from the monorepo root regardless of which directory npm runs from
-dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 import express from "express";
 import session from "express-session";
 import createSqliteStoreFactory from "better-sqlite3-session-store";

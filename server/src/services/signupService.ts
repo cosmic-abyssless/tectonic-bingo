@@ -75,6 +75,10 @@ export interface CreateSignupParams {
   userId: string;
   rsn: string;
   answers: SignupAnswerInput[];
+  // Set by the route handler after checking the submitted RSN against the
+  // signer's tectonic-api RSNs. Never trust a client-sent verified claim.
+  womId?: string | null;
+  rsnVerified?: boolean;
 }
 
 export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
@@ -90,7 +94,17 @@ export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
     const missingRequired = questions.some((q) => q.required && !answeredIds.has(q.id));
     if (missingRequired) throw new ServiceError(400, "Please answer every required question");
 
-    const signup = tx.insert(signups).values({ bingoId: params.bingoId, userId: params.userId, rsn: params.rsn.trim() }).returning().get();
+    const signup = tx
+      .insert(signups)
+      .values({
+        bingoId: params.bingoId,
+        userId: params.userId,
+        rsn: params.rsn.trim(),
+        womId: params.womId ?? null,
+        rsnVerified: params.rsnVerified ?? false,
+      })
+      .returning()
+      .get();
     for (const a of params.answers) {
       tx.insert(signupAnswers).values({ signupId: signup.id, questionId: a.questionId, value: a.value }).run();
     }
@@ -101,6 +115,9 @@ export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
 export interface UpdateSignupParams {
   rsn?: string;
   answers?: SignupAnswerInput[];
+  // Same convention as CreateSignupParams: route-computed, never client-trusted.
+  womId?: string | null;
+  rsnVerified?: boolean;
 }
 
 export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: UpdateSignupParams) {
@@ -111,7 +128,14 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
 
     if (params.rsn !== undefined) {
       if (!params.rsn.trim()) throw new ServiceError(400, "RSN is required");
-      tx.update(signups).set({ rsn: params.rsn.trim() }).where(eq(signups.id, signupId)).run();
+      tx.update(signups)
+        .set({
+          rsn: params.rsn.trim(),
+          womId: params.womId ?? null,
+          rsnVerified: params.rsnVerified ?? false,
+        })
+        .where(eq(signups.id, signupId))
+        .run();
     }
     for (const a of params.answers ?? []) {
       const existingAnswer = tx

@@ -51,6 +51,17 @@ describe("createSignup", () => {
     createQuestion(db, { bingoId: bingo.id, prompt: "Required Q", type: "text", required: true });
     expect(() => createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "MyRsn", answers: [] })).toThrow(/required question/);
   });
+
+  it("stores womId/rsnVerified when passed, and defaults to unverified when omitted", () => {
+    const { bingo, memberId, adminId } = seedBingo();
+    const verified = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "MyRsn", answers: [], womId: "1135", rsnVerified: true });
+    expect(verified.womId).toBe("1135");
+    expect(verified.rsnVerified).toBe(true);
+
+    const unverified = createSignup(db, bingo, { bingoId: bingo.id, userId: adminId, rsn: "OtherRsn", answers: [] });
+    expect(unverified.womId).toBeNull();
+    expect(unverified.rsnVerified).toBe(false);
+  });
 });
 
 describe("updateSignup / withdrawSignup", () => {
@@ -71,6 +82,17 @@ describe("updateSignup / withdrawSignup", () => {
     const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Old", answers: [] });
     const closedBingo = { ...bingo, stage: "draft" as const };
     expect(() => updateSignup(db, closedBingo, signup.id, { rsn: "New" })).toThrow(ServiceError);
+  });
+
+  it("updates womId/rsnVerified alongside rsn, resetting to unverified when omitted", () => {
+    const { bingo, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Old", answers: [] });
+
+    updateSignup(db, bingo, signup.id, { rsn: "New", womId: "1135", rsnVerified: true });
+    expect(getSignupForUser(db, bingo.id, memberId)!.signup).toEqual(expect.objectContaining({ rsn: "New", womId: "1135", rsnVerified: true }));
+
+    updateSignup(db, bingo, signup.id, { rsn: "Newer" });
+    expect(getSignupForUser(db, bingo.id, memberId)!.signup).toEqual(expect.objectContaining({ rsn: "Newer", womId: null, rsnVerified: false }));
   });
 
   it("marks a signup withdrawn", () => {

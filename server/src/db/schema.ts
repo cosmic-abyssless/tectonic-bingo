@@ -93,6 +93,10 @@ export const signups = sqliteTable('signups', {
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
   userId: text('user_id').notNull().references(() => users.id),
   rsn: text('rsn').notNull(), // RuneScape display name (max 12 chars)
+  // Populated when the submitted RSN matched one of the signer's tectonic-api
+  // RSNs at signup time. Never set from a client-supplied claim.
+  womId: text('wom_id'),
+  rsnVerified: integer('rsn_verified', { mode: 'boolean' }).notNull().default(false),
   status: text('status', { enum: ['active', 'withdrawn'] }).notNull().default('active'),
   buyinReceivedAt: integer('buyin_received_at', { mode: 'timestamp' }),
   buyinCollectedByUserId: text('buyin_collected_by_user_id').references(() => users.id), // who physically collected the GP

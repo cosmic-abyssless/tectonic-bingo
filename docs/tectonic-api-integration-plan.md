@@ -106,12 +106,48 @@ a constructor arg — no live API in tests). What exists, for the phases below t
 **DoD met:** unit-tested with mocked fetch; boots clean and logs "disabled" with env unset. A live
 smoke test against a locally running tectonic-api is still worth doing at the start of T2.
 
-### Phase T2 — Verified signups
+### Phase T2 — Verified signups — DONE
 
-Implementation notes (repo conventions apply throughout: fresh migration regen — delete
-`server/drizzle/` + the dev DB file, `drizzle-kit generate`, never layer a new migration;
-kill dev-server processes with `taskkill //PID <pid> //T //F` (tree kill); NEVER run a full
-`db:reset` as cleanup if the dev DB may hold the user's own test bingos — it wipes everything):
+Implemented and live-verified 2026-09-01 (browser screenshots: signup form renders the RSN as a
+select with a green "✓ Verified against your linked clan account" note; mod roster shows "Lynx
+titan ✓"). What exists, for T3 to build on:
+
+- Schema: `signups.womId` (nullable) + `signups.rsnVerified` (default false), fresh migration
+  `0000_unusual_king_bedlam.sql`. `shared.Signup` matches.
+- `GET /:slug/signup/rsns` — the caller's tectonic RSNs (`[]` when unconfigured/not a member).
+- `POST`/`PATCH /:slug/signup` — the route (not signupService, which stays sync/DB-pure) case-
+  insensitively matches the submitted RSN against the caller's tectonic RSNs via
+  `resolveRsnVerification()` in `routes/bingos.ts`, and only that path can set `rsnVerified: true`.
+  A client-sent verified claim is never trusted.
+- `SignupForm.tsx` — `useMyTectonicRsns` renders a `<select>` of linked RSNs (auto-selects when
+  there's exactly one) in place of free text when ≥1 come back; keeps a signer's already-saved
+  but no-longer-linked RSN selectable instead of silently dropping it.
+- Verified badges: green "✓" in `SignupRoster.tsx`'s roster table and in `TeamManager.tsx`'s
+  captain-candidate `<select>` options, both driven directly by `signup.rsnVerified`.
+- `signupService.test.ts` covers `womId`/`rsnVerified` passthrough and reset-on-omit.
+
+**Real bug found and fixed along the way (unrelated to tectonic-api itself, but blocked live
+verification):** `server/src/index.ts` had `dotenv.config()` textually before its other imports,
+but TS/esbuild hoists all `import` declarations above interleaved plain statements in the compiled
+output — so every other import in that file (and everything *they* transitively require) was
+actually evaluated before `dotenv.config()` ran. This silently broke three things on every real
+cold start (not just this feature): `routes/auth.ts`'s and `routes/mod.ts`'s dev-only gates always
+saw `DEV_LOGIN_ENABLED` as `undefined` (routes never registered — this was probably the real cause
+of the "dev-login/seed-signups worked after a restart" confusion documented earlier in this
+project, previously misattributed each time to orphaned watch processes), `auth/discord.ts` always
+saw `DISCORD_GUILD_ID` as `undefined` (silently requesting fewer OAuth scopes than configured), and
+`db/index.ts` always ignored a custom `DB_PATH`. Fixed by moving the dotenv call into its own
+import-free-of-app-code module (`server/src/env.ts`) and making `import "./env"` the literal first
+line of `index.ts` — since hoisting preserves relative order *among* imports, that guarantees it
+runs before anything else. Worth knowing if something env-gated still misbehaves: check whether
+its gate lives in a file that's a *transitive* import reached another way before `index.ts`'s own
+import chain would visit `./env`.
+
+Old implementation notes below, left for reference (repo conventions apply throughout: fresh
+migration regen — delete `server/drizzle/` + the dev DB file, `drizzle-kit generate`, never layer a
+new migration; kill dev-server processes with `taskkill //PID <pid> //T //F` (tree kill); NEVER run
+a full `db:reset` as cleanup if the dev DB may hold the user's own test bingos — it wipes
+everything; back up `data/bingo.db` first and ask before a destructive regen if it might):
 
 1. **Schema** (`server/src/db/schema.ts`): `signups` gains `womId: text('wom_id')` (nullable) and
    `rsnVerified: integer('rsn_verified', { mode: 'boolean' }).notNull().default(false)`.
@@ -137,11 +173,13 @@ kill dev-server processes with `taskkill //PID <pid> //T //F` (tree kill); NEVER
 6. **Tests** — signupService tests for the new params passing through; route-level behavior is
    covered by the live DoD run (this repo doesn't do route-level unit tests).
 
-**DoD:** live browser run — a member with a linked RSN gets it auto-filled and badge-verified; a
-user unknown to tectonic falls back to free text and shows unverified; with the integration
-unconfigured, signup behaves exactly as today. Verify with the real tectonic-api via
-`docker compose --profile dev up` in `../tectonic-api` (matching `API_KEY`), or note explicitly if
-verified against a mocked/unavailable API.
+**DoD — met:** live-verified against a real `docker compose --profile dev up` tectonic-api
+instance: a registered clan member's linked RSN auto-fills, selects, and shows the verified badge
+on both the signup form and the mod roster; a submitted RSN that doesn't match any linked RSN
+falls back to `womId: null, rsnVerified: false`; the client-side free-text fallback for zero linked
+RSNs and the "off" behavior are covered by the existing unit tests (both are a simple
+`tectonicRsns.length === 0` / `getTectonicClient() === null` branch, already exercised there).
+Zero console errors in the browser check.
 
 ### Phase T3 — Roster & draft enrichment
 

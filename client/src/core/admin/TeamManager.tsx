@@ -108,7 +108,8 @@ export function TeamManager({ slug }: { slug: string }) {
               <option value="">Select a signed-up player…</option>
               {candidates.map((c) => (
                 <option key={c.user.id} value={c.user.id}>
-                  {c.signup.rsn} ({displayName(c.user)})
+                  {c.signup.rsn}
+                  {c.signup.rsnVerified ? " ✓" : ""} ({displayName(c.user)})
                 </option>
               ))}
             </select>
