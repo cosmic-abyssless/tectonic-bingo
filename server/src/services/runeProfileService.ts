@@ -11,8 +11,10 @@
 // against signup.rsn.
 //
 // Requires RUNEPROFILE_CLAN_NAME — off entirely, same nullable pattern as
-// tectonicService/womService, when unset.
-
+// tectonicService/womService, when unset. Not every clan member has this
+// set up (it needs the RuneProfile RuneLite plugin), so routes/bingos.ts
+// falls back to WOM's coarser type for anyone this doesn't know about.
+//
 // Confirmed against the real clan's RuneProfile roster (223 members): the
 // values actually present are "normal", "ironman", "hardcore_ironman",
 // "group_ironman", "unranked_group_ironman". "ultimate_ironman" and
@@ -20,15 +22,7 @@
 // standard account-type ordering (ids 2 and 5, the two gaps in the ids we
 // did see: 0 normal, 1 ironman, 3 hardcore, 4 group, 6 unranked group).
 // "unknown" is defensive for anything else RuneProfile might send.
-export type RuneProfileAccountType =
-  | "normal"
-  | "ironman"
-  | "ultimate_ironman"
-  | "hardcore_ironman"
-  | "group_ironman"
-  | "hardcore_group_ironman"
-  | "unranked_group_ironman"
-  | "unknown";
+import type { AccountType } from "@bingo/shared";
 
 const RUNEPROFILE_BASE_URL = "https://api.runeprofile.com/v1";
 const USER_AGENT = "tectonic-bingo (draft-room account type)";
@@ -44,7 +38,7 @@ export function getRuneProfileClanName(): string | null {
   return process.env.RUNEPROFILE_CLAN_NAME || null;
 }
 
-const KNOWN_ACCOUNT_TYPES: readonly RuneProfileAccountType[] = [
+const KNOWN_ACCOUNT_TYPES: readonly AccountType[] = [
   "normal",
   "ironman",
   "ultimate_ironman",
@@ -53,8 +47,8 @@ const KNOWN_ACCOUNT_TYPES: readonly RuneProfileAccountType[] = [
   "hardcore_group_ironman",
   "unranked_group_ironman",
 ];
-function parseAccountType(key: unknown): RuneProfileAccountType {
-  return KNOWN_ACCOUNT_TYPES.includes(key as RuneProfileAccountType) ? (key as RuneProfileAccountType) : "unknown";
+function parseAccountType(key: unknown): AccountType {
+  return KNOWN_ACCOUNT_TYPES.includes(key as AccountType) ? (key as AccountType) : "unknown";
 }
 
 interface ClanMemberResponse {
@@ -69,7 +63,7 @@ interface ClanResponse {
 }
 
 export class RuneProfileClient {
-  private cache: { value: Map<string, RuneProfileAccountType>; expiresAt: number } | null = null;
+  private cache: { value: Map<string, AccountType>; expiresAt: number } | null = null;
   private rateLimitedUntil = 0;
 
   constructor(
@@ -78,11 +72,11 @@ export class RuneProfileClient {
   ) {}
 
   /** Account type for every member of the given clan, keyed by lowercased RSN. */
-  async getClanAccountTypes(clanName: string): Promise<Map<string, RuneProfileAccountType> | null> {
+  async getClanAccountTypes(clanName: string): Promise<Map<string, AccountType> | null> {
     if (this.cache && this.cache.expiresAt > Date.now()) return this.cache.value;
     if (Date.now() < this.rateLimitedUntil) return null;
 
-    const byRsn = new Map<string, RuneProfileAccountType>();
+    const byRsn = new Map<string, AccountType>();
     let cursor: string | undefined;
     try {
       for (let page = 0; page < MAX_PAGES; page++) {
