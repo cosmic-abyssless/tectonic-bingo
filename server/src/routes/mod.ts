@@ -9,6 +9,7 @@ import * as submissionService from "../services/submissionService";
 import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
 import * as devSeedService from "../services/devSeedService";
+import { getTectonicClient } from "../services/tectonicService";
 import { approveSubmission, rejectSubmission } from "../services/scoringService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
@@ -128,7 +129,8 @@ if (process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "
     asyncHandler(async (req, res) => {
       const { count } = req.body as { count?: number };
       const n = Math.min(Math.max(Math.trunc(count ?? 8), 1), 50);
-      const signups = devSeedService.seedTestSignups(db, req.bingo!, n);
+      const roster = (await getTectonicClient()?.getRoster(1000)) ?? [];
+      const signups = devSeedService.seedTestSignups(db, req.bingo!, n, roster);
       res.status(201).json({ signups });
     }),
   );
