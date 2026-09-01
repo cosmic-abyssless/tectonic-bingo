@@ -7,6 +7,8 @@ import { createTestDb } from "../testUtils/testDb";
 import { createQuestion } from "./signupService";
 import { seedTestSignups } from "./devSeedService";
 import type { TectonicRosterUser } from "./tectonicService";
+import { parseWomSummary } from "./womService";
+import { parseAccountType } from "./runeProfileService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -97,5 +99,27 @@ describe("seedTestSignups", () => {
     const created = seedTestSignups(db, bingo, 1, [noRsn]);
     expect(created[0]!.rsn).toBe("TestBot1");
     expect(created[0]!.rsnVerified).toBe(false);
+  });
+
+  it("fabricates parseable WOM/RuneProfile stats locally for every seeded signup, real and TestBot alike, without any network call", () => {
+    const bingo = seedBingo();
+    const roster = [rosterUser("111", "RealOne", "w1")];
+
+    const created = seedTestSignups(db, bingo, 3, roster); // 1 real + 2 TestBots
+    expect(created).toHaveLength(3);
+
+    for (const signup of created) {
+      const row = db.select().from(schema.signups).where(eq(schema.signups.id, signup.id)).get()!;
+      expect(row.womDataJson).not.toBeNull();
+      expect(row.runeProfileDataJson).not.toBeNull();
+      expect(row.statsFetchedAt).not.toBeNull();
+
+      const womSummary = parseWomSummary(JSON.parse(row.womDataJson!));
+      expect(womSummary).not.toBeNull();
+      expect(typeof womSummary!.ehb).toBe("number");
+
+      const accountType = parseAccountType(JSON.parse(row.runeProfileDataJson!));
+      expect(accountType).not.toBeNull();
+    }
   });
 });
