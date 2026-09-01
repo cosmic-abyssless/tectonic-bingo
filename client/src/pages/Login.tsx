@@ -1,6 +1,68 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import type { User } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
+import { displayName } from "../core/ui/user";
+
+// Dev-only — the /auth/dev-users fetch 404s (and this renders nothing)
+// unless the server has NODE_ENV !== 'production' && DEV_LOGIN_ENABLED ===
+// 'true', same gate as /auth/dev-login itself. Lets you switch identity —
+// e.g. to a plain non-mod player — with one click instead of a console fetch.
+function DevLoginPanel() {
+  const [users, setUsers] = useState<User[] | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/auth/dev-users", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setUsers(data?.users ?? null))
+      .catch(() => setUsers(null));
+  }, []);
+
+  async function loginAs(discordId: string) {
+    setPending(discordId);
+    setError(null);
+    try {
+      const res = await fetch("/auth/dev-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ discordId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? "Dev login failed");
+      }
+      window.location.href = "/";
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Dev login failed");
+      setPending(null);
+    }
+  }
+
+  if (!users || users.length === 0) return null;
+
+  return (
+    <div className="w-full border-t border-slate-700 pt-4 mt-2">
+      <p className="text-xs text-amber-400 font-semibold uppercase tracking-wide mb-2 text-center">Dev tools — log in as</p>
+      <div className="flex flex-wrap gap-2 justify-center max-w-xs">
+        {users.map((u) => (
+          <button
+            key={u.id}
+            onClick={() => loginAs(u.discordId)}
+            disabled={pending === u.discordId}
+            className="text-xs bg-slate-700 hover:bg-amber-700 disabled:opacity-50 text-white rounded-full px-3 py-1.5 transition-colors cursor-pointer"
+          >
+            {displayName(u)}
+            {u.isAdmin ? " ★" : ""}
+          </button>
+        ))}
+      </div>
+      {error && <p className="text-red-400 text-xs mt-2 text-center">{error}</p>}
+    </div>
+  );
+}
 
 export function Login() {
   const { user, loading } = useAuth();
@@ -25,6 +87,7 @@ export function Login() {
           <DiscordIcon />
           Sign in with Discord
         </a>
+        <DevLoginPanel />
       </div>
     </div>
   );
