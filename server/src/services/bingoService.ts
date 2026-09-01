@@ -122,7 +122,6 @@ export interface UpdateBingoSettingsParams {
   buyinAmount?: number | null;
   bonusPotAmount?: number;
   rulesMarkdown?: string | null;
-  aiHint?: string | null;
   signupOpensAt?: Date | null;
   draftScheduledAt?: Date | null;
   revealScheduledAt?: Date | null;

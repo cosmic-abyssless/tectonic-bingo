@@ -34,7 +34,6 @@ export interface Bingo {
   buyinAmount: number | null;
   bonusPotAmount: number;
   rulesMarkdown: string | null;
-  aiHint: string | null;
   signupOpensAt: string | null;
   draftScheduledAt: string | null;
   revealScheduledAt: string | null;

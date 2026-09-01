@@ -37,7 +37,7 @@ Fresh Drizzle migration set: delete `server/drizzle/*` and the dev DB, rewrite `
 ### Identity & platform
 
 - **`users`** — as v1 (`discordId` unique, username/globalName/guildNick/avatar) **minus `isModerator`**, plus `isAdmin` (boolean, default false). On login upsert, set `isAdmin = true` if the Discord ID is in the `ADMIN_DISCORD_IDS` env var (comma-separated). Admins can create bingos and grant mod/admin from the UI; `ADMIN_DISCORD_IDS` is only the bootstrap.
-- **`bingos`** (replaces `bingo_events`) — `slug` (unique, URL-safe, admin-set), `name`, `description`, `theme` (text, default `'default'`; selects the client theme folder), `stage` (enum: `planning | signup | draft | reveal | live | complete`, default `planning`), `boardRows`, `boardCols` (ints), `buyinAmount` (GP, nullable), `bonusPotAmount` (int, default 0 — extra GP added on top of buy-ins, e.g. sponsorships; the actual pot total is computed as `buyinAmount × paid signups + bonusPotAmount`, not stored), `rulesMarkdown` (text, nullable — replaces the hardcoded RulesModal), `aiHint` (text, nullable — appended to the screenshot-analysis prompt), scheduled dates: `signupOpensAt`, `draftScheduledAt`, `revealScheduledAt`, `startsAt`, `endsAt` (all nullable timestamps), `createdByUserId`.
+- **`bingos`** (replaces `bingo_events`) — `slug` (unique, URL-safe, admin-set), `name`, `description`, `theme` (text, default `'default'`; selects the client theme folder), `stage` (enum: `planning | signup | draft | reveal | live | complete`, default `planning`), `boardRows`, `boardCols` (ints), `buyinAmount` (GP, nullable), `bonusPotAmount` (int, default 0 — extra GP added on top of buy-ins, e.g. sponsorships; the actual pot total is computed as `buyinAmount × paid signups + bonusPotAmount`, not stored), `rulesMarkdown` (text, nullable — replaces the hardcoded RulesModal), scheduled dates: `signupOpensAt`, `draftScheduledAt`, `revealScheduledAt`, `startsAt`, `endsAt` (all nullable timestamps), `createdByUserId`.
 - **`bingo_moderators`** — `bingoId`, `userId`, unique pair. Mod is **per-bingo**, not global (fixes v1's global boolean).
 - **`stage_transitions`** — `bingoId`, `fromStage`, `toStage`, `changedByUserId`, `createdAt`. Append-only audit log; feeds the timeline view.
 
@@ -101,7 +101,7 @@ server/src/
     mod.ts                 /api/bingos/:slug/mod/*
     admin.ts               /api/admin/* and /api/bingos/:slug/admin/*
   ws.ts                    envelope broadcast (see below)
-  ai.ts                    screenshot analysis, prompt parameterized by bingo.aiHint
+  ai.ts                    screenshot analysis, prompt uses a hardcoded OSRS hint (AI_HINT)
 ```
 
 ### Auth changes
@@ -154,7 +154,7 @@ All bingo-scoped routes live under `/api/bingos/:slug`. No route may fall back t
 | GET `/api/bingos/:slug/teams/:teamId/progress` | auth | Points breakdown + per-task progress. Own team, or any team for mods; all teams for everyone once stage = `live` (scoreboard is public within the app) |
 | GET `/api/bingos/:slug/teams/:teamId/submissions` | auth | Own team, or mods |
 | POST `/api/bingos/:slug/submissions` | auth (team member) | Create submission (multipart), server-side gating |
-| POST `/api/bingos/:slug/submissions/analyze` | auth | AI screenshot analysis (prompt + item list from this bingo; `aiHint` appended) |
+| POST `/api/bingos/:slug/submissions/analyze` | auth | AI screenshot analysis (prompt + item list from this bingo; hardcoded OSRS hint prepended) |
 | GET/POST/DELETE `/api/bingos/:slug/signup` | auth | Read own signup / create (answers + rsn) / withdraw |
 | GET `/api/bingos/:slug/signup/questions` | auth | Question list for the form |
 | GET `/api/bingos/:slug/draft` | auth (signed-up or mod) | Draft state: order, picks, pool, whose turn |

@@ -22,8 +22,8 @@ function CreateBingoForm() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
-  const [boardRows, setBoardRows] = useState(7);
-  const [boardCols, setBoardCols] = useState(7);
+  // Board is always square for now — enforced here client-side, not in the schema.
+  const [boardSize, setBoardSize] = useState(7);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,7 +31,7 @@ function CreateBingoForm() {
     setCreating(true);
     setError(null);
     try {
-      const { bingo } = await adminApi.createBingo({ slug: slug || slugify(name), name, boardRows, boardCols });
+      const { bingo } = await adminApi.createBingo({ slug: slug || slugify(name), name, boardRows: boardSize, boardCols: boardSize });
       await queryClient.invalidateQueries({ queryKey: queryKeys.bingos() });
       navigate(`/b/${bingo.slug}/admin`);
     } catch (e: unknown) {
@@ -66,15 +66,15 @@ function CreateBingoForm() {
           className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
         />
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">Board rows</label>
-          <input type="number" min={1} value={boardRows} onChange={(e) => setBoardRows(Number(e.target.value) || 1)} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">Board columns</label>
-          <input type="number" min={1} value={boardCols} onChange={(e) => setBoardCols(Number(e.target.value) || 1)} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-        </div>
+      <div>
+        <label className="block text-xs text-slate-400 mb-1">Board size (NxN)</label>
+        <input
+          type="number"
+          min={1}
+          value={boardSize}
+          onChange={(e) => setBoardSize(Number(e.target.value) || 1)}
+          className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+        />
       </div>
       {error && <p className="text-red-400 text-sm">{error}</p>}
       <button onClick={create} disabled={!name || !slug || creating} className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer">

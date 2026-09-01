@@ -40,9 +40,6 @@ export const bingos = sqliteTable('bingos', {
   // this — computed in bingoService.calculatePotTotal, not stored.
   bonusPotAmount: integer('bonus_pot_amount').notNull().default(0),
   rulesMarkdown: text('rules_markdown'),
-  // Extra context appended to the AI screenshot-analysis prompt for this bingo
-  // (e.g. "This is an Old School RuneScape screenshot...").
-  aiHint: text('ai_hint'),
   signupOpensAt: integer('signup_opens_at', { mode: 'timestamp' }),
   draftScheduledAt: integer('draft_scheduled_at', { mode: 'timestamp' }),
   revealScheduledAt: integer('reveal_scheduled_at', { mode: 'timestamp' }),
