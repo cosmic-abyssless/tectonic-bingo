@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "./db/schema";
 import { tileTaskItems, tileTasks, tileWildcards, tiles } from "./db/schema";
+import { findBestMatch, fuzzyIncludes, type DetectedItemMatch, type DetectedWildcardMatch } from "./services/textMatchService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -17,8 +18,8 @@ export interface AnalyzeResult {
   codewordFound: boolean;
   codeword: string;
   extractedText: string[];
-  detectedMatch: { tileId: string; tileName: string; taskId: string; taskItemId: string; itemName: string } | null;
-  detectedWildcard: { tileId: string; tileName: string; wildcardId: string; itemName: string; applicableTaskId: string | null } | null;
+  detectedMatch: DetectedItemMatch | null;
+  detectedWildcard: DetectedWildcardMatch | null;
   warnings: string[];
 }
 
@@ -51,7 +52,10 @@ function toArrayBuffer(buf: Buffer): ArrayBuffer {
 }
 
 // Runs local OCR on the screenshot, then matches the extracted text against
-// the team's codeword and every item/wildcard on this bingo's board.
+// the team's codeword and every item/wildcard on this bingo's board. All
+// matching (including fuzzy tolerance for OCR slips) lives in
+// textMatchService — this function is I/O only: OCR the image, load the
+// board's items/wildcards, hand both to the pure matcher.
 export async function analyzeSubmissionScreenshot(db: Db, bingo: Bingo, team: Team, file: ScreenshotFile): Promise<AnalyzeResult> {
   const service = await getOcrService();
   const result = await service.recognize(toArrayBuffer(file.buffer), { noCache: true });
@@ -60,9 +64,10 @@ export async function analyzeSubmissionScreenshot(db: Db, bingo: Bingo, team: Te
     .map((line) => line.trim())
     .filter(Boolean);
 
-  // Plain substring matching for now — Phase O2 (textMatchService) adds edit-
-  // distance tolerance for OCR slips on OSRS's bitmap font.
-  const codewordFound = extractedText.some((line) => line.toLowerCase().includes(team.codeword.toLowerCase()));
+  // Fixed at 1 edit regardless of the codeword's length — a false positive
+  // here wrongly suppresses the "codeword not found" warning mods rely on,
+  // so this stays more conservative than the length-scaled item/wildcard default.
+  const codewordFound = fuzzyIncludes(extractedText, team.codeword, { maxEdits: 1 });
 
   const items = db
     .select({ id: tileTaskItems.id, itemName: tileTaskItems.itemName, taskId: tileTasks.id, tileId: tiles.id, tileName: tiles.name })
@@ -79,30 +84,7 @@ export async function analyzeSubmissionScreenshot(db: Db, bingo: Bingo, team: Te
     .where(eq(tiles.bingoId, bingo.id))
     .all();
 
-  let detectedMatch: AnalyzeResult["detectedMatch"] = null;
-  outer: for (const item of items) {
-    const needle = item.itemName.toLowerCase();
-    for (const text of extractedText) {
-      if (text.toLowerCase().includes(needle)) {
-        detectedMatch = { tileId: item.tileId, tileName: item.tileName, taskId: item.taskId, taskItemId: item.id, itemName: item.itemName };
-        break outer;
-      }
-    }
-  }
-
-  // Only check wildcards if no regular item was matched.
-  let detectedWildcard: AnalyzeResult["detectedWildcard"] = null;
-  if (!detectedMatch) {
-    outerWc: for (const wc of wildcards) {
-      const needle = wc.itemName.toLowerCase();
-      for (const text of extractedText) {
-        if (text.toLowerCase().includes(needle)) {
-          detectedWildcard = { tileId: wc.tileId, tileName: wc.tileName, wildcardId: wc.id, itemName: wc.itemName, applicableTaskId: wc.applicableTaskId };
-          break outerWc;
-        }
-      }
-    }
-  }
+  const { detectedMatch, detectedWildcard } = findBestMatch(extractedText, items, wildcards);
 
   const warnings: string[] = [];
   if (!codewordFound) {
