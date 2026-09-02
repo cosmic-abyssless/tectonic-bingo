@@ -12,8 +12,9 @@ function parseOptions(question: SignupQuestion): string[] {
 }
 
 function QuestionField({ question, value, onChange }: { question: SignupQuestion; value: string; onChange: (v: string) => void }) {
+  const fieldId = `signup-question-${question.id}`;
   const label = (
-    <label className="block text-sm font-medium text-slate-300 mb-1.5">
+    <label htmlFor={fieldId} className="block text-sm font-medium text-slate-300 mb-1.5">
       {question.prompt}
       {question.required && <span className="text-red-400 ml-1">*</span>}
     </label>
@@ -23,7 +24,7 @@ function QuestionField({ question, value, onChange }: { question: SignupQuestion
     return (
       <div>
         {label}
-        <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={3} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 resize-none" />
+        <textarea id={fieldId} value={value} onChange={(e) => onChange(e.target.value)} rows={3} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 resize-none" />
       </div>
     );
   }
@@ -43,7 +44,7 @@ function QuestionField({ question, value, onChange }: { question: SignupQuestion
     return (
       <div>
         {label}
-        <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+        <select id={fieldId} value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
           <option value="">Select…</option>
           {options.map((opt) => (
             <option key={opt} value={opt}>
@@ -57,7 +58,7 @@ function QuestionField({ question, value, onChange }: { question: SignupQuestion
   return (
     <div>
       {label}
-      <input value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+      <input id={fieldId} value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
     </div>
   );
 }
@@ -151,12 +152,12 @@ export function SignupForm({ slug }: { slug: string }) {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1.5">
+        <label htmlFor="signup-rsn" className="block text-sm font-medium text-slate-300 mb-1.5">
           RuneScape name <span className="text-red-400">*</span>
         </label>
         {rsnOptions.length > 0 ? (
           <>
-            <select value={rsn} onChange={(e) => setRsn(e.target.value)} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+            <select id="signup-rsn" value={rsn} onChange={(e) => setRsn(e.target.value)} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
               <option value="">Select…</option>
               {rsnOptions.map((r) => (
                 <option key={r.rsn} value={r.rsn}>
@@ -171,7 +172,7 @@ export function SignupForm({ slug }: { slug: string }) {
             )}
           </>
         ) : (
-          <input value={rsn} onChange={(e) => setRsn(e.target.value)} maxLength={12} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+          <input id="signup-rsn" value={rsn} onChange={(e) => setRsn(e.target.value)} maxLength={12} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
         )}
       </div>
 

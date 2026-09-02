@@ -180,26 +180,52 @@ tiles with correct positions, all 4 tasks with correct points/`pointsRequirePrev
 "the UI showed the right thing," the persisted data is actually correct. `npm run test
 --workspace=server` and both `tsc --noEmit` still green.
 
-## 4. Phase E3 — Signups, buy-ins, captains, teams
+## 4. Phase E3 — Signups, buy-ins, captains, teams — DONE (2026-09-02)
 
-1. For each of `e2e-p1`…`e2e-p5`: log in (reuse the page — `loginAs` switches the session
-   in-place; reload after), goto `/b/pokemon`, fill the signup form (free-text RSN — use
-   `Trainer1`…`Trainer5`; answer the required select; p1 and p2 answer "Willing to captain?" yes)
-   and submit. Assert the "Saved!"/edit state.
-2. One negative check: p1 opens the form again and sees the edit state, then withdraws and
-   re-signs up (exercises withdraw + the "already signed up" unique constraint is NOT hit through
-   the UI — re-signup after withdraw is blocked by the DB design, so instead just cancel the
-   withdraw confirm; keep this small).
-   ⚠️ If withdraw-then-resignup turns out to be impossible by design (unique `(bingoId, userId)`
-   even for withdrawn rows), don't fight it — assert the withdraw confirm dialog works and cancel.
-3. As `e2e-admin` in the mod panel Signups tab: mark buy-in received for all 5 (checkbox toggles
-   freely; "who collected it" search is a separate column), assert the pot total on the Settings
-   tab or bingo header reflects 5 × 10M + 50M.
-4. Advance signup → captains. Teams tab: the captain picker is a `<select>` of signed-up
-   candidates with a team-size summary line. Create 2 teams with p1 and p2 as captains.
-5. Advance captains → draft.
+Shipped as planned: `e2e-p1`…`e2e-p5` each log in (`loginAs` + fresh `page.goto`, no explicit
+reload needed since navigating to a new URL already refetches auth state), sign up free-text
+(`Trainer1`…`Trainer5`, required combat-style select, p1/p2 also check "Willing to captain?"),
+one withdraw-then-cancel negative check on p1, admin marks all 5 buy-ins received, advances
+signup → captains, assigns Trainer1 and Trainer2 as captains via the Teams tab, advances
+captains → draft.
 
-**DoD E3:** suite green; Teams tab shows 2 teams; 3 undrafted players remain.
+**Two more `htmlFor`/`id` fixes**, same pattern as Phase E2: `SignupForm.tsx`'s RSN field (shared
+id since it's either a `<select>` or an `<input>` depending on whether the signer has linked
+tectonic RSNs, never both at once) and `QuestionField`'s per-question field in the same file
+(question-id-scoped, same reasoning as `TaskEditor`'s task-scoped ids — multiple question fields
+render simultaneously). `TeamManager.tsx`'s captain-picker `<select>` got
+`aria-label="Assign a captain"` (no accessible name at all before).
+
+**Real gotchas hit:**
+- **A required field's label text includes a trailing `" *"`** (rendered as a nested `<span>`),
+  which broke `getByLabel("RuneScape name", { exact: true })` — `exact` compares against the
+  *full* accessible name including that marker, so it never matched and the test hung until the
+  180s test timeout. Symptom to recognize: a `locator.fill`/`.click` that just times out with no
+  other error, on a field whose label has a required-asterisk. Fix: drop `exact: true` on any
+  label that might carry one, unless you match the marker too.
+- **`teamSizeSummary()` in `TeamManager.tsx` is a moving target, not a final answer** — it
+  returns `null` (nothing renders) until at least one team exists, then recomputes as
+  `remainingCandidates / currentTeamCount` after *each* captain assignment — it does not wait
+  until all captains are assigned to show a stable "N teams of M". With 5 total participants:
+  after 1 captain it reads "There will be 1 team of 5…", only after the 2nd does it become
+  "There will be 2 teams of 2 based on the 5 total participants. 1 team will have an extra
+  player." Asserting the final-shape text before any captain is assigned just times out (element
+  never appears, since it's `null` at that point, not merely different text).
+- **`useMarkBuyin` only invalidates the signup-roster query, not the bingo query that
+  `BingoSettingsForm` reads `paidSignupCount`/`potTotal` from** — after marking buy-ins, the
+  Settings tab's "Total pot" stays stale until something else refetches it. No WS broadcast
+  covers this either (`invalidateForEvent` in `WebSocketContext.tsx` has no case for a buy-in
+  change). Worked around with a `page.reload()` before checking the total; **this is a real gap
+  in the app, not fixed here** — flagging in case it's worth a real fix (`useMarkBuyin` invalidating
+  `queryKeys.bingo(slug)` too) independent of this test suite.
+- Team array order from the API isn't guaranteed — don't assert on `teamCards.nth(0)` /
+  `.nth(1)` positionally; compare values as a set instead
+  (`teamNameInputs.evaluateAll(...)` → `Set` comparison, wrapped in `expect(async () => {...}).toPass()`
+  since `evaluateAll` doesn't auto-retry the way locator assertions do).
+
+**DoD E3 — met:** suite green, fresh and re-run. Spot-checked e2e.db: all 5 signups active and
+paid, exactly 2 teams with the right names/captains, bingo stage `draft`. `npm run test
+--workspace=server` and both `tsc --noEmit` still green.
 
 ## 5. Phase E4 — The draft
 
