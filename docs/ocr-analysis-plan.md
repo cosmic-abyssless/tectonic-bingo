@@ -70,127 +70,97 @@ team codeword would appear). Warm per-image latency on this dev machine (Windows
   `docs/e2e-testing-plan.md` §0 for the full list of repo-wide gotchas (never touch
   `server/data/bingo.db`, etc.).
 
-## 2. Phase O1 — Engine swap
+## 2. Phase O1 — Engine swap — DONE (2026-09-02)
 
-Replace the Anthropic call with local OCR, same result shape, no matcher changes yet.
+Shipped as planned: `server/src/ai.ts` → `server/src/ocr.ts` (git mv), `getAIClient`/
+`Anthropic`/`AI_HINT`/the message-building block all gone, replaced with a lazy
+module-level singleton (`getOcrService()`) that initializes `PaddleOcrService({ model:
+V6_SMALL_MODEL })` once on first use. `analyzeSubmissionScreenshot(db, bingo, team, file)`
+drops the `client` param; OCR runs on an ArrayBuffer slice of the upload, `result.text`
+splits on newlines into `extractedText`. Codeword/item/wildcard matching stayed plain
+`.includes()` in this phase exactly as scoped — Phase O2 is what makes it fuzzy.
+`bingos.ts`'s analyze route swaps the `getAIClient()`/503 check for `isOcrEnabled()`/503;
+an OCR failure just throws and rides the existing `asyncHandler` → `errorHandler` → 500
+path already used everywhere else in this router (no new try/catch needed — confirmed by
+reading `errorHandler.ts` before assuming). `ANTHROPIC_API_KEY` removed from
+`.env.example` and `playwright.config.ts`, replaced by `SCREENSHOT_OCR_DISABLED` in both;
+a stale "same nullable pattern as getAIClient" comment in `tectonicService.ts` (pointing
+at a function that no longer exists) was also fixed while grepping for other references.
 
-1. Dependencies, from the repo root:
-   `npm install ppu-paddle-ocr onnxruntime-node --workspace=server` and
-   `npm uninstall @anthropic-ai/sdk --workspace=server`.
-2. Rename `server/src/ai.ts` → `server/src/ocr.ts` (git mv so history follows). Inside:
-   - Delete `getAIClient`, the `Anthropic` import, the `AI_HINT` prompt, and the
-     message-building/JSON-parsing block.
-   - Add a lazy singleton:
-     ```ts
-     let _service: Promise<PaddleOcrService> | null = null;
-     function getOcrService(): Promise<PaddleOcrService> { ... } // init once, memoize the promise
-     export function isOcrEnabled(): boolean {
-       return process.env.SCREENSHOT_OCR_DISABLED !== "true";
-     }
-     ```
-   - `analyzeSubmissionScreenshot(db, bingo, team, file)` (the `client` param is gone):
-     run OCR on the file buffer (ArrayBuffer slice — see §1), split `result.text` on
-     newlines into `extractedText: string[]` (trim lines, drop empties), then:
-     - `codewordFound` = any line contains `team.codeword` case-insensitively (plain
-       `includes` for now; Phase O2 makes it fuzzy).
-     - Item/wildcard matching: keep the existing loops verbatim (lowercase substring
-       against each extracted line). They already operate on `extractedText` — only the
-       source of that array changes.
-     - Keep the codeword warning string identical.
-3. `server/src/routes/bingos.ts` (~line 233): replace the `getAIClient()` /
-   `503 "AI analysis is not configured on this server"` block with
-   `if (!isOcrEnabled()) throw new ServiceError(503, "Screenshot analysis is disabled on this server")`,
-   and call the new signature. Also wrap the OCR call so an engine failure (corrupt
-   image, 1×1 test PNG, model load failure) surfaces as a 500 — the client already
-   treats any non-2xx as `analysisFailed` and tells the player to pick manually. Do not
-   let it take the process down.
-4. Config plumbing:
-   - `.env.example`: delete the `ANTHROPIC_API_KEY` line; add `SCREENSHOT_OCR_DISABLED`
-     (commented, described as a test/CI switch — OCR is on by default, no key needed).
-   - `playwright.config.ts` server env: replace `ANTHROPIC_API_KEY: ""` with
-     `SCREENSHOT_OCR_DISABLED: "true"`.
-   - Check nothing else references `ANTHROPIC_API_KEY` (`git grep`) — `server/src/env.ts`
-     and docs may mention it.
-5. Manual smoke test (the only step needing eyes): `npm run dev`, log in via dev-login,
-   upload any OSRS screenshot through the Submit modal, confirm the analysis box shows
-   extracted text / a detected item rather than "analysis unavailable". First call
-   downloads models — expect a one-time delay.
+**Real gotchas hit:**
+- `npm audit` reported 15 vulnerabilities after installing — all pre-existing in
+  `multer`/`drizzle-orm`/`body-parser`/`nanoid`/`path-to-regexp`, confirmed via
+  `npm audit --omit=dev` and a targeted grep that none trace to `onnxruntime-node` or
+  `ppu-paddle-ocr` themselves. Out of scope; not touched.
+- The E2E suite never explicitly asserts on the "analysis unavailable" UI text, but it
+  *does* upload a real screenshot on every submission (triggering the real analyze POST),
+  so both full E2E runs organically proved the `SCREENSHOT_OCR_DISABLED` 503 path doesn't
+  block submission — exactly what the DoD needed, without a dedicated assertion.
+- Manual smoke test could not safely use `npm run dev` against the real `server/data/
+  bingo.db` as written — the user's actual dev DB already has 4 real bingos in it, and a
+  port check found a real dev server already running on 3001. Instead: `drizzle-kit
+  migrate` + `seed-dev.ts` against an isolated `DB_PATH` in the scratchpad, server started
+  on port 3199, hit via raw `fetch` (dev-login → multipart POST to `/submissions/
+  analyze`). Confirmed both a real downloaded OSRS chat screenshot (real extracted text,
+  `codewordFound: false` correctly) and a synthetic "Ahrim's hood" image (correct
+  `detectedMatch` against the seeded Barrows tile) work end-to-end. The real dev DB was
+  never opened.
 
-**DoD O1:** both `tsc --noEmit` clean; `npm run test --workspace=server` green;
-full E2E suite (`npm run test:e2e`) green twice (it exercises the disabled path);
-manual smoke test shows real extracted text; `@anthropic-ai/sdk` gone from
-`server/package.json` and the lockfile.
+**DoD O1 — met:** both `tsc --noEmit` clean, 126 unit tests green, E2E suite green twice,
+`@anthropic-ai/sdk` gone from `server/package.json` and the lockfile, manual smoke test
+against an isolated DB showed real extraction + a real DB item match.
 
-## 3. Phase O2 — Fuzzy matching (this is what makes local OCR actually good enough)
+## 3. Phase O2 — Fuzzy matching — DONE (2026-09-02)
 
-New file `server/src/services/textMatchService.ts` — pure, DB-free, unit-tested. OCR of
-OSRS's bitmap font reliably confuses `w→u`/`w→v`, `O→0`, `a→e`, and drops spaces around
-mixed-case boundaries. All observed misses were within 1–2 edits after normalization.
+Shipped as planned. New `server/src/services/textMatchService.ts` (pure, DB-free):
+`normalizeForMatch`, a bounded `levenshteinWithin` (rolling two-row DP, early exit once a
+row's minimum exceeds `max`), and `fuzzyIncludes(lines, needle, { maxEdits? })` — exact
+normalized-substring first, short needles (<6 normalized chars) skip edit tolerance
+entirely, otherwise a sliding window of widths `needleLen-1..needleLen+1` checked against
+`levenshteinWithin` with the length-scaled default (`>=12` chars → 2 edits, else 1).
+`ocr.ts` now calls `fuzzyIncludes` for the codeword (pinned to `maxEdits: 1` regardless of
+length) and `findBestMatch(extractedText, items, wildcards)` for item/wildcard selection —
+that function also moved out of `ocr.ts` per the plan's point 4, so `ocr.ts` is I/O only
+now (OCR the image, load the board, hand both to the pure matcher) and the whole matching
+decision is unit-testable without OCR or a DB.
 
-1. Exports:
-   - `normalizeForMatch(s: string): string` — lowercase, strip every non-`[a-z0-9]`.
-   - `levenshteinWithin(a: string, b: string, max: number): boolean` — standard DP, early
-     row-minimum exit once `> max`.
-   - `fuzzyIncludes(lines: string[], needle: string): boolean` —
-     1. Normalize the needle; if it's shorter than **6** normalized chars, do plain
-        normalized-substring matching only (no edit tolerance — short names like "Vorki"
-        must not fuzz into random text).
-     2. Otherwise: normalized substring hit on any line wins immediately; else slide a
-        window of widths `needleLen-1 … needleLen+1` across each normalized line and
-        accept if `levenshteinWithin(window, needle, maxEdits)` where
-        `maxEdits = needle length >= 12 ? 2 : 1`.
-   - Lines are matched individually (never the joined blob) so a needle can't straddle
-     two unrelated lines.
-2. Wire into `server/src/ocr.ts`:
-   - Codeword: `codewordFound = fuzzyIncludes(extractedText, team.codeword)` — the
-     codeword is `adjective-noun`; normalization removes the hyphen, so a player typing
-     "crimson falcon" or OCR reading "crimsom-falcon" still counts. Keep `maxEdits` at 1
-     for codewords regardless of length (spec it as a `fuzzyIncludes` option) — a
-     codeword false-positive wrongly *suppresses* the warning mods rely on, so stay
-     conservative.
-   - Items and wildcards: replace the `text.toLowerCase().includes(needle)` inner checks
-     with `fuzzyIncludes`. Preserve ordering semantics exactly: first item in query order
-     wins, wildcards only consulted when no item matched.
-3. Unit tests (`textMatchService.test.ts`, vitest, colocated like every other service
-   test) — use the *actual observed OCR errors* as fixtures:
-   - `"Fishing Trauler"` matches needle `"Fishing Trawler"` (1 edit).
-   - `"Welcome to 0ldSchoolRuneScepe."` matches `"Old School RuneScape"` (normalization
-     + edits).
-   - `"MasteringMixology"` and `"Rogues'Den"` match their spaced/apostrophed names
-     (normalization alone).
-   - `"Halloved Sepulchre"` matches `"Hallowed Sepulchre"`.
-   - Negative cases: `"Vorki"` does NOT match a line containing `"Vorkath"`... note it
-     WOULD as a substring — that's existing behavior, keep it; instead assert e.g.
-     `"Zamorak hilt"` does not match `"Zamorakian spear"`, and a ≥6-char needle with 3+
-     edits does not match. Also assert the short-needle path does no edit-tolerance.
-   - Codeword-mode: 1 edit passes, 2 edits fails even for a long codeword.
-4. Extract-and-test opportunity: `analyzeSubmissionScreenshot`'s match-selection loops
-   can move into `textMatchService` as a pure function taking
-   `(extractedText, items, wildcards)` and returning `{ detectedMatch, detectedWildcard }`
-   so the whole decision path is unit-tested without OCR or a DB. Do it — `ocr.ts` then
-   only does I/O.
+**Real gotchas hit:** none on the implementation side — every fixture from the plan's
+spec (`"Fishing Trauler"`, `"0ldSchoolRuneScepe"`, `"MasteringMixology"`, `"Rogues'Den"`,
+`"Halloved Sepulchre"`, the `"Zamorak hilt"`/`"Zamorakian spear"` negative, the codeword
+1-edit-passes/2-edit-fails pair) passed on the first `vitest` run — the plan's own
+by-hand edit-distance math (worked out before writing any code) held up exactly.
 
-**DoD O2:** new unit tests green alongside the existing 126; both typechecks clean; E2E
-suite still green twice; manual smoke test now detects an item even when OCR output has a
-1-char slip (verify by checking the dev-server response for a real screenshot).
+**DoD O2 — met:** 20 new unit tests green (146 total alongside the existing 126), both
+typechecks clean, E2E suite green twice. Manual smoke test: a synthetic screenshot reading
+"Ahrim's hoad" (deliberate 1-char OCR-style typo of the real item "Ahrim's hood") resolved
+to the correct `detectedMatch` against the seeded Barrows tile — the fuzzy layer confirmed
+live end-to-end, not just unit-tested.
 
-## 4. Phase O3 — Verification script + docs
+## 4. Phase O3 — Verification script + docs — DONE (2026-09-02)
 
-1. `server/scripts/ocr-smoke.ts` (run via `tsx`, not shipped in any build): takes an
-   image path, prints extracted lines, timing, and what
-   `analyzeSubmissionScreenshot`-level matching would decide against a named bingo's
-   items. Purpose: a mod/dev can sanity-check OCR quality on a real submission in
-   seconds without clicking through the UI. Keep it dependency-free beyond what the
-   server already has.
-2. Update this plan's phase sections to DONE-with-gotchas as executed (same convention as
-   `docs/e2e-testing-plan.md`).
-3. Deployment note to include in the DONE write-up: the model cache lives in
-   `~/.cache/ppu-paddle-ocr`; a fresh deploy downloads ~30 MB once on first analyze call.
-   If the eventual host can't reach the internet at runtime, pre-warm the cache in the
-   build step (run the smoke script once) — do not solve this now, just document it.
+Shipped as planned. `server/scripts/ocr-smoke.ts`: `tsx scripts/ocr-smoke.ts <image>
+[bingo-slug]` — prints init/recognize timing and every extracted line; with a slug, also
+loads that bingo's real items/wildcards from whatever `DB_PATH` points at and prints what
+`findBestMatch` would decide. Lives outside `tsconfig.json`'s `rootDir: "./src"`, so `tsc
+--noEmit`/`build` never touch it — confirmed by running the typecheck after adding the
+file rather than assuming the exclusion.
 
-**DoD O3:** smoke script runs against a real screenshot end-to-end; plan doc updated;
-final full pass — both typechecks, unit suite, E2E twice — green.
+**Deployment note:** the model cache lives in `~/.cache/ppu-paddle-ocr`; a fresh deploy
+downloads ~30 MB once on the first real (non-`SCREENSHOT_OCR_DISABLED`) analyze call. If
+the eventual host can't reach the internet at runtime, pre-warm the cache in the build
+step by running `ocr-smoke.ts` once (or calling `PaddleOcrService.downloadModels()`
+directly) — not solved here, just flagged for whoever sets up that deploy.
+
+**Real gotchas hit:**
+- Running the script against the real dev DB would have hit the same "don't touch the
+  user's actual `bingo.db`" concern as Phase O1's manual smoke test — verified it instead
+  against the same isolated scratchpad DB built for that phase (`DB_PATH` pointed there),
+  both with and without a slug argument, plus a deliberately-missing slug to confirm the
+  "no bingo with slug" error path doesn't crash.
+
+**DoD O3 — met:** smoke script run end-to-end against a real image, twice (with and
+without a bingo slug) — both produced correct output. Plan doc updated (this section).
+Final full pass: both typechecks clean, 146 unit tests green, E2E suite green twice.
 
 ## 5. Verification discipline
 
