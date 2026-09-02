@@ -151,4 +151,102 @@ test("full bingo lifecycle", async ({ page }) => {
     await page.getByRole("button", { name: "Confirm" }).click();
     await expect(page.getByText("signup", { exact: true })).toBeVisible();
   });
+
+  const PLAYER_RSNS: Record<string, string> = {
+    "e2e-p1": "Trainer1",
+    "e2e-p2": "Trainer2",
+    "e2e-p3": "Trainer3",
+    "e2e-p4": "Trainer4",
+    "e2e-p5": "Trainer5",
+  };
+
+  await test.step("five players sign up", async () => {
+    for (const discordId of E2E_USERS.players) {
+      await loginAs(page, discordId);
+      await page.goto(`/b/${SLUG}`);
+      // Not exact — the label's accessible name includes a trailing " *"
+      // (required-field marker rendered as a nested span; see docs/e2e-
+      // testing-plan.md Phase E3 notes).
+      await page.getByLabel("RuneScape name").fill(PLAYER_RSNS[discordId]!);
+      await page.getByLabel("What is your preferred combat style?").selectOption({ label: "Melee" });
+      if (discordId === "e2e-p1" || discordId === "e2e-p2") {
+        await page.getByLabel("Willing to captain?").check();
+      }
+      await page.getByRole("button", { name: "Sign up" }).click();
+      await expect(page.getByText("Saved!", { exact: true })).toBeVisible();
+    }
+  });
+
+  await test.step("a player can withdraw (cancelled, to keep all 5 signups)", async () => {
+    await loginAs(page, "e2e-p1");
+    await page.goto(`/b/${SLUG}`);
+    await expect(page.getByRole("heading", { name: "Edit your signup" })).toBeVisible();
+    await page.getByRole("button", { name: "Withdraw" }).click();
+    await expect(page.getByText("Withdraw your signup?")).toBeVisible();
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByText("Withdraw your signup?")).not.toBeVisible();
+  });
+
+  await test.step("admin marks buy-in received for all 5 players", async () => {
+    await loginAs(page, E2E_USERS.admin);
+    await page.goto(`/b/${SLUG}/mod`);
+    await dismissNotifPromptIfPresent(page);
+    await page.getByRole("button", { name: "Signups" }).click();
+
+    for (const rsn of Object.values(PLAYER_RSNS)) {
+      const row = page.locator("tr", { has: page.getByText(rsn, { exact: true }) });
+      await row.getByRole("checkbox").click();
+      await expect(row.getByRole("checkbox")).toBeChecked();
+    }
+
+    // useMarkBuyin only invalidates the signup-roster query, not the bingo
+    // query Settings reads paidSignupCount/potTotal from — a reload is
+    // needed to see the updated total (a real gap, not a test workaround
+    // for a test-only issue; see docs/e2e-testing-plan.md Phase E3 notes).
+    await page.reload();
+    await dismissNotifPromptIfPresent(page);
+    // 5 paid signups x 10,000,000 buy-in + 50,000,000 bonus.
+    await page.getByRole("button", { name: "Settings" }).click();
+    await expect(page.getByText(/Total pot:\s*100,000,000 GP/)).toBeVisible();
+  });
+
+  await test.step("admin advances signup to captains and assigns two captains", async () => {
+    await page.getByRole("button", { name: "Advance to captains →" }).click();
+    await page.getByRole("button", { name: "Confirm" }).click();
+    await expect(page.getByText("captains", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Teams" }).click();
+    // teamSizeSummary() returns null (nothing renders) until at least one
+    // team exists — it's a forward-looking estimate of
+    // remainingCandidates / currentTeamCount, not a final roster count, so
+    // it changes shape with each captain assigned rather than jumping
+    // straight to "2 teams of 2".
+    await page.getByLabel("Assign a captain").selectOption({ label: "Trainer1 (e2e_player_1)" });
+    await page.getByRole("button", { name: "Make captain" }).click();
+    await expect(page.getByText(/There will be 1 team of 5/)).toBeVisible();
+
+    await page.getByLabel("Assign a captain").selectOption({ label: "Trainer2 (e2e_player_2)" });
+    await page.getByRole("button", { name: "Make captain" }).click();
+    await expect(page.getByText(/There will be 2 teams of 2/)).toBeVisible();
+    await expect(page.getByText(/1 team will have an extra player/)).toBeVisible();
+
+    // 2 captains assigned out of 5 signups — Trainer3/4/5 are still
+    // eligible candidates, so the picker stays up (only empty once every
+    // signup is a captain). TeamCard's rename field is a defaultValue
+    // (uncontrolled) input with no id — toHaveValue reads the live DOM
+    // value regardless.
+    const teamNameInputs = page.locator("input.flex-1.bg-transparent.text-white.font-semibold.text-sm");
+    await expect(teamNameInputs).toHaveCount(2);
+    // Team array order isn't guaranteed — compare as a set, not positionally.
+    await expect(async () => {
+      const values = await teamNameInputs.evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value));
+      expect(new Set(values)).toEqual(new Set(["e2e_player_1's Team", "e2e_player_2's Team"]));
+    }).toPass();
+  });
+
+  await test.step("admin advances captains to draft", async () => {
+    await page.getByRole("button", { name: "Advance to draft →" }).click();
+    await page.getByRole("button", { name: "Confirm" }).click();
+    await expect(page.getByText("draft", { exact: true })).toBeVisible();
+  });
 });
