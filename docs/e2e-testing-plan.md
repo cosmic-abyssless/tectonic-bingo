@@ -30,9 +30,16 @@ Work each phase in order. Each has its own DoD; run `npm run test:e2e` (headed w
   if you start servers manually while debugging.
 - If `npx` fails with a doubled `node_modules\node_modules` path (has happened in some shells on
   this machine), invoke binaries directly: `node node_modules/@playwright/test/cli.js test`.
-- Ports: server 3001, Vite client 5173. Vite proxies `/api`, `/auth`, `/uploads`, `/ws` → 3001
-  (`client/vite.config.ts`), so the browser and API share the 5173 origin — session cookies
-  depend on this; always drive tests through `http://localhost:5173`.
+- **Playwright starts `webServer` before `globalSetup`, not after.** DB prep (migrate + seed)
+  must NOT be a `globalSetup` — it must finish before the server process starts at all, or the
+  server opens/auto-creates an empty file first and never sees later migrations. This is why DB
+  prep is chained into the server `webServer.command` itself (`e2e/prepare-db.cjs`). Full
+  explanation in Phase E1 below; don't rediscover this the hard way.
+- Ports: E2E runs its own server+client pair on 3101/5273 (see Phase E1), separate from the
+  normal dev ports (3001/5173) so it doesn't collide with a manually-running dev server. Vite
+  proxies `/api`, `/auth`, `/uploads`, `/ws` to the server port either way, so the browser and API
+  share one origin — session cookies depend on this; always drive tests through
+  `http://localhost:5273`, never the server port directly.
 - Selector policy: prefer `getByRole`/`getByLabel`/`getByText`. The codebase has no test ids. If
   a control genuinely can't be reached accessibly, add an `aria-label` to the component (an
   accessibility improvement, commit it) rather than sprinkling `data-testid`.
@@ -58,67 +65,57 @@ export async function loginAs(page: Page, discordId: string) {
 Users must exist first — global setup inserts them directly into the e2e DB (below). Site-admin
 status is just `users.is_admin = 1` on the row; no `ADMIN_DISCORD_IDS` bootstrapping needed.
 
-## 2. Phase E1 — Scaffolding
+## 2. Phase E1 — Scaffolding — DONE (2026-09-02)
 
-1. **Install** (root workspace, so it hoists): `npm i -D @playwright/test` at the repo root, then
-   `npx playwright install chromium` (chromium only — keep CI surface small).
-2. **`playwright.config.ts`** (repo root):
-   - `testDir: "e2e"`, single project (chromium), `baseURL: "http://localhost:5173"`.
-   - `timeout: 180_000` for tests (the full-flow test is long), expect timeout ~10s.
-   - `globalSetup: "./e2e/global-setup.ts"`.
-   - `fullyParallel: false`, `workers: 1` — the suite shares one server/DB.
-   - Two `webServer` entries (Playwright accepts an array):
-     - Server: `command: "npm run dev --workspace=server"`, `url: "http://localhost:3001/api/bingos"`,
-       `reuseExistingServer: false`, and `env`:
-       ```
-       DB_PATH: "./data/e2e.db"          // resolved against server/ cwd — verify with a quick run;
-                                          // if the workspace command's cwd is the repo root, use
-                                          // "server/data/e2e.db" instead. Check where the file appears.
-       DEV_LOGIN_ENABLED: "true",
-       DISCORD_CLIENT_ID: "e2e", DISCORD_CLIENT_SECRET: "e2e",
-       DISCORD_CALLBACK_URL: "http://localhost:5173/auth/discord/callback",
-       DISCORD_GUILD_ID: "e2e", SESSION_SECRET: "e2e-secret",
-       CLIENT_URL: "http://localhost:5173",
-       TECTONIC_API_URL: "", TECTONIC_API_KEY: "", TECTONIC_GUILD_ID: "",
-       ANTHROPIC_API_KEY: "", RUNEPROFILE_API_KEY: "",
-       PLAYER_STATS_FETCH_DISABLED: "true",   // see prerequisite change below
-       ```
-       (`REQUIRED_ENV` in `server/src/index.ts` demands the DISCORD_*/SESSION_SECRET/CLIENT_URL
-       vars at boot — dummies satisfy it since no real OAuth happens.)
-     - Client: `command: "npm run dev --workspace=client"`, `url: "http://localhost:5173"`.
-3. **Prerequisite code change — hermetic stats fetch.** `playerStatsService.ts`'s
-   `fetchAndPersistPlayerStats` runs on every real signup with no config gate, so E2E signups
-   would hit the real WOM/RuneProfile APIs. Add at the top of the function:
-   ```ts
-   if (process.env.PLAYER_STATS_FETCH_DISABLED === "true") return;
-   ```
-   Document it in `.env.example` next to the RuneProfile block ("test hook — skips the WOM/
-   RuneProfile fetch at signup time; used by the E2E suite"). Add a unit test in
-   `playerStatsService.test.ts` (use `vi.stubEnv`, and note the existing tests use
-   `afterEach(vi.unstubAllEnvs)` in sibling files as the pattern).
-4. **`e2e/global-setup.ts`**: delete `server/data/e2e.db{,-shm,-wal}` if present, then build the
-   schema exactly the way `server/src/testUtils/testDb.ts` does — open the file with
-   `better-sqlite3`, apply every `server/drizzle/*.sql` in sorted order, stripping
-   `--> statement-breakpoint` — then insert users:
-   - `e2e-admin` / username `e2e_admin` / `is_admin = 1`
-   - `e2e-p1` … `e2e-p5` / usernames `e2e_player_1` … `_5`
-   (Plain string discordIds are fine — dev-login doesn't validate the format.) Do NOT seed a
-   bingo — building it through the UI is the point of the suite.
-5. **`e2e/helpers.ts`**: `loginAs` (above) plus whatever tiny helpers Phase E2+ grows.
-6. **`e2e/fixtures/screenshot.png`**: check in a tiny valid PNG (a few hundred bytes — generate
-   once with a Node one-liner writing a base64 1×1 PNG buffer).
-7. **Root `package.json`**: add `"test:e2e": "playwright test"` and `"test:e2e:headed":
-   "playwright test --headed"`.
-8. **`.gitignore`**: add `server/data/e2e.db*`, `test-results/`, `playwright-report/`.
-9. **Smoke spec** `e2e/full-flow.spec.ts` (this file grows through every later phase — one
-   `test("full bingo lifecycle", ...)` using `test.step(...)` blocks; a single test keeps state
-   continuity trivial and retry-safe):
-   - Step "admin logs in": `loginAs(page, "e2e-admin")`, goto `/`, expect the bingo-list page
-     (it will be empty) and the logged-in header (username `e2e_admin` visible).
+What shipped, for later phases to build on:
 
-**DoD E1:** `npm run test:e2e` passes from a clean checkout; a second consecutive run also passes
-(global setup must fully reset the e2e DB). `npm run test --workspace=server` still green
-(the `PLAYER_STATS_FETCH_DISABLED` change included).
+- **`playwright.config.ts`** (repo root): `testDir: "e2e"`, chromium only, `baseURL:
+  "http://localhost:5273"`, `timeout: 180_000`, `fullyParallel: false`, `workers: 1`. Two
+  `webServer` entries on **ports 3101 (server) / 5273 (client)**, not 3001/5173 — a manually-run
+  dev server is routinely up on those during normal work on this repo (this whole session had
+  one running); reusing them would collide or silently test against someone's live session.
+- **`client/vite.config.ts`** now reads `VITE_PORT`/`VITE_API_TARGET` env vars (falls back to
+  5173/`http://localhost:3001`, so normal `npm run dev` is unaffected) with `strictPort: true` so
+  a port collision fails fast instead of Vite silently picking a different one out from under
+  Playwright's health check.
+- **`e2e/prepare-db.cjs`** — plain CommonJS (no build step), builds `server/data/e2e.db` from
+  scratch (delete stale file, apply every `server/drizzle/*.sql`, seed `e2e-admin` +
+  `e2e-p1`…`e2e-p5`) and is chained into the **server** `webServer.command` itself:
+  `"node e2e/prepare-db.cjs && npm run dev --workspace=server"` — **not** a Playwright
+  `globalSetup`. This matters and is not obvious: Playwright's runner starts `webServer` plugins
+  *before* running `globalSetup` (`createGlobalSetupTasks` in `playwright/lib/runner/*.js` orders
+  plugin setup first). A `globalSetup` that deletes+recreates the DB file races the server, which
+  opens (and, via `better-sqlite3-session-store`, auto-creates) the file the moment it boots —
+  the server keeps its original file handle even after the directory entry is unlinked and
+  recreated, so migrations applied by a later `globalSetup` are invisible to it; it just serves
+  500s ("no such table: bingos") against an empty, sessions-table-only database forever, and the
+  webServer health check times out. Chaining prep into the server's own startup command instead
+  guarantees the file is fully built before the server process even exists. Confirmed by
+  reproducing the bug (empty DB, 60s webServer timeout) before this fix.
+- **`e2e/helpers.ts`**: `E2E_USERS` (must stay in sync with `prepare-db.cjs`'s literals — that
+  file is intentionally not TS/no shared import, see its header) and `loginAs(page, discordId)`
+  via `page.request.post("/auth/dev-login", ...)`.
+- **`e2e/fixtures/screenshot.png`**: a tiny (70-byte) valid PNG fixture.
+- **Root `package.json`**: `"test:e2e": "playwright test"`, `"test:e2e:headed": "playwright test
+  --headed"`.
+- **`.gitignore`**: added `test-results/`, `playwright-report/` (`server/data/*.db` already
+  covered `e2e.db`).
+- **Prerequisite code change — hermetic stats fetch**: `playerStatsService.ts`'s
+  `fetchAndPersistPlayerStats` now returns immediately when
+  `process.env.PLAYER_STATS_FETCH_DISABLED === "true"` (set in the server `webServer.env`),
+  before it would otherwise hit the real WOM/RuneProfile APIs on every signup. Documented in
+  `.env.example`; covered by a new test in `playerStatsService.test.ts`.
+- **Smoke spec** `e2e/full-flow.spec.ts`: one `test("full bingo lifecycle", ...)` using
+  `test.step(...)` blocks (this file grows through every later phase — a single test keeps state
+  continuity trivial, at the cost of not being independently re-runnable per step). Current step:
+  "admin logs in" — `loginAs`, goto `/`, assert `e2e_admin` visible.
+- Also fixed in passing: `.env.example` had an accidental duplicated `RUNEPROFILE_API_KEY=` line
+  from an earlier commit.
+
+**DoD E1 — met:** `npm run test:e2e` passes from a clean checkout; a second consecutive run also
+passes (confirmed — `prepare-db.cjs` fully resets the e2e DB each run). `npm run test
+--workspace=server` green (126 tests, `PLAYER_STATS_FETCH_DISABLED` test included). No leftover
+Playwright-spawned processes after a run (checked via `Get-CimInstance Win32_Process`).
 
 ## 3. Phase E2 — Admin builds the Pokémon bingo through the UI
 

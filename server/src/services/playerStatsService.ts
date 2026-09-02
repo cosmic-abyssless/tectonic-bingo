@@ -25,6 +25,11 @@ export async function fetchAndPersistPlayerStats(
   womClient: WomClient = getWomClient(),
   runeProfileClient: RuneProfileClient = getRuneProfileClient(),
 ): Promise<void> {
+  // Test hook — skips the WOM/RuneProfile network calls entirely. Used by
+  // the E2E suite (docs/e2e-testing-plan.md) so a real signup during tests
+  // never hits those live APIs.
+  if (process.env.PLAYER_STATS_FETCH_DISABLED === "true") return;
+
   try {
     const [womData, runeProfileData] = await Promise.all([womClient.getPlayerByUsername(rsn), runeProfileClient.getAccountFull(rsn)]);
     db.update(signups)

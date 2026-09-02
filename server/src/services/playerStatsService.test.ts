@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { eq } from "drizzle-orm";
@@ -34,6 +34,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   sqlite.close();
+  vi.unstubAllEnvs();
 });
 
 describe("fetchAndPersistPlayerStats", () => {
@@ -65,5 +66,23 @@ describe("fetchAndPersistPlayerStats", () => {
     const throwingRpClient = { getAccountFull: async () => { throw new Error("boom"); } } as unknown as RuneProfileClient;
 
     await expect(fetchAndPersistPlayerStats(db, signup.id, "C osmic", throwingClient, throwingRpClient)).resolves.toBeUndefined();
+  });
+
+  it("skips the fetch entirely when PLAYER_STATS_FETCH_DISABLED=true (E2E test hook)", async () => {
+    vi.stubEnv("PLAYER_STATS_FETCH_DISABLED", "true");
+    const signup = seedSignup();
+    const client = fakeWomClient({ ehb: 1, type: "regular" });
+    const rpClient = fakeRuneProfileClient({ accountType: { key: "normal" } });
+    const clientSpy = vi.spyOn(client, "getPlayerByUsername");
+    const rpClientSpy = vi.spyOn(rpClient, "getAccountFull");
+
+    await fetchAndPersistPlayerStats(db, signup.id, "C osmic", client, rpClient);
+
+    expect(clientSpy).not.toHaveBeenCalled();
+    expect(rpClientSpy).not.toHaveBeenCalled();
+    const updated = db.select().from(schema.signups).where(eq(schema.signups.id, signup.id)).get()!;
+    expect(updated.womDataJson).toBeNull();
+    expect(updated.runeProfileDataJson).toBeNull();
+    expect(updated.statsFetchedAt).toBeNull();
   });
 });
