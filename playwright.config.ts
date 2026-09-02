@@ -19,6 +19,13 @@ export default defineConfig({
     baseURL: BASE_URL,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    // Pre-grant notifications so Notification.permission is "granted" from
+    // the first page load — in headed mode Chrome shows a real, blocking
+    // native permission popup the instant the app checks/requests it
+    // (ModPage.tsx's own in-app "enable notifications?" overlay only covers
+    // the pre-permission state; it doesn't stop the native prompt). Without
+    // this, headed runs stall until a human clicks the OS-level dialog.
+    permissions: ["notifications"],
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
