@@ -72,7 +72,7 @@ export function TileModal({
               Submit
             </button>
           )}
-          <button className="text-slate-400 hover:text-white text-lg leading-none p-1 cursor-pointer" onClick={onClose}>
+          <button aria-label="Close" className="text-slate-400 hover:text-white text-lg leading-none p-1 cursor-pointer" onClick={onClose}>
             ✕
           </button>
         </div>

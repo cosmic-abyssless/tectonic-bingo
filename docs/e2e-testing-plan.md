@@ -355,7 +355,111 @@ helpers from Phase E5).
 **DoD:** suite green, fresh and re-run twice (idempotent). `npm run test --workspace=server` (126
 tests) and both `tsc --noEmit` still green.
 
-## 8. Verification discipline
+## 8. Phase E7 — Special tile-rule mechanics — DONE (2026-09-02)
+
+Not in the original plan — added afterward because E1–E6's "pokemon" bingo only ever exercised
+plain single-item tasks and `pointsRequirePrevious`. `TileTask` has a whole family of other flag
+columns (`submitRequiresPrevious`, `requiresNoDuplicates`, `allowsPreviouslyAcquired`,
+`allowsPreLoad`, `minSubmissions`, `requiresCompleteSet`) plus options-group items and wildcards
+that were never touched by any test. New file: `e2e/special-tile-rules.spec.ts`, its own bingo
+(slug `special-rules`), separate from `full-flow.spec.ts`'s `pokemon` — same shared `e2e.db` (one
+`prepare-db.cjs` run serves both spec files), no signup questions, no buy-in, **no lines generated
+at all** (deliberately — Phase E5 already showed how fast line-bonus math gets away from you on a
+sparse board; this phase's whole point is per-task mechanics, so lines are just noise here). One
+captain (`e2e-p4`, RSN "RuleTester") is also the team's only member — captain creation via
+`createTeam` auto-adds the captain as a `teamMembers` row, so no draft is needed; `advanceStage`
+has no draft-completeness gate either, so the draft/reveal stages are just clicked through empty.
+Five tiles, one mechanic-cluster each:
+
+- **Barrows** (`requiresCompleteSet` + an options group, plus `requiresNoDuplicates` for its badge)
+  — one task, 8 items across two 4-item groups ("ahrim"/"dharok"). Submit+approve 3 of 4 Ahrim
+  pieces → still 0 points (a partial set isn't a complete set). Approve the 4th → 30 points.
+- **K'ril Tsutsaroth** (`minSubmissions: 2` + an options group) — one task, 3 items in one group.
+  Submit+approve one item → still 0 points even though the group's item requirement is technically
+  satisfied already (`evaluateTaskCompletion` gates on `approvedSubmissionCount` independently of
+  the item tally — mirrors `scoringService.test.ts`'s own "gates on minSubmissions even when the
+  item tally is already satisfied" case). Submit+approve a second, different item → 25 points.
+- **Cerberus** (`allowsPreviouslyAcquired` folding + a wildcard capped at the schema default of 1
+  redemption/team) — Part A (single item, `allowsPreLoad`), Part B (`allowsPreviouslyAcquired`,
+  `minSubmissions: 2`, same single item). Submit Part A *with* the wildcard → approve → 25 points,
+  wildcard usage 1/1. Submit Part B *with* the wildcard too (a second redemption, different task —
+  the wildcard's `applicableTaskId` is left null/"Any task", and the admin item-creation UI has no
+  field for `maxRedemptionsPerTeam` or item `quantity` at all, so this whole tile's design works
+  around the schema defaults rather than chosen values) → the *submission* succeeds, but admin's
+  *approval* is rejected server-side ("Cerberus jar has already been redeemed the maximum number of
+  times for this team", surfaced in `ReviewQueue`'s own error banner) → reject that stuck
+  submission → submit Part B for real (no wildcard) → approve → Part A's already-approved claim
+  folds in via `allowsPreviouslyAcquired`, satisfying both the qty and the 2-submission minimum →
+  40 points. Cerberus total: 65.
+- **Colosseum** (`hasFreezePeriod`, negative path only) — one task, tile frozen for 120 minutes
+  from a `startsAt` set to 10 minutes before the test runs it (bingo has "started" for every other
+  tile, Colosseum specifically hasn't unfrozen). No positive freeze-unlock path is tested — that
+  would mean actually waiting out a 2-hour timer, and the arithmetic boundary itself already has
+  its own coverage elsewhere (`submissionService.ts`'s `now < unlockAt`). Both UI entry points
+  already exclude the tile (`TileCell`'s 🔒 badge + disabled `TileModal` submit button; the header
+  Submit's tile picker doesn't list it at all) — asserted, then a **raw `page.request.post` bypassing
+  the UI entirely** proves the *server* itself rejects it too (400, message matches `/frozen/`),
+  which is the actual point of the check per `submissionService.ts`'s own header comment ("the
+  client mirrors these checks for UX, but this is the enforcement").
+- **Duke Sucellus** (`submitRequiresPrevious`) — same shape as Colosseum's freeze check but for the
+  chain gate: Part B is excluded from both UI entry points before Part A completes, and a raw API
+  POST against Part B's task id is independently rejected (400, `/previous task/`). Then the
+  positive path: complete Part A (20 pts) → Part B becomes available with no task picker (the only
+  remaining option) → complete it (30 pts). Duke Sucellus total: 50.
+
+Grand total: 30 (Barrows) + 25 (K'ril) + 65 (Cerberus) + 50 (Duke Sucellus) = **170 pts** — the
+whole suite's final assertion, spot-checked directly in `e2e.db` (`team_task_progress` sums to
+170 across exactly 6 rows, `team_wildcard_usage` has exactly 1 row despite 2 redemption attempts).
+
+**Two real app bugs found and fixed, not test bugs:**
+- **`SubmissionModal.tsx`'s "Submit with a wildcard" checkbox permanently disabled the submit
+  button for any single-item task.** Checking it clears `selectedItemId` (switching the item
+  picker's label between "what are you submitting?" and "which item does the wildcard count
+  towards?"), but the effect that auto-selects the sole item for a single-item task only depends on
+  `[selectedTaskId, currentTask]` — toggling the checkbox changes neither, so the effect never
+  re-fires, and the item picker is `readOnly` for a single-item task (no way to manually reselect
+  either). Net effect: wildcard + single-item task = permanently disabled "Submit for Review",
+  full stop, no escape via the UI. Caught because Cerberus's wildcard-eligible tasks are realistic
+  single-item ones (matches the real ruleset's own boss-jar wildcards). Fixed by adding
+  `isWildcardMode` to that effect's dependency array. Test hung at the exact button-disabled state
+  for the full 180s timeout before this was diagnosed — same "silent timeout, no other error"
+  failure shape as the Phase E3 required-asterisk gotcha; screenshot showed a perfectly normal-
+  looking form, so the cause had to be traced through the component's state logic, not the DOM.
+- **`TileModal.tsx`'s own close button (`✕`) had no `aria-label`**, unlike every other modal's close
+  button in this codebase (`ModalHeader`'s already got one from Phase E2). Not a functional bug,
+  but a real accessibility gap and the reason `getByRole("button", { name: "Close" })` — which
+  correctly closes every *other* modal — silently hung here instead of erroring.
+
+**Real gotchas hit (test-side, no app changes):**
+- **`TaskEditor.tsx`'s flag checkboxes and `TileEditorPanel.tsx`'s freeze-period checkbox are all
+  DB-backed** (patch + query-invalidate on change), so every one of them needed the same
+  `.click()` + separate `toBeChecked()` fix from Phase E2/E3 — a plain `.check()` raced the
+  round-trip on all six.
+- **An item with an options group renders as `"Ahrim's hood (group: ahrim)"`**, not just the item
+  name — `getByText(item, { exact: true })` after adding an item never matched; dropped `exact`
+  for every item-added assertion in this file.
+- **RSN has a real `maxLength={12}`** (matches OSRS's actual limit) — "SpecialTester" (13 chars)
+  silently truncated to "SpecialTeste", which then made the captain-assignment dropdown option
+  label not match anything and time out. Renamed to "RuleTester".
+- **Once a task becomes unavailable (completed, or the only one left), `SubmissionModal` stops
+  rendering a task-picker button for it at all** — no button to *not* find, just a "Submitting for
+  X" text indicator instead. Every later resubmission to a tile with a since-completed sibling task
+  needed `pickTileAndTask(page, tileName)` with no task-label argument, not the task label from the
+  first submission to that tile.
+- **A bare string in Playwright's `multipart` option is sent as a text field, not a file** — the
+  raw-API freeze/chain-gate checks first failed with "Screenshot is required" (multer's `req.file`
+  never populated) until the screenshot field became an explicit
+  `{ name, mimeType, buffer: readFileSync(...) }`.
+- **The bare `request` fixture doesn't share cookies with `page`** — only `page.request` does (same
+  browser context). The first raw-API attempt got 401s until every `getTaskId`/`rawSubmit` call
+  switched from the test's `request` fixture to `page.request`.
+
+**DoD E7 — met:** suite green (both spec files together), fresh and re-run twice (idempotent).
+Spot-checked `e2e.db`: `team_task_progress` sums to exactly 170 across 6 rows for the one team,
+`team_wildcard_usage` has exactly 1 row. `npm run test --workspace=server` (126 tests) and both
+`tsc --noEmit` still green.
+
+## 9. Verification discipline
 
 - After each phase: `npm run test:e2e` twice in a row (setup must be idempotent), plus the unit
   suite `npm test` and both typechecks (`node node_modules/typescript/bin/tsc --noEmit` in

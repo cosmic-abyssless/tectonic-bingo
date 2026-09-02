@@ -86,8 +86,9 @@ export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: str
             </div>
             {tile.hasFreezePeriod && (
               <div className="col-span-2">
-                <label className="block text-xs text-slate-400 mb-1">Freeze duration (minutes)</label>
+                <label htmlFor="tile-freeze-duration" className="block text-xs text-slate-400 mb-1">Freeze duration (minutes)</label>
                 <input
+                  id="tile-freeze-duration"
                   type="number"
                   defaultValue={tile.freezeDurationMinutes}
                   onBlur={(e) => patch({ freezeDurationMinutes: Number(e.target.value) || 0 })}
@@ -128,6 +129,7 @@ export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: str
                   className="flex-1 bg-transparent text-sm text-white focus:outline-none"
                 />
                 <select
+                  aria-label="Wildcard applicable task"
                   defaultValue={wc.applicableTaskId ?? ""}
                   onChange={(e) => adminApi.updateWildcard(slug, wc.id, { applicableTaskId: e.target.value || null }).then(invalidate)}
                   className="bg-slate-800 border border-slate-600 text-slate-300 text-xs rounded px-1.5 py-1 focus:outline-none"
