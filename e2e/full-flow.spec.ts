@@ -326,4 +326,194 @@ test("full bingo lifecycle", async ({ page }) => {
     await page.getByRole("button", { name: "Confirm" }).click();
     await expect(page.getByText("live", { exact: true })).toBeVisible();
   });
+
+  const SCREENSHOT_PATH = "e2e/fixtures/screenshot.png";
+  const PENDING_ROW = ".bg-slate-800.rounded-lg.border.border-slate-700.overflow-hidden";
+
+  function teamPoints(page: Page) {
+    return page.locator("span.text-xl.font-bold.text-yellow-400");
+  }
+
+  // TileModal's own "Submit" button, disambiguated from the page header's
+  // identically-labeled global "Submit" button (both can be on screen at
+  // once — TileModal doesn't unmount when SubmissionModal opens on top of
+  // it).
+  function tileModalSubmitButton(page: Page, tileName: string) {
+    return page
+      .locator(".bg-slate-800.rounded-xl")
+      .filter({ has: page.getByRole("heading", { name: tileName, exact: true }) })
+      .getByRole("button", { name: "Submit", exact: true });
+  }
+
+  async function pickTileAndTask(page: Page, tileName: string, taskLabel?: string) {
+    await page.getByPlaceholder("Search tiles…").click();
+    await page.getByRole("button", { name: tileName, exact: true }).click();
+    if (taskLabel) await page.getByRole("button", { name: taskLabel, exact: true }).click();
+  }
+
+  await test.step("admin sets the bingo start time to the past so submissions are allowed", async () => {
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByLabel("Bingo starts").fill("2020-01-01T00:00");
+    await page.getByRole("button", { name: "Save Settings" }).click();
+    await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  });
+
+  await test.step("p3 submits Wintertodt via the tile modal (single item auto-selects)", async () => {
+    await loginAs(page, "e2e-p3");
+    await page.goto(`/b/${SLUG}`);
+    // TileCell's accessible name includes its points badge ("Wintertodt
+    // 0/20"), not just the tile name — no exact match here.
+    await page.getByRole("button", { name: "Wintertodt" }).click();
+    await tileModalSubmitButton(page, "Wintertodt").click();
+    await expect(page.getByText("Submit Completion")).toBeVisible();
+    await page.locator('input[type="file"]').setInputFiles(SCREENSHOT_PATH);
+    await page.getByRole("button", { name: "Submit for Review" }).click();
+    await expect(page.getByText("Submit Completion")).not.toBeVisible();
+  });
+
+  await test.step("admin approves the Wintertodt submission", async () => {
+    await loginAs(page, E2E_USERS.admin);
+    await page.goto(`/b/${SLUG}/mod`);
+    await dismissNotifPromptIfPresent(page);
+    const row = page.locator(PENDING_ROW).first();
+    await row.click();
+    await row.getByRole("button", { name: "Approve" }).click();
+    await expect(page.getByText("Nothing here")).toBeVisible();
+    await page.getByRole("button", { name: /^Approved/ }).click();
+    await expect(page.getByText("Wintertodt")).toBeVisible();
+  });
+
+  await test.step("p3 sees the Wintertodt tile complete and points awarded (task + line bonus)", async () => {
+    await loginAs(page, "e2e-p3");
+    await page.goto(`/b/${SLUG}`);
+    // This 3x3 test board only has row 0 filled (Vorkath/Wintertodt/GOTR),
+    // so column 1 is a 1-tile line consisting of just Wintertodt — it
+    // completes the instant Wintertodt does. 20 (task) + 15 (column 1) = 35.
+    await expect(teamPoints(page)).toHaveText("35 pts");
+  });
+
+  await test.step("p3 submits Vorkath Part A", async () => {
+    await page.getByRole("button", { name: "Submit", exact: true }).click();
+    await expect(page.getByText("Submit Completion")).toBeVisible();
+    await pickTileAndTask(page, "Vorkath", "Part A");
+    await page.locator('input[type="file"]').setInputFiles(SCREENSHOT_PATH);
+    await page.getByRole("button", { name: "Submit for Review" }).click();
+    await expect(page.getByText("Submit Completion")).not.toBeVisible();
+  });
+
+  await test.step("admin rejects the Vorkath Part A submission with a note", async () => {
+    await loginAs(page, E2E_USERS.admin);
+    await page.goto(`/b/${SLUG}/mod`);
+    await dismissNotifPromptIfPresent(page);
+    const row = page.locator(PENDING_ROW).first();
+    await row.click();
+    await row.getByPlaceholder("Visible to the submitting player…").fill("Screenshot doesn't show the kill count.");
+    await row.getByRole("button", { name: "Reject" }).click();
+    await expect(page.getByText("Nothing here")).toBeVisible();
+  });
+
+  await test.step("p3 sees the rejection and points are unchanged", async () => {
+    await loginAs(page, "e2e-p3");
+    await page.goto(`/b/${SLUG}`);
+    await page.getByRole("button", { name: "Submissions" }).click();
+    await expect(page.getByText("Rejected", { exact: true })).toBeVisible();
+    await expect(page.getByText("Screenshot doesn't show the kill count.")).toBeVisible();
+    await page.getByRole("button", { name: "Close" }).click();
+    await expect(teamPoints(page)).toHaveText("35 pts");
+  });
+
+  await test.step("p3 submits GOTR Speedrun (manual scoring, no item list)", async () => {
+    await page.getByRole("button", { name: "Submit", exact: true }).click();
+    await expect(page.getByText("Submit Completion")).toBeVisible();
+    await pickTileAndTask(page, "GOTR Speedrun");
+    await expect(page.getByText("This task is judged manually")).toBeVisible();
+    await page.locator('input[type="file"]').setInputFiles(SCREENSHOT_PATH);
+    await page.getByRole("button", { name: "Submit for Review" }).click();
+    await expect(page.getByText("Submit Completion")).not.toBeVisible();
+  });
+
+  await test.step("admin approves GOTR Speedrun with the default manual completion/points", async () => {
+    await loginAs(page, E2E_USERS.admin);
+    await page.goto(`/b/${SLUG}/mod`);
+    await dismissNotifPromptIfPresent(page);
+    const row = page.locator(PENDING_ROW).first();
+    await row.click();
+    // Manual task — mod must explicitly confirm completion/points, but the
+    // defaults (checked, task.points) are exactly what this approval wants.
+    await expect(row.getByLabel("Mark task complete")).toBeChecked();
+    await expect(row.locator('input[type="number"]')).toHaveValue("20");
+    await row.getByRole("button", { name: "Approve" }).click();
+    await expect(page.getByText("Nothing here")).toBeVisible();
+  });
+
+  await test.step("p3 sees points for Wintertodt + GOTR plus two more line bonuses", async () => {
+    await loginAs(page, "e2e-p3");
+    await page.goto(`/b/${SLUG}`);
+    // GOTR is the sole tile in both column 2 and diagonal 1 (rows 1/2 are
+    // empty on this sparse test board), so its completion fires both lines
+    // at once: 20 (task) + 15 (column 2) + 15 (diagonal 1) = 50, on top of
+    // the prior 35 → 85.
+    await expect(teamPoints(page)).toHaveText("85 pts");
+  });
+
+  await test.step("p3 submits Vorkath Part B before Part A is complete (withheld-points path)", async () => {
+    await page.getByRole("button", { name: "Submit", exact: true }).click();
+    await expect(page.getByText("Submit Completion")).toBeVisible();
+    await pickTileAndTask(page, "Vorkath", "Part B");
+    await page.locator('input[type="file"]').setInputFiles(SCREENSHOT_PATH);
+    await page.getByRole("button", { name: "Submit for Review" }).click();
+    await expect(page.getByText("Submit Completion")).not.toBeVisible();
+  });
+
+  await test.step("admin approves Vorkath Part B — points stay withheld", async () => {
+    await loginAs(page, E2E_USERS.admin);
+    await page.goto(`/b/${SLUG}/mod`);
+    await dismissNotifPromptIfPresent(page);
+    const row = page.locator(PENDING_ROW).first();
+    await row.click();
+    await row.getByRole("button", { name: "Approve" }).click();
+    await expect(page.getByText("Nothing here")).toBeVisible();
+  });
+
+  await test.step("p3 sees points unchanged while Vorkath Part A is still incomplete", async () => {
+    await loginAs(page, "e2e-p3");
+    await page.goto(`/b/${SLUG}`);
+    // Withheld points don't fire the tile's lines either — Vorkath still
+    // isn't fully complete (Part A isn't), so no column-0/diagonal-0 bonus yet.
+    await expect(teamPoints(page)).toHaveText("85 pts");
+  });
+
+  await test.step("p3 resubmits Vorkath Part A", async () => {
+    // Part B is now "completed" (0 withheld points) so it drops out of the
+    // available-tasks list — Part A is the only one left, no task picker.
+    await page.getByRole("button", { name: "Submit", exact: true }).click();
+    await expect(page.getByText("Submit Completion")).toBeVisible();
+    await pickTileAndTask(page, "Vorkath");
+    await page.locator('input[type="file"]').setInputFiles(SCREENSHOT_PATH);
+    await page.getByRole("button", { name: "Submit for Review" }).click();
+    await expect(page.getByText("Submit Completion")).not.toBeVisible();
+  });
+
+  await test.step("admin approves the resubmitted Vorkath Part A — releases Part A and Part B points", async () => {
+    await loginAs(page, E2E_USERS.admin);
+    await page.goto(`/b/${SLUG}/mod`);
+    await dismissNotifPromptIfPresent(page);
+    const row = page.locator(PENDING_ROW).first();
+    await row.click();
+    await row.getByRole("button", { name: "Approve" }).click();
+    await expect(page.getByText("Nothing here")).toBeVisible();
+  });
+
+  await test.step("final team points reflect exactly the approved, non-withheld tasks plus every line bonus that fired", async () => {
+    await loginAs(page, "e2e-p3");
+    await page.goto(`/b/${SLUG}`);
+    // Vorkath completing (Part A 25 + released Part B 35) also finishes its
+    // last two lines (column 0, diagonal 0 — both single-tile, Vorkath-only)
+    // AND row 0, now that all three of its tiles are complete. Task points:
+    // 20 (Wintertodt) + 20 (GOTR) + 25 (Vorkath A) + 35 (Vorkath B) = 100.
+    // Line bonuses: column 1, column 2, diagonal 1, column 0, diagonal 0,
+    // row 0 = 6 × 15 = 90 (row 1/row 2 have zero tiles and can never fire).
+    // 100 + 90 = 190.
+    await expect(teamPoints(page)).toHaveText("190 pts");
+  });
 });

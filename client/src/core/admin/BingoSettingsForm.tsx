@@ -123,8 +123,9 @@ export function BingoSettingsForm({
       <div className="grid grid-cols-2 gap-4">
         {DATE_FIELDS.map(({ key, label }) => (
           <div key={key}>
-            <label className="block text-sm font-medium text-slate-300 mb-1">{label}</label>
+            <label htmlFor={`settings-${key}`} className="block text-sm font-medium text-slate-300 mb-1">{label}</label>
             <input
+              id={`settings-${key}`}
               type="datetime-local"
               value={form[key as keyof typeof form] as string}
               onChange={(e) => setForm({ ...form, [key]: e.target.value })}

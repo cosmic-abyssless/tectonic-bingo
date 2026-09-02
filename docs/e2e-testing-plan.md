@@ -272,33 +272,62 @@ distinct id (the admin) acting on team 2's behalf — confirming the admin-overr
 happened server-side, not just that the UI didn't error. `npm run test --workspace=server` (126
 tests) and both `tsc --noEmit` still green.
 
-## 6. Phase E5 — Submissions and scoring
+## 6. Phase E5 — Submissions and scoring — DONE (2026-09-02)
 
-Screens: board at `/b/pokemon`, tile modal, SubmissionModal
-(`client/src/core/submissions/SubmissionModal.tsx` — the file input is hidden
-(`className="hidden"`); Playwright's `setInputFiles` on `input[type="file"]` works on hidden
-inputs, or use the drag-drop zone), mod review queue (mod panel Submissions tab).
+Shipped as planned, including the withheld-points bonus path (step 6) — Part A stayed rejected
+through the rest of the flow, so it applied. First submission uses the tile-click flow (open
+"Wintertodt", click its modal's own "Submit"); later ones use the header's global "Submit" +
+`SearchableSelect` tile/task pickers, exercising both entry points into `SubmissionModal`. Order:
+Wintertodt submit → approve (auto item-select, single task) → Vorkath Part A submit → reject with
+a note → player sees "Rejected" + the note in their team submissions list → GOTR Speedrun submit
+(manual, no items) → approve with the review form's untouched defaults (`taskCompleted: true`,
+`points: task.points`) → Vorkath Part B submit *before* Part A is done → approve, points withheld
+→ Vorkath Part A resubmit → approve, which both awards Part A's points and releases Part B's
+withheld points per `pointsRequirePrevious`.
 
-1. As a drafted player (e.g. p3): open the board, click "Wintertodt", submit via the tile/submit
-   flow — select the "Bruma torch" item (it should auto-select as the only item), attach
-   `e2e/fixtures/screenshot.png`, submit. AI analysis is disabled (no ANTHROPIC key) — the modal
-   must not block on it; assert the submission lands (modal closes / pending indicator).
-2. As admin: Submissions tab → Pending shows the Wintertodt submission with a thumbnail. Expand,
-   approve (leave notes blank). Assert it moves to Approved.
-3. Back as the player (reload is fine; observing the WebSocket-driven live update without reload
-   is Phase E6): the Wintertodt tile shows complete and the team's points show 20.
-4. Rejection path: p3 submits "Vorkath" Part A; admin rejects it with a note; player sees the
-   tile NOT complete and can see rejection state in their team submissions view.
-5. Manual-scoring path: p3 submits "GOTR Speedrun" (no item list); admin approves — manual tasks
-   require the mod to explicitly mark task completion / points on approval (see the review UI and
-   `scoringService`'s `taskCompleted` handling). Assert 20 more points land.
-6. Withheld-points path (bonus, cheap to add): submit and approve Vorkath Part B *before* Part A
-   is complete — its points must stay withheld (team total unchanged), then complete Part A and
-   assert both land per the `pointsRequirePrevious` rule. Only do this if the earlier steps left
-   Vorkath Part A un-approved; otherwise skip.
+One accessibility fix: `BingoSettingsForm.tsx`'s 5 date fields (`DATE_FIELDS.map`) had no
+`htmlFor`/`id` — added `id={`settings-${key}`}` uniformly across all five (needed to fill "Bingo
+starts" so submissions aren't blocked by `submissionService`'s `now < bingo.startsAt` check —
+`startsAt` is otherwise left null when a bingo is created through the admin form's minimal
+Name/Slug/Board-size fields). No other fixes were needed: the manual-review checkbox
+("Mark task complete") turned out to already work with `getByLabel` since its `<input>` is a
+descendant of its `<label>` (Playwright's "wrapper label" pattern, not just `htmlFor`/`id`); the
+review form's "Points" input and reject notes textarea were reachable via `input[type="number"]`
+scoping and `getByPlaceholder`, no id needed.
 
-**DoD E5:** suite green; final team points assertion matches the sum of exactly the approved,
-non-withheld tasks.
+**Real gotchas hit:**
+- **`TileCell`'s accessible name is `"{tile.name} {awarded}/{total}"`, not just the tile name** —
+  its points badge (`{summary.pointsAwarded}/{summary.totalPoints}`) is a *descendant* of the
+  `<button>`, so `getByRole("button", { name: "Wintertodt", exact: true })` never matches (real
+  name: `"Wintertodt 0/20"`) and hangs for the full test timeout. Dropped `exact: true` for board
+  tile clicks specifically — `TileModal`'s own `<h2>{tile.name}</h2>` heading and
+  `SearchableSelect`'s plain-text option buttons don't have this problem (no nested badge), so
+  `exact: true` stays correct there.
+- **This sparse 3x3 test board (only row 0 has real tiles) makes line bonuses fire far more
+  eagerly than a full board would, and the math is easy to get wrong first-try.** `Generate lines
+  from board` still produces one line per row/column/diagonal even when most of the grid is empty
+  — an empty row (0 tiles) can never complete (nothing ever lists it as one of a tile's lines, so
+  it's simply unreachable — not a vacuous-truth bug), but a column or diagonal that happens to
+  contain exactly one real tile becomes a de facto duplicate of that tile's own completion, firing
+  its 15-point bonus the instant that lone tile finishes. On this board: column 1 duplicates
+  Wintertodt, column 2 *and* diagonal 1 both duplicate GOTR Speedrun (so GOTR's approval fires two
+  line bonuses at once), and column 0 *and* diagonal 0 both duplicate Vorkath — whose own
+  completion additionally finishes row 0 (the only line with real content, once all three tiles are
+  done). First run asserted "20 pts" after the Wintertodt approval and got "35 pts" back; traced it
+  by inspecting `bingo_line_tiles` row counts per line directly in `e2e.db` rather than guessing,
+  found column 1 had exactly one tile row (Wintertodt), and rebuilt every point-total assertion
+  from that. Final total: 100 task points + 6 fired line bonuses × 15 = 190 (row 1/row 2 never
+  fire — 0 tiles each). This wasn't an app bug worth fixing — `isTileCompleteForTeam`/
+  `recordCompletedLinesForTile` behave correctly for the real 7x7 fully-filled event board, where
+  no line is ever a strict subset of another; it's purely an artifact of this suite's minimal
+  3-tile test board, documented here since the next person to touch these assertions needs the
+  same reasoning to change them correctly.
+
+**DoD E5 — met:** suite green, fresh and re-run twice (idempotent). Spot-checked `e2e.db`:
+`team_task_progress` sums to exactly 100 for the submitting team, `team_completed_lines` has
+exactly 6 rows for that team (0 for the other), matching 100 + 6×15 = 190 shown in the UI —
+confirmed server-side, not just that the page rendered the right text. `npm run test
+--workspace=server` (126 tests) and both `tsc --noEmit` still green.
 
 ## 7. Phase E6 — Stretch (only after E1–E5 are green)
 
