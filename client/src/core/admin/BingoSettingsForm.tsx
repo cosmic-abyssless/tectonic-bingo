@@ -84,28 +84,29 @@ export function BingoSettingsForm({
     <div className="space-y-5 max-w-2xl">
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-1">Name</label>
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+          <label htmlFor="settings-name" className="block text-sm font-medium text-slate-300 mb-1">Name</label>
+          <input id="settings-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-1">Theme</label>
-          <input value={form.theme} onChange={(e) => setForm({ ...form, theme: e.target.value })} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+          <label htmlFor="settings-theme" className="block text-sm font-medium text-slate-300 mb-1">Theme</label>
+          <input id="settings-theme" value={form.theme} onChange={(e) => setForm({ ...form, theme: e.target.value })} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1">Description</label>
-        <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 resize-none" />
+        <label htmlFor="settings-description" className="block text-sm font-medium text-slate-300 mb-1">Description</label>
+        <textarea id="settings-description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 resize-none" />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-1">Buy-in (GP)</label>
-          <input type="number" value={form.buyinAmount} onChange={(e) => setForm({ ...form, buyinAmount: e.target.value })} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+          <label htmlFor="settings-buyin" className="block text-sm font-medium text-slate-300 mb-1">Buy-in (GP)</label>
+          <input id="settings-buyin" type="number" value={form.buyinAmount} onChange={(e) => setForm({ ...form, buyinAmount: e.target.value })} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-1">Bonus pot / extra donations (GP)</label>
+          <label htmlFor="settings-bonus-pot" className="block text-sm font-medium text-slate-300 mb-1">Bonus pot / extra donations (GP)</label>
           <input
+            id="settings-bonus-pot"
             type="number"
             value={form.bonusPotAmount}
             onChange={(e) => setForm({ ...form, bonusPotAmount: e.target.value })}

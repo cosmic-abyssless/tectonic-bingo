@@ -43,7 +43,7 @@ export function ModalHeader({ title, subtitle, onClose, action }: { title: strin
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {action}
-        <button onClick={onClose} className="text-slate-400 hover:text-white text-lg leading-none p-1 cursor-pointer">
+        <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-white text-lg leading-none p-1 cursor-pointer">
           ✕
         </button>
       </div>

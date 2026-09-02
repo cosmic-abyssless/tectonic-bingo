@@ -60,8 +60,8 @@ export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: str
 
           <div className="flex-1 grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="block text-xs text-slate-400 mb-1">Name</label>
-              <input defaultValue={tile.name} onBlur={(e) => patch({ name: e.target.value })} className="w-full bg-slate-900 border border-slate-600 text-white rounded px-2 py-1.5 text-sm focus:outline-none focus:border-indigo-500" />
+              <label htmlFor="tile-name" className="block text-xs text-slate-400 mb-1">Name</label>
+              <input id="tile-name" defaultValue={tile.name} onBlur={(e) => patch({ name: e.target.value })} className="w-full bg-slate-900 border border-slate-600 text-white rounded px-2 py-1.5 text-sm focus:outline-none focus:border-indigo-500" />
             </div>
             <div>
               <label className="block text-xs text-slate-400 mb-1">Category</label>

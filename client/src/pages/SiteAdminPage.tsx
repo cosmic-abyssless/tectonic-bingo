@@ -45,8 +45,9 @@ function CreateBingoForm() {
     <div className="bg-slate-800 border border-slate-700 rounded-lg p-5 space-y-4 max-w-md">
       <h2 className="font-bold text-white">Create a bingo</h2>
       <div>
-        <label className="block text-xs text-slate-400 mb-1">Name</label>
+        <label htmlFor="create-bingo-name" className="block text-xs text-slate-400 mb-1">Name</label>
         <input
+          id="create-bingo-name"
           value={name}
           onChange={(e) => {
             setName(e.target.value);
@@ -56,8 +57,9 @@ function CreateBingoForm() {
         />
       </div>
       <div>
-        <label className="block text-xs text-slate-400 mb-1">Slug (used in the URL)</label>
+        <label htmlFor="create-bingo-slug" className="block text-xs text-slate-400 mb-1">Slug (used in the URL)</label>
         <input
+          id="create-bingo-slug"
           value={slug}
           onChange={(e) => {
             setSlug(slugify(e.target.value));
@@ -67,8 +69,9 @@ function CreateBingoForm() {
         />
       </div>
       <div>
-        <label className="block text-xs text-slate-400 mb-1">Board size (NxN)</label>
+        <label htmlFor="create-bingo-size" className="block text-xs text-slate-400 mb-1">Board size (NxN)</label>
         <input
+          id="create-bingo-size"
           type="number"
           min={1}
           value={boardSize}

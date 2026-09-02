@@ -45,6 +45,7 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
               return tile ? (
                 <button
                   key={`${row},${col}`}
+                  aria-label={`Edit tile at row ${row}, column ${col}: ${tile.name}`}
                   onClick={() => setSelectedTileId(tile.id)}
                   style={category?.colorHex ? { borderColor: category.colorHex } : undefined}
                   className="aspect-square bg-slate-800 border-2 border-slate-700 rounded-md p-1 flex flex-col items-center justify-center text-center hover:border-indigo-500 transition-colors cursor-pointer overflow-hidden"
@@ -56,6 +57,7 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
               ) : (
                 <button
                   key={`${row},${col}`}
+                  aria-label={`Create tile at row ${row}, column ${col}`}
                   disabled={creating}
                   onClick={() => createAt(row, col)}
                   className="aspect-square bg-slate-900/50 border-2 border-dashed border-slate-800 rounded-md flex items-center justify-center text-slate-600 hover:border-slate-600 hover:text-slate-400 transition-colors cursor-pointer disabled:cursor-wait"

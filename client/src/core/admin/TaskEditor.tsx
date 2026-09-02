@@ -45,29 +45,34 @@ export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: Tile
 
   return (
     <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 cursor-pointer" onClick={() => setExpanded((e) => !e)}>
+      <button
+        type="button"
+        aria-label={`${expanded ? "Collapse" : "Expand"} task: ${task.label}`}
+        onClick={() => setExpanded((e) => !e)}
+        className="w-full flex items-center justify-between px-3 py-2 cursor-pointer text-left"
+      >
         <span className="text-sm font-semibold text-white">
           {task.label} <span className="text-slate-500 font-normal">— {task.points} pts{isManual ? " · manual" : ""}</span>
         </span>
         <span className="text-slate-500 text-xs">{expanded ? "▲" : "▼"}</span>
-      </div>
+      </button>
 
       {expanded && (
         <div className="border-t border-slate-700 px-3 py-3 space-y-3" onClick={(e) => e.stopPropagation()}>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Label</label>
-              <input defaultValue={task.label} onBlur={(e) => patch({ label: e.target.value })} className="w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500" />
+              <label htmlFor={`task-${task.id}-label`} className="block text-xs text-slate-400 mb-1">Label</label>
+              <input id={`task-${task.id}-label`} defaultValue={task.label} onBlur={(e) => patch({ label: e.target.value })} className="w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500" />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Points</label>
-              <input type="number" defaultValue={task.points} onBlur={(e) => patch({ points: Number(e.target.value) || 0 })} className="w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500" />
+              <label htmlFor={`task-${task.id}-points`} className="block text-xs text-slate-400 mb-1">Points</label>
+              <input id={`task-${task.id}-points`} type="number" defaultValue={task.points} onBlur={(e) => patch({ points: Number(e.target.value) || 0 })} className="w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500" />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Description</label>
-            <textarea defaultValue={task.description} onBlur={(e) => patch({ description: e.target.value })} rows={2} className="w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500 resize-none" />
+            <label htmlFor={`task-${task.id}-description`} className="block text-xs text-slate-400 mb-1">Description</label>
+            <textarea id={`task-${task.id}-description`} defaultValue={task.description} onBlur={(e) => patch({ description: e.target.value })} rows={2} className="w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500 resize-none" />
           </div>
 
           <div>

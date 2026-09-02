@@ -117,36 +117,68 @@ passes (confirmed — `prepare-db.cjs` fully resets the e2e DB each run). `npm r
 --workspace=server` green (126 tests, `PLAYER_STATS_FETCH_DISABLED` test included). No leftover
 Playwright-spawned processes after a run (checked via `Get-CimInstance Win32_Process`).
 
-## 3. Phase E2 — Admin builds the Pokémon bingo through the UI
+## 3. Phase E2 — Admin builds the Pokémon bingo through the UI — DONE (2026-09-02)
 
-All as `e2e-admin`, extending the same test with new steps. Key screens: `/admin` (site admin,
-`client/src/pages/SiteAdminPage.tsx`) and `/b/pokemon/mod` (mod panel, 8 tabs —
-`client/src/pages/ModPage.tsx`; the 6 admin-only tabs are visible since e2e-admin is a site admin).
+All as `e2e-admin`. Built a 3×3 board named "Pokemon Bingo" (slug `pokemon`, explicitly overriding
+the auto-slug "pokemon-bingo"), NOT the real event's 7×7 49-tile board — 3×3 exercises every
+mechanic without 49 tiles' worth of UI-click flake surface. Tiles: "Vorkath" (Part A 25pts/item
+"Vorki", Part B 35pts/item "Draconic visage"/`pointsRequirePrevious`), "Wintertodt" (20pts/item
+"Bruma torch"), "GOTR Speedrun" (20pts/`scoringMode: manual`, no items). 8 lines generated. Two
+signup questions (required select + optional boolean). Advanced planning → signup.
 
-**Scope decision:** a 3×3 board named "Pokemon Bingo" (slug `pokemon`), NOT the real event's 7×7
-49-tile board — building 49 tiles through UI clicks would be slow and flaky, and 3×3 exercises
-every mechanic. (The real board's data lives in the project's memory/docs if a bigger fixture is
-ever wanted; don't build it here.)
+**Accessibility fixes made along the way (small, surgical, one per field actually touched — not a
+sweep of the whole app), because this codebase's form labels are siblings of their inputs, not
+`htmlFor`-linked, so `getByLabel` doesn't resolve them at all by default:**
+- `htmlFor`/`id` pairs: `SiteAdminPage.tsx` (Name/Slug/Board size), `BingoSettingsForm.tsx`
+  (Name/Theme/Description/Buy-in/Bonus pot), `TileEditorPanel.tsx` (tile Name),
+  `TaskEditor.tsx` (Label/Points/Description — **id must be task-scoped**,
+  e.g. `` `task-${task.id}-label` ``, since multiple tasks can be expanded at once and would
+  otherwise collide).
+- `aria-label`: `BoardEditor.tsx`'s grid cell buttons (`"Create tile at row {r}, column {c}"` /
+  `"Edit tile at row {r}, column {c}: {name}"` — otherwise unaddressable, no text/title at all),
+  `Modal.tsx`'s `✕` close button (`aria-label="Close"` — otherwise ambiguous against per-item `✕`
+  delete buttons once a tile has items), `QuestionBuilder.tsx`'s new-question type `<select>`
+  (`aria-label="New question type"` — otherwise indistinguishable from each existing question's
+  own type select).
+- `TaskEditor.tsx`'s collapse/expand header was a plain `<div onClick>` — changed to a real
+  `<button type="button" aria-label="{Expand|Collapse} task: {label}">` (interactive elements
+  should be real buttons regardless of testing; this one was also the only way to reliably target
+  "the task I just added" via `.filter({ has: ... })`, since a freshly-added task's other fields
+  still say generic defaults like "Part A").
+- Fields with an existing `placeholder` (QuestionBuilder's new-question prompt/options,
+  TaskEditor's item name/options-group) needed no change — `getByPlaceholder` already worked.
 
-Steps:
-1. Create the bingo at `/admin`: name "Pokemon Bingo" (slug auto-fills via `slugify`), "Board
-   size (NxN)" = 3. Creation navigates to `/b/pokemon/mod`.
-2. Settings tab: set buy-in 10,000,000 and bonus pot 50,000,000; assert the computed "Total pot"
-   line renders.
-3. Board tab: create 3 tiles on row 0 (positions 0,0 / 0,1 / 0,2), Pokémon-flavored names:
-   - "Vorkath" — two tasks: Part A (25 pts, item "Vorki"), Part B (35 pts, item "Draconic
-     visage", `pointsRequirePrevious`).
-   - "Wintertodt" — one task (20 pts, item "Bruma torch").
-   - "GOTR Speedrun" — one task (20 pts, `scoringMode: manual`, no items).
-   Explore `client/src/core/admin/TileEditorPanel.tsx` and the Board tab UI for the actual
-   controls; drive the real UI, don't insert via DB.
-4. Lines tab: assert generated lines exist for the 3×3 (3 rows + 3 cols + 2 diagonals = 8).
-5. Signup Questions tab: add a required select "What is your preferred combat style?"
-   (Melee/Ranged/Magic) and a boolean "Willing to captain?".
-6. Advance stage planning → signup (the mod panel header's "Advance to signup →" button —
-   `client/src/core/mod/StageControls.tsx`).
+**Real gotchas hit, worth knowing before Phase E3+:**
+- **`getByLabel("Points")` is a substring match by default** and matched both the Points input
+  *and* the "Withhold **points** until previous" checkbox label. Any short label word (Points,
+  Label, Name, Description) needs `{ exact: true }` once checkbox/flag labels with overlapping
+  words are on the same page — cheaper to always pass `exact: true` on short field labels than to
+  discover the collision per-field.
+- **Controlled checkboxes race `.check()`.** `TaskEditor.tsx`'s flag checkboxes (and
+  `QuestionBuilder.tsx`'s "Required") are `checked={someServerValue}`, not `defaultChecked` — the
+  visual state only flips once the PATCH round-trips and the query refetches. Playwright's
+  `.check()` clicks once and immediately verifies, which can lose that race and throw "Clicking
+  the checkbox did not change its state". Fix: `.click()` then a separate
+  `await expect(locator).toBeChecked()`, which polls/retries and absorbs the round-trip. Same
+  fix applies anywhere else a controlled (not default-) checkbox/input gets toggled.
+- **`page.getByDisplayValue(...)` does not exist in Playwright** (that's a Testing Library API —
+  easy mistake coming from that world). To assert an input's live value, get a *locator* however
+  you can (scope by container position/structure) and use `expect(locator).toHaveValue(text)`.
+- Multiple unrelated components in this codebase share the exact same Tailwind class string
+  (e.g. `TaskEditor`'s and `QuestionBuilder`'s row wrappers are both
+  `"bg-slate-900 border border-slate-700 rounded-lg ..."` with one differing trailing class) —
+  a CSS-class locator scoped this way is fragile in the abstract but fine in practice here since
+  the two never render on screen simultaneously (different tabs). Don't reuse one tab's scoping
+  locator on another without checking for this.
+- `getByRole("button", { name: "Board" })` (no `exact`) also matched the mod panel header's
+  "Back to board" button — substring matching bites on tab names too, not just form labels.
 
-**DoD E2:** suite green; board tab shows 3 tiles; stage banner shows "Signup".
+**DoD E2 — met:** suite green (both fresh and re-run — DB rebuild is idempotent via Phase E1's
+`prepare-db.cjs`); spot-checked the e2e.db directly after a run and confirmed the bingo, all 3
+tiles with correct positions, all 4 tasks with correct points/`pointsRequirePrevious`/
+`scoringMode`, all 3 items, 8 lines, and both questions with correct `required` flags — not just
+"the UI showed the right thing," the persisted data is actually correct. `npm run test
+--workspace=server` and both `tsc --noEmit` still green.
 
 ## 4. Phase E3 — Signups, buy-ins, captains, teams
 
