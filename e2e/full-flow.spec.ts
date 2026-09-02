@@ -18,7 +18,7 @@ function taskPanel(page: Page, taskLabel: string) {
 // naturally) at the cost of not being independently re-runnable per step.
 // See docs/e2e-testing-plan.md for the phase-by-phase build-out; each phase
 // adds more test.step() blocks to this same test.
-test("full bingo lifecycle", async ({ page }) => {
+test("full bingo lifecycle", async ({ page, browser }) => {
   await test.step("admin logs in", async () => {
     await loginAs(page, E2E_USERS.admin);
     await page.goto("/");
@@ -483,7 +483,7 @@ test("full bingo lifecycle", async ({ page }) => {
     await expect(teamPoints(page)).toHaveText("85 pts");
   });
 
-  await test.step("p3 resubmits Vorkath Part A", async () => {
+  await test.step("p3 resubmits Vorkath Part A (this tab stays open for the live-update check)", async () => {
     // Part B is now "completed" (0 withheld points) so it drops out of the
     // available-tasks list — Part A is the only one left, no task picker.
     await page.getByRole("button", { name: "Submit", exact: true }).click();
@@ -492,21 +492,31 @@ test("full bingo lifecycle", async ({ page }) => {
     await page.locator('input[type="file"]').setInputFiles(SCREENSHOT_PATH);
     await page.getByRole("button", { name: "Submit for Review" }).click();
     await expect(page.getByText("Submit Completion")).not.toBeVisible();
+    await expect(teamPoints(page)).toHaveText("85 pts");
   });
 
-  await test.step("admin approves the resubmitted Vorkath Part A — releases Part A and Part B points", async () => {
-    await loginAs(page, E2E_USERS.admin);
-    await page.goto(`/b/${SLUG}/mod`);
-    await dismissNotifPromptIfPresent(page);
-    const row = page.locator(PENDING_ROW).first();
-    await row.click();
-    await row.getByRole("button", { name: "Approve" }).click();
-    await expect(page.getByText("Nothing here")).toBeVisible();
-  });
+  await test.step("admin approves it from a second browser context — points update live on p3's board with no reload", async () => {
+    // A second, independent context (not just a second tab in `page`'s
+    // context) so it gets its own cookie jar — admin and p3 need separate
+    // sessions open at once. `page` (p3's board) is deliberately never
+    // touched here: no goto, no reload. If the final assertion below passes,
+    // it can only be because the WebSocket's submission_reviewed broadcast
+    // invalidated `page`'s ["teamProgress"] query in the background
+    // (WebSocketContext.tsx's invalidateForEvent) and it refetched on its own.
+    const adminContext = await browser.newContext();
+    const adminPage = await adminContext.newPage();
+    try {
+      await loginAs(adminPage, E2E_USERS.admin);
+      await adminPage.goto(`/b/${SLUG}/mod`);
+      await dismissNotifPromptIfPresent(adminPage);
+      const row = adminPage.locator(PENDING_ROW).first();
+      await row.click();
+      await row.getByRole("button", { name: "Approve" }).click();
+      await expect(adminPage.getByText("Nothing here")).toBeVisible();
+    } finally {
+      await adminContext.close();
+    }
 
-  await test.step("final team points reflect exactly the approved, non-withheld tasks plus every line bonus that fired", async () => {
-    await loginAs(page, "e2e-p3");
-    await page.goto(`/b/${SLUG}`);
     // Vorkath completing (Part A 25 + released Part B 35) also finishes its
     // last two lines (column 0, diagonal 0 — both single-tile, Vorkath-only)
     // AND row 0, now that all three of its tiles are complete. Task points:

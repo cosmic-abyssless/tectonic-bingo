@@ -329,13 +329,31 @@ exactly 6 rows for that team (0 for the other), matching 100 + 6×15 = 190 shown
 confirmed server-side, not just that the page rendered the right text. `npm run test
 --workspace=server` (126 tests) and both `tsc --noEmit` still green.
 
-## 7. Phase E6 — Stretch (only after E1–E5 are green)
+## 7. Phase E6 — Stretch — DONE (2026-09-02, live-WS-update only)
 
-- **Line bonus:** complete all 3 row-0 tiles for one team and assert +15 line points appear.
-- **Live WS update:** open two pages in one test — player's board and admin's review queue —
-  approve on one, and `expect(...).toPass()` the points update on the other WITHOUT reload.
-- **CI wiring** (GitHub Actions) — out of scope unless asked; the suite must merely be CI-shaped
-  (no reliance on pre-existing local state).
+**Line bonus:** already covered as a side effect of Phase E5's point-math work — completing all
+three row-0 tiles fires the row-0 line bonus (and five other lines this sparse board happens to
+make into single-tile duplicates), verified both in the UI total and directly in `e2e.db`'s
+`team_completed_lines`. No separate step needed.
+
+**Live WS update — shipped:** reworked Phase E5's last two steps (which used to just re-login the
+shared `page` as admin, approve, then re-login as p3 to check) into: p3's resubmit-Vorkath-Part-A
+step now leaves `page` sitting on the board as p3 with no further navigation; a *second, independent*
+`browser.newContext()` (own cookie jar, so admin and p3 can be logged in simultaneously) opens,
+logs in as admin, approves the pending submission, and closes; the final assertion checks `page`
+(p3's untouched tab) reaches "190 pts" with zero `goto`/reload in between. Passing this only proves
+anything because `WebSocketContext.tsx`'s `invalidateForEvent` invalidates `["teamProgress"]` on
+every `submission_reviewed` broadcast, for every connected client — this test is a real check of
+that broadcast path, not just app plumbing that happens to work.
+
+**CI wiring:** not done, per the plan's own "out of scope unless asked" — nobody asked.
+
+**Real gotchas hit:** none new — this reused every pattern already established (multi-context
+login via `browser.newContext()` + `loginAs` on that context's own page, `PENDING_ROW`/`teamPoints`
+helpers from Phase E5).
+
+**DoD:** suite green, fresh and re-run twice (idempotent). `npm run test --workspace=server` (126
+tests) and both `tsc --noEmit` still green.
 
 ## 8. Verification discipline
 
