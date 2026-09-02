@@ -13,7 +13,7 @@ import * as submissionService from "../services/submissionService";
 import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
 import * as statsService from "../services/statsService";
-import { getAIClient, analyzeSubmissionScreenshot } from "../ai";
+import { isOcrEnabled, analyzeSubmissionScreenshot } from "../ocr";
 import { getTectonicClient, type TectonicDetailedUser } from "../services/tectonicService";
 import { parseWomSummary } from "../services/womService";
 import { parseAccountType } from "../services/runeProfileService";
@@ -230,10 +230,13 @@ router.post(
     if (!team) throw new ServiceError(403, "You are not on a team for this bingo");
     if (!req.file) throw new ServiceError(400, "Screenshot is required");
 
-    const ai = getAIClient();
-    if (!ai) throw new ServiceError(503, "AI analysis is not configured on this server");
+    if (!isOcrEnabled()) throw new ServiceError(503, "Screenshot analysis is disabled on this server");
 
-    const result = await analyzeSubmissionScreenshot(ai, db, bingo, team, req.file);
+    // An OCR engine failure (corrupt image, model load issue, a tiny test
+    // fixture PNG) just throws here — asyncHandler routes it to errorHandler,
+    // which falls back to a plain 500. The client's existing analysisFailed
+    // path already treats any non-2xx the same way it treats "not configured".
+    const result = await analyzeSubmissionScreenshot(db, bingo, team, req.file);
     res.json(result);
   }),
 );

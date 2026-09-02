@@ -5,9 +5,9 @@
 // Server-to-server only — auth is a single static API key that must never
 // reach the browser; every consumer proxies through our routes. The whole
 // integration is optional: getTectonicClient() returns null unless all three
-// env vars are set (same nullable pattern as getAIClient), and every method
-// returns null on failure rather than throwing, so consumers degrade to
-// current behavior when tectonic-api is down or unconfigured.
+// env vars are set, and every method returns null on failure rather than
+// throwing, so consumers degrade to current behavior when tectonic-api is
+// down or unconfigured.
 
 export interface TectonicConfig {
   baseUrl: string;
