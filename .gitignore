@@ -8,3 +8,5 @@ server/data/*.db-wal
 server/uploads/
 server/*.sqlite.bak
 .db-backups
+test-results/
+playwright-report/
