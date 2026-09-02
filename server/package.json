@@ -14,7 +14,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
     "@discordjs/rest": "^2.6.0",
     "@types/multer": "^2.0.0",
     "@types/ws": "^8.18.1",
@@ -27,8 +26,10 @@
     "express": "^4.21.2",
     "express-session": "^1.18.1",
     "multer": "^2.0.2",
+    "onnxruntime-node": "^1.29.0",
     "passport": "^0.7.0",
     "passport-discord": "^0.1.4",
+    "ppu-paddle-ocr": "^6.4.3",
     "ws": "^8.19.0"
   },
   "devDependencies": {

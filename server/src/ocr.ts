@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { PaddleOcrService, V6_SMALL_MODEL } from "ppu-paddle-ocr";
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "./db/schema";
@@ -7,15 +7,6 @@ import { tileTaskItems, tileTasks, tileWildcards, tiles } from "./db/schema";
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
 type Team = typeof schema.teams.$inferSelect;
-
-let _client: Anthropic | null = null;
-
-/** Returns the Anthropic client, or null if ANTHROPIC_API_KEY is not set. */
-export function getAIClient(): Anthropic | null {
-  if (!process.env.ANTHROPIC_API_KEY) return null;
-  if (!_client) _client = new Anthropic();
-  return _client;
-}
 
 export interface ScreenshotFile {
   buffer: Buffer;
@@ -31,58 +22,47 @@ export interface AnalyzeResult {
   warnings: string[];
 }
 
-// Hardcoded for now — every bingo on this platform is an OSRS event. If we
-// ever host a non-OSRS bingo this'll need to move back to a per-bingo field.
-const AI_HINT =
-  "This screenshot is from Old School RuneScape (OSRS), a fantasy MMORPG. Look for chat box messages, kill count trackers, loot/drop notifications, and inventory or bank interfaces.\n\n";
+/** Test/CI escape hatch — skips the ~30MB first-run model download entirely. */
+export function isOcrEnabled(): boolean {
+  return process.env.SCREENSHOT_OCR_DISABLED !== "true";
+}
 
-// Two steps: (1) ask Claude what's visible in the screenshot and whether the
-// team's codeword appears, (2) match the extracted text against every item
-// and wildcard on this bingo's board.
-export async function analyzeSubmissionScreenshot(
-  client: Anthropic,
-  db: Db,
-  bingo: Bingo,
-  team: Team,
-  file: ScreenshotFile,
-): Promise<AnalyzeResult> {
-  const base64 = file.buffer.toString("base64");
-  const mediaType = (file.mimetype || "image/png") as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+// Lazy singleton: initialize() is ~1.6s warm (longer on the very first call,
+// which also downloads and caches the model), so this must happen once, on
+// first use — never at server boot (a tsx-watch restart loop shouldn't pay
+// that cost or hit the network) and never per-request.
+let _service: Promise<PaddleOcrService> | null = null;
 
-  const message = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 512,
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-          {
-            type: "text",
-            text: `${AI_HINT}This screenshot was submitted as proof for a bingo competition.
+function getOcrService(): Promise<PaddleOcrService> {
+  if (!_service) {
+    _service = (async () => {
+      const service = new PaddleOcrService({ model: V6_SMALL_MODEL });
+      await service.initialize();
+      return service;
+    })();
+  }
+  return _service;
+}
 
-The player's team codeword is: "${team.codeword}"
+// A Buffer is a view into a shared, larger ArrayBuffer pool — `buf.buffer`
+// alone hands the OCR library unrelated memory. Slice to the view's own range.
+function toArrayBuffer(buf: Buffer): ArrayBuffer {
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+}
 
-Do two things:
-1. Look for the exact text "${team.codeword}" literally visible anywhere in the image. Only return true if those exact characters are present — do not guess or infer.
-2. Extract every piece of text you can read from the image that's relevant to the achievement being claimed (item names, notifications, counters, labels).
+// Runs local OCR on the screenshot, then matches the extracted text against
+// the team's codeword and every item/wildcard on this bingo's board.
+export async function analyzeSubmissionScreenshot(db: Db, bingo: Bingo, team: Team, file: ScreenshotFile): Promise<AnalyzeResult> {
+  const service = await getOcrService();
+  const result = await service.recognize(toArrayBuffer(file.buffer), { noCache: true });
+  const extractedText = result.text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 
-Respond ONLY with a JSON object, no markdown:
-{
-  "codewordFound": <true | false>,
-  "extractedText": ["<every string of text you can read from the image>"]
-}`,
-          },
-        ],
-      },
-    ],
-  });
-
-  const raw = message.content[0].type === "text" ? message.content[0].text.trim() : "{}";
-  const json = raw.replace(/^```[a-z]*\n?/i, "").replace(/```$/, "").trim();
-  const parsed = JSON.parse(json);
-  const codewordFound = !!parsed.codewordFound;
-  const extractedText: string[] = Array.isArray(parsed.extractedText) ? parsed.extractedText : [];
+  // Plain substring matching for now — Phase O2 (textMatchService) adds edit-
+  // distance tolerance for OCR slips on OSRS's bitmap font.
+  const codewordFound = extractedText.some((line) => line.toLowerCase().includes(team.codeword.toLowerCase()));
 
   const items = db
     .select({ id: tileTaskItems.id, itemName: tileTaskItems.itemName, taskId: tileTasks.id, tileId: tiles.id, tileName: tiles.name })
