@@ -96,8 +96,8 @@ export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: Tile
           {!isManual && (
             <>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Min. approved submissions to complete</label>
-                <input type="number" min={1} defaultValue={task.minSubmissions} onBlur={(e) => patch({ minSubmissions: Math.max(1, Number(e.target.value) || 1) })} className="w-24 bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500" />
+                <label htmlFor={`task-${task.id}-min-submissions`} className="block text-xs text-slate-400 mb-1">Min. approved submissions to complete</label>
+                <input id={`task-${task.id}-min-submissions`} type="number" min={1} defaultValue={task.minSubmissions} onBlur={(e) => patch({ minSubmissions: Math.max(1, Number(e.target.value) || 1) })} className="w-24 bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500" />
               </div>
 
               <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">

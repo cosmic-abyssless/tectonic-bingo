@@ -70,7 +70,12 @@ export function SubmissionModal({ slug, bingo, tiles, categories, progress, team
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTileId, availableTasks.map((t) => t.id).join(",")]);
 
-  // Auto-select the item when there's exactly one available option.
+  // Auto-select the item when there's exactly one available option. Must
+  // also re-run when isWildcardMode toggles — its own onChange clears
+  // selectedItemId (switching between "what are you submitting?" and "which
+  // item does the wildcard count towards?"), and for a single-item task the
+  // item picker is readOnly, so without this the clear is permanent and the
+  // submit button stays disabled forever.
   useEffect(() => {
     if (!currentTask || isManualTask) return;
     const available = currentTask.items.filter((i) => !excludedItemNames.has(i.itemName));
@@ -79,7 +84,7 @@ export function SubmissionModal({ slug, bingo, tiles, categories, progress, team
       setSubmissionQty(1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTaskId, currentTask]);
+  }, [selectedTaskId, currentTask, isWildcardMode]);
 
   // Auto-select the wildcard when there's exactly one available option.
   useEffect(() => {
