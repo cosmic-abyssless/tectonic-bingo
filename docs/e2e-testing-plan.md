@@ -227,25 +227,50 @@ render simultaneously). `TeamManager.tsx`'s captain-picker `<select>` got
 paid, exactly 2 teams with the right names/captains, bingo stage `draft`. `npm run test
 --workspace=server` and both `tsc --noEmit` still green.
 
-## 5. Phase E4 — The draft
+## 5. Phase E4 — The draft — DONE (2026-09-02)
 
-Screens: `/b/pokemon/draft` (`client/src/core/draft/DraftRoom.tsx`). The draft is snake order;
-teams' captain RSNs head per-team columns; the pool is a sortable table (no WOM/RuneProfile stat
-columns will render — stats fetch is disabled, `womStats`/`accountType` are null, and the columns
-hide themselves when nobody has data; assert they're absent as a bonus).
+Shipped as planned, with the picking strategy adapted to reality: `startDraft` shuffles team
+order, so which captain (Trainer1's or Trainer2's) goes first is randomized per run. Rather than
+hardcoding an order, the test reads the "▼ On the clock" indicator right after "Start Draft" to
+learn who's first, then drives the rest of the draft from that.
 
-1. As admin: open the draft room, click "Start Draft" (needs ≥2 teams).
-2. Determine who's on the clock from the "▼ On the clock" indicator. Log in as the OTHER captain
-   and assert no pick is offered (out-of-turn captains simply don't get pick buttons —
-   `canPick` gating; assert no "Draft" button in the pool table).
-3. As the on-the-clock captain: assert the "It's your turn to pick!" banner, draft a player.
-4. Alternate captains (snake order: with 2 teams the order is A, B, B, A —
-   `pickOrderTeamIndex`) until all 3 players are drafted. Assert "Draft complete!" renders.
-5. Site-admin override sanity check: at least one of the picks in step 4 should be made while
-   logged in as `e2e-admin` (admins may pick on behalf of the team on the clock).
-6. As admin: advance draft → reveal → live (two advances; the reveal stage exists between).
+With 2 teams and 3 pool players, `pickOrderTeamIndex`'s snake math (`round = ceil(pickNumber /
+teamCount)`) puts pick 1 on team A, and picks 2 *and* 3 both on team B (round stays 1 for pick 2,
+only pick 3 rolls to round 2) — team A never comes back on the clock. That shape is exactly what's
+needed for both required checks without extra logins: pick 1 as captain A (asserts "It's your turn
+to pick!", drafts Trainer3), then immediately assert zero "Draft" buttons are visible anywhere for
+captain A (the out-of-turn check — no separate "log in as the other captain and confirm no button"
+round-trip needed, since captain A is *already* out of turn the instant their pick lands). Pick 2
+as captain B (drafts Trainer4). Pick 3 as `e2e-admin` (drafts Trainer5) — the site-admin
+pick-on-behalf-of override, satisfying the "at least one admin-made pick" requirement. Then
+"Draft complete!" asserts, and admin advances draft → reveal → live (two separate `StageControls`
+advances — `nextStage` reads directly off `STAGE_ORDER`, so the button text is literally "Advance
+to reveal →" then "Advance to live →").
 
-**DoD E4:** suite green; both teams have captain + at least 1 member; stage is "Live".
+No new `htmlFor`/`id`/`aria-label` fixes were needed — `DraftRoom.tsx`'s existing text/class
+surface (exact `"Round {n} — Pick {n}"`, `"It's your turn to pick!"`, `"Draft complete!"`, the
+`"Draft"` per-row button, and the `CaptainColumn`'s two nested divs) was targetable as-is by
+scoping locators (pool row via `tr` + `getByText(rsn, {exact:true})`; on-clock captain via the
+`.flex.flex-col.items-center.text-center.gap-1.min-w-0` container filtered by `hasText: "On the
+clock"`).
+
+**Real gotchas hit:**
+- **Round numbers don't increment per pick** — round is `ceil(pickNumber / teamCount)`, so with 2
+  teams, picks 1 and 2 are both "Round 1"; only pick 3 becomes "Round 2". Assumed a fresh round per
+  pick initially and asserted "Round 2 — Pick 2", which never renders (actual text is "Round 1 —
+  Pick 2") — verified against `pickOrderTeamIndex` in `server/src/services/draftService.ts` before
+  writing the fix rather than guessing.
+- No WOM/RuneProfile stat columns rendered (as predicted — `PLAYER_STATS_FETCH_DISABLED` keeps
+  `womStats`/`accountType` null for every pool entry), so `showWomStats` stays false and the
+  columns never render; no assertion needed since their absence is just the pool table rendering
+  one column set instead of two, nothing to break.
+
+**DoD E4 — met:** suite green, fresh and re-run twice (idempotent). Spot-checked `e2e.db` directly:
+bingo stage `live`; 2 teams with distinct `captain_user_id`s; 3 `draft_picks` rows — pick 1
+`picked_by_user_id` equals team 1's captain, pick 2's equals team 2's captain, pick 3's is a third,
+distinct id (the admin) acting on team 2's behalf — confirming the admin-override pick actually
+happened server-side, not just that the UI didn't error. `npm run test --workspace=server` (126
+tests) and both `tsc --noEmit` still green.
 
 ## 6. Phase E5 — Submissions and scoring
 
