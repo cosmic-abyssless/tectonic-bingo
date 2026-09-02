@@ -19,3 +19,15 @@ export async function loginAs(page: Page, discordId: string): Promise<void> {
     throw new Error(`dev-login failed for ${discordId}: ${res.status()} ${await res.text()}`);
   }
 }
+
+// ModPage.tsx shows a full-screen "Enable notifications?" prompt the first
+// time a mod visits (Notification.permission === "default" in a fresh
+// Chromium profile — true for every Playwright run) and it's a fixed
+// inset-0 overlay that blocks interaction with the tab bar underneath.
+// Call once after first landing on a mod page.
+export async function dismissNotifPromptIfPresent(page: Page): Promise<void> {
+  const noThanks = page.getByRole("button", { name: "No thanks" });
+  if (await noThanks.isVisible().catch(() => false)) {
+    await noThanks.click();
+  }
+}

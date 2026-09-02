@@ -121,7 +121,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
             placeholder="New question…"
             className="flex-1 bg-slate-800 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
           />
-          <select value={newType} onChange={(e) => setNewType(e.target.value as SignupQuestionType)} className="bg-slate-800 border border-slate-600 text-slate-300 text-sm rounded-md px-2 py-2 focus:outline-none">
+          <select aria-label="New question type" value={newType} onChange={(e) => setNewType(e.target.value as SignupQuestionType)} className="bg-slate-800 border border-slate-600 text-slate-300 text-sm rounded-md px-2 py-2 focus:outline-none">
             {TYPES.map((t) => (
               <option key={t.value} value={t.value}>
                 {t.label}
