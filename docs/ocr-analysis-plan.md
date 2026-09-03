@@ -162,7 +162,46 @@ directly) — not solved here, just flagged for whoever sets up that deploy.
 without a bingo slug) — both produced correct output. Plan doc updated (this section).
 Final full pass: both typechecks clean, 146 unit tests green, E2E suite green twice.
 
-## 5. Verification discipline
+## 5. Post-ship fix — real screenshots were missing obvious text — DONE (2026-09-03)
+
+Found via user report against a real RuneLite client screenshot (1500x996, full chatbox
+visible): several entire chat lines were missing from `extractedText` even though they
+were clearly legible in the image, and a few numeric UI badges (inventory quantities, the
+XP-progress percentage) decoded as garbage/CJK characters.
+
+**Root cause:** `ppu-paddle-ocr`'s `detection.maxSideLength` defaults to `"auto"`, which
+computes `clamp(0.75 * longestSide, 960, 1920)` and downscales the detector's input to
+that cap. For a 1500px-wide screenshot that's a downscale to 1125px — a 25% shrink — which
+is enough to make several lines of OSRS's small, densely-packed chatbox font undetectable.
+This never showed up during Phase O1's benchmarking (§0) or during Phase O1/O2/O3 manual
+smoke tests, because every test image used so far (the benchmark set, the synthetic
+"Ahrim's hoad" fixture, `e2e/fixtures/screenshot.png`) was already small/cropped enough to
+stay under the auto cap. A real full-client screenshot is not — it's the primary real-world
+input this feature exists for, so this was a live accuracy bug, not an edge case.
+
+**Fix:** `ocr.ts`'s `getOcrService()` now passes `detection: { maxSideLength: 4000 }` and
+`recognition: { maxCropSourceSideLength: 4000 }` explicitly, overriding the library's
+auto-scaling for both the detector and the recognition crop source. Confirmed via a direct
+A/B (same image, `"auto"` vs. `4000`) that this recovers every previously-missing chat
+line with no regressions on the existing benchmark set; latency cost was small (~1.0s to
+~1.2s warm on the 1500px test image).
+
+`getOcrService()` was also exported from `ocr.ts` and `ocr-smoke.ts` now calls it instead
+of constructing its own `PaddleOcrService` with default options — the smoke script had
+silently drifted from production config, which is exactly how this bug went undetected
+until a real user hit it. They can no longer drift apart.
+
+The CJK-character garbage on small numeric UI badges (inventory counts, XP%) was not
+fixed — it's a pre-existing PP-OCRv6 multilingual-dictionary quirk on noisy/tiny glyphs,
+unrelated to the downscale bug, and harmless: `normalizeForMatch` strips non-`[a-z0-9]`
+characters, so CJK garbage can never fuzzy-match a real item/codeword string. Not worth
+chasing unless it starts producing false matches in practice.
+
+**DoD — met:** re-verified against the real reported screenshot (all 9 chat lines now
+extract correctly), both typechecks clean, 146 unit tests green (unchanged — this is a
+config-only change, no matching logic touched), E2E suite green twice.
+
+## 6. Verification discipline
 
 Same as `docs/e2e-testing-plan.md` §9: per phase run both `tsc --noEmit`s, the server
 unit suite, and the E2E suite twice; no arbitrary waits; read the component/service

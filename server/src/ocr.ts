@@ -34,10 +34,28 @@ export function isOcrEnabled(): boolean {
 // that cost or hit the network) and never per-request.
 let _service: Promise<PaddleOcrService> | null = null;
 
-function getOcrService(): Promise<PaddleOcrService> {
+// Exported so scripts/ocr-smoke.ts uses the exact same tuned options as
+// production rather than the library's defaults, which drift silently
+// otherwise (that drift is how the maxSideLength bug above went unnoticed).
+export function getOcrService(): Promise<PaddleOcrService> {
   if (!_service) {
     _service = (async () => {
-      const service = new PaddleOcrService({ model: V6_SMALL_MODEL });
+      const service = new PaddleOcrService({
+        model: V6_SMALL_MODEL,
+        // The library's default "auto" cap (clamp(0.75 * longestSide, 960,
+        // 1920)) shrinks a real full-client RuneLite screenshot enough to
+        // drop entire chatbox lines outright — confirmed against a real
+        // 1500px-wide screenshot where "auto" silently dropped 4 of 9 chat
+        // lines and a fixed higher cap recovered all of them. Real
+        // screenshots aren't the tightly-cropped benchmark images this
+        // model was tuned against, so don't downscale them.
+        detection: { maxSideLength: 4000 },
+        // charactersDictionary is typed as required here, but the library
+        // always overwrites it with the loaded dict during initialize() —
+        // confirmed by reading paddle-ocr.service.js. `[]` matches the
+        // library's own DEFAULT_RECOGNITION_OPTIONS placeholder.
+        recognition: { maxCropSourceSideLength: 4000, charactersDictionary: [] },
+      });
       await service.initialize();
       return service;
     })();
