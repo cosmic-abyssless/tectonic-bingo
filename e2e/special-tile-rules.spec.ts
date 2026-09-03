@@ -110,19 +110,20 @@ test("special tile-rule mechanics", async ({ page }) => {
     await taskPanel(page, "Part A").getByLabel("No duplicate items").click();
     await expect(taskPanel(page, "Part A").getByLabel("No duplicate items")).toBeChecked();
 
-    // Not exact — an item with an options group renders as
-    // "Ahrim's hood (group: ahrim)" (TaskEditor.tsx appends the group name).
+    // Added items render as an inline-editable name input (TaskEditor.tsx),
+    // not plain text — assert via its aria-label, not getByText (Playwright
+    // has no getByDisplayValue; that's a Testing Library API, not Playwright's).
     for (const item of ["Ahrim's hood", "Ahrim's robetop", "Ahrim's robeskirt", "Ahrim's staff"]) {
       await taskPanel(page, "Part A").getByPlaceholder("Item name").fill(item);
       await taskPanel(page, "Part A").getByPlaceholder("Options group (optional)").fill("ahrim");
       await taskPanel(page, "Part A").getByRole("button", { name: "Add" }).click();
-      await expect(taskPanel(page, "Part A").getByText(item)).toBeVisible();
+      await expect(taskPanel(page, "Part A").getByRole("textbox", { name: `Item name for ${item}` })).toBeVisible();
     }
     for (const item of ["Dharok's helm", "Dharok's platebody", "Dharok's platelegs", "Dharok's greataxe"]) {
       await taskPanel(page, "Part A").getByPlaceholder("Item name").fill(item);
       await taskPanel(page, "Part A").getByPlaceholder("Options group (optional)").fill("dharok");
       await taskPanel(page, "Part A").getByRole("button", { name: "Add" }).click();
-      await expect(taskPanel(page, "Part A").getByText(item)).toBeVisible();
+      await expect(taskPanel(page, "Part A").getByRole("textbox", { name: `Item name for ${item}` })).toBeVisible();
     }
 
     await page.getByRole("button", { name: "Close" }).click();
@@ -143,7 +144,7 @@ test("special tile-rule mechanics", async ({ page }) => {
       await taskPanel(page, "Part A").getByPlaceholder("Item name").fill(item);
       await taskPanel(page, "Part A").getByPlaceholder("Options group (optional)").fill("drop");
       await taskPanel(page, "Part A").getByRole("button", { name: "Add" }).click();
-      await expect(taskPanel(page, "Part A").getByText(item)).toBeVisible();
+      await expect(taskPanel(page, "Part A").getByRole("textbox", { name: `Item name for ${item}` })).toBeVisible();
     }
 
     await page.getByRole("button", { name: "Close" }).click();
@@ -162,7 +163,7 @@ test("special tile-rule mechanics", async ({ page }) => {
     await expect(taskPanel(page, "Part A").getByLabel("Allows pre-load screenshot")).toBeChecked();
     await taskPanel(page, "Part A").getByPlaceholder("Item name").fill("Any Cerberus drop");
     await taskPanel(page, "Part A").getByRole("button", { name: "Add" }).click();
-    await expect(taskPanel(page, "Part A").getByText("Any Cerberus drop", { exact: true })).toBeVisible();
+    await expect(taskPanel(page, "Part A").getByRole("textbox", { name: "Item name for Any Cerberus drop" })).toBeVisible();
 
     await page.getByRole("button", { name: "+ Add task" }).click();
     await taskPanel(page, "Part B").getByRole("button", { name: /Expand task: Part B/ }).click();
@@ -173,7 +174,7 @@ test("special tile-rule mechanics", async ({ page }) => {
     await taskPanel(page, "Part B").getByLabel("Min. approved submissions to complete").fill("2");
     await taskPanel(page, "Part B").getByPlaceholder("Item name").fill("Any Cerberus drop");
     await taskPanel(page, "Part B").getByRole("button", { name: "Add" }).click();
-    await expect(taskPanel(page, "Part B").getByText("Any Cerberus drop", { exact: true })).toBeVisible();
+    await expect(taskPanel(page, "Part B").getByRole("textbox", { name: "Item name for Any Cerberus drop" })).toBeVisible();
 
     // A single wildcard, applicable to any task on the tile, at the schema
     // default of 1 redemption per team — the admin UI has no field to set
@@ -201,7 +202,7 @@ test("special tile-rule mechanics", async ({ page }) => {
     await taskPanel(page, "Part A").getByLabel("Description", { exact: true }).fill("Clear waves 1 through 3.");
     await taskPanel(page, "Part A").getByPlaceholder("Item name").fill("Waves 1-3 proof");
     await taskPanel(page, "Part A").getByRole("button", { name: "Add" }).click();
-    await expect(taskPanel(page, "Part A").getByText("Waves 1-3 proof", { exact: true })).toBeVisible();
+    await expect(taskPanel(page, "Part A").getByRole("textbox", { name: "Item name for Waves 1-3 proof" })).toBeVisible();
 
     await page.getByRole("button", { name: "Close" }).click();
   });
@@ -217,7 +218,7 @@ test("special tile-rule mechanics", async ({ page }) => {
     await taskPanel(page, "Part A").getByLabel("Description", { exact: true }).fill("Kill Duke Sucellus.");
     await taskPanel(page, "Part A").getByPlaceholder("Item name").fill("Duke Sucellus kill proof");
     await taskPanel(page, "Part A").getByRole("button", { name: "Add" }).click();
-    await expect(taskPanel(page, "Part A").getByText("Duke Sucellus kill proof", { exact: true })).toBeVisible();
+    await expect(taskPanel(page, "Part A").getByRole("textbox", { name: "Item name for Duke Sucellus kill proof" })).toBeVisible();
 
     await page.getByRole("button", { name: "+ Add task" }).click();
     await taskPanel(page, "Part B").getByRole("button", { name: /Expand task: Part B/ }).click();
@@ -227,7 +228,7 @@ test("special tile-rule mechanics", async ({ page }) => {
     await expect(taskPanel(page, "Part B").getByLabel("Requires previous task")).toBeChecked();
     await taskPanel(page, "Part B").getByPlaceholder("Item name").fill("Vestige");
     await taskPanel(page, "Part B").getByRole("button", { name: "Add" }).click();
-    await expect(taskPanel(page, "Part B").getByText("Vestige", { exact: true })).toBeVisible();
+    await expect(taskPanel(page, "Part B").getByRole("textbox", { name: "Item name for Vestige" })).toBeVisible();
 
     await page.getByRole("button", { name: "Close" }).click();
   });
