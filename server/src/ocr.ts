@@ -54,7 +54,17 @@ export function getOcrService(): Promise<PaddleOcrService> {
         // always overwrites it with the loaded dict during initialize() —
         // confirmed by reading paddle-ocr.service.js. `[]` matches the
         // library's own DEFAULT_RECOGNITION_OPTIONS placeholder.
-        recognition: { maxCropSourceSideLength: 4000, charactersDictionary: [] },
+        //
+        // strategy: "per-box" overrides the library default ("per-line",
+        // which merges same-line boxes before recognizing). On a real
+        // screenshot that merge corrupted adjacent text — e.g. a UI label
+        // "frost-wyvern 03/09/2026 21:08 UTC" came out as "rost-uyer
+        // 03/09/20e26 2" / "1.08 UT" under per-line, but recognized exactly
+        // right (0.94-0.99 confidence per box) under per-box. A/B against
+        // the same real screenshot showed per-box was more accurate on
+        // nearly every line (not just this one), with no measurable
+        // latency cost for a screenshot-sized image.
+        recognition: { maxCropSourceSideLength: 4000, charactersDictionary: [], strategy: "per-box" },
       });
       await service.initialize();
       return service;

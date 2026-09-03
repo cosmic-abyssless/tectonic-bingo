@@ -201,6 +201,33 @@ chasing unless it starts producing false matches in practice.
 extract correctly), both typechecks clean, 146 unit tests green (unchanged — this is a
 config-only change, no matching logic touched), E2E suite green twice.
 
+### 5.1 Follow-up — same screenshot, "frost-wyvern" label still missing — DONE (2026-09-03)
+
+The maxSideLength fix above didn't fully solve it: a small white-on-translucent-dark UI
+label reading "frost-wyvern 03/09/2026 21:08 UTC" (RuneLite's screenshot-plugin filename
+overlay) was still garbled to "rost-uyer 03/09/20e26 2" / "1.08 UT" even with detection
+downscaling disabled.
+
+**Root cause:** the recognition strategy, not detection. `recognition.strategy` defaults
+to `"per-line"`, which merges same-line detected boxes before running recognition on the
+merged crop. For this specific label the merge corrupted character boundaries badly enough
+to drop/misread several letters. Isolated per-box crops of the exact same label recognized
+perfectly (0.94-0.99 confidence per box).
+
+**Fix:** `recognition.strategy: "per-box"` (each detected box recognized on its own — more
+inferences, but each is isolated). A/B against the same real screenshot showed per-box was
+more accurate on nearly every line, not just this one (better "Private"/"Filtered" reads
+on the chat-filter row too), with no measurable latency difference on a screenshot-sized
+image (~1.0-1.1s warm either way).
+
+**DoD — met:** re-verified against the real reported screenshot — "frost-wyvern
+03/09/2026 21:08 UTC" now extracts correctly on its own line. Both typechecks clean, 146
+unit tests green. E2E suite: one run hit an unrelated flake on `full-flow.spec.ts` (E2E
+sets `SCREENSHOT_OCR_DISABLED=true`, so `getOcrService()` never runs during E2E at all —
+this strategy change cannot be its cause; matches the same benign Vite `ws proxy socket
+error` HMR noise seen intermittently throughout this project's E2E history) — two
+subsequent consecutive runs both green.
+
 ## 6. Verification discipline
 
 Same as `docs/e2e-testing-plan.md` §9: per phase run both `tsc --noEmit`s, the server
