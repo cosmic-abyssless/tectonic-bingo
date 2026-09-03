@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { TileTask } from "@bingo/shared";
+import type { TileTask, TileTaskItem } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
 
@@ -17,6 +17,7 @@ export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: Tile
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [newItemName, setNewItemName] = useState("");
+  const [newItemQty, setNewItemQty] = useState(1);
   const [newItemGroup, setNewItemGroup] = useState("");
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.board(slug) });
@@ -32,8 +33,19 @@ export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: Tile
   }
   async function addItem() {
     if (!newItemName.trim()) return;
-    await adminApi.createTaskItem(slug, task.id, { itemName: newItemName.trim(), optionsGroup: newItemGroup.trim() || null, sortOrder: task.items.length });
+    await adminApi.createTaskItem(slug, task.id, {
+      itemName: newItemName.trim(),
+      quantity: Math.max(1, newItemQty || 1),
+      optionsGroup: newItemGroup.trim() || null,
+      sortOrder: task.items.length,
+    });
     setNewItemName("");
+    setNewItemQty(1);
+    setNewItemGroup("");
+    invalidate();
+  }
+  async function patchItem(id: string, fields: Partial<TileTaskItem>) {
+    await adminApi.updateTaskItem(slug, id, fields);
     invalidate();
   }
   async function deleteItem(id: string) {
@@ -113,12 +125,41 @@ export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: Tile
                 <label className="block text-xs text-slate-400 mb-1.5">Items ({task.items.length})</label>
                 <ul className="space-y-1 mb-2">
                   {task.items.map((item) => (
-                    <li key={item.id} className="flex items-center justify-between bg-slate-800 rounded px-2 py-1 text-xs">
-                      <span className="text-slate-200">
-                        {item.itemName}
-                        {item.optionsGroup && <span className="text-slate-500"> (group: {item.optionsGroup})</span>}
-                      </span>
-                      <button onClick={() => deleteItem(item.id)} className="text-slate-500 hover:text-red-400 cursor-pointer">
+                    <li key={item.id} className="flex items-center gap-2 bg-slate-800 rounded px-2 py-1 text-xs">
+                      <input
+                        defaultValue={item.itemName}
+                        onBlur={(e) => {
+                          const value = e.target.value.trim();
+                          if (value && value !== item.itemName) patchItem(item.id, { itemName: value });
+                          else e.target.value = item.itemName;
+                        }}
+                        aria-label={`Item name for ${item.itemName}`}
+                        className="flex-1 bg-slate-900 border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-indigo-500"
+                      />
+                      <input
+                        type="number"
+                        min={1}
+                        defaultValue={item.quantity}
+                        onBlur={(e) => {
+                          const value = Math.max(1, Number(e.target.value) || 1);
+                          if (value !== item.quantity) patchItem(item.id, { quantity: value });
+                          e.target.value = String(value);
+                        }}
+                        aria-label={`Quantity needed for ${item.itemName}`}
+                        title="Total quantity needed (summed across all approved submissions)"
+                        className="w-16 bg-slate-900 border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-indigo-500"
+                      />
+                      <input
+                        defaultValue={item.optionsGroup ?? ""}
+                        onBlur={(e) => {
+                          const value = e.target.value.trim() || null;
+                          if (value !== item.optionsGroup) patchItem(item.id, { optionsGroup: value });
+                        }}
+                        placeholder="group"
+                        aria-label={`Options group for ${item.itemName}`}
+                        className="w-24 bg-slate-900 border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
+                      />
+                      <button onClick={() => deleteItem(item.id)} className="text-slate-500 hover:text-red-400 cursor-pointer" aria-label={`Delete item ${item.itemName}`}>
                         ✕
                       </button>
                     </li>
@@ -130,6 +171,15 @@ export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: Tile
                     onChange={(e) => setNewItemName(e.target.value)}
                     placeholder="Item name"
                     className="flex-1 bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
+                  />
+                  <input
+                    type="number"
+                    min={1}
+                    value={newItemQty}
+                    onChange={(e) => setNewItemQty(Math.max(1, Number(e.target.value) || 1))}
+                    aria-label="Quantity needed for new item"
+                    title="Total quantity needed (summed across all approved submissions)"
+                    className="w-16 bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500"
                   />
                   <input
                     value={newItemGroup}
