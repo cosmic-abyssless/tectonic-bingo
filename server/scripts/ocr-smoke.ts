@@ -12,9 +12,9 @@
 
 import { readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";
-import { PaddleOcrService, V6_SMALL_MODEL } from "ppu-paddle-ocr";
 import { db } from "../src/db";
 import { bingos, tileTaskItems, tileTasks, tileWildcards, tiles } from "../src/db/schema";
+import { getOcrService } from "../src/ocr";
 import { findBestMatch } from "../src/services/textMatchService";
 
 async function main() {
@@ -27,9 +27,8 @@ async function main() {
   const buffer = readFileSync(imagePath);
   const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
 
-  const service = new PaddleOcrService({ model: V6_SMALL_MODEL });
   const initStart = Date.now();
-  await service.initialize();
+  const service = await getOcrService();
   const initMs = Date.now() - initStart;
 
   const recognizeStart = Date.now();
