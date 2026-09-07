@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { RequirementKind, RequirementNode, RequirementNodeInput, TileTask } from "@bingo/shared";
+import type { RequirementNode, RequirementNodeInput, TileTask } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
-import { useItemGroups } from "../../api/adminQueries";
+import { adminQueryKeys, useItemGroups } from "../../api/adminQueries";
+import { RequirementTreeEditor } from "./RequirementTreeEditor";
 
 const FLAG_FIELDS: { key: "submitRequiresPrevious" | "pointsRequirePrevious" | "allowsPreLoad"; label: string; hint: string }[] = [
   { key: "submitRequiresPrevious", label: "Requires previous task", hint: "Can't submit until the previous task is completed" },
@@ -11,14 +12,6 @@ const FLAG_FIELDS: { key: "submitRequiresPrevious" | "pointsRequirePrevious" | "
   { key: "allowsPreLoad", label: "Allows pre-load screenshot", hint: "Player may submit an empty-state screenshot beforehand" },
 ];
 
-const ROOT_KINDS: { kind: RequirementKind; label: string }[] = [
-  { kind: "ALL", label: "All of" },
-  { kind: "ANY", label: "Any one of" },
-  { kind: "COUNT", label: "At least N of" },
-];
-
-// The flat editor only handles a root (ALL/ANY/COUNT) with ITEM leaves.
-// Deeper trees are shown read-only until edited, at which point they collapse.
 function toInput(node: RequirementNode): RequirementNodeInput {
   return {
     kind: node.kind,
@@ -30,8 +23,6 @@ function toInput(node: RequirementNode): RequirementNodeInput {
     children: node.children.map(toInput),
   };
 }
-
-const INPUT = "bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600";
 
 export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: TileTask; onDeleted: () => void }) {
   const queryClient = useQueryClient();
@@ -49,27 +40,17 @@ export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: Tile
     invalidate();
     onDeleted();
   }
+  async function saveAsGroup(itemNames: string[]) {
+    const name = prompt("Name for the new item group:", "");
+    if (!name?.trim()) return null;
+    const { itemGroup } = await adminApi.createItemGroup({ name: name.trim(), itemNames });
+    queryClient.invalidateQueries({ queryKey: adminQueryKeys.itemGroups });
+    return itemGroup;
+  }
 
+  // A bare ITEM root (from the API/seed) is shown wrapped in an ALL so the tree always has a group at the top.
   const root = task.requirement;
-  const leaves = root.kind === "ITEM" ? [root] : root.children;
-  const rootKind: RequirementKind = root.kind === "ITEM" ? "ALL" : root.kind;
-  const isNested = leaves.some((leaf) => leaf.kind !== "ITEM");
-
-  function saveTree(kind: RequirementKind, minCount: number | undefined, children: RequirementNodeInput[]) {
-    return patch({ requirement: { kind, minCount: kind === "COUNT" ? minCount ?? 1 : undefined, children } });
-  }
-  function saveLeaves(nextLeaves: RequirementNodeInput[]) {
-    return saveTree(rootKind, root.minCount ?? undefined, nextLeaves);
-  }
-  function updateLeaf(index: number, changes: Partial<RequirementNodeInput>) {
-    return saveLeaves(leaves.map((leaf, i) => (i === index ? { ...toInput(leaf), ...changes } : toInput(leaf))));
-  }
-  function addLeaf() {
-    return saveLeaves([...leaves.map(toInput), { kind: "ITEM", itemNames: [], quantity: 1 }]);
-  }
-  function removeLeaf(index: number) {
-    return saveLeaves(leaves.filter((_, i) => i !== index).map(toInput));
-  }
+  const rootInput: RequirementNodeInput = root.kind === "ITEM" ? { kind: "ALL", children: [toInput(root)] } : toInput(root);
 
   const isManual = task.scoringMode === "manual";
 
@@ -134,72 +115,8 @@ export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: Tile
 
           {!isManual && (
             <div>
-              <div className="flex items-center gap-2 mb-1.5">
-                <label className="text-xs text-slate-400">Requirement</label>
-                <select
-                  aria-label="Requirement kind"
-                  value={rootKind}
-                  onChange={(e) => saveTree(e.target.value as RequirementKind, root.minCount ?? undefined, leaves.map(toInput))}
-                  className={INPUT}
-                >
-                  {ROOT_KINDS.map((k) => (
-                    <option key={k.kind} value={k.kind}>{k.label}</option>
-                  ))}
-                </select>
-                {rootKind === "COUNT" && (
-                  <input
-                    aria-label="Minimum count"
-                    type="number"
-                    min={1}
-                    defaultValue={root.minCount ?? 1}
-                    onBlur={(e) => saveTree("COUNT", Math.max(1, Number(e.target.value) || 1), leaves.map(toInput))}
-                    className={`w-16 ${INPUT}`}
-                  />
-                )}
-              </div>
-              {isNested && <p className="text-xs text-yellow-400 mb-1.5">This task has a nested requirement tree; editing here will flatten it.</p>}
-              <ul className="space-y-1 mb-2">
-                {leaves.map((leaf, i) => (
-                  <li key={leaf.id} className="flex items-center gap-2 bg-slate-800 rounded px-2 py-1">
-                    <input
-                      aria-label="Item names"
-                      defaultValue={leaf.itemNames.join(", ")}
-                      placeholder="Item names, comma-separated"
-                      onBlur={(e) => updateLeaf(i, { itemNames: e.target.value.split(",").map((n) => n.trim()).filter(Boolean) })}
-                      className={`flex-1 ${INPUT}`}
-                    />
-                    <select
-                      aria-label="Item group"
-                      value={leaf.itemGroupId ?? ""}
-                      onChange={(e) => updateLeaf(i, { itemGroupId: e.target.value || undefined })}
-                      className={INPUT}
-                    >
-                      <option value="">No group</option>
-                      {itemGroups.map((g) => (
-                        <option key={g.id} value={g.id}>{g.name}</option>
-                      ))}
-                    </select>
-                    <input
-                      aria-label="Quantity"
-                      type="number"
-                      min={1}
-                      defaultValue={leaf.quantity ?? 1}
-                      onBlur={(e) => updateLeaf(i, { quantity: Math.max(1, Number(e.target.value) || 1) })}
-                      className={`w-14 ${INPUT}`}
-                    />
-                    <label title="Count distinct item names instead of total quantity" className="flex items-center gap-1 text-xs text-slate-300 cursor-pointer">
-                      <input type="checkbox" checked={leaf.distinctItems} onChange={(e) => updateLeaf(i, { distinctItems: e.target.checked })} className="w-3.5 h-3.5 accent-indigo-500 cursor-pointer" />
-                      distinct
-                    </label>
-                    <button onClick={() => removeLeaf(i)} className="text-slate-500 hover:text-red-400 text-xs cursor-pointer">
-                      ✕
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <button onClick={addLeaf} className="text-xs bg-slate-700 hover:bg-slate-600 text-white rounded px-2.5 py-1 cursor-pointer">
-                + Add item requirement
-              </button>
+              <label className="block text-xs text-slate-400 mb-1.5">Requirement</label>
+              <RequirementTreeEditor root={rootInput} itemGroups={itemGroups} onChange={(requirement) => patch({ requirement })} onSaveAsGroup={saveAsGroup} />
             </div>
           )}
 

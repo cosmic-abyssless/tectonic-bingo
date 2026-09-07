@@ -129,13 +129,22 @@ if (process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "
     asyncHandler(async (req, res) => {
       const { count } = req.body as { count?: number };
       const n = Math.min(Math.max(Math.trunc(count ?? 8), 1), 50);
-      const roster = (await getTectonicClient()?.getRoster(1000)) ?? [];
+      const tectonic = getTectonicClient();
+      const roster = (await tectonic?.getRoster(1000)) ?? [];
       // devSeedService fabricates WOM/RuneProfile stats locally (no network
       // calls) for every seeded signup — up to 50 real API round trips per
       // click would be slow and pointless rate-limit exposure for
       // throwaway test data. Real signups still fetch real data.
-      const signups = devSeedService.seedTestSignups(db, req.bingo!, n, roster);
-      res.status(201).json({ signups });
+      const result = devSeedService.seedTestSignups(db, req.bingo!, n, roster);
+      res.status(201).json({ ...result, tectonicConfigured: tectonic !== null });
+    }),
+  );
+
+  router.delete(
+    "/dev/signups",
+    asyncHandler(async (req, res) => {
+      if (req.bingo!.stage !== "signup") throw new ServiceError(400, "Signups can only be wiped during the signup stage");
+      res.json({ deleted: devSeedService.deleteAllSignups(db, req.bingo!.id) });
     }),
   );
 }

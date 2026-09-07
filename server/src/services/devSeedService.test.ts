@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createQuestion } from "./signupService";
-import { seedTestSignups } from "./devSeedService";
+import { deleteAllSignups, seedTestSignups } from "./devSeedService";
 import type { TectonicRosterUser } from "./tectonicService";
 import { parseWomSummary } from "./womService";
 import { parseAccountType } from "./runeProfileService";
@@ -28,8 +28,9 @@ afterEach(() => {
 describe("seedTestSignups", () => {
   it("creates the requested number of active signups with distinct users", () => {
     const bingo = seedBingo();
-    const created = seedTestSignups(db, bingo, 5);
+    const { signups: created, source } = seedTestSignups(db, bingo, 5);
 
+    expect(source).toBe("synthetic");
     expect(created).toHaveLength(5);
     expect(created.every((s) => s.status === "active")).toBe(true);
     expect(new Set(created.map((s) => s.userId)).size).toBe(5);
@@ -40,7 +41,7 @@ describe("seedTestSignups", () => {
     createQuestion(db, { bingoId: bingo.id, prompt: "Willing to captain?", type: "boolean", required: true });
     createQuestion(db, { bingoId: bingo.id, prompt: "Preferred role", type: "select", optionsJson: JSON.stringify(["dps", "support"]), required: true });
 
-    const created = seedTestSignups(db, bingo, 3);
+    const { signups: created } = seedTestSignups(db, bingo, 3);
     expect(created).toHaveLength(3);
 
     const answers = db.select().from(schema.signupAnswers).where(eq(schema.signupAnswers.signupId, created[0]!.id)).all();
@@ -64,8 +65,9 @@ describe("seedTestSignups", () => {
     const bingo = seedBingo();
     const roster = [rosterUser("111", "RealOne", "w1"), rosterUser("222", "RealTwo", "w2")];
 
-    const created = seedTestSignups(db, bingo, 3, roster);
+    const { signups: created, source } = seedTestSignups(db, bingo, 3, roster);
 
+    expect(source).toBe("mixed");
     expect(created).toHaveLength(3);
     const rsns = created.map((s) => s.rsn).sort();
     expect(rsns).toEqual(["RealOne", "RealTwo", "TestBot3"].sort());
@@ -78,7 +80,7 @@ describe("seedTestSignups", () => {
     const bingo = seedBingo();
     seedTestSignups(db, bingo, 1, [rosterUser("111", "RealOne", "w1")]);
 
-    const created = seedTestSignups(db, bingo, 1, [rosterUser("111", "RealOne", "w1"), rosterUser("222", "RealTwo", "w2")]);
+    const { signups: created } = seedTestSignups(db, bingo, 1, [rosterUser("111", "RealOne", "w1"), rosterUser("222", "RealTwo", "w2")]);
     expect(created[0]!.rsn).toBe("RealTwo");
   });
 
@@ -86,7 +88,7 @@ describe("seedTestSignups", () => {
     const bingo = seedBingo();
     db.insert(schema.users).values({ discordId: "111", discordUsername: "RealOne" }).run();
 
-    const [created] = seedTestSignups(db, bingo, 1, [rosterUser("111", "RealOne", "w1")]);
+    const [created] = seedTestSignups(db, bingo, 1, [rosterUser("111", "RealOne", "w1")]).signups;
     const matchingUsers = db.select().from(schema.users).where(eq(schema.users.discordId, "111")).all();
     expect(matchingUsers).toHaveLength(1);
     expect(created!.userId).toBe(matchingUsers[0]!.id);
@@ -96,7 +98,7 @@ describe("seedTestSignups", () => {
     const bingo = seedBingo();
     const noRsn: TectonicRosterUser = { user_id: "333", guild_id: "g", points: 0, rsns: [] };
 
-    const created = seedTestSignups(db, bingo, 1, [noRsn]);
+    const { signups: created } = seedTestSignups(db, bingo, 1, [noRsn]);
     expect(created[0]!.rsn).toBe("TestBot1");
     expect(created[0]!.rsnVerified).toBe(false);
   });
@@ -105,7 +107,7 @@ describe("seedTestSignups", () => {
     const bingo = seedBingo();
     const roster = [rosterUser("111", "RealOne", "w1")];
 
-    const created = seedTestSignups(db, bingo, 3, roster); // 1 real + 2 TestBots
+    const { signups: created } = seedTestSignups(db, bingo, 3, roster); // 1 real + 2 TestBots
     expect(created).toHaveLength(3);
 
     for (const signup of created) {
@@ -121,5 +123,21 @@ describe("seedTestSignups", () => {
       const accountType = parseAccountType(JSON.parse(row.runeProfileDataJson!));
       expect(accountType).not.toBeNull();
     }
+  });
+});
+
+describe("deleteAllSignups", () => {
+  it("removes every signup and its answers for the bingo only", () => {
+    const bingo = seedBingo();
+    const other = db.insert(schema.bingos).values({ slug: "other", name: "Other", boardRows: 3, boardCols: 3, createdByUserId: bingo.createdByUserId, stage: "signup" }).returning().get();
+    createQuestion(db, { bingoId: bingo.id, prompt: "Willing to captain?", type: "boolean", required: true });
+    seedTestSignups(db, bingo, 3);
+    seedTestSignups(db, other, 2);
+
+    expect(deleteAllSignups(db, bingo.id)).toBe(3);
+
+    expect(db.select().from(schema.signups).where(eq(schema.signups.bingoId, bingo.id)).all()).toHaveLength(0);
+    expect(db.select().from(schema.signupAnswers).all()).toHaveLength(0);
+    expect(db.select().from(schema.signups).where(eq(schema.signups.bingoId, other.id)).all()).toHaveLength(2);
   });
 });

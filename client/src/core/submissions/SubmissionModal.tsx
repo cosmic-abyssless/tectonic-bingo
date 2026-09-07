@@ -32,11 +32,18 @@ interface Props {
   onSuccess: () => void;
 }
 
+// A claim the player has finished picking but not yet submitted; several can go in one screenshot.
+interface StagedClaim {
+  claim: ClaimInput;
+  label: string;
+}
+
 export function SubmissionModal({ slug, bingo, tiles, categories, progress, teamSubmissions, initialTileId, onClose, onSuccess }: Props) {
   const [selectedTileId, setSelectedTileId] = useState(initialTileId ?? "");
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [selectedItemName, setSelectedItemName] = useState("");
+  const [stagedClaims, setStagedClaims] = useState<StagedClaim[]>([]);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -60,9 +67,14 @@ export function SubmissionModal({ slug, bingo, tiles, categories, progress, team
   const claimMaps = useMemo(() => buildLeafClaimMaps(teamSubmissions), [teamSubmissions]);
   const isManualTask = currentTask?.scoringMode === "manual";
 
-  // Leaves of the current task that still need items, narrowed to the selected wildcard's scope.
+  // Leaves of the current task that still need items (counting claims staged in this modal),
+  // narrowed to the selected wildcard's scope.
   const taskLeaves: RequirementNode[] = currentTask ? collectLeaves(currentTask.requirement) : [];
-  const openLeaves = taskLeaves.filter((leaf) => leaf.kind === "ITEM" && leafProgress(leaf.id, leaf.distinctItems, claimMaps) < (leaf.quantity ?? 1));
+  const stagedQtyByNode = new Map<string, number>();
+  for (const { claim } of stagedClaims) stagedQtyByNode.set(claim.nodeId, (stagedQtyByNode.get(claim.nodeId) ?? 0) + (claim.quantity ?? 1));
+  const openLeaves = taskLeaves.filter(
+    (leaf) => leaf.kind === "ITEM" && leafProgress(leaf.id, leaf.distinctItems, claimMaps) + (stagedQtyByNode.get(leaf.id) ?? 0) < (leaf.quantity ?? 1),
+  );
   const availableWildcards: TileWildcard[] = (selectedTile?.wildcards ?? []).filter(
     (wc) => wc.applicableNodeId === null || openLeaves.some((leaf) => leaf.id === wc.applicableNodeId),
   );
@@ -81,9 +93,10 @@ export function SubmissionModal({ slug, bingo, tiles, categories, progress, team
 
   // Auto-select the leaf when there's exactly one option. Re-runs when the
   // wildcard mode/selection changes because those narrow the leaf options and
-  // their onChange handlers clear selectedNodeId.
+  // their onChange handlers clear selectedNodeId. Skipped once claims are staged
+  // so a submit never silently includes a claim the player didn't pick.
   useEffect(() => {
-    if (!currentTask || isManualTask) return;
+    if (!currentTask || isManualTask || stagedClaims.length > 0) return;
     if (leafOptions.length === 1) {
       setSelectedNodeId(leafOptions[0].id);
       setSubmissionQty(1);
@@ -209,8 +222,39 @@ export function SubmissionModal({ slug, bingo, tiles, categories, progress, team
   }, [handleFile]);
 
   const manualLeaf = isManualTask ? taskLeaves.find((leaf) => leaf.kind === "MANUAL") : undefined;
-  const isValid =
-    imageFile && selectedTileId && selectedTaskId && (isManualTask ? manualLeaf : selectedLeaf && (isWildcardMode ? selectedWildcard : selectedItemName));
+
+  // The claim described by the current picker state, or null while it's incomplete.
+  const currentClaim: StagedClaim | null = (() => {
+    if (!currentTask) return null;
+    if (manualLeaf) return { claim: { nodeId: manualLeaf.id }, label: `${currentTask.label}: manual review` };
+    if (!selectedLeaf) return null;
+    const qtyPrefix = submissionQty > 1 ? `${submissionQty}× ` : "";
+    if (isWildcardMode) {
+      if (!selectedWildcard) return null;
+      return {
+        claim: { nodeId: selectedLeaf.id, itemName: selectedWildcard.itemName, quantity: submissionQty, wildcardId: selectedWildcard.id },
+        label: `${currentTask.label}: ${qtyPrefix}${selectedWildcard.itemName} (wildcard)`,
+      };
+    }
+    if (!selectedItemName) return null;
+    return { claim: { nodeId: selectedLeaf.id, itemName: selectedItemName, quantity: submissionQty }, label: `${currentTask.label}: ${qtyPrefix}${selectedItemName}` };
+  })();
+  const pickerEmpty = !selectedNodeId && !selectedWildcardId && !isManualTask;
+  const isValid = !!imageFile && !!selectedTileId && (currentClaim !== null || (stagedClaims.length > 0 && pickerEmpty));
+
+  const resetPicker = () => {
+    setSelectedNodeId("");
+    setSelectedItemName("");
+    setSelectedWildcardId("");
+    setIsWildcardMode(false);
+    setSubmissionQty(1);
+  };
+
+  const stageCurrentClaim = () => {
+    if (!currentClaim) return;
+    setStagedClaims((prev) => [...prev, currentClaim]);
+    resetPicker();
+  };
 
   const handleSubmit = async () => {
     if (!isValid || !imageFile) return;
@@ -218,12 +262,8 @@ export function SubmissionModal({ slug, bingo, tiles, categories, progress, team
 
     const formData = new FormData();
     formData.append("screenshot", imageFile);
-    const claim: ClaimInput = manualLeaf
-      ? { nodeId: manualLeaf.id }
-      : isWildcardMode
-        ? { nodeId: selectedLeaf!.id, itemName: selectedWildcard!.itemName, quantity: submissionQty, wildcardId: selectedWildcard!.id }
-        : { nodeId: selectedLeaf!.id, itemName: selectedItemName, quantity: submissionQty };
-    formData.append("claims", JSON.stringify([claim]));
+    const claims = [...stagedClaims, ...(currentClaim ? [currentClaim] : [])].map((s) => s.claim);
+    formData.append("claims", JSON.stringify(claims));
 
     try {
       await createSubmission.mutateAsync(formData);
@@ -340,11 +380,8 @@ export function SubmissionModal({ slug, bingo, tiles, categories, progress, team
             onChange={(id) => {
               setSelectedTileId(id);
               setSelectedTaskId("");
-              setSelectedNodeId("");
-              setSelectedItemName("");
-              setSelectedWildcardId("");
-              setIsWildcardMode(false);
-              setSubmissionQty(1);
+              setStagedClaims([]);
+              resetPicker();
             }}
           />
         </div>
@@ -360,11 +397,7 @@ export function SubmissionModal({ slug, bingo, tiles, categories, progress, team
                   type="button"
                   onClick={() => {
                     setSelectedTaskId(task.id);
-                    setSelectedNodeId("");
-                    setSelectedItemName("");
-                    setSelectedWildcardId("");
-                    setIsWildcardMode(false);
-                    setSubmissionQty(1);
+                    resetPicker();
                   }}
                   className={`flex-1 py-2 text-sm font-medium transition-colors cursor-pointer ${i > 0 ? "border-l border-slate-600" : ""} ${
                     selectedTaskId === task.id ? "bg-indigo-600 text-white" : "bg-slate-900 text-slate-400 hover:text-slate-200"
@@ -482,6 +515,34 @@ export function SubmissionModal({ slug, bingo, tiles, categories, progress, team
               className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
             />
           </div>
+        )}
+
+        {/* Claims already staged for this screenshot */}
+        {stagedClaims.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Also in this screenshot</label>
+            <ul className="space-y-1">
+              {stagedClaims.map((staged, i) => (
+                <li key={i} className="flex items-center justify-between gap-2 bg-slate-900/60 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-300">
+                  <span>{staged.label}</span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${staged.label}`}
+                    onClick={() => setStagedClaims((prev) => prev.filter((_, j) => j !== i))}
+                    className="text-slate-500 hover:text-red-400 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {currentClaim && !manualLeaf && (
+          <button type="button" onClick={stageCurrentClaim} className="text-sm text-indigo-400 hover:text-indigo-300 cursor-pointer">
+            + Add another item from this screenshot
+          </button>
         )}
 
         {error && <p className="text-red-400 text-sm">{error}</p>}
