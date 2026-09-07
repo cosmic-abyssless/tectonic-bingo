@@ -1,7 +1,9 @@
 // Dev-only seed: one admin user + one demo bingo exercising every requirement
-// node kind and task flag on a small 3x3 board. Production boards are authored
-// in the admin panel — this script exists purely so local dev/testing has data
-// to work against.
+// node kind and task flag on a small 3x3 board, plus sample submissions in
+// every review state. Production boards are authored in the admin panel —
+// this script exists purely so local dev/testing has data to work against.
+import { copyFileSync, mkdirSync } from 'node:fs';
+import path from 'node:path';
 import { db } from './index';
 import {
   users, bingos, bingoModerators, tileCategories, tiles,
@@ -9,7 +11,9 @@ import {
   signupQuestions, itemGroups, itemGroupItems,
 } from './schema';
 import { createTask, type CreateTaskParams } from '../services/boardService';
-import { getRequirementTree, type RequirementNodeInput } from '../services/requirementService';
+import { getRequirementTree, leafIds, type RequirementNodeInput } from '../services/requirementService';
+import { createSubmission } from '../services/submissionService';
+import { approveSubmission, rejectSubmission } from '../services/scoringService';
 
 async function main() {
   const [admin] = await db.insert(users).values({
@@ -146,7 +150,8 @@ async function main() {
   ];
 
   const tileRowsById: Record<string, { id: string }> = {};
-  let cerberusTaskAId: string | null = null;
+  // "Tile name/Task label" -> task id, for wiring wildcards and sample submissions.
+  const taskIdByKey: Record<string, string> = {};
 
   for (const def of tileDefs) {
     const [tile] = await db.insert(tiles).values({
@@ -162,19 +167,17 @@ async function main() {
 
     for (const [i, taskDef] of def.tasks.entries()) {
       const task = createTask(db, { tileId: tile.id, sortOrder: i, ...taskDef });
-      if (def.name === 'Cerberus' && taskDef.label === 'Part A') cerberusTaskAId = task.id;
+      taskIdByKey[`${def.name}/${taskDef.label}`] = task.id;
     }
   }
 
-  if (cerberusTaskAId) {
-    await db.insert(tileWildcards).values({
-      tileId: tileRowsById['0,2'].id,
-      itemName: 'Cerberus jar',
-      maxRedemptionsPerTeam: 1,
-      description: 'Redeeming a Cerberus jar counts as a Cerberus unique for Part A.',
-      applicableNodeId: getRequirementTree(db, cerberusTaskAId)!.id,
-    });
-  }
+  const [cerbWildcard] = await db.insert(tileWildcards).values({
+    tileId: tileRowsById['0,2'].id,
+    itemName: 'Cerberus jar',
+    maxRedemptionsPerTeam: 1,
+    description: 'Redeeming a Cerberus jar counts as a Cerberus unique for Part A.',
+    applicableNodeId: getRequirementTree(db, taskIdByKey['Cerberus/Part A'])!.id,
+  }).returning();
 
   // Generate all lines for a 3x3 board: 3 rows + 3 cols + 2 diagonals.
   for (let row = 0; row < 3; row++) {
@@ -220,7 +223,41 @@ async function main() {
     { bingoId: bingo.id, prompt: 'Anything else we should know?', type: 'textarea', required: false, sortOrder: 2 },
   ]);
 
-  console.log(`Seeded bingo "${bingo.name}" (slug: ${bingo.slug}) with ${tileDefs.length} tiles, 2 teams, 8 lines.`);
+  // Sample submissions in every review state, created through the real
+  // services so progress/points/lines are derived exactly as in production.
+  // Reuses the e2e fixture screenshot so the images actually render.
+  const uploadsDir = path.join(__dirname, '../../uploads');
+  mkdirSync(uploadsDir, { recursive: true });
+  copyFileSync(path.join(__dirname, '../../../e2e/fixtures/screenshot.png'), path.join(uploadsDir, 'seed-screenshot.png'));
+  const screenshotUrl = '/uploads/seed-screenshot.png';
+
+  // Leaf ids of a task in tree order; single-leaf tasks use leaves(...)[0].
+  const leaves = (key: string) => leafIds(getRequirementTree(db, taskIdByKey[key])!);
+  const submit = (teamId: string, submittedByUserId: string, claims: Parameters<typeof createSubmission>[2]['claims']) =>
+    createSubmission(db, bingo, { teamId, submittedByUserId, claims, screenshotUrl });
+
+  // Alpha: Vorkath A approved (complete), Vorkath B pending, Zulrah one of two
+  // fangs approved (in progress), Wintertodt rejected.
+  const alphaVorki = submit(teamAlpha.id, memberA.id, [{ nodeId: leaves('Vorkath/Part A')[0], itemName: 'Vorki' }]);
+  approveSubmission(db, { submissionId: alphaVorki.id, reviewedByUserId: admin.id });
+  submit(teamAlpha.id, captainA.id, [{ nodeId: leaves('Vorkath/Part B')[0], itemName: 'Draconic visage' }]);
+  const alphaFang = submit(teamAlpha.id, memberA.id, [{ nodeId: leaves('Zulrah/Part A')[0], itemName: 'Tanzanite fang' }]);
+  approveSubmission(db, { submissionId: alphaFang.id, reviewedByUserId: admin.id });
+  const alphaTodt = submit(teamAlpha.id, memberA.id, [{ nodeId: leaves('Wintertodt/Part A')[0], itemName: 'Bruma torch' }]);
+  rejectSubmission(db, { submissionId: alphaTodt.id, reviewedByUserId: admin.id, reviewerNotes: 'Screenshot does not show the team codeword.' });
+
+  // Beta: one screenshot claiming two Wintertodt leaves at once (complete),
+  // Cerberus A via the jar wildcard (complete), GOTR manual pending.
+  const betaTodt = submit(teamBeta.id, memberB.id, [
+    { nodeId: leaves('Wintertodt/Part A')[0], itemName: 'Bruma torch' },
+    { nodeId: leaves('Wintertodt/Part A')[2], itemName: 'Warm gloves' },
+  ]);
+  approveSubmission(db, { submissionId: betaTodt.id, reviewedByUserId: admin.id });
+  const betaCerb = submit(teamBeta.id, captainB.id, [{ nodeId: leaves('Cerberus/Part A')[0], itemName: 'Cerberus jar', wildcardId: cerbWildcard.id }]);
+  approveSubmission(db, { submissionId: betaCerb.id, reviewedByUserId: admin.id });
+  submit(teamBeta.id, memberB.id, [{ nodeId: leaves('Custom Challenge: GOTR Speedrun/Part A')[0] }]);
+
+  console.log(`Seeded bingo "${bingo.name}" (slug: ${bingo.slug}) with ${tileDefs.length} tiles, 2 teams, 8 lines, 7 sample submissions.`);
 }
 
 main()

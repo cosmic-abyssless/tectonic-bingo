@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { RosterEntry, User } from "@bingo/shared";
-import { useBingo, useMarkBuyin, useSeedTestSignups, useSignupRoster, useSignupQuestions } from "../../api/queries";
+import { useBingo, useDeleteAllSignups, useMarkBuyin, useSeedTestSignups, useSignupRoster, useSignupQuestions, type SeedTestSignupsResponse } from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
 import { displayName } from "../ui/user";
 import { UserSearchInput } from "../admin/UserSearchInput";
@@ -77,37 +77,66 @@ function CollectedByCell({ slug, entry }: { slug: string; entry: RosterEntry }) 
 // signing up a dozen browser tabs.
 function DevSeedPanel({ slug }: { slug: string }) {
   const seedTestSignups = useSeedTestSignups(slug);
+  const deleteAllSignups = useDeleteAllSignups(slug);
   const [count, setCount] = useState(8);
   const [error, setError] = useState<string | null>(null);
+  const [lastSeed, setLastSeed] = useState<SeedTestSignupsResponse | null>(null);
 
-  async function seed() {
+  async function run(action: () => Promise<void>, fallback: string) {
     setError(null);
     try {
-      await seedTestSignups.mutateAsync(count);
+      await action();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to seed test signups");
+      setError(e instanceof Error ? e.message : fallback);
     }
   }
 
+  const seed = () => run(async () => setLastSeed(await seedTestSignups.mutateAsync(count)), "Failed to seed test signups");
+  const wipe = () =>
+    run(async () => {
+      if (!confirm("Delete every signup for this bingo?")) return;
+      await deleteAllSignups.mutateAsync();
+      setLastSeed(null);
+    }, "Failed to delete signups");
+
+  const busy = seedTestSignups.isPending || deleteAllSignups.isPending;
+
   return (
-    <div className="bg-amber-950/30 border border-amber-800/60 rounded-lg px-3 py-2 mb-4 flex items-center gap-2 flex-wrap">
-      <span className="text-xs text-amber-400 font-semibold uppercase tracking-wide shrink-0">Dev tools</span>
-      <input
-        type="number"
-        min={1}
-        max={50}
-        value={count}
-        onChange={(e) => setCount(Number(e.target.value) || 1)}
-        className="w-16 bg-slate-900 border border-slate-600 text-white rounded-md px-2 py-1 text-sm focus:outline-none focus:border-indigo-500"
-      />
-      <button
-        onClick={seed}
-        disabled={seedTestSignups.isPending}
-        className="text-sm bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold rounded-md px-3 py-1 transition-colors cursor-pointer"
-      >
-        {seedTestSignups.isPending ? "Seeding…" : "Seed test signups"}
-      </button>
-      {error && <p className="text-red-400 text-xs">{error}</p>}
+    <div className="bg-amber-950/30 border border-amber-800/60 rounded-lg px-3 py-2 mb-4">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-amber-400 font-semibold uppercase tracking-wide shrink-0">Dev tools</span>
+        <input
+          type="number"
+          min={1}
+          max={50}
+          value={count}
+          onChange={(e) => setCount(Number(e.target.value) || 1)}
+          className="w-16 bg-slate-900 border border-slate-600 text-white rounded-md px-2 py-1 text-sm focus:outline-none focus:border-indigo-500"
+        />
+        <button
+          onClick={seed}
+          disabled={busy}
+          className="text-sm bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold rounded-md px-3 py-1 transition-colors cursor-pointer"
+        >
+          {seedTestSignups.isPending ? "Seeding…" : "Seed test signups"}
+        </button>
+        <button
+          onClick={wipe}
+          disabled={busy}
+          className="text-sm bg-slate-700 hover:bg-red-800 disabled:opacity-50 text-white rounded-md px-3 py-1 transition-colors cursor-pointer"
+        >
+          {deleteAllSignups.isPending ? "Deleting…" : "Delete all signups"}
+        </button>
+        {error && <p className="text-red-400 text-xs">{error}</p>}
+      </div>
+      {lastSeed && lastSeed.source !== "tectonic" && (
+        <p className="text-xs text-amber-300 mt-2">
+          {lastSeed.source === "mixed" ? "Some" : "All"} of the {lastSeed.signups.length} seeded signups are synthetic TestBot users.{" "}
+          {lastSeed.tectonicConfigured
+            ? "The clan roster ran out of unused members."
+            : "Set TECTONIC_API_URL, TECTONIC_API_KEY and TECTONIC_GUILD_ID in server/.env to draw real clan members instead."}
+        </p>
+      )}
     </div>
   );
 }
