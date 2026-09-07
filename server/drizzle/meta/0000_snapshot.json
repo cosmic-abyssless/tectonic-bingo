@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "bafe0034-5614-4e7d-aaa7-87eb7f82685b",
+  "id": "d02f79ec-6bab-4dd3-aff6-7b15d32d6c74",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "bingo_line_tiles": {
@@ -368,6 +368,99 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "claims": {
+      "name": "claims",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "submission_id": {
+          "name": "submission_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "item_name": {
+          "name": "item_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "wildcard_id": {
+          "name": "wildcard_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "claims_submission_id_submissions_id_fk": {
+          "name": "claims_submission_id_submissions_id_fk",
+          "tableFrom": "claims",
+          "tableTo": "submissions",
+          "columnsFrom": [
+            "submission_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "claims_node_id_requirement_nodes_id_fk": {
+          "name": "claims_node_id_requirement_nodes_id_fk",
+          "tableFrom": "claims",
+          "tableTo": "requirement_nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "claims_wildcard_id_tile_wildcards_id_fk": {
+          "name": "claims_wildcard_id_tile_wildcards_id_fk",
+          "tableFrom": "claims",
+          "tableTo": "tile_wildcards",
+          "columnsFrom": [
+            "wildcard_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "draft_picks": {
       "name": "draft_picks",
       "columns": {
@@ -486,6 +579,246 @@
           "tableTo": "users",
           "columnsFrom": [
             "picked_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "item_group_items": {
+      "name": "item_group_items",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "group_id": {
+          "name": "group_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "item_name": {
+          "name": "item_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "item_group_items_group_name_unq": {
+          "name": "item_group_items_group_name_unq",
+          "columns": [
+            "group_id",
+            "item_name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "item_group_items_group_id_item_groups_id_fk": {
+          "name": "item_group_items_group_id_item_groups_id_fk",
+          "tableFrom": "item_group_items",
+          "tableTo": "item_groups",
+          "columnsFrom": [
+            "group_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "item_groups": {
+      "name": "item_groups",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "item_groups_name_unique": {
+          "name": "item_groups_name_unique",
+          "columns": [
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "requirement_node_items": {
+      "name": "requirement_node_items",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "item_name": {
+          "name": "item_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "requirement_node_items_node_id_requirement_nodes_id_fk": {
+          "name": "requirement_node_items_node_id_requirement_nodes_id_fk",
+          "tableFrom": "requirement_node_items",
+          "tableTo": "requirement_nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "requirement_nodes": {
+      "name": "requirement_nodes",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "task_id": {
+          "name": "task_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "parent_id": {
+          "name": "parent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "min_count": {
+          "name": "min_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "distinct_items": {
+          "name": "distinct_items",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "item_group_id": {
+          "name": "item_group_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "requirement_nodes_task_id_tile_tasks_id_fk": {
+          "name": "requirement_nodes_task_id_tile_tasks_id_fk",
+          "tableFrom": "requirement_nodes",
+          "tableTo": "tile_tasks",
+          "columnsFrom": [
+            "task_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "requirement_nodes_item_group_id_item_groups_id_fk": {
+          "name": "requirement_nodes_item_group_id_item_groups_id_fk",
+          "tableFrom": "requirement_nodes",
+          "tableTo": "item_groups",
+          "columnsFrom": [
+            "item_group_id"
           ],
           "columnsTo": [
             "id"
@@ -900,79 +1233,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "submission_item_claims": {
-      "name": "submission_item_claims",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "submission_id": {
-          "name": "submission_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "item_name": {
-          "name": "item_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "quantity": {
-          "name": "quantity",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        },
-        "task_item_id": {
-          "name": "task_item_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "submission_item_claims_submission_id_submissions_id_fk": {
-          "name": "submission_item_claims_submission_id_submissions_id_fk",
-          "tableFrom": "submission_item_claims",
-          "tableTo": "submissions",
-          "columnsFrom": [
-            "submission_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "submission_item_claims_task_item_id_tile_task_items_id_fk": {
-          "name": "submission_item_claims_task_item_id_tile_task_items_id_fk",
-          "tableFrom": "submission_item_claims",
-          "tableTo": "tile_task_items",
-          "columnsFrom": [
-            "task_item_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "submission_screenshots": {
       "name": "submission_screenshots",
       "columns": {
@@ -1080,13 +1340,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "task_id": {
-          "name": "task_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "submitted_by_user_id": {
           "name": "submitted_by_user_id",
           "type": "text",
@@ -1138,21 +1391,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "is_wildcard_redemption": {
-          "name": "is_wildcard_redemption",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "wildcard_id": {
-          "name": "wildcard_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "integer",
@@ -1185,19 +1423,6 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "submissions_task_id_tile_tasks_id_fk": {
-          "name": "submissions_task_id_tile_tasks_id_fk",
-          "tableFrom": "submissions",
-          "tableTo": "tile_tasks",
-          "columnsFrom": [
-            "task_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "submissions_submitted_by_user_id_users_id_fk": {
           "name": "submissions_submitted_by_user_id_users_id_fk",
           "tableFrom": "submissions",
@@ -1217,19 +1442,6 @@
           "tableTo": "users",
           "columnsFrom": [
             "reviewed_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "submissions_wildcard_id_tile_wildcards_id_fk": {
-          "name": "submissions_wildcard_id_tile_wildcards_id_fk",
-          "tableFrom": "submissions",
-          "tableTo": "tile_wildcards",
-          "columnsFrom": [
-            "wildcard_id"
           ],
           "columnsTo": [
             "id"
@@ -1590,92 +1802,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "team_wildcard_usage": {
-      "name": "team_wildcard_usage",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "team_id": {
-          "name": "team_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "tile_wildcard_id": {
-          "name": "tile_wildcard_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "submission_id": {
-          "name": "submission_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "used_at": {
-          "name": "used_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "team_wildcard_usage_team_id_teams_id_fk": {
-          "name": "team_wildcard_usage_team_id_teams_id_fk",
-          "tableFrom": "team_wildcard_usage",
-          "tableTo": "teams",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "team_wildcard_usage_tile_wildcard_id_tile_wildcards_id_fk": {
-          "name": "team_wildcard_usage_tile_wildcard_id_tile_wildcards_id_fk",
-          "tableFrom": "team_wildcard_usage",
-          "tableTo": "tile_wildcards",
-          "columnsFrom": [
-            "tile_wildcard_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "team_wildcard_usage_submission_id_submissions_id_fk": {
-          "name": "team_wildcard_usage_submission_id_submissions_id_fk",
-          "tableFrom": "team_wildcard_usage",
-          "tableTo": "submissions",
-          "columnsFrom": [
-            "submission_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "teams": {
       "name": "teams",
       "columns": {
@@ -1855,74 +1981,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "tile_task_items": {
-      "name": "tile_task_items",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "task_id": {
-          "name": "task_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "item_name": {
-          "name": "item_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "quantity": {
-          "name": "quantity",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        },
-        "options_group": {
-          "name": "options_group",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "tile_task_items_task_id_tile_tasks_id_fk": {
-          "name": "tile_task_items_task_id_tile_tasks_id_fk",
-          "tableFrom": "tile_task_items",
-          "tableTo": "tile_tasks",
-          "columnsFrom": [
-            "task_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "tile_tasks": {
       "name": "tile_tasks",
       "columns": {
@@ -1993,40 +2051,8 @@
           "autoincrement": false,
           "default": false
         },
-        "requires_no_duplicates": {
-          "name": "requires_no_duplicates",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "allows_previously_acquired": {
-          "name": "allows_previously_acquired",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
         "allows_pre_load": {
           "name": "allows_pre_load",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "min_submissions": {
-          "name": "min_submissions",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        },
-        "requires_complete_set": {
-          "name": "requires_complete_set",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -2109,8 +2135,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "applicable_task_id": {
-          "name": "applicable_task_id",
+        "applicable_node_id": {
+          "name": "applicable_node_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -2132,12 +2158,12 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "tile_wildcards_applicable_task_id_tile_tasks_id_fk": {
-          "name": "tile_wildcards_applicable_task_id_tile_tasks_id_fk",
+        "tile_wildcards_applicable_node_id_requirement_nodes_id_fk": {
+          "name": "tile_wildcards_applicable_node_id_requirement_nodes_id_fk",
           "tableFrom": "tile_wildcards",
-          "tableTo": "tile_tasks",
+          "tableTo": "requirement_nodes",
           "columnsFrom": [
-            "applicable_task_id"
+            "applicable_node_id"
           ],
           "columnsTo": [
             "id"

@@ -56,7 +56,7 @@ router.patch(
       broadcast({
         type: "submission_reviewed",
         bingoId: req.bingo!.id,
-        payload: { teamId: submission.teamId, taskId: submission.taskId },
+        payload: { teamId: submission.teamId, taskIds: result.taskIds },
       });
       res.json(result);
       return;
@@ -67,7 +67,7 @@ router.patch(
       broadcast({
         type: "submission_reviewed",
         bingoId: req.bingo!.id,
-        payload: { teamId: submission.teamId, taskId: submission.taskId },
+        payload: { teamId: submission.teamId, taskIds: result.taskIds },
       });
       res.json(result);
       return;

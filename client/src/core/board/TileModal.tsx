@@ -2,7 +2,8 @@ import type { Bingo, SubmissionDetails, TeamTaskProgress, Tile, TileCategory } f
 import { Modal } from "../ui/Modal";
 import { SubmissionRow } from "../submissions/SubmissionRow";
 import { TaskPanel } from "./TaskPanel";
-import { buildTaskClaimMaps } from "./taskClaims";
+import { buildLeafClaimMaps } from "./taskClaims";
+import { findNode } from "./requirementTree";
 import { summarizeTileProgress, getFreezeUnlockAt } from "./tileProgress";
 
 export function TileModal({
@@ -28,10 +29,11 @@ export function TileModal({
   const isFrozen = !!(freezeUnlocksAt && Date.now() < freezeUnlocksAt);
   const submitDisabled = summary.allComplete || isFrozen;
 
-  const claimMaps = buildTaskClaimMaps(tile, teamSubmissions);
+  const claimMaps = buildLeafClaimMaps(teamSubmissions);
   const statusByTaskId = new Map(progress.map((p) => [p.taskId, p.status]));
+  const taskLabelById = new Map(tile.tasks.map((t) => [t.id, t.label]));
 
-  const tileSubmissions = teamSubmissions.filter((d) => tile.tasks.some((t) => t.id === d.submission.taskId));
+  const tileSubmissions = teamSubmissions.filter((d) => d.claims.some((c) => taskLabelById.has(c.taskId)));
 
   return (
     <Modal onClose={onClose} size="lg">
@@ -87,8 +89,7 @@ export function TileModal({
             <TaskPanel
               key={task.id}
               task={task}
-              approvedByItemName={claimMaps.approvedByTaskAndItem.get(task.id) ?? new Map()}
-              submittedItemNames={claimMaps.submittedByTask.get(task.id) ?? new Set()}
+              claimMaps={claimMaps}
               locked={locked}
               lockedReason={locked ? `${task.label} cannot be submitted until ${prevTask?.label} is completed.` : undefined}
               complete={statusByTaskId.get(task.id) === "completed"}
@@ -101,16 +102,12 @@ export function TileModal({
       {tileSubmissions.length > 0 && (
         <div className="p-5 border-t border-slate-700">
           <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-3">Submissions</h4>
-          {tile.tasks.map((task) => {
-            const subs = tileSubmissions.filter((d) => d.submission.taskId === task.id);
-            if (subs.length === 0) return null;
+          {tileSubmissions.map((detail) => {
+            const labels = [...new Set(detail.claims.map((c) => taskLabelById.get(c.taskId)).filter(Boolean))];
             return (
-              <div key={task.id} className="mb-3 last:mb-0">
-                <p className="text-xs font-semibold text-slate-400 mb-1">{task.label}</p>
-                {subs.map((detail) => {
-                  const wildcard = tile.wildcards.find((w) => w.id === detail.submission.wildcardId);
-                  return <SubmissionRow key={detail.submission.id} detail={detail} wildcardItemName={wildcard?.itemName} />;
-                })}
+              <div key={detail.submission.id}>
+                <p className="text-xs font-semibold text-slate-400 mt-2">{labels.join(" + ")}</p>
+                <SubmissionRow detail={detail} />
               </div>
             );
           })}
@@ -123,7 +120,7 @@ export function TileModal({
           <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-3">Wildcards</h4>
           <div className="space-y-2">
             {tile.wildcards.map((wc) => {
-              const applicableTask = tile.tasks.find((t) => t.id === wc.applicableTaskId);
+              const applicableTask = wc.applicableNodeId ? tile.tasks.find((t) => findNode(t.requirement, wc.applicableNodeId!)) : undefined;
               return (
                 <div key={wc.id} className="flex items-baseline gap-2 flex-wrap">
                   <span className="text-yellow-400 text-sm font-semibold">{wc.itemName}</span>

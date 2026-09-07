@@ -62,11 +62,13 @@ export function groupSubmissionsByTile(tiles: Tile[], submissions: SubmissionDet
   const taskToTile = taskToTileMap(tiles);
   const map = new Map<string, SubmissionDetails[]>();
   for (const s of submissions) {
-    const tileId = taskToTile.get(s.submission.taskId);
-    if (!tileId) continue;
-    const list = map.get(tileId) ?? [];
-    list.push(s);
-    map.set(tileId, list);
+    // A submission may touch several tasks; at launch they are all on one tile.
+    const tileIds = new Set(s.claims.map((c) => taskToTile.get(c.taskId)).filter((id): id is string => !!id));
+    for (const tileId of tileIds) {
+      const list = map.get(tileId) ?? [];
+      list.push(s);
+      map.set(tileId, list);
+    }
   }
   return map;
 }

@@ -74,8 +74,9 @@ export function fuzzyIncludes(lines: string[], needle: string, opts: FuzzyInclud
   return false;
 }
 
+/** One accepted item name on one ITEM leaf (a leaf with N names yields N entries). */
 export interface MatchableItem {
-  id: string;
+  nodeId: string;
   itemName: string;
   taskId: string;
   tileId: string;
@@ -85,7 +86,7 @@ export interface MatchableItem {
 export interface MatchableWildcard {
   id: string;
   itemName: string;
-  applicableTaskId: string | null;
+  applicableNodeId: string | null;
   tileId: string;
   tileName: string;
 }
@@ -94,7 +95,7 @@ export interface DetectedItemMatch {
   tileId: string;
   tileName: string;
   taskId: string;
-  taskItemId: string;
+  nodeId: string;
   itemName: string;
 }
 
@@ -103,7 +104,7 @@ export interface DetectedWildcardMatch {
   tileName: string;
   wildcardId: string;
   itemName: string;
-  applicableTaskId: string | null;
+  applicableNodeId: string | null;
 }
 
 // First item in query order wins; wildcards are only consulted when no item
@@ -117,7 +118,7 @@ export function findBestMatch(
   let detectedMatch: DetectedItemMatch | null = null;
   for (const item of items) {
     if (fuzzyIncludes(extractedText, item.itemName)) {
-      detectedMatch = { tileId: item.tileId, tileName: item.tileName, taskId: item.taskId, taskItemId: item.id, itemName: item.itemName };
+      detectedMatch = { tileId: item.tileId, tileName: item.tileName, taskId: item.taskId, nodeId: item.nodeId, itemName: item.itemName };
       break;
     }
   }
@@ -126,7 +127,7 @@ export function findBestMatch(
   if (!detectedMatch) {
     for (const wc of wildcards) {
       if (fuzzyIncludes(extractedText, wc.itemName)) {
-        detectedWildcard = { tileId: wc.tileId, tileName: wc.tileName, wildcardId: wc.id, itemName: wc.itemName, applicableTaskId: wc.applicableTaskId };
+        detectedWildcard = { tileId: wc.tileId, tileName: wc.tileName, wildcardId: wc.id, itemName: wc.itemName, applicableNodeId: wc.applicableNodeId };
         break;
       }
     }

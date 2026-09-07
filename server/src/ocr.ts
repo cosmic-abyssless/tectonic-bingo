@@ -2,7 +2,7 @@ import { PaddleOcrService, V6_SMALL_MODEL } from "ppu-paddle-ocr";
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "./db/schema";
-import { tileTaskItems, tileTasks, tileWildcards, tiles } from "./db/schema";
+import { itemGroupItems, requirementNodeItems, requirementNodes, tileTasks, tileWildcards, tiles } from "./db/schema";
 import { findBestMatch, fuzzyIncludes, type DetectedItemMatch, type DetectedWildcardMatch } from "./services/textMatchService";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -97,16 +97,32 @@ export async function analyzeSubmissionScreenshot(db: Db, bingo: Bingo, team: Te
   // so this stays more conservative than the length-scaled item/wildcard default.
   const codewordFound = fuzzyIncludes(extractedText, team.codeword, { maxEdits: 1 });
 
-  const items = db
-    .select({ id: tileTaskItems.id, itemName: tileTaskItems.itemName, taskId: tileTasks.id, tileId: tiles.id, tileName: tiles.name })
-    .from(tileTaskItems)
-    .innerJoin(tileTasks, eq(tileTaskItems.taskId, tileTasks.id))
+  const leafBase = {
+    nodeId: requirementNodes.id,
+    taskId: tileTasks.id,
+    tileId: tiles.id,
+    tileName: tiles.name,
+  };
+  const inlineItems = db
+    .select({ ...leafBase, itemName: requirementNodeItems.itemName })
+    .from(requirementNodeItems)
+    .innerJoin(requirementNodes, eq(requirementNodeItems.nodeId, requirementNodes.id))
+    .innerJoin(tileTasks, eq(requirementNodes.taskId, tileTasks.id))
     .innerJoin(tiles, eq(tileTasks.tileId, tiles.id))
     .where(eq(tiles.bingoId, bingo.id))
     .all();
+  const groupItems = db
+    .select({ ...leafBase, itemName: itemGroupItems.itemName })
+    .from(itemGroupItems)
+    .innerJoin(requirementNodes, eq(itemGroupItems.groupId, requirementNodes.itemGroupId))
+    .innerJoin(tileTasks, eq(requirementNodes.taskId, tileTasks.id))
+    .innerJoin(tiles, eq(tileTasks.tileId, tiles.id))
+    .where(eq(tiles.bingoId, bingo.id))
+    .all();
+  const items = [...inlineItems, ...groupItems];
 
   const wildcards = db
-    .select({ id: tileWildcards.id, itemName: tileWildcards.itemName, applicableTaskId: tileWildcards.applicableTaskId, tileId: tiles.id, tileName: tiles.name })
+    .select({ id: tileWildcards.id, itemName: tileWildcards.itemName, applicableNodeId: tileWildcards.applicableNodeId, tileId: tiles.id, tileName: tiles.name })
     .from(tileWildcards)
     .innerJoin(tiles, eq(tileWildcards.tileId, tiles.id))
     .where(eq(tiles.bingoId, bingo.id))

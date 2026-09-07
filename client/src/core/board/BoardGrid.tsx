@@ -3,18 +3,8 @@ import type { Bingo, SubmissionDetails, TeamTaskProgress, Tile, TileCategory } f
 import { TileCell } from "./TileCell";
 import { TileModal } from "./TileModal";
 import { groupProgressByTile, groupSubmissionsByTile } from "./tileProgress";
+import { tileMatchesSearch } from "./requirementTree";
 import { CountdownTimer } from "../ui/CountdownTimer";
-
-function tileMatchesSearch(tile: Tile, q: string): boolean {
-  if (tile.name.toLowerCase().includes(q)) return true;
-  for (const task of tile.tasks) {
-    if (task.description.toLowerCase().includes(q)) return true;
-    for (const item of task.items) {
-      if (item.itemName.toLowerCase().includes(q)) return true;
-    }
-  }
-  return false;
-}
 
 function getRowCategory(tiles: Tile[], categories: TileCategory[], row: number): TileCategory | null {
   const rowTiles = tiles.filter((t) => t.boardRow === row);

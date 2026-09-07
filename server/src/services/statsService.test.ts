@@ -4,10 +4,12 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { and, eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import {
-  bingoLines, bingoLineTiles, draftPicks, stageTransitions, submissionItemClaims, submissions,
-  teamPointAdjustments, teamTaskProgress, tileTaskItems, tileTasks, tiles,
+  bingoLines, bingoLineTiles, claims, draftPicks, stageTransitions, submissions,
+  teamPointAdjustments, teamTaskProgress, tiles,
 } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
+import { createTask, type CreateTaskParams } from "./boardService";
+import { getRequirementTree } from "./requirementService";
 import { approveSubmission } from "./scoringService";
 import { getTeamProgress } from "./teamService";
 import { getContributionCounts, getPointsOverTime, getTileHeatmap, getTimeline } from "./statsService";
@@ -36,15 +38,17 @@ function seedFixture(): Fixture {
   return { bingoId: bingo.id, teamAId: teamA.id, teamBId: teamB.id, modUserId: admin.id, memberUserId: member.id, tileId: tile.id };
 }
 
-function addTask(tileId: string, opts: Partial<typeof tileTasks.$inferInsert> & { sortOrder: number; points: number }) {
-  return db.insert(tileTasks).values({ tileId, label: `Task ${opts.sortOrder}`, description: "desc", ...opts }).returning().get();
+// Creates a task whose requirement is a single ITEM leaf for "Bruma torch".
+function addTask(tileId: string, opts: Partial<CreateTaskParams> & { sortOrder: number; points: number }) {
+  return createTask(db, { tileId, label: `Task ${opts.sortOrder}`, description: "desc", requirement: { kind: "ITEM", itemNames: ["Bruma torch"] }, ...opts });
 }
-function addItem(taskId: string, itemName: string) {
-  db.insert(tileTaskItems).values({ taskId, itemName }).run();
+function submit(teamId: string, taskId: string, submittedByUserId: string) {
+  const [submission] = db.insert(submissions).values({ teamId, submittedByUserId }).returning().all();
+  db.insert(claims).values({ submissionId: submission.id, nodeId: getRequirementTree(db, taskId)!.id, itemName: "Bruma torch" }).run();
+  return submission;
 }
-function submitAndApprove(teamId: string, taskId: string, submittedByUserId: string, modUserId: string, itemName: string) {
-  const [submission] = db.insert(submissions).values({ teamId, taskId, submittedByUserId }).returning().all();
-  db.insert(submissionItemClaims).values({ submissionId: submission.id, itemName }).run();
+function submitAndApprove(teamId: string, taskId: string, submittedByUserId: string, modUserId: string) {
+  const submission = submit(teamId, taskId, submittedByUserId);
   return approveSubmission(db, { submissionId: submission.id, reviewedByUserId: modUserId });
 }
 
@@ -59,8 +63,7 @@ describe("getPointsOverTime", () => {
   it("reconciles the final cumulative total with teamService.getTeamProgress", () => {
     const fx = seedFixture();
     const task = addTask(fx.tileId, { sortOrder: 0, points: 20 });
-    addItem(task.id, "Bruma torch");
-    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId, "Bruma torch");
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId);
 
     const [line] = db.insert(bingoLines).values({ bingoId: fx.bingoId, lineType: "row", lineIndex: 0, points: 15 }).returning().all();
     db.insert(bingoLineTiles).values({ bingoLineId: line.id, tileId: fx.tileId }).run();
@@ -82,9 +85,8 @@ describe("getPointsOverTime", () => {
   it("tracks separate running totals per team", () => {
     const fx = seedFixture();
     const task = addTask(fx.tileId, { sortOrder: 0, points: 20 });
-    addItem(task.id, "Bruma torch");
-    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId, "Bruma torch");
-    submitAndApprove(fx.teamBId, task.id, fx.memberUserId, fx.modUserId, "Bruma torch");
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId);
+    submitAndApprove(fx.teamBId, task.id, fx.memberUserId, fx.modUserId);
 
     const series = getPointsOverTime(db, fx.bingoId);
     expect(series.filter((e) => e.teamId === fx.teamAId).at(-1)!.cumulativePoints).toBe(20);
@@ -102,12 +104,11 @@ describe("getTimeline", () => {
   it("includes stage changes, draft picks, line completions, and first-completions, sorted chronologically", () => {
     const fx = seedFixture();
     const task = addTask(fx.tileId, { sortOrder: 0, points: 20 });
-    addItem(task.id, "Bruma torch");
 
     db.insert(stageTransitions).values({ bingoId: fx.bingoId, fromStage: "signup", toStage: "draft", changedByUserId: fx.modUserId }).run();
     db.insert(draftPicks).values({ bingoId: fx.bingoId, pickNumber: 1, teamId: fx.teamAId, userId: fx.memberUserId, pickedByUserId: fx.modUserId }).run();
 
-    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId, "Bruma torch");
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId);
 
     const [line] = db.insert(bingoLines).values({ bingoId: fx.bingoId, lineType: "row", lineIndex: 0, points: 15 }).returning().all();
     db.insert(bingoLineTiles).values({ bingoLineId: line.id, tileId: fx.tileId }).run();
@@ -128,15 +129,14 @@ describe("getTimeline", () => {
   it("only credits the earliest team as the first to complete a task", () => {
     const fx = seedFixture();
     const task = addTask(fx.tileId, { sortOrder: 0, points: 20 });
-    addItem(task.id, "Bruma torch");
 
     // completedAt is stored at 1-second resolution, so two approvals in the
     // same test tick can otherwise land in the same second — force a clear
     // gap so the "earliest" comparison isn't a coin flip on DB row order.
-    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId, "Bruma torch");
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId);
     db.update(teamTaskProgress).set({ completedAt: new Date(Date.now() - 60_000) }).where(and(eq(teamTaskProgress.teamId, fx.teamAId), eq(teamTaskProgress.taskId, task.id))).run();
 
-    submitAndApprove(fx.teamBId, task.id, fx.memberUserId, fx.modUserId, "Bruma torch");
+    submitAndApprove(fx.teamBId, task.id, fx.memberUserId, fx.modUserId);
     db.update(teamTaskProgress).set({ completedAt: new Date() }).where(and(eq(teamTaskProgress.teamId, fx.teamBId), eq(teamTaskProgress.taskId, task.id))).run();
 
     const firstCompletions = getTimeline(db, fx.bingoId).filter((e) => e.type === "first_completion");
@@ -148,12 +148,11 @@ describe("getTimeline", () => {
 describe("getContributionCounts", () => {
   it("counts only approved submissions, per submitter", () => {
     const fx = seedFixture();
-    const task = addTask(fx.tileId, { sortOrder: 0, points: 20, minSubmissions: 1 });
-    addItem(task.id, "Bruma torch");
-    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId, "Bruma torch");
+    const task = addTask(fx.tileId, { sortOrder: 0, points: 20 });
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId);
 
     // A rejected submission from the same user shouldn't count.
-    const [rejected] = db.insert(submissions).values({ teamId: fx.teamAId, taskId: task.id, submittedByUserId: fx.memberUserId }).returning().all();
+    const rejected = submit(fx.teamAId, task.id, fx.memberUserId);
     db.update(submissions).set({ status: "rejected" }).where(eq(submissions.id, rejected.id)).run();
 
     const counts = getContributionCounts(db, fx.bingoId);
@@ -166,10 +165,9 @@ describe("getTileHeatmap", () => {
   it("reports completedTasks/totalTasks per team per tile", () => {
     const fx = seedFixture();
     const task1 = addTask(fx.tileId, { sortOrder: 0, points: 20 });
-    addItem(task1.id, "Bruma torch");
     addTask(fx.tileId, { sortOrder: 1, points: 30 }); // never completed by anyone
 
-    submitAndApprove(fx.teamAId, task1.id, fx.memberUserId, fx.modUserId, "Bruma torch");
+    submitAndApprove(fx.teamAId, task1.id, fx.memberUserId, fx.modUserId);
 
     const cells = getTileHeatmap(db, fx.bingoId);
     const teamACell = cells.find((c) => c.teamId === fx.teamAId && c.tileId === fx.tileId)!;

@@ -212,37 +212,6 @@ router.delete(
 );
 
 // ---------------------------------------------------------------------------
-// Task items
-// ---------------------------------------------------------------------------
-
-router.post(
-  "/tasks/:taskId/items",
-  asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
-    const { itemName } = req.body as { itemName?: string };
-    if (!itemName) throw new ServiceError(400, "itemName is required");
-    const item = boardService.createTaskItem(db, { taskId: req.params.taskId as string, ...req.body });
-    res.status(201).json({ item });
-  }),
-);
-router.patch(
-  "/items/:id",
-  asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
-    const item = boardService.updateTaskItem(db, req.params.id as string, req.body);
-    res.json({ item });
-  }),
-);
-router.delete(
-  "/items/:id",
-  asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
-    boardService.deleteTaskItem(db, req.params.id as string);
-    res.status(204).end();
-  }),
-);
-
-// ---------------------------------------------------------------------------
 // Wildcards
 // ---------------------------------------------------------------------------
 
