@@ -1,27 +1,46 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { TileTask } from "@bingo/shared";
+import type { RequirementKind, RequirementNode, RequirementNodeInput, TileTask } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
+import { useItemGroups } from "../../api/adminQueries";
 
-const FLAG_FIELDS: { key: keyof TileTask; label: string; hint: string }[] = [
+const FLAG_FIELDS: { key: "submitRequiresPrevious" | "pointsRequirePrevious" | "allowsPreLoad"; label: string; hint: string }[] = [
   { key: "submitRequiresPrevious", label: "Requires previous task", hint: "Can't submit until the previous task is completed" },
   { key: "pointsRequirePrevious", label: "Withhold points until previous", hint: "Can complete early, but points stay 0 until the previous task completes" },
-  { key: "requiresNoDuplicates", label: "No duplicate items", hint: "Same item can't be claimed twice" },
-  { key: "allowsPreviouslyAcquired", label: "Folds previous task's claims", hint: "Approved claims from the previous task count toward this one too" },
   { key: "allowsPreLoad", label: "Allows pre-load screenshot", hint: "Player may submit an empty-state screenshot beforehand" },
-  { key: "requiresCompleteSet", label: "Requires a complete set", hint: "Needs every item in one options group, not just one per group" },
 ];
+
+const ROOT_KINDS: { kind: RequirementKind; label: string }[] = [
+  { kind: "ALL", label: "All of" },
+  { kind: "ANY", label: "Any one of" },
+  { kind: "COUNT", label: "At least N of" },
+];
+
+// The flat editor only handles a root (ALL/ANY/COUNT) with ITEM leaves.
+// Deeper trees are shown read-only until edited, at which point they collapse.
+function toInput(node: RequirementNode): RequirementNodeInput {
+  return {
+    kind: node.kind,
+    minCount: node.minCount ?? undefined,
+    quantity: node.quantity ?? undefined,
+    distinctItems: node.distinctItems,
+    itemGroupId: node.itemGroupId ?? undefined,
+    itemNames: node.itemNames,
+    children: node.children.map(toInput),
+  };
+}
+
+const INPUT = "bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600";
 
 export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: TileTask; onDeleted: () => void }) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
-  const [newItemName, setNewItemName] = useState("");
-  const [newItemGroup, setNewItemGroup] = useState("");
+  const itemGroups = useItemGroups().data?.itemGroups ?? [];
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.board(slug) });
 
-  async function patch(fields: Partial<TileTask>) {
+  async function patch(fields: adminApi.TaskPayload) {
     await adminApi.updateTask(slug, task.id, fields);
     invalidate();
   }
@@ -30,15 +49,26 @@ export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: Tile
     invalidate();
     onDeleted();
   }
-  async function addItem() {
-    if (!newItemName.trim()) return;
-    await adminApi.createTaskItem(slug, task.id, { itemName: newItemName.trim(), optionsGroup: newItemGroup.trim() || null, sortOrder: task.items.length });
-    setNewItemName("");
-    invalidate();
+
+  const root = task.requirement;
+  const leaves = root.kind === "ITEM" ? [root] : root.children;
+  const rootKind: RequirementKind = root.kind === "ITEM" ? "ALL" : root.kind;
+  const isNested = leaves.some((leaf) => leaf.kind !== "ITEM");
+
+  function saveTree(kind: RequirementKind, minCount: number | undefined, children: RequirementNodeInput[]) {
+    return patch({ requirement: { kind, minCount: kind === "COUNT" ? minCount ?? 1 : undefined, children } });
   }
-  async function deleteItem(id: string) {
-    await adminApi.deleteTaskItem(slug, id);
-    invalidate();
+  function saveLeaves(nextLeaves: RequirementNodeInput[]) {
+    return saveTree(rootKind, root.minCount ?? undefined, nextLeaves);
+  }
+  function updateLeaf(index: number, changes: Partial<RequirementNodeInput>) {
+    return saveLeaves(leaves.map((leaf, i) => (i === index ? { ...toInput(leaf), ...changes } : toInput(leaf))));
+  }
+  function addLeaf() {
+    return saveLeaves([...leaves.map(toInput), { kind: "ITEM", itemNames: [], quantity: 1 }]);
+  }
+  function removeLeaf(index: number) {
+    return saveLeaves(leaves.filter((_, i) => i !== index).map(toInput));
   }
 
   const isManual = task.scoringMode === "manual";
@@ -79,13 +109,13 @@ export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: Tile
             <label className="block text-xs text-slate-400 mb-1">Scoring mode</label>
             <div className="flex rounded-md overflow-hidden border border-slate-600 w-fit">
               <button
-                onClick={() => patch({ scoringMode: "automatic" })}
+                onClick={() => patch({ scoringMode: "automatic", requirement: { kind: "ALL", children: [] } })}
                 className={`px-3 py-1 text-xs font-medium cursor-pointer ${!isManual ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-400"}`}
               >
                 Automatic
               </button>
               <button
-                onClick={() => patch({ scoringMode: "manual" })}
+                onClick={() => patch({ scoringMode: "manual", requirement: { kind: "MANUAL" } })}
                 className={`px-3 py-1 text-xs font-medium cursor-pointer border-l border-slate-600 ${isManual ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-400"}`}
               >
                 Manual (mod judges)
@@ -93,56 +123,84 @@ export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: Tile
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+            {FLAG_FIELDS.map(({ key, label, hint }) => (
+              <label key={key} title={hint} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                <input type="checkbox" checked={task[key]} onChange={(e) => patch({ [key]: e.target.checked })} className="w-3.5 h-3.5 accent-indigo-500 cursor-pointer" />
+                {label}
+              </label>
+            ))}
+          </div>
+
           {!isManual && (
-            <>
-              <div>
-                <label htmlFor={`task-${task.id}-min-submissions`} className="block text-xs text-slate-400 mb-1">Min. approved submissions to complete</label>
-                <input id={`task-${task.id}-min-submissions`} type="number" min={1} defaultValue={task.minSubmissions} onBlur={(e) => patch({ minSubmissions: Math.max(1, Number(e.target.value) || 1) })} className="w-24 bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-                {FLAG_FIELDS.map(({ key, label, hint }) => (
-                  <label key={key} title={hint} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                    <input type="checkbox" checked={!!task[key]} onChange={(e) => patch({ [key]: e.target.checked } as Partial<TileTask>)} className="w-3.5 h-3.5 accent-indigo-500 cursor-pointer" />
-                    {label}
-                  </label>
-                ))}
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-400 mb-1.5">Items ({task.items.length})</label>
-                <ul className="space-y-1 mb-2">
-                  {task.items.map((item) => (
-                    <li key={item.id} className="flex items-center justify-between bg-slate-800 rounded px-2 py-1 text-xs">
-                      <span className="text-slate-200">
-                        {item.itemName}
-                        {item.optionsGroup && <span className="text-slate-500"> (group: {item.optionsGroup})</span>}
-                      </span>
-                      <button onClick={() => deleteItem(item.id)} className="text-slate-500 hover:text-red-400 cursor-pointer">
-                        ✕
-                      </button>
-                    </li>
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <label className="text-xs text-slate-400">Requirement</label>
+                <select
+                  aria-label="Requirement kind"
+                  value={rootKind}
+                  onChange={(e) => saveTree(e.target.value as RequirementKind, root.minCount ?? undefined, leaves.map(toInput))}
+                  className={INPUT}
+                >
+                  {ROOT_KINDS.map((k) => (
+                    <option key={k.kind} value={k.kind}>{k.label}</option>
                   ))}
-                </ul>
-                <div className="flex gap-2">
+                </select>
+                {rootKind === "COUNT" && (
                   <input
-                    value={newItemName}
-                    onChange={(e) => setNewItemName(e.target.value)}
-                    placeholder="Item name"
-                    className="flex-1 bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
+                    aria-label="Minimum count"
+                    type="number"
+                    min={1}
+                    defaultValue={root.minCount ?? 1}
+                    onBlur={(e) => saveTree("COUNT", Math.max(1, Number(e.target.value) || 1), leaves.map(toInput))}
+                    className={`w-16 ${INPUT}`}
                   />
-                  <input
-                    value={newItemGroup}
-                    onChange={(e) => setNewItemGroup(e.target.value)}
-                    placeholder="Options group (optional)"
-                    className="w-40 bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
-                  />
-                  <button onClick={addItem} className="text-xs bg-slate-700 hover:bg-slate-600 text-white rounded px-2.5 py-1 cursor-pointer">
-                    Add
-                  </button>
-                </div>
+                )}
               </div>
-            </>
+              {isNested && <p className="text-xs text-yellow-400 mb-1.5">This task has a nested requirement tree; editing here will flatten it.</p>}
+              <ul className="space-y-1 mb-2">
+                {leaves.map((leaf, i) => (
+                  <li key={leaf.id} className="flex items-center gap-2 bg-slate-800 rounded px-2 py-1">
+                    <input
+                      aria-label="Item names"
+                      defaultValue={leaf.itemNames.join(", ")}
+                      placeholder="Item names, comma-separated"
+                      onBlur={(e) => updateLeaf(i, { itemNames: e.target.value.split(",").map((n) => n.trim()).filter(Boolean) })}
+                      className={`flex-1 ${INPUT}`}
+                    />
+                    <select
+                      aria-label="Item group"
+                      value={leaf.itemGroupId ?? ""}
+                      onChange={(e) => updateLeaf(i, { itemGroupId: e.target.value || undefined })}
+                      className={INPUT}
+                    >
+                      <option value="">No group</option>
+                      {itemGroups.map((g) => (
+                        <option key={g.id} value={g.id}>{g.name}</option>
+                      ))}
+                    </select>
+                    <input
+                      aria-label="Quantity"
+                      type="number"
+                      min={1}
+                      defaultValue={leaf.quantity ?? 1}
+                      onBlur={(e) => updateLeaf(i, { quantity: Math.max(1, Number(e.target.value) || 1) })}
+                      className={`w-14 ${INPUT}`}
+                    />
+                    <label title="Count distinct item names instead of total quantity" className="flex items-center gap-1 text-xs text-slate-300 cursor-pointer">
+                      <input type="checkbox" checked={leaf.distinctItems} onChange={(e) => updateLeaf(i, { distinctItems: e.target.checked })} className="w-3.5 h-3.5 accent-indigo-500 cursor-pointer" />
+                      distinct
+                    </label>
+                    <button onClick={() => removeLeaf(i)} className="text-slate-500 hover:text-red-400 text-xs cursor-pointer">
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button onClick={addLeaf} className="text-xs bg-slate-700 hover:bg-slate-600 text-white rounded px-2.5 py-1 cursor-pointer">
+                + Add item requirement
+              </button>
+            </div>
           )}
 
           <div>

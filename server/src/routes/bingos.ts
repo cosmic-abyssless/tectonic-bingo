@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import type { ClaimInput } from "@bingo/shared";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireBingo } from "../middleware/requireBingo";
 import { asyncHandler } from "../middleware/errorHandler";
@@ -181,34 +182,21 @@ router.post(
     }
     if (!req.file) throw new ServiceError(400, "Screenshot is required");
 
-    const { taskId, itemClaims: itemClaimsRaw, isWildcardRedemption, wildcardId } = req.body as {
-      taskId?: string;
-      itemClaims?: string;
-      isWildcardRedemption?: string;
-      wildcardId?: string;
-    };
-    if (!taskId) {
-      fs.unlinkSync(req.file.path);
-      throw new ServiceError(400, "taskId is required");
-    }
-
-    let itemClaims: submissionService.ItemClaimInput[];
+    const { claims: claimsRaw } = req.body as { claims?: string };
+    let claims: ClaimInput[];
     try {
-      itemClaims = itemClaimsRaw ? JSON.parse(itemClaimsRaw) : [];
+      claims = claimsRaw ? JSON.parse(claimsRaw) : [];
     } catch {
       fs.unlinkSync(req.file.path);
-      throw new ServiceError(400, "itemClaims must be valid JSON");
+      throw new ServiceError(400, "claims must be valid JSON");
     }
 
     try {
       const submission = submissionService.createSubmission(db, bingo, {
         teamId: team.id,
-        taskId,
         submittedByUserId: req.user!.id,
-        itemClaims,
+        claims,
         screenshotUrl: `/uploads/${req.file.filename}`,
-        isWildcardRedemption: isWildcardRedemption === "true",
-        wildcardId,
       });
       broadcast({ type: "submission_created", bingoId: bingo.id, payload: { teamId: team.id } });
       res.status(201).json({ submission });

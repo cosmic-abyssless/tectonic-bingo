@@ -14,7 +14,7 @@ export function initWebSocketServer(server: Server): void {
 
 export type BroadcastEvent =
   | { type: "submission_created"; bingoId: string; payload: { teamId: string } }
-  | { type: "submission_reviewed"; bingoId: string; payload: { teamId: string; taskId: string } }
+  | { type: "submission_reviewed"; bingoId: string; payload: { teamId: string; taskIds: string[] } }
   | { type: "stage_changed"; bingoId: string; payload: { stage: string } }
   | { type: "draft_started"; bingoId: string; payload: Record<string, never> }
   | { type: "draft_pick"; bingoId: string; payload: { pickNumber: number; teamId: string; userId: string } }

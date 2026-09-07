@@ -5,6 +5,8 @@ import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
 import { Modal, ModalHeader } from "../ui/Modal";
 import { TaskEditor } from "./TaskEditor";
+import { collectLeaves } from "../board/requirementTree";
+import { leafLabel } from "../board/TaskPanel";
 
 export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: string; tile: Tile; categories: TileCategory[]; onClose: () => void }) {
   const queryClient = useQueryClient();
@@ -129,17 +131,21 @@ export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: str
                   className="flex-1 bg-transparent text-sm text-white focus:outline-none"
                 />
                 <select
-                  aria-label="Wildcard applicable task"
-                  defaultValue={wc.applicableTaskId ?? ""}
-                  onChange={(e) => adminApi.updateWildcard(slug, wc.id, { applicableTaskId: e.target.value || null }).then(invalidate)}
+                  aria-label="Wildcard applicable requirement"
+                  defaultValue={wc.applicableNodeId ?? ""}
+                  onChange={(e) => adminApi.updateWildcard(slug, wc.id, { applicableNodeId: e.target.value || null }).then(invalidate)}
                   className="bg-slate-800 border border-slate-600 text-slate-300 text-xs rounded px-1.5 py-1 focus:outline-none"
                 >
-                  <option value="">Any task</option>
-                  {tile.tasks.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label}
-                    </option>
-                  ))}
+                  <option value="">Any requirement</option>
+                  {tile.tasks.flatMap((t) =>
+                    collectLeaves(t.requirement)
+                      .filter((leaf) => leaf.kind === "ITEM")
+                      .map((leaf) => (
+                        <option key={leaf.id} value={leaf.id}>
+                          {t.label}: {leafLabel(leaf)}
+                        </option>
+                      )),
+                  )}
                 </select>
                 <button onClick={() => deleteWildcard(wc.id)} className="text-slate-500 hover:text-red-400 text-xs cursor-pointer">
                   ✕

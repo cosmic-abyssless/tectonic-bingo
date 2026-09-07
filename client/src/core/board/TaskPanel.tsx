@@ -1,21 +1,7 @@
-import type { TileTask, TileTaskItem } from "@bingo/shared";
+import type { RequirementNode, TileTask } from "@bingo/shared";
+import { leafProgress, type LeafClaimMaps } from "./taskClaims";
 
-function groupItems(items: TileTaskItem[]) {
-  const required: TileTaskItem[] = [];
-  const grouped = new Map<string, TileTaskItem[]>();
-  for (const item of items) {
-    if (!item.optionsGroup) {
-      required.push(item);
-    } else {
-      const list = grouped.get(item.optionsGroup) ?? [];
-      list.push(item);
-      grouped.set(item.optionsGroup, list);
-    }
-  }
-  return { required, grouped };
-}
-
-function CheckIcon() {
+export function CheckIcon() {
   return (
     <svg className="w-3 h-3 text-green-400 shrink-0 no-underline" fill="currentColor" viewBox="0 0 20 20">
       <path
@@ -27,32 +13,86 @@ function CheckIcon() {
   );
 }
 
-function ItemProgress({ item, approvedQty }: { item: TileTaskItem; approvedQty: number }) {
-  if (item.quantity <= 1) return null;
-  const done = approvedQty >= item.quantity;
+export function leafLabel(node: RequirementNode): string {
+  const names = node.itemGroupName ? [`Any ${node.itemGroupName}`, ...node.itemNames] : node.itemNames;
+  return names.join(" / ") || "(no items)";
+}
+
+function compositeLabel(node: RequirementNode): string {
+  switch (node.kind) {
+    case "ALL":
+      return "All of:";
+    case "ANY":
+      return "Any one of:";
+    case "COUNT":
+      return `At least ${node.minCount ?? 1} of:`;
+    default:
+      return "";
+  }
+}
+
+function LeafRow({ node, maps }: { node: RequirementNode; maps: LeafClaimMaps }) {
+  const target = node.quantity ?? 1;
+  const progress = leafProgress(node.id, node.distinctItems, maps);
+  const approved = progress >= target;
+  const submitted = maps.submittedNodeIds.has(node.id);
   return (
-    <span className={`font-semibold text-xs tabular-nums ${done ? "text-green-400" : "text-yellow-400"}`}>
-      {approvedQty}/{item.quantity}
-    </span>
+    <li className={`flex items-baseline gap-2 text-sm ${approved ? "text-slate-500 line-through" : submitted ? "text-slate-400" : "text-slate-200"}`}>
+      <span className="text-indigo-400 text-xs">▸</span>
+      {target > 1 && (
+        <span className={`font-semibold text-xs tabular-nums ${approved ? "text-green-400" : "text-yellow-400"}`}>
+          {progress}/{target}
+          {node.distinctItems && " distinct"}
+        </span>
+      )}
+      {leafLabel(node)}
+      {approved && <CheckIcon />}
+    </li>
+  );
+}
+
+function RequirementTree({ node, maps, root }: { node: RequirementNode; maps: LeafClaimMaps; root?: boolean }) {
+  if (node.kind === "MANUAL") return null;
+  if (node.kind === "ITEM") {
+    return (
+      <ul className="space-y-1">
+        <LeafRow node={node} maps={maps} />
+      </ul>
+    );
+  }
+  // A root ALL with only leaves is the common case; skip the redundant heading.
+  const showHeading = !(root && node.kind === "ALL");
+  return (
+    <div className={root ? "" : "ml-3 border-l border-slate-700 pl-3"}>
+      {showHeading && <span className="text-slate-500 text-xs uppercase tracking-wide">{compositeLabel(node)}</span>}
+      <ul className="space-y-1 mt-1">
+        {node.children.map((child) =>
+          child.kind === "ITEM" ? (
+            <LeafRow key={child.id} node={child} maps={maps} />
+          ) : (
+            <li key={child.id}>
+              <RequirementTree node={child} maps={maps} />
+            </li>
+          ),
+        )}
+      </ul>
+    </div>
   );
 }
 
 export function TaskPanel({
   task,
-  approvedByItemName,
-  submittedItemNames,
+  claimMaps,
   locked,
   lockedReason,
   complete,
 }: {
   task: TileTask;
-  approvedByItemName: Map<string, number>;
-  submittedItemNames: Set<string>;
+  claimMaps: LeafClaimMaps;
   locked?: boolean;
   lockedReason?: string;
   complete?: boolean;
 }) {
-  const { required, grouped } = groupItems(task.items);
   const isManual = task.scoringMode === "manual";
 
   return (
@@ -87,72 +127,13 @@ export function TaskPanel({
 
       <p className="text-slate-300 text-sm leading-relaxed mb-3">{task.description}</p>
 
-      {!isManual && required.length > 0 && (
-        <ul className="space-y-1 mb-2">
-          {required.map((item) => {
-            const submitted = submittedItemNames.has(item.itemName);
-            const approved = (approvedByItemName.get(item.itemName) ?? 0) > 0;
-            return (
-              <li
-                key={item.id}
-                className={`flex items-baseline gap-2 text-sm ${submitted ? "text-slate-500 line-through" : "text-slate-200"}`}
-              >
-                <span className="text-indigo-400 text-xs">▸</span>
-                <ItemProgress item={item} approvedQty={approvedByItemName.get(item.itemName) ?? 0} />
-                {item.itemName}
-                {approved && <CheckIcon />}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {!isManual && <RequirementTree node={task.requirement} maps={claimMaps} root />}
 
-      {!isManual &&
-        [...grouped.entries()].map(([group, opts]) => (
-          <div key={group} className="mt-2">
-            <span className="text-slate-500 text-xs uppercase tracking-wide">Choose one:</span>
-            <ul className="space-y-1 mt-1">
-              {opts.map((item) => {
-                const submitted = submittedItemNames.has(item.itemName);
-                const approved = (approvedByItemName.get(item.itemName) ?? 0) > 0;
-                return (
-                  <li
-                    key={item.id}
-                    className={`flex items-baseline gap-2 text-sm ${submitted ? "text-slate-500 line-through" : "text-slate-300"}`}
-                  >
-                    <span className="text-slate-500 text-xs">◦</span>
-                    <ItemProgress item={item} approvedQty={approvedByItemName.get(item.itemName) ?? 0} />
-                    {item.itemName}
-                    {approved && <CheckIcon />}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
-
-      {!isManual && (task.requiresNoDuplicates || task.allowsPreviouslyAcquired || task.allowsPreLoad || task.requiresCompleteSet) && (
+      {!isManual && task.allowsPreLoad && (
         <div className="flex gap-2 flex-wrap mt-3">
-          {task.requiresCompleteSet && (
-            <span className="text-xs bg-amber-900/40 text-amber-300 border border-amber-600 rounded-full px-2 py-0.5">
-              Complete a full set
-            </span>
-          )}
-          {task.requiresNoDuplicates && (
-            <span className="text-xs bg-blue-900/40 text-blue-300 border border-blue-600 rounded-full px-2 py-0.5">
-              No duplicates
-            </span>
-          )}
-          {task.allowsPreviouslyAcquired && (
-            <span className="text-xs bg-blue-900/40 text-blue-300 border border-blue-600 rounded-full px-2 py-0.5">
-              Prev. acquired OK
-            </span>
-          )}
-          {task.allowsPreLoad && (
-            <span className="text-xs bg-blue-900/40 text-blue-300 border border-blue-600 rounded-full px-2 py-0.5">
-              Pre-load allowed
-            </span>
-          )}
+          <span className="text-xs bg-blue-900/40 text-blue-300 border border-blue-600 rounded-full px-2 py-0.5">
+            Pre-load allowed
+          </span>
         </div>
       )}
 

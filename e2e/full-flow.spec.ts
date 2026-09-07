@@ -60,9 +60,10 @@ test("full bingo lifecycle", async ({ page, browser }) => {
     await taskPanel(page, "Part A").getByLabel("Label", { exact: true }).fill("Part A");
     await taskPanel(page, "Part A").getByLabel("Points", { exact: true }).fill("25");
     await taskPanel(page, "Part A").getByLabel("Description", { exact: true }).fill("Obtain a Vorki pet or Draconic visage.");
-    await taskPanel(page, "Part A").getByPlaceholder("Item name").fill("Vorki");
-    await taskPanel(page, "Part A").getByRole("button", { name: "Add" }).click();
-    await expect(taskPanel(page, "Part A").getByText("Vorki", { exact: true })).toBeVisible();
+    await taskPanel(page, "Part A").getByRole("button", { name: "+ Add item requirement" }).click();
+    await taskPanel(page, "Part A").getByLabel("Item names").fill("Vorki");
+    await taskPanel(page, "Part A").getByLabel("Item names").press("Tab");
+    await expect(taskPanel(page, "Part A").getByLabel("Item names")).toHaveValue("Vorki");
 
     await page.getByRole("button", { name: "+ Add task" }).click();
     await taskPanel(page, "Part B").getByRole("button", { name: /Expand task: Part B/ }).click();
@@ -75,9 +76,10 @@ test("full bingo lifecycle", async ({ page, browser }) => {
     // let expect's polling absorb the round-trip.
     await taskPanel(page, "Part B").getByLabel("Withhold points until previous").click();
     await expect(taskPanel(page, "Part B").getByLabel("Withhold points until previous")).toBeChecked();
-    await taskPanel(page, "Part B").getByPlaceholder("Item name").fill("Draconic visage");
-    await taskPanel(page, "Part B").getByRole("button", { name: "Add" }).click();
-    await expect(taskPanel(page, "Part B").getByText("Draconic visage", { exact: true })).toBeVisible();
+    await taskPanel(page, "Part B").getByRole("button", { name: "+ Add item requirement" }).click();
+    await taskPanel(page, "Part B").getByLabel("Item names").fill("Draconic visage");
+    await taskPanel(page, "Part B").getByLabel("Item names").press("Tab");
+    await expect(taskPanel(page, "Part B").getByLabel("Item names")).toHaveValue("Draconic visage");
 
     await page.getByRole("button", { name: "Close" }).click();
 
@@ -90,9 +92,10 @@ test("full bingo lifecycle", async ({ page, browser }) => {
     await taskPanel(page, "Part A").getByRole("button", { name: /Expand task: Part A/ }).click();
     await taskPanel(page, "Part A").getByLabel("Points", { exact: true }).fill("20");
     await taskPanel(page, "Part A").getByLabel("Description", { exact: true }).fill("Complete a Wintertodt kill.");
-    await taskPanel(page, "Part A").getByPlaceholder("Item name").fill("Bruma torch");
-    await taskPanel(page, "Part A").getByRole("button", { name: "Add" }).click();
-    await expect(taskPanel(page, "Part A").getByText("Bruma torch", { exact: true })).toBeVisible();
+    await taskPanel(page, "Part A").getByRole("button", { name: "+ Add item requirement" }).click();
+    await taskPanel(page, "Part A").getByLabel("Item names").fill("Bruma torch");
+    await taskPanel(page, "Part A").getByLabel("Item names").press("Tab");
+    await expect(taskPanel(page, "Part A").getByLabel("Item names")).toHaveValue("Bruma torch");
 
     await page.getByRole("button", { name: "Close" }).click();
 

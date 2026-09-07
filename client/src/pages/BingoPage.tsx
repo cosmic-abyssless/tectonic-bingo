@@ -8,19 +8,11 @@ import { ThemeRoot } from "../themes/ThemeRoot";
 import { BoardGrid } from "../core/board/BoardGrid";
 import { SubmissionModal } from "../core/submissions/SubmissionModal";
 import { TeamSubmissionsList } from "../core/submissions/TeamSubmissionsList";
+import { tileMatchesSearch } from "../core/board/requirementTree";
 import { SignupForm } from "../core/signup/SignupForm";
 import { Markdown } from "../core/ui/Markdown";
 import { displayName, avatarUrl } from "../core/ui/user";
 import { CountdownTimer } from "../core/ui/CountdownTimer";
-
-function tileMatchesSearch(tile: Tile, q: string): boolean {
-  if (tile.name.toLowerCase().includes(q)) return true;
-  for (const task of tile.tasks) {
-    if (task.description.toLowerCase().includes(q)) return true;
-    for (const item of task.items) if (item.itemName.toLowerCase().includes(q)) return true;
-  }
-  return false;
-}
 
 export function BingoPage() {
   const { slug } = useParams<{ slug: string }>();

@@ -3,6 +3,7 @@ import { Modal, ModalHeader } from "../ui/Modal";
 import { SubmissionStatusBadge } from "../ui/StatusBadge";
 import { timeAgo } from "../ui/time";
 import { displayName } from "../ui/user";
+import { claimsSummary } from "./claimsSummary";
 
 export function TeamSubmissionsList({
   tiles,
@@ -44,7 +45,8 @@ export function TeamSubmissionsList({
       ) : (
         <ul className="divide-y divide-slate-700/60">
           {sorted.map((detail) => {
-            const info = taskLookup.get(detail.submission.taskId);
+            const infos = [...new Set(detail.claims.map((c) => c.taskId))].map((id) => taskLookup.get(id)).filter((i) => !!i);
+            const tileName = infos[0]?.tile.name;
             const thumb = detail.screenshots[0]?.storageUrl;
             return (
               <li key={detail.submission.id} className="flex items-start gap-4 px-5 py-4 hover:bg-slate-700/30 transition-colors">
@@ -58,11 +60,13 @@ export function TeamSubmissionsList({
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className="text-white text-sm font-semibold truncate">{info?.tile.name ?? "Unknown tile"}</span>
-                    {info && <span className="text-xs text-slate-500 bg-slate-700 rounded-full px-2 py-0.5 shrink-0">{info.taskLabel}</span>}
+                    <span className="text-white text-sm font-semibold truncate">{tileName ?? "Unknown tile"}</span>
+                    {infos.map((info) => (
+                      <span key={info.taskLabel} className="text-xs text-slate-500 bg-slate-700 rounded-full px-2 py-0.5 shrink-0">{info.taskLabel}</span>
+                    ))}
                   </div>
                   <p className="text-sm text-slate-300 truncate">
-                    {detail.claims.length > 0 ? detail.claims.map((c) => (c.quantity > 1 ? `${c.quantity}× ${c.itemName}` : c.itemName)).join(", ") : "(manual review)"}
+                    {claimsSummary(detail.claims)}
                   </p>
                   {detail.submittedByUser && <p className="text-xs text-slate-500 mt-0.5">by {displayName(detail.submittedByUser)}</p>}
                   {detail.submission.reviewerNotes && <p className="text-xs text-amber-400 mt-0.5 truncate">{detail.submission.reviewerNotes}</p>}

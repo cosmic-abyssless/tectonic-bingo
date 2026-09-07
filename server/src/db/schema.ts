@@ -207,14 +207,12 @@ export const tileTasks = sqliteTable('tile_tasks', {
   sortOrder: integer('sort_order').notNull().default(0),
   points: integer('points').notNull(),
   description: text('description').notNull(),
-  // 'automatic' (default) completes via evaluateTaskCompletion against
-  // tileTaskItems/submission claims, same as every other task. 'manual' is
-  // the escape hatch for a one-off custom challenge an admin can't codify as
-  // an item list — items are optional/ignored, and a mod directly decides
-  // completion + points when reviewing each submission (scoringService
-  // requires an explicit taskCompleted flag on approval instead of computing
-  // it). Everything downstream — withheld points, claim folding on a later
-  // task, line completion — behaves identically either way.
+  // 'automatic' (default) completes when the task's requirement tree evaluates
+  // true against approved claims. 'manual' is the escape hatch for a one-off
+  // custom challenge an admin can't codify as items — the tree is a single
+  // MANUAL leaf and a mod directly decides completion + points when reviewing
+  // each submission. Everything downstream — withheld points, line
+  // completion — behaves identically either way.
   scoringMode: text('scoring_mode', { enum: ['automatic', 'manual'] }).notNull().default('automatic'),
   // Server rejects a submission for this task until the previous task in the
   // chain is completed.
@@ -222,43 +220,63 @@ export const tileTasks = sqliteTable('tile_tasks', {
   // This task can be completed and approved early, but its points stay
   // withheld (0) until the previous task in the chain completes.
   pointsRequirePrevious: integer('points_require_previous', { mode: 'boolean' }).notNull().default(false),
-  requiresNoDuplicates: integer('requires_no_duplicates', { mode: 'boolean' }).notNull().default(false),
-  // Approved claims from the previous task fold into this task's tally too
-  // (e.g. a Cerberus jar claimed on task 1 also counts toward task 2).
-  allowsPreviouslyAcquired: integer('allows_previously_acquired', { mode: 'boolean' }).notNull().default(false),
   allowsPreLoad: integer('allows_pre_load', { mode: 'boolean' }).notNull().default(false),
-  // Minimum number of approved submissions required before this task is
-  // marked complete (covers "2 different drops" where each is qty=1).
-  minSubmissions: integer('min_submissions').notNull().default(1),
-  // When true, completion requires ALL items in at least ONE options group to
-  // be approved (a complete matching set), rather than any one per group.
-  requiresCompleteSet: integer('requires_complete_set', { mode: 'boolean' }).notNull().default(false),
   notes: text('notes'),
 }, (t) => [
   uniqueIndex('tile_tasks_tile_sort_unq').on(t.tileId, t.sortOrder),
 ]);
 
-// Individual items/tasks that make up a task's requirement. Items sharing the
-// same optionsGroup are interchangeable alternatives; items with no group are
-// all individually required.
-export const tileTaskItems = sqliteTable('tile_task_items', {
+// Global, reusable named sets of items (e.g. "Cerberus uniques"). Not scoped
+// to a bingo so they can be shared across events.
+export const itemGroups = sqliteTable('item_groups', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text('name').notNull().unique(),
+  description: text('description'),
+});
+
+export const itemGroupItems = sqliteTable('item_group_items', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  groupId: text('group_id').notNull().references(() => itemGroups.id),
+  itemName: text('item_name').notNull(),
+}, (t) => [
+  uniqueIndex('item_group_items_group_name_unq').on(t.groupId, t.itemName),
+]);
+
+// A task's requirement is a tree with exactly one root (parentId NULL).
+// Composite kinds fold their children: ALL = every child, ANY = at least one,
+// COUNT = at least minCount children. Leaves are ITEM (claims of accepted
+// item names — the group's items plus inline requirementNodeItems — must
+// reach `quantity`, summed by claim quantity or counted as distinct names
+// when distinctItems) or MANUAL (a mod decides on approval). Claims attach
+// to leaves, so one submission can advance several tasks at once.
+export const requirementNodes = sqliteTable('requirement_nodes', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   taskId: text('task_id').notNull().references(() => tileTasks.id),
-  itemName: text('item_name').notNull(),
-  quantity: integer('quantity').notNull().default(1),
-  optionsGroup: text('options_group'), // null = required individually; set = pick-any-one-of
+  parentId: text('parent_id'),
   sortOrder: integer('sort_order').notNull().default(0),
+  kind: text('kind', { enum: ['ALL', 'ANY', 'COUNT', 'ITEM', 'MANUAL'] }).notNull(),
+  minCount: integer('min_count'), // COUNT only
+  quantity: integer('quantity'), // ITEM only
+  distinctItems: integer('distinct_items', { mode: 'boolean' }).notNull().default(false), // ITEM only
+  itemGroupId: text('item_group_id').references(() => itemGroups.id), // ITEM only
+});
+
+// Inline accepted item names for an ITEM leaf (in addition to its group).
+export const requirementNodeItems = sqliteTable('requirement_node_items', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  nodeId: text('node_id').notNull().references(() => requirementNodes.id),
+  itemName: text('item_name').notNull(),
 });
 
 // Wildcard items that can substitute for a required item, capped at
-// maxRedemptionsPerTeam uses per team (enforced in the approval transaction).
+// maxRedemptionsPerTeam approved claims per team.
 export const tileWildcards = sqliteTable('tile_wildcards', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   tileId: text('tile_id').notNull().references(() => tiles.id),
   itemName: text('item_name').notNull(),
   maxRedemptionsPerTeam: integer('max_redemptions_per_team').notNull().default(1),
   description: text('description'),
-  applicableTaskId: text('applicable_task_id').references(() => tileTasks.id), // null = any task on the tile
+  applicableNodeId: text('applicable_node_id').references(() => requirementNodes.id), // null = any leaf on the tile
 });
 
 // All possible lines on the board (rows + cols + diagonals, generated from
@@ -298,10 +316,12 @@ export const teamTaskProgress = sqliteTable('team_task_progress', {
   uniqueIndex('team_task_progress_team_task_unq').on(t.teamId, t.taskId),
 ]);
 
+// A submission is a screenshot plus the claims a player makes against
+// requirement leaves. It is not bound to a task — its claims may span several
+// tasks (typically the sides of one tile).
 export const submissions = sqliteTable('submissions', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   teamId: text('team_id').notNull().references(() => teams.id),
-  taskId: text('task_id').notNull().references(() => tileTasks.id),
   submittedByUserId: text('submitted_by_user_id').notNull().references(() => users.id),
   status: text('status', {
     enum: ['pending', 'approved', 'rejected'],
@@ -311,8 +331,6 @@ export const submissions = sqliteTable('submissions', {
   reviewedByUserId: text('reviewed_by_user_id').references(() => users.id),
   reviewerNotes: text('reviewer_notes'),
   pointsAwarded: integer('points_awarded'), // set by moderator on approval; may override the task's default
-  isWildcardRedemption: integer('is_wildcard_redemption', { mode: 'boolean' }).notNull().default(false),
-  wildcardId: text('wildcard_id').references(() => tileWildcards.id),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
@@ -335,25 +353,16 @@ export const submissionScreenshots = sqliteTable('submission_screenshots', {
   uploadedAt: integer('uploaded_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
 
-// The specific items a player claims within a submission.
-export const submissionItemClaims = sqliteTable('submission_item_claims', {
+// One row per drop a player allocates to a requirement leaf. itemName is null
+// for MANUAL leaves. wildcardId marks the claim as a wildcard redemption; the
+// per-team cap is enforced by counting approved claims per wildcard.
+export const claims = sqliteTable('claims', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   submissionId: text('submission_id').notNull().references(() => submissions.id),
-  itemName: text('item_name').notNull(),
+  nodeId: text('node_id').notNull().references(() => requirementNodes.id),
+  itemName: text('item_name'),
   quantity: integer('quantity').notNull().default(1),
-  taskItemId: text('task_item_id').references(() => tileTaskItems.id),
-});
-
-// Tracks which wildcards a team has spent. The row is written on submission
-// APPROVAL (not submission) so a rejected wildcard submission doesn't burn a
-// redemption. No unique index — the per-team cap is enforced by counting
-// rows inside the approval transaction, so maxRedemptionsPerTeam > 1 works.
-export const teamWildcardUsage = sqliteTable('team_wildcard_usage', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  teamId: text('team_id').notNull().references(() => teams.id),
-  tileWildcardId: text('tile_wildcard_id').notNull().references(() => tileWildcards.id),
-  submissionId: text('submission_id').notNull().references(() => submissions.id),
-  usedAt: integer('used_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  wildcardId: text('wildcard_id').references(() => tileWildcards.id),
 });
 
 export const teamCompletedLines = sqliteTable('team_completed_lines', {

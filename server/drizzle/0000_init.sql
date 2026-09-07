@@ -49,6 +49,18 @@ CREATE TABLE `bingos` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `bingos_slug_unique` ON `bingos` (`slug`);--> statement-breakpoint
+CREATE TABLE `claims` (
+	`id` text PRIMARY KEY NOT NULL,
+	`submission_id` text NOT NULL,
+	`node_id` text NOT NULL,
+	`item_name` text,
+	`quantity` integer DEFAULT 1 NOT NULL,
+	`wildcard_id` text,
+	FOREIGN KEY (`submission_id`) REFERENCES `submissions`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`node_id`) REFERENCES `requirement_nodes`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`wildcard_id`) REFERENCES `tile_wildcards`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
 CREATE TABLE `draft_picks` (
 	`id` text PRIMARY KEY NOT NULL,
 	`bingo_id` text NOT NULL,
@@ -65,6 +77,42 @@ CREATE TABLE `draft_picks` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `draft_picks_bingo_pick_unq` ON `draft_picks` (`bingo_id`,`pick_number`);--> statement-breakpoint
 CREATE UNIQUE INDEX `draft_picks_bingo_user_unq` ON `draft_picks` (`bingo_id`,`user_id`);--> statement-breakpoint
+CREATE TABLE `item_group_items` (
+	`id` text PRIMARY KEY NOT NULL,
+	`group_id` text NOT NULL,
+	`item_name` text NOT NULL,
+	FOREIGN KEY (`group_id`) REFERENCES `item_groups`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `item_group_items_group_name_unq` ON `item_group_items` (`group_id`,`item_name`);--> statement-breakpoint
+CREATE TABLE `item_groups` (
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text NOT NULL,
+	`description` text
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `item_groups_name_unique` ON `item_groups` (`name`);--> statement-breakpoint
+CREATE TABLE `requirement_node_items` (
+	`id` text PRIMARY KEY NOT NULL,
+	`node_id` text NOT NULL,
+	`item_name` text NOT NULL,
+	FOREIGN KEY (`node_id`) REFERENCES `requirement_nodes`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE TABLE `requirement_nodes` (
+	`id` text PRIMARY KEY NOT NULL,
+	`task_id` text NOT NULL,
+	`parent_id` text,
+	`sort_order` integer DEFAULT 0 NOT NULL,
+	`kind` text NOT NULL,
+	`min_count` integer,
+	`quantity` integer,
+	`distinct_items` integer DEFAULT false NOT NULL,
+	`item_group_id` text,
+	FOREIGN KEY (`task_id`) REFERENCES `tile_tasks`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`item_group_id`) REFERENCES `item_groups`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
 CREATE TABLE `signup_answers` (
 	`id` text PRIMARY KEY NOT NULL,
 	`signup_id` text NOT NULL,
@@ -119,16 +167,6 @@ CREATE TABLE `stage_transitions` (
 	FOREIGN KEY (`changed_by_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE TABLE `submission_item_claims` (
-	`id` text PRIMARY KEY NOT NULL,
-	`submission_id` text NOT NULL,
-	`item_name` text NOT NULL,
-	`quantity` integer DEFAULT 1 NOT NULL,
-	`task_item_id` text,
-	FOREIGN KEY (`submission_id`) REFERENCES `submissions`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`task_item_id`) REFERENCES `tile_task_items`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
 CREATE TABLE `submission_screenshots` (
 	`id` text PRIMARY KEY NOT NULL,
 	`submission_id` text NOT NULL,
@@ -145,7 +183,6 @@ CREATE TABLE `submission_screenshots` (
 CREATE TABLE `submissions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`team_id` text NOT NULL,
-	`task_id` text NOT NULL,
 	`submitted_by_user_id` text NOT NULL,
 	`status` text DEFAULT 'pending' NOT NULL,
 	`submitted_at` integer DEFAULT (unixepoch()) NOT NULL,
@@ -153,15 +190,11 @@ CREATE TABLE `submissions` (
 	`reviewed_by_user_id` text,
 	`reviewer_notes` text,
 	`points_awarded` integer,
-	`is_wildcard_redemption` integer DEFAULT false NOT NULL,
-	`wildcard_id` text,
 	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
 	`updated_at` integer DEFAULT (unixepoch()) NOT NULL,
 	FOREIGN KEY (`team_id`) REFERENCES `teams`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`task_id`) REFERENCES `tile_tasks`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`submitted_by_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`reviewed_by_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`wildcard_id`) REFERENCES `tile_wildcards`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`reviewed_by_user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE TABLE `team_completed_lines` (
@@ -210,17 +243,6 @@ CREATE TABLE `team_task_progress` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `team_task_progress_team_task_unq` ON `team_task_progress` (`team_id`,`task_id`);--> statement-breakpoint
-CREATE TABLE `team_wildcard_usage` (
-	`id` text PRIMARY KEY NOT NULL,
-	`team_id` text NOT NULL,
-	`tile_wildcard_id` text NOT NULL,
-	`submission_id` text NOT NULL,
-	`used_at` integer DEFAULT (unixepoch()) NOT NULL,
-	FOREIGN KEY (`team_id`) REFERENCES `teams`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`tile_wildcard_id`) REFERENCES `tile_wildcards`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`submission_id`) REFERENCES `submissions`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
 CREATE TABLE `teams` (
 	`id` text PRIMARY KEY NOT NULL,
 	`bingo_id` text NOT NULL,
@@ -246,16 +268,6 @@ CREATE TABLE `tile_categories` (
 	FOREIGN KEY (`bingo_id`) REFERENCES `bingos`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE TABLE `tile_task_items` (
-	`id` text PRIMARY KEY NOT NULL,
-	`task_id` text NOT NULL,
-	`item_name` text NOT NULL,
-	`quantity` integer DEFAULT 1 NOT NULL,
-	`options_group` text,
-	`sort_order` integer DEFAULT 0 NOT NULL,
-	FOREIGN KEY (`task_id`) REFERENCES `tile_tasks`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
 CREATE TABLE `tile_tasks` (
 	`id` text PRIMARY KEY NOT NULL,
 	`tile_id` text NOT NULL,
@@ -266,11 +278,7 @@ CREATE TABLE `tile_tasks` (
 	`scoring_mode` text DEFAULT 'automatic' NOT NULL,
 	`submit_requires_previous` integer DEFAULT false NOT NULL,
 	`points_require_previous` integer DEFAULT false NOT NULL,
-	`requires_no_duplicates` integer DEFAULT false NOT NULL,
-	`allows_previously_acquired` integer DEFAULT false NOT NULL,
 	`allows_pre_load` integer DEFAULT false NOT NULL,
-	`min_submissions` integer DEFAULT 1 NOT NULL,
-	`requires_complete_set` integer DEFAULT false NOT NULL,
 	`notes` text,
 	FOREIGN KEY (`tile_id`) REFERENCES `tiles`(`id`) ON UPDATE no action ON DELETE no action
 );
@@ -282,9 +290,9 @@ CREATE TABLE `tile_wildcards` (
 	`item_name` text NOT NULL,
 	`max_redemptions_per_team` integer DEFAULT 1 NOT NULL,
 	`description` text,
-	`applicable_task_id` text,
+	`applicable_node_id` text,
 	FOREIGN KEY (`tile_id`) REFERENCES `tiles`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`applicable_task_id`) REFERENCES `tile_tasks`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`applicable_node_id`) REFERENCES `requirement_nodes`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE TABLE `tiles` (

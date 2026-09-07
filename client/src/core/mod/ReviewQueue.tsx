@@ -4,6 +4,7 @@ import { useModSubmissions, useReviewSubmission } from "../../api/queries";
 import { SubmissionStatusBadge } from "../ui/StatusBadge";
 import { timeAgo } from "../ui/time";
 import { displayName } from "../ui/user";
+import { claimsSummary } from "../submissions/claimsSummary";
 
 type Filter = SubmissionStatus | "all";
 const FILTERS: { key: Filter; label: string }[] = [
@@ -12,6 +13,8 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "rejected", label: "Rejected" },
   { key: "all", label: "All" },
 ];
+
+const isManualRow = (row: ModSubmissionRow) => row.tasks.some((t) => t.scoringMode === "manual");
 
 interface ReviewForm {
   notes: string;
@@ -31,7 +34,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const [error, setError] = useState<string | null>(null);
 
   function getForm(row: ModSubmissionRow): ReviewForm {
-    return forms[row.submission.id] ?? { notes: "", taskCompleted: true, points: String(row.task.points) };
+    return forms[row.submission.id] ?? { notes: "", taskCompleted: true, points: String(row.tasks.reduce((sum, t) => sum + t.points, 0)) };
   }
   function setForm(id: string, patch: Partial<ReviewForm>) {
     setForms((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { notes: "", taskCompleted: true, points: "" }), ...patch } }));
@@ -56,8 +59,8 @@ export function ReviewQueue({ slug }: { slug: string }) {
         submissionId: row.submission.id,
         action,
         reviewerNotes: form.notes || undefined,
-        taskCompleted: row.task.scoringMode === "manual" && action === "approve" ? form.taskCompleted : undefined,
-        pointsAwardedOverride: row.task.scoringMode === "manual" && action === "approve" ? Number(form.points) || 0 : undefined,
+        taskCompleted: isManualRow(row) && action === "approve" ? form.taskCompleted : undefined,
+        pointsAwardedOverride: isManualRow(row) && action === "approve" ? Number(form.points) || 0 : undefined,
       });
       setExpandedId(null);
     } catch (e: unknown) {
@@ -123,7 +126,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
               const isExpanded = expandedId === row.submission.id;
               const canReview = row.submission.status === "pending";
               const form = getForm(row);
-              const isManual = row.task.scoringMode === "manual";
+              const isManual = isManualRow(row);
 
               return (
                 <div key={row.submission.id} className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
@@ -142,17 +145,19 @@ export function ReviewQueue({ slug }: { slug: string }) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-white text-sm font-semibold">{row.tile.name}</span>
-                        <span className="text-xs text-slate-500 bg-slate-700 rounded-full px-2 py-0.5">{row.task.label}</span>
+                        {row.tasks.map((task) => (
+                          <span key={task.id} className="text-xs text-slate-500 bg-slate-700 rounded-full px-2 py-0.5">{task.label}</span>
+                        ))}
                         <span className="text-xs text-slate-500 bg-slate-700 rounded-full px-2 py-0.5">{row.team.name}</span>
                         {isManual && (
                           <span className="text-xs font-semibold border rounded-full px-2 py-0.5 bg-purple-900/50 text-purple-300 border-purple-700">manual</span>
                         )}
-                        {row.submission.isWildcardRedemption && (
+                        {row.claims.some((c) => c.wildcardId !== null) && (
                           <span className="text-xs font-semibold border rounded-full px-2 py-0.5 bg-amber-900/50 text-amber-300 border-amber-700">✦ wildcard</span>
                         )}
                       </div>
                       <p className="text-sm text-slate-300 truncate">
-                        {row.claims.length > 0 ? row.claims.map((c) => (c.quantity > 1 ? `${c.quantity}× ${c.itemName}` : c.itemName)).join(", ") : "(manual review)"}
+                        {claimsSummary(row.claims)}
                       </p>
                       <p className="text-xs text-slate-500 mt-0.5">by {row.submittedByUser ? displayName(row.submittedByUser) : "unknown"}</p>
                       {row.submission.reviewerNotes && <p className="text-xs text-amber-400 mt-0.5 truncate">{row.submission.reviewerNotes}</p>}
