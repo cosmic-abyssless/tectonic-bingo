@@ -2,6 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import type { OsrsItemSearchResult } from "@bingo/shared";
 import { searchOsrsItems } from "../../api/osrsItemsApi";
 
+// Mirrors osrsWikiService.ts's iconUrlFor — the wiki's real upload
+// convention for an item's small inventory-sprite icon (title with spaces
+// as underscores). Constructed client-side, with no search/lookup call,
+// so a closed field can show an icon for whatever text it already holds
+// (an existing item loaded from the DB, not just one picked this session)
+// — the <img>'s onError hides it for text that isn't a real item name.
+function iconUrlFor(name: string): string {
+  return `https://oldschool.runescape.wiki/images/${encodeURIComponent(name.trim().replace(/ /g, "_"))}.png`;
+}
+
 // A plain controlled text input augmented with OSRS Wiki item suggestions
 // (name + icon) as the admin types — a drop-in for any "item name" text
 // field. Freeform text always stays valid and is never overwritten except
@@ -39,12 +49,16 @@ export function ItemSearchInput({
   const [loading, setLoading] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
   const [dropdownRect, setDropdownRect] = useState<DOMRect | null>(null);
-  // Remembers the picked suggestion so its icon keeps showing in the closed
-  // field. Only trusted while `value` still matches what was picked — any
-  // further edit (the field is freeform text, not a locked-in selection)
-  // silently drops the icon rather than showing a stale/wrong one.
-  const [selectedItem, setSelectedItem] = useState<OsrsItemSearchResult | null>(null);
-  const selectedIcon = selectedItem?.name === value ? selectedItem : null;
+  // Whether the icon derived from the current value failed to load (not a
+  // real item name, or no icon on the wiki). Reset whenever value changes
+  // so switching to a different, valid name gets a fresh attempt.
+  const [iconFailed, setIconFailed] = useState(false);
+  useEffect(() => setIconFailed(false), [value]);
+  // Shown only while the field is closed (not actively being typed into) —
+  // while open, the dropdown's own per-result icons already show what's
+  // relevant, and re-deriving this on every keystroke would fire a failed
+  // image request for nearly every partial string typed.
+  const closedIconUrl = !open && value.trim() && !iconFailed ? iconUrlFor(value) : null;
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -104,7 +118,6 @@ export function ItemSearchInput({
   const pick = (item: OsrsItemSearchResult) => {
     onChange(item.name);
     onCommit?.(item.name);
-    setSelectedItem(item);
     setResults([]);
     setOpen(false);
   };
@@ -133,14 +146,12 @@ export function ItemSearchInput({
 
   return (
     <div ref={containerRef} className={`relative ${containerClassName ?? ""}`}>
-      {selectedIcon && (
+      {closedIconUrl && (
         <img
-          src={selectedIcon.iconUrl}
+          src={closedIconUrl}
           alt=""
           className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 object-contain pointer-events-none"
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.visibility = "hidden";
-          }}
+          onError={() => setIconFailed(true)}
         />
       )}
       <input
@@ -153,7 +164,7 @@ export function ItemSearchInput({
         onFocus={() => setOpen(true)}
         onBlur={() => onCommit?.(value)}
         onKeyDown={handleKeyDown}
-        className={`${className ?? "w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"} ${selectedIcon ? "pl-7" : ""}`}
+        className={`${className ?? "w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"} ${closedIconUrl ? "pl-7" : ""}`}
       />
 
       {showDropdown && dropdownRect && (
