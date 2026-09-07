@@ -467,6 +467,16 @@ export interface StatsResponse {
 }
 
 // ---------------------------------------------------------------------------
+// OSRS Wiki item search, matching server/src/services/osrsWikiService.ts
+// ---------------------------------------------------------------------------
+
+export interface OsrsItemSearchResult {
+  name: string;
+  iconUrl: string;
+  wikiUrl: string;
+}
+
+// ---------------------------------------------------------------------------
 // WebSocket envelope, matching server/src/ws.ts
 // ---------------------------------------------------------------------------
 

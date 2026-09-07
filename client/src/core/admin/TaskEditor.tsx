@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { TileTask, TileTaskItem } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
+import { ItemSearchInput } from "../ui/ItemSearchInput";
 
 const FLAG_FIELDS: { key: keyof TileTask; label: string; hint: string }[] = [
   { key: "submitRequiresPrevious", label: "Requires previous task", hint: "Can't submit until the previous task is completed" },
@@ -166,11 +167,11 @@ export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: Tile
                   ))}
                 </ul>
                 <div className="flex gap-2">
-                  <input
+                  <ItemSearchInput
                     value={newItemName}
-                    onChange={(e) => setNewItemName(e.target.value)}
+                    onChange={setNewItemName}
                     placeholder="Item name"
-                    className="flex-1 bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
+                    containerClassName="flex-1"
                   />
                   <input
                     type="number"

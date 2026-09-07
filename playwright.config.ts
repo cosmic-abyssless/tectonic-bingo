@@ -57,6 +57,7 @@ export default defineConfig({
         RUNEPROFILE_API_KEY: "",
         PLAYER_STATS_FETCH_DISABLED: "true",
         SCREENSHOT_OCR_DISABLED: "true",
+        OSRS_ITEM_SEARCH_DISABLED: "true",
       },
     },
     {
