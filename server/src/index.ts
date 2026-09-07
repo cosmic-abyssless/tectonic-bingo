@@ -16,6 +16,7 @@ import bingosRouter from "./routes/bingos";
 import modRouter from "./routes/mod";
 import adminRouter from "./routes/admin";
 import siteAdminRouter from "./routes/siteAdmin";
+import osrsItemsRouter from "./routes/osrsItems";
 import { errorHandler } from "./middleware/errorHandler";
 import { initWebSocketServer } from "./ws";
 import { sqlite } from "./db";
@@ -98,6 +99,7 @@ app.use("/api/admin", siteAdminRouter);
 app.use("/api/bingos", bingosRouter);
 app.use("/api/bingos/:slug/mod", modRouter);
 app.use("/api/bingos/:slug/admin", adminRouter);
+app.use("/api/osrs-items", osrsItemsRouter);
 app.use(errorHandler);
 
 const server = http.createServer(app);
