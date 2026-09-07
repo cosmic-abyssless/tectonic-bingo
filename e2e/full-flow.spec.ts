@@ -125,10 +125,15 @@ test("full bingo lifecycle", async ({ page, browser }) => {
 
   await test.step("admin adds signup questions", async () => {
     await page.getByRole("button", { name: "Signup Questions" }).click();
-    // Each existing question renders in its own same-shaped wrapper div, in
-    // order — no id/placeholder on the prompt input itself (defaultValue,
-    // not value, so toHaveValue still reads the live DOM value correctly).
-    const questionRows = page.locator(".bg-slate-900.border.border-slate-700.rounded-lg.p-3.space-y-2");
+    // Each existing question renders as a role="listitem" (QuestionBuilder.tsx)
+    // — not a raw class-selector: the always-present "add new question" form
+    // below shares the exact same Tailwind classes as each row's wrapper div,
+    // so a class-chain locator silently matches it too (confirmed: it made
+    // this exact assertion pass or fail depending on a network-timing race,
+    // not on whether a row had actually been added). No id/placeholder on
+    // the prompt input itself either (defaultValue, not value, so
+    // toHaveValue still reads the live DOM value correctly).
+    const questionRows = page.getByRole("listitem");
 
     await page.getByPlaceholder("New question…").fill("What is your preferred combat style?");
     await page.getByLabel("New question type").selectOption({ label: "Dropdown" });
