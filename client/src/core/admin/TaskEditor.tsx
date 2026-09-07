@@ -5,6 +5,63 @@ import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
 import { ItemSearchInput } from "../ui/ItemSearchInput";
 
+// A row's own component instance so its editable name has independent
+// local state (a hook can't live inside the parent's .map() callback).
+function TaskItemRow({
+  item,
+  onPatch,
+  onDelete,
+}: {
+  item: TileTaskItem;
+  onPatch: (id: string, fields: Partial<TileTaskItem>) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [name, setName] = useState(item.itemName);
+
+  return (
+    <li className="flex items-center gap-2 bg-slate-800 rounded px-2 py-1 text-xs">
+      <ItemSearchInput
+        value={name}
+        onChange={setName}
+        onCommit={(value) => {
+          const trimmed = value.trim();
+          if (trimmed && trimmed !== item.itemName) onPatch(item.id, { itemName: trimmed });
+          else setName(item.itemName);
+        }}
+        ariaLabel={`Item name for ${item.itemName}`}
+        containerClassName="flex-1"
+        className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-indigo-500"
+      />
+      <input
+        type="number"
+        min={1}
+        defaultValue={item.quantity}
+        onBlur={(e) => {
+          const value = Math.max(1, Number(e.target.value) || 1);
+          if (value !== item.quantity) onPatch(item.id, { quantity: value });
+          e.target.value = String(value);
+        }}
+        aria-label={`Quantity needed for ${item.itemName}`}
+        title="Total quantity needed (summed across all approved submissions)"
+        className="w-16 bg-slate-900 border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-indigo-500"
+      />
+      <input
+        defaultValue={item.optionsGroup ?? ""}
+        onBlur={(e) => {
+          const value = e.target.value.trim() || null;
+          if (value !== item.optionsGroup) onPatch(item.id, { optionsGroup: value });
+        }}
+        placeholder="group"
+        aria-label={`Options group for ${item.itemName}`}
+        className="w-24 bg-slate-900 border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
+      />
+      <button onClick={() => onDelete(item.id)} className="text-slate-500 hover:text-red-400 cursor-pointer" aria-label={`Delete item ${item.itemName}`}>
+        ✕
+      </button>
+    </li>
+  );
+}
+
 const FLAG_FIELDS: { key: keyof TileTask; label: string; hint: string }[] = [
   { key: "submitRequiresPrevious", label: "Requires previous task", hint: "Can't submit until the previous task is completed" },
   { key: "pointsRequirePrevious", label: "Withhold points until previous", hint: "Can complete early, but points stay 0 until the previous task completes" },
@@ -126,44 +183,7 @@ export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: Tile
                 <label className="block text-xs text-slate-400 mb-1.5">Items ({task.items.length})</label>
                 <ul className="space-y-1 mb-2">
                   {task.items.map((item) => (
-                    <li key={item.id} className="flex items-center gap-2 bg-slate-800 rounded px-2 py-1 text-xs">
-                      <input
-                        defaultValue={item.itemName}
-                        onBlur={(e) => {
-                          const value = e.target.value.trim();
-                          if (value && value !== item.itemName) patchItem(item.id, { itemName: value });
-                          else e.target.value = item.itemName;
-                        }}
-                        aria-label={`Item name for ${item.itemName}`}
-                        className="flex-1 bg-slate-900 border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-indigo-500"
-                      />
-                      <input
-                        type="number"
-                        min={1}
-                        defaultValue={item.quantity}
-                        onBlur={(e) => {
-                          const value = Math.max(1, Number(e.target.value) || 1);
-                          if (value !== item.quantity) patchItem(item.id, { quantity: value });
-                          e.target.value = String(value);
-                        }}
-                        aria-label={`Quantity needed for ${item.itemName}`}
-                        title="Total quantity needed (summed across all approved submissions)"
-                        className="w-16 bg-slate-900 border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-indigo-500"
-                      />
-                      <input
-                        defaultValue={item.optionsGroup ?? ""}
-                        onBlur={(e) => {
-                          const value = e.target.value.trim() || null;
-                          if (value !== item.optionsGroup) patchItem(item.id, { optionsGroup: value });
-                        }}
-                        placeholder="group"
-                        aria-label={`Options group for ${item.itemName}`}
-                        className="w-24 bg-slate-900 border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
-                      />
-                      <button onClick={() => deleteItem(item.id)} className="text-slate-500 hover:text-red-400 cursor-pointer" aria-label={`Delete item ${item.itemName}`}>
-                        ✕
-                      </button>
-                    </li>
+                    <TaskItemRow key={item.id} item={item} onPatch={patchItem} onDelete={deleteItem} />
                   ))}
                 </ul>
                 <div className="flex gap-2">

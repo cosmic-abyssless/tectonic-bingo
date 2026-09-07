@@ -11,16 +11,28 @@ import { searchOsrsItems } from "../../api/osrsItemsApi";
 export function ItemSearchInput({
   value,
   onChange,
+  onCommit,
   placeholder,
   className,
   containerClassName,
+  ariaLabel,
 }: {
   value: string;
   onChange: (value: string) => void;
+  /**
+   * Fires when the value should be persisted: on blur (freeform typing —
+   * not on every keystroke, to avoid a request per character) and
+   * immediately on picking a suggestion (a deliberate, final choice, not
+   * worth waiting on a blur for). Optional — a caller that persists via its
+   * own separate "Add" action (rather than per-field autosave) has no use
+   * for this.
+   */
+  onCommit?: (value: string) => void;
   placeholder?: string;
   className?: string;
   /** Applied to the wrapping (relative-positioned) div — set this, not `className`, to control layout/sizing (e.g. "flex-1") in a flex row. */
   containerClassName?: string;
+  ariaLabel?: string;
 }) {
   const [results, setResults] = useState<OsrsItemSearchResult[]>([]);
   const [open, setOpen] = useState(false);
@@ -91,6 +103,7 @@ export function ItemSearchInput({
 
   const pick = (item: OsrsItemSearchResult) => {
     onChange(item.name);
+    onCommit?.(item.name);
     setSelectedItem(item);
     setResults([]);
     setOpen(false);
@@ -135,8 +148,10 @@ export function ItemSearchInput({
         type="text"
         value={value}
         placeholder={placeholder}
+        aria-label={ariaLabel}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setOpen(true)}
+        onBlur={() => onCommit?.(value)}
         onKeyDown={handleKeyDown}
         className={`${className ?? "w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"} ${selectedIcon ? "pl-7" : ""}`}
       />
@@ -154,7 +169,15 @@ export function ItemSearchInput({
               <button
                 key={item.name}
                 type="button"
-                onMouseDown={() => pick(item)}
+                // preventDefault stops the browser's default mousedown-blur
+                // behavior — without it, clicking a suggestion blurs the
+                // input (firing onCommit with the stale, still-being-typed
+                // text) a tick before pick()'s own onCommit(item.name)
+                // fires, racing two commits for one click.
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pick(item);
+                }}
                 className={`w-full flex items-center gap-2 text-left px-2 py-1.5 text-xs transition-colors ${
                   i === highlighted ? "bg-indigo-600 text-white" : "text-slate-200 hover:bg-slate-700"
                 }`}
