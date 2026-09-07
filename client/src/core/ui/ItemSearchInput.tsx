@@ -27,6 +27,12 @@ export function ItemSearchInput({
   const [loading, setLoading] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
   const [dropdownRect, setDropdownRect] = useState<DOMRect | null>(null);
+  // Remembers the picked suggestion so its icon keeps showing in the closed
+  // field. Only trusted while `value` still matches what was picked — any
+  // further edit (the field is freeform text, not a locked-in selection)
+  // silently drops the icon rather than showing a stale/wrong one.
+  const [selectedItem, setSelectedItem] = useState<OsrsItemSearchResult | null>(null);
+  const selectedIcon = selectedItem?.name === value ? selectedItem : null;
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -85,6 +91,7 @@ export function ItemSearchInput({
 
   const pick = (item: OsrsItemSearchResult) => {
     onChange(item.name);
+    setSelectedItem(item);
     setResults([]);
     setOpen(false);
   };
@@ -113,6 +120,16 @@ export function ItemSearchInput({
 
   return (
     <div ref={containerRef} className={`relative ${containerClassName ?? ""}`}>
+      {selectedIcon && (
+        <img
+          src={selectedIcon.iconUrl}
+          alt=""
+          className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 object-contain pointer-events-none"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.visibility = "hidden";
+          }}
+        />
+      )}
       <input
         ref={inputRef}
         type="text"
@@ -121,7 +138,7 @@ export function ItemSearchInput({
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setOpen(true)}
         onKeyDown={handleKeyDown}
-        className={className ?? "w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"}
+        className={`${className ?? "w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"} ${selectedIcon ? "pl-7" : ""}`}
       />
 
       {showDropdown && dropdownRect && (
