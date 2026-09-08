@@ -3,7 +3,7 @@ import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { claims, submissions, tileWildcards } from "../db/schema";
+import { claims, submissions } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createTile, createTask, generateLines } from "./boardService";
 import { approveSubmission, rejectSubmission } from "./scoringService";
@@ -45,8 +45,14 @@ function seedBaseFixture(): Fixture {
 function addTask(tileId: string, input: GraphNodeInput) {
   return createTask(db, tileId, { label: "Task", description: "desc", ...input });
 }
-function itemTask(tileId: string, opts: { points: number; pointsGateNodeId?: string; submitGateNodeId?: string }, itemName: string, quantity = 1) {
-  return addTask(tileId, { kind: "ITEM", itemNames: [itemName], quantity, ...opts });
+function itemTask(tileId: string, opts: { points: number; pointsGateNodeId?: string; submitGateNodeId?: string }, itemName: string) {
+  return addTask(tileId, { kind: "ITEM", itemName, ...opts });
+}
+// A SUM(quantity) over one named leaf — for "N of one exact item" cases.
+// Returns the task tree; submit claims against `.children[0].id`, not the
+// task's own id (which is the SUM node).
+function sumTask(tileId: string, opts: { points: number; pointsGateNodeId?: string; submitGateNodeId?: string }, itemName: string, quantity: number) {
+  return addTask(tileId, { kind: "SUM", quantity, children: [{ kind: "ITEM", itemName }], ...opts });
 }
 function manualTask(tileId: string, opts: { points: number; pointsGateNodeId?: string; submitGateNodeId?: string }) {
   return addTask(tileId, { kind: "MANUAL", ...opts });
@@ -54,10 +60,10 @@ function manualTask(tileId: string, opts: { points: number; pointsGateNodeId?: s
 
 // Bypasses submissionService's validation to insert a raw submission/claims
 // directly — these tests target scoringService in isolation.
-function submitAndReturn(teamId: string, submittedByUserId: string, claimRows: { nodeId: string; itemName?: string; quantity?: number; wildcardId?: string }[]) {
+function submitAndReturn(teamId: string, submittedByUserId: string, claimRows: { nodeId: string; itemName?: string; quantity?: number }[]) {
   const [submission] = db.insert(submissions).values({ teamId, submittedByUserId }).returning().all();
   for (const c of claimRows) {
-    db.insert(claims).values({ submissionId: submission.id, nodeId: c.nodeId, itemName: c.itemName ?? null, quantity: c.quantity ?? 1, wildcardId: c.wildcardId ?? null }).run();
+    db.insert(claims).values({ submissionId: submission.id, nodeId: c.nodeId, itemName: c.itemName ?? null, quantity: c.quantity ?? 1 }).run();
   }
   return submission;
 }
@@ -127,16 +133,19 @@ describe("approveSubmission", () => {
     expect(findState(fx.teamId, task2.id)?.pointsAwarded).toBe(35);
   });
 
-  it("accumulates claims across submissions and only completes once the target is met", () => {
+  it("accumulates claims across submissions and only completes once the SUM's target is met", () => {
     const fx = seedBaseFixture();
-    const task = itemTask(fx.tileId, { points: 40 }, "Cerberus drop", 2);
+    const task = sumTask(fx.tileId, { points: 40 }, "Cerberus drop", 2);
+    const leafId = task.children[0]!.id;
 
-    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Cerberus drop" }]);
+    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: leafId, itemName: "Cerberus drop" }]);
     const r1 = approveSubmission(db, { submissionId: sub1.id, reviewedByUserId: fx.modUserId });
-    expect(r1.newlyCompletedNodeIds).toEqual([]);
+    // The leaf itself completes on any claim (pure presence) — it's the
+    // wrapping SUM whose own target (2) isn't met yet.
+    expect(r1.newlyCompletedNodeIds).toEqual([leafId]);
     expect(findState(fx.teamId, task.id)).toBeUndefined();
 
-    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Cerberus drop" }]);
+    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: leafId, itemName: "Cerberus drop" }]);
     const r2 = approveSubmission(db, { submissionId: sub2.id, reviewedByUserId: fx.modUserId });
     expect(r2.newlyCompletedNodeIds).toContain(task.id);
     expect(findState(fx.teamId, task.id)?.pointsAwarded).toBe(40);
@@ -163,30 +172,6 @@ describe("approveSubmission", () => {
     }
 
     expect(findState(fx.teamId, line.nodeId)?.pointsAwarded).toBe(42);
-  });
-
-  it("enforces a wildcard's per-team redemption cap at approval time", () => {
-    const fx = seedBaseFixture();
-    const task = itemTask(fx.tileId, { points: 25 }, "Cerberus drop", 2);
-    const [wildcard] = db.insert(tileWildcards).values({ tileId: fx.tileId, itemName: "Cerberus jar", maxRedemptionsPerTeam: 1 }).returning().all();
-
-    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Cerberus jar", wildcardId: wildcard.id }]);
-    approveSubmission(db, { submissionId: sub1.id, reviewedByUserId: fx.modUserId });
-
-    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Cerberus jar", wildcardId: wildcard.id }]);
-    expect(() => approveSubmission(db, { submissionId: sub2.id, reviewedByUserId: fx.modUserId })).toThrow(/maximum number of times/);
-  });
-
-  it("does not burn a wildcard redemption on a rejected submission", () => {
-    const fx = seedBaseFixture();
-    const task = itemTask(fx.tileId, { points: 25 }, "Cerberus drop");
-    const [wildcard] = db.insert(tileWildcards).values({ tileId: fx.tileId, itemName: "Cerberus jar", maxRedemptionsPerTeam: 1 }).returning().all();
-
-    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Cerberus jar", wildcardId: wildcard.id }]);
-    rejectSubmission(db, { submissionId: sub1.id, reviewedByUserId: fx.modUserId, reviewerNotes: "not valid" });
-
-    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Cerberus jar", wildcardId: wildcard.id }]);
-    expect(() => approveSubmission(db, { submissionId: sub2.id, reviewedByUserId: fx.modUserId })).not.toThrow();
   });
 
   it("does not allow reviewing the same submission twice", () => {

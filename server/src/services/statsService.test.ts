@@ -36,7 +36,7 @@ function seedFixture(): Fixture {
 
 // A bare ITEM-leaf task for "Bruma torch" — its own node id is the leaf id.
 function addTask(tileId: string, opts: { points: number }) {
-  return createTask(db, tileId, { kind: "ITEM", itemNames: ["Bruma torch"], label: "Task", description: "desc", points: opts.points });
+  return createTask(db, tileId, { kind: "ITEM", itemName: "Bruma torch", label: "Task", description: "desc", points: opts.points });
 }
 function submit(teamId: string, nodeId: string, submittedByUserId: string) {
   const [submission] = db.insert(submissions).values({ teamId, submittedByUserId }).returning().all();

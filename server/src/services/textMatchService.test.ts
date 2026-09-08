@@ -92,21 +92,13 @@ describe("findBestMatch", () => {
     { nodeId: "node-a", itemName: "Ahrim's hood", tileId: "tile-a", tileName: "Barrows" },
     { nodeId: "node-b", itemName: "Vorki", tileId: "tile-b", tileName: "Vorkath" },
   ];
-  const wildcards = [{ id: "wc-a", itemName: "Cerberus jar", applicableNodeId: null, tileId: "tile-c", tileName: "Cerberus" }];
 
   it("returns the first matching item in query order", () => {
-    const { detectedMatch, detectedWildcard } = findBestMatch(["I got a Vorki pet!"], items, wildcards);
+    const { detectedMatch } = findBestMatch(["I got a Vorki pet!"], items);
     expect(detectedMatch).toEqual({ tileId: "tile-b", tileName: "Vorkath", nodeId: "node-b", itemName: "Vorki" });
-    expect(detectedWildcard).toBeNull();
   });
 
-  it("falls back to a wildcard only when no item matched", () => {
-    const { detectedMatch, detectedWildcard } = findBestMatch(["You received a Cerberus jar!"], items, wildcards);
-    expect(detectedMatch).toBeNull();
-    expect(detectedWildcard).toEqual({ tileId: "tile-c", tileName: "Cerberus", wildcardId: "wc-a", itemName: "Cerberus jar", applicableNodeId: null });
-  });
-
-  it("returns nulls when nothing matches", () => {
-    expect(findBestMatch(["Nothing relevant here"], items, wildcards)).toEqual({ detectedMatch: null, detectedWildcard: null });
+  it("returns null when nothing matches", () => {
+    expect(findBestMatch(["Nothing relevant here"], items)).toEqual({ detectedMatch: null });
   });
 });

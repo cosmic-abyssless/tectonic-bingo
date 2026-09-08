@@ -41,7 +41,7 @@ function addTile(bingoId: string, opts: Partial<Parameters<typeof createTile>[1]
 
 // Creates a task that's a bare leaf ("x" item, or MANUAL) so its own node id is the leaf id.
 function addTask(tileId: string, opts: { sortOrder?: number; points: number; scoringMode?: "automatic" | "manual"; submitRequiresPrevious?: boolean; pointsRequirePrevious?: boolean }) {
-  const base: GraphNodeInput = opts.scoringMode === "manual" ? { kind: "MANUAL" } : { kind: "ITEM", itemNames: ["x"] };
+  const base: GraphNodeInput = opts.scoringMode === "manual" ? { kind: "MANUAL" } : { kind: "ITEM", itemName: "x" };
   const task = createTask(db, tileId, { ...base, label: `Task ${opts.sortOrder ?? 0}`, description: "desc", points: opts.points }, opts.sortOrder);
   return { ...task, leafId: task.id };
 }
@@ -86,10 +86,37 @@ describe("createSubmission", () => {
     ).toThrow(/itemName is required/);
   });
 
+  it("rejects an itemName that doesn't match the target leaf's own name", () => {
+    const { bingo, teamId, memberUserId } = seed();
+    const tile = addTile(bingo.id);
+    const task = addTask(tile.id, { sortOrder: 0, points: 20 }); // leaf's itemName is "x"
+
+    expect(() =>
+      createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId: task.leafId, itemName: "not x" }], ...base }),
+    ).toThrow(/does not match/);
+    // Case-insensitive match still succeeds.
+    expect(() =>
+      createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId: task.leafId, itemName: "X" }], ...base }),
+    ).not.toThrow();
+  });
+
+  it("rejects a submission that claims the same node twice", () => {
+    const { bingo, teamId, memberUserId } = seed();
+    const tile = addTile(bingo.id);
+    const task = addTask(tile.id, { sortOrder: 0, points: 20 });
+
+    expect(() =>
+      createSubmission(db, bingo, {
+        teamId, submittedByUserId: memberUserId, ...base,
+        claims: [{ nodeId: task.leafId, itemName: "x", quantity: 1 }, { nodeId: task.leafId, itemName: "x", quantity: 2 }],
+      }),
+    ).toThrow(/same requirement twice/);
+  });
+
   it("rejects claims that do not target a requirement leaf", () => {
     const { bingo, teamId, memberUserId } = seed();
     const tile = addTile(bingo.id);
-    const task = createTask(db, tile.id, { kind: "ALL", label: "T", description: "d", points: 20, children: [{ kind: "ITEM", itemNames: ["x"] }] });
+    const task = createTask(db, tile.id, { kind: "ALL", label: "T", description: "d", points: 20, children: [{ kind: "ITEM", itemName: "x" }] });
 
     expect(() =>
       createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId: task.id, itemName: "x" }], ...base }),
@@ -163,7 +190,7 @@ describe("createSubmission", () => {
     const { bingo, teamId, memberUserId } = seed();
     const tile = addTile(bingo.id);
     const task1 = addTask(tile.id, { sortOrder: 0, points: 20 });
-    const task2 = createTask(db, tile.id, { kind: "ITEM", itemNames: ["x"], label: "Task 1", description: "desc", points: 20, submitGateNodeId: task1.leafId }, 1);
+    const task2 = createTask(db, tile.id, { kind: "ITEM", itemName: "x", label: "Task 1", description: "desc", points: 20, submitGateNodeId: task1.leafId }, 1);
     const claims = [{ nodeId: task2.id, itemName: "x" }];
 
     expect(() => createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims, ...base })).toThrow(/must be completed first/);
@@ -173,34 +200,6 @@ describe("createSubmission", () => {
     expect(() => createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims, ...base })).not.toThrow();
   });
 
-  it("rejects a wildcard that doesn't belong to the tile, or isn't applicable to the claimed leaf", () => {
-    const { bingo, teamId, memberUserId } = seed();
-    const tile = addTile(bingo.id);
-    const otherTile = addTile(bingo.id, { boardRow: 0, boardCol: 1 });
-    const task1 = addTask(tile.id, { sortOrder: 0, points: 20 });
-    const task2 = addTask(tile.id, { sortOrder: 1, points: 20 });
-    const [foreign] = db.insert(schema.tileWildcards).values({ tileId: otherTile.id, itemName: "Some jar" }).returning().all();
-    const [scoped] = db.insert(schema.tileWildcards).values({ tileId: tile.id, itemName: "Jar", applicableNodeId: task1.leafId }).returning().all();
-
-    expect(() =>
-      createSubmission(db, bingo, {
-        teamId, submittedByUserId: memberUserId, ...base,
-        claims: [{ nodeId: task1.leafId, itemName: "Some jar", wildcardId: foreign.id }],
-      }),
-    ).toThrow(/does not belong/);
-    expect(() =>
-      createSubmission(db, bingo, {
-        teamId, submittedByUserId: memberUserId, ...base,
-        claims: [{ nodeId: task2.leafId, itemName: "Jar", wildcardId: scoped.id }],
-      }),
-    ).toThrow(/not applicable/);
-    expect(() =>
-      createSubmission(db, bingo, {
-        teamId, submittedByUserId: memberUserId, ...base,
-        claims: [{ nodeId: task1.leafId, itemName: "Jar", wildcardId: scoped.id }],
-      }),
-    ).not.toThrow();
-  });
 });
 
 describe("getTeamSubmissions / getAllSubmissionsForBingo", () => {
