@@ -16,7 +16,9 @@ export function collectLeaves(root: GraphNode): GraphNode[] {
 }
 
 export function collectItemNames(root: GraphNode): string[] {
-  return collectLeaves(root).flatMap((leaf) => leaf.acceptedItemNames);
+  return collectLeaves(root)
+    .map((leaf) => leaf.itemName)
+    .filter((name): name is string => name !== null);
 }
 
 // A tile's "tasks" are just the direct children of its node.

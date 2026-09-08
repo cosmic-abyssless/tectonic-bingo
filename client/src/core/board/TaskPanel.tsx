@@ -1,5 +1,5 @@
 import type { GraphNode } from "@bingo/shared";
-import { leafProgress, type LeafClaimMaps } from "./taskClaims";
+import { itemLeafValue, leafComplete, type LeafClaimMaps } from "./taskClaims";
 
 export function CheckIcon() {
   return (
@@ -13,9 +13,10 @@ export function CheckIcon() {
   );
 }
 
+/** For an ITEM leaf, just its name. For a SUM, its children's names joined — the SUM is what carries the quantity/target now. */
 export function leafLabel(node: GraphNode): string {
-  const names = [...node.itemGroups.map((g) => `Any ${g.name}`), ...node.itemNames];
-  return names.join(" / ") || "(no items)";
+  if (node.kind === "SUM") return node.children.map((c) => c.itemName).filter((n): n is string => !!n).join(" / ") || "(no items)";
+  return node.itemName ?? "(no item)";
 }
 
 function compositeLabel(node: GraphNode): string {
@@ -31,22 +32,34 @@ function compositeLabel(node: GraphNode): string {
   }
 }
 
+// A single-name ITEM leaf — boolean, no quantity of its own.
 function LeafRow({ node, maps }: { node: GraphNode; maps: LeafClaimMaps }) {
-  const target = node.quantity ?? 1;
-  const progress = leafProgress(node.id, node.distinctItems, maps);
-  const approved = progress >= target;
+  const complete = leafComplete(node.id, maps);
   const submitted = maps.submittedNodeIds.has(node.id);
   return (
-    <li className={`flex items-baseline gap-2 text-sm ${approved ? "text-slate-500 line-through" : submitted ? "text-slate-400" : "text-slate-200"}`}>
+    <li className={`flex items-baseline gap-2 text-sm ${complete ? "text-slate-500 line-through" : submitted ? "text-slate-400" : "text-slate-200"}`}>
       <span className="text-indigo-400 text-xs">▸</span>
-      {target > 1 && (
-        <span className={`font-semibold text-xs tabular-nums ${approved ? "text-green-400" : "text-yellow-400"}`}>
-          {progress}/{target}
-          {node.distinctItems && " distinct"}
-        </span>
-      )}
       {leafLabel(node)}
-      {approved && <CheckIcon />}
+      {complete && <CheckIcon />}
+    </li>
+  );
+}
+
+// A SUM over one or more ITEM children — the quantity target lives here now,
+// summed across whichever of its children's names were actually claimed.
+function SumRow({ node, maps }: { node: GraphNode; maps: LeafClaimMaps }) {
+  const target = node.quantity ?? 1;
+  const progress = node.children.reduce((sum, child) => sum + itemLeafValue(child.id, maps), 0);
+  const complete = progress >= target;
+  const submitted = node.children.some((child) => maps.submittedNodeIds.has(child.id));
+  return (
+    <li className={`flex items-baseline gap-2 text-sm ${complete ? "text-slate-500 line-through" : submitted ? "text-slate-400" : "text-slate-200"}`}>
+      <span className="text-indigo-400 text-xs">▸</span>
+      <span className={`font-semibold text-xs tabular-nums ${complete ? "text-green-400" : "text-yellow-400"}`}>
+        {progress}/{target}
+      </span>
+      {leafLabel(node)}
+      {complete && <CheckIcon />}
     </li>
   );
 }
@@ -60,6 +73,13 @@ function RequirementTree({ node, maps, root }: { node: GraphNode; maps: LeafClai
       </ul>
     );
   }
+  if (node.kind === "SUM") {
+    return (
+      <ul className="space-y-1">
+        <SumRow node={node} maps={maps} />
+      </ul>
+    );
+  }
   // A root ALL with only leaves is the common case; skip the redundant heading.
   const showHeading = !(root && node.kind === "ALL");
   return (
@@ -69,6 +89,8 @@ function RequirementTree({ node, maps, root }: { node: GraphNode; maps: LeafClai
         {node.children.map((child) =>
           child.kind === "ITEM" ? (
             <LeafRow key={child.id} node={child} maps={maps} />
+          ) : child.kind === "SUM" ? (
+            <SumRow key={child.id} node={child} maps={maps} />
           ) : (
             <li key={child.id}>
               <RequirementTree node={child} maps={maps} />
