@@ -58,6 +58,22 @@ function appendChild(root: GraphNodeInput, path: Path, child: GraphNodeInput): G
   return updateAt(root, path, (parent) => ({ ...parent, children: [...(parent.children ?? []), child] }));
 }
 
+// Groups pickable existing leaves by the task they currently live under, so
+// "+ existing group" can offer "pull in everything from Part A" as one click
+// instead of one leaf at a time.
+function groupExistingLeaves(leaves: ExistingLeaf[]): { taskLabel: string; leaves: ExistingLeaf[] }[] {
+  const order: string[] = [];
+  const byTask = new Map<string, ExistingLeaf[]>();
+  for (const leaf of leaves) {
+    if (!byTask.has(leaf.taskLabel)) {
+      byTask.set(leaf.taskLabel, []);
+      order.push(leaf.taskLabel);
+    }
+    byTask.get(leaf.taskLabel)!.push(leaf);
+  }
+  return order.map((taskLabel) => ({ taskLabel, leaves: byTask.get(taskLabel)! }));
+}
+
 // An "item row" is always a SUM, even at quantity 1 — one write-path shape,
 // no bare-leaf-sometimes/wrapped-sometimes special case. See
 // docs/item-quantity-model.md §2.
@@ -99,6 +115,11 @@ export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGrou
     update: (path, fn) => onChange(updateAt(root, path, fn)),
     remove: (path) => onChange(removeAt(root, path)),
     add: (path, child) => onChange(appendChild(root, path, child)),
+    // Batched sibling of `add`: folds every child onto `root` in one
+    // onChange call. Calling `add` in a loop instead would have each call
+    // close over the same pre-update `root`, so only the last child would
+    // survive — this is the "+ existing group" bulk-add path.
+    addMany: (path, children) => onChange(children.reduce((r, child) => appendChild(r, path, child), root)),
   };
   return root.kind === "ITEM" || root.kind === "SUM" ? <ItemRowNode {...props} /> : <GroupNode {...props} />;
 }
@@ -112,17 +133,23 @@ interface NodeProps {
   update: (path: Path, fn: (node: GraphNodeInput) => GraphNodeInput) => void;
   remove: (path: Path) => void;
   add: (path: Path, child: GraphNodeInput) => void;
+  addMany: (path: Path, children: GraphNodeInput[]) => void;
 }
 
 function GroupNode(props: NodeProps) {
-  const { node, path, update, remove, add, existingLeaves } = props;
+  const { node, path, update, remove, add, addMany, existingLeaves } = props;
   const isRoot = path.length === 0;
   const children = node.children ?? [];
   const [pickingExisting, setPickingExisting] = useState(false);
+  const [pickingExistingGroup, setPickingExistingGroup] = useState(false);
   // Offer a leaf already on this group only once — re-adding the same id as
   // a second direct child of the same parent isn't meaningful.
   const childIds = new Set(children.map((c) => c.id).filter(Boolean));
   const pickableLeaves = (existingLeaves ?? []).filter((l) => !childIds.has(l.id));
+  // "+ existing group" bulk-adds every not-yet-present leaf from one sibling
+  // task at once (e.g. pull every boss already used on Part A into Part B),
+  // instead of clicking "+ existing item" once per leaf.
+  const pickableTaskGroups = groupExistingLeaves(pickableLeaves);
 
   return (
     <div className={isRoot ? "" : "border-l-2 border-slate-700 pl-3"}>
@@ -152,6 +179,9 @@ function GroupNode(props: NodeProps) {
         {pickableLeaves.length > 0 && (
           <button type="button" onClick={() => setPickingExisting((v) => !v)} className={SMALL_BTN}>+ existing item</button>
         )}
+        {pickableTaskGroups.length > 0 && (
+          <button type="button" onClick={() => setPickingExistingGroup((v) => !v)} className={SMALL_BTN}>+ existing group</button>
+        )}
         {!isRoot && (
           <button type="button" aria-label="Remove group" onClick={() => remove(path)} className="ml-auto text-slate-500 hover:text-red-400 text-xs cursor-pointer">✕</button>
         )}
@@ -166,6 +196,20 @@ function GroupNode(props: NodeProps) {
               const leaf = pickableLeaves.find((l) => l.id === id);
               if (leaf) add(path, { id: leaf.id, kind: "ITEM", itemName: leaf.itemName });
               setPickingExisting(false);
+            }}
+          />
+        </div>
+      )}
+      {pickingExistingGroup && (
+        <div className="mb-1.5 max-w-xs">
+          <SearchableSelect
+            value=""
+            options={pickableTaskGroups.map((g) => ({ id: g.taskLabel, label: `${g.taskLabel} — all ${g.leaves.length} items` }))}
+            placeholder="Pull in every item from another task…"
+            onChange={(taskLabel) => {
+              const group = pickableTaskGroups.find((g) => g.taskLabel === taskLabel);
+              if (group) addMany(path, group.leaves.map((l): GraphNodeInput => ({ id: l.id, kind: "ITEM", itemName: l.itemName })));
+              setPickingExistingGroup(false);
             }}
           />
         </div>
@@ -194,8 +238,13 @@ function ItemRowNode({ node, path, itemGroups, update, remove, onSaveAsGroup, ex
   const quantity = node.kind === "SUM" ? node.quantity ?? 1 : 1;
   const [newName, setNewName] = useState("");
   const [pickingExisting, setPickingExisting] = useState(false);
+  const [pickingExistingGroup, setPickingExistingGroup] = useState(false);
   const childIds = new Set(children.map((c) => c.id).filter(Boolean));
   const pickableLeaves = (existingLeaves ?? []).filter((l) => !childIds.has(l.id));
+  // "+ existing group": bulk-pull every leaf of a sibling task in as chips on
+  // this one row — e.g. a shared boss pool, where Part B's SUM(N) reuses
+  // every per-boss leaf Part A already defined (docs/item-quantity-model.md §9/§10).
+  const pickableTaskGroups = groupExistingLeaves(pickableLeaves);
 
   function writeChildren(nextChildren: GraphNodeInput[], nextQuantity: number = quantity) {
     // Upgrading a bare ITEM into a SUM wrapper must NOT reuse the item's own
@@ -242,6 +291,15 @@ function ItemRowNode({ node, path, itemGroups, update, remove, onSaveAsGroup, ex
     setPickingExisting(false);
   }
 
+  // Adds every leaf of one sibling task as chips on this row in a single
+  // write (not one addExisting per leaf, which would each fire its own
+  // update — this stays one PATCH like every other edit here).
+  function addExistingGroup(taskLabel: string) {
+    const group = pickableTaskGroups.find((g) => g.taskLabel === taskLabel);
+    if (group) writeChildren([...children, ...group.leaves.map((l): GraphNodeInput => ({ id: l.id, kind: "ITEM", itemName: l.itemName }))]);
+    setPickingExistingGroup(false);
+  }
+
   // Persists the row's current names as a new reusable group for future
   // picks — the row itself is untouched (see the type's own doc comment).
   async function saveAsGroup() {
@@ -278,6 +336,9 @@ function ItemRowNode({ node, path, itemGroups, update, remove, onSaveAsGroup, ex
         {pickableLeaves.length > 0 && (
           <button type="button" onClick={() => setPickingExisting((v) => !v)} className={SMALL_BTN}>+ existing item</button>
         )}
+        {pickableTaskGroups.length > 0 && (
+          <button type="button" onClick={() => setPickingExistingGroup((v) => !v)} className={SMALL_BTN}>+ existing group</button>
+        )}
         <input
           aria-label="Quantity"
           type="number"
@@ -297,6 +358,16 @@ function ItemRowNode({ node, path, itemGroups, update, remove, onSaveAsGroup, ex
             options={pickableLeaves.map((l) => ({ id: l.id, label: l.itemName, group: l.taskLabel }))}
             placeholder="Search items elsewhere on this tile…"
             onChange={addExisting}
+          />
+        </div>
+      )}
+      {pickingExistingGroup && (
+        <div className="max-w-xs">
+          <SearchableSelect
+            value=""
+            options={pickableTaskGroups.map((g) => ({ id: g.taskLabel, label: `${g.taskLabel} — all ${g.leaves.length} items` }))}
+            placeholder="Pull in every item from another task…"
+            onChange={addExistingGroup}
           />
         </div>
       )}
