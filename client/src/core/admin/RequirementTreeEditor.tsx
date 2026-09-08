@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ItemGroup, NodeKind, GraphNode, GraphNodeInput } from "@bingo/shared";
 import { ItemSearchInput, iconUrlFor } from "../ui/ItemSearchInput";
 import { SearchableSelect } from "../ui/SearchableSelect";
@@ -55,6 +55,53 @@ function LinkIcon({ title, className }: { title: string; className: string }) {
   );
 }
 
+// One primary "+ Item" action plus a caret revealing the less-common adds
+// (a new nested condition, or a reference to something that already exists
+// elsewhere on the tile) — keeps a GroupNode's header to two controls
+// instead of up to four separate buttons.
+function SplitAddButton({ primaryLabel, onPrimary, options }: { primaryLabel: string; onPrimary: () => void; options: { label: string; onClick: () => void }[] }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (containerRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="relative inline-flex shrink-0">
+      <div className="flex rounded border border-slate-600 overflow-hidden">
+        <button type="button" onClick={onPrimary} className="px-2 py-1 text-xs text-slate-400 hover:text-white hover:bg-slate-700 cursor-pointer">+ {primaryLabel}</button>
+        {options.length > 0 && (
+          <button type="button" aria-label="More add options" onClick={() => setOpen((v) => !v)} className="px-1.5 py-1 text-xs text-slate-400 hover:text-white hover:bg-slate-700 cursor-pointer border-l border-slate-600">▾</button>
+        )}
+      </div>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 min-w-max bg-slate-900 border border-slate-700 rounded-md shadow-xl z-10">
+          {options.map((o) => (
+            <button
+              key={o.label}
+              type="button"
+              onClick={() => {
+                o.onClick();
+                setOpen(false);
+              }}
+              className="block w-full whitespace-nowrap text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 cursor-pointer"
+            >
+              + {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Every composite kind a requirement can be, uniformly: ALL/ANY are plain
 // booleans over children, COUNT needs a minimum number of complete children,
 // SUM needs a summed quantity across ITEM children. One dropdown, one set of
@@ -67,7 +114,6 @@ const GROUP_KINDS: { kind: NodeKind; label: string }[] = [
 ];
 
 const INPUT = "bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600";
-const SMALL_BTN = "text-xs text-slate-400 hover:text-white cursor-pointer";
 
 type Path = number[];
 
@@ -231,6 +277,9 @@ function GroupNode(props: NodeProps) {
   return (
     <div className={isRoot ? "" : "border-l-2 border-slate-700 pl-3"}>
       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+        {isShared && (
+          <LinkIcon title={`Shared with ${sharedWithTasks.length > 0 ? sharedWithTasks.join(", ") : "another task"} — removing it here only unlinks it from this task`} className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+        )}
         {ownLabel && <span className="text-[10px] text-slate-500 font-mono shrink-0" title="Shown in this task's own tree, and in other tasks' &quot;+ existing condition&quot; picker once saved">Condition {ownLabel}</span>}
         <select
           aria-label="Requirement kind"
@@ -270,17 +319,15 @@ function GroupNode(props: NodeProps) {
             className={`w-16 ${INPUT}`}
           />
         )}
-        <button type="button" onClick={() => setAddingItem((v) => !v)} className={SMALL_BTN}>+ item</button>
-        <button type="button" onClick={() => add(path, NEW_GROUP)} className={SMALL_BTN}>+ condition</button>
-        {pickableLeaves.length > 0 && (
-          <button type="button" onClick={() => setPickingExisting((v) => !v)} className={SMALL_BTN}>+ existing item</button>
-        )}
-        {pickableConditions.length > 0 && (
-          <button type="button" onClick={() => setPickingExistingCondition((v) => !v)} className={SMALL_BTN}>+ existing condition</button>
-        )}
-        {isShared && (
-          <LinkIcon title={`Shared with ${sharedWithTasks.length > 0 ? sharedWithTasks.join(", ") : "another task"} — removing it here only unlinks it from this task`} className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-        )}
+        <SplitAddButton
+          primaryLabel="Item"
+          onPrimary={() => setAddingItem((v) => !v)}
+          options={[
+            { label: "Condition", onClick: () => add(path, NEW_GROUP) },
+            ...(pickableLeaves.length > 0 ? [{ label: "Existing item", onClick: () => setPickingExisting((v) => !v) }] : []),
+            ...(pickableConditions.length > 0 ? [{ label: "Existing condition", onClick: () => setPickingExistingCondition((v) => !v) }] : []),
+          ]}
+        />
         {!isRoot && (
           <button
             type="button"
@@ -370,11 +417,11 @@ function ItemLeafRow({ node, path, remove, existingLeaves, sharedNodeIds }: Node
 
   return (
     <div className="flex items-center gap-1.5 bg-slate-800 rounded px-2 py-1.5">
-      <ChipIcon name={name} className="w-4 h-4" />
-      <span className="flex-1 text-xs text-slate-200 truncate">{name}</span>
       {isShared && (
         <LinkIcon title={`Shared with ${sharedWithTasks.length > 0 ? sharedWithTasks.join(", ") : "another task"} — removing it here only unlinks it from this task`} className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
       )}
+      <ChipIcon name={name} className="w-4 h-4" />
+      <span className="flex-1 text-xs text-slate-200 truncate">{name}</span>
       {!isRoot && (
         <button
           type="button"
