@@ -26,6 +26,19 @@ function ChipIcon({ name, className }: { name: string; className: string }) {
   );
 }
 
+// Marks a chip whose id is shared with another task's leaf (added via
+// "+ existing item"/"+ existing group", or the original side of one) — the
+// same claim counts toward both tasks, which isn't visible from the name
+// alone.
+function LinkIcon({ title, className }: { title: string; className: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" role="img" aria-label={title}>
+      <title>{title}</title>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+    </svg>
+  );
+}
+
 // Structural composites only — a SUM is never chosen here. Every SUM in this
 // editor is an "item row" (see ItemRowNode) created via "+ item"; its
 // children are always ITEM leaves, so it never needs the generic
@@ -314,10 +327,15 @@ function ItemRowNode({ node, path, itemGroups, update, remove, onSaveAsGroup, ex
         {children.map((child) => {
           const name = child.itemName;
           if (!name) return null;
+          // A shared leaf's id shows up in some *other* task's leaf list too
+          // (that's what "shared" means here) — collect which task(s), for
+          // the tooltip.
+          const sharedWithTasks = child.id ? Array.from(new Set((existingLeaves ?? []).filter((l) => l.id === child.id).map((l) => l.taskLabel))) : [];
           return (
             <span key={name} className="flex items-center gap-1 bg-slate-700 text-slate-200 text-xs rounded-full pl-1.5 pr-1 py-0.5">
               <ChipIcon name={name} className="w-3.5 h-3.5" />
               {name}
+              {sharedWithTasks.length > 0 && <LinkIcon title={`Shared with ${sharedWithTasks.join(", ")} — one claim counts toward both`} className="w-3 h-3 text-indigo-400" />}
               <button type="button" aria-label={`Remove ${name}`} onClick={() => removeName(name)} className="text-slate-400 hover:text-red-400 cursor-pointer leading-none">✕</button>
             </span>
           );
