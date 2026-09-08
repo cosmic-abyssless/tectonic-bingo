@@ -168,63 +168,8 @@ export const draftPicks = sqliteTable('draft_picks', {
 ]);
 
 // ---------------------------------------------------------------------------
-// BOARD & RULES
+// ITEMS
 // ---------------------------------------------------------------------------
-
-// Optional per-bingo row/category labels (replaces v1's hardcoded 7-category
-// enum). A bingo can leave this empty and just use raw grid positions.
-export const tileCategories = sqliteTable('tile_categories', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  bingoId: text('bingo_id').notNull().references(() => bingos.id),
-  label: text('label').notNull(),
-  colorHex: text('color_hex'),
-  sortOrder: integer('sort_order').notNull().default(0),
-});
-
-export const tiles = sqliteTable('tiles', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  bingoId: text('bingo_id').notNull().references(() => bingos.id),
-  name: text('name').notNull(),
-  imageUrl: text('image_url'), // uploaded via the admin panel
-  categoryId: text('category_id').references(() => tileCategories.id),
-  boardRow: integer('board_row').notNull(), // 0-indexed
-  boardCol: integer('board_col').notNull(), // 0-indexed
-  hasFreezePeriod: integer('has_freeze_period', { mode: 'boolean' }).notNull().default(false),
-  freezeDurationMinutes: integer('freeze_duration_minutes').notNull().default(0),
-  notes: text('notes'),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
-}, (t) => [
-  uniqueIndex('tiles_bingo_position_unq').on(t.bingoId, t.boardRow, t.boardCol),
-]);
-
-// A tile has N ordered tasks (v1's hardcoded Part A / Part B is now just the
-// two-task common case). sortOrder determines the task chain: "the previous
-// task" means the task with the next-lower sortOrder on the same tile.
-export const tileTasks = sqliteTable('tile_tasks', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  tileId: text('tile_id').notNull().references(() => tiles.id),
-  label: text('label').notNull(), // e.g. "Part A"
-  sortOrder: integer('sort_order').notNull().default(0),
-  points: integer('points').notNull(),
-  description: text('description').notNull(),
-  // 'automatic' (default) completes when the task's requirement tree evaluates
-  // true against approved claims. 'manual' is the escape hatch for a one-off
-  // custom challenge an admin can't codify as items — the tree is a single
-  // MANUAL leaf and a mod directly decides completion + points when reviewing
-  // each submission. Everything downstream — withheld points, line
-  // completion — behaves identically either way.
-  scoringMode: text('scoring_mode', { enum: ['automatic', 'manual'] }).notNull().default('automatic'),
-  // Server rejects a submission for this task until the previous task in the
-  // chain is completed.
-  submitRequiresPrevious: integer('submit_requires_previous', { mode: 'boolean' }).notNull().default(false),
-  // This task can be completed and approved early, but its points stay
-  // withheld (0) until the previous task in the chain completes.
-  pointsRequirePrevious: integer('points_require_previous', { mode: 'boolean' }).notNull().default(false),
-  allowsPreLoad: integer('allows_pre_load', { mode: 'boolean' }).notNull().default(false),
-  notes: text('notes'),
-}, (t) => [
-  uniqueIndex('tile_tasks_tile_sort_unq').on(t.tileId, t.sortOrder),
-]);
 
 // Global, reusable named sets of items (e.g. "Cerberus uniques"). Not scoped
 // to a bingo so they can be shared across events.
@@ -242,31 +187,93 @@ export const itemGroupItems = sqliteTable('item_group_items', {
   uniqueIndex('item_group_items_group_name_unq').on(t.groupId, t.itemName),
 ]);
 
-// A task's requirement is a tree with exactly one root (parentId NULL).
-// Composite kinds fold their children: ALL = every child, ANY = at least one,
-// COUNT = at least minCount children. Leaves are ITEM (claims of accepted
-// item names — the group's items plus inline requirementNodeItems — must
-// reach `quantity`, summed by claim quantity or counted as distinct names
-// when distinctItems) or MANUAL (a mod decides on approval). Claims attach
-// to leaves, so one submission can advance several tasks at once.
-export const requirementNodes = sqliteTable('requirement_nodes', {
+// ---------------------------------------------------------------------------
+// NODE GRAPH
+//
+// Everything scorable — a tile, a task ("Part A"), a line, an item
+// requirement — is a node in one DAG per bingo. `kind` is purely logical:
+// ALL/ANY/COUNT are composites that fold their children; ITEM/MANUAL are
+// leaves that claims attach to. Any node may carry points; a node completes
+// (bottom-up, see engine.ts) independent of whether anything points at it.
+// A node may have several parents via nodeEdges (a tile sits in a row, a
+// column, and maybe a diagonal). See docs/node-graph-model.md.
+// ---------------------------------------------------------------------------
+
+export const nodes = sqliteTable('nodes', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  taskId: text('task_id').notNull().references(() => tileTasks.id),
-  parentId: text('parent_id'),
-  sortOrder: integer('sort_order').notNull().default(0),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
   kind: text('kind', { enum: ['ALL', 'ANY', 'COUNT', 'ITEM', 'MANUAL'] }).notNull(),
+  label: text('label'), // e.g. "Part A", "Vorkath", "Row 0" — display name
+  description: text('description'),
+  notes: text('notes'),
+  points: integer('points').notNull().default(0), // awarded once this node completes (subject to pointsGateNodeId)
   minCount: integer('min_count'), // COUNT only
   quantity: integer('quantity'), // ITEM only
   distinctItems: integer('distinct_items', { mode: 'boolean' }).notNull().default(false), // ITEM only
   itemGroupId: text('item_group_id').references(() => itemGroups.id), // ITEM only
+  // Self-references. Plain text, no FK constraint declared (Drizzle can't
+  // express a same-table FK cleanly and SQLite won't enforce it across a
+  // deferred insert order anyway) — validity (same bingo, not a descendant)
+  // is enforced in graphService, same convention as the old
+  // requirementNodes.parentId.
+  pointsGateNodeId: text('points_gate_node_id'), // this node's points stay 0 until the gate node completes too
+  submitGateNodeId: text('submit_gate_node_id'), // submissions targeting a leaf under this node are rejected until the gate node completes
+  allowsPreLoad: integer('allows_pre_load', { mode: 'boolean' }).notNull().default(false), // display hint: player may submit an empty-state screenshot beforehand
 });
 
-// Inline accepted item names for an ITEM leaf (in addition to its group).
-export const requirementNodeItems = sqliteTable('requirement_node_items', {
+// A node may have several parents (DAG). sortOrder is scoped to one parent —
+// a node's position among its siblings can differ per parent.
+export const nodeEdges = sqliteTable('node_edges', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  nodeId: text('node_id').notNull().references(() => requirementNodes.id),
+  parentId: text('parent_id').notNull().references(() => nodes.id),
+  childId: text('child_id').notNull().references(() => nodes.id),
+  sortOrder: integer('sort_order').notNull().default(0),
+}, (t) => [
+  uniqueIndex('node_edges_parent_child_unq').on(t.parentId, t.childId),
+]);
+
+// Inline accepted item names for an ITEM leaf (in addition to its group).
+export const nodeItems = sqliteTable('node_items', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  nodeId: text('node_id').notNull().references(() => nodes.id),
   itemName: text('item_name').notNull(),
+}, (t) => [
+  uniqueIndex('node_items_node_name_unq').on(t.nodeId, t.itemName),
+]);
+
+// ---------------------------------------------------------------------------
+// BOARD & RULES
+// ---------------------------------------------------------------------------
+
+// Optional per-bingo row/category labels (replaces v1's hardcoded 7-category
+// enum). A bingo can leave this empty and just use raw grid positions.
+export const tileCategories = sqliteTable('tile_categories', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  label: text('label').notNull(),
+  colorHex: text('color_hex'),
+  sortOrder: integer('sort_order').notNull().default(0),
 });
+
+// A tile is a presentation/submission wrapper (grid position, image, freeze
+// window) around one node — its tasks are that node's children.
+export const tiles = sqliteTable('tiles', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  nodeId: text('node_id').notNull().references(() => nodes.id),
+  name: text('name').notNull(),
+  imageUrl: text('image_url'), // uploaded via the admin panel
+  categoryId: text('category_id').references(() => tileCategories.id),
+  boardRow: integer('board_row').notNull(), // 0-indexed
+  boardCol: integer('board_col').notNull(), // 0-indexed
+  hasFreezePeriod: integer('has_freeze_period', { mode: 'boolean' }).notNull().default(false),
+  freezeDurationMinutes: integer('freeze_duration_minutes').notNull().default(0),
+  notes: text('notes'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => [
+  uniqueIndex('tiles_bingo_position_unq').on(t.bingoId, t.boardRow, t.boardCol),
+  uniqueIndex('tiles_node_unq').on(t.nodeId),
+]);
 
 // Wildcard items that can substitute for a required item, capped at
 // maxRedemptionsPerTeam approved claims per team.
@@ -276,49 +283,46 @@ export const tileWildcards = sqliteTable('tile_wildcards', {
   itemName: text('item_name').notNull(),
   maxRedemptionsPerTeam: integer('max_redemptions_per_team').notNull().default(1),
   description: text('description'),
-  applicableNodeId: text('applicable_node_id').references(() => requirementNodes.id), // null = any leaf on the tile
+  applicableNodeId: text('applicable_node_id').references(() => nodes.id), // null = any leaf on the tile
 });
 
 // All possible lines on the board (rows + cols + diagonals, generated from
-// bingos.boardRows/boardCols; diagonals only when the board is square).
+// bingos.boardRows/boardCols; diagonals only when the board is square). Each
+// line is a presentation wrapper around a node whose children are the line's
+// tile nodes (an ALL by convention) and whose points are the line bonus.
 export const bingoLines = sqliteTable('bingo_lines', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  nodeId: text('node_id').notNull().references(() => nodes.id),
   lineType: text('line_type', { enum: ['row', 'column', 'diagonal', 'custom'] }).notNull(),
   lineIndex: integer('line_index').notNull(),
-  points: integer('points').notNull().default(15),
-});
-
-export const bingoLineTiles = sqliteTable('bingo_line_tiles', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  bingoLineId: text('bingo_line_id').notNull().references(() => bingoLines.id),
-  tileId: text('tile_id').notNull().references(() => tiles.id),
 }, (t) => [
-  uniqueIndex('bingo_line_tiles_line_tile_unq').on(t.bingoLineId, t.tileId),
+  uniqueIndex('bingo_lines_node_unq').on(t.nodeId),
 ]);
 
 // ---------------------------------------------------------------------------
 // PROGRESS & SUBMISSIONS
 // ---------------------------------------------------------------------------
 
-// Aggregated completion state per team per task. Updated by scoringService
-// whenever a submission is approved.
-export const teamTaskProgress = sqliteTable('team_task_progress', {
+// Derived cache: one row per node currently COMPLETE for a team. Rebuilt in
+// full for the affected team inside every approve/reject transaction by
+// re-running the engine (engine.ts) over the bingo's graph — this table is
+// never patched incrementally. Soft statuses (in_progress/pending_approval)
+// are not stored; they're derived at read time from the team's submissions.
+export const teamNodeState = sqliteTable('team_node_state', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   teamId: text('team_id').notNull().references(() => teams.id),
-  taskId: text('task_id').notNull().references(() => tileTasks.id),
-  status: text('status', {
-    enum: ['not_started', 'in_progress', 'pending_approval', 'completed'],
-  }).notNull().default('not_started'),
+  nodeId: text('node_id').notNull().references(() => nodes.id),
+  completedAt: integer('completed_at', { mode: 'timestamp' }).notNull(),
   pointsAwarded: integer('points_awarded').notNull().default(0),
-  completedAt: integer('completed_at', { mode: 'timestamp' }),
 }, (t) => [
-  uniqueIndex('team_task_progress_team_task_unq').on(t.teamId, t.taskId),
+  uniqueIndex('team_node_state_team_node_unq').on(t.teamId, t.nodeId),
 ]);
 
 // A submission is a screenshot plus the claims a player makes against
 // requirement leaves. It is not bound to a task — its claims may span several
-// tasks (typically the sides of one tile).
+// leaves (typically the sides of one tile). Points are never stored here —
+// see teamNodeState / teamPointAdjustments.
 export const submissions = sqliteTable('submissions', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   teamId: text('team_id').notNull().references(() => teams.id),
@@ -330,7 +334,6 @@ export const submissions = sqliteTable('submissions', {
   reviewedAt: integer('reviewed_at', { mode: 'timestamp' }),
   reviewedByUserId: text('reviewed_by_user_id').references(() => users.id),
   reviewerNotes: text('reviewer_notes'),
-  pointsAwarded: integer('points_awarded'), // set by moderator on approval; may override the task's default
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
@@ -359,22 +362,15 @@ export const submissionScreenshots = sqliteTable('submission_screenshots', {
 export const claims = sqliteTable('claims', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   submissionId: text('submission_id').notNull().references(() => submissions.id),
-  nodeId: text('node_id').notNull().references(() => requirementNodes.id),
+  nodeId: text('node_id').notNull().references(() => nodes.id),
   itemName: text('item_name'),
   quantity: integer('quantity').notNull().default(1),
   wildcardId: text('wildcard_id').references(() => tileWildcards.id),
 });
 
-export const teamCompletedLines = sqliteTable('team_completed_lines', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  teamId: text('team_id').notNull().references(() => teams.id),
-  bingoLineId: text('bingo_line_id').notNull().references(() => bingoLines.id),
-  completedAt: integer('completed_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
-}, (t) => [
-  uniqueIndex('team_completed_lines_team_line_unq').on(t.teamId, t.bingoLineId),
-]);
-
-// Manual point adjustments applied by moderators.
+// Manual point adjustments applied by moderators. Also the only way to hand
+// out points outside the node graph (e.g. correcting a mistake) since nodes
+// no longer accept a per-submission points override.
 // Use negative amounts for penalties (e.g. -100 for hiding outside clan chat).
 export const teamPointAdjustments = sqliteTable('team_point_adjustments', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),

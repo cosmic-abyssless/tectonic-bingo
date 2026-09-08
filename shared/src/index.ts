@@ -2,13 +2,18 @@
 // shapes (dates arrive as ISO strings, not Date objects). Domain rows mirror
 // server/src/db/schema.ts field-for-field; nest/derived shapes match what
 // each route actually returns.
+//
+// Node-graph model (docs/node-graph-model.md): tiles, tasks, lines and
+// requirements are all nodes in one per-bingo DAG. "Task" and "line" are not
+// kinds — a task is a node that happens to be a direct child of a tile's
+// node; a line is a node referenced by a BingoLine row. NodeStatus is
+// derived at read time, never stored (see TeamNodeState).
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
 
-export type TaskStatus = "not_started" | "in_progress" | "pending_approval" | "completed";
+export type NodeStatus = "not_started" | "in_progress" | "pending_approval" | "completed";
 export type SubmissionStatus = "pending" | "approved" | "rejected";
-export type ScoringMode = "automatic" | "manual";
 
 export interface User {
   id: string;
@@ -70,56 +75,57 @@ export interface ItemGroup {
   itemNames: string[];
 }
 
-export type RequirementKind = "ALL" | "ANY" | "COUNT" | "ITEM" | "MANUAL";
+export type NodeKind = "ALL" | "ANY" | "COUNT" | "ITEM" | "MANUAL";
 
-// A task's requirement tree. Composite nodes (ALL/ANY/COUNT) have children;
-// ITEM leaves accept claims for their group's items plus inline itemNames.
-export interface RequirementNode {
+// One node in a bingo's DAG. Composite kinds (ALL/ANY/COUNT) fold their
+// children (see engine.ts); ITEM/MANUAL are leaves that claims attach to.
+// Any node may carry points, gated by pointsGateNodeId/submitGateNodeId.
+export interface GraphNode {
   id: string;
-  taskId: string;
-  parentId: string | null;
-  sortOrder: number;
-  kind: RequirementKind;
-  minCount: number | null;
-  quantity: number | null;
-  distinctItems: boolean;
-  itemGroupId: string | null;
-  itemGroupName: string | null;
-  /** Inline item names only (what the admin typed on this leaf). */
+  bingoId: string;
+  kind: NodeKind;
+  label: string | null;
+  description: string | null;
+  notes: string | null;
+  points: number;
+  minCount: number | null; // COUNT only
+  quantity: number | null; // ITEM only
+  distinctItems: boolean; // ITEM only
+  itemGroupId: string | null; // ITEM only
+  itemGroupName: string | null; // ITEM only, denormalised for display
+  /** Inline item names only (what the admin typed on this leaf). ITEM only. */
   itemNames: string[];
-  /** Inline names plus the referenced group's items — what a claim may name. */
+  /** Inline names union the referenced group's items — what a claim may name. ITEM only. */
   acceptedItemNames: string[];
-  children: RequirementNode[];
+  /** This node's points stay 0 until the gate node also completes for the team. */
+  pointsGateNodeId: string | null;
+  /** Submissions targeting a leaf under this node are rejected until the gate node completes for the team. */
+  submitGateNodeId: string | null;
+  /** Display hint: player may submit an empty-state screenshot beforehand. */
+  allowsPreLoad: boolean;
+  /** In parent-relative sortOrder. Empty for leaves. */
+  children: GraphNode[];
 }
 
-// Admin input shape for creating/replacing a task's requirement tree.
-export interface RequirementNodeInput {
-  kind: RequirementKind;
+// Admin input shape for creating/replacing a subtree. `id` is optional and,
+// when present, preserves an existing leaf's id so claims already pointing
+// at it stay valid across an edit (see graphService.replaceSubtree).
+export interface GraphNodeInput {
+  id?: string;
+  kind: NodeKind;
+  label?: string | null;
+  description?: string | null;
+  notes?: string | null;
+  points?: number;
   minCount?: number;
   quantity?: number;
   distinctItems?: boolean;
   itemGroupId?: string;
   itemNames?: string[];
-  children?: RequirementNodeInput[];
-}
-
-// The raw tile_tasks row, as returned unnested (e.g. in mod submission rows).
-export interface TileTaskBase {
-  id: string;
-  tileId: string;
-  label: string;
-  sortOrder: number;
-  points: number;
-  description: string;
-  scoringMode: ScoringMode;
-  submitRequiresPrevious: boolean;
-  pointsRequirePrevious: boolean;
-  allowsPreLoad: boolean;
-  notes: string | null;
-}
-
-export interface TileTask extends TileTaskBase {
-  requirement: RequirementNode;
+  pointsGateNodeId?: string | null;
+  submitGateNodeId?: string | null;
+  allowsPreLoad?: boolean;
+  children?: GraphNodeInput[];
 }
 
 export interface TileWildcard {
@@ -135,6 +141,7 @@ export interface TileWildcard {
 export interface TileBase {
   id: string;
   bingoId: string;
+  nodeId: string;
   name: string;
   imageUrl: string | null;
   categoryId: string | null;
@@ -147,7 +154,7 @@ export interface TileBase {
 }
 
 export interface Tile extends TileBase {
-  tasks: TileTask[];
+  node: GraphNode;
   wildcards: TileWildcard[];
 }
 
@@ -160,7 +167,6 @@ export interface Submission {
   reviewedAt: string | null;
   reviewedByUserId: string | null;
   reviewerNotes: string | null;
-  pointsAwarded: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -177,13 +183,11 @@ export interface SubmissionScreenshot {
   uploadedAt: string;
 }
 
-// One drop allocated to a requirement leaf. taskId is denormalised from the
-// leaf for convenience. itemName is null for MANUAL leaves.
+// One drop allocated to a requirement leaf. itemName is null for MANUAL leaves.
 export interface Claim {
   id: string;
   submissionId: string;
   nodeId: string;
-  taskId: string;
   itemName: string | null;
   quantity: number;
   wildcardId: string | null;
@@ -198,25 +202,28 @@ export interface SubmissionDetails {
   submittedByUser: MinimalUser | null;
 }
 
+// Minimal display info for a leaf a submission's claims touched — enough for
+// the review queue to label each claim without fetching the whole board graph.
+export interface ClaimedLeaf {
+  id: string;
+  kind: NodeKind;
+  label: string | null;
+}
+
 export interface ModSubmissionRow extends SubmissionDetails {
-  tasks: TileTaskBase[];
+  leaves: ClaimedLeaf[];
   tile: TileBase;
   team: Pick<Team, "id" | "name" | "color">;
 }
 
-export interface TeamTaskProgress {
-  id: string;
-  teamId: string;
-  taskId: string;
-  status: TaskStatus;
-  pointsAwarded: number;
-  completedAt: string | null;
-}
-
-export interface CompletedLine {
-  bingoLineId: string;
-  points: number;
+// Derived cache: one row per node currently COMPLETE for a team (see
+// engine.ts / graphService.rebuildTeamState). Soft statuses
+// (in_progress/pending_approval) are never stored — the board read path
+// derives them from the team's submissions.
+export interface TeamNodeState {
+  nodeId: string;
   completedAt: string;
+  pointsAwarded: number;
 }
 
 export interface PointAdjustment {
@@ -230,8 +237,7 @@ export interface PointAdjustment {
 }
 
 export interface TeamProgressSummary {
-  tasks: TeamTaskProgress[];
-  completedLines: CompletedLine[];
+  nodeStates: TeamNodeState[];
   adjustments: PointAdjustment[];
   totalPoints: number;
 }
@@ -240,7 +246,7 @@ export interface ScreenshotAnalysis {
   codewordFound: boolean;
   codeword: string;
   extractedText: string[];
-  detectedMatch: { tileId: string; tileName: string; taskId: string; nodeId: string; itemName: string } | null;
+  detectedMatch: { tileId: string; tileName: string; nodeId: string; itemName: string } | null;
   detectedWildcard: { tileId: string; tileName: string; wildcardId: string; itemName: string; applicableNodeId: string | null } | null;
   warnings: string[];
 }
@@ -263,8 +269,13 @@ export interface BingoShellResponse {
   potTotal: number;
 }
 
+export interface BoardLine extends BingoLine {
+  node: GraphNode;
+}
+
 export interface BoardResponse {
   tiles: Tile[];
+  lines: BoardLine[];
 }
 
 export interface TeamSubmissionsResponse {
@@ -302,12 +313,12 @@ export interface CreateSubmissionPayload {
 
 export interface ReviewSubmissionResponse {
   submission: Submission;
-  // Every task the submission's claims touched.
-  taskIds: string[];
-  // Tasks completed by this approval (empty when none completed or on reject).
-  completedTaskIds?: string[];
-  pointsAwarded?: number;
-  completedLineIds?: string[];
+  /** Every leaf node the submission's claims touched. */
+  nodeIds: string[];
+  /** Nodes (any kind, anywhere in the graph) newly completed by this approval. Empty/absent on reject. */
+  newlyCompletedNodeIds?: string[];
+  /** Sum of points newly awarded by this approval. */
+  pointsDelta?: number;
 }
 
 export type SignupQuestionType = "text" | "textarea" | "select" | "boolean";
@@ -390,12 +401,13 @@ export interface CaptainCandidatesResponse {
   candidates: RosterEntry[];
 }
 
+// The raw bingo_lines row. Points live on the referenced node (see BoardLine).
 export interface BingoLine {
   id: string;
   bingoId: string;
+  nodeId: string;
   lineType: "row" | "column" | "diagonal" | "custom";
   lineIndex: number;
-  points: number;
 }
 
 export interface BingoModerator {
@@ -473,7 +485,7 @@ export interface DraftState {
 export interface PointsOverTimePoint {
   at: string;
   teamId: string;
-  source: "task" | "line" | "adjustment";
+  source: "node" | "adjustment";
   label: string;
   delta: number;
   cumulativePoints: number;
@@ -525,7 +537,7 @@ export interface OsrsItemSearchResult {
 
 export type BroadcastEvent =
   | { type: "submission_created"; bingoId: string; payload: { teamId: string } }
-  | { type: "submission_reviewed"; bingoId: string; payload: { teamId: string; taskIds: string[] } }
+  | { type: "submission_reviewed"; bingoId: string; payload: { teamId: string; nodeIds: string[] } }
   | { type: "stage_changed"; bingoId: string; payload: { stage: Stage } }
   | { type: "draft_started"; bingoId: string; payload: Record<string, never> }
   | { type: "draft_pick"; bingoId: string; payload: { pickNumber: number; teamId: string; userId: string } }

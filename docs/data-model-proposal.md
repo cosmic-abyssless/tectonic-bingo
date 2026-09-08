@@ -5,6 +5,9 @@
 > `tile_task_items` + per-task rule flags) has been replaced by the requirement-tree
 > model below. `docs/implementation-plan.md` still describes the older flags where it
 > talks about `tile_task_items`; the schema in `server/src/db/schema.ts` is authoritative.
+>
+> Proposed successor (not yet implemented): `docs/node-graph-model.md` — one node graph per
+> bingo replacing tiles/tasks/lines/requirements as separate concepts.
 
 ## Shape
 

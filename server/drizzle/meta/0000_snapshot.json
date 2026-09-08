@@ -1,76 +1,9 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d02f79ec-6bab-4dd3-aff6-7b15d32d6c74",
+  "id": "5a116340-bc66-467b-a950-3f33ff41aa53",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "bingo_line_tiles": {
-      "name": "bingo_line_tiles",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "bingo_line_id": {
-          "name": "bingo_line_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "tile_id": {
-          "name": "tile_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "bingo_line_tiles_line_tile_unq": {
-          "name": "bingo_line_tiles_line_tile_unq",
-          "columns": [
-            "bingo_line_id",
-            "tile_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "bingo_line_tiles_bingo_line_id_bingo_lines_id_fk": {
-          "name": "bingo_line_tiles_bingo_line_id_bingo_lines_id_fk",
-          "tableFrom": "bingo_line_tiles",
-          "tableTo": "bingo_lines",
-          "columnsFrom": [
-            "bingo_line_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bingo_line_tiles_tile_id_tiles_id_fk": {
-          "name": "bingo_line_tiles_tile_id_tiles_id_fk",
-          "tableFrom": "bingo_line_tiles",
-          "tableTo": "tiles",
-          "columnsFrom": [
-            "tile_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "bingo_lines": {
       "name": "bingo_lines",
       "columns": {
@@ -83,6 +16,13 @@
         },
         "bingo_id": {
           "name": "bingo_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -101,17 +41,17 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
-        },
-        "points": {
-          "name": "points",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 15
         }
       },
-      "indexes": {},
+      "indexes": {
+        "bingo_lines_node_unq": {
+          "name": "bingo_lines_node_unq",
+          "columns": [
+            "node_id"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
         "bingo_lines_bingo_id_bingos_id_fk": {
           "name": "bingo_lines_bingo_id_bingos_id_fk",
@@ -119,6 +59,19 @@
           "tableTo": "bingos",
           "columnsFrom": [
             "bingo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bingo_lines_node_id_nodes_id_fk": {
+          "name": "bingo_lines_node_id_nodes_id_fk",
+          "tableFrom": "bingo_lines",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
           ],
           "columnsTo": [
             "id"
@@ -430,10 +383,10 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "claims_node_id_requirement_nodes_id_fk": {
-          "name": "claims_node_id_requirement_nodes_id_fk",
+        "claims_node_id_nodes_id_fk": {
+          "name": "claims_node_id_nodes_id_fk",
           "tableFrom": "claims",
-          "tableTo": "requirement_nodes",
+          "tableTo": "nodes",
           "columnsFrom": [
             "node_id"
           ],
@@ -684,8 +637,83 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "requirement_node_items": {
-      "name": "requirement_node_items",
+    "node_edges": {
+      "name": "node_edges",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "parent_id": {
+          "name": "parent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "child_id": {
+          "name": "child_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "node_edges_parent_child_unq": {
+          "name": "node_edges_parent_child_unq",
+          "columns": [
+            "parent_id",
+            "child_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "node_edges_parent_id_nodes_id_fk": {
+          "name": "node_edges_parent_id_nodes_id_fk",
+          "tableFrom": "node_edges",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "parent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "node_edges_child_id_nodes_id_fk": {
+          "name": "node_edges_child_id_nodes_id_fk",
+          "tableFrom": "node_edges",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "child_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "node_items": {
+      "name": "node_items",
       "columns": {
         "id": {
           "name": "id",
@@ -709,12 +737,21 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "node_items_node_name_unq": {
+          "name": "node_items_node_name_unq",
+          "columns": [
+            "node_id",
+            "item_name"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
-        "requirement_node_items_node_id_requirement_nodes_id_fk": {
-          "name": "requirement_node_items_node_id_requirement_nodes_id_fk",
-          "tableFrom": "requirement_node_items",
-          "tableTo": "requirement_nodes",
+        "node_items_node_id_nodes_id_fk": {
+          "name": "node_items_node_id_nodes_id_fk",
+          "tableFrom": "node_items",
+          "tableTo": "nodes",
           "columnsFrom": [
             "node_id"
           ],
@@ -729,8 +766,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "requirement_nodes": {
-      "name": "requirement_nodes",
+    "nodes": {
+      "name": "nodes",
       "columns": {
         "id": {
           "name": "id",
@@ -739,27 +776,12 @@
           "notNull": true,
           "autoincrement": false
         },
-        "task_id": {
-          "name": "task_id",
+        "bingo_id": {
+          "name": "bingo_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
-        },
-        "parent_id": {
-          "name": "parent_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
         },
         "kind": {
           "name": "kind",
@@ -767,6 +789,35 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "points": {
+          "name": "points",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         },
         "min_count": {
           "name": "min_count",
@@ -796,16 +847,38 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "points_gate_node_id": {
+          "name": "points_gate_node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "submit_gate_node_id": {
+          "name": "submit_gate_node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "allows_pre_load": {
+          "name": "allows_pre_load",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         }
       },
       "indexes": {},
       "foreignKeys": {
-        "requirement_nodes_task_id_tile_tasks_id_fk": {
-          "name": "requirement_nodes_task_id_tile_tasks_id_fk",
-          "tableFrom": "requirement_nodes",
-          "tableTo": "tile_tasks",
+        "nodes_bingo_id_bingos_id_fk": {
+          "name": "nodes_bingo_id_bingos_id_fk",
+          "tableFrom": "nodes",
+          "tableTo": "bingos",
           "columnsFrom": [
-            "task_id"
+            "bingo_id"
           ],
           "columnsTo": [
             "id"
@@ -813,9 +886,9 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "requirement_nodes_item_group_id_item_groups_id_fk": {
-          "name": "requirement_nodes_item_group_id_item_groups_id_fk",
-          "tableFrom": "requirement_nodes",
+        "nodes_item_group_id_item_groups_id_fk": {
+          "name": "nodes_item_group_id_item_groups_id_fk",
+          "tableFrom": "nodes",
           "tableTo": "item_groups",
           "columnsFrom": [
             "item_group_id"
@@ -1384,13 +1457,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "points_awarded": {
-          "name": "points_awarded",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "integer",
@@ -1442,81 +1508,6 @@
           "tableTo": "users",
           "columnsFrom": [
             "reviewed_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "team_completed_lines": {
-      "name": "team_completed_lines",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "team_id": {
-          "name": "team_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "bingo_line_id": {
-          "name": "bingo_line_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "completed_at": {
-          "name": "completed_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        }
-      },
-      "indexes": {
-        "team_completed_lines_team_line_unq": {
-          "name": "team_completed_lines_team_line_unq",
-          "columns": [
-            "team_id",
-            "bingo_line_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "team_completed_lines_team_id_teams_id_fk": {
-          "name": "team_completed_lines_team_id_teams_id_fk",
-          "tableFrom": "team_completed_lines",
-          "tableTo": "teams",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "team_completed_lines_bingo_line_id_bingo_lines_id_fk": {
-          "name": "team_completed_lines_bingo_line_id_bingo_lines_id_fk",
-          "tableFrom": "team_completed_lines",
-          "tableTo": "bingo_lines",
-          "columnsFrom": [
-            "bingo_line_id"
           ],
           "columnsTo": [
             "id"
@@ -1600,6 +1591,88 @@
           "tableTo": "users",
           "columnsFrom": [
             "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "team_node_state": {
+      "name": "team_node_state",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "team_id": {
+          "name": "team_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "points_awarded": {
+          "name": "points_awarded",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "team_node_state_team_node_unq": {
+          "name": "team_node_state_team_node_unq",
+          "columns": [
+            "team_id",
+            "node_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "team_node_state_team_id_teams_id_fk": {
+          "name": "team_node_state_team_id_teams_id_fk",
+          "tableFrom": "team_node_state",
+          "tableTo": "teams",
+          "columnsFrom": [
+            "team_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "team_node_state_node_id_nodes_id_fk": {
+          "name": "team_node_state_node_id_nodes_id_fk",
+          "tableFrom": "team_node_state",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
           ],
           "columnsTo": [
             "id"
@@ -1700,96 +1773,6 @@
           "tableTo": "users",
           "columnsFrom": [
             "created_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "team_task_progress": {
-      "name": "team_task_progress",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "team_id": {
-          "name": "team_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "task_id": {
-          "name": "task_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'not_started'"
-        },
-        "points_awarded": {
-          "name": "points_awarded",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "completed_at": {
-          "name": "completed_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "team_task_progress_team_task_unq": {
-          "name": "team_task_progress_team_task_unq",
-          "columns": [
-            "team_id",
-            "task_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "team_task_progress_team_id_teams_id_fk": {
-          "name": "team_task_progress_team_id_teams_id_fk",
-          "tableFrom": "team_task_progress",
-          "tableTo": "teams",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "team_task_progress_task_id_tile_tasks_id_fk": {
-          "name": "team_task_progress_task_id_tile_tasks_id_fk",
-          "tableFrom": "team_task_progress",
-          "tableTo": "tile_tasks",
-          "columnsFrom": [
-            "task_id"
           ],
           "columnsTo": [
             "id"
@@ -1981,121 +1964,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "tile_tasks": {
-      "name": "tile_tasks",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "tile_id": {
-          "name": "tile_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "label": {
-          "name": "label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "points": {
-          "name": "points",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "scoring_mode": {
-          "name": "scoring_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'automatic'"
-        },
-        "submit_requires_previous": {
-          "name": "submit_requires_previous",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "points_require_previous": {
-          "name": "points_require_previous",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "allows_pre_load": {
-          "name": "allows_pre_load",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "notes": {
-          "name": "notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "tile_tasks_tile_sort_unq": {
-          "name": "tile_tasks_tile_sort_unq",
-          "columns": [
-            "tile_id",
-            "sort_order"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "tile_tasks_tile_id_tiles_id_fk": {
-          "name": "tile_tasks_tile_id_tiles_id_fk",
-          "tableFrom": "tile_tasks",
-          "tableTo": "tiles",
-          "columnsFrom": [
-            "tile_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "tile_wildcards": {
       "name": "tile_wildcards",
       "columns": {
@@ -2158,10 +2026,10 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "tile_wildcards_applicable_node_id_requirement_nodes_id_fk": {
-          "name": "tile_wildcards_applicable_node_id_requirement_nodes_id_fk",
+        "tile_wildcards_applicable_node_id_nodes_id_fk": {
+          "name": "tile_wildcards_applicable_node_id_nodes_id_fk",
           "tableFrom": "tile_wildcards",
-          "tableTo": "requirement_nodes",
+          "tableTo": "nodes",
           "columnsFrom": [
             "applicable_node_id"
           ],
@@ -2188,6 +2056,13 @@
         },
         "bingo_id": {
           "name": "bingo_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -2269,6 +2144,13 @@
             "board_col"
           ],
           "isUnique": true
+        },
+        "tiles_node_unq": {
+          "name": "tiles_node_unq",
+          "columns": [
+            "node_id"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -2278,6 +2160,19 @@
           "tableTo": "bingos",
           "columnsFrom": [
             "bingo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "tiles_node_id_nodes_id_fk": {
+          "name": "tiles_node_id_nodes_id_fk",
+          "tableFrom": "tiles",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
           ],
           "columnsTo": [
             "id"
