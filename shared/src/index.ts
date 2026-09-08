@@ -143,11 +143,38 @@ export interface TileBase {
   hasFreezePeriod: boolean;
   freezeDurationMinutes: number;
   notes: string | null;
+  /** When true, this tile's tasks share one pool of item leaves — see docs/item-quantity-model.md §9. Derive the pool + each task's aggregation from `node.children` when set. */
+  sharedItemPool: boolean;
   createdAt: string;
 }
 
 export interface Tile extends TileBase {
   node: GraphNode;
+}
+
+// Payload for the dedicated shared-item-pool write path (updateSharedItemPool).
+// One pool of names, resolved to real ITEM leaves and multi-parented under
+// every task that references it, built atomically in one transaction —
+// never routed through each task's independent replaceSubtree call.
+export type SharedPoolAggregationInput =
+  | { kind: "COUNT"; target: number }
+  | { kind: "SUM"; target: number }
+  | { kind: "FULL_SET"; sets: { name: string; itemNames: string[] }[] };
+
+export interface SharedPoolTaskInput {
+  /** Existing task node id — omit for a brand-new task. */
+  id?: string;
+  label: string;
+  points: number;
+  /** Index into this same tasks array (must be earlier) to withhold points until that task completes; omit for no gate. Submit gates are not supported in this mode — see docs/item-quantity-model.md §8. */
+  pointsGateTaskIndex?: number;
+  aggregation: SharedPoolAggregationInput;
+}
+
+export interface SharedPoolInput {
+  /** Item names in the shared pool, in display order. */
+  pool: string[];
+  tasks: SharedPoolTaskInput[];
 }
 
 export interface Submission {
