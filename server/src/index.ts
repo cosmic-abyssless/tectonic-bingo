@@ -49,7 +49,18 @@ if (getAdminDiscordIds().length === 0) {
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 
-// CORS - allow requests from the React client
+// Railway (and most PaaS hosts) terminate TLS at a reverse proxy and forward
+// plain HTTP internally — without this, req.secure is always false behind
+// that proxy, which silently breaks the `cookie.secure: true` session below
+// in production (the browser never gets the session cookie). Harmless in
+// dev, where there's no proxy in front and this is a no-op.
+app.set("trust proxy", 1);
+
+// CORS - allow requests from the React client. Only matters when the client
+// is served from a different origin than this API (local dev, where Vite
+// runs on its own port) — a same-origin production deploy (see the static
+// serving below) never sends a cross-origin request here at all, so this is
+// effectively inert there, not something to strip out for that case.
 app.use(
   cors({
     origin: process.env.CLIENT_URL,
@@ -87,8 +98,10 @@ configurePassport();
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Uploads — serve screenshots stored locally
-const UPLOADS_DIR = path.join(__dirname, "../uploads");
+// Uploads — serve screenshots stored locally. Overridable so a Railway
+// deploy can point this at a mounted volume (the default path lives inside
+// the container's filesystem, which does not survive a redeploy).
+const UPLOADS_DIR = process.env.UPLOADS_DIR ?? path.join(__dirname, "../uploads");
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 app.use("/uploads", express.static(UPLOADS_DIR));
 
@@ -100,6 +113,27 @@ app.use("/api/bingos", bingosRouter);
 app.use("/api/bingos/:slug/mod", modRouter);
 app.use("/api/bingos/:slug/admin", adminRouter);
 app.use("/api/osrs-items", osrsItemsRouter);
+
+// Serve the built client (client/dist) so the whole site — API, WS, and
+// frontend — comes from one origin in production: no CORS, no cookie-domain
+// mismatch, and the client's already-relative fetch/WS URLs (see
+// WebSocketContext.tsx's `window.location.host`) just work unmodified.
+// Keyed off the build actually existing rather than NODE_ENV, so it can't be
+// silently skipped by a misconfigured env var — in dev this directory simply
+// doesn't exist (the client is served by Vite's own dev server instead, see
+// vite.config.ts's proxy setup), so this block never engages there.
+const CLIENT_DIST = path.join(__dirname, "../../client/dist");
+if (fs.existsSync(CLIENT_DIST)) {
+  app.use(express.static(CLIENT_DIST));
+  // SPA fallback: any GET that isn't one of the routes above (API, auth,
+  // uploads, ws) falls through to index.html, so client-side routing
+  // (react-router) still resolves a direct navigation or refresh on a deep
+  // link like /bingos/some-slug.
+  app.get(/^\/(?!api|auth|uploads|ws).*/, (_req, res) => {
+    res.sendFile(path.join(CLIENT_DIST, "index.html"));
+  });
+}
+
 app.use(errorHandler);
 
 const server = http.createServer(app);
