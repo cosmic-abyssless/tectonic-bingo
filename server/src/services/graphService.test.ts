@@ -4,7 +4,7 @@ import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { itemGroupItems, itemGroups, nodeEdges, nodeItems, nodes, tileWildcards } from "../db/schema";
+import { nodeEdges, nodes } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { deleteNode, deleteSubtree, getApprovedClaims, getFullGraph, getNodeTree, getNodeTrees, insertSubtree, replaceSubtree } from "./graphService";
 
@@ -24,59 +24,53 @@ afterEach(() => {
 });
 
 describe("insertSubtree / getNodeTree", () => {
-  it("builds a nested GraphNode, resolving inline names and item group items", () => {
-    const bingo = seedBingo();
-    const [group] = db.insert(itemGroups).values({ name: "Cerberus uniques" }).returning().all();
-    db.insert(itemGroupItems).values({ groupId: group.id, itemName: "Jar of darkness" }).run();
-
+  it("builds a nested GraphNode with single-name ITEM leaves", () => {
     const input: GraphNodeInput = {
       kind: "ALL",
       label: "Part A",
       points: 25,
       children: [
-        { kind: "ITEM", itemNames: ["Tanzanite fang"], quantity: 1 },
-        { kind: "ITEM", itemGroupIds: [group.id], itemNames: ["Inline extra"] },
+        { kind: "ITEM", itemName: "Tanzanite fang" },
+        { kind: "ITEM", itemName: "Magic fang" },
       ],
     };
+    const bingo = seedBingo();
     const rootId = db.transaction((tx) => insertSubtree(tx, bingo.id, input));
     const tree = getNodeTree(db, rootId)!;
 
     expect(tree.kind).toBe("ALL");
     expect(tree.label).toBe("Part A");
     expect(tree.children).toHaveLength(2);
-    expect(tree.children[0]!.itemNames).toEqual(["Tanzanite fang"]);
-    expect(tree.children[0]!.acceptedItemNames).toEqual(["Tanzanite fang"]);
-    const groupLeaf = tree.children[1]!;
-    expect(groupLeaf.itemGroups).toEqual([{ id: group.id, name: "Cerberus uniques", itemNames: ["Jar of darkness"] }]);
-    expect(groupLeaf.acceptedItemNames.sort()).toEqual(["Inline extra", "Jar of darkness"].sort());
+    expect(tree.children[0]!.itemName).toBe("Tanzanite fang");
+    expect(tree.children[1]!.itemName).toBe("Magic fang");
   });
 
-  it("resolves several item groups referenced by the same leaf", () => {
+  it("resolves a SUM's quantity and its ITEM children", () => {
+    const input: GraphNodeInput = {
+      kind: "SUM",
+      quantity: 10_000,
+      children: [{ kind: "ITEM", itemName: "Splinters" }, { kind: "ITEM", itemName: "Demon tears" }],
+    };
     const bingo = seedBingo();
-    const [groupA] = db.insert(itemGroups).values({ name: "Group A" }).returning().all();
-    const [groupB] = db.insert(itemGroups).values({ name: "Group B" }).returning().all();
-    db.insert(itemGroupItems).values({ groupId: groupA.id, itemName: "Splinters" }).run();
-    db.insert(itemGroupItems).values({ groupId: groupB.id, itemName: "Demon tears" }).run();
-
-    const input: GraphNodeInput = { kind: "ITEM", itemGroupIds: [groupA.id, groupB.id] };
     const rootId = db.transaction((tx) => insertSubtree(tx, bingo.id, input));
     const tree = getNodeTree(db, rootId)!;
 
-    expect(tree.itemGroupIds.sort()).toEqual([groupA.id, groupB.id].sort());
-    expect(tree.acceptedItemNames.sort()).toEqual(["Splinters", "Demon tears"].sort());
+    expect(tree.kind).toBe("SUM");
+    expect(tree.quantity).toBe(10_000);
+    expect(tree.children.map((c) => c.itemName)).toEqual(["Splinters", "Demon tears"]);
   });
 
   it("preserves child order via sortOrder", () => {
     const bingo = seedBingo();
-    const input: GraphNodeInput = { kind: "ALL", children: [{ kind: "ITEM", itemNames: ["A"] }, { kind: "ITEM", itemNames: ["B"] }, { kind: "ITEM", itemNames: ["C"] }] };
+    const input: GraphNodeInput = { kind: "ALL", children: [{ kind: "ITEM", itemName: "A" }, { kind: "ITEM", itemName: "B" }, { kind: "ITEM", itemName: "C" }] };
     const rootId = db.transaction((tx) => insertSubtree(tx, bingo.id, input));
     const tree = getNodeTree(db, rootId)!;
-    expect(tree.children.map((c) => c.itemNames[0])).toEqual(["A", "B", "C"]);
+    expect(tree.children.map((c) => c.itemName)).toEqual(["A", "B", "C"]);
   });
 
   it("nests a node reachable from two different roots under both (shared leaf)", () => {
     const bingo = seedBingo();
-    const leafId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "ITEM", itemNames: ["Shared"] }));
+    const leafId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "ITEM", itemName: "Shared" }));
     const rootAId = db.transaction((tx) => {
       const id = tx.insert(nodes).values({ bingoId: bingo.id, kind: "ALL" }).returning().get().id;
       tx.insert(nodeEdges).values({ parentId: id, childId: leafId, sortOrder: 0 }).run();
@@ -97,25 +91,25 @@ describe("replaceSubtree", () => {
   it("preserves a leaf's id (and thus its claims) across an edit when the input carries its id", () => {
     const bingo = seedBingo();
     const rootId = db.transaction((tx) =>
-      insertSubtree(tx, bingo.id, { kind: "ALL", children: [{ kind: "ITEM", itemNames: ["Vorki"], quantity: 1 }] }),
+      insertSubtree(tx, bingo.id, { kind: "ALL", children: [{ kind: "ITEM", itemName: "Vorki", points: 0 }] }),
     );
     const leafId = getNodeTree(db, rootId)!.children[0]!.id;
 
-    db.transaction((tx) => replaceSubtree(tx, rootId, bingo.id, { kind: "ALL", children: [{ id: leafId, kind: "ITEM", itemNames: ["Vorki"], quantity: 2 }] }));
+    db.transaction((tx) => replaceSubtree(tx, rootId, bingo.id, { kind: "ALL", children: [{ id: leafId, kind: "ITEM", itemName: "Vorki", points: 10 }] }));
 
     const updated = getNodeTree(db, rootId)!;
     expect(updated.children[0]!.id).toBe(leafId); // same id — any claims on it are still valid
-    expect(updated.children[0]!.quantity).toBe(2); // but its fields did update
+    expect(updated.children[0]!.points).toBe(10); // but its fields did update
   });
 
-  it("drops a leaf not reused by the new input, and its item rows", () => {
+  it("drops a leaf not reused by the new input", () => {
     const bingo = seedBingo();
     const rootId = db.transaction((tx) =>
-      insertSubtree(tx, bingo.id, { kind: "ALL", children: [{ kind: "ITEM", itemNames: ["A"] }, { kind: "ITEM", itemNames: ["B"] }] }),
+      insertSubtree(tx, bingo.id, { kind: "ALL", children: [{ kind: "ITEM", itemName: "A" }, { kind: "ITEM", itemName: "B" }] }),
     );
     const droppedLeafId = getNodeTree(db, rootId)!.children[0]!.id;
 
-    db.transaction((tx) => replaceSubtree(tx, rootId, bingo.id, { kind: "ALL", children: [{ kind: "ITEM", itemNames: ["B"] }] }));
+    db.transaction((tx) => replaceSubtree(tx, rootId, bingo.id, { kind: "ALL", children: [{ kind: "ITEM", itemName: "B" }] }));
 
     expect(db.select().from(nodes).all().find((n) => n.id === droppedLeafId)).toBeUndefined();
     expect(getNodeTree(db, rootId)!.children).toHaveLength(1);
@@ -123,7 +117,7 @@ describe("replaceSubtree", () => {
 
   it("does not delete a leaf still referenced by another root (shared across two tasks)", () => {
     const bingo = seedBingo();
-    const leafId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "ITEM", itemNames: ["Shared"] }));
+    const leafId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "ITEM", itemName: "Shared" }));
     const taskARoot = db.transaction((tx) => {
       const id = tx.insert(nodes).values({ bingoId: bingo.id, kind: "ALL" }).returning().get().id;
       tx.insert(nodeEdges).values({ parentId: id, childId: leafId, sortOrder: 0 }).run();
@@ -141,32 +135,19 @@ describe("replaceSubtree", () => {
     // The leaf must survive — task B still points at it.
     expect(getNodeTree(db, taskBRoot)!.children[0]!.id).toBe(leafId);
   });
-
-  it("nulls out tileWildcards.applicableNodeId for a deleted node", () => {
-    const bingo = seedBingo();
-    const rootId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "ALL", children: [{ kind: "ITEM", itemNames: ["A"] }] }));
-    const leafId = getNodeTree(db, rootId)!.children[0]!.id;
-    const tile = db.insert(schema.tiles).values({ bingoId: bingo.id, nodeId: rootId, name: "T", boardRow: 0, boardCol: 0 }).returning().get();
-    db.insert(tileWildcards).values({ tileId: tile.id, itemName: "Jar", applicableNodeId: leafId }).run();
-
-    db.transaction((tx) => replaceSubtree(tx, rootId, bingo.id, { kind: "ALL", children: [] }));
-
-    expect(db.select().from(tileWildcards).all()[0]!.applicableNodeId).toBeNull();
-  });
 });
 
 describe("deleteSubtree / deleteNode", () => {
   it("deleteSubtree removes every descendant not shared elsewhere", () => {
     const bingo = seedBingo();
-    const rootId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "ALL", children: [{ kind: "ITEM", itemNames: ["A"] }, { kind: "ITEM", itemNames: ["B"] }] }));
+    const rootId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "ALL", children: [{ kind: "ITEM", itemName: "A" }, { kind: "ITEM", itemName: "B" }] }));
     db.transaction((tx) => deleteSubtree(tx, rootId));
     expect(db.select().from(nodes).all()).toHaveLength(0);
-    expect(db.select().from(nodeItems).all()).toHaveLength(0);
   });
 
   it("deleteNode removes one node and GCs its now-orphaned children", () => {
     const bingo = seedBingo();
-    const rootId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "ALL", children: [{ kind: "ALL", children: [{ kind: "ITEM", itemNames: ["A"] }] }] }));
+    const rootId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "ALL", children: [{ kind: "ALL", children: [{ kind: "ITEM", itemName: "A" }] }] }));
     const childId = getNodeTree(db, rootId)!.children[0]!.id;
     db.transaction((tx) => deleteNode(tx, childId));
     expect(getNodeTree(db, rootId)!.children).toHaveLength(0);
@@ -198,7 +179,7 @@ describe("presentation roots survive GC", () => {
 describe("getFullGraph / getApprovedClaims", () => {
   it("flattens the whole bingo's graph, including a node with no presentation row", () => {
     const bingo = seedBingo();
-    db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "ALL", label: "Bonus", points: 30, children: [{ kind: "ITEM", itemNames: ["X"] }] }));
+    db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "ALL", label: "Bonus", points: 30, children: [{ kind: "ITEM", itemName: "X" }] }));
     const { engineNodes, childrenOf } = getFullGraph(db, bingo.id);
     expect(engineNodes).toHaveLength(2);
     const root = engineNodes.find((n) => n.kind === "ALL")!;
@@ -209,7 +190,7 @@ describe("getFullGraph / getApprovedClaims", () => {
     const bingo = seedBingo();
     const [user] = db.insert(schema.users).values({ discordId: "u1", discordUsername: "u1" }).returning().all();
     const [team] = db.insert(schema.teams).values({ bingoId: bingo.id, captainUserId: user.id, name: "T", codeword: "cw" }).returning().all();
-    const leafId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "ITEM", itemNames: ["A"] }));
+    const leafId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "ITEM", itemName: "A" }));
 
     const approved = db.insert(schema.submissions).values({ teamId: team.id, submittedByUserId: user.id, status: "approved", reviewedAt: new Date() }).returning().get();
     db.insert(schema.claims).values({ submissionId: approved.id, nodeId: leafId, itemName: "A", quantity: 1 }).run();

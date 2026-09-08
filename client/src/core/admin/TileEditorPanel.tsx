@@ -1,12 +1,46 @@
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Tile, TileCategory } from "@bingo/shared";
+import type { GraphNode, Tile, TileCategory } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
 import { Modal, ModalHeader } from "../ui/Modal";
 import { TaskEditor } from "./TaskEditor";
-import { collectLeaves } from "../board/requirementTree";
-import { leafLabel } from "../board/TaskPanel";
+import type { ExistingLeaf, ExistingCondition } from "./RequirementTreeEditor";
+import { collectLeaves, collectLabeledConditions, collectSharedNodeIds } from "../board/requirementTree";
+
+// Every ITEM leaf on this tile, labeled by which task it's currently under —
+// offered to every OTHER task as a reference (see RequirementTreeEditor's
+// "+ existing item"), so two tasks can share the same requirement (a claim
+// then counts toward both) without retyping the name.
+function existingLeavesExcluding(tasks: GraphNode[], excludeTaskIndex: number): ExistingLeaf[] {
+  return tasks
+    .filter((_, i) => i !== excludeTaskIndex)
+    .flatMap((task) =>
+      collectLeaves(task)
+        .filter((leaf) => leaf.kind === "ITEM" && leaf.itemName)
+        .map((leaf) => ({ id: leaf.id, itemName: leaf.itemName!, taskLabel: task.label ?? "Task" })),
+    );
+}
+
+// Every ALL/ANY/COUNT/SUM block on this tile (including a whole task's own
+// root), labeled by which task it's under and a dot-notation index within it
+// (1, 1.1, 1.2, 1.1.1, ...) — offered to every OTHER task as a reference (see
+// RequirementTreeEditor's "+ existing condition"), so a whole nested
+// requirement (not just one item) can be reused as-is instead of rebuilt.
+// The label is display-only, computed fresh each render — nothing here is
+// persisted.
+function existingConditionsExcluding(tasks: GraphNode[], excludeTaskIndex: number): ExistingCondition[] {
+  return tasks
+    .filter((_, i) => i !== excludeTaskIndex)
+    .flatMap((task) =>
+      collectLabeledConditions(task).map(({ node, label }) => ({
+        id: node.id,
+        taskLabel: task.label ?? "Task",
+        label: `Condition ${label}`,
+        node,
+      })),
+    );
+}
 
 export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: string; tile: Tile; categories: TileCategory[]; onClose: () => void }) {
   const queryClient = useQueryClient();
@@ -39,15 +73,11 @@ export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: str
       setUploading(false);
     }
   }
-  async function addWildcard() {
-    await adminApi.createWildcard(slug, tile.id, { itemName: "New wildcard" });
-    invalidate();
-  }
-  async function deleteWildcard(id: string) {
-    await adminApi.deleteWildcard(slug, id);
-    invalidate();
-  }
-
+  // Tile-wide (not per-task, unlike existingLeaves/existingConditions —
+  // there's no "self" to exclude here): every node with 2+ direct parents
+  // anywhere on this tile, so a task's own editor can tell a genuinely
+  // shared row apart from one that merely sits inside a shared block.
+  const sharedNodeIds = collectSharedNodeIds(tile.node);
   return (
     <Modal onClose={onClose} size="lg">
       <ModalHeader title={tile.name} subtitle={`Row ${tile.boardRow}, Col ${tile.boardCol}`} onClose={onClose} />
@@ -111,49 +141,18 @@ export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: str
           </div>
           <div className="space-y-2">
             {tile.node.children.map((task, i) => (
-              <TaskEditor key={task.id} slug={slug} task={task} previousTaskId={tile.node.children[i - 1]?.id} onDeleted={() => {}} />
+              <TaskEditor
+                key={task.id}
+                slug={slug}
+                task={task}
+                previousTaskId={tile.node.children[i - 1]?.id}
+                existingLeaves={existingLeavesExcluding(tile.node.children, i)}
+                existingConditions={existingConditionsExcluding(tile.node.children, i)}
+                sharedNodeIds={sharedNodeIds}
+                onDeleted={() => {}}
+              />
             ))}
           </div>
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-slate-300">Wildcards ({tile.wildcards.length})</p>
-            <button onClick={addWildcard} className="text-xs bg-slate-700 hover:bg-slate-600 text-white rounded px-2.5 py-1 cursor-pointer">
-              + Add wildcard
-            </button>
-          </div>
-          <ul className="space-y-1.5">
-            {tile.wildcards.map((wc) => (
-              <li key={wc.id} className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded px-2 py-1.5">
-                <input
-                  defaultValue={wc.itemName}
-                  onBlur={(e) => adminApi.updateWildcard(slug, wc.id, { itemName: e.target.value }).then(invalidate)}
-                  className="flex-1 bg-transparent text-sm text-white focus:outline-none"
-                />
-                <select
-                  aria-label="Wildcard applicable requirement"
-                  defaultValue={wc.applicableNodeId ?? ""}
-                  onChange={(e) => adminApi.updateWildcard(slug, wc.id, { applicableNodeId: e.target.value || null }).then(invalidate)}
-                  className="bg-slate-800 border border-slate-600 text-slate-300 text-xs rounded px-1.5 py-1 focus:outline-none"
-                >
-                  <option value="">Any requirement</option>
-                  {tile.node.children.flatMap((t) =>
-                    collectLeaves(t)
-                      .filter((leaf) => leaf.kind === "ITEM")
-                      .map((leaf) => (
-                        <option key={leaf.id} value={leaf.id}>
-                          {t.label}: {leafLabel(leaf)}
-                        </option>
-                      )),
-                  )}
-                </select>
-                <button onClick={() => deleteWildcard(wc.id)} className="text-slate-500 hover:text-red-400 text-xs cursor-pointer">
-                  ✕
-                </button>
-              </li>
-            ))}
-          </ul>
         </div>
 
         <div>

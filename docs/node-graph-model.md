@@ -10,6 +10,12 @@
 > childless composite node must NOT be vacuously complete (see §3) — the original design
 > called empty `ALL` true, which would have silently awarded every unconfigured tile's and
 > task's points to every team the moment anything else was approved.
+>
+> **Superseded in part by `docs/item-quantity-model.md` (2026-09-08, branch
+> `item-quantity-model`)**: `ITEM` is a single-name leaf now (no `quantity`/`distinctItems`
+> of its own), a new `SUM` kind holds quantity totals, and wildcards (`tileWildcards`,
+> `claims.wildcardId`) are removed entirely. Everything else on this page — tiles/lines as
+> presentation, `teamNodeState`, gates, the DAG, `ALL`/`ANY`/`COUNT` — is unchanged.
 
 ---
 

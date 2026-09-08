@@ -4,33 +4,30 @@ import type { GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
 import { adminQueryKeys, useItemGroups } from "../../api/adminQueries";
-import { RequirementTreeEditor } from "./RequirementTreeEditor";
-
-function toInput(node: GraphNode): GraphNodeInput {
-  return {
-    id: node.id,
-    kind: node.kind,
-    label: node.label,
-    description: node.description,
-    notes: node.notes,
-    points: node.points,
-    minCount: node.minCount ?? undefined,
-    quantity: node.quantity ?? undefined,
-    distinctItems: node.distinctItems,
-    itemGroupIds: node.itemGroupIds,
-    itemNames: node.itemNames,
-    pointsGateNodeId: node.pointsGateNodeId,
-    submitGateNodeId: node.submitGateNodeId,
-    allowsPreLoad: node.allowsPreLoad,
-    children: node.children.map(toInput),
-  };
-}
+import { toGraphNodeInput as toInput } from "../board/requirementTree";
+import { RequirementTreeEditor, type ExistingLeaf, type ExistingCondition } from "./RequirementTreeEditor";
 
 // A task is a node that's a direct child of its tile's node. `previousTaskId`
 // is the sibling immediately before this one (per the tile's current child
 // order) — "requires/withholds until previous" resolves to that specific
 // node id, per docs/node-graph-model.md §6.
-export function TaskEditor({ slug, task, previousTaskId, onDeleted }: { slug: string; task: GraphNode; previousTaskId?: string; onDeleted: () => void }) {
+export function TaskEditor({
+  slug,
+  task,
+  previousTaskId,
+  existingLeaves,
+  existingConditions,
+  sharedNodeIds,
+  onDeleted,
+}: {
+  slug: string;
+  task: GraphNode;
+  previousTaskId?: string;
+  existingLeaves?: ExistingLeaf[];
+  existingConditions?: ExistingCondition[];
+  sharedNodeIds: Set<string>;
+  onDeleted: () => void;
+}) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const itemGroups = useItemGroups().data?.itemGroups ?? [];
@@ -142,7 +139,15 @@ export function TaskEditor({ slug, task, previousTaskId, onDeleted }: { slug: st
           {!isManual && (
             <div>
               <label className="block text-xs text-slate-400 mb-1.5">Requirement</label>
-              <RequirementTreeEditor root={toInput(task)} itemGroups={itemGroups} onChange={(updated) => patch(updated)} onSaveAsGroup={saveAsGroup} />
+              <RequirementTreeEditor
+                root={toInput(task)}
+                itemGroups={itemGroups}
+                onChange={(updated) => patch(updated)}
+                onSaveAsGroup={saveAsGroup}
+                existingLeaves={existingLeaves}
+                existingConditions={existingConditions}
+                sharedNodeIds={sharedNodeIds}
+              />
             </div>
           )}
 

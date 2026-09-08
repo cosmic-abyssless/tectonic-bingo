@@ -1,5 +1,5 @@
-import type { GraphNode } from "@bingo/shared";
-import { leafProgress, type LeafClaimMaps } from "./taskClaims";
+import type { GraphNode, NodeStatus } from "@bingo/shared";
+import { itemLeafValue, leafComplete, type LeafClaimMaps } from "./taskClaims";
 
 export function CheckIcon() {
   return (
@@ -13,9 +13,10 @@ export function CheckIcon() {
   );
 }
 
+/** For an ITEM leaf, just its name. For a SUM, its children's names joined — the SUM is what carries the quantity/target now. */
 export function leafLabel(node: GraphNode): string {
-  const names = [...node.itemGroups.map((g) => `Any ${g.name}`), ...node.itemNames];
-  return names.join(" / ") || "(no items)";
+  if (node.kind === "SUM") return node.children.map((c) => c.itemName).filter((n): n is string => !!n).join(" / ") || "(no items)";
+  return node.itemName ?? "(no item)";
 }
 
 function compositeLabel(node: GraphNode): string {
@@ -31,47 +32,99 @@ function compositeLabel(node: GraphNode): string {
   }
 }
 
-function LeafRow({ node, maps }: { node: GraphNode; maps: LeafClaimMaps }) {
-  const target = node.quantity ?? 1;
-  const progress = leafProgress(node.id, node.distinctItems, maps);
-  const approved = progress >= target;
+// A single-name ITEM leaf — boolean, no quantity of its own. `notNeeded`
+// means an enclosing ANY/COUNT is already satisfied by a sibling — this leaf
+// itself was never claimed (no checkmark), but no longer needs to be.
+function LeafRow({ node, maps, notNeeded }: { node: GraphNode; maps: LeafClaimMaps; notNeeded?: boolean }) {
+  const complete = leafComplete(node.id, maps);
   const submitted = maps.submittedNodeIds.has(node.id);
+  const dim = complete || notNeeded;
   return (
-    <li className={`flex items-baseline gap-2 text-sm ${approved ? "text-slate-500 line-through" : submitted ? "text-slate-400" : "text-slate-200"}`}>
+    <li className={`flex items-baseline gap-2 text-sm ${dim ? "text-slate-500 line-through" : submitted ? "text-slate-400" : "text-slate-200"}`}>
       <span className="text-indigo-400 text-xs">▸</span>
-      {target > 1 && (
-        <span className={`font-semibold text-xs tabular-nums ${approved ? "text-green-400" : "text-yellow-400"}`}>
-          {progress}/{target}
-          {node.distinctItems && " distinct"}
-        </span>
-      )}
       {leafLabel(node)}
-      {approved && <CheckIcon />}
+      {complete && <CheckIcon />}
     </li>
   );
 }
 
-function RequirementTree({ node, maps, root }: { node: GraphNode; maps: LeafClaimMaps; root?: boolean }) {
+// A SUM over one or more ITEM children — the quantity target lives here now,
+// summed across whichever of its children's names were actually claimed.
+function SumRow({ node, maps, notNeeded }: { node: GraphNode; maps: LeafClaimMaps; notNeeded?: boolean }) {
+  const target = node.quantity ?? 1;
+  const progress = node.children.reduce((sum, child) => sum + itemLeafValue(child.id, maps), 0);
+  const complete = progress >= target;
+  const submitted = node.children.some((child) => maps.submittedNodeIds.has(child.id));
+  const dim = complete || notNeeded;
+  return (
+    <li className={`flex items-baseline gap-2 text-sm ${dim ? "text-slate-500 line-through" : submitted ? "text-slate-400" : "text-slate-200"}`}>
+      <span className="text-indigo-400 text-xs">▸</span>
+      <span className={`font-semibold text-xs tabular-nums ${complete ? "text-green-400" : "text-yellow-400"}`}>
+        {progress}/{target}
+      </span>
+      {leafLabel(node)}
+      {complete && <CheckIcon />}
+    </li>
+  );
+}
+
+// `statusByNodeId` is the server-confirmed completion set (teamNodeState,
+// rescored after an approval) — the same source TileModal already uses for a
+// task's own checkmark. Threading it through here lets an ALL/ANY/COUNT node
+// show its *own* completion (not just each leaf's), and — via
+// `ancestorSatisfied` carried down through the recursion — dim every leaf
+// under an already-satisfied ANY/COUNT, since submitting them wouldn't
+// progress the tile any further. A still-*pending* sibling claim doesn't
+// trigger this (no teamNodeState row yet — a mod could still reject it).
+function RequirementTree({
+  node,
+  maps,
+  statusByNodeId,
+  ancestorSatisfied = false,
+  root,
+}: {
+  node: GraphNode;
+  maps: LeafClaimMaps;
+  statusByNodeId?: Map<string, NodeStatus>;
+  ancestorSatisfied?: boolean;
+  root?: boolean;
+}) {
   if (node.kind === "MANUAL") return null;
   if (node.kind === "ITEM") {
     return (
       <ul className="space-y-1">
-        <LeafRow node={node} maps={maps} />
+        <LeafRow node={node} maps={maps} notNeeded={ancestorSatisfied} />
       </ul>
     );
   }
+  if (node.kind === "SUM") {
+    return (
+      <ul className="space-y-1">
+        <SumRow node={node} maps={maps} notNeeded={ancestorSatisfied} />
+      </ul>
+    );
+  }
+  const nodeComplete = statusByNodeId?.get(node.id) === "completed";
+  const childAncestorSatisfied = ancestorSatisfied || nodeComplete;
   // A root ALL with only leaves is the common case; skip the redundant heading.
   const showHeading = !(root && node.kind === "ALL");
   return (
     <div className={root ? "" : "ml-3 border-l border-slate-700 pl-3"}>
-      {showHeading && <span className="text-slate-500 text-xs uppercase tracking-wide">{compositeLabel(node)}</span>}
+      {showHeading && (
+        <span className={`text-xs uppercase tracking-wide inline-flex items-center gap-1 ${nodeComplete ? "text-green-500" : "text-slate-500"}`}>
+          {compositeLabel(node)}
+          {nodeComplete && <CheckIcon />}
+        </span>
+      )}
       <ul className="space-y-1 mt-1">
         {node.children.map((child) =>
           child.kind === "ITEM" ? (
-            <LeafRow key={child.id} node={child} maps={maps} />
+            <LeafRow key={child.id} node={child} maps={maps} notNeeded={childAncestorSatisfied} />
+          ) : child.kind === "SUM" ? (
+            <SumRow key={child.id} node={child} maps={maps} notNeeded={childAncestorSatisfied} />
           ) : (
             <li key={child.id}>
-              <RequirementTree node={child} maps={maps} />
+              <RequirementTree node={child} maps={maps} statusByNodeId={statusByNodeId} ancestorSatisfied={childAncestorSatisfied} />
             </li>
           ),
         )}
@@ -84,12 +137,14 @@ function RequirementTree({ node, maps, root }: { node: GraphNode; maps: LeafClai
 export function TaskPanel({
   task,
   claimMaps,
+  statusByNodeId,
   locked,
   lockedReason,
   complete,
 }: {
   task: GraphNode;
   claimMaps: LeafClaimMaps;
+  statusByNodeId?: Map<string, NodeStatus>;
   locked?: boolean;
   lockedReason?: string;
   complete?: boolean;
@@ -128,7 +183,7 @@ export function TaskPanel({
 
       <p className="text-slate-300 text-sm leading-relaxed mb-3">{task.description}</p>
 
-      {!isManual && <RequirementTree node={task} maps={claimMaps} root />}
+      {!isManual && <RequirementTree node={task} maps={claimMaps} statusByNodeId={statusByNodeId} root />}
 
       {!isManual && task.allowsPreLoad && (
         <div className="flex gap-2 flex-wrap mt-3">

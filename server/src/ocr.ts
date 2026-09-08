@@ -2,9 +2,9 @@ import { PaddleOcrService, V6_SMALL_MODEL } from "ppu-paddle-ocr";
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "./db/schema";
-import { tileWildcards, tiles } from "./db/schema";
+import { tiles } from "./db/schema";
 import { getFullGraph, leafDescendants } from "./services/graphService";
-import { findBestMatch, fuzzyIncludes, type DetectedItemMatch, type DetectedWildcardMatch, type MatchableItem } from "./services/textMatchService";
+import { findBestMatch, fuzzyIncludes, type DetectedItemMatch, type MatchableItem } from "./services/textMatchService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -20,7 +20,6 @@ export interface AnalyzeResult {
   codeword: string;
   extractedText: string[];
   detectedMatch: DetectedItemMatch | null;
-  detectedWildcard: DetectedWildcardMatch | null;
   warnings: string[];
 }
 
@@ -81,10 +80,10 @@ function toArrayBuffer(buf: Buffer): ArrayBuffer {
 }
 
 // Runs local OCR on the screenshot, then matches the extracted text against
-// the team's codeword and every item/wildcard on this bingo's board. All
-// matching (including fuzzy tolerance for OCR slips) lives in
-// textMatchService — this function is I/O only: OCR the image, load the
-// board's items/wildcards, hand both to the pure matcher.
+// the team's codeword and every item on this bingo's board. All matching
+// (including fuzzy tolerance for OCR slips) lives in textMatchService — this
+// function is I/O only: OCR the image, load the board's items, hand both to
+// the pure matcher.
 export async function analyzeSubmissionScreenshot(db: Db, bingo: Bingo, team: Team, file: ScreenshotFile): Promise<AnalyzeResult> {
   const service = await getOcrService();
   const result = await service.recognize(toArrayBuffer(file.buffer), { noCache: true });
@@ -95,37 +94,28 @@ export async function analyzeSubmissionScreenshot(db: Db, bingo: Bingo, team: Te
 
   // Fixed at 1 edit regardless of the codeword's length — a false positive
   // here wrongly suppresses the "codeword not found" warning mods rely on,
-  // so this stays more conservative than the length-scaled item/wildcard default.
+  // so this stays more conservative than the length-scaled item default.
   const codewordFound = fuzzyIncludes(extractedText, team.codeword, { maxEdits: 1 });
 
-  // Every ITEM leaf under each tile's node, with its accepted names already
-  // resolved (inline ∪ group) by getFullGraph — one MatchableItem per name.
+  // Every ITEM leaf under each tile's node — one MatchableItem per leaf now
+  // that a leaf holds exactly one name.
   const tileRows = db.select({ id: tiles.id, nodeId: tiles.nodeId, name: tiles.name }).from(tiles).where(eq(tiles.bingoId, bingo.id)).all();
   const { childrenOf, nodesById } = getFullGraph(db, bingo.id);
   const items: MatchableItem[] = [];
   for (const tile of tileRows) {
     for (const leafId of leafDescendants(tile.nodeId, childrenOf, nodesById)) {
       const node = nodesById.get(leafId);
-      if (node?.kind !== "ITEM") continue;
-      for (const itemName of node.acceptedItemNames) {
-        items.push({ nodeId: leafId, itemName, tileId: tile.id, tileName: tile.name });
-      }
+      if (node?.kind !== "ITEM" || !node.itemName) continue;
+      items.push({ nodeId: leafId, itemName: node.itemName, tileId: tile.id, tileName: tile.name });
     }
   }
 
-  const wildcards = db
-    .select({ id: tileWildcards.id, itemName: tileWildcards.itemName, applicableNodeId: tileWildcards.applicableNodeId, tileId: tiles.id, tileName: tiles.name })
-    .from(tileWildcards)
-    .innerJoin(tiles, eq(tileWildcards.tileId, tiles.id))
-    .where(eq(tiles.bingoId, bingo.id))
-    .all();
-
-  const { detectedMatch, detectedWildcard } = findBestMatch(extractedText, items, wildcards);
+  const { detectedMatch } = findBestMatch(extractedText, items);
 
   const warnings: string[] = [];
   if (!codewordFound) {
     warnings.push(`Codeword '${team.codeword}' was not found in your screenshot. Make sure it's visible on screen before submitting.`);
   }
 
-  return { codewordFound, codeword: team.codeword, extractedText, detectedMatch, detectedWildcard, warnings };
+  return { codewordFound, codeword: team.codeword, extractedText, detectedMatch, warnings };
 }

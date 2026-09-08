@@ -1,6 +1,6 @@
 import type {
   Bingo, BingoLine, BingoModerator, BoardLine, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, SignupQuestion, Team, TeamMember, Tile,
-  TileCategory, TileWildcard, User,
+  TileCategory, User,
 } from "@bingo/shared";
 import { api } from "./client";
 
@@ -85,16 +85,6 @@ export function updateTask(slug: string, id: string, input: GraphNodeInput) {
 }
 export function deleteTask(slug: string, id: string) {
   return api.delete(`${base(slug)}/tasks/${id}`);
-}
-
-export function createWildcard(slug: string, tileId: string, payload: { itemName: string; maxRedemptionsPerTeam?: number; description?: string; applicableNodeId?: string | null }) {
-  return api.post<{ wildcard: TileWildcard }>(`${base(slug)}/tiles/${tileId}/wildcards`, payload);
-}
-export function updateWildcard(slug: string, id: string, payload: Partial<TileWildcard>) {
-  return api.patch<{ wildcard: TileWildcard }>(`${base(slug)}/wildcards/${id}`, payload);
-}
-export function deleteWildcard(slug: string, id: string) {
-  return api.delete(`${base(slug)}/wildcards/${id}`);
 }
 
 export function getLines(slug: string) {

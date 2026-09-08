@@ -3,7 +3,7 @@ import { Modal } from "../ui/Modal";
 import { SubmissionRow } from "../submissions/SubmissionRow";
 import { TaskPanel } from "./TaskPanel";
 import { buildLeafClaimMaps } from "./taskClaims";
-import { collectLeaves, findNode } from "./requirementTree";
+import { collectLeaves } from "./requirementTree";
 import { summarizeTileProgress, getFreezeUnlockAt } from "./tileProgress";
 
 export function TileModal({
@@ -100,6 +100,7 @@ export function TileModal({
               key={task.id}
               task={task}
               claimMaps={claimMaps}
+              statusByNodeId={summary.statusByNodeId}
               locked={locked}
               lockedReason={locked && gate ? `${task.label} cannot be submitted until ${gate.label} is completed.` : undefined}
               complete={summary.statusByNodeId.get(task.id) === "completed"}
@@ -124,26 +125,6 @@ export function TileModal({
         </div>
       )}
 
-      {/* Wildcards */}
-      {tile.wildcards.length > 0 && (
-        <div className="p-5 border-t border-slate-700">
-          <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-3">Wildcards</h4>
-          <div className="space-y-2">
-            {tile.wildcards.map((wc) => {
-              const applicableTask = wc.applicableNodeId ? tasks.find((t) => findNode(t, wc.applicableNodeId!)) : undefined;
-              return (
-                <div key={wc.id} className="flex items-baseline gap-2 flex-wrap">
-                  <span className="text-yellow-400 text-sm font-semibold">{wc.itemName}</span>
-                  <span className="text-slate-300 text-sm">{wc.description}</span>
-                  {applicableTask && (
-                    <span className="text-xs text-slate-500 bg-slate-900 rounded-full px-2 py-0.5">{applicableTask.label} only</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </Modal>
   );
 }

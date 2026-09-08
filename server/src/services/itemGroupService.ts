@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { ItemGroup } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { itemGroupItems, itemGroups, nodeItemGroups } from "../db/schema";
+import { itemGroupItems, itemGroups } from "../db/schema";
 import { ServiceError } from "./errors";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -56,10 +56,11 @@ export function updateItemGroup(db: Db, id: string, input: Partial<ItemGroupInpu
   });
 }
 
+// No "referenced by a tile requirement" guard: item groups are an
+// authoring-time template now (picking one expands into plain ITEM leaves
+// with no lasting reference back to the group), so a group is always safe
+// to delete — see docs/item-quantity-model.md §6.
 export function deleteItemGroup(db: Db, id: string): void {
-  if (db.select().from(nodeItemGroups).where(eq(nodeItemGroups.itemGroupId, id)).get()) {
-    throw new ServiceError(409, "Item group is referenced by a tile requirement");
-  }
   db.transaction((tx) => {
     tx.delete(itemGroupItems).where(eq(itemGroupItems.groupId, id)).run();
     tx.delete(itemGroups).where(eq(itemGroups.id, id)).run();

@@ -192,24 +192,33 @@ export const itemGroupItems = sqliteTable('item_group_items', {
 //
 // Everything scorable — a tile, a task ("Part A"), a line, an item
 // requirement — is a node in one DAG per bingo. `kind` is purely logical:
-// ALL/ANY/COUNT are composites that fold their children; ITEM/MANUAL are
+// ALL/ANY/COUNT/SUM are composites that fold their children; ITEM/MANUAL are
 // leaves that claims attach to. Any node may carry points; a node completes
 // (bottom-up, see engine.ts) independent of whether anything points at it.
 // A node may have several parents via nodeEdges (a tile sits in a row, a
-// column, and maybe a diagonal). See docs/node-graph-model.md.
+// column, and maybe a diagonal). See docs/node-graph-model.md and
+// docs/item-quantity-model.md (ITEM/SUM/quantity revision).
+//
+// ITEM is a single-name leaf (`itemName`) with no quantity of its own — it is
+// complete as soon as one approved claim targets it. Every quantitative
+// decision lives one level up: SUM sums approved-claim quantities across its
+// ITEM children against its own `quantity` target; COUNT (already existed)
+// counts how many children are complete, which also covers what a removed
+// `distinctItems` flag used to mean ("N distinct names" = COUNT(N) over N
+// single-name leaves). See docs/item-quantity-model.md §2.
 // ---------------------------------------------------------------------------
 
 export const nodes = sqliteTable('nodes', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
-  kind: text('kind', { enum: ['ALL', 'ANY', 'COUNT', 'ITEM', 'MANUAL'] }).notNull(),
+  kind: text('kind', { enum: ['ALL', 'ANY', 'COUNT', 'SUM', 'ITEM', 'MANUAL'] }).notNull(),
   label: text('label'), // e.g. "Part A", "Vorkath", "Row 0" — display name
   description: text('description'),
   notes: text('notes'),
   points: integer('points').notNull().default(0), // awarded once this node completes (subject to pointsGateNodeId)
   minCount: integer('min_count'), // COUNT only
-  quantity: integer('quantity'), // ITEM only
-  distinctItems: integer('distinct_items', { mode: 'boolean' }).notNull().default(false), // ITEM only
+  quantity: integer('quantity'), // SUM only — target total of children's approved-claim quantities
+  itemName: text('item_name'), // ITEM only — the single accepted name
   // Self-references. Plain text, no FK constraint declared (Drizzle can't
   // express a same-table FK cleanly and SQLite won't enforce it across a
   // deferred insert order anyway) — validity (same bingo, not a descendant)
@@ -229,25 +238,6 @@ export const nodeEdges = sqliteTable('node_edges', {
   sortOrder: integer('sort_order').notNull().default(0),
 }, (t) => [
   uniqueIndex('node_edges_parent_child_unq').on(t.parentId, t.childId),
-]);
-
-// Inline accepted item names for an ITEM leaf (in addition to any groups).
-export const nodeItems = sqliteTable('node_items', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  nodeId: text('node_id').notNull().references(() => nodes.id),
-  itemName: text('item_name').notNull(),
-}, (t) => [
-  uniqueIndex('node_items_node_name_unq').on(t.nodeId, t.itemName),
-]);
-
-// Item groups referenced by an ITEM leaf (in addition to any inline names) —
-// a leaf can reference several groups at once, same shape as nodeItems.
-export const nodeItemGroups = sqliteTable('node_item_groups', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  nodeId: text('node_id').notNull().references(() => nodes.id),
-  itemGroupId: text('item_group_id').notNull().references(() => itemGroups.id),
-}, (t) => [
-  uniqueIndex('node_item_groups_node_group_unq').on(t.nodeId, t.itemGroupId),
 ]);
 
 // ---------------------------------------------------------------------------
@@ -283,17 +273,6 @@ export const tiles = sqliteTable('tiles', {
   uniqueIndex('tiles_bingo_position_unq').on(t.bingoId, t.boardRow, t.boardCol),
   uniqueIndex('tiles_node_unq').on(t.nodeId),
 ]);
-
-// Wildcard items that can substitute for a required item, capped at
-// maxRedemptionsPerTeam approved claims per team.
-export const tileWildcards = sqliteTable('tile_wildcards', {
-  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  tileId: text('tile_id').notNull().references(() => tiles.id),
-  itemName: text('item_name').notNull(),
-  maxRedemptionsPerTeam: integer('max_redemptions_per_team').notNull().default(1),
-  description: text('description'),
-  applicableNodeId: text('applicable_node_id').references(() => nodes.id), // null = any leaf on the tile
-});
 
 // All possible lines on the board (rows + cols + diagonals, generated from
 // bingos.boardRows/boardCols; diagonals only when the board is square). Each
@@ -366,15 +345,15 @@ export const submissionScreenshots = sqliteTable('submission_screenshots', {
 });
 
 // One row per drop a player allocates to a requirement leaf. itemName is null
-// for MANUAL leaves. wildcardId marks the claim as a wildcard redemption; the
-// per-team cap is enforced by counting approved claims per wildcard.
+// for MANUAL leaves; for an ITEM leaf it must match the leaf's own itemName
+// (validated in submissionService, not enforced here — see
+// docs/item-quantity-model.md §8).
 export const claims = sqliteTable('claims', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   submissionId: text('submission_id').notNull().references(() => submissions.id),
   nodeId: text('node_id').notNull().references(() => nodes.id),
   itemName: text('item_name'),
   quantity: integer('quantity').notNull().default(1),
-  wildcardId: text('wildcard_id').references(() => tileWildcards.id),
 });
 
 // Manual point adjustments applied by moderators. Also the only way to hand

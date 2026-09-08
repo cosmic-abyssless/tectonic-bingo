@@ -2,7 +2,7 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { bingoLines, claims, itemGroupItems, itemGroups, nodeEdges, nodeItemGroups, nodeItems, nodes, submissions, tileWildcards, tiles } from "../db/schema";
+import { bingoLines, claims, nodeEdges, nodes, submissions, tiles } from "../db/schema";
 import type { ApprovedClaim, EngineNode } from "./engine";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -16,21 +16,10 @@ type Queryable = Db | Tx;
 interface TreeCtx {
   nodesById: Map<string, typeof nodes.$inferSelect>;
   edgesByParent: Map<string, { childId: string; sortOrder: number }[]>;
-  itemsByNode: Map<string, string[]>;
-  groupIdsByNode: Map<string, string[]>;
-  groupsById: Map<string, { id: string; name: string }>;
-  groupItemsByGroup: Map<string, string[]>;
 }
 
 function toGraphNode(id: string, ctx: TreeCtx): GraphNode {
   const row = ctx.nodesById.get(id)!;
-  const itemNames = ctx.itemsByNode.get(id) ?? [];
-  const groupIds = ctx.groupIdsByNode.get(id) ?? [];
-  const itemGroups = groupIds.map((gid) => ({
-    id: gid,
-    name: ctx.groupsById.get(gid)?.name ?? "",
-    itemNames: ctx.groupItemsByGroup.get(gid) ?? [],
-  }));
   const childIds = (ctx.edgesByParent.get(id) ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder).map((e) => e.childId);
   return {
     id: row.id,
@@ -42,11 +31,7 @@ function toGraphNode(id: string, ctx: TreeCtx): GraphNode {
     points: row.points,
     minCount: row.minCount,
     quantity: row.quantity,
-    distinctItems: row.distinctItems,
-    itemGroupIds: groupIds,
-    itemGroups,
-    itemNames,
-    acceptedItemNames: [...itemNames, ...itemGroups.flatMap((g) => g.itemNames)],
+    itemName: row.itemName,
     pointsGateNodeId: row.pointsGateNodeId,
     submitGateNodeId: row.submitGateNodeId,
     allowsPreLoad: row.allowsPreLoad,
@@ -55,9 +40,9 @@ function toGraphNode(id: string, ctx: TreeCtx): GraphNode {
 }
 
 // Batch-loads the full nested GraphNode for each root id (a tile's or line's
-// node, typically), resolving item groups. Descendants are found by
-// following edges from the roots — a node reachable from two different roots
-// in the same call is loaded once and nested under both (shared leaf).
+// node, typically). Descendants are found by following edges from the roots
+// — a node reachable from two different roots in the same call is loaded
+// once and nested under both (shared leaf).
 export function getNodeTrees(db: Queryable, rootIds: string[]): Map<string, GraphNode> {
   if (rootIds.length === 0) return new Map();
 
@@ -73,11 +58,6 @@ export function getNodeTrees(db: Queryable, rootIds: string[]): Map<string, Grap
 
   const nodeRows = db.select().from(nodes).where(inArray(nodes.id, ids)).all();
   const edgeRows = db.select().from(nodeEdges).where(inArray(nodeEdges.parentId, ids)).all();
-  const itemRows = db.select().from(nodeItems).where(inArray(nodeItems.nodeId, ids)).all();
-  const nodeGroupRows = db.select().from(nodeItemGroups).where(inArray(nodeItemGroups.nodeId, ids)).all();
-  const groupIds = [...new Set(nodeGroupRows.map((r) => r.itemGroupId))];
-  const groupRows = groupIds.length ? db.select().from(itemGroups).where(inArray(itemGroups.id, groupIds)).all() : [];
-  const groupItemRows = groupIds.length ? db.select().from(itemGroupItems).where(inArray(itemGroupItems.groupId, groupIds)).all() : [];
 
   const edgesByParent = new Map<string, { childId: string; sortOrder: number }[]>();
   for (const e of edgeRows) {
@@ -85,32 +65,7 @@ export function getNodeTrees(db: Queryable, rootIds: string[]): Map<string, Grap
     list.push({ childId: e.childId, sortOrder: e.sortOrder });
     edgesByParent.set(e.parentId, list);
   }
-  const itemsByNode = new Map<string, string[]>();
-  for (const i of itemRows) {
-    const list = itemsByNode.get(i.nodeId) ?? [];
-    list.push(i.itemName);
-    itemsByNode.set(i.nodeId, list);
-  }
-  const groupIdsByNode = new Map<string, string[]>();
-  for (const ng of nodeGroupRows) {
-    const list = groupIdsByNode.get(ng.nodeId) ?? [];
-    list.push(ng.itemGroupId);
-    groupIdsByNode.set(ng.nodeId, list);
-  }
-  const groupItemsByGroup = new Map<string, string[]>();
-  for (const gi of groupItemRows) {
-    const list = groupItemsByGroup.get(gi.groupId) ?? [];
-    list.push(gi.itemName);
-    groupItemsByGroup.set(gi.groupId, list);
-  }
-  const ctx: TreeCtx = {
-    nodesById: new Map(nodeRows.map((r) => [r.id, r])),
-    edgesByParent,
-    itemsByNode,
-    groupIdsByNode,
-    groupsById: new Map(groupRows.map((g) => [g.id, g])),
-    groupItemsByGroup,
-  };
+  const ctx: TreeCtx = { nodesById: new Map(nodeRows.map((r) => [r.id, r])), edgesByParent };
 
   const result = new Map<string, GraphNode>();
   for (const rootId of rootIds) {
@@ -130,40 +85,13 @@ export function getFullGraph(db: Queryable, bingoId: string): { engineNodes: Eng
   const nodeRows = db.select().from(nodes).where(eq(nodes.bingoId, bingoId)).all();
   const ids = nodeRows.map((r) => r.id);
   const edgeRows = ids.length ? db.select().from(nodeEdges).where(inArray(nodeEdges.parentId, ids)).all() : [];
-  const itemRows = ids.length ? db.select().from(nodeItems).where(inArray(nodeItems.nodeId, ids)).all() : [];
-  const nodeGroupRows = ids.length ? db.select().from(nodeItemGroups).where(inArray(nodeItemGroups.nodeId, ids)).all() : [];
-  const groupIds = [...new Set(nodeGroupRows.map((r) => r.itemGroupId))];
-  const groupItemRows = groupIds.length ? db.select().from(itemGroupItems).where(inArray(itemGroupItems.groupId, groupIds)).all() : [];
-
-  const itemsByNode = new Map<string, string[]>();
-  for (const i of itemRows) {
-    const list = itemsByNode.get(i.nodeId) ?? [];
-    list.push(i.itemName);
-    itemsByNode.set(i.nodeId, list);
-  }
-  const groupIdsByNode = new Map<string, string[]>();
-  for (const ng of nodeGroupRows) {
-    const list = groupIdsByNode.get(ng.nodeId) ?? [];
-    list.push(ng.itemGroupId);
-    groupIdsByNode.set(ng.nodeId, list);
-  }
-  const groupItemsByGroup = new Map<string, string[]>();
-  for (const gi of groupItemRows) {
-    const list = groupItemsByGroup.get(gi.groupId) ?? [];
-    list.push(gi.itemName);
-    groupItemsByGroup.set(gi.groupId, list);
-  }
 
   const engineNodes: EngineNode[] = nodeRows.map((r) => ({
     id: r.id,
     kind: r.kind,
     minCount: r.minCount,
     quantity: r.quantity,
-    distinctItems: r.distinctItems,
-    acceptedItemNames: [
-      ...(itemsByNode.get(r.id) ?? []),
-      ...(groupIdsByNode.get(r.id) ?? []).flatMap((gid) => groupItemsByGroup.get(gid) ?? []),
-    ],
+    itemName: r.itemName,
     points: r.points,
     pointsGateNodeId: r.pointsGateNodeId,
   }));
@@ -182,7 +110,7 @@ export function getFullGraph(db: Queryable, bingoId: string): { engineNodes: Eng
 // them at once — a leaf can be a descendant of several roots).
 export function getApprovedClaims(db: Queryable, teamId: string, bingoId: string): ApprovedClaim[] {
   return db
-    .select({ nodeId: claims.nodeId, itemName: claims.itemName, quantity: claims.quantity, wildcardId: claims.wildcardId, reviewedAt: submissions.reviewedAt })
+    .select({ nodeId: claims.nodeId, itemName: claims.itemName, quantity: claims.quantity, reviewedAt: submissions.reviewedAt })
     .from(claims)
     .innerJoin(submissions, eq(claims.submissionId, submissions.id))
     .innerJoin(nodes, eq(claims.nodeId, nodes.id))
@@ -222,6 +150,10 @@ export function leafDescendants(rootId: string, childrenOf: Map<string, string[]
 
 type NodeRow = typeof nodes.$inferInsert;
 
+// SUM's children must all be ITEM kind, same as ITEM/MANUAL having no
+// children — documented invariants, not runtime-enforced here (consistent
+// with how the ITEM/MANUAL-have-no-children invariant is handled today: the
+// admin UI is the only writer and always builds valid shapes).
 function nodeFields(bingoId: string, input: GraphNodeInput): Omit<NodeRow, "id"> {
   return {
     bingoId,
@@ -232,21 +164,11 @@ function nodeFields(bingoId: string, input: GraphNodeInput): Omit<NodeRow, "id">
     points: input.points ?? 0,
     minCount: input.minCount ?? null,
     quantity: input.quantity ?? null,
-    distinctItems: input.distinctItems ?? false,
+    itemName: input.itemName ?? null,
     pointsGateNodeId: input.pointsGateNodeId ?? null,
     submitGateNodeId: input.submitGateNodeId ?? null,
     allowsPreLoad: input.allowsPreLoad ?? false,
   };
-}
-
-function replaceItemNames(tx: Tx, nodeId: string, itemNames: string[]): void {
-  tx.delete(nodeItems).where(eq(nodeItems.nodeId, nodeId)).run();
-  for (const itemName of itemNames) tx.insert(nodeItems).values({ nodeId, itemName }).run();
-}
-
-function replaceItemGroups(tx: Tx, nodeId: string, itemGroupIds: string[]): void {
-  tx.delete(nodeItemGroups).where(eq(nodeItemGroups.nodeId, nodeId)).run();
-  for (const itemGroupId of itemGroupIds) tx.insert(nodeItemGroups).values({ nodeId, itemGroupId }).run();
 }
 
 // Inserts a brand-new subtree (used for a freshly created tile/line/task with
@@ -255,8 +177,6 @@ function replaceItemGroups(tx: Tx, nodeId: string, itemGroupIds: string[]): void
 export function insertSubtree(tx: Tx, bingoId: string, input: GraphNodeInput): string {
   const values: NodeRow = { ...nodeFields(bingoId, input), ...(input.id ? { id: input.id } : {}) };
   const node = tx.insert(nodes).values(values).returning().get();
-  replaceItemNames(tx, node.id, input.itemNames ?? []);
-  replaceItemGroups(tx, node.id, input.itemGroupIds ?? []);
   (input.children ?? []).forEach((child, i) => {
     const childId = insertSubtree(tx, bingoId, child);
     tx.insert(nodeEdges).values({ parentId: node.id, childId, sortOrder: i }).run();
@@ -273,8 +193,6 @@ function reconcileSubtree(tx: Tx, bingoId: string, input: GraphNodeInput, touche
   const id = existing ? existing.id : tx.insert(nodes).values({ ...nodeFields(bingoId, input), ...(input.id ? { id: input.id } : {}) }).returning().get().id;
   if (existing) tx.update(nodes).set(nodeFields(bingoId, input)).where(eq(nodes.id, id)).run();
   touched.add(id);
-  replaceItemNames(tx, id, input.itemNames ?? []);
-  replaceItemGroups(tx, id, input.itemGroupIds ?? []);
 
   tx.delete(nodeEdges).where(eq(nodeEdges.parentId, id)).run();
   (input.children ?? []).forEach((child, i) => {
@@ -305,16 +223,13 @@ function collectDescendants(tx: Tx, rootId: string): Set<string> {
   return seen;
 }
 
-// Unconditionally deletes `id` (edges, inline items, wildcard references),
-// then recurses into its former children via deleteNodeIfOrphaned — so a
-// child still reachable from elsewhere in the DAG (e.g. a leaf shared by two
-// tasks) survives, and one that isn't is cleaned up too.
+// Unconditionally deletes `id` (and its edges), then recurses into its
+// former children via deleteNodeIfOrphaned — so a child still reachable from
+// elsewhere in the DAG (e.g. a leaf shared by two tasks) survives, and one
+// that isn't is cleaned up too.
 function deleteNodeForce(tx: Tx, id: string): void {
   const childIds = tx.select({ childId: nodeEdges.childId }).from(nodeEdges).where(eq(nodeEdges.parentId, id)).all().map((r) => r.childId);
   tx.delete(nodeEdges).where(or(eq(nodeEdges.parentId, id), eq(nodeEdges.childId, id))).run();
-  tx.delete(nodeItems).where(eq(nodeItems.nodeId, id)).run();
-  tx.delete(nodeItemGroups).where(eq(nodeItemGroups.nodeId, id)).run();
-  tx.update(tileWildcards).set({ applicableNodeId: null }).where(eq(tileWildcards.applicableNodeId, id)).run();
   tx.delete(nodes).where(eq(nodes.id, id)).run();
   for (const childId of childIds) deleteNodeIfOrphaned(tx, childId);
 }

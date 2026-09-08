@@ -66,6 +66,7 @@ export interface AdvanceStageParams {
   bingoId: string;
   toStage: Stage;
   changedByUserId: string;
+  now?: Date; // injectable for tests
 }
 
 // Forward one stage, or back one stage (mods correcting a mistake). No
@@ -81,7 +82,17 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
       throw new ServiceError(400, `Cannot move from "${bingo.stage}" directly to "${params.toStage}"`);
     }
 
-    tx.update(bingos).set({ stage: params.toStage }).where(eq(bingos.id, bingo.id)).run();
+    // `startsAt` is normally set ahead of time (a scheduled kickoff mods can
+    // point a countdown at), but createSubmission also gates on it — a mod
+    // advancing to "live" without one already set (or with one still in the
+    // future) would otherwise leave the board showing live while every
+    // submission is rejected with "the bingo has not started yet". Advancing
+    // to live is itself a statement that the bingo starts now, so backfill it
+    // here rather than leaving stage and startsAt able to disagree.
+    const now = params.now ?? new Date();
+    const startsAt = params.toStage === "live" && (!bingo.startsAt || bingo.startsAt > now) ? now : undefined;
+
+    tx.update(bingos).set({ stage: params.toStage, ...(startsAt ? { startsAt } : {}) }).where(eq(bingos.id, bingo.id)).run();
     tx.insert(stageTransitions)
       .values({ bingoId: bingo.id, fromStage: bingo.stage as Stage, toStage: params.toStage, changedByUserId: params.changedByUserId })
       .run();

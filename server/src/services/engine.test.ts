@@ -2,65 +2,88 @@ import { describe, expect, it } from "vitest";
 import { awardedPoints, evaluateGraph, type ApprovedClaim, type EngineNode } from "./engine";
 
 function claim(nodeId: string, overrides: Partial<ApprovedClaim> = {}): ApprovedClaim {
-  return { nodeId, itemName: "Item", quantity: 1, wildcardId: null, reviewedAt: new Date("2026-01-01T00:00:00Z"), ...overrides };
+  return { nodeId, itemName: "Item", quantity: 1, reviewedAt: new Date("2026-01-01T00:00:00Z"), ...overrides };
 }
 
 function item(id: string, overrides: Partial<EngineNode> = {}): EngineNode {
-  return { id, kind: "ITEM", minCount: null, quantity: 1, distinctItems: false, acceptedItemNames: ["Item"], points: 0, pointsGateNodeId: null, ...overrides };
+  return { id, kind: "ITEM", minCount: null, quantity: null, itemName: "Item", points: 0, pointsGateNodeId: null, ...overrides };
 }
 
-function composite(id: string, kind: "ALL" | "ANY" | "COUNT", overrides: Partial<EngineNode> = {}): EngineNode {
-  return { id, kind, minCount: null, quantity: null, distinctItems: false, acceptedItemNames: [], points: 0, pointsGateNodeId: null, ...overrides };
+function composite(id: string, kind: "ALL" | "ANY" | "COUNT" | "SUM", overrides: Partial<EngineNode> = {}): EngineNode {
+  return { id, kind, minCount: null, quantity: null, itemName: null, points: 0, pointsGateNodeId: null, ...overrides };
 }
 
 function manual(id: string, overrides: Partial<EngineNode> = {}): EngineNode {
-  return { id, kind: "MANUAL", minCount: null, quantity: null, distinctItems: false, acceptedItemNames: [], points: 0, pointsGateNodeId: null, ...overrides };
+  return { id, kind: "MANUAL", minCount: null, quantity: null, itemName: null, points: 0, pointsGateNodeId: null, ...overrides };
 }
 
 describe("evaluateGraph — ITEM", () => {
-  it("sums claim quantity against the target", () => {
-    const nodes = [item("a", { quantity: 5 })];
-    const claims = [claim("a", { quantity: 2 }), claim("a", { quantity: 2 })];
-    expect(evaluateGraph(nodes, new Map(), claims).get("a")).toEqual({ complete: false, completedAt: null });
-    claims.push(claim("a", { quantity: 1 }));
-    const result = evaluateGraph(nodes, new Map(), claims).get("a")!;
+  it("is not complete with no approved claims", () => {
+    expect(evaluateGraph([item("a")], new Map(), []).get("a")).toEqual({ complete: false, completedAt: null, value: 0 });
+  });
+
+  it("is complete once any approved claim targets it, regardless of quantity", () => {
+    const result = evaluateGraph([item("a")], new Map(), [claim("a", { quantity: 3 })]).get("a")!;
     expect(result.complete).toBe(true);
+    expect(result.value).toBe(3);
   });
 
-  it("counts distinct item names, not quantity, when distinctItems is set", () => {
-    const nodes = [item("a", { quantity: 2, distinctItems: true, acceptedItemNames: ["A", "B", "C"] })];
-    const claims = [claim("a", { itemName: "A", quantity: 5 })];
-    expect(evaluateGraph(nodes, new Map(), claims).get("a")!.complete).toBe(false);
-    claims.push(claim("a", { itemName: "A", quantity: 3 })); // same name again — still only 1 distinct
-    expect(evaluateGraph(nodes, new Map(), claims).get("a")!.complete).toBe(false);
-    claims.push(claim("a", { itemName: "B", quantity: 1 }));
-    expect(evaluateGraph(nodes, new Map(), claims).get("a")!.complete).toBe(true);
+  it("sums claim quantity into value across multiple claims", () => {
+    const claims = [claim("a", { quantity: 2 }), claim("a", { quantity: 5 })];
+    expect(evaluateGraph([item("a")], new Map(), claims).get("a")!.value).toBe(7);
   });
 
-  it("ignores claims whose itemName isn't accepted, unless they carry a wildcardId", () => {
-    const nodes = [item("a", { acceptedItemNames: ["Vorki"] })];
-    expect(evaluateGraph(nodes, new Map(), [claim("a", { itemName: "Not Vorki" })]).get("a")!.complete).toBe(false);
-    expect(evaluateGraph(nodes, new Map(), [claim("a", { itemName: "Not Vorki", wildcardId: "w1" })]).get("a")!.complete).toBe(true);
+  it("sets completedAt to the earliest approved claim, ignoring later ones", () => {
+    const claims = [
+      claim("a", { reviewedAt: new Date("2026-01-02") }),
+      claim("a", { reviewedAt: new Date("2026-01-01") }), // earlier, out of insertion order
+    ];
+    expect(evaluateGraph([item("a")], new Map(), claims).get("a")!.completedAt).toEqual(new Date("2026-01-01"));
+  });
+});
+
+describe("evaluateGraph — SUM", () => {
+  it("sums claim quantities across its ITEM children against its own quantity target", () => {
+    const nodes = [composite("root", "SUM", { quantity: 5 }), item("a"), item("b")];
+    const childrenOf = new Map([["root", ["a", "b"]]]);
+    const claims = [claim("a", { quantity: 2 }), claim("b", { quantity: 2 })];
+    expect(evaluateGraph(nodes, childrenOf, claims).get("root")!.complete).toBe(false);
+    claims.push(claim("a", { quantity: 1 }));
+    const result = evaluateGraph(nodes, childrenOf, claims).get("root")!;
+    expect(result.complete).toBe(true);
+    expect(result.value).toBe(5);
   });
 
-  it("is case-insensitive on item names", () => {
-    const nodes = [item("a", { acceptedItemNames: ["Vorki"] })];
-    expect(evaluateGraph(nodes, new Map(), [claim("a", { itemName: "vorki" })]).get("a")!.complete).toBe(true);
+  it("sets completedAt to the reviewedAt of the claim (on any child) that tipped the total over, ignoring later claims", () => {
+    const nodes = [composite("root", "SUM", { quantity: 3 }), item("a"), item("b")];
+    const childrenOf = new Map([["root", ["a", "b"]]]);
+    const claims = [
+      claim("a", { quantity: 1, reviewedAt: new Date("2026-01-01") }),
+      claim("b", { quantity: 2, reviewedAt: new Date("2026-01-02") }), // tips it over — on a different child than the first claim
+      claim("a", { quantity: 5, reviewedAt: new Date("2026-01-03") }), // arrives after completion, ignored for the timestamp
+    ];
+    expect(evaluateGraph(nodes, childrenOf, claims).get("root")!.completedAt).toEqual(new Date("2026-01-02"));
   });
 
   it("defaults quantity to 1", () => {
-    const nodes = [item("a", { quantity: null })];
-    expect(evaluateGraph(nodes, new Map(), [claim("a", { quantity: 1 })]).get("a")!.complete).toBe(true);
+    const nodes = [composite("root", "SUM", { quantity: null }), item("a")];
+    const childrenOf = new Map([["root", ["a"]]]);
+    expect(evaluateGraph(nodes, childrenOf, [claim("a", { quantity: 1 })]).get("root")!.complete).toBe(true);
   });
 
-  it("sets completedAt to the reviewedAt of the claim that first reached the target, ignoring later claims", () => {
-    const nodes = [item("a", { quantity: 3 })];
-    const claims = [
-      claim("a", { quantity: 1, reviewedAt: new Date("2026-01-01") }),
-      claim("a", { quantity: 2, reviewedAt: new Date("2026-01-02") }), // tips it over — this is the completedAt
-      claim("a", { quantity: 5, reviewedAt: new Date("2026-01-03") }), // arrives after completion, ignored for the timestamp
-    ];
-    expect(evaluateGraph(nodes, new Map(), claims).get("a")!.completedAt).toEqual(new Date("2026-01-02"));
+  it("empty SUM is not complete — a childless node is unconfigured, not vacuously satisfied", () => {
+    expect(evaluateGraph([composite("root", "SUM", { quantity: 1 })], new Map(), []).get("root")!.complete).toBe(false);
+  });
+});
+
+describe("evaluateGraph — COUNT replaces distinctItems", () => {
+  it("'N distinct uniques' is COUNT(N) over one single-name leaf per unique — a second claim on an already-complete leaf doesn't add a second distinct count", () => {
+    const nodes = [composite("root", "COUNT", { minCount: 2 }), item("a", { itemName: "A" }), item("b", { itemName: "B" }), item("c", { itemName: "C" })];
+    const childrenOf = new Map([["root", ["a", "b", "c"]]]);
+    const claims = [claim("a", { itemName: "A", quantity: 5 }), claim("a", { itemName: "A", quantity: 3 })]; // both on leaf "a" — still only 1 leaf complete
+    expect(evaluateGraph(nodes, childrenOf, claims).get("root")!.complete).toBe(false);
+    claims.push(claim("b", { itemName: "B", quantity: 1 }));
+    expect(evaluateGraph(nodes, childrenOf, claims).get("root")!.complete).toBe(true);
   });
 });
 
@@ -83,7 +106,8 @@ describe("evaluateGraph — composites", () => {
     const claims = [claim("a", { reviewedAt: new Date("2026-01-01") })];
     expect(evaluateGraph(nodes, childrenOf, claims).get("root")!.complete).toBe(false);
     claims.push(claim("b", { reviewedAt: new Date("2026-01-02") }));
-    expect(evaluateGraph(nodes, childrenOf, claims).get("root")).toEqual({ complete: true, completedAt: new Date("2026-01-02") });
+    expect(evaluateGraph(nodes, childrenOf, claims).get("root")!.complete).toBe(true);
+    expect(evaluateGraph(nodes, childrenOf, claims).get("root")!.completedAt).toEqual(new Date("2026-01-02"));
   });
 
   it("empty ALL is not complete — a childless node is unconfigured, not vacuously satisfied", () => {
@@ -94,7 +118,8 @@ describe("evaluateGraph — composites", () => {
     const nodes = [composite("root", "ANY"), item("a"), item("b")];
     const childrenOf = new Map([["root", ["a", "b"]]]);
     const claims = [claim("b", { reviewedAt: new Date("2026-01-01") })];
-    expect(evaluateGraph(nodes, childrenOf, claims).get("root")).toEqual({ complete: true, completedAt: new Date("2026-01-01") });
+    expect(evaluateGraph(nodes, childrenOf, claims).get("root")!.complete).toBe(true);
+    expect(evaluateGraph(nodes, childrenOf, claims).get("root")!.completedAt).toEqual(new Date("2026-01-01"));
   });
 
   it("empty ANY is not complete", () => {
@@ -110,7 +135,8 @@ describe("evaluateGraph — composites", () => {
       claim("c", { reviewedAt: new Date("2026-01-02") }),
     ];
     // a, b, c complete at 01-03, 01-01, 01-02 respectively — the 2nd earliest is 01-02.
-    expect(evaluateGraph(nodes, childrenOf, claims).get("root")).toEqual({ complete: true, completedAt: new Date("2026-01-02") });
+    expect(evaluateGraph(nodes, childrenOf, claims).get("root")!.complete).toBe(true);
+    expect(evaluateGraph(nodes, childrenOf, claims).get("root")!.completedAt).toEqual(new Date("2026-01-02"));
   });
 
   it("empty COUNT is not complete", () => {
@@ -126,6 +152,18 @@ describe("evaluateGraph — composites", () => {
     const results = evaluateGraph(nodes, childrenOf, [claim("shared")]);
     expect(results.get("taskA")!.complete).toBe(true);
     expect(results.get("taskB")!.complete).toBe(true);
+  });
+
+  it("evaluates a leaf shared between a SUM and a COUNT (the Barrows shape): one claim feeds both views", () => {
+    const nodes = [composite("total", "SUM", { quantity: 2 }), composite("distinct", "COUNT", { minCount: 2 }), item("a"), item("b")];
+    const childrenOf = new Map([
+      ["total", ["a", "b"]],
+      ["distinct", ["a", "b"]],
+    ]);
+    const claims = [claim("a", { quantity: 1 }), claim("b", { quantity: 1 })];
+    const results = evaluateGraph(nodes, childrenOf, claims);
+    expect(results.get("total")!.complete).toBe(true); // 1 + 1 >= 2
+    expect(results.get("distinct")!.complete).toBe(true); // both leaves individually complete
   });
 });
 
@@ -153,8 +191,9 @@ describe("awardedPoints", () => {
   });
 
   it("awards nothing for an incomplete node", () => {
-    const nodes = [item("a", { points: 25, quantity: 5 })];
-    const results = evaluateGraph(nodes, new Map(), [claim("a", { quantity: 1 })]);
-    expect(awardedPoints("a", results, new Map(nodes.map((n) => [n.id, n])))).toBe(0);
+    const nodes = [composite("root", "SUM", { points: 25, quantity: 5 }), item("a")];
+    const childrenOf = new Map([["root", ["a"]]]);
+    const results = evaluateGraph(nodes, childrenOf, [claim("a", { quantity: 1 })]);
+    expect(awardedPoints("root", results, new Map(nodes.map((n) => [n.id, n])))).toBe(0);
   });
 });

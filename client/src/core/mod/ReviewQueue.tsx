@@ -151,9 +151,6 @@ export function ReviewQueue({ slug }: { slug: string }) {
                         {isManual && (
                           <span className="text-xs font-semibold border rounded-full px-2 py-0.5 bg-purple-900/50 text-purple-300 border-purple-700">manual</span>
                         )}
-                        {row.claims.some((c) => c.wildcardId !== null) && (
-                          <span className="text-xs font-semibold border rounded-full px-2 py-0.5 bg-amber-900/50 text-amber-300 border-amber-700">✦ wildcard</span>
-                        )}
                       </div>
                       <p className="text-sm text-slate-300 truncate">
                         {claimsSummary(row.claims)}

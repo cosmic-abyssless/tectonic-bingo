@@ -9,8 +9,7 @@ export interface LeafClaimMaps {
 
 // Builds per-leaf "what's been submitted/approved" maps from a team's
 // submissions — feeds TaskPanel's progress display. Mirrors the server's
-// evaluateNode: an ITEM leaf's tally is the sum (or distinct count) of its
-// approved claims.
+// engine: an ITEM leaf's value is the sum of its approved claims' quantity.
 export function buildLeafClaimMaps(teamSubmissions: SubmissionDetails[]): LeafClaimMaps {
   const approvedByNode = new Map<string, Claim[]>();
   const submittedNodeIds = new Set<string>();
@@ -29,8 +28,13 @@ export function buildLeafClaimMaps(teamSubmissions: SubmissionDetails[]): LeafCl
   return { approvedByNode, submittedNodeIds };
 }
 
-export function leafProgress(nodeId: string, distinctItems: boolean, maps: LeafClaimMaps): number {
+/** Sum of approved-claim quantity for one ITEM leaf. */
+export function itemLeafValue(nodeId: string, maps: LeafClaimMaps): number {
   const approved = maps.approvedByNode.get(nodeId) ?? [];
-  if (distinctItems) return new Set(approved.map((c) => c.itemName?.toLowerCase())).size;
   return approved.reduce((sum, c) => sum + c.quantity, 0);
+}
+
+/** Whether an ITEM/MANUAL leaf has at least one approved claim — mirrors the engine's `value >= 1`. */
+export function leafComplete(nodeId: string, maps: LeafClaimMaps): boolean {
+  return itemLeafValue(nodeId, maps) >= 1;
 }

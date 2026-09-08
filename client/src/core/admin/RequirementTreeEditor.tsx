@@ -1,8 +1,32 @@
-import { useState } from "react";
-import type { ItemGroup, NodeKind, GraphNodeInput } from "@bingo/shared";
+import { useEffect, useRef, useState } from "react";
+import type { ItemGroup, NodeKind, GraphNode, GraphNodeInput } from "@bingo/shared";
 import { ItemSearchInput, iconUrlFor } from "../ui/ItemSearchInput";
+import { SearchableSelect } from "../ui/SearchableSelect";
+import { toGraphNodeInput, collectLabeledConditions } from "../board/requirementTree";
 
-// Best-effort wiki icon for a chip — many names here are bingo-specific
+/** An ITEM leaf that already exists elsewhere on the same tile — offered as a reference, not retyped. */
+export interface ExistingLeaf {
+  id: string;
+  itemName: string;
+  taskLabel: string;
+}
+
+/**
+ * An ALL/ANY/COUNT/SUM block that already exists elsewhere on the same tile
+ * (including a whole sibling task's own root) — offered as a reference, so
+ * the entire nested requirement can be reused as-is instead of flattened
+ * into plain items or rebuilt by hand. `label` is a display-only dot-notation
+ * index ("Condition 1.2"), computed fresh per render (see TileEditorPanel)
+ * — nothing here is persisted.
+ */
+export interface ExistingCondition {
+  id: string;
+  taskLabel: string;
+  label: string;
+  node: GraphNode;
+}
+
+// Best-effort wiki icon for a row — many names here are bingo-specific
 // labels ("Any Cerberus drop") with no real wiki icon, so a 404 just hides
 // the <img> rather than leaving a broken-image glyph.
 function ChipIcon({ name, className }: { name: string; className: string }) {
@@ -18,14 +42,78 @@ function ChipIcon({ name, className }: { name: string; className: string }) {
   );
 }
 
+// Marks a row whose id is shared with another task's leaf (added via
+// "+ existing item"/"+ existing condition", or the original side of one) —
+// the same claim counts toward both tasks, which isn't visible from the name
+// alone.
+function LinkIcon({ title, className }: { title: string; className: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" role="img" aria-label={title}>
+      <title>{title}</title>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+    </svg>
+  );
+}
+
+// One primary "+ Item" action plus a caret revealing the less-common adds
+// (a new nested condition, or a reference to something that already exists
+// elsewhere on the tile) — keeps a GroupNode's header to two controls
+// instead of up to four separate buttons.
+function SplitAddButton({ primaryLabel, onPrimary, options }: { primaryLabel: string; onPrimary: () => void; options: { label: string; onClick: () => void }[] }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (containerRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="relative inline-flex shrink-0">
+      <div className="flex rounded border border-slate-600 overflow-hidden">
+        <button type="button" onClick={onPrimary} className="px-2 py-1 text-xs text-slate-400 hover:text-white hover:bg-slate-700 cursor-pointer">+ {primaryLabel}</button>
+        {options.length > 0 && (
+          <button type="button" aria-label="More add options" onClick={() => setOpen((v) => !v)} className="px-1.5 py-1 text-xs text-slate-400 hover:text-white hover:bg-slate-700 cursor-pointer border-l border-slate-600">▾</button>
+        )}
+      </div>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 min-w-max bg-slate-900 border border-slate-700 rounded-md shadow-xl z-10">
+          {options.map((o) => (
+            <button
+              key={o.label}
+              type="button"
+              onClick={() => {
+                o.onClick();
+                setOpen(false);
+              }}
+              className="block w-full whitespace-nowrap text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 cursor-pointer"
+            >
+              + {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Every composite kind a requirement can be, uniformly: ALL/ANY are plain
+// booleans over children, COUNT needs a minimum number of complete children,
+// SUM needs a summed quantity across ITEM children. One dropdown, one set of
+// children (items or nested composites) — no separate "item row" shape.
 const GROUP_KINDS: { kind: NodeKind; label: string }[] = [
   { kind: "ALL", label: "All of" },
   { kind: "ANY", label: "Any one of" },
   { kind: "COUNT", label: "At least N of" },
+  { kind: "SUM", label: "Sum to N across" },
 ];
 
 const INPUT = "bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600";
-const SMALL_BTN = "text-xs text-slate-400 hover:text-white cursor-pointer";
 
 type Path = number[];
 
@@ -46,22 +134,79 @@ function appendChild(root: GraphNodeInput, path: Path, child: GraphNodeInput): G
   return updateAt(root, path, (parent) => ({ ...parent, children: [...(parent.children ?? []), child] }));
 }
 
-const NEW_LEAF: GraphNodeInput = { kind: "ITEM", itemNames: [], quantity: 1 };
 const NEW_GROUP: GraphNodeInput = { kind: "ALL", children: [] };
+
+// Labels every ALL/ANY/COUNT/SUM block in this tree with the same
+// dot-notation index (1, 1.1, 1.2, 1.1.1, ...) TileEditorPanel's
+// existingConditionsExcluding() uses for a sibling task's "+ existing
+// condition" picker — so an admin looking at this task's own tree can tell
+// which entry there refers to which block. Keyed by node reference rather
+// than id: a freshly added, unsaved condition has no id yet, and `root` is
+// the same object graph rendered below within one render pass, so identity
+// holds.
+function labelConditions(root: GraphNodeInput): Map<GraphNodeInput, string> {
+  return new Map(collectLabeledConditions(root).map(({ node, label }) => [node, label]));
+}
 
 export interface RequirementTreeEditorProps {
   root: GraphNodeInput;
   itemGroups: ItemGroup[];
   onChange: (root: GraphNodeInput) => void;
-  /** Creates a global item group from inline names; resolves null if cancelled. */
+  /** Persists a set of item names as a new reusable group. Does not affect the row that called it — groups are a one-time authoring template, not a live reference (see docs/item-quantity-model.md §6). */
   onSaveAsGroup?: (itemNames: string[]) => Promise<ItemGroup | null>;
+  /**
+   * ITEM leaves already present on other tasks of this same tile — lets an
+   * admin reference one as a shared requirement (multi-parent: the same
+   * claim then counts toward both tasks) instead of only ever being able to
+   * create new leaves. The underlying node graph already supports a leaf
+   * having several parents (see docs/node-graph-model.md); this is just the
+   * missing UI for it, not a new write path — reusing an id here goes
+   * through the exact same PATCH this editor already does.
+   */
+  existingLeaves?: ExistingLeaf[];
+  /** Same idea as `existingLeaves`, but whole ALL/ANY/COUNT/SUM blocks — see ExistingCondition. */
+  existingConditions?: ExistingCondition[];
+  /**
+   * Every node id on this tile with 2+ direct parents — i.e. genuinely
+   * shared, at whatever level the sharing happens (see
+   * requirementTree.ts's collectSharedNodeIds). Distinct from
+   * existingLeaves/existingConditions (which list what's *available to
+   * link*, including everything nested inside an already-shared block):
+   * this instead says which row *is itself* a link, so its remove button
+   * can read "unlink" and its icon shows only there, not on every item
+   * inside a shared condition too.
+   */
+  sharedNodeIds: Set<string>;
 }
 
-// Recursive editor for a task's requirement tree. Every group node (ALL/ANY/
-// COUNT) can hold any number of item leaves or nested groups. The root is a
-// group and cannot be removed; leaves and nested groups can.
-export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGroup }: RequirementTreeEditorProps) {
-  return <GroupNode node={root} path={[]} itemGroups={itemGroups} onSaveAsGroup={onSaveAsGroup} update={(path, fn) => onChange(updateAt(root, path, fn))} remove={(path) => onChange(removeAt(root, path))} add={(path, child) => onChange(appendChild(root, path, child))} />;
+// Recursive editor for a task's requirement tree. Every composite node
+// (ALL/ANY/COUNT/SUM) can hold any number of single-item rows or nested
+// composites. The root is usually a composite (every task created via "+ Add
+// task" starts as ALL), but hand-authored data (e.g. seed-dev.ts) can make
+// the task itself a bare ITEM leaf — dispatch on kind here exactly like
+// GroupNode does for its own children, or such a task would render as an
+// empty composite instead of its actual item row.
+export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGroup, existingLeaves, existingConditions, sharedNodeIds }: RequirementTreeEditorProps) {
+  const conditionLabels = labelConditions(root);
+  const props: NodeProps = {
+    node: root,
+    path: [],
+    itemGroups,
+    onSaveAsGroup,
+    existingLeaves,
+    existingConditions,
+    sharedNodeIds,
+    conditionLabels,
+    update: (path, fn) => onChange(updateAt(root, path, fn)),
+    remove: (path) => onChange(removeAt(root, path)),
+    add: (path, child) => onChange(appendChild(root, path, child)),
+    // Batched sibling of `add`: folds every child onto `root` in one
+    // onChange call. Calling `add` in a loop instead would have each call
+    // close over the same pre-update `root`, so only the last child would
+    // survive — this is the "+ item" (group-pick) path.
+    addMany: (path, children) => onChange(children.reduce((r, child) => appendChild(r, path, child), root)),
+  };
+  return root.kind === "ITEM" ? <ItemLeafRow {...props} /> : <GroupNode {...props} />;
 }
 
 interface NodeProps {
@@ -69,22 +214,85 @@ interface NodeProps {
   path: Path;
   itemGroups: ItemGroup[];
   onSaveAsGroup?: (itemNames: string[]) => Promise<ItemGroup | null>;
+  existingLeaves?: ExistingLeaf[];
+  existingConditions?: ExistingCondition[];
+  sharedNodeIds: Set<string>;
+  conditionLabels: Map<GraphNodeInput, string>;
   update: (path: Path, fn: (node: GraphNodeInput) => GraphNodeInput) => void;
   remove: (path: Path) => void;
   add: (path: Path, child: GraphNodeInput) => void;
+  addMany: (path: Path, children: GraphNodeInput[]) => void;
 }
 
 function GroupNode(props: NodeProps) {
-  const { node, path, update, remove, add } = props;
+  const { node, path, itemGroups, update, remove, add, addMany, onSaveAsGroup, existingLeaves, existingConditions, sharedNodeIds, conditionLabels } = props;
   const isRoot = path.length === 0;
   const children = node.children ?? [];
+  const ownLabel = conditionLabels.get(node);
+  // This block *itself* has 2+ direct parents (not merely "something inside
+  // it is reachable from another task") — see sharedNodeIds' doc comment.
+  const isShared = !!node.id && sharedNodeIds.has(node.id);
+  const sharedWithTasks = isShared ? Array.from(new Set((existingConditions ?? []).filter((c) => c.id === node.id).map((c) => c.taskLabel))) : [];
+  const [addingItem, setAddingItem] = useState(false);
+  const [newItemName, setNewItemName] = useState("");
+  const [pickingExisting, setPickingExisting] = useState(false);
+  const [pickingExistingCondition, setPickingExistingCondition] = useState(false);
+  // Offer a leaf/condition already on this group only once — re-adding the
+  // same id as a second direct child of the same parent isn't meaningful.
+  const childIds = new Set(children.map((c) => c.id).filter(Boolean));
+  const pickableLeaves = (existingLeaves ?? []).filter((l) => !childIds.has(l.id));
+  // "+ existing condition" references a whole ALL/ANY/COUNT/SUM block from a
+  // sibling task as-is (its own kind/quantity/children, not decomposed into
+  // items) — e.g. reuse Part A's "at least 2 of these 5 bosses" verbatim in
+  // Part B, rather than rebuilding the same COUNT by hand.
+  const pickableConditions = (existingConditions ?? []).filter((c) => !childIds.has(c.id));
+
+  // Committing (blur, or picking a suggestion) adds one plain ITEM leaf and
+  // closes the picker — mirrors "+ existing item"'s reveal-then-commit flow.
+  function commitNewItem(raw: string) {
+    const trimmed = raw.trim();
+    if (trimmed) add(path, { kind: "ITEM", itemName: trimmed });
+    setNewItemName("");
+    setAddingItem(false);
+  }
+  // The same search box surfaces item groups by name (ItemSearchInput merges
+  // them into its dropdown). Picking one drops every member in as its own
+  // sibling item row — a one-time expansion, not a live reference
+  // (docs/item-quantity-model.md §6).
+  function commitNewItemGroup(group: ItemGroup) {
+    addMany(path, group.itemNames.map((itemName): GraphNodeInput => ({ kind: "ITEM", itemName })));
+    setAddingItem(false);
+  }
+
+  // Offered only when every direct child is a plain item (a flat set, like
+  // what a saved group expands into) — nested composites have no flat name
+  // list to save.
+  const itemChildren = children.filter((c) => c.kind === "ITEM" && c.itemName);
+  const canSaveAsGroup = onSaveAsGroup && itemChildren.length > 1 && itemChildren.length === children.length;
+  async function saveAsGroup() {
+    const names = itemChildren.map((c) => c.itemName!).filter(Boolean);
+    await onSaveAsGroup!(names);
+  }
+
   return (
     <div className={isRoot ? "" : "border-l-2 border-slate-700 pl-3"}>
-      <div className="flex items-center gap-2 mb-1.5">
+      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+        {isShared && (
+          <LinkIcon title={`Shared with ${sharedWithTasks.length > 0 ? sharedWithTasks.join(", ") : "another task"} — removing it here only unlinks it from this task`} className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+        )}
+        {ownLabel && <span className="text-[10px] text-slate-500 font-mono shrink-0" title="Shown in this task's own tree, and in other tasks' &quot;+ existing condition&quot; picker once saved">Condition {ownLabel}</span>}
         <select
           aria-label="Requirement kind"
           value={node.kind}
-          onChange={(e) => update(path, (n) => ({ ...n, kind: e.target.value as NodeKind, minCount: e.target.value === "COUNT" ? n.minCount ?? 1 : undefined }))}
+          onChange={(e) => {
+            const kind = e.target.value as NodeKind;
+            update(path, (n) => ({
+              ...n,
+              kind,
+              minCount: kind === "COUNT" ? n.minCount ?? 1 : undefined,
+              quantity: kind === "SUM" ? n.quantity ?? 1 : undefined,
+            }));
+          }}
           className={INPUT}
         >
           {GROUP_KINDS.map((k) => (
@@ -101,131 +309,129 @@ function GroupNode(props: NodeProps) {
             className={`w-16 ${INPUT}`}
           />
         )}
-        <button type="button" onClick={() => add(path, NEW_LEAF)} className={SMALL_BTN}>+ item</button>
-        <button type="button" onClick={() => add(path, NEW_GROUP)} className={SMALL_BTN}>+ group</button>
+        {node.kind === "SUM" && (
+          <input
+            aria-label="Target quantity"
+            type="number"
+            min={1}
+            defaultValue={node.quantity ?? 1}
+            onBlur={(e) => update(path, (n) => ({ ...n, quantity: Math.max(1, Number(e.target.value) || 1) }))}
+            className={`w-16 ${INPUT}`}
+          />
+        )}
+        <SplitAddButton
+          primaryLabel="Item"
+          onPrimary={() => setAddingItem((v) => !v)}
+          options={[
+            { label: "Condition", onClick: () => add(path, NEW_GROUP) },
+            ...(pickableLeaves.length > 0 ? [{ label: "Existing item", onClick: () => setPickingExisting((v) => !v) }] : []),
+            ...(pickableConditions.length > 0 ? [{ label: "Existing condition", onClick: () => setPickingExistingCondition((v) => !v) }] : []),
+          ]}
+        />
         {!isRoot && (
-          <button type="button" aria-label="Remove group" onClick={() => remove(path)} className="ml-auto text-slate-500 hover:text-red-400 text-xs cursor-pointer">✕</button>
+          <button
+            type="button"
+            aria-label={isShared ? "Unlink condition" : "Remove group"}
+            title={isShared ? "Unlink from this task — the condition itself is only deleted if this was its last use" : undefined}
+            onClick={() => remove(path)}
+            className="ml-auto text-slate-500 hover:text-red-400 text-xs cursor-pointer"
+          >
+            {isShared ? "unlink" : "✕"}
+          </button>
         )}
       </div>
-      {children.length === 0 && <p className="text-xs text-slate-500 italic mb-1.5">No requirements yet — add an item or a group.</p>}
+      {addingItem && (
+        <div className="mb-1.5 max-w-xs">
+          <ItemSearchInput
+            value={newItemName}
+            onChange={setNewItemName}
+            onCommit={commitNewItem}
+            itemGroups={itemGroups}
+            onPickGroup={commitNewItemGroup}
+            placeholder="Add item or group…"
+            ariaLabel="New item name"
+            className={INPUT}
+          />
+        </div>
+      )}
+      {pickingExisting && (
+        <div className="mb-1.5 max-w-xs">
+          <SearchableSelect
+            value=""
+            options={pickableLeaves.map((l) => ({ id: l.id, label: l.itemName, group: l.taskLabel }))}
+            placeholder="Search items elsewhere on this tile…"
+            onChange={(id) => {
+              const leaf = pickableLeaves.find((l) => l.id === id);
+              if (leaf) add(path, { id: leaf.id, kind: "ITEM", itemName: leaf.itemName });
+              setPickingExisting(false);
+            }}
+          />
+        </div>
+      )}
+      {pickingExistingCondition && (
+        <div className="mb-1.5 max-w-xs">
+          <SearchableSelect
+            value=""
+            options={pickableConditions.map((c) => ({ id: c.id, label: c.label, group: c.taskLabel }))}
+            placeholder="Search conditions elsewhere on this tile…"
+            onChange={(id) => {
+              const condition = pickableConditions.find((c) => c.id === id);
+              if (condition) add(path, toGraphNodeInput(condition.node));
+              setPickingExistingCondition(false);
+            }}
+          />
+        </div>
+      )}
+      {children.length === 0 && <p className="text-xs text-slate-500 italic mb-1.5">No requirements yet — add an item or a condition.</p>}
       <ul className="space-y-1.5">
         {children.map((child, i) => (
           // Inputs are uncontrolled (save on blur); include length so removing a sibling remounts the rest.
           <li key={`${i}-${children.length}`}>
-            {child.kind === "ITEM" ? <LeafNode {...props} node={child} path={[...path, i]} /> : <GroupNode {...props} node={child} path={[...path, i]} />}
+            {child.kind === "ITEM" ? <ItemLeafRow {...props} node={child} path={[...path, i]} /> : <GroupNode {...props} node={child} path={[...path, i]} />}
           </li>
         ))}
       </ul>
+      {canSaveAsGroup && (
+        <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-1.5">
+          <button type="button" onClick={saveAsGroup} className="text-indigo-400 hover:text-indigo-300 cursor-pointer">Save these names as a new group…</button>
+        </div>
+      )}
     </div>
   );
 }
 
-function LeafNode({ node, path, itemGroups, update, remove, onSaveAsGroup }: NodeProps) {
-  const itemNames = node.itemNames ?? [];
-  const itemGroupIds = node.itemGroupIds ?? [];
-  const [newName, setNewName] = useState("");
+// One item requirement: a single row, one name, no quantity of its own —
+// quantity always lives on the enclosing SUM/COUNT (see
+// docs/item-quantity-model.md §2). Renaming isn't supported here; remove and
+// re-add (or "+ existing item") instead, matching the read-only-once-added
+// behavior a chip always had.
+function ItemLeafRow({ node, path, remove, existingLeaves, sharedNodeIds }: NodeProps) {
+  const isRoot = path.length === 0;
+  const name = node.itemName ?? "";
+  // This leaf *itself* has 2+ direct parents — not just "reachable somewhere
+  // under a sibling task," which would also be true of every other leaf
+  // nested inside a condition block that's shared one level up. Only the
+  // node that's actually the link gets the icon (see sharedNodeIds).
+  const isShared = !!node.id && sharedNodeIds.has(node.id);
+  const sharedWithTasks = isShared ? Array.from(new Set((existingLeaves ?? []).filter((l) => l.id === node.id).map((l) => l.taskLabel))) : [];
 
-  // Each name is its own chip (not a comma-separated blob) so the wiki
-  // search/icon lookup — which resolves one item at a time — can drive
-  // adding them. Committing (blur, or picking a suggestion) appends the
-  // name and clears the box for the next one; re-adding an existing name
-  // (case-insensitive) is a no-op rather than a silent duplicate.
-  function addName(raw: string) {
-    const trimmed = raw.trim();
-    if (trimmed && !itemNames.some((n) => n.toLowerCase() === trimmed.toLowerCase())) {
-      update(path, (n) => ({ ...n, itemNames: [...(n.itemNames ?? []), trimmed] }));
-    }
-    setNewName("");
-  }
-  function removeName(name: string) {
-    update(path, (n) => ({ ...n, itemNames: (n.itemNames ?? []).filter((existing) => existing !== name) }));
-  }
-
-  // The same search box also surfaces item groups by name (ItemSearchInput
-  // merges them into its dropdown) — picking one adds the whole group
-  // alongside any individual names, rather than replacing them. A leaf can
-  // reference several groups at once.
-  function addGroup(group: ItemGroup) {
-    if (!itemGroupIds.includes(group.id)) {
-      update(path, (n) => ({ ...n, itemGroupIds: [...(n.itemGroupIds ?? []), group.id] }));
-    }
-  }
-  function removeGroup(groupId: string) {
-    update(path, (n) => ({ ...n, itemGroupIds: (n.itemGroupIds ?? []).filter((id) => id !== groupId) }));
-  }
-
-  // Folds everything this leaf currently accepts — inline names plus every
-  // attached group's members — into one brand-new group, then points the
-  // leaf at just that group. Lets an admin build up a leaf from a mix of
-  // loose names and existing groups, then consolidate the whole mix into a
-  // single reusable group instead of only ever saving the loose names.
-  function namesToFold(): string[] {
-    const groupNames = itemGroupIds.flatMap((gid) => itemGroups.find((g) => g.id === gid)?.itemNames ?? []);
-    const combined = [...itemNames, ...groupNames];
-    return combined.filter((name, i) => combined.findIndex((other) => other.toLowerCase() === name.toLowerCase()) === i);
-  }
-  async function saveAsGroup() {
-    const created = await onSaveAsGroup!(namesToFold());
-    if (created) update(path, (n) => ({ ...n, itemNames: [], itemGroupIds: [created.id] }));
-  }
-  const canSaveAsGroup = onSaveAsGroup && itemNames.length + itemGroupIds.length > 1;
   return (
-    <div className="bg-slate-800 rounded px-2 py-1.5 space-y-1.5">
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {itemNames.map((name) => (
-          <span key={name} className="flex items-center gap-1 bg-slate-700 text-slate-200 text-xs rounded-full pl-1.5 pr-1 py-0.5">
-            <ChipIcon name={name} className="w-3.5 h-3.5" />
-            {name}
-            <button type="button" aria-label={`Remove ${name}`} onClick={() => removeName(name)} className="text-slate-400 hover:text-red-400 cursor-pointer leading-none">✕</button>
-          </span>
-        ))}
-        {itemGroupIds.map((gid) => {
-          const g = itemGroups.find((ig) => ig.id === gid);
-          if (!g) return null;
-          return (
-            <span key={gid} className="flex items-center gap-1.5 bg-slate-700 text-slate-200 text-xs rounded-full pl-2 pr-1 py-0.5">
-              <span className="font-medium whitespace-nowrap">{g.name}</span>
-              <span className="flex items-center gap-1 flex-wrap">
-                {g.itemNames.map((name) => (
-                  <span key={name} className="flex items-center gap-1 bg-slate-600 text-slate-300 rounded-full pl-1 pr-1.5 py-0.5 text-[10px] whitespace-nowrap">
-                    <ChipIcon name={name} className="w-3 h-3" />
-                    {name}
-                  </span>
-                ))}
-              </span>
-              <button type="button" aria-label={`Remove group ${g.name}`} onClick={() => removeGroup(gid)} className="text-slate-400 hover:text-red-400 cursor-pointer leading-none">✕</button>
-            </span>
-          );
-        })}
-        <ItemSearchInput
-          value={newName}
-          onChange={setNewName}
-          onCommit={addName}
-          itemGroups={itemGroups}
-          onPickGroup={addGroup}
-          placeholder="Add item or group…"
-          ariaLabel="Item names"
-          containerClassName="flex-1 min-w-36"
-          className={INPUT}
-        />
-        <input
-          aria-label="Quantity"
-          type="number"
-          min={1}
-          defaultValue={node.quantity ?? 1}
-          onBlur={(e) => update(path, (n) => ({ ...n, quantity: Math.max(1, Number(e.target.value) || 1) }))}
-          className={`w-14 ${INPUT}`}
-        />
-        <label title="Count distinct item names instead of total quantity" className="flex items-center gap-1 text-xs text-slate-300 cursor-pointer">
-          <input type="checkbox" checked={node.distinctItems ?? false} onChange={(e) => update(path, (n) => ({ ...n, distinctItems: e.target.checked }))} className="w-3.5 h-3.5 accent-indigo-500 cursor-pointer" />
-          distinct
-        </label>
-        <button type="button" aria-label="Remove item" onClick={() => remove(path)} className="text-slate-500 hover:text-red-400 text-xs cursor-pointer">✕</button>
-      </div>
-      {canSaveAsGroup && (
-        <div className="flex items-center gap-2 text-[11px] text-slate-500">
-          <button type="button" onClick={saveAsGroup} className="text-indigo-400 hover:text-indigo-300 cursor-pointer">Save all of these as a new group…</button>
-        </div>
+    <div className="flex items-center gap-1.5 bg-slate-800 rounded px-2 py-1.5">
+      {isShared && (
+        <LinkIcon title={`Shared with ${sharedWithTasks.length > 0 ? sharedWithTasks.join(", ") : "another task"} — removing it here only unlinks it from this task`} className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+      )}
+      <ChipIcon name={name} className="w-4 h-4" />
+      <span className="flex-1 text-xs text-slate-200 truncate">{name}</span>
+      {!isRoot && (
+        <button
+          type="button"
+          aria-label={isShared ? `Unlink ${name}` : `Remove ${name}`}
+          title={isShared ? "Unlink from this task — the item itself is only deleted if this was its last use" : undefined}
+          onClick={() => remove(path)}
+          className="text-slate-500 hover:text-red-400 text-xs cursor-pointer shrink-0"
+        >
+          {isShared ? "unlink" : "✕"}
+        </button>
       )}
     </div>
   );

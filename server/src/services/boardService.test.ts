@@ -3,9 +3,9 @@ import { eq } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { bingoLines, nodeEdges, nodeItems, nodes, tileWildcards, tiles } from "../db/schema";
+import { bingoLines, nodeEdges, nodes, tiles } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { createTile, createTask, createWildcard, deleteTile, generateLines, getTeamNodeStatuses } from "./boardService";
+import { createTile, createTask, deleteTile, generateLines, getTeamNodeStatuses } from "./boardService";
 import { createSubmission } from "./submissionService";
 import { approveSubmission } from "./scoringService";
 import { getNodeTree } from "./graphService";
@@ -47,12 +47,11 @@ describe("createTile", () => {
 });
 
 describe("deleteTile", () => {
-  it("cascades to tasks, leaves, and wildcards, and detaches from lines without deleting them", () => {
+  it("cascades to tasks and leaves, and detaches from lines without deleting them", () => {
     const bingo = seedBingo();
     const tile = createTile(db, { bingoId: bingo.id, name: "A", boardRow: 0, boardCol: 0 });
-    const task = createTask(db, tile.id, { kind: "ALL", label: "Part A", points: 10, description: "d", children: [{ kind: "ITEM", itemNames: ["Item"] }] });
+    const task = createTask(db, tile.id, { kind: "ALL", label: "Part A", points: 10, description: "d", children: [{ kind: "ITEM", itemName: "Item" }] });
     const leafId = task.children[0]!.id;
-    createWildcard(db, { tileId: tile.id, itemName: "Jar", applicableNodeId: leafId });
     const lines = generateLines(db, bingo, 15); // wires this tile into the 3x3 board's lines
     const line = lines.find((l) => l.lineType === "row" && l.lineIndex === 0)!;
 
@@ -62,8 +61,6 @@ describe("deleteTile", () => {
     expect(db.select().from(nodes).where(eq(nodes.id, tile.nodeId)).all()).toHaveLength(0);
     expect(db.select().from(nodes).where(eq(nodes.id, task.id)).all()).toHaveLength(0);
     expect(db.select().from(nodes).where(eq(nodes.id, leafId)).all()).toHaveLength(0);
-    expect(db.select().from(nodeItems).all()).toHaveLength(0);
-    expect(db.select().from(tileWildcards).all()).toHaveLength(0);
     expect(db.select().from(nodeEdges).where(eq(nodeEdges.childId, tile.nodeId)).all()).toHaveLength(0);
     // The line itself survives (it may still reference other tiles) — only the edge to this tile is removed.
     expect(db.select().from(bingoLines).where(eq(bingoLines.id, line.id)).all()).toHaveLength(1);
@@ -76,12 +73,15 @@ describe("getTeamNodeStatuses", () => {
     const [member] = db.insert(schema.users).values({ discordId: "m", discordUsername: "m" }).returning().all();
     const [team] = db.insert(schema.teams).values({ bingoId: bingo.id, captainUserId: member.id, name: "T", codeword: "cw" }).returning().all();
     const tile = createTile(db, { bingoId: bingo.id, name: "A", boardRow: 0, boardCol: 0 });
-    const untouched = createTask(db, tile.id, { kind: "ITEM", label: "Untouched", points: 10, description: "d", itemNames: ["X"] });
-    const inProgress = createTask(db, tile.id, { kind: "ITEM", label: "InProgress", points: 10, description: "d", itemNames: ["Y"], quantity: 5 });
-    const pending = createTask(db, tile.id, { kind: "ITEM", label: "Pending", points: 10, description: "d", itemNames: ["Z"] });
-    const completed = createTask(db, tile.id, { kind: "ITEM", label: "Completed", points: 10, description: "d", itemNames: ["W"] });
+    const untouched = createTask(db, tile.id, { kind: "ITEM", label: "Untouched", points: 10, description: "d", itemName: "X" });
+    // A SUM(5) over one leaf — one approved claim of quantity 1 leaves it in
+    // progress, not complete, exactly like the old "quantity: 5" ITEM did.
+    const inProgress = createTask(db, tile.id, { kind: "SUM", label: "InProgress", points: 10, description: "d", quantity: 5, children: [{ kind: "ITEM", itemName: "Y" }] });
+    const inProgressLeafId = inProgress.children[0]!.id;
+    const pending = createTask(db, tile.id, { kind: "ITEM", label: "Pending", points: 10, description: "d", itemName: "Z" });
+    const completed = createTask(db, tile.id, { kind: "ITEM", label: "Completed", points: 10, description: "d", itemName: "W" });
 
-    const approvedSub = createSubmission(db, bingo, { teamId: team.id, submittedByUserId: member.id, screenshotUrl: "/x.png", now: new Date("2026-01-02"), claims: [{ nodeId: inProgress.id, itemName: "Y", quantity: 1 }] });
+    const approvedSub = createSubmission(db, bingo, { teamId: team.id, submittedByUserId: member.id, screenshotUrl: "/x.png", now: new Date("2026-01-02"), claims: [{ nodeId: inProgressLeafId, itemName: "Y", quantity: 1 }] });
     approveSubmission(db, { submissionId: approvedSub.id, reviewedByUserId: member.id });
     createSubmission(db, bingo, { teamId: team.id, submittedByUserId: member.id, screenshotUrl: "/x.png", now: new Date("2026-01-02"), claims: [{ nodeId: pending.id, itemName: "Z" }] });
     const completedSub = createSubmission(db, bingo, { teamId: team.id, submittedByUserId: member.id, screenshotUrl: "/x.png", now: new Date("2026-01-02"), claims: [{ nodeId: completed.id, itemName: "W" }] });

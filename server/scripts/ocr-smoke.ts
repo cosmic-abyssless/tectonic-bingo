@@ -6,14 +6,14 @@
 //
 //   node ../node_modules/tsx/dist/cli.mjs scripts/ocr-smoke.ts <path-to-image> [bingo-slug]
 //
-// With a bingo slug, also prints what analyzeSubmissionScreenshot-level
-// item/wildcard matching would decide against that bingo's real board data
-// (reads whatever DB_PATH points at — same as every other script here).
+// With a bingo slug, also prints what analyzeSubmissionScreenshot-level item
+// matching would decide against that bingo's real board data (reads
+// whatever DB_PATH points at — same as every other script here).
 
 import { readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { db } from "../src/db";
-import { bingos, tileWildcards, tiles } from "../src/db/schema";
+import { bingos, tiles } from "../src/db/schema";
 import { getOcrService } from "../src/ocr";
 import { getFullGraph, leafDescendants } from "../src/services/graphService";
 import { findBestMatch, type MatchableItem } from "../src/services/textMatchService";
@@ -46,7 +46,7 @@ async function main() {
   for (const line of extractedText) console.log(`  ${line}`);
 
   if (!slug) {
-    console.log('\n(pass a bingo slug as a 2nd argument to also check item/wildcard matching, e.g. "demo")');
+    console.log('\n(pass a bingo slug as a 2nd argument to also check item matching, e.g. "demo")');
     return;
   }
 
@@ -57,8 +57,7 @@ async function main() {
     return;
   }
 
-  // Every ITEM leaf under each tile's node, with accepted names already
-  // resolved (inline ∪ group) by getFullGraph — one MatchableItem per name.
+  // Every ITEM leaf under each tile's node — one MatchableItem per leaf.
   // Mirrors ocr.ts's analyzeSubmissionScreenshot exactly.
   const tileRows = db.select({ id: tiles.id, nodeId: tiles.nodeId, name: tiles.name }).from(tiles).where(eq(tiles.bingoId, bingo.id)).all();
   const { childrenOf, nodesById } = getFullGraph(db, bingo.id);
@@ -66,27 +65,16 @@ async function main() {
   for (const tile of tileRows) {
     for (const leafId of leafDescendants(tile.nodeId, childrenOf, nodesById)) {
       const node = nodesById.get(leafId);
-      if (node?.kind !== "ITEM") continue;
-      for (const itemName of node.acceptedItemNames) {
-        items.push({ nodeId: leafId, itemName, tileId: tile.id, tileName: tile.name });
-      }
+      if (node?.kind !== "ITEM" || !node.itemName) continue;
+      items.push({ nodeId: leafId, itemName: node.itemName, tileId: tile.id, tileName: tile.name });
     }
   }
 
-  const wildcards = db
-    .select({ id: tileWildcards.id, itemName: tileWildcards.itemName, applicableNodeId: tileWildcards.applicableNodeId, tileId: tiles.id, tileName: tiles.name })
-    .from(tileWildcards)
-    .innerJoin(tiles, eq(tileWildcards.tileId, tiles.id))
-    .where(eq(tiles.bingoId, bingo.id))
-    .all();
+  const { detectedMatch } = findBestMatch(extractedText, items);
 
-  const { detectedMatch, detectedWildcard } = findBestMatch(extractedText, items, wildcards);
-
-  console.log(`\nAgainst bingo "${bingo.name}" (${items.length} items, ${wildcards.length} wildcards):`);
+  console.log(`\nAgainst bingo "${bingo.name}" (${items.length} items):`);
   if (detectedMatch) {
     console.log(`  Matched item: ${detectedMatch.itemName} (tile: ${detectedMatch.tileName})`);
-  } else if (detectedWildcard) {
-    console.log(`  Matched wildcard: ${detectedWildcard.itemName} (tile: ${detectedWildcard.tileName})`);
   } else {
     console.log("  No match");
   }

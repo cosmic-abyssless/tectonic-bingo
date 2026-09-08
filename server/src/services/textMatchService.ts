@@ -74,18 +74,10 @@ export function fuzzyIncludes(lines: string[], needle: string, opts: FuzzyInclud
   return false;
 }
 
-/** One accepted item name on one ITEM leaf (a leaf with N names yields N entries). */
+/** One ITEM leaf's single accepted name. */
 export interface MatchableItem {
   nodeId: string;
   itemName: string;
-  tileId: string;
-  tileName: string;
-}
-
-export interface MatchableWildcard {
-  id: string;
-  itemName: string;
-  applicableNodeId: string | null;
   tileId: string;
   tileName: string;
 }
@@ -97,39 +89,13 @@ export interface DetectedItemMatch {
   itemName: string;
 }
 
-export interface DetectedWildcardMatch {
-  tileId: string;
-  tileName: string;
-  wildcardId: string;
-  itemName: string;
-  applicableNodeId: string | null;
-}
-
-// First item in query order wins; wildcards are only consulted when no item
-// matched. Pure decision logic — no DB or OCR involved — so it's testable on
-// its own from plain extracted-text fixtures.
-export function findBestMatch(
-  extractedText: string[],
-  items: MatchableItem[],
-  wildcards: MatchableWildcard[],
-): { detectedMatch: DetectedItemMatch | null; detectedWildcard: DetectedWildcardMatch | null } {
-  let detectedMatch: DetectedItemMatch | null = null;
+// First item in query order wins. Pure decision logic — no DB or OCR
+// involved — so it's testable on its own from plain extracted-text fixtures.
+export function findBestMatch(extractedText: string[], items: MatchableItem[]): { detectedMatch: DetectedItemMatch | null } {
   for (const item of items) {
     if (fuzzyIncludes(extractedText, item.itemName)) {
-      detectedMatch = { tileId: item.tileId, tileName: item.tileName, nodeId: item.nodeId, itemName: item.itemName };
-      break;
+      return { detectedMatch: { tileId: item.tileId, tileName: item.tileName, nodeId: item.nodeId, itemName: item.itemName } };
     }
   }
-
-  let detectedWildcard: DetectedWildcardMatch | null = null;
-  if (!detectedMatch) {
-    for (const wc of wildcards) {
-      if (fuzzyIncludes(extractedText, wc.itemName)) {
-        detectedWildcard = { tileId: wc.tileId, tileName: wc.tileName, wildcardId: wc.id, itemName: wc.itemName, applicableNodeId: wc.applicableNodeId };
-        break;
-      }
-    }
-  }
-
-  return { detectedMatch, detectedWildcard };
+  return { detectedMatch: null };
 }

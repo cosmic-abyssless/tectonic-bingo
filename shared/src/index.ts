@@ -75,11 +75,18 @@ export interface ItemGroup {
   itemNames: string[];
 }
 
-export type NodeKind = "ALL" | "ANY" | "COUNT" | "ITEM" | "MANUAL";
+export type NodeKind = "ALL" | "ANY" | "COUNT" | "SUM" | "ITEM" | "MANUAL";
 
-// One node in a bingo's DAG. Composite kinds (ALL/ANY/COUNT) fold their
+// One node in a bingo's DAG. Composite kinds (ALL/ANY/COUNT/SUM) fold their
 // children (see engine.ts); ITEM/MANUAL are leaves that claims attach to.
 // Any node may carry points, gated by pointsGateNodeId/submitGateNodeId.
+//
+// ITEM is a single-name leaf: complete as soon as one approved claim targets
+// it. Quantity always lives one level up — SUM sums approved-claim
+// quantities across its ITEM children against its own `quantity` target;
+// COUNT counts how many children are complete (also how "N distinct names"
+// is expressed — COUNT(N) over N single-name leaves — see
+// docs/item-quantity-model.md).
 export interface GraphNode {
   id: string;
   bingoId: string;
@@ -89,16 +96,8 @@ export interface GraphNode {
   notes: string | null;
   points: number;
   minCount: number | null; // COUNT only
-  quantity: number | null; // ITEM only
-  distinctItems: boolean; // ITEM only
-  /** Item groups referenced by this leaf, in addition to itemNames. ITEM only. */
-  itemGroupIds: string[];
-  /** Denormalised {id, name, itemNames} per referenced group, for display. ITEM only. */
-  itemGroups: { id: string; name: string; itemNames: string[] }[];
-  /** Inline item names only (what the admin typed on this leaf). ITEM only. */
-  itemNames: string[];
-  /** Inline names union every referenced group's items — what a claim may name. ITEM only. */
-  acceptedItemNames: string[];
+  quantity: number | null; // SUM only
+  itemName: string | null; // ITEM only
   /** This node's points stay 0 until the gate node also completes for the team. */
   pointsGateNodeId: string | null;
   /** Submissions targeting a leaf under this node are rejected until the gate node completes for the team. */
@@ -111,7 +110,10 @@ export interface GraphNode {
 
 // Admin input shape for creating/replacing a subtree. `id` is optional and,
 // when present, preserves an existing leaf's id so claims already pointing
-// at it stay valid across an edit (see graphService.replaceSubtree).
+// at it stay valid across an edit (see graphService.replaceSubtree). Picking
+// an item group in the admin UI is a client-side expansion into several
+// plain ITEM children (one per group member name) — there is no group
+// reference on a node; see docs/item-quantity-model.md §6.
 export interface GraphNodeInput {
   id?: string;
   kind: NodeKind;
@@ -121,22 +123,11 @@ export interface GraphNodeInput {
   points?: number;
   minCount?: number;
   quantity?: number;
-  distinctItems?: boolean;
-  itemGroupIds?: string[];
-  itemNames?: string[];
+  itemName?: string | null;
   pointsGateNodeId?: string | null;
   submitGateNodeId?: string | null;
   allowsPreLoad?: boolean;
   children?: GraphNodeInput[];
-}
-
-export interface TileWildcard {
-  id: string;
-  tileId: string;
-  itemName: string;
-  maxRedemptionsPerTeam: number;
-  description: string | null;
-  applicableNodeId: string | null;
 }
 
 // The raw tiles row, as returned unnested (e.g. in mod submission rows).
@@ -157,7 +148,6 @@ export interface TileBase {
 
 export interface Tile extends TileBase {
   node: GraphNode;
-  wildcards: TileWildcard[];
 }
 
 export interface Submission {
@@ -192,7 +182,6 @@ export interface Claim {
   nodeId: string;
   itemName: string | null;
   quantity: number;
-  wildcardId: string | null;
 }
 
 export type MinimalUser = Pick<User, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">;
@@ -249,7 +238,6 @@ export interface ScreenshotAnalysis {
   codeword: string;
   extractedText: string[];
   detectedMatch: { tileId: string; tileName: string; nodeId: string; itemName: string } | null;
-  detectedWildcard: { tileId: string; tileName: string; wildcardId: string; itemName: string; applicableNodeId: string | null } | null;
   warnings: string[];
 }
 
@@ -314,7 +302,6 @@ export interface ClaimInput {
   nodeId: string;
   itemName?: string;
   quantity?: number;
-  wildcardId?: string;
 }
 
 export interface CreateSubmissionPayload {
