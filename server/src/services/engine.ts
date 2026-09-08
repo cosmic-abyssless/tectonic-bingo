@@ -2,17 +2,17 @@ import type { NodeKind } from "@bingo/shared";
 
 // Pure scoring engine — no DB access. Given a bingo's full node graph and one
 // team's approved claims, evaluates every node bottom-up. See
-// docs/node-graph-model.md §4. The caller (graphService/scoringService)
-// guarantees the edge set is acyclic (enforced on every write); this module
-// does not defend against cycles.
+// docs/node-graph-model.md §4 and docs/item-quantity-model.md (ITEM/SUM
+// revision). The caller (graphService/scoringService) guarantees the edge
+// set is acyclic (enforced on every write); this module does not defend
+// against cycles.
 
 export interface EngineNode {
   id: string;
   kind: NodeKind;
   minCount: number | null; // COUNT only
-  quantity: number | null; // ITEM only
-  distinctItems: boolean; // ITEM only
-  acceptedItemNames: string[]; // ITEM only, already resolved (inline ∪ group)
+  quantity: number | null; // SUM only — target total of children's claimed quantities
+  itemName: string | null; // ITEM only — the single accepted name
   points: number;
   pointsGateNodeId: string | null;
 }
@@ -21,13 +21,14 @@ export interface ApprovedClaim {
   nodeId: string;
   itemName: string | null;
   quantity: number;
-  wildcardId: string | null;
   reviewedAt: Date;
 }
 
 export interface NodeResult {
   complete: boolean;
   completedAt: Date | null;
+  /** Total approved-claim quantity for this node — only ITEM and SUM produce one; a SUM reads it from its ITEM children. */
+  value?: number;
 }
 
 // Evaluates every node in `nodes` for one team. `childrenOf` maps a node id
@@ -61,28 +62,36 @@ export function evaluateGraph(
         break;
       }
       case "ITEM": {
-        const accepted = new Set(node.acceptedItemNames.map((n) => n.toLowerCase()));
-        const mine = (claimsByNode.get(nodeId) ?? [])
-          .filter((c) => c.wildcardId !== null || (c.itemName !== null && accepted.has(c.itemName.toLowerCase())))
+        // nodeId already identifies the exact name (validated at submission
+        // time — see docs/item-quantity-model.md §8), so every claim on this
+        // node counts; no name check here.
+        const mine = (claimsByNode.get(nodeId) ?? []).slice().sort((a, b) => a.reviewedAt.getTime() - b.reviewedAt.getTime());
+        const value = mine.reduce((sum, c) => sum + c.quantity, 0);
+        const complete = value >= 1;
+        result = { complete, completedAt: complete ? mine[0]!.reviewedAt : null, value };
+        break;
+      }
+      case "SUM": {
+        // Children are always ITEM leaves (enforced on write) — pull their
+        // raw claims directly and merge chronologically, so completedAt is
+        // the claim that tipped the running total over node.quantity,
+        // regardless of which leaf it landed on.
+        const mine = (childrenOf.get(nodeId) ?? [])
+          .flatMap((id) => claimsByNode.get(id) ?? [])
           .slice()
           .sort((a, b) => a.reviewedAt.getTime() - b.reviewedAt.getTime());
         const target = node.quantity ?? 1;
+        const value = mine.reduce((sum, c) => sum + c.quantity, 0);
+        const complete = value >= target;
         let completedAt: Date | null = null;
-        if (node.distinctItems) {
-          const seen = new Set<string>();
-          for (const c of mine) {
-            seen.add(c.itemName?.toLowerCase() ?? `wildcard:${c.wildcardId}`);
-            if (seen.size >= target) { completedAt = c.reviewedAt; break; }
-          }
-          result = { complete: seen.size >= target, completedAt };
-        } else {
+        if (complete) {
           let tally = 0;
           for (const c of mine) {
             tally += c.quantity;
             if (tally >= target) { completedAt = c.reviewedAt; break; }
           }
-          result = { complete: tally >= target, completedAt };
         }
+        result = { complete, completedAt, value };
         break;
       }
       case "ALL": {
