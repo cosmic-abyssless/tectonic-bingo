@@ -1,12 +1,21 @@
 # Tectonic Bingo — Item/quantity model refinement
 
-> Status: **proposed, not yet implemented.** Written 2026-09-08 for review before building;
-> revised the same day after a code-level review against the engine, submission path and
-> client (§§7–8 and the amendments in §2 came out of that review). Builds on
-> `docs/node-graph-model.md` (implemented, on `main`) — this doc revises how `ITEM` leaves,
-> quantities, item groups, "distinct" requirements and wildcards work; everything else in
-> that doc (tiles/lines as presentation, `teamNodeState`, gates, the DAG, `ALL`/`ANY`/`COUNT`)
-> is unchanged.
+> Status: **implemented (2026-09-08)**, on branch `item-quantity-model`, not yet merged to
+> `main`. Written the same day for review before building; revised after a code-level review
+> against the engine, submission path and client (§§7–8 and the amendments in §2 came out of
+> that review), then built in full (Q1–Q8: schema, engine, graphService, submission/scoring
+> services, OCR/text-match, admin `RequirementTreeEditor`/`TaskEditor`, `SubmissionModal`,
+> every read-side board/mod component, and the full server test suite). §13's file list is
+> the authoritative account of what changed. Builds on `docs/node-graph-model.md`
+> (implemented, on `main`) — this doc revises how `ITEM` leaves, quantities, item groups,
+> "distinct" requirements and wildcards work; everything else in that doc (tiles/lines as
+> presentation, `teamNodeState`, gates, the DAG, `ALL`/`ANY`/`COUNT`) is unchanged.
+>
+> **Not built in this pass**: the tile-level "tasks share one item pool" checkbox from §9
+> (the boss-pool/Barrows shared-leaf UI) — that's additive on top of this core model and was
+> explicitly scoped out as follow-up work. E2E (`special-tile-rules.spec.ts`,
+> `full-flow.spec.ts`) is untouched per this branch's established policy: fixed only in a
+> final pass right before merging to `main`, not during iteration.
 
 ## 1. Motivation
 
