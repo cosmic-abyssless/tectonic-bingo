@@ -60,11 +60,10 @@ test("full bingo lifecycle", async ({ page, browser }) => {
     await taskPanel(page, "Part A").getByLabel("Label", { exact: true }).fill("Part A");
     await taskPanel(page, "Part A").getByLabel("Points", { exact: true }).fill("25");
     await taskPanel(page, "Part A").getByLabel("Description", { exact: true }).fill("Obtain a Vorki pet or Draconic visage.");
-    await taskPanel(page, "Part A").getByPlaceholder("Item name").fill("Vorki");
-    await taskPanel(page, "Part A").getByRole("button", { name: "Add" }).click();
-    // Added items render as an inline-editable input, not plain text —
-    // assert via its aria-label (TaskEditor.tsx).
-    await expect(taskPanel(page, "Part A").getByRole("textbox", { name: "Item name for Vorki" })).toBeVisible();
+    await taskPanel(page, "Part A").getByRole("button", { name: "+ item", exact: true }).click();
+    await taskPanel(page, "Part A").getByLabel("Item names").fill("Vorki");
+    await taskPanel(page, "Part A").getByLabel("Item names").press("Tab");
+    await expect(taskPanel(page, "Part A").getByLabel("Item names")).toHaveValue("Vorki");
 
     await page.getByRole("button", { name: "+ Add task" }).click();
     await taskPanel(page, "Part B").getByRole("button", { name: /Expand task: Part B/ }).click();
@@ -77,9 +76,10 @@ test("full bingo lifecycle", async ({ page, browser }) => {
     // let expect's polling absorb the round-trip.
     await taskPanel(page, "Part B").getByLabel("Withhold points until previous").click();
     await expect(taskPanel(page, "Part B").getByLabel("Withhold points until previous")).toBeChecked();
-    await taskPanel(page, "Part B").getByPlaceholder("Item name").fill("Draconic visage");
-    await taskPanel(page, "Part B").getByRole("button", { name: "Add" }).click();
-    await expect(taskPanel(page, "Part B").getByRole("textbox", { name: "Item name for Draconic visage" })).toBeVisible();
+    await taskPanel(page, "Part B").getByRole("button", { name: "+ item", exact: true }).click();
+    await taskPanel(page, "Part B").getByLabel("Item names").fill("Draconic visage");
+    await taskPanel(page, "Part B").getByLabel("Item names").press("Tab");
+    await expect(taskPanel(page, "Part B").getByLabel("Item names")).toHaveValue("Draconic visage");
 
     await page.getByRole("button", { name: "Close" }).click();
 
@@ -92,9 +92,10 @@ test("full bingo lifecycle", async ({ page, browser }) => {
     await taskPanel(page, "Part A").getByRole("button", { name: /Expand task: Part A/ }).click();
     await taskPanel(page, "Part A").getByLabel("Points", { exact: true }).fill("20");
     await taskPanel(page, "Part A").getByLabel("Description", { exact: true }).fill("Complete a Wintertodt kill.");
-    await taskPanel(page, "Part A").getByPlaceholder("Item name").fill("Bruma torch");
-    await taskPanel(page, "Part A").getByRole("button", { name: "Add" }).click();
-    await expect(taskPanel(page, "Part A").getByRole("textbox", { name: "Item name for Bruma torch" })).toBeVisible();
+    await taskPanel(page, "Part A").getByRole("button", { name: "+ item", exact: true }).click();
+    await taskPanel(page, "Part A").getByLabel("Item names").fill("Bruma torch");
+    await taskPanel(page, "Part A").getByLabel("Item names").press("Tab");
+    await expect(taskPanel(page, "Part A").getByLabel("Item names")).toHaveValue("Bruma torch");
 
     await page.getByRole("button", { name: "Close" }).click();
 
@@ -125,15 +126,10 @@ test("full bingo lifecycle", async ({ page, browser }) => {
 
   await test.step("admin adds signup questions", async () => {
     await page.getByRole("button", { name: "Signup Questions" }).click();
-    // Each existing question renders as a role="listitem" (QuestionBuilder.tsx)
-    // — not a raw class-selector: the always-present "add new question" form
-    // below shares the exact same Tailwind classes as each row's wrapper div,
-    // so a class-chain locator silently matches it too (confirmed: it made
-    // this exact assertion pass or fail depending on a network-timing race,
-    // not on whether a row had actually been added). No id/placeholder on
-    // the prompt input itself either (defaultValue, not value, so
-    // toHaveValue still reads the live DOM value correctly).
-    const questionRows = page.getByRole("listitem");
+    // Each existing question renders in its own same-shaped wrapper div, in
+    // order — no id/placeholder on the prompt input itself (defaultValue,
+    // not value, so toHaveValue still reads the live DOM value correctly).
+    const questionRows = page.locator(".bg-slate-900.border.border-slate-700.rounded-lg.p-3.space-y-2");
 
     await page.getByPlaceholder("New question…").fill("What is your preferred combat style?");
     await page.getByLabel("New question type").selectOption({ label: "Dropdown" });

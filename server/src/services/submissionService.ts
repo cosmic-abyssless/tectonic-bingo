@@ -1,35 +1,26 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type { ClaimInput } from "@bingo/shared";
 import * as schema from "../db/schema";
 import {
-  submissionItemClaims, submissions, submissionScreenshots, teams, teamTaskProgress,
-  tileTasks, tiles, tileWildcards, users,
+  claims, requirementNodes, submissions, submissionScreenshots, teams, teamTaskProgress, tileTasks, tiles, tileWildcards, users,
 } from "../db/schema";
 import { ServiceError } from "./errors";
+import { refreshTaskProgressStatus } from "./scoringService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
 
-export interface ItemClaimInput {
-  itemName: string;
-  quantity?: number;
-  taskItemId?: string;
-}
-
 export interface CreateSubmissionParams {
   teamId: string;
-  taskId: string;
   submittedByUserId: string;
-  itemClaims: ItemClaimInput[];
+  claims: ClaimInput[];
   screenshotUrl: string;
-  isWildcardRedemption?: boolean;
-  wildcardId?: string;
   now?: Date; // injectable for tests
 }
 
 // All submission-time gating lives here — the client mirrors these checks
-// for UX, but this is the enforcement (v1 only enforced freeze/gating
-// client-side, which meant a direct API call bypassed both).
+// for UX, but this is the enforcement.
 export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionParams) {
   return db.transaction((tx) => {
     const now = params.now ?? new Date();
@@ -40,10 +31,22 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
     if (!bingo.startsAt || now < bingo.startsAt) {
       throw new ServiceError(400, "The bingo has not started yet");
     }
+    if (params.claims.length === 0) throw new ServiceError(400, "At least one claim is required");
 
-    const task = tx.select().from(tileTasks).where(eq(tileTasks.id, params.taskId)).get();
-    if (!task) throw new ServiceError(404, "Task not found");
-    const tile = tx.select().from(tiles).where(eq(tiles.id, task.tileId)).get();
+    const nodeIds = [...new Set(params.claims.map((c) => c.nodeId))];
+    const leaves = tx.select().from(requirementNodes).where(inArray(requirementNodes.id, nodeIds)).all();
+    if (leaves.length !== nodeIds.length || leaves.some((n) => n.kind !== "ITEM" && n.kind !== "MANUAL")) {
+      throw new ServiceError(400, "Claims must target requirement leaves");
+    }
+    const leafById = new Map(leaves.map((n) => [n.id, n]));
+
+    const taskIds = [...new Set(leaves.map((n) => n.taskId))];
+    const tasks = tx.select().from(tileTasks).where(inArray(tileTasks.id, taskIds)).all();
+    const tileIds = [...new Set(tasks.map((t) => t.tileId))];
+    // Launch scope: one submission covers one tile. Drop this to allow
+    // cross-tile claims.
+    if (tileIds.length !== 1) throw new ServiceError(400, "All claims in a submission must belong to the same tile");
+    const tile = tx.select().from(tiles).where(eq(tiles.id, tileIds[0])).get();
     if (!tile || tile.bingoId !== bingo.id) throw new ServiceError(404, "Tile not found");
 
     if (tile.hasFreezePeriod) {
@@ -53,71 +56,54 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
       }
     }
 
-    if (task.submitRequiresPrevious) {
-      const tasksOrdered = tx.select().from(tileTasks).where(eq(tileTasks.tileId, tile.id)).orderBy(tileTasks.sortOrder).all();
+    const tasksOrdered = tx.select().from(tileTasks).where(eq(tileTasks.tileId, tile.id)).orderBy(tileTasks.sortOrder).all();
+    for (const task of tasks) {
+      if (!task.submitRequiresPrevious) continue;
       const idx = tasksOrdered.findIndex((t) => t.id === task.id);
       const prevTask = idx > 0 ? tasksOrdered[idx - 1] : null;
-      if (prevTask) {
-        const prevProgress = tx
-          .select()
-          .from(teamTaskProgress)
-          .where(and(eq(teamTaskProgress.teamId, params.teamId), eq(teamTaskProgress.taskId, prevTask.id)))
-          .get();
-        if (prevProgress?.status !== "completed") {
-          throw new ServiceError(400, "The previous task on this tile must be completed first");
-        }
+      if (!prevTask) continue;
+      const prevProgress = tx
+        .select()
+        .from(teamTaskProgress)
+        .where(and(eq(teamTaskProgress.teamId, params.teamId), eq(teamTaskProgress.taskId, prevTask.id)))
+        .get();
+      if (prevProgress?.status !== "completed") {
+        throw new ServiceError(400, `${task.label}: the previous task on this tile must be completed first`);
       }
     }
 
-    // Manual-scoring tasks have no item list to claim against — the mod
-    // judges the screenshot directly, so an empty claim list is fine.
-    if (task.scoringMode === "automatic" && params.itemClaims.length === 0) {
-      throw new ServiceError(400, "At least one item claim is required");
-    }
-
-    if (params.isWildcardRedemption) {
-      if (!params.wildcardId) throw new ServiceError(400, "wildcardId is required for a wildcard redemption");
-      const wildcard = tx.select().from(tileWildcards).where(eq(tileWildcards.id, params.wildcardId)).get();
-      if (!wildcard || wildcard.tileId !== tile.id) {
-        throw new ServiceError(400, "Wildcard does not belong to this tile");
-      }
-      if (wildcard.applicableTaskId && wildcard.applicableTaskId !== task.id) {
-        throw new ServiceError(400, "Wildcard is not applicable to this task");
+    for (const claim of params.claims) {
+      const leaf = leafById.get(claim.nodeId)!;
+      if (leaf.kind === "ITEM" && !claim.itemName) throw new ServiceError(400, "itemName is required for item claims");
+      if (!claim.wildcardId) continue;
+      const wildcard = tx.select().from(tileWildcards).where(eq(tileWildcards.id, claim.wildcardId)).get();
+      if (!wildcard || wildcard.tileId !== tile.id) throw new ServiceError(400, "Wildcard does not belong to this tile");
+      if (wildcard.applicableNodeId && wildcard.applicableNodeId !== claim.nodeId) {
+        throw new ServiceError(400, "Wildcard is not applicable to this requirement");
       }
     }
 
     const submission = tx
       .insert(submissions)
-      .values({
-        teamId: params.teamId,
-        taskId: task.id,
-        submittedByUserId: params.submittedByUserId,
-        isWildcardRedemption: params.isWildcardRedemption ?? false,
-        wildcardId: params.wildcardId ?? null,
-      })
+      .values({ teamId: params.teamId, submittedByUserId: params.submittedByUserId })
       .returning()
       .get();
 
     tx.insert(submissionScreenshots).values({ submissionId: submission.id, storageUrl: params.screenshotUrl }).run();
 
-    for (const claim of params.itemClaims) {
-      tx.insert(submissionItemClaims)
-        .values({ submissionId: submission.id, itemName: claim.itemName, quantity: claim.quantity ?? 1, taskItemId: claim.taskItemId ?? null })
+    for (const claim of params.claims) {
+      tx.insert(claims)
+        .values({
+          submissionId: submission.id,
+          nodeId: claim.nodeId,
+          itemName: claim.itemName ?? null,
+          quantity: claim.quantity ?? 1,
+          wildcardId: claim.wildcardId ?? null,
+        })
         .run();
     }
 
-    const progress = tx
-      .select()
-      .from(teamTaskProgress)
-      .where(and(eq(teamTaskProgress.teamId, params.teamId), eq(teamTaskProgress.taskId, task.id)))
-      .get();
-    if (progress) {
-      if (progress.status !== "completed") {
-        tx.update(teamTaskProgress).set({ status: "pending_approval" }).where(eq(teamTaskProgress.id, progress.id)).run();
-      }
-    } else {
-      tx.insert(teamTaskProgress).values({ teamId: params.teamId, taskId: task.id, status: "pending_approval" }).run();
-    }
+    for (const taskId of taskIds) refreshTaskProgressStatus(tx, params.teamId, taskId);
 
     return submission;
   });
@@ -125,21 +111,39 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
 
 export type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">;
 
+export interface ClaimRow {
+  id: string;
+  submissionId: string;
+  nodeId: string;
+  taskId: string;
+  itemName: string | null;
+  quantity: number;
+  wildcardId: string | null;
+}
+
 export interface SubmissionDetails {
   submission: typeof submissions.$inferSelect;
   screenshots: (typeof submissionScreenshots.$inferSelect)[];
-  claims: (typeof submissionItemClaims.$inferSelect)[];
+  claims: ClaimRow[];
   submittedByUser: MinimalUser | null;
 }
 
-// Attaches screenshots, item claims, and the submitter's (minimal) user row
-// to a set of submissions — every submission list the client renders needs
-// all three to be reviewable/displayable.
+// Attaches screenshots, claims, and the submitter's (minimal) user row to a
+// set of submissions — every submission list the client renders needs all
+// three to be reviewable/displayable.
 function attachDetails(db: Db, subs: (typeof submissions.$inferSelect)[]): SubmissionDetails[] {
   if (subs.length === 0) return [];
   const submissionIds = subs.map((s) => s.id);
   const screenshots = db.select().from(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, submissionIds)).all();
-  const claims = db.select().from(submissionItemClaims).where(inArray(submissionItemClaims.submissionId, submissionIds)).all();
+  const claimRows = db
+    .select({
+      id: claims.id, submissionId: claims.submissionId, nodeId: claims.nodeId, taskId: requirementNodes.taskId,
+      itemName: claims.itemName, quantity: claims.quantity, wildcardId: claims.wildcardId,
+    })
+    .from(claims)
+    .innerJoin(requirementNodes, eq(claims.nodeId, requirementNodes.id))
+    .where(inArray(claims.submissionId, submissionIds))
+    .all();
   const userIds = [...new Set(subs.map((s) => s.submittedByUserId))];
   const userRows = db
     .select({ id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick })
@@ -151,31 +155,38 @@ function attachDetails(db: Db, subs: (typeof submissions.$inferSelect)[]): Submi
   return subs.map((s) => ({
     submission: s,
     screenshots: screenshots.filter((sc) => sc.submissionId === s.id),
-    claims: claims.filter((c) => c.submissionId === s.id),
+    claims: claimRows.filter((c) => c.submissionId === s.id),
     submittedByUser: userById.get(s.submittedByUserId) ?? null,
   }));
 }
 
 export interface ModSubmissionRow extends SubmissionDetails {
-  task: typeof tileTasks.$inferSelect;
+  tasks: (typeof tileTasks.$inferSelect)[];
   tile: typeof tiles.$inferSelect;
   team: Pick<typeof teams.$inferSelect, "id" | "name" | "color">;
 }
 
 export function getAllSubmissionsForBingo(db: Db, bingoId: string): ModSubmissionRow[] {
   const rows = db
-    .select({ submission: submissions, task: tileTasks, tile: tiles, team: { id: teams.id, name: teams.name, color: teams.color } })
+    .select({ submission: submissions, team: { id: teams.id, name: teams.name, color: teams.color } })
     .from(submissions)
-    .innerJoin(tileTasks, eq(submissions.taskId, tileTasks.id))
-    .innerJoin(tiles, eq(tileTasks.tileId, tiles.id))
     .innerJoin(teams, eq(submissions.teamId, teams.id))
-    .where(eq(tiles.bingoId, bingoId))
+    .where(eq(teams.bingoId, bingoId))
     .all();
 
   const details = attachDetails(db, rows.map((r) => r.submission));
-  const detailsById = new Map(details.map((d) => [d.submission.id, d]));
+  const taskIds = [...new Set(details.flatMap((d) => d.claims.map((c) => c.taskId)))];
+  const taskRows = taskIds.length ? db.select().from(tileTasks).where(inArray(tileTasks.id, taskIds)).orderBy(tileTasks.sortOrder).all() : [];
+  const tileIds = [...new Set(taskRows.map((t) => t.tileId))];
+  const tileRows = tileIds.length ? db.select().from(tiles).where(inArray(tiles.id, tileIds)).all() : [];
+  const taskById = new Map(taskRows.map((t) => [t.id, t]));
+  const tileById = new Map(tileRows.map((t) => [t.id, t]));
 
-  return rows.map((r) => ({ ...detailsById.get(r.submission.id)!, task: r.task, tile: r.tile, team: r.team }));
+  return rows.map((r, i) => {
+    const d = details[i];
+    const tasks = [...new Set(d.claims.map((c) => c.taskId))].map((id) => taskById.get(id)!);
+    return { ...d, tasks, tile: tileById.get(tasks[0].tileId)!, team: r.team };
+  });
 }
 
 export function getPendingSubmissions(db: Db, bingoId: string) {

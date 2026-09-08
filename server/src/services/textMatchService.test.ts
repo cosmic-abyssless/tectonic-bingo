@@ -89,21 +89,21 @@ describe("fuzzyIncludes — codeword mode (explicit maxEdits: 1 regardless of le
 
 describe("findBestMatch", () => {
   const items = [
-    { id: "item-a", itemName: "Ahrim's hood", taskId: "task-a", tileId: "tile-a", tileName: "Barrows" },
-    { id: "item-b", itemName: "Vorki", taskId: "task-b", tileId: "tile-b", tileName: "Vorkath" },
+    { nodeId: "node-a", itemName: "Ahrim's hood", taskId: "task-a", tileId: "tile-a", tileName: "Barrows" },
+    { nodeId: "node-b", itemName: "Vorki", taskId: "task-b", tileId: "tile-b", tileName: "Vorkath" },
   ];
-  const wildcards = [{ id: "wc-a", itemName: "Cerberus jar", applicableTaskId: null, tileId: "tile-c", tileName: "Cerberus" }];
+  const wildcards = [{ id: "wc-a", itemName: "Cerberus jar", applicableNodeId: null, tileId: "tile-c", tileName: "Cerberus" }];
 
   it("returns the first matching item in query order", () => {
     const { detectedMatch, detectedWildcard } = findBestMatch(["I got a Vorki pet!"], items, wildcards);
-    expect(detectedMatch).toEqual({ tileId: "tile-b", tileName: "Vorkath", taskId: "task-b", taskItemId: "item-b", itemName: "Vorki" });
+    expect(detectedMatch).toEqual({ tileId: "tile-b", tileName: "Vorkath", taskId: "task-b", nodeId: "node-b", itemName: "Vorki" });
     expect(detectedWildcard).toBeNull();
   });
 
   it("falls back to a wildcard only when no item matched", () => {
     const { detectedMatch, detectedWildcard } = findBestMatch(["You received a Cerberus jar!"], items, wildcards);
     expect(detectedMatch).toBeNull();
-    expect(detectedWildcard).toEqual({ tileId: "tile-c", tileName: "Cerberus", wildcardId: "wc-a", itemName: "Cerberus jar", applicableTaskId: null });
+    expect(detectedWildcard).toEqual({ tileId: "tile-c", tileName: "Cerberus", wildcardId: "wc-a", itemName: "Cerberus jar", applicableNodeId: null });
   });
 
   it("returns nulls when nothing matches", () => {

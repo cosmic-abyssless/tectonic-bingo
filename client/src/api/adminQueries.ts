@@ -7,7 +7,12 @@ export const adminQueryKeys = {
   questions: (slug: string) => ["adminQuestions", slug] as const,
   userSearch: (scope: string, q: string) => ["adminUserSearch", scope, q] as const,
   captainCandidates: (slug: string) => ["adminCaptainCandidates", slug] as const,
+  itemGroups: ["adminItemGroups"] as const,
 };
+
+export function useItemGroups() {
+  return useQuery({ queryKey: adminQueryKeys.itemGroups, queryFn: () => adminApi.getItemGroups() });
+}
 
 export function useMods(slug: string) {
   return useQuery({ queryKey: adminQueryKeys.mods(slug), queryFn: () => adminApi.getMods(slug) });

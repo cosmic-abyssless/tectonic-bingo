@@ -1,8 +1,9 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { bingoLines, bingoLineTiles, tileCategories, tileTaskItems, tileTasks, tileWildcards, tiles } from "../db/schema";
+import { bingoLines, bingoLineTiles, tileCategories, tileTasks, tileWildcards, tiles } from "../db/schema";
 import { ServiceError } from "./errors";
+import { deleteRequirementTrees, getRequirementTrees, replaceRequirementTree, type RequirementNodeInput } from "./requirementService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -11,24 +12,21 @@ export function getCategories(db: Db, bingoId: string) {
   return db.select().from(tileCategories).where(eq(tileCategories.bingoId, bingoId)).orderBy(tileCategories.sortOrder).all();
 }
 
-// Full tile -> task -> item tree plus per-tile wildcards, for one bingo.
+// Full tile -> task -> requirement tree plus per-tile wildcards, for one bingo.
 export function getBoardTiles(db: Db, bingoId: string) {
   const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
   const tileIds = tileRows.map((t) => t.id);
   if (tileIds.length === 0) return [];
 
   const taskRows = db.select().from(tileTasks).where(inArray(tileTasks.tileId, tileIds)).orderBy(tileTasks.sortOrder).all();
-  const taskIds = taskRows.map((t) => t.id);
-  const itemRows = taskIds.length
-    ? db.select().from(tileTaskItems).where(inArray(tileTaskItems.taskId, taskIds)).orderBy(tileTaskItems.sortOrder).all()
-    : [];
+  const requirements = getRequirementTrees(db, taskRows.map((t) => t.id));
   const wildcardRows = db.select().from(tileWildcards).where(inArray(tileWildcards.tileId, tileIds)).all();
 
   return tileRows.map((tile) => ({
     ...tile,
     tasks: taskRows
       .filter((t) => t.tileId === tile.id)
-      .map((task) => ({ ...task, items: itemRows.filter((i) => i.taskId === task.id) })),
+      .map((task) => ({ ...task, requirement: requirements.get(task.id)! })),
     wildcards: wildcardRows.filter((w) => w.tileId === tile.id),
   }));
 }
@@ -97,8 +95,8 @@ export function updateTile(db: Db, id: string, params: Partial<Omit<CreateTilePa
 export function deleteTile(db: Db, id: string): void {
   db.transaction((tx) => {
     const taskIds = tx.select({ id: tileTasks.id }).from(tileTasks).where(eq(tileTasks.tileId, id)).all().map((t) => t.id);
-    if (taskIds.length > 0) tx.delete(tileTaskItems).where(inArray(tileTaskItems.taskId, taskIds)).run();
     tx.delete(tileWildcards).where(eq(tileWildcards.tileId, id)).run();
+    deleteRequirementTrees(tx, taskIds);
     tx.delete(bingoLineTiles).where(eq(bingoLineTiles.tileId, id)).run();
     tx.delete(tileTasks).where(eq(tileTasks.tileId, id)).run();
     tx.delete(tiles).where(eq(tiles.id, id)).run();
@@ -114,50 +112,41 @@ export interface CreateTaskParams {
   scoringMode?: "automatic" | "manual";
   submitRequiresPrevious?: boolean;
   pointsRequirePrevious?: boolean;
-  requiresNoDuplicates?: boolean;
-  allowsPreviouslyAcquired?: boolean;
   allowsPreLoad?: boolean;
-  minSubmissions?: number;
-  requiresCompleteSet?: boolean;
   notes?: string | null;
+  // Defaults to an empty ALL root (automatic) or a MANUAL root (manual) so
+  // every task always has exactly one requirement tree.
+  requirement?: RequirementNodeInput;
 }
 export function createTask(db: Db, params: CreateTaskParams) {
+  const { requirement, ...taskValues } = params;
   const existing = db
     .select()
     .from(tileTasks)
     .where(and(eq(tileTasks.tileId, params.tileId), eq(tileTasks.sortOrder, params.sortOrder)))
     .get();
   if (existing) throw new ServiceError(409, `A task already exists at sortOrder ${params.sortOrder} on this tile`);
-  return db.insert(tileTasks).values(params).returning().get();
+  return db.transaction((tx) => {
+    const task = tx.insert(tileTasks).values(taskValues).returning().get();
+    replaceRequirementTree(tx, task.id, requirement ?? { kind: task.scoringMode === "manual" ? "MANUAL" : "ALL" });
+    return task;
+  });
 }
 export function updateTask(db: Db, id: string, params: Partial<Omit<CreateTaskParams, "tileId">>) {
+  const { requirement, ...taskValues } = params;
   const existing = db.select().from(tileTasks).where(eq(tileTasks.id, id)).get();
   if (!existing) throw new ServiceError(404, "Task not found");
-  return db.update(tileTasks).set(params).where(eq(tileTasks.id, id)).returning().get();
+  return db.transaction((tx) => {
+    if (requirement) replaceRequirementTree(tx, id, requirement);
+    if (Object.keys(taskValues).length === 0) return existing;
+    return tx.update(tileTasks).set(taskValues).where(eq(tileTasks.id, id)).returning().get();
+  });
 }
 export function deleteTask(db: Db, id: string): void {
-  db.delete(tileTaskItems).where(eq(tileTaskItems.taskId, id)).run();
-  db.update(tileWildcards).set({ applicableTaskId: null }).where(eq(tileWildcards.applicableTaskId, id)).run();
-  db.delete(tileTasks).where(eq(tileTasks.id, id)).run();
-}
-
-export interface CreateTaskItemParams {
-  taskId: string;
-  itemName: string;
-  quantity?: number;
-  optionsGroup?: string | null;
-  sortOrder?: number;
-}
-export function createTaskItem(db: Db, params: CreateTaskItemParams) {
-  return db.insert(tileTaskItems).values(params).returning().get();
-}
-export function updateTaskItem(db: Db, id: string, params: Partial<Omit<CreateTaskItemParams, "taskId">>) {
-  const existing = db.select().from(tileTaskItems).where(eq(tileTaskItems.id, id)).get();
-  if (!existing) throw new ServiceError(404, "Item not found");
-  return db.update(tileTaskItems).set(params).where(eq(tileTaskItems.id, id)).returning().get();
-}
-export function deleteTaskItem(db: Db, id: string): void {
-  db.delete(tileTaskItems).where(eq(tileTaskItems.id, id)).run();
+  db.transaction((tx) => {
+    deleteRequirementTrees(tx, [id]);
+    tx.delete(tileTasks).where(eq(tileTasks.id, id)).run();
+  });
 }
 
 export interface CreateWildcardParams {
@@ -165,7 +154,7 @@ export interface CreateWildcardParams {
   itemName: string;
   maxRedemptionsPerTeam?: number;
   description?: string | null;
-  applicableTaskId?: string | null;
+  applicableNodeId?: string | null;
 }
 export function createWildcard(db: Db, params: CreateWildcardParams) {
   return db.insert(tileWildcards).values(params).returning().get();

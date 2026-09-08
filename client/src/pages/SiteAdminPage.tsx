@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { queryKeys } from "../api/queries";
 import * as adminApi from "../api/adminApi";
 import { UserSearchInput } from "../core/admin/UserSearchInput";
+import { ItemGroupsPanel } from "../core/admin/ItemGroupsPanel";
 import { displayName } from "../core/ui/user";
 
 function slugify(s: string): string {
@@ -140,6 +141,7 @@ export function SiteAdminPage() {
       <main className="max-w-5xl mx-auto px-6 py-6 flex flex-wrap gap-6">
         <CreateBingoForm />
         <GrantAdminPanel />
+        <ItemGroupsPanel />
       </main>
     </div>
   );

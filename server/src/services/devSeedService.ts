@@ -1,7 +1,7 @@
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import * as schema from "../db/schema";
-import { users, signups } from "../db/schema";
+import { users, signups, signupAnswers } from "../db/schema";
 import * as signupService from "./signupService";
 import type { TectonicRosterUser } from "./tectonicService";
 
@@ -91,7 +91,9 @@ function fakePlayerStats(rsn: string): { womDataJson: string; runeProfileDataJso
 // re-trusting a client-sent claim. Falls back to synthetic TestBot
 // placeholders once real candidates run out, or entirely when the roster is
 // empty (integration off, or genuinely no members left to draw from).
-export function seedTestSignups(db: Db, bingo: Bingo, count: number, tectonicRoster: TectonicRosterUser[] = []) {
+export type SeedSource = "tectonic" | "synthetic" | "mixed";
+
+export function seedTestSignups(db: Db, bingo: Bingo, count: number, tectonicRoster: TectonicRosterUser[] = []): { signups: Array<ReturnType<typeof signupService.createSignup>>; source: SeedSource } {
   const questions = signupService.getQuestions(db, bingo.id);
   const runSuffix = crypto.randomUUID().slice(0, 8);
 
@@ -111,6 +113,7 @@ export function seedTestSignups(db: Db, bingo: Bingo, count: number, tectonicRos
   const realCandidates = shuffled(tectonicRoster.filter((r) => r.rsns.length > 0 && !alreadySignedUp.has(r.user_id)));
 
   const created = [];
+  let realCount = 0;
   for (let i = 1; i <= count; i++) {
     const answers: signupService.SignupAnswerInput[] = questions.map((q) => ({
       questionId: q.id,
@@ -121,6 +124,7 @@ export function seedTestSignups(db: Db, bingo: Bingo, count: number, tectonicRos
     let signup;
     let rsnForStats: string;
     if (real) {
+      realCount++;
       const rsn = real.rsns[0]!;
       // Reuse the existing user row if this real member already exists in
       // our DB (e.g. from a real login, or a prior seed run in another
@@ -139,5 +143,19 @@ export function seedTestSignups(db: Db, bingo: Bingo, count: number, tectonicRos
     db.update(signups).set({ womDataJson, runeProfileDataJson, statsFetchedAt: new Date() }).where(eq(signups.id, signup.id)).run();
     created.push(signup);
   }
-  return created;
+  const source: SeedSource = realCount === created.length ? "tectonic" : realCount === 0 ? "synthetic" : "mixed";
+  return { signups: created, source };
+}
+
+// Dev-only counterpart to seedTestSignups: wipes every signup (and its
+// answers) for the bingo so a seed run can be redone from scratch. Only
+// meaningful during the signup stage — the route enforces that.
+export function deleteAllSignups(db: Db, bingoId: string): number {
+  return db.transaction((tx) => {
+    const ids = tx.select({ id: signups.id }).from(signups).where(eq(signups.bingoId, bingoId)).all().map((r) => r.id);
+    if (ids.length === 0) return 0;
+    tx.delete(signupAnswers).where(inArray(signupAnswers.signupId, ids)).run();
+    tx.delete(signups).where(eq(signups.bingoId, bingoId)).run();
+    return ids.length;
+  });
 }

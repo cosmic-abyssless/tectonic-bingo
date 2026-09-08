@@ -1,86 +1,37 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { TileTask, TileTaskItem } from "@bingo/shared";
+import type { RequirementNode, RequirementNodeInput, TileTask } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
-import { ItemSearchInput } from "../ui/ItemSearchInput";
+import { adminQueryKeys, useItemGroups } from "../../api/adminQueries";
+import { RequirementTreeEditor } from "./RequirementTreeEditor";
 
-// A row's own component instance so its editable name has independent
-// local state (a hook can't live inside the parent's .map() callback).
-function TaskItemRow({
-  item,
-  onPatch,
-  onDelete,
-}: {
-  item: TileTaskItem;
-  onPatch: (id: string, fields: Partial<TileTaskItem>) => void;
-  onDelete: (id: string) => void;
-}) {
-  const [name, setName] = useState(item.itemName);
-
-  return (
-    <li className="flex items-center gap-2 bg-slate-800 rounded px-2 py-1 text-xs">
-      <ItemSearchInput
-        value={name}
-        onChange={setName}
-        onCommit={(value) => {
-          const trimmed = value.trim();
-          if (trimmed && trimmed !== item.itemName) onPatch(item.id, { itemName: trimmed });
-          else setName(item.itemName);
-        }}
-        ariaLabel={`Item name for ${item.itemName}`}
-        containerClassName="flex-1"
-        className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-indigo-500"
-      />
-      <input
-        type="number"
-        min={1}
-        defaultValue={item.quantity}
-        onBlur={(e) => {
-          const value = Math.max(1, Number(e.target.value) || 1);
-          if (value !== item.quantity) onPatch(item.id, { quantity: value });
-          e.target.value = String(value);
-        }}
-        aria-label={`Quantity needed for ${item.itemName}`}
-        title="Total quantity needed (summed across all approved submissions)"
-        className="w-16 bg-slate-900 border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-indigo-500"
-      />
-      <input
-        defaultValue={item.optionsGroup ?? ""}
-        onBlur={(e) => {
-          const value = e.target.value.trim() || null;
-          if (value !== item.optionsGroup) onPatch(item.id, { optionsGroup: value });
-        }}
-        placeholder="group"
-        aria-label={`Options group for ${item.itemName}`}
-        className="w-24 bg-slate-900 border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
-      />
-      <button onClick={() => onDelete(item.id)} className="text-slate-500 hover:text-red-400 cursor-pointer" aria-label={`Delete item ${item.itemName}`}>
-        ✕
-      </button>
-    </li>
-  );
-}
-
-const FLAG_FIELDS: { key: keyof TileTask; label: string; hint: string }[] = [
+const FLAG_FIELDS: { key: "submitRequiresPrevious" | "pointsRequirePrevious" | "allowsPreLoad"; label: string; hint: string }[] = [
   { key: "submitRequiresPrevious", label: "Requires previous task", hint: "Can't submit until the previous task is completed" },
   { key: "pointsRequirePrevious", label: "Withhold points until previous", hint: "Can complete early, but points stay 0 until the previous task completes" },
-  { key: "requiresNoDuplicates", label: "No duplicate items", hint: "Same item can't be claimed twice" },
-  { key: "allowsPreviouslyAcquired", label: "Folds previous task's claims", hint: "Approved claims from the previous task count toward this one too" },
   { key: "allowsPreLoad", label: "Allows pre-load screenshot", hint: "Player may submit an empty-state screenshot beforehand" },
-  { key: "requiresCompleteSet", label: "Requires a complete set", hint: "Needs every item in one options group, not just one per group" },
 ];
+
+function toInput(node: RequirementNode): RequirementNodeInput {
+  return {
+    kind: node.kind,
+    minCount: node.minCount ?? undefined,
+    quantity: node.quantity ?? undefined,
+    distinctItems: node.distinctItems,
+    itemGroupId: node.itemGroupId ?? undefined,
+    itemNames: node.itemNames,
+    children: node.children.map(toInput),
+  };
+}
 
 export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: TileTask; onDeleted: () => void }) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
-  const [newItemName, setNewItemName] = useState("");
-  const [newItemQty, setNewItemQty] = useState(1);
-  const [newItemGroup, setNewItemGroup] = useState("");
+  const itemGroups = useItemGroups().data?.itemGroups ?? [];
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.board(slug) });
 
-  async function patch(fields: Partial<TileTask>) {
+  async function patch(fields: adminApi.TaskPayload) {
     await adminApi.updateTask(slug, task.id, fields);
     invalidate();
   }
@@ -89,27 +40,17 @@ export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: Tile
     invalidate();
     onDeleted();
   }
-  async function addItem() {
-    if (!newItemName.trim()) return;
-    await adminApi.createTaskItem(slug, task.id, {
-      itemName: newItemName.trim(),
-      quantity: Math.max(1, newItemQty || 1),
-      optionsGroup: newItemGroup.trim() || null,
-      sortOrder: task.items.length,
-    });
-    setNewItemName("");
-    setNewItemQty(1);
-    setNewItemGroup("");
-    invalidate();
+  async function saveAsGroup(itemNames: string[]) {
+    const name = prompt("Name for the new item group:", "");
+    if (!name?.trim()) return null;
+    const { itemGroup } = await adminApi.createItemGroup({ name: name.trim(), itemNames });
+    queryClient.invalidateQueries({ queryKey: adminQueryKeys.itemGroups });
+    return itemGroup;
   }
-  async function patchItem(id: string, fields: Partial<TileTaskItem>) {
-    await adminApi.updateTaskItem(slug, id, fields);
-    invalidate();
-  }
-  async function deleteItem(id: string) {
-    await adminApi.deleteTaskItem(slug, id);
-    invalidate();
-  }
+
+  // A bare ITEM root (from the API/seed) is shown wrapped in an ALL so the tree always has a group at the top.
+  const root = task.requirement;
+  const rootInput: RequirementNodeInput = root.kind === "ITEM" ? { kind: "ALL", children: [toInput(root)] } : toInput(root);
 
   const isManual = task.scoringMode === "manual";
 
@@ -149,13 +90,13 @@ export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: Tile
             <label className="block text-xs text-slate-400 mb-1">Scoring mode</label>
             <div className="flex rounded-md overflow-hidden border border-slate-600 w-fit">
               <button
-                onClick={() => patch({ scoringMode: "automatic" })}
+                onClick={() => patch({ scoringMode: "automatic", requirement: { kind: "ALL", children: [] } })}
                 className={`px-3 py-1 text-xs font-medium cursor-pointer ${!isManual ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-400"}`}
               >
                 Automatic
               </button>
               <button
-                onClick={() => patch({ scoringMode: "manual" })}
+                onClick={() => patch({ scoringMode: "manual", requirement: { kind: "MANUAL" } })}
                 className={`px-3 py-1 text-xs font-medium cursor-pointer border-l border-slate-600 ${isManual ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-400"}`}
               >
                 Manual (mod judges)
@@ -163,57 +104,20 @@ export function TaskEditor({ slug, task, onDeleted }: { slug: string; task: Tile
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+            {FLAG_FIELDS.map(({ key, label, hint }) => (
+              <label key={key} title={hint} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                <input type="checkbox" checked={task[key]} onChange={(e) => patch({ [key]: e.target.checked })} className="w-3.5 h-3.5 accent-indigo-500 cursor-pointer" />
+                {label}
+              </label>
+            ))}
+          </div>
+
           {!isManual && (
-            <>
-              <div>
-                <label htmlFor={`task-${task.id}-min-submissions`} className="block text-xs text-slate-400 mb-1">Min. approved submissions to complete</label>
-                <input id={`task-${task.id}-min-submissions`} type="number" min={1} defaultValue={task.minSubmissions} onBlur={(e) => patch({ minSubmissions: Math.max(1, Number(e.target.value) || 1) })} className="w-24 bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-                {FLAG_FIELDS.map(({ key, label, hint }) => (
-                  <label key={key} title={hint} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                    <input type="checkbox" checked={!!task[key]} onChange={(e) => patch({ [key]: e.target.checked } as Partial<TileTask>)} className="w-3.5 h-3.5 accent-indigo-500 cursor-pointer" />
-                    {label}
-                  </label>
-                ))}
-              </div>
-
-              <div>
-                <label className="block text-xs text-slate-400 mb-1.5">Items ({task.items.length})</label>
-                <ul className="space-y-1 mb-2">
-                  {task.items.map((item) => (
-                    <TaskItemRow key={item.id} item={item} onPatch={patchItem} onDelete={deleteItem} />
-                  ))}
-                </ul>
-                <div className="flex gap-2">
-                  <ItemSearchInput
-                    value={newItemName}
-                    onChange={setNewItemName}
-                    placeholder="Item name"
-                    containerClassName="flex-1"
-                  />
-                  <input
-                    type="number"
-                    min={1}
-                    value={newItemQty}
-                    onChange={(e) => setNewItemQty(Math.max(1, Number(e.target.value) || 1))}
-                    aria-label="Quantity needed for new item"
-                    title="Total quantity needed (summed across all approved submissions)"
-                    className="w-16 bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500"
-                  />
-                  <input
-                    value={newItemGroup}
-                    onChange={(e) => setNewItemGroup(e.target.value)}
-                    placeholder="Options group (optional)"
-                    className="w-40 bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
-                  />
-                  <button onClick={addItem} className="text-xs bg-slate-700 hover:bg-slate-600 text-white rounded px-2.5 py-1 cursor-pointer">
-                    Add
-                  </button>
-                </div>
-              </div>
-            </>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1.5">Requirement</label>
+              <RequirementTreeEditor root={rootInput} itemGroups={itemGroups} onChange={(requirement) => patch({ requirement })} onSaveAsGroup={saveAsGroup} />
+            </div>
           )}
 
           <div>

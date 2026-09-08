@@ -63,13 +63,44 @@ export interface Team {
   updatedAt: string;
 }
 
-export interface TileTaskItem {
+export interface ItemGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  itemNames: string[];
+}
+
+export type RequirementKind = "ALL" | "ANY" | "COUNT" | "ITEM" | "MANUAL";
+
+// A task's requirement tree. Composite nodes (ALL/ANY/COUNT) have children;
+// ITEM leaves accept claims for their group's items plus inline itemNames.
+export interface RequirementNode {
   id: string;
   taskId: string;
-  itemName: string;
-  quantity: number;
-  optionsGroup: string | null;
+  parentId: string | null;
   sortOrder: number;
+  kind: RequirementKind;
+  minCount: number | null;
+  quantity: number | null;
+  distinctItems: boolean;
+  itemGroupId: string | null;
+  itemGroupName: string | null;
+  /** Inline item names only (what the admin typed on this leaf). */
+  itemNames: string[];
+  /** Inline names plus the referenced group's items — what a claim may name. */
+  acceptedItemNames: string[];
+  children: RequirementNode[];
+}
+
+// Admin input shape for creating/replacing a task's requirement tree.
+export interface RequirementNodeInput {
+  kind: RequirementKind;
+  minCount?: number;
+  quantity?: number;
+  distinctItems?: boolean;
+  itemGroupId?: string;
+  itemNames?: string[];
+  children?: RequirementNodeInput[];
 }
 
 // The raw tile_tasks row, as returned unnested (e.g. in mod submission rows).
@@ -83,16 +114,12 @@ export interface TileTaskBase {
   scoringMode: ScoringMode;
   submitRequiresPrevious: boolean;
   pointsRequirePrevious: boolean;
-  requiresNoDuplicates: boolean;
-  allowsPreviouslyAcquired: boolean;
   allowsPreLoad: boolean;
-  minSubmissions: number;
-  requiresCompleteSet: boolean;
   notes: string | null;
 }
 
 export interface TileTask extends TileTaskBase {
-  items: TileTaskItem[];
+  requirement: RequirementNode;
 }
 
 export interface TileWildcard {
@@ -101,7 +128,7 @@ export interface TileWildcard {
   itemName: string;
   maxRedemptionsPerTeam: number;
   description: string | null;
-  applicableTaskId: string | null;
+  applicableNodeId: string | null;
 }
 
 // The raw tiles row, as returned unnested (e.g. in mod submission rows).
@@ -127,7 +154,6 @@ export interface Tile extends TileBase {
 export interface Submission {
   id: string;
   teamId: string;
-  taskId: string;
   submittedByUserId: string;
   status: SubmissionStatus;
   submittedAt: string;
@@ -135,8 +161,6 @@ export interface Submission {
   reviewedByUserId: string | null;
   reviewerNotes: string | null;
   pointsAwarded: number | null;
-  isWildcardRedemption: boolean;
-  wildcardId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -153,12 +177,16 @@ export interface SubmissionScreenshot {
   uploadedAt: string;
 }
 
-export interface SubmissionItemClaim {
+// One drop allocated to a requirement leaf. taskId is denormalised from the
+// leaf for convenience. itemName is null for MANUAL leaves.
+export interface Claim {
   id: string;
   submissionId: string;
-  itemName: string;
+  nodeId: string;
+  taskId: string;
+  itemName: string | null;
   quantity: number;
-  taskItemId: string | null;
+  wildcardId: string | null;
 }
 
 export type MinimalUser = Pick<User, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">;
@@ -166,12 +194,12 @@ export type MinimalUser = Pick<User, "id" | "discordUsername" | "discordGlobalNa
 export interface SubmissionDetails {
   submission: Submission;
   screenshots: SubmissionScreenshot[];
-  claims: SubmissionItemClaim[];
+  claims: Claim[];
   submittedByUser: MinimalUser | null;
 }
 
 export interface ModSubmissionRow extends SubmissionDetails {
-  task: TileTaskBase;
+  tasks: TileTaskBase[];
   tile: TileBase;
   team: Pick<Team, "id" | "name" | "color">;
 }
@@ -212,8 +240,8 @@ export interface ScreenshotAnalysis {
   codewordFound: boolean;
   codeword: string;
   extractedText: string[];
-  detectedMatch: { tileId: string; tileName: string; taskId: string; taskItemId: string; itemName: string } | null;
-  detectedWildcard: { tileId: string; tileName: string; wildcardId: string; itemName: string; applicableTaskId: string | null } | null;
+  detectedMatch: { tileId: string; tileName: string; taskId: string; nodeId: string; itemName: string } | null;
+  detectedWildcard: { tileId: string; tileName: string; wildcardId: string; itemName: string; applicableNodeId: string | null } | null;
   warnings: string[];
 }
 
@@ -260,11 +288,26 @@ export interface CreateSubmissionResponse {
   submission: Submission;
 }
 
+export interface ClaimInput {
+  nodeId: string;
+  itemName?: string;
+  quantity?: number;
+  wildcardId?: string;
+}
+
+export interface CreateSubmissionPayload {
+  claims: ClaimInput[];
+  screenshotUrl: string;
+}
+
 export interface ReviewSubmissionResponse {
   submission: Submission;
-  taskCompleted: boolean;
-  pointsAwarded: number;
-  completedLineIds: string[];
+  // Every task the submission's claims touched.
+  taskIds: string[];
+  // Tasks completed by this approval (empty when none completed or on reject).
+  completedTaskIds?: string[];
+  pointsAwarded?: number;
+  completedLineIds?: string[];
 }
 
 export type SignupQuestionType = "text" | "textarea" | "select" | "boolean";
@@ -482,7 +525,7 @@ export interface OsrsItemSearchResult {
 
 export type BroadcastEvent =
   | { type: "submission_created"; bingoId: string; payload: { teamId: string } }
-  | { type: "submission_reviewed"; bingoId: string; payload: { teamId: string; taskId: string } }
+  | { type: "submission_reviewed"; bingoId: string; payload: { teamId: string; taskIds: string[] } }
   | { type: "stage_changed"; bingoId: string; payload: { stage: Stage } }
   | { type: "draft_started"; bingoId: string; payload: Record<string, never> }
   | { type: "draft_pick"; bingoId: string; payload: { pickNumber: number; teamId: string; userId: string } }

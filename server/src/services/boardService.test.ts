@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { bingoLineTiles, bingoLines, tileTaskItems, tileTasks, tileWildcards, tiles } from "../db/schema";
+import { bingoLineTiles, bingoLines, requirementNodeItems, requirementNodes, tileTasks, tileWildcards, tiles } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { createTile, createTask, createTaskItem, createWildcard, deleteTile, generateLines } from "./boardService";
+import { createTile, createTask, createWildcard, deleteTile, generateLines } from "./boardService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -31,12 +31,15 @@ describe("createTile", () => {
 });
 
 describe("deleteTile", () => {
-  it("cascades to tasks, items, wildcards, and line memberships", () => {
+  it("cascades to tasks, requirement trees, wildcards, and line memberships", () => {
     const bingo = seedBingo();
     const tile = createTile(db, { bingoId: bingo.id, name: "A", boardRow: 0, boardCol: 0 });
-    const task = createTask(db, { tileId: tile.id, label: "Part A", sortOrder: 0, points: 10, description: "d" });
-    createTaskItem(db, { taskId: task.id, itemName: "Item" });
-    createWildcard(db, { tileId: tile.id, itemName: "Jar" });
+    const task = createTask(db, {
+      tileId: tile.id, label: "Part A", sortOrder: 0, points: 10, description: "d",
+      requirement: { kind: "ALL", children: [{ kind: "ITEM", itemNames: ["Item"] }] },
+    });
+    const leaf = db.select().from(requirementNodes).all().find((n) => n.kind === "ITEM")!;
+    createWildcard(db, { tileId: tile.id, itemName: "Jar", applicableNodeId: leaf.id });
     const [line] = db.insert(bingoLines).values({ bingoId: bingo.id, lineType: "row", lineIndex: 0 }).returning().all();
     db.insert(bingoLineTiles).values({ bingoLineId: line.id, tileId: tile.id }).run();
 
@@ -44,7 +47,8 @@ describe("deleteTile", () => {
 
     expect(db.select().from(tiles).all()).toHaveLength(0);
     expect(db.select().from(tileTasks).all()).toHaveLength(0);
-    expect(db.select().from(tileTaskItems).all()).toHaveLength(0);
+    expect(db.select().from(requirementNodes).all()).toHaveLength(0);
+    expect(db.select().from(requirementNodeItems).all()).toHaveLength(0);
     expect(db.select().from(tileWildcards).all()).toHaveLength(0);
     expect(db.select().from(bingoLineTiles).all()).toHaveLength(0);
     // The line itself survives (it may still reference other tiles) — only the membership row is removed.
