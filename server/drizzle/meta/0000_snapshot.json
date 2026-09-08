@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "88b66330-9768-4b3d-9163-ed938e973424",
+  "id": "15547d15-12b6-4e6a-b482-a6cd45733cdc",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "bingo_lines": {
@@ -359,13 +359,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": 1
-        },
-        "wildcard_id": {
-          "name": "wildcard_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {},
@@ -389,19 +382,6 @@
           "tableTo": "nodes",
           "columnsFrom": [
             "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "claims_wildcard_id_tile_wildcards_id_fk": {
-          "name": "claims_wildcard_id_tile_wildcards_id_fk",
-          "tableFrom": "claims",
-          "tableTo": "tile_wildcards",
-          "columnsFrom": [
-            "wildcard_id"
           ],
           "columnsTo": [
             "id"
@@ -712,127 +692,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "node_item_groups": {
-      "name": "node_item_groups",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "node_id": {
-          "name": "node_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "item_group_id": {
-          "name": "item_group_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "node_item_groups_node_group_unq": {
-          "name": "node_item_groups_node_group_unq",
-          "columns": [
-            "node_id",
-            "item_group_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "node_item_groups_node_id_nodes_id_fk": {
-          "name": "node_item_groups_node_id_nodes_id_fk",
-          "tableFrom": "node_item_groups",
-          "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "node_item_groups_item_group_id_item_groups_id_fk": {
-          "name": "node_item_groups_item_group_id_item_groups_id_fk",
-          "tableFrom": "node_item_groups",
-          "tableTo": "item_groups",
-          "columnsFrom": [
-            "item_group_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "node_items": {
-      "name": "node_items",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "node_id": {
-          "name": "node_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "item_name": {
-          "name": "item_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "node_items_node_name_unq": {
-          "name": "node_items_node_name_unq",
-          "columns": [
-            "node_id",
-            "item_name"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "node_items_node_id_nodes_id_fk": {
-          "name": "node_items_node_id_nodes_id_fk",
-          "tableFrom": "node_items",
-          "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "nodes": {
       "name": "nodes",
       "columns": {
@@ -900,13 +759,12 @@
           "notNull": false,
           "autoincrement": false
         },
-        "distinct_items": {
-          "name": "distinct_items",
-          "type": "integer",
+        "item_name": {
+          "name": "item_name",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
+          "notNull": false,
+          "autoincrement": false
         },
         "points_gate_node_id": {
           "name": "points_gate_node_id",
@@ -1999,86 +1857,6 @@
           "tableTo": "bingos",
           "columnsFrom": [
             "bingo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "tile_wildcards": {
-      "name": "tile_wildcards",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "tile_id": {
-          "name": "tile_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "item_name": {
-          "name": "item_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "max_redemptions_per_team": {
-          "name": "max_redemptions_per_team",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "applicable_node_id": {
-          "name": "applicable_node_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "tile_wildcards_tile_id_tiles_id_fk": {
-          "name": "tile_wildcards_tile_id_tiles_id_fk",
-          "tableFrom": "tile_wildcards",
-          "tableTo": "tiles",
-          "columnsFrom": [
-            "tile_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "tile_wildcards_applicable_node_id_nodes_id_fk": {
-          "name": "tile_wildcards_applicable_node_id_nodes_id_fk",
-          "tableFrom": "tile_wildcards",
-          "tableTo": "nodes",
-          "columnsFrom": [
-            "applicable_node_id"
           ],
           "columnsTo": [
             "id"
