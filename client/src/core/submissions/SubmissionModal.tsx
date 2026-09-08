@@ -1,21 +1,19 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import type { Bingo, ClaimInput, RequirementNode, ScreenshotAnalysis, SubmissionDetails, TeamTaskProgress, Tile, TileCategory, TileTask, TileWildcard } from "@bingo/shared";
+import type { Bingo, ClaimInput, GraphNode, NodeStatus, ScreenshotAnalysis, SubmissionDetails, TeamNodeState, Tile, TileCategory, TileWildcard } from "@bingo/shared";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { Modal, ModalHeader } from "../ui/Modal";
 import { useAnalyzeScreenshot, useCreateSubmission } from "../../api/queries";
 import { buildLeafClaimMaps, leafProgress } from "../board/taskClaims";
 import { collectLeaves } from "../board/requirementTree";
 import { leafLabel } from "../board/TaskPanel";
-import { getFreezeUnlockAt } from "../board/tileProgress";
+import { deriveBoardNodeStatuses, getFreezeUnlockAt } from "../board/tileProgress";
 
-function getAvailableTasks(tile: Tile, statusByTaskId: Map<string, string>): TileTask[] {
-  return tile.tasks.filter((task, i) => {
-    const status = statusByTaskId.get(task.id) ?? "not_started";
+// A task is a direct child of its tile's node.
+function getAvailableTasks(tile: Tile, statusByNodeId: Map<string, NodeStatus>): GraphNode[] {
+  return tile.node.children.filter((task) => {
+    const status = statusByNodeId.get(task.id) ?? "not_started";
     if (status === "completed") return false;
-    if (task.submitRequiresPrevious) {
-      const prev = i > 0 ? tile.tasks[i - 1] : null;
-      if (prev && statusByTaskId.get(prev.id) !== "completed") return false;
-    }
+    if (task.submitGateNodeId && statusByNodeId.get(task.submitGateNodeId) !== "completed") return false;
     return true;
   });
 }
@@ -25,7 +23,7 @@ interface Props {
   bingo: Bingo;
   tiles: Tile[];
   categories: TileCategory[];
-  progress: TeamTaskProgress[];
+  nodeStates: TeamNodeState[];
   teamSubmissions: SubmissionDetails[];
   initialTileId?: string;
   onClose: () => void;
@@ -38,7 +36,7 @@ interface StagedClaim {
   label: string;
 }
 
-export function SubmissionModal({ slug, bingo, tiles, categories, progress, teamSubmissions, initialTileId, onClose, onSuccess }: Props) {
+export function SubmissionModal({ slug, bingo, tiles, categories, nodeStates, teamSubmissions, initialTileId, onClose, onSuccess }: Props) {
   const [selectedTileId, setSelectedTileId] = useState(initialTileId ?? "");
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [selectedNodeId, setSelectedNodeId] = useState("");
@@ -59,17 +57,17 @@ export function SubmissionModal({ slug, bingo, tiles, categories, progress, team
   const createSubmission = useCreateSubmission(slug);
   const analyzeScreenshot = useAnalyzeScreenshot(slug);
 
-  const statusByTaskId = useMemo(() => new Map(progress.map((p) => [p.taskId, p.status])), [progress]);
+  const statusByNodeId = useMemo(() => deriveBoardNodeStatuses(tiles, nodeStates, teamSubmissions), [tiles, nodeStates, teamSubmissions]);
   const selectedTile = tiles.find((t) => t.id === selectedTileId);
-  const availableTasks = selectedTile ? getAvailableTasks(selectedTile, statusByTaskId) : [];
-  const currentTask = selectedTile?.tasks.find((t) => t.id === selectedTaskId);
+  const availableTasks = selectedTile ? getAvailableTasks(selectedTile, statusByNodeId) : [];
+  const currentTask = selectedTile?.node.children.find((t) => t.id === selectedTaskId);
 
   const claimMaps = useMemo(() => buildLeafClaimMaps(teamSubmissions), [teamSubmissions]);
-  const isManualTask = currentTask?.scoringMode === "manual";
+  const isManualTask = currentTask?.kind === "MANUAL";
 
   // Leaves of the current task that still need items (counting claims staged in this modal),
   // narrowed to the selected wildcard's scope.
-  const taskLeaves: RequirementNode[] = currentTask ? collectLeaves(currentTask.requirement) : [];
+  const taskLeaves: GraphNode[] = currentTask ? collectLeaves(currentTask) : [];
   const stagedQtyByNode = new Map<string, number>();
   for (const { claim } of stagedClaims) stagedQtyByNode.set(claim.nodeId, (stagedQtyByNode.get(claim.nodeId) ?? 0) + (claim.quantity ?? 1));
   const openLeaves = taskLeaves.filter(
@@ -125,18 +123,20 @@ export function SubmissionModal({ slug, bingo, tiles, categories, progress, team
     if (!matchedTile) return;
     const freezeUnlocksAt = getFreezeUnlockAt(bingo.startsAt, matchedTile);
     if (freezeUnlocksAt && Date.now() < freezeUnlocksAt) return;
-    const matchedTask = matchedTile.tasks.find((t) => t.id === match.taskId);
+    // The matched leaf may be nested under a task's ALL/ANY/COUNT wrapper —
+    // find the task (direct tile child) that owns it.
+    const matchedTask = matchedTile.node.children.find((t) => collectLeaves(t).some((l) => l.id === match.nodeId));
     if (!matchedTask) return;
-    const available = getAvailableTasks(matchedTile, statusByTaskId);
-    if (!available.some((t) => t.id === match.taskId)) return;
+    const available = getAvailableTasks(matchedTile, statusByNodeId);
+    if (!available.some((t) => t.id === matchedTask.id)) return;
 
     if (!selectedTileId) {
       setSelectedTileId(match.tileId);
-      setSelectedTaskId(match.taskId);
+      setSelectedTaskId(matchedTask.id);
       setSelectedNodeId(match.nodeId);
       setSelectedItemName(match.itemName);
     } else if (selectedTileId === match.tileId && !selectedNodeId) {
-      setSelectedTaskId(match.taskId);
+      setSelectedTaskId(matchedTask.id);
       setSelectedNodeId(match.nodeId);
       setSelectedItemName(match.itemName);
     }
@@ -281,7 +281,7 @@ export function SubmissionModal({ slug, bingo, tiles, categories, progress, team
       .filter((t) => t.categoryId === (cat?.id ?? null))
       .sort((a, b) => a.boardRow - b.boardRow || a.boardCol - b.boardCol);
     return catTiles.flatMap((t) => {
-      const available = getAvailableTasks(t, statusByTaskId);
+      const available = getAvailableTasks(t, statusByNodeId);
       const freezeUnlocksAt = getFreezeUnlockAt(bingo.startsAt, t);
       const frozen = !!(freezeUnlocksAt && Date.now() < freezeUnlocksAt);
       if (available.length === 0 || frozen) return [];

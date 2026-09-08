@@ -1,4 +1,5 @@
-import type { SubmissionDetails, Tile, TaskStatus, TeamTaskProgress } from "@bingo/shared";
+import type { GraphNode, NodeStatus, SubmissionDetails, Tile, TeamNodeState } from "@bingo/shared";
+import { collectLeaves } from "./requirementTree";
 
 export interface TileProgressSummary {
   completedTasks: number;
@@ -6,31 +7,85 @@ export interface TileProgressSummary {
   pointsAwarded: number;
   totalPoints: number;
   allComplete: boolean;
-  statusByTaskId: Map<string, TaskStatus>;
+  statusByNodeId: Map<string, NodeStatus>;
 }
 
-export function summarizeTileProgress(tile: Tile, progress: TeamTaskProgress[]): TileProgressSummary {
-  const byTaskId = new Map(progress.map((p) => [p.taskId, p]));
-  const statusByTaskId = new Map<string, TaskStatus>();
+function buildClaimNodeIdSets(teamSubmissions: SubmissionDetails[]): { pendingLeafIds: Set<string>; approvedLeafIds: Set<string> } {
+  const pendingLeafIds = new Set<string>();
+  const approvedLeafIds = new Set<string>();
+  for (const d of teamSubmissions) {
+    const target = d.submission.status === "pending" ? pendingLeafIds : d.submission.status === "approved" ? approvedLeafIds : null;
+    if (!target) continue;
+    for (const c of d.claims) target.add(c.nodeId);
+  }
+  return { pendingLeafIds, approvedLeafIds };
+}
+
+// Bottom-up, mirroring server boardService.getTeamNodeStatuses: a node in
+// completedNodeIds is "completed"; a leaf's status otherwise comes from
+// whether it has a pending or approved claim; a composite's status is the
+// most "active" of its children's (pending_approval > in_progress > not_started).
+function deriveNodeStatuses(
+  node: GraphNode,
+  completedNodeIds: Set<string>,
+  pendingLeafIds: Set<string>,
+  approvedLeafIds: Set<string>,
+  out: Map<string, NodeStatus>,
+): NodeStatus {
+  if (completedNodeIds.has(node.id)) {
+    out.set(node.id, "completed");
+    return "completed";
+  }
+  let status: NodeStatus;
+  if (node.kind === "ITEM" || node.kind === "MANUAL") {
+    status = pendingLeafIds.has(node.id) ? "pending_approval" : approvedLeafIds.has(node.id) ? "in_progress" : "not_started";
+  } else {
+    const childStatuses = node.children.map((c) => deriveNodeStatuses(c, completedNodeIds, pendingLeafIds, approvedLeafIds, out));
+    status = childStatuses.includes("pending_approval") ? "pending_approval" : childStatuses.includes("in_progress") ? "in_progress" : "not_started";
+  }
+  out.set(node.id, status);
+  return status;
+}
+
+// Same derivation as summarizeTileProgress, merged across every tile — for
+// UI that picks among tasks on any tile (SubmissionModal) rather than
+// rendering one tile at a time. Node ids are globally unique so the merge
+// can't collide across tiles.
+export function deriveBoardNodeStatuses(tiles: Tile[], nodeStates: TeamNodeState[], teamSubmissions: SubmissionDetails[]): Map<string, NodeStatus> {
+  const completedNodeIds = new Set(nodeStates.map((s) => s.nodeId));
+  const { pendingLeafIds, approvedLeafIds } = buildClaimNodeIdSets(teamSubmissions);
+  const out = new Map<string, NodeStatus>();
+  for (const tile of tiles) deriveNodeStatuses(tile.node, completedNodeIds, pendingLeafIds, approvedLeafIds, out);
+  return out;
+}
+
+// Takes the whole team's node states/submissions (not pre-filtered to this
+// tile) — cheap at this board's scale, and correct without needing a
+// leaf-to-tile lookup, since the recursion only ever visits this tile's own
+// subtree.
+export function summarizeTileProgress(tile: Tile, nodeStates: TeamNodeState[], teamSubmissions: SubmissionDetails[]): TileProgressSummary {
+  const completedNodeIds = new Set(nodeStates.map((s) => s.nodeId));
+  const pointsByNodeId = new Map(nodeStates.map((s) => [s.nodeId, s.pointsAwarded]));
+  const { pendingLeafIds, approvedLeafIds } = buildClaimNodeIdSets(teamSubmissions);
+  const statusByNodeId = new Map<string, NodeStatus>();
+  deriveNodeStatuses(tile.node, completedNodeIds, pendingLeafIds, approvedLeafIds, statusByNodeId);
+
+  const tasks = tile.node.children;
   let completedTasks = 0;
   let pointsAwarded = 0;
-  const totalPoints = tile.tasks.reduce((sum, t) => sum + t.points, 0);
-
-  for (const task of tile.tasks) {
-    const p = byTaskId.get(task.id);
-    const status = p?.status ?? "not_started";
-    statusByTaskId.set(task.id, status);
-    if (status === "completed") completedTasks++;
-    pointsAwarded += p?.pointsAwarded ?? 0;
+  const totalPoints = tasks.reduce((sum, t) => sum + t.points, 0);
+  for (const task of tasks) {
+    if (statusByNodeId.get(task.id) === "completed") completedTasks++;
+    pointsAwarded += pointsByNodeId.get(task.id) ?? 0;
   }
 
   return {
     completedTasks,
-    totalTasks: tile.tasks.length,
+    totalTasks: tasks.length,
     pointsAwarded,
     totalPoints,
-    allComplete: tile.tasks.length > 0 && completedTasks === tile.tasks.length,
-    statusByTaskId,
+    allComplete: tasks.length > 0 && completedTasks === tasks.length,
+    statusByNodeId,
   };
 }
 
@@ -39,31 +94,19 @@ export function getFreezeUnlockAt(bingoStartsAt: string | null, tile: Tile): num
   return new Date(bingoStartsAt).getTime() + tile.freezeDurationMinutes * 60_000;
 }
 
-function taskToTileMap(tiles: Tile[]): Map<string, string> {
+function leafToTileMap(tiles: Tile[]): Map<string, string> {
   const map = new Map<string, string>();
-  for (const tile of tiles) for (const task of tile.tasks) map.set(task.id, tile.id);
+  for (const tile of tiles) for (const leaf of collectLeaves(tile.node)) map.set(leaf.id, tile.id);
   return map;
 }
 
-export function groupProgressByTile(tiles: Tile[], progress: TeamTaskProgress[]): Map<string, TeamTaskProgress[]> {
-  const taskToTile = taskToTileMap(tiles);
-  const map = new Map<string, TeamTaskProgress[]>();
-  for (const p of progress) {
-    const tileId = taskToTile.get(p.taskId);
-    if (!tileId) continue;
-    const list = map.get(tileId) ?? [];
-    list.push(p);
-    map.set(tileId, list);
-  }
-  return map;
-}
-
+// For display only (e.g. TileModal's "past submissions" list) — a submission
+// belongs to a tile if any of its claims target a leaf under that tile.
 export function groupSubmissionsByTile(tiles: Tile[], submissions: SubmissionDetails[]): Map<string, SubmissionDetails[]> {
-  const taskToTile = taskToTileMap(tiles);
+  const leafToTile = leafToTileMap(tiles);
   const map = new Map<string, SubmissionDetails[]>();
   for (const s of submissions) {
-    // A submission may touch several tasks; at launch they are all on one tile.
-    const tileIds = new Set(s.claims.map((c) => taskToTile.get(c.taskId)).filter((id): id is string => !!id));
+    const tileIds = new Set(s.claims.map((c) => leafToTile.get(c.nodeId)).filter((id): id is string => !!id));
     for (const tileId of tileIds) {
       const list = map.get(tileId) ?? [];
       list.push(s);

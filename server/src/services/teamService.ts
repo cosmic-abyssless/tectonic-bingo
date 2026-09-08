@@ -46,6 +46,21 @@ export function getTeamProgress(db: Db, teamId: string): TeamProgressSummary {
   return { nodeStates, adjustments, totalPoints: nodePoints + adjustmentPoints };
 }
 
+// The only way to hand out points outside the node graph now that approval
+// no longer takes a per-submission points override (docs/node-graph-model.md
+// §6) — e.g. correcting a mistake, or a bonus/penalty with no node behind it.
+export interface CreatePointAdjustmentParams {
+  teamId: string;
+  bingoId: string;
+  amount: number;
+  reason: string;
+  createdByUserId: string;
+}
+export function createPointAdjustment(db: Db, params: CreatePointAdjustmentParams) {
+  if (!params.reason.trim()) throw new ServiceError(400, "reason is required");
+  return db.insert(teamPointAdjustments).values(params).returning().get();
+}
+
 // ---------------------------------------------------------------------------
 // Admin team/roster management — used before the draft flow exists (Phase 7)
 // so Phase 5's admin panel can still get a playable bingo end-to-end.

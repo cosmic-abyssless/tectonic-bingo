@@ -9,6 +9,7 @@ import * as submissionService from "../services/submissionService";
 import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
 import * as devSeedService from "../services/devSeedService";
+import * as teamService from "../services/teamService";
 import { getTectonicClient } from "../services/tectonicService";
 import { approveSubmission, rejectSubmission } from "../services/scoringService";
 import { ServiceError } from "../services/errors";
@@ -63,6 +64,24 @@ router.patch(
     }
 
     throw new ServiceError(400, 'action must be "approve" or "reject"');
+  }),
+);
+
+router.post(
+  "/teams/:teamId/adjustments",
+  asyncHandler(async (req, res) => {
+    const { amount, reason } = req.body as { amount?: number; reason?: string };
+    if (typeof amount !== "number" || !amount) throw new ServiceError(400, "amount must be a non-zero number");
+    if (!reason) throw new ServiceError(400, "reason is required");
+    const adjustment = teamService.createPointAdjustment(db, {
+      teamId: req.params.teamId as string,
+      bingoId: req.bingo!.id,
+      amount,
+      reason,
+      createdByUserId: req.user!.id,
+    });
+    broadcast({ type: "team_updated", bingoId: req.bingo!.id, payload: { teamId: adjustment.teamId } });
+    res.status(201).json({ adjustment });
   }),
 );
 

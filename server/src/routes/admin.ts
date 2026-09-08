@@ -248,7 +248,7 @@ router.delete(
 router.get(
   "/lines",
   asyncHandler(async (req, res) => {
-    res.json({ lines: boardService.getLines(db, req.bingo!.id) });
+    res.json({ lines: boardService.getBoardLines(db, req.bingo!.id) });
   }),
 );
 router.post(

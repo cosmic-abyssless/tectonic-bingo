@@ -1,6 +1,6 @@
 import type {
-  Bingo, BingoLine, BingoModerator, CaptainCandidatesResponse, ItemGroup, RequirementNodeInput, SignupQuestion, Team, TeamMember, Tile,
-  TileCategory, TileTask, TileWildcard, User,
+  Bingo, BingoLine, BingoModerator, BoardLine, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, SignupQuestion, Team, TeamMember, Tile,
+  TileCategory, TileWildcard, User,
 } from "@bingo/shared";
 import { api } from "./client";
 
@@ -76,13 +76,12 @@ export async function uploadTileImage(slug: string, id: string, file: File) {
   return api.postForm<{ tile: Tile }>(`${base(slug)}/tiles/${id}/image`, fd);
 }
 
-export type TaskPayload = Partial<Omit<TileTask, "requirement">> & { requirement?: RequirementNodeInput };
-
-export function createTask(slug: string, tileId: string, payload: TaskPayload & { label: string; sortOrder: number; points: number; description: string }) {
-  return api.post<{ task: TileTask }>(`${base(slug)}/tiles/${tileId}/tasks`, payload);
+// A task is just a node that's a direct child of its tile's node.
+export function createTask(slug: string, tileId: string, input: GraphNodeInput, sortOrder?: number) {
+  return api.post<{ task: GraphNode }>(`${base(slug)}/tiles/${tileId}/tasks`, { ...input, sortOrder });
 }
-export function updateTask(slug: string, id: string, payload: TaskPayload) {
-  return api.patch<{ task: TileTask }>(`${base(slug)}/tasks/${id}`, payload);
+export function updateTask(slug: string, id: string, input: GraphNodeInput) {
+  return api.patch<{ task: GraphNode }>(`${base(slug)}/tasks/${id}`, input);
 }
 export function deleteTask(slug: string, id: string) {
   return api.delete(`${base(slug)}/tasks/${id}`);
@@ -99,7 +98,7 @@ export function deleteWildcard(slug: string, id: string) {
 }
 
 export function getLines(slug: string) {
-  return api.get<{ lines: BingoLine[] }>(`${base(slug)}/lines`);
+  return api.get<{ lines: BoardLine[] }>(`${base(slug)}/lines`);
 }
 export function generateLines(slug: string, pointsPerLine?: number) {
   return api.post<{ lines: BingoLine[] }>(`${base(slug)}/lines/generate`, { pointsPerLine });

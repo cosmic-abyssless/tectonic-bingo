@@ -1,4 +1,4 @@
-import type { RequirementNode, TileTask } from "@bingo/shared";
+import type { GraphNode } from "@bingo/shared";
 import { leafProgress, type LeafClaimMaps } from "./taskClaims";
 
 export function CheckIcon() {
@@ -13,12 +13,12 @@ export function CheckIcon() {
   );
 }
 
-export function leafLabel(node: RequirementNode): string {
+export function leafLabel(node: GraphNode): string {
   const names = node.itemGroupName ? [`Any ${node.itemGroupName}`, ...node.itemNames] : node.itemNames;
   return names.join(" / ") || "(no items)";
 }
 
-function compositeLabel(node: RequirementNode): string {
+function compositeLabel(node: GraphNode): string {
   switch (node.kind) {
     case "ALL":
       return "All of:";
@@ -31,7 +31,7 @@ function compositeLabel(node: RequirementNode): string {
   }
 }
 
-function LeafRow({ node, maps }: { node: RequirementNode; maps: LeafClaimMaps }) {
+function LeafRow({ node, maps }: { node: GraphNode; maps: LeafClaimMaps }) {
   const target = node.quantity ?? 1;
   const progress = leafProgress(node.id, node.distinctItems, maps);
   const approved = progress >= target;
@@ -51,7 +51,7 @@ function LeafRow({ node, maps }: { node: RequirementNode; maps: LeafClaimMaps })
   );
 }
 
-function RequirementTree({ node, maps, root }: { node: RequirementNode; maps: LeafClaimMaps; root?: boolean }) {
+function RequirementTree({ node, maps, root }: { node: GraphNode; maps: LeafClaimMaps; root?: boolean }) {
   if (node.kind === "MANUAL") return null;
   if (node.kind === "ITEM") {
     return (
@@ -80,6 +80,7 @@ function RequirementTree({ node, maps, root }: { node: RequirementNode; maps: Le
   );
 }
 
+// A task is just a node that's a direct child of its tile's node.
 export function TaskPanel({
   task,
   claimMaps,
@@ -87,13 +88,13 @@ export function TaskPanel({
   lockedReason,
   complete,
 }: {
-  task: TileTask;
+  task: GraphNode;
   claimMaps: LeafClaimMaps;
   locked?: boolean;
   lockedReason?: string;
   complete?: boolean;
 }) {
-  const isManual = task.scoringMode === "manual";
+  const isManual = task.kind === "MANUAL";
 
   return (
     <div className="p-5">
@@ -127,7 +128,7 @@ export function TaskPanel({
 
       <p className="text-slate-300 text-sm leading-relaxed mb-3">{task.description}</p>
 
-      {!isManual && <RequirementTree node={task.requirement} maps={claimMaps} root />}
+      {!isManual && <RequirementTree node={task} maps={claimMaps} root />}
 
       {!isManual && task.allowsPreLoad && (
         <div className="flex gap-2 flex-wrap mt-3">

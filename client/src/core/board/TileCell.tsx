@@ -1,5 +1,5 @@
 import { useState, type CSSProperties } from "react";
-import type { Tile, TileCategory, TeamTaskProgress } from "@bingo/shared";
+import type { SubmissionDetails, Tile, TileCategory, TeamNodeState } from "@bingo/shared";
 import { summarizeTileProgress, getFreezeUnlockAt } from "./tileProgress";
 import { formatCountdown } from "../ui/time";
 import { TASK_STATUS_DOT } from "../ui/StatusBadge";
@@ -10,7 +10,8 @@ export function TileCell({
   tile,
   bingoStartsAt,
   category,
-  progress,
+  nodeStates,
+  teamSubmissions,
   now,
   dimmed,
   onClick,
@@ -18,13 +19,14 @@ export function TileCell({
   tile: Tile;
   bingoStartsAt: string | null;
   category?: TileCategory;
-  progress: TeamTaskProgress[];
+  nodeStates: TeamNodeState[];
+  teamSubmissions: SubmissionDetails[];
   now: number;
   dimmed?: boolean;
   onClick: () => void;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const summary = summarizeTileProgress(tile, progress);
+  const summary = summarizeTileProgress(tile, nodeStates, teamSubmissions);
   const freezeUnlocksAt = getFreezeUnlockAt(bingoStartsAt, tile);
   const isFrozen = !!(freezeUnlocksAt && now < freezeUnlocksAt);
   const remaining = freezeUnlocksAt ? freezeUnlocksAt - now : 0;
@@ -90,8 +92,8 @@ export function TileCell({
 
       {summary.totalTasks > 1 && (
         <div className="absolute bottom-1 right-1 flex gap-0.5 z-20">
-          {tile.tasks.map((task, i) => {
-            const status = summary.statusByTaskId.get(task.id) ?? "not_started";
+          {tile.node.children.map((task, i) => {
+            const status = summary.statusByNodeId.get(task.id) ?? "not_started";
             if (status === "not_started") return null;
             return (
               <span

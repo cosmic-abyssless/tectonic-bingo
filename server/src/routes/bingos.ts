@@ -106,7 +106,10 @@ router.get(
     const bingo = req.bingo!;
     const isMod = req.user ? bingoService.isBingoMod(db, bingo.id, req.user.id, req.user.isAdmin) : false;
     const canView = bingoService.canViewTiles(bingo, isMod);
-    res.json({ tiles: canView ? boardService.getBoardTiles(db, bingo.id) : [] });
+    res.json({
+      tiles: canView ? boardService.getBoardTiles(db, bingo.id) : [],
+      lines: canView ? boardService.getBoardLines(db, bingo.id) : [],
+    });
   }),
 );
 

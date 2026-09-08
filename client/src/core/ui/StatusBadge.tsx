@@ -1,4 +1,4 @@
-import type { SubmissionStatus, TaskStatus } from "@bingo/shared";
+import type { NodeStatus, SubmissionStatus } from "@bingo/shared";
 
 const SUBMISSION_STYLE: Record<SubmissionStatus, { label: string; cls: string }> = {
   pending: { label: "Pending", cls: "bg-yellow-900/50 text-yellow-300 border-yellow-700" },
@@ -11,7 +11,7 @@ export function SubmissionStatusBadge({ status }: { status: SubmissionStatus }) 
   return <span className={`text-xs font-semibold border rounded-full px-2 py-0.5 ${cls}`}>{label}</span>;
 }
 
-export const TASK_STATUS_DOT: Record<TaskStatus, string> = {
+export const TASK_STATUS_DOT: Record<NodeStatus, string> = {
   not_started: "bg-slate-600",
   in_progress: "bg-yellow-400",
   pending_approval: "bg-blue-400",

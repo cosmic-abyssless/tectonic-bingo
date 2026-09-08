@@ -1,6 +1,6 @@
-import type { RequirementNode, Tile } from "@bingo/shared";
+import type { GraphNode, Tile } from "@bingo/shared";
 
-export function findNode(root: RequirementNode, nodeId: string): RequirementNode | undefined {
+export function findNode(root: GraphNode, nodeId: string): GraphNode | undefined {
   if (root.id === nodeId) return root;
   for (const child of root.children) {
     const hit = findNode(child, nodeId);
@@ -10,18 +10,19 @@ export function findNode(root: RequirementNode, nodeId: string): RequirementNode
 }
 
 /** ITEM and MANUAL leaves in tree order. */
-export function collectLeaves(root: RequirementNode): RequirementNode[] {
+export function collectLeaves(root: GraphNode): GraphNode[] {
   if (root.kind === "ITEM" || root.kind === "MANUAL") return [root];
   return root.children.flatMap(collectLeaves);
 }
 
-export function collectItemNames(root: RequirementNode): string[] {
+export function collectItemNames(root: GraphNode): string[] {
   return collectLeaves(root).flatMap((leaf) => leaf.acceptedItemNames);
 }
 
+// A tile's "tasks" are just the direct children of its node.
 export function tileMatchesSearch(tile: Tile, q: string): boolean {
   if (tile.name.toLowerCase().includes(q)) return true;
-  return tile.tasks.some(
-    (task) => task.description.toLowerCase().includes(q) || collectItemNames(task.requirement).some((n) => n.toLowerCase().includes(q)),
+  return tile.node.children.some(
+    (task) => (task.description ?? "").toLowerCase().includes(q) || collectItemNames(task).some((n) => n.toLowerCase().includes(q)),
   );
 }

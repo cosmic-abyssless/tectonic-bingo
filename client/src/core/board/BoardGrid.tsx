@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Bingo, SubmissionDetails, TeamTaskProgress, Tile, TileCategory } from "@bingo/shared";
+import type { Bingo, SubmissionDetails, TeamNodeState, Tile, TileCategory } from "@bingo/shared";
 import { TileCell } from "./TileCell";
 import { TileModal } from "./TileModal";
-import { groupProgressByTile, groupSubmissionsByTile } from "./tileProgress";
+import { groupSubmissionsByTile } from "./tileProgress";
 import { tileMatchesSearch } from "./requirementTree";
 import { CountdownTimer } from "../ui/CountdownTimer";
 
@@ -17,7 +17,7 @@ export function BoardGrid({
   bingo,
   tiles,
   categories,
-  progress,
+  nodeStates,
   teamSubmissions,
   searchQuery,
   openTileId,
@@ -27,7 +27,7 @@ export function BoardGrid({
   bingo: Bingo;
   tiles: Tile[];
   categories: TileCategory[];
-  progress: TeamTaskProgress[];
+  nodeStates: TeamNodeState[];
   teamSubmissions: SubmissionDetails[];
   searchQuery?: string;
   openTileId?: string | null;
@@ -37,7 +37,6 @@ export function BoardGrid({
   const [selected, setSelected] = useState<Tile | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
-  const progressByTile = useMemo(() => groupProgressByTile(tiles, progress), [tiles, progress]);
   const submissionsByTile = useMemo(() => groupSubmissionsByTile(tiles, teamSubmissions), [tiles, teamSubmissions]);
 
   useEffect(() => {
@@ -123,7 +122,8 @@ export function BoardGrid({
                       tile={tile}
                       bingoStartsAt={bingo.startsAt}
                       category={tile.categoryId ? categoryById.get(tile.categoryId) : undefined}
-                      progress={progressByTile.get(tile.id) ?? []}
+                      nodeStates={nodeStates}
+                      teamSubmissions={teamSubmissions}
                       now={now}
                       dimmed={matchingTileIds !== null && !matchingTileIds.has(tile.id)}
                       onClick={() => setSelected(tile)}
@@ -153,7 +153,7 @@ export function BoardGrid({
           tile={selected}
           bingo={bingo}
           category={selected.categoryId ? categoryById.get(selected.categoryId) : undefined}
-          progress={progressByTile.get(selected.id) ?? []}
+          nodeStates={nodeStates}
           teamSubmissions={submissionsByTile.get(selected.id) ?? []}
           onClose={() => setSelected(null)}
           onSubmit={onSubmitTile ? () => onSubmitTile(selected.id) : undefined}

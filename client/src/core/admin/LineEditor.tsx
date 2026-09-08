@@ -63,7 +63,7 @@ export function LineEditor({ slug }: { slug: string }) {
                 <td className="py-1.5">
                   <input
                     type="number"
-                    defaultValue={line.points}
+                    defaultValue={line.node.points}
                     onBlur={(e) => updatePoints(line.id, Number(e.target.value) || 0)}
                     className="w-20 bg-slate-900 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500"
                   />

@@ -74,7 +74,7 @@ export function BingoPage() {
   const viewingTeam = teams.find((t) => t.id === viewingTeamId) ?? null;
   const isViewingOtherTeam = isMod && !!viewingTeamId && viewingTeamId !== myTeam?.id;
   const canSubmit = bingo.stage === "live" && !isViewingOtherTeam && !!viewingTeamId;
-  const progress = progressData?.tasks ?? [];
+  const nodeStates = progressData?.nodeStates ?? [];
   const teamSubmissions = submissionsData?.submissions ?? [];
 
   const boardRevealed = isMod || bingo.stage === "reveal" || bingo.stage === "live" || bingo.stage === "complete";
@@ -359,7 +359,7 @@ export function BingoPage() {
                 bingo={bingo}
                 tiles={tiles}
                 categories={categories}
-                progress={progress}
+                nodeStates={nodeStates}
                 teamSubmissions={teamSubmissions}
                 searchQuery={searchQuery}
                 openTileId={openTileId}
@@ -383,7 +383,7 @@ export function BingoPage() {
             bingo={bingo}
             tiles={tiles}
             categories={categories}
-            progress={progress}
+            nodeStates={nodeStates}
             teamSubmissions={teamSubmissions}
             initialTileId={submitInitialTileId}
             onClose={() => {

@@ -1,6 +1,6 @@
-import type { ItemGroup, RequirementKind, RequirementNodeInput } from "@bingo/shared";
+import type { ItemGroup, NodeKind, GraphNodeInput } from "@bingo/shared";
 
-const GROUP_KINDS: { kind: RequirementKind; label: string }[] = [
+const GROUP_KINDS: { kind: NodeKind; label: string }[] = [
   { kind: "ALL", label: "All of" },
   { kind: "ANY", label: "Any one of" },
   { kind: "COUNT", label: "At least N of" },
@@ -11,30 +11,30 @@ const SMALL_BTN = "text-xs text-slate-400 hover:text-white cursor-pointer";
 
 type Path = number[];
 
-function updateAt(root: RequirementNodeInput, path: Path, fn: (node: RequirementNodeInput) => RequirementNodeInput): RequirementNodeInput {
+function updateAt(root: GraphNodeInput, path: Path, fn: (node: GraphNodeInput) => GraphNodeInput): GraphNodeInput {
   if (path.length === 0) return fn(root);
   const [head, ...rest] = path;
   const children = root.children ?? [];
   return { ...root, children: children.map((child, i) => (i === head ? updateAt(child, rest, fn) : child)) };
 }
 
-function removeAt(root: RequirementNodeInput, path: Path): RequirementNodeInput {
+function removeAt(root: GraphNodeInput, path: Path): GraphNodeInput {
   const parentPath = path.slice(0, -1);
   const index = path[path.length - 1]!;
   return updateAt(root, parentPath, (parent) => ({ ...parent, children: (parent.children ?? []).filter((_, i) => i !== index) }));
 }
 
-function appendChild(root: RequirementNodeInput, path: Path, child: RequirementNodeInput): RequirementNodeInput {
+function appendChild(root: GraphNodeInput, path: Path, child: GraphNodeInput): GraphNodeInput {
   return updateAt(root, path, (parent) => ({ ...parent, children: [...(parent.children ?? []), child] }));
 }
 
-const NEW_LEAF: RequirementNodeInput = { kind: "ITEM", itemNames: [], quantity: 1 };
-const NEW_GROUP: RequirementNodeInput = { kind: "ALL", children: [] };
+const NEW_LEAF: GraphNodeInput = { kind: "ITEM", itemNames: [], quantity: 1 };
+const NEW_GROUP: GraphNodeInput = { kind: "ALL", children: [] };
 
 export interface RequirementTreeEditorProps {
-  root: RequirementNodeInput;
+  root: GraphNodeInput;
   itemGroups: ItemGroup[];
-  onChange: (root: RequirementNodeInput) => void;
+  onChange: (root: GraphNodeInput) => void;
   /** Creates a global item group from inline names; resolves null if cancelled. */
   onSaveAsGroup?: (itemNames: string[]) => Promise<ItemGroup | null>;
 }
@@ -47,13 +47,13 @@ export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGrou
 }
 
 interface NodeProps {
-  node: RequirementNodeInput;
+  node: GraphNodeInput;
   path: Path;
   itemGroups: ItemGroup[];
   onSaveAsGroup?: (itemNames: string[]) => Promise<ItemGroup | null>;
-  update: (path: Path, fn: (node: RequirementNodeInput) => RequirementNodeInput) => void;
+  update: (path: Path, fn: (node: GraphNodeInput) => GraphNodeInput) => void;
   remove: (path: Path) => void;
-  add: (path: Path, child: RequirementNodeInput) => void;
+  add: (path: Path, child: GraphNodeInput) => void;
 }
 
 function GroupNode(props: NodeProps) {
@@ -66,7 +66,7 @@ function GroupNode(props: NodeProps) {
         <select
           aria-label="Requirement kind"
           value={node.kind}
-          onChange={(e) => update(path, (n) => ({ ...n, kind: e.target.value as RequirementKind, minCount: e.target.value === "COUNT" ? n.minCount ?? 1 : undefined }))}
+          onChange={(e) => update(path, (n) => ({ ...n, kind: e.target.value as NodeKind, minCount: e.target.value === "COUNT" ? n.minCount ?? 1 : undefined }))}
           className={INPUT}
         >
           {GROUP_KINDS.map((k) => (

@@ -52,7 +52,7 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
                 >
                   {tile.imageUrl && <img src={tile.imageUrl} alt="" className="w-8 h-8 object-contain mb-0.5" />}
                   <span className="text-[10px] text-slate-300 leading-tight line-clamp-2">{tile.name}</span>
-                  <span className="text-[9px] text-slate-500">{tile.tasks.length} task{tile.tasks.length !== 1 ? "s" : ""}</span>
+                  <span className="text-[9px] text-slate-500">{tile.node.children.length} task{tile.node.children.length !== 1 ? "s" : ""}</span>
                 </button>
               ) : (
                 <button

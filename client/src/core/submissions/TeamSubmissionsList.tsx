@@ -3,6 +3,7 @@ import { Modal, ModalHeader } from "../ui/Modal";
 import { SubmissionStatusBadge } from "../ui/StatusBadge";
 import { timeAgo } from "../ui/time";
 import { displayName } from "../ui/user";
+import { collectLeaves } from "../board/requirementTree";
 import { claimsSummary } from "./claimsSummary";
 
 export function TeamSubmissionsList({
@@ -16,8 +17,10 @@ export function TeamSubmissionsList({
   onClose: () => void;
   onSubmit?: () => void;
 }) {
+  // A claim targets a leaf, which may be nested under a task's ALL/ANY/COUNT
+  // wrapper rather than being the task itself.
   const taskLookup = new Map<string, { tile: Tile; taskLabel: string }>();
-  for (const tile of tiles) for (const task of tile.tasks) taskLookup.set(task.id, { tile, taskLabel: task.label });
+  for (const tile of tiles) for (const task of tile.node.children) for (const leaf of collectLeaves(task)) taskLookup.set(leaf.id, { tile, taskLabel: task.label ?? "" });
 
   const sorted = [...submissions].sort((a, b) => new Date(b.submission.submittedAt).getTime() - new Date(a.submission.submittedAt).getTime());
 
@@ -45,7 +48,7 @@ export function TeamSubmissionsList({
       ) : (
         <ul className="divide-y divide-slate-700/60">
           {sorted.map((detail) => {
-            const infos = [...new Set(detail.claims.map((c) => c.taskId))].map((id) => taskLookup.get(id)).filter((i) => !!i);
+            const infos = [...new Set(detail.claims.map((c) => c.nodeId))].map((id) => taskLookup.get(id)).filter((i) => !!i);
             const tileName = infos[0]?.tile.name;
             const thumb = detail.screenshots[0]?.storageUrl;
             return (

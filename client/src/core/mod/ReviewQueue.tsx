@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ModSubmissionRow, SubmissionStatus } from "@bingo/shared";
-import { useModSubmissions, useReviewSubmission } from "../../api/queries";
+import { useCreatePointAdjustment, useModSubmissions, useReviewSubmission } from "../../api/queries";
 import { SubmissionStatusBadge } from "../ui/StatusBadge";
 import { timeAgo } from "../ui/time";
 import { displayName } from "../ui/user";
@@ -14,31 +14,24 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "All" },
 ];
 
-const isManualRow = (row: ModSubmissionRow) => row.tasks.some((t) => t.scoringMode === "manual");
-
-interface ReviewForm {
-  notes: string;
-  taskCompleted: boolean;
-  points: string;
-}
+// A MANUAL leaf has no separate completion decision — approving its claim IS
+// the decision (rejecting is "not done yet"). See docs/node-graph-model.md §5.
+const isManualRow = (row: ModSubmissionRow) => row.leaves.some((l) => l.kind === "MANUAL");
 
 export function ReviewQueue({ slug }: { slug: string }) {
   const { data, isLoading } = useModSubmissions(slug);
   const review = useReviewSubmission(slug);
+  const adjust = useCreatePointAdjustment(slug);
   const submissions = data?.submissions ?? [];
 
   const [filter, setFilter] = useState<Filter>("pending");
   const [teamFilter, setTeamFilter] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [forms, setForms] = useState<Record<string, ReviewForm>>({});
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
-
-  function getForm(row: ModSubmissionRow): ReviewForm {
-    return forms[row.submission.id] ?? { notes: "", taskCompleted: true, points: String(row.tasks.reduce((sum, t) => sum + t.points, 0)) };
-  }
-  function setForm(id: string, patch: Partial<ReviewForm>) {
-    setForms((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { notes: "", taskCompleted: true, points: "" }), ...patch } }));
-  }
+  const [adjustOpenFor, setAdjustOpenFor] = useState<string | null>(null);
+  const [adjustAmount, setAdjustAmount] = useState("");
+  const [adjustReason, setAdjustReason] = useState("");
 
   const allTeams = [...new Set(submissions.map((s) => s.team.name))].sort();
   const byStatus = filter === "all" ? submissions : submissions.filter((s) => s.submission.status === filter);
@@ -52,19 +45,26 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const visible = filter === "pending" ? [...byTeam].reverse() : byTeam;
 
   async function submitReview(row: ModSubmissionRow, action: "approve" | "reject") {
-    const form = getForm(row);
     setError(null);
     try {
-      await review.mutateAsync({
-        submissionId: row.submission.id,
-        action,
-        reviewerNotes: form.notes || undefined,
-        taskCompleted: isManualRow(row) && action === "approve" ? form.taskCompleted : undefined,
-        pointsAwardedOverride: isManualRow(row) && action === "approve" ? Number(form.points) || 0 : undefined,
-      });
+      await review.mutateAsync({ submissionId: row.submission.id, action, reviewerNotes: notes[row.submission.id] || undefined });
       setExpandedId(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Review failed");
+    }
+  }
+
+  async function submitAdjustment(teamId: string) {
+    const amount = Number(adjustAmount);
+    if (!amount || !adjustReason.trim()) return;
+    setError(null);
+    try {
+      await adjust.mutateAsync({ teamId, amount, reason: adjustReason.trim() });
+      setAdjustOpenFor(null);
+      setAdjustAmount("");
+      setAdjustReason("");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Adjustment failed");
     }
   }
 
@@ -125,7 +125,6 @@ export function ReviewQueue({ slug }: { slug: string }) {
               const thumb = row.screenshots[0]?.storageUrl;
               const isExpanded = expandedId === row.submission.id;
               const canReview = row.submission.status === "pending";
-              const form = getForm(row);
               const isManual = isManualRow(row);
 
               return (
@@ -145,8 +144,8 @@ export function ReviewQueue({ slug }: { slug: string }) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-white text-sm font-semibold">{row.tile.name}</span>
-                        {row.tasks.map((task) => (
-                          <span key={task.id} className="text-xs text-slate-500 bg-slate-700 rounded-full px-2 py-0.5">{task.label}</span>
+                        {row.leaves.map((leaf) => (
+                          <span key={leaf.id} className="text-xs text-slate-500 bg-slate-700 rounded-full px-2 py-0.5">{leaf.label ?? "Item"}</span>
                         ))}
                         <span className="text-xs text-slate-500 bg-slate-700 rounded-full px-2 py-0.5">{row.team.name}</span>
                         {isManual && (
@@ -165,9 +164,6 @@ export function ReviewQueue({ slug }: { slug: string }) {
 
                     <div className="shrink-0 text-right flex flex-col items-end gap-1">
                       <SubmissionStatusBadge status={row.submission.status} />
-                      {row.submission.status === "approved" && row.submission.pointsAwarded != null && (
-                        <span className="text-xs text-yellow-400 font-semibold">{row.submission.pointsAwarded} pts</span>
-                      )}
                       <span className="text-xs text-slate-500">{timeAgo(row.submission.submittedAt)}</span>
                       {canReview && <span className="text-xs text-slate-500">{isExpanded ? "▲" : "▼"}</span>}
                     </div>
@@ -186,34 +182,16 @@ export function ReviewQueue({ slug }: { slug: string }) {
                       )}
 
                       {isManual && (
-                        <div className="flex items-end gap-3">
-                          <label className="flex items-center gap-2 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={form.taskCompleted}
-                              onChange={(e) => setForm(row.submission.id, { taskCompleted: e.target.checked })}
-                              className="w-4 h-4 accent-indigo-500 cursor-pointer"
-                            />
-                            <span className="text-sm text-slate-300">Mark task complete</span>
-                          </label>
-                          <div>
-                            <label className="block text-xs font-medium text-slate-400 mb-1">Points</label>
-                            <input
-                              type="number"
-                              min={0}
-                              value={form.points}
-                              onChange={(e) => setForm(row.submission.id, { points: e.target.value })}
-                              className="w-24 bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500"
-                            />
-                          </div>
-                        </div>
+                        <p className="text-xs text-purple-300 bg-purple-900/30 border border-purple-700 rounded px-3 py-2">
+                          Approving completes this immediately and awards its points — reject instead if the mod judges it isn't done.
+                        </p>
                       )}
 
                       <div>
                         <label className="block text-xs font-medium text-slate-400 mb-1">Notes (optional)</label>
                         <textarea
-                          value={form.notes}
-                          onChange={(e) => setForm(row.submission.id, { notes: e.target.value })}
+                          value={notes[row.submission.id] ?? ""}
+                          onChange={(e) => setNotes((prev) => ({ ...prev, [row.submission.id]: e.target.value }))}
                           placeholder="Visible to the submitting player…"
                           rows={2}
                           className="w-full bg-slate-800 border border-slate-600 text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-500 resize-none"
@@ -237,6 +215,44 @@ export function ReviewQueue({ slug }: { slug: string }) {
                         >
                           Reject
                         </button>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-700">
+                        {adjustOpenFor === row.submission.id ? (
+                          <div className="flex items-end gap-2 flex-wrap">
+                            <div>
+                              <label className="block text-xs text-slate-400 mb-1">Points +/-</label>
+                              <input
+                                type="number"
+                                value={adjustAmount}
+                                onChange={(e) => setAdjustAmount(e.target.value)}
+                                className="w-24 bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500"
+                              />
+                            </div>
+                            <div className="flex-1 min-w-32">
+                              <label className="block text-xs text-slate-400 mb-1">Reason</label>
+                              <input
+                                value={adjustReason}
+                                onChange={(e) => setAdjustReason(e.target.value)}
+                                className="w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500"
+                              />
+                            </div>
+                            <button
+                              onClick={() => submitAdjustment(row.team.id)}
+                              disabled={adjust.isPending}
+                              className="text-xs bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded px-2.5 py-1.5 cursor-pointer"
+                            >
+                              Apply
+                            </button>
+                            <button onClick={() => setAdjustOpenFor(null)} className="text-xs text-slate-400 hover:text-white cursor-pointer px-1">
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setAdjustOpenFor(row.submission.id)} className="text-xs text-slate-400 hover:text-white cursor-pointer">
+                            Adjust {row.team.name}'s points…
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}

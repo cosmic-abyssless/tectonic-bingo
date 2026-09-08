@@ -299,6 +299,15 @@ export interface CreateSubmissionResponse {
   submission: Submission;
 }
 
+export interface CreatePointAdjustmentPayload {
+  amount: number;
+  reason: string;
+}
+
+export interface CreatePointAdjustmentResponse {
+  adjustment: PointAdjustment;
+}
+
 export interface ClaimInput {
   nodeId: string;
   itemName?: string;

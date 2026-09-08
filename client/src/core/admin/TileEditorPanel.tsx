@@ -26,7 +26,8 @@ export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: str
     onClose();
   }
   async function addTask() {
-    await adminApi.createTask(slug, tile.id, { label: `Part ${String.fromCharCode(65 + tile.tasks.length)}`, sortOrder: tile.tasks.length, points: 10, description: "Describe the challenge…" });
+    const tasks = tile.node.children;
+    await adminApi.createTask(slug, tile.id, { kind: "ALL", label: `Part ${String.fromCharCode(65 + tasks.length)}`, points: 10, description: "Describe the challenge…", children: [] }, tasks.length);
     invalidate();
   }
   async function uploadImage(file: File) {
@@ -103,14 +104,14 @@ export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: str
 
         <div>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-slate-300">Tasks ({tile.tasks.length})</p>
+            <p className="text-sm font-medium text-slate-300">Tasks ({tile.node.children.length})</p>
             <button onClick={addTask} className="text-xs bg-slate-700 hover:bg-slate-600 text-white rounded px-2.5 py-1 cursor-pointer">
               + Add task
             </button>
           </div>
           <div className="space-y-2">
-            {tile.tasks.map((task) => (
-              <TaskEditor key={task.id} slug={slug} task={task} onDeleted={() => {}} />
+            {tile.node.children.map((task, i) => (
+              <TaskEditor key={task.id} slug={slug} task={task} previousTaskId={tile.node.children[i - 1]?.id} onDeleted={() => {}} />
             ))}
           </div>
         </div>
@@ -137,8 +138,8 @@ export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: str
                   className="bg-slate-800 border border-slate-600 text-slate-300 text-xs rounded px-1.5 py-1 focus:outline-none"
                 >
                   <option value="">Any requirement</option>
-                  {tile.tasks.flatMap((t) =>
-                    collectLeaves(t.requirement)
+                  {tile.node.children.flatMap((t) =>
+                    collectLeaves(t)
                       .filter((leaf) => leaf.kind === "ITEM")
                       .map((leaf) => (
                         <option key={leaf.id} value={leaf.id}>

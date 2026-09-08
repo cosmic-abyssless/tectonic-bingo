@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  BingoListResponse, BingoShellResponse, BoardResponse, CreateSubmissionResponse, DraftState,
+  BingoListResponse, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   ModSubmissionsResponse, MySignupResponse, MyTectonicRsnsResponse, PendingCountResponse, ReviewSubmissionResponse,
   RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupQuestion, Stage,
   StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
@@ -99,12 +99,10 @@ export function useAnalyzeScreenshot(slug: string) {
 export function useReviewSubmission(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (params: { submissionId: string; action: "approve" | "reject"; reviewerNotes?: string; pointsAwardedOverride?: number; taskCompleted?: boolean }) =>
+    mutationFn: (params: { submissionId: string; action: "approve" | "reject"; reviewerNotes?: string }) =>
       api.patch<ReviewSubmissionResponse>(`/api/bingos/${slug}/mod/submissions/${params.submissionId}`, {
         action: params.action,
         reviewerNotes: params.reviewerNotes,
-        pointsAwardedOverride: params.pointsAwardedOverride,
-        taskCompleted: params.taskCompleted,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.modSubmissions(slug) });
@@ -112,6 +110,18 @@ export function useReviewSubmission(slug: string) {
       queryClient.invalidateQueries({ queryKey: ["teamProgress", slug] });
       queryClient.invalidateQueries({ queryKey: ["teamSubmissions", slug] });
     },
+  });
+}
+
+// The only way to hand out points outside the node graph now that approval
+// no longer takes a per-submission points override — e.g. correcting a
+// mistake, or a bonus/penalty with no node behind it.
+export function useCreatePointAdjustment(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { teamId: string; amount: number; reason: string }) =>
+      api.post<CreatePointAdjustmentResponse>(`/api/bingos/${slug}/mod/teams/${params.teamId}/adjustments`, { amount: params.amount, reason: params.reason }),
+    onSuccess: (_data, params) => queryClient.invalidateQueries({ queryKey: queryKeys.teamProgress(slug, params.teamId) }),
   });
 }
 
