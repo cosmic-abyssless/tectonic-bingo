@@ -268,14 +268,6 @@ export const tiles = sqliteTable('tiles', {
   hasFreezePeriod: integer('has_freeze_period', { mode: 'boolean' }).notNull().default(false),
   freezeDurationMinutes: integer('freeze_duration_minutes').notNull().default(0),
   notes: text('notes'),
-  // When true, this tile's tasks share one pool of item leaves (each pool
-  // name is one real ITEM node, multi-parented under every task that
-  // references it) instead of each task owning its own independent
-  // requirement tree — see docs/item-quantity-model.md §9. The admin panel
-  // uses this to pick which editor to render; the pool + each task's
-  // aggregation are derived from the tile's node tree itself, not stored
-  // separately. Written only via graphService.applySharedItemPool.
-  sharedItemPool: integer('shared_item_pool', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 }, (t) => [
   uniqueIndex('tiles_bingo_position_unq').on(t.bingoId, t.boardRow, t.boardCol),

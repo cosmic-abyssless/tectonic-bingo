@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "92799a99-bf98-4662-b233-309637a3b806",
+  "id": "15547d15-12b6-4e6a-b482-a6cd45733cdc",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "bingo_lines": {
@@ -1950,14 +1950,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "shared_item_pool": {
-          "name": "shared_item_pool",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
         },
         "created_at": {
           "name": "created_at",

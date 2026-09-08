@@ -265,7 +265,6 @@ CREATE TABLE `tiles` (
 	`has_freeze_period` integer DEFAULT false NOT NULL,
 	`freeze_duration_minutes` integer DEFAULT 0 NOT NULL,
 	`notes` text,
-	`shared_item_pool` integer DEFAULT false NOT NULL,
 	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
 	FOREIGN KEY (`bingo_id`) REFERENCES `bingos`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
