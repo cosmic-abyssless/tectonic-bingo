@@ -27,7 +27,7 @@ test("full bingo lifecycle", async ({ page, browser }) => {
 
   await test.step("admin creates the Pokemon Bingo", async () => {
     await page.goto("/admin");
-    await page.getByLabel("Name").fill("Pokemon Bingo");
+    await page.getByLabel("Name", { exact: true }).fill("Pokemon Bingo");
     // Override the auto-generated slug ("pokemon-bingo") — every later step
     // and URL in this suite assumes the short slug "pokemon".
     await page.getByLabel("Slug (used in the URL)").fill(SLUG);
@@ -435,16 +435,15 @@ test("full bingo lifecycle", async ({ page, browser }) => {
     await expect(page.getByText("Submit Completion")).not.toBeVisible();
   });
 
-  await test.step("admin approves GOTR Speedrun with the default manual completion/points", async () => {
+  await test.step("admin approves GOTR Speedrun — approving a manual leaf is the completion decision", async () => {
     await loginAs(page, E2E_USERS.admin);
     await page.goto(`/b/${SLUG}/mod`);
     await dismissNotifPromptIfPresent(page);
     const row = page.locator(PENDING_ROW).first();
     await row.click();
-    // Manual task — mod must explicitly confirm completion/points, but the
-    // defaults (checked, task.points) are exactly what this approval wants.
-    await expect(row.getByLabel("Mark task complete")).toBeChecked();
-    await expect(row.locator('input[type="number"]')).toHaveValue("20");
+    // No separate "mark complete" step for a MANUAL leaf — approving its
+    // claim IS the decision (rejecting would be "not done").
+    await expect(row.getByText("Approving completes this immediately")).toBeVisible();
     await row.getByRole("button", { name: "Approve" }).click();
     await expect(page.getByText("Nothing here")).toBeVisible();
   });

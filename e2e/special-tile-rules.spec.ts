@@ -3,22 +3,23 @@ import { readFileSync } from "node:fs";
 import { loginAs, dismissNotifPromptIfPresent, E2E_USERS } from "./helpers";
 
 // Separate bingo/slug from full-flow.spec.ts's "pokemon" — this test exists
-// purely to exercise the per-task "weird rule" fields (TileTask's flag
-// columns, options groups, wildcards, freeze) that the main lifecycle test
-// never touches. No signup questions, no buy-in, no lines (irrelevant here
-// and their point-math would just add noise — see docs/e2e-testing-plan.md
-// Phase E5 for how easily that math gets away from you). One captain acting
-// as the sole team member submits everything.
+// purely to exercise node-graph mechanics the main lifecycle test never
+// touches: a nested ANY-of-ALL requirement, distinctItems, a wildcard's
+// per-team cap, a frozen tile, and submitGateNodeId. No signup questions, no
+// buy-in, no lines (irrelevant here and their point-math would just add
+// noise — see docs/e2e-testing-plan.md Phase E5 for how easily that gets
+// away from you). One captain acting as the sole team member submits
+// everything.
+//
+// The board itself is built through the admin API rather than clicking
+// through RequirementTreeEditor — full-flow.spec.ts already exercises that
+// UI end to end (adding a task, "+ item", editing labels/points); what this
+// file cares about is the player- and mod-facing behavior of the resulting
+// graph, so construction stays out of the way.
 const SLUG = "special-rules";
 const SCREENSHOT_PATH = "e2e/fixtures/screenshot.png";
 const PENDING_ROW = ".bg-slate-800.rounded-lg.border.border-slate-700.overflow-hidden";
 const CAPTAIN = "e2e-p4";
-
-function taskPanel(page: Page, taskLabel: string) {
-  return page
-    .locator(".bg-slate-900.border.border-slate-700.rounded-lg.overflow-hidden")
-    .filter({ has: page.getByRole("button", { name: new RegExp(`task: ${taskLabel}$`) }) });
-}
 
 function teamPoints(page: Page) {
   return page.locator("span.text-xl.font-bold.text-yellow-400");
@@ -34,11 +35,19 @@ async function pickTileAndTask(page: Page, tileName: string, taskLabel?: string)
   if (taskLabel) await page.getByRole("button", { name: taskLabel, exact: true }).click();
 }
 
-// Explicit item pick — for tasks whose item list has more than one option
-// left (SearchableSelect stays interactive, not readOnly-auto-selected).
+// Explicit item-name pick — for a leaf whose own item list has more than one
+// option left (SearchableSelect stays interactive, not readOnly-auto-selected).
 async function pickItem(page: Page, itemName: string) {
   await page.getByPlaceholder("Search items…").click();
   await page.getByRole("button", { name: itemName, exact: true }).click();
+}
+
+// Explicit requirement (leaf) pick — for a task whose tree has more than one
+// leaf to choose from (e.g. Barrows' 8 separate one-item pieces). Distinct
+// from pickItem: this picks *which leaf*, not which item name on one leaf.
+async function pickRequirement(page: Page, label: string) {
+  await page.getByPlaceholder("Search requirements…").click();
+  await page.getByRole("button", { name: label, exact: true }).click();
 }
 
 function toDatetimeLocal(d: Date): string {
@@ -46,16 +55,21 @@ function toDatetimeLocal(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+interface GraphNode {
+  id: string;
+  label: string | null;
+  children: GraphNode[];
+}
 interface BoardTile {
   name: string;
-  tasks: { id: string; label: string }[];
+  node: GraphNode;
 }
 
 async function getTaskId(request: APIRequestContext, tileName: string, taskLabel: string): Promise<string> {
   const res = await request.get(`/api/bingos/${SLUG}/board`);
   const body = (await res.json()) as { tiles: BoardTile[] };
   const tile = body.tiles.find((t) => t.name === tileName);
-  const task = tile?.tasks.find((t) => t.label === taskLabel);
+  const task = tile?.node.children.find((t) => t.label === taskLabel);
   if (!task) throw new Error(`Task "${taskLabel}" on tile "${tileName}" not found in board response`);
   return task.id;
 }
@@ -65,176 +79,95 @@ async function getTaskId(request: APIRequestContext, tileName: string, taskLabel
 // mirrors these checks for UX, but this is the enforcement"), not just that
 // the client hid the option. The client-side UI checks are asserted
 // separately in each scenario below.
-async function rawSubmit(request: APIRequestContext, taskId: string) {
+async function rawSubmit(request: APIRequestContext, nodeId: string) {
   return request.post(`/api/bingos/${SLUG}/submissions`, {
-    // A bare string multipart value is sent as a text field, not a file —
-    // multer's req.file stays undefined and the route rejects with
-    // "Screenshot is required" before ever reaching the real check this is
-    // trying to exercise. Needs an explicit {name, mimeType, buffer}.
     multipart: {
       screenshot: { name: "screenshot.png", mimeType: "image/png", buffer: readFileSync(SCREENSHOT_PATH) },
-      taskId,
-      itemClaims: "[]",
+      claims: JSON.stringify([{ nodeId, itemName: "x" }]),
     },
   });
 }
 
-// TODO: rewrite against the requirement-tree model (ITEM/ALL/ANY/COUNT leaves, claims bound to nodes).
-test.skip("special tile-rule mechanics", async ({ page }) => {
+async function createTile(request: APIRequestContext, params: { name: string; boardRow: number; boardCol: number; hasFreezePeriod?: boolean; freezeDurationMinutes?: number }): Promise<{ id: string }> {
+  const res = await request.post(`/api/bingos/${SLUG}/admin/tiles`, { data: params });
+  expect(res.ok(), `createTile ${params.name}: ${res.status()} ${await res.text()}`).toBe(true);
+  return ((await res.json()) as { tile: { id: string } }).tile;
+}
+
+async function createTask(request: APIRequestContext, tileId: string, input: Record<string, unknown>): Promise<GraphNode> {
+  const res = await request.post(`/api/bingos/${SLUG}/admin/tiles/${tileId}/tasks`, { data: input });
+  expect(res.ok(), `createTask ${input.label}: ${res.status()} ${await res.text()}`).toBe(true);
+  return ((await res.json()) as { task: GraphNode }).task;
+}
+
+async function createWildcard(request: APIRequestContext, tileId: string, params: { itemName: string; applicableNodeId?: string }): Promise<{ id: string }> {
+  const res = await request.post(`/api/bingos/${SLUG}/admin/tiles/${tileId}/wildcards`, { data: params });
+  expect(res.ok(), `createWildcard: ${res.status()} ${await res.text()}`).toBe(true);
+  return ((await res.json()) as { wildcard: { id: string } }).wildcard;
+}
+
+test("special tile-rule mechanics", async ({ page }) => {
   await test.step("admin logs in and creates the special-rules bingo", async () => {
     await loginAs(page, E2E_USERS.admin);
-    await page.goto("/admin");
-    await page.getByLabel("Name").fill("Special Rules Bingo");
-    await page.getByLabel("Slug (used in the URL)").fill(SLUG);
-    await page.getByLabel("Board size (NxN)").fill("3");
-    await page.getByRole("button", { name: "Create bingo" }).click();
-    await expect(page).toHaveURL(new RegExp(`/b/${SLUG}/mod$`));
+    const res = await page.request.post("/api/admin/bingos", { data: { slug: SLUG, name: "Special Rules Bingo", boardRows: 3, boardCols: 3 } });
+    expect(res.ok()).toBe(true);
+    await page.goto(`/b/${SLUG}/mod`);
     await dismissNotifPromptIfPresent(page);
   });
 
-  await test.step("admin builds Barrows (requires a complete set from one options group, plus the no-duplicates badge)", async () => {
-    await page.getByRole("button", { name: "Board", exact: true }).click();
-    await page.getByRole("button", { name: "Create tile at row 0, column 0" }).click();
-    await page.getByLabel("Name", { exact: true }).fill("Barrows");
-    await page.getByLabel("Name", { exact: true }).press("Tab");
-
-    await page.getByRole("button", { name: "+ Add task" }).click();
-    await taskPanel(page, "Part A").getByRole("button", { name: /Expand task: Part A/ }).click();
-    await taskPanel(page, "Part A").getByLabel("Points", { exact: true }).fill("30");
-    await taskPanel(page, "Part A").getByLabel("Description", { exact: true }).fill("Obtain a complete set from one brother.");
-    // These flag checkboxes are DB-backed (patch + query invalidate on blur/
-    // change) — checked only reflects the new value once that round-trips,
-    // so .click() + a separate toBeChecked() (which polls) instead of a
-    // plain .check() (click + immediate verify, which races it).
-    await taskPanel(page, "Part A").getByLabel("Requires a complete set").click();
-    await expect(taskPanel(page, "Part A").getByLabel("Requires a complete set")).toBeChecked();
-    await taskPanel(page, "Part A").getByLabel("No duplicate items").click();
-    await expect(taskPanel(page, "Part A").getByLabel("No duplicate items")).toBeChecked();
-
-    // Added items render as an inline-editable name input (TaskEditor.tsx),
-    // not plain text — assert via its aria-label, not getByText (Playwright
-    // has no getByDisplayValue; that's a Testing Library API, not Playwright's).
-    for (const item of ["Ahrim's hood", "Ahrim's robetop", "Ahrim's robeskirt", "Ahrim's staff"]) {
-      await taskPanel(page, "Part A").getByPlaceholder("Item name").fill(item);
-      await taskPanel(page, "Part A").getByPlaceholder("Options group (optional)").fill("ahrim");
-      await taskPanel(page, "Part A").getByRole("button", { name: "Add" }).click();
-      await expect(taskPanel(page, "Part A").getByRole("textbox", { name: `Item name for ${item}` })).toBeVisible();
-    }
-    for (const item of ["Dharok's helm", "Dharok's platebody", "Dharok's platelegs", "Dharok's greataxe"]) {
-      await taskPanel(page, "Part A").getByPlaceholder("Item name").fill(item);
-      await taskPanel(page, "Part A").getByPlaceholder("Options group (optional)").fill("dharok");
-      await taskPanel(page, "Part A").getByRole("button", { name: "Add" }).click();
-      await expect(taskPanel(page, "Part A").getByRole("textbox", { name: `Item name for ${item}` })).toBeVisible();
-    }
-
-    await page.getByRole("button", { name: "Close" }).click();
+  await test.step("admin builds Barrows via the API: ANY of ALL(4 Ahrim's)/ALL(4 Dharok's)", async () => {
+    const tile = await createTile(page.request, { name: "Barrows", boardRow: 0, boardCol: 0 });
+    await createTask(page.request, tile.id, {
+      kind: "ANY",
+      label: "Part A",
+      points: 30,
+      description: "Obtain a complete set from one brother.",
+      children: [
+        { kind: "ALL", children: ["Ahrim's hood", "Ahrim's robetop", "Ahrim's robeskirt", "Ahrim's staff"].map((n) => ({ kind: "ITEM", itemNames: [n] })) },
+        { kind: "ALL", children: ["Dharok's helm", "Dharok's platebody", "Dharok's platelegs", "Dharok's greataxe"].map((n) => ({ kind: "ITEM", itemNames: [n] })) },
+      ],
+    });
   });
 
-  await test.step("admin builds K'ril Tsutsaroth (minSubmissions gates completion even once the item tally is satisfied)", async () => {
-    await page.getByRole("button", { name: "Create tile at row 0, column 1" }).click();
-    await page.getByLabel("Name", { exact: true }).fill("K'ril Tsutsaroth");
-    await page.getByLabel("Name", { exact: true }).press("Tab");
-
-    await page.getByRole("button", { name: "+ Add task" }).click();
-    await taskPanel(page, "Part A").getByRole("button", { name: /Expand task: Part A/ }).click();
-    await taskPanel(page, "Part A").getByLabel("Points", { exact: true }).fill("25");
-    await taskPanel(page, "Part A").getByLabel("Description", { exact: true }).fill("Obtain two different unique drops.");
-    await taskPanel(page, "Part A").getByLabel("Min. approved submissions to complete").fill("2");
-
-    for (const item of ["Steam battlestaff", "Zamorakian spear", "Zamorak hilt"]) {
-      await taskPanel(page, "Part A").getByPlaceholder("Item name").fill(item);
-      await taskPanel(page, "Part A").getByPlaceholder("Options group (optional)").fill("drop");
-      await taskPanel(page, "Part A").getByRole("button", { name: "Add" }).click();
-      await expect(taskPanel(page, "Part A").getByRole("textbox", { name: `Item name for ${item}` })).toBeVisible();
-    }
-
-    await page.getByRole("button", { name: "Close" }).click();
+  await test.step("admin builds K'ril Tsutsaroth via the API: 2 distinct drops required, not just 2 of the same", async () => {
+    const tile = await createTile(page.request, { name: "K'ril Tsutsaroth", boardRow: 0, boardCol: 1 });
+    await createTask(page.request, tile.id, {
+      kind: "ITEM",
+      label: "Part A",
+      points: 25,
+      description: "Obtain two different unique drops.",
+      itemNames: ["Steam battlestaff", "Zamorakian spear", "Zamorak hilt"],
+      quantity: 2,
+      distinctItems: true,
+    });
   });
 
-  await test.step("admin builds Cerberus (allowsPreviouslyAcquired folding + a wildcard capped at 1 redemption)", async () => {
-    await page.getByRole("button", { name: "Create tile at row 0, column 2" }).click();
-    await page.getByLabel("Name", { exact: true }).fill("Cerberus");
-    await page.getByLabel("Name", { exact: true }).press("Tab");
-
-    await page.getByRole("button", { name: "+ Add task" }).click();
-    await taskPanel(page, "Part A").getByRole("button", { name: /Expand task: Part A/ }).click();
-    await taskPanel(page, "Part A").getByLabel("Points", { exact: true }).fill("25");
-    await taskPanel(page, "Part A").getByLabel("Description", { exact: true }).fill("Obtain your first Cerberus drop.");
-    await taskPanel(page, "Part A").getByLabel("Allows pre-load screenshot").click();
-    await expect(taskPanel(page, "Part A").getByLabel("Allows pre-load screenshot")).toBeChecked();
-    await taskPanel(page, "Part A").getByPlaceholder("Item name").fill("Any Cerberus drop");
-    await taskPanel(page, "Part A").getByRole("button", { name: "Add" }).click();
-    await expect(taskPanel(page, "Part A").getByRole("textbox", { name: "Item name for Any Cerberus drop" })).toBeVisible();
-
-    await page.getByRole("button", { name: "+ Add task" }).click();
-    await taskPanel(page, "Part B").getByRole("button", { name: /Expand task: Part B/ }).click();
-    await taskPanel(page, "Part B").getByLabel("Points", { exact: true }).fill("40");
-    await taskPanel(page, "Part B").getByLabel("Description", { exact: true }).fill("Obtain two more Cerberus drops (drops from Part A count).");
-    await taskPanel(page, "Part B").getByLabel("Folds previous task's claims").click();
-    await expect(taskPanel(page, "Part B").getByLabel("Folds previous task's claims")).toBeChecked();
-    await taskPanel(page, "Part B").getByLabel("Min. approved submissions to complete").fill("2");
-    await taskPanel(page, "Part B").getByPlaceholder("Item name").fill("Any Cerberus drop");
-    await taskPanel(page, "Part B").getByRole("button", { name: "Add" }).click();
-    await expect(taskPanel(page, "Part B").getByRole("textbox", { name: "Item name for Any Cerberus drop" })).toBeVisible();
-
-    // A single wildcard, applicable to any task on the tile, at the schema
-    // default of 1 redemption per team — the admin UI has no field to set
-    // maxRedemptionsPerTeam or item quantity at creation time, so this test
-    // is built around those defaults rather than around chosen values.
-    await page.getByRole("button", { name: "+ Add wildcard" }).click();
-    const wildcardRow = page.locator("li").filter({ has: page.getByLabel("Wildcard applicable task") });
-    await wildcardRow.locator("input").first().fill("Cerberus jar");
-    await wildcardRow.locator("input").first().blur();
-
-    await page.getByRole("button", { name: "Close" }).click();
+  await test.step("admin builds Cerberus via the API: same item group on both tasks, Part B gated on Part A, a wildcard capped at 1", async () => {
+    const tile = await createTile(page.request, { name: "Cerberus", boardRow: 0, boardCol: 2 });
+    const partA = await createTask(page.request, tile.id, {
+      kind: "ITEM", label: "Part A", points: 25, description: "Obtain your first Cerberus drop.",
+      itemNames: ["Any Cerberus drop"], allowsPreLoad: true,
+    });
+    await createTask(page.request, tile.id, {
+      kind: "ITEM", label: "Part B", points: 40, description: "Obtain another Cerberus drop.",
+      itemNames: ["Any Cerberus drop"], submitGateNodeId: partA.id,
+    });
+    await createWildcard(page.request, tile.id, { itemName: "Cerberus jar" });
   });
 
-  await test.step("admin builds Colosseum (frozen — negative path only, no waiting out a real 2-hour timer)", async () => {
-    await page.getByRole("button", { name: "Create tile at row 1, column 0" }).click();
-    await page.getByLabel("Name", { exact: true }).fill("Colosseum");
-    await page.getByLabel("Name", { exact: true }).press("Tab");
-    await page.getByLabel("Freeze period").click();
-    await expect(page.getByLabel("Freeze period")).toBeChecked();
-    await page.getByLabel("Freeze duration (minutes)").fill("120");
-
-    await page.getByRole("button", { name: "+ Add task" }).click();
-    await taskPanel(page, "Part A").getByRole("button", { name: /Expand task: Part A/ }).click();
-    await taskPanel(page, "Part A").getByLabel("Points", { exact: true }).fill("20");
-    await taskPanel(page, "Part A").getByLabel("Description", { exact: true }).fill("Clear waves 1 through 3.");
-    await taskPanel(page, "Part A").getByPlaceholder("Item name").fill("Waves 1-3 proof");
-    await taskPanel(page, "Part A").getByRole("button", { name: "Add" }).click();
-    await expect(taskPanel(page, "Part A").getByRole("textbox", { name: "Item name for Waves 1-3 proof" })).toBeVisible();
-
-    await page.getByRole("button", { name: "Close" }).click();
+  await test.step("admin builds Colosseum via the API: frozen for 120 minutes", async () => {
+    const tile = await createTile(page.request, { name: "Colosseum", boardRow: 1, boardCol: 0, hasFreezePeriod: true, freezeDurationMinutes: 120 });
+    await createTask(page.request, tile.id, { kind: "ITEM", label: "Part A", points: 20, description: "Clear waves 1 through 3.", itemNames: ["Waves 1-3 proof"] });
   });
 
-  await test.step("admin builds Duke Sucellus (submitRequiresPrevious — Part B can't even be submitted before Part A)", async () => {
-    await page.getByRole("button", { name: "Create tile at row 1, column 1" }).click();
-    await page.getByLabel("Name", { exact: true }).fill("Duke Sucellus");
-    await page.getByLabel("Name", { exact: true }).press("Tab");
-
-    await page.getByRole("button", { name: "+ Add task" }).click();
-    await taskPanel(page, "Part A").getByRole("button", { name: /Expand task: Part A/ }).click();
-    await taskPanel(page, "Part A").getByLabel("Points", { exact: true }).fill("20");
-    await taskPanel(page, "Part A").getByLabel("Description", { exact: true }).fill("Kill Duke Sucellus.");
-    await taskPanel(page, "Part A").getByPlaceholder("Item name").fill("Duke Sucellus kill proof");
-    await taskPanel(page, "Part A").getByRole("button", { name: "Add" }).click();
-    await expect(taskPanel(page, "Part A").getByRole("textbox", { name: "Item name for Duke Sucellus kill proof" })).toBeVisible();
-
-    await page.getByRole("button", { name: "+ Add task" }).click();
-    await taskPanel(page, "Part B").getByRole("button", { name: /Expand task: Part B/ }).click();
-    await taskPanel(page, "Part B").getByLabel("Points", { exact: true }).fill("30");
-    await taskPanel(page, "Part B").getByLabel("Description", { exact: true }).fill("Obtain a Vestige.");
-    await taskPanel(page, "Part B").getByLabel("Requires previous task").click();
-    await expect(taskPanel(page, "Part B").getByLabel("Requires previous task")).toBeChecked();
-    await taskPanel(page, "Part B").getByPlaceholder("Item name").fill("Vestige");
-    await taskPanel(page, "Part B").getByRole("button", { name: "Add" }).click();
-    await expect(taskPanel(page, "Part B").getByRole("textbox", { name: "Item name for Vestige" })).toBeVisible();
-
-    await page.getByRole("button", { name: "Close" }).click();
+  await test.step("admin builds Duke Sucellus via the API: Part B gated on Part A", async () => {
+    const tile = await createTile(page.request, { name: "Duke Sucellus", boardRow: 1, boardCol: 1 });
+    const partA = await createTask(page.request, tile.id, { kind: "ITEM", label: "Part A", points: 20, description: "Kill Duke Sucellus.", itemNames: ["Duke Sucellus kill proof"] });
+    await createTask(page.request, tile.id, { kind: "ITEM", label: "Part B", points: 30, description: "Obtain a Vestige.", itemNames: ["Vestige"], submitGateNodeId: partA.id });
   });
 
   await test.step("admin advances to signup, one captain signs up, advances to captains and creates the team", async () => {
+    await page.reload();
     await page.getByRole("button", { name: "Advance to signup →" }).click();
     await page.getByRole("button", { name: "Confirm" }).click();
     await expect(page.getByText("signup", { exact: true })).toBeVisible();
@@ -280,23 +213,19 @@ test.skip("special tile-rule mechanics", async ({ page }) => {
     await expect(page.getByText("Saved", { exact: true })).toBeVisible();
   });
 
-  await test.step("Barrows: partial set (3/4) doesn't complete, the 4th piece does — plus the no-duplicates badge renders", async () => {
+  await test.step("Barrows: a partial set (3/4) doesn't complete, the 4th piece does", async () => {
     await loginAs(page, CAPTAIN);
     await page.goto(`/b/${SLUG}`);
 
-    for (const item of ["Ahrim's hood", "Ahrim's robetop", "Ahrim's robeskirt", "Ahrim's staff"]) {
+    for (const item of ["Ahrim's hood", "Ahrim's robetop", "Ahrim's robeskirt"]) {
       await page.getByRole("button", { name: "Submit", exact: true }).click();
       await expect(page.getByText("Submit Completion")).toBeVisible();
       await pickTileAndTask(page, "Barrows");
-      await pickItem(page, item);
+      await pickRequirement(page, item);
       await page.locator('input[type="file"]').setInputFiles(SCREENSHOT_PATH);
       await page.getByRole("button", { name: "Submit for Review" }).click();
       await expect(page.getByText("Submit Completion")).not.toBeVisible();
     }
-
-    await page.getByRole("button", { name: "Barrows" }).click();
-    await expect(page.getByText("No duplicates", { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Close" }).click();
 
     await loginAs(page, E2E_USERS.admin);
     await page.goto(`/b/${SLUG}/mod`);
@@ -309,9 +238,16 @@ test.skip("special tile-rule mechanics", async ({ page }) => {
 
     await loginAs(page, CAPTAIN);
     await page.goto(`/b/${SLUG}`);
-    // A 3/4 set is not "complete" — requiresCompleteSet needs every item in
-    // one whole group, not most of one.
+    // A 3/4 set from one brother is not "complete" — the ALL under Barrows'
+    // ANY needs every item in one whole group, not most of one.
     await expect(teamPoints(page)).toHaveText("0 pts");
+
+    await page.getByRole("button", { name: "Submit", exact: true }).click();
+    await pickTileAndTask(page, "Barrows");
+    await pickRequirement(page, "Ahrim's staff");
+    await page.locator('input[type="file"]').setInputFiles(SCREENSHOT_PATH);
+    await page.getByRole("button", { name: "Submit for Review" }).click();
+    await expect(page.getByText("Submit Completion")).not.toBeVisible();
 
     await loginAs(page, E2E_USERS.admin);
     await page.goto(`/b/${SLUG}/mod`);
@@ -325,7 +261,7 @@ test.skip("special tile-rule mechanics", async ({ page }) => {
     await expect(teamPoints(page)).toHaveText("30 pts");
   });
 
-  await test.step("K'ril Tsutsaroth: minSubmissions still gates completion even once the item tally alone would satisfy the group", async () => {
+  await test.step("K'ril Tsutsaroth: a 2nd claim of the SAME item doesn't complete distinctItems, a different one does", async () => {
     await page.getByRole("button", { name: "Submit", exact: true }).click();
     await expect(page.getByText("Submit Completion")).toBeVisible();
     await pickTileAndTask(page, "K'ril Tsutsaroth");
@@ -343,9 +279,8 @@ test.skip("special tile-rule mechanics", async ({ page }) => {
 
     await loginAs(page, CAPTAIN);
     await page.goto(`/b/${SLUG}`);
-    // One approved submission out of the required 2 — the group's item
-    // requirement is technically satisfied already, but minSubmissions
-    // still blocks completion on its own.
+    // One distinct drop out of the 2 required — distinctItems counts unique
+    // names, so a repeat of this same drop still wouldn't be enough.
     await expect(teamPoints(page)).toHaveText("30 pts");
 
     await page.getByRole("button", { name: "Submit", exact: true }).click();
@@ -368,10 +303,12 @@ test.skip("special tile-rule mechanics", async ({ page }) => {
     await expect(teamPoints(page)).toHaveText("55 pts");
   });
 
-  await test.step("Cerberus: wildcard redemption succeeds once, a second redemption is rejected server-side, then a real claim completes Part B via allowsPreviouslyAcquired folding", async () => {
+  await test.step("Cerberus: a wildcard redemption succeeds once, a second is rejected server-side, then a real claim completes the gated Part B", async () => {
     await page.getByRole("button", { name: "Submit", exact: true }).click();
     await expect(page.getByText("Submit Completion")).toBeVisible();
-    await pickTileAndTask(page, "Cerberus", "Part A");
+    // Part B is submitGate'd on Part A, so Part A is the only available
+    // task from the start — auto-selected, no task picker to click.
+    await pickTileAndTask(page, "Cerberus");
     await page.getByLabel("Submit with a wildcard").check();
     await page.locator('input[type="file"]').setInputFiles(SCREENSHOT_PATH);
     await page.getByRole("button", { name: "Submit for Review" }).click();
@@ -415,10 +352,8 @@ test.skip("special tile-rule mechanics", async ({ page }) => {
     await expect(wildcardRow2).toBeVisible();
     await wildcardRow2.getByRole("button", { name: "Reject" }).click();
 
-    // A real (non-wildcard) claim on Part B — combined with Part A's already-
-    // approved submission folding in via allowsPreviouslyAcquired, this is
-    // the 2nd approved submission minSubmissions needs, and the item tally
-    // is satisfied too.
+    // A real (non-wildcard) claim on Part B — its own independent ITEM leaf
+    // on the same item group, now unblocked since Part A is approved.
     await loginAs(page, CAPTAIN);
     await page.goto(`/b/${SLUG}`);
     await page.getByRole("button", { name: "Submit", exact: true }).click();
@@ -461,7 +396,7 @@ test.skip("special tile-rule mechanics", async ({ page }) => {
     const partBTaskId = await getTaskId(page.request, "Duke Sucellus", "Part B");
     const res = await rawSubmit(page.request, partBTaskId);
     expect(res.status()).toBe(400);
-    expect((await res.json()).error).toMatch(/previous task/);
+    expect((await res.json()).error).toMatch(/must be completed first/);
 
     await page.getByRole("button", { name: "Submit", exact: true }).click();
     await expect(page.getByText("Submit Completion")).toBeVisible();
@@ -504,7 +439,8 @@ test.skip("special tile-rule mechanics", async ({ page }) => {
 
     await loginAs(page, CAPTAIN);
     await page.goto(`/b/${SLUG}`);
-    // Barrows 30 + K'ril 25 + Cerberus 65 (25 + 40) + Duke Sucellus 50 (20 + 30) = 170.
+    // Barrows 30 + K'ril 25 (one node, distinctItems — not per-item) +
+    // Cerberus 65 (25 + 40) + Duke Sucellus 50 (20 + 30) = 170.
     await expect(teamPoints(page)).toHaveText("170 pts");
   });
 });

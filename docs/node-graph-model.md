@@ -1,9 +1,15 @@
 # Tectonic Bingo — Node-graph scoring model
 
-> Status: **proposed, agreed in principle (2026-09-07)**. Successor to the requirement-tree
-> model in `docs/data-model-proposal.md`. Part 1 is the design; Part 2 is the phased
-> implementation plan, written so a lower-tier model can execute it phase by phase.
-> `server/src/db/schema.ts` remains authoritative for what is *currently* live.
+> Status: **implemented (2026-09-08)**. Successor to the requirement-tree model in
+> `docs/data-model-proposal.md`, which is now itself historical. Part 1 is the design;
+> Part 2 is the phased implementation plan (N1-N5), all complete — schema, engine, service
+> layer, routes, full client, and E2E coverage. `server/src/db/schema.ts` remains
+> authoritative for exact current field names; §10's open questions were resolved during
+> implementation (union for accepted names, same-tile restriction kept, points only on
+> tile-children/lines so far) and a real bug was found and fixed along the way: a
+> childless composite node must NOT be vacuously complete (see §3) — the original design
+> called empty `ALL` true, which would have silently awarded every unconfigured tile's and
+> task's points to every team the moment anything else was approved.
 
 ---
 
@@ -60,8 +66,17 @@ Removed: `tileTasks`, `requirementNodes` (→ `nodes`), `requirementNodes.parent
 ## 3. Invariants (enforced in the service layer on every write)
 
 - The edge set is acyclic. Every edge joins two nodes with the same `bingoId`.
-- `ITEM` and `MANUAL` nodes have no children. Composite kinds may have zero children:
-  empty `ALL` ⇒ true, empty `ANY`/`COUNT` ⇒ false (today's semantics, kept).
+- `ITEM` and `MANUAL` nodes have no children. Composite kinds may have zero children — a
+  freshly created tile or automatic task starts this way, before anything is added to it.
+  All three composite kinds are **not complete** when empty: a childless node is
+  unconfigured, not a vacuously satisfied requirement. (An early draft of this design
+  called empty `ALL` vacuously true, matching boolean-logic convention; that was wrong for
+  this domain — under the old requirement-tree model this case only ever *looked* handled
+  because tile/line completion was checked solely when a member tile completed, never
+  evaluated cold, so an empty composite's truthiness was never actually exercised. This
+  model's "recompute everything, always" engine does exercise it, on the very next
+  approval of anything — so empty-ALL-is-true would silently award every unconfigured
+  tile's and task's points to every team.)
 - Claims target leaves only (`ITEM`/`MANUAL`), as `createSubmission` enforces today.
 - `pointsGateNodeId` / `submitGateNodeId` reference a node in the same bingo that is not a
   descendant of the gated node.
@@ -90,7 +105,7 @@ function evaluate(node, memo): NodeResult {           // memoised by node.id —
     case "MANUAL": {
       // complete when ≥1 approved claim on this node; completedAt = earliest reviewedAt.
     }
-    case "ALL":   { /* every child;              completedAt = max(children.completedAt) */ }
+    case "ALL":   { /* ≥1 child AND every child;  completedAt = max(children.completedAt) */ }
     case "ANY":   { /* some child;               completedAt = min over complete children */ }
     case "COUNT": { /* ≥ (minCount ?? 1) children; completedAt = minCount-th smallest child completedAt */ }
   }

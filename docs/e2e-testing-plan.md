@@ -1,5 +1,14 @@
 # E2E UI Testing Plan — Playwright full-flow coverage
 
+> Historical build-out record (Phases E1-E5, all done). Its Phase E5 (`special-tile-rules.
+> spec.ts`) describes the pre-PR#2 flat-item-list flags (`requiresCompleteSet`,
+> `minSubmissions`, `allowsPreviouslyAcquired`, options groups) — that spec file has since
+> been rewritten twice: once left `test.skip`'d by PR #2 (whose commit introduced the
+> requirement-tree model this phase predates), then rewritten again for the node-graph
+> model (`docs/node-graph-model.md`). The actual spec files (`e2e/*.spec.ts`) are
+> authoritative for current E2E coverage; this file is kept as a log of how they were
+> built, not updated to match.
+
 Written 2026-09-01 to be executed phase-by-phase by another model, standalone. Goal: real-browser
 end-to-end tests covering the entire bingo lifecycle — an admin builds a Pokémon-themed bingo
 through the UI, players sign up, teams get drafted, and submissions get made and scored — with

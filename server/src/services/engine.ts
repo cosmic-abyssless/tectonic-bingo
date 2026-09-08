@@ -87,7 +87,10 @@ export function evaluateGraph(
       }
       case "ALL": {
         const results = (childrenOf.get(nodeId) ?? []).map(evaluate);
-        const complete = results.every((r) => r.complete);
+        // A childless ALL is a not-yet-configured tile/task, not a vacuously
+        // satisfied one — treating it as complete would award its points to
+        // every team the instant anything else gets approved.
+        const complete = results.length > 0 && results.every((r) => r.complete);
         const completedAt = complete
           ? results.reduce<Date | null>((max, r) => (r.completedAt && (!max || r.completedAt > max) ? r.completedAt : max), null)
           : null;

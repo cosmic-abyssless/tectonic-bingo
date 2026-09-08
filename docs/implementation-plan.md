@@ -1,5 +1,14 @@
 # Bingo Platform — Implementation Plan
 
+> Historical record of the v1→v2 phased build-out below (Phases 1-8, all done). Its
+> tile-task data model (`tile_tasks`/`tile_task_items`, flags like `requiresCompleteSet`,
+> `minSubmissions`, `allowsPreviouslyAcquired`) was superseded first by PR #2's
+> requirement-tree model (`docs/data-model-proposal.md`), then by the node-graph model
+> (`docs/node-graph-model.md`) — the schema and scoring-engine sections here predate both
+> and no longer describe the live code. Kept as-is (not rewritten) since it's a phase
+> log, not a living spec; `server/src/db/schema.ts` and `docs/node-graph-model.md` are
+> authoritative for the current model.
+
 This plan turns the single-event Pokémon bingo tracker into a generic, multi-bingo platform per `docs/abstraction-plan.md`. It is written to be executed phase-by-phase by an implementing agent. **Do not skip ahead**: each phase has a Definition of Done (DoD) that must pass before starting the next.
 
 ## Decisions already made (do not re-litigate)

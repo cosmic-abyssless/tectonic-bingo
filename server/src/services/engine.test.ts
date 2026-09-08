@@ -86,8 +86,8 @@ describe("evaluateGraph — composites", () => {
     expect(evaluateGraph(nodes, childrenOf, claims).get("root")).toEqual({ complete: true, completedAt: new Date("2026-01-02") });
   });
 
-  it("empty ALL is complete", () => {
-    expect(evaluateGraph([composite("root", "ALL")], new Map(), []).get("root")!.complete).toBe(true);
+  it("empty ALL is not complete — a childless node is unconfigured, not vacuously satisfied", () => {
+    expect(evaluateGraph([composite("root", "ALL")], new Map(), []).get("root")!.complete).toBe(false);
   });
 
   it("ANY requires one child; completedAt is the earliest complete child", () => {
