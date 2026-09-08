@@ -58,10 +58,12 @@ correlate identities.
 1. **Availability coupling** — tectonic-api may be down or unconfigured (e.g. fresh local dev).
    Answer: nullable-integration pattern already used for the AI client (`getAIClient()` returns
    null when unconfigured); every consumer degrades to current behavior. A startup log line states
-   enabled/disabled, like the dev-mode line.
+   enabled/disabled, like the dev-mode line. Configured-but-unreachable is different: the client
+   throws `TectonicUnavailableError` and the signup routes answer 503 ("membership check
+   temporarily unavailable") rather than mistaking an outage for non-membership (403).
 2. **Players not registered in tectonic** — clan staff register members via the bot; a signup from
-   someone absent there can't be verified. Answer: warn-don't-block by default — signups carry an
-   `rsnVerified` flag instead of hard-failing. A strict mode can come later if wanted.
+   someone absent there can't be verified. Answer: new signups are hard-gated (403, "clan members
+   only"); existing signups keep their spot and only carry the `rsnVerified` flag.
 3. **Multi-bingo ↔ multi-guild mapping** — the platform hosts many bingos; tectonic hosts many
    guilds. Decision: start with a single env-configured `TECTONIC_GUILD_ID` (one-clan deployment
    reality). A nullable per-bingo `tectonicGuildId` override is a cheap follow-up if ever needed.

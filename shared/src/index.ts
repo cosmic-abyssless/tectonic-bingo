@@ -12,6 +12,12 @@
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
 
+// Structural board edits are locked once the game is live (mirrors server
+// bingoService.assertBoardEditable). Editing during reveal is still allowed.
+export function isBoardLocked(stage: Stage): boolean {
+  return stage === "live" || stage === "complete";
+}
+
 export type NodeStatus = "not_started" | "in_progress" | "pending_approval" | "completed";
 export type SubmissionStatus = "pending" | "approved" | "rejected";
 

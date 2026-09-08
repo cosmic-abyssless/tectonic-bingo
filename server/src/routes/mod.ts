@@ -10,7 +10,7 @@ import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
 import * as devSeedService from "../services/devSeedService";
 import * as teamService from "../services/teamService";
-import { getTectonicClient } from "../services/tectonicService";
+import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
 import { approveSubmission, rejectSubmission } from "../services/scoringService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
@@ -138,7 +138,14 @@ if (process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "
       const { count } = req.body as { count?: number };
       const n = Math.min(Math.max(Math.trunc(count ?? 8), 1), 50);
       const tectonic = getTectonicClient();
-      const roster = (await tectonic?.getRoster(1000)) ?? [];
+      // Throwaway test data: an unreachable tectonic-api just means seeded
+      // signups aren't drawn from the real roster.
+      const roster = tectonic
+        ? await tectonic.getRoster(1000).catch((err: unknown) => {
+            if (err instanceof TectonicUnavailableError) return [];
+            throw err;
+          })
+        : [];
       // devSeedService fabricates WOM/RuneProfile stats locally (no network
       // calls) for every seeded signup — up to 50 real API round trips per
       // click would be slow and pointless rate-limit exposure for

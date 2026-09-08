@@ -99,6 +99,18 @@ interface CacheEntry {
 
 const CACHE_TTL_MS = 60_000;
 
+/**
+ * tectonic-api couldn't be reached or returned a non-2xx. Distinct from "the
+ * API answered and this user isn't in it" — callers must not treat an outage
+ * as non-membership.
+ */
+export class TectonicUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TectonicUnavailableError";
+  }
+}
+
 export class TectonicClient {
   private cache = new Map<string, CacheEntry>();
 
@@ -110,28 +122,30 @@ export class TectonicClient {
   // Cache is keyed by URL. 60s keeps us far under tectonic-api's global
   // 120 req/s limiter even with a busy signup page, while staying fresh
   // enough for draft-time data.
-  private async get<T>(path: string): Promise<T | null> {
+  private async get<T>(path: string): Promise<T> {
     const url = `${this.cfg.baseUrl}${path}`;
     const cached = this.cache.get(url);
     if (cached && cached.expiresAt > Date.now()) return cached.value as T;
 
+    let res: Response;
     try {
-      const res = await this.fetchImpl(url, { headers: { Authorization: this.cfg.apiKey } });
-      if (!res.ok) {
-        console.warn(`[tectonic] ${res.status} from GET ${path}`);
-        return null;
-      }
-      const value = (await res.json()) as T;
-      this.cache.set(url, { value, expiresAt: Date.now() + CACHE_TTL_MS });
-      return value;
+      res = await this.fetchImpl(url, { headers: { Authorization: this.cfg.apiKey } });
     } catch (err) {
-      console.warn(`[tectonic] request failed: GET ${path}`, err instanceof Error ? err.message : err);
-      return null;
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn(`[tectonic] request failed: GET ${path}`, reason);
+      throw new TectonicUnavailableError(`GET ${path}: ${reason}`);
     }
+    if (!res.ok) {
+      console.warn(`[tectonic] ${res.status} from GET ${path}`);
+      throw new TectonicUnavailableError(`GET ${path}: HTTP ${res.status}`);
+    }
+    const value = (await res.json()) as T;
+    this.cache.set(url, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+    return value;
   }
 
   /** Full guild roster (leaderboard ordering) with RSNs and points. */
-  async getRoster(limit = 1000): Promise<TectonicRosterUser[] | null> {
+  async getRoster(limit = 1000): Promise<TectonicRosterUser[]> {
     return this.get<TectonicRosterUser[]>(`/api/v1/guilds/${this.cfg.guildId}/leaderboard?limit=${Math.min(limit, 1000)}`);
   }
 
@@ -139,16 +153,16 @@ export class TectonicClient {
    * Detailed users (RSNs, points, tier, records, events, achievements) by
    * Discord IDs. IDs unknown to tectonic are simply absent from the result.
    */
-  async getDetailedUsers(discordIds: string[]): Promise<TectonicDetailedUser[] | null> {
+  async getDetailedUsers(discordIds: string[]): Promise<TectonicDetailedUser[]> {
     if (discordIds.length === 0) return [];
     const ids = discordIds.map(encodeURIComponent).join(",");
     return this.get<TectonicDetailedUser[]>(`/api/v1/guilds/${this.cfg.guildId}/users/${ids}`);
   }
 
-  /** Convenience: one user's detailed record, or null if not a member (or on failure). */
+  /** Convenience: one user's detailed record, or null if tectonic doesn't know them. Throws TectonicUnavailableError on failure. */
   async getDetailedUser(discordId: string): Promise<TectonicDetailedUser | null> {
     const users = await this.getDetailedUsers([discordId]);
-    return users?.find((u) => u.user_id === discordId) ?? null;
+    return users.find((u) => u.user_id === discordId) ?? null;
   }
 }
 

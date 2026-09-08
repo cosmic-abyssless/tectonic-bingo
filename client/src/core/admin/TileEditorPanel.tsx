@@ -42,33 +42,41 @@ function existingConditionsExcluding(tasks: GraphNode[], excludeTaskIndex: numbe
     );
 }
 
-export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: string; tile: Tile; categories: TileCategory[]; onClose: () => void }) {
+export function TileEditorPanel({ slug, tile, categories, locked, onClose }: { slug: string; tile: Tile; categories: TileCategory[]; locked: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.board(slug) });
-
+  // Every mutation funnels through here so a server rejection (e.g. the
+  // stage lock) is shown instead of silently reverting the input on refetch.
+  async function run(action: () => Promise<unknown>) {
+    setError(null);
+    try {
+      await action();
+      queryClient.invalidateQueries({ queryKey: queryKeys.board(slug) });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+    }
+  }
   async function patch(fields: Partial<Tile>) {
-    await adminApi.updateTile(slug, tile.id, fields);
-    invalidate();
+    await run(() => adminApi.updateTile(slug, tile.id, fields));
   }
   async function deleteTile() {
     if (!confirm(`Delete "${tile.name}" and everything on it? This can't be undone.`)) return;
-    await adminApi.deleteTile(slug, tile.id);
-    invalidate();
-    onClose();
+    await run(async () => {
+      await adminApi.deleteTile(slug, tile.id);
+      onClose();
+    });
   }
   async function addTask() {
     const tasks = tile.node.children;
-    await adminApi.createTask(slug, tile.id, { kind: "ALL", label: `Part ${String.fromCharCode(65 + tasks.length)}`, points: 10, description: "Describe the challenge…", children: [] }, tasks.length);
-    invalidate();
+    await run(() => adminApi.createTask(slug, tile.id, { kind: "ALL", label: `Part ${String.fromCharCode(65 + tasks.length)}`, points: 10, description: "Describe the challenge…", children: [] }, tasks.length));
   }
   async function uploadImage(file: File) {
     setUploading(true);
     try {
-      await adminApi.uploadTileImage(slug, tile.id, file);
-      invalidate();
+      await run(() => adminApi.uploadTileImage(slug, tile.id, file));
     } finally {
       setUploading(false);
     }
@@ -81,11 +89,15 @@ export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: str
   return (
     <Modal onClose={onClose} size="lg">
       <ModalHeader title={tile.name} subtitle={`Row ${tile.boardRow}, Col ${tile.boardCol}`} onClose={onClose} />
-      <div className="p-5 space-y-4">
+      {/* A disabled fieldset inertly disables every control inside it,
+          including the nested task/requirement editors. */}
+      <fieldset disabled={locked} className="min-w-0 p-5 space-y-4 disabled:opacity-60">
+        {locked && <p className="text-sm text-amber-300">The board is locked once the game is live. Step the stage back to edit it.</p>}
+        {error && <p className="text-red-400 text-sm">{error}</p>}
         <div className="flex items-start gap-4">
           <div
-            className="w-20 h-20 shrink-0 bg-slate-900 border border-slate-700 rounded-md flex items-center justify-center cursor-pointer overflow-hidden"
-            onClick={() => fileInputRef.current?.click()}
+            className={`w-20 h-20 shrink-0 bg-slate-900 border border-slate-700 rounded-md flex items-center justify-center overflow-hidden ${locked ? "" : "cursor-pointer"}`}
+            onClick={() => !locked && fileInputRef.current?.click()}
           >
             {tile.imageUrl ? <img src={tile.imageUrl} alt="" className="w-full h-full object-contain" /> : <span className="text-slate-600 text-xs text-center px-1">{uploading ? "…" : "Upload"}</span>}
           </div>
@@ -160,10 +172,10 @@ export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: str
           <input defaultValue={tile.notes ?? ""} onBlur={(e) => patch({ notes: e.target.value || null })} className="w-full bg-slate-900 border border-slate-600 text-white rounded px-2 py-1.5 text-sm focus:outline-none focus:border-indigo-500" />
         </div>
 
-        <button onClick={deleteTile} className="text-sm text-red-400 hover:text-red-300 cursor-pointer">
+        <button onClick={deleteTile} className="text-sm text-red-400 hover:text-red-300 cursor-pointer disabled:cursor-not-allowed">
           Delete tile
         </button>
-      </div>
+      </fieldset>
     </Modal>
   );
 }
