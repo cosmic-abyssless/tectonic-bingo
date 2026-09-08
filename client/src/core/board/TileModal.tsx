@@ -100,6 +100,7 @@ export function TileModal({
               key={task.id}
               task={task}
               claimMaps={claimMaps}
+              statusByNodeId={summary.statusByNodeId}
               locked={locked}
               lockedReason={locked && gate ? `${task.label} cannot be submitted until ${gate.label} is completed.` : undefined}
               complete={summary.statusByNodeId.get(task.id) === "completed"}

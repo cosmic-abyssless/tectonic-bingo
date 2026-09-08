@@ -4,7 +4,7 @@ import { SearchableSelect } from "../ui/SearchableSelect";
 import { Modal, ModalHeader } from "../ui/Modal";
 import { useAnalyzeScreenshot, useCreateSubmission } from "../../api/queries";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete } from "../board/taskClaims";
-import { collectLeaves, collectLeavesWithParent } from "../board/requirementTree";
+import { collectLeaves, collectLeavesWithAncestors } from "../board/requirementTree";
 import { leafLabel } from "../board/TaskPanel";
 import { deriveBoardNodeStatuses, getFreezeUnlockAt } from "../board/tileProgress";
 
@@ -62,31 +62,40 @@ export function SubmissionModal({ slug, bingo, tiles, categories, nodeStates, te
   const claimMaps = useMemo(() => buildLeafClaimMaps(teamSubmissions), [teamSubmissions]);
   const isManualTask = currentTask?.kind === "MANUAL";
 
-  // Leaves of the current task, paired with their immediate parent so a
+  // Leaves of the current task, paired with every enclosing composite so a
   // SUM's child (duplicates still wanted until the SUM's own total is met)
   // can be told apart from an ordinary leaf (open until it individually
-  // completes) — see docs/item-quantity-model.md §8.
-  const taskLeaves = currentTask ? collectLeavesWithParent(currentTask) : [];
+  // completes) — see docs/item-quantity-model.md §8 — and so a leaf whose
+  // ANY/COUNT is already satisfied by a sibling can be dropped entirely: it
+  // no longer progresses the tile, however many are submitted.
+  const taskLeaves = currentTask ? collectLeavesWithAncestors(currentTask) : [];
   const stagedNodeIds = new Set(stagedClaims.map((s) => s.claim.nodeId));
   // Approved + already-staged-this-screenshot quantity for one leaf.
   const leafPendingValue = (nodeId: string) =>
     itemLeafValue(nodeId, claimMaps) + stagedClaims.filter((s) => s.claim.nodeId === nodeId).reduce((sum, s) => sum + (s.claim.quantity ?? 1), 0);
   const sumProgress = (sum: GraphNode) => sum.children.reduce((total, child) => total + leafPendingValue(child.id), 0);
   const sumStillOpen = (sum: GraphNode) => sumProgress(sum) < (sum.quantity ?? 1);
+  // "Completed" here means server-confirmed (an approved claim already
+  // satisfied it, and rescoring landed a teamNodeState row) — a still-pending
+  // sibling claim doesn't hide the rest, since a mod could yet reject it.
+  const ancestorAlreadySatisfied = (ancestors: GraphNode[]) => ancestors.some((a) => statusByNodeId.get(a.id) === "completed");
 
   const openLeaves: GraphNode[] = taskLeaves
     .filter(({ leaf }) => leaf.kind === "ITEM")
-    .filter(({ leaf, parent }) => {
+    .filter(({ leaf, ancestors }) => {
       // A submission may not claim the same node twice — a leaf already
       // staged in this screenshot can't be offered again (adjust its
       // quantity instead of staging a second claim on it).
       if (stagedNodeIds.has(leaf.id)) return false;
+      if (ancestorAlreadySatisfied(ancestors)) return false;
+      const parent = ancestors[ancestors.length - 1];
       if (parent?.kind === "SUM") return sumStillOpen(parent);
       return !leafComplete(leaf.id, claimMaps);
     })
     .map(({ leaf }) => leaf);
   const selectedLeaf = openLeaves.find((leaf) => leaf.id === selectedNodeId);
-  const selectedLeafParent = selectedLeaf ? taskLeaves.find((tl) => tl.leaf.id === selectedLeaf.id)?.parent : undefined;
+  const selectedLeafAncestors = selectedLeaf ? taskLeaves.find((tl) => tl.leaf.id === selectedLeaf.id)?.ancestors : undefined;
+  const selectedLeafParent = selectedLeafAncestors?.[selectedLeafAncestors.length - 1];
   const enclosingSum = selectedLeafParent?.kind === "SUM" ? selectedLeafParent : undefined;
 
   // Auto-select the task when there's exactly one available.

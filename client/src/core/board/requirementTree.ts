@@ -69,14 +69,18 @@ export function collectLeaves(root: GraphNode): GraphNode[] {
 }
 
 /**
- * ITEM/MANUAL leaves paired with their immediate parent — lets a caller tell
- * a SUM's child (duplicates still wanted until the SUM's own total is met)
- * apart from an ordinary leaf (open until it individually completes). See
- * docs/item-quantity-model.md §8.
+ * ITEM/MANUAL leaves paired with every ancestor composite between them and
+ * `root` (root-first, immediate parent last — empty for a bare-leaf root).
+ * Two things a caller needs this for: telling a SUM's child (duplicates
+ * still wanted until the SUM's own total is met, see
+ * docs/item-quantity-model.md §8) apart from an ordinary leaf (open until it
+ * individually completes), via the last ancestor; and telling whether *any*
+ * enclosing ANY/COUNT is already satisfied by a sibling branch, in which
+ * case this leaf no longer needs submitting at all, via the full chain.
  */
-export function collectLeavesWithParent(root: GraphNode, parent: GraphNode | null = null): { leaf: GraphNode; parent: GraphNode | null }[] {
-  if (root.kind === "ITEM" || root.kind === "MANUAL") return [{ leaf: root, parent }];
-  return root.children.flatMap((child) => collectLeavesWithParent(child, root));
+export function collectLeavesWithAncestors(root: GraphNode, ancestors: GraphNode[] = []): { leaf: GraphNode; ancestors: GraphNode[] }[] {
+  if (root.kind === "ITEM" || root.kind === "MANUAL") return [{ leaf: root, ancestors }];
+  return root.children.flatMap((child) => collectLeavesWithAncestors(child, [...ancestors, root]));
 }
 
 /**
