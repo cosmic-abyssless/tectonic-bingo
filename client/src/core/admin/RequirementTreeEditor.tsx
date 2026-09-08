@@ -83,21 +83,24 @@ export interface RequirementTreeEditorProps {
 }
 
 // Recursive editor for a task's requirement tree. Every group node (ALL/ANY/
-// COUNT) can hold any number of item rows or nested groups. The root is a
-// group and cannot be removed; rows and nested groups can.
+// COUNT) can hold any number of item rows or nested groups. The root is
+// usually a group (every task created via "+ Add task" starts as ALL), but
+// hand-authored data (e.g. seed-dev.ts) can make the task itself a bare
+// ITEM/SUM row — dispatch on kind here exactly like GroupNode does for its
+// own children, or such a task would render as an empty composite instead
+// of its actual item row.
 export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGroup, existingLeaves }: RequirementTreeEditorProps) {
-  return (
-    <GroupNode
-      node={root}
-      path={[]}
-      itemGroups={itemGroups}
-      onSaveAsGroup={onSaveAsGroup}
-      existingLeaves={existingLeaves}
-      update={(path, fn) => onChange(updateAt(root, path, fn))}
-      remove={(path) => onChange(removeAt(root, path))}
-      add={(path, child) => onChange(appendChild(root, path, child))}
-    />
-  );
+  const props: NodeProps = {
+    node: root,
+    path: [],
+    itemGroups,
+    onSaveAsGroup,
+    existingLeaves,
+    update: (path, fn) => onChange(updateAt(root, path, fn)),
+    remove: (path) => onChange(removeAt(root, path)),
+    add: (path, child) => onChange(appendChild(root, path, child)),
+  };
+  return root.kind === "ITEM" || root.kind === "SUM" ? <ItemRowNode {...props} /> : <GroupNode {...props} />;
 }
 
 interface NodeProps {
@@ -185,10 +188,14 @@ function GroupNode(props: NodeProps) {
 // written back as a SUM — a bare ITEM child (from hand-authored data, e.g.
 // the seed script) is displayed as a 1-chip row and upgrades to a real SUM
 // the moment it's edited.
-function ItemRowNode({ node, path, itemGroups, update, remove, onSaveAsGroup }: NodeProps) {
+function ItemRowNode({ node, path, itemGroups, update, remove, onSaveAsGroup, existingLeaves }: NodeProps) {
+  const isRoot = path.length === 0;
   const children = node.kind === "ITEM" ? [node] : node.children ?? [];
   const quantity = node.kind === "SUM" ? node.quantity ?? 1 : 1;
   const [newName, setNewName] = useState("");
+  const [pickingExisting, setPickingExisting] = useState(false);
+  const childIds = new Set(children.map((c) => c.id).filter(Boolean));
+  const pickableLeaves = (existingLeaves ?? []).filter((l) => !childIds.has(l.id));
 
   function writeChildren(nextChildren: GraphNodeInput[], nextQuantity: number = quantity) {
     // Upgrading a bare ITEM into a SUM wrapper must NOT reuse the item's own
@@ -226,6 +233,15 @@ function ItemRowNode({ node, path, itemGroups, update, remove, onSaveAsGroup }: 
     if (additions.length > 0) writeChildren([...children, ...additions]);
   }
 
+  // References a leaf already on another task (same tile) as one more chip
+  // on this row, preserving its id — the same claim then counts toward both
+  // tasks. See RequirementTreeEditorProps.existingLeaves.
+  function addExisting(leafId: string) {
+    const leaf = pickableLeaves.find((l) => l.id === leafId);
+    if (leaf) writeChildren([...children, { id: leaf.id, kind: "ITEM", itemName: leaf.itemName }]);
+    setPickingExisting(false);
+  }
+
   // Persists the row's current names as a new reusable group for future
   // picks — the row itself is untouched (see the type's own doc comment).
   async function saveAsGroup() {
@@ -259,6 +275,9 @@ function ItemRowNode({ node, path, itemGroups, update, remove, onSaveAsGroup }: 
           containerClassName="flex-1 min-w-36"
           className={INPUT}
         />
+        {pickableLeaves.length > 0 && (
+          <button type="button" onClick={() => setPickingExisting((v) => !v)} className={SMALL_BTN}>+ existing item</button>
+        )}
         <input
           aria-label="Quantity"
           type="number"
@@ -267,8 +286,20 @@ function ItemRowNode({ node, path, itemGroups, update, remove, onSaveAsGroup }: 
           onBlur={(e) => writeChildren(children, Math.max(1, Number(e.target.value) || 1))}
           className={`w-14 ${INPUT}`}
         />
-        <button type="button" aria-label="Remove item" onClick={() => remove(path)} className="text-slate-500 hover:text-red-400 text-xs cursor-pointer">✕</button>
+        {!isRoot && (
+          <button type="button" aria-label="Remove item" onClick={() => remove(path)} className="text-slate-500 hover:text-red-400 text-xs cursor-pointer">✕</button>
+        )}
       </div>
+      {pickingExisting && (
+        <div className="max-w-xs">
+          <SearchableSelect
+            value=""
+            options={pickableLeaves.map((l) => ({ id: l.id, label: l.itemName, group: l.taskLabel }))}
+            placeholder="Search items elsewhere on this tile…"
+            onChange={addExisting}
+          />
+        </div>
+      )}
       {canSaveAsGroup && (
         <div className="flex items-center gap-2 text-[11px] text-slate-500">
           <button type="button" onClick={saveAsGroup} className="text-indigo-400 hover:text-indigo-300 cursor-pointer">Save these names as a new group…</button>
