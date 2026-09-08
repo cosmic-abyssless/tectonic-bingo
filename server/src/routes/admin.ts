@@ -1,5 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
+import type { GraphNodeInput } from "@bingo/shared";
 import path from "path";
 import fs from "fs";
 import { requireAuth } from "../middleware/requireAuth";
@@ -186,11 +187,9 @@ router.post(
   "/tiles/:tileId/tasks",
   asyncHandler(async (req, res) => {
     bingoService.assertBoardEditable(req.bingo!);
-    const { label, sortOrder, points, description } = req.body as { label?: string; sortOrder?: number; points?: number; description?: string };
-    if (!label || sortOrder === undefined || points === undefined || !description) {
-      throw new ServiceError(400, "label, sortOrder, points, and description are required");
-    }
-    const task = boardService.createTask(db, { tileId: req.params.tileId as string, ...req.body });
+    const { sortOrder, ...input } = req.body as GraphNodeInput & { sortOrder?: number };
+    if (!input.kind) throw new ServiceError(400, "kind is required");
+    const task = boardService.createTask(db, req.params.tileId as string, input, sortOrder);
     res.status(201).json({ task });
   }),
 );
@@ -198,7 +197,7 @@ router.patch(
   "/tasks/:id",
   asyncHandler(async (req, res) => {
     bingoService.assertBoardEditable(req.bingo!);
-    const task = boardService.updateTask(db, req.params.id as string, req.body);
+    const task = boardService.updateNode(db, req.params.id as string, req.body as GraphNodeInput);
     res.json({ task });
   }),
 );
@@ -267,7 +266,7 @@ router.patch(
     bingoService.assertBoardEditable(req.bingo!);
     const { points } = req.body as { points?: number };
     if (points === undefined) throw new ServiceError(400, "points is required");
-    const line = boardService.updateLine(db, req.params.id as string, points);
+    const line = boardService.updateLinePoints(db, req.params.id as string, points);
     res.json({ line });
   }),
 );

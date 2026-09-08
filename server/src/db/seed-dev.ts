@@ -1,17 +1,18 @@
-// Dev-only seed: one admin user + one demo bingo exercising every requirement
-// node kind and task flag on a small 3x3 board, plus sample submissions in
-// every review state. Production boards are authored in the admin panel —
-// this script exists purely so local dev/testing has data to work against.
+// Dev-only seed: one admin user + one demo bingo exercising every node kind
+// and gate on a small 3x3 board, plus sample submissions in every review
+// state. Production boards are authored in the admin panel — this script
+// exists purely so local dev/testing has data to work against.
 import { copyFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
+import type { GraphNode, GraphNodeInput } from '@bingo/shared';
 import { db } from './index';
 import {
-  users, bingos, bingoModerators, tileCategories, tiles,
-  tileWildcards, bingoLines, bingoLineTiles, teams, teamMembers,
+  users, bingos, bingoModerators, tileCategories,
+  tileWildcards, teams, teamMembers,
   signupQuestions, itemGroups, itemGroupItems,
 } from './schema';
-import { createTask, type CreateTaskParams } from '../services/boardService';
-import { getRequirementTree, leafIds, type RequirementNodeInput } from '../services/requirementService';
+import { createTile, createTask, generateLines } from '../services/boardService';
+import { getNodeTree } from '../services/graphService';
 import { createSubmission } from '../services/submissionService';
 import { approveSubmission, rejectSubmission } from '../services/scoringService';
 
@@ -31,7 +32,7 @@ async function main() {
   const [bingo] = await db.insert(bingos).values({
     slug: 'demo',
     name: 'Demo Bingo',
-    description: 'A small 3x3 board covering every tile-task rule flag, for local dev/testing.',
+    description: 'A small 3x3 board covering every node kind and gate, for local dev/testing.',
     theme: 'default',
     stage: 'live',
     boardRows: 3,
@@ -66,15 +67,26 @@ async function main() {
     ['Primordial crystal', 'Pegasian crystal', 'Eternal crystal', 'Smouldering stone', 'Hellpuppy', 'Jar of souls'].map((itemName) => ({ groupId: cerbGroup.id, itemName })),
   );
 
-  const item = (itemNames: string[], extra: Partial<RequirementNodeInput> = {}): RequirementNodeInput => ({ kind: 'ITEM', itemNames, ...extra });
+  const item = (itemNames: string[], extra: Partial<GraphNodeInput> = {}): GraphNodeInput => ({ kind: 'ITEM', itemNames, ...extra });
 
-  // Each task: label/points/description + flags + a requirement tree. Covers
-  // every node kind: ALL, ANY, COUNT, ITEM (inline names, group, quantity,
-  // distinctItems) and MANUAL.
+  interface TaskDef {
+    label: string;
+    points: number;
+    description: string;
+    scoringMode?: 'automatic' | 'manual';
+    submitRequiresPrevious?: boolean;
+    pointsRequirePrevious?: boolean;
+    allowsPreLoad?: boolean;
+    requirement?: GraphNodeInput;
+  }
+
+  // Each task is a node (label/points/description + gates + a requirement
+  // shape). Covers every node kind: ALL, ANY, COUNT, ITEM (inline names,
+  // group, quantity, distinctItems) and MANUAL.
   const tileDefs: Array<{
     row: number; col: number; categoryIndex: number; name: string;
     hasFreezePeriod?: boolean; freezeDurationMinutes?: number;
-    tasks: Array<Omit<CreateTaskParams, 'tileId' | 'sortOrder'>>;
+    tasks: TaskDef[];
   }> = [
     {
       row: 0, col: 0, categoryIndex: 0, name: 'Vorkath',
@@ -139,8 +151,8 @@ async function main() {
     },
     {
       // Manual-scoring example: a one-off custom challenge with no item list
-      // to codify. Mods judge the screenshot directly and decide completion
-      // + points when reviewing each submission.
+      // to codify. The task node itself is a bare MANUAL leaf — approving a
+      // submission's claim on it IS the mod's completion decision.
       row: 2, col: 2, categoryIndex: 2, name: 'Custom Challenge: GOTR Speedrun',
       tasks: [{
         label: 'Part A', points: 20, scoringMode: 'manual',
@@ -150,56 +162,54 @@ async function main() {
   ];
 
   const tileRowsById: Record<string, { id: string }> = {};
-  // "Tile name/Task label" -> task id, for wiring wildcards and sample submissions.
+  // "Tile name/Task label" -> task node id, for wiring wildcards and sample submissions.
   const taskIdByKey: Record<string, string> = {};
 
   for (const def of tileDefs) {
-    const [tile] = await db.insert(tiles).values({
+    const tile = createTile(db, {
       bingoId: bingo.id,
       name: def.name,
-      categoryId: categories[def.categoryIndex].id,
+      categoryId: categories[def.categoryIndex]!.id,
       boardRow: def.row,
       boardCol: def.col,
       hasFreezePeriod: def.hasFreezePeriod ?? false,
       freezeDurationMinutes: def.freezeDurationMinutes ?? 0,
-    }).returning();
+    });
     tileRowsById[`${def.row},${def.col}`] = tile;
 
-    for (const [i, taskDef] of def.tasks.entries()) {
-      const task = createTask(db, { tileId: tile.id, sortOrder: i, ...taskDef });
+    // submitRequiresPrevious/pointsRequirePrevious resolve to the previous
+    // sibling task's node id — the admin client will do this same resolution
+    // against the tile's current child order (see docs/node-graph-model.md §6).
+    let prevTaskNodeId: string | undefined;
+    for (const taskDef of def.tasks) {
+      const base: GraphNodeInput = taskDef.requirement ?? { kind: taskDef.scoringMode === 'manual' ? 'MANUAL' : 'ALL' };
+      const input: GraphNodeInput = {
+        ...base,
+        label: taskDef.label,
+        description: taskDef.description,
+        points: taskDef.points,
+        allowsPreLoad: taskDef.allowsPreLoad ?? false,
+        submitGateNodeId: taskDef.submitRequiresPrevious ? prevTaskNodeId : undefined,
+        pointsGateNodeId: taskDef.pointsRequirePrevious ? prevTaskNodeId : undefined,
+      };
+      const task = createTask(db, tile.id, input);
       taskIdByKey[`${def.name}/${taskDef.label}`] = task.id;
+      prevTaskNodeId = task.id;
     }
   }
 
   const [cerbWildcard] = await db.insert(tileWildcards).values({
-    tileId: tileRowsById['0,2'].id,
+    tileId: tileRowsById['0,2']!.id,
     itemName: 'Cerberus jar',
     maxRedemptionsPerTeam: 1,
     description: 'Redeeming a Cerberus jar counts as a Cerberus unique for Part A.',
-    applicableNodeId: getRequirementTree(db, taskIdByKey['Cerberus/Part A'])!.id,
+    // Cerberus/Part A's requirement is a bare ITEM leaf, so the task's own
+    // node id already is that leaf's id.
+    applicableNodeId: taskIdByKey['Cerberus/Part A']!,
   }).returning();
 
-  // Generate all lines for a 3x3 board: 3 rows + 3 cols + 2 diagonals.
-  for (let row = 0; row < 3; row++) {
-    const [line] = await db.insert(bingoLines).values({ bingoId: bingo.id, lineType: 'row', lineIndex: row, points: 15 }).returning();
-    for (let col = 0; col < 3; col++) {
-      await db.insert(bingoLineTiles).values({ bingoLineId: line.id, tileId: tileRowsById[`${row},${col}`].id });
-    }
-  }
-  for (let col = 0; col < 3; col++) {
-    const [line] = await db.insert(bingoLines).values({ bingoId: bingo.id, lineType: 'column', lineIndex: col, points: 15 }).returning();
-    for (let row = 0; row < 3; row++) {
-      await db.insert(bingoLineTiles).values({ bingoLineId: line.id, tileId: tileRowsById[`${row},${col}`].id });
-    }
-  }
-  const [diagTlBr] = await db.insert(bingoLines).values({ bingoId: bingo.id, lineType: 'diagonal', lineIndex: 0, points: 15 }).returning();
-  for (let i = 0; i < 3; i++) {
-    await db.insert(bingoLineTiles).values({ bingoLineId: diagTlBr.id, tileId: tileRowsById[`${i},${i}`].id });
-  }
-  const [diagTrBl] = await db.insert(bingoLines).values({ bingoId: bingo.id, lineType: 'diagonal', lineIndex: 1, points: 15 }).returning();
-  for (let i = 0; i < 3; i++) {
-    await db.insert(bingoLineTiles).values({ bingoLineId: diagTrBl.id, tileId: tileRowsById[`${i},${2 - i}`].id });
-  }
+  // Rows + cols + both diagonals for the 3x3 board.
+  generateLines(db, bingo, 15);
 
   const [teamAlpha] = await db.insert(teams).values({
     bingoId: bingo.id, captainUserId: captainA.id, name: "Alpha's Team", codeword: 'crimson-falcon', color: '#e74c3c',
@@ -224,38 +234,42 @@ async function main() {
   ]);
 
   // Sample submissions in every review state, created through the real
-  // services so progress/points/lines are derived exactly as in production.
+  // services so completion/points/lines are derived exactly as in production.
   // Reuses the e2e fixture screenshot so the images actually render.
   const uploadsDir = path.join(__dirname, '../../uploads');
   mkdirSync(uploadsDir, { recursive: true });
   copyFileSync(path.join(__dirname, '../../../e2e/fixtures/screenshot.png'), path.join(uploadsDir, 'seed-screenshot.png'));
   const screenshotUrl = '/uploads/seed-screenshot.png';
 
+  function collectLeaves(node: GraphNode): GraphNode[] {
+    if (node.kind === 'ITEM' || node.kind === 'MANUAL') return [node];
+    return node.children.flatMap(collectLeaves);
+  }
   // Leaf ids of a task in tree order; single-leaf tasks use leaves(...)[0].
-  const leaves = (key: string) => leafIds(getRequirementTree(db, taskIdByKey[key])!);
+  const leaves = (key: string) => collectLeaves(getNodeTree(db, taskIdByKey[key]!)!).map((n) => n.id);
   const submit = (teamId: string, submittedByUserId: string, claims: Parameters<typeof createSubmission>[2]['claims']) =>
     createSubmission(db, bingo, { teamId, submittedByUserId, claims, screenshotUrl });
 
   // Alpha: Vorkath A approved (complete), Vorkath B pending, Zulrah one of two
   // fangs approved (in progress), Wintertodt rejected.
-  const alphaVorki = submit(teamAlpha.id, memberA.id, [{ nodeId: leaves('Vorkath/Part A')[0], itemName: 'Vorki' }]);
+  const alphaVorki = submit(teamAlpha.id, memberA.id, [{ nodeId: leaves('Vorkath/Part A')[0]!, itemName: 'Vorki' }]);
   approveSubmission(db, { submissionId: alphaVorki.id, reviewedByUserId: admin.id });
-  submit(teamAlpha.id, captainA.id, [{ nodeId: leaves('Vorkath/Part B')[0], itemName: 'Draconic visage' }]);
-  const alphaFang = submit(teamAlpha.id, memberA.id, [{ nodeId: leaves('Zulrah/Part A')[0], itemName: 'Tanzanite fang' }]);
+  submit(teamAlpha.id, captainA.id, [{ nodeId: leaves('Vorkath/Part B')[0]!, itemName: 'Draconic visage' }]);
+  const alphaFang = submit(teamAlpha.id, memberA.id, [{ nodeId: leaves('Zulrah/Part A')[0]!, itemName: 'Tanzanite fang' }]);
   approveSubmission(db, { submissionId: alphaFang.id, reviewedByUserId: admin.id });
-  const alphaTodt = submit(teamAlpha.id, memberA.id, [{ nodeId: leaves('Wintertodt/Part A')[0], itemName: 'Bruma torch' }]);
+  const alphaTodt = submit(teamAlpha.id, memberA.id, [{ nodeId: leaves('Wintertodt/Part A')[0]!, itemName: 'Bruma torch' }]);
   rejectSubmission(db, { submissionId: alphaTodt.id, reviewedByUserId: admin.id, reviewerNotes: 'Screenshot does not show the team codeword.' });
 
   // Beta: one screenshot claiming two Wintertodt leaves at once (complete),
   // Cerberus A via the jar wildcard (complete), GOTR manual pending.
   const betaTodt = submit(teamBeta.id, memberB.id, [
-    { nodeId: leaves('Wintertodt/Part A')[0], itemName: 'Bruma torch' },
-    { nodeId: leaves('Wintertodt/Part A')[2], itemName: 'Warm gloves' },
+    { nodeId: leaves('Wintertodt/Part A')[0]!, itemName: 'Bruma torch' },
+    { nodeId: leaves('Wintertodt/Part A')[2]!, itemName: 'Warm gloves' },
   ]);
   approveSubmission(db, { submissionId: betaTodt.id, reviewedByUserId: admin.id });
-  const betaCerb = submit(teamBeta.id, captainB.id, [{ nodeId: leaves('Cerberus/Part A')[0], itemName: 'Cerberus jar', wildcardId: cerbWildcard.id }]);
+  const betaCerb = submit(teamBeta.id, captainB.id, [{ nodeId: leaves('Cerberus/Part A')[0]!, itemName: 'Cerberus jar', wildcardId: cerbWildcard.id }]);
   approveSubmission(db, { submissionId: betaCerb.id, reviewedByUserId: admin.id });
-  submit(teamBeta.id, memberB.id, [{ nodeId: leaves('Custom Challenge: GOTR Speedrun/Part A')[0] }]);
+  submit(teamBeta.id, memberB.id, [{ nodeId: leaves('Custom Challenge: GOTR Speedrun/Part A')[0]! }]);
 
   console.log(`Seeded bingo "${bingo.name}" (slug: ${bingo.slug}) with ${tileDefs.length} tiles, 2 teams, 8 lines, 7 sample submissions.`);
 }

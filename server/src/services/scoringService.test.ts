@@ -1,81 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type { GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { bingoLineTiles, bingoLines, claims, submissions, teamTaskProgress, tiles, tileWildcards } from "../db/schema";
+import { claims, submissions, tileWildcards } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { createTask, type CreateTaskParams } from "./boardService";
-import { evaluateNode, getRequirementTree, leafIds, type ApprovedClaim, type EvaluableNode } from "./requirementService";
+import { createTile, createTask, generateLines } from "./boardService";
 import { approveSubmission, rejectSubmission } from "./scoringService";
 
-// --- Pure evaluation ---
-
-let nextId = 0;
-function node(partial: Partial<EvaluableNode> & { kind: EvaluableNode["kind"] }): EvaluableNode {
-  return { id: `n${nextId++}`, minCount: null, quantity: null, distinctItems: false, acceptedItemNames: [], children: [], ...partial };
-}
-function claim(nodeId: string, itemName: string, quantity = 1, wildcardId: string | null = null): ApprovedClaim {
-  return { nodeId, itemName, quantity, wildcardId };
-}
-
-describe("evaluateNode (pure)", () => {
-  it("ITEM sums claimed quantity against the target, matching names case-insensitively", () => {
-    const torch = node({ kind: "ITEM", acceptedItemNames: ["Bruma torch"], quantity: 2 });
-    expect(evaluateNode(torch, [claim(torch.id, "bruma torch", 1)])).toBe(false);
-    expect(evaluateNode(torch, [claim(torch.id, "bruma torch", 1), claim(torch.id, "Bruma torch", 1)])).toBe(true);
-    expect(evaluateNode(torch, [claim(torch.id, "Bruma torch", 2)])).toBe(true);
-  });
-
-  it("ITEM ignores claims allocated to other leaves or naming unaccepted items", () => {
-    const torch = node({ kind: "ITEM", acceptedItemNames: ["Bruma torch"] });
-    expect(evaluateNode(torch, [claim("other", "Bruma torch")])).toBe(false);
-    expect(evaluateNode(torch, [claim(torch.id, "Phoenix")])).toBe(false);
-  });
-
-  it("ITEM accepts wildcard claims regardless of item name", () => {
-    const torch = node({ kind: "ITEM", acceptedItemNames: ["Bruma torch"] });
-    expect(evaluateNode(torch, [claim(torch.id, "Cerberus jar", 1, "wc1")])).toBe(true);
-  });
-
-  it("ITEM with distinctItems counts unique names instead of quantity", () => {
-    const kril = node({ kind: "ITEM", acceptedItemNames: ["Steam battlestaff", "Zamorak hilt"], quantity: 2, distinctItems: true });
-    expect(evaluateNode(kril, [claim(kril.id, "Zamorak hilt", 2)])).toBe(false);
-    expect(evaluateNode(kril, [claim(kril.id, "Zamorak hilt"), claim(kril.id, "Steam battlestaff")])).toBe(true);
-  });
-
-  it("ALL / ANY / COUNT fold their children", () => {
-    const a = node({ kind: "ITEM", acceptedItemNames: ["A"] });
-    const b = node({ kind: "ITEM", acceptedItemNames: ["B"] });
-    const c = node({ kind: "ITEM", acceptedItemNames: ["C"] });
-    const onlyA = [claim(a.id, "A")];
-    const aAndB = [claim(a.id, "A"), claim(b.id, "B")];
-
-    expect(evaluateNode(node({ kind: "ALL", children: [a, b] }), onlyA)).toBe(false);
-    expect(evaluateNode(node({ kind: "ALL", children: [a, b] }), aAndB)).toBe(true);
-    expect(evaluateNode(node({ kind: "ANY", children: [a, b] }), onlyA)).toBe(true);
-    expect(evaluateNode(node({ kind: "ANY", children: [a, b] }), [])).toBe(false);
-    expect(evaluateNode(node({ kind: "COUNT", minCount: 2, children: [a, b, c] }), onlyA)).toBe(false);
-    expect(evaluateNode(node({ kind: "COUNT", minCount: 2, children: [a, b, c] }), aAndB)).toBe(true);
-  });
-
-  it("nests: ANY of complete sets (Barrows)", () => {
-    const hood = node({ kind: "ITEM", acceptedItemNames: ["Ahrim's hood"] });
-    const staff = node({ kind: "ITEM", acceptedItemNames: ["Ahrim's staff"] });
-    const helm = node({ kind: "ITEM", acceptedItemNames: ["Dharok's helm"] });
-    const axe = node({ kind: "ITEM", acceptedItemNames: ["Dharok's greataxe"] });
-    const root = node({ kind: "ANY", children: [node({ kind: "ALL", children: [hood, staff] }), node({ kind: "ALL", children: [helm, axe] })] });
-    expect(evaluateNode(root, [claim(hood.id, "Ahrim's hood"), claim(helm.id, "Dharok's helm")])).toBe(false);
-    expect(evaluateNode(root, [claim(hood.id, "Ahrim's hood"), claim(staff.id, "Ahrim's staff")])).toBe(true);
-  });
-
-  it("MANUAL is decided by the mod", () => {
-    const manual = node({ kind: "MANUAL" });
-    expect(evaluateNode(manual, [])).toBe(false);
-    expect(evaluateNode(manual, [], true)).toBe(true);
-  });
-});
-
-// --- Integration tests against a real migrated in-memory DB ---
+// Pure engine evaluation (evaluateGraph/awardedPoints) is covered by
+// engine.test.ts. These are integration tests against a real migrated
+// in-memory DB, exercising approveSubmission/rejectSubmission end to end.
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -85,6 +20,7 @@ interface Fixture {
   modUserId: string;
   memberUserId: string;
   tileId: string;
+  tileNodeId: string;
 }
 
 function seedBaseFixture(): Fixture {
@@ -101,25 +37,23 @@ function seedBaseFixture(): Fixture {
     .values({ bingoId: bingo.id, captainUserId: captain.id, name: "Team A", codeword: "test-word" })
     .returning()
     .all();
-  const [tile] = db
-    .insert(tiles)
-    .values({ bingoId: bingo.id, name: "Test Tile", boardRow: 0, boardCol: 0 })
-    .returning()
-    .all();
-  return { teamId: team.id, modUserId: admin.id, memberUserId: member.id, tileId: tile.id };
+  const tile = createTile(db, { bingoId: bingo.id, name: "Test Tile", boardRow: 0, boardCol: 0 });
+  return { teamId: team.id, modUserId: admin.id, memberUserId: member.id, tileId: tile.id, tileNodeId: tile.nodeId };
 }
 
-// Creates a task and returns it with its leaf node ids (in tree order).
-function addTask(tileId: string, opts: Partial<CreateTaskParams> & { sortOrder: number; points: number }) {
-  const task = createTask(db, { tileId, label: `Task ${opts.sortOrder}`, description: "desc", ...opts });
-  const leaves = leafIds(getRequirementTree(db, task.id)!);
-  return { ...task, leaves };
+// A task that's a bare leaf, so its own node id is the leaf id.
+function addTask(tileId: string, input: GraphNodeInput) {
+  return createTask(db, tileId, { label: "Task", description: "desc", ...input });
+}
+function itemTask(tileId: string, opts: { points: number; pointsGateNodeId?: string; submitGateNodeId?: string }, itemName: string, quantity = 1) {
+  return addTask(tileId, { kind: "ITEM", itemNames: [itemName], quantity, ...opts });
+}
+function manualTask(tileId: string, opts: { points: number; pointsGateNodeId?: string; submitGateNodeId?: string }) {
+  return addTask(tileId, { kind: "MANUAL", ...opts });
 }
 
-function itemTask(tileId: string, opts: Partial<CreateTaskParams> & { sortOrder: number; points: number }, itemName: string, quantity = 1) {
-  return addTask(tileId, { ...opts, requirement: { kind: "ITEM", itemNames: [itemName], quantity } });
-}
-
+// Bypasses submissionService's validation to insert a raw submission/claims
+// directly — these tests target scoringService in isolation.
 function submitAndReturn(teamId: string, submittedByUserId: string, claimRows: { nodeId: string; itemName?: string; quantity?: number; wildcardId?: string }[]) {
   const [submission] = db.insert(submissions).values({ teamId, submittedByUserId }).returning().all();
   for (const c of claimRows) {
@@ -128,8 +62,8 @@ function submitAndReturn(teamId: string, submittedByUserId: string, claimRows: {
   return submission;
 }
 
-function findProgress(teamId: string, taskId: string) {
-  return db.select().from(teamTaskProgress).all().find((p) => p.teamId === teamId && p.taskId === taskId);
+function findState(teamId: string, nodeId: string) {
+  return db.select().from(schema.teamNodeState).all().find((s) => s.teamId === teamId && s.nodeId === nodeId);
 }
 
 beforeEach(() => {
@@ -140,221 +74,179 @@ afterEach(() => {
   sqlite.close();
 });
 
-describe("approveSubmission / rejectSubmission (integration)", () => {
-  it("completes a simple single-task tile and awards points", () => {
+describe("approveSubmission", () => {
+  it("completes a simple single-task tile and awards points — completing the only task also completes the tile", () => {
     const fx = seedBaseFixture();
-    const task = itemTask(fx.tileId, { sortOrder: 0, points: 20 }, "Bruma torch");
-    const submission = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.leaves[0], itemName: "Bruma torch" }]);
+    const task = itemTask(fx.tileId, { points: 20 }, "Bruma torch");
+    const submission = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Bruma torch" }]);
 
     const result = approveSubmission(db, { submissionId: submission.id, reviewedByUserId: fx.modUserId });
 
-    expect(result.taskIds).toEqual([task.id]);
-    expect(result.completedTaskIds).toEqual([task.id]);
-    expect(result.pointsAwarded).toBe(20);
+    expect(result.nodeIds).toEqual([task.id]);
+    expect(result.newlyCompletedNodeIds.sort()).toEqual([task.id, fx.tileNodeId].sort());
+    expect(result.pointsDelta).toBe(20); // the tile's own ALL node carries 0 points
     expect(result.submission.status).toBe("approved");
 
-    const progress = findProgress(fx.teamId, task.id);
-    expect(progress?.status).toBe("completed");
-    expect(progress?.pointsAwarded).toBe(20);
+    const state = findState(fx.teamId, task.id);
+    expect(state?.pointsAwarded).toBe(20);
   });
 
   it("one submission can complete several tasks when its claims span them", () => {
     const fx = seedBaseFixture();
-    const task1 = itemTask(fx.tileId, { sortOrder: 0, points: 25 }, "Vorki");
-    const task2 = itemTask(fx.tileId, { sortOrder: 1, points: 35 }, "Draconic visage");
+    const task1 = itemTask(fx.tileId, { points: 25 }, "Vorki");
+    const task2 = itemTask(fx.tileId, { points: 35 }, "Draconic visage");
 
     const sub = submitAndReturn(fx.teamId, fx.memberUserId, [
-      { nodeId: task1.leaves[0], itemName: "Vorki" },
-      { nodeId: task2.leaves[0], itemName: "Draconic visage" },
+      { nodeId: task1.id, itemName: "Vorki" },
+      { nodeId: task2.id, itemName: "Draconic visage" },
     ]);
     const result = approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId });
 
-    expect(result.completedTaskIds.sort()).toEqual([task1.id, task2.id].sort());
-    expect(result.pointsAwarded).toBe(60);
+    expect(result.newlyCompletedNodeIds.sort()).toEqual([task1.id, task2.id, fx.tileNodeId].sort());
+    expect(result.pointsDelta).toBe(60);
   });
 
-  it("withholds points on a pointsRequirePrevious task until the previous task completes, then releases them", () => {
+  it("withholds points on a pointsGateNodeId task until the gate completes, then releases them with no special-case code", () => {
     const fx = seedBaseFixture();
-    const task1 = itemTask(fx.tileId, { sortOrder: 0, points: 25 }, "Vorki");
-    const task2 = itemTask(fx.tileId, { sortOrder: 1, points: 35, pointsRequirePrevious: true }, "Draconic visage");
+    const task1 = itemTask(fx.tileId, { points: 25 }, "Vorki");
+    const task2 = itemTask(fx.tileId, { points: 35, pointsGateNodeId: task1.id }, "Draconic visage");
 
-    // Complete task 2 first (out of order) — should complete but withhold points.
-    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task2.leaves[0], itemName: "Draconic visage" }]);
+    // Complete task 2 first (out of order) — it completes but its points are withheld.
+    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task2.id, itemName: "Draconic visage" }]);
     const result2 = approveSubmission(db, { submissionId: sub2.id, reviewedByUserId: fx.modUserId });
-    expect(result2.completedTaskIds).toEqual([task2.id]);
-    expect(result2.pointsAwarded).toBe(0);
+    expect(result2.newlyCompletedNodeIds).toEqual([task2.id]); // tile isn't complete yet (task1 still incomplete)
+    expect(result2.pointsDelta).toBe(0);
+    expect(findState(fx.teamId, task2.id)?.pointsAwarded).toBe(0);
 
-    // Now complete task 1 — cascade should release task 2's points.
-    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task1.leaves[0], itemName: "Vorki" }]);
-    approveSubmission(db, { submissionId: sub1.id, reviewedByUserId: fx.modUserId });
+    // Completing task1 completes the tile too, and releases task2's points —
+    // a plain recompute, not a "release the next task" special case.
+    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task1.id, itemName: "Vorki" }]);
+    const result1 = approveSubmission(db, { submissionId: sub1.id, reviewedByUserId: fx.modUserId });
+    expect(result1.pointsDelta).toBe(60); // task1's 25 + task2's newly-released 35
 
-    const progress = findProgress(fx.teamId, task2.id)!;
-    expect(progress.status).toBe("completed");
-    expect(progress.pointsAwarded).toBe(35);
+    expect(findState(fx.teamId, task2.id)?.pointsAwarded).toBe(35);
   });
 
   it("accumulates claims across submissions and only completes once the target is met", () => {
     const fx = seedBaseFixture();
-    const task = itemTask(fx.tileId, { sortOrder: 0, points: 40 }, "Cerberus drop", 2);
+    const task = itemTask(fx.tileId, { points: 40 }, "Cerberus drop", 2);
 
-    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.leaves[0], itemName: "Cerberus drop" }]);
+    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Cerberus drop" }]);
     const r1 = approveSubmission(db, { submissionId: sub1.id, reviewedByUserId: fx.modUserId });
-    expect(r1.completedTaskIds).toEqual([]);
-    expect(findProgress(fx.teamId, task.id)?.status).toBe("in_progress");
+    expect(r1.newlyCompletedNodeIds).toEqual([]);
+    expect(findState(fx.teamId, task.id)).toBeUndefined();
 
-    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.leaves[0], itemName: "Cerberus drop" }]);
+    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Cerberus drop" }]);
     const r2 = approveSubmission(db, { submissionId: sub2.id, reviewedByUserId: fx.modUserId });
-    expect(r2.completedTaskIds).toEqual([task.id]);
-    expect(findProgress(fx.teamId, task.id)?.pointsAwarded).toBe(40);
+    expect(r2.newlyCompletedNodeIds).toContain(task.id);
+    expect(findState(fx.teamId, task.id)?.pointsAwarded).toBe(40);
   });
 
   it("records a completed line once every tile in it is complete, using the line's own points", () => {
     const fx = seedBaseFixture();
-    const bingo = db.select().from(schema.bingos).all()[0];
-
-    // Build a full 3x3 board's worth of single-task tiles so row 0 can complete.
+    const bingo = db.select().from(schema.bingos).all()[0]!;
     const tileIds: string[] = [fx.tileId];
     for (let col = 1; col < 3; col++) {
-      const [t] = db.insert(tiles).values({ bingoId: bingo.id, name: `Tile ${col}`, boardRow: 0, boardCol: col }).returning().all();
-      tileIds.push(t.id);
+      tileIds.push(createTile(db, { bingoId: bingo.id, name: `Tile ${col}`, boardRow: 0, boardCol: col }).id);
     }
-    const [line] = db.insert(bingoLines).values({ bingoId: bingo.id, lineType: "row", lineIndex: 0, points: 42 }).returning().all();
-    for (const tid of tileIds) {
-      db.insert(bingoLineTiles).values({ bingoLineId: line.id, tileId: tid }).run();
-    }
-
-    const tasks = tileIds.map((tid) => itemTask(tid, { sortOrder: 0, points: 10 }, "Proof"));
+    const line = generateLines(db, bingo, 42).find((l) => l.lineType === "row" && l.lineIndex === 0)!;
+    const tasks = tileIds.map((tid) => itemTask(tid, { points: 10 }, "Proof"));
 
     for (let i = 0; i < tasks.length; i++) {
-      const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: tasks[i].leaves[0], itemName: "Proof" }]);
+      const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: tasks[i]!.id, itemName: "Proof" }]);
       const result = approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId });
       if (i < tasks.length - 1) {
-        expect(result.completedLineIds).toEqual([]);
+        expect(result.newlyCompletedNodeIds).not.toContain(line.nodeId);
       } else {
-        expect(result.completedLineIds).toEqual([line.id]);
+        expect(result.newlyCompletedNodeIds).toContain(line.nodeId);
       }
     }
 
-    const completedLines = db.select().from(schema.teamCompletedLines).all();
-    expect(completedLines).toHaveLength(1);
-    expect(completedLines[0].bingoLineId).toBe(line.id);
+    expect(findState(fx.teamId, line.nodeId)?.pointsAwarded).toBe(42);
   });
 
   it("enforces a wildcard's per-team redemption cap at approval time", () => {
     const fx = seedBaseFixture();
-    const task = itemTask(fx.tileId, { sortOrder: 0, points: 25 }, "Cerberus drop", 2);
+    const task = itemTask(fx.tileId, { points: 25 }, "Cerberus drop", 2);
     const [wildcard] = db.insert(tileWildcards).values({ tileId: fx.tileId, itemName: "Cerberus jar", maxRedemptionsPerTeam: 1 }).returning().all();
 
-    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.leaves[0], itemName: "Cerberus jar", wildcardId: wildcard.id }]);
+    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Cerberus jar", wildcardId: wildcard.id }]);
     approveSubmission(db, { submissionId: sub1.id, reviewedByUserId: fx.modUserId });
 
-    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.leaves[0], itemName: "Cerberus jar", wildcardId: wildcard.id }]);
+    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Cerberus jar", wildcardId: wildcard.id }]);
     expect(() => approveSubmission(db, { submissionId: sub2.id, reviewedByUserId: fx.modUserId })).toThrow(/maximum number of times/);
   });
 
   it("does not burn a wildcard redemption on a rejected submission", () => {
     const fx = seedBaseFixture();
-    const task = itemTask(fx.tileId, { sortOrder: 0, points: 25 }, "Cerberus drop");
+    const task = itemTask(fx.tileId, { points: 25 }, "Cerberus drop");
     const [wildcard] = db.insert(tileWildcards).values({ tileId: fx.tileId, itemName: "Cerberus jar", maxRedemptionsPerTeam: 1 }).returning().all();
 
-    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.leaves[0], itemName: "Cerberus jar", wildcardId: wildcard.id }]);
+    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Cerberus jar", wildcardId: wildcard.id }]);
     rejectSubmission(db, { submissionId: sub1.id, reviewedByUserId: fx.modUserId, reviewerNotes: "not valid" });
 
-    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.leaves[0], itemName: "Cerberus jar", wildcardId: wildcard.id }]);
+    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Cerberus jar", wildcardId: wildcard.id }]);
     expect(() => approveSubmission(db, { submissionId: sub2.id, reviewedByUserId: fx.modUserId })).not.toThrow();
-  });
-
-  it("recomputes progress status on rejection from what remains for each touched task", () => {
-    const fx = seedBaseFixture();
-    const task1 = itemTask(fx.tileId, { sortOrder: 0, points: 25 }, "Drop", 2);
-    const task2 = itemTask(fx.tileId, { sortOrder: 1, points: 25 }, "Other");
-
-    // task1 has an approved claim (in_progress); task2 has nothing else.
-    const approved = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task1.leaves[0], itemName: "Drop" }]);
-    approveSubmission(db, { submissionId: approved.id, reviewedByUserId: fx.modUserId });
-    // Simulate submissionService having marked both tasks under review.
-    db.update(teamTaskProgress).set({ status: "pending_approval" }).run();
-    db.insert(teamTaskProgress).values({ teamId: fx.teamId, taskId: task2.id, status: "pending_approval" }).run();
-
-    const rejected = submitAndReturn(fx.teamId, fx.memberUserId, [
-      { nodeId: task1.leaves[0], itemName: "Drop" },
-      { nodeId: task2.leaves[0], itemName: "Other" },
-    ]);
-    const result = rejectSubmission(db, { submissionId: rejected.id, reviewedByUserId: fx.modUserId });
-
-    expect(result.taskIds.sort()).toEqual([task1.id, task2.id].sort());
-    expect(findProgress(fx.teamId, task1.id)?.status).toBe("in_progress");
-    expect(findProgress(fx.teamId, task2.id)?.status).toBe("not_started");
-  });
-
-  it("keeps a task pending_approval on rejection while another submission for it is still pending", () => {
-    const fx = seedBaseFixture();
-    const task = itemTask(fx.tileId, { sortOrder: 0, points: 25 }, "Drop");
-    db.insert(teamTaskProgress).values({ teamId: fx.teamId, taskId: task.id, status: "pending_approval" }).run();
-
-    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.leaves[0], itemName: "Drop" }]);
-    submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.leaves[0], itemName: "Drop" }]);
-    rejectSubmission(db, { submissionId: sub1.id, reviewedByUserId: fx.modUserId });
-
-    expect(findProgress(fx.teamId, task.id)?.status).toBe("pending_approval");
   });
 
   it("does not allow reviewing the same submission twice", () => {
     const fx = seedBaseFixture();
-    const task = itemTask(fx.tileId, { sortOrder: 0, points: 25 }, "Bruma torch");
-    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.leaves[0], itemName: "Bruma torch" }]);
+    const task = itemTask(fx.tileId, { points: 25 }, "Bruma torch");
+    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Bruma torch" }]);
     approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId });
     expect(() => approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId })).toThrow(/already been reviewed/);
+    expect(() => rejectSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId })).toThrow(/already been reviewed/);
+  });
+});
+
+describe("rejectSubmission", () => {
+  it("flips status to rejected without touching teamNodeState — a pending submission's claims never counted", () => {
+    const fx = seedBaseFixture();
+    const task = itemTask(fx.tileId, { points: 25 }, "Drop");
+    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Drop" }]);
+
+    const result = rejectSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId, reviewerNotes: "nope" });
+
+    expect(result.submission.status).toBe("rejected");
+    expect(result.nodeIds).toEqual([task.id]);
+    expect(db.select().from(schema.teamNodeState).all()).toHaveLength(0);
+  });
+});
+
+describe("MANUAL leaves — approving IS the completion decision, no separate flag", () => {
+  it("completes once its claim is approved", () => {
+    const fx = seedBaseFixture();
+    const task = manualTask(fx.tileId, { points: 50 });
+    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id }]);
+
+    const result = approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId });
+
+    expect(result.newlyCompletedNodeIds).toContain(task.id);
+    expect(findState(fx.teamId, task.id)?.pointsAwarded).toBe(50);
   });
 
-  it("requires an explicit taskCompleted decision when approving a manual-scoring task", () => {
+  it("rejecting a submission that touches a MANUAL leaf does not complete it — that IS the 'not done' decision", () => {
     const fx = seedBaseFixture();
-    const task = addTask(fx.tileId, { sortOrder: 0, points: 50, scoringMode: "manual" });
-    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.leaves[0] }]);
-    expect(() => approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId })).toThrow(/taskCompleted is required/);
+    const task = manualTask(fx.tileId, { points: 50 });
+    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id }]);
+
+    rejectSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId });
+
+    expect(findState(fx.teamId, task.id)).toBeUndefined();
   });
 
-  it("lets a mod directly decide completion and points on a manual-scoring task", () => {
+  it("still withholds and releases points on a manual leaf chained with a points gate", () => {
     const fx = seedBaseFixture();
-    const task = addTask(fx.tileId, { sortOrder: 0, points: 50, scoringMode: "manual" });
-    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.leaves[0] }]);
+    const task1 = itemTask(fx.tileId, { points: 25 }, "Bruma torch");
+    const task2 = manualTask(fx.tileId, { points: 50, pointsGateNodeId: task1.id });
 
-    const result = approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId, taskCompleted: true, pointsAwardedOverride: 35 });
-    expect(result.completedTaskIds).toEqual([task.id]);
-    expect(result.pointsAwarded).toBe(35);
+    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task2.id }]);
+    const result2 = approveSubmission(db, { submissionId: sub2.id, reviewedByUserId: fx.modUserId });
+    expect(result2.pointsDelta).toBe(0);
 
-    const progress = findProgress(fx.teamId, task.id)!;
-    expect(progress.status).toBe("completed");
-    expect(progress.pointsAwarded).toBe(35);
-  });
-
-  it("approves a manual-scoring submission without completing the task when the mod says it's not done yet", () => {
-    const fx = seedBaseFixture();
-    const task = addTask(fx.tileId, { sortOrder: 0, points: 50, scoringMode: "manual" });
-    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.leaves[0] }]);
-
-    const result = approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId, taskCompleted: false });
-    expect(result.submission.status).toBe("approved");
-    expect(result.completedTaskIds).toEqual([]);
-
-    const progress = findProgress(fx.teamId, task.id)!;
-    expect(progress.status).toBe("in_progress");
-  });
-
-  it("still withholds and releases points on a manual task chained with pointsRequirePrevious", () => {
-    const fx = seedBaseFixture();
-    const task1 = itemTask(fx.tileId, { sortOrder: 0, points: 25 }, "Bruma torch");
-    const task2 = addTask(fx.tileId, { sortOrder: 1, points: 50, scoringMode: "manual", pointsRequirePrevious: true });
-
-    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task2.leaves[0] }]);
-    const result2 = approveSubmission(db, { submissionId: sub2.id, reviewedByUserId: fx.modUserId, taskCompleted: true });
-    expect(result2.pointsAwarded).toBe(0);
-
-    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task1.leaves[0], itemName: "Bruma torch" }]);
+    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task1.id, itemName: "Bruma torch" }]);
     approveSubmission(db, { submissionId: sub1.id, reviewedByUserId: fx.modUserId });
 
-    const progress2 = findProgress(fx.teamId, task2.id)!;
-    expect(progress2.status).toBe("completed");
-    expect(progress2.pointsAwarded).toBe(50);
+    expect(findState(fx.teamId, task2.id)?.pointsAwarded).toBe(50);
   });
 });

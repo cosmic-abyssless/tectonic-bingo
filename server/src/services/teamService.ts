@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { bingoLines, signupAnswers, signups, teamCompletedLines, teamMembers, teamPointAdjustments, teamTaskProgress, teams, users } from "../db/schema";
+import { signupAnswers, signups, teamMembers, teamNodeState, teamPointAdjustments, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { PUBLIC_SIGNUP_COLS } from "./signupService";
 
@@ -31,33 +31,19 @@ export function getUserTeamForBingo(db: Db, bingoId: string, userId: string) {
 }
 
 export interface TeamProgressSummary {
-  tasks: (typeof teamTaskProgress.$inferSelect)[];
-  completedLines: { bingoLineId: string; points: number; completedAt: Date }[];
+  nodeStates: (typeof teamNodeState.$inferSelect)[];
   adjustments: (typeof teamPointAdjustments.$inferSelect)[];
   totalPoints: number;
 }
 
 export function getTeamProgress(db: Db, teamId: string): TeamProgressSummary {
-  const taskProgress = db.select().from(teamTaskProgress).where(eq(teamTaskProgress.teamId, teamId)).all();
-  const completedLineRows = db.select().from(teamCompletedLines).where(eq(teamCompletedLines.teamId, teamId)).all();
-  const lineIds = completedLineRows.map((l) => l.bingoLineId);
-  const lineRows = lineIds.length ? db.select().from(bingoLines).where(inArray(bingoLines.id, lineIds)).all() : [];
+  const nodeStates = db.select().from(teamNodeState).where(eq(teamNodeState.teamId, teamId)).all();
   const adjustments = db.select().from(teamPointAdjustments).where(eq(teamPointAdjustments.teamId, teamId)).all();
 
-  const taskPoints = taskProgress.reduce((sum, t) => sum + t.pointsAwarded, 0);
-  const linePoints = lineRows.reduce((sum, l) => sum + l.points, 0);
+  const nodePoints = nodeStates.reduce((sum, s) => sum + s.pointsAwarded, 0);
   const adjustmentPoints = adjustments.reduce((sum, a) => sum + a.amount, 0);
 
-  return {
-    tasks: taskProgress,
-    completedLines: completedLineRows.map((cl) => ({
-      bingoLineId: cl.bingoLineId,
-      points: lineRows.find((l) => l.id === cl.bingoLineId)?.points ?? 0,
-      completedAt: cl.completedAt,
-    })),
-    adjustments,
-    totalPoints: taskPoints + linePoints + adjustmentPoints,
-  };
+  return { nodeStates, adjustments, totalPoints: nodePoints + adjustmentPoints };
 }
 
 // ---------------------------------------------------------------------------

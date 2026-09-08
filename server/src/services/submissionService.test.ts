@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { GraphNodeInput } from "@bingo/shared";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { teamTaskProgress, tiles } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { createTask, type CreateTaskParams } from "./boardService";
-import { getRequirementTree, leafIds } from "./requirementService";
+import { createTile, createTask } from "./boardService";
+import { getTeamNodeStatuses } from "./boardService";
 import { createSubmission, getAllSubmissionsForBingo, getTeamSubmissions } from "./submissionService";
 import { ServiceError } from "./errors";
 
@@ -35,16 +35,15 @@ function seed(bingoOverrides: Partial<typeof schema.bingos.$inferInsert> = {}) {
   return { bingo, teamId: team.id, memberUserId: member.id };
 }
 
-function addTile(bingoId: string, opts: Partial<typeof tiles.$inferInsert> = {}) {
-  return db.insert(tiles).values({ bingoId, name: "Tile", boardRow: 0, boardCol: 0, ...opts }).returning().get();
+function addTile(bingoId: string, opts: Partial<Parameters<typeof createTile>[1]> = {}) {
+  return createTile(db, { bingoId, name: "Tile", boardRow: 0, boardCol: 0, ...opts });
 }
 
-// Creates a task with a single-leaf requirement ("x" item, or MANUAL) and returns its leaf id.
-function addTask(tileId: string, opts: Partial<CreateTaskParams> & { sortOrder: number; points: number }) {
-  const requirement: CreateTaskParams["requirement"] = opts.scoringMode === "manual" ? undefined : { kind: "ITEM", itemNames: ["x"] };
-  const task = createTask(db, { tileId, label: `Task ${opts.sortOrder}`, description: "desc", requirement, ...opts });
-  const [leafId] = leafIds(getRequirementTree(db, task.id)!);
-  return { ...task, leafId };
+// Creates a task that's a bare leaf ("x" item, or MANUAL) so its own node id is the leaf id.
+function addTask(tileId: string, opts: { sortOrder?: number; points: number; scoringMode?: "automatic" | "manual"; submitRequiresPrevious?: boolean; pointsRequirePrevious?: boolean }) {
+  const base: GraphNodeInput = opts.scoringMode === "manual" ? { kind: "MANUAL" } : { kind: "ITEM", itemNames: ["x"] };
+  const task = createTask(db, tileId, { ...base, label: `Task ${opts.sortOrder ?? 0}`, description: "desc", points: opts.points }, opts.sortOrder);
+  return { ...task, leafId: task.id };
 }
 
 const base = { screenshotUrl: "/x.png", now: NOW };
@@ -58,7 +57,7 @@ afterEach(() => {
 });
 
 describe("createSubmission", () => {
-  it("succeeds on a plain task and marks progress pending_approval", () => {
+  it("succeeds on a plain task and marks it pending_approval", () => {
     const { bingo, teamId, memberUserId } = seed();
     const tile = addTile(bingo.id);
     const task = addTask(tile.id, { sortOrder: 0, points: 20 });
@@ -68,8 +67,8 @@ describe("createSubmission", () => {
     });
 
     expect(submission.status).toBe("pending");
-    const progress = db.select().from(teamTaskProgress).all().find((p) => p.taskId === task.id);
-    expect(progress?.status).toBe("pending_approval");
+    const statuses = getTeamNodeStatuses(db, teamId, bingo.id);
+    expect(statuses.get(task.id)).toBe("pending_approval");
   });
 
   it("requires at least one claim, and an itemName on ITEM claims but not MANUAL ones", () => {
@@ -90,14 +89,10 @@ describe("createSubmission", () => {
   it("rejects claims that do not target a requirement leaf", () => {
     const { bingo, teamId, memberUserId } = seed();
     const tile = addTile(bingo.id);
-    const task = createTask(db, {
-      tileId: tile.id, label: "T", description: "d", sortOrder: 0, points: 20,
-      requirement: { kind: "ALL", children: [{ kind: "ITEM", itemNames: ["x"] }] },
-    });
-    const rootId = getRequirementTree(db, task.id)!.id;
+    const task = createTask(db, tile.id, { kind: "ALL", label: "T", description: "d", points: 20, children: [{ kind: "ITEM", itemNames: ["x"] }] });
 
     expect(() =>
-      createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId: rootId, itemName: "x" }], ...base }),
+      createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId: task.id, itemName: "x" }], ...base }),
     ).toThrow(/requirement leaves/);
     expect(() =>
       createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId: "missing", itemName: "x" }], ...base }),
@@ -123,8 +118,9 @@ describe("createSubmission", () => {
       teamId, submittedByUserId: memberUserId, ...base,
       claims: [{ nodeId: task1.leafId, itemName: "x" }, { nodeId: task2.leafId, itemName: "x" }],
     });
-    const statuses = db.select().from(teamTaskProgress).all().map((p) => [p.taskId, p.status]);
-    expect(statuses.sort()).toEqual([[task1.id, "pending_approval"], [task2.id, "pending_approval"]].sort());
+    const statuses = getTeamNodeStatuses(db, teamId, bingo.id);
+    expect(statuses.get(task1.id)).toBe("pending_approval");
+    expect(statuses.get(task2.id)).toBe("pending_approval");
   });
 
   it("rejects when the bingo is not live", () => {
@@ -163,16 +159,16 @@ describe("createSubmission", () => {
     ).not.toThrow();
   });
 
-  it("rejects submitRequiresPrevious until the previous task is completed, then accepts", () => {
+  it("rejects submitGateNodeId until the gate is completed for the team, then accepts", () => {
     const { bingo, teamId, memberUserId } = seed();
     const tile = addTile(bingo.id);
     const task1 = addTask(tile.id, { sortOrder: 0, points: 20 });
-    const task2 = addTask(tile.id, { sortOrder: 1, points: 20, submitRequiresPrevious: true });
-    const claims = [{ nodeId: task2.leafId, itemName: "x" }];
+    const task2 = createTask(db, tile.id, { kind: "ITEM", itemNames: ["x"], label: "Task 1", description: "desc", points: 20, submitGateNodeId: task1.leafId }, 1);
+    const claims = [{ nodeId: task2.id, itemName: "x" }];
 
-    expect(() => createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims, ...base })).toThrow(/previous task/);
+    expect(() => createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims, ...base })).toThrow(/must be completed first/);
 
-    db.insert(teamTaskProgress).values({ teamId, taskId: task1.id, status: "completed", pointsAwarded: 20 }).run();
+    db.insert(schema.teamNodeState).values({ teamId, nodeId: task1.leafId, completedAt: NOW, pointsAwarded: 20 }).run();
 
     expect(() => createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims, ...base })).not.toThrow();
   });
@@ -208,7 +204,7 @@ describe("createSubmission", () => {
 });
 
 describe("getTeamSubmissions / getAllSubmissionsForBingo", () => {
-  it("attaches screenshots, claims (with their task), and the submitter's user row", () => {
+  it("attaches screenshots, claims, and the submitter's user row", () => {
     const { bingo, teamId, memberUserId } = seed();
     const tile = addTile(bingo.id);
     const task = addTask(tile.id, { sortOrder: 0, points: 20 });
@@ -217,13 +213,13 @@ describe("getTeamSubmissions / getAllSubmissionsForBingo", () => {
     });
 
     const [detail] = getTeamSubmissions(db, teamId);
-    expect(detail.screenshots).toHaveLength(1);
-    expect(detail.screenshots[0].storageUrl).toBe("/uploads/x.png");
-    expect(detail.claims).toEqual([expect.objectContaining({ nodeId: task.leafId, taskId: task.id, itemName: "x", quantity: 2 })]);
-    expect(detail.submittedByUser?.discordUsername).toBe("member");
+    expect(detail!.screenshots).toHaveLength(1);
+    expect(detail!.screenshots[0]!.storageUrl).toBe("/uploads/x.png");
+    expect(detail!.claims).toEqual([expect.objectContaining({ nodeId: task.leafId, itemName: "x", quantity: 2 })]);
+    expect(detail!.submittedByUser?.discordUsername).toBe("member");
   });
 
-  it("includes touched tasks, tile, and team info scoped to the bingo", () => {
+  it("includes touched leaves, tile, and team info scoped to the bingo", () => {
     const { bingo, teamId, memberUserId } = seed();
     const tile = addTile(bingo.id, { name: "Wintertodt" });
     const task = addTask(tile.id, { sortOrder: 0, points: 20 });
@@ -232,9 +228,9 @@ describe("getTeamSubmissions / getAllSubmissionsForBingo", () => {
     });
 
     const [row] = getAllSubmissionsForBingo(db, bingo.id);
-    expect(row.tile.name).toBe("Wintertodt");
-    expect(row.tasks.map((t) => t.id)).toEqual([task.id]);
-    expect(row.team).toEqual(expect.objectContaining({ id: teamId, name: "Team A" }));
-    expect(row.screenshots).toHaveLength(1);
+    expect(row!.tile.name).toBe("Wintertodt");
+    expect(row!.leaves.map((l) => l.id)).toEqual([task.leafId]);
+    expect(row!.team).toEqual(expect.objectContaining({ id: teamId, name: "Team A" }));
+    expect(row!.screenshots).toHaveLength(1);
   });
 });

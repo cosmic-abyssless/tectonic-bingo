@@ -2,7 +2,7 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { claims, itemGroupItems, itemGroups, nodeEdges, nodeItems, nodes, submissions, tileWildcards } from "../db/schema";
+import { bingoLines, claims, itemGroupItems, itemGroups, nodeEdges, nodeItems, nodes, submissions, tileWildcards, tiles } from "../db/schema";
 import type { ApprovedClaim, EngineNode } from "./engine";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -167,6 +167,21 @@ export function getApprovedClaims(db: Queryable, teamId: string, bingoId: string
     .map((r) => ({ ...r, reviewedAt: r.reviewedAt! }));
 }
 
+// nodeId plus every ancestor reached by walking edges upward. Used to find
+// which tile/line a leaf belongs to (submission-time tile resolution, gate
+// checks against every ancestor's submitGateNodeId).
+export function findAncestorIds(db: Queryable, nodeId: string): Set<string> {
+  const seen = new Set<string>([nodeId]);
+  let frontier = [nodeId];
+  while (frontier.length > 0) {
+    const rows = db.select({ parentId: nodeEdges.parentId }).from(nodeEdges).where(inArray(nodeEdges.childId, frontier)).all();
+    const next = rows.map((r) => r.parentId).filter((id) => !seen.has(id));
+    next.forEach((id) => seen.add(id));
+    frontier = next;
+  }
+  return seen;
+}
+
 // The leaf (ITEM/MANUAL) descendants of a node, per the flat graph shape
 // getFullGraph returns. Used for submission-time validation (a claim must
 // target a leaf) and gate checks.
@@ -239,6 +254,15 @@ function reconcileSubtree(tx: Tx, bingoId: string, input: GraphNodeInput, touche
   return id;
 }
 
+// A tile's or line's root node has no incoming nodeEdge — it's referenced
+// directly by tiles.nodeId / bingoLines.nodeId instead — so the orphan check
+// below must also know about these, or it would wrongly GC a tile that a
+// deleted line pointed at.
+function isPresentationRoot(tx: Tx, id: string): boolean {
+  if (tx.select({ id: tiles.id }).from(tiles).where(eq(tiles.nodeId, id)).get()) return true;
+  return !!tx.select({ id: bingoLines.id }).from(bingoLines).where(eq(bingoLines.nodeId, id)).get();
+}
+
 function collectDescendants(tx: Tx, rootId: string): Set<string> {
   const seen = new Set<string>([rootId]);
   let frontier = [rootId];
@@ -273,6 +297,7 @@ function deleteNodeIfOrphaned(tx: Tx, id: string): void {
   if (!stillExists) return;
   const hasParent = tx.select({ id: nodeEdges.id }).from(nodeEdges).where(eq(nodeEdges.childId, id)).get();
   if (hasParent) return;
+  if (isPresentationRoot(tx, id)) return;
   deleteNodeForce(tx, id);
 }
 

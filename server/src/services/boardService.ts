@@ -1,9 +1,10 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type { GraphNodeInput, NodeStatus } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { bingoLines, bingoLineTiles, tileCategories, tileTasks, tileWildcards, tiles } from "../db/schema";
+import { bingoLines, claims, nodeEdges, submissions, teamNodeState, tileCategories, tileWildcards, tiles } from "../db/schema";
 import { ServiceError } from "./errors";
-import { deleteRequirementTrees, getRequirementTrees, replaceRequirementTree, type RequirementNodeInput } from "./requirementService";
+import { deleteNode, deleteSubtree, getFullGraph, getNodeTree, getNodeTrees, insertSubtree, replaceSubtree } from "./graphService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -12,35 +13,81 @@ export function getCategories(db: Db, bingoId: string) {
   return db.select().from(tileCategories).where(eq(tileCategories.bingoId, bingoId)).orderBy(tileCategories.sortOrder).all();
 }
 
-// Full tile -> task -> requirement tree plus per-tile wildcards, for one bingo.
+// Full tile -> node tree (tasks are just the node's children) plus per-tile
+// wildcards and every line (with its own node), for one bingo.
 export function getBoardTiles(db: Db, bingoId: string) {
   const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
   const tileIds = tileRows.map((t) => t.id);
   if (tileIds.length === 0) return [];
 
-  const taskRows = db.select().from(tileTasks).where(inArray(tileTasks.tileId, tileIds)).orderBy(tileTasks.sortOrder).all();
-  const requirements = getRequirementTrees(db, taskRows.map((t) => t.id));
+  const trees = getNodeTrees(db, tileRows.map((t) => t.nodeId));
   const wildcardRows = db.select().from(tileWildcards).where(inArray(tileWildcards.tileId, tileIds)).all();
 
   return tileRows.map((tile) => ({
     ...tile,
-    tasks: taskRows
-      .filter((t) => t.tileId === tile.id)
-      .map((task) => ({ ...task, requirement: requirements.get(task.id)! })),
+    node: trees.get(tile.nodeId)!,
     wildcards: wildcardRows.filter((w) => w.tileId === tile.id),
   }));
+}
+
+export function getBoardLines(db: Db, bingoId: string) {
+  const lineRows = db.select().from(bingoLines).where(eq(bingoLines.bingoId, bingoId)).all();
+  const trees = getNodeTrees(db, lineRows.map((l) => l.nodeId));
+  return lineRows.map((line) => ({ ...line, node: trees.get(line.nodeId)! }));
 }
 
 export function getTileById(db: Db, tileId: string) {
   return db.select().from(tiles).where(eq(tiles.id, tileId)).get();
 }
 
-export function getTaskById(db: Db, taskId: string) {
-  return db.select().from(tileTasks).where(eq(tileTasks.id, taskId)).get();
-}
+// Per-node soft status for one team, derived at read time (never stored —
+// see docs/node-graph-model.md §5): completed nodes come from teamNodeState;
+// everything else is derived from whether any leaf in the node's subtree has
+// a pending or approved claim.
+export function getTeamNodeStatuses(db: Db, teamId: string, bingoId: string): Map<string, NodeStatus> {
+  const { engineNodes, childrenOf, nodesById } = getFullGraph(db, bingoId);
 
-export function getTileTasksOrdered(db: Db, tileId: string) {
-  return db.select().from(tileTasks).where(eq(tileTasks.tileId, tileId)).orderBy(tileTasks.sortOrder).all();
+  const completedIds = new Set(db.select({ nodeId: teamNodeState.nodeId }).from(teamNodeState).where(eq(teamNodeState.teamId, teamId)).all().map((r) => r.nodeId));
+  const claimNodeIds = (status: "pending" | "approved") =>
+    new Set(
+      db
+        .select({ nodeId: claims.nodeId })
+        .from(claims)
+        .innerJoin(submissions, eq(claims.submissionId, submissions.id))
+        .where(and(eq(submissions.teamId, teamId), eq(submissions.status, status)))
+        .all()
+        .map((r) => r.nodeId),
+    );
+  const pendingLeafIds = claimNodeIds("pending");
+  const approvedLeafIds = claimNodeIds("approved");
+
+  const leafSetCache = new Map<string, Set<string>>();
+  function leafSet(nodeId: string): Set<string> {
+    const cached = leafSetCache.get(nodeId);
+    if (cached) return cached;
+    const node = nodesById.get(nodeId);
+    const set = new Set<string>();
+    leafSetCache.set(nodeId, set); // pre-register to survive a cycle, defensively (invariant forbids one)
+    if (node?.kind === "ITEM" || node?.kind === "MANUAL") {
+      set.add(nodeId);
+    } else {
+      for (const childId of childrenOf.get(nodeId) ?? []) for (const id of leafSet(childId)) set.add(id);
+    }
+    return set;
+  }
+
+  const statuses = new Map<string, NodeStatus>();
+  for (const node of engineNodes) {
+    if (completedIds.has(node.id)) {
+      statuses.set(node.id, "completed");
+      continue;
+    }
+    const leaves = leafSet(node.id);
+    const hasPending = [...leaves].some((id) => pendingLeafIds.has(id));
+    const hasApproved = [...leaves].some((id) => approvedLeafIds.has(id));
+    statuses.set(node.id, hasPending ? "pending_approval" : hasApproved ? "in_progress" : "not_started");
+  }
+  return statuses;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,14 +125,19 @@ export interface CreateTileParams {
   freezeDurationMinutes?: number;
   notes?: string | null;
 }
+// A tile's node is a plain ALL root with no points of its own — its tasks
+// (children) carry the points; the tile completes once every task does.
 export function createTile(db: Db, params: CreateTileParams) {
-  const existing = db
-    .select()
-    .from(tiles)
-    .where(and(eq(tiles.bingoId, params.bingoId), eq(tiles.boardRow, params.boardRow), eq(tiles.boardCol, params.boardCol)))
-    .get();
-  if (existing) throw new ServiceError(409, `A tile already exists at row ${params.boardRow}, col ${params.boardCol}`);
-  return db.insert(tiles).values(params).returning().get();
+  return db.transaction((tx) => {
+    const existing = tx
+      .select()
+      .from(tiles)
+      .where(and(eq(tiles.bingoId, params.bingoId), eq(tiles.boardRow, params.boardRow), eq(tiles.boardCol, params.boardCol)))
+      .get();
+    if (existing) throw new ServiceError(409, `A tile already exists at row ${params.boardRow}, col ${params.boardCol}`);
+    const nodeId = insertSubtree(tx, params.bingoId, { kind: "ALL" });
+    return tx.insert(tiles).values({ ...params, nodeId }).returning().get();
+  });
 }
 export function updateTile(db: Db, id: string, params: Partial<Omit<CreateTileParams, "bingoId">>) {
   const existing = db.select().from(tiles).where(eq(tiles.id, id)).get();
@@ -94,58 +146,51 @@ export function updateTile(db: Db, id: string, params: Partial<Omit<CreateTilePa
 }
 export function deleteTile(db: Db, id: string): void {
   db.transaction((tx) => {
-    const taskIds = tx.select({ id: tileTasks.id }).from(tileTasks).where(eq(tileTasks.tileId, id)).all().map((t) => t.id);
+    const tile = tx.select().from(tiles).where(eq(tiles.id, id)).get();
+    if (!tile) return;
     tx.delete(tileWildcards).where(eq(tileWildcards.tileId, id)).run();
-    deleteRequirementTrees(tx, taskIds);
-    tx.delete(bingoLineTiles).where(eq(bingoLineTiles.tileId, id)).run();
-    tx.delete(tileTasks).where(eq(tileTasks.tileId, id)).run();
-    tx.delete(tiles).where(eq(tiles.id, id)).run();
+    tx.delete(tiles).where(eq(tiles.id, id)).run(); // must precede deleting the node it FKs to
+    deleteSubtree(tx, tile.nodeId);
   });
 }
 
-export interface CreateTaskParams {
-  tileId: string;
-  label: string;
-  sortOrder: number;
-  points: number;
-  description: string;
-  scoringMode?: "automatic" | "manual";
-  submitRequiresPrevious?: boolean;
-  pointsRequirePrevious?: boolean;
-  allowsPreLoad?: boolean;
-  notes?: string | null;
-  // Defaults to an empty ALL root (automatic) or a MANUAL root (manual) so
-  // every task always has exactly one requirement tree.
-  requirement?: RequirementNodeInput;
-}
-export function createTask(db: Db, params: CreateTaskParams) {
-  const { requirement, ...taskValues } = params;
-  const existing = db
-    .select()
-    .from(tileTasks)
-    .where(and(eq(tileTasks.tileId, params.tileId), eq(tileTasks.sortOrder, params.sortOrder)))
-    .get();
-  if (existing) throw new ServiceError(409, `A task already exists at sortOrder ${params.sortOrder} on this tile`);
+// ---------------------------------------------------------------------------
+// Tasks — a task is just a node that's a direct child of its tile's node.
+// Gate resolution ("requires previous task" -> a specific sibling's node id)
+// is the caller's job (it already has the tile's current child order from
+// the board response); these are otherwise plain node operations.
+// ---------------------------------------------------------------------------
+
+export function createTask(db: Db, tileId: string, input: GraphNodeInput, sortOrder?: number) {
   return db.transaction((tx) => {
-    const task = tx.insert(tileTasks).values(taskValues).returning().get();
-    replaceRequirementTree(tx, task.id, requirement ?? { kind: task.scoringMode === "manual" ? "MANUAL" : "ALL" });
-    return task;
+    const tile = tx.select().from(tiles).where(eq(tiles.id, tileId)).get();
+    if (!tile) throw new ServiceError(404, "Tile not found");
+    const order = sortOrder ?? tx.select({ id: nodeEdges.id }).from(nodeEdges).where(eq(nodeEdges.parentId, tile.nodeId)).all().length;
+    const taskNodeId = insertSubtree(tx, tile.bingoId, input);
+    tx.insert(nodeEdges).values({ parentId: tile.nodeId, childId: taskNodeId, sortOrder: order }).run();
+    return getNodeTree(tx, taskNodeId)!;
   });
 }
-export function updateTask(db: Db, id: string, params: Partial<Omit<CreateTaskParams, "tileId">>) {
-  const { requirement, ...taskValues } = params;
-  const existing = db.select().from(tileTasks).where(eq(tileTasks.id, id)).get();
-  if (!existing) throw new ServiceError(404, "Task not found");
+
+export function updateNode(db: Db, id: string, input: GraphNodeInput) {
   return db.transaction((tx) => {
-    if (requirement) replaceRequirementTree(tx, id, requirement);
-    if (Object.keys(taskValues).length === 0) return existing;
-    return tx.update(tileTasks).set(taskValues).where(eq(tileTasks.id, id)).returning().get();
+    const existing = tx.select({ bingoId: schema.nodes.bingoId }).from(schema.nodes).where(eq(schema.nodes.id, id)).get();
+    if (!existing) throw new ServiceError(404, "Node not found");
+    replaceSubtree(tx, id, existing.bingoId, input);
+    return getNodeTree(tx, id)!;
   });
 }
+
 export function deleteTask(db: Db, id: string): void {
+  db.transaction((tx) => deleteNode(tx, id));
+}
+
+// Reorders a node's children (drag-reorder in the admin UI).
+export function reorderChildren(db: Db, parentNodeId: string, orderedChildIds: string[]): void {
   db.transaction((tx) => {
-    deleteRequirementTrees(tx, [id]);
-    tx.delete(tileTasks).where(eq(tileTasks.id, id)).run();
+    orderedChildIds.forEach((childId, i) => {
+      tx.update(nodeEdges).set({ sortOrder: i }).where(and(eq(nodeEdges.parentId, parentNodeId), eq(nodeEdges.childId, childId))).run();
+    });
   });
 }
 
@@ -169,7 +214,8 @@ export function deleteWildcard(db: Db, id: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Lines
+// Lines — a line's node is an ALL over its tile nodes; its points are the
+// line bonus.
 // ---------------------------------------------------------------------------
 
 export function getLines(db: Db, bingoId: string) {
@@ -182,59 +228,58 @@ export function getLines(db: Db, bingoId: string) {
 export function generateLines(db: Db, bingo: Bingo, pointsPerLine = 15) {
   return db.transaction((tx) => {
     const tileRows = tx.select().from(tiles).where(eq(tiles.bingoId, bingo.id)).all();
-    const existingLines = tx.select({ id: bingoLines.id }).from(bingoLines).where(eq(bingoLines.bingoId, bingo.id)).all();
-    if (existingLines.length > 0) {
-      const lineIds = existingLines.map((l) => l.id);
-      tx.delete(bingoLineTiles).where(inArray(bingoLineTiles.bingoLineId, lineIds)).run();
-      tx.delete(bingoLines).where(inArray(bingoLines.id, lineIds)).run();
+    const existingLines = tx.select().from(bingoLines).where(eq(bingoLines.bingoId, bingo.id)).all();
+    for (const line of existingLines) {
+      tx.delete(bingoLines).where(eq(bingoLines.id, line.id)).run(); // must precede deleting the node it FKs to
+      deleteSubtree(tx, line.nodeId);
     }
 
     const tileAt = (row: number, col: number) => tileRows.find((t) => t.boardRow === row && t.boardCol === col);
-    const createdLines = [];
+    // The line's own root node is freshly inserted; its children are edges to
+    // the tile nodes that already exist (insertSubtree can only create new
+    // nodes, so those edges are added directly rather than via `children`).
+    const makeLine = (lineType: "row" | "column" | "diagonal", lineIndex: number, tileIds: string[]) => {
+      const nodeId = insertSubtree(tx, bingo.id, { kind: "ALL", points: pointsPerLine });
+      tileIds.forEach((tileId, i) => {
+        const tileNodeId = tileRows.find((t) => t.id === tileId)!.nodeId;
+        tx.insert(nodeEdges).values({ parentId: nodeId, childId: tileNodeId, sortOrder: i }).run();
+      });
+      return tx.insert(bingoLines).values({ bingoId: bingo.id, nodeId, lineType, lineIndex }).returning().get();
+    };
 
+    const createdLines = [];
     for (let row = 0; row < bingo.boardRows; row++) {
-      const line = tx.insert(bingoLines).values({ bingoId: bingo.id, lineType: "row", lineIndex: row, points: pointsPerLine }).returning().get();
-      for (let col = 0; col < bingo.boardCols; col++) {
-        const tile = tileAt(row, col);
-        if (tile) tx.insert(bingoLineTiles).values({ bingoLineId: line.id, tileId: tile.id }).run();
-      }
-      createdLines.push(line);
+      const rowTileIds = Array.from({ length: bingo.boardCols }, (_, col) => tileAt(row, col)?.id).filter((id): id is string => !!id);
+      createdLines.push(makeLine("row", row, rowTileIds));
     }
     for (let col = 0; col < bingo.boardCols; col++) {
-      const line = tx.insert(bingoLines).values({ bingoId: bingo.id, lineType: "column", lineIndex: col, points: pointsPerLine }).returning().get();
-      for (let row = 0; row < bingo.boardRows; row++) {
-        const tile = tileAt(row, col);
-        if (tile) tx.insert(bingoLineTiles).values({ bingoLineId: line.id, tileId: tile.id }).run();
-      }
-      createdLines.push(line);
+      const colTileIds = Array.from({ length: bingo.boardRows }, (_, row) => tileAt(row, col)?.id).filter((id): id is string => !!id);
+      createdLines.push(makeLine("column", col, colTileIds));
     }
     if (bingo.boardRows === bingo.boardCols) {
-      const diagTlBr = tx.insert(bingoLines).values({ bingoId: bingo.id, lineType: "diagonal", lineIndex: 0, points: pointsPerLine }).returning().get();
-      for (let i = 0; i < bingo.boardRows; i++) {
-        const tile = tileAt(i, i);
-        if (tile) tx.insert(bingoLineTiles).values({ bingoLineId: diagTlBr.id, tileId: tile.id }).run();
-      }
-      createdLines.push(diagTlBr);
-
-      const diagTrBl = tx.insert(bingoLines).values({ bingoId: bingo.id, lineType: "diagonal", lineIndex: 1, points: pointsPerLine }).returning().get();
-      for (let i = 0; i < bingo.boardRows; i++) {
-        const tile = tileAt(i, bingo.boardCols - 1 - i);
-        if (tile) tx.insert(bingoLineTiles).values({ bingoLineId: diagTrBl.id, tileId: tile.id }).run();
-      }
-      createdLines.push(diagTrBl);
+      const diagTlBr = Array.from({ length: bingo.boardRows }, (_, i) => tileAt(i, i)?.id).filter((id): id is string => !!id);
+      createdLines.push(makeLine("diagonal", 0, diagTlBr));
+      const diagTrBl = Array.from({ length: bingo.boardRows }, (_, i) => tileAt(i, bingo.boardCols - 1 - i)?.id).filter((id): id is string => !!id);
+      createdLines.push(makeLine("diagonal", 1, diagTrBl));
     }
-
     return createdLines;
   });
 }
 
-export function updateLine(db: Db, id: string, points: number) {
-  const existing = db.select().from(bingoLines).where(eq(bingoLines.id, id)).get();
-  if (!existing) throw new ServiceError(404, "Line not found");
-  return db.update(bingoLines).set({ points }).where(eq(bingoLines.id, id)).returning().get();
+export function updateLinePoints(db: Db, id: string, points: number) {
+  return db.transaction((tx) => {
+    const line = tx.select().from(bingoLines).where(eq(bingoLines.id, id)).get();
+    if (!line) throw new ServiceError(404, "Line not found");
+    tx.update(schema.nodes).set({ points }).where(eq(schema.nodes.id, line.nodeId)).run();
+    return line;
+  });
 }
 
 export function deleteLine(db: Db, id: string): void {
-  db.delete(bingoLineTiles).where(eq(bingoLineTiles.bingoLineId, id)).run();
-  db.delete(bingoLines).where(eq(bingoLines.id, id)).run();
+  db.transaction((tx) => {
+    const line = tx.select().from(bingoLines).where(eq(bingoLines.id, id)).get();
+    if (!line) return;
+    tx.delete(bingoLines).where(eq(bingoLines.id, id)).run(); // must precede deleting the node it FKs to
+    deleteSubtree(tx, line.nodeId);
+  });
 }

@@ -78,7 +78,6 @@ export function fuzzyIncludes(lines: string[], needle: string, opts: FuzzyInclud
 export interface MatchableItem {
   nodeId: string;
   itemName: string;
-  taskId: string;
   tileId: string;
   tileName: string;
 }
@@ -94,7 +93,6 @@ export interface MatchableWildcard {
 export interface DetectedItemMatch {
   tileId: string;
   tileName: string;
-  taskId: string;
   nodeId: string;
   itemName: string;
 }
@@ -118,7 +116,7 @@ export function findBestMatch(
   let detectedMatch: DetectedItemMatch | null = null;
   for (const item of items) {
     if (fuzzyIncludes(extractedText, item.itemName)) {
-      detectedMatch = { tileId: item.tileId, tileName: item.tileName, taskId: item.taskId, nodeId: item.nodeId, itemName: item.itemName };
+      detectedMatch = { tileId: item.tileId, tileName: item.tileName, nodeId: item.nodeId, itemName: item.itemName };
       break;
     }
   }

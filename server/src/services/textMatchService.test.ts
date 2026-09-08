@@ -89,14 +89,14 @@ describe("fuzzyIncludes — codeword mode (explicit maxEdits: 1 regardless of le
 
 describe("findBestMatch", () => {
   const items = [
-    { nodeId: "node-a", itemName: "Ahrim's hood", taskId: "task-a", tileId: "tile-a", tileName: "Barrows" },
-    { nodeId: "node-b", itemName: "Vorki", taskId: "task-b", tileId: "tile-b", tileName: "Vorkath" },
+    { nodeId: "node-a", itemName: "Ahrim's hood", tileId: "tile-a", tileName: "Barrows" },
+    { nodeId: "node-b", itemName: "Vorki", tileId: "tile-b", tileName: "Vorkath" },
   ];
   const wildcards = [{ id: "wc-a", itemName: "Cerberus jar", applicableNodeId: null, tileId: "tile-c", tileName: "Cerberus" }];
 
   it("returns the first matching item in query order", () => {
     const { detectedMatch, detectedWildcard } = findBestMatch(["I got a Vorki pet!"], items, wildcards);
-    expect(detectedMatch).toEqual({ tileId: "tile-b", tileName: "Vorkath", taskId: "task-b", nodeId: "node-b", itemName: "Vorki" });
+    expect(detectedMatch).toEqual({ tileId: "tile-b", tileName: "Vorkath", nodeId: "node-b", itemName: "Vorki" });
     expect(detectedWildcard).toBeNull();
   });
 

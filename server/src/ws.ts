@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
+import type { BroadcastEvent } from "@bingo/shared";
 
 let wss: WebSocketServer | null = null;
 
@@ -11,14 +12,6 @@ export function initWebSocketServer(server: Server): void {
     socket.on("error", () => {});
   });
 }
-
-export type BroadcastEvent =
-  | { type: "submission_created"; bingoId: string; payload: { teamId: string } }
-  | { type: "submission_reviewed"; bingoId: string; payload: { teamId: string; taskIds: string[] } }
-  | { type: "stage_changed"; bingoId: string; payload: { stage: string } }
-  | { type: "draft_started"; bingoId: string; payload: Record<string, never> }
-  | { type: "draft_pick"; bingoId: string; payload: { pickNumber: number; teamId: string; userId: string } }
-  | { type: "team_updated"; bingoId: string; payload: { teamId: string } };
 
 export function broadcast(event: BroadcastEvent): void {
   if (!wss) return;

@@ -1,15 +1,25 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { ClaimInput } from "@bingo/shared";
+import type { ClaimInput, NodeKind } from "@bingo/shared";
 import * as schema from "../db/schema";
-import {
-  claims, requirementNodes, submissions, submissionScreenshots, teams, teamTaskProgress, tileTasks, tiles, tileWildcards, users,
-} from "../db/schema";
+import { claims, nodes, submissions, submissionScreenshots, teamNodeState, teams, tiles, tileWildcards, users } from "../db/schema";
 import { ServiceError } from "./errors";
-import { refreshTaskProgressStatus } from "./scoringService";
+import { findAncestorIds } from "./graphService";
 
 type Db = BetterSQLite3Database<typeof schema>;
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Bingo = typeof schema.bingos.$inferSelect;
+
+// Which tile (if any) a leaf belongs to, found by walking edges upward from
+// the leaf until an ancestor matches a tile's root node.
+function tileForLeaf(db: Db | Tx, leafId: string, tileByNodeId: Map<string, typeof tiles.$inferSelect>): typeof tiles.$inferSelect | null {
+  const ancestors = findAncestorIds(db, leafId);
+  for (const nodeId of ancestors) {
+    const tile = tileByNodeId.get(nodeId);
+    if (tile) return tile;
+  }
+  return null;
+}
 
 export interface CreateSubmissionParams {
   teamId: string;
@@ -34,20 +44,21 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
     if (params.claims.length === 0) throw new ServiceError(400, "At least one claim is required");
 
     const nodeIds = [...new Set(params.claims.map((c) => c.nodeId))];
-    const leaves = tx.select().from(requirementNodes).where(inArray(requirementNodes.id, nodeIds)).all();
+    const leaves = tx.select().from(nodes).where(inArray(nodes.id, nodeIds)).all();
     if (leaves.length !== nodeIds.length || leaves.some((n) => n.kind !== "ITEM" && n.kind !== "MANUAL")) {
       throw new ServiceError(400, "Claims must target requirement leaves");
     }
     const leafById = new Map(leaves.map((n) => [n.id, n]));
 
-    const taskIds = [...new Set(leaves.map((n) => n.taskId))];
-    const tasks = tx.select().from(tileTasks).where(inArray(tileTasks.id, taskIds)).all();
-    const tileIds = [...new Set(tasks.map((t) => t.tileId))];
     // Launch scope: one submission covers one tile. Drop this to allow
     // cross-tile claims.
-    if (tileIds.length !== 1) throw new ServiceError(400, "All claims in a submission must belong to the same tile");
-    const tile = tx.select().from(tiles).where(eq(tiles.id, tileIds[0])).get();
-    if (!tile || tile.bingoId !== bingo.id) throw new ServiceError(404, "Tile not found");
+    const tileRows = tx.select().from(tiles).where(eq(tiles.bingoId, bingo.id)).all();
+    const tileByNodeId = new Map(tileRows.map((t) => [t.nodeId, t]));
+    const tilesTouched = new Set(nodeIds.map((id) => tileForLeaf(tx, id, tileByNodeId)?.id ?? null));
+    if (tilesTouched.size !== 1 || tilesTouched.has(null)) {
+      throw new ServiceError(400, "All claims in a submission must belong to the same tile");
+    }
+    const tile = tileRows.find((t) => t.id === [...tilesTouched][0])!;
 
     if (tile.hasFreezePeriod) {
       const unlockAt = new Date(bingo.startsAt.getTime() + tile.freezeDurationMinutes * 60_000);
@@ -56,19 +67,19 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
       }
     }
 
-    const tasksOrdered = tx.select().from(tileTasks).where(eq(tileTasks.tileId, tile.id)).orderBy(tileTasks.sortOrder).all();
-    for (const task of tasks) {
-      if (!task.submitRequiresPrevious) continue;
-      const idx = tasksOrdered.findIndex((t) => t.id === task.id);
-      const prevTask = idx > 0 ? tasksOrdered[idx - 1] : null;
-      if (!prevTask) continue;
-      const prevProgress = tx
-        .select()
-        .from(teamTaskProgress)
-        .where(and(eq(teamTaskProgress.teamId, params.teamId), eq(teamTaskProgress.taskId, prevTask.id)))
-        .get();
-      if (prevProgress?.status !== "completed") {
-        throw new ServiceError(400, `${task.label}: the previous task on this tile must be completed first`);
+    // submitGateNodeId: every ancestor of a claimed leaf (up to and including
+    // the tile) that names a gate must have that gate already complete for
+    // this team.
+    const completedNodeIds = new Set(
+      tx.select({ nodeId: teamNodeState.nodeId }).from(teamNodeState).where(eq(teamNodeState.teamId, params.teamId)).all().map((r) => r.nodeId),
+    );
+    for (const leafId of nodeIds) {
+      const ancestorIds = [...findAncestorIds(tx, leafId)];
+      const ancestors = tx.select().from(nodes).where(inArray(nodes.id, ancestorIds)).all();
+      for (const ancestor of ancestors) {
+        if (ancestor.submitGateNodeId && !completedNodeIds.has(ancestor.submitGateNodeId)) {
+          throw new ServiceError(400, `${ancestor.label ?? "This requirement"}: the previous requirement must be completed first`);
+        }
       }
     }
 
@@ -103,8 +114,6 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
         .run();
     }
 
-    for (const taskId of taskIds) refreshTaskProgressStatus(tx, params.teamId, taskId);
-
     return submission;
   });
 }
@@ -115,7 +124,6 @@ export interface ClaimRow {
   id: string;
   submissionId: string;
   nodeId: string;
-  taskId: string;
   itemName: string | null;
   quantity: number;
   wildcardId: string | null;
@@ -135,15 +143,7 @@ function attachDetails(db: Db, subs: (typeof submissions.$inferSelect)[]): Submi
   if (subs.length === 0) return [];
   const submissionIds = subs.map((s) => s.id);
   const screenshots = db.select().from(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, submissionIds)).all();
-  const claimRows = db
-    .select({
-      id: claims.id, submissionId: claims.submissionId, nodeId: claims.nodeId, taskId: requirementNodes.taskId,
-      itemName: claims.itemName, quantity: claims.quantity, wildcardId: claims.wildcardId,
-    })
-    .from(claims)
-    .innerJoin(requirementNodes, eq(claims.nodeId, requirementNodes.id))
-    .where(inArray(claims.submissionId, submissionIds))
-    .all();
+  const claimRows = db.select().from(claims).where(inArray(claims.submissionId, submissionIds)).all();
   const userIds = [...new Set(subs.map((s) => s.submittedByUserId))];
   const userRows = db
     .select({ id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick })
@@ -160,8 +160,14 @@ function attachDetails(db: Db, subs: (typeof submissions.$inferSelect)[]): Submi
   }));
 }
 
+export interface ClaimedLeaf {
+  id: string;
+  kind: NodeKind;
+  label: string | null;
+}
+
 export interface ModSubmissionRow extends SubmissionDetails {
-  tasks: (typeof tileTasks.$inferSelect)[];
+  leaves: ClaimedLeaf[];
   tile: typeof tiles.$inferSelect;
   team: Pick<typeof teams.$inferSelect, "id" | "name" | "color">;
 }
@@ -175,17 +181,20 @@ export function getAllSubmissionsForBingo(db: Db, bingoId: string): ModSubmissio
     .all();
 
   const details = attachDetails(db, rows.map((r) => r.submission));
-  const taskIds = [...new Set(details.flatMap((d) => d.claims.map((c) => c.taskId)))];
-  const taskRows = taskIds.length ? db.select().from(tileTasks).where(inArray(tileTasks.id, taskIds)).orderBy(tileTasks.sortOrder).all() : [];
-  const tileIds = [...new Set(taskRows.map((t) => t.tileId))];
-  const tileRows = tileIds.length ? db.select().from(tiles).where(inArray(tiles.id, tileIds)).all() : [];
-  const taskById = new Map(taskRows.map((t) => [t.id, t]));
-  const tileById = new Map(tileRows.map((t) => [t.id, t]));
+  const leafIds = [...new Set(details.flatMap((d) => d.claims.map((c) => c.nodeId)))];
+  const leafRows = leafIds.length ? db.select({ id: nodes.id, kind: nodes.kind, label: nodes.label }).from(nodes).where(inArray(nodes.id, leafIds)).all() : [];
+  const leafById = new Map(leafRows.map((l) => [l.id, l]));
+
+  const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
+  const tileByNodeId = new Map(tileRows.map((t) => [t.nodeId, t]));
 
   return rows.map((r, i) => {
-    const d = details[i];
-    const tasks = [...new Set(d.claims.map((c) => c.taskId))].map((id) => taskById.get(id)!);
-    return { ...d, tasks, tile: tileById.get(tasks[0].tileId)!, team: r.team };
+    const d = details[i]!;
+    const claimedNodeIds = [...new Set(d.claims.map((c) => c.nodeId))];
+    const leaves = claimedNodeIds.map((id) => leafById.get(id)!).filter(Boolean);
+    const firstLeafId = claimedNodeIds[0];
+    const tile = firstLeafId ? tileForLeaf(db, firstLeafId, tileByNodeId) : null;
+    return { ...d, leaves, tile: tile!, team: r.team };
   });
 }
 

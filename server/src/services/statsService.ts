@@ -1,10 +1,8 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import {
-  bingoLines, draftPicks, stageTransitions, submissions, teamCompletedLines,
-  teamPointAdjustments, teamTaskProgress, teams, tileTasks, tiles, users,
-} from "../db/schema";
+import { bingoLines, draftPicks, nodeEdges, nodes, stageTransitions, submissions, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
+import { findAncestorIds } from "./graphService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -19,7 +17,7 @@ function displayName(user: MinimalUser): string {
 export interface PointsOverTimePoint {
   at: Date;
   teamId: string;
-  source: "task" | "line" | "adjustment";
+  source: "node" | "adjustment";
   label: string;
   delta: number;
   cumulativePoints: number;
@@ -34,35 +32,32 @@ export function getPointsOverTime(db: Db, bingoId: string): PointsOverTimePoint[
   const teamIds = teamRows.map((t) => t.id);
   if (teamIds.length === 0) return [];
 
-  const taskRows = db
-    .select({ teamId: teamTaskProgress.teamId, pointsAwarded: teamTaskProgress.pointsAwarded, completedAt: teamTaskProgress.completedAt, taskLabel: tileTasks.label, tileName: tiles.name })
-    .from(teamTaskProgress)
-    .innerJoin(tileTasks, eq(teamTaskProgress.taskId, tileTasks.id))
-    .innerJoin(tiles, eq(tileTasks.tileId, tiles.id))
-    .where(and(inArray(teamTaskProgress.teamId, teamIds), eq(teamTaskProgress.status, "completed")))
-    .all();
-  const taskEvents = taskRows
-    .filter((r) => r.completedAt)
-    .map((r) => ({ at: r.completedAt as Date, teamId: r.teamId, source: "task" as const, label: `${r.tileName} — ${r.taskLabel}`, delta: r.pointsAwarded }));
+  const stateRows = db.select().from(teamNodeState).where(inArray(teamNodeState.teamId, teamIds)).all();
+  const nodeIds = [...new Set(stateRows.map((r) => r.nodeId))];
+  const nodeRows = nodeIds.length ? db.select().from(nodes).where(inArray(nodes.id, nodeIds)).all() : [];
+  const nodeById = new Map(nodeRows.map((n) => [n.id, n]));
 
-  const lineRows = db
-    .select({ teamId: teamCompletedLines.teamId, completedAt: teamCompletedLines.completedAt, lineType: bingoLines.lineType, lineIndex: bingoLines.lineIndex, points: bingoLines.points })
-    .from(teamCompletedLines)
-    .innerJoin(bingoLines, eq(teamCompletedLines.bingoLineId, bingoLines.id))
-    .where(inArray(teamCompletedLines.teamId, teamIds))
-    .all();
-  const lineEvents = lineRows.map((r) => ({
-    at: r.completedAt,
-    teamId: r.teamId,
-    source: "line" as const,
-    label: `${r.lineType} ${r.lineIndex + 1} line bonus`,
-    delta: r.points,
-  }));
+  const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
+  const tileByNodeId = new Map(tileRows.map((t) => [t.nodeId, t]));
+  const lineRows = db.select().from(bingoLines).where(eq(bingoLines.bingoId, bingoId)).all();
+  const lineByNodeId = new Map(lineRows.map((l) => [l.nodeId, l]));
+
+  function labelFor(nodeId: string): string {
+    const line = lineByNodeId.get(nodeId);
+    if (line) return `${line.lineType} ${line.lineIndex + 1} line bonus`;
+    const directTile = tileByNodeId.get(nodeId);
+    const node = nodeById.get(nodeId);
+    if (directTile) return directTile.name;
+    const ancestorTile = [...findAncestorIds(db, nodeId)].map((id) => tileByNodeId.get(id)).find((t): t is NonNullable<typeof t> => !!t);
+    return ancestorTile ? `${ancestorTile.name} — ${node?.label ?? "Task"}` : node?.label ?? "Bonus";
+  }
+
+  const nodeEvents = stateRows.map((r) => ({ at: r.completedAt, teamId: r.teamId, source: "node" as const, label: labelFor(r.nodeId), delta: r.pointsAwarded }));
 
   const adjustmentRows = db.select().from(teamPointAdjustments).where(eq(teamPointAdjustments.bingoId, bingoId)).all();
   const adjustmentEvents = adjustmentRows.map((a) => ({ at: a.createdAt, teamId: a.teamId, source: "adjustment" as const, label: a.reason, delta: a.amount }));
 
-  const all = [...taskEvents, ...lineEvents, ...adjustmentEvents].sort((a, b) => a.at.getTime() - b.at.getTime());
+  const all = [...nodeEvents, ...adjustmentEvents].sort((a, b) => a.at.getTime() - b.at.getTime());
 
   const running = new Map<string, number>();
   return all.map((e) => {
@@ -105,39 +100,51 @@ export function getTimeline(db: Db, bingoId: string): TimelineEvent[] {
     label: `${teamById.get(r.teamId)?.name ?? "A team"} drafted ${displayName(r.user)}`,
   }));
 
-  const lineRows = db
-    .select({ teamId: teamCompletedLines.teamId, completedAt: teamCompletedLines.completedAt, lineType: bingoLines.lineType, lineIndex: bingoLines.lineIndex, points: bingoLines.points })
-    .from(teamCompletedLines)
-    .innerJoin(bingoLines, eq(teamCompletedLines.bingoLineId, bingoLines.id))
-    .where(inArray(teamCompletedLines.teamId, teamIds))
-    .all();
-  const lineEvents: TimelineEvent[] = lineRows.map((r) => ({
-    at: r.completedAt,
-    type: "line_completed",
-    teamId: r.teamId,
-    label: `${teamById.get(r.teamId)?.name ?? "A team"} completed a ${r.lineType} line (+${r.points})`,
-  }));
+  const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
+  const tileByNodeId = new Map(tileRows.map((t) => [t.nodeId, t]));
+  const tileNodeIds = tileRows.map((t) => t.nodeId);
 
-  const taskRows = db
-    .select({ teamId: teamTaskProgress.teamId, taskId: teamTaskProgress.taskId, completedAt: teamTaskProgress.completedAt, taskLabel: tileTasks.label, tileName: tiles.name })
-    .from(teamTaskProgress)
-    .innerJoin(tileTasks, eq(teamTaskProgress.taskId, tileTasks.id))
-    .innerJoin(tiles, eq(tileTasks.tileId, tiles.id))
-    .where(and(inArray(teamTaskProgress.teamId, teamIds), eq(teamTaskProgress.status, "completed")))
-    .all()
-    .filter((r) => r.completedAt);
+  const lineRows = db.select().from(bingoLines).where(eq(bingoLines.bingoId, bingoId)).all();
+  const lineByNodeId = new Map(lineRows.map((l) => [l.nodeId, l]));
+  const lineNodeIds = lineRows.map((l) => l.nodeId);
+  const lineStateRows = lineNodeIds.length
+    ? db.select().from(teamNodeState).where(and(inArray(teamNodeState.teamId, teamIds), inArray(teamNodeState.nodeId, lineNodeIds))).all()
+    : [];
+  const lineEvents: TimelineEvent[] = lineStateRows.map((r) => {
+    const line = lineByNodeId.get(r.nodeId)!;
+    return {
+      at: r.completedAt,
+      type: "line_completed",
+      teamId: r.teamId,
+      label: `${teamById.get(r.teamId)?.name ?? "A team"} completed a ${line.lineType} line (+${r.pointsAwarded})`,
+    };
+  });
 
-  const firstByTask = new Map<string, (typeof taskRows)[number]>();
-  for (const r of taskRows) {
-    const existing = firstByTask.get(r.taskId);
-    if (!existing || r.completedAt!.getTime() < existing.completedAt!.getTime()) firstByTask.set(r.taskId, r);
+  // "Task" here means any node that's a direct child of a tile's node.
+  const taskEdges = tileNodeIds.length ? db.select({ parentId: nodeEdges.parentId, childId: nodeEdges.childId }).from(nodeEdges).where(inArray(nodeEdges.parentId, tileNodeIds)).all() : [];
+  const taskNodeIds = taskEdges.map((e) => e.childId);
+  const tileIdByTaskNode = new Map(taskEdges.map((e) => [e.childId, e.parentId]));
+  const taskNodeRows = taskNodeIds.length ? db.select().from(nodes).where(inArray(nodes.id, taskNodeIds)).all() : [];
+  const taskNodeById = new Map(taskNodeRows.map((n) => [n.id, n]));
+
+  const taskStateRows = taskNodeIds.length
+    ? db.select().from(teamNodeState).where(and(inArray(teamNodeState.teamId, teamIds), inArray(teamNodeState.nodeId, taskNodeIds))).all()
+    : [];
+  const firstByTask = new Map<string, (typeof taskStateRows)[number]>();
+  for (const r of taskStateRows) {
+    const existing = firstByTask.get(r.nodeId);
+    if (!existing || r.completedAt.getTime() < existing.completedAt.getTime()) firstByTask.set(r.nodeId, r);
   }
-  const firstEvents: TimelineEvent[] = [...firstByTask.values()].map((r) => ({
-    at: r.completedAt as Date,
-    type: "first_completion",
-    teamId: r.teamId,
-    label: `${teamById.get(r.teamId)?.name ?? "A team"} was first to complete ${r.tileName} — ${r.taskLabel}`,
-  }));
+  const firstEvents: TimelineEvent[] = [...firstByTask.values()].map((r) => {
+    const tile = tileByNodeId.get(tileIdByTaskNode.get(r.nodeId)!);
+    const node = taskNodeById.get(r.nodeId);
+    return {
+      at: r.completedAt,
+      type: "first_completion",
+      teamId: r.teamId,
+      label: `${teamById.get(r.teamId)?.name ?? "A team"} was first to complete ${tile?.name ?? ""} — ${node?.label ?? "Task"}`,
+    };
+  });
 
   return [...stageEvents, ...pickEvents, ...lineEvents, ...firstEvents].sort((a, b) => a.at.getTime() - b.at.getTime());
 }
@@ -185,29 +192,32 @@ export interface TileHeatmapCell {
 }
 
 // One cell per (team, tile) — completedTasks/totalTasks lets the client shade
-// by completion fraction rather than a binary done/not-done.
+// by completion fraction rather than a binary done/not-done. "Task" again
+// means a direct child of the tile's node.
 export function getTileHeatmap(db: Db, bingoId: string): TileHeatmapCell[] {
   const teamIds = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.id);
-  const tileIds = db.select({ id: tiles.id }).from(tiles).where(eq(tiles.bingoId, bingoId)).all().map((t) => t.id);
+  const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
+  const tileIds = tileRows.map((t) => t.id);
   if (teamIds.length === 0 || tileIds.length === 0) return [];
 
-  const taskRows = db.select({ id: tileTasks.id, tileId: tileTasks.tileId }).from(tileTasks).where(inArray(tileTasks.tileId, tileIds)).all();
-  const taskIds = taskRows.map((t) => t.id);
-  const tileByTask = new Map(taskRows.map((t) => [t.id, t.tileId]));
+  const tileIdByNodeId = new Map(tileRows.map((t) => [t.nodeId, t.id]));
+  const tileNodeIds = tileRows.map((t) => t.nodeId);
+  const taskEdges = db.select({ parentId: nodeEdges.parentId, childId: nodeEdges.childId }).from(nodeEdges).where(inArray(nodeEdges.parentId, tileNodeIds)).all();
+  const taskIds = taskEdges.map((e) => e.childId);
+  const tileByTask = new Map(taskEdges.map((e) => [e.childId, tileIdByNodeId.get(e.parentId)!]));
   const totalTasksByTile = new Map<string, number>();
-  for (const t of taskRows) totalTasksByTile.set(t.tileId, (totalTasksByTile.get(t.tileId) ?? 0) + 1);
+  for (const e of taskEdges) {
+    const tileId = tileIdByNodeId.get(e.parentId)!;
+    totalTasksByTile.set(tileId, (totalTasksByTile.get(tileId) ?? 0) + 1);
+  }
 
   const progressRows = taskIds.length
-    ? db
-        .select({ teamId: teamTaskProgress.teamId, taskId: teamTaskProgress.taskId })
-        .from(teamTaskProgress)
-        .where(and(inArray(teamTaskProgress.teamId, teamIds), inArray(teamTaskProgress.taskId, taskIds), eq(teamTaskProgress.status, "completed")))
-        .all()
+    ? db.select({ teamId: teamNodeState.teamId, nodeId: teamNodeState.nodeId }).from(teamNodeState).where(and(inArray(teamNodeState.teamId, teamIds), inArray(teamNodeState.nodeId, taskIds))).all()
     : [];
 
   const completedByTeamTile = new Map<string, number>();
   for (const p of progressRows) {
-    const tileId = tileByTask.get(p.taskId)!;
+    const tileId = tileByTask.get(p.nodeId)!;
     const key = `${p.teamId}:${tileId}`;
     completedByTeamTile.set(key, (completedByTeamTile.get(key) ?? 0) + 1);
   }

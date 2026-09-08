@@ -1,159 +1,46 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import {
-  bingoLineTiles, claims, requirementNodes, submissions, teamCompletedLines, teamTaskProgress, tileTasks, tileWildcards,
-} from "../db/schema";
+import { claims, submissions, teamNodeState, teams, tileWildcards } from "../db/schema";
 import { ServiceError } from "./errors";
-import { evaluateNode, getApprovedClaimsForTask, getRequirementTree } from "./requirementService";
+import { awardedPoints, evaluateGraph } from "./engine";
+import { getApprovedClaims, getFullGraph } from "./graphService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
-function getTileTasksOrdered(tx: Tx, tileId: string) {
-  return tx.select().from(tileTasks).where(eq(tileTasks.tileId, tileId)).orderBy(tileTasks.sortOrder).all();
+// Distinct leaf nodes a submission's claims target.
+export function getSubmissionNodeIds(tx: Tx, submissionId: string): string[] {
+  const rows = tx.select({ nodeId: claims.nodeId }).from(claims).where(eq(claims.submissionId, submissionId)).all();
+  return [...new Set(rows.map((r) => r.nodeId))];
 }
 
-// Distinct tasks a submission's claims touch (via their leaves).
-export function getSubmissionTaskIds(tx: Tx, submissionId: string): string[] {
-  const rows = tx
-    .select({ taskId: requirementNodes.taskId })
-    .from(claims)
-    .innerJoin(requirementNodes, eq(claims.nodeId, requirementNodes.id))
-    .where(eq(claims.submissionId, submissionId))
-    .all();
-  return [...new Set(rows.map((r) => r.taskId))];
-}
+// Re-evaluates the whole bingo's graph against a team's approved claims and
+// overwrites teamNodeState with exactly the currently-complete nodes. This is
+// a full recompute, not an incremental patch — see docs/node-graph-model.md
+// §5. Returns the new state so callers can diff against what was there
+// before (e.g. to report what an approval newly completed).
+export function rebuildTeamState(tx: Tx, teamId: string): Map<string, { completedAt: Date; pointsAwarded: number }> {
+  const team = tx.select({ bingoId: teams.bingoId }).from(teams).where(eq(teams.id, teamId)).get();
+  if (!team) throw new ServiceError(404, "Team not found");
 
-// Submissions of a team with the given status that touch a task.
-function getTeamSubmissionsForTask(tx: Tx, teamId: string, taskId: string, status: "pending" | "approved") {
-  return tx
-    .selectDistinct({ id: submissions.id, reviewedAt: submissions.reviewedAt, pointsAwarded: submissions.pointsAwarded })
-    .from(submissions)
-    .innerJoin(claims, eq(claims.submissionId, submissions.id))
-    .innerJoin(requirementNodes, eq(claims.nodeId, requirementNodes.id))
-    .where(and(eq(submissions.teamId, teamId), eq(submissions.status, status), eq(requirementNodes.taskId, taskId)))
-    .all();
-}
+  const { engineNodes, childrenOf, nodesById } = getFullGraph(tx, team.bingoId);
+  const approvedClaims = getApprovedClaims(tx, teamId, team.bingoId);
+  const results = evaluateGraph(engineNodes, childrenOf, approvedClaims);
 
-function getMostRecentApprovedPoints(tx: Tx, teamId: string, taskId: string): number | null {
-  const rows = getTeamSubmissionsForTask(tx, teamId, taskId, "approved");
-  if (rows.length === 0) return null;
-  const mostRecent = rows.reduce((latest, row) =>
-    (row.reviewedAt?.getTime() ?? 0) > (latest.reviewedAt?.getTime() ?? 0) ? row : latest,
-  );
-  return mostRecent.pointsAwarded ?? null;
-}
-
-function getOrCreateProgress(tx: Tx, teamId: string, taskId: string) {
-  const existing = tx
-    .select()
-    .from(teamTaskProgress)
-    .where(and(eq(teamTaskProgress.teamId, teamId), eq(teamTaskProgress.taskId, taskId)))
-    .get();
-  if (existing) return existing;
-  return tx.insert(teamTaskProgress).values({ teamId, taskId }).returning().get();
-}
-
-// Recompute a not-yet-completed task's status from the team's remaining
-// submissions. Completed tasks are never downgraded.
-export function refreshTaskProgressStatus(tx: Tx, teamId: string, taskId: string): void {
-  const progress = getOrCreateProgress(tx, teamId, taskId);
-  if (progress.status === "completed") return;
-  const status = getTeamSubmissionsForTask(tx, teamId, taskId, "pending").length > 0
-    ? "pending_approval"
-    : getTeamSubmissionsForTask(tx, teamId, taskId, "approved").length > 0
-      ? "in_progress"
-      : "not_started";
-  tx.update(teamTaskProgress).set({ status }).where(eq(teamTaskProgress.id, progress.id)).run();
-}
-
-function isTileCompleteForTeam(tx: Tx, teamId: string, tileId: string): boolean {
-  const taskIds = tx.select({ id: tileTasks.id }).from(tileTasks).where(eq(tileTasks.tileId, tileId)).all().map((r) => r.id);
-  if (taskIds.length === 0) return false;
-  const completedCount = tx
-    .select()
-    .from(teamTaskProgress)
-    .where(
-      and(
-        eq(teamTaskProgress.teamId, teamId),
-        inArray(teamTaskProgress.taskId, taskIds),
-        eq(teamTaskProgress.status, "completed"),
-      ),
-    )
-    .all().length;
-  return completedCount === taskIds.length;
-}
-
-// A tile completing may complete one or more lines. Returns the ids of lines
-// newly recorded as complete (skips lines already recorded for this team).
-function recordCompletedLinesForTile(tx: Tx, teamId: string, tileId: string): string[] {
-  if (!isTileCompleteForTeam(tx, teamId, tileId)) return [];
-
-  const lineIds = tx
-    .select({ id: bingoLineTiles.bingoLineId })
-    .from(bingoLineTiles)
-    .where(eq(bingoLineTiles.tileId, tileId))
-    .all()
-    .map((r) => r.id);
-
-  const newlyCompleted: string[] = [];
-  for (const lineId of lineIds) {
-    const already = tx
-      .select()
-      .from(teamCompletedLines)
-      .where(and(eq(teamCompletedLines.teamId, teamId), eq(teamCompletedLines.bingoLineId, lineId)))
-      .get();
-    if (already) continue;
-
-    const lineTileIds = tx
-      .select({ tileId: bingoLineTiles.tileId })
-      .from(bingoLineTiles)
-      .where(eq(bingoLineTiles.bingoLineId, lineId))
-      .all()
-      .map((r) => r.tileId);
-
-    if (lineTileIds.every((tid) => isTileCompleteForTeam(tx, teamId, tid))) {
-      tx.insert(teamCompletedLines).values({ teamId, bingoLineId: lineId }).run();
-      newlyCompleted.push(lineId);
+  const newState = new Map<string, { completedAt: Date; pointsAwarded: number }>();
+  for (const node of engineNodes) {
+    const r = results.get(node.id);
+    if (r?.complete && r.completedAt) {
+      newState.set(node.id, { completedAt: r.completedAt, pointsAwarded: awardedPoints(node.id, results, nodesById) });
     }
   }
-  return newlyCompleted;
-}
 
-// When a task completes, release withheld points on an already-completed next
-// task that had pointsRequirePrevious.
-function releaseWithheldPointsOnNext(tx: Tx, teamId: string, tileId: string, fromSortOrder: number): void {
-  const tasksOrdered = getTileTasksOrdered(tx, tileId);
-  const idx = tasksOrdered.findIndex((t) => t.sortOrder === fromSortOrder);
-  if (idx < 0 || idx + 1 >= tasksOrdered.length) return;
-  const nextTask = tasksOrdered[idx + 1];
-  const progress = getOrCreateProgress(tx, teamId, nextTask.id);
-  if (progress.status === "completed" && nextTask.pointsRequirePrevious && progress.pointsAwarded === 0) {
-    const releasedPoints = getMostRecentApprovedPoints(tx, teamId, nextTask.id) ?? nextTask.points;
-    tx.update(teamTaskProgress).set({ pointsAwarded: releasedPoints }).where(eq(teamTaskProgress.id, progress.id)).run();
+  tx.delete(teamNodeState).where(eq(teamNodeState.teamId, teamId)).run();
+  for (const [nodeId, state] of newState) {
+    tx.insert(teamNodeState).values({ teamId, nodeId, completedAt: state.completedAt, pointsAwarded: state.pointsAwarded }).run();
   }
-}
-
-export interface ApproveSubmissionParams {
-  submissionId: string;
-  reviewedByUserId: string;
-  reviewerNotes?: string;
-  // Replaces task.points for every task this approval completes.
-  pointsAwardedOverride?: number;
-  // Required when the submission claims a MANUAL leaf — the mod decides
-  // completion directly instead of it being computed from item claims.
-  // Ignored otherwise.
-  taskCompleted?: boolean;
-}
-
-export interface ApproveSubmissionResult {
-  submission: typeof submissions.$inferSelect;
-  // Every task touched by the submission's claims.
-  taskIds: string[];
-  completedTaskIds: string[];
-  pointsAwarded: number;
-  completedLineIds: string[];
+  return newState;
 }
 
 function assertWildcardCapsNotExceeded(tx: Tx, teamId: string, submissionId: string): void {
@@ -167,91 +54,63 @@ function assertWildcardCapsNotExceeded(tx: Tx, teamId: string, submissionId: str
   for (const wildcardId of new Set(wildcardIds)) {
     const wildcard = tx.select().from(tileWildcards).where(eq(tileWildcards.id, wildcardId)).get();
     if (!wildcard) throw new ServiceError(404, "Wildcard not found");
-    const approvedUses = tx
+    const priorApprovedUses = tx
       .select({ id: claims.id })
       .from(claims)
       .innerJoin(submissions, eq(claims.submissionId, submissions.id))
       .where(and(eq(submissions.teamId, teamId), eq(submissions.status, "approved"), eq(claims.wildcardId, wildcardId)))
       .all().length;
     const thisUses = wildcardIds.filter((id) => id === wildcardId).length;
-    if (approvedUses + thisUses > wildcard.maxRedemptionsPerTeam) {
+    if (priorApprovedUses + thisUses > wildcard.maxRedemptionsPerTeam) {
       throw new ServiceError(400, `${wildcard.itemName} has already been redeemed the maximum number of times for this team`);
     }
   }
 }
 
+export interface ApproveSubmissionParams {
+  submissionId: string;
+  reviewedByUserId: string;
+  reviewerNotes?: string;
+}
+
+export interface ApproveSubmissionResult {
+  submission: typeof submissions.$inferSelect;
+  // Every leaf node the submission's claims touched.
+  nodeIds: string[];
+  // Nodes (any kind, anywhere in the graph) newly completed by this approval.
+  newlyCompletedNodeIds: string[];
+  // Sum of points newly awarded by this approval.
+  pointsDelta: number;
+}
+
+// Approving is the only thing that makes a submission's claims count — a
+// MANUAL leaf has no separate "completed" decision; approving its claim IS
+// the decision (see docs/node-graph-model.md §5). Points are never set here;
+// they come from the graph via rebuildTeamState.
 export function approveSubmission(db: Db, params: ApproveSubmissionParams): ApproveSubmissionResult {
   return db.transaction((tx): ApproveSubmissionResult => {
     const submission = tx.select().from(submissions).where(eq(submissions.id, params.submissionId)).get();
     if (!submission) throw new ServiceError(404, "Submission not found");
     if (submission.status !== "pending") throw new ServiceError(409, "Submission has already been reviewed");
 
-    const taskIds = getSubmissionTaskIds(tx, submission.id);
-    const tasks = tx.select().from(tileTasks).where(inArray(tileTasks.id, taskIds)).all();
-    if (tasks.some((t) => t.scoringMode === "manual") && params.taskCompleted === undefined) {
-      throw new ServiceError(400, "taskCompleted is required when approving a manual-scoring task");
-    }
-
     assertWildcardCapsNotExceeded(tx, submission.teamId, submission.id);
 
     tx.update(submissions)
-      .set({
-        status: "approved",
-        reviewedAt: new Date(),
-        reviewedByUserId: params.reviewedByUserId,
-        reviewerNotes: params.reviewerNotes ?? null,
-        pointsAwarded: params.pointsAwardedOverride ?? null,
-        updatedAt: new Date(),
-      })
+      .set({ status: "approved", reviewedAt: new Date(), reviewedByUserId: params.reviewedByUserId, reviewerNotes: params.reviewerNotes ?? null, updatedAt: new Date() })
       .where(eq(submissions.id, submission.id))
       .run();
 
-    const completedTaskIds: string[] = [];
-    const completedLineIds: string[] = [];
-    let pointsAwarded = 0;
+    const nodeIds = getSubmissionNodeIds(tx, submission.id);
+    const before = tx.select().from(teamNodeState).where(eq(teamNodeState.teamId, submission.teamId)).all();
+    const beforeIds = new Set(before.map((r) => r.nodeId));
+    const beforePoints = before.reduce((sum, r) => sum + r.pointsAwarded, 0);
 
-    for (const task of tasks) {
-      const progress = getOrCreateProgress(tx, submission.teamId, task.id);
-      if (progress.status === "completed") continue;
-
-      const root = getRequirementTree(tx, task.id);
-      if (!root) throw new ServiceError(500, `Task ${task.id} has no requirement tree`);
-      const complete = evaluateNode(
-        root,
-        getApprovedClaimsForTask(tx, submission.teamId, task.id),
-        params.taskCompleted ?? false,
-      );
-      if (!complete) {
-        refreshTaskProgressStatus(tx, submission.teamId, task.id);
-        continue;
-      }
-
-      const tasksOrdered = getTileTasksOrdered(tx, task.tileId);
-      const idx = tasksOrdered.findIndex((t) => t.id === task.id);
-      const prevTask = idx > 0 ? tasksOrdered[idx - 1] : null;
-      const prevCompleted = prevTask
-        ? tx
-            .select()
-            .from(teamTaskProgress)
-            .where(and(eq(teamTaskProgress.teamId, submission.teamId), eq(teamTaskProgress.taskId, prevTask.id)))
-            .get()?.status === "completed"
-        : true;
-      const withheld = task.pointsRequirePrevious && !prevCompleted;
-      const taskPoints = withheld ? 0 : (params.pointsAwardedOverride ?? task.points);
-
-      tx.update(teamTaskProgress)
-        .set({ status: "completed", pointsAwarded: taskPoints, completedAt: new Date() })
-        .where(eq(teamTaskProgress.id, progress.id))
-        .run();
-      completedTaskIds.push(task.id);
-      pointsAwarded += taskPoints;
-
-      releaseWithheldPointsOnNext(tx, submission.teamId, task.tileId, task.sortOrder);
-      completedLineIds.push(...recordCompletedLinesForTile(tx, submission.teamId, task.tileId));
-    }
+    const after = rebuildTeamState(tx, submission.teamId);
+    const afterPoints = [...after.values()].reduce((sum, s) => sum + s.pointsAwarded, 0);
+    const newlyCompletedNodeIds = [...after.keys()].filter((id) => !beforeIds.has(id));
 
     const updatedSubmission = tx.select().from(submissions).where(eq(submissions.id, submission.id)).get()!;
-    return { submission: updatedSubmission, taskIds, completedTaskIds, pointsAwarded, completedLineIds };
+    return { submission: updatedSubmission, nodeIds, newlyCompletedNodeIds, pointsDelta: afterPoints - beforePoints };
   });
 }
 
@@ -261,27 +120,21 @@ export interface RejectSubmissionParams {
   reviewerNotes?: string;
 }
 
-export function rejectSubmission(db: Db, params: RejectSubmissionParams): { submission: typeof submissions.$inferSelect; taskIds: string[] } {
+// A pending submission's claims never counted toward teamNodeState, so
+// rejecting one is a pure status flip — nothing to recompute.
+export function rejectSubmission(db: Db, params: RejectSubmissionParams): { submission: typeof submissions.$inferSelect; nodeIds: string[] } {
   return db.transaction((tx) => {
     const submission = tx.select().from(submissions).where(eq(submissions.id, params.submissionId)).get();
     if (!submission) throw new ServiceError(404, "Submission not found");
     if (submission.status !== "pending") throw new ServiceError(409, "Submission has already been reviewed");
 
     tx.update(submissions)
-      .set({
-        status: "rejected",
-        reviewedAt: new Date(),
-        reviewedByUserId: params.reviewedByUserId,
-        reviewerNotes: params.reviewerNotes ?? null,
-        updatedAt: new Date(),
-      })
+      .set({ status: "rejected", reviewedAt: new Date(), reviewedByUserId: params.reviewedByUserId, reviewerNotes: params.reviewerNotes ?? null, updatedAt: new Date() })
       .where(eq(submissions.id, submission.id))
       .run();
 
-    const taskIds = getSubmissionTaskIds(tx, submission.id);
-    for (const taskId of taskIds) refreshTaskProgressStatus(tx, submission.teamId, taskId);
-
+    const nodeIds = getSubmissionNodeIds(tx, submission.id);
     const updatedSubmission = tx.select().from(submissions).where(eq(submissions.id, submission.id)).get()!;
-    return { submission: updatedSubmission, taskIds };
+    return { submission: updatedSubmission, nodeIds };
   });
 }

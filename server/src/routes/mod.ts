@@ -38,25 +38,14 @@ router.patch(
     const submission = submissionService.getSubmissionById(db, submissionId);
     if (!submission) throw new ServiceError(404, "Submission not found");
 
-    const { action, reviewerNotes, pointsAwardedOverride, taskCompleted } = req.body as {
-      action?: "approve" | "reject";
-      reviewerNotes?: string;
-      pointsAwardedOverride?: number;
-      taskCompleted?: boolean; // required when the task's scoringMode is 'manual'
-    };
+    const { action, reviewerNotes } = req.body as { action?: "approve" | "reject"; reviewerNotes?: string };
 
     if (action === "approve") {
-      const result = approveSubmission(db, {
-        submissionId,
-        reviewedByUserId: req.user!.id,
-        reviewerNotes,
-        pointsAwardedOverride,
-        taskCompleted,
-      });
+      const result = approveSubmission(db, { submissionId, reviewedByUserId: req.user!.id, reviewerNotes });
       broadcast({
         type: "submission_reviewed",
         bingoId: req.bingo!.id,
-        payload: { teamId: submission.teamId, taskIds: result.taskIds },
+        payload: { teamId: submission.teamId, nodeIds: result.nodeIds },
       });
       res.json(result);
       return;
@@ -67,7 +56,7 @@ router.patch(
       broadcast({
         type: "submission_reviewed",
         bingoId: req.bingo!.id,
-        payload: { teamId: submission.teamId, taskIds: result.taskIds },
+        payload: { teamId: submission.teamId, nodeIds: result.nodeIds },
       });
       res.json(result);
       return;

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNodeInput } from "@bingo/shared";
@@ -155,6 +156,27 @@ describe("deleteSubtree / deleteNode", () => {
     db.transaction((tx) => deleteNode(tx, childId));
     expect(getNodeTree(db, rootId)!.children).toHaveLength(0);
     expect(db.select().from(nodes).all()).toHaveLength(1); // only the root is left
+  });
+});
+
+describe("presentation roots survive GC", () => {
+  it("deleting a line does not delete the tile nodes it pointed at", () => {
+    const bingo = seedBingo();
+    const tileNodeId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "ALL" }));
+    const tile = db.insert(schema.tiles).values({ bingoId: bingo.id, nodeId: tileNodeId, name: "T", boardRow: 0, boardCol: 0 }).returning().get();
+    const lineNodeId = db.transaction((tx) => {
+      const id = tx.insert(nodes).values({ bingoId: bingo.id, kind: "ALL", points: 15 }).returning().get().id;
+      tx.insert(nodeEdges).values({ parentId: id, childId: tileNodeId, sortOrder: 0 }).run();
+      return id;
+    });
+    db.insert(schema.bingoLines).values({ bingoId: bingo.id, nodeId: lineNodeId, lineType: "row", lineIndex: 0 }).run();
+
+    // Caller deletes the presentation row first (FK), then the node itself.
+    db.delete(schema.bingoLines).where(eq(schema.bingoLines.nodeId, lineNodeId)).run();
+    db.transaction((tx) => deleteSubtree(tx, lineNodeId));
+
+    expect(db.select().from(nodes).where(eq(nodes.id, tileNodeId)).get()).toBeDefined();
+    expect(db.select().from(schema.tiles).where(eq(schema.tiles.id, tile.id)).get()).toBeDefined();
   });
 });
 
