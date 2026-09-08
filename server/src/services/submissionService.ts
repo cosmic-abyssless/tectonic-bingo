@@ -2,7 +2,7 @@ import { eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { ClaimInput, NodeKind } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { claims, nodes, submissions, submissionScreenshots, teamNodeState, teams, tiles, tileWildcards, users } from "../db/schema";
+import { claims, nodes, submissions, submissionScreenshots, teamNodeState, teams, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { findAncestorIds } from "./graphService";
 
@@ -44,6 +44,9 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
     if (params.claims.length === 0) throw new ServiceError(400, "At least one claim is required");
 
     const nodeIds = [...new Set(params.claims.map((c) => c.nodeId))];
+    if (nodeIds.length !== params.claims.length) {
+      throw new ServiceError(400, "A submission may not claim the same requirement twice — combine into one claim with a quantity");
+    }
     const leaves = tx.select().from(nodes).where(inArray(nodes.id, nodeIds)).all();
     if (leaves.length !== nodeIds.length || leaves.some((n) => n.kind !== "ITEM" && n.kind !== "MANUAL")) {
       throw new ServiceError(400, "Claims must target requirement leaves");
@@ -85,12 +88,10 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
 
     for (const claim of params.claims) {
       const leaf = leafById.get(claim.nodeId)!;
-      if (leaf.kind === "ITEM" && !claim.itemName) throw new ServiceError(400, "itemName is required for item claims");
-      if (!claim.wildcardId) continue;
-      const wildcard = tx.select().from(tileWildcards).where(eq(tileWildcards.id, claim.wildcardId)).get();
-      if (!wildcard || wildcard.tileId !== tile.id) throw new ServiceError(400, "Wildcard does not belong to this tile");
-      if (wildcard.applicableNodeId && wildcard.applicableNodeId !== claim.nodeId) {
-        throw new ServiceError(400, "Wildcard is not applicable to this requirement");
+      if (leaf.kind !== "ITEM") continue;
+      if (!claim.itemName) throw new ServiceError(400, "itemName is required for item claims");
+      if (claim.itemName.toLowerCase() !== (leaf.itemName ?? "").toLowerCase()) {
+        throw new ServiceError(400, `itemName does not match this requirement (expected "${leaf.itemName}")`);
       }
     }
 
@@ -109,7 +110,6 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
           nodeId: claim.nodeId,
           itemName: claim.itemName ?? null,
           quantity: claim.quantity ?? 1,
-          wildcardId: claim.wildcardId ?? null,
         })
         .run();
     }
@@ -126,7 +126,6 @@ export interface ClaimRow {
   nodeId: string;
   itemName: string | null;
   quantity: number;
-  wildcardId: string | null;
 }
 
 export interface SubmissionDetails {

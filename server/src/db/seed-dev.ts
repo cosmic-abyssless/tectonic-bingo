@@ -8,7 +8,7 @@ import type { GraphNode, GraphNodeInput } from '@bingo/shared';
 import { db } from './index';
 import {
   users, bingos, bingoModerators, tileCategories,
-  tileWildcards, teams, teamMembers,
+  teams, teamMembers,
   signupQuestions, itemGroups, itemGroupItems,
 } from './schema';
 import { createTile, createTask, generateLines } from '../services/boardService';
@@ -61,13 +61,23 @@ async function main() {
     categories.push(row);
   }
 
-  // Reusable item groups (global, not bingo-scoped).
+  // Reusable item group (global, not bingo-scoped, not referenced by any
+  // node — picking it in the admin UI expands it into plain ITEM leaves at
+  // authoring time; see docs/item-quantity-model.md §6). Seeded purely so
+  // the admin's item-or-group search has something to find.
   const [cerbGroup] = await db.insert(itemGroups).values({ name: 'Cerberus uniques', description: 'Any Cerberus unique drop.' }).returning();
   await db.insert(itemGroupItems).values(
     ['Primordial crystal', 'Pegasian crystal', 'Eternal crystal', 'Smouldering stone', 'Hellpuppy', 'Jar of souls'].map((itemName) => ({ groupId: cerbGroup.id, itemName })),
   );
+  const CERB_UNIQUES = ['Primordial crystal', 'Pegasian crystal', 'Eternal crystal', 'Smouldering stone', 'Hellpuppy', 'Jar of souls'];
 
-  const item = (itemNames: string[], extra: Partial<GraphNodeInput> = {}): GraphNodeInput => ({ kind: 'ITEM', itemNames, ...extra });
+  // A single-name leaf — the smallest unit; "how many" is always decided by
+  // whatever wraps it (SUM/COUNT), never by the leaf itself.
+  const item = (itemName: string, extra: Partial<GraphNodeInput> = {}): GraphNodeInput => ({ kind: 'ITEM', itemName, ...extra });
+  // "N total, duplicates count" — a SUM over one leaf per name.
+  const sum = (quantity: number, itemNames: string[], extra: Partial<GraphNodeInput> = {}): GraphNodeInput => ({
+    kind: 'SUM', quantity, children: itemNames.map((n) => item(n)), ...extra,
+  });
 
   interface TaskDef {
     label: string;
@@ -81,8 +91,7 @@ async function main() {
   }
 
   // Each task is a node (label/points/description + gates + a requirement
-  // shape). Covers every node kind: ALL, ANY, COUNT, ITEM (inline names,
-  // group, quantity, distinctItems) and MANUAL.
+  // shape). Covers every node kind: ALL, ANY, COUNT, SUM, ITEM and MANUAL.
   const tileDefs: Array<{
     row: number; col: number; categoryIndex: number; name: string;
     hasFreezePeriod?: boolean; freezeDurationMinutes?: number;
@@ -91,22 +100,24 @@ async function main() {
     {
       row: 0, col: 0, categoryIndex: 0, name: 'Vorkath',
       tasks: [
-        { label: 'Part A', points: 25, description: 'Obtain a Vorki pet.', requirement: item(['Vorki']) },
-        { label: 'Part B', points: 35, description: 'Obtain a Draconic visage.', pointsRequirePrevious: true, requirement: item(['Draconic visage']) },
+        { label: 'Part A', points: 25, description: 'Obtain a Vorki pet.', requirement: item('Vorki') },
+        { label: 'Part B', points: 35, description: 'Obtain a Draconic visage.', pointsRequirePrevious: true, requirement: item('Draconic visage') },
       ],
     },
     {
       row: 0, col: 1, categoryIndex: 0, name: 'Zulrah',
       tasks: [{
         label: 'Part A', points: 50, description: 'Obtain a Tanzanite fang and a Magic fang.',
-        requirement: { kind: 'ALL', children: [item(['Tanzanite fang']), item(['Magic fang'])] },
+        requirement: { kind: 'ALL', children: [item('Tanzanite fang'), item('Magic fang')] },
       }],
     },
     {
       row: 0, col: 2, categoryIndex: 0, name: 'Cerberus',
       tasks: [
-        { label: 'Part A', points: 25, description: 'Obtain your first Cerberus unique.', requirement: item([], { itemGroupIds: [cerbGroup.id] }) },
-        { label: 'Part B', points: 40, description: 'Obtain another Cerberus unique.', submitRequiresPrevious: true, requirement: item([], { itemGroupIds: [cerbGroup.id] }) },
+        // "Any one unique" = SUM(1) over one leaf per name — the jar is just
+        // one more leaf, no wildcard needed (see docs/item-quantity-model.md §7).
+        { label: 'Part A', points: 25, description: 'Obtain your first Cerberus unique.', requirement: sum(1, CERB_UNIQUES) },
+        { label: 'Part B', points: 40, description: 'Obtain another Cerberus unique.', submitRequiresPrevious: true, requirement: sum(1, CERB_UNIQUES) },
       ],
     },
     {
@@ -116,8 +127,8 @@ async function main() {
         requirement: {
           kind: 'ANY',
           children: [
-            { kind: 'ALL', children: ["Ahrim's hood", "Ahrim's robetop", "Ahrim's robeskirt", "Ahrim's staff"].map((n) => item([n])) },
-            { kind: 'ALL', children: ["Dharok's helm", "Dharok's platebody", "Dharok's platelegs", "Dharok's greataxe"].map((n) => item([n])) },
+            { kind: 'ALL', children: ["Ahrim's hood", "Ahrim's robetop", "Ahrim's robeskirt", "Ahrim's staff"].map((n) => item(n)) },
+            { kind: 'ALL', children: ["Dharok's helm", "Dharok's platebody", "Dharok's platelegs", "Dharok's greataxe"].map((n) => item(n)) },
           ],
         },
       }],
@@ -126,27 +137,34 @@ async function main() {
       row: 1, col: 1, categoryIndex: 1, name: "K'ril Tsutsaroth",
       tasks: [{
         label: 'Part A', points: 25, description: 'Obtain two different unique drops.',
-        requirement: item(['Steam battlestaff', 'Zamorakian spear', 'Zamorak hilt'], { quantity: 2, distinctItems: true }),
+        // "2 distinct" = COUNT(2) over one leaf per unique name — replaces
+        // the old distinctItems flag; see docs/item-quantity-model.md §2.
+        requirement: { kind: 'COUNT', minCount: 2, children: ['Steam battlestaff', 'Zamorakian spear', 'Zamorak hilt'].map((n) => item(n)) },
       }],
     },
     {
       row: 1, col: 2, categoryIndex: 1, name: 'Gauntlet',
-      tasks: [{ label: 'Part A', points: 35, description: 'Complete the Gauntlet.', allowsPreLoad: true, requirement: item(['Crystal armour seed']) }],
+      tasks: [{
+        label: 'Part A', points: 35, description: 'Obtain 3 Crystal armour seeds (duplicates count).', allowsPreLoad: true,
+        // The flagship SUM case: "N of one exact item" — SUM(3) over a
+        // single leaf, not a quantity on the leaf itself.
+        requirement: sum(3, ['Crystal armour seed']),
+      }],
     },
     {
       row: 2, col: 0, categoryIndex: 2, name: 'Colosseum',
       hasFreezePeriod: true, freezeDurationMinutes: 120,
       tasks: [
-        { label: 'Waves 1-3', points: 20, description: 'Clear waves 1 through 3.', requirement: item(['Waves 1-3 proof']) },
-        { label: 'Waves 4-6', points: 20, description: 'Clear waves 4 through 6.', submitRequiresPrevious: true, requirement: item(['Waves 4-6 proof']) },
-        { label: 'Waves 7-Sol', points: 20, description: 'Clear waves 7 through Sol Heredit.', submitRequiresPrevious: true, requirement: item(['Colosseum completion proof']) },
+        { label: 'Waves 1-3', points: 20, description: 'Clear waves 1 through 3.', requirement: item('Waves 1-3 proof') },
+        { label: 'Waves 4-6', points: 20, description: 'Clear waves 4 through 6.', submitRequiresPrevious: true, requirement: item('Waves 4-6 proof') },
+        { label: 'Waves 7-Sol', points: 20, description: 'Clear waves 7 through Sol Heredit.', submitRequiresPrevious: true, requirement: item('Colosseum completion proof') },
       ],
     },
     {
       row: 2, col: 1, categoryIndex: 2, name: 'Wintertodt',
       tasks: [{
         label: 'Part A', points: 20, description: 'Obtain any two of: Bruma torch, Pyromancer hood, Warm gloves.',
-        requirement: { kind: 'COUNT', minCount: 2, children: [item(['Bruma torch']), item(['Pyromancer hood']), item(['Warm gloves'])] },
+        requirement: { kind: 'COUNT', minCount: 2, children: ['Bruma torch', 'Pyromancer hood', 'Warm gloves'].map((n) => item(n)) },
       }],
     },
     {
@@ -161,8 +179,7 @@ async function main() {
     },
   ];
 
-  const tileRowsById: Record<string, { id: string }> = {};
-  // "Tile name/Task label" -> task node id, for wiring wildcards and sample submissions.
+  // "Tile name/Task label" -> task node id, for wiring sample submissions.
   const taskIdByKey: Record<string, string> = {};
 
   for (const def of tileDefs) {
@@ -175,7 +192,6 @@ async function main() {
       hasFreezePeriod: def.hasFreezePeriod ?? false,
       freezeDurationMinutes: def.freezeDurationMinutes ?? 0,
     });
-    tileRowsById[`${def.row},${def.col}`] = tile;
 
     // submitRequiresPrevious/pointsRequirePrevious resolve to the previous
     // sibling task's node id — the admin client will do this same resolution
@@ -197,16 +213,6 @@ async function main() {
       prevTaskNodeId = task.id;
     }
   }
-
-  const [cerbWildcard] = await db.insert(tileWildcards).values({
-    tileId: tileRowsById['0,2']!.id,
-    itemName: 'Cerberus jar',
-    maxRedemptionsPerTeam: 1,
-    description: 'Redeeming a Cerberus jar counts as a Cerberus unique for Part A.',
-    // Cerberus/Part A's requirement is a bare ITEM leaf, so the task's own
-    // node id already is that leaf's id.
-    applicableNodeId: taskIdByKey['Cerberus/Part A']!,
-  }).returning();
 
   // Rows + cols + both diagonals for the 3x3 board.
   generateLines(db, bingo, 15);
@@ -261,13 +267,14 @@ async function main() {
   rejectSubmission(db, { submissionId: alphaTodt.id, reviewedByUserId: admin.id, reviewerNotes: 'Screenshot does not show the team codeword.' });
 
   // Beta: one screenshot claiming two Wintertodt leaves at once (complete),
-  // Cerberus A via the jar wildcard (complete), GOTR manual pending.
+  // Cerberus A via the jar (just one more leaf in the SUM(1), not a
+  // wildcard), GOTR manual pending.
   const betaTodt = submit(teamBeta.id, memberB.id, [
     { nodeId: leaves('Wintertodt/Part A')[0]!, itemName: 'Bruma torch' },
     { nodeId: leaves('Wintertodt/Part A')[2]!, itemName: 'Warm gloves' },
   ]);
   approveSubmission(db, { submissionId: betaTodt.id, reviewedByUserId: admin.id });
-  const betaCerb = submit(teamBeta.id, captainB.id, [{ nodeId: leaves('Cerberus/Part A')[0]!, itemName: 'Cerberus jar', wildcardId: cerbWildcard.id }]);
+  const betaCerb = submit(teamBeta.id, captainB.id, [{ nodeId: leaves('Cerberus/Part A')[5]!, itemName: 'Jar of souls' }]);
   approveSubmission(db, { submissionId: betaCerb.id, reviewedByUserId: admin.id });
   submit(teamBeta.id, memberB.id, [{ nodeId: leaves('Custom Challenge: GOTR Speedrun/Part A')[0]! }]);
 

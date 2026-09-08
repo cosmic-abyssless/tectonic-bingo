@@ -1,8 +1,8 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNodeInput, NodeStatus } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { bingoLines, claims, nodeEdges, submissions, teamNodeState, tileCategories, tileWildcards, tiles } from "../db/schema";
+import { bingoLines, claims, nodeEdges, submissions, teamNodeState, tileCategories, tiles } from "../db/schema";
 import { ServiceError } from "./errors";
 import { deleteNode, deleteSubtree, getFullGraph, getNodeTree, getNodeTrees, insertSubtree, replaceSubtree } from "./graphService";
 
@@ -13,21 +13,13 @@ export function getCategories(db: Db, bingoId: string) {
   return db.select().from(tileCategories).where(eq(tileCategories.bingoId, bingoId)).orderBy(tileCategories.sortOrder).all();
 }
 
-// Full tile -> node tree (tasks are just the node's children) plus per-tile
-// wildcards and every line (with its own node), for one bingo.
+// Full tile -> node tree (tasks are just the node's children) for one bingo.
 export function getBoardTiles(db: Db, bingoId: string) {
   const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
-  const tileIds = tileRows.map((t) => t.id);
-  if (tileIds.length === 0) return [];
+  if (tileRows.length === 0) return [];
 
   const trees = getNodeTrees(db, tileRows.map((t) => t.nodeId));
-  const wildcardRows = db.select().from(tileWildcards).where(inArray(tileWildcards.tileId, tileIds)).all();
-
-  return tileRows.map((tile) => ({
-    ...tile,
-    node: trees.get(tile.nodeId)!,
-    wildcards: wildcardRows.filter((w) => w.tileId === tile.id),
-  }));
+  return tileRows.map((tile) => ({ ...tile, node: trees.get(tile.nodeId)! }));
 }
 
 export function getBoardLines(db: Db, bingoId: string) {
@@ -148,7 +140,6 @@ export function deleteTile(db: Db, id: string): void {
   db.transaction((tx) => {
     const tile = tx.select().from(tiles).where(eq(tiles.id, id)).get();
     if (!tile) return;
-    tx.delete(tileWildcards).where(eq(tileWildcards.tileId, id)).run();
     tx.delete(tiles).where(eq(tiles.id, id)).run(); // must precede deleting the node it FKs to
     deleteSubtree(tx, tile.nodeId);
   });
@@ -192,25 +183,6 @@ export function reorderChildren(db: Db, parentNodeId: string, orderedChildIds: s
       tx.update(nodeEdges).set({ sortOrder: i }).where(and(eq(nodeEdges.parentId, parentNodeId), eq(nodeEdges.childId, childId))).run();
     });
   });
-}
-
-export interface CreateWildcardParams {
-  tileId: string;
-  itemName: string;
-  maxRedemptionsPerTeam?: number;
-  description?: string | null;
-  applicableNodeId?: string | null;
-}
-export function createWildcard(db: Db, params: CreateWildcardParams) {
-  return db.insert(tileWildcards).values(params).returning().get();
-}
-export function updateWildcard(db: Db, id: string, params: Partial<Omit<CreateWildcardParams, "tileId">>) {
-  const existing = db.select().from(tileWildcards).where(eq(tileWildcards.id, id)).get();
-  if (!existing) throw new ServiceError(404, "Wildcard not found");
-  return db.update(tileWildcards).set(params).where(eq(tileWildcards.id, id)).returning().get();
-}
-export function deleteWildcard(db: Db, id: string): void {
-  db.delete(tileWildcards).where(eq(tileWildcards.id, id)).run();
 }
 
 // ---------------------------------------------------------------------------

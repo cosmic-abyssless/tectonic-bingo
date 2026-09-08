@@ -211,37 +211,6 @@ router.delete(
 );
 
 // ---------------------------------------------------------------------------
-// Wildcards
-// ---------------------------------------------------------------------------
-
-router.post(
-  "/tiles/:tileId/wildcards",
-  asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
-    const { itemName } = req.body as { itemName?: string };
-    if (!itemName) throw new ServiceError(400, "itemName is required");
-    const wildcard = boardService.createWildcard(db, { tileId: req.params.tileId as string, ...req.body });
-    res.status(201).json({ wildcard });
-  }),
-);
-router.patch(
-  "/wildcards/:id",
-  asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
-    const wildcard = boardService.updateWildcard(db, req.params.id as string, req.body);
-    res.json({ wildcard });
-  }),
-);
-router.delete(
-  "/wildcards/:id",
-  asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
-    boardService.deleteWildcard(db, req.params.id as string);
-    res.status(204).end();
-  }),
-);
-
-// ---------------------------------------------------------------------------
 // Lines
 // ---------------------------------------------------------------------------
 

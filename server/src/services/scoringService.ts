@@ -1,7 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { claims, submissions, teamNodeState, teams, tileWildcards } from "../db/schema";
+import { claims, submissions, teamNodeState, teams } from "../db/schema";
 import { ServiceError } from "./errors";
 import { awardedPoints, evaluateGraph } from "./engine";
 import { getApprovedClaims, getFullGraph } from "./graphService";
@@ -43,30 +43,6 @@ export function rebuildTeamState(tx: Tx, teamId: string): Map<string, { complete
   return newState;
 }
 
-function assertWildcardCapsNotExceeded(tx: Tx, teamId: string, submissionId: string): void {
-  const wildcardIds = tx
-    .select({ wildcardId: claims.wildcardId })
-    .from(claims)
-    .where(eq(claims.submissionId, submissionId))
-    .all()
-    .map((r) => r.wildcardId)
-    .filter((id): id is string => id !== null);
-  for (const wildcardId of new Set(wildcardIds)) {
-    const wildcard = tx.select().from(tileWildcards).where(eq(tileWildcards.id, wildcardId)).get();
-    if (!wildcard) throw new ServiceError(404, "Wildcard not found");
-    const priorApprovedUses = tx
-      .select({ id: claims.id })
-      .from(claims)
-      .innerJoin(submissions, eq(claims.submissionId, submissions.id))
-      .where(and(eq(submissions.teamId, teamId), eq(submissions.status, "approved"), eq(claims.wildcardId, wildcardId)))
-      .all().length;
-    const thisUses = wildcardIds.filter((id) => id === wildcardId).length;
-    if (priorApprovedUses + thisUses > wildcard.maxRedemptionsPerTeam) {
-      throw new ServiceError(400, `${wildcard.itemName} has already been redeemed the maximum number of times for this team`);
-    }
-  }
-}
-
 export interface ApproveSubmissionParams {
   submissionId: string;
   reviewedByUserId: string;
@@ -92,8 +68,6 @@ export function approveSubmission(db: Db, params: ApproveSubmissionParams): Appr
     const submission = tx.select().from(submissions).where(eq(submissions.id, params.submissionId)).get();
     if (!submission) throw new ServiceError(404, "Submission not found");
     if (submission.status !== "pending") throw new ServiceError(409, "Submission has already been reviewed");
-
-    assertWildcardCapsNotExceeded(tx, submission.teamId, submission.id);
 
     tx.update(submissions)
       .set({ status: "approved", reviewedAt: new Date(), reviewedByUserId: params.reviewedByUserId, reviewerNotes: params.reviewerNotes ?? null, updatedAt: new Date() })
