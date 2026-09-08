@@ -1,16 +1,11 @@
 import type { GraphNode, NodeStatus } from "@bingo/shared";
+import { TooltipTrigger, Tooltip, Focusable } from "react-aria-components";
 import { itemLeafValue, leafComplete, type LeafClaimMaps } from "./taskClaims";
+import { Badge } from "../ui/Card";
+import { CheckIcon, LockIcon } from "../ui/icons";
 
-export function CheckIcon() {
-  return (
-    <svg className="w-3 h-3 text-green-400 shrink-0 no-underline" fill="currentColor" viewBox="0 0 20 20">
-      <path
-        fillRule="evenodd"
-        d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z"
-        clipRule="evenodd"
-      />
-    </svg>
-  );
+function Check() {
+  return <CheckIcon size={12} className="shrink-0 text-ok" aria-label="complete" />;
 }
 
 /** For an ITEM leaf, just its name. For a SUM, its children's names joined — the SUM is what carries the quantity/target now. */
@@ -32,18 +27,21 @@ function compositeLabel(node: GraphNode): string {
   }
 }
 
+function rowClass(dim: boolean, submitted: boolean) {
+  return `flex items-baseline gap-2 text-sm ${dim ? "text-fg-subtle line-through" : submitted ? "text-fg-muted" : "text-fg"}`;
+}
+
 // A single-name ITEM leaf — boolean, no quantity of its own. `notNeeded`
 // means an enclosing ANY/COUNT is already satisfied by a sibling — this leaf
 // itself was never claimed (no checkmark), but no longer needs to be.
 function LeafRow({ node, maps, notNeeded }: { node: GraphNode; maps: LeafClaimMaps; notNeeded?: boolean }) {
   const complete = leafComplete(node.id, maps);
   const submitted = maps.submittedNodeIds.has(node.id);
-  const dim = complete || notNeeded;
   return (
-    <li className={`flex items-baseline gap-2 text-sm ${dim ? "text-slate-500 line-through" : submitted ? "text-slate-400" : "text-slate-200"}`}>
-      <span className="text-indigo-400 text-xs">▸</span>
+    <li className={rowClass(complete || !!notNeeded, submitted)}>
+      <span className="text-fg-subtle">·</span>
       {leafLabel(node)}
-      {complete && <CheckIcon />}
+      {complete && <Check />}
     </li>
   );
 }
@@ -55,15 +53,14 @@ function SumRow({ node, maps, notNeeded }: { node: GraphNode; maps: LeafClaimMap
   const progress = node.children.reduce((sum, child) => sum + itemLeafValue(child.id, maps), 0);
   const complete = progress >= target;
   const submitted = node.children.some((child) => maps.submittedNodeIds.has(child.id));
-  const dim = complete || notNeeded;
   return (
-    <li className={`flex items-baseline gap-2 text-sm ${dim ? "text-slate-500 line-through" : submitted ? "text-slate-400" : "text-slate-200"}`}>
-      <span className="text-indigo-400 text-xs">▸</span>
-      <span className={`font-semibold text-xs tabular-nums ${complete ? "text-green-400" : "text-yellow-400"}`}>
+    <li className={rowClass(complete || !!notNeeded, submitted)}>
+      <span className="text-fg-subtle">·</span>
+      <span className={`num text-xs font-medium ${complete ? "text-ok" : "text-warn"}`}>
         {progress}/{target}
       </span>
       {leafLabel(node)}
-      {complete && <CheckIcon />}
+      {complete && <Check />}
     </li>
   );
 }
@@ -109,14 +106,14 @@ function RequirementTree({
   // A root ALL with only leaves is the common case; skip the redundant heading.
   const showHeading = !(root && node.kind === "ALL");
   return (
-    <div className={root ? "" : "ml-3 border-l border-slate-700 pl-3"}>
+    <div className={root ? "" : "ml-2 border-l border-line pl-3"}>
       {showHeading && (
-        <span className={`text-xs uppercase tracking-wide inline-flex items-center gap-1 ${nodeComplete ? "text-green-500" : "text-slate-500"}`}>
+        <span className={`inline-flex items-center gap-1 text-[11px] uppercase tracking-wide ${nodeComplete ? "text-ok" : "text-fg-subtle"}`}>
           {compositeLabel(node)}
-          {nodeComplete && <CheckIcon />}
+          {nodeComplete && <Check />}
         </span>
       )}
-      <ul className="space-y-1 mt-1">
+      <ul className="mt-1 space-y-1">
         {node.children.map((child) =>
           child.kind === "ITEM" ? (
             <LeafRow key={child.id} node={child} maps={maps} notNeeded={childAncestorSatisfied} />
@@ -153,47 +150,38 @@ export function TaskPanel({
 
   return (
     <div className="p-5">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-1.5">
-          <span className="text-white font-bold text-sm">{task.label}</span>
-          {complete && <CheckIcon />}
-          {isManual && (
-            <span className="text-xs bg-purple-900/40 text-purple-300 border border-purple-600 rounded-full px-2 py-0.5">
-              Judged by mods
-            </span>
-          )}
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-sm font-semibold text-fg">{task.label}</span>
+          {complete && <Check />}
+          {isManual && <Badge tone="info">Judged by mods</Badge>}
           {locked && (
-            <div className="relative group/lock">
-              <svg className="w-3.5 h-3.5 text-slate-400 cursor-default" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 hidden group-hover/lock:block bg-slate-900 border border-slate-600 text-slate-200 text-xs rounded-lg px-3 py-2 shadow-xl z-30 leading-relaxed">
+            <TooltipTrigger delay={200}>
+              <Focusable>
+                <span role="img" aria-label="Locked" tabIndex={0} className="inline-flex text-fg-muted">
+                  <LockIcon size={14} />
+                </span>
+              </Focusable>
+              <Tooltip offset={6} className="overlay-panel z-30 max-w-56 rounded-md border border-line bg-surface-raised px-3 py-2 text-xs leading-relaxed text-fg shadow-pop">
                 {lockedReason ?? "This task depends on a previous task."}
-                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-600" />
-              </div>
-            </div>
+              </Tooltip>
+            </TooltipTrigger>
           )}
         </div>
-        <span className="text-yellow-400 font-semibold text-sm">{task.points} pts</span>
+        <span className="num shrink-0 text-sm font-medium text-fg-muted">{task.points} pts</span>
       </div>
 
-      <p className="text-slate-300 text-sm leading-relaxed mb-3">{task.description}</p>
+      <p className="mb-3 text-sm leading-relaxed text-fg-muted">{task.description}</p>
 
       {!isManual && <RequirementTree node={task} maps={claimMaps} statusByNodeId={statusByNodeId} root />}
 
       {!isManual && task.allowsPreLoad && (
-        <div className="flex gap-2 flex-wrap mt-3">
-          <span className="text-xs bg-blue-900/40 text-blue-300 border border-blue-600 rounded-full px-2 py-0.5">
-            Pre-load allowed
-          </span>
+        <div className="mt-3">
+          <Badge>Pre-load allowed</Badge>
         </div>
       )}
 
-      {task.notes && <p className="mt-3 text-xs text-amber-400 border-l-2 border-amber-500 pl-2">{task.notes}</p>}
+      {task.notes && <p className="mt-3 border-l-2 border-warn/60 pl-2 text-xs text-warn">{task.notes}</p>}
     </div>
   );
 }

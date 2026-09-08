@@ -4,6 +4,9 @@ import type { Bingo } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
 import { Markdown } from "../ui/Markdown";
+import { Button } from "../ui/Button";
+import { Notice } from "../ui/Card";
+import { Field, Input, Textarea } from "../ui/Field";
 
 function toLocalInput(iso: string | null): string {
   if (!iso) return "";
@@ -81,82 +84,68 @@ export function BingoSettingsForm({
   }
 
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className="max-w-2xl space-y-5">
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="settings-name" className="block text-sm font-medium text-slate-300 mb-1">Name</label>
-          <input id="settings-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-        </div>
-        <div>
-          <label htmlFor="settings-theme" className="block text-sm font-medium text-slate-300 mb-1">Theme</label>
-          <input id="settings-theme" value={form.theme} onChange={(e) => setForm({ ...form, theme: e.target.value })} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-        </div>
+        <Field label="Name">
+          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        </Field>
+        <Field label="Theme">
+          <Input value={form.theme} onChange={(e) => setForm({ ...form, theme: e.target.value })} />
+        </Field>
       </div>
 
-      <div>
-        <label htmlFor="settings-description" className="block text-sm font-medium text-slate-300 mb-1">Description</label>
-        <textarea id="settings-description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 resize-none" />
-      </div>
+      <Field label="Description">
+        <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="resize-none" />
+      </Field>
 
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="settings-buyin" className="block text-sm font-medium text-slate-300 mb-1">Buy-in (GP)</label>
-          <input id="settings-buyin" type="number" value={form.buyinAmount} onChange={(e) => setForm({ ...form, buyinAmount: e.target.value })} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-        </div>
-        <div>
-          <label htmlFor="settings-bonus-pot" className="block text-sm font-medium text-slate-300 mb-1">Bonus pot / extra donations (GP)</label>
-          <input
-            id="settings-bonus-pot"
-            type="number"
-            value={form.bonusPotAmount}
-            onChange={(e) => setForm({ ...form, bonusPotAmount: e.target.value })}
-            className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
-          />
-        </div>
+        <Field label="Buy-in (GP)">
+          <Input type="number" value={form.buyinAmount} onChange={(e) => setForm({ ...form, buyinAmount: e.target.value })} className="num" />
+        </Field>
+        <Field label="Bonus pot / extra donations (GP)">
+          <Input type="number" value={form.bonusPotAmount} onChange={(e) => setForm({ ...form, bonusPotAmount: e.target.value })} className="num" />
+        </Field>
       </div>
 
-      <p className="text-sm text-slate-400">
-        Total pot: <span className="text-white font-semibold">{potTotal.toLocaleString()} GP</span> — {paidSignupCount} paid signup
-        {paidSignupCount === 1 ? "" : "s"} × {(bingo.buyinAmount ?? 0).toLocaleString()} GP buy-in, plus bonus
+      <p className="text-sm text-fg-muted">
+        Total pot: <span className="num font-semibold text-fg">{potTotal.toLocaleString()} GP</span> — <span className="num">{paidSignupCount}</span> paid signup
+        {paidSignupCount === 1 ? "" : "s"} × <span className="num">{(bingo.buyinAmount ?? 0).toLocaleString()}</span> GP buy-in, plus bonus
       </p>
 
       <div className="grid grid-cols-2 gap-4">
         {DATE_FIELDS.map(({ key, label }) => (
-          <div key={key}>
-            <label htmlFor={`settings-${key}`} className="block text-sm font-medium text-slate-300 mb-1">{label}</label>
-            <input
-              id={`settings-${key}`}
-              type="datetime-local"
-              value={form[key as keyof typeof form] as string}
-              onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-              className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
-            />
-          </div>
+          <Field key={key} label={label}>
+            <Input type="datetime-local" value={form[key as keyof typeof form] as string} onChange={(e) => setForm({ ...form, [key]: e.target.value })} className="num" />
+          </Field>
         ))}
       </div>
 
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className="block text-sm font-medium text-slate-300">Rules (Markdown)</label>
-          <button type="button" onClick={() => setShowPreview((p) => !p)} className="text-xs text-indigo-400 hover:text-indigo-300 cursor-pointer">
-            {showPreview ? "Edit" : "Preview"}
-          </button>
-        </div>
+      <Field
+        as="div"
+        label={
+          <span className="flex items-center justify-between">
+            Rules (Markdown)
+            <button type="button" onClick={() => setShowPreview((p) => !p)} className="text-xs text-fg-muted underline-offset-2 hover:text-fg hover:underline">
+              {showPreview ? "Edit" : "Preview"}
+            </button>
+          </span>
+        }
+      >
         {showPreview ? (
-          <div className="bg-slate-900 border border-slate-700 rounded-md px-3 py-2 min-h-[120px]">
+          <div className="min-h-[120px] rounded-md border border-line bg-surface px-3 py-2">
             <Markdown>{form.rulesMarkdown || "*(nothing yet)*"}</Markdown>
           </div>
         ) : (
-          <textarea value={form.rulesMarkdown} onChange={(e) => setForm({ ...form, rulesMarkdown: e.target.value })} rows={6} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-indigo-500" />
+          <Textarea aria-label="Rules (Markdown)" value={form.rulesMarkdown} onChange={(e) => setForm({ ...form, rulesMarkdown: e.target.value })} rows={6} className="font-mono" />
         )}
-      </div>
+      </Field>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && <Notice tone="danger">{error}</Notice>}
       <div className="flex items-center gap-3">
-        <button onClick={save} disabled={saving} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer">
-          {saving ? "Saving…" : "Save Settings"}
-        </button>
-        {saved && <span className="text-green-400 text-sm">Saved</span>}
+        <Button variant="primary" onPress={save} isDisabled={saving}>
+          {saving ? "Saving…" : "Save settings"}
+        </Button>
+        {saved && <span className="text-sm text-ok">Saved</span>}
       </div>
     </div>
   );

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ItemGroup, OsrsItemSearchResult } from "@bingo/shared";
 import { searchOsrsItems } from "../../api/osrsItemsApi";
+import { inputClass } from "./Field";
+import { LayersIcon } from "./icons";
 
 // Mirrors osrsWikiService.ts's iconUrlFor — the wiki's real upload
 // convention for an item's small inventory-sprite icon (title with spaces
@@ -186,7 +188,7 @@ export function ItemSearchInput({
         <img
           src={closedIconUrl}
           alt=""
-          className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 object-contain pointer-events-none"
+          className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 object-contain"
           onError={() => setIconFailed(true)}
         />
       )}
@@ -200,17 +202,17 @@ export function ItemSearchInput({
         onFocus={() => setOpen(true)}
         onBlur={() => onCommit?.(value)}
         onKeyDown={handleKeyDown}
-        className={`${className ?? "w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"} ${closedIconUrl ? "pl-7" : ""}`}
+        className={`${className ?? `${inputClass} h-9`} ${closedIconUrl ? "pl-8" : ""}`}
       />
 
       {showDropdown && dropdownRect && (
         <div
           ref={dropdownRef}
           style={{ position: "fixed", top: dropdownRect.bottom + 4, left: dropdownRect.left, width: Math.max(dropdownRect.width, 220), zIndex: 9999 }}
-          className="bg-slate-900 border border-slate-700 rounded-md shadow-xl max-h-64 overflow-y-auto"
+          className="max-h-64 overflow-y-auto rounded-md border border-line bg-surface-raised p-1 shadow-pop"
         >
           {loading && suggestions.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-slate-500">Searching…</div>
+            <div className="px-2.5 py-1.5 text-sm text-fg-subtle">Searching…</div>
           ) : (
             suggestions.map((s, i) => (
               <button
@@ -229,8 +231,8 @@ export function ItemSearchInput({
                 // that's a different default action on a different element.
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => pick(s)}
-                className={`w-full flex items-center gap-2 text-left px-2 py-1.5 text-xs transition-colors ${
-                  i === highlighted ? "bg-indigo-600 text-white" : "text-slate-200 hover:bg-slate-700"
+                className={`flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-sm ${
+                  i === highlighted ? "bg-accent text-accent-fg" : "text-fg hover:bg-surface-hover"
                 }`}
               >
                 {s.kind === "item" ? (
@@ -238,7 +240,7 @@ export function ItemSearchInput({
                     <img
                       src={s.item.iconUrl}
                       alt=""
-                      className="w-5 h-5 object-contain shrink-0"
+                      className="size-5 shrink-0 object-contain"
                       onError={(e) => {
                         (e.target as HTMLImageElement).style.visibility = "hidden";
                       }}
@@ -247,9 +249,11 @@ export function ItemSearchInput({
                   </>
                 ) : (
                   <>
-                    <span className="w-5 h-5 flex items-center justify-center text-sm shrink-0" aria-hidden>🗂</span>
+                    <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden>
+                      <LayersIcon size={14} />
+                    </span>
                     <span className="truncate">{s.group.name}</span>
-                    <span className={`ml-auto shrink-0 text-[10px] ${i === highlighted ? "text-indigo-200" : "text-slate-500"}`}>group · {s.group.itemNames.length}</span>
+                    <span className={`num ml-auto shrink-0 text-xs ${i === highlighted ? "text-accent-fg/70" : "text-fg-subtle"}`}>group · {s.group.itemNames.length}</span>
                   </>
                 )}
               </button>

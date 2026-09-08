@@ -3,8 +3,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { ItemGroup } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { adminQueryKeys, useItemGroups } from "../../api/adminQueries";
-
-const INPUT = "w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500";
+import { Button } from "../ui/Button";
+import { Card, CardHeader, Notice } from "../ui/Card";
+import { Input, Textarea } from "../ui/Field";
 
 function parseNames(raw: string): string[] {
   return raw.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
@@ -43,27 +44,18 @@ function GroupForm({ initial, onSave, onCancel }: GroupFormProps) {
 
   return (
     <div className="space-y-2">
-      <input aria-label="Group name" placeholder="Group name (e.g. Cerberus uniques)" value={name} onChange={(e) => setName(e.target.value)} className={INPUT} />
-      <input aria-label="Group description" placeholder="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} className={INPUT} />
-      <textarea
-        aria-label="Group item names"
-        placeholder="One item name per line (or comma-separated)"
-        value={names}
-        onChange={(e) => setNames(e.target.value)}
-        rows={4}
-        className={INPUT}
-      />
-      {error && <p className="text-red-400 text-xs">{error}</p>}
+      <Input aria-label="Group name" placeholder="Group name (e.g. Cerberus uniques)" value={name} onChange={(e) => setName(e.target.value)} />
+      <Input aria-label="Group description" placeholder="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} />
+      <Textarea aria-label="Group item names" placeholder="One item name per line (or comma-separated)" value={names} onChange={(e) => setNames(e.target.value)} rows={4} />
+      {error && <Notice tone="danger">{error}</Notice>}
       <div className="flex gap-2">
-        <button
-          onClick={save}
-          disabled={!name.trim() || itemNames.length === 0 || saving}
-          className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold rounded-md px-3 py-1.5 text-sm cursor-pointer"
-        >
+        <Button variant="primary" size="sm" onPress={save} isDisabled={!name.trim() || itemNames.length === 0 || saving}>
           {saving ? "Saving…" : initial ? "Save changes" : "Create group"}
-        </button>
+        </Button>
         {onCancel && (
-          <button onClick={onCancel} className="text-sm text-slate-400 hover:text-white px-3 py-1.5 cursor-pointer">Cancel</button>
+          <Button variant="ghost" size="sm" onPress={onCancel}>
+            Cancel
+          </Button>
         )}
       </div>
     </div>
@@ -88,7 +80,7 @@ function GroupRow({ group }: { group: ItemGroup }) {
   }
 
   return (
-    <li className="border border-slate-700 rounded-md p-3 space-y-2">
+    <li className="space-y-2 px-4 py-3">
       {editing ? (
         <GroupForm
           initial={group}
@@ -103,16 +95,20 @@ function GroupRow({ group }: { group: ItemGroup }) {
         <>
           <div className="flex items-start justify-between gap-2">
             <div>
-              <div className="font-semibold text-white text-sm">{group.name}</div>
-              {group.description && <div className="text-xs text-slate-400">{group.description}</div>}
+              <div className="text-sm font-semibold text-fg">{group.name}</div>
+              {group.description && <div className="text-xs text-fg-muted">{group.description}</div>}
             </div>
-            <div className="flex gap-2 text-xs shrink-0">
-              <button onClick={() => setEditing(true)} className="text-indigo-400 hover:text-indigo-300 cursor-pointer">Edit</button>
-              <button onClick={remove} className="text-red-400 hover:text-red-300 cursor-pointer">Delete</button>
+            <div className="flex shrink-0 gap-1">
+              <Button variant="ghost" size="sm" onPress={() => setEditing(true)}>
+                Edit
+              </Button>
+              <Button variant="ghost" size="sm" className="text-danger" onPress={remove}>
+                Delete
+              </Button>
             </div>
           </div>
-          <div className="text-xs text-slate-300">{group.itemNames.join(", ")}</div>
-          {error && <p className="text-red-400 text-xs">{error}</p>}
+          <div className="text-xs text-fg-muted">{group.itemNames.join(", ")}</div>
+          {error && <Notice tone="danger">{error}</Notice>}
         </>
       )}
     </li>
@@ -125,26 +121,25 @@ export function ItemGroupsPanel() {
   const groups = data?.itemGroups ?? [];
 
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg p-5 space-y-4 w-full max-w-2xl">
-      <div>
-        <h2 className="font-bold text-white">Item groups</h2>
-        <p className="text-xs text-slate-400">Named sets of item names reusable in any bingo's tile requirements.</p>
+    <Card className="w-full max-w-2xl">
+      <CardHeader title="Item groups" description="Named sets of item names reusable in any bingo's tile requirements." />
+      <div className="p-5">
+        <GroupForm
+          onSave={async (payload) => {
+            await adminApi.createItemGroup(payload);
+            await queryClient.invalidateQueries({ queryKey: adminQueryKeys.itemGroups });
+          }}
+        />
       </div>
-      <GroupForm
-        onSave={async (payload) => {
-          await adminApi.createItemGroup(payload);
-          await queryClient.invalidateQueries({ queryKey: adminQueryKeys.itemGroups });
-        }}
-      />
       {isLoading ? (
-        <p className="text-sm text-slate-400">Loading…</p>
+        <p className="px-5 pb-5 text-sm text-fg-muted">Loading…</p>
       ) : groups.length === 0 ? (
-        <p className="text-sm text-slate-500">No item groups yet.</p>
+        <p className="px-5 pb-5 text-sm text-fg-subtle">No item groups yet.</p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="divide-y divide-line border-t border-line">
           {groups.map((g) => <GroupRow key={g.id} group={g} />)}
         </ul>
       )}
-    </div>
+    </Card>
   );
 }

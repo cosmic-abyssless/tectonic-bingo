@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-
 import { AuthProvider } from "./context/AuthContext";
 import { WebSocketProvider } from "./context/WebSocketContext";
 import { ProtectedRoute } from "./core/ui/ProtectedRoute";
+import { ToastRegion } from "./core/ui/Toast";
 import { Login } from "./pages/Login";
 import { BingoList } from "./pages/BingoList";
 import { BingoPage } from "./pages/BingoPage";
@@ -77,6 +78,7 @@ export default function App() {
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          <ToastRegion />
         </WebSocketProvider>
       </AuthProvider>
     </BrowserRouter>

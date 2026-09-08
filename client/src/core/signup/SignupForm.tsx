@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import type { SignupAnswerInput, SignupQuestion } from "@bingo/shared";
 import { useCreateSignup, useMySignup, useMyTectonicRsns, useSignupQuestions, useUpdateSignup, useWithdrawSignup } from "../../api/queries";
+import { Button } from "../ui/Button";
+import { Card, CardHeader, EmptyState, Notice } from "../ui/Card";
+import { Field, Input, Select, Textarea } from "../ui/Field";
+import { AlertIcon, CheckIcon, LockIcon } from "../ui/icons";
 
 function parseOptions(question: SignupQuestion): string[] {
   try {
@@ -11,55 +15,51 @@ function parseOptions(question: SignupQuestion): string[] {
   }
 }
 
+function Required() {
+  return <span className="ml-1 text-danger">*</span>;
+}
+
 function QuestionField({ question, value, onChange }: { question: SignupQuestion; value: string; onChange: (v: string) => void }) {
-  const fieldId = `signup-question-${question.id}`;
   const label = (
-    <label htmlFor={fieldId} className="block text-sm font-medium text-slate-300 mb-1.5">
+    <>
       {question.prompt}
-      {question.required && <span className="text-red-400 ml-1">*</span>}
-    </label>
+      {question.required && <Required />}
+    </>
   );
 
-  if (question.type === "textarea") {
-    return (
-      <div>
-        {label}
-        <textarea id={fieldId} value={value} onChange={(e) => onChange(e.target.value)} rows={3} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 resize-none" />
-      </div>
-    );
-  }
   if (question.type === "boolean") {
     return (
-      <label className="flex items-center gap-2.5 cursor-pointer select-none">
-        <input type="checkbox" checked={value === "true"} onChange={(e) => onChange(e.target.checked ? "true" : "false")} className="w-4 h-4 accent-indigo-500 cursor-pointer" />
-        <span className="text-sm text-slate-300">
-          {question.prompt}
-          {question.required && <span className="text-red-400 ml-1">*</span>}
-        </span>
+      <label className="flex cursor-pointer select-none items-center gap-2.5">
+        <input type="checkbox" checked={value === "true"} onChange={(e) => onChange(e.target.checked ? "true" : "false")} className="size-4 cursor-pointer accent-accent" />
+        <span className="text-sm text-fg-muted">{label}</span>
       </label>
     );
   }
-  if (question.type === "select") {
-    const options = parseOptions(question);
+  if (question.type === "textarea") {
     return (
-      <div>
-        {label}
-        <select id={fieldId} value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+      <Field label={label}>
+        <Textarea value={value} onChange={(e) => onChange(e.target.value)} rows={3} className="resize-none" />
+      </Field>
+    );
+  }
+  if (question.type === "select") {
+    return (
+      <Field label={label}>
+        <Select value={value} onChange={(e) => onChange(e.target.value)}>
           <option value="">Select…</option>
-          {options.map((opt) => (
+          {parseOptions(question).map((opt) => (
             <option key={opt} value={opt}>
               {opt}
             </option>
           ))}
-        </select>
-      </div>
+        </Select>
+      </Field>
     );
   }
   return (
-    <div>
-      {label}
-      <input id={fieldId} value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-    </div>
+    <Field label={label}>
+      <Input value={value} onChange={(e) => onChange(e.target.value)} />
+    </Field>
   );
 }
 
@@ -106,27 +106,23 @@ export function SignupForm({ slug }: { slug: string }) {
   // fill in the form only to have the submit fail with the same message.
   if (!existing && tectonicError) {
     return (
-      <div className="max-w-lg mx-auto bg-slate-800 border border-slate-700 rounded-xl p-6 text-center space-y-2">
-        <h2 className="text-xl font-bold text-white">Signups temporarily unavailable</h2>
-        <p className="text-slate-400 text-sm">{tectonicError.message}</p>
-      </div>
+      <EmptyState icon={<AlertIcon size={20} />} title="Signups temporarily unavailable">
+        {tectonicError.message}
+      </EmptyState>
     );
   }
 
   if (!existing && tectonicRsnsData?.enabled && !tectonicRsnsData.isMember) {
     return (
-      <div className="max-w-lg mx-auto bg-slate-800 border border-slate-700 rounded-xl p-6 text-center space-y-2">
-        <h2 className="text-xl font-bold text-white">Clan members only</h2>
-        <p className="text-slate-400 text-sm">
-          This bingo is only open to registered members of the clan. If you believe this is a mistake, ask a moderator to check your clan registration.
-        </p>
-      </div>
+      <EmptyState icon={<LockIcon size={20} />} title="Clan members only">
+        This bingo is only open to registered members of the clan. If you believe this is a mistake, ask a moderator to check your clan registration.
+      </EmptyState>
     );
   }
 
   const answerList: SignupAnswerInput[] = questions.map((q) => ({ questionId: q.id, value: answers[q.id] ?? "" }));
   const missingRequired = questions.some((q) => q.required && !(answers[q.id] ?? "").trim());
-  const isValid = rsn.trim() && !missingRequired;
+  const isValid = !!rsn.trim() && !missingRequired;
 
   async function submit() {
     setError(null);
@@ -154,75 +150,80 @@ export function SignupForm({ slug }: { slug: string }) {
   }
 
   const pending = createSignup.isPending || updateSignup.isPending;
+  const rsnLabel = (
+    <>
+      RuneScape name
+      <Required />
+    </>
+  );
 
   return (
-    <div className="max-w-lg mx-auto bg-slate-800 border border-slate-700 rounded-xl p-6 space-y-5">
-      <div>
-        <h2 className="text-xl font-bold text-white">{existing ? "Edit your signup" : "Sign up"}</h2>
-        <p className="text-slate-400 text-sm mt-1">{existing ? "You can update your answers or withdraw while signups are open." : "Fill this out to join the bingo."}</p>
-      </div>
-
-      <div>
-        <label htmlFor="signup-rsn" className="block text-sm font-medium text-slate-300 mb-1.5">
-          RuneScape name <span className="text-red-400">*</span>
-        </label>
+    <Card className="mx-auto max-w-lg">
+      <CardHeader
+        title={existing ? "Edit your signup" : "Sign up"}
+        description={existing ? "You can update your answers or withdraw while signups are open." : "Fill this out to join the bingo."}
+      />
+      <div className="space-y-5 p-5">
         {rsnOptions.length > 0 ? (
-          <>
-            <select id="signup-rsn" value={rsn} onChange={(e) => setRsn(e.target.value)} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+          <Field
+            label={rsnLabel}
+            hint={
+              tectonicRsns.some((r) => r.rsn === rsn) ? (
+                <span className="inline-flex items-center gap-1 text-ok">
+                  <CheckIcon size={12} /> Verified against your linked clan account
+                </span>
+              ) : (
+                <span className="text-warn">This RSN isn't currently linked to your clan account</span>
+              )
+            }
+          >
+            <Select value={rsn} onChange={(e) => setRsn(e.target.value)}>
               <option value="">Select…</option>
               {rsnOptions.map((r) => (
                 <option key={r.rsn} value={r.rsn}>
                   {r.rsn}
                 </option>
               ))}
-            </select>
-            {tectonicRsns.some((r) => r.rsn === rsn) ? (
-              <p className="text-xs text-emerald-400 mt-1">✓ Verified against your linked clan account</p>
-            ) : (
-              <p className="text-xs text-amber-400 mt-1">This RSN isn't currently linked to your clan account</p>
-            )}
-          </>
+            </Select>
+          </Field>
         ) : (
-          <input id="signup-rsn" value={rsn} onChange={(e) => setRsn(e.target.value)} maxLength={12} className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+          <Field label={rsnLabel}>
+            <Input value={rsn} onChange={(e) => setRsn(e.target.value)} maxLength={12} />
+          </Field>
         )}
-      </div>
 
-      {questions.map((q) => (
-        <QuestionField key={q.id} question={q} value={answers[q.id] ?? ""} onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))} />
-      ))}
+        {questions.map((q) => (
+          <QuestionField key={q.id} question={q} value={answers[q.id] ?? ""} onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))} />
+        ))}
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
-      {saved && <p className="text-green-400 text-sm">Saved!</p>}
+        {error && <Notice tone="danger">{error}</Notice>}
+        {saved && <Notice tone="ok">Saved.</Notice>}
 
-      <div className="flex gap-3">
-        <button
-          onClick={submit}
-          disabled={!isValid || pending}
-          className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed"
-        >
-          {pending ? "Saving…" : existing ? "Save changes" : "Sign up"}
-        </button>
-        {existing && (
-          <button
-            onClick={() => setConfirmingWithdraw(true)}
-            className="text-sm text-red-400 hover:text-red-300 border border-red-900 hover:border-red-700 rounded-lg px-4 transition-colors cursor-pointer"
-          >
-            Withdraw
-          </button>
-        )}
-      </div>
-
-      {confirmingWithdraw && (
-        <div className="flex items-center gap-3 bg-red-950/40 border border-red-800 rounded-lg px-3 py-2.5">
-          <p className="text-sm text-red-200 flex-1">Withdraw your signup?</p>
-          <button onClick={() => setConfirmingWithdraw(false)} className="text-sm text-slate-400 hover:text-white cursor-pointer">
-            Cancel
-          </button>
-          <button onClick={withdraw} className="text-sm bg-red-700 hover:bg-red-600 text-white font-semibold rounded px-3 py-1 transition-colors cursor-pointer">
-            Confirm
-          </button>
+        <div className="flex gap-3">
+          <Button variant="primary" className="flex-1" onPress={submit} isDisabled={!isValid || pending}>
+            {pending ? "Saving…" : existing ? "Save changes" : "Sign up"}
+          </Button>
+          {existing && !confirmingWithdraw && (
+            <Button variant="danger" onPress={() => setConfirmingWithdraw(true)}>
+              Withdraw
+            </Button>
+          )}
         </div>
-      )}
-    </div>
+
+        {confirmingWithdraw && (
+          <Notice tone="danger">
+            <div className="flex items-center gap-3">
+              <span className="flex-1">Withdraw your signup?</span>
+              <Button size="sm" variant="ghost" onPress={() => setConfirmingWithdraw(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" variant="danger" onPress={withdraw} isDisabled={withdrawSignup.isPending}>
+                Confirm
+              </Button>
+            </div>
+          </Notice>
+        )}
+      </div>
+    </Card>
   );
 }

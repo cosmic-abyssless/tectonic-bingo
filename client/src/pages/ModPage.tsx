@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import type { Key } from "react-aria-components";
 import { useBingo } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { useWebSocketEvent } from "../context/WebSocketContext";
@@ -12,6 +13,10 @@ import { BoardEditor } from "../core/admin/BoardEditor";
 import { LineEditor } from "../core/admin/LineEditor";
 import { QuestionBuilder } from "../core/admin/QuestionBuilder";
 import { TeamManager } from "../core/admin/TeamManager";
+import { AppHeader } from "../core/ui/AppHeader";
+import { Button } from "../core/ui/Button";
+import { Dialog, DialogHeader } from "../core/ui/Dialog";
+import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 
 // adminOnly tabs are hidden from — and their content never rendered for — a
 // mod who isn't a site admin. The server enforces the same split on the
@@ -24,7 +29,7 @@ const TABS = [
   { key: "settings", label: "Settings", adminOnly: true },
   { key: "board", label: "Board", adminOnly: true },
   { key: "lines", label: "Lines", adminOnly: true },
-  { key: "questions", label: "Signup Questions", adminOnly: true },
+  { key: "questions", label: "Signup questions", adminOnly: true },
   { key: "teams", label: "Teams", adminOnly: true },
   { key: "mods", label: "Moderators", adminOnly: true },
 ] as const;
@@ -73,93 +78,79 @@ export function ModPage() {
 
   const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
 
+  const dismissNotifPrompt = () => {
+    localStorage.setItem("mod_notif_prompted", "true");
+    setShowNotifPrompt(false);
+  };
+
   return (
-    <div className="fixed inset-0 bg-slate-900 z-50 flex flex-col">
-      <header className="flex items-center justify-between px-6 py-3 bg-slate-800 border-b border-slate-700 shrink-0">
-        <span className="font-bold text-lg tracking-tight text-white">Mod Panel — {shell.bingo.name}</span>
-        <button
-          onClick={() => navigate(`/b/${slug}`)}
-          className="text-slate-400 hover:text-white border border-slate-600 hover:border-slate-400 rounded px-3 py-1 text-sm transition-colors cursor-pointer"
-        >
-          Back to board
-        </button>
-      </header>
+    <div className="min-h-screen bg-bg text-fg">
+      <AppHeader back={{ to: `/b/${slug}`, label: "Back to bingo" }} title="Mod panel" subtitle={shell.bingo.name} />
 
-      <div className="flex-1 w-full flex flex-col items-center overflow-y-auto">
-        <div className="w-full max-w-6xl px-6 pt-4 shrink-0">
-          <StageControls slug={slug} bingo={shell.bingo} />
-        </div>
+      <main className="mx-auto w-full max-w-6xl space-y-6 px-6 py-6">
+        <StageControls slug={slug} bingo={shell.bingo} />
 
-        {/* shrink-0 matters here: overflow-x-auto (needed so many tabs can
-            scroll horizontally instead of wrapping) gets browser-normalized
-            to overflow-y: auto too, which zeroes this item's flexbox
-            automatic min-height — without shrink-0, a tall tab's content
-            (e.g. a big signups table) can squeeze this bar down toward 0
-            instead of just scrolling past it. */}
-        <div className="w-full max-w-6xl px-6 pt-4 flex gap-1 border-b border-slate-700 overflow-x-auto shrink-0">
-          {visibleTabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`shrink-0 text-sm font-medium px-3 py-2 border-b-2 -mb-px transition-colors cursor-pointer ${
-                tab === t.key ? "border-indigo-500 text-white" : "border-transparent text-slate-400 hover:text-slate-200"
-              }`}
+        <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(key as Tab)}>
+          <TabList>
+            {visibleTabs.map((t) => (
+              <Tab key={t.key} id={t.key}>
+                {t.label}
+              </Tab>
+            ))}
+          </TabList>
+          <TabPanel id="submissions">
+            <ReviewQueue slug={slug} />
+          </TabPanel>
+          <TabPanel id="signups">
+            <SignupRoster slug={slug} />
+          </TabPanel>
+          {isAdmin && (
+            <>
+              <TabPanel id="settings">
+                <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} />
+              </TabPanel>
+              <TabPanel id="board">
+                <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />
+              </TabPanel>
+              <TabPanel id="lines">
+                <LineEditor slug={slug} />
+              </TabPanel>
+              <TabPanel id="questions">
+                <QuestionBuilder slug={slug} />
+              </TabPanel>
+              <TabPanel id="teams">
+                <TeamManager slug={slug} />
+              </TabPanel>
+              <TabPanel id="mods">
+                <ModsManager slug={slug} />
+              </TabPanel>
+            </>
+          )}
+        </Tabs>
+      </main>
+
+      <Dialog isOpen={showNotifPrompt} onClose={dismissNotifPrompt}>
+        <DialogHeader title="Enable notifications?" onClose={dismissNotifPrompt} />
+        <div className="space-y-4 p-5">
+          <p className="text-sm leading-relaxed text-fg-muted">
+            Get a browser notification whenever a new submission arrives for review, even if this tab is in the background.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onPress={dismissNotifPrompt}>
+              No thanks
+            </Button>
+            <Button
+              variant="primary"
+              onPress={async () => {
+                dismissNotifPrompt();
+                await Notification.requestPermission();
+              }}
             >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Submissions/Signups already carry their own max-w-6xl + padding —
-            an outer wrapper here would double up and squeeze them. The
-            admin-only panels don't self-pad, so they get one. */}
-        {tab === "submissions" && <ReviewQueue slug={slug} />}
-        {tab === "signups" && <SignupRoster slug={slug} />}
-        {isAdmin && tab !== "submissions" && tab !== "signups" && (
-          <div className="w-full max-w-6xl px-6 py-4">
-            {tab === "settings" && (
-              <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} />
-            )}
-            {tab === "board" && <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />}
-            {tab === "lines" && <LineEditor slug={slug} />}
-            {tab === "questions" && <QuestionBuilder slug={slug} />}
-            {tab === "teams" && <TeamManager slug={slug} />}
-            {tab === "mods" && <ModsManager slug={slug} />}
-          </div>
-        )}
-      </div>
-
-      {showNotifPrompt && (
-        <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl w-full max-w-sm shadow-2xl p-6 space-y-4">
-            <h2 className="text-white font-bold text-lg">Enable notifications?</h2>
-            <p className="text-slate-300 text-sm leading-relaxed">
-              Get a browser notification whenever a new submission arrives for review, even if this tab is in the background.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => {
-                  localStorage.setItem("mod_notif_prompted", "true");
-                  setShowNotifPrompt(false);
-                }}
-                className="text-sm text-slate-400 hover:text-white border border-slate-600 hover:border-slate-400 rounded px-3 py-1.5 transition-colors cursor-pointer"
-              >
-                No thanks
-              </button>
-              <button
-                onClick={async () => {
-                  localStorage.setItem("mod_notif_prompted", "true");
-                  setShowNotifPrompt(false);
-                  await Notification.requestPermission();
-                }}
-                className="text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded px-3 py-1.5 transition-colors cursor-pointer"
-              >
-                Enable
-              </button>
-            </div>
+              Enable
+            </Button>
           </div>
         </div>
-      )}
+      </Dialog>
     </div>
   );
 }

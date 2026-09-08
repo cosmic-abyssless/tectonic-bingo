@@ -3,7 +3,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { GraphNode, Tile, TileCategory } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
-import { Modal, ModalHeader } from "../ui/Modal";
+import { Dialog, DialogHeader } from "../ui/Dialog";
+import { Button } from "../ui/Button";
+import { Notice } from "../ui/Card";
+import { Field, Input, Select } from "../ui/Field";
+import { ImageIcon, LockIcon, PlusIcon } from "../ui/icons";
 import { TaskEditor } from "./TaskEditor";
 import type { ExistingLeaf, ExistingCondition } from "./RequirementTreeEditor";
 import { collectLeaves, collectLabeledConditions, collectSharedNodeIds } from "../board/requirementTree";
@@ -42,7 +46,15 @@ function existingConditionsExcluding(tasks: GraphNode[], excludeTaskIndex: numbe
     );
 }
 
-export function TileEditorPanel({ slug, tile, categories, locked, onClose }: { slug: string; tile: Tile; categories: TileCategory[]; locked: boolean; onClose: () => void }) {
+export function TileEditorPanel({ slug, tile, categories, locked, onClose }: { slug: string; tile: Tile | null; categories: TileCategory[]; locked: boolean; onClose: () => void }) {
+  return (
+    <Dialog isOpen={tile !== null} onClose={onClose} size="lg">
+      {tile && <TileEditor slug={slug} tile={tile} categories={categories} locked={locked} onClose={onClose} />}
+    </Dialog>
+  );
+}
+
+function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string; tile: Tile; categories: TileCategory[]; locked: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -87,69 +99,63 @@ export function TileEditorPanel({ slug, tile, categories, locked, onClose }: { s
   // shared row apart from one that merely sits inside a shared block.
   const sharedNodeIds = collectSharedNodeIds(tile.node);
   return (
-    <Modal onClose={onClose} size="lg">
-      <ModalHeader title={tile.name} subtitle={`Row ${tile.boardRow}, Col ${tile.boardCol}`} onClose={onClose} />
+    <>
+      <DialogHeader title={tile.name} subtitle={`Row ${tile.boardRow}, Col ${tile.boardCol}`} onClose={onClose} />
       {/* A disabled fieldset inertly disables every control inside it,
           including the nested task/requirement editors. */}
-      <fieldset disabled={locked} className="min-w-0 p-5 space-y-4 disabled:opacity-60">
-        {locked && <p className="text-sm text-amber-300">The board is locked once the game is live. Step the stage back to edit it.</p>}
-        {error && <p className="text-red-400 text-sm">{error}</p>}
+      <fieldset disabled={locked} className="min-w-0 space-y-5 px-5 pb-5 disabled:opacity-60">
+        {locked && (
+          <Notice tone="warn" icon={<LockIcon />}>
+            The board is locked once the game is live. Step the stage back to edit it.
+          </Notice>
+        )}
+        {error && <Notice tone="danger">{error}</Notice>}
+
         <div className="flex items-start gap-4">
-          <div
-            className={`w-20 h-20 shrink-0 bg-slate-900 border border-slate-700 rounded-md flex items-center justify-center overflow-hidden ${locked ? "" : "cursor-pointer"}`}
-            onClick={() => !locked && fileInputRef.current?.click()}
+          <button
+            type="button"
+            aria-label="Upload tile image"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line-strong bg-bg text-fg-subtle transition-colors hover:border-fg/60 hover:text-fg-muted disabled:cursor-not-allowed"
           >
-            {tile.imageUrl ? <img src={tile.imageUrl} alt="" className="w-full h-full object-contain" /> : <span className="text-slate-600 text-xs text-center px-1">{uploading ? "…" : "Upload"}</span>}
-          </div>
+            {tile.imageUrl ? <img src={tile.imageUrl} alt="" className="size-full object-contain" /> : uploading ? <span className="text-xs">…</span> : <ImageIcon size={20} />}
+          </button>
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadImage(e.target.files[0])} />
 
-          <div className="flex-1 grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label htmlFor="tile-name" className="block text-xs text-slate-400 mb-1">Name</label>
-              <input id="tile-name" defaultValue={tile.name} onBlur={(e) => patch({ name: e.target.value })} className="w-full bg-slate-900 border border-slate-600 text-white rounded px-2 py-1.5 text-sm focus:outline-none focus:border-indigo-500" />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Category</label>
-              <select
-                defaultValue={tile.categoryId ?? ""}
-                onChange={(e) => patch({ categoryId: e.target.value || null })}
-                className="w-full bg-slate-900 border border-slate-600 text-white rounded px-2 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
-              >
+          <div className="grid flex-1 grid-cols-2 gap-3">
+            <Field label="Name" className="col-span-2">
+              <Input defaultValue={tile.name} onBlur={(e) => patch({ name: e.target.value })} />
+            </Field>
+            <Field label="Category">
+              <Select defaultValue={tile.categoryId ?? ""} onChange={(e) => patch({ categoryId: e.target.value || null })}>
                 <option value="">None</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.label}
                   </option>
                 ))}
-              </select>
-            </div>
-            <div>
-              <label className="flex items-center gap-2 text-xs text-slate-300 mt-6 cursor-pointer">
-                <input type="checkbox" defaultChecked={tile.hasFreezePeriod} onChange={(e) => patch({ hasFreezePeriod: e.target.checked })} className="w-3.5 h-3.5 accent-indigo-500 cursor-pointer" />
-                Freeze period
-              </label>
-            </div>
+              </Select>
+            </Field>
+            <label className="mt-6 flex h-10 items-center gap-2 text-sm text-fg-muted">
+              <input type="checkbox" defaultChecked={tile.hasFreezePeriod} onChange={(e) => patch({ hasFreezePeriod: e.target.checked })} className="size-4 accent-accent" />
+              Freeze period
+            </label>
             {tile.hasFreezePeriod && (
-              <div className="col-span-2">
-                <label htmlFor="tile-freeze-duration" className="block text-xs text-slate-400 mb-1">Freeze duration (minutes)</label>
-                <input
-                  id="tile-freeze-duration"
-                  type="number"
-                  defaultValue={tile.freezeDurationMinutes}
-                  onBlur={(e) => patch({ freezeDurationMinutes: Number(e.target.value) || 0 })}
-                  className="w-32 bg-slate-900 border border-slate-600 text-white rounded px-2 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
-                />
-              </div>
+              <Field label="Freeze duration (minutes)" className="col-span-2">
+                <Input type="number" className="num w-32" defaultValue={tile.freezeDurationMinutes} onBlur={(e) => patch({ freezeDurationMinutes: Number(e.target.value) || 0 })} />
+              </Field>
             )}
           </div>
         </div>
 
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-slate-300">Tasks ({tile.node.children.length})</p>
-            <button onClick={addTask} className="text-xs bg-slate-700 hover:bg-slate-600 text-white rounded px-2.5 py-1 cursor-pointer">
-              + Add task
-            </button>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-medium text-fg">
+              Tasks <span className="num text-fg-subtle">({tile.node.children.length})</span>
+            </p>
+            <Button size="sm" onPress={addTask}>
+              <PlusIcon size={14} /> Add task
+            </Button>
           </div>
           <div className="space-y-2">
             {tile.node.children.map((task, i) => (
@@ -167,15 +173,14 @@ export function TileEditorPanel({ slug, tile, categories, locked, onClose }: { s
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">Notes (admin-only)</label>
-          <input defaultValue={tile.notes ?? ""} onBlur={(e) => patch({ notes: e.target.value || null })} className="w-full bg-slate-900 border border-slate-600 text-white rounded px-2 py-1.5 text-sm focus:outline-none focus:border-indigo-500" />
-        </div>
+        <Field label="Notes (admin-only)">
+          <Input defaultValue={tile.notes ?? ""} onBlur={(e) => patch({ notes: e.target.value || null })} />
+        </Field>
 
-        <button onClick={deleteTile} className="text-sm text-red-400 hover:text-red-300 cursor-pointer disabled:cursor-not-allowed">
+        <Button variant="danger" size="sm" onPress={deleteTile}>
           Delete tile
-        </button>
+        </Button>
       </fieldset>
-    </Modal>
+    </>
   );
 }

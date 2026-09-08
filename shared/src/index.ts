@@ -18,6 +18,40 @@ export function isBoardLocked(stage: Stage): boolean {
   return stage === "live" || stage === "complete";
 }
 
+export const STAGE_LABEL: Record<Stage, string> = {
+  planning: "Planning",
+  signup: "Signups open",
+  captains: "Picking captains",
+  draft: "Draft",
+  reveal: "Board revealed",
+  live: "Live",
+  complete: "Finished",
+};
+
+/** What players are waiting for while in `stage`, and the scheduled time if a mod set one. */
+export interface StageMilestone {
+  label: string;
+  at: string | null;
+}
+
+export function nextMilestone(bingo: Pick<Bingo, "stage" | "signupOpensAt" | "draftScheduledAt" | "revealScheduledAt" | "startsAt" | "endsAt">): StageMilestone | null {
+  switch (bingo.stage) {
+    case "planning":
+      return { label: "Signups open", at: bingo.signupOpensAt };
+    case "signup":
+    case "captains":
+      return { label: "Draft", at: bingo.draftScheduledAt };
+    case "draft":
+      return { label: "Board reveal", at: bingo.revealScheduledAt };
+    case "reveal":
+      return { label: "Bingo starts", at: bingo.startsAt };
+    case "live":
+      return { label: "Bingo ends", at: bingo.endsAt };
+    case "complete":
+      return null;
+  }
+}
+
 export type NodeStatus = "not_started" | "in_progress" | "pending_approval" | "completed";
 export type SubmissionStatus = "pending" | "approved" | "rejected";
 

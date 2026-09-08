@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useBingo } from "../api/queries";
 import { DraftRoom } from "../core/draft/DraftRoom";
+import { AppHeader } from "../core/ui/AppHeader";
 
 // Draft room never themes — always core/, regardless of bingo.theme.
 export function DraftPage() {
@@ -20,20 +21,9 @@ export function DraftPage() {
   if (!shell) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-900 z-50 flex flex-col">
-      <header className="flex items-center justify-between px-6 py-3 bg-slate-800 border-b border-slate-700 shrink-0">
-        <span className="font-bold text-lg tracking-tight text-white">Draft — {shell.bingo.name}</span>
-        <button
-          onClick={() => navigate(`/b/${slug}`)}
-          className="text-slate-400 hover:text-white border border-slate-600 hover:border-slate-400 rounded px-3 py-1 text-sm transition-colors cursor-pointer"
-        >
-          Back to board
-        </button>
-      </header>
-
-      <div className="flex-1 w-full overflow-y-auto">
-        <DraftRoom slug={slug!} />
-      </div>
+    <div className="min-h-screen bg-bg text-fg">
+      <AppHeader back={{ to: `/b/${slug}`, label: "Back to bingo" }} title="Draft" subtitle={shell.bingo.name} />
+      <DraftRoom slug={slug!} />
     </div>
   );
 }
