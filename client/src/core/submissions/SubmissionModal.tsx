@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import type { Bingo, ClaimInput, GraphNode, NodeStatus, ScreenshotAnalysis, SubmissionDetails, TeamNodeState, Tile, TileCategory, TileWildcard } from "@bingo/shared";
+import type { Bingo, ClaimInput, GraphNode, NodeStatus, ScreenshotAnalysis, SubmissionDetails, TeamNodeState, Tile, TileCategory } from "@bingo/shared";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { Modal, ModalHeader } from "../ui/Modal";
 import { useAnalyzeScreenshot, useCreateSubmission } from "../../api/queries";
-import { buildLeafClaimMaps, leafProgress } from "../board/taskClaims";
-import { collectLeaves } from "../board/requirementTree";
+import { buildLeafClaimMaps, itemLeafValue, leafComplete } from "../board/taskClaims";
+import { collectLeaves, collectLeavesWithParent } from "../board/requirementTree";
 import { leafLabel } from "../board/TaskPanel";
 import { deriveBoardNodeStatuses, getFreezeUnlockAt } from "../board/tileProgress";
 
@@ -40,14 +40,11 @@ export function SubmissionModal({ slug, bingo, tiles, categories, nodeStates, te
   const [selectedTileId, setSelectedTileId] = useState(initialTileId ?? "");
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [selectedNodeId, setSelectedNodeId] = useState("");
-  const [selectedItemName, setSelectedItemName] = useState("");
   const [stagedClaims, setStagedClaims] = useState<StagedClaim[]>([]);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isWildcardMode, setIsWildcardMode] = useState(false);
-  const [selectedWildcardId, setSelectedWildcardId] = useState("");
   const [submissionQty, setSubmissionQty] = useState(1);
   const [analysis, setAnalysis] = useState<ScreenshotAnalysis | null>(null);
   const [analysisFailed, setAnalysisFailed] = useState(false);
@@ -65,23 +62,32 @@ export function SubmissionModal({ slug, bingo, tiles, categories, nodeStates, te
   const claimMaps = useMemo(() => buildLeafClaimMaps(teamSubmissions), [teamSubmissions]);
   const isManualTask = currentTask?.kind === "MANUAL";
 
-  // Leaves of the current task that still need items (counting claims staged in this modal),
-  // narrowed to the selected wildcard's scope.
-  const taskLeaves: GraphNode[] = currentTask ? collectLeaves(currentTask) : [];
-  const stagedQtyByNode = new Map<string, number>();
-  for (const { claim } of stagedClaims) stagedQtyByNode.set(claim.nodeId, (stagedQtyByNode.get(claim.nodeId) ?? 0) + (claim.quantity ?? 1));
-  const openLeaves = taskLeaves.filter(
-    (leaf) => leaf.kind === "ITEM" && leafProgress(leaf.id, leaf.distinctItems, claimMaps) + (stagedQtyByNode.get(leaf.id) ?? 0) < (leaf.quantity ?? 1),
-  );
-  const availableWildcards: TileWildcard[] = (selectedTile?.wildcards ?? []).filter(
-    (wc) => wc.applicableNodeId === null || openLeaves.some((leaf) => leaf.id === wc.applicableNodeId),
-  );
-  const selectedWildcard = availableWildcards.find((wc) => wc.id === selectedWildcardId);
-  const leafOptions = isWildcardMode && selectedWildcard?.applicableNodeId
-    ? openLeaves.filter((leaf) => leaf.id === selectedWildcard.applicableNodeId)
-    : openLeaves;
-  const selectedLeaf = leafOptions.find((leaf) => leaf.id === selectedNodeId);
-  const itemOptions = selectedLeaf && !isWildcardMode ? selectedLeaf.acceptedItemNames.map((name) => ({ id: name, label: name })) : [];
+  // Leaves of the current task, paired with their immediate parent so a
+  // SUM's child (duplicates still wanted until the SUM's own total is met)
+  // can be told apart from an ordinary leaf (open until it individually
+  // completes) — see docs/item-quantity-model.md §8.
+  const taskLeaves = currentTask ? collectLeavesWithParent(currentTask) : [];
+  const stagedNodeIds = new Set(stagedClaims.map((s) => s.claim.nodeId));
+  // Approved + already-staged-this-screenshot quantity for one leaf.
+  const leafPendingValue = (nodeId: string) =>
+    itemLeafValue(nodeId, claimMaps) + stagedClaims.filter((s) => s.claim.nodeId === nodeId).reduce((sum, s) => sum + (s.claim.quantity ?? 1), 0);
+  const sumProgress = (sum: GraphNode) => sum.children.reduce((total, child) => total + leafPendingValue(child.id), 0);
+  const sumStillOpen = (sum: GraphNode) => sumProgress(sum) < (sum.quantity ?? 1);
+
+  const openLeaves: GraphNode[] = taskLeaves
+    .filter(({ leaf }) => leaf.kind === "ITEM")
+    .filter(({ leaf, parent }) => {
+      // A submission may not claim the same node twice — a leaf already
+      // staged in this screenshot can't be offered again (adjust its
+      // quantity instead of staging a second claim on it).
+      if (stagedNodeIds.has(leaf.id)) return false;
+      if (parent?.kind === "SUM") return sumStillOpen(parent);
+      return !leafComplete(leaf.id, claimMaps);
+    })
+    .map(({ leaf }) => leaf);
+  const selectedLeaf = openLeaves.find((leaf) => leaf.id === selectedNodeId);
+  const selectedLeafParent = selectedLeaf ? taskLeaves.find((tl) => tl.leaf.id === selectedLeaf.id)?.parent : undefined;
+  const enclosingSum = selectedLeafParent?.kind === "SUM" ? selectedLeafParent : undefined;
 
   // Auto-select the task when there's exactly one available.
   useEffect(() => {
@@ -89,31 +95,17 @@ export function SubmissionModal({ slug, bingo, tiles, categories, nodeStates, te
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTileId, availableTasks.map((t) => t.id).join(",")]);
 
-  // Auto-select the leaf when there's exactly one option. Re-runs when the
-  // wildcard mode/selection changes because those narrow the leaf options and
-  // their onChange handlers clear selectedNodeId. Skipped once claims are staged
-  // so a submit never silently includes a claim the player didn't pick.
+  // Auto-select the leaf when there's exactly one option. Skipped once
+  // claims are staged so a submit never silently includes a claim the
+  // player didn't pick.
   useEffect(() => {
     if (!currentTask || isManualTask || stagedClaims.length > 0) return;
-    if (leafOptions.length === 1) {
-      setSelectedNodeId(leafOptions[0].id);
+    if (openLeaves.length === 1) {
+      setSelectedNodeId(openLeaves[0]!.id);
       setSubmissionQty(1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTaskId, currentTask, isWildcardMode, selectedWildcardId]);
-
-  // Auto-select the item name when the leaf accepts exactly one.
-  useEffect(() => {
-    if (itemOptions.length === 1) setSelectedItemName(itemOptions[0].id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedNodeId, isWildcardMode]);
-
-  // Auto-select the wildcard when there's exactly one available option.
-  useEffect(() => {
-    if (!isWildcardMode || availableWildcards.length !== 1) return;
-    setSelectedWildcardId(availableWildcards[0].id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isWildcardMode, selectedTileId, selectedTaskId]);
+  }, [selectedTaskId, currentTask]);
 
   // Auto-fill from AI detection — only if the user hasn't already chosen.
   useEffect(() => {
@@ -123,8 +115,8 @@ export function SubmissionModal({ slug, bingo, tiles, categories, nodeStates, te
     if (!matchedTile) return;
     const freezeUnlocksAt = getFreezeUnlockAt(bingo.startsAt, matchedTile);
     if (freezeUnlocksAt && Date.now() < freezeUnlocksAt) return;
-    // The matched leaf may be nested under a task's ALL/ANY/COUNT wrapper —
-    // find the task (direct tile child) that owns it.
+    // The matched leaf may be nested under a task's ALL/ANY/COUNT/SUM wrapper
+    // — find the task (direct tile child) that owns it.
     const matchedTask = matchedTile.node.children.find((t) => collectLeaves(t).some((l) => l.id === match.nodeId));
     if (!matchedTask) return;
     const available = getAvailableTasks(matchedTile, statusByNodeId);
@@ -134,31 +126,9 @@ export function SubmissionModal({ slug, bingo, tiles, categories, nodeStates, te
       setSelectedTileId(match.tileId);
       setSelectedTaskId(matchedTask.id);
       setSelectedNodeId(match.nodeId);
-      setSelectedItemName(match.itemName);
     } else if (selectedTileId === match.tileId && !selectedNodeId) {
       setSelectedTaskId(matchedTask.id);
       setSelectedNodeId(match.nodeId);
-      setSelectedItemName(match.itemName);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analysis]);
-
-  // Auto-fill wildcard from AI detection (only when no regular item was matched).
-  useEffect(() => {
-    const wc = analysis?.detectedWildcard;
-    if (!wc || analysis?.detectedMatch) return;
-    const matchedTile = tiles.find((t) => t.id === wc.tileId);
-    if (!matchedTile) return;
-    const freezeUnlocksAt = getFreezeUnlockAt(bingo.startsAt, matchedTile);
-    if (freezeUnlocksAt && Date.now() < freezeUnlocksAt) return;
-
-    if (!selectedTileId) {
-      setSelectedTileId(wc.tileId);
-      setIsWildcardMode(true);
-      setSelectedWildcardId(wc.wildcardId);
-    } else if (selectedTileId === wc.tileId && !selectedWildcardId) {
-      setIsWildcardMode(true);
-      setSelectedWildcardId(wc.wildcardId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysis]);
@@ -221,32 +191,24 @@ export function SubmissionModal({ slug, bingo, tiles, categories, nodeStates, te
     };
   }, [handleFile]);
 
-  const manualLeaf = isManualTask ? taskLeaves.find((leaf) => leaf.kind === "MANUAL") : undefined;
+  const manualLeaf = isManualTask ? taskLeaves.find(({ leaf }) => leaf.kind === "MANUAL")?.leaf : undefined;
 
   // The claim described by the current picker state, or null while it's incomplete.
   const currentClaim: StagedClaim | null = (() => {
     if (!currentTask) return null;
     if (manualLeaf) return { claim: { nodeId: manualLeaf.id }, label: `${currentTask.label}: manual review` };
-    if (!selectedLeaf) return null;
+    if (!selectedLeaf || !selectedLeaf.itemName) return null;
     const qtyPrefix = submissionQty > 1 ? `${submissionQty}× ` : "";
-    if (isWildcardMode) {
-      if (!selectedWildcard) return null;
-      return {
-        claim: { nodeId: selectedLeaf.id, itemName: selectedWildcard.itemName, quantity: submissionQty, wildcardId: selectedWildcard.id },
-        label: `${currentTask.label}: ${qtyPrefix}${selectedWildcard.itemName} (wildcard)`,
-      };
-    }
-    if (!selectedItemName) return null;
-    return { claim: { nodeId: selectedLeaf.id, itemName: selectedItemName, quantity: submissionQty }, label: `${currentTask.label}: ${qtyPrefix}${selectedItemName}` };
+    return {
+      claim: { nodeId: selectedLeaf.id, itemName: selectedLeaf.itemName, quantity: submissionQty },
+      label: `${currentTask.label}: ${qtyPrefix}${selectedLeaf.itemName}`,
+    };
   })();
-  const pickerEmpty = !selectedNodeId && !selectedWildcardId && !isManualTask;
+  const pickerEmpty = !selectedNodeId && !isManualTask;
   const isValid = !!imageFile && !!selectedTileId && (currentClaim !== null || (stagedClaims.length > 0 && pickerEmpty));
 
   const resetPicker = () => {
     setSelectedNodeId("");
-    setSelectedItemName("");
-    setSelectedWildcardId("");
-    setIsWildcardMode(false);
     setSubmissionQty(1);
   };
 
@@ -356,11 +318,6 @@ export function SubmissionModal({ slug, bingo, tiles, categories, nodeStates, te
                       Detected: <span className="text-slate-300 font-medium">{analysis.detectedMatch.itemName}</span>
                       <span className="text-slate-500"> — {analysis.detectedMatch.tileName}</span>
                     </p>
-                  ) : analysis.detectedWildcard ? (
-                    <p className="text-slate-400 text-xs">
-                      Detected wildcard: <span className="text-amber-300 font-medium">{analysis.detectedWildcard.itemName}</span>
-                      <span className="text-slate-500"> — {analysis.detectedWildcard.tileName}</span>
-                    </p>
                   ) : (
                     <p className="text-slate-500 text-xs">No matching bingo item detected</p>
                   )}
@@ -428,88 +385,35 @@ export function SubmissionModal({ slug, bingo, tiles, categories, nodeStates, te
           </p>
         )}
 
-        {/* Wildcard toggle */}
-        {selectedTile && currentTask && !isManualTask && availableWildcards.length > 0 && (
-          <label className="flex items-center gap-2.5 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={isWildcardMode}
-              onChange={(e) => {
-                setIsWildcardMode(e.target.checked);
-                setSelectedNodeId("");
-                setSelectedItemName("");
-                setSelectedWildcardId("");
-              }}
-              className="w-4 h-4 accent-indigo-500 cursor-pointer"
-            />
-            <span className="text-sm text-slate-300">Submit with a wildcard</span>
-          </label>
-        )}
-
-        {selectedTile && isWildcardMode && (
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Wildcard drop</label>
-            <SearchableSelect
-              key={selectedTileId + "-" + selectedTaskId + "-wc"}
-              value={selectedWildcardId}
-              options={availableWildcards.map((wc) => ({ id: wc.id, label: wc.itemName }))}
-              placeholder="Select wildcard…"
-              readOnly={availableWildcards.length === 1}
-              onChange={(id) => {
-                setSelectedWildcardId(id);
-                setSelectedNodeId("");
-              }}
-            />
-            {selectedWildcard?.description && <p className="mt-1.5 text-xs text-slate-500 leading-snug">{selectedWildcard.description}</p>}
-          </div>
-        )}
-
-        {/* Leaf select */}
+        {/* Leaf select — the leaf IS the item now, one name each */}
         {selectedTile && currentTask && !isManualTask && (
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              {isWildcardMode ? "Which requirement does the wildcard count towards?" : "Which requirement are you submitting for?"}
-            </label>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Which requirement are you submitting for?</label>
             <SearchableSelect
-              key={selectedTileId + "-" + selectedTaskId + "-" + selectedWildcardId + (isWildcardMode ? "-wc" : "")}
+              key={selectedTileId + "-" + selectedTaskId}
               value={selectedNodeId}
-              options={leafOptions.map((leaf) => ({ id: leaf.id, label: leafLabel(leaf) }))}
+              options={openLeaves.map((leaf) => ({ id: leaf.id, label: leafLabel(leaf) }))}
               placeholder="Search requirements…"
-              readOnly={leafOptions.length === 1}
+              readOnly={openLeaves.length === 1}
               onChange={(id) => {
                 setSelectedNodeId(id);
-                setSelectedItemName("");
                 setSubmissionQty(1);
               }}
             />
           </div>
         )}
 
-        {/* Item select — only when the leaf accepts more than one item */}
-        {selectedLeaf && itemOptions.length > 1 && (
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">What are you submitting?</label>
-            <SearchableSelect
-              key={selectedNodeId + "-item"}
-              value={selectedItemName}
-              options={itemOptions}
-              placeholder="Search items…"
-              onChange={setSelectedItemName}
-            />
-          </div>
-        )}
-
-        {/* Quantity */}
-        {selectedLeaf && (selectedLeaf.quantity ?? 1) > 1 && (
+        {/* Quantity — only when the selected leaf sits under a SUM (duplicates count toward its total) */}
+        {selectedLeaf && enclosingSum && (
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
               How many are you submitting?
-              <span className="ml-2 text-slate-500 font-normal">({selectedLeaf.quantity} needed in total)</span>
+              <span className="ml-2 text-slate-500 font-normal">({enclosingSum.quantity ?? 1} needed in total)</span>
             </label>
             <input
               type="number"
               min={1}
-              max={selectedLeaf.quantity ?? 1}
+              max={enclosingSum.quantity ?? 1}
               value={submissionQty}
               onChange={(e) => setSubmissionQty(Math.max(1, parseInt(e.target.value) || 1))}
               className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"

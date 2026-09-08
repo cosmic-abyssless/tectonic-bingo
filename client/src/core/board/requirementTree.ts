@@ -15,6 +15,17 @@ export function collectLeaves(root: GraphNode): GraphNode[] {
   return root.children.flatMap(collectLeaves);
 }
 
+/**
+ * ITEM/MANUAL leaves paired with their immediate parent — lets a caller tell
+ * a SUM's child (duplicates still wanted until the SUM's own total is met)
+ * apart from an ordinary leaf (open until it individually completes). See
+ * docs/item-quantity-model.md §8.
+ */
+export function collectLeavesWithParent(root: GraphNode, parent: GraphNode | null = null): { leaf: GraphNode; parent: GraphNode | null }[] {
+  if (root.kind === "ITEM" || root.kind === "MANUAL") return [{ leaf: root, parent }];
+  return root.children.flatMap((child) => collectLeavesWithParent(child, root));
+}
+
 export function collectItemNames(root: GraphNode): string[] {
   return collectLeaves(root)
     .map((leaf) => leaf.itemName)
