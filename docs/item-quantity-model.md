@@ -11,11 +11,20 @@
 > "distinct" requirements and wildcards work; everything else in that doc (tiles/lines as
 > presentation, `teamNodeState`, gates, the DAG, `ALL`/`ANY`/`COUNT`) is unchanged.
 >
-> **Not built in this pass**: the tile-level "tasks share one item pool" checkbox from §9
-> (the boss-pool/Barrows shared-leaf UI) — that's additive on top of this core model and was
-> explicitly scoped out as follow-up work. E2E (`special-tile-rules.spec.ts`,
-> `full-flow.spec.ts`) is untouched per this branch's established policy: fixed only in a
-> final pass right before merging to `main`, not during iteration.
+> **§9 was rebuilt leaner than originally written.** The first attempt added a
+> `tiles.sharedItemPool` column and a bespoke `SharedPoolInput` write path (COUNT/SUM/
+> FULL_SET) — on review this turned out to duplicate `ALL`/`ANY`/`COUNT`/`SUM`, which already
+> express every shape in §10's worked examples via ordinary multi-parent edges. That attempt
+> was reverted. What shipped instead, frontend-only, no new schema or endpoint: a
+> "+ existing item" picker in `RequirementTreeEditor` that lists ITEM leaves already present
+> on the tile's other tasks and adds one as a plain `{id, kind: 'ITEM', itemName}` child —
+> the existing `updateTask`/`replaceSubtree` path already updates a reused id in place, so
+> nothing server-side needed to change. §9 below is updated to describe this. Not enforced:
+> doc §8's rule that a task sharing leaves with a sibling should gate points, not submission
+> (left to admin judgment for now).
+>
+> E2E (`special-tile-rules.spec.ts`, `full-flow.spec.ts`) is untouched per this branch's
+> established policy: fixed only in a final pass right before merging to `main`.
 
 ## 1. Motivation
 
@@ -295,18 +304,27 @@ that loop simplifies to one entry per leaf, and the wildcard list argument to
 - **The wildcards panel is removed** (§7). "Jar counts as a unique" is authored by adding
   the jar to the row; "mega-rare completes the part" by wrapping the row in `ANY` with a
   second row.
-- **New capability: sharing leaves across two tasks (the boss-pool / Barrows / Cerberus
-  cases).** Nothing today lets an admin reference an existing leaf from a sibling task.
-  Rather than exposing a raw "pick an existing node" primitive (which also risks two
-  independently-saved task subtrees clobbering a shared node's fields via
-  `replaceSubtree`'s full-field overwrite), the plan is a **tile-level checkbox** ("tasks
-  share one item pool") that switches the tile's task editors into a streamlined mode: one
-  shared item/group pool edited once at the tile level, each task reduced to picking its
-  own aggregation over that pool — `COUNT(n)` (n distinct), `SUM(n)` (n total, duplicates
-  count), or a "full set" `ANY`-of-`ALL` — plus points and the points gate. The "Requires
-  previous task" checkbox is disabled in this mode (§8). This needs its own dedicated
-  (small) write path that updates the shared leaves and every task's wrapper node in one
-  transaction, instead of routing through each task's independent `replaceSubtree` call.
+- **New capability: sharing a leaf across two tasks (the boss-pool / Barrows / Cerberus
+  cases) — a "+ existing item" picker, no new write path.** The node graph already lets a
+  leaf have several parents; the only real gap was that `RequirementTreeEditor` could only
+  ever create *new* leaves. `TileEditorPanel` already loads every task's full tree at once
+  (`tile.node.children`), so it can compute, per task, every `ITEM` leaf already present on
+  the tile's *other* tasks (label included, for display) and pass that list down.
+  `RequirementTreeEditor` gains a "+ existing item" button next to "+ item"/"+ group" on
+  any group node — a `SearchableSelect` over that list — which adds the picked leaf as a
+  plain `{id: existingLeafId, kind: 'ITEM', itemName}` child. Saving goes through the
+  *existing* `updateTask` → `replaceSubtree` path unchanged: "a child whose `id` names an
+  existing node is updated in place" was already the reconciliation rule for every other
+  leaf, and an `ITEM` leaf's only fields (`itemName`) can't meaningfully drift between two
+  tasks that both intend to reference the same name, so the clobber risk a dedicated write
+  path would have avoided is the same small last-write-wins class every other field in this
+  admin UI already has (e.g. two tabs editing the tile name at once) — not worth a second
+  write path to close. Building the boss-pool/Cerberus/Barrows shapes with this picker means
+  manually choosing `COUNT`/`SUM`/`ANY`-of-`ALL` per task exactly as in §10's worked
+  examples — no streamlined pool/aggregation UI, no tile-level mode toggle. Not enforced:
+  §8's rule that a task sharing leaves with a sibling should use `pointsGateNodeId`, not
+  `submitGateNodeId` — the "Requires previous task" checkbox isn't disabled or warned
+  against in this mode, left to admin judgment.
 
 ## 10. Worked examples
 
@@ -371,19 +389,21 @@ Then, fresh migration again (established convention — delete `server/drizzle/*
 - `engine.ts` — `SUM` case, `value`, drop the name check; new tests, port the
   `distinctItems` tests to `COUNT` shapes.
 - `graphService.ts` — single-name `ITEM` reads, drop group resolution, `SUM`
-  children-must-be-`ITEM` invariant; the shared-pool write path (§9).
+  children-must-be-`ITEM` invariant. (§9's "+ existing item" ended up needing no server
+  changes at all — see its final write-up.)
 - `submissionService.ts` — `itemName` validation, duplicate-`nodeId` rejection, drop
   wildcard checks; `scoringService.ts` — drop the cap check.
 - `ocr.ts` / `textMatchService.ts` — one `MatchableItem` per leaf, drop the wildcard path.
 - `itemGroupService.ts` — CRUD unaffected; delete the now-dead reference guard.
-- `boardService.ts` — no logic change (leaf-set derivation already handles sharing); the
-  tile-level shared-pool endpoint.
-- Client: `RequirementTreeEditor.tsx` (row = `SUM` wrapper, drop distinct checkbox, add
-  `SUM` to group kinds), `TaskEditor.tsx` (`toInput` shape), `TileEditorPanel.tsx` (drop the
-  wildcards panel, add the shared-pool checkbox + pool editor), `SubmissionModal.tsx` (§8),
-  `taskClaims.ts` + `TaskPanel.tsx` (progress at `SUM` level), `TileModal.tsx` +
+- `boardService.ts` — no logic change (leaf-set derivation already handles sharing); no
+  new endpoint needed (§9).
+- Client: `RequirementTreeEditor.tsx` (row = `SUM` wrapper, drop distinct checkbox, the
+  "+ existing item" picker per §9), `TaskEditor.tsx` (`toInput` shape, threads
+  `existingLeaves` through), `TileEditorPanel.tsx` (drop the wildcards panel, compute
+  `existingLeaves` per task from the tile's already-loaded tree), `SubmissionModal.tsx`
+  (§8), `taskClaims.ts` + `TaskPanel.tsx` (progress at `SUM` level), `TileModal.tsx` +
   `ReviewQueue.tsx` (drop wildcard display), `requirementTree.ts` (`collectItemNames` reads
-  `itemName`), `adminApi.ts`/`queries.ts` (drop wildcard routes, add shared-pool route).
+  `itemName`), `adminApi.ts`/`queries.ts` (drop wildcard routes).
 - `shared/src/index.ts` — `GraphNode`/`GraphNodeInput` (`itemName`, `SUM`), drop
   `TileWildcard`, `ClaimInput.wildcardId`, `ScreenshotAnalysis.detectedWildcard`.
 - `seed-dev.ts` and every test fixture that constructs an `ITEM` with `itemNames`/
