@@ -18,6 +18,10 @@ function ChipIcon({ name, className }: { name: string; className: string }) {
   );
 }
 
+// Structural composites only — a SUM is never chosen here. Every SUM in this
+// editor is an "item row" (see ItemRowNode) created via "+ item"; its
+// children are always ITEM leaves, so it never needs the generic
+// nested-group UI (see docs/item-quantity-model.md §9).
 const GROUP_KINDS: { kind: NodeKind; label: string }[] = [
   { kind: "ALL", label: "All of" },
   { kind: "ANY", label: "Any one of" },
@@ -46,20 +50,23 @@ function appendChild(root: GraphNodeInput, path: Path, child: GraphNodeInput): G
   return updateAt(root, path, (parent) => ({ ...parent, children: [...(parent.children ?? []), child] }));
 }
 
-const NEW_LEAF: GraphNodeInput = { kind: "ITEM", itemNames: [], quantity: 1 };
+// An "item row" is always a SUM, even at quantity 1 — one write-path shape,
+// no bare-leaf-sometimes/wrapped-sometimes special case. See
+// docs/item-quantity-model.md §2.
+const NEW_ITEM_ROW: GraphNodeInput = { kind: "SUM", quantity: 1, children: [] };
 const NEW_GROUP: GraphNodeInput = { kind: "ALL", children: [] };
 
 export interface RequirementTreeEditorProps {
   root: GraphNodeInput;
   itemGroups: ItemGroup[];
   onChange: (root: GraphNodeInput) => void;
-  /** Creates a global item group from inline names; resolves null if cancelled. */
+  /** Persists a set of item names as a new reusable group. Does not affect the row that called it — groups are a one-time authoring template, not a live reference (see docs/item-quantity-model.md §6). */
   onSaveAsGroup?: (itemNames: string[]) => Promise<ItemGroup | null>;
 }
 
 // Recursive editor for a task's requirement tree. Every group node (ALL/ANY/
-// COUNT) can hold any number of item leaves or nested groups. The root is a
-// group and cannot be removed; leaves and nested groups can.
+// COUNT) can hold any number of item rows or nested groups. The root is a
+// group and cannot be removed; rows and nested groups can.
 export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGroup }: RequirementTreeEditorProps) {
   return <GroupNode node={root} path={[]} itemGroups={itemGroups} onSaveAsGroup={onSaveAsGroup} update={(path, fn) => onChange(updateAt(root, path, fn))} remove={(path) => onChange(removeAt(root, path))} add={(path, child) => onChange(appendChild(root, path, child))} />;
 }
@@ -101,7 +108,7 @@ function GroupNode(props: NodeProps) {
             className={`w-16 ${INPUT}`}
           />
         )}
-        <button type="button" onClick={() => add(path, NEW_LEAF)} className={SMALL_BTN}>+ item</button>
+        <button type="button" onClick={() => add(path, NEW_ITEM_ROW)} className={SMALL_BTN}>+ item</button>
         <button type="button" onClick={() => add(path, NEW_GROUP)} className={SMALL_BTN}>+ group</button>
         {!isRoot && (
           <button type="button" aria-label="Remove group" onClick={() => remove(path)} className="ml-auto text-slate-500 hover:text-red-400 text-xs cursor-pointer">✕</button>
@@ -112,7 +119,7 @@ function GroupNode(props: NodeProps) {
         {children.map((child, i) => (
           // Inputs are uncontrolled (save on blur); include length so removing a sibling remounts the rest.
           <li key={`${i}-${children.length}`}>
-            {child.kind === "ITEM" ? <LeafNode {...props} node={child} path={[...path, i]} /> : <GroupNode {...props} node={child} path={[...path, i]} />}
+            {child.kind === "ITEM" || child.kind === "SUM" ? <ItemRowNode {...props} node={child} path={[...path, i]} /> : <GroupNode {...props} node={child} path={[...path, i]} />}
           </li>
         ))}
       </ul>
@@ -120,10 +127,25 @@ function GroupNode(props: NodeProps) {
   );
 }
 
-function LeafNode({ node, path, itemGroups, update, remove, onSaveAsGroup }: NodeProps) {
-  const itemNames = node.itemNames ?? [];
-  const itemGroupIds = node.itemGroupIds ?? [];
+// One item requirement: a chip per accepted name, a search box to add more
+// (typed or picked from a group), and the row's own quantity target. Always
+// written back as a SUM — a bare ITEM child (from hand-authored data, e.g.
+// the seed script) is displayed as a 1-chip row and upgrades to a real SUM
+// the moment it's edited.
+function ItemRowNode({ node, path, itemGroups, update, remove, onSaveAsGroup }: NodeProps) {
+  const children = node.kind === "ITEM" ? [node] : node.children ?? [];
+  const quantity = node.kind === "SUM" ? node.quantity ?? 1 : 1;
   const [newName, setNewName] = useState("");
+
+  function writeChildren(nextChildren: GraphNodeInput[], nextQuantity: number = quantity) {
+    // Upgrading a bare ITEM into a SUM wrapper must NOT reuse the item's own
+    // id for the wrapper — that id may already have claims pointing at it,
+    // and it's carried forward on the child (still in nextChildren, since
+    // `children` above is `[node]` itself for the ITEM case). The wrapper
+    // gets a fresh id instead; an already-SUM row keeps its own id as usual.
+    const wrapperId = node.kind === "SUM" ? node.id : undefined;
+    update(path, (n) => ({ ...n, id: wrapperId, kind: "SUM", quantity: nextQuantity, children: nextChildren }));
+  }
 
   // Each name is its own chip (not a comma-separated blob) so the wiki
   // search/icon lookup — which resolves one item at a time — can drive
@@ -132,68 +154,44 @@ function LeafNode({ node, path, itemGroups, update, remove, onSaveAsGroup }: Nod
   // (case-insensitive) is a no-op rather than a silent duplicate.
   function addName(raw: string) {
     const trimmed = raw.trim();
-    if (trimmed && !itemNames.some((n) => n.toLowerCase() === trimmed.toLowerCase())) {
-      update(path, (n) => ({ ...n, itemNames: [...(n.itemNames ?? []), trimmed] }));
+    if (trimmed && !children.some((c) => (c.itemName ?? "").toLowerCase() === trimmed.toLowerCase())) {
+      writeChildren([...children, { kind: "ITEM", itemName: trimmed }]);
     }
     setNewName("");
   }
-  function removeName(name: string) {
-    update(path, (n) => ({ ...n, itemNames: (n.itemNames ?? []).filter((existing) => existing !== name) }));
+  function removeName(itemName: string) {
+    writeChildren(children.filter((c) => c.itemName !== itemName));
   }
 
   // The same search box also surfaces item groups by name (ItemSearchInput
-  // merges them into its dropdown) — picking one adds the whole group
-  // alongside any individual names, rather than replacing them. A leaf can
-  // reference several groups at once.
+  // merges them into its dropdown). Picking one drops every member in as its
+  // own plain item chip, deduped against names already on the row — a
+  // one-time expansion, not a live reference (docs/item-quantity-model.md §6).
   function addGroup(group: ItemGroup) {
-    if (!itemGroupIds.includes(group.id)) {
-      update(path, (n) => ({ ...n, itemGroupIds: [...(n.itemGroupIds ?? []), group.id] }));
-    }
-  }
-  function removeGroup(groupId: string) {
-    update(path, (n) => ({ ...n, itemGroupIds: (n.itemGroupIds ?? []).filter((id) => id !== groupId) }));
+    const existing = new Set(children.map((c) => (c.itemName ?? "").toLowerCase()));
+    const additions = group.itemNames.filter((n) => !existing.has(n.toLowerCase())).map((itemName): GraphNodeInput => ({ kind: "ITEM", itemName }));
+    if (additions.length > 0) writeChildren([...children, ...additions]);
   }
 
-  // Folds everything this leaf currently accepts — inline names plus every
-  // attached group's members — into one brand-new group, then points the
-  // leaf at just that group. Lets an admin build up a leaf from a mix of
-  // loose names and existing groups, then consolidate the whole mix into a
-  // single reusable group instead of only ever saving the loose names.
-  function namesToFold(): string[] {
-    const groupNames = itemGroupIds.flatMap((gid) => itemGroups.find((g) => g.id === gid)?.itemNames ?? []);
-    const combined = [...itemNames, ...groupNames];
-    return combined.filter((name, i) => combined.findIndex((other) => other.toLowerCase() === name.toLowerCase()) === i);
-  }
+  // Persists the row's current names as a new reusable group for future
+  // picks — the row itself is untouched (see the type's own doc comment).
   async function saveAsGroup() {
-    const created = await onSaveAsGroup!(namesToFold());
-    if (created) update(path, (n) => ({ ...n, itemNames: [], itemGroupIds: [created.id] }));
+    const names = children.map((c) => c.itemName).filter((n): n is string => !!n);
+    await onSaveAsGroup!(names);
   }
-  const canSaveAsGroup = onSaveAsGroup && itemNames.length + itemGroupIds.length > 1;
+  const canSaveAsGroup = onSaveAsGroup && children.length > 1;
+
   return (
     <div className="bg-slate-800 rounded px-2 py-1.5 space-y-1.5">
       <div className="flex items-center gap-1.5 flex-wrap">
-        {itemNames.map((name) => (
-          <span key={name} className="flex items-center gap-1 bg-slate-700 text-slate-200 text-xs rounded-full pl-1.5 pr-1 py-0.5">
-            <ChipIcon name={name} className="w-3.5 h-3.5" />
-            {name}
-            <button type="button" aria-label={`Remove ${name}`} onClick={() => removeName(name)} className="text-slate-400 hover:text-red-400 cursor-pointer leading-none">✕</button>
-          </span>
-        ))}
-        {itemGroupIds.map((gid) => {
-          const g = itemGroups.find((ig) => ig.id === gid);
-          if (!g) return null;
+        {children.map((child) => {
+          const name = child.itemName;
+          if (!name) return null;
           return (
-            <span key={gid} className="flex items-center gap-1.5 bg-slate-700 text-slate-200 text-xs rounded-full pl-2 pr-1 py-0.5">
-              <span className="font-medium whitespace-nowrap">{g.name}</span>
-              <span className="flex items-center gap-1 flex-wrap">
-                {g.itemNames.map((name) => (
-                  <span key={name} className="flex items-center gap-1 bg-slate-600 text-slate-300 rounded-full pl-1 pr-1.5 py-0.5 text-[10px] whitespace-nowrap">
-                    <ChipIcon name={name} className="w-3 h-3" />
-                    {name}
-                  </span>
-                ))}
-              </span>
-              <button type="button" aria-label={`Remove group ${g.name}`} onClick={() => removeGroup(gid)} className="text-slate-400 hover:text-red-400 cursor-pointer leading-none">✕</button>
+            <span key={name} className="flex items-center gap-1 bg-slate-700 text-slate-200 text-xs rounded-full pl-1.5 pr-1 py-0.5">
+              <ChipIcon name={name} className="w-3.5 h-3.5" />
+              {name}
+              <button type="button" aria-label={`Remove ${name}`} onClick={() => removeName(name)} className="text-slate-400 hover:text-red-400 cursor-pointer leading-none">✕</button>
             </span>
           );
         })}
@@ -212,19 +210,15 @@ function LeafNode({ node, path, itemGroups, update, remove, onSaveAsGroup }: Nod
           aria-label="Quantity"
           type="number"
           min={1}
-          defaultValue={node.quantity ?? 1}
-          onBlur={(e) => update(path, (n) => ({ ...n, quantity: Math.max(1, Number(e.target.value) || 1) }))}
+          defaultValue={quantity}
+          onBlur={(e) => writeChildren(children, Math.max(1, Number(e.target.value) || 1))}
           className={`w-14 ${INPUT}`}
         />
-        <label title="Count distinct item names instead of total quantity" className="flex items-center gap-1 text-xs text-slate-300 cursor-pointer">
-          <input type="checkbox" checked={node.distinctItems ?? false} onChange={(e) => update(path, (n) => ({ ...n, distinctItems: e.target.checked }))} className="w-3.5 h-3.5 accent-indigo-500 cursor-pointer" />
-          distinct
-        </label>
         <button type="button" aria-label="Remove item" onClick={() => remove(path)} className="text-slate-500 hover:text-red-400 text-xs cursor-pointer">✕</button>
       </div>
       {canSaveAsGroup && (
         <div className="flex items-center gap-2 text-[11px] text-slate-500">
-          <button type="button" onClick={saveAsGroup} className="text-indigo-400 hover:text-indigo-300 cursor-pointer">Save all of these as a new group…</button>
+          <button type="button" onClick={saveAsGroup} className="text-indigo-400 hover:text-indigo-300 cursor-pointer">Save these names as a new group…</button>
         </div>
       )}
     </div>
