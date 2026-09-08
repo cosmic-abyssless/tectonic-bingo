@@ -1,6 +1,14 @@
 import { useState } from "react";
 import type { ItemGroup, NodeKind, GraphNodeInput } from "@bingo/shared";
 import { ItemSearchInput, iconUrlFor } from "../ui/ItemSearchInput";
+import { SearchableSelect } from "../ui/SearchableSelect";
+
+/** An ITEM leaf that already exists elsewhere on the same tile — offered as a reference, not retyped. */
+export interface ExistingLeaf {
+  id: string;
+  itemName: string;
+  taskLabel: string;
+}
 
 // Best-effort wiki icon for a chip — many names here are bingo-specific
 // labels ("Any Cerberus drop") with no real wiki icon, so a 404 just hides
@@ -62,13 +70,34 @@ export interface RequirementTreeEditorProps {
   onChange: (root: GraphNodeInput) => void;
   /** Persists a set of item names as a new reusable group. Does not affect the row that called it — groups are a one-time authoring template, not a live reference (see docs/item-quantity-model.md §6). */
   onSaveAsGroup?: (itemNames: string[]) => Promise<ItemGroup | null>;
+  /**
+   * ITEM leaves already present on other tasks of this same tile — lets an
+   * admin reference one as a shared requirement (multi-parent: the same
+   * claim then counts toward both tasks) instead of only ever being able to
+   * create new leaves. The underlying node graph already supports a leaf
+   * having several parents (see docs/node-graph-model.md); this is just the
+   * missing UI for it, not a new write path — reusing an id here goes
+   * through the exact same PATCH this editor already does.
+   */
+  existingLeaves?: ExistingLeaf[];
 }
 
 // Recursive editor for a task's requirement tree. Every group node (ALL/ANY/
 // COUNT) can hold any number of item rows or nested groups. The root is a
 // group and cannot be removed; rows and nested groups can.
-export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGroup }: RequirementTreeEditorProps) {
-  return <GroupNode node={root} path={[]} itemGroups={itemGroups} onSaveAsGroup={onSaveAsGroup} update={(path, fn) => onChange(updateAt(root, path, fn))} remove={(path) => onChange(removeAt(root, path))} add={(path, child) => onChange(appendChild(root, path, child))} />;
+export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGroup, existingLeaves }: RequirementTreeEditorProps) {
+  return (
+    <GroupNode
+      node={root}
+      path={[]}
+      itemGroups={itemGroups}
+      onSaveAsGroup={onSaveAsGroup}
+      existingLeaves={existingLeaves}
+      update={(path, fn) => onChange(updateAt(root, path, fn))}
+      remove={(path) => onChange(removeAt(root, path))}
+      add={(path, child) => onChange(appendChild(root, path, child))}
+    />
+  );
 }
 
 interface NodeProps {
@@ -76,18 +105,25 @@ interface NodeProps {
   path: Path;
   itemGroups: ItemGroup[];
   onSaveAsGroup?: (itemNames: string[]) => Promise<ItemGroup | null>;
+  existingLeaves?: ExistingLeaf[];
   update: (path: Path, fn: (node: GraphNodeInput) => GraphNodeInput) => void;
   remove: (path: Path) => void;
   add: (path: Path, child: GraphNodeInput) => void;
 }
 
 function GroupNode(props: NodeProps) {
-  const { node, path, update, remove, add } = props;
+  const { node, path, update, remove, add, existingLeaves } = props;
   const isRoot = path.length === 0;
   const children = node.children ?? [];
+  const [pickingExisting, setPickingExisting] = useState(false);
+  // Offer a leaf already on this group only once — re-adding the same id as
+  // a second direct child of the same parent isn't meaningful.
+  const childIds = new Set(children.map((c) => c.id).filter(Boolean));
+  const pickableLeaves = (existingLeaves ?? []).filter((l) => !childIds.has(l.id));
+
   return (
     <div className={isRoot ? "" : "border-l-2 border-slate-700 pl-3"}>
-      <div className="flex items-center gap-2 mb-1.5">
+      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
         <select
           aria-label="Requirement kind"
           value={node.kind}
@@ -110,10 +146,27 @@ function GroupNode(props: NodeProps) {
         )}
         <button type="button" onClick={() => add(path, NEW_ITEM_ROW)} className={SMALL_BTN}>+ item</button>
         <button type="button" onClick={() => add(path, NEW_GROUP)} className={SMALL_BTN}>+ group</button>
+        {pickableLeaves.length > 0 && (
+          <button type="button" onClick={() => setPickingExisting((v) => !v)} className={SMALL_BTN}>+ existing item</button>
+        )}
         {!isRoot && (
           <button type="button" aria-label="Remove group" onClick={() => remove(path)} className="ml-auto text-slate-500 hover:text-red-400 text-xs cursor-pointer">✕</button>
         )}
       </div>
+      {pickingExisting && (
+        <div className="mb-1.5 max-w-xs">
+          <SearchableSelect
+            value=""
+            options={pickableLeaves.map((l) => ({ id: l.id, label: l.itemName, group: l.taskLabel }))}
+            placeholder="Search items elsewhere on this tile…"
+            onChange={(id) => {
+              const leaf = pickableLeaves.find((l) => l.id === id);
+              if (leaf) add(path, { id: leaf.id, kind: "ITEM", itemName: leaf.itemName });
+              setPickingExisting(false);
+            }}
+          />
+        </div>
+      )}
       {children.length === 0 && <p className="text-xs text-slate-500 italic mb-1.5">No requirements yet — add an item or a group.</p>}
       <ul className="space-y-1.5">
         {children.map((child, i) => (

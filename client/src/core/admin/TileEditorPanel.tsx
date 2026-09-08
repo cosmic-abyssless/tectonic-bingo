@@ -1,10 +1,26 @@
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Tile, TileCategory } from "@bingo/shared";
+import type { GraphNode, Tile, TileCategory } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
 import { Modal, ModalHeader } from "../ui/Modal";
 import { TaskEditor } from "./TaskEditor";
+import type { ExistingLeaf } from "./RequirementTreeEditor";
+import { collectLeaves } from "../board/requirementTree";
+
+// Every ITEM leaf on this tile, labeled by which task it's currently under —
+// offered to every OTHER task as a reference (see RequirementTreeEditor's
+// "+ existing item"), so two tasks can share the same requirement (a claim
+// then counts toward both) without retyping the name.
+function existingLeavesExcluding(tasks: GraphNode[], excludeTaskIndex: number): ExistingLeaf[] {
+  return tasks
+    .filter((_, i) => i !== excludeTaskIndex)
+    .flatMap((task) =>
+      collectLeaves(task)
+        .filter((leaf) => leaf.kind === "ITEM" && leaf.itemName)
+        .map((leaf) => ({ id: leaf.id, itemName: leaf.itemName!, taskLabel: task.label ?? "Task" })),
+    );
+}
 
 export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: string; tile: Tile; categories: TileCategory[]; onClose: () => void }) {
   const queryClient = useQueryClient();
@@ -100,7 +116,14 @@ export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: str
           </div>
           <div className="space-y-2">
             {tile.node.children.map((task, i) => (
-              <TaskEditor key={task.id} slug={slug} task={task} previousTaskId={tile.node.children[i - 1]?.id} onDeleted={() => {}} />
+              <TaskEditor
+                key={task.id}
+                slug={slug}
+                task={task}
+                previousTaskId={tile.node.children[i - 1]?.id}
+                existingLeaves={existingLeavesExcluding(tile.node.children, i)}
+                onDeleted={() => {}}
+              />
             ))}
           </div>
         </div>
