@@ -210,7 +210,6 @@ export const nodes = sqliteTable('nodes', {
   minCount: integer('min_count'), // COUNT only
   quantity: integer('quantity'), // ITEM only
   distinctItems: integer('distinct_items', { mode: 'boolean' }).notNull().default(false), // ITEM only
-  itemGroupId: text('item_group_id').references(() => itemGroups.id), // ITEM only
   // Self-references. Plain text, no FK constraint declared (Drizzle can't
   // express a same-table FK cleanly and SQLite won't enforce it across a
   // deferred insert order anyway) — validity (same bingo, not a descendant)
@@ -232,13 +231,23 @@ export const nodeEdges = sqliteTable('node_edges', {
   uniqueIndex('node_edges_parent_child_unq').on(t.parentId, t.childId),
 ]);
 
-// Inline accepted item names for an ITEM leaf (in addition to its group).
+// Inline accepted item names for an ITEM leaf (in addition to any groups).
 export const nodeItems = sqliteTable('node_items', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   nodeId: text('node_id').notNull().references(() => nodes.id),
   itemName: text('item_name').notNull(),
 }, (t) => [
   uniqueIndex('node_items_node_name_unq').on(t.nodeId, t.itemName),
+]);
+
+// Item groups referenced by an ITEM leaf (in addition to any inline names) —
+// a leaf can reference several groups at once, same shape as nodeItems.
+export const nodeItemGroups = sqliteTable('node_item_groups', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  nodeId: text('node_id').notNull().references(() => nodes.id),
+  itemGroupId: text('item_group_id').notNull().references(() => itemGroups.id),
+}, (t) => [
+  uniqueIndex('node_item_groups_node_group_unq').on(t.nodeId, t.itemGroupId),
 ]);
 
 // ---------------------------------------------------------------------------

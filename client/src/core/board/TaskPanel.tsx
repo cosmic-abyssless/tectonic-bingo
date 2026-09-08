@@ -14,7 +14,7 @@ export function CheckIcon() {
 }
 
 export function leafLabel(node: GraphNode): string {
-  const names = node.itemGroupName ? [`Any ${node.itemGroupName}`, ...node.itemNames] : node.itemNames;
+  const names = [...node.itemGroups.map((g) => `Any ${g.name}`), ...node.itemNames];
   return names.join(" / ") || "(no items)";
 }
 

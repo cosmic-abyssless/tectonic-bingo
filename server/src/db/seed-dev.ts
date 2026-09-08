@@ -105,8 +105,8 @@ async function main() {
     {
       row: 0, col: 2, categoryIndex: 0, name: 'Cerberus',
       tasks: [
-        { label: 'Part A', points: 25, description: 'Obtain your first Cerberus unique.', requirement: item([], { itemGroupId: cerbGroup.id }) },
-        { label: 'Part B', points: 40, description: 'Obtain another Cerberus unique.', submitRequiresPrevious: true, requirement: item([], { itemGroupId: cerbGroup.id }) },
+        { label: 'Part A', points: 25, description: 'Obtain your first Cerberus unique.', requirement: item([], { itemGroupIds: [cerbGroup.id] }) },
+        { label: 'Part B', points: 40, description: 'Obtain another Cerberus unique.', submitRequiresPrevious: true, requirement: item([], { itemGroupIds: [cerbGroup.id] }) },
       ],
     },
     {

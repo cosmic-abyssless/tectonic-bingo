@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { ItemGroup } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { itemGroupItems, itemGroups, nodes } from "../db/schema";
+import { itemGroupItems, itemGroups, nodeItemGroups } from "../db/schema";
 import { ServiceError } from "./errors";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -57,7 +57,7 @@ export function updateItemGroup(db: Db, id: string, input: Partial<ItemGroupInpu
 }
 
 export function deleteItemGroup(db: Db, id: string): void {
-  if (db.select().from(nodes).where(eq(nodes.itemGroupId, id)).get()) {
+  if (db.select().from(nodeItemGroups).where(eq(nodeItemGroups.itemGroupId, id)).get()) {
     throw new ServiceError(409, "Item group is referenced by a tile requirement");
   }
   db.transaction((tx) => {

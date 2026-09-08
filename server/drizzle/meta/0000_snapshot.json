@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "5a116340-bc66-467b-a950-3f33ff41aa53",
+  "id": "88b66330-9768-4b3d-9163-ed938e973424",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "bingo_lines": {
@@ -712,6 +712,73 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "node_item_groups": {
+      "name": "node_item_groups",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "item_group_id": {
+          "name": "item_group_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "node_item_groups_node_group_unq": {
+          "name": "node_item_groups_node_group_unq",
+          "columns": [
+            "node_id",
+            "item_group_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "node_item_groups_node_id_nodes_id_fk": {
+          "name": "node_item_groups_node_id_nodes_id_fk",
+          "tableFrom": "node_item_groups",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "node_item_groups_item_group_id_item_groups_id_fk": {
+          "name": "node_item_groups_item_group_id_item_groups_id_fk",
+          "tableFrom": "node_item_groups",
+          "tableTo": "item_groups",
+          "columnsFrom": [
+            "item_group_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "node_items": {
       "name": "node_items",
       "columns": {
@@ -841,13 +908,6 @@
           "autoincrement": false,
           "default": false
         },
-        "item_group_id": {
-          "name": "item_group_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "points_gate_node_id": {
           "name": "points_gate_node_id",
           "type": "text",
@@ -879,19 +939,6 @@
           "tableTo": "bingos",
           "columnsFrom": [
             "bingo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "nodes_item_group_id_item_groups_id_fk": {
-          "name": "nodes_item_group_id_item_groups_id_fk",
-          "tableFrom": "nodes",
-          "tableTo": "item_groups",
-          "columnsFrom": [
-            "item_group_id"
           ],
           "columnsTo": [
             "id"

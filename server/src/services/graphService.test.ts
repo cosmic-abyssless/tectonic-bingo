@@ -35,7 +35,7 @@ describe("insertSubtree / getNodeTree", () => {
       points: 25,
       children: [
         { kind: "ITEM", itemNames: ["Tanzanite fang"], quantity: 1 },
-        { kind: "ITEM", itemGroupId: group.id, itemNames: ["Inline extra"] },
+        { kind: "ITEM", itemGroupIds: [group.id], itemNames: ["Inline extra"] },
       ],
     };
     const rootId = db.transaction((tx) => insertSubtree(tx, bingo.id, input));
@@ -47,8 +47,23 @@ describe("insertSubtree / getNodeTree", () => {
     expect(tree.children[0]!.itemNames).toEqual(["Tanzanite fang"]);
     expect(tree.children[0]!.acceptedItemNames).toEqual(["Tanzanite fang"]);
     const groupLeaf = tree.children[1]!;
-    expect(groupLeaf.itemGroupName).toBe("Cerberus uniques");
+    expect(groupLeaf.itemGroups).toEqual([{ id: group.id, name: "Cerberus uniques", itemNames: ["Jar of darkness"] }]);
     expect(groupLeaf.acceptedItemNames.sort()).toEqual(["Inline extra", "Jar of darkness"].sort());
+  });
+
+  it("resolves several item groups referenced by the same leaf", () => {
+    const bingo = seedBingo();
+    const [groupA] = db.insert(itemGroups).values({ name: "Group A" }).returning().all();
+    const [groupB] = db.insert(itemGroups).values({ name: "Group B" }).returning().all();
+    db.insert(itemGroupItems).values({ groupId: groupA.id, itemName: "Splinters" }).run();
+    db.insert(itemGroupItems).values({ groupId: groupB.id, itemName: "Demon tears" }).run();
+
+    const input: GraphNodeInput = { kind: "ITEM", itemGroupIds: [groupA.id, groupB.id] };
+    const rootId = db.transaction((tx) => insertSubtree(tx, bingo.id, input));
+    const tree = getNodeTree(db, rootId)!;
+
+    expect(tree.itemGroupIds.sort()).toEqual([groupA.id, groupB.id].sort());
+    expect(tree.acceptedItemNames.sort()).toEqual(["Splinters", "Demon tears"].sort());
   });
 
   it("preserves child order via sortOrder", () => {

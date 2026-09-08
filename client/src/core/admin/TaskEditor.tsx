@@ -17,7 +17,7 @@ function toInput(node: GraphNode): GraphNodeInput {
     minCount: node.minCount ?? undefined,
     quantity: node.quantity ?? undefined,
     distinctItems: node.distinctItems,
-    itemGroupId: node.itemGroupId ?? undefined,
+    itemGroupIds: node.itemGroupIds,
     itemNames: node.itemNames,
     pointsGateNodeId: node.pointsGateNodeId,
     submitGateNodeId: node.submitGateNodeId,

@@ -91,11 +91,13 @@ export interface GraphNode {
   minCount: number | null; // COUNT only
   quantity: number | null; // ITEM only
   distinctItems: boolean; // ITEM only
-  itemGroupId: string | null; // ITEM only
-  itemGroupName: string | null; // ITEM only, denormalised for display
+  /** Item groups referenced by this leaf, in addition to itemNames. ITEM only. */
+  itemGroupIds: string[];
+  /** Denormalised {id, name, itemNames} per referenced group, for display. ITEM only. */
+  itemGroups: { id: string; name: string; itemNames: string[] }[];
   /** Inline item names only (what the admin typed on this leaf). ITEM only. */
   itemNames: string[];
-  /** Inline names union the referenced group's items — what a claim may name. ITEM only. */
+  /** Inline names union every referenced group's items — what a claim may name. ITEM only. */
   acceptedItemNames: string[];
   /** This node's points stay 0 until the gate node also completes for the team. */
   pointsGateNodeId: string | null;
@@ -120,7 +122,7 @@ export interface GraphNodeInput {
   minCount?: number;
   quantity?: number;
   distinctItems?: boolean;
-  itemGroupId?: string;
+  itemGroupIds?: string[];
   itemNames?: string[];
   pointsGateNodeId?: string | null;
   submitGateNodeId?: string | null;

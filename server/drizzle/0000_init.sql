@@ -95,6 +95,15 @@ CREATE TABLE `node_edges` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `node_edges_parent_child_unq` ON `node_edges` (`parent_id`,`child_id`);--> statement-breakpoint
+CREATE TABLE `node_item_groups` (
+	`id` text PRIMARY KEY NOT NULL,
+	`node_id` text NOT NULL,
+	`item_group_id` text NOT NULL,
+	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`item_group_id`) REFERENCES `item_groups`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `node_item_groups_node_group_unq` ON `node_item_groups` (`node_id`,`item_group_id`);--> statement-breakpoint
 CREATE TABLE `node_items` (
 	`id` text PRIMARY KEY NOT NULL,
 	`node_id` text NOT NULL,
@@ -114,12 +123,10 @@ CREATE TABLE `nodes` (
 	`min_count` integer,
 	`quantity` integer,
 	`distinct_items` integer DEFAULT false NOT NULL,
-	`item_group_id` text,
 	`points_gate_node_id` text,
 	`submit_gate_node_id` text,
 	`allows_pre_load` integer DEFAULT false NOT NULL,
-	FOREIGN KEY (`bingo_id`) REFERENCES `bingos`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`item_group_id`) REFERENCES `item_groups`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`bingo_id`) REFERENCES `bingos`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE TABLE `signup_answers` (
