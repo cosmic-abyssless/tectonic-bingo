@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { ItemGroup, NodeKind, GraphNodeInput } from "@bingo/shared";
+import { ItemSearchInput } from "../ui/ItemSearchInput";
 
 const GROUP_KINDS: { kind: NodeKind; label: string }[] = [
   { kind: "ALL", label: "All of" },
@@ -105,20 +107,48 @@ function GroupNode(props: NodeProps) {
 function LeafNode({ node, path, itemGroups, update, remove, onSaveAsGroup }: NodeProps) {
   const itemNames = node.itemNames ?? [];
   const group = itemGroups.find((g) => g.id === node.itemGroupId);
+  const [newName, setNewName] = useState("");
+
+  // Each name is its own chip (not a comma-separated blob) so the wiki
+  // search/icon lookup — which resolves one item at a time — can drive
+  // adding them. Committing (blur, or picking a suggestion) appends the
+  // name and clears the box for the next one; re-adding an existing name
+  // (case-insensitive) is a no-op rather than a silent duplicate.
+  function addName(raw: string) {
+    const trimmed = raw.trim();
+    if (trimmed && !itemNames.some((n) => n.toLowerCase() === trimmed.toLowerCase())) {
+      update(path, (n) => ({ ...n, itemNames: [...(n.itemNames ?? []), trimmed] }));
+    }
+    setNewName("");
+  }
+  function removeName(name: string) {
+    update(path, (n) => ({ ...n, itemNames: (n.itemNames ?? []).filter((existing) => existing !== name) }));
+  }
+
   async function saveAsGroup() {
     const created = await onSaveAsGroup!(itemNames);
     if (created) update(path, (n) => ({ ...n, itemNames: [], itemGroupId: created.id }));
   }
   return (
-    <div className="bg-slate-800 rounded px-2 py-1.5 space-y-1">
-      <div className="flex items-center gap-2">
-        <input
-          aria-label="Item names"
-          defaultValue={itemNames.join(", ")}
-          placeholder="Item names, comma-separated"
-          onBlur={(e) => update(path, (n) => ({ ...n, itemNames: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) }))}
-          className={`flex-1 ${INPUT}`}
+    <div className="bg-slate-800 rounded px-2 py-1.5 space-y-1.5">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {itemNames.map((name) => (
+          <span key={name} className="flex items-center gap-1 bg-slate-700 text-slate-200 text-xs rounded-full pl-2 pr-1 py-0.5">
+            {name}
+            <button type="button" aria-label={`Remove ${name}`} onClick={() => removeName(name)} className="text-slate-400 hover:text-red-400 cursor-pointer leading-none">✕</button>
+          </span>
+        ))}
+        <ItemSearchInput
+          value={newName}
+          onChange={setNewName}
+          onCommit={addName}
+          placeholder="Add item name…"
+          ariaLabel="Item names"
+          containerClassName="flex-1 min-w-36"
+          className={INPUT}
         />
+      </div>
+      <div className="flex items-center gap-2">
         <select
           aria-label="Item group"
           value={node.itemGroupId ?? ""}

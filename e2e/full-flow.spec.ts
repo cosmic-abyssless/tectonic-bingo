@@ -63,7 +63,8 @@ test("full bingo lifecycle", async ({ page, browser }) => {
     await taskPanel(page, "Part A").getByRole("button", { name: "+ item", exact: true }).click();
     await taskPanel(page, "Part A").getByLabel("Item names").fill("Vorki");
     await taskPanel(page, "Part A").getByLabel("Item names").press("Tab");
-    await expect(taskPanel(page, "Part A").getByLabel("Item names")).toHaveValue("Vorki");
+    await expect(taskPanel(page, "Part A").getByLabel("Remove Vorki")).toBeVisible();
+    await expect(taskPanel(page, "Part A").getByLabel("Item names")).toHaveValue("");
 
     await page.getByRole("button", { name: "+ Add task" }).click();
     await taskPanel(page, "Part B").getByRole("button", { name: /Expand task: Part B/ }).click();
@@ -79,7 +80,8 @@ test("full bingo lifecycle", async ({ page, browser }) => {
     await taskPanel(page, "Part B").getByRole("button", { name: "+ item", exact: true }).click();
     await taskPanel(page, "Part B").getByLabel("Item names").fill("Draconic visage");
     await taskPanel(page, "Part B").getByLabel("Item names").press("Tab");
-    await expect(taskPanel(page, "Part B").getByLabel("Item names")).toHaveValue("Draconic visage");
+    await expect(taskPanel(page, "Part B").getByLabel("Remove Draconic visage")).toBeVisible();
+    await expect(taskPanel(page, "Part B").getByLabel("Item names")).toHaveValue("");
 
     await page.getByRole("button", { name: "Close" }).click();
 
@@ -95,7 +97,8 @@ test("full bingo lifecycle", async ({ page, browser }) => {
     await taskPanel(page, "Part A").getByRole("button", { name: "+ item", exact: true }).click();
     await taskPanel(page, "Part A").getByLabel("Item names").fill("Bruma torch");
     await taskPanel(page, "Part A").getByLabel("Item names").press("Tab");
-    await expect(taskPanel(page, "Part A").getByLabel("Item names")).toHaveValue("Bruma torch");
+    await expect(taskPanel(page, "Part A").getByLabel("Remove Bruma torch")).toBeVisible();
+    await expect(taskPanel(page, "Part A").getByLabel("Item names")).toHaveValue("");
 
     await page.getByRole("button", { name: "Close" }).click();
 
