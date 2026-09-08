@@ -1,4 +1,4 @@
-import type { GraphNode, GraphNodeInput, Tile } from "@bingo/shared";
+import type { GraphNode, GraphNodeInput, NodeKind, Tile } from "@bingo/shared";
 
 // The server replaces a node's full fields + subtree on every write — this
 // mirrors a loaded node into that same input shape unmodified, both for "the
@@ -49,10 +49,33 @@ export function collectLeavesWithParent(root: GraphNode, parent: GraphNode | nul
   return root.children.flatMap((child) => collectLeavesWithParent(child, root));
 }
 
-/** ALL/ANY/COUNT/SUM composite nodes in tree order (root included, if composite) — the admin editor's "condition blocks" that can be referenced whole, not decomposed into leaves. */
-export function collectConditionNodes(root: GraphNode): GraphNode[] {
-  if (root.kind === "ITEM" || root.kind === "MANUAL") return [];
-  return [root, ...root.children.flatMap(collectConditionNodes)];
+/**
+ * Every ALL/ANY/COUNT/SUM block in a tree — the admin editor's "condition
+ * blocks" that can be referenced whole, not decomposed into leaves — each
+ * paired with an outline-style dot label: the root is "1", each composite
+ * child is its parent's label + ".N" (counting only composite siblings —
+ * items don't get a number and don't count toward one), so a nested
+ * condition's label shows exactly where it lives (a first composite
+ * grandchild of the second composite child of the root is "1.2.1").
+ *
+ * Generic over GraphNode (server-loaded) and GraphNodeInput (an unsaved
+ * admin draft, whose nodes have no id yet) — both shapes carry `kind` and
+ * `children`, which is all this needs.
+ */
+export function collectLabeledConditions<T extends { kind: NodeKind; children?: T[] | null }>(root: T): { node: T; label: string }[] {
+  const result: { node: T; label: string }[] = [];
+  function walk(node: T, label: string) {
+    if (node.kind === "ITEM" || node.kind === "MANUAL") return;
+    result.push({ node, label });
+    let counter = 0;
+    for (const child of node.children ?? []) {
+      if (child.kind === "ITEM" || child.kind === "MANUAL") continue;
+      counter += 1;
+      walk(child, `${label}.${counter}`);
+    }
+  }
+  walk(root, "1");
+  return result;
 }
 
 export function collectItemNames(root: GraphNode): string[] {

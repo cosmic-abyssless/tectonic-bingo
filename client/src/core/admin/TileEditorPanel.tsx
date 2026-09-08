@@ -6,7 +6,7 @@ import { queryKeys } from "../../api/queries";
 import { Modal, ModalHeader } from "../ui/Modal";
 import { TaskEditor } from "./TaskEditor";
 import type { ExistingLeaf, ExistingCondition } from "./RequirementTreeEditor";
-import { collectLeaves, collectConditionNodes } from "../board/requirementTree";
+import { collectLeaves, collectLabeledConditions } from "../board/requirementTree";
 
 // Every ITEM leaf on this tile, labeled by which task it's currently under —
 // offered to every OTHER task as a reference (see RequirementTreeEditor's
@@ -23,19 +23,20 @@ function existingLeavesExcluding(tasks: GraphNode[], excludeTaskIndex: number): 
 }
 
 // Every ALL/ANY/COUNT/SUM block on this tile (including a whole task's own
-// root), labeled by which task it's under and a per-task index — offered to
-// every OTHER task as a reference (see RequirementTreeEditor's "+ existing
-// condition"), so a whole nested requirement (not just one item) can be
-// reused as-is instead of rebuilt. The index is display-only, computed fresh
-// each render — nothing here is persisted.
+// root), labeled by which task it's under and a dot-notation index within it
+// (1, 1.1, 1.2, 1.1.1, ...) — offered to every OTHER task as a reference (see
+// RequirementTreeEditor's "+ existing condition"), so a whole nested
+// requirement (not just one item) can be reused as-is instead of rebuilt.
+// The label is display-only, computed fresh each render — nothing here is
+// persisted.
 function existingConditionsExcluding(tasks: GraphNode[], excludeTaskIndex: number): ExistingCondition[] {
   return tasks
     .filter((_, i) => i !== excludeTaskIndex)
     .flatMap((task) =>
-      collectConditionNodes(task).map((node, i) => ({
+      collectLabeledConditions(task).map(({ node, label }) => ({
         id: node.id,
         taskLabel: task.label ?? "Task",
-        label: `Condition ${i + 1}`,
+        label: `Condition ${label}`,
         node,
       })),
     );

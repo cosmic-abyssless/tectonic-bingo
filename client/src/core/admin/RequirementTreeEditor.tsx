@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { ItemGroup, NodeKind, GraphNode, GraphNodeInput } from "@bingo/shared";
 import { ItemSearchInput, iconUrlFor } from "../ui/ItemSearchInput";
 import { SearchableSelect } from "../ui/SearchableSelect";
-import { toGraphNodeInput } from "../board/requirementTree";
+import { toGraphNodeInput, collectLabeledConditions } from "../board/requirementTree";
 
 /** An ITEM leaf that already exists elsewhere on the same tile — offered as a reference, not retyped. */
 export interface ExistingLeaf {
@@ -15,9 +15,9 @@ export interface ExistingLeaf {
  * An ALL/ANY/COUNT/SUM block that already exists elsewhere on the same tile
  * (including a whole sibling task's own root) — offered as a reference, so
  * the entire nested requirement can be reused as-is instead of flattened
- * into plain items or rebuilt by hand. `label` is a display-only "Condition
- * N" index, computed fresh per render (see TileEditorPanel) — nothing here
- * is persisted.
+ * into plain items or rebuilt by hand. `label` is a display-only dot-notation
+ * index ("Condition 1.2"), computed fresh per render (see TileEditorPanel)
+ * — nothing here is persisted.
  */
 export interface ExistingCondition {
   id: string;
@@ -90,24 +90,16 @@ function appendChild(root: GraphNodeInput, path: Path, child: GraphNodeInput): G
 
 const NEW_GROUP: GraphNodeInput = { kind: "ALL", children: [] };
 
-// Labels every ALL/ANY/COUNT/SUM block in this tree "Condition N", in the
-// same pre-order (self, then children) used by requirementTree.ts's
-// collectConditionNodes — so a label shown here, while editing this task,
-// lines up with what a sibling task's "+ existing condition" picker calls
-// the same block once this task is saved. Keyed by path rather than id: a
-// freshly added, unsaved condition has no id yet, and paths are unique for
-// the render they're computed in either way.
-function labelConditions(root: GraphNodeInput): Map<string, string> {
-  const labels = new Map<string, string>();
-  let counter = 0;
-  function walk(node: GraphNodeInput, path: Path) {
-    if (node.kind === "ITEM") return;
-    counter += 1;
-    labels.set(path.join("."), `Condition ${counter}`);
-    (node.children ?? []).forEach((child, i) => walk(child, [...path, i]));
-  }
-  walk(root, []);
-  return labels;
+// Labels every ALL/ANY/COUNT/SUM block in this tree with the same
+// dot-notation index (1, 1.1, 1.2, 1.1.1, ...) TileEditorPanel's
+// existingConditionsExcluding() uses for a sibling task's "+ existing
+// condition" picker — so an admin looking at this task's own tree can tell
+// which entry there refers to which block. Keyed by node reference rather
+// than id: a freshly added, unsaved condition has no id yet, and `root` is
+// the same object graph rendered below within one render pass, so identity
+// holds.
+function labelConditions(root: GraphNodeInput): Map<GraphNodeInput, string> {
+  return new Map(collectLabeledConditions(root).map(({ node, label }) => [node, label]));
 }
 
 export interface RequirementTreeEditorProps {
@@ -166,7 +158,7 @@ interface NodeProps {
   onSaveAsGroup?: (itemNames: string[]) => Promise<ItemGroup | null>;
   existingLeaves?: ExistingLeaf[];
   existingConditions?: ExistingCondition[];
-  conditionLabels: Map<string, string>;
+  conditionLabels: Map<GraphNodeInput, string>;
   update: (path: Path, fn: (node: GraphNodeInput) => GraphNodeInput) => void;
   remove: (path: Path) => void;
   add: (path: Path, child: GraphNodeInput) => void;
@@ -177,7 +169,7 @@ function GroupNode(props: NodeProps) {
   const { node, path, itemGroups, update, remove, add, addMany, onSaveAsGroup, existingLeaves, existingConditions, conditionLabels } = props;
   const isRoot = path.length === 0;
   const children = node.children ?? [];
-  const ownLabel = conditionLabels.get(path.join("."));
+  const ownLabel = conditionLabels.get(node);
   const [addingItem, setAddingItem] = useState(false);
   const [newItemName, setNewItemName] = useState("");
   const [pickingExisting, setPickingExisting] = useState(false);
@@ -222,7 +214,7 @@ function GroupNode(props: NodeProps) {
   return (
     <div className={isRoot ? "" : "border-l-2 border-slate-700 pl-3"}>
       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-        {ownLabel && <span className="text-[10px] text-slate-500 font-mono shrink-0" title="Shown in this task's own tree, and in other tasks' &quot;+ existing condition&quot; picker once saved">{ownLabel}</span>}
+        {ownLabel && <span className="text-[10px] text-slate-500 font-mono shrink-0" title="Shown in this task's own tree, and in other tasks' &quot;+ existing condition&quot; picker once saved">Condition {ownLabel}</span>}
         <select
           aria-label="Requirement kind"
           value={node.kind}
