@@ -1,0 +1,212 @@
+import { useEffect, useRef, useState } from "react";
+import type { OsrsItemSearchResult } from "@bingo/shared";
+import { searchOsrsItems } from "../../api/osrsItemsApi";
+
+// Mirrors osrsWikiService.ts's iconUrlFor — the wiki's real upload
+// convention for an item's small inventory-sprite icon (title with spaces
+// as underscores). Constructed client-side, with no search/lookup call,
+// so a closed field can show an icon for whatever text it already holds
+// (an existing item loaded from the DB, not just one picked this session)
+// — the <img>'s onError hides it for text that isn't a real item name.
+function iconUrlFor(name: string): string {
+  return `https://oldschool.runescape.wiki/images/${encodeURIComponent(name.trim().replace(/ /g, "_"))}.png`;
+}
+
+// A plain controlled text input augmented with OSRS Wiki item suggestions
+// (name + icon) as the admin types — a drop-in for any "item name" text
+// field. Freeform text always stays valid and is never overwritten except
+// by an explicit suggestion pick: plenty of item names in this app (e.g.
+// "Any Cerberus drop", "Waves 1-3 proof") are bingo-specific labels, not
+// real OSRS items, and won't have wiki matches at all.
+export function ItemSearchInput({
+  value,
+  onChange,
+  onCommit,
+  placeholder,
+  className,
+  containerClassName,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  /**
+   * Fires when the value should be persisted: on blur (freeform typing —
+   * not on every keystroke, to avoid a request per character) and
+   * immediately on picking a suggestion (a deliberate, final choice, not
+   * worth waiting on a blur for). Optional — a caller that persists via its
+   * own separate "Add" action (rather than per-field autosave) has no use
+   * for this.
+   */
+  onCommit?: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+  /** Applied to the wrapping (relative-positioned) div — set this, not `className`, to control layout/sizing (e.g. "flex-1") in a flex row. */
+  containerClassName?: string;
+  ariaLabel?: string;
+}) {
+  const [results, setResults] = useState<OsrsItemSearchResult[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [highlighted, setHighlighted] = useState(0);
+  const [dropdownRect, setDropdownRect] = useState<DOMRect | null>(null);
+  // Whether the icon derived from the current value failed to load (not a
+  // real item name, or no icon on the wiki). Reset whenever value changes
+  // so switching to a different, valid name gets a fresh attempt.
+  const [iconFailed, setIconFailed] = useState(false);
+  useEffect(() => setIconFailed(false), [value]);
+  // Shown only while the field is closed (not actively being typed into) —
+  // while open, the dropdown's own per-result icons already show what's
+  // relevant, and re-deriving this on every keystroke would fire a failed
+  // image request for nearly every partial string typed.
+  const closedIconUrl = !open && value.trim() && !iconFailed ? iconUrlFor(value) : null;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Debounced search — fires on every value change while the field is
+  // focused, not just on an explicit "search" action, so results feel live.
+  useEffect(() => {
+    const query = value.trim();
+    if (!open || query.length < 2) {
+      setResults([]);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    const timer = setTimeout(() => {
+      searchOsrsItems(query)
+        .then((res) => {
+          if (!cancelled) setResults(res.items);
+        })
+        .catch(() => {
+          if (!cancelled) setResults([]);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [value, open]);
+
+  useEffect(() => {
+    if (open && containerRef.current) setDropdownRect(containerRef.current.getBoundingClientRect());
+  }, [open, results.length]);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => {
+      const target = e.target as Node;
+      if (containerRef.current?.contains(target)) return;
+      if (dropdownRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    setHighlighted(0);
+  }, [results]);
+
+  const pick = (item: OsrsItemSearchResult) => {
+    onChange(item.name);
+    onCommit?.(item.name);
+    setResults([]);
+    setOpen(false);
+  };
+
+  const showDropdown = open && (loading || results.length > 0);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showDropdown) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlighted((h) => Math.min(h + 1, results.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlighted((h) => Math.max(h - 1, 0));
+    } else if (e.key === "Enter") {
+      if (results[highlighted]) {
+        e.preventDefault();
+        pick(results[highlighted]);
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
+      inputRef.current?.blur();
+    }
+  };
+
+  return (
+    <div ref={containerRef} className={`relative ${containerClassName ?? ""}`}>
+      {closedIconUrl && (
+        <img
+          src={closedIconUrl}
+          alt=""
+          className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 object-contain pointer-events-none"
+          onError={() => setIconFailed(true)}
+        />
+      )}
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => onCommit?.(value)}
+        onKeyDown={handleKeyDown}
+        className={`${className ?? "w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"} ${closedIconUrl ? "pl-7" : ""}`}
+      />
+
+      {showDropdown && dropdownRect && (
+        <div
+          ref={dropdownRef}
+          style={{ position: "fixed", top: dropdownRect.bottom + 4, left: dropdownRect.left, width: Math.max(dropdownRect.width, 220), zIndex: 9999 }}
+          className="bg-slate-900 border border-slate-700 rounded-md shadow-xl max-h-64 overflow-y-auto"
+        >
+          {loading && results.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-slate-500">Searching…</div>
+          ) : (
+            results.map((item, i) => (
+              <button
+                key={item.name}
+                type="button"
+                // preventDefault stops the browser's default mousedown-blur
+                // behavior — without it, clicking a suggestion blurs the
+                // input (firing onCommit with the stale, still-being-typed
+                // text) a tick before pick()'s own onCommit(item.name)
+                // fires, racing two commits for one click.
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pick(item);
+                }}
+                className={`w-full flex items-center gap-2 text-left px-2 py-1.5 text-xs transition-colors ${
+                  i === highlighted ? "bg-indigo-600 text-white" : "text-slate-200 hover:bg-slate-700"
+                }`}
+              >
+                <img
+                  src={item.iconUrl}
+                  alt=""
+                  className="w-5 h-5 object-contain shrink-0"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.visibility = "hidden";
+                  }}
+                />
+                <span className="truncate">{item.name}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

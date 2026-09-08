@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 const MAX_WIDTH = {
   md: "max-w-lg",
@@ -22,8 +22,27 @@ export function Modal({
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
+  // A plain onClick={onClose} on the backdrop closes on mouseUP alone —
+  // dragging a text selection that starts inside the modal (e.g. selecting
+  // a description) and releases past its edge fires a click whose target
+  // resolves to the backdrop (the nearest common ancestor of the mousedown
+  // and mouseup targets), bypassing the content div's stopPropagation
+  // entirely since the click never touches it. Only close when BOTH the
+  // mousedown and the click landed directly on the backdrop itself, not
+  // bubbled up from a drag that started inside the content.
+  const mouseDownOnBackdrop = useRef(false);
+
   return (
-    <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4"
+      onMouseDown={(e) => {
+        mouseDownOnBackdrop.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (mouseDownOnBackdrop.current && e.target === e.currentTarget) onClose();
+        mouseDownOnBackdrop.current = false;
+      }}
+    >
       <div
         className={`bg-slate-800 rounded-xl w-full ${MAX_WIDTH[size]} max-h-[90vh] overflow-y-auto shadow-2xl`}
         onClick={(e) => e.stopPropagation()}
