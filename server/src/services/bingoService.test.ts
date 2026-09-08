@@ -83,11 +83,11 @@ describe("advanceStage", () => {
 });
 
 describe("assertBoardEditable", () => {
-  it.each(["planning", "signup", "captains", "draft"] as const)("allows edits during %s", (stage) => {
+  it.each(["planning", "signup", "captains", "draft", "reveal"] as const)("allows edits during %s", (stage) => {
     expect(() => assertBoardEditable(seedBingo({ stage }))).not.toThrow();
   });
 
-  it.each(["reveal", "live", "complete"] as const)("locks the board during %s", (stage) => {
+  it.each(["live", "complete"] as const)("locks the board during %s", (stage) => {
     expect(() => assertBoardEditable(seedBingo({ stage }))).toThrow(ServiceError);
   });
 });

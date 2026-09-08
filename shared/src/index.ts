@@ -12,10 +12,10 @@
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
 
-// Players can see the board from `reveal` onward; structural board edits are
-// locked from the same point (mirrors server bingoService.isBoardRevealed).
-export function isBoardRevealed(stage: Stage): boolean {
-  return stage === "reveal" || stage === "live" || stage === "complete";
+// Structural board edits are locked once the game is live (mirrors server
+// bingoService.assertBoardEditable). Editing during reveal is still allowed.
+export function isBoardLocked(stage: Stage): boolean {
+  return stage === "live" || stage === "complete";
 }
 
 export type NodeStatus = "not_started" | "in_progress" | "pending_approval" | "completed";

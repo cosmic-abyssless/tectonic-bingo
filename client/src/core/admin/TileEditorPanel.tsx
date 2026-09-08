@@ -92,7 +92,7 @@ export function TileEditorPanel({ slug, tile, categories, locked, onClose }: { s
       {/* A disabled fieldset inertly disables every control inside it,
           including the nested task/requirement editors. */}
       <fieldset disabled={locked} className="min-w-0 p-5 space-y-4 disabled:opacity-60">
-        {locked && <p className="text-sm text-amber-300">The board is locked once revealed to players. Step the stage back to edit it.</p>}
+        {locked && <p className="text-sm text-amber-300">The board is locked once the game is live. Step the stage back to edit it.</p>}
         {error && <p className="text-red-400 text-sm">{error}</p>}
         <div className="flex items-start gap-4">
           <div

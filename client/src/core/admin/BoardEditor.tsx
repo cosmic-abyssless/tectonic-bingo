@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { isBoardRevealed, type Bingo, type Tile, type TileCategory } from "@bingo/shared";
+import { isBoardLocked, type Bingo, type Tile, type TileCategory } from "@bingo/shared";
 import { useBoard } from "../../api/queries";
 import { queryKeys } from "../../api/queries";
 import * as adminApi from "../../api/adminApi";
@@ -15,7 +15,7 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Mirrors the server's assertBoardEditable gate.
-  const locked = isBoardRevealed(bingo.stage);
+  const locked = isBoardLocked(bingo.stage);
 
   const grid = new Map<string, Tile>();
   for (const tile of tiles) grid.set(`${tile.boardRow},${tile.boardCol}`, tile);
@@ -39,7 +39,7 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
     <div className="space-y-6">
       {locked && (
         <p className="text-sm text-amber-300 bg-amber-900/30 border border-amber-800 rounded-md px-3 py-2">
-          The board is locked once revealed to players (current stage: {bingo.stage}). Step the stage back to edit it.
+          The board is locked once the game is live (current stage: {bingo.stage}). Step the stage back to edit it.
         </p>
       )}
       {error && <p className="text-red-400 text-sm">{error}</p>}

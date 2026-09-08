@@ -17,11 +17,11 @@ export function getBingoBySlug(db: Db, slug: string) {
   return db.select().from(bingos).where(eq(bingos.slug, slug)).get();
 }
 
-// Board/task/question edits are only allowed before the board is revealed —
-// once players can see it, structural changes would be confusing or unfair.
+// Board/task/question edits are allowed until the game goes live (including
+// during reveal) — once play has started, structural changes would be unfair.
 export function assertBoardEditable(bingo: typeof bingos.$inferSelect): void {
-  if (isBoardRevealed(bingo)) {
-    throw new ServiceError(400, `The board is locked once revealed to players (current stage: ${bingo.stage})`);
+  if (bingo.stage === "live" || bingo.stage === "complete") {
+    throw new ServiceError(400, `The board is locked once the game is live (current stage: ${bingo.stage})`);
   }
 }
 
