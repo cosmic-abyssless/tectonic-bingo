@@ -17,6 +17,7 @@ export function TaskEditor({
   previousTaskId,
   existingLeaves,
   existingConditions,
+  sharedNodeIds,
   onDeleted,
 }: {
   slug: string;
@@ -24,6 +25,7 @@ export function TaskEditor({
   previousTaskId?: string;
   existingLeaves?: ExistingLeaf[];
   existingConditions?: ExistingCondition[];
+  sharedNodeIds: Set<string>;
   onDeleted: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -144,6 +146,7 @@ export function TaskEditor({
                 onSaveAsGroup={saveAsGroup}
                 existingLeaves={existingLeaves}
                 existingConditions={existingConditions}
+                sharedNodeIds={sharedNodeIds}
               />
             </div>
           )}

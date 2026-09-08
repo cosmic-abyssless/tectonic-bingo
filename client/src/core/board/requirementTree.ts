@@ -23,6 +23,36 @@ export function toGraphNodeInput(node: GraphNode): GraphNodeInput {
   };
 }
 
+/**
+ * Ids with 2+ distinct *direct* parents anywhere under `tileRoot` (a tile's
+ * own node, whose children are its tasks) — genuinely multi-parented
+ * ("shared") nodes, at whatever level the sharing actually happens. A leaf
+ * nested inside a shared condition block is NOT itself shared (it has
+ * exactly one parent: the block) unless it's independently referenced a
+ * second time — only the block is. This is what decides whether a row's
+ * remove button is a safe "unlink" (the node survives elsewhere) or an
+ * actual delete; reachability-based checks (does this id appear *anywhere*
+ * in a sibling task, at any depth) overcount everything nested inside a
+ * shared block.
+ */
+export function collectSharedNodeIds(tileRoot: GraphNode): Set<string> {
+  const parentsOf = new Map<string, Set<string>>();
+  function walk(node: GraphNode) {
+    for (const child of node.children) {
+      const set = parentsOf.get(child.id) ?? new Set<string>();
+      set.add(node.id);
+      parentsOf.set(child.id, set);
+      walk(child);
+    }
+  }
+  walk(tileRoot);
+  const shared = new Set<string>();
+  for (const [id, parents] of parentsOf) {
+    if (parents.size >= 2) shared.add(id);
+  }
+  return shared;
+}
+
 export function findNode(root: GraphNode, nodeId: string): GraphNode | undefined {
   if (root.id === nodeId) return root;
   for (const child of root.children) {

@@ -6,7 +6,7 @@ import { queryKeys } from "../../api/queries";
 import { Modal, ModalHeader } from "../ui/Modal";
 import { TaskEditor } from "./TaskEditor";
 import type { ExistingLeaf, ExistingCondition } from "./RequirementTreeEditor";
-import { collectLeaves, collectLabeledConditions } from "../board/requirementTree";
+import { collectLeaves, collectLabeledConditions, collectSharedNodeIds } from "../board/requirementTree";
 
 // Every ITEM leaf on this tile, labeled by which task it's currently under —
 // offered to every OTHER task as a reference (see RequirementTreeEditor's
@@ -73,6 +73,11 @@ export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: str
       setUploading(false);
     }
   }
+  // Tile-wide (not per-task, unlike existingLeaves/existingConditions —
+  // there's no "self" to exclude here): every node with 2+ direct parents
+  // anywhere on this tile, so a task's own editor can tell a genuinely
+  // shared row apart from one that merely sits inside a shared block.
+  const sharedNodeIds = collectSharedNodeIds(tile.node);
   return (
     <Modal onClose={onClose} size="lg">
       <ModalHeader title={tile.name} subtitle={`Row ${tile.boardRow}, Col ${tile.boardCol}`} onClose={onClose} />
@@ -143,6 +148,7 @@ export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: str
                 previousTaskId={tile.node.children[i - 1]?.id}
                 existingLeaves={existingLeavesExcluding(tile.node.children, i)}
                 existingConditions={existingConditionsExcluding(tile.node.children, i)}
+                sharedNodeIds={sharedNodeIds}
                 onDeleted={() => {}}
               />
             ))}

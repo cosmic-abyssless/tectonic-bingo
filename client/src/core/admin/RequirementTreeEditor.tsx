@@ -120,6 +120,17 @@ export interface RequirementTreeEditorProps {
   existingLeaves?: ExistingLeaf[];
   /** Same idea as `existingLeaves`, but whole ALL/ANY/COUNT/SUM blocks — see ExistingCondition. */
   existingConditions?: ExistingCondition[];
+  /**
+   * Every node id on this tile with 2+ direct parents — i.e. genuinely
+   * shared, at whatever level the sharing happens (see
+   * requirementTree.ts's collectSharedNodeIds). Distinct from
+   * existingLeaves/existingConditions (which list what's *available to
+   * link*, including everything nested inside an already-shared block):
+   * this instead says which row *is itself* a link, so its remove button
+   * can read "unlink" and its icon shows only there, not on every item
+   * inside a shared condition too.
+   */
+  sharedNodeIds: Set<string>;
 }
 
 // Recursive editor for a task's requirement tree. Every composite node
@@ -129,7 +140,7 @@ export interface RequirementTreeEditorProps {
 // the task itself a bare ITEM leaf — dispatch on kind here exactly like
 // GroupNode does for its own children, or such a task would render as an
 // empty composite instead of its actual item row.
-export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGroup, existingLeaves, existingConditions }: RequirementTreeEditorProps) {
+export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGroup, existingLeaves, existingConditions, sharedNodeIds }: RequirementTreeEditorProps) {
   const conditionLabels = labelConditions(root);
   const props: NodeProps = {
     node: root,
@@ -138,6 +149,7 @@ export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGrou
     onSaveAsGroup,
     existingLeaves,
     existingConditions,
+    sharedNodeIds,
     conditionLabels,
     update: (path, fn) => onChange(updateAt(root, path, fn)),
     remove: (path) => onChange(removeAt(root, path)),
@@ -158,6 +170,7 @@ interface NodeProps {
   onSaveAsGroup?: (itemNames: string[]) => Promise<ItemGroup | null>;
   existingLeaves?: ExistingLeaf[];
   existingConditions?: ExistingCondition[];
+  sharedNodeIds: Set<string>;
   conditionLabels: Map<GraphNodeInput, string>;
   update: (path: Path, fn: (node: GraphNodeInput) => GraphNodeInput) => void;
   remove: (path: Path) => void;
@@ -166,10 +179,14 @@ interface NodeProps {
 }
 
 function GroupNode(props: NodeProps) {
-  const { node, path, itemGroups, update, remove, add, addMany, onSaveAsGroup, existingLeaves, existingConditions, conditionLabels } = props;
+  const { node, path, itemGroups, update, remove, add, addMany, onSaveAsGroup, existingLeaves, existingConditions, sharedNodeIds, conditionLabels } = props;
   const isRoot = path.length === 0;
   const children = node.children ?? [];
   const ownLabel = conditionLabels.get(node);
+  // This block *itself* has 2+ direct parents (not merely "something inside
+  // it is reachable from another task") — see sharedNodeIds' doc comment.
+  const isShared = !!node.id && sharedNodeIds.has(node.id);
+  const sharedWithTasks = isShared ? Array.from(new Set((existingConditions ?? []).filter((c) => c.id === node.id).map((c) => c.taskLabel))) : [];
   const [addingItem, setAddingItem] = useState(false);
   const [newItemName, setNewItemName] = useState("");
   const [pickingExisting, setPickingExisting] = useState(false);
@@ -261,8 +278,19 @@ function GroupNode(props: NodeProps) {
         {pickableConditions.length > 0 && (
           <button type="button" onClick={() => setPickingExistingCondition((v) => !v)} className={SMALL_BTN}>+ existing condition</button>
         )}
+        {isShared && (
+          <LinkIcon title={`Shared with ${sharedWithTasks.length > 0 ? sharedWithTasks.join(", ") : "another task"} — removing it here only unlinks it from this task`} className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+        )}
         {!isRoot && (
-          <button type="button" aria-label="Remove group" onClick={() => remove(path)} className="ml-auto text-slate-500 hover:text-red-400 text-xs cursor-pointer">✕</button>
+          <button
+            type="button"
+            aria-label={isShared ? "Unlink condition" : "Remove group"}
+            title={isShared ? "Unlink from this task — the condition itself is only deleted if this was its last use" : undefined}
+            onClick={() => remove(path)}
+            className="ml-auto text-slate-500 hover:text-red-400 text-xs cursor-pointer"
+          >
+            {isShared ? "unlink" : "✕"}
+          </button>
         )}
       </div>
       {addingItem && (
@@ -330,22 +358,33 @@ function GroupNode(props: NodeProps) {
 // docs/item-quantity-model.md §2). Renaming isn't supported here; remove and
 // re-add (or "+ existing item") instead, matching the read-only-once-added
 // behavior a chip always had.
-function ItemLeafRow({ node, path, remove, existingLeaves }: NodeProps) {
+function ItemLeafRow({ node, path, remove, existingLeaves, sharedNodeIds }: NodeProps) {
   const isRoot = path.length === 0;
   const name = node.itemName ?? "";
-  // A shared leaf's id shows up in some *other* task's leaf list too (that's
-  // what "shared" means here) — collect which task(s), for the tooltip.
-  const sharedWithTasks = node.id ? Array.from(new Set((existingLeaves ?? []).filter((l) => l.id === node.id).map((l) => l.taskLabel))) : [];
+  // This leaf *itself* has 2+ direct parents — not just "reachable somewhere
+  // under a sibling task," which would also be true of every other leaf
+  // nested inside a condition block that's shared one level up. Only the
+  // node that's actually the link gets the icon (see sharedNodeIds).
+  const isShared = !!node.id && sharedNodeIds.has(node.id);
+  const sharedWithTasks = isShared ? Array.from(new Set((existingLeaves ?? []).filter((l) => l.id === node.id).map((l) => l.taskLabel))) : [];
 
   return (
     <div className="flex items-center gap-1.5 bg-slate-800 rounded px-2 py-1.5">
       <ChipIcon name={name} className="w-4 h-4" />
       <span className="flex-1 text-xs text-slate-200 truncate">{name}</span>
-      {sharedWithTasks.length > 0 && (
-        <LinkIcon title={`Shared with ${sharedWithTasks.join(", ")} — one claim counts toward both`} className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+      {isShared && (
+        <LinkIcon title={`Shared with ${sharedWithTasks.length > 0 ? sharedWithTasks.join(", ") : "another task"} — removing it here only unlinks it from this task`} className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
       )}
       {!isRoot && (
-        <button type="button" aria-label={`Remove ${name}`} onClick={() => remove(path)} className="text-slate-500 hover:text-red-400 text-xs cursor-pointer shrink-0">✕</button>
+        <button
+          type="button"
+          aria-label={isShared ? `Unlink ${name}` : `Remove ${name}`}
+          title={isShared ? "Unlink from this task — the item itself is only deleted if this was its last use" : undefined}
+          onClick={() => remove(path)}
+          className="text-slate-500 hover:text-red-400 text-xs cursor-pointer shrink-0"
+        >
+          {isShared ? "unlink" : "✕"}
+        </button>
       )}
     </div>
   );
