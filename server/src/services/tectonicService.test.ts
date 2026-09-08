@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TectonicClient, getTectonicConfig, type TectonicConfig } from "./tectonicService";
+import { TectonicClient, TectonicUnavailableError, getTectonicConfig, type TectonicConfig } from "./tectonicService";
 
 const cfg: TectonicConfig = { baseUrl: "http://tectonic.test", apiKey: "secret-key", guildId: "guild123" };
 
@@ -50,18 +50,18 @@ describe("TectonicClient", () => {
     expect(call[1].headers.Authorization).toBe("secret-key");
   });
 
-  it("returns null on a non-2xx response instead of throwing", async () => {
+  it("throws TectonicUnavailableError on a non-2xx response", async () => {
     const fetchImpl = mockFetch({ "/leaderboard": { status: 401, body: { error: "bad key" } } });
     const client = new TectonicClient(cfg, fetchImpl);
-    expect(await client.getRoster()).toBeNull();
+    await expect(client.getRoster()).rejects.toBeInstanceOf(TectonicUnavailableError);
   });
 
-  it("returns null on a network failure instead of throwing", async () => {
+  it("throws TectonicUnavailableError on a network failure", async () => {
     const fetchImpl = vi.fn(async () => {
       throw new Error("ECONNREFUSED");
     }) as unknown as typeof fetch;
     const client = new TectonicClient(cfg, fetchImpl);
-    expect(await client.getRoster()).toBeNull();
+    await expect(client.getDetailedUser("111")).rejects.toBeInstanceOf(TectonicUnavailableError);
   });
 
   it("caches successful responses and skips refetching within the TTL", async () => {
@@ -77,8 +77,8 @@ describe("TectonicClient", () => {
     const fetchImpl = mockFetch({ "/leaderboard": { status: 500 } });
     const client = new TectonicClient(cfg, fetchImpl);
 
-    await client.getRoster();
-    await client.getRoster();
+    await client.getRoster().catch(() => {});
+    await client.getRoster().catch(() => {});
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(2);
   });
 

@@ -66,7 +66,7 @@ function QuestionField({ question, value, onChange }: { question: SignupQuestion
 export function SignupForm({ slug }: { slug: string }) {
   const { data: questionsData } = useSignupQuestions(slug);
   const { data: mySignup, isLoading } = useMySignup(slug);
-  const { data: tectonicRsnsData, isLoading: tectonicLoading } = useMyTectonicRsns(slug);
+  const { data: tectonicRsnsData, isLoading: tectonicLoading, error: tectonicError } = useMyTectonicRsns(slug);
   const createSignup = useCreateSignup(slug);
   const updateSignup = useUpdateSignup(slug);
   const withdrawSignup = useWithdrawSignup(slug);
@@ -101,6 +101,17 @@ export function SignupForm({ slug }: { slug: string }) {
   // was turned on (or before they were registered) keeps their spot, so
   // wait for the membership check only when there's no existing signup.
   if (isLoading || (!existing && tectonicLoading)) return null;
+
+  // Server answers 503 when tectonic-api is unreachable. Don't let the user
+  // fill in the form only to have the submit fail with the same message.
+  if (!existing && tectonicError) {
+    return (
+      <div className="max-w-lg mx-auto bg-slate-800 border border-slate-700 rounded-xl p-6 text-center space-y-2">
+        <h2 className="text-xl font-bold text-white">Signups temporarily unavailable</h2>
+        <p className="text-slate-400 text-sm">{tectonicError.message}</p>
+      </div>
+    );
+  }
 
   if (!existing && tectonicRsnsData?.enabled && !tectonicRsnsData.isMember) {
     return (

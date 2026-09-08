@@ -15,7 +15,7 @@ import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
 import * as statsService from "../services/statsService";
 import { isOcrEnabled, analyzeSubmissionScreenshot } from "../ocr";
-import { getTectonicClient, type TectonicDetailedUser } from "../services/tectonicService";
+import { getTectonicClient, TectonicUnavailableError, type TectonicDetailedUser } from "../services/tectonicService";
 import { parseWomSummary } from "../services/womService";
 import { parseAccountType } from "../services/runeProfileService";
 import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
@@ -26,10 +26,19 @@ import { broadcast } from "../ws";
 // stays sync/DB-pure). One call covers both membership gating and RSN
 // verification for a request. `enabled: false` means the integration isn't
 // configured — no gating or verification applies, current behavior.
+// `member: null` means tectonic answered and doesn't know this user; an
+// outage is surfaced as a 503 rather than mistaken for non-membership.
 async function getTectonicMembership(discordId: string): Promise<{ enabled: boolean; member: TectonicDetailedUser | null }> {
   const client = getTectonicClient();
   if (!client) return { enabled: false, member: null };
-  return { enabled: true, member: await client.getDetailedUser(discordId) };
+  try {
+    return { enabled: true, member: await client.getDetailedUser(discordId) };
+  } catch (err) {
+    if (err instanceof TectonicUnavailableError) {
+      throw new ServiceError(503, "Clan membership check is temporarily unavailable. Please try again in a minute.");
+    }
+    throw err;
+  }
 }
 
 // Matches the submitted RSN against the signer's tectonic-api RSNs
