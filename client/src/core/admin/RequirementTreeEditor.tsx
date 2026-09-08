@@ -1,13 +1,29 @@
 import { useState } from "react";
-import type { ItemGroup, NodeKind, GraphNodeInput } from "@bingo/shared";
+import type { ItemGroup, NodeKind, GraphNode, GraphNodeInput } from "@bingo/shared";
 import { ItemSearchInput, iconUrlFor } from "../ui/ItemSearchInput";
 import { SearchableSelect } from "../ui/SearchableSelect";
+import { toGraphNodeInput } from "../board/requirementTree";
 
 /** An ITEM leaf that already exists elsewhere on the same tile — offered as a reference, not retyped. */
 export interface ExistingLeaf {
   id: string;
   itemName: string;
   taskLabel: string;
+}
+
+/**
+ * An ALL/ANY/COUNT/SUM block that already exists elsewhere on the same tile
+ * (including a whole sibling task's own root) — offered as a reference, so
+ * the entire nested requirement can be reused as-is instead of flattened
+ * into plain items or rebuilt by hand. `label` is a display-only "Condition
+ * N" index, computed fresh per render (see TileEditorPanel) — nothing here
+ * is persisted.
+ */
+export interface ExistingCondition {
+  id: string;
+  taskLabel: string;
+  label: string;
+  node: GraphNode;
 }
 
 // Best-effort wiki icon for a row — many names here are bingo-specific
@@ -27,8 +43,8 @@ function ChipIcon({ name, className }: { name: string; className: string }) {
 }
 
 // Marks a row whose id is shared with another task's leaf (added via
-// "+ existing item"/"+ existing group", or the original side of one) — the
-// same claim counts toward both tasks, which isn't visible from the name
+// "+ existing item"/"+ existing condition", or the original side of one) —
+// the same claim counts toward both tasks, which isn't visible from the name
 // alone.
 function LinkIcon({ title, className }: { title: string; className: string }) {
   return (
@@ -72,22 +88,6 @@ function appendChild(root: GraphNodeInput, path: Path, child: GraphNodeInput): G
   return updateAt(root, path, (parent) => ({ ...parent, children: [...(parent.children ?? []), child] }));
 }
 
-// Groups pickable existing leaves by the task they currently live under, so
-// "+ existing group" can offer "pull in everything from Part A" as one click
-// instead of one leaf at a time.
-function groupExistingLeaves(leaves: ExistingLeaf[]): { taskLabel: string; leaves: ExistingLeaf[] }[] {
-  const order: string[] = [];
-  const byTask = new Map<string, ExistingLeaf[]>();
-  for (const leaf of leaves) {
-    if (!byTask.has(leaf.taskLabel)) {
-      byTask.set(leaf.taskLabel, []);
-      order.push(leaf.taskLabel);
-    }
-    byTask.get(leaf.taskLabel)!.push(leaf);
-  }
-  return order.map((taskLabel) => ({ taskLabel, leaves: byTask.get(taskLabel)! }));
-}
-
 const NEW_GROUP: GraphNodeInput = { kind: "ALL", children: [] };
 
 export interface RequirementTreeEditorProps {
@@ -106,6 +106,8 @@ export interface RequirementTreeEditorProps {
    * through the exact same PATCH this editor already does.
    */
   existingLeaves?: ExistingLeaf[];
+  /** Same idea as `existingLeaves`, but whole ALL/ANY/COUNT/SUM blocks — see ExistingCondition. */
+  existingConditions?: ExistingCondition[];
 }
 
 // Recursive editor for a task's requirement tree. Every composite node
@@ -115,20 +117,21 @@ export interface RequirementTreeEditorProps {
 // the task itself a bare ITEM leaf — dispatch on kind here exactly like
 // GroupNode does for its own children, or such a task would render as an
 // empty composite instead of its actual item row.
-export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGroup, existingLeaves }: RequirementTreeEditorProps) {
+export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGroup, existingLeaves, existingConditions }: RequirementTreeEditorProps) {
   const props: NodeProps = {
     node: root,
     path: [],
     itemGroups,
     onSaveAsGroup,
     existingLeaves,
+    existingConditions,
     update: (path, fn) => onChange(updateAt(root, path, fn)),
     remove: (path) => onChange(removeAt(root, path)),
     add: (path, child) => onChange(appendChild(root, path, child)),
     // Batched sibling of `add`: folds every child onto `root` in one
     // onChange call. Calling `add` in a loop instead would have each call
     // close over the same pre-update `root`, so only the last child would
-    // survive — this is the "+ existing group" and "+ item" (group-pick) path.
+    // survive — this is the "+ item" (group-pick) path.
     addMany: (path, children) => onChange(children.reduce((r, child) => appendChild(r, path, child), root)),
   };
   return root.kind === "ITEM" ? <ItemLeafRow {...props} /> : <GroupNode {...props} />;
@@ -140,6 +143,7 @@ interface NodeProps {
   itemGroups: ItemGroup[];
   onSaveAsGroup?: (itemNames: string[]) => Promise<ItemGroup | null>;
   existingLeaves?: ExistingLeaf[];
+  existingConditions?: ExistingCondition[];
   update: (path: Path, fn: (node: GraphNodeInput) => GraphNodeInput) => void;
   remove: (path: Path) => void;
   add: (path: Path, child: GraphNodeInput) => void;
@@ -147,21 +151,22 @@ interface NodeProps {
 }
 
 function GroupNode(props: NodeProps) {
-  const { node, path, itemGroups, update, remove, add, addMany, onSaveAsGroup, existingLeaves } = props;
+  const { node, path, itemGroups, update, remove, add, addMany, onSaveAsGroup, existingLeaves, existingConditions } = props;
   const isRoot = path.length === 0;
   const children = node.children ?? [];
   const [addingItem, setAddingItem] = useState(false);
   const [newItemName, setNewItemName] = useState("");
   const [pickingExisting, setPickingExisting] = useState(false);
-  const [pickingExistingGroup, setPickingExistingGroup] = useState(false);
-  // Offer a leaf already on this group only once — re-adding the same id as
-  // a second direct child of the same parent isn't meaningful.
+  const [pickingExistingCondition, setPickingExistingCondition] = useState(false);
+  // Offer a leaf/condition already on this group only once — re-adding the
+  // same id as a second direct child of the same parent isn't meaningful.
   const childIds = new Set(children.map((c) => c.id).filter(Boolean));
   const pickableLeaves = (existingLeaves ?? []).filter((l) => !childIds.has(l.id));
-  // "+ existing group" bulk-adds every not-yet-present leaf from one sibling
-  // task at once (e.g. pull every boss already used on Part A into Part B),
-  // instead of clicking "+ existing item" once per leaf.
-  const pickableTaskGroups = groupExistingLeaves(pickableLeaves);
+  // "+ existing condition" references a whole ALL/ANY/COUNT/SUM block from a
+  // sibling task as-is (its own kind/quantity/children, not decomposed into
+  // items) — e.g. reuse Part A's "at least 2 of these 5 bosses" verbatim in
+  // Part B, rather than rebuilding the same COUNT by hand.
+  const pickableConditions = (existingConditions ?? []).filter((c) => !childIds.has(c.id));
 
   // Committing (blur, or picking a suggestion) adds one plain ITEM leaf and
   // closes the picker — mirrors "+ existing item"'s reveal-then-commit flow.
@@ -236,8 +241,8 @@ function GroupNode(props: NodeProps) {
         {pickableLeaves.length > 0 && (
           <button type="button" onClick={() => setPickingExisting((v) => !v)} className={SMALL_BTN}>+ existing item</button>
         )}
-        {pickableTaskGroups.length > 0 && (
-          <button type="button" onClick={() => setPickingExistingGroup((v) => !v)} className={SMALL_BTN}>+ existing group</button>
+        {pickableConditions.length > 0 && (
+          <button type="button" onClick={() => setPickingExistingCondition((v) => !v)} className={SMALL_BTN}>+ existing condition</button>
         )}
         {!isRoot && (
           <button type="button" aria-label="Remove group" onClick={() => remove(path)} className="ml-auto text-slate-500 hover:text-red-400 text-xs cursor-pointer">✕</button>
@@ -271,16 +276,16 @@ function GroupNode(props: NodeProps) {
           />
         </div>
       )}
-      {pickingExistingGroup && (
+      {pickingExistingCondition && (
         <div className="mb-1.5 max-w-xs">
           <SearchableSelect
             value=""
-            options={pickableTaskGroups.map((g) => ({ id: g.taskLabel, label: `${g.taskLabel} — all ${g.leaves.length} items` }))}
-            placeholder="Pull in every item from another task…"
-            onChange={(taskLabel) => {
-              const group = pickableTaskGroups.find((g) => g.taskLabel === taskLabel);
-              if (group) addMany(path, group.leaves.map((l): GraphNodeInput => ({ id: l.id, kind: "ITEM", itemName: l.itemName })));
-              setPickingExistingGroup(false);
+            options={pickableConditions.map((c) => ({ id: c.id, label: c.label, group: c.taskLabel }))}
+            placeholder="Search conditions elsewhere on this tile…"
+            onChange={(id) => {
+              const condition = pickableConditions.find((c) => c.id === id);
+              if (condition) add(path, toGraphNodeInput(condition.node));
+              setPickingExistingCondition(false);
             }}
           />
         </div>

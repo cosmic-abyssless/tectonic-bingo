@@ -5,8 +5,8 @@ import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
 import { Modal, ModalHeader } from "../ui/Modal";
 import { TaskEditor } from "./TaskEditor";
-import type { ExistingLeaf } from "./RequirementTreeEditor";
-import { collectLeaves } from "../board/requirementTree";
+import type { ExistingLeaf, ExistingCondition } from "./RequirementTreeEditor";
+import { collectLeaves, collectConditionNodes } from "../board/requirementTree";
 
 // Every ITEM leaf on this tile, labeled by which task it's currently under —
 // offered to every OTHER task as a reference (see RequirementTreeEditor's
@@ -19,6 +19,25 @@ function existingLeavesExcluding(tasks: GraphNode[], excludeTaskIndex: number): 
       collectLeaves(task)
         .filter((leaf) => leaf.kind === "ITEM" && leaf.itemName)
         .map((leaf) => ({ id: leaf.id, itemName: leaf.itemName!, taskLabel: task.label ?? "Task" })),
+    );
+}
+
+// Every ALL/ANY/COUNT/SUM block on this tile (including a whole task's own
+// root), labeled by which task it's under and a per-task index — offered to
+// every OTHER task as a reference (see RequirementTreeEditor's "+ existing
+// condition"), so a whole nested requirement (not just one item) can be
+// reused as-is instead of rebuilt. The index is display-only, computed fresh
+// each render — nothing here is persisted.
+function existingConditionsExcluding(tasks: GraphNode[], excludeTaskIndex: number): ExistingCondition[] {
+  return tasks
+    .filter((_, i) => i !== excludeTaskIndex)
+    .flatMap((task) =>
+      collectConditionNodes(task).map((node, i) => ({
+        id: node.id,
+        taskLabel: task.label ?? "Task",
+        label: `Condition ${i + 1}`,
+        node,
+      })),
     );
 }
 
@@ -122,6 +141,7 @@ export function TileEditorPanel({ slug, tile, categories, onClose }: { slug: str
                 task={task}
                 previousTaskId={tile.node.children[i - 1]?.id}
                 existingLeaves={existingLeavesExcluding(tile.node.children, i)}
+                existingConditions={existingConditionsExcluding(tile.node.children, i)}
                 onDeleted={() => {}}
               />
             ))}
