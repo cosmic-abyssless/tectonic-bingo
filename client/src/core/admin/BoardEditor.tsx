@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Bingo, Tile, TileCategory } from "@bingo/shared";
+import { isBoardRevealed, type Bingo, type Tile, type TileCategory } from "@bingo/shared";
 import { useBoard } from "../../api/queries";
 import { queryKeys } from "../../api/queries";
 import * as adminApi from "../../api/adminApi";
@@ -13,6 +13,9 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
   const queryClient = useQueryClient();
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Mirrors the server's assertBoardEditable gate.
+  const locked = isBoardRevealed(bingo.stage);
 
   const grid = new Map<string, Tile>();
   for (const tile of tiles) grid.set(`${tile.boardRow},${tile.boardCol}`, tile);
@@ -20,10 +23,13 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
 
   async function createAt(row: number, col: number) {
     setCreating(true);
+    setError(null);
     try {
       const { tile } = await adminApi.createTile(slug, { name: "New Tile", boardRow: row, boardCol: col });
       await queryClient.invalidateQueries({ queryKey: queryKeys.board(slug) });
       setSelectedTileId(tile.id);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to create tile");
     } finally {
       setCreating(false);
     }
@@ -31,7 +37,17 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
 
   return (
     <div className="space-y-6">
-      <CategoryEditor slug={slug} categories={categories} />
+      {locked && (
+        <p className="text-sm text-amber-300 bg-amber-900/30 border border-amber-800 rounded-md px-3 py-2">
+          The board is locked once revealed to players (current stage: {bingo.stage}). Step the stage back to edit it.
+        </p>
+      )}
+      {error && <p className="text-red-400 text-sm">{error}</p>}
+
+      {/* A disabled fieldset inertly disables every control inside it. */}
+      <fieldset disabled={locked} className="min-w-0 disabled:opacity-60">
+        <CategoryEditor slug={slug} categories={categories} />
+      </fieldset>
 
       <div>
         <p className="text-sm font-medium text-slate-300 mb-2">
@@ -58,9 +74,9 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
                 <button
                   key={`${row},${col}`}
                   aria-label={`Create tile at row ${row}, column ${col}`}
-                  disabled={creating}
+                  disabled={creating || locked}
                   onClick={() => createAt(row, col)}
-                  className="aspect-square bg-slate-900/50 border-2 border-dashed border-slate-800 rounded-md flex items-center justify-center text-slate-600 hover:border-slate-600 hover:text-slate-400 transition-colors cursor-pointer disabled:cursor-wait"
+                  className="aspect-square bg-slate-900/50 border-2 border-dashed border-slate-800 rounded-md flex items-center justify-center text-slate-600 hover:border-slate-600 hover:text-slate-400 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   +
                 </button>
@@ -70,7 +86,7 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
         </div>
       </div>
 
-      {selectedTile && <TileEditorPanel slug={slug} tile={selectedTile} categories={categories} onClose={() => setSelectedTileId(null)} />}
+      {selectedTile && <TileEditorPanel slug={slug} tile={selectedTile} categories={categories} locked={locked} onClose={() => setSelectedTileId(null)} />}
     </div>
   );
 }

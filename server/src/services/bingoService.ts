@@ -20,8 +20,8 @@ export function getBingoBySlug(db: Db, slug: string) {
 // Board/task/question edits are only allowed before the board is revealed —
 // once players can see it, structural changes would be confusing or unfair.
 export function assertBoardEditable(bingo: typeof bingos.$inferSelect): void {
-  if (bingo.stage !== "planning" && bingo.stage !== "signup") {
-    throw new ServiceError(400, `The board can only be edited during planning or signup (current stage: ${bingo.stage})`);
+  if (isBoardRevealed(bingo)) {
+    throw new ServiceError(400, `The board is locked once revealed to players (current stage: ${bingo.stage})`);
   }
 }
 
@@ -34,12 +34,15 @@ export function isBingoMod(db: Db, bingoId: string, userId: string, isSiteAdmin:
     .get();
 }
 
-// Tiles are only visible to non-mods once the board has been revealed —
-// stage reveal/live/complete. Mods can always see them (for building/testing
-// the board before reveal).
-export function canViewTiles(bingo: typeof bingos.$inferSelect, isMod: boolean): boolean {
-  if (isMod) return true;
+// The board is revealed to players from stage reveal onward (reveal/live/complete).
+export function isBoardRevealed(bingo: typeof bingos.$inferSelect): boolean {
   return bingo.stage === "reveal" || bingo.stage === "live" || bingo.stage === "complete";
+}
+
+// Tiles are only visible to non-mods once the board has been revealed. Mods
+// can always see them (for building/testing the board before reveal).
+export function canViewTiles(bingo: typeof bingos.$inferSelect, isMod: boolean): boolean {
+  return isMod || isBoardRevealed(bingo);
 }
 
 export interface CreateBingoParams {

@@ -83,7 +83,7 @@ export function getTeamNodeStatuses(db: Db, teamId: string, bingoId: string): Ma
 }
 
 // ---------------------------------------------------------------------------
-// Admin CRUD — all gated to planning/signup via bingoService.assertBoardEditable,
+// Admin CRUD — all gated to pre-reveal stages via bingoService.assertBoardEditable,
 // called by the route before invoking these.
 // ---------------------------------------------------------------------------
 

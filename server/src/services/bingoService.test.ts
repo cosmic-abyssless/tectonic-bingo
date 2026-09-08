@@ -5,7 +5,8 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingos } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { advanceStage } from "./bingoService";
+import { advanceStage, assertBoardEditable } from "./bingoService";
+import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -78,5 +79,15 @@ describe("advanceStage", () => {
     const row = db.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!;
     expect(row.stage).toBe("live");
     expect(row.startsAt).not.toBeNull();
+  });
+});
+
+describe("assertBoardEditable", () => {
+  it.each(["planning", "signup", "captains", "draft"] as const)("allows edits during %s", (stage) => {
+    expect(() => assertBoardEditable(seedBingo({ stage }))).not.toThrow();
+  });
+
+  it.each(["reveal", "live", "complete"] as const)("locks the board during %s", (stage) => {
+    expect(() => assertBoardEditable(seedBingo({ stage }))).toThrow(ServiceError);
   });
 });
