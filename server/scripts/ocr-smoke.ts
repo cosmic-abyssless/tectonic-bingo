@@ -13,9 +13,10 @@
 import { readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { db } from "../src/db";
-import { bingos, tileTaskItems, tileTasks, tileWildcards, tiles } from "../src/db/schema";
+import { bingos, tileWildcards, tiles } from "../src/db/schema";
 import { getOcrService } from "../src/ocr";
-import { findBestMatch } from "../src/services/textMatchService";
+import { getFullGraph, leafDescendants } from "../src/services/graphService";
+import { findBestMatch, type MatchableItem } from "../src/services/textMatchService";
 
 async function main() {
   const [, , imagePath, slug] = process.argv;
@@ -56,16 +57,24 @@ async function main() {
     return;
   }
 
-  const items = db
-    .select({ id: tileTaskItems.id, itemName: tileTaskItems.itemName, taskId: tileTasks.id, tileId: tiles.id, tileName: tiles.name })
-    .from(tileTaskItems)
-    .innerJoin(tileTasks, eq(tileTaskItems.taskId, tileTasks.id))
-    .innerJoin(tiles, eq(tileTasks.tileId, tiles.id))
-    .where(eq(tiles.bingoId, bingo.id))
-    .all();
+  // Every ITEM leaf under each tile's node, with accepted names already
+  // resolved (inline ∪ group) by getFullGraph — one MatchableItem per name.
+  // Mirrors ocr.ts's analyzeSubmissionScreenshot exactly.
+  const tileRows = db.select({ id: tiles.id, nodeId: tiles.nodeId, name: tiles.name }).from(tiles).where(eq(tiles.bingoId, bingo.id)).all();
+  const { childrenOf, nodesById } = getFullGraph(db, bingo.id);
+  const items: MatchableItem[] = [];
+  for (const tile of tileRows) {
+    for (const leafId of leafDescendants(tile.nodeId, childrenOf, nodesById)) {
+      const node = nodesById.get(leafId);
+      if (node?.kind !== "ITEM") continue;
+      for (const itemName of node.acceptedItemNames) {
+        items.push({ nodeId: leafId, itemName, tileId: tile.id, tileName: tile.name });
+      }
+    }
+  }
 
   const wildcards = db
-    .select({ id: tileWildcards.id, itemName: tileWildcards.itemName, applicableTaskId: tileWildcards.applicableTaskId, tileId: tiles.id, tileName: tiles.name })
+    .select({ id: tileWildcards.id, itemName: tileWildcards.itemName, applicableNodeId: tileWildcards.applicableNodeId, tileId: tiles.id, tileName: tiles.name })
     .from(tileWildcards)
     .innerJoin(tiles, eq(tileWildcards.tileId, tiles.id))
     .where(eq(tiles.bingoId, bingo.id))
