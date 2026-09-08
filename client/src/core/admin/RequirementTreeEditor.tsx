@@ -90,6 +90,26 @@ function appendChild(root: GraphNodeInput, path: Path, child: GraphNodeInput): G
 
 const NEW_GROUP: GraphNodeInput = { kind: "ALL", children: [] };
 
+// Labels every ALL/ANY/COUNT/SUM block in this tree "Condition N", in the
+// same pre-order (self, then children) used by requirementTree.ts's
+// collectConditionNodes — so a label shown here, while editing this task,
+// lines up with what a sibling task's "+ existing condition" picker calls
+// the same block once this task is saved. Keyed by path rather than id: a
+// freshly added, unsaved condition has no id yet, and paths are unique for
+// the render they're computed in either way.
+function labelConditions(root: GraphNodeInput): Map<string, string> {
+  const labels = new Map<string, string>();
+  let counter = 0;
+  function walk(node: GraphNodeInput, path: Path) {
+    if (node.kind === "ITEM") return;
+    counter += 1;
+    labels.set(path.join("."), `Condition ${counter}`);
+    (node.children ?? []).forEach((child, i) => walk(child, [...path, i]));
+  }
+  walk(root, []);
+  return labels;
+}
+
 export interface RequirementTreeEditorProps {
   root: GraphNodeInput;
   itemGroups: ItemGroup[];
@@ -118,6 +138,7 @@ export interface RequirementTreeEditorProps {
 // GroupNode does for its own children, or such a task would render as an
 // empty composite instead of its actual item row.
 export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGroup, existingLeaves, existingConditions }: RequirementTreeEditorProps) {
+  const conditionLabels = labelConditions(root);
   const props: NodeProps = {
     node: root,
     path: [],
@@ -125,6 +146,7 @@ export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGrou
     onSaveAsGroup,
     existingLeaves,
     existingConditions,
+    conditionLabels,
     update: (path, fn) => onChange(updateAt(root, path, fn)),
     remove: (path) => onChange(removeAt(root, path)),
     add: (path, child) => onChange(appendChild(root, path, child)),
@@ -144,6 +166,7 @@ interface NodeProps {
   onSaveAsGroup?: (itemNames: string[]) => Promise<ItemGroup | null>;
   existingLeaves?: ExistingLeaf[];
   existingConditions?: ExistingCondition[];
+  conditionLabels: Map<string, string>;
   update: (path: Path, fn: (node: GraphNodeInput) => GraphNodeInput) => void;
   remove: (path: Path) => void;
   add: (path: Path, child: GraphNodeInput) => void;
@@ -151,9 +174,10 @@ interface NodeProps {
 }
 
 function GroupNode(props: NodeProps) {
-  const { node, path, itemGroups, update, remove, add, addMany, onSaveAsGroup, existingLeaves, existingConditions } = props;
+  const { node, path, itemGroups, update, remove, add, addMany, onSaveAsGroup, existingLeaves, existingConditions, conditionLabels } = props;
   const isRoot = path.length === 0;
   const children = node.children ?? [];
+  const ownLabel = conditionLabels.get(path.join("."));
   const [addingItem, setAddingItem] = useState(false);
   const [newItemName, setNewItemName] = useState("");
   const [pickingExisting, setPickingExisting] = useState(false);
@@ -198,6 +222,7 @@ function GroupNode(props: NodeProps) {
   return (
     <div className={isRoot ? "" : "border-l-2 border-slate-700 pl-3"}>
       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+        {ownLabel && <span className="text-[10px] text-slate-500 font-mono shrink-0" title="Shown in this task's own tree, and in other tasks' &quot;+ existing condition&quot; picker once saved">{ownLabel}</span>}
         <select
           aria-label="Requirement kind"
           value={node.kind}
