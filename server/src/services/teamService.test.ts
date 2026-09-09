@@ -4,7 +4,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { and, eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { addTeamMember, createTeam, getCaptainCandidates, getTeamsWithMembers, removeTeamMember, updateTeam } from "./teamService";
+import { addTeamMember, createTeam, deleteTeam, getCaptainCandidates, getTeamsWithMembers, removeTeamMember, updateTeam } from "./teamService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -118,14 +118,20 @@ describe("updateTeam", () => {
 });
 
 describe("getTeamsWithMembers", () => {
-  it("attaches each team roster with the captain flagged", () => {
+  it("attaches each team roster with the captain flagged and listed first", () => {
     const { bingo, captain, member } = seedBingoAndUsers();
+    // Re-insert the captain's row after the member's so the sort, not insertion order, puts the captain on top.
     const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
     addTeamMember(db, team.id, member.id);
+    db.delete(schema.teamMembers).where(eq(schema.teamMembers.userId, captain.id)).run();
+    db.insert(schema.teamMembers).values({ teamId: team.id, userId: captain.id, isCaptain: true }).run();
 
     const [withMembers] = getTeamsWithMembers(db, bingo.id);
     expect(withMembers.id).toBe(team.id);
-    expect(withMembers.members.map((m) => [m.user.id, m.isCaptain]).sort()).toEqual([[captain.id, true], [member.id, false]].sort());
+    expect(withMembers.members.map((m) => [m.user.id, m.isCaptain])).toEqual([
+      [captain.id, true],
+      [member.id, false],
+    ]);
   });
 });
 
@@ -143,5 +149,27 @@ describe("addTeamMember / removeTeamMember", () => {
     const { bingo, captain } = seedBingoAndUsers();
     const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
     expect(() => removeTeamMember(db, team.id, captain.id)).toThrow(/captain/);
+  });
+});
+
+describe("deleteTeam", () => {
+  it("removes the team and its members", () => {
+    const { bingo, captain, member } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    addTeamMember(db, team.id, member.id);
+
+    deleteTeam(db, team.id);
+
+    expect(getTeamsWithMembers(db, bingo.id)).toEqual([]);
+    expect(db.select().from(schema.teamMembers).where(eq(schema.teamMembers.teamId, team.id)).all()).toEqual([]);
+  });
+
+  it("refuses once the team has game history", () => {
+    const { bingo, captain, member } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    db.insert(schema.draftPicks).values({ bingoId: bingo.id, pickNumber: 1, teamId: team.id, userId: member.id, pickedByUserId: captain.id }).run();
+
+    expect(() => deleteTeam(db, team.id)).toThrow(ServiceError);
+    expect(getTeamsWithMembers(db, bingo.id)).toHaveLength(1);
   });
 });

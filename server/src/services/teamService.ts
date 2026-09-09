@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { signupAnswers, signups, teamMembers, teamNodeState, teamPointAdjustments, teams, users } from "../db/schema";
+import { draftPicks, signupAnswers, signups, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { PUBLIC_SIGNUP_COLS } from "./signupService";
 
@@ -32,7 +32,10 @@ export function getTeamsWithMembers(db: Db, bingoId: string) {
     .all();
   return teamRows.map((team) => ({
     ...team,
-    members: memberRows.filter((m) => m.teamId === team.id).map(({ user, isCaptain }) => ({ user, isCaptain })),
+    members: memberRows
+      .filter((m) => m.teamId === team.id)
+      .sort((a, b) => Number(b.isCaptain) - Number(a.isCaptain))
+      .map(({ user, isCaptain }) => ({ user, isCaptain })),
   }));
 }
 
@@ -193,6 +196,19 @@ export function removeTeamMember(db: Db, teamId: string, userId: string): void {
   if (!team) throw new ServiceError(404, "Team not found");
   if (team.captainUserId === userId) throw new ServiceError(400, "Cannot remove the captain — reassign the captaincy or delete the team instead");
   db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).run();
+}
+
+// Only teams without game history can go: once a team has draft picks,
+// submissions or point adjustments, removing it would orphan that record.
+export function deleteTeam(db: Db, teamId: string): void {
+  db.transaction((tx) => {
+    const team = tx.select().from(teams).where(eq(teams.id, teamId)).get();
+    if (!team) throw new ServiceError(404, "Team not found");
+    const hasHistory = [draftPicks, submissions, teamPointAdjustments].some((table) => tx.select({ id: table.id }).from(table).where(eq(table.teamId, teamId)).get());
+    if (hasHistory) throw new ServiceError(409, "This team has draft picks or submissions and can't be deleted");
+    tx.delete(teamMembers).where(eq(teamMembers.teamId, teamId)).run();
+    tx.delete(teams).where(eq(teams.id, teamId)).run();
+  });
 }
 
 // Active signups not already on a team for this bingo — the pool mods pick

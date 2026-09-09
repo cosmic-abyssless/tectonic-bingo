@@ -125,6 +125,9 @@ export function createTeam(slug: string, payload: { captainUserId: string; name?
 export function updateTeam(slug: string, id: string, payload: Partial<Team>) {
   return api.patch<{ team: Team }>(`${base(slug)}/teams/${id}`, payload);
 }
+export function deleteTeam(slug: string, id: string) {
+  return api.delete(`${base(slug)}/teams/${id}`);
+}
 export function addTeamMember(slug: string, teamId: string, userId: string) {
   return api.post<{ member: TeamMember }>(`${base(slug)}/teams/${teamId}/members`, { userId });
 }

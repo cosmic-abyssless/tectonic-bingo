@@ -332,6 +332,13 @@ router.post(
   }),
 );
 router.delete(
+  "/teams/:id",
+  asyncHandler(async (req, res) => {
+    teamService.deleteTeam(db, req.params.id as string);
+    res.status(204).end();
+  }),
+);
+router.delete(
   "/teams/:id/members/:userId",
   asyncHandler(async (req, res) => {
     teamService.removeTeamMember(db, req.params.id as string, req.params.userId as string);

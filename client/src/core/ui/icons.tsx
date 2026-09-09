@@ -169,3 +169,9 @@ export const LinkIcon = (p: IconProps) => (
     <path d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1a2.5 2.5 0 0 1-3.5-3.5l1-1" />
   </Svg>
 );
+
+export const CrownIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M2.5 5.5L5.5 8l2.5-4.5L10.5 8l3-2.5-1.25 7h-8.5z" />
+  </Svg>
+);

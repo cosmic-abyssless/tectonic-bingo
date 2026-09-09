@@ -1,11 +1,7 @@
 import type { DraftPick, DraftTeam } from "@bingo/shared";
+import { CrownIcon } from "../ui/icons";
 import { displayName } from "../ui/user";
 
-/**
- * One team's roster: captain up top, picks below in draft order. Used in the
- * draft room (live, with the on-the-clock indicator) and on the bingo page
- * once the draft is done (the team reveal).
- */
 export function TeamRoster({ team, picks, isCurrent, highlight }: { team: DraftTeam; picks: DraftPick[]; isCurrent?: boolean; highlight?: boolean }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
@@ -18,8 +14,9 @@ export function TeamRoster({ team, picks, isCurrent, highlight }: { team: DraftT
           {team.color && <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: team.color }} />}
           <span className="truncate text-sm font-semibold text-fg">{team.name}</span>
         </div>
-        <div className="mt-0.5 truncate text-xs text-fg-muted">
-          <span className="text-fg-subtle">Captain</span> {team.captainRsn || "?"}
+        <div className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-fg-muted">
+          <CrownIcon size={12} className="shrink-0 text-warn" aria-label="Captain" />
+          <span className="truncate">{team.captainRsn || "?"}</span>
         </div>
       </div>
       <ul className="w-full space-y-1">

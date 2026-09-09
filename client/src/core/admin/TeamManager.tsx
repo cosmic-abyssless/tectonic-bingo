@@ -9,7 +9,7 @@ import { displayName } from "../ui/user";
 import { Button, IconButton } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
 import { Field, Input, Select } from "../ui/Field";
-import { XIcon } from "../ui/icons";
+import { ChevronDownIcon, ChevronRightIcon, CrownIcon, TrashIcon, XIcon } from "../ui/icons";
 
 // Forward-looking estimate while captains are still being assigned — teams
 // don't have their non-captain members yet, so this is just
@@ -30,6 +30,8 @@ function teamSizeSummary(teamCount: number, totalParticipants: number): string |
 
 function TeamCard({ slug, team }: { slug: string; team: TeamWithMembers }) {
   const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Every mutation here funnels through this so a failure (409 already on a
@@ -46,6 +48,7 @@ function TeamCard({ slug, team }: { slug: string; team: TeamWithMembers }) {
   const update = (patch: Partial<Team>) => run(() => adminApi.updateTeam(slug, team.id, patch));
   const addMember = (user: User) => run(() => adminApi.addTeamMember(slug, team.id, user.id));
   const removeMember = (user: User) => run(() => adminApi.removeTeamMember(slug, team.id, user.id));
+  const remove = () => run(() => Promise.all([adminApi.deleteTeam(slug, team.id), queryClient.invalidateQueries({ queryKey: adminQueryKeys.captainCandidates(slug) })]));
   function rename(name: string) {
     if (name.trim() && name.trim() !== team.name) update({ name });
   }
@@ -53,43 +56,80 @@ function TeamCard({ slug, team }: { slug: string; team: TeamWithMembers }) {
     if (codeword.trim() && codeword.trim() !== team.codeword) update({ codeword });
   }
 
+  const panelId = `team-${team.id}`;
   return (
-    <Card className="space-y-3 p-4">
-      <div className="flex items-end gap-2">
-        <Field label="Name" className="flex-1">
-          <Input key={team.name} defaultValue={team.name} onBlur={(e) => rename(e.target.value)} className="font-semibold" />
-        </Field>
-        <input
-          type="color"
-          aria-label={`${team.name} color`}
-          value={team.color ?? "#6366f1"}
-          onChange={(e) => update({ color: e.target.value })}
-          className="size-10 shrink-0 cursor-pointer rounded-md border border-line-strong bg-bg p-1"
-        />
-      </div>
-      <Field label="Password" hint="Must be visible in every screenshot the team submits.">
-        <Input key={team.codeword} defaultValue={team.codeword} onBlur={(e) => setPassword(e.target.value)} className="num" />
-      </Field>
-      <Field label={`Members (${team.members.length})`} as="div">
-        <ul className="divide-y divide-line rounded-md border border-line">
-          {team.members.map(({ user, isCaptain }) => (
-            <li key={user.id} className="flex h-9 items-center gap-2 px-3 text-sm">
-              <span className="min-w-0 flex-1 truncate text-fg">{displayName(user)}</span>
-              {isCaptain ? (
-                <span className="text-xs text-fg-subtle">Captain</span>
-              ) : (
-                <IconButton label={`Remove ${displayName(user)}`} size="sm" onPress={() => removeMember(user)}>
-                  <XIcon size={12} />
-                </IconButton>
-              )}
-            </li>
-          ))}
-        </ul>
-      </Field>
-      <Field label="Add member" as="div">
-        <UserSearchInput scope={slug} onSelect={addMember} />
-      </Field>
-      {error && <Notice tone="danger">{error}</Notice>}
+    <Card>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="flex h-12 w-full items-center gap-3 px-4 text-left transition-colors hover:bg-surface-hover"
+      >
+        <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: team.color ?? "var(--color-line-strong)" }} />
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">{team.name}</span>
+        <span className="num text-xs text-fg-subtle">
+          {team.members.length} {team.members.length === 1 ? "member" : "members"}
+        </span>
+        <span className="text-fg-subtle">{open ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
+      </button>
+      {open && (
+        <div id={panelId} className="space-y-3 border-t border-line p-4">
+          <div className="flex items-end gap-2">
+            <Field label="Name" className="flex-1">
+              <Input key={team.name} defaultValue={team.name} onBlur={(e) => rename(e.target.value)} className="font-semibold" />
+            </Field>
+            <input
+              type="color"
+              aria-label={`${team.name} color`}
+              value={team.color ?? "#6366f1"}
+              onChange={(e) => update({ color: e.target.value })}
+              className="size-10 shrink-0 cursor-pointer rounded-md border border-line-strong bg-bg p-1"
+            />
+          </div>
+          <Field label="Password" hint="Must be visible in every screenshot the team submits.">
+            <Input key={team.codeword} defaultValue={team.codeword} onBlur={(e) => setPassword(e.target.value)} className="num" />
+          </Field>
+          <Field label={`Members (${team.members.length})`} as="div">
+            <ul className="divide-y divide-line rounded-md border border-line">
+              {team.members.map(({ user, isCaptain }) => (
+                <li key={user.id} className="flex h-9 items-center gap-2 px-3 text-sm">
+                  {isCaptain && <CrownIcon size={14} className="shrink-0 text-warn" aria-label="Captain" />}
+                  <span className="min-w-0 flex-1 truncate text-fg">{displayName(user)}</span>
+                  {!isCaptain && (
+                    <IconButton label={`Remove ${displayName(user)}`} size="sm" onPress={() => removeMember(user)}>
+                      <XIcon size={12} />
+                    </IconButton>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </Field>
+          <Field label="Add member" as="div">
+            <UserSearchInput scope={slug} onSelect={addMember} />
+          </Field>
+          {error && <Notice tone="danger">{error}</Notice>}
+          {confirmingDelete ? (
+            <Notice tone="danger">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>Delete {team.name}? Its members go back to the captain pool.</span>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onPress={() => setConfirmingDelete(false)}>
+                    Cancel
+                  </Button>
+                  <Button variant="danger" size="sm" onPress={remove}>
+                    Delete team
+                  </Button>
+                </div>
+              </div>
+            </Notice>
+          ) : (
+            <Button variant="ghost" size="sm" className="text-danger" onPress={() => setConfirmingDelete(true)}>
+              <TrashIcon size={14} /> Delete team
+            </Button>
+          )}
+        </div>
+      )}
     </Card>
   );
 }
