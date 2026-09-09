@@ -7,15 +7,16 @@ export function Tabs(props: TabsProps) {
 
 export function TabList({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <AriaTabList className={`flex gap-1 border-b border-line overflow-x-auto ${className ?? ""}`}>{children}</AriaTabList>
+    <AriaTabList className={`flex flex-wrap gap-1 border-b border-line ${className ?? ""}`}>{children}</AriaTabList>
   );
 }
 
-export function Tab({ id, children }: { id: string; children: ReactNode }) {
+/** `dimmed` marks a tab that is reachable but not relevant yet. */
+export function Tab({ id, dimmed, children }: { id: string; dimmed?: boolean; children: ReactNode }) {
   return (
     <AriaTab
       id={id}
-      className="relative -mb-px cursor-pointer whitespace-nowrap px-3 py-2.5 text-sm font-medium text-fg-muted transition-colors hovered:text-fg selected:text-fg selected:after:absolute selected:after:inset-x-3 selected:after:-bottom-px selected:after:h-px selected:after:bg-fg outline-none"
+      className={`${dimmed ? "opacity-50 " : ""}relative -mb-px cursor-pointer whitespace-nowrap px-3 py-2.5 text-sm font-medium text-fg-muted transition-colors hovered:text-fg selected:text-fg selected:after:absolute selected:after:inset-x-3 selected:after:-bottom-px selected:after:h-px selected:after:bg-fg outline-none`}
     >
       {children}
     </AriaTab>

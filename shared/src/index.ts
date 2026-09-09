@@ -108,6 +108,17 @@ export interface Team {
   updatedAt: string;
 }
 
+export interface TeamRosterEntry {
+  user: User;
+  isCaptain: boolean;
+  isDrafted: boolean; // joined via a draft pick, so mods can't remove them by hand
+}
+
+/** Team as shipped in the bingo shell: the row plus everyone on it. */
+export interface TeamWithMembers extends Team {
+  members: TeamRosterEntry[];
+}
+
 export interface ItemGroup {
   id: string;
   name: string;
@@ -292,7 +303,7 @@ export interface BingoListResponse {
 export interface BingoShellResponse {
   bingo: Bingo;
   categories: TileCategory[];
-  teams: Team[];
+  teams: TeamWithMembers[];
   isMod: boolean;
   myTeam: Team | null;
   paidSignupCount: number;
@@ -579,4 +590,7 @@ export type BroadcastEvent =
   | { type: "stage_changed"; bingoId: string; payload: { stage: Stage } }
   | { type: "draft_started"; bingoId: string; payload: Record<string, never> }
   | { type: "draft_pick"; bingoId: string; payload: { pickNumber: number; teamId: string; userId: string } }
-  | { type: "team_updated"; bingoId: string; payload: { teamId: string } };
+  | { type: "team_updated"; bingoId: string; payload: { teamId: string } }
+  // Any successful admin mutation (settings, board, lines, questions, teams,
+  // mods). Coarse on purpose: clients refetch the bingo shell + board.
+  | { type: "bingo_changed"; bingoId: string; payload: Record<string, never> };

@@ -36,6 +36,7 @@ export function BoardPageLayout() {
   const TeamBanner = useSlot("TeamBanner");
   const BoardGrid = useSlot("BoardGrid");
   const RulesDialog = useSlot("RulesDialog");
+  const TeamInfoDialog = useSlot("TeamInfoDialog");
   const SubmissionsDrawer = useSlot("SubmissionsDrawer");
   const TileModal = useSlot("TileModal");
   const SubmissionModal = useSlot("SubmissionModal");
@@ -45,7 +46,7 @@ export function BoardPageLayout() {
       <PageHeader page={page} />
 
       <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
-        <StageRow stage={page.bingo.stage} milestone={page.milestone} />
+        <StageRow stage={page.bingo.stage} milestone={page.milestone} showStepper={page.isMod} />
 
         {page.stageView === "signup" ? (
           <SignupStage slug={page.slug} />
@@ -91,6 +92,12 @@ export function BoardPageLayout() {
         isOpen={page.rules.open}
         markdown={page.bingo.rulesMarkdown ?? ""}
         onClose={page.rules.hide}
+      />
+
+      <TeamInfoDialog
+        slug={page.slug}
+        team={page.teamInfo.open ? page.myTeam : null}
+        onClose={page.teamInfo.hide}
       />
 
       <SubmissionsDrawer

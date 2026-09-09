@@ -5,6 +5,8 @@ interface AuthState {
   user: User | null;
   loading: boolean;
   devMode: boolean;
+  /** Only admins listed in the server's ADMIN_DISCORD_IDS may grant site admin. */
+  canGrantAdmin: boolean;
   logout: () => Promise<void>;
 }
 
@@ -13,6 +15,7 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [devMode, setDevMode] = useState(false);
+  const [canGrantAdmin, setCanGrantAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,6 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         setUser(data?.user ?? null);
         setDevMode(data?.devMode ?? false);
+        setCanGrantAdmin(data?.canGrantAdmin ?? false);
       })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
@@ -31,7 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  return <AuthContext.Provider value={{ user, loading, devMode, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, loading, devMode, canGrantAdmin, logout }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthState {

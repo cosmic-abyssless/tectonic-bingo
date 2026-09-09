@@ -113,7 +113,7 @@ function Heatmap({ heatmap, tiles, teams }: { heatmap: TileHeatmapCell[]; tiles:
 
   return (
     <div className="space-y-3">
-      <Select aria-label="Team" value={teamId} onChange={(e) => setTeamId(e.target.value)} className="h-9 w-auto">
+      <Select aria-label="Team" value={teamId} onChange={(e) => setTeamId(e.target.value)} className="w-auto!">
         {teams.map((t) => (
           <option key={t.id} value={t.id}>
             {t.name}
@@ -156,9 +156,10 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 export function StatsView({ slug }: { slug: string }) {
   const { data: shell } = useBingo(slug);
-  const { data: stats } = useStats(slug);
+  const { data: stats, error } = useStats(slug);
   const { data: boardData } = useBoard(slug);
 
+  if (error) return <div className="py-24 text-center text-sm text-fg-muted">{error.message}</div>;
   if (!shell || !stats) return <div className="py-24 text-center text-sm text-fg-muted">Loading…</div>;
 
   const teams = shell.teams;

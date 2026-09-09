@@ -1,9 +1,9 @@
 import type { StageMilestone } from "@bingo/shared";
 import type { BingoPageModel } from "../../../headless/types";
-import { EmptyState } from "../../../core/ui/Card";
+import { EmptyState, Notice } from "../../../core/ui/Card";
 import { Button } from "../../../core/ui/Button";
 import { MilestoneCountdown } from "../../../core/ui/StageStepper";
-import { UsersIcon } from "../../../core/ui/icons";
+import { CheckIcon, UsersIcon } from "../../../core/ui/icons";
 import { TeamRoster } from "../../../core/draft/TeamRoster";
 
 /**
@@ -14,9 +14,21 @@ import { TeamRoster } from "../../../core/draft/TeamRoster";
 export function DraftStage({ draft, milestone, onOpenDraft }: { draft: BingoPageModel["draft"]; milestone: StageMilestone | null; onOpenDraft: () => void }) {
   if (draft.isLoading) return null;
 
+  // Having draft state at all means the server let us into the room (mods,
+  // captains and signed-up players), so offer the door even before it starts.
   if (!draft.state || !draft.state.draftStarted) {
     return (
-      <EmptyState icon={<UsersIcon size={20} />} title="The draft hasn't started yet">
+      <EmptyState
+        icon={<UsersIcon size={20} />}
+        title="The draft hasn't started yet"
+        action={
+          draft.state ? (
+            <Button variant="primary" onPress={onOpenDraft}>
+              Open draft room
+            </Button>
+          ) : undefined
+        }
+      >
         <MilestoneCountdown milestone={milestone} className="justify-center" />
       </EmptyState>
     );
@@ -42,11 +54,10 @@ export function DraftStage({ draft, milestone, onOpenDraft }: { draft: BingoPage
   }
 
   return (
-    <section>
-      <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-base font-semibold text-fg">Teams</h2>
-        <p className="text-sm text-fg-muted">Draft complete. The board is revealed next.</p>
-      </div>
+    <section className="space-y-4">
+      <Notice tone="ok" icon={<CheckIcon />}>
+        Draft complete. The board is revealed next.
+      </Notice>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {draft.state.teams.map((team) => (
           <TeamRoster key={team.id} team={team} picks={draft.state!.picks.filter((p) => p.teamId === team.id)} />

@@ -26,6 +26,9 @@ export function StageControls({ slug, bingo }: { slug: string; bingo: Bingo }) {
   const nextStage = idx < STAGE_ORDER.length - 1 ? STAGE_ORDER[idx + 1] : null;
   const prevStage = idx > 0 ? STAGE_ORDER[idx - 1] : null;
 
+  // Stages strictly between the current one and the target, in travel order.
+  const skipped = confirming ? STAGE_ORDER.slice(Math.min(idx, STAGE_ORDER.indexOf(confirming)) + 1, Math.max(idx, STAGE_ORDER.indexOf(confirming))) : [];
+
   async function go(toStage: Stage) {
     setError(null);
     try {
@@ -60,7 +63,7 @@ export function StageControls({ slug, bingo }: { slug: string; bingo: Bingo }) {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <StageStepper stage={bingo.stage} />
+        <StageStepper stage={bingo.stage} onSelect={setConfirming} />
         <MilestoneCountdown milestone={nextMilestone(bingo)} />
       </div>
 
@@ -72,6 +75,11 @@ export function StageControls({ slug, bingo }: { slug: string; bingo: Bingo }) {
             Move from {STAGE_LABEL[bingo.stage]} to {STAGE_LABEL[confirming]}?
           </p>
           <p className="mt-1 text-fg-muted">{ENTER_EFFECT[confirming]}</p>
+          {skipped.length > 0 && (
+            <p className="mt-1 text-fg-muted">
+              Skips {skipped.map((s) => STAGE_LABEL[s]).join(", ")}.
+            </p>
+          )}
           <div className="mt-3 flex gap-2">
             <Button size="sm" variant="ghost" onPress={() => setConfirming(null)}>
               Cancel

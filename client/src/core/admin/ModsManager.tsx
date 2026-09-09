@@ -1,23 +1,41 @@
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { User } from "@bingo/shared";
+import type { BingoModerator, User } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
+import { optimisticUpdate } from "../../api/optimistic";
 import { adminQueryKeys, useMods } from "../../api/adminQueries";
 import { UserSearchInput } from "./UserSearchInput";
 import { displayName } from "../ui/user";
 import { Button } from "../ui/Button";
+import { Notice } from "../ui/Card";
 import { Field } from "../ui/Field";
 
 export function ModsManager({ slug }: { slug: string }) {
   const { data } = useMods(slug);
   const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
 
   async function add(user: User) {
-    await adminApi.addMod(slug, user.id);
-    queryClient.invalidateQueries({ queryKey: adminQueryKeys.mods(slug) });
+    setError(null);
+    try {
+      await adminApi.addMod(slug, user.id);
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.mods(slug) });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add moderator");
+    }
   }
   async function remove(userId: string) {
-    await adminApi.removeMod(slug, userId);
-    queryClient.invalidateQueries({ queryKey: adminQueryKeys.mods(slug) });
+    setError(null);
+    try {
+      await optimisticUpdate<{ mods: BingoModerator[] }>(
+        queryClient,
+        adminQueryKeys.mods(slug),
+        (d) => ({ mods: d.mods.filter((m) => m.userId !== userId) }),
+        () => adminApi.removeMod(slug, userId),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to remove moderator");
+    }
   }
 
   return (
@@ -40,6 +58,7 @@ export function ModsManager({ slug }: { slug: string }) {
           ))}
         </ul>
       </div>
+      {error && <Notice tone="danger">{error}</Notice>}
     </div>
   );
 }

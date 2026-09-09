@@ -24,13 +24,13 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
       }
     >
       {page.isMod && page.teams.length > 0 && <TeamSelector selector={page.teamSelector} />}
-      {!page.isMod && page.myTeam && <TeamBadge team={page.myTeam} />}
+      {!page.isMod && page.myTeam && <TeamBadge team={page.myTeam} onPress={page.teamInfo.show} />}
       {page.bingo.rulesMarkdown && (
         <Button size="sm" variant="ghost" onPress={page.rules.show}>
           Rules
         </Button>
       )}
-      {(page.boardRevealed || page.isMod) && (
+      {page.canViewStats && (
         <Button size="sm" variant="ghost" onPress={page.actions.goToStats}>
           Stats
         </Button>
