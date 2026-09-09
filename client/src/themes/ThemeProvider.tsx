@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { defaultTheme } from "./default";
 import { defaultTokens } from "./tokens";
 import { tokensToCssVars } from "./tokens";
-import { isKnownTheme, resolveTheme, type ResolvedTheme } from "./registry";
+import { isKnownTheme, onThemeHmrUpdate, resolveTheme, type ResolvedTheme } from "./registry";
 import { ThemeContext } from "./context";
 import type { ThemeSlots } from "./slots";
 
@@ -26,6 +26,23 @@ export function ThemeProvider({ themeKey, children }: { themeKey: string; childr
     } else {
       setResolved(result);
     }
+  }, [themeKey]);
+
+  // Dev-only: re-resolve when a theme file hot-updates (see registry.ts's
+  // onThemeHmrUpdate) — editing tokens/slots wouldn't otherwise reach this
+  // already-mounted provider, since nothing about `themeKey` changed.
+  useEffect(() => {
+    if (!import.meta.hot) return;
+    return onThemeHmrUpdate(() => {
+      const result = resolveTheme(themeKey);
+      if (result instanceof Promise) {
+        result.then((theme) => {
+          if (requestedKey.current === themeKey) setResolved(theme);
+        });
+      } else {
+        setResolved(result);
+      }
+    });
   }, [themeKey]);
 
   return (

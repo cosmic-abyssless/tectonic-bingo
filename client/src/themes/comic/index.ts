@@ -1,4 +1,4 @@
-import type { ThemeDefinition } from "../registry";
+import { pushThemeHmrUpdate, type ThemeDefinition } from "../registry";
 
 // Starter scaffold for the "comic" theme — see docs/theming.md for the full
 // writer's guide (resolution/fallback rules, what a slot may import, the
@@ -25,21 +25,33 @@ const comicTheme: ThemeDefinition = {
     },
     // Uncomment and fill in to re-skin the page chrome (header, panels,
     // dialogs, ...) via Tailwind's --color-* variables — see docs/theming.md.
-    // chrome: {
-    //   bg: "#101012",
-    //   surface: "#18181b",
-    //   surfaceRaised: "#202023",
-    //   surfaceHover: "#232327",
-    //   line: "#27272a",
-    //   lineStrong: "#3f3f46",
-    //   fg: "#fafafa",
-    //   fgMuted: "#a1a1aa",
-    //   fgSubtle: "#71717a",
-    //   accent: "#a1a1aa",
-    //   accentFg: "#101012",
-    // },
+    chrome: {
+      bg: "#000",
+      surface: "#ddd",
+      surfaceRaised: "#f90202",
+      surfaceHover: "#232327",
+      line: "#ffff",
+      lineStrong: "#3f3f46",
+      fg: "#fafafa",
+      fgMuted: "#a1a1aa",
+      fgSubtle: "#71717a",
+      accent: "#a1a1aa",
+      accentFg: "#101012",
+    },
   },
   slots: {},
 };
 
 export default comicTheme;
+
+// Required for editing tokens/slots above to hot-update without a manual
+// refresh — Vite's dev-only accept hands us the freshly re-evaluated
+// module directly, which is the only reliable way to get fresh content
+// here (a plain re-`import()` of this file would return the browser's
+// already-cached module for this URL forever). Every theme's index.ts
+// needs this same snippet; see docs/theming.md.
+if (import.meta.hot) {
+  import.meta.hot.accept((mod) => {
+    if (mod) pushThemeHmrUpdate(mod.default as ThemeDefinition);
+  });
+}

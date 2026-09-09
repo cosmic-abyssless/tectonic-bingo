@@ -43,6 +43,28 @@ const loaders: Record<string, () => Promise<{ default: ThemeDefinition }>> = {
 export const THEME_KEYS = ["default", "comic"] as const;
 ```
 
+And end `index.ts` with this snippet — every theme needs it, verbatim:
+
+```ts
+if (import.meta.hot) {
+  import.meta.hot.accept((mod) => {
+    if (mod) pushThemeHmrUpdate(mod.default as ThemeDefinition);
+  });
+}
+```
+
+Without it, editing tokens/slots still works, but only shows up after a
+full page reload instead of live. The reason it's needed (and can't be
+handled centrally in `registry.ts` instead) is a genuine Vite HMR quirk:
+a plain re-`import()` of a lazily-loaded module is cached by the browser's
+native ESM registry forever, regardless of server-side content changes —
+only the module's *own* `import.meta.hot.accept` callback is guaranteed to
+hand back the freshly re-evaluated exports. `pushThemeHmrUpdate` (from
+`themes/registry.ts`) takes that fresh `ThemeDefinition` directly and
+writes it into the shared theme cache, no re-import involved. This is
+dev-only — tree-shaken out of the production bundle entirely, since
+`import.meta.hot` is statically `undefined` in a production build.
+
 ## What a slot may import
 
 Everything a slot needs comes from the **headless barrel**
