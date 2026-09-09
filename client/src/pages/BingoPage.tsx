@@ -11,6 +11,7 @@ import { TeamSubmissionsList } from "../core/submissions/TeamSubmissionsList";
 import { tileMatchesSearch } from "../core/board/requirementTree";
 import { SignupForm } from "../core/signup/SignupForm";
 import { TeamRoster } from "../core/draft/TeamRoster";
+import { TeamInfoDialog } from "../core/teams/TeamInfoDialog";
 import { Markdown } from "../core/ui/Markdown";
 import { AppHeader } from "../core/ui/AppHeader";
 import { Button } from "../core/ui/Button";
@@ -48,6 +49,7 @@ export function BingoPage() {
   const [submitInitialTileId, setSubmitInitialTileId] = useState<string | undefined>();
   const [showSubmissionsList, setShowSubmissionsList] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [showTeamInfo, setShowTeamInfo] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [openTileId, setOpenTileId] = useState<string | null>(null);
   const hasStarted = useHasPassed(shell?.bingo.startsAt);
@@ -125,11 +127,12 @@ export function BingoPage() {
             </MenuTrigger>
           )}
           {!isMod && myTeam && (
-            // Static twin of the mod team picker above so the header reads the same for both roles.
-            <span className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line-strong bg-surface-raised px-2.5 text-xs font-medium text-fg" style={teamBadgeStyle(myTeam)}>
+            // Twin of the mod team picker above so the header reads the same for both roles.
+            <Button size="sm" style={teamBadgeStyle(myTeam)} onPress={() => setShowTeamInfo(true)}>
               {myTeam.color && <span className="size-2 rounded-full" style={{ backgroundColor: myTeam.color }} />}
               {myTeam.name}
-            </span>
+              <UsersIcon className="text-fg-subtle" />
+            </Button>
           )}
           {bingo.rulesMarkdown && (
             <Button size="sm" variant="ghost" onPress={() => setShowRules(true)}>
@@ -250,6 +253,13 @@ export function BingoPage() {
             <Markdown>{bingo.rulesMarkdown ?? ""}</Markdown>
           </div>
         </Dialog>
+
+        <TeamInfoDialog
+          slug={slug!}
+          team={showTeamInfo ? (teams.find((t) => t.id === myTeam?.id) ?? null) : null}
+          isCaptain={myTeam?.captainUserId === user.id}
+          onClose={() => setShowTeamInfo(false)}
+        />
 
         <TeamSubmissionsList
           isOpen={showSubmissionsList}

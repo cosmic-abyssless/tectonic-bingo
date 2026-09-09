@@ -590,4 +590,7 @@ export type BroadcastEvent =
   | { type: "stage_changed"; bingoId: string; payload: { stage: Stage } }
   | { type: "draft_started"; bingoId: string; payload: Record<string, never> }
   | { type: "draft_pick"; bingoId: string; payload: { pickNumber: number; teamId: string; userId: string } }
-  | { type: "team_updated"; bingoId: string; payload: { teamId: string } };
+  | { type: "team_updated"; bingoId: string; payload: { teamId: string } }
+  // Any successful admin mutation (settings, board, lines, questions, teams,
+  // mods). Coarse on purpose: clients refetch the bingo shell + board.
+  | { type: "bingo_changed"; bingoId: string; payload: Record<string, never> };
