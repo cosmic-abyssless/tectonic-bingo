@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ItemGroup, OsrsItemSearchResult } from "@bingo/shared";
 import { searchOsrsItems } from "../../api/osrsItemsApi";
-import { inputClass } from "./Field";
+import { controlClass } from "./Field";
 import { LayersIcon } from "./icons";
 
 // Mirrors osrsWikiService.ts's iconUrlFor — the wiki's real upload
@@ -202,7 +202,7 @@ export function ItemSearchInput({
         onFocus={() => setOpen(true)}
         onBlur={() => onCommit?.(value)}
         onKeyDown={handleKeyDown}
-        className={`${className ?? `${inputClass} h-9`} ${closedIconUrl ? "pl-8" : ""}`}
+        className={`${className ?? controlClass()} ${closedIconUrl ? "pl-8" : ""}`}
       />
 
       {showDropdown && dropdownRect && (

@@ -4,7 +4,7 @@ import type { ItemGroup, NodeKind, GraphNode, GraphNodeInput } from "@bingo/shar
 import { ItemSearchInput, iconUrlFor } from "../ui/ItemSearchInput";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { Button, IconButton } from "../ui/Button";
-import { inputClass } from "../ui/Field";
+import { controlClass } from "../ui/Field";
 import { Menu, MenuItem } from "../ui/Menu";
 import { ChevronDownIcon, LinkIcon, PlusIcon, XIcon } from "../ui/icons";
 import { toGraphNodeInput, collectLabeledConditions } from "../board/requirementTree";
@@ -279,7 +279,7 @@ function GroupNode(props: NodeProps) {
               quantity: kind === "SUM" ? n.quantity ?? 1 : undefined,
             }));
           }}
-          className={`${inputClass} h-8 w-auto text-xs`}
+          className={`${controlClass("sm")} w-auto`}
         >
           {GROUP_KINDS.map((k) => (
             <option key={k.kind} value={k.kind}>
@@ -294,7 +294,7 @@ function GroupNode(props: NodeProps) {
             min={1}
             defaultValue={node.minCount ?? 1}
             onBlur={(e) => update(path, (n) => ({ ...n, minCount: Math.max(1, Number(e.target.value) || 1) }))}
-            className={`${inputClass} num h-8 w-16 text-xs`}
+            className={`${controlClass("sm")} num w-16`}
           />
         )}
         {node.kind === "SUM" && (
@@ -304,7 +304,7 @@ function GroupNode(props: NodeProps) {
             min={1}
             defaultValue={node.quantity ?? 1}
             onBlur={(e) => update(path, (n) => ({ ...n, quantity: Math.max(1, Number(e.target.value) || 1) }))}
-            className={`${inputClass} num h-8 w-16 text-xs`}
+            className={`${controlClass("sm")} num w-16`}
           />
         )}
         <SplitAddButton

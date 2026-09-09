@@ -119,7 +119,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                   defaultValue={parseOptions(q.optionsJson)}
                   onBlur={(e) => patch(q.id, { optionsJson: JSON.stringify(e.target.value.split(",").map((s) => s.trim()).filter(Boolean)) })}
                   placeholder="Comma-separated options"
-                  className="h-8 text-xs"
+                  size="sm"
                 />
               )}
             </Card>
@@ -149,7 +149,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
             onChange={(e) => setNewOptions(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && add()}
             placeholder="Comma-separated options"
-            className="h-8 text-xs"
+            size="sm"
           />
         )}
         {error && <Notice tone="danger">{error}</Notice>}

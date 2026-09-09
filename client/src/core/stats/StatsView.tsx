@@ -113,7 +113,7 @@ function Heatmap({ heatmap, tiles, teams }: { heatmap: TileHeatmapCell[]; tiles:
 
   return (
     <div className="space-y-3">
-      <Select aria-label="Team" value={teamId} onChange={(e) => setTeamId(e.target.value)} className="h-9 w-auto">
+      <Select aria-label="Team" value={teamId} onChange={(e) => setTeamId(e.target.value)} className="w-auto!">
         {teams.map((t) => (
           <option key={t.id} value={t.id}>
             {t.name}
