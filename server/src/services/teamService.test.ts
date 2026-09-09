@@ -150,6 +150,16 @@ describe("addTeamMember / removeTeamMember", () => {
     const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
     expect(() => removeTeamMember(db, team.id, captain.id)).toThrow(/captain/);
   });
+
+  it("refuses to remove a drafted player", () => {
+    const { bingo, captain, member } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    addTeamMember(db, team.id, member.id);
+    db.insert(schema.draftPicks).values({ bingoId: bingo.id, pickNumber: 1, teamId: team.id, userId: member.id, pickedByUserId: captain.id }).run();
+
+    expect(() => removeTeamMember(db, team.id, member.id)).toThrow(/drafted/);
+    expect(getTeamsWithMembers(db, bingo.id)[0]!.members).toHaveLength(2);
+  });
 });
 
 describe("deleteTeam", () => {

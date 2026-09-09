@@ -24,18 +24,22 @@ export function getTeamMembers(db: Db, teamId: string) {
 export function getTeamsWithMembers(db: Db, bingoId: string) {
   const teamRows = getTeamsForBingo(db, bingoId);
   if (teamRows.length === 0) return [];
+  const teamIds = teamRows.map((t) => t.id);
   const memberRows = db
     .select({ teamId: teamMembers.teamId, isCaptain: teamMembers.isCaptain, user: users })
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))
-    .where(inArray(teamMembers.teamId, teamRows.map((t) => t.id)))
+    .where(inArray(teamMembers.teamId, teamIds))
     .all();
+  const draftedUserIds = new Set(
+    db.select({ userId: draftPicks.userId }).from(draftPicks).where(inArray(draftPicks.teamId, teamIds)).all().map((p) => p.userId),
+  );
   return teamRows.map((team) => ({
     ...team,
     members: memberRows
       .filter((m) => m.teamId === team.id)
       .sort((a, b) => Number(b.isCaptain) - Number(a.isCaptain))
-      .map(({ user, isCaptain }) => ({ user, isCaptain })),
+      .map(({ user, isCaptain }) => ({ user, isCaptain, isDrafted: draftedUserIds.has(user.id) })),
   }));
 }
 
@@ -191,10 +195,15 @@ export function addTeamMember(db: Db, teamId: string, userId: string) {
   });
 }
 
+// Drafted players stay put: dropping only the membership would return them
+// to the pool while their pick still shows on the roster, and dropping the
+// pick would shift the snake order for everyone after it.
 export function removeTeamMember(db: Db, teamId: string, userId: string): void {
   const team = db.select().from(teams).where(eq(teams.id, teamId)).get();
   if (!team) throw new ServiceError(404, "Team not found");
   if (team.captainUserId === userId) throw new ServiceError(400, "Cannot remove the captain — reassign the captaincy or delete the team instead");
+  const pick = db.select({ id: draftPicks.id }).from(draftPicks).where(and(eq(draftPicks.teamId, teamId), eq(draftPicks.userId, userId))).get();
+  if (pick) throw new ServiceError(409, "This player was drafted onto the team and can't be removed");
   db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).run();
 }
 

@@ -96,11 +96,12 @@ function TeamCard({ slug, team }: { slug: string; team: TeamWithMembers }) {
           </Field>
           <Field label={`Members (${team.members.length})`} as="div">
             <ul className="divide-y divide-line rounded-md border border-line">
-              {team.members.map(({ user, isCaptain }) => (
+              {team.members.map(({ user, isCaptain, isDrafted }) => (
                 <li key={user.id} className="flex h-9 items-center gap-2 px-3 text-sm">
                   {isCaptain && <CrownIcon size={14} className="shrink-0 text-warn" aria-label="Captain" />}
                   <span className="min-w-0 flex-1 truncate text-fg">{displayName(user)}</span>
-                  {!isCaptain && (
+                  {isDrafted && <span className="text-xs text-fg-subtle">drafted</span>}
+                  {!isCaptain && !isDrafted && (
                     <IconButton label={`Remove ${displayName(user)}`} size="sm" onPress={() => removeMember(user)}>
                       <XIcon size={12} />
                     </IconButton>

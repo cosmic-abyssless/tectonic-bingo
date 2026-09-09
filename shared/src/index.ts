@@ -111,6 +111,7 @@ export interface Team {
 export interface TeamRosterEntry {
   user: User;
   isCaptain: boolean;
+  isDrafted: boolean; // joined via a draft pick, so mods can't remove them by hand
 }
 
 /** Team as shipped in the bingo shell: the row plus everyone on it. */
