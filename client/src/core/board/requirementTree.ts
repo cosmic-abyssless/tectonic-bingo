@@ -133,6 +133,22 @@ export function collectLabeledConditions<T extends { kind: NodeKind; children?: 
   return result;
 }
 
+/** Player-facing heading for a composite condition, e.g. "Complete at least 3 of". */
+export function conditionHeading(node: { kind: NodeKind; minCount?: number | null; quantity?: number | null }): string {
+  switch (node.kind) {
+    case "ALL":
+      return "Complete all of";
+    case "ANY":
+      return "Complete any one of";
+    case "COUNT":
+      return `Complete at least ${node.minCount ?? 1} of`;
+    case "SUM":
+      return `Collect ${node.quantity ?? 1} in total across`;
+    default:
+      return "";
+  }
+}
+
 export function collectItemNames(root: GraphNode): string[] {
   return collectLeaves(root)
     .map((leaf) => leaf.itemName)

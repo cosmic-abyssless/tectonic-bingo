@@ -1,6 +1,7 @@
 import type { GraphNode, NodeStatus } from "@bingo/shared";
 import { TooltipTrigger, Tooltip, Focusable } from "react-aria-components";
 import { itemLeafValue, leafComplete, type LeafClaimMaps } from "./taskClaims";
+import { conditionHeading } from "./requirementTree";
 import { Badge } from "../ui/Card";
 import { CheckIcon, LockIcon } from "../ui/icons";
 
@@ -12,19 +13,6 @@ function Check() {
 export function leafLabel(node: GraphNode): string {
   if (node.kind === "SUM") return node.children.map((c) => c.itemName).filter((n): n is string => !!n).join(" / ") || "(no items)";
   return node.itemName ?? "(no item)";
-}
-
-function compositeLabel(node: GraphNode): string {
-  switch (node.kind) {
-    case "ALL":
-      return "All of:";
-    case "ANY":
-      return "Any one of:";
-    case "COUNT":
-      return `At least ${node.minCount ?? 1} of:`;
-    default:
-      return "";
-  }
 }
 
 function rowClass(dim: boolean, submitted: boolean) {
@@ -103,16 +91,12 @@ function RequirementTree({
   }
   const nodeComplete = statusByNodeId?.get(node.id) === "completed";
   const childAncestorSatisfied = ancestorSatisfied || nodeComplete;
-  // A root ALL with only leaves is the common case; skip the redundant heading.
-  const showHeading = !(root && node.kind === "ALL");
   return (
     <div className={root ? "" : "ml-2 border-l border-line pl-3"}>
-      {showHeading && (
-        <span className={`inline-flex items-center gap-1 text-[11px] uppercase tracking-wide ${nodeComplete ? "text-ok" : "text-fg-subtle"}`}>
-          {compositeLabel(node)}
-          {nodeComplete && <Check />}
-        </span>
-      )}
+      <span className={`inline-flex items-center gap-1 text-[11px] uppercase tracking-wide ${nodeComplete ? "text-ok" : "text-fg-subtle"}`}>
+        {conditionHeading(node)}
+        {nodeComplete && <Check />}
+      </span>
       <ul className="mt-1 space-y-1">
         {node.children.map((child) =>
           child.kind === "ITEM" ? (
