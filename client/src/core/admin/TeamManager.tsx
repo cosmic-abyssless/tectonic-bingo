@@ -9,8 +9,9 @@ import { UserSearchInput } from "./UserSearchInput";
 import { displayName } from "../ui/user";
 import { Button, IconButton } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
+import { Disclosure } from "../ui/Disclosure";
 import { Field, Input, Select } from "../ui/Field";
-import { ChevronDownIcon, ChevronRightIcon, CrownIcon, TrashIcon, XIcon } from "../ui/icons";
+import { CrownIcon, TrashIcon, XIcon } from "../ui/icons";
 
 // Forward-looking estimate while captains are still being assigned — teams
 // don't have their non-captain members yet, so this is just
@@ -37,7 +38,6 @@ function optimisticTeams(queryClient: QueryClient, slug: string, update: (teams:
 
 function TeamCard({ slug, team, onDelete }: { slug: string; team: TeamWithMembers; onDelete: () => void }) {
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,25 +73,19 @@ function TeamCard({ slug, team, onDelete }: { slug: string; team: TeamWithMember
     if (codeword.trim() && codeword.trim() !== team.codeword) update({ codeword });
   }
 
-  const panelId = `team-${team.id}`;
   return (
-    <Card>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        aria-controls={panelId}
-        className={`flex h-12 w-full items-center gap-3 px-4 text-left transition-colors hover:bg-surface-hover ${open ? "rounded-t-lg" : "rounded-lg"}`}
-      >
-        <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: team.color ?? "var(--color-line-strong)" }} />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">{team.name}</span>
-        <span className="num text-xs text-fg-subtle">
-          {team.members.length} {team.members.length === 1 ? "member" : "members"}
-        </span>
-        <span className="text-fg-subtle">{open ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
-      </button>
-      {open && (
-        <div id={panelId} className="space-y-3 border-t border-line p-4">
+    <Disclosure
+      title={
+        <>
+          <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: team.color ?? "var(--color-line-strong)" }} />
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">{team.name}</span>
+          <span className="num text-xs text-fg-subtle">
+            {team.members.length} {team.members.length === 1 ? "member" : "members"}
+          </span>
+        </>
+      }
+    >
+      <div className="space-y-3">
           <div className="flex items-end gap-2">
             <Field label="Name" className="flex-1">
               <Input key={team.name} defaultValue={team.name} onBlur={(e) => rename(e.target.value)} className="font-semibold" />
@@ -146,9 +140,8 @@ function TeamCard({ slug, team, onDelete }: { slug: string; team: TeamWithMember
               <TrashIcon size={14} /> Delete team
             </Button>
           )}
-        </div>
-      )}
-    </Card>
+      </div>
+    </Disclosure>
   );
 }
 
