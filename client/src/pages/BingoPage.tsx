@@ -267,9 +267,17 @@ function DraftStageView({ slug, bingo, onOpenDraft }: { slug: string; bingo: Bin
   const { data: draft, isLoading } = useDraftState(slug);
   if (isLoading) return null;
 
+  // `draft` is only present for people allowed in the room (mods, captains,
+  // signed-up players), so its presence doubles as the gate for the button.
+  const openDraft = draft && (
+    <Button variant="primary" onPress={onOpenDraft}>
+      Open draft room
+    </Button>
+  );
+
   if (!draft || !draft.draftStarted) {
     return (
-      <EmptyState icon={<UsersIcon size={20} />} title="The draft hasn't started yet">
+      <EmptyState icon={<UsersIcon size={20} />} title="The draft hasn't started yet" action={openDraft}>
         <MilestoneCountdown bingo={bingo} className="justify-center" />
       </EmptyState>
     );
@@ -277,15 +285,7 @@ function DraftStageView({ slug, bingo, onOpenDraft }: { slug: string; bingo: Bin
 
   if (draft.currentPick) {
     return (
-      <EmptyState
-        icon={<UsersIcon size={20} />}
-        title="Draft in progress"
-        action={
-          <Button variant="primary" onPress={onOpenDraft}>
-            Open draft room
-          </Button>
-        }
-      >
+      <EmptyState icon={<UsersIcon size={20} />} title="Draft in progress" action={openDraft}>
         <span className="num">
           Round {draft.currentPick.round}, pick {draft.currentPick.pickNumber}
         </span>
