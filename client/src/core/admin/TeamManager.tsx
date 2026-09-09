@@ -8,7 +8,7 @@ import { UserSearchInput } from "./UserSearchInput";
 import { displayName } from "../ui/user";
 import { Button } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
-import { Field, Select } from "../ui/Field";
+import { Field, Input, Select } from "../ui/Field";
 
 // Forward-looking estimate while captains are still being assigned — teams
 // don't have their non-captain members yet, so this is just
@@ -30,6 +30,7 @@ function teamSizeSummary(teamCount: number, totalParticipants: number): string |
 function TeamCard({ slug, team }: { slug: string; team: Team }) {
   const queryClient = useQueryClient();
   const [members, setMembers] = useState<User[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
 
@@ -38,13 +39,20 @@ function TeamCard({ slug, team }: { slug: string; team: Team }) {
     setMembers(null);
     invalidate();
   }
-  async function recolor(hex: string) {
-    await adminApi.updateTeam(slug, team.id, { color: hex });
-    invalidate();
+  async function update(patch: Partial<Team>) {
+    setError(null);
+    try {
+      await adminApi.updateTeam(slug, team.id, patch);
+      invalidate();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update team");
+    }
   }
-  async function rename(name: string) {
-    if (name && name !== team.name) await adminApi.updateTeam(slug, team.id, { name });
-    invalidate();
+  function rename(name: string) {
+    if (name.trim() && name.trim() !== team.name) update({ name });
+  }
+  function setPassword(codeword: string) {
+    if (codeword.trim() && codeword.trim() !== team.codeword) update({ codeword });
   }
 
   return (
@@ -54,7 +62,7 @@ function TeamCard({ slug, team }: { slug: string; team: Team }) {
           type="color"
           aria-label={`${team.name} color`}
           value={team.color ?? "#6366f1"}
-          onChange={(e) => recolor(e.target.value)}
+          onChange={(e) => update({ color: e.target.value })}
           className="size-7 shrink-0 cursor-pointer rounded-full border-none bg-transparent"
         />
         <input
@@ -63,8 +71,11 @@ function TeamCard({ slug, team }: { slug: string; team: Team }) {
           onBlur={(e) => rename(e.target.value)}
           className="flex-1 border-b border-transparent bg-transparent text-sm font-semibold text-fg outline-none focus:border-line-strong"
         />
-        <span className="num shrink-0 text-xs text-fg-subtle">{team.codeword}</span>
       </div>
+      <Field label="Password" hint="Must be visible in every screenshot the team submits.">
+        <Input key={team.codeword} defaultValue={team.codeword} onBlur={(e) => setPassword(e.target.value)} className="num" />
+      </Field>
+      {error && <Notice tone="danger">{error}</Notice>}
       <Field label="Add member" as="div">
         <UserSearchInput scope={slug} onSelect={addMember} />
       </Field>

@@ -4,7 +4,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { and, eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { addTeamMember, createTeam, getCaptainCandidates, removeTeamMember } from "./teamService";
+import { addTeamMember, createTeam, getCaptainCandidates, removeTeamMember, updateTeam } from "./teamService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -92,6 +92,28 @@ describe("getCaptainCandidates", () => {
 
     const candidates = getCaptainCandidates(db, bingo.id);
     expect(candidates.map((c) => c.user.id).sort()).toEqual([captain.id, captain2.id].sort());
+  });
+});
+
+describe("updateTeam", () => {
+  it("trims and saves a new codeword", () => {
+    const { bingo, captain } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    expect(updateTeam(db, team.id, { codeword: "  open sesame " }).codeword).toBe("open sesame");
+  });
+
+  it("rejects an empty codeword or name", () => {
+    const { bingo, captain } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    expect(() => updateTeam(db, team.id, { codeword: "   " })).toThrow(/codeword/);
+    expect(() => updateTeam(db, team.id, { name: "" })).toThrow(/name/);
+  });
+
+  it("rejects a codeword already used by another team in the same bingo", () => {
+    const { bingo, captain, captain2 } = seedBingoAndUsers();
+    const teamA = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    const teamB = createTeam(db, { bingoId: bingo.id, captainUserId: captain2.id });
+    expect(() => updateTeam(db, teamB.id, { codeword: teamA.codeword })).toThrow(/already uses/);
   });
 });
 
