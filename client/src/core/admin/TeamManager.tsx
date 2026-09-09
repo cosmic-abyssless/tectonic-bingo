@@ -40,7 +40,11 @@ function TeamCard({ slug, team }: { slug: string; team: TeamWithMembers }) {
     setError(null);
     try {
       await action();
-      await queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
+      // Membership changes also change who is free to captain a new team.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) }),
+        queryClient.invalidateQueries({ queryKey: adminQueryKeys.captainCandidates(slug) }),
+      ]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     }
@@ -48,7 +52,7 @@ function TeamCard({ slug, team }: { slug: string; team: TeamWithMembers }) {
   const update = (patch: Partial<Team>) => run(() => adminApi.updateTeam(slug, team.id, patch));
   const addMember = (user: User) => run(() => adminApi.addTeamMember(slug, team.id, user.id));
   const removeMember = (user: User) => run(() => adminApi.removeTeamMember(slug, team.id, user.id));
-  const remove = () => run(() => Promise.all([adminApi.deleteTeam(slug, team.id), queryClient.invalidateQueries({ queryKey: adminQueryKeys.captainCandidates(slug) })]));
+  const remove = () => run(() => adminApi.deleteTeam(slug, team.id));
   function rename(name: string) {
     if (name.trim() && name.trim() !== team.name) update({ name });
   }
@@ -64,7 +68,7 @@ function TeamCard({ slug, team }: { slug: string; team: TeamWithMembers }) {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-controls={panelId}
-        className="flex h-12 w-full items-center gap-3 px-4 text-left transition-colors hover:bg-surface-hover"
+        className={`flex h-12 w-full items-center gap-3 px-4 text-left transition-colors hover:bg-surface-hover ${open ? "rounded-t-lg" : "rounded-lg"}`}
       >
         <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: team.color ?? "var(--color-line-strong)" }} />
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">{team.name}</span>
