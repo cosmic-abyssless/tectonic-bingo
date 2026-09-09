@@ -122,8 +122,8 @@ router.get(
   }),
 );
 
-// Same visibility rule as the board itself — read-only and entirely derived,
-// so there's no reason to gate it any tighter.
+// Stats expose every team's progress, so players only get them once the bingo
+// is over; mods can watch throughout.
 router.get(
   "/:slug/stats",
   requireAuth,
@@ -131,7 +131,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
     const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
-    if (!bingoService.canViewTiles(bingo, isMod)) throw new ServiceError(403, "Stats aren't visible until the board is revealed");
+    if (!isMod && bingo.stage !== "complete") throw new ServiceError(403, "Stats aren't visible until the bingo is complete");
 
     res.json({
       pointsOverTime: statsService.getPointsOverTime(db, bingo.id),
@@ -153,10 +153,9 @@ router.get(
     if (!team || team.bingoId !== bingo.id) throw new ServiceError(404, "Team not found");
 
     const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
-    const isPublic = bingo.stage === "live" || bingo.stage === "complete";
     const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
-    if (!isMod && !isPublic && myTeam?.id !== teamId) {
-      throw new ServiceError(403, "Team progress isn't visible to other teams yet");
+    if (!isMod && bingo.stage !== "complete" && myTeam?.id !== teamId) {
+      throw new ServiceError(403, "Other teams' progress isn't visible until the bingo is complete");
     }
     res.json(teamService.getTeamProgress(db, teamId));
   }),

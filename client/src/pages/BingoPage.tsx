@@ -82,7 +82,6 @@ export function BingoPage() {
   const canSubmit = bingo.stage === "live" && hasStarted && !isViewingOtherTeam && !!viewingTeamId;
   const nodeStates = progressData?.nodeStates ?? [];
   const teamSubmissions = submissionsData?.submissions ?? [];
-  const boardRevealed = bingo.stage === "reveal" || bingo.stage === "live" || bingo.stage === "complete";
 
   const openSubmit = (tileId?: string) => {
     setSubmitInitialTileId(tileId);
@@ -139,7 +138,7 @@ export function BingoPage() {
               Rules
             </Button>
           )}
-          {(boardRevealed || isMod) && (
+          {(bingo.stage === "complete" || isMod) && (
             <Button size="sm" variant="ghost" onPress={() => navigate(`/b/${slug}/stats`)}>
               Stats
             </Button>
