@@ -4,7 +4,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { and, eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { addTeamMember, createTeam, getCaptainCandidates, removeTeamMember } from "./teamService";
+import { addTeamMember, createTeam, getCaptainCandidates, getTeamsWithMembers, removeTeamMember, updateTeam } from "./teamService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -55,6 +55,15 @@ describe("createTeam", () => {
     expect(teamA.codeword).not.toBe(teamB.codeword);
   });
 
+  it("assigns each new team a distinct palette colour", () => {
+    const { bingo, captain, member } = seedBingoAndUsers();
+    const teamA = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    const teamB = createTeam(db, { bingoId: bingo.id, captainUserId: member.id });
+    expect(teamA.color).toMatch(/^#[0-9a-f]{6}$/);
+    expect(teamB.color).toMatch(/^#[0-9a-f]{6}$/);
+    expect(teamA.color).not.toBe(teamB.color);
+  });
+
   it("rejects a captain with no signup for this bingo", () => {
     const { bingo } = seedBingoAndUsers();
     const [outsider] = db.insert(schema.users).values({ discordId: "outsider", discordUsername: "outsider" }).returning().all();
@@ -83,6 +92,40 @@ describe("getCaptainCandidates", () => {
 
     const candidates = getCaptainCandidates(db, bingo.id);
     expect(candidates.map((c) => c.user.id).sort()).toEqual([captain.id, captain2.id].sort());
+  });
+});
+
+describe("updateTeam", () => {
+  it("trims and saves a new codeword", () => {
+    const { bingo, captain } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    expect(updateTeam(db, team.id, { codeword: "  open sesame " }).codeword).toBe("open sesame");
+  });
+
+  it("rejects an empty codeword or name", () => {
+    const { bingo, captain } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    expect(() => updateTeam(db, team.id, { codeword: "   " })).toThrow(/codeword/);
+    expect(() => updateTeam(db, team.id, { name: "" })).toThrow(/name/);
+  });
+
+  it("rejects a codeword already used by another team in the same bingo", () => {
+    const { bingo, captain, captain2 } = seedBingoAndUsers();
+    const teamA = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    const teamB = createTeam(db, { bingoId: bingo.id, captainUserId: captain2.id });
+    expect(() => updateTeam(db, teamB.id, { codeword: teamA.codeword })).toThrow(/already uses/);
+  });
+});
+
+describe("getTeamsWithMembers", () => {
+  it("attaches each team roster with the captain flagged", () => {
+    const { bingo, captain, member } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    addTeamMember(db, team.id, member.id);
+
+    const [withMembers] = getTeamsWithMembers(db, bingo.id);
+    expect(withMembers.id).toBe(team.id);
+    expect(withMembers.members.map((m) => [m.user.id, m.isCaptain]).sort()).toEqual([[captain.id, true], [member.id, false]].sort());
   });
 });
 

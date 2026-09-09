@@ -317,7 +317,8 @@ router.post(
 router.patch(
   "/teams/:id",
   asyncHandler(async (req, res) => {
-    const team = teamService.updateTeam(db, req.params.id as string, req.body);
+    const { name, color, codeword } = req.body as teamService.UpdateTeamParams;
+    const team = teamService.updateTeam(db, req.params.id as string, { name, color, codeword });
     res.json({ team });
   }),
 );

@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Team, User } from "@bingo/shared";
+import type { Team, TeamWithMembers, User } from "@bingo/shared";
 import { useBingo, queryKeys } from "../../api/queries";
 import { adminQueryKeys, useCaptainCandidates } from "../../api/adminQueries";
 import * as adminApi from "../../api/adminApi";
 import { UserSearchInput } from "./UserSearchInput";
 import { displayName } from "../ui/user";
-import { Button } from "../ui/Button";
+import { Button, IconButton } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
-import { Field, Select } from "../ui/Field";
+import { Field, Input, Select } from "../ui/Field";
+import { XIcon } from "../ui/icons";
 
 // Forward-looking estimate while captains are still being assigned — teams
 // don't have their non-captain members yet, so this is just
@@ -27,47 +28,68 @@ function teamSizeSummary(teamCount: number, totalParticipants: number): string |
   return summary;
 }
 
-function TeamCard({ slug, team }: { slug: string; team: Team }) {
+function TeamCard({ slug, team }: { slug: string; team: TeamWithMembers }) {
   const queryClient = useQueryClient();
-  const [members, setMembers] = useState<User[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
-
-  async function addMember(user: User) {
-    await adminApi.addTeamMember(slug, team.id, user.id);
-    setMembers(null);
-    invalidate();
+  // Every mutation here funnels through this so a failure (409 already on a
+  // team, 400 empty password, ...) lands in the card instead of the console.
+  async function run(action: () => Promise<unknown>) {
+    setError(null);
+    try {
+      await action();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
+    }
   }
-  async function recolor(hex: string) {
-    await adminApi.updateTeam(slug, team.id, { color: hex });
-    invalidate();
+  const update = (patch: Partial<Team>) => run(() => adminApi.updateTeam(slug, team.id, patch));
+  const addMember = (user: User) => run(() => adminApi.addTeamMember(slug, team.id, user.id));
+  const removeMember = (user: User) => run(() => adminApi.removeTeamMember(slug, team.id, user.id));
+  function rename(name: string) {
+    if (name.trim() && name.trim() !== team.name) update({ name });
   }
-  async function rename(name: string) {
-    if (name && name !== team.name) await adminApi.updateTeam(slug, team.id, { name });
-    invalidate();
+  function setPassword(codeword: string) {
+    if (codeword.trim() && codeword.trim() !== team.codeword) update({ codeword });
   }
 
   return (
     <Card className="space-y-3 p-4">
-      <div className="flex items-center gap-2">
+      <div className="flex items-end gap-2">
+        <Field label="Name" className="flex-1">
+          <Input key={team.name} defaultValue={team.name} onBlur={(e) => rename(e.target.value)} className="font-semibold" />
+        </Field>
         <input
           type="color"
           aria-label={`${team.name} color`}
           value={team.color ?? "#6366f1"}
-          onChange={(e) => recolor(e.target.value)}
-          className="size-7 shrink-0 cursor-pointer rounded-full border-none bg-transparent"
+          onChange={(e) => update({ color: e.target.value })}
+          className="size-10 shrink-0 cursor-pointer rounded-md border border-line-strong bg-bg p-1"
         />
-        <input
-          aria-label="Team name"
-          defaultValue={team.name}
-          onBlur={(e) => rename(e.target.value)}
-          className="flex-1 border-b border-transparent bg-transparent text-sm font-semibold text-fg outline-none focus:border-line-strong"
-        />
-        <span className="num shrink-0 text-xs text-fg-subtle">{team.codeword}</span>
       </div>
+      <Field label="Password" hint="Must be visible in every screenshot the team submits.">
+        <Input key={team.codeword} defaultValue={team.codeword} onBlur={(e) => setPassword(e.target.value)} className="num" />
+      </Field>
+      <Field label={`Members (${team.members.length})`} as="div">
+        <ul className="divide-y divide-line rounded-md border border-line">
+          {team.members.map(({ user, isCaptain }) => (
+            <li key={user.id} className="flex h-9 items-center gap-2 px-3 text-sm">
+              <span className="min-w-0 flex-1 truncate text-fg">{displayName(user)}</span>
+              {isCaptain ? (
+                <span className="text-xs text-fg-subtle">Captain</span>
+              ) : (
+                <IconButton label={`Remove ${displayName(user)}`} size="sm" onPress={() => removeMember(user)}>
+                  <XIcon size={12} />
+                </IconButton>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Field>
       <Field label="Add member" as="div">
         <UserSearchInput scope={slug} onSelect={addMember} />
       </Field>
+      {error && <Notice tone="danger">{error}</Notice>}
     </Card>
   );
 }
