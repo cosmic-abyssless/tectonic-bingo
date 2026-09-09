@@ -17,6 +17,7 @@ import { TeamManager } from "../core/admin/TeamManager";
 import { AppHeader } from "../core/ui/AppHeader";
 import { Button } from "../core/ui/Button";
 import { Dialog, DialogHeader } from "../core/ui/Dialog";
+import { usePreference } from "../core/ui/preferences";
 import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 
 // adminOnly tabs are hidden from — and their content never rendered for — a
@@ -25,22 +26,28 @@ import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 // so this is UX decluttering on top of a real boundary, not the boundary
 // itself.
 //
-// A tab with `until` is hidden once the bingo has moved past that stage —
-// there is nothing left to do on it. Tabs without it are always shown.
-const TABS: { key: string; label: string; adminOnly: boolean; until?: Stage }[] = [
-  { key: "submissions", label: "Submissions", adminOnly: false },
+// `from`/`until` bound the stages a tab is relevant in. Past `until` there
+// is nothing left to do on it, so it is hidden. Before `from` it is either
+// dimmed and moved to the end or hidden, per the user's "upcomingTabs"
+// preference. Tabs without bounds are always shown.
+const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; until?: Stage }[] = [
+  { key: "submissions", label: "Submissions", adminOnly: false, from: "live" },
   { key: "signups", label: "Signups", adminOnly: false, until: "draft" },
   { key: "settings", label: "Settings", adminOnly: true },
   { key: "board", label: "Board", adminOnly: true, until: "reveal" },
   { key: "lines", label: "Lines", adminOnly: true, until: "reveal" },
   { key: "questions", label: "Signup questions", adminOnly: true, until: "draft" },
-  { key: "teams", label: "Teams", adminOnly: true },
+  { key: "teams", label: "Teams", adminOnly: true, from: "captains" },
   { key: "mods", label: "Moderators", adminOnly: true },
 ];
 type TabDef = (typeof TABS)[number];
 
 function isPastStage(tab: TabDef, stage: Stage): boolean {
   return tab.until !== undefined && STAGE_ORDER.indexOf(stage) > STAGE_ORDER.indexOf(tab.until);
+}
+
+function isUpcoming(tab: TabDef, stage: Stage): boolean {
+  return tab.from !== undefined && STAGE_ORDER.indexOf(stage) < STAGE_ORDER.indexOf(tab.from);
 }
 
 // Mod surfaces never theme — always core/, regardless of bingo.theme.
@@ -51,9 +58,15 @@ export function ModPage() {
   const { user } = useAuth();
   const isAdmin = !!user?.isAdmin;
   const [tab, setTab] = useState("submissions");
+  const [upcomingTabs] = usePreference("upcomingTabs");
 
   const stage = shell?.bingo.stage;
-  const visibleTabs = useMemo(() => (stage ? TABS.filter((t) => (!t.adminOnly || isAdmin) && !isPastStage(t, stage)) : []), [stage, isAdmin]);
+  const visibleTabs = useMemo(() => {
+    if (!stage) return [];
+    const relevant = TABS.filter((t) => (!t.adminOnly || isAdmin) && !isPastStage(t, stage)).map((t) => ({ ...t, dimmed: isUpcoming(t, stage) }));
+    const current = relevant.filter((t) => !t.dimmed);
+    return upcomingTabs === "hide" ? current : [...current, ...relevant.filter((t) => t.dimmed)];
+  }, [stage, isAdmin, upcomingTabs]);
 
   const [showNotifPrompt, setShowNotifPrompt] = useState(
     () => "Notification" in window && Notification.permission === "default" && !localStorage.getItem("mod_notif_prompted"),
@@ -101,7 +114,7 @@ export function ModPage() {
         <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key))}>
           <TabList>
             {visibleTabs.map((t) => (
-              <Tab key={t.key} id={t.key}>
+              <Tab key={t.key} id={t.key} dimmed={t.dimmed}>
                 {t.label}
               </Tab>
             ))}
