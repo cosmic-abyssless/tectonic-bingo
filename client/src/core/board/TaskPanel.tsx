@@ -1,30 +1,16 @@
 import type { GraphNode, NodeStatus } from "@bingo/shared";
 import { TooltipTrigger, Tooltip, Focusable } from "react-aria-components";
 import { itemLeafValue, leafComplete, type LeafClaimMaps } from "./taskClaims";
+import { leafLabel, compositeLabel } from "./labels";
 import { Badge } from "../ui/Card";
 import { CheckIcon, LockIcon } from "../ui/icons";
 
+// Re-exported for existing callers (e.g. SubmissionModal.tsx) that still
+// import it from here — the real definition now lives in ./labels.
+export { leafLabel };
+
 function Check() {
   return <CheckIcon size={12} className="shrink-0 text-ok" aria-label="complete" />;
-}
-
-/** For an ITEM leaf, just its name. For a SUM, its children's names joined — the SUM is what carries the quantity/target now. */
-export function leafLabel(node: GraphNode): string {
-  if (node.kind === "SUM") return node.children.map((c) => c.itemName).filter((n): n is string => !!n).join(" / ") || "(no items)";
-  return node.itemName ?? "(no item)";
-}
-
-function compositeLabel(node: GraphNode): string {
-  switch (node.kind) {
-    case "ALL":
-      return "All of:";
-    case "ANY":
-      return "Any one of:";
-    case "COUNT":
-      return `At least ${node.minCount ?? 1} of:`;
-    default:
-      return "";
-  }
 }
 
 function rowClass(dim: boolean, submitted: boolean) {

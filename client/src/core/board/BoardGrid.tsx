@@ -4,16 +4,10 @@ import { TileCell } from "./TileCell";
 import { TileModal } from "./TileModal";
 import { groupSubmissionsByTile } from "./tileProgress";
 import { tileMatchesSearch } from "./requirementTree";
+import { getRowCategory } from "../../headless/boardModel";
 import { CountdownTimer } from "../ui/CountdownTimer";
 import { Notice } from "../ui/Card";
 import { ClockIcon } from "../ui/icons";
-
-function getRowCategory(tiles: Tile[], categories: TileCategory[], row: number): TileCategory | null {
-  const rowTiles = tiles.filter((t) => t.boardRow === row);
-  const catIds = new Set(rowTiles.map((t) => t.categoryId).filter((id): id is string => id !== null));
-  if (catIds.size !== 1) return null;
-  return categories.find((c) => c.id === [...catIds][0]) ?? null;
-}
 
 export function BoardGrid({
   bingo,

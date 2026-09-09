@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import type { Bingo, ClaimInput, GraphNode, NodeStatus, ScreenshotAnalysis, SubmissionDetails, TeamNodeState, Tile, TileCategory } from "@bingo/shared";
+import type { Bingo, ClaimInput, GraphNode, ScreenshotAnalysis, SubmissionDetails, TeamNodeState, Tile, TileCategory } from "@bingo/shared";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { Dialog, DialogHeader } from "../ui/Dialog";
 import { Button, IconButton } from "../ui/Button";
@@ -11,16 +11,7 @@ import { buildLeafClaimMaps, itemLeafValue, leafComplete } from "../board/taskCl
 import { collectLeaves, collectLeavesWithAncestors } from "../board/requirementTree";
 import { leafLabel } from "../board/TaskPanel";
 import { deriveBoardNodeStatuses, getFreezeUnlockAt } from "../board/tileProgress";
-
-// A task is a direct child of its tile's node.
-function getAvailableTasks(tile: Tile, statusByNodeId: Map<string, NodeStatus>): GraphNode[] {
-  return tile.node.children.filter((task) => {
-    const status = statusByNodeId.get(task.id) ?? "not_started";
-    if (status === "completed") return false;
-    if (task.submitGateNodeId && statusByNodeId.get(task.submitGateNodeId) !== "completed") return false;
-    return true;
-  });
-}
+import { getAvailableTasks } from "../../headless/submissionFlowLogic";
 
 interface Props {
   slug: string;
