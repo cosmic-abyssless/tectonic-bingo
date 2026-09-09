@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { signupAnswers, signups, teamMembers, teamNodeState, teamPointAdjustments, teams, users } from "../db/schema";
+import { draftPicks, signupAnswers, signups, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { PUBLIC_SIGNUP_COLS } from "./signupService";
 
@@ -17,6 +17,30 @@ export function getTeamById(db: Db, teamId: string) {
 
 export function getTeamMembers(db: Db, teamId: string) {
   return db.select().from(teamMembers).where(eq(teamMembers.teamId, teamId)).all();
+}
+
+// Teams plus their rosters — what the bingo shell ships so admins can see who
+// is on each team and players can see teammates once the board is revealed.
+export function getTeamsWithMembers(db: Db, bingoId: string) {
+  const teamRows = getTeamsForBingo(db, bingoId);
+  if (teamRows.length === 0) return [];
+  const teamIds = teamRows.map((t) => t.id);
+  const memberRows = db
+    .select({ teamId: teamMembers.teamId, isCaptain: teamMembers.isCaptain, user: users })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(inArray(teamMembers.teamId, teamIds))
+    .all();
+  const draftedUserIds = new Set(
+    db.select({ userId: draftPicks.userId }).from(draftPicks).where(inArray(draftPicks.teamId, teamIds)).all().map((p) => p.userId),
+  );
+  return teamRows.map((team) => ({
+    ...team,
+    members: memberRows
+      .filter((m) => m.teamId === team.id)
+      .sort((a, b) => Number(b.isCaptain) - Number(a.isCaptain))
+      .map(({ user, isCaptain }) => ({ user, isCaptain, isDrafted: draftedUserIds.has(user.id) })),
+  }));
 }
 
 // A user belongs to at most one team per bingo (enforced by the draft flow).
@@ -75,6 +99,15 @@ function generateCodeword(): string {
   return `${adj}-${noun}`;
 }
 
+// Distinguishable on the dark theme; new teams take the first unused colour
+// and wrap once all eight are taken. Admins can still recolour later.
+const TEAM_PALETTE = ["#e74c3c", "#3498db", "#2ecc71", "#f1c40f", "#9b59b6", "#e67e22", "#1abc9c", "#ec407a"];
+
+function nextTeamColor(db: Db, bingoId: string): string {
+  const used = db.select({ color: teams.color }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.color);
+  return TEAM_PALETTE.find((c) => !used.includes(c)) ?? TEAM_PALETTE[used.length % TEAM_PALETTE.length];
+}
+
 function assertUserNotOnATeam(db: Db, bingoId: string, userId: string): void {
   const existing = db
     .select({ team: teams })
@@ -116,7 +149,7 @@ export function createTeam(db: Db, params: CreateTeamParams) {
 
     const team = tx
       .insert(teams)
-      .values({ bingoId: params.bingoId, captainUserId: params.captainUserId, name: params.name ?? "New Team", codeword })
+      .values({ bingoId: params.bingoId, captainUserId: params.captainUserId, name: params.name ?? "New Team", codeword, color: nextTeamColor(tx, params.bingoId) })
       .returning()
       .get();
     tx.insert(teamMembers).values({ teamId: team.id, userId: params.captainUserId, isCaptain: true }).run();
@@ -124,10 +157,33 @@ export function createTeam(db: Db, params: CreateTeamParams) {
   });
 }
 
-export function updateTeam(db: Db, teamId: string, params: { name?: string; color?: string | null; codeword?: string }) {
+export interface UpdateTeamParams {
+  name?: string;
+  color?: string | null;
+  codeword?: string;
+}
+export function updateTeam(db: Db, teamId: string, params: UpdateTeamParams) {
   const existing = db.select().from(teams).where(eq(teams.id, teamId)).get();
   if (!existing) throw new ServiceError(404, "Team not found");
-  return db.update(teams).set(params).where(eq(teams.id, teamId)).returning().get();
+
+  const patch: UpdateTeamParams = {};
+  if (params.name !== undefined) {
+    if (typeof params.name !== "string" || !params.name.trim()) throw new ServiceError(400, "name must be a non-empty string");
+    patch.name = params.name.trim();
+  }
+  if (params.color !== undefined) {
+    if (params.color !== null && typeof params.color !== "string") throw new ServiceError(400, "color must be a string or null");
+    patch.color = params.color;
+  }
+  if (params.codeword !== undefined) {
+    if (typeof params.codeword !== "string" || !params.codeword.trim()) throw new ServiceError(400, "codeword must be a non-empty string");
+    const codeword = params.codeword.trim();
+    const clash = db.select({ id: teams.id }).from(teams).where(and(eq(teams.bingoId, existing.bingoId), eq(teams.codeword, codeword))).get();
+    if (clash && clash.id !== teamId) throw new ServiceError(409, "Another team in this bingo already uses that password");
+    patch.codeword = codeword;
+  }
+  if (Object.keys(patch).length === 0) return existing;
+  return db.update(teams).set(patch).where(eq(teams.id, teamId)).returning().get();
 }
 
 export function addTeamMember(db: Db, teamId: string, userId: string) {
@@ -139,11 +195,29 @@ export function addTeamMember(db: Db, teamId: string, userId: string) {
   });
 }
 
+// Drafted players stay put: dropping only the membership would return them
+// to the pool while their pick still shows on the roster, and dropping the
+// pick would shift the snake order for everyone after it.
 export function removeTeamMember(db: Db, teamId: string, userId: string): void {
   const team = db.select().from(teams).where(eq(teams.id, teamId)).get();
   if (!team) throw new ServiceError(404, "Team not found");
   if (team.captainUserId === userId) throw new ServiceError(400, "Cannot remove the captain — reassign the captaincy or delete the team instead");
+  const pick = db.select({ id: draftPicks.id }).from(draftPicks).where(and(eq(draftPicks.teamId, teamId), eq(draftPicks.userId, userId))).get();
+  if (pick) throw new ServiceError(409, "This player was drafted onto the team and can't be removed");
   db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).run();
+}
+
+// Only teams without game history can go: once a team has draft picks,
+// submissions or point adjustments, removing it would orphan that record.
+export function deleteTeam(db: Db, teamId: string): void {
+  db.transaction((tx) => {
+    const team = tx.select().from(teams).where(eq(teams.id, teamId)).get();
+    if (!team) throw new ServiceError(404, "Team not found");
+    const hasHistory = [draftPicks, submissions, teamPointAdjustments].some((table) => tx.select({ id: table.id }).from(table).where(eq(table.teamId, teamId)).get());
+    if (hasHistory) throw new ServiceError(409, "This team has draft picks or submissions and can't be deleted");
+    tx.delete(teamMembers).where(eq(teamMembers.teamId, teamId)).run();
+    tx.delete(teams).where(eq(teams.id, teamId)).run();
+  });
 }
 
 // Active signups not already on a team for this bingo — the pool mods pick

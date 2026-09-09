@@ -1,14 +1,14 @@
 // Pure builders that turn raw server shapes into the view models in
 // ./types.ts. No React, no hooks — safe to call from anywhere, including
 // providers and (if ever wanted) tests. See docs/headless-theming-plan.md §2.
-import type { BoardLine, GraphNode, NodeStatus, SubmissionDetails, Team, TeamNodeState, Tile, TileCategory } from "@bingo/shared";
+import type { BoardLine, GraphNode, NodeStatus, SubmissionDetails, TeamNodeState, TeamWithMembers, Tile, TileCategory } from "@bingo/shared";
 import { summarizeTileProgress, getFreezeUnlockAt, groupSubmissionsByTile, type TileProgressSummary } from "../core/board/tileProgress";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete, type LeafClaimMaps } from "../core/board/taskClaims";
-import { collectLeaves } from "../core/board/requirementTree";
-import { leafLabel, compositeLabel } from "../core/board/labels";
+import { collectLeaves, conditionHeading } from "../core/board/requirementTree";
+import { leafLabel } from "../core/board/labels";
 import { claimsSummary } from "../core/submissions/claimsSummary";
 import { timeAgo } from "../core/ui/time";
-import { displayName } from "../core/ui/user";
+import { avatarUrl, displayName } from "../core/ui/user";
 import type { BoardModel, CategoryModel, LineModel, RequirementNodeModel, SubmissionModel, TaskModel, TeamModel, TileModel } from "./types";
 
 // Moved from BoardGrid.tsx, unchanged.
@@ -23,8 +23,15 @@ export function toCategoryModel(category: TileCategory): CategoryModel {
   return { id: category.id, label: category.label, color: category.colorHex, sortOrder: category.sortOrder };
 }
 
-export function toTeamModel(team: Team, myTeamId: string | null): TeamModel {
-  return { id: team.id, name: team.name, color: team.color, isMine: team.id === myTeamId };
+export function toTeamModel(team: TeamWithMembers, myTeamId: string | null, viewerUserId: string): TeamModel {
+  return {
+    id: team.id,
+    name: team.name,
+    color: team.color,
+    isMine: team.id === myTeamId,
+    members: team.members.map((m) => ({ id: m.user.id, displayName: displayName(m.user), avatarUrl: avatarUrl(m.user), isCaptain: m.isCaptain })),
+    canRename: team.captainUserId === viewerUserId,
+  };
 }
 
 // Ports TaskPanel.tsx's LeafRow/SumRow/RequirementTree rules 1:1: a leaf's
@@ -37,7 +44,6 @@ export function buildRequirementTree(
   maps: LeafClaimMaps,
   statusByNodeId: Map<string, NodeStatus>,
   ancestorSatisfied = false,
-  root = true,
 ): RequirementNodeModel | null {
   if (node.kind === "MANUAL") return null;
 
@@ -83,13 +89,13 @@ export function buildRequirementTree(
   const nodeComplete = statusByNodeId.get(node.id) === "completed";
   const childAncestorSatisfied = ancestorSatisfied || nodeComplete;
   const children = node.children
-    .map((child) => buildRequirementTree(child, maps, statusByNodeId, childAncestorSatisfied, false))
+    .map((child) => buildRequirementTree(child, maps, statusByNodeId, childAncestorSatisfied))
     .filter((c): c is RequirementNodeModel => c !== null);
 
   return {
     id: node.id,
     kind: node.kind,
-    label: compositeLabel(node),
+    label: conditionHeading(node),
     isLeaf: false,
     status: statusByNodeId.get(node.id) ?? "not_started",
     complete: nodeComplete,
@@ -97,7 +103,7 @@ export function buildRequirementTree(
     notNeeded: ancestorSatisfied,
     dim: false,
     progress: null,
-    showHeading: !(root && node.kind === "ALL"),
+    showHeading: true,
     children,
   };
 }
@@ -125,7 +131,7 @@ export function buildTaskModels(tile: Tile, summary: TileProgressSummary, maps: 
       locked,
       lockedReason: locked && gate ? `${task.label} cannot be submitted until ${gate.label} is completed.` : null,
       available: !complete && !locked,
-      tree: isManual ? null : buildRequirementTree(task, maps, summary.statusByNodeId, false, true),
+      tree: isManual ? null : buildRequirementTree(task, maps, summary.statusByNodeId),
     };
   });
 }

@@ -14,6 +14,7 @@ import { DraftStage } from "./page/DraftStage";
 import { NoTeamStage } from "./page/NoTeamStage";
 import { RulesDialog } from "./page/RulesDialog";
 import { SubmissionsDrawer } from "./page/SubmissionsDrawer";
+import { TeamInfoDialog } from "../../core/teams/TeamInfoDialog";
 import { BoardGrid } from "./board/BoardGrid";
 import { RowLabel } from "./board/RowLabel";
 import { EmptyCell } from "./board/EmptyCell";
@@ -52,6 +53,7 @@ export const defaultTheme: ThemeDefinition = {
     NoTeamStage,
     RulesDialog,
     SubmissionsDrawer,
+    TeamInfoDialog,
     BoardGrid,
     RowLabel,
     EmptyCell,

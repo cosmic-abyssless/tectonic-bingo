@@ -15,7 +15,7 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
         onFocus={() => search.setFocused(true)}
         onBlur={search.blur}
         onKeyDown={search.onKeyDown}
-        className="h-9 pl-9 pr-9"
+        className="pl-9 pr-10"
       />
       {search.query && (
         <button
@@ -25,7 +25,7 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
             search.clear();
             search.inputRef.current?.focus();
           }}
-          className="hit-40 absolute right-2 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-sm p-1 text-fg-subtle transition-colors hover:text-fg"
+          className="absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
         >
           <XIcon />
         </button>

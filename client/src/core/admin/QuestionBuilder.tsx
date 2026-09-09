@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { SignupQuestion, SignupQuestionType } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
+import { optimisticUpdate } from "../../api/optimistic";
 import { adminQueryKeys, useQuestions } from "../../api/adminQueries";
 import { Button, IconButton } from "../ui/Button";
 import { Card, EmptyState, Notice } from "../ui/Card";
@@ -25,7 +26,7 @@ function parseOptions(optionsJson: string | null | undefined): string {
 
 function TypeSelect(props: { value: SignupQuestionType; onChange: (t: SignupQuestionType) => void; "aria-label": string }) {
   return (
-    <Select aria-label={props["aria-label"]} value={props.value} onChange={(e) => props.onChange(e.target.value as SignupQuestionType)} className="w-auto shrink-0">
+    <Select aria-label={props["aria-label"]} value={props.value} onChange={(e) => props.onChange(e.target.value as SignupQuestionType)} className="w-auto! shrink-0">
       {TYPES.map((t) => (
         <option key={t.value} value={t.value}>
           {t.label}
@@ -72,16 +73,24 @@ export function QuestionBuilder({ slug }: { slug: string }) {
     await adminApi.updateQuestion(slug, id, fields);
     invalidate();
   }
-  async function remove(id: string) {
-    await adminApi.deleteQuestion(slug, id);
-    invalidate();
+  function remove(id: string) {
+    return optimisticUpdate<{ questions: SignupQuestion[] }>(
+      queryClient,
+      adminQueryKeys.questions(slug),
+      (d) => ({ questions: d.questions.filter((q) => q.id !== id) }),
+      () => adminApi.deleteQuestion(slug, id),
+    );
   }
-  async function move(index: number, dir: -1 | 1) {
+  function move(index: number, dir: -1 | 1) {
     const reordered = [...questions];
     const [item] = reordered.splice(index, 1);
     reordered.splice(index + dir, 0, item);
-    await adminApi.reorderQuestions(slug, reordered.map((q) => q.id));
-    invalidate();
+    return optimisticUpdate<{ questions: SignupQuestion[] }>(
+      queryClient,
+      adminQueryKeys.questions(slug),
+      () => ({ questions: reordered }),
+      () => adminApi.reorderQuestions(slug, reordered.map((q) => q.id)),
+    );
   }
 
   return (
@@ -103,7 +112,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                     <ChevronDownIcon size={12} />
                   </IconButton>
                 </div>
-                <Input aria-label="Question prompt" defaultValue={q.prompt} onBlur={(e) => patch(q.id, { prompt: e.target.value })} className="flex-1" />
+                <Input aria-label="Question prompt" defaultValue={q.prompt} onBlur={(e) => patch(q.id, { prompt: e.target.value })} className="min-w-0 flex-1" />
                 <TypeSelect aria-label="Question type" value={q.type} onChange={(type) => patch(q.id, { type })} />
                 <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-fg-muted">
                   <input type="checkbox" checked={q.required} onChange={(e) => patch(q.id, { required: e.target.checked })} className="size-4 accent-accent" />
@@ -119,7 +128,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                   defaultValue={parseOptions(q.optionsJson)}
                   onBlur={(e) => patch(q.id, { optionsJson: JSON.stringify(e.target.value.split(",").map((s) => s.trim()).filter(Boolean)) })}
                   placeholder="Comma-separated options"
-                  className="h-8 text-xs"
+                  size="sm"
                 />
               )}
             </Card>
@@ -135,7 +144,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
             onChange={(e) => setNewPrompt(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && newType !== "select" && add()}
             placeholder="New question…"
-            className="flex-1"
+            className="min-w-0 flex-1"
           />
           <TypeSelect aria-label="New question type" value={newType} onChange={setNewType} />
           <Button onPress={add} isDisabled={!newPrompt.trim()} className="shrink-0">
@@ -149,7 +158,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
             onChange={(e) => setNewOptions(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && add()}
             placeholder="Comma-separated options"
-            className="h-8 text-xs"
+            size="sm"
           />
         )}
         {error && <Notice tone="danger">{error}</Notice>}

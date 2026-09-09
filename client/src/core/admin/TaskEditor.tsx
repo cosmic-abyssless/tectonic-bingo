@@ -1,16 +1,30 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import type { GraphNode, GraphNodeInput } from "@bingo/shared";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import type { BoardResponse, GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
+import { optimisticUpdate } from "../../api/optimistic";
 import { queryKeys } from "../../api/queries";
 import { adminQueryKeys, useItemGroups } from "../../api/adminQueries";
-import { toGraphNodeInput as toInput } from "../board/requirementTree";
+import { previewGraphNode, toGraphNodeInput as toInput } from "../board/requirementTree";
 import { Button } from "../ui/Button";
+import { Notice } from "../ui/Card";
 import { Field, Input, Textarea } from "../ui/Field";
 import { ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { RequirementTreeEditor, type ExistingLeaf, type ExistingCondition } from "./RequirementTreeEditor";
 
 const CHECKBOX = "size-4 accent-accent disabled:opacity-40";
+
+// Edits to a tile's tasks show up in the cached board immediately and roll
+// back if the server rejects them, so tree edits and deletes don't wait on
+// the round trip.
+export function optimisticTasks(queryClient: QueryClient, slug: string, tileId: string, update: (tasks: GraphNode[]) => GraphNode[], request: () => Promise<unknown>) {
+  return optimisticUpdate<BoardResponse>(
+    queryClient,
+    queryKeys.board(slug),
+    (board) => ({ ...board, tiles: board.tiles.map((tile) => (tile.id === tileId ? { ...tile, node: { ...tile.node, children: update(tile.node.children) } } : tile)) }),
+    request,
+  );
+}
 
 // A task is a node that's a direct child of its tile's node. `previousTaskId`
 // is the sibling immediately before this one (per the tile's current child
@@ -18,39 +32,46 @@ const CHECKBOX = "size-4 accent-accent disabled:opacity-40";
 // node id, per docs/node-graph-model.md §6.
 export function TaskEditor({
   slug,
+  tileId,
   task,
   previousTaskId,
   existingLeaves,
   existingConditions,
   sharedNodeIds,
-  onDeleted,
+  onDelete,
 }: {
   slug: string;
+  tileId: string;
   task: GraphNode;
   previousTaskId?: string;
   existingLeaves?: ExistingLeaf[];
   existingConditions?: ExistingCondition[];
   sharedNodeIds: Set<string>;
-  onDeleted: () => void;
+  onDelete: () => void;
 }) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const itemGroups = useItemGroups().data?.itemGroups ?? [];
-
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.board(slug) });
 
   // The server replaces the whole node (fields + subtree) on every PATCH —
   // always send the full current input, overridden with just the changed
   // field(s), so editing one field can't wipe another (e.g. a label edit
   // wiping the requirement tree, or a tree edit resetting points to 0).
   async function patch(fields: Partial<GraphNodeInput>) {
-    await adminApi.updateTask(slug, task.id, { ...toInput(task), ...fields });
-    invalidate();
-  }
-  async function deleteTask() {
-    await adminApi.deleteTask(slug, task.id);
-    invalidate();
-    onDeleted();
+    const input = { ...toInput(task), ...fields };
+    setError(null);
+    try {
+      await optimisticTasks(
+        queryClient,
+        slug,
+        tileId,
+        (tasks) => tasks.map((t) => (t.id === task.id ? previewGraphNode(task.bingoId, input) : t)),
+        () => adminApi.updateTask(slug, task.id, input),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+    }
   }
   async function saveAsGroup(itemNames: string[]) {
     const name = prompt("Name for the new item group:", "");
@@ -151,7 +172,9 @@ export function TaskEditor({
             <Input defaultValue={task.notes ?? ""} onBlur={(e) => patch({ notes: e.target.value || null })} />
           </Field>
 
-          <Button variant="danger" size="sm" onPress={deleteTask}>
+          {error && <Notice tone="danger">{error}</Notice>}
+
+          <Button variant="danger" size="sm" onPress={onDelete}>
             Delete task
           </Button>
         </div>

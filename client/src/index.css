@@ -5,6 +5,7 @@
 @custom-variant selected (&[data-selected]);
 @custom-variant hovered (&[data-hovered]);
 @custom-variant current (&[data-current]);
+@custom-variant expanded (&[data-expanded]);
 
 /*
  * Design tokens. Minimal high-contrast dark: near-black surfaces separated by

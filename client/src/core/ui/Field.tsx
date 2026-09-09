@@ -7,18 +7,26 @@ import type { ComponentProps, ReactNode } from "react";
  */
 
 export const inputClass =
-  "w-full rounded-md border border-line-strong bg-bg px-3 text-sm text-fg placeholder:text-fg-subtle transition-colors focus:border-fg/60 disabled:opacity-50 disabled:cursor-not-allowed";
+  "w-full rounded-md border border-line-strong bg-bg px-3 text-fg placeholder:text-fg-subtle transition-colors focus:border-fg/60 disabled:opacity-50 disabled:cursor-not-allowed";
 
-export function Input({ className, ...props }: ComponentProps<"input">) {
-  return <input {...props} className={`${inputClass} h-10 ${className ?? ""}`} />;
+// Mirrors Button's sizes so controls sit flush next to buttons. Callers must
+// use `size` rather than passing h-* classes — `h-10` here would win anyway.
+const controlSize = { sm: "h-8 text-xs", md: "h-10 text-sm" } as const;
+export type ControlSize = keyof typeof controlSize;
+
+/** Full class string for a raw <input>/<select> that can't use the components below. */
+export const controlClass = (size: ControlSize = "md") => `${inputClass} ${controlSize[size]}`;
+
+export function Input({ className, size = "md", ...props }: Omit<ComponentProps<"input">, "size"> & { size?: ControlSize }) {
+  return <input {...props} className={`${controlClass(size)} ${className ?? ""}`} />;
 }
 
 export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
-  return <textarea {...props} className={`${inputClass} py-2 ${className ?? ""}`} />;
+  return <textarea {...props} className={`${inputClass} py-2 text-sm ${className ?? ""}`} />;
 }
 
-export function Select({ className, ...props }: ComponentProps<"select">) {
-  return <select {...props} className={`${inputClass} h-10 ${className ?? ""}`} />;
+export function Select({ className, size = "md", ...props }: Omit<ComponentProps<"select">, "size"> & { size?: ControlSize }) {
+  return <select {...props} className={`${controlClass(size)} ${className ?? ""}`} />;
 }
 
 /** Labelled control. Use `as="div"` when the content isn't a single form control (button groups, lists). */

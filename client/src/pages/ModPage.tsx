@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { Key } from "react-aria-components";
+import { STAGE_ORDER, type Stage } from "@bingo/shared";
 import { useBingo } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { useWebSocketEvent } from "../context/WebSocketContext";
@@ -16,6 +17,8 @@ import { TeamManager } from "../core/admin/TeamManager";
 import { AppHeader } from "../core/ui/AppHeader";
 import { Button } from "../core/ui/Button";
 import { Dialog, DialogHeader } from "../core/ui/Dialog";
+import { MenuItem } from "../core/ui/Menu";
+import { usePreference } from "../core/ui/preferences";
 import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 
 // adminOnly tabs are hidden from — and their content never rendered for — a
@@ -23,17 +26,27 @@ import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 // underlying routes (requireAdmin on admin.ts vs requireBingoMod on mod.ts),
 // so this is UX decluttering on top of a real boundary, not the boundary
 // itself.
-const TABS = [
-  { key: "submissions", label: "Submissions", adminOnly: false },
-  { key: "signups", label: "Signups", adminOnly: false },
+//
+// `from`/`until` bound the stages a tab is relevant in. Outside that window
+// (stage already past `until`, or not yet at `from`) the tab is either hidden
+// or dimmed and moved to the end, per the mod's "outOfStageTabs" preference.
+// Tabs without bounds are always shown.
+const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; until?: Stage }[] = [
+  { key: "submissions", label: "Submissions", adminOnly: false, from: "live" },
+  { key: "signups", label: "Signups", adminOnly: false, until: "draft" },
   { key: "settings", label: "Settings", adminOnly: true },
-  { key: "board", label: "Board", adminOnly: true },
-  { key: "lines", label: "Lines", adminOnly: true },
-  { key: "questions", label: "Signup questions", adminOnly: true },
-  { key: "teams", label: "Teams", adminOnly: true },
+  { key: "board", label: "Board", adminOnly: true, until: "reveal" },
+  { key: "lines", label: "Lines", adminOnly: true, until: "reveal" },
+  { key: "questions", label: "Signup questions", adminOnly: true, until: "signup" },
+  { key: "teams", label: "Teams", adminOnly: true, from: "captains" },
   { key: "mods", label: "Moderators", adminOnly: true },
-] as const;
-type Tab = (typeof TABS)[number]["key"];
+];
+type TabDef = (typeof TABS)[number];
+
+function isOutOfStage(tab: TabDef, stage: Stage): boolean {
+  const idx = STAGE_ORDER.indexOf(stage);
+  return (tab.until !== undefined && idx > STAGE_ORDER.indexOf(tab.until)) || (tab.from !== undefined && idx < STAGE_ORDER.indexOf(tab.from));
+}
 
 // Mod surfaces never theme — always core/, regardless of bingo.theme.
 export function ModPage() {
@@ -42,7 +55,16 @@ export function ModPage() {
   const { data: shell } = useBingo(slug);
   const { user } = useAuth();
   const isAdmin = !!user?.isAdmin;
-  const [tab, setTab] = useState<Tab>("submissions");
+  const [tab, setTab] = useState("submissions");
+  const [outOfStageTabs, setOutOfStageTabs] = usePreference("outOfStageTabs");
+
+  const stage = shell?.bingo.stage;
+  const visibleTabs = useMemo(() => {
+    if (!stage) return [];
+    const allowed = TABS.filter((t) => !t.adminOnly || isAdmin).map((t) => ({ ...t, dimmed: isOutOfStage(t, stage) }));
+    const current = allowed.filter((t) => !t.dimmed);
+    return outOfStageTabs === "hide" ? current : [...current, ...allowed.filter((t) => t.dimmed)];
+  }, [stage, isAdmin, outOfStageTabs]);
 
   const [showNotifPrompt, setShowNotifPrompt] = useState(
     () => "Notification" in window && Notification.permission === "default" && !localStorage.getItem("mod_notif_prompted"),
@@ -67,16 +89,16 @@ export function ModPage() {
     if (shell && !shell.isMod) navigate(`/b/${slug}`, { replace: true });
   }, [shell, navigate, slug]);
 
-  // A tab the user can no longer see (e.g. isAdmin resolved to false after
-  // mount) shouldn't leave stale admin-only content selected.
+  // A tab the user can no longer see (isAdmin resolved to false after mount,
+  // or the stage moved past the tab) shouldn't leave stale content selected.
+  // Settings is always in-stage, so it's the safe landing spot when visible.
   useEffect(() => {
-    const current = TABS.find((t) => t.key === tab);
-    if (current?.adminOnly && !isAdmin) setTab("submissions");
-  }, [isAdmin, tab]);
+    if (visibleTabs.length > 0 && !visibleTabs.some((t) => t.key === tab)) {
+      setTab(visibleTabs.some((t) => t.key === "settings") ? "settings" : visibleTabs[0].key);
+    }
+  }, [visibleTabs, tab]);
 
   if (!shell || !shell.isMod || !slug) return null;
-
-  const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
 
   const dismissNotifPrompt = () => {
     localStorage.setItem("mod_notif_prompted", "true");
@@ -85,15 +107,25 @@ export function ModPage() {
 
   return (
     <div className="min-h-screen bg-bg text-fg">
-      <AppHeader back={{ to: `/b/${slug}`, label: "Back to bingo" }} title="Mod panel" subtitle={shell.bingo.name} />
+      <AppHeader
+        back={{ to: `/b/${slug}`, label: "Back to bingo" }}
+        title="Mod panel"
+        subtitle={shell.bingo.name}
+        menuItems={
+          <MenuItem id="outOfStageTabs" className="justify-between" onAction={() => setOutOfStageTabs(outOfStageTabs === "hide" ? "dim" : "hide")}>
+            Out-of-stage tabs
+            <span className="text-xs text-fg-subtle">{outOfStageTabs === "hide" ? "Hidden" : "Dimmed"}</span>
+          </MenuItem>
+        }
+      />
 
       <main className="mx-auto w-full max-w-6xl space-y-6 px-6 py-6">
         <StageControls slug={slug} bingo={shell.bingo} />
 
-        <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(key as Tab)}>
+        <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key))}>
           <TabList>
             {visibleTabs.map((t) => (
-              <Tab key={t.key} id={t.key}>
+              <Tab key={t.key} id={t.key} dimmed={t.dimmed}>
                 {t.label}
               </Tab>
             ))}
