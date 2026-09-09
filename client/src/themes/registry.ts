@@ -11,9 +11,10 @@ export interface ThemeDefinition {
 
 export type ResolvedTheme = ThemeContextValue;
 
-// Follow-up themes register here as one line each, e.g.:
-//   comic: () => import("./comic"),
-const loaders: Record<string, () => Promise<{ default: ThemeDefinition }>> = {};
+// Follow-up themes register here as one line each.
+const loaders: Record<string, () => Promise<{ default: ThemeDefinition }>> = {
+  comic: () => import("./comic"),
+};
 
 const DEFAULT_RESOLVED: ResolvedTheme = { key: defaultTheme.key, tokens: defaultTokens, slots: defaultTheme.slots as ThemeSlots };
 
