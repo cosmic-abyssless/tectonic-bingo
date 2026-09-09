@@ -57,19 +57,16 @@ function TeamCard({ slug, team }: { slug: string; team: Team }) {
 
   return (
     <Card className="space-y-3 p-4">
-      <div className="flex items-center gap-2">
+      <div className="flex items-end gap-2">
+        <Field label="Name" className="flex-1">
+          <Input key={team.name} defaultValue={team.name} onBlur={(e) => rename(e.target.value)} className="font-semibold" />
+        </Field>
         <input
           type="color"
           aria-label={`${team.name} color`}
           value={team.color ?? "#6366f1"}
           onChange={(e) => update({ color: e.target.value })}
-          className="size-7 shrink-0 cursor-pointer rounded-full border-none bg-transparent"
-        />
-        <input
-          aria-label="Team name"
-          defaultValue={team.name}
-          onBlur={(e) => rename(e.target.value)}
-          className="flex-1 border-b border-transparent bg-transparent text-sm font-semibold text-fg outline-none focus:border-line-strong"
+          className="size-10 shrink-0 cursor-pointer rounded-md border border-line-strong bg-bg p-1"
         />
       </div>
       <Field label="Password" hint="Must be visible in every screenshot the team submits.">
