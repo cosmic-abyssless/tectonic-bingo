@@ -25,7 +25,7 @@ function parseOptions(optionsJson: string | null | undefined): string {
 
 function TypeSelect(props: { value: SignupQuestionType; onChange: (t: SignupQuestionType) => void; "aria-label": string }) {
   return (
-    <Select aria-label={props["aria-label"]} value={props.value} onChange={(e) => props.onChange(e.target.value as SignupQuestionType)} className="w-auto shrink-0">
+    <Select aria-label={props["aria-label"]} value={props.value} onChange={(e) => props.onChange(e.target.value as SignupQuestionType)} className="w-auto! shrink-0">
       {TYPES.map((t) => (
         <option key={t.value} value={t.value}>
           {t.label}
@@ -103,7 +103,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                     <ChevronDownIcon size={12} />
                   </IconButton>
                 </div>
-                <Input aria-label="Question prompt" defaultValue={q.prompt} onBlur={(e) => patch(q.id, { prompt: e.target.value })} className="flex-1" />
+                <Input aria-label="Question prompt" defaultValue={q.prompt} onBlur={(e) => patch(q.id, { prompt: e.target.value })} className="min-w-0 flex-1" />
                 <TypeSelect aria-label="Question type" value={q.type} onChange={(type) => patch(q.id, { type })} />
                 <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-fg-muted">
                   <input type="checkbox" checked={q.required} onChange={(e) => patch(q.id, { required: e.target.checked })} className="size-4 accent-accent" />
@@ -135,7 +135,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
             onChange={(e) => setNewPrompt(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && newType !== "select" && add()}
             placeholder="New question…"
-            className="flex-1"
+            className="min-w-0 flex-1"
           />
           <TypeSelect aria-label="New question type" value={newType} onChange={setNewType} />
           <Button onPress={add} isDisabled={!newPrompt.trim()} className="shrink-0">
