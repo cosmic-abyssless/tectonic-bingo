@@ -36,16 +36,17 @@ export function BoardGrid({
   onOpenTileHandled?: () => void;
   onSubmitTile?: (tileId: string) => void;
 }) {
-  const [selected, setSelected] = useState<Tile | null>(null);
+  // Track the id, not the tile, so an open modal picks up board refreshes.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = selectedId ? tiles.find((t) => t.id === selectedId) ?? null : null;
   const [now, setNow] = useState(() => Date.now());
 
   const submissionsByTile = useMemo(() => groupSubmissionsByTile(tiles, teamSubmissions), [tiles, teamSubmissions]);
 
   useEffect(() => {
     if (!openTileId) return;
-    const tile = tiles.find((t) => t.id === openTileId);
-    if (tile) {
-      setSelected(tile);
+    if (tiles.some((t) => t.id === openTileId)) {
+      setSelectedId(openTileId);
       onOpenTileHandled?.();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -126,7 +127,7 @@ export function BoardGrid({
                       teamSubmissions={teamSubmissions}
                       now={now}
                       dimmed={matchingTileIds !== null && !matchingTileIds.has(tile.id)}
-                      onClick={() => setSelected(tile)}
+                      onClick={() => setSelectedId(tile.id)}
                     />
                   );
                 })}
@@ -142,7 +143,7 @@ export function BoardGrid({
         category={selected?.categoryId ? categoryById.get(selected.categoryId) : undefined}
         nodeStates={nodeStates}
         teamSubmissions={selected ? submissionsByTile.get(selected.id) ?? [] : []}
-        onClose={() => setSelected(null)}
+        onClose={() => setSelectedId(null)}
         onSubmit={onSubmitTile && selected ? () => onSubmitTile(selected.id) : undefined}
       />
     </div>
