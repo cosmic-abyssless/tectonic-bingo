@@ -93,10 +93,10 @@ function SplitAddButton({ primaryLabel, onPrimary, options }: { primaryLabel: st
 // SUM needs a summed quantity across ITEM children. One dropdown, one set of
 // children (items or nested composites) — no separate "item row" shape.
 const GROUP_KINDS: { kind: NodeKind; label: string }[] = [
-  { kind: "ALL", label: "All of" },
-  { kind: "ANY", label: "Any one of" },
-  { kind: "COUNT", label: "At least N of" },
-  { kind: "SUM", label: "Sum to N across" },
+  { kind: "ALL", label: "Complete all of" },
+  { kind: "ANY", label: "Complete any one of" },
+  { kind: "COUNT", label: "Complete at least N of" },
+  { kind: "SUM", label: "Collect N in total across" },
 ];
 
 type Path = number[];
