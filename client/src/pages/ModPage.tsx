@@ -91,8 +91,11 @@ export function ModPage() {
 
   // A tab the user can no longer see (isAdmin resolved to false after mount,
   // or the stage moved past the tab) shouldn't leave stale content selected.
+  // Settings is always in-stage, so it's the safe landing spot when visible.
   useEffect(() => {
-    if (visibleTabs.length > 0 && !visibleTabs.some((t) => t.key === tab)) setTab(visibleTabs[0].key);
+    if (visibleTabs.length > 0 && !visibleTabs.some((t) => t.key === tab)) {
+      setTab(visibleTabs.some((t) => t.key === "settings") ? "settings" : visibleTabs[0].key);
+    }
   }, [visibleTabs, tab]);
 
   if (!shell || !shell.isMod || !slug) return null;
