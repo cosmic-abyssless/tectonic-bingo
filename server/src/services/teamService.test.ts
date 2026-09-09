@@ -55,6 +55,15 @@ describe("createTeam", () => {
     expect(teamA.codeword).not.toBe(teamB.codeword);
   });
 
+  it("assigns each new team a distinct palette colour", () => {
+    const { bingo, captain, member } = seedBingoAndUsers();
+    const teamA = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    const teamB = createTeam(db, { bingoId: bingo.id, captainUserId: member.id });
+    expect(teamA.color).toMatch(/^#[0-9a-f]{6}$/);
+    expect(teamB.color).toMatch(/^#[0-9a-f]{6}$/);
+    expect(teamA.color).not.toBe(teamB.color);
+  });
+
   it("rejects a captain with no signup for this bingo", () => {
     const { bingo } = seedBingoAndUsers();
     const [outsider] = db.insert(schema.users).values({ discordId: "outsider", discordUsername: "outsider" }).returning().all();

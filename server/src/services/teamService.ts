@@ -75,6 +75,15 @@ function generateCodeword(): string {
   return `${adj}-${noun}`;
 }
 
+// Distinguishable on the dark theme; new teams take the first unused colour
+// and wrap once all eight are taken. Admins can still recolour later.
+const TEAM_PALETTE = ["#e74c3c", "#3498db", "#2ecc71", "#f1c40f", "#9b59b6", "#e67e22", "#1abc9c", "#ec407a"];
+
+function nextTeamColor(db: Db, bingoId: string): string {
+  const used = db.select({ color: teams.color }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.color);
+  return TEAM_PALETTE.find((c) => !used.includes(c)) ?? TEAM_PALETTE[used.length % TEAM_PALETTE.length];
+}
+
 function assertUserNotOnATeam(db: Db, bingoId: string, userId: string): void {
   const existing = db
     .select({ team: teams })
@@ -116,7 +125,7 @@ export function createTeam(db: Db, params: CreateTeamParams) {
 
     const team = tx
       .insert(teams)
-      .values({ bingoId: params.bingoId, captainUserId: params.captainUserId, name: params.name ?? "New Team", codeword })
+      .values({ bingoId: params.bingoId, captainUserId: params.captainUserId, name: params.name ?? "New Team", codeword, color: nextTeamColor(tx, params.bingoId) })
       .returning()
       .get();
     tx.insert(teamMembers).values({ teamId: team.id, userId: params.captainUserId, isCaptain: true }).run();
