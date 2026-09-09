@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { SignupQuestion, SignupQuestionType } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
+import { optimisticUpdate } from "../../api/optimistic";
 import { adminQueryKeys, useQuestions } from "../../api/adminQueries";
 import { Button, IconButton } from "../ui/Button";
 import { Card, EmptyState, Notice } from "../ui/Card";
@@ -72,16 +73,24 @@ export function QuestionBuilder({ slug }: { slug: string }) {
     await adminApi.updateQuestion(slug, id, fields);
     invalidate();
   }
-  async function remove(id: string) {
-    await adminApi.deleteQuestion(slug, id);
-    invalidate();
+  function remove(id: string) {
+    return optimisticUpdate<{ questions: SignupQuestion[] }>(
+      queryClient,
+      adminQueryKeys.questions(slug),
+      (d) => ({ questions: d.questions.filter((q) => q.id !== id) }),
+      () => adminApi.deleteQuestion(slug, id),
+    );
   }
-  async function move(index: number, dir: -1 | 1) {
+  function move(index: number, dir: -1 | 1) {
     const reordered = [...questions];
     const [item] = reordered.splice(index, 1);
     reordered.splice(index + dir, 0, item);
-    await adminApi.reorderQuestions(slug, reordered.map((q) => q.id));
-    invalidate();
+    return optimisticUpdate<{ questions: SignupQuestion[] }>(
+      queryClient,
+      adminQueryKeys.questions(slug),
+      () => ({ questions: reordered }),
+      () => adminApi.reorderQuestions(slug, reordered.map((q) => q.id)),
+    );
   }
 
   return (

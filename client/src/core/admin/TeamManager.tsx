@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import type { Team, TeamWithMembers, User } from "@bingo/shared";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import type { BingoShellResponse, Team, TeamWithMembers, User } from "@bingo/shared";
 import { useBingo, queryKeys } from "../../api/queries";
 import { adminQueryKeys, useCaptainCandidates } from "../../api/adminQueries";
 import * as adminApi from "../../api/adminApi";
+import { optimisticUpdate } from "../../api/optimistic";
 import { UserSearchInput } from "./UserSearchInput";
 import { displayName } from "../ui/user";
 import { Button, IconButton } from "../ui/Button";
@@ -28,7 +29,13 @@ function teamSizeSummary(teamCount: number, totalParticipants: number): string |
   return summary;
 }
 
-function TeamCard({ slug, team }: { slug: string; team: TeamWithMembers }) {
+// Removals drop the row from the cached shell right away and put it back if
+// the server refuses, so the UI doesn't wait on the round trip.
+function optimisticTeams(queryClient: QueryClient, slug: string, update: (teams: TeamWithMembers[]) => TeamWithMembers[], request: () => Promise<unknown>) {
+  return optimisticUpdate<BingoShellResponse>(queryClient, queryKeys.bingo(slug), (shell) => ({ ...shell, teams: update(shell.teams) }), request);
+}
+
+function TeamCard({ slug, team, onDelete }: { slug: string; team: TeamWithMembers; onDelete: () => void }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -40,19 +47,25 @@ function TeamCard({ slug, team }: { slug: string; team: TeamWithMembers }) {
     setError(null);
     try {
       await action();
-      // Membership changes also change who is free to captain a new team.
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) }),
-        queryClient.invalidateQueries({ queryKey: adminQueryKeys.captainCandidates(slug) }),
-      ]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      // Membership changes also change who is free to captain a new team.
+      queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.captainCandidates(slug) });
     }
   }
   const update = (patch: Partial<Team>) => run(() => adminApi.updateTeam(slug, team.id, patch));
   const addMember = (user: User) => run(() => adminApi.addTeamMember(slug, team.id, user.id));
-  const removeMember = (user: User) => run(() => adminApi.removeTeamMember(slug, team.id, user.id));
-  const remove = () => run(() => adminApi.deleteTeam(slug, team.id));
+  const removeMember = (user: User) =>
+    run(() =>
+      optimisticTeams(
+        queryClient,
+        slug,
+        (teams) => teams.map((t) => (t.id === team.id ? { ...t, members: t.members.filter((m) => m.user.id !== user.id) } : t)),
+        () => adminApi.removeTeamMember(slug, team.id, user.id),
+      ),
+    );
   function rename(name: string) {
     if (name.trim() && name.trim() !== team.name) update({ name });
   }
@@ -122,7 +135,7 @@ function TeamCard({ slug, team }: { slug: string; team: TeamWithMembers }) {
                   <Button variant="ghost" size="sm" onPress={() => setConfirmingDelete(false)}>
                     Cancel
                   </Button>
-                  <Button variant="danger" size="sm" onPress={remove}>
+                  <Button variant="danger" size="sm" onPress={onDelete}>
                     Delete team
                   </Button>
                 </div>
@@ -170,6 +183,22 @@ export function TeamManager({ slug }: { slug: string }) {
       setCreating(false);
     }
   }
+  // Deleting unmounts the card, so its error has to surface up here.
+  async function deleteTeam(team: TeamWithMembers) {
+    setError(null);
+    try {
+      await optimisticTeams(
+        queryClient,
+        slug,
+        (teams) => teams.filter((t) => t.id !== team.id),
+        () => adminApi.deleteTeam(slug, team.id),
+      );
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : `Failed to delete ${team.name}`);
+    } finally {
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.captainCandidates(slug) });
+    }
+  }
 
   return (
     <div className="max-w-2xl space-y-4">
@@ -201,7 +230,7 @@ export function TeamManager({ slug }: { slug: string }) {
 
       <div className="space-y-3">
         {data?.teams.map((team) => (
-          <TeamCard key={team.id} slug={slug} team={team} />
+          <TeamCard key={team.id} slug={slug} team={team} onDelete={() => deleteTeam(team)} />
         ))}
       </div>
     </div>

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import type { BoardLine } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
+import { optimisticUpdate } from "../../api/optimistic";
 import { adminQueryKeys, useLines } from "../../api/adminQueries";
 import { Button, IconButton } from "../ui/Button";
 import { Field, Input, controlClass } from "../ui/Field";
@@ -28,9 +30,13 @@ export function LineEditor({ slug }: { slug: string }) {
     await adminApi.updateLine(slug, id, points);
     invalidate();
   }
-  async function remove(id: string) {
-    await adminApi.deleteLine(slug, id);
-    invalidate();
+  function remove(id: string) {
+    return optimisticUpdate<{ lines: BoardLine[] }>(
+      queryClient,
+      adminQueryKeys.lines(slug),
+      (data) => ({ lines: data.lines.filter((l) => l.id !== id) }),
+      () => adminApi.deleteLine(slug, id),
+    );
   }
 
   return (

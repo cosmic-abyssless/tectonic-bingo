@@ -23,6 +23,27 @@ export function toGraphNodeInput(node: GraphNode): GraphNodeInput {
   };
 }
 
+// The inverse, for showing an edit before the server confirms it: nodes the
+// input doesn't name yet get a placeholder id, which the refetch replaces.
+export function previewGraphNode(bingoId: string, input: GraphNodeInput): GraphNode {
+  return {
+    id: input.id ?? `pending-${crypto.randomUUID()}`,
+    bingoId,
+    kind: input.kind,
+    label: input.label ?? null,
+    description: input.description ?? null,
+    notes: input.notes ?? null,
+    points: input.points ?? 0,
+    minCount: input.minCount ?? null,
+    quantity: input.quantity ?? null,
+    itemName: input.itemName ?? null,
+    pointsGateNodeId: input.pointsGateNodeId ?? null,
+    submitGateNodeId: input.submitGateNodeId ?? null,
+    allowsPreLoad: input.allowsPreLoad ?? false,
+    children: (input.children ?? []).map((child) => previewGraphNode(bingoId, child)),
+  };
+}
+
 /**
  * Ids with 2+ distinct *direct* parents anywhere under `tileRoot` (a tile's
  * own node, whose children are its tasks) — genuinely multi-parented
