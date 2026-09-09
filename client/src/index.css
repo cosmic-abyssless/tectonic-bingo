@@ -1,7 +1,100 @@
 @import "tailwindcss";
 
+/* react-aria-components state variants (data-* attributes). */
+@custom-variant pressed (&[data-pressed]);
+@custom-variant selected (&[data-selected]);
+@custom-variant hovered (&[data-hovered]);
+@custom-variant current (&[data-current]);
+
+/*
+ * Design tokens. Minimal high-contrast dark: near-black surfaces separated by
+ * hairline borders, one accent, mono numerals. Boards keep their own theming
+ * via headless tile components, so nothing here assumes tile colours.
+ */
 @theme {
-  --color-bg-base: #0f172a;
-  --color-bg-card: #1e293b;
-  --color-bg-raised: #273548;
+  --color-bg: #09090b;
+  --color-surface: #101012;
+  --color-surface-raised: #17171a;
+  --color-surface-hover: #1c1c20;
+
+  --color-line: #232327;
+  --color-line-strong: #34343a;
+
+  --color-fg: #fafafa;
+  --color-fg-muted: #a1a1aa;
+  --color-fg-subtle: #6b6b74;
+
+  --color-accent: #e4e4e7;
+  --color-accent-fg: #09090b;
+
+  --color-ok: #4ade80;
+  --color-warn: #fbbf24;
+  --color-danger: #f87171;
+  --color-info: #60a5fa;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  --shadow-pop: 0 0 0 1px rgb(0 0 0 / 0.6), 0 8px 24px -8px rgb(0 0 0 / 0.7), 0 24px 48px -16px rgb(0 0 0 / 0.6);
+
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-bg text-fg antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  * {
+    @apply border-line;
+  }
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  /* Visible keyboard focus everywhere; pointer focus stays quiet. */
+  :where(button, a, input, select, textarea, [role="button"], [tabindex]):focus-visible,
+  [data-focus-visible] {
+    @apply outline-2 outline-offset-2 outline-fg/80;
+  }
+  :where(button, a, input, select, textarea, [role="button"]):focus:not(:focus-visible) {
+    outline: none;
+  }
+}
+
+@layer utilities {
+  .num {
+    @apply tabular-nums;
+  }
+  /* Extend a small control's hit area to 40px without changing its layout. */
+  .hit-40 {
+    position: relative;
+  }
+  .hit-40::before {
+    content: "";
+    position: absolute;
+    inset: 50% auto auto 50%;
+    width: max(100%, 40px);
+    height: max(100%, 40px);
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* Enter/exit for react-aria overlays (respects prefers-reduced-motion). */
+@media (prefers-reduced-motion: no-preference) {
+  [data-entering].overlay-backdrop { animation: fade-in 150ms ease-out; }
+  [data-exiting].overlay-backdrop { animation: fade-in 120ms ease-in reverse; }
+  [data-entering].overlay-panel { animation: pop-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+  [data-exiting].overlay-panel { animation: pop-in 120ms ease-in reverse; }
+  [data-entering].toast-item { animation: slide-up 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+  [data-exiting].toast-item { animation: fade-in 120ms ease-in reverse; }
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop-in { from { opacity: 0; transform: translateY(6px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes slide-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }

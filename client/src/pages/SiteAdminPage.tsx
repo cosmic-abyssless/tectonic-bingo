@@ -8,6 +8,11 @@ import * as adminApi from "../api/adminApi";
 import { UserSearchInput } from "../core/admin/UserSearchInput";
 import { ItemGroupsPanel } from "../core/admin/ItemGroupsPanel";
 import { displayName } from "../core/ui/user";
+import { AppHeader } from "../core/ui/AppHeader";
+import { Button } from "../core/ui/Button";
+import { Card, CardHeader, Notice } from "../core/ui/Card";
+import { Field, Input } from "../core/ui/Field";
+import { CheckIcon } from "../core/ui/icons";
 
 function slugify(s: string): string {
   return s
@@ -43,48 +48,37 @@ function CreateBingoForm() {
   }
 
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg p-5 space-y-4 max-w-md">
-      <h2 className="font-bold text-white">Create a bingo</h2>
-      <div>
-        <label htmlFor="create-bingo-name" className="block text-xs text-slate-400 mb-1">Name</label>
-        <input
-          id="create-bingo-name"
-          value={name}
-          onChange={(e) => {
-            setName(e.target.value);
-            if (!slugTouched) setSlug(slugify(e.target.value));
-          }}
-          className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
-        />
+    <Card className="w-full max-w-md">
+      <CardHeader title="Create a bingo" />
+      <div className="space-y-4 p-5">
+        <Field label="Name">
+          <Input
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (!slugTouched) setSlug(slugify(e.target.value));
+            }}
+          />
+        </Field>
+        <Field label="Slug (used in the URL)">
+          <Input
+            value={slug}
+            onChange={(e) => {
+              setSlug(slugify(e.target.value));
+              setSlugTouched(true);
+            }}
+            className="font-mono"
+          />
+        </Field>
+        <Field label="Board size (N×N)">
+          <Input type="number" min={1} value={boardSize} onChange={(e) => setBoardSize(Number(e.target.value) || 1)} className="num" />
+        </Field>
+        {error && <Notice tone="danger">{error}</Notice>}
+        <Button variant="primary" onPress={create} isDisabled={!name || !slug || creating} className="w-full">
+          {creating ? "Creating…" : "Create bingo"}
+        </Button>
       </div>
-      <div>
-        <label htmlFor="create-bingo-slug" className="block text-xs text-slate-400 mb-1">Slug (used in the URL)</label>
-        <input
-          id="create-bingo-slug"
-          value={slug}
-          onChange={(e) => {
-            setSlug(slugify(e.target.value));
-            setSlugTouched(true);
-          }}
-          className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
-        />
-      </div>
-      <div>
-        <label htmlFor="create-bingo-size" className="block text-xs text-slate-400 mb-1">Board size (NxN)</label>
-        <input
-          id="create-bingo-size"
-          type="number"
-          min={1}
-          value={boardSize}
-          onChange={(e) => setBoardSize(Number(e.target.value) || 1)}
-          className="w-full bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
-        />
-      </div>
-      {error && <p className="text-red-400 text-sm">{error}</p>}
-      <button onClick={create} disabled={!name || !slug || creating} className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer">
-        {creating ? "Creating…" : "Create bingo"}
-      </button>
-    </div>
+    </Card>
   );
 }
 
@@ -103,20 +97,23 @@ function GrantAdminPanel() {
   }
 
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg p-5 space-y-3 max-w-md">
-      <h2 className="font-bold text-white">Grant site admin</h2>
-      <UserSearchInput scope="site" onSelect={grant} />
-      {error && <p className="text-red-400 text-sm">{error}</p>}
-      {granted.length > 0 && (
-        <ul className="space-y-1">
-          {granted.map((u) => (
-            <li key={u.id} className="text-sm text-green-400">
-              ✓ {displayName(u)} is now a site admin
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <Card className="w-full max-w-md">
+      <CardHeader title="Grant site admin" description="Site admins can create bingos and edit any board." />
+      <div className="space-y-3 p-5">
+        <UserSearchInput scope="site" onSelect={grant} />
+        {error && <Notice tone="danger">{error}</Notice>}
+        {granted.length > 0 && (
+          <ul className="space-y-1">
+            {granted.map((u) => (
+              <li key={u.id} className="flex items-center gap-2 text-sm text-ok">
+                <CheckIcon size={14} />
+                {displayName(u)} is now a site admin
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -124,21 +121,19 @@ export function SiteAdminPage() {
   const { user } = useAuth();
   if (!user?.isAdmin) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-slate-400">
-        Site admin access required. <Link to="/" className="text-indigo-400 ml-1">Back to bingos</Link>
+      <div className="flex min-h-screen items-center justify-center gap-1 bg-bg text-sm text-fg-muted">
+        Site admin access required.
+        <Link to="/" className="text-fg underline underline-offset-2">
+          Back to bingos
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
-      <header className="flex items-center justify-between px-6 py-3 bg-slate-800 border-b border-slate-700">
-        <span className="font-bold text-lg tracking-tight">Site Admin</span>
-        <Link to="/" className="text-sm text-slate-400 hover:text-white border border-slate-600 hover:border-slate-400 rounded px-3 py-1 transition-colors">
-          All bingos
-        </Link>
-      </header>
-      <main className="max-w-5xl mx-auto px-6 py-6 flex flex-wrap gap-6">
+    <div className="min-h-screen bg-bg text-fg">
+      <AppHeader back={{ to: "/", label: "All bingos" }} title="Site admin" />
+      <main className="mx-auto flex w-full max-w-6xl flex-wrap items-start gap-6 px-6 py-6">
         <CreateBingoForm />
         <GrantAdminPanel />
         <ItemGroupsPanel />

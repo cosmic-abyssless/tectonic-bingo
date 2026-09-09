@@ -1,12 +1,41 @@
 import type { Bingo, SubmissionDetails, Tile, TileCategory, TeamNodeState } from "@bingo/shared";
-import { Modal } from "../ui/Modal";
+import { Heading } from "react-aria-components";
+import { Dialog } from "../ui/Dialog";
+import { Button, IconButton } from "../ui/Button";
+import { Badge } from "../ui/Card";
+import { ClockIcon, XIcon } from "../ui/icons";
 import { SubmissionRow } from "../submissions/SubmissionRow";
 import { TaskPanel } from "./TaskPanel";
 import { buildLeafClaimMaps } from "./taskClaims";
 import { collectLeaves } from "./requirementTree";
 import { summarizeTileProgress, getFreezeUnlockAt } from "./tileProgress";
 
+/** `tile` null closes the dialog (kept mounted so it can animate out). */
 export function TileModal({
+  tile,
+  bingo,
+  category,
+  nodeStates,
+  teamSubmissions,
+  onClose,
+  onSubmit,
+}: {
+  tile: Tile | null;
+  bingo: Bingo;
+  category?: TileCategory;
+  nodeStates: TeamNodeState[];
+  teamSubmissions: SubmissionDetails[];
+  onClose: () => void;
+  onSubmit?: () => void;
+}) {
+  return (
+    <Dialog isOpen={tile !== null} onClose={onClose} size="lg">
+      {tile && <TileDetails tile={tile} bingo={bingo} category={category} nodeStates={nodeStates} teamSubmissions={teamSubmissions} onClose={onClose} onSubmit={onSubmit} />}
+    </Dialog>
+  );
+}
+
+function TileDetails({
   tile,
   bingo,
   category,
@@ -23,7 +52,6 @@ export function TileModal({
   onClose: () => void;
   onSubmit?: () => void;
 }) {
-  const accent = category?.colorHex;
   const summary = summarizeTileProgress(tile, nodeStates, teamSubmissions);
   const freezeUnlocksAt = getFreezeUnlockAt(bingo.startsAt, tile);
   const isFrozen = !!(freezeUnlocksAt && Date.now() < freezeUnlocksAt);
@@ -46,52 +74,46 @@ export function TileModal({
   const tileSubmissions = teamSubmissions.filter((d) => d.claims.some((c) => leafIds.has(c.nodeId)));
 
   return (
-    <Modal onClose={onClose} size="lg">
-      {/* Header */}
-      <div className="flex items-start justify-between p-5 border-b-2" style={{ borderColor: accent ?? "#64748b" }}>
-        <div className="flex items-center gap-4">
-          {tile.imageUrl && <img src={tile.imageUrl} alt={tile.name} className="w-16 h-16 object-contain shrink-0" />}
-          <div>
-            <h2 className="text-white text-xl font-bold">{tile.name}</h2>
-            <div className="flex items-center gap-2 mt-2 flex-wrap">
+    <>
+      <div className="flex items-start justify-between gap-4 border-b p-5" style={{ borderColor: category?.colorHex ?? undefined }}>
+        <div className="flex min-w-0 items-center gap-4">
+          {tile.imageUrl && <img src={tile.imageUrl} alt="" className="size-14 shrink-0 object-contain" />}
+          <div className="min-w-0">
+            <Heading slot="title" className="text-lg font-semibold text-fg">
+              {tile.name}
+            </Heading>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
               {category && (
-                <span
-                  className="text-xs font-semibold border rounded-full px-2.5 py-0.5"
-                  style={{ color: category.colorHex ?? undefined, borderColor: category.colorHex ?? undefined, backgroundColor: category.colorHex ? `${category.colorHex}1a` : undefined }}
-                >
+                <Badge className="border-current" style={{ color: category.colorHex ?? undefined }}>
                   {category.label}
-                </span>
+                </Badge>
               )}
-              <span className="text-yellow-400 text-sm font-semibold">
+              <span className="num text-sm text-fg-muted">
                 {summary.totalTasks > 0 ? `${summary.pointsAwarded}/` : ""}
                 {summary.totalPoints} pts
               </span>
               {tile.hasFreezePeriod && (
-                <span className="text-xs bg-blue-900/40 text-blue-300 border border-blue-600 rounded-full px-2.5 py-0.5">
-                  ⏱ {tile.freezeDurationMinutes}min freeze
-                </span>
+                <Badge tone="info">
+                  <ClockIcon size={12} />
+                  <span className="num">{tile.freezeDurationMinutes}min</span> freeze
+                </Badge>
               )}
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex shrink-0 items-center gap-2">
           {onSubmit && (
-            <button
-              onClick={submitDisabled ? undefined : onSubmit}
-              disabled={submitDisabled}
-              className="text-sm bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold rounded px-3 py-1 transition-colors cursor-pointer disabled:cursor-not-allowed"
-            >
-              Submit
-            </button>
+            <Button variant="primary" size="sm" onPress={onSubmit} isDisabled={submitDisabled}>
+              {summary.allComplete ? "Complete" : isFrozen ? "Frozen" : "Submit"}
+            </Button>
           )}
-          <button aria-label="Close" className="text-slate-400 hover:text-white text-lg leading-none p-1 cursor-pointer" onClick={onClose}>
-            ✕
-          </button>
+          <IconButton label="Close" size="sm" onPress={onClose}>
+            <XIcon />
+          </IconButton>
         </div>
       </div>
 
-      {/* Tasks */}
-      <div className="grid divide-x divide-slate-700" style={{ gridTemplateColumns: `repeat(${Math.max(tasks.length, 1)}, minmax(0, 1fr))` }}>
+      <div className="grid divide-x divide-line" style={{ gridTemplateColumns: `repeat(${Math.max(tasks.length, 1)}, minmax(0, 1fr))` }}>
         {tasks.map((task) => {
           const gate = task.submitGateNodeId ? tasks.find((t) => t.id === task.submitGateNodeId) : undefined;
           const locked = gate ? summary.statusByNodeId.get(gate.id) !== "completed" : false;
@@ -109,22 +131,20 @@ export function TileModal({
         })}
       </div>
 
-      {/* Team submissions */}
       {tileSubmissions.length > 0 && (
-        <div className="p-5 border-t border-slate-700">
-          <h4 className="text-slate-400 text-xs uppercase tracking-wide mb-3">Submissions</h4>
+        <div className="border-t border-line p-5">
+          <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-fg-subtle">Submissions</h3>
           {tileSubmissions.map((detail) => {
             const labels = [...new Set(detail.claims.map((c) => taskLabelByLeafId.get(c.nodeId)).filter(Boolean))];
             return (
               <div key={detail.submission.id}>
-                <p className="text-xs font-semibold text-slate-400 mt-2">{labels.join(" + ")}</p>
+                <p className="mt-2 text-xs font-medium text-fg-muted">{labels.join(" + ")}</p>
                 <SubmissionRow detail={detail} />
               </div>
             );
           })}
         </div>
       )}
-
-    </Modal>
+    </>
   );
 }
