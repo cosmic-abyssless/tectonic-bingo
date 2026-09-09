@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { Key } from "react-aria-components";
+import { STAGE_ORDER, type Stage } from "@bingo/shared";
 import { useBingo } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { useWebSocketEvent } from "../context/WebSocketContext";
@@ -23,17 +24,24 @@ import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 // underlying routes (requireAdmin on admin.ts vs requireBingoMod on mod.ts),
 // so this is UX decluttering on top of a real boundary, not the boundary
 // itself.
-const TABS = [
+//
+// A tab with `until` is hidden once the bingo has moved past that stage —
+// there is nothing left to do on it. Tabs without it are always shown.
+const TABS: { key: string; label: string; adminOnly: boolean; until?: Stage }[] = [
   { key: "submissions", label: "Submissions", adminOnly: false },
-  { key: "signups", label: "Signups", adminOnly: false },
+  { key: "signups", label: "Signups", adminOnly: false, until: "draft" },
   { key: "settings", label: "Settings", adminOnly: true },
-  { key: "board", label: "Board", adminOnly: true },
-  { key: "lines", label: "Lines", adminOnly: true },
-  { key: "questions", label: "Signup questions", adminOnly: true },
+  { key: "board", label: "Board", adminOnly: true, until: "reveal" },
+  { key: "lines", label: "Lines", adminOnly: true, until: "reveal" },
+  { key: "questions", label: "Signup questions", adminOnly: true, until: "draft" },
   { key: "teams", label: "Teams", adminOnly: true },
   { key: "mods", label: "Moderators", adminOnly: true },
-] as const;
-type Tab = (typeof TABS)[number]["key"];
+];
+type TabDef = (typeof TABS)[number];
+
+function isPastStage(tab: TabDef, stage: Stage): boolean {
+  return tab.until !== undefined && STAGE_ORDER.indexOf(stage) > STAGE_ORDER.indexOf(tab.until);
+}
 
 // Mod surfaces never theme — always core/, regardless of bingo.theme.
 export function ModPage() {
@@ -42,7 +50,10 @@ export function ModPage() {
   const { data: shell } = useBingo(slug);
   const { user } = useAuth();
   const isAdmin = !!user?.isAdmin;
-  const [tab, setTab] = useState<Tab>("submissions");
+  const [tab, setTab] = useState("submissions");
+
+  const stage = shell?.bingo.stage;
+  const visibleTabs = useMemo(() => (stage ? TABS.filter((t) => (!t.adminOnly || isAdmin) && !isPastStage(t, stage)) : []), [stage, isAdmin]);
 
   const [showNotifPrompt, setShowNotifPrompt] = useState(
     () => "Notification" in window && Notification.permission === "default" && !localStorage.getItem("mod_notif_prompted"),
@@ -67,16 +78,13 @@ export function ModPage() {
     if (shell && !shell.isMod) navigate(`/b/${slug}`, { replace: true });
   }, [shell, navigate, slug]);
 
-  // A tab the user can no longer see (e.g. isAdmin resolved to false after
-  // mount) shouldn't leave stale admin-only content selected.
+  // A tab the user can no longer see (isAdmin resolved to false after mount,
+  // or the stage moved past the tab) shouldn't leave stale content selected.
   useEffect(() => {
-    const current = TABS.find((t) => t.key === tab);
-    if (current?.adminOnly && !isAdmin) setTab("submissions");
-  }, [isAdmin, tab]);
+    if (visibleTabs.length > 0 && !visibleTabs.some((t) => t.key === tab)) setTab(visibleTabs[0].key);
+  }, [visibleTabs, tab]);
 
   if (!shell || !shell.isMod || !slug) return null;
-
-  const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
 
   const dismissNotifPrompt = () => {
     localStorage.setItem("mod_notif_prompted", "true");
@@ -90,7 +98,7 @@ export function ModPage() {
       <main className="mx-auto w-full max-w-6xl space-y-6 px-6 py-6">
         <StageControls slug={slug} bingo={shell.bingo} />
 
-        <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(key as Tab)}>
+        <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key))}>
           <TabList>
             {visibleTabs.map((t) => (
               <Tab key={t.key} id={t.key}>
