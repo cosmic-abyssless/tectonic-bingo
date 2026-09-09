@@ -1,0 +1,171 @@
+import type { SVGProps } from "react";
+
+/*
+ * Single outline icon set (16px grid, 1.75 stroke, currentColor). Replaces the
+ * emoji/glyph mix so icons match text weight and colour on every platform.
+ */
+
+type IconProps = SVGProps<SVGSVGElement> & { size?: number };
+
+function Svg({ size = 16, children, ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      {children}
+    </svg>
+  );
+}
+
+export const XIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 4l8 8M12 4l-8 8" />
+  </Svg>
+);
+
+export const CheckIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 8.5l3 3 7-7" />
+  </Svg>
+);
+
+export const ChevronRightIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 3.5L10.5 8 6 12.5" />
+  </Svg>
+);
+
+export const ChevronDownIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3.5 6L8 10.5 12.5 6" />
+  </Svg>
+);
+
+export const ChevronUpIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3.5 10L8 5.5 12.5 10" />
+  </Svg>
+);
+
+export const ListIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01" />
+  </Svg>
+);
+
+export const ArrowLeftIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M13 8H3M7 4L3 8l4 4" />
+  </Svg>
+);
+
+export const ArrowRightIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 8h10M9 4l4 4-4 4" />
+  </Svg>
+);
+
+export const LockIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="7" width="10" height="7" rx="1.5" />
+    <path d="M5 7V5a3 3 0 0 1 6 0v2" />
+  </Svg>
+);
+
+export const ClockIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="8" cy="8" r="5.5" />
+    <path d="M8 5v3l2 1.5" />
+  </Svg>
+);
+
+export const SearchIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="7" cy="7" r="4" />
+    <path d="M10 10l3.5 3.5" />
+  </Svg>
+);
+
+export const AlertIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 2.5l6 10.5H2z" />
+    <path d="M8 6.5v3M8 11.6v.1" />
+  </Svg>
+);
+
+export const InfoIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="8" cy="8" r="5.5" />
+    <path d="M8 7.5V11M8 5.4v.1" />
+  </Svg>
+);
+
+export const UsersIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="6" cy="5.5" r="2.25" />
+    <path d="M1.75 13a4.25 4.25 0 0 1 8.5 0" />
+    <path d="M10.5 3.5a2.25 2.25 0 0 1 0 4.2M11.5 9.2a4.25 4.25 0 0 1 2.75 3.8" />
+  </Svg>
+);
+
+export const GridIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" />
+    <rect x="9" y="2.5" width="4.5" height="4.5" rx="1" />
+    <rect x="2.5" y="9" width="4.5" height="4.5" rx="1" />
+    <rect x="9" y="9" width="4.5" height="4.5" rx="1" />
+  </Svg>
+);
+
+export const ImageIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="2.5" y="3" width="11" height="10" rx="1.5" />
+    <circle cx="6" cy="6.5" r="1" />
+    <path d="M13.5 10.5L10 7l-5 6" />
+  </Svg>
+);
+
+export const SpinnerIcon = (p: IconProps) => (
+  <Svg {...p} className={`animate-spin ${p.className ?? ""}`}>
+    <path d="M8 2.5a5.5 5.5 0 1 0 5.5 5.5" />
+  </Svg>
+);
+
+export const PlusIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 3v10M3 8h10" />
+  </Svg>
+);
+
+export const TrashIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8h5.8l.6-8" />
+  </Svg>
+);
+
+export const ExternalIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9 3h4v4M13 3L7.5 8.5M11 9.5V13H3V5h3.5" />
+  </Svg>
+);
+
+export const LayersIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 2.5 14 5.5 8 8.5 2 5.5zM2 8.5l6 3 6-3M2 11.5l6 3 6-3" />
+  </Svg>
+);
+
+export const LinkIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1a2.5 2.5 0 0 1-3.5-3.5l1-1" />
+  </Svg>
+);

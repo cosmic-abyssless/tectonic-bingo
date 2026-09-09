@@ -1,7 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { MenuTrigger } from "react-aria-components";
 import type { ItemGroup, NodeKind, GraphNode, GraphNodeInput } from "@bingo/shared";
 import { ItemSearchInput, iconUrlFor } from "../ui/ItemSearchInput";
 import { SearchableSelect } from "../ui/SearchableSelect";
+import { Button, IconButton } from "../ui/Button";
+import { inputClass } from "../ui/Field";
+import { Menu, MenuItem } from "../ui/Menu";
+import { ChevronDownIcon, LinkIcon, PlusIcon, XIcon } from "../ui/icons";
 import { toGraphNodeInput, collectLabeledConditions } from "../board/requirementTree";
 
 /** An ITEM leaf that already exists elsewhere on the same tile — offered as a reference, not retyped. */
@@ -46,12 +51,12 @@ function ChipIcon({ name, className }: { name: string; className: string }) {
 // "+ existing item"/"+ existing condition", or the original side of one) —
 // the same claim counts toward both tasks, which isn't visible from the name
 // alone.
-function LinkIcon({ title, className }: { title: string; className: string }) {
+function SharedMark({ tasks }: { tasks: string[] }) {
+  const title = `Shared with ${tasks.length > 0 ? tasks.join(", ") : "another task"} — removing it here only unlinks it from this task`;
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" role="img" aria-label={title}>
-      <title>{title}</title>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-    </svg>
+    <span title={title} role="img" aria-label={title} className="shrink-0 text-info">
+      <LinkIcon size={14} />
+    </span>
   );
 }
 
@@ -60,43 +65,24 @@ function LinkIcon({ title, className }: { title: string; className: string }) {
 // elsewhere on the tile) — keeps a GroupNode's header to two controls
 // instead of up to four separate buttons.
 function SplitAddButton({ primaryLabel, onPrimary, options }: { primaryLabel: string; onPrimary: () => void; options: { label: string; onClick: () => void }[] }) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => {
-      if (containerRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [open]);
-
   return (
-    <div ref={containerRef} className="relative inline-flex shrink-0">
-      <div className="flex rounded border border-slate-600 overflow-hidden">
-        <button type="button" onClick={onPrimary} className="px-2 py-1 text-xs text-slate-400 hover:text-white hover:bg-slate-700 cursor-pointer">+ {primaryLabel}</button>
-        {options.length > 0 && (
-          <button type="button" aria-label="More add options" onClick={() => setOpen((v) => !v)} className="px-1.5 py-1 text-xs text-slate-400 hover:text-white hover:bg-slate-700 cursor-pointer border-l border-slate-600">▾</button>
-        )}
-      </div>
-      {open && (
-        <div className="absolute left-0 top-full mt-1 min-w-max bg-slate-900 border border-slate-700 rounded-md shadow-xl z-10">
-          {options.map((o) => (
-            <button
-              key={o.label}
-              type="button"
-              onClick={() => {
-                o.onClick();
-                setOpen(false);
-              }}
-              className="block w-full whitespace-nowrap text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 cursor-pointer"
-            >
-              + {o.label}
-            </button>
-          ))}
-        </div>
+    <div className="inline-flex shrink-0 overflow-hidden rounded-md border border-line-strong">
+      <Button variant="ghost" size="sm" onPress={onPrimary} className="rounded-none border-0">
+        <PlusIcon size={12} /> {primaryLabel}
+      </Button>
+      {options.length > 0 && (
+        <MenuTrigger>
+          <Button variant="ghost" size="sm" aria-label="More add options" className="rounded-none border-0 border-l border-line-strong px-1.5">
+            <ChevronDownIcon size={12} />
+          </Button>
+          <Menu onAction={(key) => options.find((o) => o.label === key)?.onClick()}>
+            {options.map((o) => (
+              <MenuItem key={o.label} id={o.label}>
+                <PlusIcon size={12} /> {o.label}
+              </MenuItem>
+            ))}
+          </Menu>
+        </MenuTrigger>
       )}
     </div>
   );
@@ -112,8 +98,6 @@ const GROUP_KINDS: { kind: NodeKind; label: string }[] = [
   { kind: "COUNT", label: "At least N of" },
   { kind: "SUM", label: "Sum to N across" },
 ];
-
-const INPUT = "bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600";
 
 type Path = number[];
 
@@ -275,12 +259,14 @@ function GroupNode(props: NodeProps) {
   }
 
   return (
-    <div className={isRoot ? "" : "border-l-2 border-slate-700 pl-3"}>
-      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-        {isShared && (
-          <LinkIcon title={`Shared with ${sharedWithTasks.length > 0 ? sharedWithTasks.join(", ") : "another task"} — removing it here only unlinks it from this task`} className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+    <div className={isRoot ? "" : "border-l-2 border-line pl-3"}>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        {isShared && <SharedMark tasks={sharedWithTasks} />}
+        {ownLabel && (
+          <span className="num shrink-0 text-xs text-fg-subtle" title="Shown in this task's own tree, and in other tasks' &quot;+ existing condition&quot; picker once saved">
+            Condition {ownLabel}
+          </span>
         )}
-        {ownLabel && <span className="text-[10px] text-slate-500 font-mono shrink-0" title="Shown in this task's own tree, and in other tasks' &quot;+ existing condition&quot; picker once saved">Condition {ownLabel}</span>}
         <select
           aria-label="Requirement kind"
           value={node.kind}
@@ -293,10 +279,12 @@ function GroupNode(props: NodeProps) {
               quantity: kind === "SUM" ? n.quantity ?? 1 : undefined,
             }));
           }}
-          className={INPUT}
+          className={`${inputClass} h-8 w-auto text-xs`}
         >
           {GROUP_KINDS.map((k) => (
-            <option key={k.kind} value={k.kind}>{k.label}</option>
+            <option key={k.kind} value={k.kind}>
+              {k.label}
+            </option>
           ))}
         </select>
         {node.kind === "COUNT" && (
@@ -306,7 +294,7 @@ function GroupNode(props: NodeProps) {
             min={1}
             defaultValue={node.minCount ?? 1}
             onBlur={(e) => update(path, (n) => ({ ...n, minCount: Math.max(1, Number(e.target.value) || 1) }))}
-            className={`w-16 ${INPUT}`}
+            className={`${inputClass} num h-8 w-16 text-xs`}
           />
         )}
         {node.kind === "SUM" && (
@@ -316,7 +304,7 @@ function GroupNode(props: NodeProps) {
             min={1}
             defaultValue={node.quantity ?? 1}
             onBlur={(e) => update(path, (n) => ({ ...n, quantity: Math.max(1, Number(e.target.value) || 1) }))}
-            className={`w-16 ${INPUT}`}
+            className={`${inputClass} num h-8 w-16 text-xs`}
           />
         )}
         <SplitAddButton
@@ -328,34 +316,15 @@ function GroupNode(props: NodeProps) {
             ...(pickableConditions.length > 0 ? [{ label: "Existing condition", onClick: () => setPickingExistingCondition((v) => !v) }] : []),
           ]}
         />
-        {!isRoot && (
-          <button
-            type="button"
-            aria-label={isShared ? "Unlink condition" : "Remove group"}
-            title={isShared ? "Unlink from this task — the condition itself is only deleted if this was its last use" : undefined}
-            onClick={() => remove(path)}
-            className="ml-auto text-slate-500 hover:text-red-400 text-xs cursor-pointer"
-          >
-            {isShared ? "unlink" : "✕"}
-          </button>
-        )}
+        {!isRoot && <RemoveButton shared={isShared} label={isShared ? "Unlink condition" : "Remove group"} what="condition" onPress={() => remove(path)} className="ml-auto" />}
       </div>
       {addingItem && (
-        <div className="mb-1.5 max-w-xs">
-          <ItemSearchInput
-            value={newItemName}
-            onChange={setNewItemName}
-            onCommit={commitNewItem}
-            itemGroups={itemGroups}
-            onPickGroup={commitNewItemGroup}
-            placeholder="Add item or group…"
-            ariaLabel="New item name"
-            className={INPUT}
-          />
+        <div className="mb-2 max-w-xs">
+          <ItemSearchInput value={newItemName} onChange={setNewItemName} onCommit={commitNewItem} itemGroups={itemGroups} onPickGroup={commitNewItemGroup} placeholder="Add item or group…" ariaLabel="New item name" />
         </div>
       )}
       {pickingExisting && (
-        <div className="mb-1.5 max-w-xs">
+        <div className="mb-2 max-w-xs">
           <SearchableSelect
             value=""
             options={pickableLeaves.map((l) => ({ id: l.id, label: l.itemName, group: l.taskLabel }))}
@@ -369,7 +338,7 @@ function GroupNode(props: NodeProps) {
         </div>
       )}
       {pickingExistingCondition && (
-        <div className="mb-1.5 max-w-xs">
+        <div className="mb-2 max-w-xs">
           <SearchableSelect
             value=""
             options={pickableConditions.map((c) => ({ id: c.id, label: c.label, group: c.taskLabel }))}
@@ -382,7 +351,7 @@ function GroupNode(props: NodeProps) {
           />
         </div>
       )}
-      {children.length === 0 && <p className="text-xs text-slate-500 italic mb-1.5">No requirements yet — add an item or a condition.</p>}
+      {children.length === 0 && <p className="mb-2 text-xs text-fg-subtle">No requirements yet — add an item or a condition.</p>}
       <ul className="space-y-1.5">
         {children.map((child, i) => (
           // Inputs are uncontrolled (save on blur); include length so removing a sibling remounts the rest.
@@ -392,11 +361,26 @@ function GroupNode(props: NodeProps) {
         ))}
       </ul>
       {canSaveAsGroup && (
-        <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-1.5">
-          <button type="button" onClick={saveAsGroup} className="text-indigo-400 hover:text-indigo-300 cursor-pointer">Save these names as a new group…</button>
-        </div>
+        <Button variant="ghost" size="sm" onPress={saveAsGroup} className="mt-1.5 -ml-2.5">
+          Save these names as a new group…
+        </Button>
       )}
     </div>
+  );
+}
+
+// "✕" for a plain row, "unlink" for a shared one — the latter is only removed
+// from this task, not deleted (see sharedNodeIds).
+function RemoveButton({ shared, label, what, onPress, className }: { shared: boolean; label: string; what: string; onPress: () => void; className?: string }) {
+  const title = shared ? `Unlink from this task — the ${what} itself is only deleted if this was its last use` : undefined;
+  return shared ? (
+    <Button variant="ghost" size="sm" aria-label={label} onPress={onPress} className={`h-7 px-2 text-fg-subtle hover:text-danger ${className ?? ""}`}>
+      <span title={title}>unlink</span>
+    </Button>
+  ) : (
+    <IconButton size="sm" label={label} onPress={onPress} className={`hover:text-danger ${className ?? ""}`}>
+      <XIcon size={12} />
+    </IconButton>
   );
 }
 
@@ -416,23 +400,11 @@ function ItemLeafRow({ node, path, remove, existingLeaves, sharedNodeIds }: Node
   const sharedWithTasks = isShared ? Array.from(new Set((existingLeaves ?? []).filter((l) => l.id === node.id).map((l) => l.taskLabel))) : [];
 
   return (
-    <div className="flex items-center gap-1.5 bg-slate-800 rounded px-2 py-1.5">
-      {isShared && (
-        <LinkIcon title={`Shared with ${sharedWithTasks.length > 0 ? sharedWithTasks.join(", ") : "another task"} — removing it here only unlinks it from this task`} className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-      )}
-      <ChipIcon name={name} className="w-4 h-4" />
-      <span className="flex-1 text-xs text-slate-200 truncate">{name}</span>
-      {!isRoot && (
-        <button
-          type="button"
-          aria-label={isShared ? `Unlink ${name}` : `Remove ${name}`}
-          title={isShared ? "Unlink from this task — the item itself is only deleted if this was its last use" : undefined}
-          onClick={() => remove(path)}
-          className="text-slate-500 hover:text-red-400 text-xs cursor-pointer shrink-0"
-        >
-          {isShared ? "unlink" : "✕"}
-        </button>
-      )}
+    <div className="flex h-8 items-center gap-2 rounded-md border border-line bg-surface px-2">
+      {isShared && <SharedMark tasks={sharedWithTasks} />}
+      <ChipIcon name={name} className="size-4" />
+      <span className="flex-1 truncate text-xs text-fg">{name}</span>
+      {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${name}` : `Remove ${name}`} what="item" onPress={() => remove(path)} />}
     </div>
   );
 }

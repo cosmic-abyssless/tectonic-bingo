@@ -1,61 +1,36 @@
 import { Link } from "react-router-dom";
+import { STAGE_LABEL } from "@bingo/shared";
 import { useBingos } from "../api/queries";
-import { useAuth } from "../context/AuthContext";
-import { displayName, avatarUrl } from "../core/ui/user";
-
-const STAGE_LABEL: Record<string, string> = {
-  planning: "Planning",
-  signup: "Signup open",
-  draft: "Draft in progress",
-  reveal: "Board revealed",
-  live: "Live",
-  complete: "Complete",
-};
+import { AppHeader } from "../core/ui/AppHeader";
+import { Badge, EmptyState } from "../core/ui/Card";
+import { ChevronRightIcon, GridIcon } from "../core/ui/icons";
 
 export function BingoList() {
-  const { user, logout } = useAuth();
   const { data, isLoading, error } = useBingos();
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
-      <header className="flex items-center justify-between px-6 py-3 bg-slate-800 border-b border-slate-700">
-        <span className="font-bold text-lg tracking-tight">Bingo Platform</span>
-        {user && (
-          <div className="flex items-center gap-3">
-            {user.isAdmin && (
-              <Link to="/admin" className="text-sm text-yellow-400 hover:text-yellow-300 border border-yellow-700 hover:border-yellow-500 rounded px-3 py-1 transition-colors font-semibold">
-                Site Admin
-              </Link>
-            )}
-            <img src={avatarUrl(user)} alt="avatar" className="w-8 h-8 rounded-full border-2 border-indigo-500" />
-            <span className="text-sm text-slate-300">{displayName(user)}</span>
-            <button
-              onClick={logout}
-              className="text-sm text-slate-400 hover:text-white border border-slate-600 hover:border-slate-400 rounded px-3 py-1 transition-colors cursor-pointer"
-            >
-              Log out
-            </button>
-          </div>
-        )}
-      </header>
+    <div className="min-h-screen">
+      <AppHeader title="Tectonic Bingo" />
 
-      <main className="max-w-3xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-6">Bingos</h1>
-        {isLoading && <p className="text-slate-400">Loading…</p>}
-        {error && <p className="text-red-400">{error instanceof Error ? error.message : "Failed to load bingos"}</p>}
-        {data?.bingos.length === 0 && <p className="text-slate-400">No bingos yet.</p>}
-        <ul className="space-y-2">
+      <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+        <h1 className="mb-6 text-xl font-semibold text-fg">Bingos</h1>
+        {isLoading && <p className="text-sm text-fg-muted">Loading…</p>}
+        {error && <p className="text-sm text-danger">{error instanceof Error ? error.message : "Failed to load bingos"}</p>}
+        {data?.bingos.length === 0 && (
+          <EmptyState icon={<GridIcon />} title="No bingos yet">
+            A site admin can create one from the admin page.
+          </EmptyState>
+        )}
+        <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
           {data?.bingos.map((bingo) => (
             <li key={bingo.id}>
-              <Link
-                to={`/b/${bingo.slug}`}
-                className="flex items-center justify-between gap-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-4 py-3 transition-colors"
-              >
-                <div>
-                  <p className="font-semibold">{bingo.name}</p>
-                  {bingo.description && <p className="text-sm text-slate-400 mt-0.5">{bingo.description}</p>}
+              <Link to={`/b/${bingo.slug}`} className="flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-surface-hover">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-fg">{bingo.name}</p>
+                  {bingo.description && <p className="mt-0.5 truncate text-sm text-fg-muted">{bingo.description}</p>}
                 </div>
-                <span className="text-xs text-slate-400 bg-slate-900 rounded-full px-2.5 py-1 shrink-0">{STAGE_LABEL[bingo.stage] ?? bingo.stage}</span>
+                <Badge tone={bingo.stage === "live" ? "ok" : "neutral"}>{STAGE_LABEL[bingo.stage]}</Badge>
+                <ChevronRightIcon className="shrink-0 text-fg-subtle" />
               </Link>
             </li>
           ))}

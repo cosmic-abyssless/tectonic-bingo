@@ -4,6 +4,10 @@ import { useBingo, useDeleteAllSignups, useMarkBuyin, useSeedTestSignups, useSig
 import { useAuth } from "../../context/AuthContext";
 import { displayName } from "../ui/user";
 import { UserSearchInput } from "../admin/UserSearchInput";
+import { Button, IconButton } from "../ui/Button";
+import { Badge, EmptyState, Notice } from "../ui/Card";
+import { Input } from "../ui/Field";
+import { CheckIcon, UsersIcon, XIcon } from "../ui/icons";
 
 function csvEscape(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
@@ -35,9 +39,9 @@ function BuyinCell({ slug, entry }: { slug: string; entry: RosterEntry }) {
   }
 
   return (
-    <label className="flex items-center gap-2 cursor-pointer select-none">
-      <input type="checkbox" checked={received} onChange={toggle} disabled={markBuyin.isPending} className="w-4 h-4 accent-green-500 cursor-pointer" />
-      <span className={`text-xs ${received ? "text-green-400" : "text-slate-500"}`}>{received ? "Received" : "Not received"}</span>
+    <label className="flex cursor-pointer select-none items-center gap-2">
+      <input type="checkbox" checked={received} onChange={toggle} disabled={markBuyin.isPending} className="size-4 cursor-pointer accent-accent" />
+      <span className={`text-xs ${received ? "text-ok" : "text-fg-subtle"}`}>{received ? "Received" : "Not received"}</span>
     </label>
   );
 }
@@ -57,11 +61,11 @@ function CollectedByCell({ slug, entry }: { slug: string; entry: RosterEntry }) 
   return (
     <div className="w-48">
       {entry.collectedByUser && (
-        <div className="flex items-center gap-1.5 mb-1">
-          <span className="text-xs text-slate-300 truncate">{displayName(entry.collectedByUser)}</span>
-          <button onClick={() => setCollector(null)} disabled={!received} className="text-xs text-slate-500 hover:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0">
-            ✕
-          </button>
+        <div className="mb-1 flex items-center gap-1">
+          <span className="truncate text-xs text-fg">{displayName(entry.collectedByUser)}</span>
+          <IconButton label="Clear collector" size="sm" onPress={() => setCollector(null)} isDisabled={!received}>
+            <XIcon size={12} />
+          </IconButton>
         </div>
       )}
       <fieldset disabled={!received}>
@@ -102,44 +106,31 @@ function DevSeedPanel({ slug }: { slug: string }) {
   const busy = seedTestSignups.isPending || deleteAllSignups.isPending;
 
   return (
-    <div className="bg-amber-950/30 border border-amber-800/60 rounded-lg px-3 py-2 mb-4">
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-amber-400 font-semibold uppercase tracking-wide shrink-0">Dev tools</span>
-        <input
-          type="number"
-          min={1}
-          max={50}
-          value={count}
-          onChange={(e) => setCount(Number(e.target.value) || 1)}
-          className="w-16 bg-slate-900 border border-slate-600 text-white rounded-md px-2 py-1 text-sm focus:outline-none focus:border-indigo-500"
-        />
-        <button
-          onClick={seed}
-          disabled={busy}
-          className="text-sm bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold rounded-md px-3 py-1 transition-colors cursor-pointer"
-        >
+    <Notice tone="warn">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="shrink-0 text-xs font-semibold uppercase tracking-wide">Dev tools</span>
+        <Input type="number" min={1} max={50} value={count} onChange={(e) => setCount(Number(e.target.value) || 1)} className="num h-8 w-16" />
+        <Button size="sm" onPress={seed} isDisabled={busy}>
           {seedTestSignups.isPending ? "Seeding…" : "Seed test signups"}
-        </button>
-        <button
-          onClick={wipe}
-          disabled={busy}
-          className="text-sm bg-slate-700 hover:bg-red-800 disabled:opacity-50 text-white rounded-md px-3 py-1 transition-colors cursor-pointer"
-        >
+        </Button>
+        <Button size="sm" variant="danger" onPress={wipe} isDisabled={busy}>
           {deleteAllSignups.isPending ? "Deleting…" : "Delete all signups"}
-        </button>
-        {error && <p className="text-red-400 text-xs">{error}</p>}
+        </Button>
+        {error && <p className="text-xs text-danger">{error}</p>}
       </div>
       {lastSeed && lastSeed.source !== "tectonic" && (
-        <p className="text-xs text-amber-300 mt-2">
+        <p className="mt-2 text-xs text-fg-muted">
           {lastSeed.source === "mixed" ? "Some" : "All"} of the {lastSeed.signups.length} seeded signups are synthetic TestBot users.{" "}
           {lastSeed.tectonicConfigured
             ? "The clan roster ran out of unused members."
             : "Set TECTONIC_API_URL, TECTONIC_API_KEY and TECTONIC_GUILD_ID in server/.env to draw real clan members instead."}
         </p>
       )}
-    </div>
+    </Notice>
   );
 }
+
+const TH = "pb-2 pr-4 text-left text-xs font-medium uppercase tracking-wide text-fg-subtle";
 
 export function SignupRoster({ slug }: { slug: string }) {
   const { data } = useSignupRoster(slug);
@@ -158,68 +149,71 @@ export function SignupRoster({ slug }: { slug: string }) {
   }
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-6">
+    <div className="space-y-4">
       {devMode && bingoData?.bingo.stage === "signup" && <DevSeedPanel slug={slug} />}
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-slate-400">{roster.length} signup{roster.length !== 1 ? "s" : ""}</p>
-        <button onClick={copyCsv} className="text-sm bg-slate-700 hover:bg-slate-600 text-white rounded px-3 py-1.5 transition-colors cursor-pointer">
-          {copied ? "Copied!" : "Copy as CSV"}
-        </button>
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-fg-muted">
+          <span className="num text-fg">{roster.length}</span> signup{roster.length !== 1 ? "s" : ""}
+        </p>
+        <Button size="sm" onPress={copyCsv} isDisabled={roster.length === 0}>
+          {copied ? "Copied" : "Copy as CSV"}
+        </Button>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-slate-500 text-xs uppercase border-b border-slate-700">
-              <th className="pb-2 pr-4">RSN</th>
-              <th className="pb-2 pr-4">Discord</th>
-              <th className="pb-2 pr-4">Status</th>
-              <th className="pb-2 pr-4">Buy-in</th>
-              <th className="pb-2 pr-4">Collected by</th>
-              {questions.map((q) => (
-                <th key={q.id} className="pb-2 pr-4">
-                  {q.prompt}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-800">
-            {roster.map((entry) => {
-              const answerByQ = new Map(entry.answers.map((a) => [a.questionId, a.value]));
-              return (
-                <tr key={entry.signup.id}>
-                  <td className="py-2 pr-4 text-white font-medium">
-                    {entry.signup.rsn}
-                    {entry.signup.rsnVerified && (
-                      <span title="Verified against the linked clan account" className="ml-1.5 text-emerald-400">
-                        ✓
+      {roster.length === 0 ? (
+        <EmptyState icon={<UsersIcon />} title="No signups yet">
+          Players who sign up will appear here with their answers and buy-in status.
+        </EmptyState>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line">
+                <th className={TH}>RSN</th>
+                <th className={TH}>Discord</th>
+                <th className={TH}>Status</th>
+                <th className={TH}>Buy-in</th>
+                <th className={TH}>Collected by</th>
+                {questions.map((q) => (
+                  <th key={q.id} className={TH}>
+                    {q.prompt}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {roster.map((entry) => {
+                const answerByQ = new Map(entry.answers.map((a) => [a.questionId, a.value]));
+                return (
+                  <tr key={entry.signup.id}>
+                    <td className="py-2 pr-4 font-medium text-fg">
+                      <span className="inline-flex items-center gap-1.5">
+                        {entry.signup.rsn}
+                        {entry.signup.rsnVerified && <CheckIcon size={14} className="text-ok" aria-label="Verified against the linked clan account" />}
                       </span>
-                    )}
-                  </td>
-                  <td className="py-2 pr-4 text-slate-300">{displayName(entry.user)}</td>
-                  <td className="py-2 pr-4">
-                    <span className={`text-xs rounded-full px-2 py-0.5 ${entry.signup.status === "active" ? "bg-green-900/50 text-green-300" : "bg-slate-700 text-slate-400"}`}>
-                      {entry.signup.status}
-                    </span>
-                  </td>
-                  <td className="py-2 pr-4">
-                    <BuyinCell slug={slug} entry={entry} />
-                  </td>
-                  <td className="py-2 pr-4">
-                    <CollectedByCell slug={slug} entry={entry} />
-                  </td>
-                  {questions.map((q) => (
-                    <td key={q.id} className="py-2 pr-4 text-slate-300">
-                      {answerByQ.get(q.id) ?? "—"}
                     </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {roster.length === 0 && <p className="text-slate-500 text-sm py-8 text-center">No signups yet.</p>}
-      </div>
+                    <td className="py-2 pr-4 text-fg-muted">{displayName(entry.user)}</td>
+                    <td className="py-2 pr-4">
+                      <Badge tone={entry.signup.status === "active" ? "ok" : "neutral"}>{entry.signup.status}</Badge>
+                    </td>
+                    <td className="py-2 pr-4">
+                      <BuyinCell slug={slug} entry={entry} />
+                    </td>
+                    <td className="py-2 pr-4">
+                      <CollectedByCell slug={slug} entry={entry} />
+                    </td>
+                    {questions.map((q) => (
+                      <td key={q.id} className="py-2 pr-4 text-fg-muted">
+                        {answerByQ.get(q.id) ?? "—"}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

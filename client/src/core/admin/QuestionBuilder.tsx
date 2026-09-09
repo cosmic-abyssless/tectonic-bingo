@@ -3,6 +3,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { SignupQuestion, SignupQuestionType } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { adminQueryKeys, useQuestions } from "../../api/adminQueries";
+import { Button, IconButton } from "../ui/Button";
+import { Card, EmptyState, Notice } from "../ui/Card";
+import { Input, Select } from "../ui/Field";
+import { ChevronDownIcon, ChevronUpIcon, ListIcon, XIcon } from "../ui/icons";
 
 const TYPES: { value: SignupQuestionType; label: string }[] = [
   { value: "text", label: "Short text" },
@@ -10,6 +14,26 @@ const TYPES: { value: SignupQuestionType; label: string }[] = [
   { value: "select", label: "Dropdown" },
   { value: "boolean", label: "Yes / No" },
 ];
+
+function parseOptions(optionsJson: string | null | undefined): string {
+  try {
+    return JSON.parse(optionsJson ?? "[]").join(", ");
+  } catch {
+    return "";
+  }
+}
+
+function TypeSelect(props: { value: SignupQuestionType; onChange: (t: SignupQuestionType) => void; "aria-label": string }) {
+  return (
+    <Select aria-label={props["aria-label"]} value={props.value} onChange={(e) => props.onChange(e.target.value as SignupQuestionType)} className="w-auto shrink-0">
+      {TYPES.map((t) => (
+        <option key={t.value} value={t.value}>
+          {t.label}
+        </option>
+      ))}
+    </Select>
+  );
+}
 
 export function QuestionBuilder({ slug }: { slug: string }) {
   const { data } = useQuestions(slug);
@@ -61,90 +85,75 @@ export function QuestionBuilder({ slug }: { slug: string }) {
   }
 
   return (
-    <div className="max-w-2xl space-y-3">
-      <div role="list" aria-label="Signup questions" className="space-y-3">
-        {questions.map((q, i) => (
-          <div key={q.id} role="listitem" className="bg-slate-900 border border-slate-700 rounded-lg p-3 space-y-2">
-            <div className="flex items-start gap-2">
-              <div className="flex flex-col gap-0.5 pt-1">
-                <button onClick={() => move(i, -1)} disabled={i === 0} className="text-slate-500 hover:text-white disabled:opacity-20 text-xs cursor-pointer leading-none">
-                  ▲
-                </button>
-                <button onClick={() => move(i, 1)} disabled={i === questions.length - 1} className="text-slate-500 hover:text-white disabled:opacity-20 text-xs cursor-pointer leading-none">
-                  ▼
-                </button>
+    <div className="max-w-2xl space-y-4">
+      {questions.length === 0 ? (
+        <EmptyState icon={<ListIcon />} title="No signup questions">
+          Players only enter their RSN. Add questions below if you need more from them.
+        </EmptyState>
+      ) : (
+        <div role="list" aria-label="Signup questions" className="space-y-2">
+          {questions.map((q, i) => (
+            <Card key={q.id} role="listitem" className="space-y-2 p-3">
+              <div className="flex items-center gap-2">
+                <div className="flex shrink-0 flex-col">
+                  <IconButton label="Move up" size="sm" isDisabled={i === 0} onPress={() => move(i, -1)} className="size-5">
+                    <ChevronUpIcon size={12} />
+                  </IconButton>
+                  <IconButton label="Move down" size="sm" isDisabled={i === questions.length - 1} onPress={() => move(i, 1)} className="size-5">
+                    <ChevronDownIcon size={12} />
+                  </IconButton>
+                </div>
+                <Input aria-label="Question prompt" defaultValue={q.prompt} onBlur={(e) => patch(q.id, { prompt: e.target.value })} className="flex-1" />
+                <TypeSelect aria-label="Question type" value={q.type} onChange={(type) => patch(q.id, { type })} />
+                <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-fg-muted">
+                  <input type="checkbox" checked={q.required} onChange={(e) => patch(q.id, { required: e.target.checked })} className="size-4 accent-accent" />
+                  Required
+                </label>
+                <IconButton label="Delete question" size="sm" onPress={() => remove(q.id)} className="hover:text-danger">
+                  <XIcon size={12} />
+                </IconButton>
               </div>
-              <input
-                defaultValue={q.prompt}
-                onBlur={(e) => patch(q.id, { prompt: e.target.value })}
-                className="flex-1 bg-slate-800 border border-slate-600 text-white rounded px-2 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
-              />
-              <select value={q.type} onChange={(e) => patch(q.id, { type: e.target.value as SignupQuestionType })} className="bg-slate-800 border border-slate-600 text-slate-300 text-xs rounded px-2 py-1.5 focus:outline-none">
-                {TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-              <label className="flex items-center gap-1.5 text-xs text-slate-400 shrink-0 cursor-pointer">
-                <input type="checkbox" checked={q.required} onChange={(e) => patch(q.id, { required: e.target.checked })} className="w-3.5 h-3.5 accent-indigo-500 cursor-pointer" />
-                Required
-              </label>
-              <button onClick={() => remove(q.id)} className="text-slate-500 hover:text-red-400 text-xs cursor-pointer shrink-0">
-                ✕
-              </button>
-            </div>
-            {q.type === "select" && (
-              <input
-                defaultValue={(() => {
-                  try {
-                    return JSON.parse(q.optionsJson ?? "[]").join(", ");
-                  } catch {
-                    return "";
-                  }
-                })()}
-                onBlur={(e) =>
-                  patch(q.id, { optionsJson: JSON.stringify(e.target.value.split(",").map((s) => s.trim()).filter(Boolean)) })
-                }
-                placeholder="Comma-separated options"
-                className="w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
-              />
-            )}
-          </div>
-        ))}
-      </div>
+              {q.type === "select" && (
+                <Input
+                  aria-label="Dropdown options"
+                  defaultValue={parseOptions(q.optionsJson)}
+                  onBlur={(e) => patch(q.id, { optionsJson: JSON.stringify(e.target.value.split(",").map((s) => s.trim()).filter(Boolean)) })}
+                  placeholder="Comma-separated options"
+                  className="h-8 text-xs"
+                />
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
 
-      <div className="bg-slate-900 border border-slate-700 rounded-lg p-3 space-y-2">
+      <Card className="space-y-2 p-3">
         <div className="flex items-center gap-2">
-          <input
+          <Input
+            aria-label="New question"
             value={newPrompt}
             onChange={(e) => setNewPrompt(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && newType !== "select" && add()}
             placeholder="New question…"
-            className="flex-1 bg-slate-800 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
+            className="flex-1"
           />
-          <select aria-label="New question type" value={newType} onChange={(e) => setNewType(e.target.value as SignupQuestionType)} className="bg-slate-800 border border-slate-600 text-slate-300 text-sm rounded-md px-2 py-2 focus:outline-none">
-            {TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-          <button onClick={add} className="text-sm bg-slate-700 hover:bg-slate-600 text-white rounded-md px-4 py-2 transition-colors cursor-pointer shrink-0">
+          <TypeSelect aria-label="New question type" value={newType} onChange={setNewType} />
+          <Button onPress={add} isDisabled={!newPrompt.trim()} className="shrink-0">
             Add
-          </button>
+          </Button>
         </div>
         {newType === "select" && (
-          <input
+          <Input
+            aria-label="Dropdown options"
             value={newOptions}
             onChange={(e) => setNewOptions(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && add()}
             placeholder="Comma-separated options"
-            className="w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
+            className="h-8 text-xs"
           />
         )}
-        {error && <p className="text-red-400 text-xs">{error}</p>}
-      </div>
+        {error && <Notice tone="danger">{error}</Notice>}
+      </Card>
     </div>
   );
 }

@@ -5,7 +5,12 @@ import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
 import { adminQueryKeys, useItemGroups } from "../../api/adminQueries";
 import { toGraphNodeInput as toInput } from "../board/requirementTree";
+import { Button } from "../ui/Button";
+import { Field, Input, Textarea } from "../ui/Field";
+import { ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { RequirementTreeEditor, type ExistingLeaf, type ExistingCondition } from "./RequirementTreeEditor";
+
+const CHECKBOX = "size-4 accent-accent disabled:opacity-40";
 
 // A task is a node that's a direct child of its tile's node. `previousTaskId`
 // is the sibling immediately before this one (per the tile's current child
@@ -60,85 +65,76 @@ export function TaskEditor({
   const withholdsPoints = task.pointsGateNodeId != null;
 
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
+    <div className="overflow-hidden rounded-md border border-line bg-bg">
       <button
         type="button"
         aria-label={`${expanded ? "Collapse" : "Expand"} task: ${task.label}`}
         onClick={() => setExpanded((e) => !e)}
-        className="w-full flex items-center justify-between px-3 py-2 cursor-pointer text-left"
+        className="flex h-10 w-full items-center justify-between px-3 text-left transition-colors hover:bg-surface-hover"
       >
-        <span className="text-sm font-semibold text-white">
-          {task.label} <span className="text-slate-500 font-normal">— {task.points} pts{isManual ? " · manual" : ""}</span>
+        <span className="text-sm font-medium text-fg">
+          {task.label}{" "}
+          <span className="font-normal text-fg-subtle">
+            — <span className="num">{task.points}</span> pts{isManual ? " · manual" : ""}
+          </span>
         </span>
-        <span className="text-slate-500 text-xs">{expanded ? "▲" : "▼"}</span>
+        <span className="text-fg-subtle">{expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
       </button>
 
       {expanded && (
-        <div className="border-t border-slate-700 px-3 py-3 space-y-3" onClick={(e) => e.stopPropagation()}>
+        <div className="space-y-4 border-t border-line px-3 py-3" onClick={(e) => e.stopPropagation()}>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor={`task-${task.id}-label`} className="block text-xs text-slate-400 mb-1">Label</label>
-              <input id={`task-${task.id}-label`} defaultValue={task.label ?? ""} onBlur={(e) => patch({ label: e.target.value })} className="w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500" />
-            </div>
-            <div>
-              <label htmlFor={`task-${task.id}-points`} className="block text-xs text-slate-400 mb-1">Points</label>
-              <input id={`task-${task.id}-points`} type="number" defaultValue={task.points} onBlur={(e) => patch({ points: Number(e.target.value) || 0 })} className="w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500" />
-            </div>
+            <Field label="Label">
+              <Input defaultValue={task.label ?? ""} onBlur={(e) => patch({ label: e.target.value })} />
+            </Field>
+            <Field label="Points">
+              <Input type="number" className="num" defaultValue={task.points} onBlur={(e) => patch({ points: Number(e.target.value) || 0 })} />
+            </Field>
           </div>
 
-          <div>
-            <label htmlFor={`task-${task.id}-description`} className="block text-xs text-slate-400 mb-1">Description</label>
-            <textarea id={`task-${task.id}-description`} defaultValue={task.description ?? ""} onBlur={(e) => patch({ description: e.target.value })} rows={2} className="w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500 resize-none" />
-          </div>
+          <Field label="Description">
+            <Textarea defaultValue={task.description ?? ""} onBlur={(e) => patch({ description: e.target.value })} rows={2} className="resize-none" />
+          </Field>
 
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Scoring mode</label>
-            <div className="flex rounded-md overflow-hidden border border-slate-600 w-fit">
-              <button
-                onClick={() => patch({ kind: "ALL", children: [] })}
-                className={`px-3 py-1 text-xs font-medium cursor-pointer ${!isManual ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-400"}`}
-              >
-                Automatic
-              </button>
-              <button
-                onClick={() => patch({ kind: "MANUAL", children: [] })}
-                className={`px-3 py-1 text-xs font-medium cursor-pointer border-l border-slate-600 ${isManual ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-400"}`}
-              >
-                Manual (mod judges)
-              </button>
+          <Field label="Scoring mode" as="div">
+            <div className="flex w-fit overflow-hidden rounded-md border border-line-strong">
+              {(
+                [
+                  ["Automatic", false],
+                  ["Manual (mod judges)", true],
+                ] as const
+              ).map(([label, manual], i) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => patch({ kind: manual ? "MANUAL" : "ALL", children: [] })}
+                  className={`h-8 px-3 text-xs font-medium transition-colors ${i > 0 ? "border-l border-line-strong" : ""} ${
+                    isManual === manual ? "bg-accent text-accent-fg" : "bg-bg text-fg-muted hover:text-fg"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-          </div>
+          </Field>
 
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-            <label title="Can't submit until the previous task is completed" className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={requiresPrevious}
-                disabled={!previousTaskId}
-                onChange={(e) => patch({ submitGateNodeId: e.target.checked ? previousTaskId : null })}
-                className="w-3.5 h-3.5 accent-indigo-500 cursor-pointer disabled:opacity-40"
-              />
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+            <label title="Can't submit until the previous task is completed" className="flex items-center gap-2 text-xs text-fg-muted">
+              <input type="checkbox" checked={requiresPrevious} disabled={!previousTaskId} onChange={(e) => patch({ submitGateNodeId: e.target.checked ? previousTaskId : null })} className={CHECKBOX} />
               Requires previous task
             </label>
-            <label title="Can complete early, but points stay 0 until the previous task completes" className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={withholdsPoints}
-                disabled={!previousTaskId}
-                onChange={(e) => patch({ pointsGateNodeId: e.target.checked ? previousTaskId : null })}
-                className="w-3.5 h-3.5 accent-indigo-500 cursor-pointer disabled:opacity-40"
-              />
+            <label title="Can complete early, but points stay 0 until the previous task completes" className="flex items-center gap-2 text-xs text-fg-muted">
+              <input type="checkbox" checked={withholdsPoints} disabled={!previousTaskId} onChange={(e) => patch({ pointsGateNodeId: e.target.checked ? previousTaskId : null })} className={CHECKBOX} />
               Withhold points until previous
             </label>
-            <label title="Player may submit an empty-state screenshot beforehand" className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-              <input type="checkbox" checked={task.allowsPreLoad} onChange={(e) => patch({ allowsPreLoad: e.target.checked })} className="w-3.5 h-3.5 accent-indigo-500 cursor-pointer" />
+            <label title="Player may submit an empty-state screenshot beforehand" className="flex items-center gap-2 text-xs text-fg-muted">
+              <input type="checkbox" checked={task.allowsPreLoad} onChange={(e) => patch({ allowsPreLoad: e.target.checked })} className={CHECKBOX} />
               Allows pre-load screenshot
             </label>
           </div>
 
           {!isManual && (
-            <div>
-              <label className="block text-xs text-slate-400 mb-1.5">Requirement</label>
+            <Field label="Requirement" as="div">
               <RequirementTreeEditor
                 root={toInput(task)}
                 itemGroups={itemGroups}
@@ -148,17 +144,16 @@ export function TaskEditor({
                 existingConditions={existingConditions}
                 sharedNodeIds={sharedNodeIds}
               />
-            </div>
+            </Field>
           )}
 
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Notes (shown to players)</label>
-            <input defaultValue={task.notes ?? ""} onBlur={(e) => patch({ notes: e.target.value || null })} className="w-full bg-slate-800 border border-slate-600 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-indigo-500" />
-          </div>
+          <Field label="Notes (shown to players)">
+            <Input defaultValue={task.notes ?? ""} onBlur={(e) => patch({ notes: e.target.value || null })} />
+          </Field>
 
-          <button onClick={deleteTask} className="text-xs text-red-400 hover:text-red-300 cursor-pointer">
+          <Button variant="danger" size="sm" onPress={deleteTask}>
             Delete task
-          </button>
+          </Button>
         </div>
       )}
     </div>

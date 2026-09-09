@@ -1,17 +1,32 @@
 import { useState } from "react";
-import { STAGE_ORDER, type Bingo } from "@bingo/shared";
+import { STAGE_LABEL, STAGE_ORDER, type Bingo, type Stage } from "@bingo/shared";
 import { useAdvanceStage } from "../../api/queries";
+import { Button } from "../ui/Button";
+import { Card, Notice } from "../ui/Card";
+import { MilestoneCountdown, StageStepper } from "../ui/StageStepper";
+import { ArrowLeftIcon, ArrowRightIcon } from "../ui/icons";
+
+// What advancing *into* each stage does, so a mod knows before confirming.
+const ENTER_EFFECT: Record<Stage, string> = {
+  planning: "Signups close; the board becomes editable again.",
+  signup: "Players can sign up and edit their answers. New signups are gated on clan membership.",
+  captains: "Signups close. Pick captains from the Teams tab — each captain gets a team.",
+  draft: "Captains can enter the draft room. Start the draft from there once everyone is present.",
+  reveal: "Teams and the board become visible to players. The board locks for editing.",
+  live: "Submissions open. If no start time is set, the bingo starts now.",
+  complete: "Submissions close; the board and stats stay visible.",
+};
 
 export function StageControls({ slug, bingo }: { slug: string; bingo: Bingo }) {
   const advanceStage = useAdvanceStage(slug);
-  const [confirming, setConfirming] = useState<"forward" | "back" | null>(null);
+  const [confirming, setConfirming] = useState<Stage | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const idx = STAGE_ORDER.indexOf(bingo.stage);
   const nextStage = idx < STAGE_ORDER.length - 1 ? STAGE_ORDER[idx + 1] : null;
   const prevStage = idx > 0 ? STAGE_ORDER[idx - 1] : null;
 
-  async function go(toStage: typeof STAGE_ORDER[number]) {
+  async function go(toStage: Stage) {
     setError(null);
     try {
       await advanceStage.mutateAsync(toStage);
@@ -22,55 +37,51 @@ export function StageControls({ slug, bingo }: { slug: string; bingo: Bingo }) {
   }
 
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <Card className="space-y-4 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs text-slate-500 uppercase tracking-wide">Current stage</p>
-          <p className="text-white font-bold text-lg capitalize">{bingo.stage}</p>
+          <p className="text-xs uppercase tracking-wide text-fg-subtle">Current stage</p>
+          <p className="text-lg font-semibold text-fg">{STAGE_LABEL[bingo.stage]}</p>
         </div>
         <div className="flex gap-2">
           {prevStage && (
-            <button
-              onClick={() => setConfirming("back")}
-              className="text-sm text-slate-300 hover:text-white border border-slate-600 hover:border-slate-400 rounded px-3 py-1.5 transition-colors cursor-pointer"
-            >
-              ← Back to {prevStage}
-            </button>
+            <Button size="sm" onPress={() => setConfirming(prevStage)}>
+              <ArrowLeftIcon />
+              Back to {STAGE_LABEL[prevStage]}
+            </Button>
           )}
           {nextStage && (
-            <button
-              onClick={() => setConfirming("forward")}
-              className="text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded px-3 py-1.5 transition-colors cursor-pointer"
-            >
-              Advance to {nextStage} →
-            </button>
+            <Button size="sm" variant="primary" onPress={() => setConfirming(nextStage)}>
+              Advance to {STAGE_LABEL[nextStage]}
+              <ArrowRightIcon />
+            </Button>
           )}
         </div>
       </div>
 
-      {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <StageStepper stage={bingo.stage} />
+        <MilestoneCountdown bingo={bingo} />
+      </div>
+
+      {error && <Notice tone="danger">{error}</Notice>}
 
       {confirming && (
-        <div className="mt-3 flex items-center gap-3 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2.5">
-          <p className="text-sm text-slate-300 flex-1">
-            Move this bingo from <span className="font-semibold capitalize">{bingo.stage}</span> to{" "}
-            <span className="font-semibold capitalize">{confirming === "forward" ? nextStage : prevStage}</span>?
+        <Notice tone="warn">
+          <p className="font-medium text-fg">
+            Move from {STAGE_LABEL[bingo.stage]} to {STAGE_LABEL[confirming]}?
           </p>
-          <button
-            onClick={() => setConfirming(null)}
-            className="text-sm text-slate-400 hover:text-white border border-slate-600 hover:border-slate-400 rounded px-3 py-1 transition-colors cursor-pointer"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => go((confirming === "forward" ? nextStage : prevStage)!)}
-            disabled={advanceStage.isPending}
-            className="text-sm bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold rounded px-3 py-1 transition-colors cursor-pointer"
-          >
-            Confirm
-          </button>
-        </div>
+          <p className="mt-1 text-fg-muted">{ENTER_EFFECT[confirming]}</p>
+          <div className="mt-3 flex gap-2">
+            <Button size="sm" variant="ghost" onPress={() => setConfirming(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" variant="primary" onPress={() => go(confirming)} isDisabled={advanceStage.isPending}>
+              Confirm
+            </Button>
+          </div>
+        </Notice>
       )}
-    </div>
+    </Card>
   );
 }

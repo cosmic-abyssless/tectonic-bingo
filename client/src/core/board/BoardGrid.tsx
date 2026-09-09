@@ -5,6 +5,8 @@ import { TileModal } from "./TileModal";
 import { groupSubmissionsByTile } from "./tileProgress";
 import { tileMatchesSearch } from "./requirementTree";
 import { CountdownTimer } from "../ui/CountdownTimer";
+import { Notice } from "../ui/Card";
+import { ClockIcon } from "../ui/icons";
 
 function getRowCategory(tiles: Tile[], categories: TileCategory[], row: number): TileCategory | null {
   const rowTiles = tiles.filter((t) => t.boardRow === row);
@@ -80,42 +82,40 @@ export function BoardGrid({
   const categoryById = new Map(categories.map((c) => [c.id, c]));
 
   const startMs = bingo.startsAt ? new Date(bingo.startsAt).getTime() : null;
-  // Board can be revealed before it goes live — show it, but dimmed with a countdown.
+  // The board is revealed before it goes live so teams can plan. Keep it
+  // fully inspectable; a banner carries the countdown instead of an overlay.
   const isPreStart = startMs !== null && now < startMs;
 
   return (
     <div className="w-full">
-      <div className="relative">
-        <div className={`overflow-x-auto${isPreStart ? " opacity-25 pointer-events-none select-none" : ""}`}>
-          <div
-            className="grid gap-1 w-full"
-            style={{ gridTemplateColumns: `${showLabelColumn ? "auto " : ""}repeat(${bingo.boardCols}, minmax(65px, 1fr))` }}
-          >
+      {isPreStart && startMs !== null && (
+        <Notice tone="info" icon={<ClockIcon />} className="mb-3">
+          Bingo starts in <CountdownTimer target={startMs} className="text-fg" />. Look over the tiles now — submissions open when the timer hits zero.
+        </Notice>
+      )}
+
+      <div className="overflow-x-auto">
+        <div className="grid w-full gap-1" style={{ gridTemplateColumns: `${showLabelColumn ? "auto " : ""}repeat(${bingo.boardCols}, minmax(65px, 1fr))` }}>
           {Array.from({ length: bingo.boardRows }, (_, row) => {
             const rowCategory = rowCategories[row];
             return (
               <div key={`row-${row}`} className="contents">
                 {showLabelColumn && (
                   <div
-                    className="flex items-center justify-center rounded-md border-2 text-[11px] font-bold uppercase tracking-widest px-1.5 border-slate-700 bg-slate-900/60 text-slate-400"
-                    style={
-                      rowCategory
-                        ? {
-                            writingMode: "vertical-lr",
-                            transform: "rotate(180deg)",
-                            color: rowCategory.colorHex ?? undefined,
-                            borderColor: rowCategory.colorHex ?? undefined,
-                            backgroundColor: rowCategory.colorHex ? `${rowCategory.colorHex}1a` : undefined,
-                          }
-                        : { writingMode: "vertical-lr", transform: "rotate(180deg)" }
-                    }
+                    className="flex items-center justify-center rounded-md border border-[var(--tile-border)] bg-[var(--tile-empty)] px-1.5 text-[11px] font-semibold uppercase tracking-widest text-fg-muted"
+                    style={{
+                      writingMode: "vertical-lr",
+                      transform: "rotate(180deg)",
+                      color: rowCategory?.colorHex ?? undefined,
+                      borderColor: rowCategory?.colorHex ? `${rowCategory.colorHex}66` : undefined,
+                    }}
                   >
                     {rowCategory?.label ?? ""}
                   </div>
                 )}
                 {Array.from({ length: bingo.boardCols }, (_, col) => {
                   const tile = grid.get(row)?.get(col);
-                  if (!tile) return <div key={`empty-${row}-${col}`} className="aspect-square bg-slate-900/50 rounded-md border-2 border-slate-800" />;
+                  if (!tile) return <div key={`empty-${row}-${col}`} className="aspect-square rounded-md border border-[var(--tile-border)] bg-[var(--tile-empty)]" />;
                   return (
                     <TileCell
                       key={tile.id}
@@ -136,29 +136,15 @@ export function BoardGrid({
         </div>
       </div>
 
-      {isPreStart && startMs !== null && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="flex flex-col items-center gap-3 bg-slate-900/90 border border-slate-700 rounded-xl px-10 py-8 shadow-xl">
-            <p className="text-slate-300 text-sm font-semibold uppercase tracking-widest">Bingo starts in</p>
-            <p className="text-white text-3xl font-bold text-center">
-              <CountdownTimer target={startMs} />
-            </p>
-          </div>
-        </div>
-      )}
-      </div>
-
-      {selected && (
-        <TileModal
-          tile={selected}
-          bingo={bingo}
-          category={selected.categoryId ? categoryById.get(selected.categoryId) : undefined}
-          nodeStates={nodeStates}
-          teamSubmissions={submissionsByTile.get(selected.id) ?? []}
-          onClose={() => setSelected(null)}
-          onSubmit={onSubmitTile ? () => onSubmitTile(selected.id) : undefined}
-        />
-      )}
+      <TileModal
+        tile={selected}
+        bingo={bingo}
+        category={selected?.categoryId ? categoryById.get(selected.categoryId) : undefined}
+        nodeStates={nodeStates}
+        teamSubmissions={selected ? submissionsByTile.get(selected.id) ?? [] : []}
+        onClose={() => setSelected(null)}
+        onSubmit={onSubmitTile && selected ? () => onSubmitTile(selected.id) : undefined}
+      />
     </div>
   );
 }

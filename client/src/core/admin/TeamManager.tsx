@@ -6,6 +6,9 @@ import { adminQueryKeys, useCaptainCandidates } from "../../api/adminQueries";
 import * as adminApi from "../../api/adminApi";
 import { UserSearchInput } from "./UserSearchInput";
 import { displayName } from "../ui/user";
+import { Button } from "../ui/Button";
+import { Card, Notice } from "../ui/Card";
+import { Field, Select } from "../ui/Field";
 
 // Forward-looking estimate while captains are still being assigned — teams
 // don't have their non-captain members yet, so this is just
@@ -45,17 +48,27 @@ function TeamCard({ slug, team }: { slug: string; team: Team }) {
   }
 
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg p-4 space-y-3">
+    <Card className="space-y-3 p-4">
       <div className="flex items-center gap-2">
-        <input type="color" value={team.color ?? "#6366f1"} onChange={(e) => recolor(e.target.value)} className="w-7 h-7 rounded-full border-none cursor-pointer bg-transparent shrink-0" />
-        <input defaultValue={team.name} onBlur={(e) => rename(e.target.value)} className="flex-1 bg-transparent text-white font-semibold text-sm focus:outline-none border-b border-transparent focus:border-slate-600" />
-        <span className="text-xs text-slate-500 font-mono shrink-0">{team.codeword}</span>
+        <input
+          type="color"
+          aria-label={`${team.name} color`}
+          value={team.color ?? "#6366f1"}
+          onChange={(e) => recolor(e.target.value)}
+          className="size-7 shrink-0 cursor-pointer rounded-full border-none bg-transparent"
+        />
+        <input
+          aria-label="Team name"
+          defaultValue={team.name}
+          onBlur={(e) => rename(e.target.value)}
+          className="flex-1 border-b border-transparent bg-transparent text-sm font-semibold text-fg outline-none focus:border-line-strong"
+        />
+        <span className="num shrink-0 text-xs text-fg-subtle">{team.codeword}</span>
       </div>
-      <div>
-        <label className="block text-xs text-slate-400 mb-1">Add member</label>
+      <Field label="Add member" as="div">
         <UserSearchInput scope={slug} onSelect={addMember} />
-      </div>
-    </div>
+      </Field>
+    </Card>
   );
 }
 
@@ -93,19 +106,16 @@ export function TeamManager({ slug }: { slug: string }) {
 
   return (
     <div className="max-w-2xl space-y-4">
-      <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-        <p className="text-sm font-medium text-slate-300 mb-2">Assign a captain</p>
-        {summary && <p className="text-sm text-indigo-300 mb-3">{summary}</p>}
+      <Card className="space-y-3 p-4">
+        <div>
+          <p className="text-sm font-medium text-fg">Assign a captain</p>
+          {summary && <p className="mt-1 text-sm text-fg-muted">{summary}</p>}
+        </div>
         {candidates.length === 0 ? (
-          <p className="text-sm text-slate-500">No eligible signups — everyone who signed up is already a captain, or no one has signed up yet.</p>
+          <p className="text-sm text-fg-subtle">No eligible signups — everyone who signed up is already a captain, or no one has signed up yet.</p>
         ) : (
           <div className="flex items-start gap-2">
-            <select
-              aria-label="Assign a captain"
-              value={selectedCaptainId}
-              onChange={(e) => setSelectedCaptainId(e.target.value)}
-              className="flex-1 bg-slate-900 border border-slate-600 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
-            >
+            <Select aria-label="Assign a captain" value={selectedCaptainId} onChange={(e) => setSelectedCaptainId(e.target.value)} className="flex-1">
               <option value="">Select a signed-up player…</option>
               {candidates.map((c) => (
                 <option key={c.user.id} value={c.user.id}>
@@ -113,18 +123,14 @@ export function TeamManager({ slug }: { slug: string }) {
                   {c.signup.rsnVerified ? " ✓" : ""} ({displayName(c.user)})
                 </option>
               ))}
-            </select>
-            <button
-              onClick={createTeam}
-              disabled={!selectedCaptainId || creating}
-              className="text-sm bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold rounded-md px-4 py-2 transition-colors cursor-pointer shrink-0"
-            >
+            </Select>
+            <Button variant="primary" onPress={createTeam} isDisabled={!selectedCaptainId || creating} className="shrink-0">
               {creating ? "Creating…" : "Make captain"}
-            </button>
+            </Button>
           </div>
         )}
-        {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
-      </div>
+        {error && <Notice tone="danger">{error}</Notice>}
+      </Card>
 
       <div className="space-y-3">
         {data?.teams.map((team) => (
