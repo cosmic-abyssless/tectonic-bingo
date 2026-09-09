@@ -6,7 +6,8 @@ import { queryKeys } from "../../api/queries";
 import { Markdown } from "../ui/Markdown";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
-import { Field, Input, Textarea } from "../ui/Field";
+import { Field, Input, Select, Textarea } from "../ui/Field";
+import { THEME_KEYS } from "../../themes/keys";
 
 function toLocalInput(iso: string | null): string {
   if (!iso) return "";
@@ -90,7 +91,14 @@ export function BingoSettingsForm({
           <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </Field>
         <Field label="Theme">
-          <Input value={form.theme} onChange={(e) => setForm({ ...form, theme: e.target.value })} />
+          <Select value={form.theme} onChange={(e) => setForm({ ...form, theme: e.target.value })}>
+            {!(THEME_KEYS as readonly string[]).includes(form.theme) && <option value={form.theme}>{form.theme} (unknown — falls back to default)</option>}
+            {THEME_KEYS.map((key) => (
+              <option key={key} value={key}>
+                {key}
+              </option>
+            ))}
+          </Select>
         </Field>
       </div>
 

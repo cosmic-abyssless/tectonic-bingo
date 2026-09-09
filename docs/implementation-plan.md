@@ -192,26 +192,36 @@ client/src/
   api/                  typed fetch wrapper + TanStack Query hooks (useBingo, useBoard,
                         useTeamProgress, useDraft, useSignup, mutations…). All server
                         state lives in the query cache — no more callback-prop lifting.
+  headless/             the only layer allowed to import api/* + context/*. View-model
+                        types + pure builders (types.ts, boardModel.ts,
+                        submissionFlowLogic.ts), data-owning providers/hooks
+                        (BingoPageProvider, BoardProvider, useSubmissionFlow,
+                        SubmissionFlowHost) exposed via the public barrel index.ts
+                        (useBingoPage, useBoardModel, useTileModel, usePageEvent).
   core/                 theme-agnostic building blocks, styled with neutral tokens only
-    ui/                 SearchableSelect (port as-is), Modal, StatusBadge, CountdownTimer,
-                        timeAgo.ts (ONE copy), Markdown
-    board/              BoardGrid (renders bingos.boardRows × boardCols from data,
-                        category row labels from tile_categories), TileCell, TileModal,
-                        TaskPanel (port of v1 SidePanel, N-task aware)
-    submissions/        SubmissionModal, SubmissionRow (ported, task-chain aware)
-    draft/              DraftRoom, PickList, TeamColumn
+    ui/                 SearchableSelect, Dialog, Menu, Button, Card, Field, AppHeader,
+                        StageStepper, CountdownTimer, StatusBadge, Markdown, icons.tsx
+    board/              tileProgress.ts, taskClaims.ts, requirementTree.ts, labels.ts —
+                        pure helpers only; presentational board components live in
+                        themes/default/board now (see below)
+    submissions/        SubmissionRow, ScreenshotThumb, claimsSummary.ts (pure/shared;
+                        the submission modal's UI lives in themes/default/submission)
+    draft/              DraftRoom, PickList, TeamColumn, TeamRoster
     signup/             SignupForm (renders admin-defined questions), SignupClosed
     mod/                ReviewQueue (ported ModPanel), SignupRoster, StageControls
     admin/              BingoSettings, BoardEditor, TaskEditor, QuestionBuilder,
                         TeamManager, LineEditor
   themes/
-    registry.ts         theme key → partial component/token overrides
-    default/            complete neutral theme (tokens + any component overrides)
-  pages/                thin route components composing core/* via the active theme
+    keys.ts             THEME_KEYS — import-free list for the admin theme select
+    tokens.ts, slots.ts, context.ts, registry.ts, ThemeProvider.tsx
+    default/            the eager fallback theme: page/, board/, submission/ slot
+                        components, each consuming only headless view models
+  pages/                thin route components; BingoPage.tsx wraps BingoPageProvider ->
+                        ThemeProvider -> the active theme's BoardPage slot
   context/              AuthContext, WebSocketProvider (single socket)
 ```
 
-**Theme contract:** `bingos.theme` selects a folder. A theme exports design tokens (CSS variables set on the bingo page root: category palette fallback, surfaces, accents) and *optional* component overrides; `useThemeComponent('TileCell')` returns the override or the core default. Admin and mod surfaces **never** theme — they always use core components directly (requirement: admin panel looks the same regardless of theme). A future themed bingo (e.g. another Pokémon one) is a new folder overriding `TileCell`/`BoardGrid` visuals; nothing else changes.
+**Theme contract:** see `docs/theming.md` for the full writer's guide. In short: `bingos.theme` selects a key in `themes/registry.ts`'s `loaders` map (lazy `import()`; `"default"` and unknown keys resolve synchronously). A theme is a `ThemeDefinition` — `{ key, tokens?, slots? }` — merged over the `default` theme, so it only needs to override what it changes. Slots are typed in `themes/slots.ts` and consumed via `useSlot()`; every one receives only the headless view models (`TileModel`, `BoardModel`, `BingoPageModel`, `SubmissionFlowModel`, …), never raw server shapes — a theme never imports `api/*` or `context/*` directly. Admin and mod surfaces **never** theme — they always import `core/*` directly and never mount a `ThemeProvider` (the admin theme select only imports the import-free `themes/keys.ts`).
 
 **Routing:** `/` bingo list · `/login` · `/b/:slug` stage-aware page (planning: countdown + rules; signup: form/roster; draft: link or embedded draft room; reveal: board preview + countdown to start; live/complete: board) · `/b/:slug/draft` · `/b/:slug/mod` (unified panel — see below) · `/b/:slug/stats` · `/admin`. Auth: viewing is public where the API allows; acting requires login (v1's blanket ProtectedRoute on `/` goes away).
 
