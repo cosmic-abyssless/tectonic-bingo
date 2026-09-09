@@ -14,14 +14,15 @@ import { TeamRoster } from "../core/draft/TeamRoster";
 import { Markdown } from "../core/ui/Markdown";
 import { AppHeader } from "../core/ui/AppHeader";
 import { Button } from "../core/ui/Button";
-import { Badge, EmptyState } from "../core/ui/Card";
+import { Badge, EmptyState, Notice } from "../core/ui/Card";
 import { Dialog, DialogHeader } from "../core/ui/Dialog";
 import { Input } from "../core/ui/Field";
 import { Menu, MenuItem, MenuTrigger } from "../core/ui/Menu";
 import { MilestoneCountdown, StageStepper } from "../core/ui/StageStepper";
 import { CountdownTimer } from "../core/ui/CountdownTimer";
 import { toast } from "../core/ui/Toast";
-import { ChevronDownIcon, ClockIcon, GridIcon, SearchIcon, UsersIcon, XIcon } from "../core/ui/icons";
+import { useHasPassed } from "../core/ui/useHasPassed";
+import { CheckIcon, ChevronDownIcon, ClockIcon, GridIcon, SearchIcon, UsersIcon, XIcon } from "../core/ui/icons";
 
 const SUGGESTION_CAP = 8;
 
@@ -49,6 +50,7 @@ export function BingoPage() {
   const [showRules, setShowRules] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [openTileId, setOpenTileId] = useState<string | null>(null);
+  const hasStarted = useHasPassed(shell?.bingo.startsAt);
 
   useWebSocketEvent((event) => {
     if (!shell) return;
@@ -74,7 +76,8 @@ export function BingoPage() {
   const { bingo, categories, teams, isMod, myTeam } = shell;
   const viewingTeam = teams.find((t) => t.id === viewingTeamId) ?? null;
   const isViewingOtherTeam = isMod && !!viewingTeamId && viewingTeamId !== myTeam?.id;
-  const canSubmit = bingo.stage === "live" && !isViewingOtherTeam && !!viewingTeamId;
+  // Mirrors the server's submission gate: live stage and past startsAt.
+  const canSubmit = bingo.stage === "live" && hasStarted && !isViewingOtherTeam && !!viewingTeamId;
   const nodeStates = progressData?.nodeStates ?? [];
   const teamSubmissions = submissionsData?.submissions ?? [];
   const boardRevealed = bingo.stage === "reveal" || bingo.stage === "live" || bingo.stage === "complete";
@@ -122,10 +125,11 @@ export function BingoPage() {
             </MenuTrigger>
           )}
           {!isMod && myTeam && (
-            <Badge className="hidden sm:inline-flex" style={teamBadgeStyle(myTeam)}>
+            // Static twin of the mod team picker above so the header reads the same for both roles.
+            <span className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line-strong bg-surface-raised px-2.5 text-xs font-medium text-fg" style={teamBadgeStyle(myTeam)}>
               {myTeam.color && <span className="size-2 rounded-full" style={{ backgroundColor: myTeam.color }} />}
               {myTeam.name}
-            </Badge>
+            </span>
           )}
           {bingo.rulesMarkdown && (
             <Button size="sm" variant="ghost" onPress={() => setShowRules(true)}>
@@ -161,8 +165,9 @@ export function BingoPage() {
         </AppHeader>
 
         <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
+          {/* The full stage list only means something to whoever drives it (#14). */}
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <StageStepper stage={bingo.stage} />
+            {isMod && <StageStepper stage={bingo.stage} />}
             <MilestoneCountdown bingo={bingo} />
           </div>
 
@@ -295,11 +300,10 @@ function DraftStageView({ slug, bingo, onOpenDraft }: { slug: string; bingo: Bin
   }
 
   return (
-    <section>
-      <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-base font-semibold text-fg">Teams</h2>
-        <p className="text-sm text-fg-muted">Draft complete. The board is revealed next.</p>
-      </div>
+    <section className="space-y-4">
+      <Notice tone="ok" icon={<CheckIcon />}>
+        Draft complete. The board is revealed next.
+      </Notice>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {draft.teams.map((team) => (
           <TeamRoster key={team.id} team={team} picks={draft.picks.filter((p) => p.teamId === team.id)} />
@@ -359,7 +363,7 @@ function TileSearch({ tiles, query, onQueryChange, onOpenTile }: { tiles: Tile[]
         onFocus={() => setFocused(true)}
         onBlur={() => setTimeout(() => setFocused(false), 150)}
         onKeyDown={handleKeyDown}
-        className="pl-9 pr-9"
+        className="pl-9 pr-10"
       />
       {query && (
         <button
@@ -370,7 +374,7 @@ function TileSearch({ tiles, query, onQueryChange, onOpenTile }: { tiles: Tile[]
             setHighlighted(0);
             inputRef.current?.focus();
           }}
-          className="hit-40 absolute right-2 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-sm p-1 text-fg-subtle transition-colors hover:text-fg"
+          className="absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
         >
           <XIcon />
         </button>

@@ -48,7 +48,7 @@ export function TeamSubmissionsList({
       {sorted.length === 0 ? (
         <div className="p-5">
           <EmptyState icon={<ImageIcon />} title="No submissions yet">
-            Submit a completion using the Submit button in the header.
+            {onSubmit ? "Submit a completion using the Submit button in the header." : "Nothing has been submitted for this team yet."}
           </EmptyState>
         </div>
       ) : (

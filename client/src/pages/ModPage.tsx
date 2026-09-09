@@ -37,7 +37,7 @@ const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; unti
   { key: "settings", label: "Settings", adminOnly: true },
   { key: "board", label: "Board", adminOnly: true, until: "reveal" },
   { key: "lines", label: "Lines", adminOnly: true, until: "reveal" },
-  { key: "questions", label: "Signup questions", adminOnly: true, until: "draft" },
+  { key: "questions", label: "Signup questions", adminOnly: true, until: "signup" },
   { key: "teams", label: "Teams", adminOnly: true, from: "captains" },
   { key: "mods", label: "Moderators", adminOnly: true },
 ];

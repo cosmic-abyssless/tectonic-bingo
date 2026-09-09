@@ -7,7 +7,7 @@ export function Tabs(props: TabsProps) {
 
 export function TabList({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <AriaTabList className={`flex gap-1 border-b border-line overflow-x-auto ${className ?? ""}`}>{children}</AriaTabList>
+    <AriaTabList className={`flex flex-wrap gap-1 border-b border-line ${className ?? ""}`}>{children}</AriaTabList>
   );
 }
 
