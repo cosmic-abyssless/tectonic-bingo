@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { ChevronDownIcon } from "./icons";
-import { inputClass } from "./Field";
+import { controlClass } from "./Field";
 
 interface Option {
   id: string;
@@ -147,7 +147,7 @@ export function SearchableSelect({
             if (!readOnly) setOpen(true);
           }}
           onKeyDown={readOnly ? undefined : handleKeyDown}
-          className={`${inputClass} h-10 ${readOnly ? "cursor-default select-none text-fg-muted" : "pr-9"}`}
+          className={`${controlClass()} ${readOnly ? "cursor-default select-none text-fg-muted" : "pr-9"}`}
         />
         {!readOnly && <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-fg-subtle" />}
       </div>

@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as adminApi from "../../api/adminApi";
 import { adminQueryKeys, useLines } from "../../api/adminQueries";
 import { Button, IconButton } from "../ui/Button";
-import { Field, Input, inputClass } from "../ui/Field";
+import { Field, Input, controlClass } from "../ui/Field";
 import { XIcon } from "../ui/icons";
 
 export function LineEditor({ slug }: { slug: string }) {
@@ -67,7 +67,7 @@ export function LineEditor({ slug }: { slug: string }) {
                     type="number"
                     defaultValue={line.node.points}
                     onBlur={(e) => updatePoints(line.id, Number(e.target.value) || 0)}
-                    className={`${inputClass} num h-8 w-20`}
+                    className={`${controlClass("sm")} num w-20`}
                   />
                 </td>
                 <td className="py-1.5">

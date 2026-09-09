@@ -36,8 +36,8 @@ export function MilestoneCountdown({ bingo, className }: { bingo: Bingo; classNa
   const at = milestone.at ? new Date(milestone.at) : null;
   const upcoming = at !== null && at.getTime() > Date.now();
   return (
-    <div className={`flex items-center gap-2 text-sm text-fg-muted ${className ?? ""}`}>
-      <ClockIcon className="shrink-0 text-fg-subtle" />
+    <div className={`flex items-baseline gap-2 text-sm text-fg-muted ${className ?? ""}`}>
+      <ClockIcon className="shrink-0 self-center text-fg-subtle" />
       <span>
         {milestone.label}
         {upcoming ? (

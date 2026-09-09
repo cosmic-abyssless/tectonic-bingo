@@ -11,7 +11,7 @@ export function UserSearchInput({ scope, onSelect, placeholder = "Search by Disc
 
   return (
     <div className="relative">
-      <Input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={placeholder} className="h-9" />
+      <Input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={placeholder} />
       {query.trim() && (
         <div className="mt-1 max-h-48 overflow-y-auto rounded-md border border-line bg-surface-raised">
           {isFetching ? (

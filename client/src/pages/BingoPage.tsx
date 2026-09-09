@@ -190,7 +190,7 @@ export function BingoPage() {
                 <TileSearch tiles={tiles} query={searchQuery} onQueryChange={setSearchQuery} onOpenTile={(tile) => setOpenTileId(tile.id)} />
                 {viewingTeam && (
                   <div
-                    className="flex h-9 items-center justify-between gap-4 rounded-md border border-line bg-surface px-3"
+                    className="flex h-10 items-center justify-between gap-4 rounded-md border border-line bg-surface px-3"
                     style={viewingTeam.color ? { borderColor: `${viewingTeam.color}99` } : undefined}
                   >
                     <div className="flex items-center gap-2 text-sm">
@@ -359,7 +359,7 @@ function TileSearch({ tiles, query, onQueryChange, onOpenTile }: { tiles: Tile[]
         onFocus={() => setFocused(true)}
         onBlur={() => setTimeout(() => setFocused(false), 150)}
         onKeyDown={handleKeyDown}
-        className="h-9 pl-9 pr-9"
+        className="pl-9 pr-9"
       />
       {query && (
         <button
