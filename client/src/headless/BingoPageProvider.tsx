@@ -11,11 +11,10 @@ import { usePageEvents } from "./usePageEvents";
 import { BoardProvider } from "./BoardProvider";
 import type { BingoPageModel, StageView } from "./types";
 
-// Internal/transitional escape hatch: components that haven't been ported
-// to the view models yet (core/submissions/SubmissionModal.tsx and
-// TeamSubmissionsList.tsx, until Phase 4; DraftStageView's MilestoneCountdown,
-// which still takes a raw Bingo) read this. No theme should ever import it —
-// themes only get the headless barrel's clean models.
+// Internal escape hatch: only useSubmissionFlow.ts (which needs raw
+// tiles/categories/nodeStates/teamSubmissions/bingo for the submission
+// flow's claim logic) reads this. No theme should ever import it — themes
+// only get the headless barrel's clean models.
 interface BingoPageRaw {
   slug: string;
   bingo: Bingo;

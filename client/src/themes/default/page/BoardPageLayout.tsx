@@ -1,12 +1,10 @@
 import { useBingoPage, useBoardModel, useTileModel } from "../../../headless";
-import { useBingoPageRaw } from "../../../headless/BingoPageProvider";
-import { SubmissionModal } from "../../../core/submissions/SubmissionModal";
+import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
 import { useSlot } from "../../context";
 
 export function BoardPageLayout() {
   const page = useBingoPage();
   const board = useBoardModel();
-  const raw = useBingoPageRaw();
   const modalTile = useTileModel(page.openTile.id);
 
   const PageHeader = useSlot("PageHeader");
@@ -21,6 +19,7 @@ export function BoardPageLayout() {
   const RulesDialog = useSlot("RulesDialog");
   const SubmissionsDrawer = useSlot("SubmissionsDrawer");
   const TileModal = useSlot("TileModal");
+  const SubmissionModal = useSlot("SubmissionModal");
 
   return (
     <div className="min-h-screen bg-bg text-fg">
@@ -50,17 +49,9 @@ export function BoardPageLayout() {
       </main>
 
       {page.submit.open && (
-        <SubmissionModal
-          slug={page.slug}
-          bingo={raw.bingo}
-          tiles={raw.tiles}
-          categories={raw.categories}
-          nodeStates={raw.nodeStates}
-          teamSubmissions={raw.teamSubmissions}
-          initialTileId={page.submit.initialTileId}
-          onClose={page.submit.hide}
-          onSuccess={() => {}}
-        />
+        <SubmissionFlowHost initialTileId={page.submit.initialTileId} onClose={page.submit.hide} onSuccess={() => {}}>
+          {(flow) => <SubmissionModal flow={flow} />}
+        </SubmissionFlowHost>
       )}
 
       <RulesDialog isOpen={page.rules.open} markdown={page.bingo.rulesMarkdown ?? ""} onClose={page.rules.hide} />

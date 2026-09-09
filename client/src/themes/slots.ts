@@ -5,6 +5,7 @@ import type {
   BoardModel,
   CategoryModel,
   RequirementNodeModel,
+  SubmissionFlowModel,
   SubmissionModel,
   TaskModel,
   TeamModel,
@@ -13,9 +14,6 @@ import type {
   TileSearchModel,
 } from "../headless/types";
 
-// The full slot registry. Submission-flow slots (SubmissionModal,
-// ScreenshotDropzone, …) are added in Phase 4 — until then the submission
-// modal is still mounted directly from core/submissions/SubmissionModal.tsx.
 export interface ThemeSlots {
   // Whole-surface composition — may call headless hooks directly.
   BoardPage: ComponentType<Record<string, never>>;
@@ -50,6 +48,15 @@ export interface ThemeSlots {
   TaskPanel: ComponentType<{ task: TaskModel }>;
   RequirementTree: ComponentType<{ node: RequirementNodeModel; root?: boolean }>;
   TileSubmissions: ComponentType<{ submissions: SubmissionModel[] }>;
+
+  // Submission flow — mounted only while open (see BoardPageLayout).
+  SubmissionModal: ComponentType<{ flow: SubmissionFlowModel }>;
+  ScreenshotDropzone: ComponentType<{ screenshot: SubmissionFlowModel["screenshot"] }>;
+  AnalysisPanel: ComponentType<{ analysis: SubmissionFlowModel["analysis"] }>;
+  TilePicker: ComponentType<{ tile: SubmissionFlowModel["tile"] }>;
+  TaskPicker: ComponentType<{ task: SubmissionFlowModel["task"] }>;
+  RequirementPicker: ComponentType<{ requirement: SubmissionFlowModel["requirement"]; quantity: SubmissionFlowModel["quantity"] }>;
+  StagedClaimsList: ComponentType<{ staged: SubmissionFlowModel["staged"] }>;
 }
 
 export type SlotName = keyof ThemeSlots;
