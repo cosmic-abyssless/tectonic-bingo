@@ -72,17 +72,16 @@ export interface AdvanceStageParams {
   now?: Date; // injectable for tests
 }
 
-// Forward one stage, or back one stage (mods correcting a mistake). No
-// skipping — each transition is recorded for the post-bingo timeline.
+// Move to any other stage, in either direction. Skipping stages is allowed
+// (a bingo without a draft goes signup -> reveal); the jump is recorded as a
+// single transition for the post-bingo timeline.
 export function advanceStage(db: Db, params: AdvanceStageParams) {
   return db.transaction((tx) => {
     const bingo = tx.select().from(bingos).where(eq(bingos.id, params.bingoId)).get();
     if (!bingo) throw new ServiceError(404, "Bingo not found");
 
-    const fromIdx = STAGE_ORDER.indexOf(bingo.stage as Stage);
-    const toIdx = STAGE_ORDER.indexOf(params.toStage);
-    if (Math.abs(toIdx - fromIdx) !== 1) {
-      throw new ServiceError(400, `Cannot move from "${bingo.stage}" directly to "${params.toStage}"`);
+    if (params.toStage === bingo.stage) {
+      throw new ServiceError(400, `Bingo is already in the "${bingo.stage}" stage`);
     }
 
     // `startsAt` is normally set ahead of time (a scheduled kickoff mods can

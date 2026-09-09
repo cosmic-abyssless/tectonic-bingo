@@ -60,9 +60,23 @@ describe("advanceStage", () => {
     expect(updated.startsAt).toBeNull();
   });
 
-  it("rejects skipping a stage", () => {
+  it("allows skipping stages and records the jump as one transition", () => {
     const bingo = seedBingo({ stage: "signup" });
-    expect(() => advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: bingo.createdByUserId })).toThrow();
+    const updated = advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: bingo.createdByUserId });
+    expect(updated.stage).toBe("live");
+    const rows = db.select().from(schema.stageTransitions).where(eq(schema.stageTransitions.bingoId, bingo.id)).all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ fromStage: "signup", toStage: "live" });
+  });
+
+  it("allows jumping back several stages", () => {
+    const bingo = seedBingo({ stage: "live" });
+    expect(advanceStage(db, { bingoId: bingo.id, toStage: "signup", changedByUserId: bingo.createdByUserId }).stage).toBe("signup");
+  });
+
+  it("rejects moving to the current stage", () => {
+    const bingo = seedBingo({ stage: "signup" });
+    expect(() => advanceStage(db, { bingoId: bingo.id, toStage: "signup", changedByUserId: bingo.createdByUserId })).toThrow();
   });
 
   it("records the transition in stageTransitions", () => {
