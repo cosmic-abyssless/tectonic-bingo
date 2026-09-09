@@ -19,6 +19,23 @@ export function getTeamMembers(db: Db, teamId: string) {
   return db.select().from(teamMembers).where(eq(teamMembers.teamId, teamId)).all();
 }
 
+// Teams plus their rosters — what the bingo shell ships so admins can see who
+// is on each team and players can see teammates once the board is revealed.
+export function getTeamsWithMembers(db: Db, bingoId: string) {
+  const teamRows = getTeamsForBingo(db, bingoId);
+  if (teamRows.length === 0) return [];
+  const memberRows = db
+    .select({ teamId: teamMembers.teamId, isCaptain: teamMembers.isCaptain, user: users })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(inArray(teamMembers.teamId, teamRows.map((t) => t.id)))
+    .all();
+  return teamRows.map((team) => ({
+    ...team,
+    members: memberRows.filter((m) => m.teamId === team.id).map(({ user, isCaptain }) => ({ user, isCaptain })),
+  }));
+}
+
 // A user belongs to at most one team per bingo (enforced by the draft flow).
 export function getUserTeamForBingo(db: Db, bingoId: string, userId: string) {
   const rows = db

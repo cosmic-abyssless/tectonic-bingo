@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Team, User } from "@bingo/shared";
+import type { Team, TeamWithMembers, User } from "@bingo/shared";
 import { useBingo, queryKeys } from "../../api/queries";
 import { adminQueryKeys, useCaptainCandidates } from "../../api/adminQueries";
 import * as adminApi from "../../api/adminApi";
 import { UserSearchInput } from "./UserSearchInput";
 import { displayName } from "../ui/user";
-import { Button } from "../ui/Button";
+import { Button, IconButton } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
 import { Field, Input, Select } from "../ui/Field";
+import { XIcon } from "../ui/icons";
 
 // Forward-looking estimate while captains are still being assigned — teams
 // don't have their non-captain members yet, so this is just
@@ -27,27 +28,24 @@ function teamSizeSummary(teamCount: number, totalParticipants: number): string |
   return summary;
 }
 
-function TeamCard({ slug, team }: { slug: string; team: Team }) {
+function TeamCard({ slug, team }: { slug: string; team: TeamWithMembers }) {
   const queryClient = useQueryClient();
-  const [members, setMembers] = useState<User[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
-
-  async function addMember(user: User) {
-    await adminApi.addTeamMember(slug, team.id, user.id);
-    setMembers(null);
-    invalidate();
-  }
-  async function update(patch: Partial<Team>) {
+  // Every mutation here funnels through this so a failure (409 already on a
+  // team, 400 empty password, ...) lands in the card instead of the console.
+  async function run(action: () => Promise<unknown>) {
     setError(null);
     try {
-      await adminApi.updateTeam(slug, team.id, patch);
-      invalidate();
+      await action();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update team");
+      setError(e instanceof Error ? e.message : "Something went wrong");
     }
   }
+  const update = (patch: Partial<Team>) => run(() => adminApi.updateTeam(slug, team.id, patch));
+  const addMember = (user: User) => run(() => adminApi.addTeamMember(slug, team.id, user.id));
+  const removeMember = (user: User) => run(() => adminApi.removeTeamMember(slug, team.id, user.id));
   function rename(name: string) {
     if (name.trim() && name.trim() !== team.name) update({ name });
   }
@@ -72,10 +70,26 @@ function TeamCard({ slug, team }: { slug: string; team: Team }) {
       <Field label="Password" hint="Must be visible in every screenshot the team submits.">
         <Input key={team.codeword} defaultValue={team.codeword} onBlur={(e) => setPassword(e.target.value)} className="num" />
       </Field>
-      {error && <Notice tone="danger">{error}</Notice>}
+      <Field label={`Members (${team.members.length})`} as="div">
+        <ul className="divide-y divide-line rounded-md border border-line">
+          {team.members.map(({ user, isCaptain }) => (
+            <li key={user.id} className="flex h-9 items-center gap-2 px-3 text-sm">
+              <span className="min-w-0 flex-1 truncate text-fg">{displayName(user)}</span>
+              {isCaptain ? (
+                <span className="text-xs text-fg-subtle">Captain</span>
+              ) : (
+                <IconButton label={`Remove ${displayName(user)}`} size="sm" onPress={() => removeMember(user)}>
+                  <XIcon size={12} />
+                </IconButton>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Field>
       <Field label="Add member" as="div">
         <UserSearchInput scope={slug} onSelect={addMember} />
       </Field>
+      {error && <Notice tone="danger">{error}</Notice>}
     </Card>
   );
 }

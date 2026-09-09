@@ -99,7 +99,7 @@ router.get(
     res.json({
       bingo,
       categories: boardService.getCategories(db, bingo.id),
-      teams: teamService.getTeamsForBingo(db, bingo.id),
+      teams: teamService.getTeamsWithMembers(db, bingo.id),
       isMod,
       myTeam,
       paidSignupCount,

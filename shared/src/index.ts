@@ -108,6 +108,16 @@ export interface Team {
   updatedAt: string;
 }
 
+export interface TeamRosterEntry {
+  user: User;
+  isCaptain: boolean;
+}
+
+/** Team as shipped in the bingo shell: the row plus everyone on it. */
+export interface TeamWithMembers extends Team {
+  members: TeamRosterEntry[];
+}
+
 export interface ItemGroup {
   id: string;
   name: string;
@@ -292,7 +302,7 @@ export interface BingoListResponse {
 export interface BingoShellResponse {
   bingo: Bingo;
   categories: TileCategory[];
-  teams: Team[];
+  teams: TeamWithMembers[];
   isMod: boolean;
   myTeam: Team | null;
   paidSignupCount: number;

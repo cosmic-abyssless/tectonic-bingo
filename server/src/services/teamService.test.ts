@@ -4,7 +4,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { and, eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { addTeamMember, createTeam, getCaptainCandidates, removeTeamMember, updateTeam } from "./teamService";
+import { addTeamMember, createTeam, getCaptainCandidates, getTeamsWithMembers, removeTeamMember, updateTeam } from "./teamService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -114,6 +114,18 @@ describe("updateTeam", () => {
     const teamA = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
     const teamB = createTeam(db, { bingoId: bingo.id, captainUserId: captain2.id });
     expect(() => updateTeam(db, teamB.id, { codeword: teamA.codeword })).toThrow(/already uses/);
+  });
+});
+
+describe("getTeamsWithMembers", () => {
+  it("attaches each team roster with the captain flagged", () => {
+    const { bingo, captain, member } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    addTeamMember(db, team.id, member.id);
+
+    const [withMembers] = getTeamsWithMembers(db, bingo.id);
+    expect(withMembers.id).toBe(team.id);
+    expect(withMembers.members.map((m) => [m.user.id, m.isCaptain]).sort()).toEqual([[captain.id, true], [member.id, false]].sort());
   });
 });
 
