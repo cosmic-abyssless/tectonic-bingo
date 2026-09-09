@@ -17,6 +17,7 @@ import { TeamManager } from "../core/admin/TeamManager";
 import { AppHeader } from "../core/ui/AppHeader";
 import { Button } from "../core/ui/Button";
 import { Dialog, DialogHeader } from "../core/ui/Dialog";
+import { MenuItem } from "../core/ui/Menu";
 import { usePreference } from "../core/ui/preferences";
 import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 
@@ -26,10 +27,10 @@ import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 // so this is UX decluttering on top of a real boundary, not the boundary
 // itself.
 //
-// `from`/`until` bound the stages a tab is relevant in. Past `until` there
-// is nothing left to do on it, so it is hidden. Before `from` it is either
-// dimmed and moved to the end or hidden, per the user's "upcomingTabs"
-// preference. Tabs without bounds are always shown.
+// `from`/`until` bound the stages a tab is relevant in. Outside that window
+// (stage already past `until`, or not yet at `from`) the tab is either hidden
+// or dimmed and moved to the end, per the mod's "outOfStageTabs" preference.
+// Tabs without bounds are always shown.
 const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; until?: Stage }[] = [
   { key: "submissions", label: "Submissions", adminOnly: false, from: "live" },
   { key: "signups", label: "Signups", adminOnly: false, until: "draft" },
@@ -42,12 +43,9 @@ const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; unti
 ];
 type TabDef = (typeof TABS)[number];
 
-function isPastStage(tab: TabDef, stage: Stage): boolean {
-  return tab.until !== undefined && STAGE_ORDER.indexOf(stage) > STAGE_ORDER.indexOf(tab.until);
-}
-
-function isUpcoming(tab: TabDef, stage: Stage): boolean {
-  return tab.from !== undefined && STAGE_ORDER.indexOf(stage) < STAGE_ORDER.indexOf(tab.from);
+function isOutOfStage(tab: TabDef, stage: Stage): boolean {
+  const idx = STAGE_ORDER.indexOf(stage);
+  return (tab.until !== undefined && idx > STAGE_ORDER.indexOf(tab.until)) || (tab.from !== undefined && idx < STAGE_ORDER.indexOf(tab.from));
 }
 
 // Mod surfaces never theme — always core/, regardless of bingo.theme.
@@ -58,15 +56,15 @@ export function ModPage() {
   const { user } = useAuth();
   const isAdmin = !!user?.isAdmin;
   const [tab, setTab] = useState("submissions");
-  const [upcomingTabs] = usePreference("upcomingTabs");
+  const [outOfStageTabs, setOutOfStageTabs] = usePreference("outOfStageTabs");
 
   const stage = shell?.bingo.stage;
   const visibleTabs = useMemo(() => {
     if (!stage) return [];
-    const relevant = TABS.filter((t) => (!t.adminOnly || isAdmin) && !isPastStage(t, stage)).map((t) => ({ ...t, dimmed: isUpcoming(t, stage) }));
-    const current = relevant.filter((t) => !t.dimmed);
-    return upcomingTabs === "hide" ? current : [...current, ...relevant.filter((t) => t.dimmed)];
-  }, [stage, isAdmin, upcomingTabs]);
+    const allowed = TABS.filter((t) => !t.adminOnly || isAdmin).map((t) => ({ ...t, dimmed: isOutOfStage(t, stage) }));
+    const current = allowed.filter((t) => !t.dimmed);
+    return outOfStageTabs === "hide" ? current : [...current, ...allowed.filter((t) => t.dimmed)];
+  }, [stage, isAdmin, outOfStageTabs]);
 
   const [showNotifPrompt, setShowNotifPrompt] = useState(
     () => "Notification" in window && Notification.permission === "default" && !localStorage.getItem("mod_notif_prompted"),
@@ -106,7 +104,17 @@ export function ModPage() {
 
   return (
     <div className="min-h-screen bg-bg text-fg">
-      <AppHeader back={{ to: `/b/${slug}`, label: "Back to bingo" }} title="Mod panel" subtitle={shell.bingo.name} />
+      <AppHeader
+        back={{ to: `/b/${slug}`, label: "Back to bingo" }}
+        title="Mod panel"
+        subtitle={shell.bingo.name}
+        menuItems={
+          <MenuItem id="outOfStageTabs" className="justify-between" onAction={() => setOutOfStageTabs(outOfStageTabs === "hide" ? "dim" : "hide")}>
+            Out-of-stage tabs
+            <span className="text-xs text-fg-subtle">{outOfStageTabs === "hide" ? "Hidden" : "Dimmed"}</span>
+          </MenuItem>
+        }
+      />
 
       <main className="mx-auto w-full max-w-6xl space-y-6 px-6 py-6">
         <StageControls slug={slug} bingo={shell.bingo} />

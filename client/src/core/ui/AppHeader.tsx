@@ -1,24 +1,30 @@
 import type { ReactNode } from "react";
-import type { Key } from "react-aria-components";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { Button } from "./Button";
 import { Menu, MenuItem, MenuTrigger } from "./Menu";
-import { usePreference } from "./preferences";
 import { ArrowLeftIcon } from "./icons";
 import { avatarUrl, displayName } from "./user";
 
 /**
  * Top bar shared by every page: optional back link, title/subtitle, page
- * actions, and the signed-in user's menu.
+ * actions, and the signed-in user's menu. `menuItems` are extra `MenuItem`s
+ * (with their own `onAction`) slotted above "Log out".
  */
-export function AppHeader({ back, title, subtitle, children }: { back?: { to: string; label: string }; title: ReactNode; subtitle?: ReactNode; children?: ReactNode }) {
+export function AppHeader({
+  back,
+  title,
+  subtitle,
+  menuItems,
+  children,
+}: {
+  back?: { to: string; label: string };
+  title: ReactNode;
+  subtitle?: ReactNode;
+  menuItems?: ReactNode;
+  children?: ReactNode;
+}) {
   const { user, logout } = useAuth();
-  const [upcomingTabs, setUpcomingTabs] = usePreference("upcomingTabs");
-  const onMenuAction = (key: Key) => {
-    if (key === "logout") logout();
-    if (key === "upcomingTabs") setUpcomingTabs(upcomingTabs === "dim" ? "hide" : "dim");
-  };
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-bg/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-2.5 sm:px-6">
@@ -42,17 +48,16 @@ export function AppHeader({ back, title, subtitle, children }: { back?: { to: st
                 <img src={avatarUrl(user)} alt="" className="size-6 rounded-full" />
                 <span className="hidden sm:inline">{displayName(user)}</span>
               </Button>
-              <Menu onAction={onMenuAction}>
+              <Menu>
                 {user.isAdmin && (
                   <MenuItem id="admin" href="/admin">
                     Site admin
                   </MenuItem>
                 )}
-                <MenuItem id="upcomingTabs" className="justify-between">
-                  Upcoming mod tabs
-                  <span className="text-xs text-fg-subtle">{upcomingTabs === "dim" ? "Dimmed" : "Hidden"}</span>
+                {menuItems}
+                <MenuItem id="logout" onAction={logout}>
+                  Log out
                 </MenuItem>
-                <MenuItem id="logout">Log out</MenuItem>
               </Menu>
             </MenuTrigger>
           )}

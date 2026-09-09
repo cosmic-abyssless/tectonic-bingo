@@ -6,8 +6,8 @@ import { useCallback, useSyncExternalStore } from "react";
  * value falls back to.
  */
 const PREFERENCES = {
-  // What to do with mod tabs whose stage hasn't arrived yet.
-  upcomingTabs: ["dim", "hide"],
+  // What to do with mod tabs whose stage has passed or hasn't arrived yet.
+  outOfStageTabs: ["hide", "dim"],
 } as const satisfies Record<string, readonly string[]>;
 
 type PreferenceKey = keyof typeof PREFERENCES;
