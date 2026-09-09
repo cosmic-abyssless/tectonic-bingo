@@ -1,4 +1,5 @@
 import { pushThemeHmrUpdate, type ThemeDefinition } from "../registry";
+import { BoardPageLayout } from "./page/BoardPageLayout";
 
 // Starter scaffold for the "comic" theme — see docs/theming.md for the full
 // writer's guide (resolution/fallback rules, what a slot may import, the
@@ -26,20 +27,22 @@ const comicTheme: ThemeDefinition = {
     // Uncomment and fill in to re-skin the page chrome (header, panels,
     // dialogs, ...) via Tailwind's --color-* variables — see docs/theming.md.
     chrome: {
-      bg: "#000",
-      surface: "#ddd",
+      bg: "#f2dc47",
+      surface: "#ffbb00",
       surfaceRaised: "#f90202",
       surfaceHover: "#232327",
-      line: "#ffff",
+      line: "#000000",
       lineStrong: "#3f3f46",
-      fg: "#fafafa",
+      fg: "#000",
       fgMuted: "#a1a1aa",
       fgSubtle: "#71717a",
       accent: "#a1a1aa",
       accentFg: "#101012",
     },
   },
-  slots: {},
+  slots: {
+    BoardPage: BoardPageLayout,
+  },
 };
 
 export default comicTheme;
