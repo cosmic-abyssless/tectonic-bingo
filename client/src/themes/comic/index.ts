@@ -1,5 +1,6 @@
 import { pushThemeHmrUpdate, type ThemeDefinition } from "../registry";
 import { BoardPageLayout } from "./page/BoardPageLayout";
+import { TileSearch } from "./page/TileSearch";
 
 // Starter scaffold for the "comic" theme — see docs/theming.md for the full
 // writer's guide (resolution/fallback rules, what a slot may import, the
@@ -27,8 +28,8 @@ const comicTheme: ThemeDefinition = {
     // Uncomment and fill in to re-skin the page chrome (header, panels,
     // dialogs, ...) via Tailwind's --color-* variables — see docs/theming.md.
     chrome: {
-      bg: "#f2dc47",
-      surface: "#ffbb00",
+      bg: "#dbbf42",
+      surface: "#ffffff",
       surfaceRaised: "#f90202",
       surfaceHover: "#232327",
       line: "#000000",
@@ -42,6 +43,7 @@ const comicTheme: ThemeDefinition = {
   },
   slots: {
     BoardPage: BoardPageLayout,
+    TileSearch,
   },
 };
 

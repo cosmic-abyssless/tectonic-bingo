@@ -1,3 +1,4 @@
+import { CSSProperties } from "react";
 import { useBingoPage, useBoardModel, useTileModel } from "../../../headless";
 import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
 import { useSlot } from "../../context";
@@ -6,10 +7,14 @@ import { useSlot } from "../../context";
 // halftone texture. A repeating radial-gradient is the cheapest way to get
 // a dot grid in CSS: each "tile" of the background is one dot on a
 // transparent field, then `backgroundSize` sets the grid spacing.
-const DOT_GRID_STYLE = {
+const DOT_GRID_STYLE: CSSProperties = {
   backgroundColor: "var(--color-bg)",
-  backgroundImage: "radial-gradient(circle at center, rgba(0,0,0,0.18) 1.6px, transparent 1.7px)",
-  backgroundSize: "10px 10px",
+  backgroundImage:
+    "radial-gradient(#00000080, 15%, transparent 16%), radial-gradient(#00000080, 15%, transparent 16%)",
+  backgroundSize: "14px 14px",
+  backgroundPosition: "0 0, 7px 7px",
+  position: "relative",
+  zIndex: 1,
 };
 
 export function BoardPageLayout() {
@@ -43,14 +48,24 @@ export function BoardPageLayout() {
         ) : page.stageView === "planning" || page.stageView === "captains" ? (
           <PlanningStage stage={page.stageView} />
         ) : page.stageView === "draft" ? (
-          <DraftStage draft={page.draft} milestone={page.milestone} onOpenDraft={page.actions.goToDraft} />
+          <DraftStage
+            draft={page.draft}
+            milestone={page.milestone}
+            onOpenDraft={page.actions.goToDraft}
+          />
         ) : page.stageView === "noTeam" ? (
           <NoTeamStage isMod={page.isMod} />
         ) : (
           <>
             <div className="mb-4 flex flex-wrap justify-between gap-4">
               <TileSearch search={page.search} />
-              {page.viewing.team && <TeamBanner team={page.viewing.team} isOtherTeam={page.viewing.isOtherTeam} totalPoints={board.totalPoints} />}
+              {page.viewing.team && (
+                <TeamBanner
+                  team={page.viewing.team}
+                  isOtherTeam={page.viewing.isOtherTeam}
+                  totalPoints={board.totalPoints}
+                />
+              )}
             </div>
 
             <BoardGrid board={board} onOpenTile={page.openTile.open} />
@@ -59,20 +74,37 @@ export function BoardPageLayout() {
       </main>
 
       {page.submit.open && (
-        <SubmissionFlowHost initialTileId={page.submit.initialTileId} onClose={page.submit.hide} onSuccess={() => {}}>
+        <SubmissionFlowHost
+          initialTileId={page.submit.initialTileId}
+          onClose={page.submit.hide}
+          onSuccess={() => {}}
+        >
           {(flow) => <SubmissionModal flow={flow} />}
         </SubmissionFlowHost>
       )}
 
-      <RulesDialog isOpen={page.rules.open} markdown={page.bingo.rulesMarkdown ?? ""} onClose={page.rules.hide} />
+      <RulesDialog
+        isOpen={page.rules.open}
+        markdown={page.bingo.rulesMarkdown ?? ""}
+        onClose={page.rules.hide}
+      />
 
-      <SubmissionsDrawer isOpen={page.drawer.open} submissions={page.submissions} onClose={page.drawer.hide} onSubmit={page.canSubmit ? () => page.submit.show() : undefined} />
+      <SubmissionsDrawer
+        isOpen={page.drawer.open}
+        submissions={page.submissions}
+        onClose={page.drawer.hide}
+        onSubmit={page.canSubmit ? () => page.submit.show() : undefined}
+      />
 
       <TileModal
         tile={modalTile}
         isOpen={page.openTile.id !== null}
         onClose={page.openTile.close}
-        onSubmit={page.canSubmit ? () => page.submit.show(page.openTile.id ?? undefined) : undefined}
+        onSubmit={
+          page.canSubmit
+            ? () => page.submit.show(page.openTile.id ?? undefined)
+            : undefined
+        }
       />
     </div>
   );
