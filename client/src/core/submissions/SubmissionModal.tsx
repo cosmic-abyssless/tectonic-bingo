@@ -9,7 +9,7 @@ import { AlertIcon, CheckIcon, ImageIcon, PlusIcon, SpinnerIcon, XIcon } from ".
 import { useAnalyzeScreenshot, useCreateSubmission } from "../../api/queries";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete } from "../board/taskClaims";
 import { collectLeaves, collectLeavesWithAncestors } from "../board/requirementTree";
-import { leafLabel } from "../board/TaskPanel";
+import { leafLabel } from "../board/labels";
 import { deriveBoardNodeStatuses, getFreezeUnlockAt } from "../board/tileProgress";
 import { getAvailableTasks } from "../../headless/submissionFlowLogic";
 

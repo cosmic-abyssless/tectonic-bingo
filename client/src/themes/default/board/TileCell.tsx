@@ -1,15 +1,18 @@
-import { useState, type CSSProperties } from "react";
-import type { TileModel } from "../../headless/types";
-import { formatCountdown } from "../ui/time";
-import { TASK_STATUS_DOT } from "../ui/StatusBadge";
-import { CheckIcon, ClockIcon, LockIcon } from "../ui/icons";
+import { memo, useState, type CSSProperties } from "react";
+import type { TileModel } from "../../../headless/types";
+import { formatCountdown } from "../../../core/ui/time";
+import { TASK_STATUS_DOT } from "../../../core/ui/StatusBadge";
+import { CheckIcon, ClockIcon, LockIcon } from "../../../core/ui/icons";
 
 /*
  * Board tile. All colours come from the `--tile-*` variables set by the
- * bingo's theme (themes/<key>/tokens.ts) so a themed bingo can reskin tiles
+ * bingo's theme (themes/tokens.ts) so a themed bingo can reskin tiles
  * without touching this component; a category colour overrides the accent.
+ * Memoized: BoardProvider's two-stage tile memo only produces a new
+ * TileModel object for tiles whose freeze/dim/canSubmit actually changed
+ * this tick, so non-frozen cells skip re-render entirely.
  */
-export function TileCell({ tile, onClick }: { tile: TileModel; onClick: () => void }) {
+export const TileCell = memo(function TileCell({ tile, onOpen }: { tile: TileModel; onOpen: (tileId: string) => void }) {
   const [imgFailed, setImgFailed] = useState(false);
 
   const style = (tile.accentColor ? { "--tile-accent": tile.accentColor } : {}) as CSSProperties;
@@ -17,7 +20,7 @@ export function TileCell({ tile, onClick }: { tile: TileModel; onClick: () => vo
 
   return (
     <button
-      onClick={onClick}
+      onClick={() => onOpen(tile.id)}
       title={tile.name}
       style={{ ...style, borderColor }}
       className={`group relative aspect-square w-full cursor-pointer overflow-hidden rounded-md border-2 border-[var(--tile-border)] bg-[var(--tile-bg)] transition-[border-color,opacity] duration-150 hover:border-[var(--tile-accent)] ${
@@ -80,4 +83,4 @@ export function TileCell({ tile, onClick }: { tile: TileModel; onClick: () => vo
       )}
     </button>
   );
-}
+});

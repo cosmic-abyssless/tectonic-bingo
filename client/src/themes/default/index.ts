@@ -1,0 +1,58 @@
+import type { ThemeDefinition } from "../registry";
+import { defaultTokens } from "../tokens";
+import { BoardPageLayout } from "./page/BoardPageLayout";
+import { PageLoading, PageError } from "./page/PageStates";
+import { PageHeader } from "./page/PageHeader";
+import { TeamSelector } from "./page/TeamSelector";
+import { TeamBadge } from "./page/TeamBadge";
+import { StageRow } from "./page/StageRow";
+import { TileSearch } from "./page/TileSearch";
+import { TeamBanner } from "./page/TeamBanner";
+import { PlanningStage } from "./page/PlanningStage";
+import { SignupStage } from "./page/SignupStage";
+import { DraftStage } from "./page/DraftStage";
+import { NoTeamStage } from "./page/NoTeamStage";
+import { RulesDialog } from "./page/RulesDialog";
+import { SubmissionsDrawer } from "./page/SubmissionsDrawer";
+import { BoardGrid } from "./board/BoardGrid";
+import { RowLabel } from "./board/RowLabel";
+import { EmptyCell } from "./board/EmptyCell";
+import { TileCell } from "./board/TileCell";
+import { PreStartBanner } from "./board/PreStartBanner";
+import { TileModal } from "./board/TileModal";
+import { TaskPanel } from "./board/TaskPanel";
+import { RequirementTree } from "./board/RequirementTree";
+import { TileSubmissions } from "./board/TileSubmissions";
+
+// The neutral/fallback theme: eager (it's what every unknown or loading
+// theme key falls back to), and the only theme that must define every slot.
+export const defaultTheme: ThemeDefinition = {
+  key: "default",
+  tokens: defaultTokens,
+  slots: {
+    BoardPage: BoardPageLayout,
+    PageLoading,
+    PageError,
+    PageHeader,
+    TeamSelector,
+    TeamBadge,
+    StageRow,
+    TileSearch,
+    TeamBanner,
+    PlanningStage,
+    SignupStage,
+    DraftStage,
+    NoTeamStage,
+    RulesDialog,
+    SubmissionsDrawer,
+    BoardGrid,
+    RowLabel,
+    EmptyCell,
+    TileCell,
+    PreStartBanner,
+    TileModal,
+    TaskPanel,
+    RequirementTree,
+    TileSubmissions,
+  },
+};

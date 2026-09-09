@@ -1,27 +1,52 @@
-import type { ComponentType } from "react";
-import { defaultTokens } from "./default/tokens";
+import { defaultTheme } from "./default";
+import { defaultTokens, type ThemeTokens } from "./tokens";
+import type { ThemeSlots } from "./slots";
+import type { ThemeContextValue } from "./context";
 
 export interface ThemeDefinition {
-  tokens: Record<string, string>;
-  // Optional per-component visual overrides, keyed by core component name
-  // (e.g. "TileCell", "BoardGrid"). A themed bingo (bingos.theme) that wants
-  // custom art/layout for one piece of the board provides just that
-  // override — everything else still comes from core/.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  components?: Partial<Record<string, ComponentType<any>>>;
+  key: string;
+  tokens?: Partial<ThemeTokens>;
+  slots?: Partial<ThemeSlots>;
 }
 
-const themes: Record<string, ThemeDefinition> = {
-  default: { tokens: defaultTokens },
-};
+export type ResolvedTheme = ThemeContextValue;
 
-export function getTheme(key: string): ThemeDefinition {
-  return themes[key] ?? themes.default;
+// Follow-up themes register here as one line each, e.g.:
+//   comic: () => import("./comic"),
+const loaders: Record<string, () => Promise<{ default: ThemeDefinition }>> = {};
+
+const DEFAULT_RESOLVED: ResolvedTheme = { key: defaultTheme.key, tokens: defaultTokens, slots: defaultTheme.slots as ThemeSlots };
+
+const cache = new Map<string, Promise<ResolvedTheme>>();
+
+export function isKnownTheme(key: string): boolean {
+  return key in loaders;
 }
 
-// Admin and mod surfaces must never theme (they always import core/*
-// directly) — this hook is only for player-facing pages.
-export function useThemedComponent<T>(themeKey: string, name: string, fallback: T): T {
-  const theme = getTheme(themeKey);
-  return (theme.components?.[name] as T) ?? fallback;
+export function mergeTheme(base: ResolvedTheme, def: ThemeDefinition): ResolvedTheme {
+  return {
+    key: def.key,
+    tokens: { ...base.tokens, ...def.tokens, tile: { ...base.tokens.tile, ...def.tokens?.tile }, chrome: { ...base.tokens.chrome, ...def.tokens?.chrome } },
+    slots: { ...base.slots, ...def.slots },
+  };
+}
+
+// "default" or an unknown key resolves synchronously to the merged default
+// theme. A known lazy key resolves asynchronously, cached per key; an import
+// failure warns and falls back to default (never throws).
+export function resolveTheme(key: string): ResolvedTheme | Promise<ResolvedTheme> {
+  const loader = loaders[key];
+  if (!loader) return DEFAULT_RESOLVED;
+
+  let cached = cache.get(key);
+  if (!cached) {
+    cached = loader()
+      .then((mod) => mergeTheme(DEFAULT_RESOLVED, mod.default))
+      .catch((err) => {
+        console.warn(`[themes] failed to load theme "${key}", falling back to default`, err);
+        return DEFAULT_RESOLVED;
+      });
+    cache.set(key, cached);
+  }
+  return cached;
 }

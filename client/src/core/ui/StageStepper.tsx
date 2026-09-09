@@ -1,4 +1,4 @@
-import { STAGE_LABEL, STAGE_ORDER, nextMilestone, type Bingo, type Stage } from "@bingo/shared";
+import { STAGE_LABEL, STAGE_ORDER, type Stage, type StageMilestone } from "@bingo/shared";
 import { CountdownTimer } from "./CountdownTimer";
 import { ClockIcon } from "./icons";
 
@@ -30,8 +30,7 @@ export function StageStepper({ stage }: { stage: Stage }) {
  * "Draft in 2 days 3 hours" / "Draft — time TBA". Returns null once the
  * bingo is complete (nothing left to wait for).
  */
-export function MilestoneCountdown({ bingo, className }: { bingo: Bingo; className?: string }) {
-  const milestone = nextMilestone(bingo);
+export function MilestoneCountdown({ milestone, className }: { milestone: StageMilestone | null; className?: string }) {
   if (!milestone) return null;
   const at = milestone.at ? new Date(milestone.at) : null;
   const upcoming = at !== null && at.getTime() > Date.now();

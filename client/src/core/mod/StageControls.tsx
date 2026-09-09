@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { STAGE_LABEL, STAGE_ORDER, type Bingo, type Stage } from "@bingo/shared";
+import { STAGE_LABEL, STAGE_ORDER, nextMilestone, type Bingo, type Stage } from "@bingo/shared";
 import { useAdvanceStage } from "../../api/queries";
 import { Button } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
@@ -61,7 +61,7 @@ export function StageControls({ slug, bingo }: { slug: string; bingo: Bingo }) {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <StageStepper stage={bingo.stage} />
-        <MilestoneCountdown bingo={bingo} />
+        <MilestoneCountdown milestone={nextMilestone(bingo)} />
       </div>
 
       {error && <Notice tone="danger">{error}</Notice>}

@@ -1,22 +1,23 @@
 import { Heading } from "react-aria-components";
-import type { TileModel } from "../../headless/types";
-import { Dialog } from "../ui/Dialog";
-import { Button, IconButton } from "../ui/Button";
-import { Badge } from "../ui/Card";
-import { ClockIcon, XIcon } from "../ui/icons";
-import { SubmissionRow } from "../submissions/SubmissionRow";
-import { TaskPanel } from "./TaskPanel";
+import type { TileModel } from "../../../headless/types";
+import { Dialog } from "../../../core/ui/Dialog";
+import { Button, IconButton } from "../../../core/ui/Button";
+import { Badge } from "../../../core/ui/Card";
+import { ClockIcon, XIcon } from "../../../core/ui/icons";
+import { useSlot } from "../../context";
 
-/** `tile` null closes the dialog (kept mounted so it can animate out). */
-export function TileModal({ tile, onClose, onSubmit }: { tile: TileModel | null; onClose: () => void; onSubmit?: () => void }) {
+/** `tile` null while `isOpen` transitions closed (kept mounted so it can animate out). */
+export function TileModal({ tile, isOpen, onClose, onSubmit }: { tile: TileModel | null; isOpen: boolean; onClose: () => void; onSubmit?: () => void }) {
   return (
-    <Dialog isOpen={tile !== null} onClose={onClose} size="lg">
+    <Dialog isOpen={isOpen} onClose={onClose} size="lg">
       {tile && <TileDetails tile={tile} onClose={onClose} onSubmit={onSubmit} />}
     </Dialog>
   );
 }
 
 function TileDetails({ tile, onClose, onSubmit }: { tile: TileModel; onClose: () => void; onSubmit?: () => void }) {
+  const TaskPanel = useSlot("TaskPanel");
+  const TileSubmissions = useSlot("TileSubmissions");
   const submitDisabled = tile.progress.allComplete || tile.freeze.isFrozen;
 
   return (
@@ -65,17 +66,7 @@ function TileDetails({ tile, onClose, onSubmit }: { tile: TileModel; onClose: ()
         ))}
       </div>
 
-      {tile.submissions.length > 0 && (
-        <div className="border-t border-line p-5">
-          <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-fg-subtle">Submissions</h3>
-          {tile.submissions.map((s) => (
-            <div key={s.id}>
-              <p className="mt-2 text-xs font-medium text-fg-muted">{s.taskLabels.join(" + ")}</p>
-              <SubmissionRow detail={s.detail} />
-            </div>
-          ))}
-        </div>
-      )}
+      {tile.submissions.length > 0 && <TileSubmissions submissions={tile.submissions} />}
     </>
   );
 }
