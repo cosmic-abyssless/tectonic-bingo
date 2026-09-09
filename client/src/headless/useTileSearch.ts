@@ -10,9 +10,28 @@ const SUGGESTION_CAP = 8;
 // pages/BingoPage.tsx. `onChoose` is called with the picked tile's id.
 export function useTileSearch(tiles: Tile[], onChoose: (tileId: string) => void): TileSearchModel {
   const [query, setQueryState] = useState("");
-  const [focused, setFocused] = useState(false);
+  const [focused, setFocusedState] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  // blur()'s 150ms grace period exists so clicking a dropdown result (which
+  // blurs the input first) doesn't close the dropdown before the click
+  // registers. But a blur can also be immediately reversed without a
+  // dropdown click — e.g. the clear button blurs the input then calls
+  // .focus() on it again synchronously. Without this, that stale timeout
+  // still fires 150ms later and force-closes an otherwise-legitimate focus.
+  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearPendingBlur() {
+    if (blurTimeoutRef.current !== null) {
+      clearTimeout(blurTimeoutRef.current);
+      blurTimeoutRef.current = null;
+    }
+  }
+
+  function setFocused(f: boolean) {
+    if (f) clearPendingBlur();
+    setFocusedState(f);
+  }
 
   const sq = query.trim().toLowerCase();
   const allMatching = sq ? tiles.filter((t) => tileMatchesSearch(t, sq)) : [];
@@ -37,7 +56,11 @@ export function useTileSearch(tiles: Tile[], onChoose: (tileId: string) => void)
   }
 
   function blur() {
-    setTimeout(() => setFocused(false), 150);
+    clearPendingBlur();
+    blurTimeoutRef.current = setTimeout(() => {
+      blurTimeoutRef.current = null;
+      setFocusedState(false);
+    }, 150);
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {

@@ -1,6 +1,8 @@
 import { pushThemeHmrUpdate, type ThemeDefinition } from "../registry";
 import { BoardPageLayout } from "./page/BoardPageLayout";
+import { BoardGrid } from "./board/BoardGrid";
 import { TileSearch } from "./page/TileSearch";
+import { TileCell } from "./board/TileCell";
 
 // Starter scaffold for the "comic" theme — see docs/theming.md for the full
 // writer's guide (resolution/fallback rules, what a slot may import, the
@@ -17,33 +19,41 @@ import { TileSearch } from "./page/TileSearch";
 const comicTheme: ThemeDefinition = {
   key: "comic",
   tokens: {
+    // Classic four-color comic palette: off-white panels (like newsprint
+    // paper) with bold black ink borders, a punchy orange accent for
+    // interaction, green/blue kept as the universal complete/frozen
+    // semantics.
     tile: {
-      bg: "#101012",
-      border: "#232327",
-      empty: "#0c0c0e",
-      accent: "#a1a1aa",
-      complete: "#4ade80",
-      frozen: "#60a5fa",
+      bg: "#f3ebd9",
+      border: "#000000",
+      empty: "#e8e2d3",
+      accent: "#f97316",
+      complete: "#22c55e",
+      frozen: "#38bdf8",
     },
-    // Uncomment and fill in to re-skin the page chrome (header, panels,
-    // dialogs, ...) via Tailwind's --color-* variables — see docs/theming.md.
+    // Yellow comic-paper background (kept as-is); white/cream panels, bold
+    // black ink outlines throughout, a comic-blue accent for CTAs/badges so
+    // it reads distinctly from the orange tile accent and green/blue status
+    // dots.
     chrome: {
       bg: "#dbbf42",
       surface: "#ffffff",
-      surfaceRaised: "#f90202",
-      surfaceHover: "#232327",
+      surfaceRaised: "#fff4d6",
+      surfaceHover: "#dbeafe",
       line: "#000000",
-      lineStrong: "#3f3f46",
-      fg: "#000",
-      fgMuted: "#a1a1aa",
-      fgSubtle: "#71717a",
-      accent: "#a1a1aa",
-      accentFg: "#101012",
+      lineStrong: "#000000",
+      fg: "#000000",
+      fgMuted: "#57534e",
+      fgSubtle: "#78716c",
+      accent: "#2563eb",
+      accentFg: "#ffffff",
     },
   },
   slots: {
     BoardPage: BoardPageLayout,
+    BoardGrid,
     TileSearch,
+    TileCell,
   },
 };
 

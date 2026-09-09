@@ -36,13 +36,18 @@ export interface ThemeSlots {
   SubmissionsDrawer: ComponentType<{ isOpen: boolean; submissions: SubmissionModel[]; onClose: () => void; onSubmit?: () => void }>;
 
   // Board.
-  BoardGrid: ComponentType<{ board: BoardModel; onOpenTile: (tileId: string) => void }>;
+  // highlightedTileId is optional and only meaningful to a theme whose
+  // TileCell has some "spotlighted" visual state to drive from it (the
+  // default theme's BoardGrid/TileCell just ignore it) — it's the id of
+  // whichever tile the search dropdown currently has highlighted, if any,
+  // so a theme can visually tie the two together.
+  BoardGrid: ComponentType<{ board: BoardModel; onOpenTile: (tileId: string) => void; highlightedTileId?: string | null }>;
   RowLabel: ComponentType<{ category: CategoryModel | null }>;
   EmptyCell: ComponentType<{ row: number; col: number }>;
   // onOpen takes the tile id (rather than being pre-bound) so the default
   // theme can pass a reference-stable callback and let React.memo(TileCell)
   // actually skip re-rendering unchanged tiles — see BoardGrid.tsx.
-  TileCell: ComponentType<{ tile: TileModel; onOpen: (tileId: string) => void }>;
+  TileCell: ComponentType<{ tile: TileModel; onOpen: (tileId: string) => void; isSearchHighlighted?: boolean }>;
   PreStartBanner: ComponentType<{ startsAt: number }>;
   TileModal: ComponentType<{ tile: TileModel | null; isOpen: boolean; onClose: () => void; onSubmit?: () => void }>;
   TaskPanel: ComponentType<{ task: TaskModel }>;

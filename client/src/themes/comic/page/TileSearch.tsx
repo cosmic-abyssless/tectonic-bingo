@@ -24,21 +24,22 @@ function BubbleTail({ outline }: { outline: string }) {
 }
 
 export function TileSearch({ search }: { search: TileSearchModel }) {
-  const isSearching = search.query.length > 0;
-  // Two independent visual cues, since they don't always coincide: the
-  // outline goes accent while there's an active query (whether or not the
-  // input still has focus), and the shadow "lifts" further off the page
-  // while the input is actually focused — like the bubble leaning in.
-  const outlineColor = isSearching ? "var(--color-accent)" : "var(--color-line)";
+  // A single state drives both cues, since they're really the same "you're
+  // talking to this bubble right now" moment: outline + tail go accent and
+  // the hard shadow lifts further off the page while the input has focus.
+  const outlineColor = search.focused ? "var(--color-accent)" : "var(--color-line)";
   const liftPx = search.focused ? 6 : 3;
 
   return (
     <div className="relative h-fit min-w-1/2 flex-1 pb-3">
       <div
-        className="relative rounded-full border-[3px] px-1 transition-[box-shadow,border-color] duration-150"
-        style={{ borderColor: outlineColor, backgroundColor: "var(--color-surface)", boxShadow: `${liftPx}px ${liftPx}px 0 ${outlineColor}` }}
+        className="relative flex items-center gap-2 rounded-full border-[3px] px-4 transition-[box-shadow,border-color] duration-150"
+        style={{ height: 42, borderColor: outlineColor, backgroundColor: "var(--color-surface)", boxShadow: `${liftPx}px ${liftPx}px 0 ${outlineColor}` }}
       >
-        <SearchIcon className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-fg-subtle" />
+        {/* Icon, input, and clear button are plain flex children — not
+            absolutely positioned — so they stay inside the bubble's padded
+            content box no matter how wide the pill ends up being. */}
+        <SearchIcon className="pointer-events-none shrink-0 text-fg-subtle" />
         <Input
           ref={search.inputRef}
           type="text"
@@ -48,7 +49,7 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
           onFocus={() => search.setFocused(true)}
           onBlur={search.blur}
           onKeyDown={search.onKeyDown}
-          className="!rounded-full !border-none !bg-transparent h-9 pl-10 pr-9"
+          className="!h-full min-w-0 flex-1 !rounded-full !border-none !bg-transparent !px-0 !outline-none"
         />
         {search.query && (
           <button
@@ -58,7 +59,7 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
               search.clear();
               search.inputRef.current?.focus();
             }}
-            className="hit-40 absolute right-2 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-sm p-1 text-fg-subtle transition-colors hover:text-fg"
+            className="hit-40 flex shrink-0 items-center justify-center rounded-sm text-fg-subtle transition-colors hover:text-fg"
           >
             <XIcon />
           </button>

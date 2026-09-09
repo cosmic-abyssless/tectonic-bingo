@@ -21,6 +21,10 @@ export function BoardPageLayout() {
   const page = useBingoPage();
   const board = useBoardModel();
   const modalTile = useTileModel(page.openTile.id);
+  // Whichever tile the search dropdown currently has highlighted (arrow-key
+  // nav or hovering a suggestion), so BoardGrid can give that tile the same
+  // "hover" treatment on the board itself, tying the two together.
+  const highlightedTileId = page.search.showDropdown ? page.search.results[page.search.highlightedIndex]?.id ?? null : null;
 
   const PageHeader = useSlot("PageHeader");
   const StageRow = useSlot("StageRow");
@@ -68,7 +72,7 @@ export function BoardPageLayout() {
               )}
             </div>
 
-            <BoardGrid board={board} onOpenTile={page.openTile.open} />
+            <BoardGrid board={board} onOpenTile={page.openTile.open} highlightedTileId={highlightedTileId} />
           </>
         )}
       </main>
