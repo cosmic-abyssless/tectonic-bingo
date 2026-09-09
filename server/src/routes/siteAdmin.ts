@@ -42,6 +42,14 @@ router.post(
   }),
 );
 
+router.delete(
+  "/bingos/:id",
+  asyncHandler(async (req, res) => {
+    bingoService.deleteBingo(db, req.params.id as string);
+    res.status(204).end();
+  }),
+);
+
 // Only the admins listed in ADMIN_DISCORD_IDS may hand out site admin, so a
 // granted admin can't fan the role out further.
 router.patch(

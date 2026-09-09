@@ -1,7 +1,28 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { bingoModerators, bingos, stageTransitions, users } from "../db/schema";
+import {
+  bingoLines,
+  bingoModerators,
+  bingos,
+  claims,
+  draftPicks,
+  nodeEdges,
+  nodes,
+  signupAnswers,
+  signupQuestions,
+  signups,
+  stageTransitions,
+  submissionScreenshots,
+  submissions,
+  teamMembers,
+  teamNodeState,
+  teamPointAdjustments,
+  teams,
+  tileCategories,
+  tiles,
+  users,
+} from "../db/schema";
 import { ServiceError } from "./errors";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -100,6 +121,40 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
       .run();
 
     return tx.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!;
+  });
+}
+
+// Removes a bingo and everything hanging off it. The schema has no ON DELETE
+// CASCADE, so children are deleted leaf-first in one transaction.
+export function deleteBingo(db: Db, bingoId: string): void {
+  db.transaction((tx) => {
+    const bingo = tx.select().from(bingos).where(eq(bingos.id, bingoId)).get();
+    if (!bingo) throw new ServiceError(404, "Bingo not found");
+
+    const teamIds = tx.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId));
+    const submissionIds = tx.select({ id: submissions.id }).from(submissions).where(inArray(submissions.teamId, teamIds));
+    const signupIds = tx.select({ id: signups.id }).from(signups).where(eq(signups.bingoId, bingoId));
+    const nodeIds = tx.select({ id: nodes.id }).from(nodes).where(eq(nodes.bingoId, bingoId));
+
+    tx.delete(claims).where(inArray(claims.submissionId, submissionIds)).run();
+    tx.delete(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, submissionIds)).run();
+    tx.delete(submissions).where(inArray(submissions.teamId, teamIds)).run();
+    tx.delete(teamPointAdjustments).where(eq(teamPointAdjustments.bingoId, bingoId)).run();
+    tx.delete(teamNodeState).where(inArray(teamNodeState.teamId, teamIds)).run();
+    tx.delete(draftPicks).where(eq(draftPicks.bingoId, bingoId)).run();
+    tx.delete(teamMembers).where(inArray(teamMembers.teamId, teamIds)).run();
+    tx.delete(teams).where(eq(teams.bingoId, bingoId)).run();
+    tx.delete(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).run();
+    tx.delete(signups).where(eq(signups.bingoId, bingoId)).run();
+    tx.delete(signupQuestions).where(eq(signupQuestions.bingoId, bingoId)).run();
+    tx.delete(bingoLines).where(eq(bingoLines.bingoId, bingoId)).run();
+    tx.delete(tiles).where(eq(tiles.bingoId, bingoId)).run();
+    tx.delete(tileCategories).where(eq(tileCategories.bingoId, bingoId)).run();
+    tx.delete(nodeEdges).where(inArray(nodeEdges.parentId, nodeIds)).run();
+    tx.delete(nodes).where(eq(nodes.bingoId, bingoId)).run();
+    tx.delete(stageTransitions).where(eq(stageTransitions.bingoId, bingoId)).run();
+    tx.delete(bingoModerators).where(eq(bingoModerators.bingoId, bingoId)).run();
+    tx.delete(bingos).where(eq(bingos.id, bingoId)).run();
   });
 }
 

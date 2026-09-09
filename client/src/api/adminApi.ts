@@ -12,6 +12,9 @@ import { api } from "./client";
 export function createBingo(payload: { slug: string; name: string; description?: string; theme?: string; boardRows: number; boardCols: number }) {
   return api.post<{ bingo: Bingo }>("/api/admin/bingos", payload);
 }
+export function deleteBingo(id: string) {
+  return api.delete(`/api/admin/bingos/${id}`);
+}
 export function setUserAdmin(userId: string, isAdmin: boolean) {
   return api.patch<{ user: User }>(`/api/admin/users/${userId}`, { isAdmin });
 }

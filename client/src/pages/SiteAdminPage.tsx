@@ -1,18 +1,19 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import type { User } from "@bingo/shared";
+import { STAGE_LABEL, type Bingo, type BingoListResponse, type User } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
-import { queryKeys } from "../api/queries";
+import { queryKeys, useBingos } from "../api/queries";
 import * as adminApi from "../api/adminApi";
+import { optimisticUpdate } from "../api/optimistic";
 import { UserSearchInput } from "../core/admin/UserSearchInput";
 import { ItemGroupsPanel } from "../core/admin/ItemGroupsPanel";
 import { displayName } from "../core/ui/user";
 import { AppHeader } from "../core/ui/AppHeader";
-import { Button } from "../core/ui/Button";
-import { Card, CardHeader, Notice } from "../core/ui/Card";
+import { Button, IconButton } from "../core/ui/Button";
+import { Badge, Card, CardHeader, Notice } from "../core/ui/Card";
 import { Field, Input } from "../core/ui/Field";
-import { CheckIcon } from "../core/ui/icons";
+import { CheckIcon, TrashIcon } from "../core/ui/icons";
 
 function slugify(s: string): string {
   return s
@@ -82,6 +83,82 @@ function CreateBingoForm() {
   );
 }
 
+// Deleting a bingo takes its signups, teams, board and submissions with it,
+// so the admin has to type the slug back before the button arms.
+function DeleteBingoConfirm({ bingo, onConfirm, onCancel }: { bingo: Bingo; onConfirm: () => void; onCancel: () => void }) {
+  const [typed, setTyped] = useState("");
+  return (
+    <Notice tone="danger" className="space-y-3">
+      <p>
+        Delete <span className="font-semibold">{bingo.name}</span> and everything in it? This can't be undone.
+      </p>
+      <Field label={`Type ${bingo.slug} to confirm`}>
+        <Input size="sm" value={typed} onChange={(e) => setTyped(e.target.value)} className="font-mono" autoFocus />
+      </Field>
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onPress={onCancel}>
+          Cancel
+        </Button>
+        <Button variant="danger" size="sm" isDisabled={typed !== bingo.slug} onPress={onConfirm}>
+          Delete bingo
+        </Button>
+      </div>
+    </Notice>
+  );
+}
+
+function BingosPanel() {
+  const queryClient = useQueryClient();
+  const { data } = useBingos();
+  const [confirming, setConfirming] = useState<Bingo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function remove(bingo: Bingo) {
+    setConfirming(null);
+    setError(null);
+    try {
+      await optimisticUpdate<BingoListResponse>(
+        queryClient,
+        queryKeys.bingos(),
+        (prev) => ({ ...prev, bingos: prev.bingos.filter((b) => b.id !== bingo.id) }),
+        () => adminApi.deleteBingo(bingo.id),
+      );
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to delete bingo");
+    }
+  }
+
+  const bingos = data?.bingos ?? [];
+  return (
+    <Card className="w-full max-w-md">
+      <CardHeader title="Bingos" description="Every bingo on this site. Deleting one removes its board, signups, teams and submissions." />
+      <div className="space-y-3 p-5">
+        {error && <Notice tone="danger">{error}</Notice>}
+        {bingos.length === 0 ? (
+          <p className="text-sm text-fg-subtle">No bingos yet.</p>
+        ) : (
+          <ul className="divide-y divide-line rounded-md border border-line">
+            {bingos.map((bingo) => (
+              <li key={bingo.id} className="space-y-3 px-3 py-2">
+                <div className="flex items-center gap-3">
+                  <Link to={`/b/${bingo.slug}/mod`} className="min-w-0 flex-1 truncate text-sm text-fg hover:underline">
+                    {bingo.name}
+                  </Link>
+                  <Badge tone={bingo.stage === "live" ? "ok" : "neutral"}>{STAGE_LABEL[bingo.stage]}</Badge>
+                  <IconButton label={`Delete ${bingo.name}`} size="sm" onPress={() => setConfirming(bingo)}>
+                    <TrashIcon size={14} />
+                  </IconButton>
+                </div>
+                {confirming?.id === bingo.id && <DeleteBingoConfirm bingo={bingo} onConfirm={() => remove(bingo)} onCancel={() => setConfirming(null)} />}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function GrantAdminPanel() {
   const [granted, setGranted] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -135,6 +212,7 @@ export function SiteAdminPage() {
       <AppHeader back={{ to: "/", label: "All bingos" }} title="Site admin" />
       <main className="mx-auto flex w-full max-w-6xl flex-wrap items-start gap-6 px-6 py-6">
         <CreateBingoForm />
+        <BingosPanel />
         {canGrantAdmin && <GrantAdminPanel />}
         <ItemGroupsPanel />
       </main>

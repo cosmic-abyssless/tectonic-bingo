@@ -5,7 +5,9 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingos } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { advanceStage, assertBoardEditable } from "./bingoService";
+import { advanceStage, assertBoardEditable, deleteBingo } from "./bingoService";
+import { createTask, createTile } from "./boardService";
+import { createTeam } from "./teamService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -103,5 +105,45 @@ describe("assertBoardEditable", () => {
 
   it.each(["live", "complete"] as const)("locks the board during %s", (stage) => {
     expect(() => assertBoardEditable(seedBingo({ stage }))).toThrow(ServiceError);
+  });
+});
+
+describe("deleteBingo", () => {
+  it("removes the bingo and every row that hangs off it, leaving other bingos alone", () => {
+    const bingo = seedBingo({ stage: "live" });
+    const other = db.insert(schema.bingos).values({ slug: "other", name: "Other", boardRows: 3, boardCols: 3, createdByUserId: bingo.createdByUserId }).returning().get();
+    const [player] = db.insert(schema.users).values({ discordId: "player", discordUsername: "player" }).returning().all();
+
+    const question = db.insert(schema.signupQuestions).values({ bingoId: bingo.id, prompt: "Q", type: "text" }).returning().get();
+    const signup = db.insert(schema.signups).values({ bingoId: bingo.id, userId: player.id, rsn: "player" }).returning().get();
+    db.insert(schema.signupAnswers).values({ signupId: signup.id, questionId: question.id, value: "A" }).run();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: player.id });
+    db.insert(schema.draftPicks).values({ bingoId: bingo.id, teamId: team.id, userId: player.id, pickNumber: 1, pickedByUserId: player.id }).run();
+    db.insert(schema.teamPointAdjustments).values({ bingoId: bingo.id, teamId: team.id, amount: 5, reason: "r", createdByUserId: bingo.createdByUserId }).run();
+    db.insert(schema.stageTransitions).values({ bingoId: bingo.id, fromStage: "planning", toStage: "live", changedByUserId: bingo.createdByUserId }).run();
+    db.insert(schema.bingoModerators).values({ bingoId: bingo.id, userId: player.id }).run();
+
+    const category = db.insert(schema.tileCategories).values({ bingoId: bingo.id, label: "C" }).returning().get();
+    const tile = createTile(db, { bingoId: bingo.id, name: "T", boardRow: 0, boardCol: 0, categoryId: category.id });
+    const task = createTask(db, tile.id, { kind: "ITEM", label: "Leaf", itemName: "Leaf" });
+    db.insert(schema.bingoLines).values({ bingoId: bingo.id, nodeId: tile.nodeId, lineType: "row", lineIndex: 0 }).run();
+    db.insert(schema.teamNodeState).values({ teamId: team.id, nodeId: task.id, completedAt: new Date() }).run();
+    const submission = db.insert(schema.submissions).values({ teamId: team.id, submittedByUserId: player.id }).returning().get();
+    db.insert(schema.submissionScreenshots).values({ submissionId: submission.id, storageUrl: "/x.png" }).run();
+    db.insert(schema.claims).values({ submissionId: submission.id, nodeId: task.id }).run();
+
+    deleteBingo(db, bingo.id);
+
+    const tables = [
+      schema.bingoModerators, schema.stageTransitions, schema.signupQuestions, schema.signups, schema.signupAnswers, schema.teams, schema.teamMembers,
+      schema.draftPicks, schema.nodes, schema.nodeEdges, schema.tileCategories, schema.tiles, schema.bingoLines, schema.teamNodeState, schema.submissions,
+      schema.submissionScreenshots, schema.claims, schema.teamPointAdjustments,
+    ];
+    for (const table of tables) expect(db.select().from(table).all()).toEqual([]);
+    expect(db.select().from(bingos).all().map((b) => b.id)).toEqual([other.id]);
+  });
+
+  it("404s for an unknown bingo", () => {
+    expect(() => deleteBingo(db, "nope")).toThrow(ServiceError);
   });
 });
