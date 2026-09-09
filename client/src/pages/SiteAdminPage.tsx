@@ -118,7 +118,7 @@ function GrantAdminPanel() {
 }
 
 export function SiteAdminPage() {
-  const { user } = useAuth();
+  const { user, canGrantAdmin } = useAuth();
   if (!user?.isAdmin) {
     return (
       <div className="flex min-h-screen items-center justify-center gap-1 bg-bg text-sm text-fg-muted">
@@ -135,7 +135,7 @@ export function SiteAdminPage() {
       <AppHeader back={{ to: "/", label: "All bingos" }} title="Site admin" />
       <main className="mx-auto flex w-full max-w-6xl flex-wrap items-start gap-6 px-6 py-6">
         <CreateBingoForm />
-        <GrantAdminPanel />
+        {canGrantAdmin && <GrantAdminPanel />}
         <ItemGroupsPanel />
       </main>
     </div>
