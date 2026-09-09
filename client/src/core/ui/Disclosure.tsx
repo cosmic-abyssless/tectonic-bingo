@@ -19,7 +19,11 @@ export function Disclosure({ title, defaultExpanded = false, children, className
           </span>
         </AriaButton>
       </Heading>
-      <DisclosurePanel className="border-t border-line p-4">{children}</DisclosurePanel>
+      {/* Border/padding live on an inner div: the collapsed panel is hidden via
+          content-visibility, which still paints the panel's own box. */}
+      <DisclosurePanel>
+        <div className="border-t border-line p-4">{children}</div>
+      </DisclosurePanel>
     </AriaDisclosure>
   );
 }
