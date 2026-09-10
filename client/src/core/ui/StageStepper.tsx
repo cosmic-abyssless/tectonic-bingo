@@ -2,23 +2,31 @@ import { STAGE_LABEL, STAGE_ORDER, type Stage, type StageMilestone } from "@bing
 import { CountdownTimer } from "./CountdownTimer";
 import { ClockIcon } from "./icons";
 
-/** Horizontal progress of the bingo's lifecycle; current stage highlighted. */
-export function StageStepper({ stage }: { stage: Stage }) {
+/**
+ * Horizontal progress of the bingo's lifecycle; current stage highlighted.
+ * With `onSelect`, every other stage becomes a button so mods can jump
+ * straight to it.
+ */
+export function StageStepper({ stage, onSelect }: { stage: Stage; onSelect?: (stage: Stage) => void }) {
   const currentIdx = STAGE_ORDER.indexOf(stage);
   return (
-    <ol className="flex items-center gap-1 overflow-x-auto" aria-label="Bingo stage">
+    <ol className="flex items-center gap-2 overflow-x-auto" aria-label="Bingo stage">
       {STAGE_ORDER.map((s, i) => {
         const state = i < currentIdx ? "done" : i === currentIdx ? "current" : "todo";
+        const pillClass = `whitespace-nowrap rounded-sm px-1.5 py-0.5 text-[11px] font-medium leading-4 ${
+          state === "current" ? "bg-accent text-accent-fg" : state === "done" ? "text-fg-muted" : "text-fg-subtle"
+        }`;
         return (
-          <li key={s} className="flex items-center gap-1" aria-current={state === "current" ? "step" : undefined}>
-            <span
-              className={`whitespace-nowrap rounded-sm px-1.5 py-0.5 text-[11px] font-medium leading-4 ${
-                state === "current" ? "bg-accent text-accent-fg" : state === "done" ? "text-fg-muted" : "text-fg-subtle"
-              }`}
-            >
-              {STAGE_LABEL[s]}
-            </span>
-            {i < STAGE_ORDER.length - 1 && <span className={`h-px w-3 ${i < currentIdx ? "bg-line-strong" : "bg-line"}`} />}
+          <li key={s} className="flex shrink-0 items-center gap-2" aria-current={state === "current" ? "step" : undefined}>
+            {onSelect && state !== "current" ? (
+              <button type="button" onClick={() => onSelect(s)} className={`${pillClass} transition-colors hover:bg-surface-hover hover:text-fg`}>
+                {STAGE_LABEL[s]}
+              </button>
+            ) : (
+              <span className={pillClass}>{STAGE_LABEL[s]}</span>
+            )}
+            {/* shrink-0 keeps the connector from collapsing under the pill when the row is tight. */}
+            {i < STAGE_ORDER.length - 1 && <span className={`h-px w-3 shrink-0 ${i < currentIdx ? "bg-line-strong" : "bg-line"}`} />}
           </li>
         );
       })}
@@ -35,8 +43,8 @@ export function MilestoneCountdown({ milestone, className }: { milestone: StageM
   const at = milestone.at ? new Date(milestone.at) : null;
   const upcoming = at !== null && at.getTime() > Date.now();
   return (
-    <div className={`flex items-center gap-2 text-sm text-fg-muted ${className ?? ""}`}>
-      <ClockIcon className="shrink-0 text-fg-subtle" />
+    <div className={`flex items-baseline gap-2 text-sm text-fg-muted ${className ?? ""}`}>
+      <ClockIcon className="shrink-0 self-center text-fg-subtle" />
       <span>
         {milestone.label}
         {upcoming ? (

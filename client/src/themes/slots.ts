@@ -24,8 +24,10 @@ export interface ThemeSlots {
   PageHeader: ComponentType<{ page: BingoPageModel }>;
   // TeamModel.isMine already tells each option whether it's the viewer's own team.
   TeamSelector: ComponentType<{ selector: TeamSelectorModel }>;
-  TeamBadge: ComponentType<{ team: TeamModel }>;
-  StageRow: ComponentType<{ stage: Stage; milestone: StageMilestone | null }>;
+  // Pressing the badge opens TeamInfoDialog.
+  TeamBadge: ComponentType<{ team: TeamModel; onPress: () => void }>;
+  // showStepper is false for players: the stage stepper is mod-facing.
+  StageRow: ComponentType<{ stage: Stage; milestone: StageMilestone | null; showStepper: boolean }>;
   TileSearch: ComponentType<{ search: TileSearchModel }>;
   TeamBanner: ComponentType<{ team: TeamModel; isOtherTeam: boolean; totalPoints: number | null }>;
   PlanningStage: ComponentType<{ stage: "planning" | "captains" }>;
@@ -33,6 +35,7 @@ export interface ThemeSlots {
   DraftStage: ComponentType<{ draft: BingoPageModel["draft"]; milestone: StageMilestone | null; onOpenDraft: () => void }>;
   NoTeamStage: ComponentType<{ isMod: boolean }>;
   RulesDialog: ComponentType<{ isOpen: boolean; markdown: string; onClose: () => void }>;
+  TeamInfoDialog: ComponentType<{ slug: string; team: TeamModel | null; onClose: () => void }>;
   SubmissionsDrawer: ComponentType<{ isOpen: boolean; submissions: SubmissionModel[]; onClose: () => void; onSubmit?: () => void }>;
 
   // Board.

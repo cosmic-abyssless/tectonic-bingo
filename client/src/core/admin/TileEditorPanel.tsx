@@ -8,7 +8,7 @@ import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
 import { Field, Input, Select } from "../ui/Field";
 import { ImageIcon, LockIcon, PlusIcon } from "../ui/icons";
-import { TaskEditor } from "./TaskEditor";
+import { TaskEditor, optimisticTasks } from "./TaskEditor";
 import type { ExistingLeaf, ExistingCondition } from "./RequirementTreeEditor";
 import { collectLeaves, collectLabeledConditions, collectSharedNodeIds } from "../board/requirementTree";
 
@@ -84,6 +84,18 @@ function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string;
   async function addTask() {
     const tasks = tile.node.children;
     await run(() => adminApi.createTask(slug, tile.id, { kind: "ALL", label: `Part ${String.fromCharCode(65 + tasks.length)}`, points: 10, description: "Describe the challenge…", children: [] }, tasks.length));
+  }
+  // Deleting unmounts the task's editor, so its error surfaces here instead.
+  async function deleteTask(task: GraphNode) {
+    await run(() =>
+      optimisticTasks(
+        queryClient,
+        slug,
+        tile.id,
+        (tasks) => tasks.filter((t) => t.id !== task.id),
+        () => adminApi.deleteTask(slug, task.id),
+      ),
+    );
   }
   async function uploadImage(file: File) {
     setUploading(true);
@@ -162,12 +174,13 @@ function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string;
               <TaskEditor
                 key={task.id}
                 slug={slug}
+                tileId={tile.id}
                 task={task}
                 previousTaskId={tile.node.children[i - 1]?.id}
                 existingLeaves={existingLeavesExcluding(tile.node.children, i)}
                 existingConditions={existingConditionsExcluding(tile.node.children, i)}
                 sharedNodeIds={sharedNodeIds}
-                onDeleted={() => {}}
+                onDelete={() => deleteTask(task)}
               />
             ))}
           </div>

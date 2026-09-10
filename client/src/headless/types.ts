@@ -12,11 +12,22 @@ export interface CategoryModel {
   sortOrder: number;
 }
 
+export interface TeamMemberModel {
+  id: string;
+  displayName: string;
+  avatarUrl: string;
+  isCaptain: boolean;
+}
+
 export interface TeamModel {
   id: string;
   name: string;
   color: string | null;
   isMine: boolean;
+  /** Captain first. */
+  members: TeamMemberModel[];
+  /** The viewer is this team's captain (the rename endpoint is captain-only). */
+  canRename: boolean;
 }
 
 export interface UserModel {
@@ -27,7 +38,7 @@ export interface UserModel {
 export interface RequirementNodeModel {
   id: string;
   kind: NodeKind;
-  /** leafLabel()/compositeLabel() already applied. */
+  /** leafLabel() for leaves, conditionHeading() for composites. */
   label: string;
   isLeaf: boolean;
   status: NodeStatus;
@@ -40,7 +51,7 @@ export interface RequirementNodeModel {
   dim: boolean;
   /** SUM only. */
   progress: { current: number; target: number } | null;
-  /** !(root && kind === "ALL") — whether the composite's own label should be shown. */
+  /** Whether the composite's own heading is rendered (always, for composites). */
   showHeading: boolean;
   children: RequirementNodeModel[];
 }
@@ -192,8 +203,8 @@ export interface BingoPageModel {
   teams: TeamModel[];
   categories: CategoryModel[];
   stageView: StageView;
-  /** reveal|live|complete — only gates the Stats button today. */
-  boardRevealed: boolean;
+  /** Mods always; players only once the bingo is complete (matches the stats endpoint). */
+  canViewStats: boolean;
   /** For the draft-stage slot; DraftState is the shared draft response type. */
   draft: { state: DraftState | null; isLoading: boolean };
   viewing: { team: TeamModel | null; isOtherTeam: boolean; submissionCount: number };
@@ -208,6 +219,8 @@ export interface BingoPageModel {
   /** Replaces both the old openTileId state and BoardGrid's own `selected` state. */
   openTile: { id: string | null; open(id: string): void; close(): void };
   rules: { open: boolean; show(): void; hide(): void };
+  /** The viewer's own team roster (TeamBadge press → TeamInfoDialog). */
+  teamInfo: { open: boolean; show(): void; hide(): void };
   drawer: { open: boolean; show(): void; hide(): void };
   /** show() also hides the drawer. */
   submit: { open: boolean; initialTileId: string | undefined; show(tileId?: string): void; hide(): void };

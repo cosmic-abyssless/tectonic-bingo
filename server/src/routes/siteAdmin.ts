@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { asyncHandler } from "../middleware/errorHandler";
+import { isAdminDiscordId } from "../config";
 import { db } from "../db";
 import * as bingoService from "../services/bingoService";
 import * as itemGroupService from "../services/itemGroupService";
@@ -41,9 +42,20 @@ router.post(
   }),
 );
 
+router.delete(
+  "/bingos/:id",
+  asyncHandler(async (req, res) => {
+    bingoService.deleteBingo(db, req.params.id as string);
+    res.status(204).end();
+  }),
+);
+
+// Only the admins listed in ADMIN_DISCORD_IDS may hand out site admin, so a
+// granted admin can't fan the role out further.
 router.patch(
   "/users/:id",
   asyncHandler(async (req, res) => {
+    if (!isAdminDiscordId(req.user!.discordId)) throw new ServiceError(403, "Only admins listed in ADMIN_DISCORD_IDS can grant site admin");
     const { isAdmin } = req.body as { isAdmin?: boolean };
     if (typeof isAdmin !== "boolean") throw new ServiceError(400, "isAdmin must be a boolean");
     const user = userService.setUserAdmin(db, req.params.id as string, isAdmin);

@@ -22,6 +22,14 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
     case "team_updated":
       queryClient.invalidateQueries({ queryKey: ["bingo"] });
       break;
+    case "bingo_changed":
+      queryClient.invalidateQueries({ queryKey: ["bingo"] });
+      queryClient.invalidateQueries({ queryKey: ["board"] });
+      queryClient.invalidateQueries({ queryKey: ["adminLines"] });
+      queryClient.invalidateQueries({ queryKey: ["adminQuestions"] });
+      queryClient.invalidateQueries({ queryKey: ["adminMods"] });
+      queryClient.invalidateQueries({ queryKey: ["adminCaptainCandidates"] });
+      break;
     case "draft_started":
     case "draft_pick":
       queryClient.invalidateQueries({ queryKey: ["draftState"] });

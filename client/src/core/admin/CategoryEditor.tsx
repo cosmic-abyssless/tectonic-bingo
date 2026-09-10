@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { TileCategory } from "@bingo/shared";
+import type { BingoShellResponse, TileCategory } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
+import { optimisticUpdate } from "../../api/optimistic";
 import { queryKeys } from "../../api/queries";
 import { Button, IconButton } from "../ui/Button";
 import { Input } from "../ui/Field";
@@ -20,9 +21,13 @@ export function CategoryEditor({ slug, categories }: { slug: string; categories:
     setLabel("");
     invalidate();
   }
-  async function remove(id: string) {
-    await adminApi.deleteCategory(slug, id);
-    invalidate();
+  function remove(id: string) {
+    return optimisticUpdate<BingoShellResponse>(
+      queryClient,
+      queryKeys.bingo(slug),
+      (shell) => ({ ...shell, categories: shell.categories.filter((c) => c.id !== id) }),
+      () => adminApi.deleteCategory(slug, id),
+    );
   }
   async function recolor(id: string, hex: string) {
     await adminApi.updateCategory(slug, id, { colorHex: hex });

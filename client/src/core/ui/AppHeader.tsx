@@ -8,9 +8,22 @@ import { avatarUrl, displayName } from "./user";
 
 /**
  * Top bar shared by every page: optional back link, title/subtitle, page
- * actions, and the signed-in user's menu.
+ * actions, and the signed-in user's menu. `menuItems` are extra `MenuItem`s
+ * (with their own `onAction`) slotted above "Log out".
  */
-export function AppHeader({ back, title, subtitle, children }: { back?: { to: string; label: string }; title: ReactNode; subtitle?: ReactNode; children?: ReactNode }) {
+export function AppHeader({
+  back,
+  title,
+  subtitle,
+  menuItems,
+  children,
+}: {
+  back?: { to: string; label: string };
+  title: ReactNode;
+  subtitle?: ReactNode;
+  menuItems?: ReactNode;
+  children?: ReactNode;
+}) {
   const { user, logout } = useAuth();
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-bg/90 backdrop-blur">
@@ -35,13 +48,16 @@ export function AppHeader({ back, title, subtitle, children }: { back?: { to: st
                 <img src={avatarUrl(user)} alt="" className="size-6 rounded-full" />
                 <span className="hidden sm:inline">{displayName(user)}</span>
               </Button>
-              <Menu onAction={(key) => key === "logout" && logout()}>
+              <Menu>
                 {user.isAdmin && (
                   <MenuItem id="admin" href="/admin">
                     Site admin
                   </MenuItem>
                 )}
-                <MenuItem id="logout">Log out</MenuItem>
+                {menuItems}
+                <MenuItem id="logout" onAction={logout}>
+                  Log out
+                </MenuItem>
               </Menu>
             </MenuTrigger>
           )}

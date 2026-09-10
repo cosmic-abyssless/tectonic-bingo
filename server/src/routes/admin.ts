@@ -14,6 +14,7 @@ import * as signupService from "../services/signupService";
 import * as teamService from "../services/teamService";
 import * as userService from "../services/userService";
 import { ServiceError } from "../services/errors";
+import { broadcast } from "../ws";
 
 // Site-admin only — not just any bingo mod. Board/settings/team/moderator
 // management is structural setup, distinct from mod.ts's day-of operational
@@ -21,6 +22,17 @@ import { ServiceError } from "../services/errors";
 // per-bingo mod.
 const router = Router({ mergeParams: true });
 router.use(requireAuth, requireBingo, requireAdmin);
+
+// Every successful mutation here changes what other clients are looking at
+// (board, settings, teams…), so tell them to refetch.
+router.use((req, res, next) => {
+  if (req.method !== "GET") {
+    res.on("finish", () => {
+      if (res.statusCode < 400) broadcast({ type: "bingo_changed", bingoId: req.bingo!.id, payload: {} });
+    });
+  }
+  next();
+});
 
 // ---------------------------------------------------------------------------
 // Bingo settings
@@ -317,7 +329,8 @@ router.post(
 router.patch(
   "/teams/:id",
   asyncHandler(async (req, res) => {
-    const team = teamService.updateTeam(db, req.params.id as string, req.body);
+    const { name, color, codeword } = req.body as teamService.UpdateTeamParams;
+    const team = teamService.updateTeam(db, req.params.id as string, { name, color, codeword });
     res.json({ team });
   }),
 );
@@ -328,6 +341,13 @@ router.post(
     if (!userId) throw new ServiceError(400, "userId is required");
     const member = teamService.addTeamMember(db, req.params.id as string, userId);
     res.status(201).json({ member });
+  }),
+);
+router.delete(
+  "/teams/:id",
+  asyncHandler(async (req, res) => {
+    teamService.deleteTeam(db, req.params.id as string);
+    res.status(204).end();
   }),
 );
 router.delete(

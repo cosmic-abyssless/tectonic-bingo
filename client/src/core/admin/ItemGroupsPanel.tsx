@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ItemGroup } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
+import { optimisticUpdate } from "../../api/optimistic";
 import { adminQueryKeys, useItemGroups } from "../../api/adminQueries";
 import { Button } from "../ui/Button";
 import { Card, CardHeader, Notice } from "../ui/Card";
@@ -72,8 +73,12 @@ function GroupRow({ group }: { group: ItemGroup }) {
     if (!confirm(`Delete item group "${group.name}"?`)) return;
     setError(null);
     try {
-      await adminApi.deleteItemGroup(group.id);
-      await invalidate();
+      await optimisticUpdate<{ itemGroups: ItemGroup[] }>(
+        queryClient,
+        adminQueryKeys.itemGroups,
+        (d) => ({ itemGroups: d.itemGroups.filter((g) => g.id !== group.id) }),
+        () => adminApi.deleteItemGroup(group.id),
+      );
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to delete item group");
     }

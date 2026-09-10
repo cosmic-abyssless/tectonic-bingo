@@ -241,7 +241,11 @@ export function useMakePick(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (userId: string) => api.post<{ pick: { id: string; pickNumber: number; teamId: string; userId: string } }>(`/api/bingos/${slug}/draft/pick`, { userId }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) });
+      // The pick also puts the player on a team, which the bingo shell carries.
+      queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
+    },
   });
 }
 

@@ -4,6 +4,7 @@ import { STAGE_LABEL, nextMilestone, type Bingo, type BoardLine, type Submission
 import { useBingo, useBoard, useDraftState, usePendingCount, useTeamProgress, useTeamSubmissions } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { displayName, avatarUrl } from "../core/ui/user";
+import { useHasPassed } from "../core/ui/useHasPassed";
 import { toCategoryModel, toTeamModel, buildSubmissionModels } from "./boardModel";
 import { useViewingTeam } from "./useViewingTeam";
 import { useTileSearch } from "./useTileSearch";
@@ -61,9 +62,12 @@ export function BingoPageProvider({
   const { data: draftState, isLoading: draftLoading } = useDraftState(shell?.bingo.stage === "draft" ? slug : undefined);
 
   usePageEvents(shell);
+  // Mirrors the server's submission gate: nothing can be submitted before startsAt.
+  const hasStarted = useHasPassed(shell?.bingo.startsAt);
 
   const [openTileId, setOpenTileId] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [teamInfoOpen, setTeamInfoOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitInitialTileId, setSubmitInitialTileId] = useState<string | undefined>(undefined);
@@ -78,10 +82,11 @@ export function BingoPageProvider({
   const nodeStates = progressData?.nodeStates ?? EMPTY_NODE_STATES;
   const teamSubmissions = submissionsData?.submissions ?? EMPTY_SUBMISSIONS;
 
-  const viewingTeamRaw = teams.find((t) => t.id === viewingTeamId) ?? null;
   const isViewingOtherTeam = isMod && !!viewingTeamId && viewingTeamId !== myTeam?.id;
-  const canSubmit = bingo.stage === "live" && !isViewingOtherTeam && !!viewingTeamId;
-  const boardRevealed = bingo.stage === "reveal" || bingo.stage === "live" || bingo.stage === "complete";
+  const canSubmit = bingo.stage === "live" && hasStarted && !isViewingOtherTeam && !!viewingTeamId;
+  // Other teams' numbers stay hidden from players until the bingo is over
+  // (the stats endpoint 403s otherwise); mods see them throughout.
+  const canViewStats = isMod || bingo.stage === "complete";
 
   // Exact branch order as the old BingoPage.tsx: signup -> planning|captains
   // -> draft -> !viewingTeamId -> board.
@@ -96,9 +101,10 @@ export function BingoPageProvider({
             ? "noTeam"
             : "board";
 
-  const teamModels = teams.map((t) => toTeamModel(t, myTeam?.id ?? null));
-  const myTeamModel = myTeam ? toTeamModel(myTeam, myTeam.id) : null;
-  const viewingTeamModel = viewingTeamRaw ? toTeamModel(viewingTeamRaw, myTeam?.id ?? null) : null;
+  const teamModels = teams.map((t) => toTeamModel(t, myTeam?.id ?? null, user.id));
+  // shell.myTeam is the bare row; the roster lives on the matching entry in shell.teams.
+  const myTeamModel = teamModels.find((t) => t.isMine) ?? null;
+  const viewingTeamModel = teamModels.find((t) => t.id === viewingTeamId) ?? null;
 
   const openSubmit = (tileId?: string) => {
     setSubmitInitialTileId(tileId);
@@ -126,7 +132,7 @@ export function BingoPageProvider({
     teams: teamModels,
     categories: categoriesRaw.map(toCategoryModel),
     stageView,
-    boardRevealed,
+    canViewStats,
     draft: { state: draftState ?? null, isLoading: draftLoading },
     viewing: { team: viewingTeamModel, isOtherTeam: isViewingOtherTeam, submissionCount: teamSubmissions.length },
     canSubmit,
@@ -137,6 +143,7 @@ export function BingoPageProvider({
     search,
     openTile: { id: openTileId, open: setOpenTileId, close: () => setOpenTileId(null) },
     rules: { open: rulesOpen, show: () => setRulesOpen(true), hide: () => setRulesOpen(false) },
+    teamInfo: { open: teamInfoOpen, show: () => setTeamInfoOpen(true), hide: () => setTeamInfoOpen(false) },
     drawer: { open: drawerOpen, show: () => setDrawerOpen(true), hide: () => setDrawerOpen(false) },
     submit: {
       open: submitOpen,

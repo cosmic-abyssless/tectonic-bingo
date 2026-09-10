@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Bingo } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
@@ -6,6 +6,7 @@ import { queryKeys } from "../../api/queries";
 import { Markdown } from "../ui/Markdown";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
+import { Disclosure } from "../ui/Disclosure";
 import { Field, Input, Select, Textarea } from "../ui/Field";
 import { THEME_KEYS } from "../../themes/keys";
 
@@ -85,68 +86,74 @@ export function BingoSettingsForm({
   }
 
   return (
-    <div className="max-w-2xl space-y-5">
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Name">
-          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        </Field>
-        <Field label="Theme">
-          <Select value={form.theme} onChange={(e) => setForm({ ...form, theme: e.target.value })}>
-            {!(THEME_KEYS as readonly string[]).includes(form.theme) && <option value={form.theme}>{form.theme} (unknown — falls back to default)</option>}
-            {THEME_KEYS.map((key) => (
-              <option key={key} value={key}>
-                {key}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      </div>
-
-      <Field label="Description">
-        <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="resize-none" />
-      </Field>
-
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Buy-in (GP)">
-          <Input type="number" value={form.buyinAmount} onChange={(e) => setForm({ ...form, buyinAmount: e.target.value })} className="num" />
-        </Field>
-        <Field label="Bonus pot / extra donations (GP)">
-          <Input type="number" value={form.bonusPotAmount} onChange={(e) => setForm({ ...form, bonusPotAmount: e.target.value })} className="num" />
-        </Field>
-      </div>
-
-      <p className="text-sm text-fg-muted">
-        Total pot: <span className="num font-semibold text-fg">{potTotal.toLocaleString()} GP</span> — <span className="num">{paidSignupCount}</span> paid signup
-        {paidSignupCount === 1 ? "" : "s"} × <span className="num">{(bingo.buyinAmount ?? 0).toLocaleString()}</span> GP buy-in, plus bonus
-      </p>
-
-      <div className="grid grid-cols-2 gap-4">
-        {DATE_FIELDS.map(({ key, label }) => (
-          <Field key={key} label={label}>
-            <Input type="datetime-local" value={form[key as keyof typeof form] as string} onChange={(e) => setForm({ ...form, [key]: e.target.value })} className="num" />
+    <div className="max-w-2xl space-y-4">
+      <Section title="General">
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Name">
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </Field>
-        ))}
-      </div>
+          <Field label="Theme">
+            <Select value={form.theme} onChange={(e) => setForm({ ...form, theme: e.target.value })}>
+              {!(THEME_KEYS as readonly string[]).includes(form.theme) && <option value={form.theme}>{form.theme} (unknown — falls back to default)</option>}
+              {THEME_KEYS.map((key) => (
+                <option key={key} value={key}>
+                  {key}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        <Field label="Description">
+          <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="resize-none" />
+        </Field>
+      </Section>
 
-      <Field
-        as="div"
-        label={
-          <span className="flex items-center justify-between">
-            Rules (Markdown)
-            <button type="button" onClick={() => setShowPreview((p) => !p)} className="text-xs text-fg-muted underline-offset-2 hover:text-fg hover:underline">
-              {showPreview ? "Edit" : "Preview"}
-            </button>
-          </span>
-        }
-      >
-        {showPreview ? (
-          <div className="min-h-[120px] rounded-md border border-line bg-surface px-3 py-2">
-            <Markdown>{form.rulesMarkdown || "*(nothing yet)*"}</Markdown>
-          </div>
-        ) : (
-          <Textarea aria-label="Rules (Markdown)" value={form.rulesMarkdown} onChange={(e) => setForm({ ...form, rulesMarkdown: e.target.value })} rows={6} className="font-mono" />
-        )}
-      </Field>
+      <Section title="Pot">
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Buy-in (GP)">
+            <Input type="number" value={form.buyinAmount} onChange={(e) => setForm({ ...form, buyinAmount: e.target.value })} className="num" />
+          </Field>
+          <Field label="Bonus pot / extra donations (GP)">
+            <Input type="number" value={form.bonusPotAmount} onChange={(e) => setForm({ ...form, bonusPotAmount: e.target.value })} className="num" />
+          </Field>
+        </div>
+        <p className="text-sm text-fg-muted">
+          Total pot: <span className="num font-semibold text-fg">{potTotal.toLocaleString()} GP</span> — <span className="num">{paidSignupCount}</span> paid signup
+          {paidSignupCount === 1 ? "" : "s"} × <span className="num">{(bingo.buyinAmount ?? 0).toLocaleString()}</span> GP buy-in, plus bonus
+        </p>
+      </Section>
+
+      <Section title="Schedule">
+        <div className="grid grid-cols-2 gap-4">
+          {DATE_FIELDS.map(({ key, label }) => (
+            <Field key={key} label={label}>
+              <Input type="datetime-local" value={form[key as keyof typeof form] as string} onChange={(e) => setForm({ ...form, [key]: e.target.value })} className="num" />
+            </Field>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Rules">
+        <Field
+          as="div"
+          label={
+            <span className="flex items-center justify-between">
+              Rules (Markdown)
+              <button type="button" onClick={() => setShowPreview((p) => !p)} className="text-xs text-fg-muted underline-offset-2 hover:text-fg hover:underline">
+                {showPreview ? "Edit" : "Preview"}
+              </button>
+            </span>
+          }
+        >
+          {showPreview ? (
+            <div className="min-h-[120px] rounded-md border border-line bg-surface px-3 py-2">
+              <Markdown>{form.rulesMarkdown || "*(nothing yet)*"}</Markdown>
+            </div>
+          ) : (
+            <Textarea aria-label="Rules (Markdown)" value={form.rulesMarkdown} onChange={(e) => setForm({ ...form, rulesMarkdown: e.target.value })} rows={6} className="font-mono" />
+          )}
+        </Field>
+      </Section>
 
       {error && <Notice tone="danger">{error}</Notice>}
       <div className="flex items-center gap-3">
@@ -156,5 +163,13 @@ export function BingoSettingsForm({
         {saved && <span className="text-sm text-ok">Saved</span>}
       </div>
     </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <Disclosure defaultExpanded title={<span className="flex-1 text-sm font-semibold text-fg">{title}</span>}>
+      <div className="space-y-4">{children}</div>
+    </Disclosure>
   );
 }

@@ -1,15 +1,18 @@
 import type { TeamModel } from "../../../headless/types";
-import { Badge } from "../../../core/ui/Card";
+import { Button } from "../../../core/ui/Button";
+import { UsersIcon } from "../../../core/ui/icons";
 
 export function teamBadgeStyle(team: TeamModel) {
   return team.color ? { borderColor: `${team.color}99`, color: team.color } : undefined;
 }
 
-export function TeamBadge({ team }: { team: TeamModel }) {
+/** The player's own team, sized like the neighbouring header buttons; opens the roster. */
+export function TeamBadge({ team, onPress }: { team: TeamModel; onPress: () => void }) {
   return (
-    <Badge className="hidden sm:inline-flex" style={teamBadgeStyle(team)}>
+    <Button size="sm" style={teamBadgeStyle(team)} onPress={onPress}>
       {team.color && <span className="size-2 rounded-full" style={{ backgroundColor: team.color }} />}
       {team.name}
-    </Badge>
+      <UsersIcon className="text-fg-subtle" />
+    </Button>
   );
 }

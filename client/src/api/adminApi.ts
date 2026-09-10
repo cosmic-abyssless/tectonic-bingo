@@ -12,6 +12,9 @@ import { api } from "./client";
 export function createBingo(payload: { slug: string; name: string; description?: string; theme?: string; boardRows: number; boardCols: number }) {
   return api.post<{ bingo: Bingo }>("/api/admin/bingos", payload);
 }
+export function deleteBingo(id: string) {
+  return api.delete(`/api/admin/bingos/${id}`);
+}
 export function setUserAdmin(userId: string, isAdmin: boolean) {
   return api.patch<{ user: User }>(`/api/admin/users/${userId}`, { isAdmin });
 }
@@ -124,6 +127,9 @@ export function createTeam(slug: string, payload: { captainUserId: string; name?
 }
 export function updateTeam(slug: string, id: string, payload: Partial<Team>) {
   return api.patch<{ team: Team }>(`${base(slug)}/teams/${id}`, payload);
+}
+export function deleteTeam(slug: string, id: string) {
+  return api.delete(`${base(slug)}/teams/${id}`);
 }
 export function addTeamMember(slug: string, teamId: string, userId: string) {
   return api.post<{ member: TeamMember }>(`${base(slug)}/teams/${teamId}/members`, { userId });
