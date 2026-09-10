@@ -483,17 +483,24 @@ export interface PartnerCandidatesResponse {
   candidates: PartnerCandidate[];
 }
 
+// One side of a pairing as the other side should see them. `user` is null
+// until they've logged in (the client then falls back to the clan roster);
+// `rsn` is set once they've signed up for this bingo.
+export interface PairingParty {
+  user: MinimalUser | null;
+  rsn: string | null;
+}
+
 export interface MyPairingResponse {
   // Accepted pair, if any.
-  partner: { pairing: SignupPairing; user: MinimalUser } | null;
-  // The single pending request the player has made. `targetUser` is null
-  // when the target hasn't logged in yet.
-  outgoing: { pairing: SignupPairing; targetUser: MinimalUser | null } | null;
+  partner: ({ pairing: SignupPairing } & PairingParty) | null;
+  // The single pending request the player has made.
+  outgoing: { pairing: SignupPairing; target: PairingParty } | null;
   // Pending requests made to the player.
-  incoming: { pairing: SignupPairing; requester: MinimalUser }[];
+  incoming: { pairing: SignupPairing; requester: PairingParty }[];
   // Why the player is currently unpaired, when their last pairing ended
   // without them choosing to: a partner declined, or a partner withdrew.
-  lastOutcome: { status: "declined" | "dissolved"; otherUser: MinimalUser | null } | null;
+  lastOutcome: { status: "declined" | "dissolved"; other: PairingParty } | null;
 }
 
 export interface RosterResponse {

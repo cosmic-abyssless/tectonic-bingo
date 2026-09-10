@@ -46,7 +46,14 @@ describe("requestPairing", () => {
   it("works for a clan member who hasn't logged in yet", () => {
     const { bingo, a } = seed();
     const pairing = requestPairing(db, bingo, { requester: a, targetDiscordId: "stranger" });
-    expect(getPairingState(db, bingo.id, a).outgoing).toEqual({ pairing, targetUser: null });
+    expect(getPairingState(db, bingo.id, a).outgoing).toEqual({ pairing, target: { user: null, rsn: null } });
+  });
+
+  it("names a target who has logged in but not signed up, without an rsn", () => {
+    const { bingo, a } = seed();
+    const lurker = db.insert(schema.users).values({ discordId: "lurker", discordUsername: "lurker" }).returning().get();
+    requestPairing(db, bingo, { requester: a, targetDiscordId: "lurker" });
+    expect(getPairingState(db, bingo.id, a).outgoing?.target).toMatchObject({ user: { id: lurker.id }, rsn: null });
   });
 
   it("allows one outgoing request at a time", () => {
@@ -60,7 +67,7 @@ describe("requestPairing", () => {
     requestPairing(db, bingo, { requester: a, targetDiscordId: b.discordId });
     const pairing = requestPairing(db, bingo, { requester: b, targetDiscordId: a.discordId });
     expect(pairing.status).toBe("accepted");
-    expect(getPairingState(db, bingo.id, a).partner?.user?.id).toBe(b.id);
+    expect(getPairingState(db, bingo.id, a).partner).toMatchObject({ user: { id: b.id }, rsn: "b" });
   });
 
   it("rejects self, unsigned requesters, already-paired players, and solo bingos", () => {
@@ -85,7 +92,7 @@ describe("respondToRequest", () => {
     expect(getAcceptedPairs(db, bingo.id).map((p) => p.userIds.sort())).toEqual([[a.id, b.id].sort()]);
     const cState = getPairingState(db, bingo.id, c);
     expect(cState.outgoing).toBeNull();
-    expect(cState.lastOutcome).toMatchObject({ status: "declined", otherUser: { id: b.id } });
+    expect(cState.lastOutcome).toMatchObject({ status: "declined", other: { user: { id: b.id } } });
     const statusById = new Map(db.select().from(schema.signupPairings).all().map((p) => [p.id, p.status]));
     expect(statusById.get(cb.id)).toBe("declined");
     expect(statusById.get(bd.id)).toBe("cancelled");
@@ -125,7 +132,7 @@ describe("adminPair / unpair", () => {
     expect(pairing).toMatchObject({ status: "accepted", createdByUserId: admin.id });
     unpair(db, bingo, pairing.id);
     expect(getAcceptedPairs(db, bingo.id)).toEqual([]);
-    expect(getPairingState(db, bingo.id, a).lastOutcome).toMatchObject({ status: "dissolved", otherUser: { id: b.id } });
+    expect(getPairingState(db, bingo.id, a).lastOutcome).toMatchObject({ status: "dissolved", other: { user: { id: b.id } } });
   });
 
   it("refuses when either player is already paired", () => {
@@ -144,7 +151,7 @@ describe("withdrawing a signup", () => {
     withdrawSignup(db, bingo, signupId);
     const bState = getPairingState(db, bingo.id, b);
     expect(bState.partner).toBeNull();
-    expect(bState.lastOutcome).toMatchObject({ status: "dissolved", otherUser: { id: a.id } });
+    expect(bState.lastOutcome).toMatchObject({ status: "dissolved", other: { user: { id: a.id } } });
     expect(requestPairing(db, bingo, { requester: b, targetDiscordId: c.discordId }).status).toBe("pending");
   });
 });

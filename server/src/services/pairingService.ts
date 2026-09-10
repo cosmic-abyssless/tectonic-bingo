@@ -59,6 +59,19 @@ function userById(db: Db, id: string): MinimalUser | null {
   return db.select(MINIMAL_USER_COLS).from(users).where(eq(users.id, id)).get() ?? null;
 }
 
+// The RSN a user signed up with, once they have. Lets the client show
+// "Discord name (rsn)" instead of whatever the clan roster lists.
+function signupRsn(db: Db, bingoId: string, user: MinimalUser | null): string | null {
+  if (!user) return null;
+  return (
+    db
+      .select({ rsn: signups.rsn })
+      .from(signups)
+      .where(and(eq(signups.bingoId, bingoId), eq(signups.userId, user.id), eq(signups.status, "active")))
+      .get()?.rsn ?? null
+  );
+}
+
 // The other half of a pairing from `me`'s point of view.
 function otherParty(db: Db, pairing: Pairing, me: Participant): MinimalUser | null {
   return pairing.requesterUserId === me.id ? userByDiscordId(db, pairing.targetDiscordId) : userById(db, pairing.requesterUserId);
@@ -93,20 +106,22 @@ export function getPairingState(db: Db, bingoId: string, me: Participant) {
   const outgoing = rows.find((p) => p.status === "pending" && p.requesterUserId === me.id) ?? null;
   const incoming = rows.filter((p) => p.status === "pending" && p.targetDiscordId === me.discordId);
 
+  const party = (user: MinimalUser | null) => ({ user, rsn: signupRsn(db, bingoId, user) });
+
   // Only worth mentioning while the player is unpaired, and only for endings
   // they didn't choose themselves.
-  let lastOutcome: { status: "declined" | "dissolved"; otherUser: MinimalUser | null } | null = null;
+  let lastOutcome: { status: "declined" | "dissolved"; other: ReturnType<typeof party> } | null = null;
   if (!accepted) {
     const last = rows.at(-1);
     if (last && ((last.status === "declined" && last.requesterUserId === me.id) || last.status === "dissolved")) {
-      lastOutcome = { status: last.status, otherUser: otherParty(db, last, me) };
+      lastOutcome = { status: last.status, other: party(otherParty(db, last, me)) };
     }
   }
 
   return {
-    partner: accepted ? { pairing: accepted, user: otherParty(db, accepted, me) } : null,
-    outgoing: outgoing ? { pairing: outgoing, targetUser: userByDiscordId(db, outgoing.targetDiscordId) } : null,
-    incoming: incoming.map((pairing) => ({ pairing, requester: userById(db, pairing.requesterUserId)! })),
+    partner: accepted ? { pairing: accepted, ...party(otherParty(db, accepted, me)) } : null,
+    outgoing: outgoing ? { pairing: outgoing, target: party(userByDiscordId(db, outgoing.targetDiscordId)) } : null,
+    incoming: incoming.map((pairing) => ({ pairing, requester: party(userById(db, pairing.requesterUserId)) })),
     lastOutcome,
   };
 }
