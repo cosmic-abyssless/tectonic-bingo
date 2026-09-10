@@ -10,3 +10,4 @@ server/*.sqlite.bak
 .db-backups
 test-results/
 playwright-report/
+.claude/settings.local.json
