@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import {
@@ -30,8 +30,11 @@ type Db = BetterSQLite3Database<typeof schema>;
 export const STAGE_ORDER = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"] as const;
 export type Stage = (typeof STAGE_ORDER)[number];
 
+// Newest first — the bingo list page redirects non-admins straight to
+// bingos[0] as the "default" bingo (issue #3: simpler than an env var,
+// since there's realistically only ever one active bingo at a time).
 export function listBingos(db: Db) {
-  return db.select().from(bingos).all();
+  return db.select().from(bingos).orderBy(desc(bingos.createdAt)).all();
 }
 
 export function getBingoBySlug(db: Db, slug: string) {
