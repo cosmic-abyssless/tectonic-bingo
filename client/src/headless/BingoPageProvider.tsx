@@ -71,6 +71,7 @@ export function BingoPageProvider({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitInitialTileId, setSubmitInitialTileId] = useState<string | undefined>(undefined);
+  const [submitInitialFile, setSubmitInitialFile] = useState<File | undefined>(undefined);
 
   const search = useTileSearch(tiles, (tileId) => setOpenTileId(tileId));
 
@@ -106,8 +107,9 @@ export function BingoPageProvider({
   const myTeamModel = teamModels.find((t) => t.isMine) ?? null;
   const viewingTeamModel = teamModels.find((t) => t.id === viewingTeamId) ?? null;
 
-  const openSubmit = (tileId?: string) => {
+  const openSubmit = (tileId?: string, file?: File) => {
     setSubmitInitialTileId(tileId);
+    setSubmitInitialFile(file);
     setDrawerOpen(false);
     setSubmitOpen(true);
   };
@@ -148,10 +150,12 @@ export function BingoPageProvider({
     submit: {
       open: submitOpen,
       initialTileId: submitInitialTileId,
+      initialFile: submitInitialFile,
       show: openSubmit,
       hide: () => {
         setSubmitOpen(false);
         setSubmitInitialTileId(undefined);
+        setSubmitInitialFile(undefined);
       },
     },
     actions: {

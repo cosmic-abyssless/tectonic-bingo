@@ -5,13 +5,15 @@ import {
   UNSTABLE_ToastQueue as ToastQueue,
   UNSTABLE_ToastRegion as AriaToastRegion,
 } from "react-aria-components";
-import { IconButton } from "./Button";
+import { Button, IconButton } from "./Button";
 import { AlertIcon, CheckIcon, InfoIcon, XIcon } from "./icons";
 
 export interface ToastData {
   title: string;
   description?: string;
   tone?: "info" | "success" | "warning";
+  /** Optional action button (e.g. "Submit") shown alongside the close button. */
+  action?: { label: string; onPress: () => void };
 }
 
 /** App-wide queue; call `toast()` from anywhere (events, mutations). */
@@ -44,6 +46,19 @@ export function ToastRegion() {
                 <Text slot="description" className="mt-0.5 block text-sm text-fg-muted">
                   {t.content.description}
                 </Text>
+              )}
+              {t.content.action && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="mt-2"
+                  onPress={() => {
+                    t.content.action?.onPress();
+                    toastQueue.close(t.key);
+                  }}
+                >
+                  {t.content.action.label}
+                </Button>
               )}
             </ToastContent>
             <IconButton slot="close" label="Dismiss" size="sm">

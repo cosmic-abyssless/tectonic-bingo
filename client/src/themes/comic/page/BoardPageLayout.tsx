@@ -1,6 +1,8 @@
 import { CSSProperties } from "react";
 import { useBingoPage, useBoardModel, useTileModel } from "../../../headless";
 import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
+import { useScreenshotCapture } from "../../../headless/useScreenshotCapture";
+import { ScreenshotDropOverlay } from "../../../core/ui/ScreenshotDropOverlay";
 import { useSlot } from "../../context";
 
 // Ben-Day dot shading over the page background — the classic comic-book
@@ -25,6 +27,7 @@ export function BoardPageLayout() {
   // nav or hovering a suggestion), so BoardGrid can give that tile the same
   // "hover" treatment on the board itself, tying the two together.
   const highlightedTileId = page.search.showDropdown ? page.search.results[page.search.highlightedIndex]?.id ?? null : null;
+  const { dragActive } = useScreenshotCapture(page);
 
   const PageHeader = useSlot("PageHeader");
   const SignupStage = useSlot("SignupStage");
@@ -75,9 +78,12 @@ export function BoardPageLayout() {
         )}
       </main>
 
+      <ScreenshotDropOverlay visible={dragActive} />
+
       {page.submit.open && (
         <SubmissionFlowHost
           initialTileId={page.submit.initialTileId}
+          initialFile={page.submit.initialFile}
           onClose={page.submit.hide}
           onSuccess={() => {}}
         >

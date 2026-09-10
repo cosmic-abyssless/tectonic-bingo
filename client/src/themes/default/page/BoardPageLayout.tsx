@@ -1,11 +1,14 @@
 import { useBingoPage, useBoardModel, useTileModel } from "../../../headless";
 import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
+import { useScreenshotCapture } from "../../../headless/useScreenshotCapture";
+import { ScreenshotDropOverlay } from "../../../core/ui/ScreenshotDropOverlay";
 import { useSlot } from "../../context";
 
 export function BoardPageLayout() {
   const page = useBingoPage();
   const board = useBoardModel();
   const modalTile = useTileModel(page.openTile.id);
+  const { dragActive } = useScreenshotCapture(page);
 
   const PageHeader = useSlot("PageHeader");
   const SignupStage = useSlot("SignupStage");
@@ -46,8 +49,10 @@ export function BoardPageLayout() {
         )}
       </main>
 
+      <ScreenshotDropOverlay visible={dragActive} />
+
       {page.submit.open && (
-        <SubmissionFlowHost initialTileId={page.submit.initialTileId} onClose={page.submit.hide} onSuccess={() => {}}>
+        <SubmissionFlowHost initialTileId={page.submit.initialTileId} initialFile={page.submit.initialFile} onClose={page.submit.hide} onSuccess={() => {}}>
           {(flow) => <SubmissionModal flow={flow} />}
         </SubmissionFlowHost>
       )}
