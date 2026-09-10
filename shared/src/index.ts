@@ -67,6 +67,9 @@ export interface User {
   updatedAt: string;
 }
 
+export const SIGNUP_MODES = ["solo", "duo"] as const;
+export type SignupMode = (typeof SIGNUP_MODES)[number];
+
 export interface Bingo {
   id: string;
   slug: string;
@@ -76,6 +79,7 @@ export interface Bingo {
   stage: Stage;
   boardRows: number;
   boardCols: number;
+  signupMode: SignupMode;
   buyinAmount: number | null;
   bonusPotAmount: number;
   rulesMarkdown: string | null;
@@ -111,6 +115,7 @@ export interface Team {
 export interface TeamRosterEntry {
   user: User;
   isCaptain: boolean;
+  isCoCaptain: boolean; // duo mode: captain's partner, shares captain permissions
   isDrafted: boolean; // joined via a draft pick, so mods can't remove them by hand
 }
 
@@ -309,6 +314,8 @@ export interface BingoShellResponse {
   myTeam: Team | null;
   paidSignupCount: number;
   potTotal: number;
+  // True once anyone has ever signed up; the signup mode is locked from then on.
+  hasSignups: boolean;
 }
 
 export interface BoardLine extends BingoLine {
@@ -441,6 +448,50 @@ export interface RosterEntry {
   // marked buy-in received for this signup. Absent from other RosterEntry
   // uses like the captain-candidates list.
   collectedByUser?: User | null;
+  // Duo mode, mod roster only: the accepted pairing this player is in.
+  pairing?: SignupPairing | null;
+}
+
+// ---------------------------------------------------------------------------
+// Duo signups
+// ---------------------------------------------------------------------------
+
+export type PairingStatus = "pending" | "accepted" | "declined" | "cancelled" | "dissolved";
+
+export interface SignupPairing {
+  id: string;
+  bingoId: string;
+  requesterUserId: string;
+  targetDiscordId: string;
+  status: PairingStatus;
+  createdByUserId: string;
+  createdAt: string;
+  respondedAt: string | null;
+}
+
+// A clan member who can be requested as a duo partner. `user` is null until
+// they've logged into the site, so the client falls back to the RSNs.
+export interface PartnerCandidate {
+  discordId: string;
+  rsns: string[];
+  user: MinimalUser | null;
+}
+
+export interface PartnerCandidatesResponse {
+  candidates: PartnerCandidate[];
+}
+
+export interface MyPairingResponse {
+  // Accepted pair, if any.
+  partner: { pairing: SignupPairing; user: MinimalUser } | null;
+  // The single pending request the player has made. `targetUser` is null
+  // when the target hasn't logged in yet.
+  outgoing: { pairing: SignupPairing; targetUser: MinimalUser | null } | null;
+  // Pending requests made to the player.
+  incoming: { pairing: SignupPairing; requester: MinimalUser }[];
+  // Why the player is currently unpaired, when their last pairing ended
+  // without them choosing to: a partner declined, or a partner withdrew.
+  lastOutcome: { status: "declined" | "dissolved"; otherUser: MinimalUser | null } | null;
 }
 
 export interface RosterResponse {
@@ -518,12 +569,19 @@ export interface DraftPoolEntry {
 
 export interface DraftTeam extends Team {
   captainRsn: string; // captains aren't in `picks` (assigned pre-draft, not drafted) — this is the only source for their RSN
+  coCaptain: { userId: string; rsn: string } | null; // duo mode: joined with the captain, also not in `picks`
+}
+
+// What a single pick drafts: one player, or a duo pair that stays together.
+export interface DraftUnit {
+  pairingId: string | null;
+  entries: DraftPoolEntry[];
 }
 
 export interface DraftState {
   teams: DraftTeam[]; // sorted by draftOrder once the draft has started
-  picks: DraftPick[];
-  pool: DraftPoolEntry[];
+  picks: DraftPick[]; // a pair shares one pickNumber across two rows
+  pool: DraftUnit[];
   draftStarted: boolean;
   currentPick: { pickNumber: number; round: number; teamId: string } | null;
 }
@@ -590,8 +648,12 @@ export type BroadcastEvent =
   | { type: "submission_reviewed"; bingoId: string; payload: { teamId: string; nodeIds: string[] } }
   | { type: "stage_changed"; bingoId: string; payload: { stage: Stage } }
   | { type: "draft_started"; bingoId: string; payload: Record<string, never> }
-  | { type: "draft_pick"; bingoId: string; payload: { pickNumber: number; teamId: string; userId: string } }
+  | { type: "draft_pick"; bingoId: string; payload: { pickNumber: number; teamId: string; userIds: string[] } }
   | { type: "team_updated"; bingoId: string; payload: { teamId: string } }
+  // A duo pairing request was created, answered, cancelled, or dissolved, or a
+  // signup changed. Clients refetch their own signup/pairing state and the mod
+  // roster.
+  | { type: "signup_changed"; bingoId: string; payload: Record<string, never> }
   // Any successful admin mutation (settings, board, lines, questions, teams,
   // mods). Coarse on purpose: clients refetch the bingo shell + board.
   | { type: "bingo_changed"; bingoId: string; payload: Record<string, never> };

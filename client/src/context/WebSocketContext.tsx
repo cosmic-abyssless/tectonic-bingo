@@ -36,6 +36,13 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       // A drafted player now has a team, so their bingo shell's myTeam changes.
       queryClient.invalidateQueries({ queryKey: ["bingo"] });
       break;
+    case "signup_changed":
+      // Signups, pairings, and who is eligible to captain all move together.
+      queryClient.invalidateQueries({ queryKey: ["signupRoster"] });
+      queryClient.invalidateQueries({ queryKey: ["myPairing"] });
+      queryClient.invalidateQueries({ queryKey: ["partnerCandidates"] });
+      queryClient.invalidateQueries({ queryKey: ["adminCaptainCandidates"] });
+      break;
   }
 }
 

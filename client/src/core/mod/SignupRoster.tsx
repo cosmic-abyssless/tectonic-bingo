@@ -1,12 +1,22 @@
 import { useState } from "react";
 import type { RosterEntry, User } from "@bingo/shared";
-import { useBingo, useDeleteAllSignups, useMarkBuyin, useSeedTestSignups, useSignupRoster, useSignupQuestions, type SeedTestSignupsResponse } from "../../api/queries";
+import {
+  useBingo,
+  useDeleteAllSignups,
+  useMarkBuyin,
+  useModPair,
+  useModUnpair,
+  useSeedTestSignups,
+  useSignupRoster,
+  useSignupQuestions,
+  type SeedTestSignupsResponse,
+} from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
 import { displayName } from "../ui/user";
 import { UserSearchInput } from "../admin/UserSearchInput";
 import { Button, IconButton } from "../ui/Button";
 import { Badge, EmptyState, Notice } from "../ui/Card";
-import { Input } from "../ui/Field";
+import { Input, Select } from "../ui/Field";
 import { CheckIcon, UsersIcon, XIcon } from "../ui/icons";
 
 function csvEscape(value: string): string {
@@ -14,8 +24,13 @@ function csvEscape(value: string): string {
   return value;
 }
 
-function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: string }[]): string {
-  const headers = ["RSN", "Discord", "Status", "Buy-in", "Collected by", ...questionPrompts.map((q) => q.prompt)];
+function partnerRsn(entry: RosterEntry, roster: RosterEntry[]): string | null {
+  if (!entry.pairing) return null;
+  return roster.find((r) => r.pairing?.id === entry.pairing!.id && r.signup.id !== entry.signup.id)?.signup.rsn ?? "Not signed up yet";
+}
+
+function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: string }[], isDuo: boolean): string {
+  const headers = ["RSN", "Discord", "Status", "Buy-in", "Collected by", ...(isDuo ? ["Partner"] : []), ...questionPrompts.map((q) => q.prompt)];
   const rows = roster.map((entry) => {
     const answerByQ = new Map(entry.answers.map((a) => [a.questionId, a.value]));
     return [
@@ -24,6 +39,7 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
       entry.signup.status,
       entry.signup.buyinReceivedAt ? "received" : "not received",
       entry.collectedByUser ? displayName(entry.collectedByUser) : "",
+      ...(isDuo ? [partnerRsn(entry, roster) ?? ""] : []),
       ...questionPrompts.map((q) => answerByQ.get(q.id) ?? ""),
     ];
   });
@@ -130,6 +146,58 @@ function DevSeedPanel({ slug }: { slug: string }) {
   );
 }
 
+// Duo mode only. Paired players show their partner (resolved from the roster
+// row sharing the same pairing) with an unpair button; unpaired active
+// players get a picker of other unpaired active players so a mod can pair
+// them by hand.
+function PartnerCell({ slug, entry, roster }: { slug: string; entry: RosterEntry; roster: RosterEntry[] }) {
+  const pair = useModPair(slug);
+  const unpair = useModUnpair(slug);
+  const [target, setTarget] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(action: () => Promise<unknown>) {
+    setError(null);
+    try {
+      await action();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to update pairing");
+    }
+  }
+
+  if (entry.pairing) {
+    return (
+      <div className="flex items-center gap-1">
+        <span className="text-fg">{partnerRsn(entry, roster)}</span>
+        <IconButton label="Unpair" size="sm" onPress={() => run(() => unpair.mutateAsync(entry.pairing!.id))} isDisabled={unpair.isPending}>
+          <XIcon size={12} />
+        </IconButton>
+        {error && <span className="text-xs text-danger">{error}</span>}
+      </div>
+    );
+  }
+
+  if (entry.signup.status !== "active") return <span className="text-fg-subtle">—</span>;
+
+  const candidates = roster.filter((r) => r.signup.status === "active" && !r.pairing && r.signup.id !== entry.signup.id);
+  return (
+    <div className="flex items-center gap-2">
+      <Select size="sm" value={target} onChange={(e) => setTarget(e.target.value)} aria-label={`Partner for ${entry.signup.rsn}`} className="w-auto!">
+        <option value="">Unpaired</option>
+        {candidates.map((c) => (
+          <option key={c.user.id} value={c.user.id}>
+            {c.signup.rsn}
+          </option>
+        ))}
+      </Select>
+      <Button size="sm" isDisabled={!target || pair.isPending} onPress={() => run(() => pair.mutateAsync({ userIdA: entry.user.id, userIdB: target }))}>
+        Pair
+      </Button>
+      {error && <span className="text-xs text-danger">{error}</span>}
+    </div>
+  );
+}
+
 const TH = "pb-2 pr-4 text-left text-xs font-medium uppercase tracking-wide text-fg-subtle";
 
 export function SignupRoster({ slug }: { slug: string }) {
@@ -139,10 +207,11 @@ export function SignupRoster({ slug }: { slug: string }) {
   const { devMode } = useAuth();
   const roster = data?.signups ?? [];
   const questions = questionsData?.questions ?? [];
+  const isDuo = bingoData?.bingo.signupMode === "duo";
   const [copied, setCopied] = useState(false);
 
   async function copyCsv() {
-    const csv = buildCsv(roster, questions);
+    const csv = buildCsv(roster, questions, isDuo);
     await navigator.clipboard.writeText(csv);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -174,6 +243,7 @@ export function SignupRoster({ slug }: { slug: string }) {
                 <th className={TH}>Status</th>
                 <th className={TH}>Buy-in</th>
                 <th className={TH}>Collected by</th>
+                {isDuo && <th className={TH}>Partner</th>}
                 {questions.map((q) => (
                   <th key={q.id} className={TH}>
                     {q.prompt}
@@ -202,6 +272,11 @@ export function SignupRoster({ slug }: { slug: string }) {
                     <td className="py-2 pr-4">
                       <CollectedByCell slug={slug} entry={entry} />
                     </td>
+                    {isDuo && (
+                      <td className="py-2 pr-4">
+                        <PartnerCell slug={slug} entry={entry} roster={roster} />
+                      </td>
+                    )}
                     {questions.map((q) => (
                       <td key={q.id} className="py-2 pr-4 text-fg-muted">
                         {answerByQ.get(q.id) ?? "—"}

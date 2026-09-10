@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   BingoListResponse, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
-  ModSubmissionsResponse, MySignupResponse, MyTectonicRsnsResponse, PendingCountResponse, ReviewSubmissionResponse,
-  RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupQuestion, Stage,
+  ModSubmissionsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PendingCountResponse,
+  ReviewSubmissionResponse, RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
 import { api } from "./client";
@@ -20,6 +20,8 @@ export const queryKeys = {
   signupQuestions: (slug: string) => ["signupQuestions", slug] as const,
   mySignup: (slug: string) => ["mySignup", slug] as const,
   myTectonicRsns: (slug: string) => ["myTectonicRsns", slug] as const,
+  myPairing: (slug: string) => ["myPairing", slug] as const,
+  partnerCandidates: (slug: string) => ["partnerCandidates", slug] as const,
   draftState: (slug: string) => ["draftState", slug] as const,
   stats: (slug: string) => ["stats", slug] as const,
 };
@@ -217,7 +219,67 @@ export function useWithdrawSignup(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => api.delete<{ signup: Signup }>(`/api/bingos/${slug}/signup`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.mySignup(slug) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.mySignup(slug) });
+      // Withdrawing dissolves any duo pairing.
+      queryClient.invalidateQueries({ queryKey: queryKeys.myPairing(slug) });
+    },
+  });
+}
+
+// Duo mode only. Both queries stay disabled in solo mode so the extra
+// requests never fire.
+export function useMyPairing(slug: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.myPairing(slug ?? ""),
+    queryFn: () => api.get<MyPairingResponse>(`/api/bingos/${slug}/signup/pairing`),
+    enabled: !!slug && enabled,
+  });
+}
+
+export function usePartnerCandidates(slug: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.partnerCandidates(slug ?? ""),
+    queryFn: () => api.get<PartnerCandidatesResponse>(`/api/bingos/${slug}/signup/partners`),
+    enabled: !!slug && enabled,
+  });
+}
+
+function usePairingMutation<TVars>(slug: string, mutationFn: (vars: TVars) => Promise<unknown>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.myPairing(slug) }),
+  });
+}
+
+export function useRequestPairing(slug: string) {
+  return usePairingMutation(slug, (targetDiscordId: string) => api.post<{ pairing: SignupPairing }>(`/api/bingos/${slug}/signup/pairing`, { targetDiscordId }));
+}
+
+export function useCancelPairingRequest(slug: string) {
+  return usePairingMutation(slug, (pairingId: string) => api.delete<void>(`/api/bingos/${slug}/signup/pairing/${pairingId}`));
+}
+
+export function useRespondToPairing(slug: string) {
+  return usePairingMutation(slug, (params: { pairingId: string; accept: boolean }) =>
+    api.post<{ pairing: SignupPairing }>(`/api/bingos/${slug}/signup/pairing/${params.pairingId}/respond`, { accept: params.accept }),
+  );
+}
+
+export function useModPair(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { userIdA: string; userIdB: string }) => api.post<{ pairing: SignupPairing }>(`/api/bingos/${slug}/mod/pairings`, params),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
+  });
+}
+
+export function useModUnpair(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (pairingId: string) => api.delete<void>(`/api/bingos/${slug}/mod/pairings/${pairingId}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
   });
 }
 
@@ -240,7 +302,7 @@ export function useStartDraft(slug: string) {
 export function useMakePick(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (userId: string) => api.post<{ pick: { id: string; pickNumber: number; teamId: string; userId: string } }>(`/api/bingos/${slug}/draft/pick`, { userId }),
+    mutationFn: (userId: string) => api.post<{ picks: { id: string; pickNumber: number; teamId: string; userId: string }[] }>(`/api/bingos/${slug}/draft/pick`, { userId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) });
       // The pick also puts the player on a team, which the bingo shell carries.

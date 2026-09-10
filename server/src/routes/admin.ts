@@ -47,6 +47,10 @@ router.patch(
     for (const key of ["name", "description", "theme", "buyinAmount", "bonusPotAmount", "rulesMarkdown"] as const) {
       if (key in body) (params as Record<string, unknown>)[key] = body[key];
     }
+    if ("signupMode" in body) {
+      if (body.signupMode !== "solo" && body.signupMode !== "duo") throw new ServiceError(400, "signupMode must be solo or duo");
+      params.signupMode = body.signupMode;
+    }
     for (const key of dateFields) {
       if (key in body) (params as Record<string, unknown>)[key] = body[key] ? new Date(body[key] as string) : null;
     }
@@ -320,9 +324,9 @@ router.get(
 router.post(
   "/teams",
   asyncHandler(async (req, res) => {
-    const { captainUserId, name } = req.body as { captainUserId?: string; name?: string };
+    const { captainUserId, coCaptainUserId, name } = req.body as { captainUserId?: string; coCaptainUserId?: string | null; name?: string };
     if (!captainUserId) throw new ServiceError(400, "captainUserId is required");
-    const team = teamService.createTeam(db, { bingoId: req.bingo!.id, captainUserId, name });
+    const team = teamService.createTeam(db, { bingoId: req.bingo!.id, captainUserId, coCaptainUserId, name });
     res.status(201).json({ team });
   }),
 );

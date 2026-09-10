@@ -49,6 +49,7 @@ function TeamInfo({ slug, team, onClose }: { slug: string; team: TeamModel; onCl
               <img src={member.avatarUrl} alt="" className="size-6 rounded-full" />
               <span className="truncate text-fg">{member.displayName}</span>
               {member.isCaptain && <CrownIcon size={14} className="shrink-0 text-warn" aria-label="Captain" />}
+              {member.isCoCaptain && <CrownIcon size={14} className="shrink-0 text-fg-subtle" aria-label="Co-captain" />}
             </li>
           ))}
         </ul>

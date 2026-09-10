@@ -13,6 +13,8 @@ import * as teamService from "../services/teamService";
 import * as submissionService from "../services/submissionService";
 import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
+import * as pairingService from "../services/pairingService";
+import * as userService from "../services/userService";
 import * as statsService from "../services/statsService";
 import { isOcrEnabled, analyzeSubmissionScreenshot } from "../ocr";
 import { getTectonicClient, TectonicUnavailableError, type TectonicDetailedUser } from "../services/tectonicService";
@@ -104,6 +106,7 @@ router.get(
       myTeam,
       paidSignupCount,
       potTotal: bingoService.calculatePotTotal(bingo, paidSignupCount),
+      hasSignups: signupService.hasAnySignup(db, bingo.id),
     });
   }),
 );
@@ -323,6 +326,7 @@ router.post(
     // load-bearing — never let a flaky third-party API slow down or fail a
     // signup. See playerStatsService.ts.
     void fetchAndPersistPlayerStats(db, signup.id, signup.rsn);
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.status(201).json({ signup });
   }),
 );
@@ -340,6 +344,7 @@ router.patch(
     // Re-fetch on any update, not just an RSN change — cheap, and keeps the
     // stored snapshot from going stale if someone edits other fields.
     void fetchAndPersistPlayerStats(db, signup.id, signup.rsn);
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.json({ signup });
   }),
 );
@@ -352,7 +357,91 @@ router.delete(
     const existing = signupService.getSignupForUser(db, req.bingo!.id, req.user!.id);
     if (!existing) throw new ServiceError(404, "You haven't signed up for this bingo");
     const signup = signupService.withdrawSignup(db, req.bingo!, existing.signup.id);
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.json({ signup });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Duo pairings
+// ---------------------------------------------------------------------------
+
+const me = (req: { user?: { id: string; discordId: string } }) => ({ id: req.user!.id, discordId: req.user!.discordId });
+
+// Who a player may request as a duo: the whole clan roster when tectonic-api
+// is configured, otherwise (dev / no integration) everyone signed up so far.
+router.get(
+  "/:slug/signup/partners",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const client = getTectonicClient();
+    let candidates: { discordId: string; rsns: string[] }[];
+    if (client) {
+      try {
+        candidates = (await client.getRoster()).map((u) => ({ discordId: u.user_id, rsns: u.rsns.map((r) => r.rsn) }));
+      } catch (err) {
+        if (err instanceof TectonicUnavailableError) throw new ServiceError(503, "The clan roster is temporarily unavailable. Please try again in a minute.");
+        throw err;
+      }
+    } else {
+      candidates = signupService
+        .getAllSignups(db, req.bingo!.id)
+        .filter((r) => r.signup.status === "active")
+        .map((r) => ({ discordId: r.user.discordId, rsns: [r.signup.rsn] }));
+    }
+    const userByDiscordId = new Map(userService.getUsersByDiscordIds(db, candidates.map((c) => c.discordId)).map((u) => [u.discordId, u]));
+    res.json({
+      candidates: candidates
+        .filter((c) => c.discordId !== req.user!.discordId)
+        .map((c) => ({ ...c, user: userByDiscordId.get(c.discordId) ?? null })),
+    });
+  }),
+);
+
+router.get(
+  "/:slug/signup/pairing",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    res.json(pairingService.getPairingState(db, req.bingo!.id, me(req)));
+  }),
+);
+
+router.post(
+  "/:slug/signup/pairing",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const { targetDiscordId } = req.body as { targetDiscordId?: string };
+    if (!targetDiscordId) throw new ServiceError(400, "targetDiscordId is required");
+    const pairing = pairingService.requestPairing(db, req.bingo!, { requester: me(req), targetDiscordId });
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    res.status(201).json({ pairing });
+  }),
+);
+
+router.delete(
+  "/:slug/signup/pairing/:pairingId",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    pairingService.cancelRequest(db, req.bingo!, me(req), req.params.pairingId as string);
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    res.status(204).end();
+  }),
+);
+
+router.post(
+  "/:slug/signup/pairing/:pairingId/respond",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const { accept } = req.body as { accept?: boolean };
+    if (typeof accept !== "boolean") throw new ServiceError(400, "accept must be a boolean");
+    const pairing = pairingService.respondToRequest(db, req.bingo!, me(req), req.params.pairingId as string, accept);
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    res.json({ pairing });
   }),
 );
 
@@ -371,8 +460,8 @@ router.get(
     const canView = isMod || !!teamService.getUserTeamForBingo(db, bingo.id, req.user!.id) || !!signupService.getSignupForUser(db, bingo.id, req.user!.id)?.signup;
     if (!canView) throw new ServiceError(403, "The draft room is only visible to signed-up players and mods");
 
-    const isCaptain = teamService.getTeamsForBingo(db, bingo.id).some((t) => t.captainUserId === req.user!.id);
-    const state = draftService.getDraftState(db, bingo.id, { includeAnswers: isMod || isCaptain });
+    const isLead = teamService.getTeamsForBingo(db, bingo.id).some((t) => teamService.isTeamLead(db, t.id, req.user!.id));
+    const state = draftService.getDraftState(db, bingo.id, { includeAnswers: isMod || isLead });
 
     // WOM EHB + account type and RuneProfile's account type were fetched
     // once at signup time (playerStatsService.ts) and persisted on the
@@ -382,18 +471,21 @@ router.get(
     // falling back to WOM for a player who syncs to WOM but isn't set up
     // with the RuneProfile RuneLite plugin. The raw JSON blobs are internal
     // only — stripped off `signup` here rather than sent to the client.
-    const pool = state.pool.map((entry) => {
-      const { womDataJson, runeProfileDataJson, statsFetchedAt, ...signup } = entry.signup;
-      void statsFetchedAt;
-      const womSummary = parseWomSummary(womDataJson ? JSON.parse(womDataJson) : null);
-      const accountType = parseAccountType(runeProfileDataJson ? JSON.parse(runeProfileDataJson) : null) ?? womSummary?.accountType ?? null;
-      return {
-        ...entry,
-        signup,
-        womStats: womSummary ? { ehb: womSummary.ehb } : null,
-        accountType,
-      };
-    });
+    const pool = state.pool.map((unit) => ({
+      ...unit,
+      entries: unit.entries.map((entry) => {
+        const { womDataJson, runeProfileDataJson, statsFetchedAt, ...signup } = entry.signup;
+        void statsFetchedAt;
+        const womSummary = parseWomSummary(womDataJson ? JSON.parse(womDataJson) : null);
+        const accountType = parseAccountType(runeProfileDataJson ? JSON.parse(runeProfileDataJson) : null) ?? womSummary?.accountType ?? null;
+        return {
+          ...entry,
+          signup,
+          womStats: womSummary ? { ehb: womSummary.ehb } : null,
+          accountType,
+        };
+      }),
+    }));
 
     res.json({ ...state, pool });
   }),
@@ -408,14 +500,15 @@ router.post(
     const { userId } = req.body as { userId?: string };
     if (!userId) throw new ServiceError(400, "userId is required");
 
-    const pick = draftService.makePick(db, { bingo, pickedUserId: userId, actingUserId: req.user!.id, actingIsAdmin: req.user!.isAdmin });
-    broadcast({ type: "draft_pick", bingoId: bingo.id, payload: { pickNumber: pick.pickNumber, teamId: pick.teamId, userId: pick.userId } });
-    res.status(201).json({ pick });
+    const picks = draftService.makePick(db, { bingo, pickedUserId: userId, actingUserId: req.user!.id, actingIsAdmin: req.user!.isAdmin });
+    const [first] = picks;
+    broadcast({ type: "draft_pick", bingoId: bingo.id, payload: { pickNumber: first!.pickNumber, teamId: first!.teamId, userIds: picks.map((p) => p.userId) } });
+    res.status(201).json({ picks });
   }),
 );
 
-// Captain self-service rename — mods can already rename any team from the
-// admin panel; this is the player-facing equivalent, name-only.
+// Captain/co-captain self-service rename — mods can already rename any team
+// from the admin panel; this is the player-facing equivalent, name-only.
 router.patch(
   "/:slug/teams/:teamId",
   requireAuth,
@@ -423,7 +516,7 @@ router.patch(
   asyncHandler(async (req, res) => {
     const team = teamService.getTeamById(db, req.params.teamId as string);
     if (!team || team.bingoId !== req.bingo!.id) throw new ServiceError(404, "Team not found");
-    if (team.captainUserId !== req.user!.id) throw new ServiceError(403, "Only the captain can rename this team");
+    if (!teamService.isTeamLead(db, team.id, req.user!.id)) throw new ServiceError(403, "Only the captain can rename this team");
 
     const { name } = req.body as { name?: string };
     if (!name || !name.trim()) throw new ServiceError(400, "name is required");

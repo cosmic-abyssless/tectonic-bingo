@@ -8,6 +8,7 @@ import * as bingoService from "../services/bingoService";
 import * as submissionService from "../services/submissionService";
 import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
+import * as pairingService from "../services/pairingService";
 import * as devSeedService from "../services/devSeedService";
 import * as teamService from "../services/teamService";
 import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
@@ -111,6 +112,27 @@ router.get(
   "/signups",
   asyncHandler(async (req, res) => {
     res.json({ signups: signupService.getAllSignups(db, req.bingo!.id) });
+  }),
+);
+
+// Duo mode: mods pair two unpaired signups by hand, or split a pair.
+router.post(
+  "/pairings",
+  asyncHandler(async (req, res) => {
+    const { userIdA, userIdB } = req.body as { userIdA?: string; userIdB?: string };
+    if (!userIdA || !userIdB) throw new ServiceError(400, "userIdA and userIdB are required");
+    const pairing = pairingService.adminPair(db, req.bingo!, { userIdA, userIdB, createdByUserId: req.user!.id });
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    res.status(201).json({ pairing });
+  }),
+);
+
+router.delete(
+  "/pairings/:id",
+  asyncHandler(async (req, res) => {
+    pairingService.unpair(db, req.bingo!, req.params.id as string);
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    res.status(204).end();
   }),
 );
 

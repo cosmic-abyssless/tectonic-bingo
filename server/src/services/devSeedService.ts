@@ -1,7 +1,7 @@
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { eq, inArray } from "drizzle-orm";
 import * as schema from "../db/schema";
-import { users, signups, signupAnswers } from "../db/schema";
+import { users, signups, signupAnswers, signupPairings } from "../db/schema";
 import * as signupService from "./signupService";
 import type { TectonicRosterUser } from "./tectonicService";
 
@@ -156,6 +156,7 @@ export function deleteAllSignups(db: Db, bingoId: string): number {
     if (ids.length === 0) return 0;
     tx.delete(signupAnswers).where(inArray(signupAnswers.signupId, ids)).run();
     tx.delete(signups).where(eq(signups.bingoId, bingoId)).run();
+    tx.delete(signupPairings).where(eq(signupPairings.bingoId, bingoId)).run();
     return ids.length;
   });
 }

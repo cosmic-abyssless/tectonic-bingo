@@ -10,6 +10,7 @@ import {
   nodeEdges,
   nodes,
   signupAnswers,
+  signupPairings,
   signupQuestions,
   signups,
   stageTransitions,
@@ -149,6 +150,7 @@ export function deleteBingo(db: Db, bingoId: string): void {
     tx.delete(teams).where(eq(teams.bingoId, bingoId)).run();
     tx.delete(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).run();
     tx.delete(signups).where(eq(signups.bingoId, bingoId)).run();
+    tx.delete(signupPairings).where(eq(signupPairings.bingoId, bingoId)).run();
     tx.delete(signupQuestions).where(eq(signupQuestions.bingoId, bingoId)).run();
     tx.delete(bingoLines).where(eq(bingoLines.bingoId, bingoId)).run();
     tx.delete(tiles).where(eq(tiles.bingoId, bingoId)).run();
@@ -190,6 +192,7 @@ export interface UpdateBingoSettingsParams {
   name?: string;
   description?: string | null;
   theme?: string;
+  signupMode?: "solo" | "duo";
   buyinAmount?: number | null;
   bonusPotAmount?: number;
   rulesMarkdown?: string | null;
@@ -203,6 +206,12 @@ export interface UpdateBingoSettingsParams {
 export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingoSettingsParams) {
   const existing = db.select().from(bingos).where(eq(bingos.id, bingoId)).get();
   if (!existing) throw new ServiceError(404, "Bingo not found");
+  if (params.signupMode !== undefined && params.signupMode !== existing.signupMode) {
+    // Existing signups were made under the other mode's rules (pairings only
+    // mean something in duo), so the switch is only allowed on a clean slate.
+    const hasSignups = db.select({ id: signups.id }).from(signups).where(eq(signups.bingoId, bingoId)).get();
+    if (hasSignups) throw new ServiceError(400, "The signup mode can't change once players have signed up");
+  }
   return db.update(bingos).set(params).where(eq(bingos.id, bingoId)).returning().get();
 }
 

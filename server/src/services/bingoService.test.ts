@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingos } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { advanceStage, assertBoardEditable, deleteBingo } from "./bingoService";
+import { advanceStage, assertBoardEditable, deleteBingo, updateBingoSettings } from "./bingoService";
 import { createTask, createTile } from "./boardService";
 import { createTeam } from "./teamService";
 import { ServiceError } from "./errors";
@@ -145,5 +145,17 @@ describe("deleteBingo", () => {
 
   it("404s for an unknown bingo", () => {
     expect(() => deleteBingo(db, "nope")).toThrow(ServiceError);
+  });
+});
+
+describe("updateBingoSettings signupMode", () => {
+  it("switches mode on an empty bingo but not once anyone has signed up", () => {
+    const bingo = seedBingo();
+    expect(updateBingoSettings(db, bingo.id, { signupMode: "duo" }).signupMode).toBe("duo");
+    const player = db.insert(schema.users).values({ discordId: "p", discordUsername: "p" }).returning().get();
+    db.insert(schema.signups).values({ bingoId: bingo.id, userId: player.id, rsn: "p" }).run();
+    expect(() => updateBingoSettings(db, bingo.id, { signupMode: "solo" })).toThrow(/can't change once players have signed up/);
+    // Re-sending the current mode alongside other settings is fine.
+    expect(updateBingoSettings(db, bingo.id, { signupMode: "duo", name: "Renamed" }).name).toBe("Renamed");
   });
 });

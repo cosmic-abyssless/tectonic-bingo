@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Bingo } from "@bingo/shared";
+import type { Bingo, SignupMode } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
 import { Markdown } from "../ui/Markdown";
@@ -33,17 +33,20 @@ export function BingoSettingsForm({
   bingo,
   paidSignupCount,
   potTotal,
+  hasSignups,
 }: {
   slug: string;
   bingo: Bingo;
   paidSignupCount: number;
   potTotal: number;
+  hasSignups: boolean;
 }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
     name: bingo.name,
     description: bingo.description ?? "",
     theme: bingo.theme,
+    signupMode: bingo.signupMode,
     buyinAmount: bingo.buyinAmount?.toString() ?? "",
     bonusPotAmount: bingo.bonusPotAmount.toString(),
     rulesMarkdown: bingo.rulesMarkdown ?? "",
@@ -67,6 +70,7 @@ export function BingoSettingsForm({
         name: form.name,
         description: form.description || null,
         theme: form.theme,
+        signupMode: form.signupMode,
         buyinAmount: form.buyinAmount ? Number(form.buyinAmount) : null,
         bonusPotAmount: Number(form.bonusPotAmount) || 0,
         rulesMarkdown: form.rulesMarkdown || null,
@@ -105,6 +109,15 @@ export function BingoSettingsForm({
         </div>
         <Field label="Description">
           <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="resize-none" />
+        </Field>
+      </Section>
+
+      <Section title="Signups">
+        <Field label="Signup mode" hint={hasSignups ? "Locked — players have already signed up." : "Duo: players pair up during signup and get drafted together."}>
+          <Select value={form.signupMode} onChange={(e) => setForm({ ...form, signupMode: e.target.value as SignupMode })} disabled={hasSignups} className="w-auto!">
+            <option value="solo">Solo</option>
+            <option value="duo">Duo</option>
+          </Select>
         </Field>
       </Section>
 

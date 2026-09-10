@@ -1,8 +1,9 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { draftPicks, signupAnswers, signups, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
+import { getAcceptedPairs } from "./pairingService";
 import { PUBLIC_SIGNUP_COLS } from "./signupService";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -26,7 +27,7 @@ export function getTeamsWithMembers(db: Db, bingoId: string) {
   if (teamRows.length === 0) return [];
   const teamIds = teamRows.map((t) => t.id);
   const memberRows = db
-    .select({ teamId: teamMembers.teamId, isCaptain: teamMembers.isCaptain, user: users })
+    .select({ teamId: teamMembers.teamId, isCaptain: teamMembers.isCaptain, isCoCaptain: teamMembers.isCoCaptain, user: users })
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))
     .where(inArray(teamMembers.teamId, teamIds))
@@ -34,13 +35,23 @@ export function getTeamsWithMembers(db: Db, bingoId: string) {
   const draftedUserIds = new Set(
     db.select({ userId: draftPicks.userId }).from(draftPicks).where(inArray(draftPicks.teamId, teamIds)).all().map((p) => p.userId),
   );
+  const rank = (m: { isCaptain: boolean; isCoCaptain: boolean }) => (m.isCaptain ? 0 : m.isCoCaptain ? 1 : 2);
   return teamRows.map((team) => ({
     ...team,
     members: memberRows
       .filter((m) => m.teamId === team.id)
-      .sort((a, b) => Number(b.isCaptain) - Number(a.isCaptain))
-      .map(({ user, isCaptain }) => ({ user, isCaptain, isDrafted: draftedUserIds.has(user.id) })),
+      .sort((a, b) => rank(a) - rank(b))
+      .map(({ user, isCaptain, isCoCaptain }) => ({ user, isCaptain, isCoCaptain, isDrafted: draftedUserIds.has(user.id) })),
   }));
+}
+
+// Captain or co-captain: the people who draft for and rename the team.
+export function isTeamLead(db: Db, teamId: string, userId: string): boolean {
+  return !!db
+    .select({ id: teamMembers.id })
+    .from(teamMembers)
+    .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId), or(eq(teamMembers.isCaptain, true), eq(teamMembers.isCoCaptain, true))))
+    .get();
 }
 
 // A user belongs to at most one team per bingo (enforced by the draft flow).
@@ -121,16 +132,23 @@ function assertUserNotOnATeam(db: Db, bingoId: string, userId: string): void {
 export interface CreateTeamParams {
   bingoId: string;
   captainUserId: string;
+  // Duo mode: the captain's partner, chosen explicitly by the mod. Must be
+  // the captain's accepted duo partner (if the captain has one) and joins
+  // with captain-equivalent permissions.
+  coCaptainUserId?: string | null;
   name?: string;
 }
 export function createTeam(db: Db, params: CreateTeamParams) {
   return db.transaction((tx) => {
-    const signup = tx
-      .select()
-      .from(signups)
-      .where(and(eq(signups.bingoId, params.bingoId), eq(signups.userId, params.captainUserId), eq(signups.status, "active")))
-      .get();
-    if (!signup) throw new ServiceError(400, "A captain must have an active signup for this bingo");
+    const requireActiveSignup = (userId: string, role: string) => {
+      const signup = tx
+        .select({ id: signups.id })
+        .from(signups)
+        .where(and(eq(signups.bingoId, params.bingoId), eq(signups.userId, userId), eq(signups.status, "active")))
+        .get();
+      if (!signup) throw new ServiceError(400, `A ${role} must have an active signup for this bingo`);
+    };
+    requireActiveSignup(params.captainUserId, "captain");
 
     const existingCaptaincy = tx
       .select()
@@ -139,6 +157,24 @@ export function createTeam(db: Db, params: CreateTeamParams) {
       .get();
     if (existingCaptaincy) throw new ServiceError(409, "This user is already a captain for this bingo");
     assertUserNotOnATeam(tx, params.bingoId, params.captainUserId);
+
+    const coCaptainUserId = params.coCaptainUserId ?? null;
+    if (coCaptainUserId) {
+      if (coCaptainUserId === params.captainUserId) throw new ServiceError(400, "The co-captain must be a different player");
+      requireActiveSignup(coCaptainUserId, "co-captain");
+      assertUserNotOnATeam(tx, params.bingoId, coCaptainUserId);
+    }
+    // Duo pairs stay together: a paired captain's co-captain is their partner,
+    // and vice versa.
+    const pairs = getAcceptedPairs(tx, params.bingoId);
+    const captainPair = pairs.find((p) => p.userIds.includes(params.captainUserId));
+    const coCaptainPair = coCaptainUserId ? pairs.find((p) => p.userIds.includes(coCaptainUserId)) : undefined;
+    if (captainPair && !captainPair.userIds.includes(coCaptainUserId ?? "")) {
+      throw new ServiceError(400, "This captain has a duo partner — pick them as the co-captain");
+    }
+    if (coCaptainPair && !coCaptainPair.userIds.includes(params.captainUserId)) {
+      throw new ServiceError(400, "That player is paired with someone else");
+    }
 
     let codeword = generateCodeword();
     for (let attempts = 0; attempts < 10; attempts++) {
@@ -153,6 +189,7 @@ export function createTeam(db: Db, params: CreateTeamParams) {
       .returning()
       .get();
     tx.insert(teamMembers).values({ teamId: team.id, userId: params.captainUserId, isCaptain: true }).run();
+    if (coCaptainUserId) tx.insert(teamMembers).values({ teamId: team.id, userId: coCaptainUserId, isCoCaptain: true }).run();
     return team;
   });
 }
@@ -202,6 +239,8 @@ export function removeTeamMember(db: Db, teamId: string, userId: string): void {
   const team = db.select().from(teams).where(eq(teams.id, teamId)).get();
   if (!team) throw new ServiceError(404, "Team not found");
   if (team.captainUserId === userId) throw new ServiceError(400, "Cannot remove the captain — reassign the captaincy or delete the team instead");
+  const member = db.select({ isCoCaptain: teamMembers.isCoCaptain }).from(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).get();
+  if (member?.isCoCaptain) throw new ServiceError(400, "Cannot remove the co-captain — delete the team instead");
   const pick = db.select({ id: draftPicks.id }).from(draftPicks).where(and(eq(draftPicks.teamId, teamId), eq(draftPicks.userId, userId))).get();
   if (pick) throw new ServiceError(409, "This player was drafted onto the team and can't be removed");
   db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).run();
@@ -222,8 +261,8 @@ export function deleteTeam(db: Db, teamId: string): void {
 
 // Active signups not already on a team for this bingo — the pool mods pick
 // captains from during the `captains` stage. Joined with the user row and
-// every signup answer (e.g. "willing to captain?") so the admin UI can show
-// context without a second round trip.
+// every signup answer (e.g. "willing to captain?") and accepted duo pairing so
+// the admin UI can show context without a second round trip.
 export function getCaptainCandidates(db: Db, bingoId: string) {
   const teamIds = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.id);
   const onATeam = teamIds.length ? new Set(db.select({ userId: teamMembers.userId }).from(teamMembers).where(inArray(teamMembers.teamId, teamIds)).all().map((m) => m.userId)) : new Set<string>();
@@ -238,5 +277,10 @@ export function getCaptainCandidates(db: Db, bingoId: string) {
 
   const signupIds = rows.map((r) => r.signup.id);
   const answers = signupIds.length ? db.select().from(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).all() : [];
-  return rows.map((r) => ({ ...r, answers: answers.filter((a) => a.signupId === r.signup.id) }));
+  const pairingByUserId = new Map(getAcceptedPairs(db, bingoId).flatMap(({ pairing, userIds }) => userIds.map((id) => [id, pairing] as const)));
+  return rows.map((r) => ({
+    ...r,
+    answers: answers.filter((a) => a.signupId === r.signup.id),
+    pairing: pairingByUserId.get(r.signup.userId) ?? null,
+  }));
 }

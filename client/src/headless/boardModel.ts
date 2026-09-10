@@ -29,8 +29,8 @@ export function toTeamModel(team: TeamWithMembers, myTeamId: string | null, view
     name: team.name,
     color: team.color,
     isMine: team.id === myTeamId,
-    members: team.members.map((m) => ({ id: m.user.id, displayName: displayName(m.user), avatarUrl: avatarUrl(m.user), isCaptain: m.isCaptain })),
-    canRename: team.captainUserId === viewerUserId,
+    members: team.members.map((m) => ({ id: m.user.id, displayName: displayName(m.user), avatarUrl: avatarUrl(m.user), isCaptain: m.isCaptain, isCoCaptain: m.isCoCaptain })),
+    canRename: team.members.some((m) => m.user.id === viewerUserId && (m.isCaptain || m.isCoCaptain)),
   };
 }
 

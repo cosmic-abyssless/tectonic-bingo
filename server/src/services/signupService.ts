@@ -3,6 +3,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { signupAnswers, signupQuestions, signups, users } from "../db/schema";
 import { ServiceError } from "./errors";
+import { dissolveForUser, getAcceptedPairs } from "./pairingService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -108,24 +109,31 @@ export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
 
   return db.transaction((tx) => {
     const existing = tx.select().from(signups).where(and(eq(signups.bingoId, params.bingoId), eq(signups.userId, params.userId))).get();
-    if (existing) throw new ServiceError(409, "You've already signed up for this bingo");
+    if (existing?.status === "active") throw new ServiceError(409, "You've already signed up for this bingo");
 
     const questions = tx.select().from(signupQuestions).where(eq(signupQuestions.bingoId, params.bingoId)).all();
     const answeredIds = new Set(params.answers.map((a) => a.questionId));
     const missingRequired = questions.some((q) => q.required && !answeredIds.has(q.id));
     if (missingRequired) throw new ServiceError(400, "Please answer every required question");
 
-    const signup = tx
-      .insert(signups)
-      .values({
-        bingoId: params.bingoId,
-        userId: params.userId,
-        rsn: params.rsn.trim(),
-        womId: params.womId ?? null,
-        rsnVerified: params.rsnVerified ?? false,
-      })
-      .returning(PUBLIC_SIGNUP_COLS)
-      .get();
+    const values = {
+      rsn: params.rsn.trim(),
+      womId: params.womId ?? null,
+      rsnVerified: params.rsnVerified ?? false,
+    };
+    // A withdrawn signup is reused rather than duplicated: (bingo, user) is
+    // unique, and the buy-in columns are reset since the old row's payment
+    // state no longer applies.
+    if (existing) {
+      tx.delete(signupAnswers).where(eq(signupAnswers.signupId, existing.id)).run();
+      tx.update(signups)
+        .set({ ...values, status: "active", buyinReceivedAt: null, buyinCollectedByUserId: null, buyinRecordedByUserId: null, createdAt: new Date() })
+        .where(eq(signups.id, existing.id))
+        .run();
+    }
+    const signup = existing
+      ? tx.select(PUBLIC_SIGNUP_COLS).from(signups).where(eq(signups.id, existing.id)).get()!
+      : tx.insert(signups).values({ bingoId: params.bingoId, userId: params.userId, ...values }).returning(PUBLIC_SIGNUP_COLS).get();
     for (const a of params.answers) {
       tx.insert(signupAnswers).values({ signupId: signup.id, questionId: a.questionId, value: a.value }).run();
     }
@@ -176,9 +184,17 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
 
 export function withdrawSignup(db: Db, bingo: Bingo, signupId: string) {
   assertSignupOpen(bingo);
-  const existing = db.select().from(signups).where(eq(signups.id, signupId)).get();
-  if (!existing) throw new ServiceError(404, "Signup not found");
-  return db.update(signups).set({ status: "withdrawn" }).where(eq(signups.id, signupId)).returning(PUBLIC_SIGNUP_COLS).get();
+  return db.transaction((tx) => {
+    const existing = tx
+      .select({ id: signups.id, userId: signups.userId, discordId: users.discordId })
+      .from(signups)
+      .innerJoin(users, eq(signups.userId, users.id))
+      .where(eq(signups.id, signupId))
+      .get();
+    if (!existing) throw new ServiceError(404, "Signup not found");
+    dissolveForUser(tx, bingo.id, { id: existing.userId, discordId: existing.discordId });
+    return tx.update(signups).set({ status: "withdrawn" }).where(eq(signups.id, signupId)).returning(PUBLIC_SIGNUP_COLS).get();
+  });
 }
 
 export function getAllSignups(db: Db, bingoId: string) {
@@ -195,10 +211,16 @@ export function getAllSignups(db: Db, bingoId: string) {
   const collectors = collectorIds.length ? db.select().from(users).where(inArray(users.id, collectorIds)).all() : [];
   const collectorById = new Map(collectors.map((u) => [u.id, u]));
 
+  const pairingByUserId = new Map<string, (typeof schema.signupPairings.$inferSelect)>();
+  for (const { pairing, userIds } of getAcceptedPairs(db, bingoId)) {
+    for (const userId of userIds) pairingByUserId.set(userId, pairing);
+  }
+
   return rows.map((r) => ({
     ...r,
     answers: answers.filter((a) => a.signupId === r.signup.id),
     collectedByUser: r.signup.buyinCollectedByUserId ? (collectorById.get(r.signup.buyinCollectedByUserId) ?? null) : null,
+    pairing: pairingByUserId.get(r.signup.userId) ?? null,
   }));
 }
 
@@ -210,6 +232,12 @@ export function getPaidSignupCount(db: Db, bingoId: string): number {
     .from(signups)
     .where(and(eq(signups.bingoId, bingoId), eq(signups.status, "active"), isNotNull(signups.buyinReceivedAt)))
     .all().length;
+}
+
+// Any row, withdrawn included — mirrors the signup-mode lock in
+// bingoService.updateBingoSettings so the client can disable the control.
+export function hasAnySignup(db: Db, bingoId: string): boolean {
+  return db.select({ id: signups.id }).from(signups).where(eq(signups.bingoId, bingoId)).get() !== undefined;
 }
 
 const BUYIN_STAGES: Bingo["stage"][] = ["signup", "captains", "draft", "reveal"];

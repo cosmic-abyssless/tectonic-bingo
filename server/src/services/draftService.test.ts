@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createTeam } from "./teamService";
 import { createSignup } from "./signupService";
+import { adminPair } from "./pairingService";
 import { getDraftState, makePick, pickOrderTeamIndex, startDraft } from "./draftService";
 import { ServiceError } from "./errors";
 
@@ -136,17 +137,17 @@ describe("makePick", () => {
   it("allows the on-the-clock captain to pick, advancing to the next team", () => {
     const { bingo, first, second, p1, p2 } = setup();
     const pick1 = makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
-    expect(pick1).toMatchObject({ pickNumber: 1, teamId: first.id, userId: p1.id });
+    expect(pick1).toMatchObject([{ pickNumber: 1, teamId: first.id, userId: p1.id }]);
 
     const pick2 = makePick(db, { bingo, pickedUserId: p2.id, actingUserId: second.captainUserId, actingIsAdmin: false });
-    expect(pick2).toMatchObject({ pickNumber: 2, teamId: second.id, userId: p2.id });
+    expect(pick2).toMatchObject([{ pickNumber: 2, teamId: second.id, userId: p2.id }]);
   });
 
   it("allows a site admin to pick on behalf of whichever team is on the clock", () => {
     const { bingo, first, p1 } = setup();
     const admin = seedUser("admin-actor");
     const pick = makePick(db, { bingo, pickedUserId: p1.id, actingUserId: admin.id, actingIsAdmin: true });
-    expect(pick).toMatchObject({ teamId: first.id, pickedByUserId: admin.id });
+    expect(pick).toMatchObject([{ teamId: first.id, pickedByUserId: admin.id }]);
   });
 
   it("rejects picking someone not signed up for this bingo", () => {
@@ -185,10 +186,10 @@ describe("getDraftState", () => {
 
     const after = getDraftState(db, bingo.id, { includeAnswers: false });
     expect(after.draftStarted).toBe(true);
-    expect(after.pool.map((e) => e.user.id)).toEqual([p2.id]);
+    expect(after.pool.map((u) => u.entries[0]!.user.id)).toEqual([p2.id]);
     expect(after.currentPick?.pickNumber).toBe(2);
     expect(after.picks).toHaveLength(1);
-    expect(after.pool[0]!.answers).toBeNull();
+    expect(after.pool[0]!.entries[0]!.answers).toBeNull();
   });
 
   it("includes each team's captain RSN and each pick's RSN", () => {
@@ -219,9 +220,68 @@ describe("getDraftState", () => {
     createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p1.id, rsn: "p1", answers: [{ questionId: question!.id, value: "hi" }] });
 
     const withAnswers = getDraftState(db, bingo.id, { includeAnswers: true });
-    expect(withAnswers.pool[0]!.answers).toHaveLength(1);
+    expect(withAnswers.pool[0]!.entries[0]!.answers).toHaveLength(1);
 
     const withoutAnswers = getDraftState(db, bingo.id, { includeAnswers: false });
-    expect(withoutAnswers.pool[0]!.answers).toBeNull();
+    expect(withoutAnswers.pool[0]!.entries[0]!.answers).toBeNull();
+  });
+});
+
+describe("duo mode", () => {
+  function setupDuo() {
+    const bingo = seedBingo({ signupMode: "duo" });
+    const signupStage = { ...bingo, stage: "signup" as const };
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
+    const co1 = seedUser("co1");
+    createSignup(db, signupStage, { bingoId: bingo.id, userId: co1.id, rsn: "co1", answers: [] });
+    adminPair(db, signupStage, { userIdA: c1.id, userIdB: co1.id, createdByUserId: c1.id });
+    const teamA = createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, coCaptainUserId: co1.id, name: "A" });
+    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
+
+    const [p1, p2, solo] = ["p1", "p2", "solo"].map((d) => seedUser(d));
+    for (const p of [p1!, p2!, solo!]) createSignup(db, signupStage, { bingoId: bingo.id, userId: p.id, rsn: p.discordUsername, answers: [] });
+    const pairing = adminPair(db, signupStage, { userIdA: p1!.id, userIdB: p2!.id, createdByUserId: c1.id });
+    startDraft(db, bingo);
+    const teams = db.select().from(schema.teams).where(eq(schema.teams.bingoId, bingo.id)).all();
+    const first = teams.find((t) => t.draftOrder === 1)!;
+    const second = teams.find((t) => t.draftOrder === 2)!;
+    return { bingo, teamA, co1, first, second, p1: p1!, p2: p2!, solo: solo!, pairing };
+  }
+
+  it("groups an accepted pair into one draft unit", () => {
+    const { bingo, p1, p2, solo, pairing } = setupDuo();
+    const state = getDraftState(db, bingo.id, { includeAnswers: false });
+    expect(state.pool).toHaveLength(2);
+    const pair = state.pool.find((u) => u.pairingId === pairing.id)!;
+    expect(pair.entries.map((e) => e.user.id).sort()).toEqual([p1.id, p2.id].sort());
+    expect(state.pool.find((u) => u.pairingId === null)!.entries[0]!.user.id).toBe(solo.id);
+  });
+
+  it("reports the co-captain on the team", () => {
+    const { bingo, teamA, co1 } = setupDuo();
+    const state = getDraftState(db, bingo.id, { includeAnswers: false });
+    expect(state.teams.find((t) => t.id === teamA.id)!.coCaptain).toEqual({ userId: co1.id, rsn: "co1" });
+  });
+
+  it("drafts both halves of a pair under one pick number and advances once", () => {
+    const { bingo, first, second, p1, p2 } = setupDuo();
+    const picks = makePick(db, { bingo, pickedUserId: p2.id, actingUserId: first.captainUserId, actingIsAdmin: true });
+    expect(picks.map((p) => p.userId).sort()).toEqual([p1.id, p2.id].sort());
+    expect(picks.every((p) => p.pickNumber === 1 && p.teamId === first.id)).toBe(true);
+
+    const state = getDraftState(db, bingo.id, { includeAnswers: false });
+    expect(state.currentPick).toMatchObject({ pickNumber: 2, teamId: second.id });
+    expect(state.pool).toHaveLength(1);
+  });
+
+  it("lets the co-captain pick for the team", () => {
+    const { bingo, teamA, co1, solo } = setupDuo();
+    // Make sure team A is on the clock regardless of the shuffle.
+    db.update(schema.teams).set({ draftOrder: 1 }).where(eq(schema.teams.id, teamA.id)).run();
+    db.update(schema.teams).set({ draftOrder: 2 }).where(and(eq(schema.teams.bingoId, bingo.id), ne(schema.teams.id, teamA.id))).run();
+    const picks = makePick(db, { bingo, pickedUserId: solo.id, actingUserId: co1.id, actingIsAdmin: false });
+    expect(picks).toHaveLength(1);
+    expect(picks[0]!.teamId).toBe(teamA.id);
   });
 });

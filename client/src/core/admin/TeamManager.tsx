@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import type { BingoShellResponse, Team, TeamWithMembers, User } from "@bingo/shared";
+import type { BingoShellResponse, RosterEntry, Team, TeamWithMembers, User } from "@bingo/shared";
 import { useBingo, queryKeys } from "../../api/queries";
 import { adminQueryKeys, useCaptainCandidates } from "../../api/adminQueries";
 import * as adminApi from "../../api/adminApi";
@@ -29,6 +29,8 @@ function teamSizeSummary(teamCount: number, totalParticipants: number): string |
   }
   return summary;
 }
+
+const candidateLabel = (c: RosterEntry) => `${c.signup.rsn}${c.signup.rsnVerified ? " ✓" : ""} (${displayName(c.user)})`;
 
 // Removals drop the row from the cached shell right away and put it back if
 // the server refuses, so the UI doesn't wait on the round trip.
@@ -103,12 +105,13 @@ function TeamCard({ slug, team, onDelete }: { slug: string; team: TeamWithMember
           </Field>
           <Field label={`Members (${team.members.length})`} as="div">
             <ul className="divide-y divide-line rounded-md border border-line">
-              {team.members.map(({ user, isCaptain, isDrafted }) => (
+              {team.members.map(({ user, isCaptain, isCoCaptain, isDrafted }) => (
                 <li key={user.id} className="flex h-9 items-center gap-2 px-3 text-sm">
                   {isCaptain && <CrownIcon size={14} className="shrink-0 text-warn" aria-label="Captain" />}
+                  {isCoCaptain && <CrownIcon size={14} className="shrink-0 text-fg-subtle" aria-label="Co-captain" />}
                   <span className="min-w-0 flex-1 truncate text-fg">{displayName(user)}</span>
                   {isDrafted && <span className="text-xs text-fg-subtle">drafted</span>}
-                  {!isCaptain && !isDrafted && (
+                  {!isCaptain && !isCoCaptain && !isDrafted && (
                     <IconButton label={`Remove ${displayName(user)}`} size="sm" onPress={() => removeMember(user)}>
                       <XIcon size={12} />
                     </IconButton>
@@ -150,22 +153,38 @@ export function TeamManager({ slug }: { slug: string }) {
   const { data: candidatesData } = useCaptainCandidates(slug);
   const queryClient = useQueryClient();
   const [selectedCaptainId, setSelectedCaptainId] = useState("");
+  const [selectedCoCaptainId, setSelectedCoCaptainId] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const candidates = candidatesData?.candidates ?? [];
+  const isDuo = data?.bingo.signupMode === "duo";
   const teamCount = data?.teams.length ?? 0;
   const totalParticipants = teamCount + candidates.length;
   const summary = teamSizeSummary(teamCount, totalParticipants);
 
+  const captain = candidates.find((c) => c.user.id === selectedCaptainId);
+  // A paired captain's partner joins as co-captain — the server refuses any
+  // other choice, so lock the select to them.
+  const partner = captain?.pairing ? candidates.find((c) => c.user.id !== captain.user.id && c.pairing?.id === captain.pairing?.id) : undefined;
+  const coCaptainId = partner?.user.id ?? selectedCoCaptainId;
+  // Unpaired co-captain candidates only: a paired player can only lead the
+  // team their partner captains.
+  const coCaptainOptions = candidates.filter((c) => c.user.id !== selectedCaptainId && !c.pairing);
+
+  function selectCaptain(id: string) {
+    setSelectedCaptainId(id);
+    if (id === selectedCoCaptainId) setSelectedCoCaptainId("");
+  }
+
   async function createTeam() {
-    const candidate = candidates.find((c) => c.user.id === selectedCaptainId);
-    if (!candidate) return;
+    if (!captain) return;
     setCreating(true);
     setError(null);
     try {
-      await adminApi.createTeam(slug, { captainUserId: candidate.user.id, name: `${displayName(candidate.user)}'s Team` });
+      await adminApi.createTeam(slug, { captainUserId: captain.user.id, coCaptainUserId: coCaptainId || null, name: `${displayName(captain.user)}'s Team` });
       setSelectedCaptainId("");
+      setSelectedCoCaptainId("");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) }),
         queryClient.invalidateQueries({ queryKey: adminQueryKeys.captainCandidates(slug) }),
@@ -197,24 +216,41 @@ export function TeamManager({ slug }: { slug: string }) {
     <div className="max-w-2xl space-y-4">
       <Card className="space-y-3 p-4">
         <div>
-          <p className="text-sm font-medium text-fg">Assign a captain</p>
+          <p className="text-sm font-medium text-fg">Create a team</p>
           {summary && <p className="mt-1 text-sm text-fg-muted">{summary}</p>}
         </div>
         {candidates.length === 0 ? (
-          <p className="text-sm text-fg-subtle">No eligible signups — everyone who signed up is already a captain, or no one has signed up yet.</p>
+          <p className="text-sm text-fg-subtle">No eligible signups — everyone who signed up is already on a team, or no one has signed up yet.</p>
         ) : (
-          <div className="flex items-start gap-2">
-            <Select aria-label="Assign a captain" value={selectedCaptainId} onChange={(e) => setSelectedCaptainId(e.target.value)} className="flex-1">
-              <option value="">Select a signed-up player…</option>
-              {candidates.map((c) => (
-                <option key={c.user.id} value={c.user.id}>
-                  {c.signup.rsn}
-                  {c.signup.rsnVerified ? " ✓" : ""} ({displayName(c.user)})
-                </option>
-              ))}
-            </Select>
-            <Button variant="primary" onPress={createTeam} isDisabled={!selectedCaptainId || creating} className="shrink-0">
-              {creating ? "Creating…" : "Make captain"}
+          <div className="space-y-3">
+            <Field label="Captain">
+              <Select value={selectedCaptainId} onChange={(e) => selectCaptain(e.target.value)}>
+                <option value="">Select a signed-up player…</option>
+                {candidates.map((c) => (
+                  <option key={c.user.id} value={c.user.id}>
+                    {candidateLabel(c)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Co-captain" hint={isDuo ? "Shares the captain's draft and rename powers. Paired captains bring their partner." : "Optional. Shares the captain's draft and rename powers."}>
+              <Select value={coCaptainId} onChange={(e) => setSelectedCoCaptainId(e.target.value)} disabled={!!partner}>
+                {partner ? (
+                  <option value={partner.user.id}>{candidateLabel(partner)}</option>
+                ) : (
+                  <>
+                    <option value="">None</option>
+                    {coCaptainOptions.map((c) => (
+                      <option key={c.user.id} value={c.user.id}>
+                        {candidateLabel(c)}
+                      </option>
+                    ))}
+                  </>
+                )}
+              </Select>
+            </Field>
+            <Button variant="primary" onPress={createTeam} isDisabled={!selectedCaptainId || creating}>
+              {creating ? "Creating…" : "Create team"}
             </Button>
           </div>
         )}
