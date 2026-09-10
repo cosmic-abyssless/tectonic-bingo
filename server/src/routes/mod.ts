@@ -146,6 +146,7 @@ router.patch(
       collectedByUserId,
       recordedByUserId: req.user!.id,
     });
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.json({ signup });
   }),
 );
@@ -173,6 +174,7 @@ if (process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "
       // click would be slow and pointless rate-limit exposure for
       // throwaway test data. Real signups still fetch real data.
       const result = devSeedService.seedTestSignups(db, req.bingo!, n, roster);
+      broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
       res.status(201).json({ ...result, tectonicConfigured: tectonic !== null });
     }),
   );
@@ -181,7 +183,9 @@ if (process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "
     "/dev/signups",
     asyncHandler(async (req, res) => {
       if (req.bingo!.stage !== "signup") throw new ServiceError(400, "Signups can only be wiped during the signup stage");
-      res.json({ deleted: devSeedService.deleteAllSignups(db, req.bingo!.id) });
+      const deleted = devSeedService.deleteAllSignups(db, req.bingo!.id);
+      broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+      res.json({ deleted });
     }),
   );
 }
