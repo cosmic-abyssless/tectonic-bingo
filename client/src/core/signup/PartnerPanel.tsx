@@ -86,7 +86,7 @@ export function PartnerPanel({ slug }: { slug: string }) {
               <span className="flex-1">
                 Waiting for <strong>{nameOf(state.outgoing.targetUser)}</strong> to accept.
               </span>
-              <Button size="sm" variant="ghost" isDisabled={busy} onPress={() => run(() => cancel.mutateAsync(state.outgoing!.pairing.id))}>
+              <Button size="sm" variant="ghost" className="-my-1.5" isDisabled={busy} onPress={() => run(() => cancel.mutateAsync(state.outgoing!.pairing.id))}>
                 Cancel request
               </Button>
             </div>

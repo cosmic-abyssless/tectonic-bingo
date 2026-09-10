@@ -62,6 +62,8 @@ export interface User {
   discordGlobalName: string | null;
   discordGuildNick: string | null;
   discordAvatar: string | null;
+  /** Was a member of the clan's Discord server at last login. */
+  inGuild: boolean;
   isAdmin: boolean;
   createdAt: string;
   updatedAt: string;

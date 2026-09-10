@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { SignupAnswerInput, SignupQuestion } from "@bingo/shared";
 import { useBingo, useCreateSignup, useMySignup, useMyTectonicRsns, useSignupQuestions, useUpdateSignup, useWithdrawSignup } from "../../api/queries";
+import { useAuth } from "../../context/AuthContext";
 import { PartnerPanel } from "./PartnerPanel";
 import { Button } from "../ui/Button";
 import { Card, CardHeader, EmptyState, Notice } from "../ui/Card";
@@ -65,6 +66,7 @@ function QuestionField({ question, value, onChange }: { question: SignupQuestion
 }
 
 export function SignupForm({ slug }: { slug: string }) {
+  const { user } = useAuth();
   const { data: shell } = useBingo(slug);
   const { data: questionsData } = useSignupQuestions(slug);
   const { data: mySignup, isLoading } = useMySignup(slug);
@@ -114,10 +116,18 @@ export function SignupForm({ slug }: { slug: string }) {
     );
   }
 
+  if (!existing && user && !user.inGuild) {
+    return (
+      <EmptyState icon={<LockIcon size={20} />} title="Not in the clan's Discord">
+        Your Discord account isn't in the Tectonic Discord server, so you can't sign up. Join the server, then log out and back in.
+      </EmptyState>
+    );
+  }
+
   if (!existing && tectonicRsnsData?.enabled && !tectonicRsnsData.isMember) {
     return (
       <EmptyState icon={<LockIcon size={20} />} title="Clan members only">
-        This bingo is only open to registered members of the clan. If you believe this is a mistake, ask a moderator to check your clan registration.
+        You're in the Discord server, but the clan bot doesn't have you registered as a member. Ask a moderator to check your clan registration.
       </EmptyState>
     );
   }

@@ -12,6 +12,11 @@ export const users = sqliteTable('users', {
   discordGlobalName: text('discord_global_name'),
   discordGuildNick: text('discord_guild_nick'),
   discordAvatar: text('discord_avatar'),
+  // Whether the user was a member of DISCORD_GUILD_ID at their last Discord
+  // login. Non-members are locked out of every bingo route. Defaults to true
+  // because only a real OAuth login can observe membership — dev-login and
+  // seeded users never go through one.
+  inGuild: integer('in_guild', { mode: 'boolean' }).notNull().default(true),
   // Site admins can create bingos and grant mod/admin to others from the admin
   // panel. Bootstrapped via the ADMIN_DISCORD_IDS env var on login.
   isAdmin: integer('is_admin', { mode: 'boolean' }).notNull().default(false),

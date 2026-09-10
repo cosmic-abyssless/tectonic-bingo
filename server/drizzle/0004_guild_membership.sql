@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `in_guild` integer DEFAULT true NOT NULL;

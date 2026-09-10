@@ -1,6 +1,6 @@
 import passport from "passport";
 import { Strategy as DiscordStrategy } from "passport-discord";
-import { REST } from "@discordjs/rest";
+import { DiscordAPIError, REST } from "@discordjs/rest";
 import type { APIGuildMember } from "discord-api-types/v10";
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -17,6 +17,11 @@ interface LoginProfile {
   avatar?: string | null;
 }
 
+// Result of asking Discord whether the signer is in DISCORD_GUILD_ID.
+// `null` means we couldn't tell (lookup failed), so the stored answer is
+// left as-is rather than locking someone out over a transient error.
+export type GuildMembership = { inGuild: true; nick: string | null } | { inGuild: false } | null;
+
 // Upserts the user row for a Discord login and applies the ADMIN_DISCORD_IDS
 // bootstrap (elevate-only — never demotes an admin granted via the admin
 // panel just because they later drop off the env var). Factored out of the
@@ -24,15 +29,15 @@ interface LoginProfile {
 export async function upsertLoginUser(
   dbInstance: BetterSQLite3Database<typeof schema>,
   profile: LoginProfile,
-  guildNick: string | null,
+  guild: GuildMembership,
 ): Promise<SessionUser> {
   const bootstrapAdmin = isAdminDiscordId(profile.id);
   const values = {
     discordId: profile.id,
     discordUsername: profile.username,
     discordGlobalName: profile.global_name ?? null,
-    discordGuildNick: guildNick,
     discordAvatar: profile.avatar ?? null,
+    ...(guild && { inGuild: guild.inGuild, discordGuildNick: guild.inGuild ? guild.nick : null }),
   };
 
   const [dbUser] = await dbInstance
@@ -52,23 +57,20 @@ export async function upsertLoginUser(
   return dbUser;
 }
 
-// Only fetched when DISCORD_GUILD_ID is configured — purely cosmetic (display
-// the clan's in-guild nickname). Team membership and mod status no longer
-// come from Discord; they're DB data (bingo_moderators, team_members).
-async function fetchGuildNick(accessToken: string): Promise<string | null> {
-  if (!process.env.DISCORD_GUILD_ID) return null;
+// Asks Discord for the signer's member record in DISCORD_GUILD_ID. A 404
+// means they aren't in the server; anything else (rate limit, outage) is
+// treated as unknown so a flaky lookup never revokes access.
+async function fetchGuildMembership(accessToken: string): Promise<GuildMembership> {
   try {
     const rest = new REST({ version: "10", authPrefix: "Bearer" }).setToken(accessToken);
-    const member = (await rest.get(
-      `/users/@me/guilds/${process.env.DISCORD_GUILD_ID}/member`,
-    )) as APIGuildMember;
-    return member.nick ?? null;
-  } catch {
+    const member = (await rest.get(`/users/@me/guilds/${process.env.DISCORD_GUILD_ID}/member`)) as APIGuildMember;
+    return { inGuild: true, nick: member.nick ?? null };
+  } catch (err) {
+    if (err instanceof DiscordAPIError && err.status === 404) return { inGuild: false };
+    console.warn("[auth] guild membership lookup failed:", err instanceof Error ? err.message : err);
     return null;
   }
 }
-
-const scopes = process.env.DISCORD_GUILD_ID ? ["identify", "guilds.members.read"] : ["identify"];
 
 export function configurePassport(): void {
   passport.use(
@@ -77,12 +79,12 @@ export function configurePassport(): void {
         clientID: process.env.DISCORD_CLIENT_ID!,
         clientSecret: process.env.DISCORD_CLIENT_SECRET!,
         callbackURL: process.env.DISCORD_CALLBACK_URL!,
-        scope: scopes,
+        scope: ["identify", "guilds.members.read"],
       },
       async (accessToken, _refreshToken, profile, done) => {
         try {
-          const guildNick = await fetchGuildNick(accessToken);
-          const dbUser = await upsertLoginUser(db, profile, guildNick);
+          const guild = await fetchGuildMembership(accessToken);
+          const dbUser = await upsertLoginUser(db, profile, guild);
           return done(null, dbUser);
         } catch (err) {
           return done(err as Error);
