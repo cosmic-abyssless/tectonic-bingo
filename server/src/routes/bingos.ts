@@ -202,18 +202,36 @@ router.post(
       throw new ServiceError(400, "claims must be valid JSON");
     }
 
+    let submission;
     try {
-      const submission = submissionService.createSubmission(db, bingo, {
+      submission = submissionService.createSubmission(db, bingo, {
         teamId: team.id,
         submittedByUserId: req.user!.id,
         claims,
         screenshotUrl: `/uploads/${req.file.filename}`,
       });
-      broadcast({ type: "submission_created", bingoId: bingo.id, payload: { teamId: team.id } });
-      res.status(201).json({ submission });
     } catch (err) {
       fs.unlinkSync(req.file.path);
       throw err;
+    }
+    broadcast({ type: "submission_created", bingoId: bingo.id, payload: { teamId: team.id } });
+    res.status(201).json({ submission });
+
+    // Runs after responding — OCR (~1.6s+) shouldn't hold up submission
+    // creation. Populates the same fields the mod panel shows (issue #7);
+    // failure here just leaves that panel without OCR info for this one.
+    if (isOcrEnabled()) {
+      const filePath = req.file.path;
+      const submissionId = submission.id;
+      (async () => {
+        const buffer = fs.readFileSync(filePath);
+        const result = await analyzeSubmissionScreenshot(db, bingo, team, { buffer, mimetype: req.file!.mimetype });
+        submissionService.recordScreenshotAnalysis(db, submissionId, {
+          extractedText: result.extractedText,
+          codewordFound: result.codewordFound,
+          detectedItemName: result.detectedMatch?.itemName ?? null,
+        });
+      })().catch(() => submissionService.markScreenshotAnalysisFailed(db, submission!.id));
     }
   }),
 );

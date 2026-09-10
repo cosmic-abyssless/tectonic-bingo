@@ -143,13 +143,27 @@ export function ReviewQueue({ slug }: { slug: string }) {
                 {isExpanded && canReview && (
                   <div className="space-y-3 border-t border-line bg-bg px-4 py-4" onClick={(e) => e.stopPropagation()}>
                     {row.screenshots.map((ss) => (
-                      <a key={ss.id} href={ss.storageUrl} target="_blank" rel="noreferrer" title="Open full size in new tab" className="block">
-                        <img
-                          src={ss.storageUrl}
-                          alt={ss.screenshotType}
-                          className="max-h-[60vh] w-full rounded-md border border-line bg-black object-contain transition-colors hover:border-line-strong"
-                        />
-                      </a>
+                      <div key={ss.id}>
+                        <a href={ss.storageUrl} target="_blank" rel="noreferrer" title="Open full size in new tab" className="block">
+                          <img
+                            src={ss.storageUrl}
+                            alt={ss.screenshotType}
+                            className="max-h-[60vh] w-full rounded-md border border-line bg-black object-contain transition-colors hover:border-line-strong"
+                          />
+                        </a>
+                        {ss.scrapeStatus === "completed" ? (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            <Badge tone={ss.codewordVerified ? "ok" : "warn"}>
+                              {ss.codewordVerified ? "Codeword found" : "Codeword not found"}
+                            </Badge>
+                            <Badge tone={ss.detectedItemName ? "ok" : "neutral"}>
+                              {ss.detectedItemName ? `Item detected: ${ss.detectedItemName}` : "No item detected"}
+                            </Badge>
+                          </div>
+                        ) : (ss.scrapeStatus === "pending" || ss.scrapeStatus === "processing") ? (
+                          <p className="mt-1.5 text-xs text-fg-subtle">Analyzing screenshot…</p>
+                        ) : null}
+                      </div>
                     ))}
 
                     {isManual && (

@@ -340,6 +340,8 @@ export const submissionScreenshots = sqliteTable('submission_screenshots', {
   }).notNull().default('pending'),
   extractedText: text('extracted_text'),
   codewordVerified: integer('codeword_verified', { mode: 'boolean' }),
+  /** Matched item's name, or null if OCR found no bingo item in the text — see textMatchService.findBestMatch. */
+  detectedItemName: text('detected_item_name'),
   scrapedAt: integer('scraped_at', { mode: 'timestamp' }),
   uploadedAt: integer('uploaded_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });

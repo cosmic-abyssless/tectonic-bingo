@@ -1,0 +1,1 @@
+ALTER TABLE `submission_screenshots` ADD `detected_item_name` text;

@@ -222,6 +222,7 @@ export interface SubmissionScreenshot {
   scrapeStatus: "pending" | "processing" | "completed" | "failed";
   extractedText: string | null;
   codewordVerified: boolean | null;
+  detectedItemName: string | null;
   scrapedAt: string | null;
   uploadedAt: string;
 }

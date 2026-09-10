@@ -15,6 +15,13 @@
       "when": 1788972411179,
       "tag": "0001_collection_log_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789008088696,
+      "tag": "0002_clumsy_devos",
+      "breakpoints": true
     }
   ]
 }

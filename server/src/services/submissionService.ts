@@ -118,6 +118,30 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
   });
 }
 
+// Runs after createSubmission, once OCR finishes — see routes/bingos.ts.
+// Best-effort: mods can still review without it, so a failure just leaves
+// scrapeStatus "failed" rather than the submission itself.
+export function recordScreenshotAnalysis(
+  db: Db,
+  submissionId: string,
+  result: { extractedText: string[]; codewordFound: boolean; detectedItemName: string | null },
+) {
+  db.update(submissionScreenshots)
+    .set({
+      extractedText: result.extractedText.join("\n"),
+      codewordVerified: result.codewordFound,
+      detectedItemName: result.detectedItemName,
+      scrapeStatus: "completed",
+      scrapedAt: new Date(),
+    })
+    .where(eq(submissionScreenshots.submissionId, submissionId))
+    .run();
+}
+
+export function markScreenshotAnalysisFailed(db: Db, submissionId: string) {
+  db.update(submissionScreenshots).set({ scrapeStatus: "failed" }).where(eq(submissionScreenshots.submissionId, submissionId)).run();
+}
+
 export type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">;
 
 export interface ClaimRow {
