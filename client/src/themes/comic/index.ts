@@ -4,6 +4,9 @@ import { BoardGrid } from "./board/BoardGrid";
 import { TileSearch } from "./page/TileSearch";
 import { TileCell } from "./board/TileCell";
 import { TileModal } from "./board/TileModal";
+import { TaskPanel } from "./board/TaskPanel";
+import { RequirementTree } from "./board/RequirementTree";
+import { TeamBanner } from "./page/TeamBanner";
 
 // Starter scaffold for the "comic" theme — see docs/theming.md for the full
 // writer's guide (resolution/fallback rules, what a slot may import, the
@@ -37,7 +40,7 @@ const comicTheme: ThemeDefinition = {
     // it reads distinctly from the orange tile accent and green/blue status
     // dots.
     chrome: {
-      bg: "#dbbf42",
+      bg: "#ffc526",
       surface: "#ffffff",
       surfaceRaised: "#fff4d6",
       surfaceHover: "#dbeafe",
@@ -48,11 +51,26 @@ const comicTheme: ThemeDefinition = {
       fgSubtle: "#78716c",
       accent: "#2563eb",
       accentFg: "#ffffff",
+      // index.css's global ok/warn/danger/info are tuned to sit on a dark
+      // surface (e.g. warn #fbbf24, a light amber that's unreadable on the
+      // header's now-white bg) — darkened here to keep 4.5:1+ contrast
+      // against this theme's white/pale surfaces instead.
+      ok: "#15803d",
+      warn: "#92400e",
+      danger: "#b91c1c",
+      info: "#1d4ed8",
+      // Button/AppHeader's borders default to a hairline 1px; bumped up
+      // here so the header rule and every button read as bold comic ink
+      // outlines instead of a thin app-chrome line.
+      borderWidth: "2px",
     },
   },
   slots: {
     BoardPage: BoardPageLayout,
     BoardGrid,
+    TaskPanel,
+    RequirementTree,
+    TeamBanner,
     TileSearch,
     TileCell,
     TileModal,

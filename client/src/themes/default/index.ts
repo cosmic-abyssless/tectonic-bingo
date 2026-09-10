@@ -5,7 +5,6 @@ import { PageLoading, PageError } from "./page/PageStates";
 import { PageHeader } from "./page/PageHeader";
 import { TeamSelector } from "./page/TeamSelector";
 import { TeamBadge } from "./page/TeamBadge";
-import { StageRow } from "./page/StageRow";
 import { TileSearch } from "./page/TileSearch";
 import { TeamBanner } from "./page/TeamBanner";
 import { PlanningStage } from "./page/PlanningStage";
@@ -44,7 +43,6 @@ export const defaultTheme: ThemeDefinition = {
     PageHeader,
     TeamSelector,
     TeamBadge,
-    StageRow,
     TileSearch,
     TeamBanner,
     PlanningStage,

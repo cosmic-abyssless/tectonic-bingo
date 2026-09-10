@@ -8,7 +8,6 @@ export function BoardPageLayout() {
   const modalTile = useTileModel(page.openTile.id);
 
   const PageHeader = useSlot("PageHeader");
-  const StageRow = useSlot("StageRow");
   const SignupStage = useSlot("SignupStage");
   const PlanningStage = useSlot("PlanningStage");
   const DraftStage = useSlot("DraftStage");
@@ -27,8 +26,6 @@ export function BoardPageLayout() {
       <PageHeader page={page} />
 
       <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
-        <StageRow stage={page.bingo.stage} milestone={page.milestone} showStepper={page.isMod} />
-
         {page.stageView === "signup" ? (
           <SignupStage slug={page.slug} />
         ) : page.stageView === "planning" || page.stageView === "captains" ? (

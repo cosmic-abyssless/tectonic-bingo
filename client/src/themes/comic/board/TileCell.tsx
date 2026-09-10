@@ -28,7 +28,7 @@ export const TileCell = memo(function TileCell({
   const dominantColor = useDominantColor(
     tile.imageUrl && !imgFailed ? tile.imageUrl : null,
   );
-  const coverColor = dominantColor ?? "var(--tile-accent)";
+  const coverColor = dominantColor ?? "#ffead4";
   // The price badge sits directly on the cover with no fill of its own, so
   // its own color (border + text) has to adapt to whatever that cover
   // color turns out to be, not the other way around.
@@ -110,14 +110,37 @@ export const TileCell = memo(function TileCell({
           className="relative aspect-[2/3] w-full transition-transform duration-200 [transform:rotateY(-15deg)] group-hover:[transform:rotateY(-15deg)_scale(1.05)_translateY(-4%)] group-focus:[transform:rotateY(-15deg)_scale(1.05)_translateY(-4%)] group-data-[search-highlighted]:[transform:rotateY(-15deg)_scale(1.05)_translateY(-4%)]"
           style={{ transformStyle: "preserve-3d" }}
         >
-          {/* Pages — flat and static, sitting directly behind the cover. The
-              cover's own foreshortening as it opens reveals a sliver of this
-              along its far (right) edge; no offset/rotation needed here. */}
+          {/* Back page — flat and fully static, the bottom of the stack. A
+              single flat sheet peeking out reads as a binder's lone insert,
+              so this sits a couple pixels past the front page's right/bottom
+              edges (away from the spine, which stays flush left/top on
+              both) — that stagger is what reads as a stack of pages rather
+              than one page in a cover. */}
           <div
-            className="absolute inset-0 overflow-hidden rounded-[3px] border-2"
+            className="absolute overflow-hidden rounded-[3px] border-2"
             style={{
+              inset: "2px -2px -3px 0",
+              backgroundColor: "#e6d9b8",
+              borderColor: "var(--tile-border)",
+            }}
+          />
+          {/* Front page — inset exactly halfway between the back page above
+              and the cover's own flush inset-0, so the stack reads as evenly
+              spaced. Its rotation is kept at that same midpoint too, at rest
+              AND on hover: back page holds 0deg (flat, its own transform),
+              cover holds -15deg at rest / -23deg on hover, so this page sits
+              at -7.5deg at rest / -11.5deg on hover — literally the angle
+              halfway between the other two the whole time, rather than
+              starting flush with the cover and only diverging once you
+              hover. Same hinge (transform-origin) as the cover so it opens
+              with it on hover/focus/search-highlight. */}
+          <div
+            className="absolute overflow-hidden rounded-[3px] border-2 transition-transform duration-200 [transform:rotateY(-7.5deg)] group-hover:[transform:rotateY(-11.5deg)] group-focus:[transform:rotateY(-11.5deg)] group-data-[search-highlighted]:[transform:rotateY(-11.5deg)]"
+            style={{
+              inset: "1px -1px -1.5px 0",
               backgroundColor: "#f2ead4",
               borderColor: "var(--tile-border)",
+              transformOrigin: "left center",
             }}
           >
             <div
