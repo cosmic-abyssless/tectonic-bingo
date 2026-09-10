@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ModSubmissionRow, SubmissionStatus } from "@bingo/shared";
+import type { ModSubmissionRow, SubmissionScreenshot, SubmissionStatus } from "@bingo/shared";
 import { useCreatePointAdjustment, useModSubmissions, useReviewSubmission } from "../../api/queries";
 import { SubmissionStatusBadge } from "../ui/StatusBadge";
 import { timeAgo } from "../ui/time";
@@ -22,6 +22,27 @@ const FILTERS: { key: Filter; label: string }[] = [
 // A MANUAL leaf has no separate completion decision — approving its claim IS
 // the decision (rejecting is "not done yet"). See docs/node-graph-model.md §5.
 const isManualRow = (row: ModSubmissionRow) => row.leaves.some((l) => l.kind === "MANUAL");
+
+// Shared between the collapsed row and the expanded review view — see
+// submissionService.recordScreenshotAnalysis for where these get populated.
+function ScreenshotAnalysisBadges({ screenshot }: { screenshot: SubmissionScreenshot }) {
+  if (screenshot.scrapeStatus === "completed") {
+    return (
+      <>
+        <Badge tone={screenshot.codewordVerified ? "ok" : "warn"}>
+          {screenshot.codewordVerified ? "Codeword found" : "Codeword not found"}
+        </Badge>
+        <Badge tone={screenshot.detectedItemName ? "ok" : "neutral"}>
+          {screenshot.detectedItemName ? `Item detected: ${screenshot.detectedItemName}` : "No item detected"}
+        </Badge>
+      </>
+    );
+  }
+  if (screenshot.scrapeStatus === "pending" || screenshot.scrapeStatus === "processing") {
+    return <span className="text-xs text-fg-subtle">Analyzing screenshot…</span>;
+  }
+  return null;
+}
 
 export function ReviewQueue({ slug }: { slug: string }) {
   const { data, isLoading } = useModSubmissions(slug);
@@ -130,6 +151,11 @@ export function ReviewQueue({ slug }: { slug: string }) {
                     </div>
                     <p className="truncate text-sm text-fg-muted">{claimsSummary(row.claims)}</p>
                     <p className="mt-0.5 text-xs text-fg-subtle">by {row.submittedByUser ? displayName(row.submittedByUser) : "unknown"}</p>
+                    {row.screenshots[0] && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <ScreenshotAnalysisBadges screenshot={row.screenshots[0]} />
+                      </div>
+                    )}
                     {row.submission.reviewerNotes && <p className="mt-0.5 truncate text-xs text-warn">{row.submission.reviewerNotes}</p>}
                   </div>
 
@@ -151,18 +177,9 @@ export function ReviewQueue({ slug }: { slug: string }) {
                             className="max-h-[60vh] w-full rounded-md border border-line bg-black object-contain transition-colors hover:border-line-strong"
                           />
                         </a>
-                        {ss.scrapeStatus === "completed" ? (
-                          <div className="mt-1.5 flex flex-wrap gap-1.5">
-                            <Badge tone={ss.codewordVerified ? "ok" : "warn"}>
-                              {ss.codewordVerified ? "Codeword found" : "Codeword not found"}
-                            </Badge>
-                            <Badge tone={ss.detectedItemName ? "ok" : "neutral"}>
-                              {ss.detectedItemName ? `Item detected: ${ss.detectedItemName}` : "No item detected"}
-                            </Badge>
-                          </div>
-                        ) : (ss.scrapeStatus === "pending" || ss.scrapeStatus === "processing") ? (
-                          <p className="mt-1.5 text-xs text-fg-subtle">Analyzing screenshot…</p>
-                        ) : null}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <ScreenshotAnalysisBadges screenshot={ss} />
+                        </div>
                       </div>
                     ))}
 
