@@ -1,4 +1,5 @@
 import type { BingoPageModel } from "../../../headless/types";
+import { useAuth } from "../../../context/AuthContext";
 import { AppHeader } from "../../../core/ui/AppHeader";
 import { Button } from "../../../core/ui/Button";
 import { Badge } from "../../../core/ui/Card";
@@ -6,12 +7,16 @@ import { CountdownTimer } from "../../../core/ui/CountdownTimer";
 import { useSlot } from "../../context";
 
 export function PageHeader({ page }: { page: BingoPageModel }) {
+  const { user } = useAuth();
   const TeamSelector = useSlot("TeamSelector");
   const TeamBadge = useSlot("TeamBadge");
 
   return (
     <AppHeader
-      back={{ to: "/", label: "All bingos" }}
+      // "/" only shows the bingo list to admins (everyone else gets bounced
+      // straight back to their own bingo — see BingoList.tsx), so the back
+      // link would just be a dead loop for anyone else.
+      back={user?.isAdmin ? { to: "/", label: "All bingos" } : undefined}
       title={page.bingo.name}
       subtitle={
         page.showEndCountdown && page.bingo.endsAt ? (
