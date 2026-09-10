@@ -3,8 +3,8 @@ import type { TileModel } from "../../../headless/types";
 import { formatCountdown } from "../../../core/ui/time";
 import { TASK_STATUS_DOT } from "../../../core/ui/StatusBadge";
 import { CheckIcon, ClockIcon, LockIcon } from "../../../core/ui/icons";
-import { COMIC_FONT } from "../font";
-import { useDominantColor } from "../useDominantColor";
+import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
+import { getContrastTextColor, useDominantColor } from "../useDominantColor";
 
 /*
  * A little comic book sitting on the tile, cracked open just enough to show
@@ -25,9 +25,14 @@ export const TileCell = memo(function TileCell({
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
-  const coverColor =
-    useDominantColor(tile.imageUrl && !imgFailed ? tile.imageUrl : null) ??
-    "var(--tile-accent)";
+  const dominantColor = useDominantColor(
+    tile.imageUrl && !imgFailed ? tile.imageUrl : null,
+  );
+  const coverColor = dominantColor ?? "var(--tile-accent)";
+  // The price badge sits directly on the cover with no fill of its own, so
+  // its own color (border + text) has to adapt to whatever that cover
+  // color turns out to be, not the other way around.
+  const priceTextColor = getContrastTextColor(dominantColor);
 
   const style = (
     tile.accentColor ? { "--tile-accent": tile.accentColor } : {}
@@ -153,7 +158,7 @@ export const TileCell = memo(function TileCell({
               style={{
                 backgroundColor: "#d2412d",
                 color: "#fff",
-                fontFamily: COMIC_FONT,
+                fontFamily: COMIC_LOGO_FONT,
                 fontWeight: 800,
                 fontSize: "8cqw",
                 letterSpacing: "0.02em",
@@ -161,6 +166,22 @@ export const TileCell = memo(function TileCell({
             >
               TECTONIC
             </span>
+
+            {/* Price badge — tucked right into the top-right corner, like a
+                vintage comic's own cover price mark. No outline/fill of its
+                own — just text stamped on the artwork — so its color has to
+                adapt to the extracted cover color's contrast. */}
+            <div
+              className="absolute right-2 top-2 z-10 leading-none"
+              style={{
+                color: priceTextColor,
+                fontFamily: COMIC_FONT,
+                fontSize: "7cqw",
+              }}
+            >
+              {tile.progress.totalPoints}
+              <span style={{ fontSize: "0.7em", marginLeft: "0.04em" }}>¢</span>
+            </div>
           </div>
         </div>
       </div>

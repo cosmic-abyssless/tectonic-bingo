@@ -3,6 +3,7 @@ import { BoardPageLayout } from "./page/BoardPageLayout";
 import { BoardGrid } from "./board/BoardGrid";
 import { TileSearch } from "./page/TileSearch";
 import { TileCell } from "./board/TileCell";
+import { TileModal } from "./board/TileModal";
 
 // Starter scaffold for the "comic" theme — see docs/theming.md for the full
 // writer's guide (resolution/fallback rules, what a slot may import, the
@@ -54,6 +55,7 @@ const comicTheme: ThemeDefinition = {
     BoardGrid,
     TileSearch,
     TileCell,
+    TileModal,
   },
 };
 

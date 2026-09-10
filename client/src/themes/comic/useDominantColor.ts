@@ -42,6 +42,22 @@ function extractDominantColor(ctx: CanvasRenderingContext2D): string | null {
   return `rgb(${Math.round(best.r / best.count)}, ${Math.round(best.g / best.count)}, ${Math.round(best.b / best.count)})`;
 }
 
+// Picks black or white — whichever reads better — against a color this
+// hook returned. `rgbColor` must be exactly the `rgb(r, g, b)` string this
+// module produces (or null/anything else, which just defaults to black);
+// it doesn't try to parse arbitrary CSS colors like `var(--tile-accent)`.
+export function getContrastTextColor(rgbColor: string | null): string {
+  const match = rgbColor ? /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/.exec(rgbColor) : null;
+  if (!match) return "#000000";
+  const r = Number(match[1]);
+  const g = Number(match[2]);
+  const b = Number(match[3]);
+  // Perceived (not WCAG-relative) luminance — plenty accurate for a plain
+  // light/dark text-color decision.
+  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+  return luminance > 150 ? "#000000" : "#ffffff";
+}
+
 // Extracts a representative color from an image — the most common cluster
 // of (non-transparent) pixel colors, sampled at a small size since we only
 // need a rough swatch, not per-pixel accuracy. Tile images are same-origin
