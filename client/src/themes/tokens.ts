@@ -32,6 +32,12 @@ export interface ThemeTokens {
     fgSubtle: string;
     accent: string;
     accentFg: string;
+    ok: string;
+    warn: string;
+    danger: string;
+    info: string;
+    /** CSS length, e.g. "2px" — width of Button/AppHeader's borders. */
+    borderWidth: string;
   }>;
 }
 
@@ -68,6 +74,11 @@ export function tokensToCssVars(tokens: ThemeTokens): CSSProperties {
     fgSubtle: "--color-fg-subtle",
     accent: "--color-accent",
     accentFg: "--color-accent-fg",
+    ok: "--color-ok",
+    warn: "--color-warn",
+    danger: "--color-danger",
+    info: "--color-info",
+    borderWidth: "--control-border-width",
   };
   if (tokens.chrome) {
     for (const [key, value] of Object.entries(tokens.chrome)) {

@@ -222,8 +222,8 @@ export interface BingoPageModel {
   /** The viewer's own team roster (TeamBadge press → TeamInfoDialog). */
   teamInfo: { open: boolean; show(): void; hide(): void };
   drawer: { open: boolean; show(): void; hide(): void };
-  /** show() also hides the drawer. */
-  submit: { open: boolean; initialTileId: string | undefined; show(tileId?: string): void; hide(): void };
+  /** show() also hides the drawer. initialFile seeds/replaces the flow's screenshot (drag-drop/paste-to-submit) — re-passing a new File while already open feeds it into the still-mounted flow. */
+  submit: { open: boolean; initialTileId: string | undefined; initialFile: File | undefined; show(tileId?: string, file?: File): void; hide(): void };
   /** logout lives in core AppHeader's own user menu, not here. */
   actions: { goHome(): void; goToStats(): void; goToMod(): void; goToDraft(): void };
 }

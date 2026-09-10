@@ -1,14 +1,16 @@
 import { useBingoPage, useBoardModel, useTileModel } from "../../../headless";
 import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
+import { useScreenshotCapture } from "../../../headless/useScreenshotCapture";
+import { ScreenshotDropOverlay } from "../../../core/ui/ScreenshotDropOverlay";
 import { useSlot } from "../../context";
 
 export function BoardPageLayout() {
   const page = useBingoPage();
   const board = useBoardModel();
   const modalTile = useTileModel(page.openTile.id);
+  const { dragActive } = useScreenshotCapture(page);
 
   const PageHeader = useSlot("PageHeader");
-  const StageRow = useSlot("StageRow");
   const SignupStage = useSlot("SignupStage");
   const PlanningStage = useSlot("PlanningStage");
   const DraftStage = useSlot("DraftStage");
@@ -27,8 +29,6 @@ export function BoardPageLayout() {
       <PageHeader page={page} />
 
       <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
-        <StageRow stage={page.bingo.stage} milestone={page.milestone} showStepper={page.isMod} />
-
         {page.stageView === "signup" ? (
           <SignupStage slug={page.slug} />
         ) : page.stageView === "planning" || page.stageView === "captains" ? (
@@ -49,8 +49,10 @@ export function BoardPageLayout() {
         )}
       </main>
 
+      <ScreenshotDropOverlay visible={dragActive} />
+
       {page.submit.open && (
-        <SubmissionFlowHost initialTileId={page.submit.initialTileId} onClose={page.submit.hide} onSuccess={() => {}}>
+        <SubmissionFlowHost initialTileId={page.submit.initialTileId} initialFile={page.submit.initialFile} onClose={page.submit.hide} onSuccess={() => {}}>
           {(flow) => <SubmissionModal flow={flow} />}
         </SubmissionFlowHost>
       )}

@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import type { Stage, StageMilestone } from "@bingo/shared";
+import type { StageMilestone } from "@bingo/shared";
 import type {
   BingoPageModel,
   BoardModel,
@@ -26,8 +26,6 @@ export interface ThemeSlots {
   TeamSelector: ComponentType<{ selector: TeamSelectorModel }>;
   // Pressing the badge opens TeamInfoDialog.
   TeamBadge: ComponentType<{ team: TeamModel; onPress: () => void }>;
-  // showStepper is false for players: the stage stepper is mod-facing.
-  StageRow: ComponentType<{ stage: Stage; milestone: StageMilestone | null; showStepper: boolean }>;
   TileSearch: ComponentType<{ search: TileSearchModel }>;
   TeamBanner: ComponentType<{ team: TeamModel; isOtherTeam: boolean; totalPoints: number | null }>;
   PlanningStage: ComponentType<{ stage: "planning" | "captains" }>;

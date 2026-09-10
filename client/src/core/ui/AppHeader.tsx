@@ -26,7 +26,7 @@ export function AppHeader({
 }) {
   const { user, logout } = useAuth();
   return (
-    <header className="sticky top-0 z-20 border-b border-line bg-bg/90 backdrop-blur">
+    <header className="sticky top-0 z-20 border-b-[length:var(--control-border-width,1px)] border-line bg-surface/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-2.5 sm:px-6">
         <div className="flex min-w-0 items-center gap-2">
           {back && (

@@ -15,7 +15,17 @@ interface StagedClaim {
   label: string;
 }
 
-export function useSubmissionFlow({ initialTileId, onClose, onSuccess }: { initialTileId?: string; onClose: () => void; onSuccess: () => void }): SubmissionFlowModel {
+export function useSubmissionFlow({
+  initialTileId,
+  initialFile,
+  onClose,
+  onSuccess,
+}: {
+  initialTileId?: string;
+  initialFile?: File;
+  onClose: () => void;
+  onSuccess: () => void;
+}): SubmissionFlowModel {
   const { slug, bingo, tiles, categories, nodeStates, teamSubmissions } = useBingoPageRaw();
 
   const [selectedTileId, setSelectedTileId] = useState(initialTileId ?? "");
@@ -150,6 +160,15 @@ export function useSubmissionFlow({ initialTileId, onClose, onSuccess }: { initi
     runAnalysis(file);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Seeds the screenshot from outside (global drag-drop/paste-to-submit —
+  // see useScreenshotCapture): fires on mount if a file was already handed
+  // in, and again any time the caller passes a *new* File while this flow
+  // stays mounted (e.g. pasting a second screenshot without closing).
+  useEffect(() => {
+    if (initialFile) handleFile(initialFile);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFile]);
 
   useEffect(() => {
     const onDragEnter = (e: DragEvent) => {

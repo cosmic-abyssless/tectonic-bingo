@@ -3,8 +3,8 @@ import type { TileModel } from "../../../headless/types";
 import { formatCountdown } from "../../../core/ui/time";
 import { TASK_STATUS_DOT } from "../../../core/ui/StatusBadge";
 import { CheckIcon, ClockIcon, LockIcon } from "../../../core/ui/icons";
-import { COMIC_FONT } from "../font";
-import { useDominantColor } from "../useDominantColor";
+import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
+import { getContrastTextColor, useDominantColor } from "../useDominantColor";
 
 /*
  * A little comic book sitting on the tile, cracked open just enough to show
@@ -25,9 +25,14 @@ export const TileCell = memo(function TileCell({
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
-  const coverColor =
-    useDominantColor(tile.imageUrl && !imgFailed ? tile.imageUrl : null) ??
-    "var(--tile-accent)";
+  const dominantColor = useDominantColor(
+    tile.imageUrl && !imgFailed ? tile.imageUrl : null,
+  );
+  const coverColor = dominantColor ?? "#ffead4";
+  // The price badge sits directly on the cover with no fill of its own, so
+  // its own color (border + text) has to adapt to whatever that cover
+  // color turns out to be, not the other way around.
+  const priceTextColor = getContrastTextColor(dominantColor);
 
   const style = (
     tile.accentColor ? { "--tile-accent": tile.accentColor } : {}
@@ -105,14 +110,37 @@ export const TileCell = memo(function TileCell({
           className="relative aspect-[2/3] w-full transition-transform duration-200 [transform:rotateY(-15deg)] group-hover:[transform:rotateY(-15deg)_scale(1.05)_translateY(-4%)] group-focus:[transform:rotateY(-15deg)_scale(1.05)_translateY(-4%)] group-data-[search-highlighted]:[transform:rotateY(-15deg)_scale(1.05)_translateY(-4%)]"
           style={{ transformStyle: "preserve-3d" }}
         >
-          {/* Pages — flat and static, sitting directly behind the cover. The
-              cover's own foreshortening as it opens reveals a sliver of this
-              along its far (right) edge; no offset/rotation needed here. */}
+          {/* Back page — flat and fully static, the bottom of the stack. A
+              single flat sheet peeking out reads as a binder's lone insert,
+              so this sits a couple pixels past the front page's right/bottom
+              edges (away from the spine, which stays flush left/top on
+              both) — that stagger is what reads as a stack of pages rather
+              than one page in a cover. */}
           <div
-            className="absolute inset-0 overflow-hidden rounded-[3px] border-2"
+            className="absolute overflow-hidden rounded-[3px] border-2"
             style={{
+              inset: "2px -2px -3px 0",
+              backgroundColor: "#e6d9b8",
+              borderColor: "var(--tile-border)",
+            }}
+          />
+          {/* Front page — inset exactly halfway between the back page above
+              and the cover's own flush inset-0, so the stack reads as evenly
+              spaced. Its rotation is kept at that same midpoint too, at rest
+              AND on hover: back page holds 0deg (flat, its own transform),
+              cover holds -15deg at rest / -23deg on hover, so this page sits
+              at -7.5deg at rest / -11.5deg on hover — literally the angle
+              halfway between the other two the whole time, rather than
+              starting flush with the cover and only diverging once you
+              hover. Same hinge (transform-origin) as the cover so it opens
+              with it on hover/focus/search-highlight. */}
+          <div
+            className="absolute overflow-hidden rounded-[3px] border-2 transition-transform duration-200 [transform:rotateY(-7.5deg)] group-hover:[transform:rotateY(-11.5deg)] group-focus:[transform:rotateY(-11.5deg)] group-data-[search-highlighted]:[transform:rotateY(-11.5deg)]"
+            style={{
+              inset: "1px -1px -1.5px 0",
               backgroundColor: "#f2ead4",
               borderColor: "var(--tile-border)",
+              transformOrigin: "left center",
             }}
           >
             <div
@@ -153,7 +181,7 @@ export const TileCell = memo(function TileCell({
               style={{
                 backgroundColor: "#d2412d",
                 color: "#fff",
-                fontFamily: COMIC_FONT,
+                fontFamily: COMIC_LOGO_FONT,
                 fontWeight: 800,
                 fontSize: "8cqw",
                 letterSpacing: "0.02em",
@@ -161,6 +189,22 @@ export const TileCell = memo(function TileCell({
             >
               TECTONIC
             </span>
+
+            {/* Price badge — tucked right into the top-right corner, like a
+                vintage comic's own cover price mark. No outline/fill of its
+                own — just text stamped on the artwork — so its color has to
+                adapt to the extracted cover color's contrast. */}
+            <div
+              className="absolute right-2 top-2 z-10 leading-none"
+              style={{
+                color: priceTextColor,
+                fontFamily: COMIC_FONT,
+                fontSize: "7cqw",
+              }}
+            >
+              {tile.progress.totalPoints}
+              <span style={{ fontSize: "0.7em", marginLeft: "0.04em" }}>¢</span>
+            </div>
           </div>
         </div>
       </div>

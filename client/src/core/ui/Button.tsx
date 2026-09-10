@@ -26,7 +26,7 @@ export function Button({ variant = "secondary", size = "md", className, ...props
   return (
     <AriaButton
       {...props}
-      className={`inline-flex items-center justify-center whitespace-nowrap rounded-md border font-medium select-none transition-[background-color,color,transform] duration-100 pressed:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed ${VARIANT[variant]} ${SIZE[size]} ${className ?? ""}`}
+      className={`inline-flex items-center justify-center whitespace-nowrap rounded-md border-[length:var(--control-border-width,1px)] font-medium select-none transition-[background-color,color,transform] duration-100 pressed:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed ${VARIANT[variant]} ${SIZE[size]} ${className ?? ""}`}
     />
   );
 }
