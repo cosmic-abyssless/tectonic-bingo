@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { SignupAnswerInput, SignupQuestion } from "@bingo/shared";
-import { useCreateSignup, useMySignup, useMyTectonicRsns, useSignupQuestions, useUpdateSignup, useWithdrawSignup } from "../../api/queries";
+import { useBingo, useCreateSignup, useMySignup, useMyTectonicRsns, useSignupQuestions, useUpdateSignup, useWithdrawSignup } from "../../api/queries";
+import { useAuth } from "../../context/AuthContext";
+import { PartnerPanel } from "./PartnerPanel";
 import { Button } from "../ui/Button";
 import { Card, CardHeader, EmptyState, Notice } from "../ui/Card";
 import { Field, Input, Select, Textarea } from "../ui/Field";
@@ -64,6 +66,8 @@ function QuestionField({ question, value, onChange }: { question: SignupQuestion
 }
 
 export function SignupForm({ slug }: { slug: string }) {
+  const { user } = useAuth();
+  const { data: shell } = useBingo(slug);
   const { data: questionsData } = useSignupQuestions(slug);
   const { data: mySignup, isLoading } = useMySignup(slug);
   const { data: tectonicRsnsData, isLoading: tectonicLoading, error: tectonicError } = useMyTectonicRsns(slug);
@@ -112,10 +116,18 @@ export function SignupForm({ slug }: { slug: string }) {
     );
   }
 
+  if (!existing && user && !user.inGuild) {
+    return (
+      <EmptyState icon={<LockIcon size={20} />} title="Not in the clan's Discord">
+        Your Discord account isn't in the Tectonic Discord server, so you can't sign up. Join the server, then log out and back in.
+      </EmptyState>
+    );
+  }
+
   if (!existing && tectonicRsnsData?.enabled && !tectonicRsnsData.isMember) {
     return (
       <EmptyState icon={<LockIcon size={20} />} title="Clan members only">
-        This bingo is only open to registered members of the clan. If you believe this is a mistake, ask a moderator to check your clan registration.
+        You're in the Discord server, but the clan bot doesn't have you registered as a member. Ask a moderator to check your clan registration.
       </EmptyState>
     );
   }
@@ -157,73 +169,79 @@ export function SignupForm({ slug }: { slug: string }) {
     </>
   );
 
+  const isDuo = shell?.bingo.signupMode === "duo";
+
   return (
-    <Card className="mx-auto max-w-lg">
-      <CardHeader
-        title={existing ? "Edit your signup" : "Sign up"}
-        description={existing ? "You can update your answers or withdraw while signups are open." : "Fill this out to join the bingo."}
-      />
-      <div className="space-y-5 p-5">
-        {rsnOptions.length > 0 ? (
-          <Field
-            label={rsnLabel}
-            hint={
-              tectonicRsns.some((r) => r.rsn === rsn) ? (
-                <span className="inline-flex items-center gap-1 text-ok">
-                  <CheckIcon size={12} /> Verified against your linked clan account
-                </span>
-              ) : (
-                <span className="text-warn">This RSN isn't currently linked to your clan account</span>
-              )
-            }
-          >
-            <Select value={rsn} onChange={(e) => setRsn(e.target.value)}>
-              <option value="">Select…</option>
-              {rsnOptions.map((r) => (
-                <option key={r.rsn} value={r.rsn}>
-                  {r.rsn}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        ) : (
-          <Field label={rsnLabel}>
-            <Input value={rsn} onChange={(e) => setRsn(e.target.value)} maxLength={12} />
-          </Field>
-        )}
+    <div className="space-y-6">
+      <Card className="mx-auto max-w-lg">
+        <CardHeader
+          title={existing ? "Edit your signup" : "Sign up"}
+          description={existing ? "You can update your answers or withdraw while signups are open." : "Fill this out to join the bingo."}
+        />
+        <div className="space-y-5 p-5">
+          {rsnOptions.length > 0 ? (
+            <Field
+              label={rsnLabel}
+              hint={
+                tectonicRsns.some((r) => r.rsn === rsn) ? (
+                  <span className="inline-flex items-center gap-1 text-ok">
+                    <CheckIcon size={12} /> Verified against your linked clan account
+                  </span>
+                ) : (
+                  <span className="text-warn">This RSN isn't currently linked to your clan account</span>
+                )
+              }
+            >
+              <Select value={rsn} onChange={(e) => setRsn(e.target.value)}>
+                <option value="">Select…</option>
+                {rsnOptions.map((r) => (
+                  <option key={r.rsn} value={r.rsn}>
+                    {r.rsn}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : (
+            <Field label={rsnLabel}>
+              <Input value={rsn} onChange={(e) => setRsn(e.target.value)} maxLength={12} />
+            </Field>
+          )}
 
-        {questions.map((q) => (
-          <QuestionField key={q.id} question={q} value={answers[q.id] ?? ""} onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))} />
-        ))}
+          {questions.map((q) => (
+            <QuestionField key={q.id} question={q} value={answers[q.id] ?? ""} onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))} />
+          ))}
 
-        {error && <Notice tone="danger">{error}</Notice>}
-        {saved && <Notice tone="ok">Saved.</Notice>}
+          {error && <Notice tone="danger">{error}</Notice>}
+          {saved && <Notice tone="ok">Saved.</Notice>}
 
-        <div className="flex gap-3">
-          <Button variant="primary" className="flex-1" onPress={submit} isDisabled={!isValid || pending}>
-            {pending ? "Saving…" : existing ? "Save changes" : "Sign up"}
-          </Button>
-          {existing && !confirmingWithdraw && (
-            <Button variant="danger" onPress={() => setConfirmingWithdraw(true)}>
-              Withdraw
+          <div className="flex gap-3">
+            <Button variant="primary" className="flex-1" onPress={submit} isDisabled={!isValid || pending}>
+              {pending ? "Saving…" : existing ? "Save changes" : "Sign up"}
             </Button>
+            {existing && !confirmingWithdraw && (
+              <Button variant="danger" onPress={() => setConfirmingWithdraw(true)}>
+                Withdraw
+              </Button>
+            )}
+          </div>
+
+          {confirmingWithdraw && (
+            <Notice tone="danger">
+              <div className="flex items-center gap-3">
+                <span className="flex-1">Withdraw your signup?</span>
+                <Button size="sm" variant="ghost" onPress={() => setConfirmingWithdraw(false)}>
+                  Cancel
+                </Button>
+                <Button size="sm" variant="danger" onPress={withdraw} isDisabled={withdrawSignup.isPending}>
+                  Confirm
+                </Button>
+              </div>
+            </Notice>
           )}
         </div>
+      </Card>
 
-        {confirmingWithdraw && (
-          <Notice tone="danger">
-            <div className="flex items-center gap-3">
-              <span className="flex-1">Withdraw your signup?</span>
-              <Button size="sm" variant="ghost" onPress={() => setConfirmingWithdraw(false)}>
-                Cancel
-              </Button>
-              <Button size="sm" variant="danger" onPress={withdraw} isDisabled={withdrawSignup.isPending}>
-                Confirm
-              </Button>
-            </div>
-          </Notice>
-        )}
-      </div>
-    </Card>
+      {isDuo && existing && <PartnerPanel slug={slug} />}
+    </div>
   );
 }

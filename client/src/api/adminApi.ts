@@ -122,7 +122,7 @@ export function reorderQuestions(slug: string, orderedIds: string[]) {
 export function getCaptainCandidates(slug: string) {
   return api.get<CaptainCandidatesResponse>(`${base(slug)}/captain-candidates`);
 }
-export function createTeam(slug: string, payload: { captainUserId: string; name?: string }) {
+export function createTeam(slug: string, payload: { captainUserId: string; coCaptainUserId?: string | null; name?: string }) {
   return api.post<{ team: Team }>(`${base(slug)}/teams`, payload);
 }
 export function updateTeam(slug: string, id: string, payload: Partial<Team>) {

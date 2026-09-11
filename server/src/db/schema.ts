@@ -12,6 +12,11 @@ export const users = sqliteTable('users', {
   discordGlobalName: text('discord_global_name'),
   discordGuildNick: text('discord_guild_nick'),
   discordAvatar: text('discord_avatar'),
+  // Whether the user was a member of DISCORD_GUILD_ID at their last Discord
+  // login. Non-members are locked out of every bingo route. Defaults to true
+  // because only a real OAuth login can observe membership — dev-login and
+  // seeded users never go through one.
+  inGuild: integer('in_guild', { mode: 'boolean' }).notNull().default(true),
   // Site admins can create bingos and grant mod/admin to others from the admin
   // panel. Bootstrapped via the ADMIN_DISCORD_IDS env var on login.
   isAdmin: integer('is_admin', { mode: 'boolean' }).notNull().default(false),
@@ -34,6 +39,9 @@ export const bingos = sqliteTable('bingos', {
   }).notNull().default('planning'),
   boardRows: integer('board_rows').notNull(),
   boardCols: integer('board_cols').notNull(),
+  // 'duo': players pair up during signup and are drafted as a unit. Only
+  // changeable while the bingo has no signups.
+  signupMode: text('signup_mode', { enum: ['solo', 'duo'] }).notNull().default('solo'),
   buyinAmount: integer('buyin_amount'), // GP per player, nullable until decided
   // Extra GP added to the pot on top of buy-ins (sponsorships, donations to
   // raise the stakes). The actual pot total is buyinAmount × paid signups +
@@ -125,6 +133,24 @@ export const signupAnswers = sqliteTable('signup_answers', {
   uniqueIndex('signup_answers_signup_question_unq').on(t.signupId, t.questionId),
 ]);
 
+// Duo-mode partner requests. The target is keyed by Discord id because a
+// player may request a clan member who hasn't logged in yet; the request
+// resolves to a user row once they do. A pair is a row with status
+// 'accepted'; 'dissolved' means one half withdrew their signup afterwards.
+export const signupPairings = sqliteTable('signup_pairings', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  requesterUserId: text('requester_user_id').notNull().references(() => users.id),
+  targetDiscordId: text('target_discord_id').notNull(),
+  status: text('status', { enum: ['pending', 'accepted', 'declined', 'cancelled', 'dissolved'] })
+    .notNull()
+    .default('pending'),
+  // Set when a mod paired the two players by hand instead of a player request.
+  createdByUserId: text('created_by_user_id').notNull().references(() => users.id),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  respondedAt: integer('responded_at', { mode: 'timestamp' }),
+});
+
 export const teams = sqliteTable('teams', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
@@ -147,13 +173,17 @@ export const teamMembers = sqliteTable('team_members', {
   teamId: text('team_id').notNull().references(() => teams.id),
   userId: text('user_id').notNull().references(() => users.id),
   isCaptain: integer('is_captain', { mode: 'boolean' }).notNull().default(false),
+  // Duo mode: the captain's partner. Shares the captain's permissions
+  // (drafting, renaming) and can't be removed from the team.
+  isCoCaptain: integer('is_co_captain', { mode: 'boolean' }).notNull().default(false),
   joinedAt: integer('joined_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 }, (t) => [
   uniqueIndex('team_members_team_user_unq').on(t.teamId, t.userId),
 ]);
 
-// One row per snake-draft pick. pickedByUserId is normally the captain, but
-// mods may pick on a captain's behalf.
+// One row per drafted player. pickedByUserId is normally the captain, but
+// mods may pick on a captain's behalf. In duo mode a pick drafts a pair, so
+// two rows share the same pickNumber.
 export const draftPicks = sqliteTable('draft_picks', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
@@ -163,7 +193,6 @@ export const draftPicks = sqliteTable('draft_picks', {
   pickedByUserId: text('picked_by_user_id').notNull().references(() => users.id),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 }, (t) => [
-  uniqueIndex('draft_picks_bingo_pick_unq').on(t.bingoId, t.pickNumber),
   uniqueIndex('draft_picks_bingo_user_unq').on(t.bingoId, t.userId),
 ]);
 

@@ -1,10 +1,11 @@
 import { useState } from "react";
-import type { DraftPoolEntry, AccountType, SignupQuestion } from "@bingo/shared";
+import type { DraftPoolEntry, DraftUnit, AccountType, SignupQuestion } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
 import { useBingo, useDraftState, useMakePick, useSignupQuestions, useStartDraft } from "../../api/queries";
 import { displayName } from "../ui/user";
 import { Button } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
+import { LinkIcon } from "../ui/icons";
 import { TeamRoster } from "./TeamRoster";
 import ironmanBadge from "../ui/icons/Ironman_chat_badge.png";
 import ultimateBadge from "../ui/icons/Ultimate_ironman_chat_badge.png";
@@ -55,6 +56,20 @@ function poolSortValue(entry: DraftPoolEntry, key: SortKey): string | number {
   return (entry.answers?.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
 }
 
+function compareSortValues(va: string | number, vb: string | number): number {
+  return typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
+}
+
+// A duo pair sorts by whichever half ranks first, so the pair sits where its
+// stronger/earlier member would on their own.
+function sortUnit(unit: DraftUnit, key: SortKey, dir: "asc" | "desc"): DraftUnit {
+  const entries = [...unit.entries].sort((a, b) => {
+    const cmp = compareSortValues(poolSortValue(a, key), poolSortValue(b, key));
+    return dir === "asc" ? cmp : -cmp;
+  });
+  return { ...unit, entries };
+}
+
 function PoolTable({
   pool,
   questions,
@@ -62,7 +77,7 @@ function PoolTable({
   onPick,
   picking,
 }: {
-  pool: DraftPoolEntry[];
+  pool: DraftUnit[];
   questions: SignupQuestion[];
   canPick: boolean;
   onPick: (userId: string) => void;
@@ -70,13 +85,15 @@ function PoolTable({
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("rsn");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const entries = pool.flatMap((u) => u.entries);
   // Answers are only sent to mods/captains (see draftService.getDraftState) —
   // everyone else's pool entries have answers: null, so skip those columns
   // entirely rather than render a table full of "—".
-  const showAnswers = pool.some((e) => e.answers !== null);
+  const showAnswers = entries.some((e) => e.answers !== null);
   // Skip the WOM columns entirely if nobody in the pool has stats (WOM
   // integration effectively unused for this bingo), same reasoning.
-  const showWomStats = pool.some((e) => e.womStats !== null);
+  const showWomStats = entries.some((e) => e.womStats !== null);
+  const hasPairs = pool.some((u) => u.entries.length > 1);
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -86,12 +103,12 @@ function PoolTable({
     }
   }
 
-  const sorted = [...pool].sort((a, b) => {
-    const va = poolSortValue(a, sortKey);
-    const vb = poolSortValue(b, sortKey);
-    const cmp = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
-    return sortDir === "asc" ? cmp : -cmp;
-  });
+  const sorted = pool
+    .map((u) => sortUnit(u, sortKey, sortDir))
+    .sort((a, b) => {
+      const cmp = compareSortValues(poolSortValue(a.entries[0], sortKey), poolSortValue(b.entries[0], sortKey));
+      return sortDir === "asc" ? cmp : -cmp;
+    });
 
   function SortHeader({ label, sortKeyValue }: { label: string; sortKeyValue: SortKey }) {
     const active = sortKey === sortKeyValue;
@@ -115,6 +132,7 @@ function PoolTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-fg-subtle">
+            {hasPairs && <th className="pb-2 pr-2" />}
             <SortHeader label="RSN" sortKeyValue="rsn" />
             <SortHeader label="Discord" sortKeyValue="discord" />
             {showWomStats && <SortHeader label="EHB" sortKeyValue="ehb" />}
@@ -122,33 +140,45 @@ function PoolTable({
             {canPick && <th className="pb-2" />}
           </tr>
         </thead>
-        <tbody className="divide-y divide-line">
-          {sorted.map((entry) => {
-            const answerByQ = new Map((entry.answers ?? []).map((a) => [a.questionId, a.value]));
-            return (
-              <tr key={entry.signup.id}>
-                <td className="whitespace-nowrap py-2 pr-4 font-medium text-fg">
-                  <AccountTypeIcon accountType={entry.accountType} /> {entry.signup.rsn}
-                </td>
-                <td className="whitespace-nowrap py-2 pr-4 text-fg-muted">{displayName(entry.user)}</td>
-                {showWomStats && <td className="num whitespace-nowrap py-2 pr-4 text-fg-muted">{entry.womStats ? Math.round(entry.womStats.ehb).toLocaleString() : "—"}</td>}
-                {showAnswers &&
-                  questions.map((q) => (
-                    <td key={q.id} className="py-2 pr-4 text-fg-muted">
-                      {answerByQ.get(q.id) ?? "—"}
+        {/* One tbody per unit: a pair's two rows share the group's Draft
+            button and are marked by a link icon down the left edge. */}
+        {sorted.map((unit) => {
+          const isPair = unit.entries.length > 1;
+          return (
+            <tbody key={unit.pairingId ?? unit.entries[0].signup.id} className="border-t border-line">
+              {unit.entries.map((entry, i) => {
+                const answerByQ = new Map((entry.answers ?? []).map((a) => [a.questionId, a.value]));
+                return (
+                  <tr key={entry.signup.id}>
+                    {hasPairs && (
+                      <td className="w-6 pr-2 align-middle text-fg-subtle">
+                        {isPair && i === 0 && <LinkIcon size={14} aria-label="Duo pair" className="mt-1" />}
+                      </td>
+                    )}
+                    <td className="whitespace-nowrap py-2 pr-4 font-medium text-fg">
+                      <AccountTypeIcon accountType={entry.accountType} /> {entry.signup.rsn}
                     </td>
-                  ))}
-                {canPick && (
-                  <td className="py-1 text-right">
-                    <Button size="sm" variant="primary" onPress={() => onPick(entry.user.id)} isDisabled={picking}>
-                      Draft
-                    </Button>
-                  </td>
-                )}
-              </tr>
-            );
-          })}
-        </tbody>
+                    <td className="whitespace-nowrap py-2 pr-4 text-fg-muted">{displayName(entry.user)}</td>
+                    {showWomStats && <td className="num whitespace-nowrap py-2 pr-4 text-fg-muted">{entry.womStats ? Math.round(entry.womStats.ehb).toLocaleString() : "—"}</td>}
+                    {showAnswers &&
+                      questions.map((q) => (
+                        <td key={q.id} className="py-2 pr-4 text-fg-muted">
+                          {answerByQ.get(q.id) ?? "—"}
+                        </td>
+                      ))}
+                    {canPick && i === 0 && (
+                      <td className="py-1 text-right align-middle" rowSpan={unit.entries.length}>
+                        <Button size="sm" variant="primary" onPress={() => onPick(entry.user.id)} isDisabled={picking}>
+                          {isPair ? "Draft pair" : "Draft"}
+                        </Button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          );
+        })}
       </table>
     </div>
   );
@@ -177,12 +207,12 @@ export function DraftRoom({ slug }: { slug: string }) {
 
   const isMod = shell.isMod;
   // The pick-on-behalf-of override is site-admin only — a regular per-bingo
-  // mod who isn't also a site admin doesn't get it, only the acting captain
-  // does. Matches the server-side check in draftService.makePick.
+  // mod who isn't also a site admin doesn't get it, only the acting team
+  // lead (captain or co-captain) does. Matches draftService.makePick.
   const isAdmin = !!user.isAdmin;
-  const myCaptainTeam = state.teams.find((t) => t.captainUserId === user.id) ?? null;
+  const myTeam = state.teams.find((t) => t.captainUserId === user.id || t.coCaptain?.userId === user.id) ?? null;
   const currentTeam = state.currentPick ? (state.teams.find((t) => t.id === state.currentPick!.teamId) ?? null) : null;
-  const isMyTurn = !!myCaptainTeam && currentTeam?.id === myCaptainTeam.id;
+  const isMyTurn = !!myTeam && currentTeam?.id === myTeam.id;
   const canAct = !!state.currentPick && (isAdmin || isMyTurn);
 
   async function handleStart() {
@@ -251,7 +281,7 @@ export function DraftRoom({ slug }: { slug: string }) {
 
       <section>
         <h3 className="mb-2 text-sm font-semibold text-fg">
-          Available players <span className="num font-normal text-fg-subtle">({state.pool.length})</span>
+          Available players <span className="num font-normal text-fg-subtle">({state.pool.reduce((n, u) => n + u.entries.length, 0)})</span>
         </h3>
         {pickError && (
           <Notice tone="danger" className="mb-2">

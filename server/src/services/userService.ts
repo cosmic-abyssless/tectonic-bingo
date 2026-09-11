@@ -1,4 +1,4 @@
-import { eq, like, or } from "drizzle-orm";
+import { eq, inArray, like, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { users } from "../db/schema";
@@ -21,6 +21,17 @@ export function searchUsers(db: Db, query: string, limit = 20) {
 
 export function getUserById(db: Db, userId: string) {
   return db.select().from(users).where(eq(users.id, userId)).get();
+}
+
+// Only id + display columns: this feeds the partner picker, where the full
+// user row (isAdmin etc.) has no business going to every player.
+export function getUsersByDiscordIds(db: Db, discordIds: string[]) {
+  if (discordIds.length === 0) return [];
+  return db
+    .select({ id: users.id, discordId: users.discordId, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick })
+    .from(users)
+    .where(inArray(users.discordId, discordIds))
+    .all();
 }
 
 export function setUserAdmin(db: Db, userId: string, isAdmin: boolean) {

@@ -18,6 +18,7 @@ import adminRouter from "./routes/admin";
 import siteAdminRouter from "./routes/siteAdmin";
 import osrsItemsRouter from "./routes/osrsItems";
 import { errorHandler } from "./middleware/errorHandler";
+import { requireGuildMember } from "./middleware/requireGuildMember";
 import { initWebSocketServer } from "./ws";
 import { sqlite } from "./db";
 import { getAdminDiscordIds } from "./config";
@@ -109,9 +110,9 @@ app.use("/uploads", express.static(UPLOADS_DIR));
 app.use("/auth", authRouter);
 app.use("/api/me", meRouter);
 app.use("/api/admin", siteAdminRouter);
-app.use("/api/bingos", bingosRouter);
-app.use("/api/bingos/:slug/mod", modRouter);
-app.use("/api/bingos/:slug/admin", adminRouter);
+app.use("/api/bingos", requireGuildMember, bingosRouter);
+app.use("/api/bingos/:slug/mod", requireGuildMember, modRouter);
+app.use("/api/bingos/:slug/admin", requireGuildMember, adminRouter);
 app.use("/api/osrs-items", osrsItemsRouter);
 
 // Serve the built client (client/dist) so the whole site — API, WS, and

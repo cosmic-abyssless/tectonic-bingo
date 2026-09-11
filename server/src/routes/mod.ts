@@ -8,6 +8,7 @@ import * as bingoService from "../services/bingoService";
 import * as submissionService from "../services/submissionService";
 import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
+import * as pairingService from "../services/pairingService";
 import * as devSeedService from "../services/devSeedService";
 import * as teamService from "../services/teamService";
 import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
@@ -114,6 +115,27 @@ router.get(
   }),
 );
 
+// Duo mode: mods pair two unpaired signups by hand, or split a pair.
+router.post(
+  "/pairings",
+  asyncHandler(async (req, res) => {
+    const { userIdA, userIdB } = req.body as { userIdA?: string; userIdB?: string };
+    if (!userIdA || !userIdB) throw new ServiceError(400, "userIdA and userIdB are required");
+    const pairing = pairingService.adminPair(db, req.bingo!, { userIdA, userIdB, createdByUserId: req.user!.id });
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    res.status(201).json({ pairing });
+  }),
+);
+
+router.delete(
+  "/pairings/:id",
+  asyncHandler(async (req, res) => {
+    pairingService.unpair(db, req.bingo!, req.params.id as string);
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    res.status(204).end();
+  }),
+);
+
 router.patch(
   "/signups/:id/buyin",
   asyncHandler(async (req, res) => {
@@ -124,6 +146,7 @@ router.patch(
       collectedByUserId,
       recordedByUserId: req.user!.id,
     });
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.json({ signup });
   }),
 );
@@ -151,6 +174,7 @@ if (process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "
       // click would be slow and pointless rate-limit exposure for
       // throwaway test data. Real signups still fetch real data.
       const result = devSeedService.seedTestSignups(db, req.bingo!, n, roster);
+      broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
       res.status(201).json({ ...result, tectonicConfigured: tectonic !== null });
     }),
   );
@@ -159,7 +183,9 @@ if (process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "
     "/dev/signups",
     asyncHandler(async (req, res) => {
       if (req.bingo!.stage !== "signup") throw new ServiceError(400, "Signups can only be wiped during the signup stage");
-      res.json({ deleted: devSeedService.deleteAllSignups(db, req.bingo!.id) });
+      const deleted = devSeedService.deleteAllSignups(db, req.bingo!.id);
+      broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+      res.json({ deleted });
     }),
   );
 }

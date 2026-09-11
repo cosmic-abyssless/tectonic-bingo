@@ -3,6 +3,8 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { draftPicks, signupAnswers, signups, teamMembers, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
+import { getAcceptedPairs } from "./pairingService";
+import { isTeamLead } from "./teamService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -27,37 +29,77 @@ function getDraftedUserIds(db: Db, bingoId: string): Set<string> {
   return new Set(memberRows.map((m) => m.userId));
 }
 
+// In duo mode a pair shares one pickNumber, so the next pick is max + 1
+// rather than row count + 1.
+function nextPickNumber(db: Db, bingoId: string): number {
+  const rows = db.select({ pickNumber: draftPicks.pickNumber }).from(draftPicks).where(eq(draftPicks.bingoId, bingoId)).all();
+  return rows.reduce((max, r) => Math.max(max, r.pickNumber), 0) + 1;
+}
+
 export interface DraftPoolEntry {
   signup: typeof signups.$inferSelect;
   user: MinimalUser;
   answers: (typeof signupAnswers.$inferSelect)[] | null; // null unless the requester may see answers
 }
 
+// What one pick drafts: a solo player, or an accepted duo pair.
+export interface DraftUnit {
+  pairingId: string | null;
+  entries: DraftPoolEntry[];
+}
+
 export interface DraftState {
-  teams: ((typeof teams.$inferSelect) & { captainRsn: string })[]; // sorted by draftOrder once the draft has started
+  teams: ((typeof teams.$inferSelect) & { captainRsn: string; coCaptain: { userId: string; rsn: string } | null })[]; // sorted by draftOrder once the draft has started
   picks: ((typeof draftPicks.$inferSelect) & { user: MinimalUser; rsn: string })[];
-  pool: DraftPoolEntry[];
+  pool: DraftUnit[];
   draftStarted: boolean;
   currentPick: { pickNumber: number; round: number; teamId: string } | null;
 }
 
-// includeAnswers gates signup-answer visibility — only mods and captains
+// Groups undrafted signups into units. Pairs whose other half is missing
+// from the pool (withdrawn, or somehow already on a team) fall back to solo.
+function groupIntoUnits(db: Db, bingoId: string, entries: DraftPoolEntry[]): DraftUnit[] {
+  const byUserId = new Map(entries.map((e) => [e.user.id, e]));
+  const units: DraftUnit[] = [];
+  for (const { pairing, userIds } of getAcceptedPairs(db, bingoId)) {
+    const pair = userIds.map((id) => byUserId.get(id)).filter((e): e is DraftPoolEntry => !!e);
+    if (pair.length !== 2) continue;
+    units.push({ pairingId: pairing.id, entries: pair });
+    for (const id of userIds) byUserId.delete(id);
+  }
+  for (const entry of byUserId.values()) units.push({ pairingId: null, entries: [entry] });
+  return units;
+}
+
+// includeAnswers gates signup-answer visibility — only mods and team leads
 // should see what a prospective draftee wrote on the signup form.
 export function getDraftState(db: Db, bingoId: string, opts: { includeAnswers: boolean }): DraftState {
   const teamRows = db.select().from(teams).where(eq(teams.bingoId, bingoId)).all();
   const draftStarted = teamRows.length > 0 && teamRows.every((t) => t.draftOrder != null);
   const sortedTeamRows = draftStarted ? [...teamRows].sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0)) : teamRows;
+  const teamIds = teamRows.map((t) => t.id);
 
-  // Captains never go through draftPicks (they're assigned pre-draft), so
-  // their RSN has to come from signups directly, same as pool entries.
-  const captainUserIds = sortedTeamRows.map((t) => t.captainUserId);
-  const captainSignupRows = captainUserIds.length
-    ? db.select({ userId: signups.userId, rsn: signups.rsn }).from(signups).where(and(eq(signups.bingoId, bingoId), inArray(signups.userId, captainUserIds))).all()
+  // Captains and co-captains never go through draftPicks (they're assigned
+  // pre-draft), so their RSNs have to come from signups directly.
+  const coCaptainRows = teamIds.length
+    ? db.select({ teamId: teamMembers.teamId, userId: teamMembers.userId }).from(teamMembers).where(and(inArray(teamMembers.teamId, teamIds), eq(teamMembers.isCoCaptain, true))).all()
     : [];
-  const captainRsnByUserId = new Map(captainSignupRows.map((s) => [s.userId, s.rsn]));
-  const orderedTeams = sortedTeamRows.map((t) => ({ ...t, captainRsn: captainRsnByUserId.get(t.captainUserId) ?? "" }));
+  const coCaptainByTeamId = new Map(coCaptainRows.map((r) => [r.teamId, r.userId]));
+  const leadUserIds = [...sortedTeamRows.map((t) => t.captainUserId), ...coCaptainRows.map((r) => r.userId)];
+  const leadSignupRows = leadUserIds.length
+    ? db.select({ userId: signups.userId, rsn: signups.rsn }).from(signups).where(and(eq(signups.bingoId, bingoId), inArray(signups.userId, leadUserIds))).all()
+    : [];
+  const leadRsnByUserId = new Map(leadSignupRows.map((s) => [s.userId, s.rsn]));
+  const orderedTeams = sortedTeamRows.map((t) => {
+    const coCaptainUserId = coCaptainByTeamId.get(t.id);
+    return {
+      ...t,
+      captainRsn: leadRsnByUserId.get(t.captainUserId) ?? "",
+      coCaptain: coCaptainUserId ? { userId: coCaptainUserId, rsn: leadRsnByUserId.get(coCaptainUserId) ?? "" } : null,
+    };
+  });
 
-  const pickRows = db.select().from(draftPicks).where(eq(draftPicks.bingoId, bingoId)).orderBy(draftPicks.pickNumber).all();
+  const pickRows = db.select().from(draftPicks).where(eq(draftPicks.bingoId, bingoId)).orderBy(draftPicks.pickNumber, draftPicks.createdAt).all();
   const pickedUserIds = pickRows.map((p) => p.userId);
   const pickedUserRows = pickedUserIds.length ? db.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, pickedUserIds)).all() : [];
   const pickedUserById = new Map(pickedUserRows.map((u) => [u.id, u]));
@@ -78,15 +120,16 @@ export function getDraftState(db: Db, bingoId: string, opts: { includeAnswers: b
       ? db.select().from(signupAnswers).where(inArray(signupAnswers.signupId, poolSignups.map((s) => s.id))).all()
       : [];
 
-  const pool: DraftPoolEntry[] = poolSignups.map((s) => ({
+  const poolEntries: DraftPoolEntry[] = poolSignups.map((s) => ({
     signup: s,
     user: poolUserById.get(s.userId)!,
     answers: opts.includeAnswers ? poolAnswers.filter((a) => a.signupId === s.id) : null,
   }));
+  const pool = groupIntoUnits(db, bingoId, poolEntries);
 
   let currentPick: DraftState["currentPick"] = null;
   if (draftStarted && pool.length > 0) {
-    const pickNumber = picks.length + 1;
+    const pickNumber = nextPickNumber(db, bingoId);
     const round = Math.ceil(pickNumber / orderedTeams.length);
     const teamIndex = pickOrderTeamIndex(orderedTeams.length, pickNumber);
     currentPick = { pickNumber, round, teamId: orderedTeams[teamIndex]!.id };
@@ -130,11 +173,12 @@ export interface MakePickParams {
   actingIsAdmin: boolean;
 }
 
-// The captain of the team currently on the clock picks a signed-up player
-// out of the undrafted pool. Site admins can pick on behalf of whichever
-// team is currently on the clock (they don't get to jump the queue either)
-// — a regular per-bingo mod who isn't also a site admin does not get this
-// override, only the acting captain does.
+// A lead (captain or co-captain) of the team currently on the clock picks a
+// signed-up player out of the undrafted pool. In duo mode, picking either
+// half of a pair drafts both onto the team under one pick number. Site
+// admins can pick on behalf of whichever team is currently on the clock
+// (they don't get to jump the queue either) — a regular per-bingo mod who
+// isn't also a site admin does not get this override.
 export function makePick(db: Db, params: MakePickParams) {
   const { bingo, pickedUserId, actingUserId, actingIsAdmin } = params;
   if (bingo.stage !== "draft") {
@@ -148,31 +192,33 @@ export function makePick(db: Db, params: MakePickParams) {
     }
     const orderedTeams = [...teamRows].sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0));
 
-    const pickCount = tx.select().from(draftPicks).where(eq(draftPicks.bingoId, bingo.id)).all().length;
-    const pickNumber = pickCount + 1;
+    const pickNumber = nextPickNumber(tx, bingo.id);
     const currentTeam = orderedTeams[pickOrderTeamIndex(orderedTeams.length, pickNumber)]!;
 
-    if (!actingIsAdmin && currentTeam.captainUserId !== actingUserId) {
+    if (!actingIsAdmin && !isTeamLead(tx, currentTeam.id, actingUserId)) {
       throw new ServiceError(403, "It's not your team's turn to pick");
     }
 
-    const signup = tx
-      .select()
-      .from(signups)
-      .where(and(eq(signups.bingoId, bingo.id), eq(signups.userId, pickedUserId), eq(signups.status, "active")))
-      .get();
-    if (!signup) throw new ServiceError(400, "That player isn't signed up for this bingo");
+    const pair = getAcceptedPairs(tx, bingo.id).find((p) => p.userIds.includes(pickedUserId));
+    const userIds = pair ? pair.userIds : [pickedUserId];
 
     const teamIds = teamRows.map((t) => t.id);
-    const alreadyDrafted = tx.select({ id: teamMembers.id }).from(teamMembers).where(and(inArray(teamMembers.teamId, teamIds), eq(teamMembers.userId, pickedUserId))).get();
-    if (alreadyDrafted) throw new ServiceError(400, "That player has already been drafted");
+    for (const userId of userIds) {
+      const signup = tx
+        .select({ id: signups.id })
+        .from(signups)
+        .where(and(eq(signups.bingoId, bingo.id), eq(signups.userId, userId), eq(signups.status, "active")))
+        .get();
+      if (!signup) throw new ServiceError(400, "That player isn't signed up for this bingo");
 
-    const pick = tx
-      .insert(draftPicks)
-      .values({ bingoId: bingo.id, pickNumber, teamId: currentTeam.id, userId: pickedUserId, pickedByUserId: actingUserId })
-      .returning()
-      .get();
-    tx.insert(teamMembers).values({ teamId: currentTeam.id, userId: pickedUserId, isCaptain: false }).run();
-    return pick;
+      const alreadyDrafted = tx.select({ id: teamMembers.id }).from(teamMembers).where(and(inArray(teamMembers.teamId, teamIds), eq(teamMembers.userId, userId))).get();
+      if (alreadyDrafted) throw new ServiceError(400, "That player has already been drafted");
+    }
+
+    const picks = userIds.map((userId) =>
+      tx.insert(draftPicks).values({ bingoId: bingo.id, pickNumber, teamId: currentTeam.id, userId, pickedByUserId: actingUserId }).returning().get(),
+    );
+    for (const userId of userIds) tx.insert(teamMembers).values({ teamId: currentTeam.id, userId, isCaptain: false }).run();
+    return picks;
   });
 }

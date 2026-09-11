@@ -139,7 +139,7 @@ export function ModPage() {
           {isAdmin && (
             <>
               <TabPanel id="settings">
-                <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} />
+                <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} hasSignups={shell.hasSignups} />
               </TabPanel>
               <TabPanel id="board">
                 <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />

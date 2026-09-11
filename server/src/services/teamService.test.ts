@@ -4,7 +4,8 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { and, eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { addTeamMember, createTeam, deleteTeam, getCaptainCandidates, getTeamsWithMembers, removeTeamMember, updateTeam } from "./teamService";
+import { addTeamMember, createTeam, deleteTeam, getCaptainCandidates, getTeamsWithMembers, isTeamLead, removeTeamMember, updateTeam } from "./teamService";
+import { adminPair } from "./pairingService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -181,5 +182,29 @@ describe("deleteTeam", () => {
 
     expect(() => deleteTeam(db, team.id)).toThrow(ServiceError);
     expect(getTeamsWithMembers(db, bingo.id)).toHaveLength(1);
+  });
+});
+
+describe("createTeam with a co-captain", () => {
+  it("adds the co-captain as a lead who can't be removed", () => {
+    const { bingo, captain, member } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, coCaptainUserId: member.id });
+    expect(isTeamLead(db, team.id, member.id)).toBe(true);
+    expect(isTeamLead(db, team.id, captain.id)).toBe(true);
+    const [withMembers] = getTeamsWithMembers(db, bingo.id);
+    expect(withMembers!.members.map((m) => [m.user.id, m.isCaptain, m.isCoCaptain])).toEqual([
+      [captain.id, true, false],
+      [member.id, false, true],
+    ]);
+    expect(() => removeTeamMember(db, team.id, member.id)).toThrow(/co-captain/);
+  });
+
+  it("keeps duo pairs together", () => {
+    const { bingo, captain, captain2, member } = seedBingoAndUsers();
+    const duo = { ...bingo, stage: "signup" as const, signupMode: "duo" as const };
+    adminPair(db, duo, { userIdA: captain.id, userIdB: member.id, createdByUserId: captain.id });
+    expect(() => createTeam(db, { bingoId: bingo.id, captainUserId: captain.id })).toThrow(/pick them as the co-captain/);
+    expect(() => createTeam(db, { bingoId: bingo.id, captainUserId: captain2.id, coCaptainUserId: member.id })).toThrow(/paired with someone else/);
+    expect(() => createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, coCaptainUserId: member.id })).not.toThrow();
   });
 });

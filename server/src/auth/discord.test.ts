@@ -19,11 +19,25 @@ afterEach(() => {
 
 describe("upsertLoginUser", () => {
   it("creates a new user from a Discord profile", async () => {
-    const user = await upsertLoginUser(db, { id: "111", username: "alice" }, "AliceInGuild");
+    const user = await upsertLoginUser(db, { id: "111", username: "alice" }, { inGuild: true, nick: "AliceInGuild" });
     expect(user.discordId).toBe("111");
     expect(user.discordUsername).toBe("alice");
     expect(user.discordGuildNick).toBe("AliceInGuild");
+    expect(user.inGuild).toBe(true);
     expect(user.isAdmin).toBe(false);
+  });
+
+  it("records non-membership and clears the guild nick", async () => {
+    await upsertLoginUser(db, { id: "111", username: "alice" }, { inGuild: true, nick: "AliceInGuild" });
+    const second = await upsertLoginUser(db, { id: "111", username: "alice" }, { inGuild: false });
+    expect(second.inGuild).toBe(false);
+    expect(second.discordGuildNick).toBeNull();
+  });
+
+  it("keeps the stored membership when the lookup result is unknown", async () => {
+    await upsertLoginUser(db, { id: "111", username: "alice" }, { inGuild: false });
+    const second = await upsertLoginUser(db, { id: "111", username: "alice" }, null);
+    expect(second.inGuild).toBe(false);
   });
 
   it("bootstraps a user in ADMIN_DISCORD_IDS as admin", async () => {
@@ -34,7 +48,7 @@ describe("upsertLoginUser", () => {
 
   it("upserts on repeat login, updating profile fields", async () => {
     await upsertLoginUser(db, { id: "111", username: "alice" }, null);
-    const second = await upsertLoginUser(db, { id: "111", username: "alice_renamed" }, "NewNick");
+    const second = await upsertLoginUser(db, { id: "111", username: "alice_renamed" }, { inGuild: true, nick: "NewNick" });
     const all = await db.select().from(schema.users);
     expect(all).toHaveLength(1);
     expect(second.discordUsername).toBe("alice_renamed");

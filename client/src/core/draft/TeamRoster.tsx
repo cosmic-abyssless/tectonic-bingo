@@ -2,6 +2,14 @@ import type { DraftPick, DraftTeam } from "@bingo/shared";
 import { CrownIcon } from "../ui/icons";
 import { displayName } from "../ui/user";
 
+// A duo pair is drafted as one pick, so both rows share a pickNumber — show
+// them as one entry so the roster reads the same way the draft was made.
+function groupByPick(picks: DraftPick[]): DraftPick[][] {
+  const byNumber = new Map<number, DraftPick[]>();
+  for (const p of picks) byNumber.set(p.pickNumber, [...(byNumber.get(p.pickNumber) ?? []), p]);
+  return [...byNumber.entries()].sort(([a], [b]) => a - b).map(([, group]) => group);
+}
+
 export function TeamRoster({ team, picks, isCurrent, highlight }: { team: DraftTeam; picks: DraftPick[]; isCurrent?: boolean; highlight?: boolean }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
@@ -18,11 +26,21 @@ export function TeamRoster({ team, picks, isCurrent, highlight }: { team: DraftT
           <CrownIcon size={12} className="shrink-0 text-warn" aria-label="Captain" />
           <span className="truncate">{team.captainRsn || "?"}</span>
         </div>
+        {team.coCaptain && (
+          <div className="flex min-w-0 items-center gap-1 text-xs text-fg-muted">
+            <CrownIcon size={12} className="shrink-0 text-fg-subtle" aria-label="Co-captain" />
+            <span className="truncate">{team.coCaptain.rsn || "?"}</span>
+          </div>
+        )}
       </div>
       <ul className="w-full space-y-1">
-        {picks.map((p) => (
-          <li key={p.id} className="truncate rounded-sm bg-surface px-2.5 py-1 text-sm text-fg-muted">
-            {p.rsn || displayName(p.user)}
+        {groupByPick(picks).map((group) => (
+          <li key={group[0].pickNumber} className="rounded-sm bg-surface px-2.5 py-1 text-sm text-fg-muted">
+            {group.map((p) => (
+              <div key={p.id} className="truncate">
+                {p.rsn || displayName(p.user)}
+              </div>
+            ))}
           </li>
         ))}
       </ul>

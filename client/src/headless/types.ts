@@ -17,6 +17,7 @@ export interface TeamMemberModel {
   displayName: string;
   avatarUrl: string;
   isCaptain: boolean;
+  isCoCaptain: boolean;
 }
 
 export interface TeamModel {
@@ -24,9 +25,9 @@ export interface TeamModel {
   name: string;
   color: string | null;
   isMine: boolean;
-  /** Captain first. */
+  /** Captain first, then co-captain. */
   members: TeamMemberModel[];
-  /** The viewer is this team's captain (the rename endpoint is captain-only). */
+  /** The viewer leads this team (captain or co-captain; the rename endpoint is lead-only). */
   canRename: boolean;
 }
 
