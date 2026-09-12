@@ -18,6 +18,7 @@ import { Button, IconButton } from "../ui/Button";
 import { Badge, EmptyState, Notice } from "../ui/Card";
 import { Input, Select } from "../ui/Field";
 import { CheckIcon, UsersIcon, XIcon } from "../ui/icons";
+import { SortHeader, compareSortValues, useTableSort } from "../ui/tableSort";
 
 function csvEscape(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
@@ -30,10 +31,11 @@ function partnerRsn(entry: RosterEntry, roster: RosterEntry[]): string | null {
 }
 
 function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: string }[], isDuo: boolean): string {
-  const headers = ["RSN", "Discord", "Status", "Buy-in", "Collected by", ...(isDuo ? ["Partner"] : []), ...questionPrompts.map((q) => q.prompt)];
-  const rows = roster.map((entry) => {
+  const headers = ["#", "RSN", "Discord", "Status", "Buy-in", "Collected by", ...(isDuo ? ["Partner"] : []), ...questionPrompts.map((q) => q.prompt)];
+  const rows = roster.map((entry, i) => {
     const answerByQ = new Map(entry.answers.map((a) => [a.questionId, a.value]));
     return [
+      String(i + 1),
       entry.signup.rsn,
       displayName(entry.user),
       entry.signup.status,
@@ -198,7 +200,27 @@ function PartnerCell({ slug, entry, roster }: { slug: string; entry: RosterEntry
   );
 }
 
-const TH = "pb-2 pr-4 text-left text-xs font-medium uppercase tracking-wide text-fg-subtle";
+// "order" | "rsn" | "discord" | "status" | "buyin" | "collectedBy" | "partner" | a signup question's id.
+type SortKey = string;
+
+// `order` is the 1-based signup position (the server returns the roster in
+// createdAt order), kept alongside the entry so sorting by another column
+// doesn't lose it.
+interface NumberedEntry {
+  order: number;
+  entry: RosterEntry;
+}
+
+function rosterSortValue({ order, entry }: NumberedEntry, key: SortKey, roster: RosterEntry[]): string | number {
+  if (key === "order") return order;
+  if (key === "rsn") return entry.signup.rsn.toLowerCase();
+  if (key === "discord") return displayName(entry.user).toLowerCase();
+  if (key === "status") return entry.signup.status;
+  if (key === "buyin") return entry.signup.buyinReceivedAt ? 1 : 0;
+  if (key === "collectedBy") return entry.collectedByUser ? displayName(entry.collectedByUser).toLowerCase() : "";
+  if (key === "partner") return (partnerRsn(entry, roster) ?? "").toLowerCase();
+  return (entry.answers.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
+}
 
 export function SignupRoster({ slug }: { slug: string }) {
   const { data } = useSignupRoster(slug);
@@ -209,6 +231,13 @@ export function SignupRoster({ slug }: { slug: string }) {
   const questions = questionsData?.questions ?? [];
   const isDuo = bingoData?.bingo.signupMode === "duo";
   const [copied, setCopied] = useState(false);
+  const sort = useTableSort<SortKey>("order");
+
+  const activeCount = roster.filter((r) => r.signup.status === "active").length;
+  const withdrawnCount = roster.length - activeCount;
+  const sorted = roster
+    .map((entry, i) => ({ order: i + 1, entry }))
+    .sort((a, b) => sort.order(compareSortValues(rosterSortValue(a, sort.key, roster), rosterSortValue(b, sort.key, roster))));
 
   async function copyCsv() {
     const csv = buildCsv(roster, questions, isDuo);
@@ -222,7 +251,12 @@ export function SignupRoster({ slug }: { slug: string }) {
       {devMode && bingoData?.bingo.stage === "signup" && <DevSeedPanel slug={slug} />}
       <div className="flex items-center justify-between">
         <p className="text-sm text-fg-muted">
-          <span className="num text-fg">{roster.length}</span> signup{roster.length !== 1 ? "s" : ""}
+          <span className="num text-fg">{activeCount}</span> active signup{activeCount !== 1 ? "s" : ""}
+          {withdrawnCount > 0 && (
+            <>
+              , <span className="num">{withdrawnCount}</span> withdrawn
+            </>
+          )}
         </p>
         <Button size="sm" onPress={copyCsv} isDisabled={roster.length === 0}>
           {copied ? "Copied" : "Copy as CSV"}
@@ -238,24 +272,24 @@ export function SignupRoster({ slug }: { slug: string }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line">
-                <th className={TH}>RSN</th>
-                <th className={TH}>Discord</th>
-                <th className={TH}>Status</th>
-                <th className={TH}>Buy-in</th>
-                <th className={TH}>Collected by</th>
-                {isDuo && <th className={TH}>Partner</th>}
+                <SortHeader label="#" sortKey="order" sort={sort} />
+                <SortHeader label="RSN" sortKey="rsn" sort={sort} />
+                <SortHeader label="Discord" sortKey="discord" sort={sort} />
+                <SortHeader label="Status" sortKey="status" sort={sort} />
+                <SortHeader label="Buy-in" sortKey="buyin" sort={sort} />
+                <SortHeader label="Collected by" sortKey="collectedBy" sort={sort} />
+                {isDuo && <SortHeader label="Partner" sortKey="partner" sort={sort} />}
                 {questions.map((q) => (
-                  <th key={q.id} className={TH}>
-                    {q.prompt}
-                  </th>
+                  <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {roster.map((entry) => {
+              {sorted.map(({ order, entry }) => {
                 const answerByQ = new Map(entry.answers.map((a) => [a.questionId, a.value]));
                 return (
                   <tr key={entry.signup.id}>
+                    <td className="num py-2 pr-4 text-fg-subtle">{order}</td>
                     <td className="py-2 pr-4 font-medium text-fg">
                       <span className="inline-flex items-center gap-1.5">
                         {entry.signup.rsn}
