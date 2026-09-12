@@ -203,6 +203,7 @@ export function getAllSignups(db: Db, bingoId: string) {
     .from(signups)
     .innerJoin(users, eq(signups.userId, users.id))
     .where(eq(signups.bingoId, bingoId))
+    .orderBy(signups.createdAt)
     .all();
   const signupIds = rows.map((r) => r.signup.id);
   const answers = signupIds.length ? db.select().from(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).all() : [];
