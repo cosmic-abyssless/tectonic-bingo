@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingos } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { advanceStage, assertBoardEditable, deleteBingo, updateBingoSettings } from "./bingoService";
+import { advanceStage, assertBoardEditable, deleteBingo, toPublicBingo, updateBingoSettings } from "./bingoService";
 import { createTask, createTile } from "./boardService";
 import { createTeam } from "./teamService";
 import { ServiceError } from "./errors";
@@ -95,6 +95,38 @@ describe("advanceStage", () => {
     const row = db.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!;
     expect(row.stage).toBe("live");
     expect(row.startsAt).not.toBeNull();
+  });
+});
+
+describe("toPublicBingo", () => {
+  it("strips womGroupVerificationCode but keeps every other field", () => {
+    const bingo = seedBingo({ womEnabled: true, womGroupId: "123", womGroupVerificationCode: "top-secret" });
+    const publicBingo = toPublicBingo(bingo);
+    expect(publicBingo).not.toHaveProperty("womGroupVerificationCode");
+    expect(publicBingo.womGroupId).toBe("123");
+    expect(publicBingo.womEnabled).toBe(true);
+    expect(publicBingo.name).toBe(bingo.name);
+  });
+});
+
+describe("updateBingoSettings — WOM fields", () => {
+  it("rejects a non-numeric group ID", () => {
+    const bingo = seedBingo();
+    expect(() => updateBingoSettings(db, bingo.id, { womGroupId: "not-a-number" })).toThrow(ServiceError);
+  });
+
+  it("accepts a numeric group ID and persists WOM settings", () => {
+    const bingo = seedBingo();
+    const updated = updateBingoSettings(db, bingo.id, { womEnabled: true, womGroupId: "456", womGroupVerificationCode: "secret" });
+    expect(updated.womEnabled).toBe(true);
+    expect(updated.womGroupId).toBe("456");
+    expect(updated.womGroupVerificationCode).toBe("secret");
+  });
+
+  it("allows clearing the group ID", () => {
+    const bingo = seedBingo({ womGroupId: "123" });
+    const updated = updateBingoSettings(db, bingo.id, { womGroupId: null });
+    expect(updated.womGroupId).toBeNull();
   });
 });
 

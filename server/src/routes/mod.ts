@@ -11,6 +11,7 @@ import * as draftService from "../services/draftService";
 import * as pairingService from "../services/pairingService";
 import * as devSeedService from "../services/devSeedService";
 import * as teamService from "../services/teamService";
+import { syncWomCompetitionAfterDraft } from "../services/womCompetitionService";
 import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
 import { approveSubmission, rejectSubmission } from "../services/scoringService";
 import { ServiceError } from "../services/errors";
@@ -93,9 +94,14 @@ router.post(
     if (!toStage || !bingoService.STAGE_ORDER.includes(toStage)) {
       throw new ServiceError(400, "toStage must be a valid stage");
     }
+    const fromStage = req.bingo!.stage;
     const bingo = bingoService.advanceStage(db, { bingoId: req.bingo!.id, toStage, changedByUserId: req.user!.id });
     broadcast({ type: "stage_changed", bingoId: bingo.id, payload: { stage: bingo.stage } });
-    res.json({ bingo });
+    // Fire-and-forget: a WOM outage or bad credentials must never block the
+    // stage change itself. syncWomCompetitionAfterDraft no-ops when the
+    // integration isn't configured.
+    if (fromStage === "draft") void syncWomCompetitionAfterDraft(db, bingo.id);
+    res.json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );
 

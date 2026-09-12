@@ -53,6 +53,23 @@ export const bingos = sqliteTable('bingos', {
   revealScheduledAt: integer('reveal_scheduled_at', { mode: 'timestamp' }),
   startsAt: integer('starts_at', { mode: 'timestamp' }),
   endsAt: integer('ends_at', { mode: 'timestamp' }),
+  // Wise Old Man integration (womCompetitionService.ts): when enabled, a WOM
+  // group competition is created for this bingo's teams once the draft
+  // finishes, and kept in sync when a captain renames their team.
+  // womGroupVerificationCode is a secret (it authorizes editing/deleting the
+  // group's competitions on WOM) — it must NEVER be serialized into a client
+  // response. bingoService.toPublicBingo() strips it; every route that sends
+  // a bingo to a client must go through it.
+  womEnabled: integer('wom_enabled', { mode: 'boolean' }).notNull().default(false),
+  womGroupId: text('wom_group_id'),
+  womGroupVerificationCode: text('wom_group_verification_code'),
+  // Set once syncWomCompetitionAfterDraft successfully creates the
+  // competition; later renames edit this same competition instead of
+  // creating a new one.
+  womCompetitionId: integer('wom_competition_id'),
+  // Last WOM sync failure (create or edit), surfaced in the admin settings
+  // panel. Cleared on the next successful sync.
+  womSyncError: text('wom_sync_error'),
   createdByUserId: text('created_by_user_id').notNull().references(() => users.id),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });

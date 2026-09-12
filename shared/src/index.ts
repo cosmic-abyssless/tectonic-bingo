@@ -90,6 +90,14 @@ export interface Bingo {
   revealScheduledAt: string | null;
   startsAt: string | null;
   endsAt: string | null;
+  // Wise Old Man integration settings (see server/src/services/womCompetitionService.ts).
+  // womGroupVerificationCode is intentionally absent — the server never
+  // serializes it into a response (bingoService.toPublicBingo); the admin
+  // settings form treats it as a write-only field.
+  womEnabled: boolean;
+  womGroupId: string | null;
+  womCompetitionId: number | null;
+  womSyncError: string | null;
   createdByUserId: string;
   createdAt: string;
 }
