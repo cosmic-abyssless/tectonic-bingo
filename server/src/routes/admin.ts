@@ -188,6 +188,16 @@ router.delete(
     res.status(204).end();
   }),
 );
+router.patch(
+  "/tiles/:id/bonus-points",
+  asyncHandler(async (req, res) => {
+    bingoService.assertBoardEditable(req.bingo!);
+    const { points } = req.body as { points?: number };
+    if (points === undefined) throw new ServiceError(400, "points is required");
+    const tile = boardService.updateTileBonusPoints(db, req.params.id as string, points);
+    res.json({ tile });
+  }),
+);
 
 const tileImageUpload = imageUpload(path.join(UPLOADS_DIR, "tiles"));
 router.post(
