@@ -5,9 +5,20 @@ import * as schema from "../db/schema";
 import { bingoLines, claims, nodeEdges, submissions, teamNodeState, tileCategories, tiles } from "../db/schema";
 import { ServiceError } from "./errors";
 import { deleteNode, deleteSubtree, getFullGraph, getNodeTree, getNodeTrees, insertSubtree, replaceSubtree } from "./graphService";
+import { audit, diffFields, markAuditedNoop } from "../audit/record";
+import { describeTaskNode } from "../audit/describe";
 
 type Db = BetterSQLite3Database<typeof schema>;
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Bingo = typeof schema.bingos.$inferSelect;
+
+// A task is a node that's a direct child of its tile's node (see the module
+// comment above createTask) — so the owning tile is one edge-hop up.
+function tileForTaskNode(tx: Tx, taskNodeId: string): typeof tiles.$inferSelect | null {
+  const edge = tx.select({ parentId: nodeEdges.parentId }).from(nodeEdges).where(eq(nodeEdges.childId, taskNodeId)).get();
+  if (!edge) return null;
+  return tx.select().from(tiles).where(eq(tiles.nodeId, edge.parentId)).get() ?? null;
+}
 
 export function getCategories(db: Db, bingoId: string) {
   return db.select().from(tileCategories).where(eq(tileCategories.bingoId, bingoId)).orderBy(tileCategories.sortOrder).all();
@@ -94,16 +105,54 @@ export interface CreateCategoryParams {
   sortOrder?: number;
 }
 export function createCategory(db: Db, params: CreateCategoryParams) {
-  return db.insert(tileCategories).values(params).returning().get();
+  return db.transaction((tx) => {
+    const category = tx.insert(tileCategories).values(params).returning().get();
+    audit(tx, {
+      action: "category.created",
+      bingoId: params.bingoId,
+      entity: { type: "category", id: category.id, label: category.label },
+      details: { label: category.label, colorHex: category.colorHex, sortOrder: category.sortOrder },
+    });
+    return category;
+  });
 }
 export function updateCategory(db: Db, id: string, params: Partial<Omit<CreateCategoryParams, "bingoId">>) {
-  const existing = db.select().from(tileCategories).where(eq(tileCategories.id, id)).get();
-  if (!existing) throw new ServiceError(404, "Category not found");
-  return db.update(tileCategories).set(params).where(eq(tileCategories.id, id)).returning().get();
+  return db.transaction((tx) => {
+    const existing = tx.select().from(tileCategories).where(eq(tileCategories.id, id)).get();
+    if (!existing) throw new ServiceError(404, "Category not found");
+    const updated = tx.update(tileCategories).set(params).where(eq(tileCategories.id, id)).returning().get();
+
+    const changes = diffFields(existing, updated, { only: Object.keys(params) as (keyof typeof existing)[] });
+    if (changes) {
+      audit(tx, {
+        action: "category.updated",
+        bingoId: existing.bingoId,
+        entity: { type: "category", id, label: existing.label },
+        details: { changes: changes as never },
+      });
+    } else {
+      markAuditedNoop();
+    }
+    return updated;
+  });
 }
 export function deleteCategory(db: Db, id: string): void {
-  db.update(tiles).set({ categoryId: null }).where(eq(tiles.categoryId, id)).run();
-  db.delete(tileCategories).where(eq(tileCategories.id, id)).run();
+  db.transaction((tx) => {
+    const existing = tx.select().from(tileCategories).where(eq(tileCategories.id, id)).get();
+    const tilesUnassigned = tx.select({ id: tiles.id }).from(tiles).where(eq(tiles.categoryId, id)).all().length;
+    tx.update(tiles).set({ categoryId: null }).where(eq(tiles.categoryId, id)).run();
+    tx.delete(tileCategories).where(eq(tileCategories.id, id)).run();
+    if (existing) {
+      audit(tx, {
+        action: "category.deleted",
+        bingoId: existing.bingoId,
+        entity: { type: "category", id, label: existing.label },
+        details: { label: existing.label, tilesUnassigned },
+      });
+    } else {
+      markAuditedNoop();
+    }
+  });
 }
 
 export interface CreateTileParams {
@@ -128,20 +177,52 @@ export function createTile(db: Db, params: CreateTileParams) {
       .get();
     if (existing) throw new ServiceError(409, `A tile already exists at row ${params.boardRow}, col ${params.boardCol}`);
     const nodeId = insertSubtree(tx, params.bingoId, { kind: "ALL" });
-    return tx.insert(tiles).values({ ...params, nodeId }).returning().get();
+    const tile = tx.insert(tiles).values({ ...params, nodeId }).returning().get();
+    audit(tx, {
+      action: "tile.created",
+      bingoId: params.bingoId,
+      entity: { type: "tile", id: tile.id, label: tile.name },
+      details: { name: tile.name, boardRow: tile.boardRow, boardCol: tile.boardCol, categoryId: tile.categoryId },
+    });
+    return tile;
   });
 }
 export function updateTile(db: Db, id: string, params: Partial<Omit<CreateTileParams, "bingoId">>) {
-  const existing = db.select().from(tiles).where(eq(tiles.id, id)).get();
-  if (!existing) throw new ServiceError(404, "Tile not found");
-  return db.update(tiles).set(params).where(eq(tiles.id, id)).returning().get();
+  return db.transaction((tx) => {
+    const existing = tx.select().from(tiles).where(eq(tiles.id, id)).get();
+    if (!existing) throw new ServiceError(404, "Tile not found");
+    const updated = tx.update(tiles).set(params).where(eq(tiles.id, id)).returning().get();
+
+    const changes = diffFields(existing, updated, { only: Object.keys(params) as (keyof typeof existing)[] });
+    if (changes) {
+      audit(tx, {
+        action: "tile.updated",
+        bingoId: existing.bingoId,
+        entity: { type: "tile", id, label: existing.name },
+        details: { changes: changes as never },
+      });
+    } else {
+      markAuditedNoop();
+    }
+    return updated;
+  });
 }
 export function deleteTile(db: Db, id: string): void {
   db.transaction((tx) => {
     const tile = tx.select().from(tiles).where(eq(tiles.id, id)).get();
-    if (!tile) return;
+    if (!tile) {
+      markAuditedNoop();
+      return;
+    }
+    const taskCount = tx.select({ id: nodeEdges.id }).from(nodeEdges).where(eq(nodeEdges.parentId, tile.nodeId)).all().length;
     tx.delete(tiles).where(eq(tiles.id, id)).run(); // must precede deleting the node it FKs to
     deleteSubtree(tx, tile.nodeId);
+    audit(tx, {
+      action: "tile.deleted",
+      bingoId: tile.bingoId,
+      entity: { type: "tile", id, label: tile.name },
+      details: { name: tile.name, boardRow: tile.boardRow, boardCol: tile.boardCol, taskCount },
+    });
   });
 }
 
@@ -159,7 +240,14 @@ export function createTask(db: Db, tileId: string, input: GraphNodeInput, sortOr
     const order = sortOrder ?? tx.select({ id: nodeEdges.id }).from(nodeEdges).where(eq(nodeEdges.parentId, tile.nodeId)).all().length;
     const taskNodeId = insertSubtree(tx, tile.bingoId, input);
     tx.insert(nodeEdges).values({ parentId: tile.nodeId, childId: taskNodeId, sortOrder: order }).run();
-    return getNodeTree(tx, taskNodeId)!;
+    const tree = getNodeTree(tx, taskNodeId)!;
+    audit(tx, {
+      action: "task.created",
+      bingoId: tile.bingoId,
+      entity: { type: "node", id: taskNodeId, label: tree.label },
+      details: { tileId: tile.id, tileName: tile.name, after: describeTaskNode(tree) },
+    });
+    return tree;
   });
 }
 
@@ -167,13 +255,36 @@ export function updateNode(db: Db, id: string, input: GraphNodeInput) {
   return db.transaction((tx) => {
     const existing = tx.select({ bingoId: schema.nodes.bingoId }).from(schema.nodes).where(eq(schema.nodes.id, id)).get();
     if (!existing) throw new ServiceError(404, "Node not found");
+    const before = getNodeTree(tx, id);
+    const tile = tileForTaskNode(tx, id);
     replaceSubtree(tx, id, existing.bingoId, input);
-    return getNodeTree(tx, id)!;
+    const after = getNodeTree(tx, id)!;
+    audit(tx, {
+      action: "task.updated",
+      bingoId: existing.bingoId,
+      entity: { type: "node", id, label: after.label },
+      details: { tileId: tile?.id ?? "", tileName: tile?.name ?? "", before: before ? describeTaskNode(before) : describeTaskNode(after), after: describeTaskNode(after) },
+    });
+    return after;
   });
 }
 
 export function deleteTask(db: Db, id: string): void {
-  db.transaction((tx) => deleteNode(tx, id));
+  db.transaction((tx) => {
+    const before = getNodeTree(tx, id);
+    const tile = tileForTaskNode(tx, id);
+    deleteNode(tx, id);
+    if (before) {
+      audit(tx, {
+        action: "task.deleted",
+        bingoId: before.bingoId,
+        entity: { type: "node", id, label: before.label },
+        details: { tileId: tile?.id ?? "", tileName: tile?.name ?? "", before: describeTaskNode(before) },
+      });
+    } else {
+      markAuditedNoop();
+    }
+  });
 }
 
 // Reorders a node's children (drag-reorder in the admin UI).
@@ -201,6 +312,7 @@ export function generateLines(db: Db, bingo: Bingo, pointsPerLine = 15) {
   return db.transaction((tx) => {
     const tileRows = tx.select().from(tiles).where(eq(tiles.bingoId, bingo.id)).all();
     const existingLines = tx.select().from(bingoLines).where(eq(bingoLines.bingoId, bingo.id)).all();
+    const replaced = existingLines.length;
     for (const line of existingLines) {
       tx.delete(bingoLines).where(eq(bingoLines.id, line.id)).run(); // must precede deleting the node it FKs to
       deleteSubtree(tx, line.nodeId);
@@ -234,6 +346,17 @@ export function generateLines(db: Db, bingo: Bingo, pointsPerLine = 15) {
       const diagTrBl = Array.from({ length: bingo.boardRows }, (_, i) => tileAt(i, bingo.boardCols - 1 - i)?.id).filter((id): id is string => !!id);
       createdLines.push(makeLine("diagonal", 1, diagTrBl));
     }
+
+    audit(tx, {
+      action: "line.generated",
+      bingoId: bingo.id,
+      entity: { type: "bingo", id: bingo.id, label: bingo.name },
+      details: {
+        pointsPerLine,
+        replaced,
+        created: { row: bingo.boardRows, column: bingo.boardCols, diagonal: bingo.boardRows === bingo.boardCols ? 2 : 0 },
+      },
+    });
     return createdLines;
   });
 }
@@ -242,7 +365,14 @@ export function updateLinePoints(db: Db, id: string, points: number) {
   return db.transaction((tx) => {
     const line = tx.select().from(bingoLines).where(eq(bingoLines.id, id)).get();
     if (!line) throw new ServiceError(404, "Line not found");
+    const node = tx.select({ points: schema.nodes.points }).from(schema.nodes).where(eq(schema.nodes.id, line.nodeId)).get()!;
     tx.update(schema.nodes).set({ points }).where(eq(schema.nodes.id, line.nodeId)).run();
+    audit(tx, {
+      action: "line.updated",
+      bingoId: line.bingoId,
+      entity: { type: "line", id: line.id, label: `${line.lineType} ${line.lineIndex}` },
+      details: { lineType: line.lineType, lineIndex: line.lineIndex, points: { before: node.points, after: points } },
+    });
     return line;
   });
 }
@@ -250,8 +380,18 @@ export function updateLinePoints(db: Db, id: string, points: number) {
 export function deleteLine(db: Db, id: string): void {
   db.transaction((tx) => {
     const line = tx.select().from(bingoLines).where(eq(bingoLines.id, id)).get();
-    if (!line) return;
+    if (!line) {
+      markAuditedNoop();
+      return;
+    }
+    const node = tx.select({ points: schema.nodes.points }).from(schema.nodes).where(eq(schema.nodes.id, line.nodeId)).get();
     tx.delete(bingoLines).where(eq(bingoLines.id, id)).run(); // must precede deleting the node it FKs to
     deleteSubtree(tx, line.nodeId);
+    audit(tx, {
+      action: "line.deleted",
+      bingoId: line.bingoId,
+      entity: { type: "line", id, label: `${line.lineType} ${line.lineIndex}` },
+      details: { lineType: line.lineType, lineIndex: line.lineIndex, points: node?.points ?? 0 },
+    });
   });
 }

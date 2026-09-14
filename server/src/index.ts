@@ -19,6 +19,7 @@ import siteAdminRouter from "./routes/siteAdmin";
 import osrsItemsRouter from "./routes/osrsItems";
 import { errorHandler } from "./middleware/errorHandler";
 import { requireGuildMember } from "./middleware/requireGuildMember";
+import { auditContext } from "./audit/middleware";
 import { initWebSocketServer } from "./ws";
 import { sqlite } from "./db";
 import { getAdminDiscordIds } from "./config";
@@ -98,6 +99,10 @@ app.use(
 configurePassport();
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Opens the per-request audit actor/requestId context — must run after
+// passport.session() (needs req.user) and before the routers.
+app.use(auditContext);
 
 // Uploads — serve screenshots stored locally. Overridable so a Railway
 // deploy can point this at a mounted volume (the default path lives inside

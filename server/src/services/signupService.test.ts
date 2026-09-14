@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { createQuestion } from "./signupService";
+import { createQuestion, deleteQuestion, reorderQuestions, updateQuestion } from "./signupService";
 import { createSignup, getAllSignups, getSignupForUser, markBuyin, updateSignup, withdrawSignup } from "./signupService";
 import { ServiceError } from "./errors";
 
@@ -146,6 +147,68 @@ describe("getAllSignups / markBuyin", () => {
     markBuyin(db, bingo, signup.id, { received: false, recordedByUserId: adminId });
     const withoutCollector = getAllSignups(db, bingo.id);
     expect(withoutCollector[0].collectedByUser).toBeNull();
+  });
+});
+
+describe("audit trail", () => {
+  it("question CRUD records created/updated/deleted/reordered", () => {
+    const { bingo } = seedBingo();
+    const q1 = createQuestion(db, { bingoId: bingo.id, prompt: "Q1", type: "text" });
+    const q2 = createQuestion(db, { bingoId: bingo.id, prompt: "Q2", type: "text" });
+    updateQuestion(db, q1.id, { prompt: "Q1 edited" });
+    reorderQuestions(db, bingo.id, [q2.id, q1.id]);
+    deleteQuestion(db, q2.id);
+
+    const actions = db.select().from(schema.auditLog).all().map((r) => r.action);
+    expect(actions).toEqual(["question.created", "question.created", "question.updated", "question.reordered", "question.deleted"]);
+    const updated = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "question.updated")).get()!;
+    expect(JSON.parse(updated.details).changes).toEqual({ before: { prompt: "Q1" }, after: { prompt: "Q1 edited" } });
+  });
+
+  it("createSignup records signup.created, flagging a re-signup as reactivated", () => {
+    const { bingo, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "MyRsn", answers: [] });
+    withdrawSignup(db, bingo, signup.id);
+    createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "NewRsn", answers: [] });
+
+    const created = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.created")).all();
+    expect(created).toHaveLength(2);
+    expect(JSON.parse(created[0]!.details)).toMatchObject({ reactivated: false });
+    expect(JSON.parse(created[1]!.details)).toMatchObject({ reactivated: true, rsn: "NewRsn" });
+  });
+
+  it("updateSignup records rsn before/after and which answers changed", () => {
+    const { bingo, memberId } = seedBingo();
+    const q = createQuestion(db, { bingoId: bingo.id, prompt: "Q", type: "text" });
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Old", answers: [{ questionId: q.id, value: "A" }] });
+
+    updateSignup(db, bingo, signup.id, { rsn: "New", answers: [{ questionId: q.id, value: "B" }] });
+
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.updated")).get()!;
+    const details = JSON.parse(row.details);
+    expect(details.rsn).toEqual({ before: "Old", after: "New" });
+    expect(details.answersChanged).toEqual([q.id]);
+  });
+
+  it("withdrawSignup records signup.withdrawn", () => {
+    const { bingo, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "MyRsn", answers: [] });
+    withdrawSignup(db, bingo, signup.id);
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.withdrawn")).get()!;
+    expect(JSON.parse(row.details)).toEqual({ rsn: "MyRsn" });
+  });
+
+  it("markBuyin records the before receivedAt state and the collector's name", () => {
+    const { bingo, memberId, adminId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "MyRsn", answers: [] });
+    markBuyin(db, bingo, signup.id, { received: true, collectedByUserId: adminId, recordedByUserId: adminId });
+    markBuyin(db, bingo, signup.id, { received: false, recordedByUserId: adminId });
+
+    const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.buyin_marked")).all();
+    expect(rows).toHaveLength(2);
+    expect(JSON.parse(rows[0]!.details)).toMatchObject({ received: true, collectedByName: "admin", before: { receivedAt: null } });
+    const secondBefore = JSON.parse(rows[1]!.details).before.receivedAt;
+    expect(secondBefore).not.toBeNull();
   });
 });
 

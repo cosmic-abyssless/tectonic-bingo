@@ -183,6 +183,30 @@ describe("syncWomCompetitionAfterDraft", () => {
   });
 });
 
+describe("audit trail", () => {
+  it("syncWomCompetitionAfterDraft records wom.competition_created as system on success", async () => {
+    const { bingo } = seedBingoWithTeam();
+    await syncWomCompetitionAfterDraft(db, bingo.id, new WomCompetitionClient(mockFetch([{ body: { competition: { id: 999 } } }])));
+    const created = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "wom.competition_created")).get()!;
+    expect(created.actorType).toBe("system");
+    expect(JSON.parse(created.details)).toEqual({ competitionId: 999 });
+  });
+
+  it("syncWomCompetitionAfterDraft records wom.sync_failed on error", async () => {
+    const { bingo } = seedBingoWithTeam();
+    await syncWomCompetitionAfterDraft(db, bingo.id, new WomCompetitionClient(mockFetch([{ status: 401, body: { message: "bad code" } }])));
+    const failed = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "wom.sync_failed")).get()!;
+    expect(JSON.parse(failed.details)).toMatchObject({ operation: "create" });
+  });
+
+  it("syncWomTeamRename records wom.roster_synced", async () => {
+    const { bingo } = seedBingoWithTeam({ womCompetitionId: 42 });
+    await syncWomTeamRename(db, bingo.id, new WomCompetitionClient(mockFetch([{ body: {} }])));
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "wom.roster_synced")).get()!;
+    expect(row.actorType).toBe("system");
+  });
+});
+
 describe("syncWomTeamRename", () => {
   it("edits the existing competition with the current roster", async () => {
     const { bingo, team } = seedBingoWithTeam({ womCompetitionId: 42 });

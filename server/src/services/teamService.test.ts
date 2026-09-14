@@ -4,7 +4,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { and, eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { addTeamMember, createTeam, deleteTeam, getCaptainCandidates, getTeamsWithMembers, isTeamLead, removeTeamMember, updateTeam } from "./teamService";
+import { addTeamMember, createPointAdjustment, createTeam, deleteTeam, getCaptainCandidates, getTeamsWithMembers, isTeamLead, removeTeamMember, updateTeam } from "./teamService";
 import { adminPair } from "./pairingService";
 import { ServiceError } from "./errors";
 
@@ -182,6 +182,66 @@ describe("deleteTeam", () => {
 
     expect(() => deleteTeam(db, team.id)).toThrow(ServiceError);
     expect(getTeamsWithMembers(db, bingo.id)).toHaveLength(1);
+  });
+});
+
+describe("audit trail", () => {
+  it("createTeam records team.created with the visibility scoped to the team", () => {
+    const { bingo, captain } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, name: "Alpha" });
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "team.created")).get()!;
+    expect(row.teamId).toBe(team.id);
+    expect(row.visibility).toBe("team");
+    expect(JSON.parse(row.details)).toMatchObject({ name: "Alpha", captainName: "captain" });
+  });
+
+  it("updateTeam records a rename with before/after names and never the codeword value", () => {
+    const { bingo, captain } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, name: "Old Name" });
+    updateTeam(db, team.id, { name: "New Name", codeword: "brand-new-word" });
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "team.updated")).get()!;
+    const details = JSON.parse(row.details);
+    expect(details.changes.before.name).toBe("Old Name");
+    expect(details.changes.after.name).toBe("New Name");
+    expect(details.codeword).toEqual({ changed: true });
+    expect(JSON.stringify(details)).not.toContain("brand-new-word");
+  });
+
+  it("updateTeam no-ops (no audit row) for an empty patch", () => {
+    const { bingo, captain } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    updateTeam(db, team.id, {});
+    const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "team.updated")).all();
+    expect(rows).toHaveLength(0);
+  });
+
+  it("addTeamMember / removeTeamMember record their actions", () => {
+    const { bingo, captain, member } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    addTeamMember(db, team.id, member.id);
+    removeTeamMember(db, team.id, member.id);
+    const added = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "team.member_added")).get()!;
+    const removed = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "team.member_removed")).get()!;
+    expect(JSON.parse(added.details)).toMatchObject({ userId: member.id, displayName: "member" });
+    expect(JSON.parse(removed.details)).toMatchObject({ userId: member.id, displayName: "member" });
+  });
+
+  it("deleteTeam records team.deleted with the member count captured before the delete", () => {
+    const { bingo, captain, member } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    addTeamMember(db, team.id, member.id);
+    deleteTeam(db, team.id);
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "team.deleted")).get()!;
+    expect(JSON.parse(row.details)).toMatchObject({ memberCount: 2, captainName: "captain" });
+  });
+
+  it("createPointAdjustment records points.adjusted scoped to the team", () => {
+    const { bingo, captain } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    createPointAdjustment(db, { teamId: team.id, bingoId: bingo.id, amount: 15, reason: "bonus", createdByUserId: captain.id });
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "points.adjusted")).get()!;
+    expect(row.teamId).toBe(team.id);
+    expect(JSON.parse(row.details)).toEqual({ amount: 15, reason: "bonus" });
   });
 });
 

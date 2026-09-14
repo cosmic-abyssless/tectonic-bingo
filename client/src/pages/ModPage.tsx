@@ -5,6 +5,7 @@ import { STAGE_ORDER, type Stage } from "@bingo/shared";
 import { useBingo } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { useWebSocketEvent } from "../context/WebSocketContext";
+import { AuditLog } from "../core/mod/AuditLog";
 import { ReviewQueue } from "../core/mod/ReviewQueue";
 import { StageControls } from "../core/mod/StageControls";
 import { SignupRoster } from "../core/mod/SignupRoster";
@@ -34,6 +35,7 @@ import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; until?: Stage }[] = [
   { key: "submissions", label: "Submissions", adminOnly: false, from: "live" },
   { key: "signups", label: "Signups", adminOnly: false, until: "draft" },
+  { key: "audit", label: "Audit log", adminOnly: false },
   { key: "settings", label: "Settings", adminOnly: true },
   { key: "board", label: "Board", adminOnly: true, until: "reveal" },
   { key: "lines", label: "Lines", adminOnly: true, until: "reveal" },
@@ -135,6 +137,9 @@ export function ModPage() {
           </TabPanel>
           <TabPanel id="signups">
             <SignupRoster slug={slug} />
+          </TabPanel>
+          <TabPanel id="audit">
+            <AuditLog slug={slug} />
           </TabPanel>
           {isAdmin && (
             <>

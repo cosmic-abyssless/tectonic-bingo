@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -6,6 +7,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createSignup, withdrawSignup } from "./signupService";
 import { adminPair, cancelRequest, getAcceptedPairs, getPairingState, requestPairing, respondToRequest, unpair } from "./pairingService";
 import { ServiceError } from "./errors";
+import { runWithAuditContext } from "../audit/context";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -139,6 +141,58 @@ describe("adminPair / unpair", () => {
     const { bingo, admin, a, b, c } = seed();
     adminPair(db, bingo, { userIdA: a.id, userIdB: b.id, createdByUserId: admin.id });
     expect(() => adminPair(db, bingo, { userIdA: b.id, userIdB: c.id, createdByUserId: admin.id })).toThrow(/already has a partner/);
+  });
+});
+
+describe("audit trail", () => {
+  it("requestPairing records pairing.requested for a one-sided request, and pairing.accepted for a mutual match", () => {
+    const { bingo, a, b } = seed();
+    requestPairing(db, bingo, { requester: a, targetDiscordId: b.discordId });
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "pairing.requested")).all()).toHaveLength(1);
+
+    requestPairing(db, bingo, { requester: b, targetDiscordId: a.discordId });
+    const accepted = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "pairing.accepted")).all();
+    expect(accepted).toHaveLength(1);
+    expect(JSON.parse(accepted[0]!.details)).toMatchObject({ partnerUserId: b.id });
+  });
+
+  it("respondToRequest records pairing.declined; cancelRequest records pairing.cancelled", () => {
+    const { bingo, a, b, c } = seed();
+    const ab = requestPairing(db, bingo, { requester: a, targetDiscordId: b.discordId });
+    respondToRequest(db, bingo, b, ab.id, false);
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "pairing.declined")).all()).toHaveLength(1);
+
+    const ac = requestPairing(db, bingo, { requester: a, targetDiscordId: c.discordId });
+    cancelRequest(db, bingo, a, ac.id);
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "pairing.cancelled")).all()).toHaveLength(1);
+  });
+
+  it("adminPair records pairing.admin_paired and unpair records pairing.unpaired, both with display names", () => {
+    const { bingo, admin, a, b } = seed();
+    const pairing = adminPair(db, bingo, { userIdA: a.id, userIdB: b.id, createdByUserId: admin.id });
+    const paired = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "pairing.admin_paired")).get()!;
+    expect(JSON.parse(paired.details).displayNames).toEqual(["a", "b"]);
+
+    unpair(db, bingo, pairing.id);
+    const unpaired = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "pairing.unpaired")).get()!;
+    expect(JSON.parse(unpaired.details).displayNames.sort()).toEqual(["a", "b"]);
+  });
+
+  it("withdrawing a paired signup records pairing.dissolved with cause 'withdrawal'", () => {
+    const { bingo, a, b } = seed();
+    const ab = requestPairing(db, bingo, { requester: a, targetDiscordId: b.discordId });
+    respondToRequest(db, bingo, b, ab.id, true);
+    const signupId = db.select().from(schema.signups).all().find((s) => s.userId === a.id)!.id;
+
+    runWithAuditContext({ requestId: "withdraw-req", actorUserId: a.id, actorType: "user", actorRole: "player", recorded: 0, skip: null }, () => {
+      withdrawSignup(db, bingo, signupId);
+    });
+
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "pairing.dissolved")).get()!;
+    expect(JSON.parse(row.details)).toMatchObject({ cause: "withdrawal" });
+    expect(row.requestId).not.toBeNull();
+    const withdrawnRow = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.withdrawn")).get()!;
+    expect(withdrawnRow.requestId).toBe(row.requestId);
   });
 });
 

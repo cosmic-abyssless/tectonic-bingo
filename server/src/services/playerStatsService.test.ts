@@ -86,3 +86,27 @@ describe("fetchAndPersistPlayerStats", () => {
     expect(updated.statsFetchedAt).toBeNull();
   });
 });
+
+describe("audit trail", () => {
+  it("records signup.stats_fetched as a system actor on success", async () => {
+    const signup = seedSignup();
+    await fetchAndPersistPlayerStats(db, signup.id, "C osmic", fakeWomClient({ ehb: 1, type: "regular" }), fakeRuneProfileClient(null));
+
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.stats_fetched")).get()!;
+    expect(row.actorType).toBe("system");
+    expect(row.bingoId).toBe(signup.bingoId);
+    expect(JSON.parse(row.details)).toEqual({ womFound: true, runeProfileFound: false });
+  });
+
+  it("records signup.stats_fetch_failed when both sources throw", async () => {
+    const signup = seedSignup();
+    const throwingClient = { getPlayerByUsername: async () => { throw new Error("boom"); } } as unknown as WomClient;
+    const throwingRpClient = { getAccountFull: async () => { throw new Error("boom"); } } as unknown as RuneProfileClient;
+
+    await fetchAndPersistPlayerStats(db, signup.id, "C osmic", throwingClient, throwingRpClient);
+
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.stats_fetch_failed")).get()!;
+    expect(row.actorType).toBe("system");
+    expect(JSON.parse(row.details)).toEqual({ message: "boom" });
+  });
+});

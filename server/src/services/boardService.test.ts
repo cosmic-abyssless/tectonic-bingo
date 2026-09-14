@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingoLines, nodeEdges, nodes, tiles } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { createTile, createTask, deleteTile, generateLines, getTeamNodeStatuses } from "./boardService";
+import { createCategory, createTile, createTask, deleteLine, deleteTask, deleteTile, generateLines, getTeamNodeStatuses, updateCategory, updateLinePoints, updateNode, updateTile } from "./boardService";
 import { createSubmission } from "./submissionService";
 import { approveSubmission } from "./scoringService";
 import { getNodeTree } from "./graphService";
@@ -93,6 +93,64 @@ describe("getTeamNodeStatuses", () => {
     expect(statuses.get(pending.id)).toBe("pending_approval");
     expect(statuses.get(completed.id)).toBe("completed");
     expect(statuses.get(tile.nodeId)).toBe("pending_approval"); // the tile's own ALL node: not complete, and one descendant (Pending) still has a pending claim
+  });
+});
+
+describe("audit trail", () => {
+  it("category CRUD records created/updated", () => {
+    const bingo = seedBingo();
+    const category = createCategory(db, { bingoId: bingo.id, label: "Bosses" });
+    updateCategory(db, category.id, { label: "Bosses Renamed" });
+
+    const created = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "category.created")).get()!;
+    expect(JSON.parse(created.details)).toMatchObject({ label: "Bosses" });
+    const updated = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "category.updated")).get()!;
+    expect(JSON.parse(updated.details).changes).toEqual({ before: { label: "Bosses" }, after: { label: "Bosses Renamed" } });
+  });
+
+  it("createTile/updateTile/deleteTile record their actions, with taskCount captured before the cascade", () => {
+    const bingo = seedBingo();
+    const tile = createTile(db, { bingoId: bingo.id, name: "A", boardRow: 0, boardCol: 0 });
+    updateTile(db, tile.id, { name: "A Renamed" });
+    createTask(db, tile.id, { kind: "ITEM", label: "Task", points: 10, description: "d", itemName: "X" });
+
+    deleteTile(db, tile.id);
+
+    expect(JSON.parse(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "tile.created")).get()!.details)).toMatchObject({ name: "A" });
+    expect(JSON.parse(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "tile.updated")).get()!.details).changes).toEqual({ before: { name: "A" }, after: { name: "A Renamed" } });
+    expect(JSON.parse(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "tile.deleted")).get()!.details)).toMatchObject({ name: "A Renamed", taskCount: 1 });
+  });
+
+  it("createTask/updateNode/deleteTask record task snapshots scoped to their tile", () => {
+    const bingo = seedBingo();
+    const tile = createTile(db, { bingoId: bingo.id, name: "Boss Tile", boardRow: 0, boardCol: 0 });
+    const task = createTask(db, tile.id, { kind: "ITEM", label: "Part A", points: 10, description: "d", itemName: "X" });
+    updateNode(db, task.id, { kind: "ITEM", label: "Part A", points: 20, description: "d", itemName: "X" });
+    deleteTask(db, task.id);
+
+    const created = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "task.created")).get()!;
+    expect(JSON.parse(created.details)).toMatchObject({ tileName: "Boss Tile", after: { label: "Part A", points: 10 } });
+    const updated = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "task.updated")).get()!;
+    expect(JSON.parse(updated.details)).toMatchObject({ tileName: "Boss Tile", before: { points: 10 }, after: { points: 20 } });
+    const deleted = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "task.deleted")).get()!;
+    expect(JSON.parse(deleted.details)).toMatchObject({ tileName: "Boss Tile", before: { points: 20 } });
+  });
+
+  it("generateLines/updateLinePoints/deleteLine record line changes", () => {
+    const bingo = seedBingo({ boardRows: 2, boardCols: 2 });
+    for (let r = 0; r < 2; r++) for (let c = 0; c < 2; c++) createTile(db, { bingoId: bingo.id, name: `T${r}${c}`, boardRow: r, boardCol: c });
+    const lines = generateLines(db, bingo, 15);
+    const generated = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "line.generated")).get()!;
+    expect(JSON.parse(generated.details)).toMatchObject({ pointsPerLine: 15, replaced: 0, created: { row: 2, column: 2, diagonal: 2 } });
+
+    const line = lines[0]!;
+    updateLinePoints(db, line.id, 25);
+    const updated = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "line.updated")).get()!;
+    expect(JSON.parse(updated.details).points).toEqual({ before: 15, after: 25 });
+
+    deleteLine(db, line.id);
+    const deleted = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "line.deleted")).get()!;
+    expect(JSON.parse(deleted.details).points).toBe(25);
   });
 });
 

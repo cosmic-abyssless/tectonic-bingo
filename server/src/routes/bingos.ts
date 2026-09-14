@@ -24,6 +24,8 @@ import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
 import { syncWomTeamRename } from "../services/womCompetitionService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
+import { auditSkip } from "../audit/middleware";
+import { queryTeamActivity } from "../audit/query";
 
 // Async tectonic lookups live at the route layer (not signupService, which
 // stays sync/DB-pure). One call covers both membership gating and RSN
@@ -183,6 +185,26 @@ router.get(
   }),
 );
 
+router.get(
+  "/:slug/teams/:teamId/activity",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const bingo = req.bingo!;
+    const teamId = req.params.teamId as string;
+    const team = teamService.getTeamById(db, teamId);
+    if (!team || team.bingoId !== bingo.id) throw new ServiceError(404, "Team not found");
+
+    const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
+    const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
+    if (!isMod && myTeam?.id !== teamId) throw new ServiceError(403, "Not allowed to view another team's activity");
+
+    const cursor = req.query.cursor ? Number(req.query.cursor) : undefined;
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    res.json(queryTeamActivity(db, bingo.id, teamId, { isMod, cursor, limit }));
+  }),
+);
+
 router.post(
   "/:slug/submissions",
   requireAuth,
@@ -245,6 +267,7 @@ router.post(
   requireAuth,
   requireBingo,
   analyzeUpload.single("screenshot"),
+  auditSkip("read-only OCR analysis — no state changes"),
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
     const team = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);

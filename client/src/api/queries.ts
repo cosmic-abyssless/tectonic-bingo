@@ -1,6 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  BingoListResponse, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
+  AuditLogFilters, AuditLogResponse, BingoListResponse, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   ModSubmissionsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
@@ -24,6 +24,8 @@ export const queryKeys = {
   partnerCandidates: (slug: string) => ["partnerCandidates", slug] as const,
   draftState: (slug: string) => ["draftState", slug] as const,
   stats: (slug: string) => ["stats", slug] as const,
+  auditLog: (slug: string, filters: AuditLogFilters) => ["auditLog", slug, filters] as const,
+  teamActivity: (slug: string, teamId: string) => ["teamActivity", slug, teamId] as const,
 };
 
 export function useBingos() {
@@ -327,6 +329,45 @@ export function useStats(slug: string | undefined) {
     queryKey: queryKeys.stats(slug ?? ""),
     queryFn: () => api.get<StatsResponse>(`/api/bingos/${slug}/stats`),
     enabled: !!slug,
+  });
+}
+
+function auditLogQueryString(filters: AuditLogFilters, cursor?: number): string {
+  const params = new URLSearchParams();
+  if (filters.action?.length) params.set("action", filters.action.join(","));
+  if (filters.category?.length) params.set("category", filters.category.join(","));
+  if (filters.actorUserId?.length) params.set("actorUserId", filters.actorUserId.join(","));
+  if (filters.teamId?.length) params.set("teamId", filters.teamId.join(","));
+  if (filters.entityType) params.set("entityType", filters.entityType);
+  if (filters.entityId) params.set("entityId", filters.entityId);
+  if (filters.visibility) params.set("visibility", filters.visibility);
+  if (filters.since) params.set("since", filters.since);
+  if (filters.until) params.set("until", filters.until);
+  if (filters.q) params.set("q", filters.q);
+  if (cursor !== undefined) params.set("cursor", String(cursor));
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+// The full mod-panel audit log — paginated with useInfiniteQuery so "load
+// more" just appends a page rather than refetching everything.
+export function useAuditLog(slug: string | undefined, filters: AuditLogFilters = {}) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.auditLog(slug ?? "", filters),
+    queryFn: ({ pageParam }) => api.get<AuditLogResponse>(`/api/bingos/${slug}/mod/audit-log${auditLogQueryString(filters, pageParam)}`),
+    initialPageParam: undefined as number | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: !!slug,
+  });
+}
+
+// One page of a single team's activity feed — the TeamInfoDialog slot, so no
+// pagination UI is needed there yet.
+export function useTeamActivity(slug: string | undefined, teamId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.teamActivity(slug ?? "", teamId ?? ""),
+    queryFn: () => api.get<AuditLogResponse>(`/api/bingos/${slug}/teams/${teamId}/activity`),
+    enabled: !!slug && !!teamId,
   });
 }
 

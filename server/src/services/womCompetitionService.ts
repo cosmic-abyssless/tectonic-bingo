@@ -19,6 +19,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingos, signups, teamMembers, teams } from "../db/schema";
+import { audit } from "../audit/record";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type FetchLike = typeof fetch;
@@ -178,10 +179,24 @@ export async function syncWomCompetitionAfterDraft(db: Db, bingoId: string, clie
       teams: rosters,
     });
     db.update(bingos).set({ womCompetitionId: id, womSyncError: null }).where(eq(bingos.id, bingoId)).run();
+    audit(db, {
+      action: "wom.competition_created",
+      bingoId,
+      entity: { type: "bingo", id: bingoId, label: bingo.name },
+      details: { competitionId: id },
+      actor: "system",
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`[wom-competition] failed to create competition for bingo ${bingoId}`, message);
     db.update(bingos).set({ womSyncError: message }).where(eq(bingos.id, bingoId)).run();
+    audit(db, {
+      action: "wom.sync_failed",
+      bingoId,
+      entity: { type: "bingo", id: bingoId, label: bingo.name },
+      details: { operation: "create", message },
+      actor: "system",
+    });
   }
 }
 
@@ -200,9 +215,23 @@ export async function syncWomTeamRename(db: Db, bingoId: string, client: WomComp
     const rosters = getTeamRosters(db, bingoId);
     await client.editCompetition({ competitionId: bingo.womCompetitionId, groupVerificationCode: config.groupVerificationCode, teams: rosters });
     db.update(bingos).set({ womSyncError: null }).where(eq(bingos.id, bingoId)).run();
+    audit(db, {
+      action: "wom.roster_synced",
+      bingoId,
+      entity: { type: "bingo", id: bingoId, label: bingo.name },
+      details: {},
+      actor: "system",
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`[wom-competition] failed to sync team rename for bingo ${bingoId}`, message);
     db.update(bingos).set({ womSyncError: message }).where(eq(bingos.id, bingoId)).run();
+    audit(db, {
+      action: "wom.sync_failed",
+      bingoId,
+      entity: { type: "bingo", id: bingoId, label: bingo.name },
+      details: { operation: "rename", message },
+      actor: "system",
+    });
   }
 }

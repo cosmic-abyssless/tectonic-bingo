@@ -10,5 +10,6 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
     res.status(403).json({ error: "Site admin access required" });
     return;
   }
+  if (req.audit) req.audit.actorRole = "admin";
   next();
 }

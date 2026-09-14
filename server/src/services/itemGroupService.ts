@@ -4,6 +4,7 @@ import type { ItemGroup } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { itemGroupItems, itemGroups } from "../db/schema";
 import { ServiceError } from "./errors";
+import { audit, diffFields, markAuditedNoop } from "../audit/record";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -42,17 +43,41 @@ export function createItemGroup(db: Db, input: ItemGroupInput): ItemGroup {
   return db.transaction((tx) => {
     const group = tx.insert(itemGroups).values({ name: input.name, description: input.description ?? null }).returning().get();
     replaceItems(tx, group.id, input.itemNames);
-    return getItemGroup(tx, group.id);
+    const full = getItemGroup(tx, group.id);
+    audit(tx, {
+      action: "item_group.created",
+      bingoId: null,
+      entity: { type: "item_group", id: group.id, label: group.name },
+      details: { name: group.name, itemCount: full.itemNames.length },
+    });
+    return full;
   });
 }
 
 export function updateItemGroup(db: Db, id: string, input: Partial<ItemGroupInput>): ItemGroup {
-  getItemGroup(db, id);
+  const before = getItemGroup(db, id);
   return db.transaction((tx) => {
     const { itemNames, ...fields } = input;
     if (Object.keys(fields).length) tx.update(itemGroups).set(fields).where(eq(itemGroups.id, id)).run();
     if (itemNames) replaceItems(tx, id, itemNames);
-    return getItemGroup(tx, id);
+    const after = getItemGroup(tx, id);
+
+    const changes = diffFields(before, after, { only: Object.keys(fields) as (keyof typeof before)[] });
+    const beforeSet = new Set(before.itemNames);
+    const afterSet = new Set(after.itemNames);
+    const added = after.itemNames.filter((n) => !beforeSet.has(n));
+    const removed = before.itemNames.filter((n) => !afterSet.has(n));
+    if (changes || added.length || removed.length) {
+      audit(tx, {
+        action: "item_group.updated",
+        bingoId: null,
+        entity: { type: "item_group", id, label: before.name },
+        details: { changes: (changes ?? { before: {}, after: {} }) as never, items: { added, removed } },
+      });
+    } else {
+      markAuditedNoop();
+    }
+    return after;
   });
 }
 
@@ -62,7 +87,19 @@ export function updateItemGroup(db: Db, id: string, input: Partial<ItemGroupInpu
 // to delete — see docs/item-quantity-model.md §6.
 export function deleteItemGroup(db: Db, id: string): void {
   db.transaction((tx) => {
+    const existing = tx.select().from(itemGroups).where(eq(itemGroups.id, id)).get();
+    const items = existing ? tx.select({ itemName: itemGroupItems.itemName }).from(itemGroupItems).where(eq(itemGroupItems.groupId, id)).all() : [];
     tx.delete(itemGroupItems).where(eq(itemGroupItems.groupId, id)).run();
     tx.delete(itemGroups).where(eq(itemGroups.id, id)).run();
+    if (existing) {
+      audit(tx, {
+        action: "item_group.deleted",
+        bingoId: null,
+        entity: { type: "item_group", id, label: existing.name },
+        details: { name: existing.name, itemNames: items.map((i) => i.itemName) },
+      });
+    } else {
+      markAuditedNoop();
+    }
   });
 }

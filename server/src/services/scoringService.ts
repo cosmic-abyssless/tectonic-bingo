@@ -1,13 +1,26 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { claims, submissions, teamNodeState, teams } from "../db/schema";
+import { claims, nodes, submissions, teamNodeState, teams, tiles } from "../db/schema";
 import { ServiceError } from "./errors";
 import { awardedPoints, evaluateGraph } from "./engine";
 import { getApprovedClaims, getFullGraph } from "./graphService";
+import { tileForLeaf } from "./submissionService";
+import { audit } from "../audit/record";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+// Denormalized labels for a submission.approved/rejected audit entry — the
+// tile a submission targeted and the labels of the specific leaves claimed,
+// resolved fresh since the graph can change after the fact.
+function describeSubmissionTarget(tx: Tx, bingoId: string, nodeIds: string[]): { tileName: string | null; taskLabels: string[] } {
+  const tileRows = tx.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
+  const tileByNodeId = new Map(tileRows.map((t) => [t.nodeId, t]));
+  const tileName = nodeIds.length ? (tileForLeaf(tx, nodeIds[0]!, tileByNodeId)?.name ?? null) : null;
+  const leafRows = nodeIds.length ? tx.select({ id: nodes.id, label: nodes.label }).from(nodes).where(inArray(nodes.id, nodeIds)).all() : [];
+  return { tileName, taskLabels: leafRows.map((n) => n.label).filter((l): l is string => !!l) };
+}
 
 // Distinct leaf nodes a submission's claims target.
 export function getSubmissionNodeIds(tx: Tx, submissionId: string): string[] {
@@ -68,6 +81,7 @@ export function approveSubmission(db: Db, params: ApproveSubmissionParams): Appr
     const submission = tx.select().from(submissions).where(eq(submissions.id, params.submissionId)).get();
     if (!submission) throw new ServiceError(404, "Submission not found");
     if (submission.status !== "pending") throw new ServiceError(409, "Submission has already been reviewed");
+    const team = tx.select().from(teams).where(eq(teams.id, submission.teamId)).get()!;
 
     tx.update(submissions)
       .set({ status: "approved", reviewedAt: new Date(), reviewedByUserId: params.reviewedByUserId, reviewerNotes: params.reviewerNotes ?? null, updatedAt: new Date() })
@@ -82,9 +96,21 @@ export function approveSubmission(db: Db, params: ApproveSubmissionParams): Appr
     const after = rebuildTeamState(tx, submission.teamId);
     const afterPoints = [...after.values()].reduce((sum, s) => sum + s.pointsAwarded, 0);
     const newlyCompletedNodeIds = [...after.keys()].filter((id) => !beforeIds.has(id));
+    const pointsDelta = afterPoints - beforePoints;
 
     const updatedSubmission = tx.select().from(submissions).where(eq(submissions.id, submission.id)).get()!;
-    return { submission: updatedSubmission, nodeIds, newlyCompletedNodeIds, pointsDelta: afterPoints - beforePoints };
+
+    const { tileName, taskLabels } = describeSubmissionTarget(tx, team.bingoId, nodeIds);
+    audit(tx, {
+      action: "submission.approved",
+      bingoId: team.bingoId,
+      entity: { type: "submission", id: submission.id, label: tileName },
+      teamId: submission.teamId,
+      details: { tileName, taskLabels, nodeIds, newlyCompletedNodeIds, pointsDelta, reviewerNotes: params.reviewerNotes ?? null, submittedByUserId: submission.submittedByUserId },
+      actor: { userId: params.reviewedByUserId },
+    });
+
+    return { submission: updatedSubmission, nodeIds, newlyCompletedNodeIds, pointsDelta };
   });
 }
 
@@ -101,6 +127,7 @@ export function rejectSubmission(db: Db, params: RejectSubmissionParams): { subm
     const submission = tx.select().from(submissions).where(eq(submissions.id, params.submissionId)).get();
     if (!submission) throw new ServiceError(404, "Submission not found");
     if (submission.status !== "pending") throw new ServiceError(409, "Submission has already been reviewed");
+    const team = tx.select().from(teams).where(eq(teams.id, submission.teamId)).get()!;
 
     tx.update(submissions)
       .set({ status: "rejected", reviewedAt: new Date(), reviewedByUserId: params.reviewedByUserId, reviewerNotes: params.reviewerNotes ?? null, updatedAt: new Date() })
@@ -109,6 +136,17 @@ export function rejectSubmission(db: Db, params: RejectSubmissionParams): { subm
 
     const nodeIds = getSubmissionNodeIds(tx, submission.id);
     const updatedSubmission = tx.select().from(submissions).where(eq(submissions.id, submission.id)).get()!;
+
+    const { tileName, taskLabels } = describeSubmissionTarget(tx, team.bingoId, nodeIds);
+    audit(tx, {
+      action: "submission.rejected",
+      bingoId: team.bingoId,
+      entity: { type: "submission", id: submission.id, label: tileName },
+      teamId: submission.teamId,
+      details: { tileName, taskLabels, nodeIds, reviewerNotes: params.reviewerNotes ?? null, submittedByUserId: submission.submittedByUserId },
+      actor: { userId: params.reviewedByUserId },
+    });
+
     return { submission: updatedSubmission, nodeIds };
   });
 }

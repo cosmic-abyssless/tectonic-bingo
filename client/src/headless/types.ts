@@ -3,7 +3,17 @@
 // never a raw Tile, TeamNodeState[], SubmissionDetails[], or LeafClaimMaps.
 // See docs/headless-theming-plan.md §2.
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
-import type { DraftState, NodeKind, NodeStatus, Stage, StageMilestone, SubmissionDetails, SubmissionStatus } from "@bingo/shared";
+import type { AuditCategory, AuditTone, DraftState, NodeKind, NodeStatus, Stage, StageMilestone, SubmissionDetails, SubmissionStatus } from "@bingo/shared";
+
+export interface ActivityEntryModel {
+  id: number;
+  label: string;
+  tone: AuditTone;
+  category: AuditCategory;
+  at: number;
+  timeAgo: string;
+  actorName: string | null;
+}
 
 export interface CategoryModel {
   id: string;

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useRenameTeam } from "../../api/queries";
+import { useTeamActivityModel } from "../../headless/useTeamActivity";
 import type { TeamModel } from "../../headless/types";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
@@ -21,6 +22,7 @@ function TeamInfo({ slug, team, onClose }: { slug: string; team: TeamModel; onCl
   const [name, setName] = useState(team.name);
   const trimmed = name.trim();
   const dirty = trimmed !== team.name;
+  const { entries: activity } = useTeamActivityModel(slug, team.id);
 
   return (
     <>
@@ -53,6 +55,20 @@ function TeamInfo({ slug, team, onClose }: { slug: string; team: TeamModel; onCl
             </li>
           ))}
         </ul>
+
+        {activity.length > 0 && (
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-fg-subtle">Recent activity</h3>
+            <ul className="space-y-2">
+              {activity.map((entry) => (
+                <li key={entry.id} className="flex items-start justify-between gap-3 text-sm">
+                  <span className="text-fg-muted">{entry.label}</span>
+                  <span className="shrink-0 text-xs text-fg-subtle">{entry.timeAgo}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </>
   );

@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // ---------------------------------------------------------------------------
@@ -97,6 +97,37 @@ export const stageTransitions = sqliteTable('stage_transitions', {
   changedByUserId: text('changed_by_user_id').notNull().references(() => users.id),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
+
+// Append-only audit log (docs/audit-log-plan.md). Deliberately breaks three
+// table conventions used everywhere else: an autoincrement integer id (total
+// insertion order gives a cheap keyset cursor), millisecond timestamps
+// (entries can land faster than 1s apart), and no FK on bingoId/teamId (a
+// site-level entry has bingoId = null, and entries must outlive
+// bingoService.deleteBingo's cascade).
+export const auditLog = sqliteTable('audit_log', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  bingoId: text('bingo_id'),
+  requestId: text('request_id'),
+  action: text('action').notNull(),
+  visibility: text('visibility', { enum: ['mods', 'team', 'public'] }).notNull(),
+  actorType: text('actor_type', { enum: ['user', 'system', 'dev'] }).notNull(),
+  actorRole: text('actor_role', { enum: ['admin', 'mod', 'player', 'system'] }).notNull(),
+  actorUserId: text('actor_user_id').references(() => users.id),
+  onBehalfOfUserId: text('on_behalf_of_user_id').references(() => users.id),
+  entityType: text('entity_type').notNull(),
+  entityId: text('entity_id'),
+  entityLabel: text('entity_label'),
+  teamId: text('team_id'),
+  details: text('details').notNull().default('{}'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+}, (t) => [
+  index('audit_log_bingo_idx').on(t.bingoId, t.id),
+  index('audit_log_bingo_action_idx').on(t.bingoId, t.action, t.id),
+  index('audit_log_bingo_team_idx').on(t.bingoId, t.teamId, t.id),
+  index('audit_log_bingo_actor_idx').on(t.bingoId, t.actorUserId, t.id),
+  index('audit_log_bingo_created_idx').on(t.bingoId, t.createdAt),
+  index('audit_log_entity_idx').on(t.entityType, t.entityId),
+]);
 
 // ---------------------------------------------------------------------------
 // SIGNUP & DRAFT

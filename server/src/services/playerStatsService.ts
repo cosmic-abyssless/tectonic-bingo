@@ -15,6 +15,7 @@ import * as schema from "../db/schema";
 import { signups } from "../db/schema";
 import { getWomClient, type WomClient } from "./womService";
 import { getRuneProfileClient, type RuneProfileClient } from "./runeProfileService";
+import { audit } from "../audit/record";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -30,6 +31,8 @@ export async function fetchAndPersistPlayerStats(
   // never hits those live APIs.
   if (process.env.PLAYER_STATS_FETCH_DISABLED === "true") return;
 
+  const signup = db.select({ bingoId: signups.bingoId }).from(signups).where(eq(signups.id, signupId)).get();
+
   try {
     const [womData, runeProfileData] = await Promise.all([womClient.getPlayerByUsername(rsn), runeProfileClient.getAccountFull(rsn)]);
     db.update(signups)
@@ -40,7 +43,22 @@ export async function fetchAndPersistPlayerStats(
       })
       .where(eq(signups.id, signupId))
       .run();
+    audit(db, {
+      action: "signup.stats_fetched",
+      bingoId: signup?.bingoId ?? null,
+      entity: { type: "signup", id: signupId, label: rsn },
+      details: { womFound: !!womData, runeProfileFound: !!runeProfileData },
+      actor: "system",
+    });
   } catch (err) {
-    console.warn(`[player-stats] failed to fetch/persist for signup ${signupId} (${rsn})`, err instanceof Error ? err.message : err);
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[player-stats] failed to fetch/persist for signup ${signupId} (${rsn})`, message);
+    audit(db, {
+      action: "signup.stats_fetch_failed",
+      bingoId: signup?.bingoId ?? null,
+      entity: { type: "signup", id: signupId, label: rsn },
+      details: { message },
+      actor: "system",
+    });
   }
 }
