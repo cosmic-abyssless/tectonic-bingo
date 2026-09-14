@@ -41,7 +41,7 @@ export type FieldChanges<T> = { before: Partial<T>; after: Partial<T> };
 // ---------------------------------------------------------------------------
 
 export interface AuditDetailsMap {
-  "bingo.created": { slug: string; name: string; theme: string; boardRows: number; boardCols: number };
+  "bingo.created": { slug: string; name: string; theme: string; boardRows: number; boardCols: number; source: "form" | "import" };
   "bingo.deleted": { slug: string; name: string; stage: Stage; counts: { teams: number; signups: number; submissions: number } };
 
   "user.admin_changed": { isAdmin: { before: boolean; after: boolean }; source: "admin_panel" | "env_bootstrap" };
@@ -184,7 +184,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     tone: "ok",
     visibility: "mods",
     title: "Bingo created",
-    label: (i) => `${actor(i)} created the bingo "${i.details.name}"`,
+    label: (i) => `${actor(i)} created the bingo "${i.details.name}"${i.details.source === "import" ? " (imported)" : ""}`,
   },
   "bingo.deleted": {
     category: "bingo",

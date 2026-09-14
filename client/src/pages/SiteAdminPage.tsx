@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { STAGE_LABEL, type Bingo, type BingoListResponse, type User } from "@bingo/shared";
+import { STAGE_LABEL, type Bingo, type BingoExportDocument, type BingoListResponse, type User } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
 import { queryKeys, useBingos } from "../api/queries";
 import * as adminApi from "../api/adminApi";
@@ -77,6 +77,85 @@ function CreateBingoForm() {
         {error && <Notice tone="danger">{error}</Notice>}
         <Button variant="primary" onPress={create} isDisabled={!name || !slug || creating} className="w-full">
           {creating ? "Creating…" : "Create bingo"}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+// Always creates a brand-new bingo from a previously exported board+settings
+// file (BingoSettingsForm's "Export" section) — never overwrites an
+// existing one. Counterpart to CreateBingoForm.
+function ImportBingoPanel() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [parsedDoc, setParsedDoc] = useState<BingoExportDocument | null>(null);
+  const [fileName, setFileName] = useState("");
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onFileChange(file: File) {
+    setError(null);
+    setFileName(file.name);
+    try {
+      const parsed = JSON.parse(await file.text()) as BingoExportDocument;
+      setParsedDoc(parsed);
+      setName(parsed.bingo?.name ?? "");
+      setSlug(slugify(parsed.bingo?.name ?? ""));
+    } catch {
+      setParsedDoc(null);
+      setError("That file isn't valid JSON");
+    }
+  }
+
+  async function doImport() {
+    if (!parsedDoc) return;
+    setImporting(true);
+    setError(null);
+    try {
+      const { bingo } = await adminApi.importBingo({ slug, name, document: parsedDoc });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.bingos() });
+      navigate(`/b/${bingo.slug}/mod`);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to import bingo");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return (
+    <Card className="w-full max-w-md">
+      <CardHeader title="Import a bingo" description="Create a new bingo from a previously exported board & settings file." />
+      <div className="space-y-4 p-5">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="w-full rounded-md border border-dashed border-line-strong px-3 py-4 text-center text-sm text-fg-muted transition-colors hover:border-fg/60 hover:text-fg"
+        >
+          {fileName || "Choose an export file…"}
+        </button>
+        <input ref={fileInputRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => e.target.files?.[0] && onFileChange(e.target.files[0])} />
+
+        {parsedDoc && (
+          <>
+            <Field label="Name">
+              <Input value={name} onChange={(e) => setName(e.target.value)} />
+            </Field>
+            <Field label="Slug (used in the URL)">
+              <Input value={slug} onChange={(e) => setSlug(slugify(e.target.value))} className="font-mono" />
+            </Field>
+            <p className="text-xs text-fg-subtle">
+              {parsedDoc.tiles.length} tile{parsedDoc.tiles.length === 1 ? "" : "s"}, {parsedDoc.categories.length} categor{parsedDoc.categories.length === 1 ? "y" : "ies"},{" "}
+              {parsedDoc.signupQuestions.length} signup question{parsedDoc.signupQuestions.length === 1 ? "" : "s"}
+            </p>
+          </>
+        )}
+        {error && <Notice tone="danger">{error}</Notice>}
+        <Button variant="primary" onPress={doImport} isDisabled={!parsedDoc || !name || !slug || importing} className="w-full">
+          {importing ? "Importing…" : "Import as new bingo"}
         </Button>
       </div>
     </Card>
@@ -212,6 +291,7 @@ export function SiteAdminPage() {
       <AppHeader back={{ to: "/", label: "All bingos" }} title="Site admin" />
       <main className="mx-auto flex w-full max-w-6xl flex-wrap items-start gap-6 px-6 py-6">
         <CreateBingoForm />
+        <ImportBingoPanel />
         <BingosPanel />
         {canGrantAdmin && <GrantAdminPanel />}
         <ItemGroupsPanel />

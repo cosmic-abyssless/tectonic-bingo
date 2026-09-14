@@ -9,6 +9,7 @@ import { requireAdmin } from "../middleware/requireAdmin";
 import { asyncHandler } from "../middleware/errorHandler";
 import { db } from "../db";
 import * as bingoService from "../services/bingoService";
+import * as bingoExportService from "../services/bingoExportService";
 import * as boardService from "../services/boardService";
 import * as signupService from "../services/signupService";
 import * as teamService from "../services/teamService";
@@ -71,6 +72,14 @@ router.patch(
     }
     const bingo = bingoService.updateBingoSettings(db, req.bingo!.id, params);
     res.json({ bingo: bingoService.toPublicBingo(bingo) });
+  }),
+);
+
+// The portable board+settings document (issue #36) — see bingoExportService.ts.
+router.get(
+  "/export",
+  asyncHandler(async (req, res) => {
+    res.json(bingoExportService.exportBingo(db, req.bingo!.id));
   }),
 );
 

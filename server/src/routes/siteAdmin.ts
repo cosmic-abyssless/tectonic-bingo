@@ -5,11 +5,12 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { isAdminDiscordId } from "../config";
 import { db } from "../db";
 import * as bingoService from "../services/bingoService";
+import * as bingoExportService from "../services/bingoExportService";
 import * as itemGroupService from "../services/itemGroupService";
 import * as userService from "../services/userService";
 import { ServiceError } from "../services/errors";
 import { queryAuditLog } from "../audit/query";
-import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility } from "@bingo/shared";
+import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility, BingoExportDocument } from "@bingo/shared";
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -40,6 +41,21 @@ router.post(
       boardCols,
       createdByUserId: req.user!.id,
     });
+    res.status(201).json({ bingo: bingoService.toPublicBingo(bingo) });
+  }),
+);
+
+// Always creates a brand-new bingo from a previously exported document
+// (GET /:slug/admin/export) — never overwrites an existing one.
+router.post(
+  "/bingos/import",
+  asyncHandler(async (req, res) => {
+    const { slug, name, document } = req.body as { slug?: string; name?: string; document?: BingoExportDocument };
+    if (!slug || !document) throw new ServiceError(400, "slug and document are required");
+    if (!/^[a-z0-9-]+$/.test(slug)) {
+      throw new ServiceError(400, "slug must be lowercase letters, numbers, and hyphens only");
+    }
+    const bingo = bingoExportService.importBingo(db, document, { slug, name, createdByUserId: req.user!.id });
     res.status(201).json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );
