@@ -4,6 +4,7 @@ import type { SubmissionModel } from "../../../headless/types";
 import { Dialog, DialogHeader } from "../../../core/ui/Dialog";
 import { Button } from "../../../core/ui/Button";
 import { Badge, EmptyState, FilterChip } from "../../../core/ui/Card";
+import { Select } from "../../../core/ui/Field";
 import { ImageIcon } from "../../../core/ui/icons";
 import { SubmissionStatusBadge } from "../../../core/ui/StatusBadge";
 import { ScreenshotThumb } from "../../../core/submissions/ScreenshotThumb";
@@ -28,8 +29,13 @@ export function SubmissionsDrawer({
   onSubmit?: () => void;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
-  const shown = filter === "all" ? submissions : submissions.filter((s) => s.status === filter);
-  const countFor = (key: Filter) => (key === "all" ? submissions.length : submissions.filter((s) => s.status === key).length);
+  // "" = everyone. Names come from the submissions themselves, so the list
+  // only ever offers people who actually submitted something.
+  const [submitter, setSubmitter] = useState("");
+  const submitters = [...new Set(submissions.flatMap((s) => (s.submittedBy ? [s.submittedBy] : [])))].sort();
+  const bySubmitter = submitter ? submissions.filter((s) => s.submittedBy === submitter) : submissions;
+  const shown = filter === "all" ? bySubmitter : bySubmitter.filter((s) => s.status === filter);
+  const countFor = (key: Filter) => (key === "all" ? bySubmitter.length : bySubmitter.filter((s) => s.status === key).length);
 
   return (
     <Dialog isOpen={isOpen} onClose={onClose} size="lg">
@@ -47,12 +53,22 @@ export function SubmissionsDrawer({
       />
 
       {submissions.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 border-b border-line px-5 py-3">
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-5 py-3">
           {FILTERS.map(({ key, label }) => (
             <FilterChip key={key} active={filter === key} count={countFor(key)} onPress={() => setFilter(key)}>
               {label}
             </FilterChip>
           ))}
+          {submitters.length > 1 && (
+            <Select size="sm" value={submitter} onChange={(e) => setSubmitter(e.target.value)} aria-label="Submitted by" className="ml-auto w-auto!">
+              <option value="">Everyone</option>
+              {submitters.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </Select>
+          )}
         </div>
       )}
 
@@ -63,7 +79,9 @@ export function SubmissionsDrawer({
           </EmptyState>
         </div>
       ) : shown.length === 0 ? (
-        <p className="p-5 text-sm text-fg-subtle">No {filter} submissions.</p>
+        <p className="p-5 text-sm text-fg-subtle">
+          No {filter === "all" ? "" : `${filter} `}submissions{submitter && ` by ${submitter}`}.
+        </p>
       ) : (
         <ul className="divide-y divide-line">
           {shown.map((s) => (
