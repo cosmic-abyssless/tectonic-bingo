@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingoLines, nodeEdges, nodes, tiles } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { createCategory, createTile, createTask, deleteLine, deleteTask, deleteTile, generateLines, getTeamNodeStatuses, updateCategory, updateLinePoints, updateNode, updateTile } from "./boardService";
+import { createCategory, createTile, createTask, deleteLine, deleteTask, deleteTile, generateLines, getTeamNodeStatuses, updateCategory, updateLinePoints, updateNode, updateTile, updateTileBonusPoints } from "./boardService";
 import { createSubmission } from "./submissionService";
 import { approveSubmission } from "./scoringService";
 import { getNodeTree } from "./graphService";
@@ -119,6 +119,24 @@ describe("audit trail", () => {
     expect(JSON.parse(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "tile.created")).get()!.details)).toMatchObject({ name: "A" });
     expect(JSON.parse(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "tile.updated")).get()!.details).changes).toEqual({ before: { name: "A" }, after: { name: "A Renamed" } });
     expect(JSON.parse(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "tile.deleted")).get()!.details)).toMatchObject({ name: "A Renamed", taskCount: 1 });
+  });
+
+  it("updateTileBonusPoints sets the tile's own node points without touching its tasks", () => {
+    const bingo = seedBingo();
+    const tile = createTile(db, { bingoId: bingo.id, name: "A", boardRow: 0, boardCol: 0 });
+    const task = createTask(db, tile.id, { kind: "ITEM", label: "Part A", points: 10, description: "d", itemName: "X" });
+
+    updateTileBonusPoints(db, tile.id, 25);
+
+    expect(pointsOf(tile.nodeId)).toBe(25);
+    expect(pointsOf(task.id)).toBe(10); // untouched
+    expect(db.select().from(nodeEdges).where(eq(nodeEdges.parentId, tile.nodeId)).all()).toHaveLength(1); // the task edge survives
+
+    const updated = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "tile.bonus_points_updated")).get()!;
+    expect(JSON.parse(updated.details).points).toEqual({ before: 0, after: 25 });
+
+    updateTileBonusPoints(db, tile.id, 0);
+    expect(pointsOf(tile.nodeId)).toBe(0);
   });
 
   it("createTask/updateNode/deleteTask record task snapshots scoped to their tile", () => {

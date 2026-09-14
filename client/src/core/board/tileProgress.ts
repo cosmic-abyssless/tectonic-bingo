@@ -73,11 +73,14 @@ export function summarizeTileProgress(tile: Tile, nodeStates: TeamNodeState[], t
   const tasks = tile.node.children;
   let completedTasks = 0;
   let pointsAwarded = 0;
-  const totalPoints = tasks.reduce((sum, t) => sum + t.points, 0);
+  // tile.node.points is the full-tile-completion bonus (0 unless a mod set
+  // one) — the tile's own root node, awarded once every task above completes.
+  const totalPoints = tasks.reduce((sum, t) => sum + t.points, 0) + tile.node.points;
   for (const task of tasks) {
     if (statusByNodeId.get(task.id) === "completed") completedTasks++;
     pointsAwarded += pointsByNodeId.get(task.id) ?? 0;
   }
+  pointsAwarded += pointsByNodeId.get(tile.node.id) ?? 0;
 
   return {
     completedTasks,

@@ -39,6 +39,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "PATCH /api/bingos/:slug/admin/tiles/:id": ["tile.updated"],
   "DELETE /api/bingos/:slug/admin/tiles/:id": ["tile.deleted"],
   "POST /api/bingos/:slug/admin/tiles/:id/image": ["tile.updated"],
+  "PATCH /api/bingos/:slug/admin/tiles/:id/bonus-points": ["tile.bonus_points_updated"],
   "POST /api/bingos/:slug/admin/tiles/:tileId/tasks": ["task.created"],
   "PATCH /api/bingos/:slug/admin/tasks/:id": ["task.updated"],
   "DELETE /api/bingos/:slug/admin/tasks/:id": ["task.deleted"],

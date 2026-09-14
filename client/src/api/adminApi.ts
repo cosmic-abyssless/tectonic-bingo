@@ -75,6 +75,9 @@ export function updateTile(slug: string, id: string, payload: Partial<Tile>) {
 export function deleteTile(slug: string, id: string) {
   return api.delete(`${base(slug)}/tiles/${id}`);
 }
+export function updateTileBonusPoints(slug: string, id: string, points: number) {
+  return api.patch<{ tile: Tile }>(`${base(slug)}/tiles/${id}/bonus-points`, { points });
+}
 export async function uploadTileImage(slug: string, id: string, file: File) {
   const fd = new FormData();
   fd.append("image", file);
