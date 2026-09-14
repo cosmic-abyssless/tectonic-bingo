@@ -68,6 +68,27 @@ export function BingoSettingsForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  async function exportBoard() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const doc = await adminApi.exportBingo(slug);
+      const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${slug}-export.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      setExportError(e instanceof Error ? e.message : "Failed to export");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function save() {
     setSaving(true);
@@ -210,6 +231,17 @@ export function BingoSettingsForm({
             <Textarea aria-label="Rules (Markdown)" value={form.rulesMarkdown} onChange={(e) => setForm({ ...form, rulesMarkdown: e.target.value })} rows={6} className="font-mono" />
           )}
         </Field>
+      </Section>
+
+      <Section title="Export">
+        <p className="text-sm text-fg-muted">
+          Download this bingo's board and settings as a file — categories, tiles, tasks, lines, and signup questions. Tile images and everything
+          environment-specific (teams, signups, submissions, moderators) are left out. Import it as a new bingo from the site admin page.
+        </p>
+        <Button onPress={exportBoard} isDisabled={exporting}>
+          {exporting ? "Exporting…" : "Export board & settings"}
+        </Button>
+        {exportError && <Notice tone="danger">{exportError}</Notice>}
       </Section>
 
       {error && <Notice tone="danger">{error}</Notice>}

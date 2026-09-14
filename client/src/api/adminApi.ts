@@ -1,5 +1,5 @@
 import type {
-  Bingo, BingoLine, BingoModerator, BoardLine, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, SignupQuestion, Team, TeamMember, Tile,
+  Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, SignupQuestion, Team, TeamMember, Tile,
   TileCategory, User,
 } from "@bingo/shared";
 import { api } from "./client";
@@ -14,6 +14,11 @@ export function createBingo(payload: { slug: string; name: string; description?:
 }
 export function deleteBingo(id: string) {
   return api.delete(`/api/admin/bingos/${id}`);
+}
+// Always creates a brand-new bingo from a previously exported document —
+// never overwrites an existing one.
+export function importBingo(payload: { slug: string; name?: string; document: BingoExportDocument }) {
+  return api.post<{ bingo: Bingo }>("/api/admin/bingos/import", payload);
 }
 export function setUserAdmin(userId: string, isAdmin: boolean) {
   return api.patch<{ user: User }>(`/api/admin/users/${userId}`, { isAdmin });
@@ -44,6 +49,9 @@ export function updateBingoSettings(slug: string, payload: Partial<Bingo> & { wo
 }
 export function searchBingoUsers(slug: string, q: string) {
   return api.get<{ users: User[] }>(`${base(slug)}/users?q=${encodeURIComponent(q)}`);
+}
+export function exportBingo(slug: string) {
+  return api.get<BingoExportDocument>(`${base(slug)}/export`);
 }
 
 export function getMods(slug: string) {

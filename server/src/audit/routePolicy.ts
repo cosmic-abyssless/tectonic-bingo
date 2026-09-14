@@ -57,6 +57,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
 
   // routes/siteAdmin.ts, mounted at /api/admin
   "POST /api/admin/bingos": ["bingo.created"],
+  "POST /api/admin/bingos/import": ["bingo.created", "settings.updated", "category.created", "tile.created", "task.created", "line.generated", "line.updated", "question.created"],
   "DELETE /api/admin/bingos/:id": ["bingo.deleted"],
   "PATCH /api/admin/users/:id": ["user.admin_changed"],
   "POST /api/admin/item-groups": ["item_group.created"],

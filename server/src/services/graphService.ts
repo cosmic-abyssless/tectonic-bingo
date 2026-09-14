@@ -184,6 +184,16 @@ export function insertSubtree(tx: Tx, bingoId: string, input: GraphNodeInput): s
   return node.id;
 }
 
+// Narrow, surgical gate patch — used by bingoExportService's import, which
+// creates a whole bingo's nodes first (gates deferred, since a gate can
+// reference a node anywhere in the bingo, not just an already-created
+// sibling) then resolves every gate to a real id in a second pass. Never use
+// replaceSubtree for this: it would mint new ids for the node's own children
+// and corrupt any not-yet-applied gate reference pointing at them.
+export function setNodeGates(tx: Tx, nodeId: string, gates: { pointsGateNodeId: string | null; submitGateNodeId: string | null }): void {
+  tx.update(nodes).set(gates).where(eq(nodes.id, nodeId)).run();
+}
+
 // Reconciles `input` onto the graph: a child whose `id` names an existing
 // node is updated in place (so claims already pointing at it stay valid);
 // anything else is created fresh. Every id touched (reused or new) is

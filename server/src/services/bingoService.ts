@@ -90,19 +90,22 @@ export interface CreateBingoParams {
   boardRows: number;
   boardCols: number;
   createdByUserId: string;
+  // Purely for the audit trail — doesn't touch the bingos row itself.
+  source?: "form" | "import";
 }
 
 export function createBingo(db: Db, params: CreateBingoParams) {
   return db.transaction((tx) => {
-    const existing = tx.select().from(bingos).where(eq(bingos.slug, params.slug)).get();
+    const { source, ...row } = params;
+    const existing = tx.select().from(bingos).where(eq(bingos.slug, row.slug)).get();
     if (existing) throw new ServiceError(409, "A bingo with this slug already exists");
-    const bingo = tx.insert(bingos).values(params).returning().get();
-    tx.insert(bingoModerators).values({ bingoId: bingo.id, userId: params.createdByUserId }).run();
+    const bingo = tx.insert(bingos).values(row).returning().get();
+    tx.insert(bingoModerators).values({ bingoId: bingo.id, userId: row.createdByUserId }).run();
     audit(tx, {
       action: "bingo.created",
       bingoId: bingo.id,
       entity: { type: "bingo", id: bingo.id, label: bingo.name },
-      details: { slug: bingo.slug, name: bingo.name, theme: bingo.theme, boardRows: bingo.boardRows, boardCols: bingo.boardCols },
+      details: { slug: bingo.slug, name: bingo.name, theme: bingo.theme, boardRows: bingo.boardRows, boardCols: bingo.boardCols, source: source ?? "form" },
     });
     return bingo;
   });

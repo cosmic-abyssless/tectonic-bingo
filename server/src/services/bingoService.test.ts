@@ -187,7 +187,14 @@ describe("audit trail", () => {
     const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.bingoId, bingo.id)).all();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ action: "bingo.created", visibility: "mods" });
-    expect(JSON.parse(rows[0]!.details)).toMatchObject({ slug: "audit-test", name: "Audit Test" });
+    expect(JSON.parse(rows[0]!.details)).toMatchObject({ slug: "audit-test", name: "Audit Test", source: "form" });
+  });
+
+  it("createBingo records source: \"import\" when passed explicitly", () => {
+    const [admin] = db.insert(schema.users).values({ discordId: "admin3", discordUsername: "admin3" }).returning().all();
+    const bingo = createBingo(db, { slug: "import-test", name: "Import Test", boardRows: 3, boardCols: 3, createdByUserId: admin.id, source: "import" });
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.bingoId, bingo.id)).get()!;
+    expect(JSON.parse(row.details)).toMatchObject({ source: "import" });
   });
 
   it("advanceStage records stage.changed with from/to", () => {

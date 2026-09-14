@@ -23,7 +23,7 @@ afterEach(() => {
 
 describe("audit()", () => {
   it("inserts a row using the action's registry default visibility when none is given", () => {
-    const id = audit(db, { action: "bingo.created", bingoId: "b1", entity: { type: "bingo", id: "b1", label: "Test" }, details: { slug: "test", name: "Test", theme: "default", boardRows: 3, boardCols: 3 } });
+    const id = audit(db, { action: "bingo.created", bingoId: "b1", entity: { type: "bingo", id: "b1", label: "Test" }, details: { slug: "test", name: "Test", theme: "default", boardRows: 3, boardCols: 3, source: "form" } });
     const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.id, id)).get();
     expect(row).toBeTruthy();
     expect(row!.visibility).toBe("mods");
@@ -32,7 +32,7 @@ describe("audit()", () => {
   it("does not insert a row when the enclosing transaction throws", () => {
     expect(() => {
       db.transaction((tx) => {
-        audit(tx, { action: "bingo.created", bingoId: "b1", entity: { type: "bingo", id: "b1", label: "Test" }, details: { slug: "test", name: "Test", theme: "default", boardRows: 3, boardCols: 3 } });
+        audit(tx, { action: "bingo.created", bingoId: "b1", entity: { type: "bingo", id: "b1", label: "Test" }, details: { slug: "test", name: "Test", theme: "default", boardRows: 3, boardCols: 3, source: "form" } });
         throw new Error("boom");
       });
     }).toThrow("boom");
@@ -71,7 +71,7 @@ describe("audit()", () => {
   });
 
   it("respects an explicit visibility override", () => {
-    audit(db, { action: "bingo.created", bingoId: "b1", entity: { type: "bingo", id: "b1" }, details: { slug: "x", name: "x", theme: "x", boardRows: 1, boardCols: 1 }, visibility: "public" });
+    audit(db, { action: "bingo.created", bingoId: "b1", entity: { type: "bingo", id: "b1" }, details: { slug: "x", name: "x", theme: "x", boardRows: 1, boardCols: 1, source: "form" }, visibility: "public" });
     const row = db.select().from(schema.auditLog).all()[0]!;
     expect(row.visibility).toBe("public");
   });
