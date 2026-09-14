@@ -3,6 +3,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import type { ClaimInput } from "@bingo/shared";
+import { UPLOADS_DIR } from "../config";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireBingo } from "../middleware/requireBingo";
 import { asyncHandler } from "../middleware/errorHandler";
@@ -51,7 +52,6 @@ function matchRsn(member: TectonicDetailedUser | null, rsn: string): { womId: st
   return match ? { womId: match.wom_id, rsnVerified: true } : { womId: null, rsnVerified: false };
 }
 
-const UPLOADS_DIR = path.join(__dirname, "../../uploads");
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 function imageOnlyFilter(_req: unknown, file: Express.Multer.File, cb: (err: Error | null, ok?: boolean) => void) {

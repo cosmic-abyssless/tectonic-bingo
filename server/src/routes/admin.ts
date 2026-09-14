@@ -3,6 +3,7 @@ import multer from "multer";
 import type { GraphNodeInput } from "@bingo/shared";
 import path from "path";
 import fs from "fs";
+import { UPLOADS_DIR } from "../config";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireBingo } from "../middleware/requireBingo";
 import { requireAdmin } from "../middleware/requireAdmin";
@@ -165,7 +166,7 @@ router.delete(
   }),
 );
 
-const TILE_UPLOADS_DIR = path.join(__dirname, "../../uploads/tiles");
+const TILE_UPLOADS_DIR = path.join(UPLOADS_DIR, "tiles");
 fs.mkdirSync(TILE_UPLOADS_DIR, { recursive: true });
 const tileImageUpload = multer({
   storage: multer.diskStorage({
