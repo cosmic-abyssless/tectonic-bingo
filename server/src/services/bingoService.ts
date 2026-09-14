@@ -35,11 +35,21 @@ export type Stage = (typeof STAGE_ORDER)[number];
 // bingos[0] as the "default" bingo (issue #3: simpler than an env var,
 // since there's realistically only ever one active bingo at a time).
 export function listBingos(db: Db) {
-  return db.select().from(bingos).orderBy(desc(bingos.createdAt)).all();
+  return db.select().from(bingos).orderBy(desc(bingos.createdAt)).all().map(toPublicBingo);
 }
 
 export function getBingoBySlug(db: Db, slug: string) {
   return db.select().from(bingos).where(eq(bingos.slug, slug)).get();
+}
+
+// bingos.womGroupVerificationCode authorizes editing/deleting the linked WOM
+// group's competitions — it must never reach a client. Every route that
+// sends a bingo (or a list of them) to a client goes through this first;
+// routes that only need the row server-side (requireBingo, stage/board
+// checks, the WOM sync itself) use the raw row from getBingoBySlug instead.
+export function toPublicBingo<T extends { womGroupVerificationCode: string | null }>(bingo: T): Omit<T, "womGroupVerificationCode"> {
+  const { womGroupVerificationCode: _womGroupVerificationCode, ...rest } = bingo;
+  return rest;
 }
 
 // Board/task/question edits are allowed until the game goes live (including
@@ -201,6 +211,9 @@ export interface UpdateBingoSettingsParams {
   revealScheduledAt?: Date | null;
   startsAt?: Date | null;
   endsAt?: Date | null;
+  womEnabled?: boolean;
+  womGroupId?: string | null;
+  womGroupVerificationCode?: string | null;
 }
 
 export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingoSettingsParams) {
@@ -211,6 +224,9 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
     // mean something in duo), so the switch is only allowed on a clean slate.
     const hasSignups = db.select({ id: signups.id }).from(signups).where(eq(signups.bingoId, bingoId)).get();
     if (hasSignups) throw new ServiceError(400, "The signup mode can't change once players have signed up");
+  }
+  if (params.womGroupId != null && !/^\d+$/.test(params.womGroupId)) {
+    throw new ServiceError(400, "WOM group ID must be a number");
   }
   return db.update(bingos).set(params).where(eq(bingos.id, bingoId)).returning().get();
 }
