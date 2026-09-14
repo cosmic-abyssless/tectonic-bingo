@@ -136,7 +136,11 @@ export function BingoPageProvider({
     stageView,
     canViewStats,
     draft: { state: draftState ?? null, isLoading: draftLoading },
-    viewing: { team: viewingTeamModel, isOtherTeam: isViewingOtherTeam, submissionCount: teamSubmissions.length },
+    viewing: {
+      team: viewingTeamModel,
+      isOtherTeam: isViewingOtherTeam,
+      pendingSubmissionCount: teamSubmissions.filter((s) => s.submission.status === "pending").length,
+    },
     canSubmit,
     pendingCount: pendingData?.count ?? 0,
     showEndCountdown: bingo.stage === "live" && !!bingo.endsAt,

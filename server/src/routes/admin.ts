@@ -1,8 +1,8 @@
 import { Router } from "express";
-import multer from "multer";
 import type { GraphNodeInput } from "@bingo/shared";
 import path from "path";
-import fs from "fs";
+import { UPLOADS_DIR } from "../config";
+import { imageUpload } from "../middleware/upload";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireBingo } from "../middleware/requireBingo";
 import { requireAdmin } from "../middleware/requireAdmin";
@@ -180,25 +180,7 @@ router.delete(
   }),
 );
 
-const TILE_UPLOADS_DIR = path.join(__dirname, "../../uploads/tiles");
-fs.mkdirSync(TILE_UPLOADS_DIR, { recursive: true });
-const tileImageUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, TILE_UPLOADS_DIR),
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname).toLowerCase();
-      cb(null, `${Date.now()}-${Math.random().toString(36).substring(2, 11)}${ext}`);
-    },
-  }),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    if (!file.mimetype.startsWith("image/")) {
-      cb(new Error("Only image files are allowed"));
-      return;
-    }
-    cb(null, true);
-  },
-});
+const tileImageUpload = imageUpload(path.join(UPLOADS_DIR, "tiles"));
 router.post(
   "/tiles/:id/image",
   tileImageUpload.single("image"),

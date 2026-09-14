@@ -1,8 +1,8 @@
 import { Router } from "express";
-import multer from "multer";
-import path from "path";
 import fs from "fs";
 import type { ClaimInput } from "@bingo/shared";
+import { UPLOADS_DIR } from "../config";
+import { imageUpload } from "../middleware/upload";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireBingo } from "../middleware/requireBingo";
 import { asyncHandler } from "../middleware/errorHandler";
@@ -52,35 +52,9 @@ function matchRsn(member: TectonicDetailedUser | null, rsn: string): { womId: st
   return match ? { womId: match.wom_id, rsnVerified: true } : { womId: null, rsnVerified: false };
 }
 
-const UPLOADS_DIR = path.join(__dirname, "../../uploads");
-fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-
-function imageOnlyFilter(_req: unknown, file: Express.Multer.File, cb: (err: Error | null, ok?: boolean) => void) {
-  if (!file.mimetype.startsWith("image/")) {
-    cb(new Error("Only image files are allowed"));
-    return;
-  }
-  cb(null, true);
-}
-
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname).toLowerCase();
-      cb(null, `${Date.now()}-${Math.random().toString(36).substring(2, 11)}${ext}`);
-    },
-  }),
-  limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: imageOnlyFilter,
-});
-
+const upload = imageUpload(UPLOADS_DIR);
 // Separate instance for analysis — memory only, nothing saved to disk.
-const analyzeUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: imageOnlyFilter,
-});
+const analyzeUpload = imageUpload();
 
 const router = Router();
 

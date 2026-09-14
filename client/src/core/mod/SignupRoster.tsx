@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { RosterEntry, User } from "@bingo/shared";
 import {
   useBingo,
+  useBingoMods,
   useDeleteAllSignups,
   useMarkBuyin,
   useModPair,
@@ -13,7 +14,6 @@ import {
 } from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
 import { displayName } from "../ui/user";
-import { UserSearchInput } from "../admin/UserSearchInput";
 import { Button, IconButton } from "../ui/Button";
 import { Badge, EmptyState, Notice } from "../ui/Card";
 import { Input, Select } from "../ui/Field";
@@ -65,31 +65,38 @@ function BuyinCell({ slug, entry }: { slug: string; entry: RosterEntry }) {
 }
 
 // Independent of the buy-in checkbox — a mod can set/change the collector at
-// any time while received is true. Disabled (via fieldset, so both the input
-// and its dropdown buttons are inert) once buy-in is unmarked, since
+// any time while received is true. Disabled once buy-in is unmarked, since
 // markBuyin always clears the collector when received goes false.
 function CollectedByCell({ slug, entry }: { slug: string; entry: RosterEntry }) {
   const markBuyin = useMarkBuyin(slug);
+  const { user: me } = useAuth();
+  const { data } = useBingoMods(slug);
   const received = !!entry.signup.buyinReceivedAt;
 
-  function setCollector(user: User | null) {
-    markBuyin.mutate({ signupId: entry.signup.id, received: true, collectedByUserId: user?.id ?? null });
-  }
+  // Mods of this bingo, plus the viewer (a site admin need not be listed as a
+  // mod) and whoever is already recorded, so the current value always has an
+  // option to display.
+  const options = new Map<string, User>();
+  for (const mod of data?.mods ?? []) options.set(mod.userId, mod.user);
+  if (me) options.set(me.id, me);
+  if (entry.collectedByUser) options.set(entry.collectedByUser.id, entry.collectedByUser);
 
   return (
-    <div className="w-48">
-      {entry.collectedByUser && (
-        <div className="mb-1 flex items-center gap-1">
-          <span className="truncate text-xs text-fg">{displayName(entry.collectedByUser)}</span>
-          <IconButton label="Clear collector" size="sm" onPress={() => setCollector(null)} isDisabled={!received}>
-            <XIcon size={12} />
-          </IconButton>
-        </div>
-      )}
-      <fieldset disabled={!received}>
-        <UserSearchInput scope={slug} onSelect={setCollector} placeholder="Who collected it?" />
-      </fieldset>
-    </div>
+    <Select
+      size="sm"
+      value={entry.collectedByUser?.id ?? ""}
+      onChange={(e) => markBuyin.mutate({ signupId: entry.signup.id, received: true, collectedByUserId: e.target.value || null })}
+      disabled={!received || markBuyin.isPending}
+      aria-label={`Collected by for ${entry.signup.rsn}`}
+      className="w-auto!"
+    >
+      <option value="">Nobody yet</option>
+      {[...options.values()].map((u) => (
+        <option key={u.id} value={u.id}>
+          {displayName(u)}
+        </option>
+      ))}
+    </Select>
   );
 }
 

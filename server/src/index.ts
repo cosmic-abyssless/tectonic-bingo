@@ -21,7 +21,7 @@ import { errorHandler } from "./middleware/errorHandler";
 import { requireGuildMember } from "./middleware/requireGuildMember";
 import { initWebSocketServer } from "./ws";
 import { sqlite } from "./db";
-import { getAdminDiscordIds } from "./config";
+import { UPLOADS_DIR, getAdminDiscordIds } from "./config";
 import { getTectonicConfig } from "./services/tectonicService";
 
 const REQUIRED_ENV = [
@@ -99,10 +99,7 @@ configurePassport();
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Uploads — serve screenshots stored locally. Overridable so a Railway
-// deploy can point this at a mounted volume (the default path lives inside
-// the container's filesystem, which does not survive a redeploy).
-const UPLOADS_DIR = process.env.UPLOADS_DIR ?? path.join(__dirname, "../uploads");
+// Uploads — serve screenshots and tile images stored locally.
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 app.use("/uploads", express.static(UPLOADS_DIR));
 
