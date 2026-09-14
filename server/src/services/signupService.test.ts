@@ -110,6 +110,15 @@ describe("updateSignup / withdrawSignup", () => {
     createTeam(db, { bingoId: bingo.id, captainUserId: memberId });
     expect(() => withdrawSignup(db, bingo, signup.id)).toThrow(/leads a team/);
   });
+
+  it("lets mods, but not players, withdraw during the captains stage", () => {
+    const { bingo, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Late", answers: [] });
+    const captainsStage = { ...bingo, stage: "captains" as const };
+    expect(() => withdrawSignup(db, captainsStage, signup.id)).toThrow(/signup stage/);
+    expect(withdrawSignup(db, captainsStage, signup.id, { byMod: true }).status).toBe("withdrawn");
+    expect(() => withdrawSignup(db, { ...bingo, stage: "draft" }, signup.id, { byMod: true })).toThrow(/draft has started/);
+  });
 });
 
 describe("getAllSignups / markBuyin", () => {

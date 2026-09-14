@@ -158,6 +158,14 @@ export function useMarkBuyin(slug: string) {
   });
 }
 
+export function useModWithdrawSignup(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (signupId: string) => api.delete<{ signup: Signup }>(`/api/bingos/${slug}/mod/signups/${signupId}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
+  });
+}
+
 // Dev-only — the server route only exists at all outside production with
 // DEV_LOGIN_ENABLED set, matching AuthContext's devMode flag.
 export interface SeedTestSignupsResponse {

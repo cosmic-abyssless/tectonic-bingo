@@ -7,6 +7,7 @@ import {
   useMarkBuyin,
   useModPair,
   useModUnpair,
+  useModWithdrawSignup,
   useSeedTestSignups,
   useSignupRoster,
   useSignupQuestions,
@@ -211,6 +212,49 @@ function PartnerCell({ slug, entry, roster }: { slug: string; entry: RosterEntry
 // "order" | "rsn" | "discord" | "status" | "buyin" | "collectedBy" | "partner" | a signup question's id.
 type SortKey = string;
 
+// Status badge plus, while the roster can still change, a two-step withdraw
+// button for removing no-shows on a player's behalf.
+function StatusCell({ slug, entry, canWithdraw }: { slug: string; entry: RosterEntry; canWithdraw: boolean }) {
+  const withdraw = useModWithdrawSignup(slug);
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const active = entry.signup.status === "active";
+
+  async function run() {
+    setError(null);
+    try {
+      await withdraw.mutateAsync(entry.signup.id);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to withdraw signup");
+      setConfirming(false);
+    }
+  }
+
+  if (confirming) {
+    return (
+      <div className="flex items-center gap-1 whitespace-nowrap">
+        <Button size="sm" variant="danger" onPress={run} isDisabled={withdraw.isPending}>
+          Withdraw {entry.signup.rsn}
+        </Button>
+        <Button size="sm" variant="ghost" onPress={() => setConfirming(false)}>
+          Cancel
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1">
+      <Badge tone={active ? "ok" : "neutral"}>{entry.signup.status}</Badge>
+      {active && canWithdraw && (
+        <IconButton label={`Withdraw ${entry.signup.rsn}'s signup`} size="sm" onPress={() => setConfirming(true)}>
+          <XIcon size={12} />
+        </IconButton>
+      )}
+      {error && <span className="text-xs text-danger">{error}</span>}
+    </div>
+  );
+}
+
 type BuyinFilter = "all" | "paid" | "unpaid";
 type PairFilter = "all" | "paired" | "unpaired";
 
@@ -264,6 +308,8 @@ export function SignupRoster({ slug }: { slug: string }) {
   const roster = data?.signups ?? [];
   const questions = questionsData?.questions ?? [];
   const isDuo = bingoData?.bingo.signupMode === "duo";
+  const stage = bingoData?.bingo.stage;
+  const canWithdraw = stage === "signup" || stage === "captains";
   const [copied, setCopied] = useState(false);
   const [buyinFilter, setBuyinFilter] = useState<BuyinFilter>("all");
   const [pairFilter, setPairFilter] = useState<PairFilter>("all");
@@ -367,7 +413,7 @@ export function SignupRoster({ slug }: { slug: string }) {
                           </time>
                         </td>
                         <td className="py-2 pr-4">
-                          <Badge tone={entry.signup.status === "active" ? "ok" : "neutral"}>{entry.signup.status}</Badge>
+                          <StatusCell slug={slug} entry={entry} canWithdraw={canWithdraw} />
                         </td>
                         <td className="py-2 pr-4">
                           <BuyinCell slug={slug} entry={entry} />

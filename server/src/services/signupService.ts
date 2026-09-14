@@ -250,14 +250,22 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
   });
 }
 
-export function withdrawSignup(db: Db, bingo: Bingo, signupId: string) {
-  assertSignupOpen(bingo);
+// Players withdraw themselves only while signups are open; mods can also trim
+// the roster during the captains stage, right up until the draft begins.
+export function withdrawSignup(db: Db, bingo: Bingo, signupId: string, { byMod = false } = {}) {
+  if (byMod) {
+    if (bingo.stage !== "signup" && bingo.stage !== "captains") {
+      throw new ServiceError(400, `Signups can't be removed once the draft has started (current stage: ${bingo.stage})`);
+    }
+  } else {
+    assertSignupOpen(bingo);
+  }
   return db.transaction((tx) => {
     const existing = tx
       .select({ id: signups.id, userId: signups.userId, rsn: signups.rsn, discordId: users.discordId })
       .from(signups)
       .innerJoin(users, eq(signups.userId, users.id))
-      .where(eq(signups.id, signupId))
+      .where(and(eq(signups.id, signupId), eq(signups.bingoId, bingo.id)))
       .get();
     if (!existing) throw new ServiceError(404, "Signup not found");
     // Captains can be assigned during signups, so a lead may try to withdraw

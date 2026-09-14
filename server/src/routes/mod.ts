@@ -189,6 +189,17 @@ router.patch(
   }),
 );
 
+// Withdraw on a player's behalf (no-shows, duplicate accounts, ...). Soft
+// delete like self-withdrawal so the player can sign up again later.
+router.delete(
+  "/signups/:id",
+  asyncHandler(async (req, res) => {
+    const signup = signupService.withdrawSignup(db, req.bingo!, req.params.id as string, { byMod: true });
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    res.json({ signup });
+  }),
+);
+
 // Dev-only test data helper — route only exists at all when explicitly
 // enabled, same gate as /auth/dev-login, so it's not reachable in production
 // even by a mod who knows the URL.
