@@ -11,9 +11,9 @@ export interface TableSort<K extends string> {
 }
 
 // Clicking a new column sorts ascending; clicking the active one flips it.
-export function useTableSort<K extends string>(defaultKey: K): TableSort<K> {
+export function useTableSort<K extends string>(defaultKey: K, defaultDir: SortDir = "asc"): TableSort<K> {
   const [key, setKey] = useState<K>(defaultKey);
-  const [dir, setDir] = useState<SortDir>("asc");
+  const [dir, setDir] = useState<SortDir>(defaultDir);
 
   function toggle(next: K) {
     if (next === key) setDir((d) => (d === "asc" ? "desc" : "asc"));

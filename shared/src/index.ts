@@ -601,12 +601,21 @@ export interface DraftUnit {
   entries: DraftPoolEntry[];
 }
 
+// A team's private scouting note on a signup. Shared by captain and
+// co-captain, never shown to other teams.
+export interface PickRating {
+  stars: number; // 0-MAX_RATING_STARS; 0 means note-only
+  note: string;
+}
+export const MAX_RATING_STARS = 3;
+
 export interface DraftState {
   teams: DraftTeam[]; // sorted by draftOrder once the draft has started
   picks: DraftPick[]; // a pair shares one pickNumber across two rows
   pool: DraftUnit[];
   draftStarted: boolean;
   currentPick: { pickNumber: number; round: number; teamId: string } | null;
+  ratings: Record<string, PickRating>; // by signupId; empty unless the viewer leads a team
 }
 
 // ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { draftPicks, signupAnswers, signups, teamMembers, teams, users } from "../db/schema";
+import { draftPicks, pickRatings, signupAnswers, signups, teamMembers, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
 import { isTeamLead } from "./teamService";
@@ -242,4 +242,40 @@ export function makePick(db: Db, params: MakePickParams) {
     });
     return picks;
   });
+}
+
+// ---------------------------------------------------------------------------
+// Pick ratings — a team's private scouting notes on signups.
+// ---------------------------------------------------------------------------
+
+export interface PickRating {
+  stars: number; // 1-3
+  note: string;
+}
+
+export const MAX_RATING_STARS = 3;
+
+export function getTeamRatings(db: Db, teamId: string): Record<string, PickRating> {
+  const rows = db.select({ signupId: pickRatings.signupId, stars: pickRatings.stars, note: pickRatings.note }).from(pickRatings).where(eq(pickRatings.teamId, teamId)).all();
+  return Object.fromEntries(rows.map((r) => [r.signupId, { stars: r.stars, note: r.note }]));
+}
+
+// Stars 0 clears the rating. Only leads of the team may write; the route
+// resolves the caller's team before calling this.
+export function setPickRating(db: Db, teamId: string, signupId: string, rating: PickRating): void {
+  if (!Number.isInteger(rating.stars) || rating.stars < 0 || rating.stars > MAX_RATING_STARS) {
+    throw new ServiceError(400, `Stars must be a whole number from 0 to ${MAX_RATING_STARS}`);
+  }
+  const note = rating.note.trim().slice(0, 200);
+  if (rating.stars === 0 && !note) {
+    db.delete(pickRatings).where(and(eq(pickRatings.teamId, teamId), eq(pickRatings.signupId, signupId))).run();
+    return;
+  }
+  const signup = db.select({ id: signups.id, bingoId: signups.bingoId }).from(signups).where(eq(signups.id, signupId)).get();
+  const team = db.select({ bingoId: teams.bingoId }).from(teams).where(eq(teams.id, teamId)).get();
+  if (!signup || !team || signup.bingoId !== team.bingoId) throw new ServiceError(404, "Signup not found");
+  db.insert(pickRatings)
+    .values({ teamId, signupId, stars: rating.stars, note })
+    .onConflictDoUpdate({ target: [pickRatings.teamId, pickRatings.signupId], set: { stars: rating.stars, note, updatedAt: new Date() } })
+    .run();
 }

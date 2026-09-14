@@ -44,6 +44,7 @@ function TeamInfo({ slug, team, onClose }: { slug: string; team: TeamModel; onCl
             </Button>
           </form>
         )}
+        {team.isLead && !team.canRename && <p className="text-sm text-fg-subtle">Team names are locked once the bingo is live.</p>}
         {rename.error && <Notice tone="danger">{rename.error.message}</Notice>}
         <ul className="divide-y divide-line rounded-md border border-line">
           {team.members.map((member) => (

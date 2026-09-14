@@ -7,7 +7,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createTeam } from "./teamService";
 import { createSignup } from "./signupService";
 import { adminPair } from "./pairingService";
-import { getDraftState, makePick, pickOrderTeamIndex, startDraft } from "./draftService";
+import { getDraftState, getTeamRatings, makePick, pickOrderTeamIndex, setPickRating, startDraft } from "./draftService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -321,5 +321,38 @@ describe("duo mode", () => {
     const picks = makePick(db, { bingo, pickedUserId: solo.id, actingUserId: co1.id, actingIsAdmin: false });
     expect(picks).toHaveLength(1);
     expect(picks[0]!.teamId).toBe(teamA.id);
+  });
+});
+
+describe("pick ratings", () => {
+  it("upserts, clears on zero stars without a note, and stays per team", () => {
+    const bingo = seedBingo({ stage: "signup" });
+    const capA = seedCaptain(bingo.id, "capA");
+    const capB = seedCaptain(bingo.id, "capB");
+    const teamA = createTeam(db, { bingoId: bingo.id, captainUserId: capA.id });
+    const teamB = createTeam(db, { bingoId: bingo.id, captainUserId: capB.id });
+    const player = seedUser("p1");
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: player.id, rsn: "p1", answers: [] });
+
+    setPickRating(db, teamA.id, signup.id, { stars: 2, note: "  solid  " });
+    expect(getTeamRatings(db, teamA.id)).toEqual({ [signup.id]: { stars: 2, note: "solid" } });
+    expect(getTeamRatings(db, teamB.id)).toEqual({});
+
+    setPickRating(db, teamA.id, signup.id, { stars: 3, note: "" });
+    expect(getTeamRatings(db, teamA.id)[signup.id]).toEqual({ stars: 3, note: "" });
+
+    setPickRating(db, teamA.id, signup.id, { stars: 0, note: "" });
+    expect(getTeamRatings(db, teamA.id)).toEqual({});
+  });
+
+  it("rejects out-of-range stars and signups from another bingo", () => {
+    const bingo = seedBingo({ stage: "signup" });
+    const capA = seedCaptain(bingo.id, "capA");
+    const teamA = createTeam(db, { bingoId: bingo.id, captainUserId: capA.id });
+    const player = seedUser("p1");
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: player.id, rsn: "p1", answers: [] });
+
+    expect(() => setPickRating(db, teamA.id, signup.id, { stars: 4, note: "" })).toThrow(ServiceError);
+    expect(() => setPickRating(db, teamA.id, "nope", { stars: 1, note: "" })).toThrow(ServiceError);
   });
 });

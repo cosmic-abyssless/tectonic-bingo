@@ -1,12 +1,13 @@
 import { useState } from "react";
-import type { DraftPoolEntry, DraftUnit, AccountType, SignupQuestion } from "@bingo/shared";
+import type { DraftPoolEntry, DraftUnit, AccountType, PickRating, SignupQuestion } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
-import { useBingo, useDraftState, useMakePick, useSignupQuestions, useStartDraft } from "../../api/queries";
+import { useBingo, useDraftState, useMakePick, useSetPickRating, useSignupQuestions, useStartDraft } from "../../api/queries";
 import { displayName } from "../ui/user";
 import { Button } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
 import { LinkIcon } from "../ui/icons";
 import { SortHeader, compareSortValues, useTableSort, type TableSort } from "../ui/tableSort";
+import { RatingCell } from "./RatingCell";
 import { TeamRoster } from "./TeamRoster";
 import ironmanBadge from "../ui/icons/Ironman_chat_badge.png";
 import ultimateBadge from "../ui/icons/Ultimate_ironman_chat_badge.png";
@@ -45,10 +46,13 @@ function AccountTypeIcon({ accountType }: { accountType: AccountType | null | un
 }
 
 
-// "rsn" | "discord" | "ehb" | a signup question's id — anything the pool table can sort by.
+// "rating" | "rsn" | "discord" | "ehb" | a signup question's id — anything the pool table can sort by.
 type SortKey = string;
 
-function poolSortValue(entry: DraftPoolEntry, key: SortKey): string | number {
+type Ratings = Record<string, PickRating>;
+
+function poolSortValue(entry: DraftPoolEntry, key: SortKey, ratings: Ratings): string | number {
+  if (key === "rating") return ratings[entry.signup.id]?.stars ?? 0;
   if (key === "rsn") return entry.signup.rsn.toLowerCase();
   if (key === "discord") return displayName(entry.user).toLowerCase();
   if (key === "ehb") return entry.womStats?.ehb ?? -1;
@@ -57,25 +61,32 @@ function poolSortValue(entry: DraftPoolEntry, key: SortKey): string | number {
 
 // A duo pair sorts by whichever half ranks first, so the pair sits where its
 // stronger/earlier member would on their own.
-function sortUnit(unit: DraftUnit, sort: TableSort<SortKey>): DraftUnit {
-  const entries = [...unit.entries].sort((a, b) => sort.order(compareSortValues(poolSortValue(a, sort.key), poolSortValue(b, sort.key))));
+function sortUnit(unit: DraftUnit, sort: TableSort<SortKey>, ratings: Ratings): DraftUnit {
+  const entries = [...unit.entries].sort((a, b) => sort.order(compareSortValues(poolSortValue(a, sort.key, ratings), poolSortValue(b, sort.key, ratings))));
   return { ...unit, entries };
 }
 
 function PoolTable({
   pool,
   questions,
+  ratings,
+  onRate,
   canPick,
   onPick,
   picking,
 }: {
   pool: DraftUnit[];
   questions: SignupQuestion[];
+  /** Present only for team leads — they see and edit their own team's ratings. */
+  ratings: Ratings | null;
+  onRate: (signupId: string, rating: PickRating) => void;
   canPick: boolean;
   onPick: (userId: string) => void;
   picking: boolean;
 }) {
-  const sort = useTableSort<SortKey>("rsn");
+  // Leads land on their favourites first; the toggle flips to ascending.
+  const sort = useTableSort<SortKey>(ratings ? "rating" : "rsn", ratings ? "desc" : "asc");
+  const ratingOf = ratings ?? {};
   const entries = pool.flatMap((u) => u.entries);
   // Answers are only sent to mods/captains (see draftService.getDraftState) —
   // everyone else's pool entries have answers: null, so skip those columns
@@ -87,8 +98,8 @@ function PoolTable({
   const hasPairs = pool.some((u) => u.entries.length > 1);
 
   const sorted = pool
-    .map((u) => sortUnit(u, sort))
-    .sort((a, b) => sort.order(compareSortValues(poolSortValue(a.entries[0], sort.key), poolSortValue(b.entries[0], sort.key))));
+    .map((u) => sortUnit(u, sort, ratingOf))
+    .sort((a, b) => sort.order(compareSortValues(poolSortValue(a.entries[0], sort.key, ratingOf), poolSortValue(b.entries[0], sort.key, ratingOf))));
 
   if (pool.length === 0) return <p className="text-sm text-fg-subtle">No one left to draft.</p>;
 
@@ -98,6 +109,7 @@ function PoolTable({
         <thead>
           <tr className="border-b border-line">
             {hasPairs && <th className="pb-2 pr-2" />}
+            {ratings && <SortHeader label="Rating" sortKey="rating" sort={sort} />}
             <SortHeader label="RSN" sortKey="rsn" sort={sort} />
             <SortHeader label="Discord" sortKey="discord" sort={sort} />
             {showWomStats && <SortHeader label="EHB" sortKey="ehb" sort={sort} />}
@@ -118,6 +130,11 @@ function PoolTable({
                     {hasPairs && (
                       <td className="w-6 pr-2 align-middle text-fg-subtle">
                         {isPair && i === 0 && <LinkIcon size={14} aria-label="Duo pair" className="mt-1" />}
+                      </td>
+                    )}
+                    {ratings && (
+                      <td className="py-1 pr-4 align-middle">
+                        <RatingCell rating={ratings[entry.signup.id]} onChange={(r) => onRate(entry.signup.id, r)} />
                       </td>
                     )}
                     <td className="whitespace-nowrap py-2 pr-4 font-medium text-fg">
@@ -156,8 +173,10 @@ export function DraftRoom({ slug }: { slug: string }) {
   const { data: questionsData } = useSignupQuestions(slug);
   const startDraft = useStartDraft(slug);
   const makePick = useMakePick(slug);
+  const setRating = useSetPickRating(slug);
   const [startError, setStartError] = useState<string | null>(null);
   const [pickError, setPickError] = useState<string | null>(null);
+  const [rateError, setRateError] = useState<string | null>(null);
 
   if (stateError) {
     return (
@@ -176,9 +195,13 @@ export function DraftRoom({ slug }: { slug: string }) {
   // lead (captain or co-captain) does. Matches draftService.makePick.
   const isAdmin = !!user.isAdmin;
   const myTeam = state.teams.find((t) => t.captainUserId === user.id || t.coCaptain?.userId === user.id) ?? null;
+  const isLead = myTeam !== null;
   const currentTeam = state.currentPick ? (state.teams.find((t) => t.id === state.currentPick!.teamId) ?? null) : null;
   const isMyTurn = !!myTeam && currentTeam?.id === myTeam.id;
   const canAct = !!state.currentPick && (isAdmin || isMyTurn);
+  // Before the draft stage the room is a scouting view: leads (and mods)
+  // browse and rate signups; nothing can start or be picked yet.
+  const scouting = shell.bingo.stage !== "draft";
 
   async function handleStart() {
     setStartError(null);
@@ -198,9 +221,23 @@ export function DraftRoom({ slug }: { slug: string }) {
     }
   }
 
+  async function handleRate(signupId: string, rating: PickRating) {
+    setRateError(null);
+    try {
+      await setRating.mutateAsync({ signupId, rating });
+    } catch (e: unknown) {
+      setRateError(e instanceof Error ? e.message : "Failed to save that rating");
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 px-6 py-6">
-      {!state.draftStarted ? (
+      {scouting ? (
+        <Notice tone="info">
+          Scouting. Signups are still {shell.bingo.stage === "signup" ? "open" : "being finalised"} — the draft starts once the mods move the bingo to the draft stage.
+          {isLead && " Star and note players now; your team's ratings carry over into the draft."}
+        </Notice>
+      ) : !state.draftStarted ? (
         <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
             <p className="font-semibold text-fg">The draft hasn't started</p>
@@ -248,12 +285,20 @@ export function DraftRoom({ slug }: { slug: string }) {
         <h3 className="mb-2 text-sm font-semibold text-fg">
           Available players <span className="num font-normal text-fg-subtle">({state.pool.reduce((n, u) => n + u.entries.length, 0)})</span>
         </h3>
-        {pickError && (
+        {(pickError || rateError) && (
           <Notice tone="danger" className="mb-2">
-            {pickError}
+            {pickError ?? rateError}
           </Notice>
         )}
-        <PoolTable pool={state.pool} questions={questionsData?.questions ?? []} canPick={canAct} onPick={handlePick} picking={makePick.isPending} />
+        <PoolTable
+          pool={state.pool}
+          questions={questionsData?.questions ?? []}
+          ratings={isLead ? state.ratings : null}
+          onRate={handleRate}
+          canPick={canAct}
+          onPick={handlePick}
+          picking={makePick.isPending}
+        />
       </section>
     </div>
   );

@@ -244,6 +244,19 @@ export const draftPicks = sqliteTable('draft_picks', {
   uniqueIndex('draft_picks_bingo_user_unq').on(t.bingoId, t.userId),
 ]);
 
+// A team's private notes on a signup while scouting before/during the draft.
+// Shared between captain and co-captain; visible to mods.
+export const pickRatings = sqliteTable('pick_ratings', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  teamId: text('team_id').notNull().references(() => teams.id),
+  signupId: text('signup_id').notNull().references(() => signups.id),
+  stars: integer('stars').notNull(), // 0-3; 0 with a note = note only
+  note: text('note').notNull().default(''),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => [
+  uniqueIndex('pick_ratings_team_signup_unq').on(t.teamId, t.signupId),
+]);
+
 // ---------------------------------------------------------------------------
 // ITEMS
 // ---------------------------------------------------------------------------

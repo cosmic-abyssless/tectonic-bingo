@@ -7,6 +7,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createQuestion, deleteQuestion, reorderQuestions, updateQuestion } from "./signupService";
 import { createSignup, getAllSignups, getSignupForUser, markBuyin, updateSignup, withdrawSignup } from "./signupService";
 import { ServiceError } from "./errors";
+import { createTeam } from "./teamService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -101,6 +102,13 @@ describe("updateSignup / withdrawSignup", () => {
     const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Old", answers: [] });
     const withdrawn = withdrawSignup(db, bingo, signup.id);
     expect(withdrawn.status).toBe("withdrawn");
+  });
+
+  it("refuses to withdraw a player who leads a team", () => {
+    const { bingo, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Cap", answers: [] });
+    createTeam(db, { bingoId: bingo.id, captainUserId: memberId });
+    expect(() => withdrawSignup(db, bingo, signup.id)).toThrow(/leads a team/);
   });
 });
 

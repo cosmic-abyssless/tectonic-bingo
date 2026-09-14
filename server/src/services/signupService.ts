@@ -1,7 +1,7 @@
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { signupAnswers, signupQuestions, signups, users } from "../db/schema";
+import { signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { dissolveForUser, getAcceptedPairs } from "./pairingService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
@@ -260,6 +260,15 @@ export function withdrawSignup(db: Db, bingo: Bingo, signupId: string) {
       .where(eq(signups.id, signupId))
       .get();
     if (!existing) throw new ServiceError(404, "Signup not found");
+    // Captains can be assigned during signups, so a lead may try to withdraw
+    // while already heading a team; the team has to go first.
+    const lead = tx
+      .select({ id: teamMembers.id })
+      .from(teamMembers)
+      .innerJoin(teams, eq(teamMembers.teamId, teams.id))
+      .where(and(eq(teams.bingoId, bingo.id), eq(teamMembers.userId, existing.userId), or(eq(teamMembers.isCaptain, true), eq(teamMembers.isCoCaptain, true))))
+      .get();
+    if (lead) throw new ServiceError(400, "This player leads a team — remove or delete the team before withdrawing the signup");
     dissolveForUser(tx, bingo.id, { id: existing.userId, discordId: existing.discordId });
     const updated = tx.update(signups).set({ status: "withdrawn" }).where(eq(signups.id, signupId)).returning(PUBLIC_SIGNUP_COLS).get();
     audit(tx, {

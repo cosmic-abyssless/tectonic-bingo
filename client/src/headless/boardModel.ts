@@ -1,7 +1,7 @@
 // Pure builders that turn raw server shapes into the view models in
 // ./types.ts. No React, no hooks — safe to call from anywhere, including
 // providers and (if ever wanted) tests. See docs/headless-theming-plan.md §2.
-import type { BoardLine, GraphNode, NodeStatus, SubmissionDetails, TeamNodeState, TeamWithMembers, Tile, TileCategory } from "@bingo/shared";
+import { isBoardLocked, type BoardLine, type GraphNode, type NodeStatus, type Stage, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory } from "@bingo/shared";
 import { summarizeTileProgress, getFreezeUnlockAt, groupSubmissionsByTile, type TileProgressSummary } from "../core/board/tileProgress";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete, type LeafClaimMaps } from "../core/board/taskClaims";
 import { collectLeaves, conditionHeading } from "../core/board/requirementTree";
@@ -23,14 +23,17 @@ export function toCategoryModel(category: TileCategory): CategoryModel {
   return { id: category.id, label: category.label, color: category.colorHex, sortOrder: category.sortOrder };
 }
 
-export function toTeamModel(team: TeamWithMembers, myTeamId: string | null, viewerUserId: string): TeamModel {
+export function toTeamModel(team: TeamWithMembers, myTeamId: string | null, viewerUserId: string, stage: Stage): TeamModel {
+  const isLead = team.members.some((m) => m.user.id === viewerUserId && (m.isCaptain || m.isCoCaptain));
   return {
     id: team.id,
     name: team.name,
     color: team.color,
     isMine: team.id === myTeamId,
     members: team.members.map((m) => ({ id: m.user.id, displayName: displayName(m.user), avatarUrl: avatarUrl(m.user), isCaptain: m.isCaptain, isCoCaptain: m.isCoCaptain })),
-    canRename: team.members.some((m) => m.user.id === viewerUserId && (m.isCaptain || m.isCoCaptain)),
+    isLead,
+    // Mirrors the captain rename route: names freeze once the bingo is live.
+    canRename: isLead && !isBoardLocked(stage),
   };
 }
 
