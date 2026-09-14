@@ -212,7 +212,7 @@ BingoPageModel {
   user: UserModel; isMod; myTeam: TeamModel|null; teams: TeamModel[]; categories: CategoryModel[];
   stageView: StageView; boardRevealed /* reveal|live|complete — only gates the Stats button today (BingoPage.tsx:135) */;
   draft: { state: DraftState | null; isLoading: boolean } /* for DraftStage; DraftState is the shared response type */;
-  viewing: { team: TeamModel|null; isOtherTeam; submissionCount }; canSubmit; pendingCount;
+  viewing: { team: TeamModel|null; isOtherTeam; pendingSubmissionCount }; canSubmit; pendingCount;
   showEndCountdown /* endsAt && stage === "live" */;
   submissions: SubmissionModel[] /* whole team, newest first (drawer) */;
   teamSelector: TeamSelectorModel; search: TileSearchModel;

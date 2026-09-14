@@ -31,6 +31,7 @@ export function ItemSearchInput({
   value,
   onChange,
   onCommit,
+  onPickItem,
   itemGroups,
   onPickGroup,
   placeholder,
@@ -41,14 +42,13 @@ export function ItemSearchInput({
   value: string;
   onChange: (value: string) => void;
   /**
-   * Fires when the value should be persisted: on blur (freeform typing —
-   * not on every keystroke, to avoid a request per character) and
-   * immediately on picking a suggestion (a deliberate, final choice, not
-   * worth waiting on a blur for). Optional — a caller that persists via its
-   * own separate "Add" action (rather than per-field autosave) has no use
-   * for this.
+   * Fires on blur with whatever freeform text is in the field — not on every
+   * keystroke, to avoid a request per character. Optional — a caller that
+   * persists via its own separate "Add" action has no use for this.
    */
   onCommit?: (value: string) => void;
+  /** Fires when an item suggestion is picked (a deliberate, final choice — no blur needed). */
+  onPickItem?: (name: string) => void;
   /** Groups searched by name alongside wiki items. Omit to search items only. */
   itemGroups?: ItemGroup[];
   /** Fires when a group suggestion is picked, instead of onCommit. */
@@ -144,13 +144,11 @@ export function ItemSearchInput({
   }, [suggestions.length]);
 
   const pick = (s: Suggestion) => {
-    if (s.kind === "item") {
-      onChange(s.item.name);
-      onCommit?.(s.item.name);
-    } else {
-      onChange("");
-      onPickGroup?.(s.group);
-    }
+    // Clear rather than fill the field: a pick is final, so leaving the name
+    // in place would only make the blur re-commit it.
+    onChange("");
+    if (s.kind === "item") onPickItem?.(s.item.name);
+    else onPickGroup?.(s.group);
     // Not setOpen(false) here: picking via onMouseDown keeps focus on the
     // input (see its preventDefault below), so onFocus — the only thing
     // that flips `open` back to true — never re-fires afterward. Clearing

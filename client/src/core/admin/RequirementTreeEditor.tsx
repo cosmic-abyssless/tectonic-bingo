@@ -231,11 +231,15 @@ function GroupNode(props: NodeProps) {
   // Part B, rather than rebuilding the same COUNT by hand.
   const pickableConditions = (existingConditions ?? []).filter((c) => !childIds.has(c.id));
 
-  // Committing (blur, or picking a suggestion) adds one plain ITEM leaf and
-  // closes the picker — mirrors "+ existing item"'s reveal-then-commit flow.
-  function commitNewItem(raw: string) {
-    const trimmed = raw.trim();
+  function addItem(name: string) {
+    const trimmed = name.trim();
     if (trimmed) add(path, { kind: "ITEM", itemName: trimmed });
+  }
+  // Picking a suggestion adds the item and keeps the (now empty, still
+  // focused) search box open so several items can be added in a row.
+  // Blurring commits any freeform text and closes the picker.
+  function commitNewItem(raw: string) {
+    addItem(raw);
     setNewItemName("");
     setAddingItem(false);
   }
@@ -245,7 +249,6 @@ function GroupNode(props: NodeProps) {
   // (docs/item-quantity-model.md §6).
   function commitNewItemGroup(group: ItemGroup) {
     addMany(path, group.itemNames.map((itemName): GraphNodeInput => ({ kind: "ITEM", itemName })));
-    setAddingItem(false);
   }
 
   // Offered only when every direct child is a plain item (a flat set, like
@@ -320,7 +323,16 @@ function GroupNode(props: NodeProps) {
       </div>
       {addingItem && (
         <div className="mb-2 max-w-xs">
-          <ItemSearchInput value={newItemName} onChange={setNewItemName} onCommit={commitNewItem} itemGroups={itemGroups} onPickGroup={commitNewItemGroup} placeholder="Add item or group…" ariaLabel="New item name" />
+          <ItemSearchInput
+            value={newItemName}
+            onChange={setNewItemName}
+            onCommit={commitNewItem}
+            onPickItem={addItem}
+            itemGroups={itemGroups}
+            onPickGroup={commitNewItemGroup}
+            placeholder="Add item or group…"
+            ariaLabel="New item name"
+          />
         </div>
       )}
       {pickingExisting && (

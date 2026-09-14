@@ -1,10 +1,20 @@
+import { useState } from "react";
+import type { SubmissionStatus } from "@bingo/shared";
 import type { SubmissionModel } from "../../../headless/types";
 import { Dialog, DialogHeader } from "../../../core/ui/Dialog";
 import { Button } from "../../../core/ui/Button";
-import { Badge, EmptyState } from "../../../core/ui/Card";
+import { Badge, EmptyState, FilterChip } from "../../../core/ui/Card";
 import { ImageIcon } from "../../../core/ui/icons";
 import { SubmissionStatusBadge } from "../../../core/ui/StatusBadge";
 import { ScreenshotThumb } from "../../../core/submissions/ScreenshotThumb";
+
+type Filter = SubmissionStatus | "all";
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "pending", label: "Pending" },
+  { key: "approved", label: "Approved" },
+  { key: "rejected", label: "Rejected" },
+];
 
 export function SubmissionsDrawer({
   isOpen,
@@ -17,6 +27,10 @@ export function SubmissionsDrawer({
   onClose: () => void;
   onSubmit?: () => void;
 }) {
+  const [filter, setFilter] = useState<Filter>("all");
+  const shown = filter === "all" ? submissions : submissions.filter((s) => s.status === filter);
+  const countFor = (key: Filter) => (key === "all" ? submissions.length : submissions.filter((s) => s.status === key).length);
+
   return (
     <Dialog isOpen={isOpen} onClose={onClose} size="lg">
       <DialogHeader
@@ -32,15 +46,27 @@ export function SubmissionsDrawer({
         }
       />
 
+      {submissions.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 border-b border-line px-5 py-3">
+          {FILTERS.map(({ key, label }) => (
+            <FilterChip key={key} active={filter === key} count={countFor(key)} onPress={() => setFilter(key)}>
+              {label}
+            </FilterChip>
+          ))}
+        </div>
+      )}
+
       {submissions.length === 0 ? (
         <div className="p-5">
           <EmptyState icon={<ImageIcon />} title="No submissions yet">
             {onSubmit ? "Submit a completion using the Submit button in the header." : "Nothing has been submitted for this team yet."}
           </EmptyState>
         </div>
+      ) : shown.length === 0 ? (
+        <p className="p-5 text-sm text-fg-subtle">No {filter} submissions.</p>
       ) : (
         <ul className="divide-y divide-line">
-          {submissions.map((s) => (
+          {shown.map((s) => (
             <li key={s.id} className="flex items-start gap-4 px-5 py-4 transition-colors hover:bg-surface-hover">
               <ScreenshotThumb url={s.thumbnailUrl ?? undefined} />
 
