@@ -121,6 +121,15 @@ router.get(
   }),
 );
 
+// Who can be recorded as having collected a buy-in. Mods only need names, so
+// this mirrors the admin-only GET /mods without opening up user management.
+router.get(
+  "/moderators",
+  asyncHandler(async (req, res) => {
+    res.json({ mods: bingoService.getModerators(db, req.bingo!.id) });
+  }),
+);
+
 // Duo mode: mods pair two unpaired signups by hand, or split a pair.
 router.post(
   "/pairings",

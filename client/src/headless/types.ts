@@ -208,7 +208,8 @@ export interface BingoPageModel {
   canViewStats: boolean;
   /** For the draft-stage slot; DraftState is the shared draft response type. */
   draft: { state: DraftState | null; isLoading: boolean };
-  viewing: { team: TeamModel | null; isOtherTeam: boolean; submissionCount: number };
+  /** pendingSubmissionCount: the viewed team's submissions still awaiting review (header badge). */
+  viewing: { team: TeamModel | null; isOtherTeam: boolean; pendingSubmissionCount: number };
   canSubmit: boolean;
   pendingCount: number;
   /** endsAt && stage === "live". */
@@ -220,7 +221,7 @@ export interface BingoPageModel {
   /** Replaces both the old openTileId state and BoardGrid's own `selected` state. */
   openTile: { id: string | null; open(id: string): void; close(): void };
   rules: { open: boolean; show(): void; hide(): void };
-  /** The viewer's own team roster (TeamBadge press → TeamInfoDialog). */
+  /** Roster of `viewing.team` (TeamBadge press for players, roster button beside TeamSelector for mods → TeamInfoDialog). */
   teamInfo: { open: boolean; show(): void; hide(): void };
   drawer: { open: boolean; show(): void; hide(): void };
   /** show() also hides the drawer. initialFile seeds/replaces the flow's screenshot (drag-drop/paste-to-submit) — re-passing a new File while already open feeds it into the still-mounted flow. */

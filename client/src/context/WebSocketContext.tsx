@@ -28,6 +28,7 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       queryClient.invalidateQueries({ queryKey: ["adminLines"] });
       queryClient.invalidateQueries({ queryKey: ["adminQuestions"] });
       queryClient.invalidateQueries({ queryKey: ["adminMods"] });
+      queryClient.invalidateQueries({ queryKey: ["bingoMods"] });
       queryClient.invalidateQueries({ queryKey: ["adminCaptainCandidates"] });
       break;
     case "draft_started":

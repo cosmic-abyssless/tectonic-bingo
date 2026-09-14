@@ -4,6 +4,7 @@ import { AppHeader } from "../../../core/ui/AppHeader";
 import { Button } from "../../../core/ui/Button";
 import { Badge } from "../../../core/ui/Card";
 import { CountdownTimer } from "../../../core/ui/CountdownTimer";
+import { UsersIcon } from "../../../core/ui/icons";
 import { useSlot } from "../../context";
 
 export function PageHeader({ page }: { page: BingoPageModel }) {
@@ -28,7 +29,16 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
         )
       }
     >
-      {page.isMod && page.teams.length > 0 && <TeamSelector selector={page.teamSelector} />}
+      {page.isMod && page.teams.length > 0 && (
+        <>
+          <TeamSelector selector={page.teamSelector} />
+          {page.viewing.team && (
+            <Button size="sm" aria-label={`${page.viewing.team.name} roster`} className="px-2" onPress={page.teamInfo.show}>
+              <UsersIcon />
+            </Button>
+          )}
+        </>
+      )}
       {!page.isMod && page.myTeam && <TeamBadge team={page.myTeam} onPress={page.teamInfo.show} />}
       {page.bingo.rulesMarkdown && (
         <Button size="sm" variant="ghost" onPress={page.rules.show}>
@@ -53,7 +63,11 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
       {page.teamSelector.selectedId && (
         <Button size="sm" onPress={page.drawer.show}>
           Submissions
-          {page.viewing.submissionCount > 0 && <span className="num text-fg-subtle">{page.viewing.submissionCount}</span>}
+          {page.viewing.pendingSubmissionCount > 0 && (
+            <Badge tone="warn" className="num -my-1">
+              {page.viewing.pendingSubmissionCount}
+            </Badge>
+          )}
         </Button>
       )}
       {page.canSubmit && (

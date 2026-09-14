@@ -117,7 +117,11 @@ export function SearchableSelect({
     <button
       key={opt.id}
       type="button"
-      onMouseDown={() => select(opt.id)}
+      // Selecting on mousedown unmounts the dropdown before mouseup, which then
+      // lands on the input and refocuses it — reopening what we just closed.
+      // preventDefault keeps focus put; the pick itself happens on click.
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => select(opt.id)}
       className={`w-full px-3 py-1.5 text-left text-sm transition-colors ${
         flatIndexMap.get(opt.id) === highlighted ? "bg-accent text-accent-fg" : "text-fg hover:bg-surface-hover"
       }`}

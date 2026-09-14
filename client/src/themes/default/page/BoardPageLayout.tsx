@@ -59,7 +59,7 @@ export function BoardPageLayout() {
 
       <RulesDialog isOpen={page.rules.open} markdown={page.bingo.rulesMarkdown ?? ""} onClose={page.rules.hide} />
 
-      <TeamInfoDialog slug={page.slug} team={page.teamInfo.open ? page.myTeam : null} onClose={page.teamInfo.hide} />
+      <TeamInfoDialog slug={page.slug} team={page.teamInfo.open ? page.viewing.team : null} onClose={page.teamInfo.hide} />
 
       <SubmissionsDrawer isOpen={page.drawer.open} submissions={page.submissions} onClose={page.drawer.hide} onSubmit={page.canSubmit ? () => page.submit.show() : undefined} />
 

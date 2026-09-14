@@ -99,7 +99,7 @@ export function BoardPageLayout() {
 
       <TeamInfoDialog
         slug={page.slug}
-        team={page.teamInfo.open ? page.myTeam : null}
+        team={page.teamInfo.open ? page.viewing.team : null}
         onClose={page.teamInfo.hide}
       />
 

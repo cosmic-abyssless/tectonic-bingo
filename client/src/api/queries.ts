@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  BingoListResponse, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
+  BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   ModSubmissionsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
@@ -17,6 +17,7 @@ export const queryKeys = {
   modSubmissions: (slug: string) => ["modSubmissions", slug] as const,
   pendingCount: (slug: string) => ["pendingCount", slug] as const,
   signupRoster: (slug: string) => ["signupRoster", slug] as const,
+  bingoMods: (slug: string) => ["bingoMods", slug] as const,
   signupQuestions: (slug: string) => ["signupQuestions", slug] as const,
   mySignup: (slug: string) => ["mySignup", slug] as const,
   myTectonicRsns: (slug: string) => ["myTectonicRsns", slug] as const,
@@ -132,6 +133,13 @@ export function useSignupRoster(slug: string | undefined) {
     queryKey: queryKeys.signupRoster(slug ?? ""),
     queryFn: () => api.get<RosterResponse>(`/api/bingos/${slug}/mod/signups`),
     enabled: !!slug,
+  });
+}
+
+export function useBingoMods(slug: string) {
+  return useQuery({
+    queryKey: queryKeys.bingoMods(slug),
+    queryFn: () => api.get<{ mods: BingoModerator[] }>(`/api/bingos/${slug}/mod/moderators`),
   });
 }
 

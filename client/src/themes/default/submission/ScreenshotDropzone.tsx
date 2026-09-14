@@ -1,3 +1,4 @@
+import { MAX_UPLOAD_MB } from "@bingo/shared";
 import type { SubmissionFlowModel } from "../../../headless/types";
 import { Field } from "../../../core/ui/Field";
 import { ImageIcon } from "../../../core/ui/icons";
@@ -18,7 +19,7 @@ export function ScreenshotDropzone({ screenshot }: { screenshot: SubmissionFlowM
           <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-fg-subtle">
             <ImageIcon size={28} />
             <span className="text-sm text-fg-muted">Drag & drop or click to upload</span>
-            <span className="text-xs">PNG, JPG, WebP — max 10 MB</span>
+            <span className="text-xs">PNG, JPG, WebP — max {MAX_UPLOAD_MB} MB</span>
           </span>
         )}
       </button>
