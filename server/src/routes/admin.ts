@@ -13,6 +13,7 @@ import * as boardService from "../services/boardService";
 import * as signupService from "../services/signupService";
 import * as teamService from "../services/teamService";
 import * as userService from "../services/userService";
+import { syncWomTeamRename } from "../services/womCompetitionService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
 
@@ -54,8 +55,22 @@ router.patch(
     for (const key of dateFields) {
       if (key in body) (params as Record<string, unknown>)[key] = body[key] ? new Date(body[key] as string) : null;
     }
+    if ("womEnabled" in body) {
+      if (typeof body.womEnabled !== "boolean") throw new ServiceError(400, "womEnabled must be a boolean");
+      params.womEnabled = body.womEnabled;
+    }
+    if ("womGroupId" in body) {
+      params.womGroupId = body.womGroupId ? String(body.womGroupId).trim() : null;
+    }
+    if ("womGroupVerificationCode" in body) {
+      // Write-only — the current value is never sent back to the client, so
+      // an empty/absent field here always means "leave it as is" from the
+      // settings form, never "clear it".
+      const code = body.womGroupVerificationCode ? String(body.womGroupVerificationCode).trim() : "";
+      if (code) params.womGroupVerificationCode = code;
+    }
     const bingo = bingoService.updateBingoSettings(db, req.bingo!.id, params);
-    res.json({ bingo });
+    res.json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );
 
@@ -317,6 +332,9 @@ router.patch(
   asyncHandler(async (req, res) => {
     const { name, color, codeword } = req.body as teamService.UpdateTeamParams;
     const team = teamService.updateTeam(db, req.params.id as string, { name, color, codeword });
+    // Keep the WOM competition's roster labels in sync with renames made
+    // from the admin panel too, not just the captain self-service route.
+    if (name !== undefined) void syncWomTeamRename(db, req.bingo!.id);
     res.json({ team });
   }),
 );

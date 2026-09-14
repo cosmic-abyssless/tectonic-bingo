@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Bingo, SignupMode } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
@@ -8,6 +8,8 @@ import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
 import { Disclosure } from "../ui/Disclosure";
 import { Field, Input, Select, Textarea } from "../ui/Field";
+import { Switch } from "../ui/Switch";
+import { ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { THEME_KEYS } from "../../themes/keys";
 
 function toLocalInput(iso: string | null): string {
@@ -55,6 +57,12 @@ export function BingoSettingsForm({
     revealScheduledAt: toLocalInput(bingo.revealScheduledAt),
     startsAt: toLocalInput(bingo.startsAt),
     endsAt: toLocalInput(bingo.endsAt),
+    womEnabled: bingo.womEnabled,
+    womGroupId: bingo.womGroupId ?? "",
+    // Write-only — the server never sends the current code back, so this
+    // always starts blank. Left blank on save, the existing code (if any) is
+    // kept as-is.
+    womGroupVerificationCode: "",
   });
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -79,7 +87,12 @@ export function BingoSettingsForm({
         revealScheduledAt: fromLocalInput(form.revealScheduledAt) as never,
         startsAt: fromLocalInput(form.startsAt) as never,
         endsAt: fromLocalInput(form.endsAt) as never,
+        womEnabled: form.womEnabled,
+        womGroupId: form.womGroupId.trim() || null,
+        // Omit entirely when blank so the server keeps the existing code.
+        ...(form.womGroupVerificationCode.trim() ? { womGroupVerificationCode: form.womGroupVerificationCode.trim() } : {}),
       });
+      setForm((f) => ({ ...f, womGroupVerificationCode: "" }));
       await queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
       setSaved(true);
     } catch (e: unknown) {
@@ -146,6 +159,37 @@ export function BingoSettingsForm({
         </div>
       </Section>
 
+      <WomSection enabled={form.womEnabled} onToggle={(womEnabled) => setForm({ ...form, womEnabled })}>
+        <Notice tone="info">
+          When enabled, a Wise Old Man group competition is created automatically for this bingo's teams once the draft finishes, and kept up to date if a
+          captain renames their team.
+        </Notice>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="WOM group ID">
+            <Input value={form.womGroupId} onChange={(e) => setForm({ ...form, womGroupId: e.target.value })} className="num" />
+          </Field>
+          <Field label="WOM group verification code" hint="For security, the saved code is never shown. Leave blank to keep the current one.">
+            <Input
+              type="password"
+              autoComplete="off"
+              placeholder={bingo.womGroupId ? "•••••••• (unchanged)" : ""}
+              value={form.womGroupVerificationCode}
+              onChange={(e) => setForm({ ...form, womGroupVerificationCode: e.target.value })}
+            />
+          </Field>
+        </div>
+        {bingo.womCompetitionId && (
+          <Notice tone="ok">
+            Competition created —{" "}
+            <a href={`https://wiseoldman.net/competitions/${bingo.womCompetitionId}`} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+              view on Wise Old Man
+            </a>
+            .
+          </Notice>
+        )}
+        {bingo.womSyncError && <Notice tone="warn">Last WOM sync failed: {bingo.womSyncError}</Notice>}
+      </WomSection>
+
       <Section title="Rules">
         <Field
           as="div"
@@ -184,5 +228,29 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
     <Disclosure defaultExpanded title={<span className="flex-1 text-sm font-semibold text-fg">{title}</span>}>
       <div className="space-y-4">{children}</div>
     </Disclosure>
+  );
+}
+
+// Unlike Section, whether this starts open or collapsed is driven by the
+// enable toggle rather than always being open — off means collapsed, on
+// means open by default with the usual expand/collapse control from there.
+// The toggle and the expand/collapse control are two separate buttons (not
+// one nested in the other, which would be invalid HTML and would fire both
+// on a single click), so this can't just reuse Disclosure's single-trigger layout.
+function WomSection({ enabled, onToggle, children }: { enabled: boolean; onToggle: (value: boolean) => void; children: ReactNode }) {
+  const [expanded, setExpanded] = useState(enabled);
+  useEffect(() => setExpanded(enabled), [enabled]);
+
+  return (
+    <div className="rounded-lg border border-line bg-surface">
+      <div className="flex h-12 w-full items-center gap-3 px-4">
+        <button type="button" onClick={() => setExpanded((v) => !v)} className="flex flex-1 items-center gap-3 text-left text-sm font-semibold text-fg">
+          Wise Old Man
+          <span className="text-fg-subtle">{expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
+        </button>
+        <Switch isSelected={enabled} onChange={onToggle} aria-label="Enable Wise Old Man integration" />
+      </div>
+      {expanded && <div className="space-y-4 border-t border-line p-4">{children}</div>}
+    </div>
   );
 }

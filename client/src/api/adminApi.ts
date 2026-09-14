@@ -37,7 +37,9 @@ export function deleteItemGroup(id: string) {
 
 const base = (slug: string) => `/api/bingos/${slug}/admin`;
 
-export function updateBingoSettings(slug: string, payload: Partial<Bingo>) {
+// womGroupVerificationCode isn't on the Bingo type at all — the server never
+// sends it back (bingoService.toPublicBingo), so it can only ever be written.
+export function updateBingoSettings(slug: string, payload: Partial<Bingo> & { womGroupVerificationCode?: string }) {
   return api.patch<{ bingo: Bingo }>(`${base(slug)}/settings`, payload);
 }
 export function searchBingoUsers(slug: string, q: string) {

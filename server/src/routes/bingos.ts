@@ -21,6 +21,7 @@ import { getTectonicClient, TectonicUnavailableError, type TectonicDetailedUser 
 import { parseWomSummary } from "../services/womService";
 import { parseAccountType } from "../services/runeProfileService";
 import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
+import { syncWomTeamRename } from "../services/womCompetitionService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
 
@@ -73,7 +74,7 @@ router.get(
     const myTeam = req.user ? teamService.getUserTeamForBingo(db, bingo.id, req.user.id) : null;
     const paidSignupCount = signupService.getPaidSignupCount(db, bingo.id);
     res.json({
-      bingo,
+      bingo: bingoService.toPublicBingo(bingo),
       categories: boardService.getCategories(db, bingo.id),
       teams: teamService.getTeamsWithMembers(db, bingo.id),
       isMod,
@@ -496,6 +497,7 @@ router.patch(
     if (!name || !name.trim()) throw new ServiceError(400, "name is required");
     const updated = teamService.updateTeam(db, team.id, { name: name.trim() });
     broadcast({ type: "team_updated", bingoId: req.bingo!.id, payload: { teamId: team.id } });
+    void syncWomTeamRename(db, req.bingo!.id);
     res.json({ team: updated });
   }),
 );

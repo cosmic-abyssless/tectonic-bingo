@@ -38,7 +38,7 @@ router.post(
       boardCols,
       createdByUserId: req.user!.id,
     });
-    res.status(201).json({ bingo });
+    res.status(201).json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );
 
