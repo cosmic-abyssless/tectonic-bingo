@@ -15,10 +15,11 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { displayName } from "../ui/user";
 import { Button, IconButton } from "../ui/Button";
-import { Badge, EmptyState, Notice } from "../ui/Card";
+import { Badge, EmptyState, FilterChip, Notice } from "../ui/Card";
 import { Input, Select } from "../ui/Field";
 import { CheckIcon, UsersIcon, XIcon } from "../ui/icons";
 import { SortHeader, compareSortValues, useTableSort } from "../ui/tableSort";
+import { timeAgo } from "../ui/time";
 
 function csvEscape(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
@@ -210,6 +211,30 @@ function PartnerCell({ slug, entry, roster }: { slug: string; entry: RosterEntry
 // "order" | "rsn" | "discord" | "status" | "buyin" | "collectedBy" | "partner" | a signup question's id.
 type SortKey = string;
 
+type BuyinFilter = "all" | "paid" | "unpaid";
+type PairFilter = "all" | "paired" | "unpaired";
+
+const BUYIN_FILTERS: { key: BuyinFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "paid", label: "Paid" },
+  { key: "unpaid", label: "Unpaid" },
+];
+const PAIR_FILTERS: { key: PairFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "paired", label: "Paired" },
+  { key: "unpaired", label: "Unpaired" },
+];
+
+const isPaid = (entry: RosterEntry) => !!entry.signup.buyinReceivedAt;
+const isPaired = (entry: RosterEntry) => !!entry.pairing;
+
+function matchesBuyin(entry: RosterEntry, filter: BuyinFilter): boolean {
+  return filter === "all" || isPaid(entry) === (filter === "paid");
+}
+function matchesPair(entry: RosterEntry, filter: PairFilter): boolean {
+  return filter === "all" || isPaired(entry) === (filter === "paired");
+}
+
 // `order` is the 1-based signup position (the server returns the roster in
 // createdAt order), kept alongside the entry so sorting by another column
 // doesn't lose it.
@@ -223,9 +248,11 @@ function rosterSortValue({ order, entry }: NumberedEntry, key: SortKey, roster: 
   if (key === "rsn") return entry.signup.rsn.toLowerCase();
   if (key === "discord") return displayName(entry.user).toLowerCase();
   if (key === "status") return entry.signup.status;
-  if (key === "buyin") return entry.signup.buyinReceivedAt ? 1 : 0;
+  if (key === "buyin") return isPaid(entry) ? 1 : 0;
   if (key === "collectedBy") return entry.collectedByUser ? displayName(entry.collectedByUser).toLowerCase() : "";
-  if (key === "partner") return (partnerRsn(entry, roster) ?? "").toLowerCase();
+  // Paired rows first (sorted by partner), unpaired rows after — so the
+  // column doubles as a paired/unpaired grouping.
+  if (key === "partner") return isPaired(entry) ? `0 ${(partnerRsn(entry, roster) ?? "").toLowerCase()}` : "1";
   return (entry.answers.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
 }
 
@@ -238,12 +265,19 @@ export function SignupRoster({ slug }: { slug: string }) {
   const questions = questionsData?.questions ?? [];
   const isDuo = bingoData?.bingo.signupMode === "duo";
   const [copied, setCopied] = useState(false);
+  const [buyinFilter, setBuyinFilter] = useState<BuyinFilter>("all");
+  const [pairFilter, setPairFilter] = useState<PairFilter>("all");
   const sort = useTableSort<SortKey>("order");
 
   const activeCount = roster.filter((r) => r.signup.status === "active").length;
   const withdrawnCount = roster.length - activeCount;
+  // Each chip's count reflects the other filter so the numbers show what
+  // clicking it would leave on screen.
+  const buyinCount = (f: BuyinFilter) => roster.filter((r) => matchesBuyin(r, f) && matchesPair(r, pairFilter)).length;
+  const pairCount = (f: PairFilter) => roster.filter((r) => matchesPair(r, f) && matchesBuyin(r, buyinFilter)).length;
   const sorted = roster
     .map((entry, i) => ({ order: i + 1, entry }))
+    .filter(({ entry }) => matchesBuyin(entry, buyinFilter) && matchesPair(entry, pairFilter))
     .sort((a, b) => sort.order(compareSortValues(rosterSortValue(a, sort.key, roster), rosterSortValue(b, sort.key, roster))));
 
   async function copyCsv() {
@@ -275,60 +309,90 @@ export function SignupRoster({ slug }: { slug: string }) {
           Players who sign up will appear here with their answers and buy-in status.
         </EmptyState>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line">
-                <SortHeader label="#" sortKey="order" sort={sort} />
-                <SortHeader label="RSN" sortKey="rsn" sort={sort} />
-                <SortHeader label="Discord" sortKey="discord" sort={sort} />
-                <SortHeader label="Status" sortKey="status" sort={sort} />
-                <SortHeader label="Buy-in" sortKey="buyin" sort={sort} />
-                <SortHeader label="Collected by" sortKey="collectedBy" sort={sort} />
-                {isDuo && <SortHeader label="Partner" sortKey="partner" sort={sort} />}
-                {questions.map((q) => (
-                  <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />
+        <>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by buy-in">
+              {BUYIN_FILTERS.map(({ key, label }) => (
+                <FilterChip key={key} active={buyinFilter === key} count={buyinCount(key)} onPress={() => setBuyinFilter(key)}>
+                  {label}
+                </FilterChip>
+              ))}
+            </div>
+            {isDuo && (
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by pairing">
+                {PAIR_FILTERS.map(({ key, label }) => (
+                  <FilterChip key={key} active={pairFilter === key} count={pairCount(key)} onPress={() => setPairFilter(key)}>
+                    {label}
+                  </FilterChip>
                 ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {sorted.map(({ order, entry }) => {
-                const answerByQ = new Map(entry.answers.map((a) => [a.questionId, a.value]));
-                return (
-                  <tr key={entry.signup.id}>
-                    <td className="num py-2 pr-4 text-fg-subtle">{order}</td>
-                    <td className="py-2 pr-4 font-medium text-fg">
-                      <span className="inline-flex items-center gap-1.5">
-                        {entry.signup.rsn}
-                        {entry.signup.rsnVerified && <CheckIcon size={14} className="text-ok" aria-label="Verified against the linked clan account" />}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-4 text-fg-muted">{displayName(entry.user)}</td>
-                    <td className="py-2 pr-4">
-                      <Badge tone={entry.signup.status === "active" ? "ok" : "neutral"}>{entry.signup.status}</Badge>
-                    </td>
-                    <td className="py-2 pr-4">
-                      <BuyinCell slug={slug} entry={entry} />
-                    </td>
-                    <td className="py-2 pr-4">
-                      <CollectedByCell slug={slug} entry={entry} />
-                    </td>
-                    {isDuo && (
-                      <td className="py-2 pr-4">
-                        <PartnerCell slug={slug} entry={entry} roster={roster} />
-                      </td>
-                    )}
+              </div>
+            )}
+          </div>
+          {sorted.length === 0 ? (
+            <p className="text-sm text-fg-muted">No signups match these filters.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line">
+                    <SortHeader label="#" sortKey="order" sort={sort} />
+                    <SortHeader label="RSN" sortKey="rsn" sort={sort} />
+                    <SortHeader label="Discord" sortKey="discord" sort={sort} />
+                    <SortHeader label="Signed up" sortKey="order" sort={sort} />
+                    <SortHeader label="Status" sortKey="status" sort={sort} />
+                    <SortHeader label="Buy-in" sortKey="buyin" sort={sort} />
+                    <SortHeader label="Collected by" sortKey="collectedBy" sort={sort} />
+                    {isDuo && <SortHeader label="Partner" sortKey="partner" sort={sort} />}
                     {questions.map((q) => (
-                      <td key={q.id} className="py-2 pr-4 text-fg-muted">
-                        {answerByQ.get(q.id) ?? "—"}
-                      </td>
+                      <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />
                     ))}
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {sorted.map(({ order, entry }) => {
+                    const answerByQ = new Map(entry.answers.map((a) => [a.questionId, a.value]));
+                    return (
+                      <tr key={entry.signup.id}>
+                        <td className="num py-2 pr-4 text-fg-subtle">{order}</td>
+                        <td className="py-2 pr-4 font-medium text-fg">
+                          <span className="inline-flex items-center gap-1.5">
+                            {entry.signup.rsn}
+                            {entry.signup.rsnVerified && <CheckIcon size={14} className="text-ok" aria-label="Verified against the linked clan account" />}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4 text-fg-muted">{displayName(entry.user)}</td>
+                        <td className="py-2 pr-4 text-fg-muted">
+                          <time dateTime={entry.signup.createdAt} title={new Date(entry.signup.createdAt).toLocaleString()} className="num whitespace-nowrap">
+                            {timeAgo(entry.signup.createdAt)}
+                          </time>
+                        </td>
+                        <td className="py-2 pr-4">
+                          <Badge tone={entry.signup.status === "active" ? "ok" : "neutral"}>{entry.signup.status}</Badge>
+                        </td>
+                        <td className="py-2 pr-4">
+                          <BuyinCell slug={slug} entry={entry} />
+                        </td>
+                        <td className="py-2 pr-4">
+                          <CollectedByCell slug={slug} entry={entry} />
+                        </td>
+                        {isDuo && (
+                          <td className="py-2 pr-4">
+                            <PartnerCell slug={slug} entry={entry} roster={roster} />
+                          </td>
+                        )}
+                        {questions.map((q) => (
+                          <td key={q.id} className="py-2 pr-4 text-fg-muted">
+                            {answerByQ.get(q.id) ?? "—"}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
