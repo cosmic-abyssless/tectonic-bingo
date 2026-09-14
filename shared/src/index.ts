@@ -72,6 +72,10 @@ export interface User {
 export const SIGNUP_MODES = ["solo", "duo"] as const;
 export type SignupMode = (typeof SIGNUP_MODES)[number];
 
+// Keep in sync with server/src/middleware/upload.ts (the server can't import this at runtime).
+export const MAX_UPLOAD_MB = 5;
+export const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+
 export interface Bingo {
   id: string;
   slug: string;

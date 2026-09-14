@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import type { ClaimInput, GraphNode, ScreenshotAnalysis } from "@bingo/shared";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, type ClaimInput, type GraphNode, type ScreenshotAnalysis } from "@bingo/shared";
 import { useAnalyzeScreenshot, useCreateSubmission } from "../api/queries";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete } from "../core/board/taskClaims";
 import { collectLeaves, collectLeavesWithAncestors } from "../core/board/requirementTree";
@@ -149,6 +149,10 @@ export function useSubmissionFlow({
   const handleFile = useCallback((file: File) => {
     if (!file.type.startsWith("image/")) {
       setError("Please upload an image file (PNG, JPG, WebP, etc.)");
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError(`That image is ${(file.size / 1024 / 1024).toFixed(1)} MB — the limit is ${MAX_UPLOAD_MB} MB`);
       return;
     }
     setError(null);
