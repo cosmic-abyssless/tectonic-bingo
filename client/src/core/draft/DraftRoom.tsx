@@ -6,6 +6,7 @@ import { displayName } from "../ui/user";
 import { Button } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
 import { LinkIcon } from "../ui/icons";
+import { SortHeader, compareSortValues, useTableSort, type TableSort } from "../ui/tableSort";
 import { TeamRoster } from "./TeamRoster";
 import ironmanBadge from "../ui/icons/Ironman_chat_badge.png";
 import ultimateBadge from "../ui/icons/Ultimate_ironman_chat_badge.png";
@@ -47,8 +48,6 @@ function AccountTypeIcon({ accountType }: { accountType: AccountType | null | un
 // "rsn" | "discord" | "ehb" | a signup question's id — anything the pool table can sort by.
 type SortKey = string;
 
-// Numeric columns must sort numerically, not with localeCompare (which
-// would put "100" before "9" — string-lexicographic order, not magnitude).
 function poolSortValue(entry: DraftPoolEntry, key: SortKey): string | number {
   if (key === "rsn") return entry.signup.rsn.toLowerCase();
   if (key === "discord") return displayName(entry.user).toLowerCase();
@@ -56,17 +55,10 @@ function poolSortValue(entry: DraftPoolEntry, key: SortKey): string | number {
   return (entry.answers?.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
 }
 
-function compareSortValues(va: string | number, vb: string | number): number {
-  return typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
-}
-
 // A duo pair sorts by whichever half ranks first, so the pair sits where its
 // stronger/earlier member would on their own.
-function sortUnit(unit: DraftUnit, key: SortKey, dir: "asc" | "desc"): DraftUnit {
-  const entries = [...unit.entries].sort((a, b) => {
-    const cmp = compareSortValues(poolSortValue(a, key), poolSortValue(b, key));
-    return dir === "asc" ? cmp : -cmp;
-  });
+function sortUnit(unit: DraftUnit, sort: TableSort<SortKey>): DraftUnit {
+  const entries = [...unit.entries].sort((a, b) => sort.order(compareSortValues(poolSortValue(a, sort.key), poolSortValue(b, sort.key))));
   return { ...unit, entries };
 }
 
@@ -83,8 +75,7 @@ function PoolTable({
   onPick: (userId: string) => void;
   picking: boolean;
 }) {
-  const [sortKey, setSortKey] = useState<SortKey>("rsn");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const sort = useTableSort<SortKey>("rsn");
   const entries = pool.flatMap((u) => u.entries);
   // Answers are only sent to mods/captains (see draftService.getDraftState) —
   // everyone else's pool entries have answers: null, so skip those columns
@@ -95,35 +86,9 @@ function PoolTable({
   const showWomStats = entries.some((e) => e.womStats !== null);
   const hasPairs = pool.some((u) => u.entries.length > 1);
 
-  function toggleSort(key: SortKey) {
-    if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  }
-
   const sorted = pool
-    .map((u) => sortUnit(u, sortKey, sortDir))
-    .sort((a, b) => {
-      const cmp = compareSortValues(poolSortValue(a.entries[0], sortKey), poolSortValue(b.entries[0], sortKey));
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-
-  function SortHeader({ label, sortKeyValue }: { label: string; sortKeyValue: SortKey }) {
-    const active = sortKey === sortKeyValue;
-    return (
-      <th className="pb-2 pr-4 whitespace-nowrap font-medium">
-        <button
-          type="button"
-          onClick={() => toggleSort(sortKeyValue)}
-          className={`select-none transition-colors hover:text-fg ${active ? "text-fg" : "text-fg-subtle"}`}
-        >
-          {label} {active && (sortDir === "asc" ? "↑" : "↓")}
-        </button>
-      </th>
-    );
-  }
+    .map((u) => sortUnit(u, sort))
+    .sort((a, b) => sort.order(compareSortValues(poolSortValue(a.entries[0], sort.key), poolSortValue(b.entries[0], sort.key))));
 
   if (pool.length === 0) return <p className="text-sm text-fg-subtle">No one left to draft.</p>;
 
@@ -131,12 +96,12 @@ function PoolTable({
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-fg-subtle">
+          <tr className="border-b border-line">
             {hasPairs && <th className="pb-2 pr-2" />}
-            <SortHeader label="RSN" sortKeyValue="rsn" />
-            <SortHeader label="Discord" sortKeyValue="discord" />
-            {showWomStats && <SortHeader label="EHB" sortKeyValue="ehb" />}
-            {showAnswers && questions.map((q) => <SortHeader key={q.id} label={q.prompt} sortKeyValue={q.id} />)}
+            <SortHeader label="RSN" sortKey="rsn" sort={sort} />
+            <SortHeader label="Discord" sortKey="discord" sort={sort} />
+            {showWomStats && <SortHeader label="EHB" sortKey="ehb" sort={sort} />}
+            {showAnswers && questions.map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />)}
             {canPick && <th className="pb-2" />}
           </tr>
         </thead>
