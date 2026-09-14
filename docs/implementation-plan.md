@@ -81,6 +81,8 @@ Fresh Drizzle migration set: delete `server/drizzle/*` and the dev DB, rewrite `
 
 **Timeline/statistics note:** no separate event-log table. The timeline view derives from timestamped rows that already exist: `stage_transitions`, `draft_picks`, `submissions`, `team_task_progress.completedAt`, `team_completed_lines.completedAt`, `team_point_adjustments`. Every state change must therefore record its timestamp and actor — keep that invariant when writing services.
 
+**Superseded (2026-09):** the codebase now has a general-purpose `audit_log` table covering nearly every mutation across the app (not just scoring events), written via `audit()` in `server/src/audit/record.ts` — see `docs/audit-log-plan.md` and `docs/audit-log.md`. `statsService`'s player-facing timeline still reads the original tables above; it hasn't been migrated onto `audit_log` yet (a noted follow-up in the audit log plan).
+
 ---
 
 # 2. Server architecture

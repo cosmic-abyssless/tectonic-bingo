@@ -9,6 +9,8 @@ import { users } from "../db/schema";
 import * as schema from "../db/schema";
 import { isAdminDiscordId } from "../config";
 import type { SessionUser } from "../types";
+import { audit } from "../audit/record";
+import { userLabel } from "../audit/describe";
 
 interface LoginProfile {
   id: string;
@@ -51,6 +53,13 @@ export async function upsertLoginUser(
 
   if (bootstrapAdmin && !dbUser.isAdmin) {
     await dbInstance.update(users).set({ isAdmin: true }).where(eq(users.id, dbUser.id));
+    audit(dbInstance, {
+      action: "user.admin_changed",
+      bingoId: null,
+      entity: { type: "user", id: dbUser.id, label: userLabel(dbUser) },
+      details: { isAdmin: { before: false, after: true }, source: "env_bootstrap" },
+      actor: "system",
+    });
     dbUser.isAdmin = true;
   }
 

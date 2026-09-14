@@ -8,6 +8,8 @@ import * as bingoService from "../services/bingoService";
 import * as itemGroupService from "../services/itemGroupService";
 import * as userService from "../services/userService";
 import { ServiceError } from "../services/errors";
+import { queryAuditLog } from "../audit/query";
+import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility } from "@bingo/shared";
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -68,6 +70,29 @@ router.get(
   asyncHandler(async (req, res) => {
     const q = (req.query.q as string) ?? "";
     res.json({ users: q ? userService.searchUsers(db, q) : [] });
+  }),
+);
+
+router.get(
+  "/audit-log",
+  asyncHandler(async (req, res) => {
+    const query = req.query as Record<string, string | undefined>;
+    const filters: AuditLogFilters = {
+      action: query.action ? (query.action.split(",") as AuditAction[]) : undefined,
+      category: query.category ? (query.category.split(",") as AuditCategory[]) : undefined,
+      actorUserId: query.actorUserId ? query.actorUserId.split(",") : undefined,
+      teamId: query.teamId ? query.teamId.split(",") : undefined,
+      entityType: query.entityType as AuditEntityType | undefined,
+      entityId: query.entityId,
+      visibility: query.visibility as AuditVisibility | undefined,
+      since: query.since,
+      until: query.until,
+      q: query.q,
+    };
+    const page = { cursor: query.cursor ? Number(query.cursor) : undefined, limit: query.limit ? Number(query.limit) : undefined };
+    // bingoId=<id> scopes to one bingo; "null" scopes to site-level entries; omitted means every bingo.
+    const bingoId = query.bingoId === undefined ? "all" : query.bingoId === "null" ? null : query.bingoId;
+    res.json(queryAuditLog(db, { bingoId }, filters, page));
   }),
 );
 

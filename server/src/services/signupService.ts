@@ -4,6 +4,8 @@ import * as schema from "../db/schema";
 import { signupAnswers, signupQuestions, signups, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { dissolveForUser, getAcceptedPairs } from "./pairingService";
+import { audit, diffFields, markAuditedNoop } from "../audit/record";
+import { userLabelById } from "../audit/describe";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -45,17 +47,54 @@ export function createQuestion(db: Db, params: CreateQuestionParams) {
   if (params.type === "select" && !params.optionsJson) {
     throw new ServiceError(400, "optionsJson is required for a select question");
   }
-  return db.insert(signupQuestions).values(params).returning().get();
+  return db.transaction((tx) => {
+    const question = tx.insert(signupQuestions).values(params).returning().get();
+    audit(tx, {
+      action: "question.created",
+      bingoId: params.bingoId,
+      entity: { type: "question", id: question.id, label: question.prompt },
+      details: { prompt: question.prompt, type: question.type, required: question.required },
+    });
+    return question;
+  });
 }
 
 export function updateQuestion(db: Db, id: string, params: Partial<Omit<CreateQuestionParams, "bingoId">>) {
-  const existing = db.select().from(signupQuestions).where(eq(signupQuestions.id, id)).get();
-  if (!existing) throw new ServiceError(404, "Question not found");
-  return db.update(signupQuestions).set(params).where(eq(signupQuestions.id, id)).returning().get();
+  return db.transaction((tx) => {
+    const existing = tx.select().from(signupQuestions).where(eq(signupQuestions.id, id)).get();
+    if (!existing) throw new ServiceError(404, "Question not found");
+    const updated = tx.update(signupQuestions).set(params).where(eq(signupQuestions.id, id)).returning().get();
+
+    const changes = diffFields(existing, updated, { only: Object.keys(params) as (keyof typeof existing)[] });
+    if (changes) {
+      audit(tx, {
+        action: "question.updated",
+        bingoId: existing.bingoId,
+        entity: { type: "question", id, label: existing.prompt },
+        details: { changes: changes as never },
+      });
+    } else {
+      markAuditedNoop();
+    }
+    return updated;
+  });
 }
 
 export function deleteQuestion(db: Db, id: string): void {
-  db.delete(signupQuestions).where(eq(signupQuestions.id, id)).run();
+  db.transaction((tx) => {
+    const existing = tx.select().from(signupQuestions).where(eq(signupQuestions.id, id)).get();
+    tx.delete(signupQuestions).where(eq(signupQuestions.id, id)).run();
+    if (existing) {
+      audit(tx, {
+        action: "question.deleted",
+        bingoId: existing.bingoId,
+        entity: { type: "question", id, label: existing.prompt },
+        details: { prompt: existing.prompt, type: existing.type, required: existing.required },
+      });
+    } else {
+      markAuditedNoop();
+    }
+  });
 }
 
 // Bulk-reorders questions by the given id order (0-based sortOrder assigned by position).
@@ -67,6 +106,12 @@ export function reorderQuestions(db: Db, bingoId: string, orderedIds: string[]):
         .where(and(eq(signupQuestions.id, id), eq(signupQuestions.bingoId, bingoId)))
         .run();
     }
+    audit(tx, {
+      action: "question.reordered",
+      bingoId,
+      entity: { type: "question", id: null },
+      details: { order: orderedIds },
+    });
   });
 }
 
@@ -137,6 +182,12 @@ export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
     for (const a of params.answers) {
       tx.insert(signupAnswers).values({ signupId: signup.id, questionId: a.questionId, value: a.value }).run();
     }
+    audit(tx, {
+      action: "signup.created",
+      bingoId: params.bingoId,
+      entity: { type: "signup", id: signup.id, label: signup.rsn },
+      details: { rsn: signup.rsn, rsnVerified: signup.rsnVerified, answerCount: params.answers.length, reactivated: !!existing },
+    });
     return signup;
   });
 }
@@ -155,17 +206,21 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
     const existing = tx.select().from(signups).where(eq(signups.id, signupId)).get();
     if (!existing) throw new ServiceError(404, "Signup not found");
 
+    let rsnChange: { before: string; after: string } | undefined;
     if (params.rsn !== undefined) {
       if (!params.rsn.trim()) throw new ServiceError(400, "RSN is required");
+      const newRsn = params.rsn.trim();
+      if (newRsn !== existing.rsn) rsnChange = { before: existing.rsn, after: newRsn };
       tx.update(signups)
         .set({
-          rsn: params.rsn.trim(),
+          rsn: newRsn,
           womId: params.womId ?? null,
           rsnVerified: params.rsnVerified ?? false,
         })
         .where(eq(signups.id, signupId))
         .run();
     }
+    const answersChanged: string[] = [];
     for (const a of params.answers ?? []) {
       const existingAnswer = tx
         .select()
@@ -177,8 +232,21 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
       } else {
         tx.insert(signupAnswers).values({ signupId, questionId: a.questionId, value: a.value }).run();
       }
+      answersChanged.push(a.questionId);
     }
-    return tx.select(PUBLIC_SIGNUP_COLS).from(signups).where(eq(signups.id, signupId)).get()!;
+
+    const updated = tx.select(PUBLIC_SIGNUP_COLS).from(signups).where(eq(signups.id, signupId)).get()!;
+    if (params.rsn !== undefined || answersChanged.length > 0) {
+      audit(tx, {
+        action: "signup.updated",
+        bingoId: bingo.id,
+        entity: { type: "signup", id: signupId, label: updated.rsn },
+        details: { ...(rsnChange ? { rsn: rsnChange } : {}), ...(params.rsnVerified !== undefined ? { rsnVerified: params.rsnVerified } : {}), answersChanged },
+      });
+    } else {
+      markAuditedNoop();
+    }
+    return updated;
   });
 }
 
@@ -186,14 +254,21 @@ export function withdrawSignup(db: Db, bingo: Bingo, signupId: string) {
   assertSignupOpen(bingo);
   return db.transaction((tx) => {
     const existing = tx
-      .select({ id: signups.id, userId: signups.userId, discordId: users.discordId })
+      .select({ id: signups.id, userId: signups.userId, rsn: signups.rsn, discordId: users.discordId })
       .from(signups)
       .innerJoin(users, eq(signups.userId, users.id))
       .where(eq(signups.id, signupId))
       .get();
     if (!existing) throw new ServiceError(404, "Signup not found");
     dissolveForUser(tx, bingo.id, { id: existing.userId, discordId: existing.discordId });
-    return tx.update(signups).set({ status: "withdrawn" }).where(eq(signups.id, signupId)).returning(PUBLIC_SIGNUP_COLS).get();
+    const updated = tx.update(signups).set({ status: "withdrawn" }).where(eq(signups.id, signupId)).returning(PUBLIC_SIGNUP_COLS).get();
+    audit(tx, {
+      action: "signup.withdrawn",
+      bingoId: bingo.id,
+      entity: { type: "signup", id: signupId, label: existing.rsn },
+      details: { rsn: existing.rsn },
+    });
+    return updated;
   });
 }
 
@@ -253,16 +328,32 @@ export function markBuyin(db: Db, bingo: Bingo, signupId: string, params: MarkBu
   if (!BUYIN_STAGES.includes(bingo.stage)) {
     throw new ServiceError(400, `Buy-in can only be marked during signup, draft, or reveal (current stage: ${bingo.stage})`);
   }
-  const existing = db.select().from(signups).where(eq(signups.id, signupId)).get();
-  if (!existing) throw new ServiceError(404, "Signup not found");
-  return db
-    .update(signups)
-    .set({
-      buyinReceivedAt: params.received ? new Date() : null,
-      buyinCollectedByUserId: params.received ? (params.collectedByUserId ?? null) : null,
-      buyinRecordedByUserId: params.received ? params.recordedByUserId : null,
-    })
-    .where(eq(signups.id, signupId))
-    .returning(PUBLIC_SIGNUP_COLS)
-    .get();
+  return db.transaction((tx) => {
+    const existing = tx.select().from(signups).where(eq(signups.id, signupId)).get();
+    if (!existing) throw new ServiceError(404, "Signup not found");
+    const collectedByUserId = params.received ? (params.collectedByUserId ?? null) : null;
+    const updated = tx
+      .update(signups)
+      .set({
+        buyinReceivedAt: params.received ? new Date() : null,
+        buyinCollectedByUserId: collectedByUserId,
+        buyinRecordedByUserId: params.received ? params.recordedByUserId : null,
+      })
+      .where(eq(signups.id, signupId))
+      .returning(PUBLIC_SIGNUP_COLS)
+      .get()!;
+    audit(tx, {
+      action: "signup.buyin_marked",
+      bingoId: bingo.id,
+      entity: { type: "signup", id: signupId, label: existing.rsn },
+      details: {
+        received: params.received,
+        collectedByUserId,
+        collectedByName: collectedByUserId ? (userLabelById(tx, collectedByUserId) ?? null) : null,
+        before: { receivedAt: existing.buyinReceivedAt ? existing.buyinReceivedAt.toISOString() : null },
+      },
+      actor: { userId: params.recordedByUserId },
+    });
+    return updated;
+  });
 }

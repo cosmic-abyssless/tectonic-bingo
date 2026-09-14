@@ -25,6 +25,8 @@ import {
   users,
 } from "../db/schema";
 import { ServiceError } from "./errors";
+import { audit, diffFields, markAuditedNoop } from "../audit/record";
+import { userLabelById } from "../audit/describe";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -96,6 +98,12 @@ export function createBingo(db: Db, params: CreateBingoParams) {
     if (existing) throw new ServiceError(409, "A bingo with this slug already exists");
     const bingo = tx.insert(bingos).values(params).returning().get();
     tx.insert(bingoModerators).values({ bingoId: bingo.id, userId: params.createdByUserId }).run();
+    audit(tx, {
+      action: "bingo.created",
+      bingoId: bingo.id,
+      entity: { type: "bingo", id: bingo.id, label: bingo.name },
+      details: { slug: bingo.slug, name: bingo.name, theme: bingo.theme, boardRows: bingo.boardRows, boardCols: bingo.boardCols },
+    });
     return bingo;
   });
 }
@@ -133,6 +141,14 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
     tx.insert(stageTransitions)
       .values({ bingoId: bingo.id, fromStage: bingo.stage as Stage, toStage: params.toStage, changedByUserId: params.changedByUserId })
       .run();
+    audit(tx, {
+      action: "stage.changed",
+      bingoId: bingo.id,
+      entity: { type: "bingo", id: bingo.id, label: bingo.name },
+      details: { from: bingo.stage as Stage, to: params.toStage, startsAtBackfilled: !!startsAt },
+      actor: { userId: params.changedByUserId },
+      now: params.now,
+    });
 
     return tx.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!;
   });
@@ -149,6 +165,22 @@ export function deleteBingo(db: Db, bingoId: string): void {
     const submissionIds = tx.select({ id: submissions.id }).from(submissions).where(inArray(submissions.teamId, teamIds));
     const signupIds = tx.select({ id: signups.id }).from(signups).where(eq(signups.bingoId, bingoId));
     const nodeIds = tx.select({ id: nodes.id }).from(nodes).where(eq(nodes.bingoId, bingoId));
+
+    audit(tx, {
+      action: "bingo.deleted",
+      bingoId: bingo.id,
+      entity: { type: "bingo", id: bingo.id, label: bingo.name },
+      details: {
+        slug: bingo.slug,
+        name: bingo.name,
+        stage: bingo.stage as Stage,
+        counts: {
+          teams: teamIds.all().length,
+          signups: signupIds.all().length,
+          submissions: submissionIds.all().length,
+        },
+      },
+    });
 
     tx.delete(claims).where(inArray(claims.submissionId, submissionIds)).run();
     tx.delete(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, submissionIds)).run();
@@ -174,19 +206,48 @@ export function deleteBingo(db: Db, bingoId: string): void {
 }
 
 export function addModerator(db: Db, params: { bingoId: string; userId: string }) {
-  const existing = db
-    .select()
-    .from(bingoModerators)
-    .where(and(eq(bingoModerators.bingoId, params.bingoId), eq(bingoModerators.userId, params.userId)))
-    .get();
-  if (existing) return existing;
-  return db.insert(bingoModerators).values(params).returning().get();
+  return db.transaction((tx) => {
+    const existing = tx
+      .select()
+      .from(bingoModerators)
+      .where(and(eq(bingoModerators.bingoId, params.bingoId), eq(bingoModerators.userId, params.userId)))
+      .get();
+    if (existing) {
+      markAuditedNoop();
+      return existing;
+    }
+    const mod = tx.insert(bingoModerators).values(params).returning().get();
+    audit(tx, {
+      action: "moderator.added",
+      bingoId: params.bingoId,
+      entity: { type: "user", id: params.userId, label: userLabelById(tx, params.userId) },
+      details: { userId: params.userId, displayName: userLabelById(tx, params.userId) ?? "Unknown user" },
+    });
+    return mod;
+  });
 }
 
 export function removeModerator(db: Db, params: { bingoId: string; userId: string }): void {
-  db.delete(bingoModerators)
-    .where(and(eq(bingoModerators.bingoId, params.bingoId), eq(bingoModerators.userId, params.userId)))
-    .run();
+  db.transaction((tx) => {
+    const existing = tx
+      .select()
+      .from(bingoModerators)
+      .where(and(eq(bingoModerators.bingoId, params.bingoId), eq(bingoModerators.userId, params.userId)))
+      .get();
+    if (!existing) {
+      markAuditedNoop();
+      return;
+    }
+    tx.delete(bingoModerators)
+      .where(and(eq(bingoModerators.bingoId, params.bingoId), eq(bingoModerators.userId, params.userId)))
+      .run();
+    audit(tx, {
+      action: "moderator.removed",
+      bingoId: params.bingoId,
+      entity: { type: "user", id: params.userId, label: userLabelById(tx, params.userId) },
+      details: { userId: params.userId, displayName: userLabelById(tx, params.userId) ?? "Unknown user" },
+    });
+  });
 }
 
 export function getModerators(db: Db, bingoId: string) {
@@ -217,18 +278,33 @@ export interface UpdateBingoSettingsParams {
 }
 
 export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingoSettingsParams) {
-  const existing = db.select().from(bingos).where(eq(bingos.id, bingoId)).get();
-  if (!existing) throw new ServiceError(404, "Bingo not found");
-  if (params.signupMode !== undefined && params.signupMode !== existing.signupMode) {
-    // Existing signups were made under the other mode's rules (pairings only
-    // mean something in duo), so the switch is only allowed on a clean slate.
-    const hasSignups = db.select({ id: signups.id }).from(signups).where(eq(signups.bingoId, bingoId)).get();
-    if (hasSignups) throw new ServiceError(400, "The signup mode can't change once players have signed up");
-  }
-  if (params.womGroupId != null && !/^\d+$/.test(params.womGroupId)) {
-    throw new ServiceError(400, "WOM group ID must be a number");
-  }
-  return db.update(bingos).set(params).where(eq(bingos.id, bingoId)).returning().get();
+  return db.transaction((tx) => {
+    const existing = tx.select().from(bingos).where(eq(bingos.id, bingoId)).get();
+    if (!existing) throw new ServiceError(404, "Bingo not found");
+    if (params.signupMode !== undefined && params.signupMode !== existing.signupMode) {
+      // Existing signups were made under the other mode's rules (pairings only
+      // mean something in duo), so the switch is only allowed on a clean slate.
+      const hasSignups = tx.select({ id: signups.id }).from(signups).where(eq(signups.bingoId, bingoId)).get();
+      if (hasSignups) throw new ServiceError(400, "The signup mode can't change once players have signed up");
+    }
+    if (params.womGroupId != null && !/^\d+$/.test(params.womGroupId)) {
+      throw new ServiceError(400, "WOM group ID must be a number");
+    }
+    const updated = tx.update(bingos).set(params).where(eq(bingos.id, bingoId)).returning().get();
+
+    const changes = diffFields(existing, updated, { only: Object.keys(params) as (keyof typeof existing)[], redact: ["womGroupVerificationCode"] });
+    if (changes) {
+      audit(tx, {
+        action: "settings.updated",
+        bingoId,
+        entity: { type: "bingo", id: bingoId, label: updated.name },
+        details: { changes: changes as never },
+      });
+    } else {
+      markAuditedNoop();
+    }
+    return updated;
+  });
 }
 
 // The pot is derived, not stored: what's actually been collected (buy-in x

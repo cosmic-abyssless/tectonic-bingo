@@ -5,14 +5,16 @@ import * as schema from "../db/schema";
 import { claims, nodes, submissions, submissionScreenshots, teamNodeState, teams, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { findAncestorIds } from "./graphService";
+import { audit } from "../audit/record";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Bingo = typeof schema.bingos.$inferSelect;
 
 // Which tile (if any) a leaf belongs to, found by walking edges upward from
-// the leaf until an ancestor matches a tile's root node.
-function tileForLeaf(db: Db | Tx, leafId: string, tileByNodeId: Map<string, typeof tiles.$inferSelect>): typeof tiles.$inferSelect | null {
+// the leaf until an ancestor matches a tile's root node. Exported for
+// audit/record's submission.approved/rejected labeling (scoringService.ts).
+export function tileForLeaf(db: Db | Tx, leafId: string, tileByNodeId: Map<string, typeof tiles.$inferSelect>): typeof tiles.$inferSelect | null {
   const ancestors = findAncestorIds(db, leafId);
   for (const nodeId of ancestors) {
     const tile = tileByNodeId.get(nodeId);
@@ -114,6 +116,22 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
         .run();
     }
 
+    const taskLabels = nodeIds.map((id) => leafById.get(id)?.label).filter((l): l is string => !!l);
+    audit(tx, {
+      action: "submission.created",
+      bingoId: bingo.id,
+      entity: { type: "submission", id: submission.id, label: tile.name },
+      teamId: params.teamId,
+      details: {
+        tileId: tile.id,
+        tileName: tile.name,
+        taskLabels,
+        claims: params.claims.map((c) => ({ nodeId: c.nodeId, itemName: c.itemName ?? null, quantity: c.quantity ?? 1 })),
+        screenshotUrl: params.screenshotUrl,
+      },
+      actor: { userId: params.submittedByUserId },
+    });
+
     return submission;
   });
 }
@@ -121,6 +139,16 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
 // Runs after createSubmission, once OCR finishes — see routes/bingos.ts.
 // Best-effort: mods can still review without it, so a failure just leaves
 // scrapeStatus "failed" rather than the submission itself.
+// bingoId/teamId aren't known to the caller (routes/bingos.ts fires this
+// after res.json(), outside the request's own submission-creation lookups),
+// so they're re-resolved here from the submission row.
+function teamAndBingoForSubmission(db: Db, submissionId: string): { teamId: string | null; bingoId: string | null } {
+  const submission = db.select({ teamId: submissions.teamId }).from(submissions).where(eq(submissions.id, submissionId)).get();
+  if (!submission) return { teamId: null, bingoId: null };
+  const team = db.select({ bingoId: teams.bingoId }).from(teams).where(eq(teams.id, submission.teamId)).get();
+  return { teamId: submission.teamId, bingoId: team?.bingoId ?? null };
+}
+
 export function recordScreenshotAnalysis(
   db: Db,
   submissionId: string,
@@ -136,10 +164,30 @@ export function recordScreenshotAnalysis(
     })
     .where(eq(submissionScreenshots.submissionId, submissionId))
     .run();
+
+  const { teamId, bingoId } = teamAndBingoForSubmission(db, submissionId);
+  audit(db, {
+    action: "submission.screenshot_analyzed",
+    bingoId,
+    entity: { type: "submission", id: submissionId },
+    teamId,
+    details: { codewordVerified: result.codewordFound, detectedItemName: result.detectedItemName, textLength: result.extractedText.join("\n").length },
+    actor: "system",
+  });
 }
 
 export function markScreenshotAnalysisFailed(db: Db, submissionId: string) {
   db.update(submissionScreenshots).set({ scrapeStatus: "failed" }).where(eq(submissionScreenshots.submissionId, submissionId)).run();
+
+  const { teamId, bingoId } = teamAndBingoForSubmission(db, submissionId);
+  audit(db, {
+    action: "submission.screenshot_analysis_failed",
+    bingoId,
+    entity: { type: "submission", id: submissionId },
+    teamId,
+    details: {},
+    actor: "system",
+  });
 }
 
 export type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">;

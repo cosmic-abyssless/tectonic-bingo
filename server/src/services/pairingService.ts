@@ -3,6 +3,8 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { signupPairings, signups, users } from "../db/schema";
 import { ServiceError } from "./errors";
+import { audit, markAuditedNoop } from "../audit/record";
+import { userLabel } from "../audit/describe";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -155,6 +157,12 @@ function accept(db: Db, pairing: Pairing, target: Participant): Pairing {
   // Both halves are spoken for now: drop everything else either had open.
   closePending(db, pairing.bingoId, target, "declined", pairing.id);
   closePending(db, pairing.bingoId, requester, "declined", pairing.id);
+  audit(db, {
+    action: "pairing.accepted",
+    bingoId: pairing.bingoId,
+    entity: { type: "pairing", id: pairing.id },
+    details: { requesterUserId: pairing.requesterUserId, targetDiscordId: pairing.targetDiscordId, partnerUserId: target.id || null },
+  });
   return accepted;
 }
 
@@ -184,20 +192,35 @@ export function requestPairing(db: Db, bingo: Bingo, params: RequestPairingParam
     const mutual = state.incoming.find((r) => r.pairing.requesterUserId === targetUser?.id);
     if (mutual) return accept(tx, mutual.pairing, requester);
 
-    return tx
+    const pairing = tx
       .insert(signupPairings)
       .values({ bingoId: bingo.id, requesterUserId: requester.id, targetDiscordId, createdByUserId: requester.id })
       .returning()
       .get();
+    audit(tx, {
+      action: "pairing.requested",
+      bingoId: bingo.id,
+      entity: { type: "pairing", id: pairing.id },
+      details: { requesterUserId: requester.id, targetDiscordId },
+    });
+    return pairing;
   });
 }
 
 export function cancelRequest(db: Db, bingo: Bingo, requester: Participant, pairingId: string): void {
   assertDuoSignupOpen(bingo);
-  const pairing = db.select().from(signupPairings).where(eq(signupPairings.id, pairingId)).get();
-  if (!pairing || pairing.bingoId !== bingo.id || pairing.requesterUserId !== requester.id) throw new ServiceError(404, "Request not found");
-  if (pairing.status !== "pending") throw new ServiceError(400, "That request has already been answered");
-  db.update(signupPairings).set({ status: "cancelled", respondedAt: new Date() }).where(eq(signupPairings.id, pairingId)).run();
+  db.transaction((tx) => {
+    const pairing = tx.select().from(signupPairings).where(eq(signupPairings.id, pairingId)).get();
+    if (!pairing || pairing.bingoId !== bingo.id || pairing.requesterUserId !== requester.id) throw new ServiceError(404, "Request not found");
+    if (pairing.status !== "pending") throw new ServiceError(400, "That request has already been answered");
+    tx.update(signupPairings).set({ status: "cancelled", respondedAt: new Date() }).where(eq(signupPairings.id, pairingId)).run();
+    audit(tx, {
+      action: "pairing.cancelled",
+      bingoId: bingo.id,
+      entity: { type: "pairing", id: pairingId },
+      details: { requesterUserId: requester.id, targetDiscordId: pairing.targetDiscordId },
+    });
+  });
 }
 
 export function respondToRequest(db: Db, bingo: Bingo, target: Participant, pairingId: string, accepted: boolean): Pairing {
@@ -207,7 +230,14 @@ export function respondToRequest(db: Db, bingo: Bingo, target: Participant, pair
     if (!pairing || pairing.bingoId !== bingo.id || pairing.targetDiscordId !== target.discordId) throw new ServiceError(404, "Request not found");
     if (pairing.status !== "pending") throw new ServiceError(400, "That request has already been answered");
     if (!accepted) {
-      return tx.update(signupPairings).set({ status: "declined", respondedAt: new Date() }).where(eq(signupPairings.id, pairingId)).returning().get();
+      const declined = tx.update(signupPairings).set({ status: "declined", respondedAt: new Date() }).where(eq(signupPairings.id, pairingId)).returning().get();
+      audit(tx, {
+        action: "pairing.declined",
+        bingoId: bingo.id,
+        entity: { type: "pairing", id: pairingId },
+        details: { requesterUserId: pairing.requesterUserId, targetDiscordId: pairing.targetDiscordId },
+      });
+      return declined;
     }
     if (!hasActiveSignup(tx, bingo.id, target.id)) throw new ServiceError(400, "Sign up before accepting a partner");
     if (getAcceptedPairing(tx, bingo.id, target)) throw new ServiceError(409, "You already have a partner");
@@ -235,7 +265,7 @@ export function adminPair(db: Db, bingo: Bingo, params: AdminPairParams): Pairin
       if (getAcceptedPairing(tx, bingo.id, p)) throw new ServiceError(409, "One of those players already has a partner");
       closePending(tx, bingo.id, p, "declined");
     }
-    return tx
+    const pairing = tx
       .insert(signupPairings)
       .values({
         bingoId: bingo.id,
@@ -247,22 +277,53 @@ export function adminPair(db: Db, bingo: Bingo, params: AdminPairParams): Pairin
       })
       .returning()
       .get();
+    audit(tx, {
+      action: "pairing.admin_paired",
+      bingoId: bingo.id,
+      entity: { type: "pairing", id: pairing.id, label: `${userLabel(a)} & ${userLabel(b)}` },
+      details: { userIds: [a.id, b.id], displayNames: [userLabel(a), userLabel(b)] },
+      actor: { userId: params.createdByUserId },
+    });
+    return pairing;
   });
 }
 
 // Mods split an accepted pair; both players go back to picking.
 export function unpair(db: Db, bingo: Bingo, pairingId: string): void {
   assertDuoSignupOpen(bingo);
-  const pairing = db.select().from(signupPairings).where(eq(signupPairings.id, pairingId)).get();
-  if (!pairing || pairing.bingoId !== bingo.id) throw new ServiceError(404, "Pairing not found");
-  if (pairing.status !== "accepted") throw new ServiceError(400, "Those players aren't paired");
-  db.update(signupPairings).set({ status: "dissolved", respondedAt: new Date() }).where(eq(signupPairings.id, pairingId)).run();
+  db.transaction((tx) => {
+    const pairing = tx.select().from(signupPairings).where(eq(signupPairings.id, pairingId)).get();
+    if (!pairing || pairing.bingoId !== bingo.id) throw new ServiceError(404, "Pairing not found");
+    if (pairing.status !== "accepted") throw new ServiceError(400, "Those players aren't paired");
+    const requester = userById(tx, pairing.requesterUserId);
+    const target = userByDiscordId(tx, pairing.targetDiscordId);
+    tx.update(signupPairings).set({ status: "dissolved", respondedAt: new Date() }).where(eq(signupPairings.id, pairingId)).run();
+
+    const userIds = [pairing.requesterUserId, target?.id].filter((id): id is string => !!id);
+    const displayNames = [requester, target].filter((u): u is MinimalUser => !!u).map(userLabel);
+    audit(tx, {
+      action: "pairing.unpaired",
+      bingoId: bingo.id,
+      entity: { type: "pairing", id: pairingId, label: displayNames.join(" & ") },
+      details: { userIds, displayNames },
+    });
+  });
 }
 
 // Called when a signup is withdrawn: the partner (or anyone waiting on this
 // player) is freed up to pick someone else.
 export function dissolveForUser(db: Db, bingoId: string, p: Participant): void {
   const accepted = getAcceptedPairing(db, bingoId, p);
-  if (accepted) db.update(signupPairings).set({ status: "dissolved", respondedAt: new Date() }).where(eq(signupPairings.id, accepted.id)).run();
+  if (accepted) {
+    db.update(signupPairings).set({ status: "dissolved", respondedAt: new Date() }).where(eq(signupPairings.id, accepted.id)).run();
+    audit(db, {
+      action: "pairing.dissolved",
+      bingoId,
+      entity: { type: "pairing", id: accepted.id },
+      details: { requesterUserId: accepted.requesterUserId, targetDiscordId: accepted.targetDiscordId, cause: "withdrawal" },
+    });
+  } else {
+    markAuditedNoop();
+  }
   closePending(db, bingoId, p, "dissolved");
 }

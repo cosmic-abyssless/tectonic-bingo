@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { MulterError } from "multer";
 import { ServiceError } from "../services/errors";
 import { MAX_UPLOAD_MB } from "./upload";
+import { runWithAuditContext } from "../audit/context";
 
 // Catches ServiceError thrown by services (via express-async-errors-free
 // try/catch in routes, or a rejected async handler) and shapes the response.
@@ -25,6 +26,12 @@ export function asyncHandler(
   fn: (req: Request, res: Response, next: NextFunction) => Promise<void>,
 ) {
   return (req: Request, res: Response, next: NextFunction) => {
-    fn(req, res, next).catch(next);
+    const run = () => fn(req, res, next).catch(next);
+    // multer/busboy resume a multipart request via stream events on the
+    // pre-existing socket, which do not carry the AsyncLocalStorage store
+    // that auditContext created earlier in the request — without
+    // re-entering it here, every multipart route (e.g. submission creation)
+    // would silently lose actor attribution and get audited as "system".
+    req.audit ? runWithAuditContext(req.audit, run) : run();
   };
 }

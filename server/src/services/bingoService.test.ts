@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingos } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { advanceStage, assertBoardEditable, deleteBingo, toPublicBingo, updateBingoSettings } from "./bingoService";
+import { addModerator, advanceStage, assertBoardEditable, createBingo, deleteBingo, removeModerator, toPublicBingo, updateBingoSettings } from "./bingoService";
 import { createTask, createTile } from "./boardService";
 import { createTeam } from "./teamService";
 import { ServiceError } from "./errors";
@@ -177,6 +177,71 @@ describe("deleteBingo", () => {
 
   it("404s for an unknown bingo", () => {
     expect(() => deleteBingo(db, "nope")).toThrow(ServiceError);
+  });
+});
+
+describe("audit trail", () => {
+  it("createBingo records bingo.created", () => {
+    const [admin] = db.insert(schema.users).values({ discordId: "admin2", discordUsername: "admin2" }).returning().all();
+    const bingo = createBingo(db, { slug: "audit-test", name: "Audit Test", boardRows: 3, boardCols: 3, createdByUserId: admin.id });
+    const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.bingoId, bingo.id)).all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ action: "bingo.created", visibility: "mods" });
+    expect(JSON.parse(rows[0]!.details)).toMatchObject({ slug: "audit-test", name: "Audit Test" });
+  });
+
+  it("advanceStage records stage.changed with from/to", () => {
+    const bingo = seedBingo({ stage: "signup" });
+    advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: bingo.createdByUserId });
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "stage.changed")).get()!;
+    expect(JSON.parse(row.details)).toMatchObject({ from: "signup", to: "live" });
+    expect(row.visibility).toBe("public");
+  });
+
+  it("deleteBingo records bingo.deleted with counts, before the cascade runs", () => {
+    const bingo = seedBingo();
+    const [player] = db.insert(schema.users).values({ discordId: "p2", discordUsername: "p2" }).returning().all();
+    db.insert(schema.signups).values({ bingoId: bingo.id, userId: player.id, rsn: "p2" }).run();
+    createTeam(db, { bingoId: bingo.id, captainUserId: player.id });
+
+    deleteBingo(db, bingo.id);
+
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "bingo.deleted")).get()!;
+    expect(row.bingoId).toBe(bingo.id);
+    expect(JSON.parse(row.details)).toMatchObject({ name: "Test", counts: { teams: 1 } });
+  });
+
+  it("addModerator records moderator.added once, and no-ops (no duplicate row) on a repeat add", () => {
+    const bingo = seedBingo();
+    const [user] = db.insert(schema.users).values({ discordId: "newmod", discordUsername: "newmod" }).returning().all();
+    addModerator(db, { bingoId: bingo.id, userId: user.id });
+    addModerator(db, { bingoId: bingo.id, userId: user.id });
+    const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "moderator.added")).all();
+    expect(rows).toHaveLength(1);
+  });
+
+  it("removeModerator records moderator.removed, and no-ops for a non-mod", () => {
+    const bingo = seedBingo();
+    const [user] = db.insert(schema.users).values({ discordId: "rmmod", discordUsername: "rmmod" }).returning().all();
+    addModerator(db, { bingoId: bingo.id, userId: user.id });
+    removeModerator(db, { bingoId: bingo.id, userId: user.id });
+    removeModerator(db, { bingoId: bingo.id, userId: user.id });
+    const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "moderator.removed")).all();
+    expect(rows).toHaveLength(1);
+  });
+
+  it("updateBingoSettings records settings.updated with the WOM verification code redacted, and no-ops on an unchanged patch", () => {
+    const bingo = seedBingo();
+    updateBingoSettings(db, bingo.id, { name: "Renamed", womGroupVerificationCode: "top-secret" });
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "settings.updated")).get()!;
+    const details = JSON.parse(row.details);
+    expect(details.changes.after.name).toBe("Renamed");
+    expect(details.changes.after.womGroupVerificationCode).toBe("[redacted]");
+    expect(JSON.stringify(details)).not.toContain("top-secret");
+
+    updateBingoSettings(db, bingo.id, { name: "Renamed" });
+    const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "settings.updated")).all();
+    expect(rows).toHaveLength(1);
   });
 });
 

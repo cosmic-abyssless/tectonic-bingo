@@ -1,10 +1,13 @@
 import { and, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type { FieldChanges } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { draftPicks, signupAnswers, signups, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
 import { PUBLIC_SIGNUP_COLS } from "./signupService";
+import { audit, diffFields, markAuditedNoop } from "../audit/record";
+import { userLabelById } from "../audit/describe";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -93,7 +96,18 @@ export interface CreatePointAdjustmentParams {
 }
 export function createPointAdjustment(db: Db, params: CreatePointAdjustmentParams) {
   if (!params.reason.trim()) throw new ServiceError(400, "reason is required");
-  return db.insert(teamPointAdjustments).values(params).returning().get();
+  return db.transaction((tx) => {
+    const adjustment = tx.insert(teamPointAdjustments).values(params).returning().get();
+    audit(tx, {
+      action: "points.adjusted",
+      bingoId: params.bingoId,
+      entity: { type: "adjustment", id: adjustment.id, label: params.reason },
+      teamId: params.teamId,
+      details: { amount: params.amount, reason: params.reason },
+      actor: { userId: params.createdByUserId },
+    });
+    return adjustment;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +204,20 @@ export function createTeam(db: Db, params: CreateTeamParams) {
       .get();
     tx.insert(teamMembers).values({ teamId: team.id, userId: params.captainUserId, isCaptain: true }).run();
     if (coCaptainUserId) tx.insert(teamMembers).values({ teamId: team.id, userId: coCaptainUserId, isCoCaptain: true }).run();
+    audit(tx, {
+      action: "team.created",
+      bingoId: params.bingoId,
+      entity: { type: "team", id: team.id, label: team.name },
+      teamId: team.id,
+      details: {
+        name: team.name,
+        captainUserId: params.captainUserId,
+        captainName: userLabelById(tx, params.captainUserId) ?? "Unknown",
+        coCaptainUserId,
+        coCaptainName: coCaptainUserId ? (userLabelById(tx, coCaptainUserId) ?? "Unknown") : null,
+        color: team.color,
+      },
+    });
     return team;
   });
 }
@@ -200,27 +228,45 @@ export interface UpdateTeamParams {
   codeword?: string;
 }
 export function updateTeam(db: Db, teamId: string, params: UpdateTeamParams) {
-  const existing = db.select().from(teams).where(eq(teams.id, teamId)).get();
-  if (!existing) throw new ServiceError(404, "Team not found");
+  return db.transaction((tx) => {
+    const existing = tx.select().from(teams).where(eq(teams.id, teamId)).get();
+    if (!existing) throw new ServiceError(404, "Team not found");
 
-  const patch: UpdateTeamParams = {};
-  if (params.name !== undefined) {
-    if (typeof params.name !== "string" || !params.name.trim()) throw new ServiceError(400, "name must be a non-empty string");
-    patch.name = params.name.trim();
-  }
-  if (params.color !== undefined) {
-    if (params.color !== null && typeof params.color !== "string") throw new ServiceError(400, "color must be a string or null");
-    patch.color = params.color;
-  }
-  if (params.codeword !== undefined) {
-    if (typeof params.codeword !== "string" || !params.codeword.trim()) throw new ServiceError(400, "codeword must be a non-empty string");
-    const codeword = params.codeword.trim();
-    const clash = db.select({ id: teams.id }).from(teams).where(and(eq(teams.bingoId, existing.bingoId), eq(teams.codeword, codeword))).get();
-    if (clash && clash.id !== teamId) throw new ServiceError(409, "Another team in this bingo already uses that password");
-    patch.codeword = codeword;
-  }
-  if (Object.keys(patch).length === 0) return existing;
-  return db.update(teams).set(patch).where(eq(teams.id, teamId)).returning().get();
+    const patch: UpdateTeamParams = {};
+    if (params.name !== undefined) {
+      if (typeof params.name !== "string" || !params.name.trim()) throw new ServiceError(400, "name must be a non-empty string");
+      patch.name = params.name.trim();
+    }
+    if (params.color !== undefined) {
+      if (params.color !== null && typeof params.color !== "string") throw new ServiceError(400, "color must be a string or null");
+      patch.color = params.color;
+    }
+    if (params.codeword !== undefined) {
+      if (typeof params.codeword !== "string" || !params.codeword.trim()) throw new ServiceError(400, "codeword must be a non-empty string");
+      const codeword = params.codeword.trim();
+      const clash = tx.select({ id: teams.id }).from(teams).where(and(eq(teams.bingoId, existing.bingoId), eq(teams.codeword, codeword))).get();
+      if (clash && clash.id !== teamId) throw new ServiceError(409, "Another team in this bingo already uses that password");
+      patch.codeword = codeword;
+    }
+    if (Object.keys(patch).length === 0) {
+      markAuditedNoop();
+      return existing;
+    }
+    const updated = tx.update(teams).set(patch).where(eq(teams.id, teamId)).returning().get();
+
+    const changes = diffFields(existing, updated, { only: ["name", "color"] });
+    audit(tx, {
+      action: "team.updated",
+      bingoId: existing.bingoId,
+      entity: { type: "team", id: teamId, label: existing.name },
+      teamId,
+      details: {
+        changes: (changes ?? { before: {}, after: {} }) as FieldChanges<{ name: string; color: string | null }>,
+        ...(params.codeword !== undefined ? { codeword: { changed: true as const } } : {}),
+      },
+    });
+    return updated;
+  });
 }
 
 export function addTeamMember(db: Db, teamId: string, userId: string) {
@@ -228,7 +274,15 @@ export function addTeamMember(db: Db, teamId: string, userId: string) {
     const team = tx.select().from(teams).where(eq(teams.id, teamId)).get();
     if (!team) throw new ServiceError(404, "Team not found");
     assertUserNotOnATeam(tx, team.bingoId, userId);
-    return tx.insert(teamMembers).values({ teamId, userId, isCaptain: false }).returning().get();
+    const member = tx.insert(teamMembers).values({ teamId, userId, isCaptain: false }).returning().get();
+    audit(tx, {
+      action: "team.member_added",
+      bingoId: team.bingoId,
+      entity: { type: "user", id: userId, label: userLabelById(tx, userId) },
+      teamId,
+      details: { userId, displayName: userLabelById(tx, userId) ?? "Unknown" },
+    });
+    return member;
   });
 }
 
@@ -236,14 +290,24 @@ export function addTeamMember(db: Db, teamId: string, userId: string) {
 // to the pool while their pick still shows on the roster, and dropping the
 // pick would shift the snake order for everyone after it.
 export function removeTeamMember(db: Db, teamId: string, userId: string): void {
-  const team = db.select().from(teams).where(eq(teams.id, teamId)).get();
-  if (!team) throw new ServiceError(404, "Team not found");
-  if (team.captainUserId === userId) throw new ServiceError(400, "Cannot remove the captain — reassign the captaincy or delete the team instead");
-  const member = db.select({ isCoCaptain: teamMembers.isCoCaptain }).from(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).get();
-  if (member?.isCoCaptain) throw new ServiceError(400, "Cannot remove the co-captain — delete the team instead");
-  const pick = db.select({ id: draftPicks.id }).from(draftPicks).where(and(eq(draftPicks.teamId, teamId), eq(draftPicks.userId, userId))).get();
-  if (pick) throw new ServiceError(409, "This player was drafted onto the team and can't be removed");
-  db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).run();
+  db.transaction((tx) => {
+    const team = tx.select().from(teams).where(eq(teams.id, teamId)).get();
+    if (!team) throw new ServiceError(404, "Team not found");
+    if (team.captainUserId === userId) throw new ServiceError(400, "Cannot remove the captain — reassign the captaincy or delete the team instead");
+    const member = tx.select({ isCoCaptain: teamMembers.isCoCaptain }).from(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).get();
+    if (member?.isCoCaptain) throw new ServiceError(400, "Cannot remove the co-captain — delete the team instead");
+    const pick = tx.select({ id: draftPicks.id }).from(draftPicks).where(and(eq(draftPicks.teamId, teamId), eq(draftPicks.userId, userId))).get();
+    if (pick) throw new ServiceError(409, "This player was drafted onto the team and can't be removed");
+    const displayName = userLabelById(tx, userId);
+    tx.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).run();
+    audit(tx, {
+      action: "team.member_removed",
+      bingoId: team.bingoId,
+      entity: { type: "user", id: userId, label: displayName },
+      teamId,
+      details: { userId, displayName: displayName ?? "Unknown" },
+    });
+  });
 }
 
 // Only teams without game history can go: once a team has draft picks,
@@ -254,6 +318,14 @@ export function deleteTeam(db: Db, teamId: string): void {
     if (!team) throw new ServiceError(404, "Team not found");
     const hasHistory = [draftPicks, submissions, teamPointAdjustments].some((table) => tx.select({ id: table.id }).from(table).where(eq(table.teamId, teamId)).get());
     if (hasHistory) throw new ServiceError(409, "This team has draft picks or submissions and can't be deleted");
+    const memberCount = tx.select({ id: teamMembers.id }).from(teamMembers).where(eq(teamMembers.teamId, teamId)).all().length;
+    audit(tx, {
+      action: "team.deleted",
+      bingoId: team.bingoId,
+      entity: { type: "team", id: teamId, label: team.name },
+      teamId,
+      details: { name: team.name, captainName: userLabelById(tx, team.captainUserId) ?? "Unknown", memberCount },
+    });
     tx.delete(teamMembers).where(eq(teamMembers.teamId, teamId)).run();
     tx.delete(teams).where(eq(teams.id, teamId)).run();
   });

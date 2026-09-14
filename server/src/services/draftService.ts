@@ -5,6 +5,7 @@ import { draftPicks, signupAnswers, signups, teamMembers, teams, users } from ".
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
 import { isTeamLead } from "./teamService";
+import { audit } from "../audit/record";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -159,8 +160,15 @@ export function startDraft(db: Db, bingo: Bingo) {
     if (teamRows.length < 2) throw new ServiceError(400, "At least 2 teams are required to start the draft");
     if (teamRows.some((t) => t.draftOrder != null)) throw new ServiceError(400, "The draft has already started");
 
-    shuffled(teamRows).forEach((team, i) => {
+    const ordered = shuffled(teamRows);
+    ordered.forEach((team, i) => {
       tx.update(teams).set({ draftOrder: i + 1 }).where(eq(teams.id, team.id)).run();
+    });
+    audit(tx, {
+      action: "draft.started",
+      bingoId: bingo.id,
+      entity: { type: "bingo", id: bingo.id, label: bingo.name },
+      details: { order: ordered.map((t, i) => ({ teamId: t.id, name: t.name, draftOrder: i + 1 })) },
     });
     return tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
   });
@@ -195,7 +203,8 @@ export function makePick(db: Db, params: MakePickParams) {
     const pickNumber = nextPickNumber(tx, bingo.id);
     const currentTeam = orderedTeams[pickOrderTeamIndex(orderedTeams.length, pickNumber)]!;
 
-    if (!actingIsAdmin && !isTeamLead(tx, currentTeam.id, actingUserId)) {
+    const isLead = isTeamLead(tx, currentTeam.id, actingUserId);
+    if (!actingIsAdmin && !isLead) {
       throw new ServiceError(403, "It's not your team's turn to pick");
     }
 
@@ -219,6 +228,18 @@ export function makePick(db: Db, params: MakePickParams) {
       tx.insert(draftPicks).values({ bingoId: bingo.id, pickNumber, teamId: currentTeam.id, userId, pickedByUserId: actingUserId }).returning().get(),
     );
     for (const userId of userIds) tx.insert(teamMembers).values({ teamId: currentTeam.id, userId, isCaptain: false }).run();
+
+    const userRows = tx.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, userIds)).all();
+    const displayNameById = new Map(userRows.map((u) => [u.id, u.discordGuildNick ?? u.discordGlobalName ?? u.discordUsername]));
+    const displayNames = userIds.map((id) => displayNameById.get(id) ?? "Unknown");
+    audit(tx, {
+      action: "draft.pick",
+      bingoId: bingo.id,
+      entity: { type: "user", id: pickedUserId, label: displayNames.join(" & ") },
+      teamId: currentTeam.id,
+      details: { pickNumber, userIds, displayNames, pair: !!pair },
+      onBehalfOfUserId: actingIsAdmin && !isLead ? currentTeam.captainUserId : null,
+    });
     return picks;
   });
 }

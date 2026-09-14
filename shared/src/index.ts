@@ -9,6 +9,8 @@
 // node; a line is a node referenced by a BingoLine row. NodeStatus is
 // derived at read time, never stored (see TeamNodeState).
 
+import type { AuditVisibility } from "./audit";
+
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
 
@@ -677,4 +679,10 @@ export type BroadcastEvent =
   | { type: "signup_changed"; bingoId: string; payload: Record<string, never> }
   // Any successful admin mutation (settings, board, lines, questions, teams,
   // mods). Coarse on purpose: clients refetch the bingo shell + board.
-  | { type: "bingo_changed"; bingoId: string; payload: Record<string, never> };
+  | { type: "bingo_changed"; bingoId: string; payload: Record<string, never> }
+  // A new audit_log row was appended. Ids/visibility only, per the
+  // unauthenticated-broadcast rule below — clients invalidate their audit
+  // log / team activity queries and refetch under their own auth.
+  | { type: "audit_appended"; bingoId: string; payload: { teamId: string | null; visibility: AuditVisibility } };
+
+export * from "./audit";

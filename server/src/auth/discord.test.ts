@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -64,5 +65,25 @@ describe("upsertLoginUser", () => {
     delete process.env.ADMIN_DISCORD_IDS;
     const second = await upsertLoginUser(db, { id: "111", username: "alice" }, null);
     expect(second.isAdmin).toBe(true);
+  });
+});
+
+describe("audit trail", () => {
+  it("records user.admin_changed with source env_bootstrap when an existing non-admin user is elevated on login, and does not repeat it on a later login", async () => {
+    // First login with no bootstrap env var: a plain non-admin user row.
+    await upsertLoginUser(db, { id: "111", username: "alice" }, null);
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "user.admin_changed")).all()).toHaveLength(0);
+
+    // Now their id is in ADMIN_DISCORD_IDS: the existing row gets elevated.
+    process.env.ADMIN_DISCORD_IDS = "111";
+    await upsertLoginUser(db, { id: "111", username: "alice" }, null);
+
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "user.admin_changed")).get()!;
+    expect(row.actorType).toBe("system");
+    expect(row.bingoId).toBeNull();
+    expect(JSON.parse(row.details)).toEqual({ isAdmin: { before: false, after: true }, source: "env_bootstrap" });
+
+    await upsertLoginUser(db, { id: "111", username: "alice" }, null);
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "user.admin_changed")).all()).toHaveLength(1);
   });
 });

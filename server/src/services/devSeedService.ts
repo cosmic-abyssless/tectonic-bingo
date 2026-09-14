@@ -4,6 +4,7 @@ import * as schema from "../db/schema";
 import { users, signups, signupAnswers, signupPairings } from "../db/schema";
 import * as signupService from "./signupService";
 import type { TectonicRosterUser } from "./tectonicService";
+import { audit, markAuditedNoop } from "../audit/record";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -144,6 +145,13 @@ export function seedTestSignups(db: Db, bingo: Bingo, count: number, tectonicRos
     created.push(signup);
   }
   const source: SeedSource = realCount === created.length ? "tectonic" : realCount === 0 ? "synthetic" : "mixed";
+  audit(db, {
+    action: "dev.signups_seeded",
+    bingoId: bingo.id,
+    entity: { type: "bingo", id: bingo.id, label: bingo.name },
+    details: { count: created.length, source },
+    actor: { userId: null, type: "dev", role: "system" },
+  });
   return { signups: created, source };
 }
 
@@ -153,10 +161,20 @@ export function seedTestSignups(db: Db, bingo: Bingo, count: number, tectonicRos
 export function deleteAllSignups(db: Db, bingoId: string): number {
   return db.transaction((tx) => {
     const ids = tx.select({ id: signups.id }).from(signups).where(eq(signups.bingoId, bingoId)).all().map((r) => r.id);
-    if (ids.length === 0) return 0;
+    if (ids.length === 0) {
+      markAuditedNoop();
+      return 0;
+    }
     tx.delete(signupAnswers).where(inArray(signupAnswers.signupId, ids)).run();
     tx.delete(signups).where(eq(signups.bingoId, bingoId)).run();
     tx.delete(signupPairings).where(eq(signupPairings.bingoId, bingoId)).run();
+    audit(tx, {
+      action: "dev.signups_wiped",
+      bingoId,
+      entity: { type: "bingo", id: bingoId },
+      details: { deleted: ids.length },
+      actor: { userId: null, type: "dev", role: "system" },
+    });
     return ids.length;
   });
 }

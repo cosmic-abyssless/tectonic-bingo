@@ -97,6 +97,44 @@ describe("startDraft", () => {
   });
 });
 
+describe("audit trail", () => {
+  it("startDraft records draft.started with the team order", () => {
+    const bingo = seedBingo();
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
+    createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, name: "A" });
+    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
+
+    startDraft(db, bingo);
+
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.started")).get()!;
+    expect(row.visibility).toBe("public");
+    const details = JSON.parse(row.details);
+    expect(details.order).toHaveLength(2);
+    expect(details.order.map((o: { name: string }) => o.name).sort()).toEqual(["A", "B"]);
+  });
+
+  it("makePick records draft.pick scoped to the drafting team, with onBehalfOfUserId set for an admin override", () => {
+    const bingo = seedBingo();
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
+    createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, name: "A" });
+    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
+    const p1 = seedUser("p1");
+    createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p1.id, rsn: "p1", answers: [] });
+    startDraft(db, bingo);
+    const first = db.select().from(schema.teams).where(and(eq(schema.teams.bingoId, bingo.id), eq(schema.teams.draftOrder, 1))).get()!;
+
+    const [admin] = db.insert(schema.users).values({ discordId: "siteadmin", discordUsername: "siteadmin" }).returning().all();
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: admin.id, actingIsAdmin: true });
+
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.pick")).get()!;
+    expect(row.teamId).toBe(first.id);
+    expect(row.onBehalfOfUserId).toBe(first.captainUserId);
+    expect(JSON.parse(row.details)).toMatchObject({ userIds: [p1.id], displayNames: ["p1"], pair: false });
+  });
+});
+
 describe("makePick", () => {
   function setup() {
     const bingo = seedBingo();

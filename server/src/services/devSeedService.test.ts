@@ -141,3 +141,27 @@ describe("deleteAllSignups", () => {
     expect(db.select().from(schema.signups).where(eq(schema.signups.bingoId, other.id)).all()).toHaveLength(2);
   });
 });
+
+describe("audit trail", () => {
+  it("seedTestSignups records dev.signups_seeded as a dev actor, alongside the individual signup.created rows", () => {
+    const bingo = seedBingo();
+    seedTestSignups(db, bingo, 3);
+
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "dev.signups_seeded")).get()!;
+    expect(row.actorType).toBe("dev");
+    expect(JSON.parse(row.details)).toEqual({ count: 3, source: "synthetic" });
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.created")).all()).toHaveLength(3);
+  });
+
+  it("deleteAllSignups records dev.signups_wiped, and no-ops when there's nothing to delete", () => {
+    const bingo = seedBingo();
+    seedTestSignups(db, bingo, 2);
+    deleteAllSignups(db, bingo.id);
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "dev.signups_wiped")).get()!;
+    expect(row.actorType).toBe("dev");
+    expect(JSON.parse(row.details)).toEqual({ deleted: 2 });
+
+    deleteAllSignups(db, bingo.id);
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "dev.signups_wiped")).all()).toHaveLength(1);
+  });
+});

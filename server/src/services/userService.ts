@@ -3,6 +3,8 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { users } from "../db/schema";
 import { ServiceError } from "./errors";
+import { audit, markAuditedNoop } from "../audit/record";
+import { userLabel } from "../audit/describe";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -35,7 +37,20 @@ export function getUsersByDiscordIds(db: Db, discordIds: string[]) {
 }
 
 export function setUserAdmin(db: Db, userId: string, isAdmin: boolean) {
-  const user = db.select().from(users).where(eq(users.id, userId)).get();
-  if (!user) throw new ServiceError(404, "User not found");
-  return db.update(users).set({ isAdmin }).where(eq(users.id, userId)).returning().get();
+  return db.transaction((tx) => {
+    const user = tx.select().from(users).where(eq(users.id, userId)).get();
+    if (!user) throw new ServiceError(404, "User not found");
+    if (user.isAdmin === isAdmin) {
+      markAuditedNoop();
+      return user;
+    }
+    const updated = tx.update(users).set({ isAdmin }).where(eq(users.id, userId)).returning().get();
+    audit(tx, {
+      action: "user.admin_changed",
+      bingoId: null,
+      entity: { type: "user", id: userId, label: userLabel(user) },
+      details: { isAdmin: { before: user.isAdmin, after: isAdmin }, source: "admin_panel" },
+    });
+    return updated;
+  });
 }

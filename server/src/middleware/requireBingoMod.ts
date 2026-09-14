@@ -15,6 +15,7 @@ export async function requireBingoMod(req: Request, res: Response, next: NextFun
     return;
   }
   if (req.user.isAdmin) {
+    if (req.audit) req.audit.actorRole = "admin";
     next();
     return;
   }
@@ -26,5 +27,6 @@ export async function requireBingoMod(req: Request, res: Response, next: NextFun
     res.status(403).json({ error: "Moderator access required for this bingo" });
     return;
   }
+  if (req.audit) req.audit.actorRole = "mod";
   next();
 }

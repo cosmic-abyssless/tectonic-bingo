@@ -198,6 +198,38 @@ describe("rejectSubmission", () => {
   });
 });
 
+describe("audit trail", () => {
+  it("approveSubmission records submission.approved with the tile/task labels and pointsDelta", () => {
+    const fx = seedBaseFixture();
+    const task = itemTask(fx.tileId, { points: 20 }, "Bruma torch");
+    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Bruma torch" }]);
+
+    approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId });
+
+    const row = db.select().from(schema.auditLog).all().find((r) => r.action === "submission.approved")!;
+    expect(row.teamId).toBe(fx.teamId);
+    const details = JSON.parse(row.details);
+    expect(details.tileName).toBe("Test Tile");
+    expect(details.taskLabels).toEqual(["Task"]);
+    expect(details.pointsDelta).toBe(20);
+    expect(details.submittedByUserId).toBe(fx.memberUserId);
+  });
+
+  it("rejectSubmission records submission.rejected with the reviewer's notes", () => {
+    const fx = seedBaseFixture();
+    const task = itemTask(fx.tileId, { points: 25 }, "Drop");
+    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Drop" }]);
+
+    rejectSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId, reviewerNotes: "not visible" });
+
+    const rows = db.select().from(schema.auditLog).all().filter((r) => r.action === "submission.rejected");
+    expect(rows).toHaveLength(1);
+    const details = JSON.parse(rows[0]!.details);
+    expect(details.reviewerNotes).toBe("not visible");
+    expect(details).not.toHaveProperty("pointsDelta");
+  });
+});
+
 describe("MANUAL leaves — approving IS the completion decision, no separate flag", () => {
   it("completes once its claim is approved", () => {
     const fx = seedBaseFixture();

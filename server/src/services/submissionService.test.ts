@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import type { GraphNodeInput } from "@bingo/shared";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -6,7 +7,7 @@ import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createTile, createTask } from "./boardService";
 import { getTeamNodeStatuses } from "./boardService";
-import { createSubmission, getAllSubmissionsForBingo, getTeamSubmissions } from "./submissionService";
+import { createSubmission, getAllSubmissionsForBingo, getTeamSubmissions, markScreenshotAnalysisFailed, recordScreenshotAnalysis } from "./submissionService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -200,6 +201,45 @@ describe("createSubmission", () => {
     expect(() => createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims, ...base })).not.toThrow();
   });
 
+});
+
+describe("audit trail", () => {
+  it("createSubmission records submission.created scoped to the team, with the claims and screenshot", () => {
+    const { bingo, teamId, memberUserId } = seed();
+    const tile = addTile(bingo.id);
+    const task = addTask(tile.id, { sortOrder: 0, points: 20 });
+
+    const submission = createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId: task.leafId, itemName: "x" }], ...base });
+
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "submission.created")).get()!;
+    expect(row.teamId).toBe(teamId);
+    expect(row.visibility).toBe("team");
+    const details = JSON.parse(row.details);
+    expect(details.tileName).toBe("Tile");
+    expect(details.taskLabels).toEqual(["Task 0"]);
+    expect(details.claims).toEqual([{ nodeId: task.leafId, itemName: "x", quantity: 1 }]);
+    expect(details.screenshotUrl).toBe("/x.png");
+    expect(row.requestId).toBeNull();
+    expect(submission.status).toBe("pending");
+  });
+
+  it("recordScreenshotAnalysis / markScreenshotAnalysisFailed record system-actor entries scoped to the submission's team", () => {
+    const { bingo, teamId, memberUserId } = seed();
+    const tile = addTile(bingo.id);
+    const task = addTask(tile.id, { sortOrder: 0, points: 20 });
+    const submission = createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId: task.leafId, itemName: "x" }], ...base });
+
+    recordScreenshotAnalysis(db, submission.id, { extractedText: ["codeword"], codewordFound: true, detectedItemName: "x" });
+    const analyzed = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "submission.screenshot_analyzed")).get()!;
+    expect(analyzed.actorType).toBe("system");
+    expect(analyzed.teamId).toBe(teamId);
+    expect(JSON.parse(analyzed.details)).toMatchObject({ codewordVerified: true, detectedItemName: "x" });
+
+    markScreenshotAnalysisFailed(db, submission.id);
+    const failed = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "submission.screenshot_analysis_failed")).get()!;
+    expect(failed.actorType).toBe("system");
+    expect(failed.teamId).toBe(teamId);
+  });
 });
 
 describe("getTeamSubmissions / getAllSubmissionsForBingo", () => {

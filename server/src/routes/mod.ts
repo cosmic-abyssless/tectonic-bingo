@@ -16,6 +16,8 @@ import { getTectonicClient, TectonicUnavailableError } from "../services/tectoni
 import { approveSubmission, rejectSubmission } from "../services/scoringService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
+import { queryAuditLog } from "../audit/query";
+import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility } from "@bingo/shared";
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth, requireBingo, requireBingoMod);
@@ -127,6 +129,27 @@ router.get(
   "/moderators",
   asyncHandler(async (req, res) => {
     res.json({ mods: bingoService.getModerators(db, req.bingo!.id) });
+  }),
+);
+
+router.get(
+  "/audit-log",
+  asyncHandler(async (req, res) => {
+    const q = req.query as Record<string, string | undefined>;
+    const filters: AuditLogFilters = {
+      action: q.action ? (q.action.split(",") as AuditAction[]) : undefined,
+      category: q.category ? (q.category.split(",") as AuditCategory[]) : undefined,
+      actorUserId: q.actorUserId ? q.actorUserId.split(",") : undefined,
+      teamId: q.teamId ? q.teamId.split(",") : undefined,
+      entityType: q.entityType as AuditEntityType | undefined,
+      entityId: q.entityId,
+      visibility: q.visibility as AuditVisibility | undefined,
+      since: q.since,
+      until: q.until,
+      q: q.q,
+    };
+    const page = { cursor: q.cursor ? Number(q.cursor) : undefined, limit: q.limit ? Number(q.limit) : undefined };
+    res.json(queryAuditLog(db, { bingoId: req.bingo!.id }, filters, page));
   }),
 );
 

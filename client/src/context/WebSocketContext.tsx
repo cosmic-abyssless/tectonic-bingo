@@ -44,6 +44,10 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       queryClient.invalidateQueries({ queryKey: ["partnerCandidates"] });
       queryClient.invalidateQueries({ queryKey: ["adminCaptainCandidates"] });
       break;
+    case "audit_appended":
+      queryClient.invalidateQueries({ queryKey: ["auditLog"] });
+      queryClient.invalidateQueries({ queryKey: ["teamActivity"] });
+      break;
   }
 }
 
