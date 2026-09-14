@@ -74,8 +74,14 @@ export class WomCompetitionClient {
   }
 
   async editCompetition(params: EditCompetitionParams): Promise<void> {
+    // Unlike POST /competitions (which takes `groupVerificationCode`), the
+    // edit endpoint's field is `verificationCode` — it just also accepts the
+    // host group's code there, not the competition's own one-time code
+    // (https://docs.wiseoldman.net/api/competitions/competition-endpoints#edit-competition).
+    // Sending `groupVerificationCode` here silently fails WOM's required-field
+    // validation, so a team rename never actually updated the roster.
     await this.request(`/competitions/${params.competitionId}`, "PUT", {
-      groupVerificationCode: params.groupVerificationCode,
+      verificationCode: params.groupVerificationCode,
       teams: params.teams,
     });
   }

@@ -107,6 +107,14 @@ describe("WomCompetitionClient", () => {
     const call = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(String(call[0])).toBe("https://api.wiseoldman.net/v2/competitions/42");
     expect(call[1].method).toBe("PUT");
+    const body = JSON.parse(call[1].body);
+    // The edit endpoint's field is `verificationCode` (accepts either the
+    // competition's own code or its host group's), not `groupVerificationCode`
+    // — that's only a create-competition field. Sending the wrong name here
+    // previously made every team-rename sync fail WOM's own validation.
+    expect(body.verificationCode).toBe("secret");
+    expect(body.groupVerificationCode).toBeUndefined();
+    expect(body.teams).toEqual([{ name: "A", participants: ["x"] }]);
   });
 });
 
