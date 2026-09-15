@@ -80,6 +80,17 @@ export function ReviewQueue({ slug }: { slug: string }) {
     }
   }
 
+  // Sends an approved/rejected submission back to pending; the server
+  // recomputes the team's points if it had been approved.
+  async function undoReview(row: ModSubmissionRow) {
+    setError(null);
+    try {
+      await review.mutateAsync({ submissionId: row.submission.id, action: "undo" });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Undo failed");
+    }
+  }
+
   async function submitAdjustment(teamId: string) {
     const amount = Number(adjustAmount);
     if (!amount || !adjustReason.trim()) return;
@@ -116,6 +127,8 @@ export function ReviewQueue({ slug }: { slug: string }) {
           ))}
         </div>
       )}
+
+      {error && expandedId === null && <Notice tone="danger">{error}</Notice>}
 
       {isLoading ? (
         <p className="py-20 text-center text-sm text-fg-muted">Loading…</p>
@@ -163,6 +176,11 @@ export function ReviewQueue({ slug }: { slug: string }) {
                     <SubmissionStatusBadge status={row.submission.status} />
                     <span className="text-xs text-fg-subtle">{timeAgo(row.submission.submittedAt)}</span>
                     {canReview && <span className="text-fg-subtle">{isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>}
+                    {!canReview && (
+                      <Button variant="ghost" size="sm" onPress={() => undoReview(row)} isDisabled={review.isPending}>
+                        Undo review
+                      </Button>
+                    )}
                   </div>
                 </div>
 

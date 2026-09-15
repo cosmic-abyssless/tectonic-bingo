@@ -104,6 +104,19 @@ export interface AuditDetailsMap {
   "submission.created": { tileId: string; tileName: string; taskLabels: string[]; claims: { nodeId: string; itemName: string | null; quantity: number }[]; screenshotUrl: string };
   "submission.approved": { tileName: string | null; taskLabels: string[]; nodeIds: string[]; newlyCompletedNodeIds: string[]; pointsDelta: number; reviewerNotes: string | null; submittedByUserId: string };
   "submission.rejected": { tileName: string | null; taskLabels: string[]; nodeIds: string[]; reviewerNotes: string | null; submittedByUserId: string };
+  "submission.review_undone": {
+    tileName: string | null;
+    taskLabels: string[];
+    nodeIds: string[];
+    previousStatus: "approved" | "rejected";
+    previousReviewerNotes: string | null;
+    previousReviewedByUserId: string | null;
+    /** Nodes that were complete before and no longer are (empty when undoing a rejection). */
+    uncompletedNodeIds: string[];
+    /** Points removed by the undo — zero or negative. */
+    pointsDelta: number;
+    submittedByUserId: string;
+  };
   "submission.screenshot_analyzed": { codewordVerified: boolean; detectedItemName: string | null; textLength: number };
   "submission.screenshot_analysis_failed": Record<string, never>;
 
@@ -303,6 +316,14 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "team",
     title: "Submission rejected",
     label: (i) => `${actor(i)} rejected a submission for "${i.details.tileName ?? "a tile"}"`,
+  },
+  "submission.review_undone": {
+    category: "submission",
+    tone: "warn",
+    visibility: "team",
+    title: "Review undone",
+    label: (i) =>
+      `${actor(i)} sent a${i.details.previousStatus === "approved" ? "n approved" : " rejected"} submission for "${i.details.tileName ?? "a tile"}" back to pending${i.details.pointsDelta ? ` (${i.details.pointsDelta} pts)` : ""}`,
   },
   "submission.screenshot_analyzed": {
     category: "submission",
