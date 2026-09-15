@@ -5,7 +5,7 @@ import type { GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { claims, submissions } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { createTile, createTask, generateLines } from "./boardService";
+import { createTile, createTask, generateLines, updateTileBonusPoints } from "./boardService";
 import { approveSubmission, rejectSubmission, undoSubmissionReview } from "./scoringService";
 
 // Pure engine evaluation (evaluateGraph/awardedPoints) is covered by
@@ -110,6 +110,25 @@ describe("approveSubmission", () => {
 
     expect(result.newlyCompletedNodeIds.sort()).toEqual([task1.id, task2.id, fx.tileNodeId].sort());
     expect(result.pointsDelta).toBe(60);
+  });
+
+  it("awards a full-tile bonus once every task completes, the same generic way a line does", () => {
+    const fx = seedBaseFixture();
+    updateTileBonusPoints(db, fx.tileId, 50);
+    const task1 = itemTask(fx.tileId, { points: 25 }, "Vorki");
+    const task2 = itemTask(fx.tileId, { points: 35 }, "Draconic visage");
+
+    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task1.id, itemName: "Vorki" }]);
+    const first = approveSubmission(db, { submissionId: sub1.id, reviewedByUserId: fx.modUserId });
+    expect(first.newlyCompletedNodeIds).toEqual([task1.id]); // tile still incomplete — bonus withheld
+    expect(first.pointsDelta).toBe(25);
+
+    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task2.id, itemName: "Draconic visage" }]);
+    const second = approveSubmission(db, { submissionId: sub2.id, reviewedByUserId: fx.modUserId });
+    expect(second.newlyCompletedNodeIds.sort()).toEqual([task2.id, fx.tileNodeId].sort());
+    expect(second.pointsDelta).toBe(35 + 50);
+
+    expect(findState(fx.teamId, fx.tileNodeId)?.pointsAwarded).toBe(50);
   });
 
   it("withholds points on a pointsGateNodeId task until the gate completes, then releases them with no special-case code", () => {
@@ -369,6 +388,25 @@ describe("undoSubmissionReview", () => {
     expect(result.pointsDelta).toBe(-(10 + 42 + 42));
     expect(findState(fx.teamId, row.nodeId)).toBeUndefined();
     expect(teamPoints(fx.teamId)).toBe(before - 94);
+  });
+
+  it("takes a full-tile bonus back when the undo leaves the tile incomplete", () => {
+    const fx = seedBaseFixture();
+    updateTileBonusPoints(db, fx.tileId, 50);
+    const task1 = itemTask(fx.tileId, { points: 25 }, "Vorki");
+    const task2 = itemTask(fx.tileId, { points: 35 }, "Draconic visage");
+    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task1.id, itemName: "Vorki" }]);
+    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task2.id, itemName: "Draconic visage" }]);
+    approveSubmission(db, { submissionId: sub1.id, reviewedByUserId: fx.modUserId });
+    approveSubmission(db, { submissionId: sub2.id, reviewedByUserId: fx.modUserId });
+    expect(teamPoints(fx.teamId)).toBe(25 + 35 + 50);
+
+    const result = undoSubmissionReview(db, { submissionId: sub2.id, undoneByUserId: fx.modUserId });
+
+    expect(result.uncompletedNodeIds.sort()).toEqual([task2.id, fx.tileNodeId].sort());
+    expect(result.pointsDelta).toBe(-(35 + 50));
+    expect(findState(fx.teamId, fx.tileNodeId)).toBeUndefined();
+    expect(findState(fx.teamId, task1.id)?.pointsAwarded).toBe(25);
   });
 
   it("only recomputes the submitting team — another team's state is untouched", () => {

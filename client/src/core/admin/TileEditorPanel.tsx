@@ -97,6 +97,17 @@ function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string;
       ),
     );
   }
+  // Local, optimistic like the checkbox/fields above (uncontrolled elsewhere
+  // in this form) — bonusEnabled toggles instantly instead of waiting on the
+  // refetch, and bonusDraft remembers the last non-zero value so unchecking
+  // then re-checking doesn't lose what the mod had typed in.
+  const [bonusEnabled, setBonusEnabled] = useState(tile.node.points > 0);
+  const [bonusDraft, setBonusDraft] = useState(tile.node.points || 25);
+  async function updateBonusPoints(points: number) {
+    setBonusEnabled(points > 0);
+    if (points > 0) setBonusDraft(points);
+    await run(() => adminApi.updateTileBonusPoints(slug, tile.id, points));
+  }
   async function uploadImage(file: File) {
     setUploading(true);
     try {
@@ -155,6 +166,20 @@ function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string;
             {tile.hasFreezePeriod && (
               <Field label="Freeze duration (minutes)" className="col-span-2">
                 <Input type="number" className="num w-32" defaultValue={tile.freezeDurationMinutes} onBlur={(e) => patch({ freezeDurationMinutes: Number(e.target.value) || 0 })} />
+              </Field>
+            )}
+            <label className="mt-6 flex h-10 items-center gap-2 text-sm text-fg-muted">
+              <input
+                type="checkbox"
+                checked={bonusEnabled}
+                onChange={(e) => updateBonusPoints(e.target.checked ? bonusDraft : 0)}
+                className="size-4 accent-accent"
+              />
+              Bonus for full completion
+            </label>
+            {bonusEnabled && (
+              <Field label="Bonus points">
+                <Input type="number" className="num w-32" defaultValue={bonusDraft} onBlur={(e) => updateBonusPoints(Number(e.target.value) || 0)} />
               </Field>
             )}
           </div>

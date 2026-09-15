@@ -80,6 +80,7 @@ export interface AuditDetailsMap {
   "tile.created": { name: string; boardRow: number; boardCol: number; categoryId: string | null };
   "tile.updated": { changes: FieldChanges<{ name: string; boardRow: number; boardCol: number; categoryId: string | null; imageUrl: string | null; hasFreezePeriod: boolean; freezeDurationMinutes: number; notes: string | null }> };
   "tile.deleted": { name: string; boardRow: number; boardCol: number; taskCount: number };
+  "tile.bonus_points_updated": { points: { before: number; after: number } };
 
   "task.created": { tileId: string; tileName: string; after: TaskSnapshot };
   "task.updated": { tileId: string; tileName: string; before: TaskSnapshot; after: TaskSnapshot };
@@ -261,6 +262,16 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
   "tile.created": { category: "board", tone: "ok", visibility: "mods", title: "Tile created", label: (i) => `${actor(i)} created the tile "${i.details.name}"` },
   "tile.updated": { category: "board", tone: "neutral", visibility: "mods", title: "Tile updated", label: (i) => `${actor(i)} updated the tile "${i.entityLabel ?? ""}"` },
   "tile.deleted": { category: "board", tone: "danger", visibility: "mods", title: "Tile deleted", label: (i) => `${actor(i)} deleted the tile "${i.details.name}"` },
+  "tile.bonus_points_updated": {
+    category: "board",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Tile bonus points updated",
+    label: (i) =>
+      i.details.points.after > 0
+        ? `${actor(i)} set "${i.entityLabel ?? ""}"'s full-completion bonus to ${i.details.points.after} pts`
+        : `${actor(i)} removed "${i.entityLabel ?? ""}"'s full-completion bonus`,
+  },
   "task.created": { category: "board", tone: "ok", visibility: "mods", title: "Task created", label: (i) => `${actor(i)} added a task to "${i.details.tileName}"` },
   "task.updated": { category: "board", tone: "neutral", visibility: "mods", title: "Task updated", label: (i) => `${actor(i)} updated a task on "${i.details.tileName}"` },
   "task.deleted": { category: "board", tone: "danger", visibility: "mods", title: "Task deleted", label: (i) => `${actor(i)} deleted a task from "${i.details.tileName}"` },

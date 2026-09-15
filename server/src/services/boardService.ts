@@ -166,8 +166,10 @@ export interface CreateTileParams {
   freezeDurationMinutes?: number;
   notes?: string | null;
 }
-// A tile's node is a plain ALL root with no points of its own — its tasks
-// (children) carry the points; the tile completes once every task does.
+// A tile's node is a plain ALL root — its tasks (children) carry the task
+// points, and the tile completes once every task does. Its own `points`
+// default to 0 (no bonus); see updateTileBonusPoints for the optional
+// full-completion bonus, awarded the same way once all tasks are complete.
 export function createTile(db: Db, params: CreateTileParams) {
   return db.transaction((tx) => {
     const existing = tx
@@ -207,6 +209,28 @@ export function updateTile(db: Db, id: string, params: Partial<Omit<CreateTilePa
     return updated;
   });
 }
+// Sets the points on the tile's own root node (see the comment above
+// createTile) — awarded once every task under it completes, via the same
+// generic ALL-node handling every other composite node gets from the engine.
+// Direct nodes.points update, not updateNode/replaceSubtree: that path
+// treats a missing `children` as "delete them all", which would wipe the
+// tile's tasks.
+export function updateTileBonusPoints(db: Db, tileId: string, points: number) {
+  return db.transaction((tx) => {
+    const tile = tx.select().from(tiles).where(eq(tiles.id, tileId)).get();
+    if (!tile) throw new ServiceError(404, "Tile not found");
+    const node = tx.select({ points: schema.nodes.points }).from(schema.nodes).where(eq(schema.nodes.id, tile.nodeId)).get()!;
+    tx.update(schema.nodes).set({ points }).where(eq(schema.nodes.id, tile.nodeId)).run();
+    audit(tx, {
+      action: "tile.bonus_points_updated",
+      bingoId: tile.bingoId,
+      entity: { type: "tile", id: tile.id, label: tile.name },
+      details: { points: { before: node.points, after: points } },
+    });
+    return tile;
+  });
+}
+
 export function deleteTile(db: Db, id: string): void {
   db.transaction((tx) => {
     const tile = tx.select().from(tiles).where(eq(tiles.id, id)).get();
