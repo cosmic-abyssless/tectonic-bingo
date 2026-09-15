@@ -51,6 +51,17 @@ export interface ThemeTokens {
     info: string;
     /** CSS length, e.g. "2px" — width of Button/AppHeader's borders. */
     borderWidth: string;
+    /** CSS font-family, e.g. '"Bangers", cursive' — applied to AppHeader's
+     *  title and Card/CardHeader's title, so a theme's display font shows up
+     *  on page/section headings without any of those core/ui components
+     *  needing to know about theming. Falls back to `inherit` when unset. */
+    headingFont: string;
+    /** CSS font-weight for the same headings, e.g. "400" — a dense display
+     *  font (Bangers) paired with the default bold weight gets illegible
+     *  fast, so a theme using one should normally set this too. Falls back
+     *  to `revert` when unset, i.e. whatever the element's own class would
+     *  set (its normal, non-heading-font weight). */
+    headingWeight: string;
   }>;
 }
 
@@ -110,6 +121,8 @@ export function tokensToCssVars(tokens: ThemeTokens): CSSProperties {
     danger: "--color-danger",
     info: "--color-info",
     borderWidth: "--control-border-width",
+    headingFont: "--font-heading",
+    headingWeight: "--font-heading-weight",
   };
   if (tokens.chrome) {
     for (const [key, value] of Object.entries(tokens.chrome)) {

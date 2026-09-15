@@ -5,11 +5,19 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return <div {...props} className={`rounded-lg border border-outline bg-surface ${className ?? ""}`} />;
 }
 
+// Themeable via --font-heading/--font-heading-weight (set by ThemeProvider
+// from tokens.chrome.headingFont/headingWeight); both fall back to a no-op
+// (this element's own weight class) outside a themed page, or when a theme
+// sets a font but not a weight.
+const HEADING_FONT: CSSProperties = { fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" };
+
 export function CardHeader({ title, description, action }: { title: ReactNode; description?: ReactNode; action?: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-outline px-5 py-4">
       <div className="min-w-0">
-        <h2 className="text-sm font-semibold text-on-surface">{title}</h2>
+        <h2 className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+          {title}
+        </h2>
         {description && <p className="mt-0.5 text-sm text-on-surface-muted">{description}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}

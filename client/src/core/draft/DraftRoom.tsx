@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import type { DraftPoolEntry, DraftUnit, AccountType, LeftoverMode, PickRating, SignupQuestion } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
 import { useBingo, useDraftState, useMakePick, useSetPickRating, useSignupQuestions, useStartDraft } from "../../api/queries";
@@ -15,6 +15,12 @@ import hardcoreBadge from "../ui/icons/Hardcore_ironman_chat_badge.png";
 import groupBadge from "../ui/icons/Group_ironman_chat_badge.png";
 import hardcoreGroupBadge from "../ui/icons/Hardcore_group_ironman_chat_badge.png";
 import unrankedGroupBadge from "../ui/icons/Unranked_group_ironman_chat_badge.png";
+
+// Themeable via --font-heading/--font-heading-weight (set by ThemeProvider
+// from tokens.chrome.headingFont/headingWeight); both fall back to a no-op
+// (this element's own weight class) outside a themed page, or when a theme
+// sets a font but not a weight.
+const HEADING_FONT: CSSProperties = { fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" };
 
 const ACCOUNT_TYPE_LABEL: Record<AccountType, string> = {
   normal: "Main",
@@ -287,7 +293,9 @@ export function DraftRoom({ slug }: { slug: string }) {
       {isMyTurn && <Notice tone="ok">It's your turn to pick.</Notice>}
 
       <section>
-        <h3 className="mb-3 text-sm font-semibold text-on-surface">Teams</h3>
+        <h3 className="mb-3 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+          Teams
+        </h3>
         {/* grid-flow-col + a minimum column width, in a scrollable row —
             handles a handful of teams (spread to fill width) and a large
             number of teams (scrolls instead of squeezing RSNs unreadable). */}
@@ -302,7 +310,7 @@ export function DraftRoom({ slug }: { slug: string }) {
       </section>
 
       <section>
-        <h3 className="mb-2 text-sm font-semibold text-on-surface">
+        <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
           Available players <span className="num font-normal text-on-surface-subtle">({poolCount})</span>
         </h3>
         {(pickError || rateError) && (
@@ -310,16 +318,18 @@ export function DraftRoom({ slug }: { slug: string }) {
             {pickError ?? rateError}
           </Notice>
         )}
-        <PoolTable
-          pool={state.pool}
-          questions={questionsData?.questions ?? []}
-          ratings={isLead ? state.ratings : null}
-          onRate={handleRate}
-          canPick={canAct}
-          onPick={handlePick}
-          picking={makePick.isPending}
-          leftoverMode={shell.bingo.leftoverMode}
-        />
+        <Card className="p-4">
+          <PoolTable
+            pool={state.pool}
+            questions={questionsData?.questions ?? []}
+            ratings={isLead ? state.ratings : null}
+            onRate={handleRate}
+            canPick={canAct}
+            onPick={handlePick}
+            picking={makePick.isPending}
+            leftoverMode={shell.bingo.leftoverMode}
+          />
+        </Card>
       </section>
     </div>
   );

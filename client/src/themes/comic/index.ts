@@ -1,5 +1,8 @@
 import { pushThemeHmrUpdate, type ThemeDefinition } from "../registry";
+import { COMIC_FONT } from "./font";
 import { BoardPageLayout } from "./page/BoardPageLayout";
+import { DraftPageLayout } from "./page/DraftPageLayout";
+import { StatsPageLayout } from "./page/StatsPageLayout";
 import { BoardGrid } from "./board/BoardGrid";
 import { TileSearch } from "./page/TileSearch";
 import { TileCell } from "./board/TileCell";
@@ -67,6 +70,15 @@ const comicChromeLight = {
   // here so the header rule and every button read as bold comic ink
   // outlines instead of a thin app-chrome line.
   borderWidth: "2px",
+  // Applied to AppHeader's title and Card/CardHeader's title (see
+  // tokens.ts) — puts the comic lettering font on page and section
+  // headings everywhere under this theme, with zero per-page wiring.
+  headingFont: COMIC_FONT,
+  // Bangers is already a dense, bold-looking display face — stacking the
+  // heading's own font-semibold/font-bold class on top of it crowds the
+  // letterforms and hurts legibility, so drop back to normal weight
+  // anywhere headingFont applies.
+  headingWeight: "400",
 };
 
 // "Moonlit comic panel": deep purple night page, pale lavender ink instead
@@ -119,6 +131,8 @@ const comicChromeDark = {
   danger: "#f87171",
   info: "#60a5fa",
   borderWidth: "2px",
+  headingFont: COMIC_FONT,
+  headingWeight: "400",
 };
 
 const comicTheme: ThemeDefinition = {
@@ -129,6 +143,8 @@ const comicTheme: ThemeDefinition = {
   },
   slots: {
     BoardPage: BoardPageLayout,
+    DraftPage: DraftPageLayout,
+    StatsPage: StatsPageLayout,
     BoardGrid,
     TaskPanel,
     RequirementTree,

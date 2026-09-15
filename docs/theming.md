@@ -1,8 +1,8 @@
 # Writing a bingo theme
 
 A theme is real React code, not a CSS skin. It can restyle the board, the
-`/b/:slug` page chrome, and the submission modal — nothing else (mod, admin,
-stats, draft room, bingo list, and login are never themed).
+`/b/:slug` page chrome, the submission modal, and the draft room and stats
+pages — nothing else (mod, admin, bingo list, and login are never themed).
 
 ## How resolution works
 
@@ -90,7 +90,9 @@ Everything a slot needs comes from the **headless barrel**
   building blocks and bring accessibility (focus management, keyboard
   nav) for free.
 - `core/submissions/{SubmissionRow, ScreenshotThumb}`, `core/signup/SignupForm`,
-  `core/draft/TeamRoster` — shared, non-themed pieces a theme may reuse.
+  `core/draft/{TeamRoster, DraftRoom}`, `core/stats/StatsView` — shared,
+  non-themed pieces a theme may reuse (the latter two are what the default
+  `DraftPage`/`StatsPage` slots wrap wholesale).
 - `@bingo/shared` types and the `STAGE_LABEL`/`STAGE_ORDER`/`nextMilestone`
   constants/helpers.
 
@@ -120,6 +122,9 @@ of truth and will drift less than a doc copy. Broadly:
 
 - **Whole-surface**: `BoardPage` (may call headless hooks directly; every
   other slot is props-only).
+- **Bingo pages (non-board)**: `DraftPage`, `StatsPage` — whole-page layout
+  (header + `core/draft`/`core/stats` content), but unlike `BoardPage`
+  still props-only — they don't have a headless model of their own.
 - **Page chrome**: `PageLoading`, `PageError`, `PageHeader`, `TeamSelector`,
   `TeamBadge`, `StageRow`, `TileSearch`, `TeamBanner`, `PlanningStage`,
   `SignupStage`, `DraftStage`, `NoTeamStage`, `RulesDialog`,

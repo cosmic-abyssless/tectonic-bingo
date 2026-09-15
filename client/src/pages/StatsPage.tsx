@@ -1,10 +1,9 @@
 import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useBingo } from "../api/queries";
-import { StatsView } from "../core/stats/StatsView";
-import { AppHeader } from "../core/ui/AppHeader";
+import { ThemeProvider } from "../themes/ThemeProvider";
+import { useSlot } from "../themes/context";
 
-// Stats never themes — always core/, regardless of bingo.theme.
 export function StatsPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -21,9 +20,13 @@ export function StatsPage() {
   if (!shell) return null;
 
   return (
-    <div className="min-h-screen bg-background text-on-surface">
-      <AppHeader back={{ to: `/b/${slug}`, label: "Back to bingo" }} title="Stats" subtitle={shell.bingo.name} />
-      <StatsView slug={slug!} />
-    </div>
+    <ThemeProvider themeKey={shell.bingo.theme}>
+      <StatsPageSlot slug={slug!} bingoName={shell.bingo.name} />
+    </ThemeProvider>
   );
+}
+
+function StatsPageSlot({ slug, bingoName }: { slug: string; bingoName: string }) {
+  const StatsPage = useSlot("StatsPage");
+  return <StatsPage slug={slug} bingoName={bingoName} />;
 }

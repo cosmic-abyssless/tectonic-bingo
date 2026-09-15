@@ -45,7 +45,10 @@ export function AppHeader({
             </Link>
           )}
           <div className="min-w-0 leading-tight">
-            <div className="truncate text-sm font-semibold text-on-surface">{title}</div>
+            {/* Themeable via --font-heading/--font-heading-weight — both no-ops outside a themed page */}
+            <div className="truncate text-sm font-semibold text-on-surface" style={{ fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" }}>
+              {title}
+            </div>
             {subtitle && <div className="truncate text-xs text-on-surface-muted">{subtitle}</div>}
           </div>
         </div>

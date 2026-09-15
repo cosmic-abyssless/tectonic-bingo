@@ -5,7 +5,10 @@ import { displayName } from "../ui/user";
 import { Card, CardHeader } from "../ui/Card";
 import { Select } from "../ui/Field";
 
-const FALLBACK_TEAM_COLOR = "#a1a1aa";
+// Tracks the current theme's muted-text color rather than a hardcoded hex —
+// a fixed mid-gray reads fine on the default theme's near-black background
+// but washes out against a bright/light theme's (e.g. comic's yellow) bg.
+const FALLBACK_TEAM_COLOR = "var(--color-on-surface-muted)";
 
 function Empty({ children }: { children: string }) {
   return <p className="text-sm text-on-surface-subtle">{children}</p>;

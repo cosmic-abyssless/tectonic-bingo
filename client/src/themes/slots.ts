@@ -18,6 +18,12 @@ export interface ThemeSlots {
   // Whole-surface composition — may call headless hooks directly.
   BoardPage: ComponentType<Record<string, never>>;
 
+  // Bingo pages outside the board — whole-page layout like BoardPage, but
+  // props-only: DraftRoom/StatsView already encapsulate their own api/*
+  // calls as ordinary core/ components, so there's no headless model here.
+  DraftPage: ComponentType<{ slug: string; bingoName: string }>;
+  StatsPage: ComponentType<{ slug: string; bingoName: string }>;
+
   // Page chrome — props-only.
   PageLoading: ComponentType<Record<string, never>>;
   PageError: ComponentType<{ message: string }>;
