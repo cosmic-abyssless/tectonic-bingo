@@ -184,6 +184,30 @@ export function getContributionCounts(db: Db, bingoId: string): ContributionCoun
     .sort((a, b) => b.approvedSubmissions - a.approvedSubmissions);
 }
 
+export interface Stats {
+  pointsOverTime: PointsOverTimePoint[];
+  timeline: TimelineEvent[];
+  contributions: ContributionCount[];
+  heatmap: TileHeatmapCell[];
+}
+
+export function getStats(db: Db, bingoId: string): Stats {
+  return {
+    pointsOverTime: getPointsOverTime(db, bingoId),
+    timeline: getTimeline(db, bingoId),
+    contributions: getContributionCounts(db, bingoId),
+    heatmap: getTileHeatmap(db, bingoId),
+  };
+}
+
+// What a player may see while the bingo is live: only their own team's rows.
+// Stage changes (teamId null) and other teams' draft picks drop out of the
+// timeline along with everything else that isn't theirs.
+export function filterStatsForTeam(stats: Stats, teamId: string): Stats {
+  const own = <T extends { teamId: string | null }>(rows: T[]) => rows.filter((r) => r.teamId === teamId);
+  return { pointsOverTime: own(stats.pointsOverTime), timeline: own(stats.timeline), contributions: own(stats.contributions), heatmap: own(stats.heatmap) };
+}
+
 export interface TileHeatmapCell {
   tileId: string;
   teamId: string;

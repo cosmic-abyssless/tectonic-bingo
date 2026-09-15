@@ -30,6 +30,9 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       queryClient.invalidateQueries({ queryKey: ["adminMods"] });
       queryClient.invalidateQueries({ queryKey: ["bingoMods"] });
       queryClient.invalidateQueries({ queryKey: ["adminCaptainCandidates"] });
+      // Team count and leftover settings decide who is at risk of being cut.
+      queryClient.invalidateQueries({ queryKey: ["mySignup"] });
+      queryClient.invalidateQueries({ queryKey: ["signupRoster"] });
       break;
     case "draft_started":
     case "draft_pick":
@@ -40,6 +43,7 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
     case "signup_changed":
       // Signups, pairings, and who is eligible to captain all move together.
       queryClient.invalidateQueries({ queryKey: ["signupRoster"] });
+      queryClient.invalidateQueries({ queryKey: ["mySignup"] });
       queryClient.invalidateQueries({ queryKey: ["myPairing"] });
       queryClient.invalidateQueries({ queryKey: ["partnerCandidates"] });
       queryClient.invalidateQueries({ queryKey: ["adminCaptainCandidates"] });

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Bingo, SignupMode } from "@bingo/shared";
+import type { Bingo, LeftoverMode, SignupMode } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
 import { Markdown } from "../ui/Markdown";
@@ -49,6 +49,8 @@ export function BingoSettingsForm({
     description: bingo.description ?? "",
     theme: bingo.theme,
     signupMode: bingo.signupMode,
+    leftoverMode: bingo.leftoverMode,
+    warnLeftovers: bingo.warnLeftovers,
     buyinAmount: bingo.buyinAmount?.toString() ?? "",
     bonusPotAmount: bingo.bonusPotAmount.toString(),
     rulesMarkdown: bingo.rulesMarkdown ?? "",
@@ -100,6 +102,8 @@ export function BingoSettingsForm({
         description: form.description || null,
         theme: form.theme,
         signupMode: form.signupMode,
+        leftoverMode: form.leftoverMode,
+        warnLeftovers: form.warnLeftovers,
         buyinAmount: form.buyinAmount ? Number(form.buyinAmount) : null,
         bonusPotAmount: Number(form.bonusPotAmount) || 0,
         rulesMarkdown: form.rulesMarkdown || null,
@@ -153,6 +157,19 @@ export function BingoSettingsForm({
             <option value="duo">Duo</option>
           </Select>
         </Field>
+        <Field
+          label="Leftover signups"
+          hint="Teams get equal picks. The newest signups that don't fill a full round are either cut or drafted in a final singles round, where the team that picked last picks first."
+        >
+          <Select value={form.leftoverMode} onChange={(e) => setForm({ ...form, leftoverMode: e.target.value as LeftoverMode })} className="w-auto!">
+            <option value="cut">Cut — not drafted</option>
+            <option value="singles">Singles round</option>
+          </Select>
+        </Field>
+        <label className="flex items-center gap-2 text-sm text-fg">
+          <input type="checkbox" checked={form.warnLeftovers} onChange={(e) => setForm({ ...form, warnLeftovers: e.target.checked })} className="size-4 cursor-pointer accent-accent" />
+          Warn at-risk signups on their signup page
+        </label>
       </Section>
 
       <Section title="Pot">

@@ -42,6 +42,12 @@ export const bingos = sqliteTable('bingos', {
   // 'duo': players pair up during signup and are drafted as a unit. Only
   // changeable while the bingo has no signups.
   signupMode: text('signup_mode', { enum: ['solo', 'duo'] }).notNull().default('solo'),
+  // Teams end up equal-sized, so signups that don't fill a full draft round
+  // are "leftovers": either cut from the draft, or drafted in a final singles
+  // round once the main pool is empty.
+  leftoverMode: text('leftover_mode', { enum: ['cut', 'singles'] }).notNull().default('cut'),
+  // Show at-risk signups a notice on the signup page.
+  warnLeftovers: integer('warn_leftovers', { mode: 'boolean' }).notNull().default(false),
   buyinAmount: integer('buyin_amount'), // GP per player, nullable until decided
   // Extra GP added to the pot on top of buy-ins (sponsorships, donations to
   // raise the stakes). The actual pot total is buyinAmount × paid signups +
@@ -242,6 +248,19 @@ export const draftPicks = sqliteTable('draft_picks', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 }, (t) => [
   uniqueIndex('draft_picks_bingo_user_unq').on(t.bingoId, t.userId),
+]);
+
+// A team's private notes on a signup while scouting before/during the draft.
+// Shared between captain and co-captain; visible to mods.
+export const pickRatings = sqliteTable('pick_ratings', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  teamId: text('team_id').notNull().references(() => teams.id),
+  signupId: text('signup_id').notNull().references(() => signups.id),
+  stars: integer('stars').notNull(), // 0-3; 0 with a note = note only
+  note: text('note').notNull().default(''),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => [
+  uniqueIndex('pick_ratings_team_signup_unq').on(t.teamId, t.signupId),
 ]);
 
 // ---------------------------------------------------------------------------

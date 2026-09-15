@@ -1,7 +1,7 @@
 import { and, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { signupPairings, signups, users } from "../db/schema";
+import { signupPairings, signups, teamMembers, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { audit, markAuditedNoop } from "../audit/record";
 import { userLabel } from "../audit/describe";
@@ -51,6 +51,18 @@ function hasActiveSignup(db: Db, bingoId: string, userId: string): boolean {
     .from(signups)
     .where(and(eq(signups.bingoId, bingoId), eq(signups.userId, userId), eq(signups.status, "active")))
     .get();
+}
+
+// Captains can be assigned during signups; once someone leads a team their
+// pairing is fixed (their co-captain), so they can't pair or be paired.
+function assertNotOnATeam(db: Db, bingoId: string, userId: string, message: string): void {
+  const onTeam = db
+    .select({ id: teamMembers.id })
+    .from(teamMembers)
+    .innerJoin(teams, eq(teamMembers.teamId, teams.id))
+    .where(and(eq(teams.bingoId, bingoId), eq(teamMembers.userId, userId)))
+    .get();
+  if (onTeam) throw new ServiceError(409, message);
 }
 
 function userByDiscordId(db: Db, discordId: string): MinimalUser | null {
@@ -181,6 +193,7 @@ export function requestPairing(db: Db, bingo: Bingo, params: RequestPairingParam
   return db.transaction((tx) => {
     if (!hasActiveSignup(tx, bingo.id, requester.id)) throw new ServiceError(400, "Sign up before requesting a partner");
     if (getAcceptedPairing(tx, bingo.id, requester)) throw new ServiceError(409, "You already have a partner");
+    assertNotOnATeam(tx, bingo.id, requester.id, "You're already on a team");
 
     const state = getPairingState(tx, bingo.id, requester);
     if (state.outgoing) throw new ServiceError(409, "Cancel your current request before making another");
@@ -188,6 +201,7 @@ export function requestPairing(db: Db, bingo: Bingo, params: RequestPairingParam
     const targetUser = userByDiscordId(tx, targetDiscordId);
     const target: Participant = { id: targetUser?.id ?? "", discordId: targetDiscordId };
     if (getAcceptedPairing(tx, bingo.id, target)) throw new ServiceError(409, "That player already has a partner");
+    if (targetUser) assertNotOnATeam(tx, bingo.id, targetUser.id, "That player is already on a team");
 
     const mutual = state.incoming.find((r) => r.pairing.requesterUserId === targetUser?.id);
     if (mutual) return accept(tx, mutual.pairing, requester);
@@ -241,7 +255,9 @@ export function respondToRequest(db: Db, bingo: Bingo, target: Participant, pair
     }
     if (!hasActiveSignup(tx, bingo.id, target.id)) throw new ServiceError(400, "Sign up before accepting a partner");
     if (getAcceptedPairing(tx, bingo.id, target)) throw new ServiceError(409, "You already have a partner");
+    assertNotOnATeam(tx, bingo.id, target.id, "You're already on a team");
     if (!hasActiveSignup(tx, bingo.id, pairing.requesterUserId)) throw new ServiceError(409, "That player has withdrawn their signup");
+    assertNotOnATeam(tx, bingo.id, pairing.requesterUserId, "That player is already on a team");
     return accept(tx, pairing, target);
   });
 }
@@ -263,6 +279,7 @@ export function adminPair(db: Db, bingo: Bingo, params: AdminPairParams): Pairin
     for (const p of [a, b]) {
       if (!hasActiveSignup(tx, bingo.id, p.id)) throw new ServiceError(400, "Both players need an active signup");
       if (getAcceptedPairing(tx, bingo.id, p)) throw new ServiceError(409, "One of those players already has a partner");
+      assertNotOnATeam(tx, bingo.id, p.id, "One of those players is already on a team");
       closePending(tx, bingo.id, p, "declined");
     }
     const pairing = tx

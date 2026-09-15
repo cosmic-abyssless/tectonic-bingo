@@ -37,7 +37,9 @@ export interface TeamModel {
   isMine: boolean;
   /** Captain first, then co-captain. */
   members: TeamMemberModel[];
-  /** The viewer leads this team (captain or co-captain; the rename endpoint is lead-only). */
+  /** The viewer is this team's captain or co-captain. */
+  isLead: boolean;
+  /** Leads only, and only until the bingo goes live (matches the rename endpoint). */
   canRename: boolean;
 }
 
@@ -214,8 +216,10 @@ export interface BingoPageModel {
   teams: TeamModel[];
   categories: CategoryModel[];
   stageView: StageView;
-  /** Mods always; players only once the bingo is complete (matches the stats endpoint). */
+  /** Mods always; players on a team once live (own team only), everyone once complete (matches the stats endpoint). */
   canViewStats: boolean;
+  /** Team leads (and mods) may browse the draft room before the draft stage to rate signups. */
+  canScout: boolean;
   /** For the draft-stage slot; DraftState is the shared draft response type. */
   draft: { state: DraftState | null; isLoading: boolean };
   /** pendingSubmissionCount: the viewed team's submissions still awaiting review (header badge). */

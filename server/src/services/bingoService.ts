@@ -7,6 +7,7 @@ import {
   bingos,
   claims,
   draftPicks,
+  pickRatings,
   nodeEdges,
   nodes,
   signupAnswers,
@@ -56,8 +57,13 @@ export function toPublicBingo<T extends { womGroupVerificationCode: string | nul
 
 // Board/task/question edits are allowed until the game goes live (including
 // during reveal) — once play has started, structural changes would be unfair.
+// Mirrors isBoardLocked in @bingo/shared (server can't runtime-import it).
+export function isBoardLocked(bingo: typeof bingos.$inferSelect): boolean {
+  return bingo.stage === "live" || bingo.stage === "complete";
+}
+
 export function assertBoardEditable(bingo: typeof bingos.$inferSelect): void {
-  if (bingo.stage === "live" || bingo.stage === "complete") {
+  if (isBoardLocked(bingo)) {
     throw new ServiceError(400, `The board is locked once the game is live (current stage: ${bingo.stage})`);
   }
 }
@@ -191,6 +197,7 @@ export function deleteBingo(db: Db, bingoId: string): void {
     tx.delete(teamPointAdjustments).where(eq(teamPointAdjustments.bingoId, bingoId)).run();
     tx.delete(teamNodeState).where(inArray(teamNodeState.teamId, teamIds)).run();
     tx.delete(draftPicks).where(eq(draftPicks.bingoId, bingoId)).run();
+    tx.delete(pickRatings).where(inArray(pickRatings.teamId, teamIds)).run();
     tx.delete(teamMembers).where(inArray(teamMembers.teamId, teamIds)).run();
     tx.delete(teams).where(eq(teams.bingoId, bingoId)).run();
     tx.delete(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).run();
@@ -267,6 +274,8 @@ export interface UpdateBingoSettingsParams {
   description?: string | null;
   theme?: string;
   signupMode?: "solo" | "duo";
+  leftoverMode?: "cut" | "singles";
+  warnLeftovers?: boolean;
   buyinAmount?: number | null;
   bonusPotAmount?: number;
   rulesMarkdown?: string | null;

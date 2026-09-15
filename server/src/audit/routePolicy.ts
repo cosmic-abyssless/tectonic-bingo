@@ -15,6 +15,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "DELETE /api/bingos/:slug/signup/pairing/:pairingId": ["pairing.cancelled"],
   "POST /api/bingos/:slug/signup/pairing/:pairingId/respond": ["pairing.declined", "pairing.accepted"],
   "POST /api/bingos/:slug/draft/pick": ["draft.pick"],
+  "PUT /api/bingos/:slug/draft/ratings/:signupId": ["draft.rating_set"],
   "PATCH /api/bingos/:slug/teams/:teamId": ["team.updated"],
 
   // routes/mod.ts, mounted at /api/bingos/:slug/mod
@@ -25,6 +26,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "POST /api/bingos/:slug/mod/pairings": ["pairing.admin_paired"],
   "DELETE /api/bingos/:slug/mod/pairings/:id": ["pairing.unpaired"],
   "PATCH /api/bingos/:slug/mod/signups/:id/buyin": ["signup.buyin_marked"],
+  "DELETE /api/bingos/:slug/mod/signups/:id": ["signup.withdrawn", "pairing.dissolved"],
   "POST /api/bingos/:slug/mod/dev/seed-signups": ["dev.signups_seeded"],
   "DELETE /api/bingos/:slug/mod/dev/signups": ["dev.signups_wiped"],
 

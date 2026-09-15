@@ -3,9 +3,10 @@ import type {
   AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   ModSubmissionsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
-  StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
+  PickRating, StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
 import { api } from "./client";
+import { optimisticUpdate } from "./optimistic";
 
 // Centralized so WebSocketProvider can invalidate the same keys queries use.
 export const queryKeys = {
@@ -153,6 +154,14 @@ export function useMarkBuyin(slug: string) {
         received: params.received,
         collectedByUserId: params.collectedByUserId,
       }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
+  });
+}
+
+export function useModWithdrawSignup(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (signupId: string) => api.delete<{ signup: Signup }>(`/api/bingos/${slug}/mod/signups/${signupId}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
   });
 }
@@ -318,6 +327,21 @@ export function useMakePick(slug: string) {
       // The pick also puts the player on a team, which the bingo shell carries.
       queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
     },
+  });
+}
+
+// Star clicks should feel instant, so the rating lands in the cached draft
+// state before the server confirms it.
+export function useSetPickRating(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ signupId, rating }: { signupId: string; rating: PickRating }) =>
+      optimisticUpdate<DraftState>(
+        queryClient,
+        queryKeys.draftState(slug),
+        (prev) => ({ ...prev, ratings: { ...prev.ratings, [signupId]: rating } }),
+        () => api.put<{ ratings: Record<string, PickRating> }>(`/api/bingos/${slug}/draft/ratings/${signupId}`, rating),
+      ),
   });
 }
 

@@ -2,7 +2,7 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { FieldChanges } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { draftPicks, signupAnswers, signups, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, users } from "../db/schema";
+import { draftPicks, pickRatings, signupAnswers, signups, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
 import { PUBLIC_SIGNUP_COLS } from "./signupService";
@@ -326,6 +326,7 @@ export function deleteTeam(db: Db, teamId: string): void {
       teamId,
       details: { name: team.name, captainName: userLabelById(tx, team.captainUserId) ?? "Unknown", memberCount },
     });
+    tx.delete(pickRatings).where(eq(pickRatings.teamId, teamId)).run();
     tx.delete(teamMembers).where(eq(teamMembers.teamId, teamId)).run();
     tx.delete(teams).where(eq(teams.id, teamId)).run();
   });

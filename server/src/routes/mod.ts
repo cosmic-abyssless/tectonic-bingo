@@ -130,7 +130,9 @@ router.post(
 router.get(
   "/signups",
   asyncHandler(async (req, res) => {
-    res.json({ signups: signupService.getAllSignups(db, req.bingo!.id) });
+    const leftovers = draftService.getLeftoverUserIds(db, req.bingo!);
+    const signups = signupService.getAllSignups(db, req.bingo!.id).map((entry) => ({ ...entry, leftover: leftovers.has(entry.user.id) }));
+    res.json({ signups });
   }),
 );
 
@@ -195,6 +197,17 @@ router.patch(
       collectedByUserId,
       recordedByUserId: req.user!.id,
     });
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    res.json({ signup });
+  }),
+);
+
+// Withdraw on a player's behalf (no-shows, duplicate accounts, ...). Soft
+// delete like self-withdrawal so the player can sign up again later.
+router.delete(
+  "/signups/:id",
+  asyncHandler(async (req, res) => {
+    const signup = signupService.withdrawSignup(db, req.bingo!, req.params.id as string, { byMod: true });
     broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.json({ signup });
   }),

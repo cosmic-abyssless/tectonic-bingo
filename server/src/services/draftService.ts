@@ -1,11 +1,11 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { draftPicks, signupAnswers, signups, teamMembers, teams, users } from "../db/schema";
+import { draftPicks, pickRatings, signupAnswers, signups, teamMembers, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
 import { isTeamLead } from "./teamService";
-import { audit } from "../audit/record";
+import { audit, markAuditedNoop } from "../audit/record";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -47,6 +47,7 @@ export interface DraftPoolEntry {
 export interface DraftUnit {
   pairingId: string | null;
   entries: DraftPoolEntry[];
+  leftover: boolean; // doesn't fit a full round — see markLeftovers
 }
 
 export interface DraftState {
@@ -54,7 +55,9 @@ export interface DraftState {
   picks: ((typeof draftPicks.$inferSelect) & { user: MinimalUser; rsn: string })[];
   pool: DraftUnit[];
   draftStarted: boolean;
-  currentPick: { pickNumber: number; round: number; teamId: string } | null;
+  // singlesRound: the main pool is empty and leftovers are being drafted
+  // (leftoverMode "singles" only).
+  currentPick: { pickNumber: number; round: number; teamId: string; singlesRound: boolean } | null;
 }
 
 // Groups undrafted signups into units. Pairs whose other half is missing
@@ -65,16 +68,33 @@ function groupIntoUnits(db: Db, bingoId: string, entries: DraftPoolEntry[]): Dra
   for (const { pairing, userIds } of getAcceptedPairs(db, bingoId)) {
     const pair = userIds.map((id) => byUserId.get(id)).filter((e): e is DraftPoolEntry => !!e);
     if (pair.length !== 2) continue;
-    units.push({ pairingId: pairing.id, entries: pair });
+    units.push({ pairingId: pairing.id, entries: pair, leftover: false });
     for (const id of userIds) byUserId.delete(id);
   }
-  for (const entry of byUserId.values()) units.push({ pairingId: null, entries: [entry] });
+  for (const entry of byUserId.values()) units.push({ pairingId: null, entries: [entry], leftover: false });
   return units;
+}
+
+// Every team drafts the same number of units, so with T teams the newest
+// (total units mod T) units don't fit a full round. Units already drafted
+// count towards the total so the answer is stable mid-draft. A pair is as
+// new as its later signup. Nothing is marked until there are 2 teams, since
+// the team count is what decides it.
+export function markLeftovers(units: DraftUnit[], teamCount: number, draftedUnitCount: number): void {
+  if (teamCount < 2) return;
+  const leftoverCount = (draftedUnitCount + units.length) % teamCount;
+  const newestFirst = [...units].sort((a, b) => signedUpAt(b) - signedUpAt(a));
+  for (const unit of newestFirst.slice(0, leftoverCount)) unit.leftover = true;
+}
+
+function signedUpAt(unit: DraftUnit): number {
+  return Math.max(...unit.entries.map((e) => e.signup.createdAt.getTime()));
 }
 
 // includeAnswers gates signup-answer visibility — only mods and team leads
 // should see what a prospective draftee wrote on the signup form.
-export function getDraftState(db: Db, bingoId: string, opts: { includeAnswers: boolean }): DraftState {
+export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: boolean }): DraftState {
+  const bingoId = bingo.id;
   const teamRows = db.select().from(teams).where(eq(teams.bingoId, bingoId)).all();
   const draftStarted = teamRows.length > 0 && teamRows.every((t) => t.draftOrder != null);
   const sortedTeamRows = draftStarted ? [...teamRows].sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0)) : teamRows;
@@ -127,16 +147,35 @@ export function getDraftState(db: Db, bingoId: string, opts: { includeAnswers: b
     answers: opts.includeAnswers ? poolAnswers.filter((a) => a.signupId === s.id) : null,
   }));
   const pool = groupIntoUnits(db, bingoId, poolEntries);
+  const draftedUnitCount = new Set(pickRows.map((p) => p.pickNumber)).size;
+  markLeftovers(pool, orderedTeams.length, draftedUnitCount);
 
   let currentPick: DraftState["currentPick"] = null;
-  if (draftStarted && pool.length > 0) {
+  const pickable = draftablePool(pool, bingo);
+  if (draftStarted && pickable.length > 0) {
     const pickNumber = nextPickNumber(db, bingoId);
     const round = Math.ceil(pickNumber / orderedTeams.length);
     const teamIndex = pickOrderTeamIndex(orderedTeams.length, pickNumber);
-    currentPick = { pickNumber, round, teamId: orderedTeams[teamIndex]!.id };
+    currentPick = { pickNumber, round, teamId: orderedTeams[teamIndex]!.id, singlesRound: pickable.every((u) => u.leftover) };
   }
 
   return { teams: orderedTeams, picks, pool, draftStarted, currentPick };
+}
+
+// Which units may be drafted next: the main pool while it lasts, then (in
+// singles mode) the leftovers. The snake simply carries on into the singles
+// round, so whoever picked last in the final full round picks first.
+function draftablePool(pool: DraftUnit[], bingo: Bingo): DraftUnit[] {
+  const main = pool.filter((u) => !u.leftover);
+  if (main.length > 0) return main;
+  return bingo.leftoverMode === "singles" ? pool : [];
+}
+
+// User ids of undrafted signups currently at risk of being cut / pushed to
+// the singles round. Used by the roster and the signup page.
+export function getLeftoverUserIds(db: Db, bingo: Bingo): Set<string> {
+  const { pool } = getDraftState(db, bingo, { includeAnswers: false });
+  return new Set(pool.filter((u) => u.leftover).flatMap((u) => u.entries.map((e) => e.user.id)));
 }
 
 function shuffled<T>(arr: T[]): T[] {
@@ -224,6 +263,14 @@ export function makePick(db: Db, params: MakePickParams) {
       if (alreadyDrafted) throw new ServiceError(400, "That player has already been drafted");
     }
 
+    const { pool } = getDraftState(tx, bingo, { includeAnswers: false });
+    if (!draftablePool(pool, bingo).some((u) => u.entries.some((e) => e.user.id === pickedUserId))) {
+      throw new ServiceError(
+        400,
+        bingo.leftoverMode === "singles" ? "Leftover signups are drafted in the singles round, after the main pool is empty" : "That signup doesn't fit a full round and isn't being drafted",
+      );
+    }
+
     const picks = userIds.map((userId) =>
       tx.insert(draftPicks).values({ bingoId: bingo.id, pickNumber, teamId: currentTeam.id, userId, pickedByUserId: actingUserId }).returning().get(),
     );
@@ -241,5 +288,58 @@ export function makePick(db: Db, params: MakePickParams) {
       onBehalfOfUserId: actingIsAdmin && !isLead ? currentTeam.captainUserId : null,
     });
     return picks;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Pick ratings — a team's private scouting notes on signups.
+// ---------------------------------------------------------------------------
+
+export interface PickRating {
+  stars: number; // 1-3
+  note: string;
+}
+
+export const MAX_RATING_STARS = 3;
+
+export function getTeamRatings(db: Db, teamId: string): Record<string, PickRating> {
+  const rows = db.select({ signupId: pickRatings.signupId, stars: pickRatings.stars, note: pickRatings.note }).from(pickRatings).where(eq(pickRatings.teamId, teamId)).all();
+  return Object.fromEntries(rows.map((r) => [r.signupId, { stars: r.stars, note: r.note }]));
+}
+
+// Stars 0 clears the rating. Only leads of the team may write; the route
+// resolves the caller's team before calling this.
+export function setPickRating(db: Db, teamId: string, signupId: string, rating: PickRating): void {
+  if (!Number.isInteger(rating.stars) || rating.stars < 0 || rating.stars > MAX_RATING_STARS) {
+    throw new ServiceError(400, `Stars must be a whole number from 0 to ${MAX_RATING_STARS}`);
+  }
+  const note = rating.note.trim().slice(0, 200);
+  db.transaction((tx) => {
+    const signup = tx.select({ id: signups.id, bingoId: signups.bingoId, rsn: signups.rsn }).from(signups).where(eq(signups.id, signupId)).get();
+    const team = tx.select({ bingoId: teams.bingoId }).from(teams).where(eq(teams.id, teamId)).get();
+    if (!signup || !team || signup.bingoId !== team.bingoId) throw new ServiceError(404, "Signup not found");
+
+    const cleared = rating.stars === 0 && !note;
+    if (cleared) {
+      const removed = tx.delete(pickRatings).where(and(eq(pickRatings.teamId, teamId), eq(pickRatings.signupId, signupId))).run();
+      if (removed.changes === 0) {
+        markAuditedNoop();
+        return;
+      }
+    } else {
+      tx.insert(pickRatings)
+        .values({ teamId, signupId, stars: rating.stars, note })
+        .onConflictDoUpdate({ target: [pickRatings.teamId, pickRatings.signupId], set: { stars: rating.stars, note, updatedAt: new Date() } })
+        .run();
+    }
+    // Ratings are a team's private scouting notes, so the entry stays
+    // team-scoped rather than joining the mod-visible signup history.
+    audit(tx, {
+      action: "draft.rating_set",
+      bingoId: team.bingoId,
+      teamId,
+      entity: { type: "signup", id: signupId, label: signup.rsn },
+      details: { rsn: signup.rsn, stars: rating.stars, hasNote: note.length > 0, cleared },
+    });
   });
 }

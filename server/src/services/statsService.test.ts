@@ -8,7 +8,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createTile, createTask, generateLines } from "./boardService";
 import { approveSubmission } from "./scoringService";
 import { getTeamProgress } from "./teamService";
-import { getContributionCounts, getPointsOverTime, getTileHeatmap, getTimeline } from "./statsService";
+import { filterStatsForTeam, getContributionCounts, getPointsOverTime, getStats, getTileHeatmap, getTimeline } from "./statsService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -165,5 +165,29 @@ describe("getTileHeatmap", () => {
     const teamBCell = cells.find((c) => c.teamId === fx.teamBId && c.tileId === fx.tileId)!;
     expect(teamACell).toMatchObject({ completedTasks: 1, totalTasks: 2 });
     expect(teamBCell).toMatchObject({ completedTasks: 0, totalTasks: 2 });
+  });
+});
+
+describe("filterStatsForTeam", () => {
+  it("keeps only the team's own rows and drops stage changes", () => {
+    const fx = seedFixture();
+    const task = addTask(fx.tileId, { points: 20 });
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId);
+    submitAndApprove(fx.teamBId, task.id, fx.memberUserId, fx.modUserId);
+    db.insert(stageTransitions).values({ bingoId: fx.bingoId, fromStage: "reveal", toStage: "live", changedByUserId: fx.modUserId }).run();
+    // A pick for each team so team A's timeline never depends on who was
+    // first to complete (both approvals can land in the same millisecond).
+    db.insert(draftPicks)
+      .values([
+        { bingoId: fx.bingoId, pickNumber: 1, teamId: fx.teamAId, userId: fx.modUserId, pickedByUserId: fx.modUserId },
+        { bingoId: fx.bingoId, pickNumber: 2, teamId: fx.teamBId, userId: fx.memberUserId, pickedByUserId: fx.modUserId },
+      ])
+      .run();
+
+    const own = filterStatsForTeam(getStats(db, fx.bingoId), fx.teamAId);
+    for (const rows of [own.pointsOverTime, own.timeline, own.contributions, own.heatmap]) {
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.every((r) => r.teamId === fx.teamAId)).toBe(true);
+    }
   });
 });

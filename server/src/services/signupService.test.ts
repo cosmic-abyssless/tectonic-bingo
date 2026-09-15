@@ -7,6 +7,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createQuestion, deleteQuestion, reorderQuestions, updateQuestion } from "./signupService";
 import { createSignup, getAllSignups, getSignupForUser, markBuyin, updateSignup, withdrawSignup } from "./signupService";
 import { ServiceError } from "./errors";
+import { createTeam } from "./teamService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -102,6 +103,22 @@ describe("updateSignup / withdrawSignup", () => {
     const withdrawn = withdrawSignup(db, bingo, signup.id);
     expect(withdrawn.status).toBe("withdrawn");
   });
+
+  it("refuses to withdraw a player who leads a team", () => {
+    const { bingo, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Cap", answers: [] });
+    createTeam(db, { bingoId: bingo.id, captainUserId: memberId });
+    expect(() => withdrawSignup(db, bingo, signup.id)).toThrow(/leads a team/);
+  });
+
+  it("lets mods, but not players, withdraw during the captains stage", () => {
+    const { bingo, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Late", answers: [] });
+    const captainsStage = { ...bingo, stage: "captains" as const };
+    expect(() => withdrawSignup(db, captainsStage, signup.id)).toThrow(/signup stage/);
+    expect(withdrawSignup(db, captainsStage, signup.id, { byMod: true }).status).toBe("withdrawn");
+    expect(() => withdrawSignup(db, { ...bingo, stage: "draft" }, signup.id, { byMod: true })).toThrow(/draft has started/);
+  });
 });
 
 describe("getAllSignups / markBuyin", () => {
@@ -196,6 +213,15 @@ describe("audit trail", () => {
     withdrawSignup(db, bingo, signup.id);
     const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.withdrawn")).get()!;
     expect(JSON.parse(row.details)).toEqual({ rsn: "MyRsn" });
+    expect(row.onBehalfOfUserId).toBeNull();
+  });
+
+  it("a mod withdrawal records who the signup belonged to", () => {
+    const { bingo, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "MyRsn", answers: [] });
+    withdrawSignup(db, bingo, signup.id, { byMod: true });
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.withdrawn")).get()!;
+    expect(row.onBehalfOfUserId).toBe(memberId);
   });
 
   it("markBuyin records the before receivedAt state and the collector's name", () => {

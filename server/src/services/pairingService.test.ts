@@ -8,6 +8,7 @@ import { createSignup, withdrawSignup } from "./signupService";
 import { adminPair, cancelRequest, getAcceptedPairs, getPairingState, requestPairing, respondToRequest, unpair } from "./pairingService";
 import { ServiceError } from "./errors";
 import { runWithAuditContext } from "../audit/context";
+import { createTeam } from "./teamService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -80,6 +81,14 @@ describe("requestPairing", () => {
     adminPair(db, bingo, { userIdA: a.id, userIdB: b.id, createdByUserId: a.id });
     expect(() => requestPairing(db, bingo, { requester: c, targetDiscordId: a.discordId })).toThrow(/already has a partner/);
     expect(() => requestPairing(db, { ...bingo, signupMode: "solo" }, { requester: c, targetDiscordId: a.discordId })).toThrow(ServiceError);
+  });
+
+  it("rejects players already on a team, in either direction", () => {
+    const { bingo, a, b, c } = seed();
+    createTeam(db, { bingoId: bingo.id, captainUserId: a.id });
+    expect(() => requestPairing(db, bingo, { requester: a, targetDiscordId: b.discordId })).toThrow(/already on a team/);
+    expect(() => requestPairing(db, bingo, { requester: b, targetDiscordId: a.discordId })).toThrow(/already on a team/);
+    expect(() => adminPair(db, bingo, { userIdA: a.id, userIdB: c.id, createdByUserId: a.id })).toThrow(/already on a team/);
   });
 });
 

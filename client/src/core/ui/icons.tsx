@@ -175,3 +175,18 @@ export const CrownIcon = (p: IconProps) => (
     <path d="M2.5 5.5L5.5 8l2.5-4.5L10.5 8l3-2.5-1.25 7h-8.5z" />
   </Svg>
 );
+
+// `fill="currentColor"` lights the star up; the default outline is the empty state.
+export const StarIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 1.75l1.9 3.95 4.35.6-3.15 3.02.78 4.33L8 11.6l-3.88 2.05.78-4.33L1.75 6.3l4.35-.6z" />
+  </Svg>
+);
+
+export const NoteIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3.5 2.5h9v8l-3 3h-6z" />
+    <path d="M9.5 13.5v-3h3" />
+    <path d="M6 6.5h4M6 9h2.5" />
+  </Svg>
+);

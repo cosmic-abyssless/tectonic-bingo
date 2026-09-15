@@ -102,8 +102,9 @@ router.get(
   }),
 );
 
-// Stats expose every team's progress, so players only get them once the bingo
-// is over; mods can watch throughout.
+// Stats expose every team's progress, so players only get the full picture once
+// the bingo is over; while it's live they see just their own team. Mods can
+// watch everything throughout.
 router.get(
   "/:slug/stats",
   requireAuth,
@@ -111,14 +112,12 @@ router.get(
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
     const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
-    if (!isMod && bingo.stage !== "complete") throw new ServiceError(403, "Stats aren't visible until the bingo is complete");
+    const seesEveryTeam = isMod || bingo.stage === "complete";
+    const myTeam = seesEveryTeam ? null : teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
+    if (!seesEveryTeam && (bingo.stage !== "live" || !myTeam)) throw new ServiceError(403, "Stats aren't visible until the bingo is complete");
 
-    res.json({
-      pointsOverTime: statsService.getPointsOverTime(db, bingo.id),
-      timeline: statsService.getTimeline(db, bingo.id),
-      contributions: statsService.getContributionCounts(db, bingo.id),
-      heatmap: statsService.getTileHeatmap(db, bingo.id),
-    });
+    const stats = statsService.getStats(db, bingo.id);
+    res.json(myTeam ? statsService.filterStatsForTeam(stats, myTeam.id) : stats);
   }),
 );
 
@@ -277,7 +276,9 @@ router.get(
   requireBingo,
   asyncHandler(async (req, res) => {
     const result = signupService.getSignupForUser(db, req.bingo!.id, req.user!.id);
-    res.json({ signup: result?.signup ?? null, answers: result?.answers ?? [] });
+    // Only warn while the mods have opted in and the player can still act on it.
+    const atRisk = !!result?.signup && result.signup.status === "active" && req.bingo!.warnLeftovers && draftService.getLeftoverUserIds(db, req.bingo!).has(req.user!.id);
+    res.json({ signup: result?.signup ?? null, answers: result?.answers ?? [], atRisk });
   }),
 );
 
@@ -454,12 +455,15 @@ router.get(
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
     const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
+    const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
     // Visible to mods, captains, and anyone signed up for this bingo — not the general public.
-    const canView = isMod || !!teamService.getUserTeamForBingo(db, bingo.id, req.user!.id) || !!signupService.getSignupForUser(db, bingo.id, req.user!.id)?.signup;
+    const canView = isMod || !!myTeam || !!signupService.getSignupForUser(db, bingo.id, req.user!.id)?.signup;
     if (!canView) throw new ServiceError(403, "The draft room is only visible to signed-up players and mods");
 
-    const isLead = teamService.getTeamsForBingo(db, bingo.id).some((t) => teamService.isTeamLead(db, t.id, req.user!.id));
-    const state = draftService.getDraftState(db, bingo.id, { includeAnswers: isMod || isLead });
+    const ledTeamId = myTeam && teamService.isTeamLead(db, myTeam.id, req.user!.id) ? myTeam.id : null;
+    const state = draftService.getDraftState(db, bingo, { includeAnswers: isMod || !!ledTeamId });
+    // Scouting notes are private to the lead's own team.
+    const ratings = ledTeamId ? draftService.getTeamRatings(db, ledTeamId) : {};
 
     // WOM EHB + account type and RuneProfile's account type were fetched
     // once at signup time (playerStatsService.ts) and persisted on the
@@ -485,7 +489,25 @@ router.get(
       }),
     }));
 
-    res.json({ ...state, pool });
+    res.json({ ...state, pool, ratings });
+  }),
+);
+
+// A lead rates a signup for their own team's scouting list. Ratings never
+// leave the team, so the acting user's team is resolved here, not from the body.
+router.put(
+  "/:slug/draft/ratings/:signupId",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const bingo = req.bingo!;
+    if (bingoService.isBoardLocked(bingo)) throw new ServiceError(400, "Ratings are locked once the bingo is live");
+    const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
+    if (!myTeam || !teamService.isTeamLead(db, myTeam.id, req.user!.id)) throw new ServiceError(403, "Only team leads can rate picks");
+
+    const { stars, note } = req.body as { stars?: number; note?: string };
+    draftService.setPickRating(db, myTeam.id, req.params.signupId as string, { stars: stars ?? 0, note: note ?? "" });
+    res.json({ ratings: draftService.getTeamRatings(db, myTeam.id) });
   }),
 );
 
@@ -515,6 +537,8 @@ router.patch(
     const team = teamService.getTeamById(db, req.params.teamId as string);
     if (!team || team.bingoId !== req.bingo!.id) throw new ServiceError(404, "Team not found");
     if (!teamService.isTeamLead(db, team.id, req.user!.id)) throw new ServiceError(403, "Only the captain can rename this team");
+    // Admins can still fix names from the mod panel; captains are done once live.
+    if (bingoService.isBoardLocked(req.bingo!)) throw new ServiceError(400, "Team names are locked once the bingo is live");
 
     const { name } = req.body as { name?: string };
     if (!name || !name.trim()) throw new ServiceError(400, "name is required");

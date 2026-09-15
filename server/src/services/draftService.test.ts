@@ -7,7 +7,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createTeam } from "./teamService";
 import { createSignup } from "./signupService";
 import { adminPair } from "./pairingService";
-import { getDraftState, makePick, pickOrderTeamIndex, startDraft } from "./draftService";
+import { getDraftState, getLeftoverUserIds, getTeamRatings, makePick, pickOrderTeamIndex, setPickRating, startDraft } from "./draftService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -121,7 +121,9 @@ describe("audit trail", () => {
     createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, name: "A" });
     createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
     const p1 = seedUser("p1");
-    createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p1.id, rsn: "p1", answers: [] });
+    const p2 = seedUser("p2");
+    // Two signups for two teams so neither is a leftover (see markLeftovers).
+    for (const p of [p1, p2]) createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p.id, rsn: p.discordUsername, answers: [] });
     startDraft(db, bingo);
     const first = db.select().from(schema.teams).where(and(eq(schema.teams.bingoId, bingo.id), eq(schema.teams.draftOrder, 1))).get()!;
 
@@ -212,7 +214,7 @@ describe("getDraftState", () => {
     const p2 = seedUser("p2");
     for (const p of [p1, p2]) createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p.id, rsn: p.discordUsername, answers: [] });
 
-    const before = getDraftState(db, bingo.id, { includeAnswers: false });
+    const before = getDraftState(db, bingo, { includeAnswers: false });
     expect(before.draftStarted).toBe(false);
     expect(before.currentPick).toBeNull();
     expect(before.pool).toHaveLength(2);
@@ -222,7 +224,7 @@ describe("getDraftState", () => {
     const first = teams.find((t) => t.draftOrder === 1)!;
     makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
 
-    const after = getDraftState(db, bingo.id, { includeAnswers: false });
+    const after = getDraftState(db, bingo, { includeAnswers: false });
     expect(after.draftStarted).toBe(true);
     expect(after.pool.map((u) => u.entries[0]!.user.id)).toEqual([p2.id]);
     expect(after.currentPick?.pickNumber).toBe(2);
@@ -238,13 +240,15 @@ describe("getDraftState", () => {
     createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
     const p1 = seedUser("p1");
     createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p1.id, rsn: "PlayerOneRsn", answers: [] });
+    const p2 = seedUser("p2");
+    createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p2.id, rsn: "p2", answers: [] });
 
     startDraft(db, bingo);
     const teams = db.select().from(schema.teams).where(eq(schema.teams.bingoId, bingo.id)).all();
     const first = teams.find((t) => t.draftOrder === 1)!;
     makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
 
-    const state = getDraftState(db, bingo.id, { includeAnswers: false });
+    const state = getDraftState(db, bingo, { includeAnswers: false });
     expect(state.teams.every((t) => t.captainRsn === "c1" || t.captainRsn === "c2")).toBe(true);
     expect(state.picks[0]).toMatchObject({ userId: p1.id, rsn: "PlayerOneRsn" });
   });
@@ -257,10 +261,10 @@ describe("getDraftState", () => {
     const [question] = db.insert(schema.signupQuestions).values({ bingoId: bingo.id, prompt: "RSN?", type: "text" }).returning().all();
     createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p1.id, rsn: "p1", answers: [{ questionId: question!.id, value: "hi" }] });
 
-    const withAnswers = getDraftState(db, bingo.id, { includeAnswers: true });
+    const withAnswers = getDraftState(db, bingo, { includeAnswers: true });
     expect(withAnswers.pool[0]!.entries[0]!.answers).toHaveLength(1);
 
-    const withoutAnswers = getDraftState(db, bingo.id, { includeAnswers: false });
+    const withoutAnswers = getDraftState(db, bingo, { includeAnswers: false });
     expect(withoutAnswers.pool[0]!.entries[0]!.answers).toBeNull();
   });
 });
@@ -289,7 +293,7 @@ describe("duo mode", () => {
 
   it("groups an accepted pair into one draft unit", () => {
     const { bingo, p1, p2, solo, pairing } = setupDuo();
-    const state = getDraftState(db, bingo.id, { includeAnswers: false });
+    const state = getDraftState(db, bingo, { includeAnswers: false });
     expect(state.pool).toHaveLength(2);
     const pair = state.pool.find((u) => u.pairingId === pairing.id)!;
     expect(pair.entries.map((e) => e.user.id).sort()).toEqual([p1.id, p2.id].sort());
@@ -298,7 +302,7 @@ describe("duo mode", () => {
 
   it("reports the co-captain on the team", () => {
     const { bingo, teamA, co1 } = setupDuo();
-    const state = getDraftState(db, bingo.id, { includeAnswers: false });
+    const state = getDraftState(db, bingo, { includeAnswers: false });
     expect(state.teams.find((t) => t.id === teamA.id)!.coCaptain).toEqual({ userId: co1.id, rsn: "co1" });
   });
 
@@ -308,7 +312,7 @@ describe("duo mode", () => {
     expect(picks.map((p) => p.userId).sort()).toEqual([p1.id, p2.id].sort());
     expect(picks.every((p) => p.pickNumber === 1 && p.teamId === first.id)).toBe(true);
 
-    const state = getDraftState(db, bingo.id, { includeAnswers: false });
+    const state = getDraftState(db, bingo, { includeAnswers: false });
     expect(state.currentPick).toMatchObject({ pickNumber: 2, teamId: second.id });
     expect(state.pool).toHaveLength(1);
   });
@@ -321,5 +325,110 @@ describe("duo mode", () => {
     const picks = makePick(db, { bingo, pickedUserId: solo.id, actingUserId: co1.id, actingIsAdmin: false });
     expect(picks).toHaveLength(1);
     expect(picks[0]!.teamId).toBe(teamA.id);
+  });
+});
+
+describe("leftovers", () => {
+  // 2 teams, 3 signups: the newest one doesn't fit a full round.
+  function setupLeftover(leftoverMode: "cut" | "singles") {
+    const bingo = seedBingo({ leftoverMode });
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
+    createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
+    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
+    const players = ["p1", "p2", "p3"].map((d, i) => {
+      const user = seedUser(d);
+      db.insert(schema.signups).values({ bingoId: bingo.id, userId: user.id, rsn: d, createdAt: new Date(1_700_000_000_000 + i * 60_000) }).run();
+      return user;
+    });
+    startDraft(db, bingo);
+    const teams = db.select().from(schema.teams).where(eq(schema.teams.bingoId, bingo.id)).all();
+    const first = teams.find((t) => t.draftOrder === 1)!;
+    const second = teams.find((t) => t.draftOrder === 2)!;
+    return { bingo, first, second, p1: players[0]!, p2: players[1]!, newest: players[2]! };
+  }
+
+  it("marks only the newest signups that don't fill a round", () => {
+    const { bingo, newest } = setupLeftover("cut");
+    const state = getDraftState(db, bingo, { includeAnswers: false });
+    expect(state.pool.filter((u) => u.leftover).map((u) => u.entries[0]!.user.id)).toEqual([newest.id]);
+    expect(getLeftoverUserIds(db, bingo)).toEqual(new Set([newest.id]));
+  });
+
+  it("marks nothing until there are two teams", () => {
+    const bingo = seedBingo({ stage: "signup" });
+    const c1 = seedCaptain(bingo.id, "c1");
+    createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
+    const p1 = seedUser("p1");
+    createSignup(db, bingo, { bingoId: bingo.id, userId: p1.id, rsn: "p1", answers: [] });
+    expect(getLeftoverUserIds(db, bingo).size).toBe(0);
+  });
+
+  it("keeps the same signups marked as the draft progresses", () => {
+    const { bingo, first, p1, newest } = setupLeftover("cut");
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    expect(getLeftoverUserIds(db, bingo)).toEqual(new Set([newest.id]));
+  });
+
+  it("cut: refuses to draft a leftover and ends the draft once the main pool is empty", () => {
+    const { bingo, first, second, p1, p2, newest } = setupLeftover("cut");
+    expect(() => makePick(db, { bingo, pickedUserId: newest.id, actingUserId: first.captainUserId, actingIsAdmin: false })).toThrow(/doesn't fit a full round/i);
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    makePick(db, { bingo, pickedUserId: p2.id, actingUserId: second.captainUserId, actingIsAdmin: false });
+    const state = getDraftState(db, bingo, { includeAnswers: false });
+    expect(state.currentPick).toBeNull();
+    expect(state.pool.map((u) => u.entries[0]!.user.id)).toEqual([newest.id]);
+  });
+
+  it("singles: drafts leftovers after the main pool, continuing the snake", () => {
+    const { bingo, first, second, p1, p2, newest } = setupLeftover("singles");
+    expect(() => makePick(db, { bingo, pickedUserId: newest.id, actingUserId: first.captainUserId, actingIsAdmin: false })).toThrow(/singles round/i);
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    makePick(db, { bingo, pickedUserId: p2.id, actingUserId: second.captainUserId, actingIsAdmin: false });
+    const state = getDraftState(db, bingo, { includeAnswers: false });
+    // Pick 3 of a 2-team snake goes back to whoever picked last.
+    expect(state.currentPick).toMatchObject({ pickNumber: 3, teamId: second.id, singlesRound: true });
+    makePick(db, { bingo, pickedUserId: newest.id, actingUserId: second.captainUserId, actingIsAdmin: false });
+    expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick).toBeNull();
+  });
+});
+
+describe("pick ratings", () => {
+  it("upserts, clears on zero stars without a note, and stays per team", () => {
+    const bingo = seedBingo({ stage: "signup" });
+    const capA = seedCaptain(bingo.id, "capA");
+    const capB = seedCaptain(bingo.id, "capB");
+    const teamA = createTeam(db, { bingoId: bingo.id, captainUserId: capA.id });
+    const teamB = createTeam(db, { bingoId: bingo.id, captainUserId: capB.id });
+    const player = seedUser("p1");
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: player.id, rsn: "p1", answers: [] });
+
+    setPickRating(db, teamA.id, signup.id, { stars: 2, note: "  solid  " });
+    expect(getTeamRatings(db, teamA.id)).toEqual({ [signup.id]: { stars: 2, note: "solid" } });
+    expect(getTeamRatings(db, teamB.id)).toEqual({});
+
+    setPickRating(db, teamA.id, signup.id, { stars: 3, note: "" });
+    expect(getTeamRatings(db, teamA.id)[signup.id]).toEqual({ stars: 3, note: "" });
+
+    setPickRating(db, teamA.id, signup.id, { stars: 0, note: "" });
+    expect(getTeamRatings(db, teamA.id)).toEqual({});
+
+    const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.rating_set")).all();
+    expect(rows.map((r) => [r.teamId, JSON.parse(r.details)])).toEqual([
+      [teamA.id, { rsn: "p1", stars: 2, hasNote: true, cleared: false }],
+      [teamA.id, { rsn: "p1", stars: 3, hasNote: false, cleared: false }],
+      [teamA.id, { rsn: "p1", stars: 0, hasNote: false, cleared: true }],
+    ]);
+  });
+
+  it("rejects out-of-range stars and signups from another bingo", () => {
+    const bingo = seedBingo({ stage: "signup" });
+    const capA = seedCaptain(bingo.id, "capA");
+    const teamA = createTeam(db, { bingoId: bingo.id, captainUserId: capA.id });
+    const player = seedUser("p1");
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: player.id, rsn: "p1", answers: [] });
+
+    expect(() => setPickRating(db, teamA.id, signup.id, { stars: 4, note: "" })).toThrow(ServiceError);
+    expect(() => setPickRating(db, teamA.id, "nope", { stars: 1, note: "" })).toThrow(ServiceError);
   });
 });

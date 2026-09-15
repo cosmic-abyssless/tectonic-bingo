@@ -53,6 +53,11 @@ router.patch(
       if (body.signupMode !== "solo" && body.signupMode !== "duo") throw new ServiceError(400, "signupMode must be solo or duo");
       params.signupMode = body.signupMode;
     }
+    if ("leftoverMode" in body) {
+      if (body.leftoverMode !== "cut" && body.leftoverMode !== "singles") throw new ServiceError(400, "leftoverMode must be cut or singles");
+      params.leftoverMode = body.leftoverMode;
+    }
+    if ("warnLeftovers" in body) params.warnLeftovers = !!body.warnLeftovers;
     for (const key of dateFields) {
       if (key in body) (params as Record<string, unknown>)[key] = body[key] ? new Date(body[key] as string) : null;
     }

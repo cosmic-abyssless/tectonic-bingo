@@ -85,9 +85,9 @@ export function BingoPageProvider({
 
   const isViewingOtherTeam = isMod && !!viewingTeamId && viewingTeamId !== myTeam?.id;
   const canSubmit = bingo.stage === "live" && hasStarted && !isViewingOtherTeam && !!viewingTeamId;
-  // Other teams' numbers stay hidden from players until the bingo is over
-  // (the stats endpoint 403s otherwise); mods see them throughout.
-  const canViewStats = isMod || bingo.stage === "complete";
+  // Players see their own team's stats while live and everyone's once the bingo
+  // is over (the stats endpoint 403s otherwise); mods see them throughout.
+  const canViewStats = isMod || bingo.stage === "complete" || (bingo.stage === "live" && !!myTeam);
 
   // Exact branch order as the old BingoPage.tsx: signup -> planning|captains
   // -> draft -> !viewingTeamId -> board.
@@ -102,9 +102,11 @@ export function BingoPageProvider({
             ? "noTeam"
             : "board";
 
-  const teamModels = teams.map((t) => toTeamModel(t, myTeam?.id ?? null, user.id));
+  const teamModels = teams.map((t) => toTeamModel(t, myTeam?.id ?? null, user.id, bingo.stage));
   // shell.myTeam is the bare row; the roster lives on the matching entry in shell.teams.
   const myTeamModel = teamModels.find((t) => t.isMine) ?? null;
+  // Captains get picked while signups are open (#39), so leads scout ahead.
+  const canScout = (bingo.stage === "signup" || bingo.stage === "captains") && (isMod || !!myTeamModel?.isLead);
   const viewingTeamModel = teamModels.find((t) => t.id === viewingTeamId) ?? null;
 
   const openSubmit = (tileId?: string, file?: File) => {
@@ -135,6 +137,7 @@ export function BingoPageProvider({
     categories: categoriesRaw.map(toCategoryModel),
     stageView,
     canViewStats,
+    canScout,
     draft: { state: draftState ?? null, isLoading: draftLoading },
     viewing: {
       team: viewingTeamModel,

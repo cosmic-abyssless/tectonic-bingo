@@ -9,7 +9,7 @@
 // node; a line is a node referenced by a BingoLine row. NodeStatus is
 // derived at read time, never stored (see TeamNodeState).
 
-import type { AuditVisibility } from "./audit";
+import type { AuditVisibility } from "./audit.ts";
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
@@ -74,6 +74,11 @@ export interface User {
 export const SIGNUP_MODES = ["solo", "duo"] as const;
 export type SignupMode = (typeof SIGNUP_MODES)[number];
 
+// What happens to signups that don't fill a full draft round (teams stay
+// equal-sized): dropped from the draft, or drafted in a final singles round.
+export const LEFTOVER_MODES = ["cut", "singles"] as const;
+export type LeftoverMode = (typeof LEFTOVER_MODES)[number];
+
 // Keep in sync with server/src/middleware/upload.ts (the server can't import this at runtime).
 export const MAX_UPLOAD_MB = 5;
 export const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
@@ -88,6 +93,8 @@ export interface Bingo {
   boardRows: number;
   boardCols: number;
   signupMode: SignupMode;
+  leftoverMode: LeftoverMode;
+  warnLeftovers: boolean;
   buyinAmount: number | null;
   bonusPotAmount: number;
   rulesMarkdown: string | null;
@@ -439,6 +446,8 @@ export interface SignupAnswerInput {
 export interface MySignupResponse {
   signup: Signup | null;
   answers: SignupAnswer[];
+  // The bingo warns leftovers and this signup is currently one of them.
+  atRisk: boolean;
 }
 
 // A tectonic-api-linked RSN.
@@ -468,6 +477,8 @@ export interface RosterEntry {
   collectedByUser?: User | null;
   // Duo mode, mod roster only: the accepted pairing this player is in.
   pairing?: SignupPairing | null;
+  // Mod roster only: undrafted and not fitting a full draft round (see LeftoverMode).
+  leftover?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -601,14 +612,25 @@ export interface DraftTeam extends Team {
 export interface DraftUnit {
   pairingId: string | null;
   entries: DraftPoolEntry[];
+  leftover: boolean; // doesn't fit a full round: cut, or drafted in the singles round
 }
+
+// A team's private scouting note on a signup. Shared by captain and
+// co-captain, never shown to other teams.
+export interface PickRating {
+  stars: number; // 0-MAX_RATING_STARS; 0 means note-only
+  note: string;
+}
+export const MAX_RATING_STARS = 3;
 
 export interface DraftState {
   teams: DraftTeam[]; // sorted by draftOrder once the draft has started
   picks: DraftPick[]; // a pair shares one pickNumber across two rows
   pool: DraftUnit[];
   draftStarted: boolean;
-  currentPick: { pickNumber: number; round: number; teamId: string } | null;
+  // singlesRound: the main pool is empty and leftovers are being drafted.
+  currentPick: { pickNumber: number; round: number; teamId: string; singlesRound: boolean } | null;
+  ratings: Record<string, PickRating>; // by signupId; empty unless the viewer leads a team
 }
 
 // ---------------------------------------------------------------------------
@@ -687,5 +709,5 @@ export type BroadcastEvent =
   // log / team activity queries and refetch under their own auth.
   | { type: "audit_appended"; bingoId: string; payload: { teamId: string | null; visibility: AuditVisibility } };
 
-export * from "./audit";
-export * from "./bingoExport";
+export * from "./audit.ts";
+export * from "./bingoExport.ts";
