@@ -36,6 +36,11 @@ export interface ThemeTokens {
     onButton: string;
     buttonSecondary: string;
     onButtonSecondary: string;
+    /** Secondary button's own border — split out from outlineStrong so a
+     *  theme can give secondary buttons a border that matches their fill
+     *  instead of inheriting whatever outlineStrong is used for elsewhere
+     *  (form fields, dividers, etc). */
+    buttonSecondaryBorder: string;
     ok: string;
     warn: string;
     danger: string;
@@ -94,6 +99,7 @@ export function tokensToCssVars(tokens: ThemeTokens): CSSProperties {
     onButton: "--color-on-button",
     buttonSecondary: "--color-button-secondary",
     onButtonSecondary: "--color-on-button-secondary",
+    buttonSecondaryBorder: "--color-button-secondary-border",
     ok: "--color-ok",
     warn: "--color-warn",
     danger: "--color-danger",

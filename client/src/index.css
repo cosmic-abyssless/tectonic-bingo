@@ -35,6 +35,7 @@
   --color-on-button: #fafafa;
   --color-button-secondary: #f4f4f5;
   --color-on-button-secondary: #18181b;
+  --color-button-secondary-border: #d4d4d8; /* same as outline-strong by default */
 
   --color-ok: #16a34a;
   --color-warn: #b45309;
@@ -69,6 +70,7 @@
     --color-on-button: #09090b;
     --color-button-secondary: #17171a;
     --color-on-button-secondary: #fafafa;
+    --color-button-secondary-border: #34343a;
     --color-ok: #4ade80;
     --color-warn: #fbbf24;
     --color-danger: #f87171;

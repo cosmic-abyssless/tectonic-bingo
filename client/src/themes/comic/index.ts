@@ -53,6 +53,7 @@ const comicChromeLight = {
   onButton: "#ffffff",
   buttonSecondary: "#fff4d6",
   onButtonSecondary: "#000000",
+  buttonSecondaryBorder: "#000000",
   // index.css's global ok/warn/danger/info are tuned to sit on a dark
   // surface (e.g. warn #fbbf24, a light amber that's unreadable on the
   // header's now-white bg) — darkened here to keep 4.5:1+ contrast
@@ -105,6 +106,10 @@ const comicChromeDark = {
   onButton: "#1a0f2e",
   buttonSecondary: "#2f6b4a",
   onButtonSecondary: "#f0fff4",
+  // A darker forest green, not outlineStrong's pale lavender — the light
+  // purple border read as a mismatched clash against the green fill; a
+  // shade of the same green reads as a proper border instead.
+  buttonSecondaryBorder: "#1e4a32",
   ok: "#4ade80",
   warn: "#fbbf24",
   danger: "#f87171",
