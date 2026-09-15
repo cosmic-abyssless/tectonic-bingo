@@ -1,8 +1,13 @@
 # Light/dark mode + a real surface/on-surface token system
 
-Status: approved, not yet implemented. Written to be executed phase-by-phase,
-**committing after each phase**, by an implementer with no prior context on
-this conversation — every phase below is self-contained.
+Status: approved, implementation starting. Written to be executed
+phase-by-phase, **committing after each phase**, by an implementer with no
+prior context on this conversation — every phase below is self-contained.
+Token roles beyond what's listed here (`button`/`onButton`,
+`buttonSecondary`/`onButtonSecondary`, `scrim`, `PAPER`/`PAPER_ALT`/`PAPER_RAISED`)
+are expected to come up during implementation and later theming work —
+add them as concrete need arises rather than trying to enumerate everything
+upfront.
 
 ## Context
 
