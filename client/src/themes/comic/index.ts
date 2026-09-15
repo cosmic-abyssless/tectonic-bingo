@@ -54,6 +54,7 @@ const comicChromeLight = {
   buttonSecondary: "#fff4d6",
   onButtonSecondary: "#000000",
   buttonSecondaryBorder: "#000000",
+  buttonSecondaryHover: "#dbeafe",
   // index.css's global ok/warn/danger/info are tuned to sit on a dark
   // surface (e.g. warn #fbbf24, a light amber that's unreadable on the
   // header's now-white bg) — darkened here to keep 4.5:1+ contrast
@@ -110,6 +111,9 @@ const comicChromeDark = {
   // purple border read as a mismatched clash against the green fill; a
   // shade of the same green reads as a proper border instead.
   buttonSecondaryBorder: "#1e4a32",
+  // A lighter green, not surfaceHover's neutral gray — hovering a green
+  // button to gray read as a step backward/disabled rather than a hover.
+  buttonSecondaryHover: "#3f8f60",
   ok: "#4ade80",
   warn: "#fbbf24",
   danger: "#f87171",

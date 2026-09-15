@@ -41,6 +41,10 @@ export interface ThemeTokens {
      *  instead of inheriting whatever outlineStrong is used for elsewhere
      *  (form fields, dividers, etc). */
     buttonSecondaryBorder: string;
+    /** Secondary button's own hover fill — split out from surfaceHover for
+     *  the same reason as buttonSecondaryBorder: a generic neutral hover
+     *  can clash against a colored secondary fill. */
+    buttonSecondaryHover: string;
     ok: string;
     warn: string;
     danger: string;
@@ -100,6 +104,7 @@ export function tokensToCssVars(tokens: ThemeTokens): CSSProperties {
     buttonSecondary: "--color-button-secondary",
     onButtonSecondary: "--color-on-button-secondary",
     buttonSecondaryBorder: "--color-button-secondary-border",
+    buttonSecondaryHover: "--color-button-secondary-hover",
     ok: "--color-ok",
     warn: "--color-warn",
     danger: "--color-danger",
