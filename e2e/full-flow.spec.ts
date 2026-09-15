@@ -217,11 +217,11 @@ test("full bingo lifecycle", async ({ page, browser }) => {
   });
 
   await test.step("admin advances signup to captains and assigns two captains", async () => {
-    await page.getByRole("button", { name: "Advance to captains →" }).click();
+    await page.getByRole("button", { name: "Advance to Signups closed →" }).click();
     await page.getByRole("button", { name: "Confirm" }).click();
-    await expect(page.getByText("captains", { exact: true })).toBeVisible();
+    await expect(page.getByText("Signups closed", { exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: "Teams" }).click();
+    await page.getByRole("button", { name: "Captains" }).click();
     // teamSizeSummary() returns null (nothing renders) until at least one
     // team exists — it's a forward-looking estimate of
     // remainingCandidates / currentTeamCount, not a final roster count, so

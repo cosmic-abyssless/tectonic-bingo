@@ -245,7 +245,7 @@ export function DraftRoom({ slug }: { slug: string }) {
     <div className="mx-auto w-full max-w-5xl space-y-6 px-6 py-6">
       {scouting ? (
         <Notice tone="info">
-          Scouting. Signups are still {shell.bingo.stage === "signup" ? "open" : "being finalised"} — the draft starts once the mods move the bingo to the draft stage.
+          Scouting. Signups are {shell.bingo.stage === "signup" ? "still open" : "closed"} — the draft starts once the mods move the bingo to the draft stage.
           {isLead && " Star and note players now; your team's ratings carry over into the draft."}
         </Notice>
       ) : !state.draftStarted ? (

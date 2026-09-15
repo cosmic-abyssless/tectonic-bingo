@@ -9,6 +9,7 @@ import { TileSearch } from "./page/TileSearch";
 import { TeamBanner } from "./page/TeamBanner";
 import { PlanningStage } from "./page/PlanningStage";
 import { SignupStage } from "./page/SignupStage";
+import { ScoutBanner } from "./page/ScoutBanner";
 import { DraftStage } from "./page/DraftStage";
 import { NoTeamStage } from "./page/NoTeamStage";
 import { RulesDialog } from "./page/RulesDialog";
@@ -47,6 +48,7 @@ export const defaultTheme: ThemeDefinition = {
     TeamBanner,
     PlanningStage,
     SignupStage,
+    ScoutBanner,
     DraftStage,
     NoTeamStage,
     RulesDialog,

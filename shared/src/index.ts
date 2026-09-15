@@ -23,7 +23,7 @@ export function isBoardLocked(stage: Stage): boolean {
 export const STAGE_LABEL: Record<Stage, string> = {
   planning: "Planning",
   signup: "Signups open",
-  captains: "Picking captains",
+  captains: "Signups closed",
   draft: "Draft",
   reveal: "Board revealed",
   live: "Live",
