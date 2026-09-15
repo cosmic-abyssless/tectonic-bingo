@@ -7,6 +7,7 @@ import * as adminApi from "../../api/adminApi";
 import { optimisticUpdate } from "../../api/optimistic";
 import { UserSearchInput } from "./UserSearchInput";
 import { displayName } from "../ui/user";
+import { PlayerName } from "../tectonic/PlayerName";
 import { Button, IconButton } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
 import { Disclosure } from "../ui/Disclosure";
@@ -109,7 +110,9 @@ function TeamCard({ slug, team, onDelete }: { slug: string; team: TeamWithMember
                 <li key={user.id} className="flex h-9 items-center gap-2 px-3 text-sm">
                   {isCaptain && <CrownIcon size={14} className="shrink-0 text-warn" aria-label="Captain" />}
                   {isCoCaptain && <CrownIcon size={14} className="shrink-0 text-fg-subtle" aria-label="Co-captain" />}
-                  <span className="min-w-0 flex-1 truncate text-fg">{displayName(user)}</span>
+                  <PlayerName userId={user.id} className="min-w-0 flex-1 truncate text-fg">
+                    {displayName(user)}
+                  </PlayerName>
                   {isDrafted && <span className="text-xs text-fg-subtle">drafted</span>}
                   {!isCaptain && !isCoCaptain && !isDrafted && (
                     <IconButton label={`Remove ${displayName(user)}`} size="sm" onPress={() => removeMember(user)}>

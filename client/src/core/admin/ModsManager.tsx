@@ -6,6 +6,7 @@ import { optimisticUpdate } from "../../api/optimistic";
 import { adminQueryKeys, useMods } from "../../api/adminQueries";
 import { UserSearchInput } from "./UserSearchInput";
 import { displayName } from "../ui/user";
+import { PlayerName } from "../tectonic/PlayerName";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
 import { Field } from "../ui/Field";
@@ -50,7 +51,9 @@ export function ModsManager({ slug }: { slug: string }) {
         <ul className="divide-y divide-line rounded-md border border-line bg-surface">
           {data?.mods.map((mod) => (
             <li key={mod.id} className="flex items-center justify-between px-3 py-2 text-sm">
-              <span className="text-fg">{displayName(mod.user)}</span>
+              <PlayerName userId={mod.userId} className="text-fg">
+                {displayName(mod.user)}
+              </PlayerName>
               <Button variant="ghost" size="sm" className="text-danger" onPress={() => remove(mod.userId)}>
                 Remove
               </Button>

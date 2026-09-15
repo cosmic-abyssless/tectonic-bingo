@@ -657,6 +657,18 @@ export interface DraftPoolEntry {
   tectonicProfile: TectonicProfile | null;
 }
 
+// One player's card, opened from any name on the page (GET /:slug/players/:userId).
+// Same fields the draft pool carries, resolved for a single user.
+export interface PlayerProfile {
+  user: MinimalUser;
+  rsn: string | null; // their signup RSN for this bingo; null when they never signed up
+  accountType: AccountType | null;
+  womStats: WomPlayerStats | null;
+  profile: TectonicProfile | null;
+  answers: SignupAnswer[] | null; // null unless the viewer is a mod or team lead
+  tectonicUnavailable: boolean;
+}
+
 export interface DraftTeam extends Team {
   captainRsn: string; // captains aren't in `picks` (assigned pre-draft, not drafted) — this is the only source for their RSN
   coCaptain: { userId: string; rsn: string } | null; // duo mode: joined with the captain, also not in `picks`

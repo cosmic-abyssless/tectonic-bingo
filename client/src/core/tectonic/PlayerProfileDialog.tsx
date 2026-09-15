@@ -1,27 +1,52 @@
 import type { ReactNode } from "react";
-import type { AccountType, SignupAnswer, SignupQuestion, TectonicProfile, WomPlayerStats } from "@bingo/shared";
+import type { PlayerProfile, SignupQuestion } from "@bingo/shared";
+import { usePlayerProfile, useSignupQuestions } from "../../api/queries";
 import { Dialog, DialogHeader } from "../ui/Dialog";
-import { Badge } from "../ui/Card";
+import { Badge, Notice } from "../ui/Card";
+import { SpinnerIcon } from "../ui/icons";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
+import { displayName } from "../ui/user";
 import { AchievementIcons, TierBadge } from "./ProfileBadges";
 import { formatRecordValue, isBingoEvent, podiumSummary } from "./profile";
 
-export interface ProfilePlayer {
-  rsn: string;
-  discordName: string;
-  accountType: AccountType | null;
-  womStats: WomPlayerStats | null;
-  profile: TectonicProfile | null;
-  answers: SignupAnswer[] | null; // null when the viewer may not see them
-}
-
-/** Everything the pool table can't fit: full records, event placements, answers. */
-export function PlayerProfileDialog({ player, questions, onClose }: { player: ProfilePlayer | null; questions: SignupQuestion[]; onClose: () => void }) {
+/**
+ * One player's card: clan standing (tier, records, event placements), account
+ * type, EHB and — for mods and team leads — their signup answers. Fetches on
+ * open so it can be reached from any name on any page.
+ */
+export function PlayerProfileDialog({ slug, userId, onClose }: { slug: string; userId: string | null; onClose: () => void }) {
   return (
-    <Dialog isOpen={player !== null} onClose={onClose} size="lg">
-      {player && <ProfileBody player={player} questions={questions} onClose={onClose} />}
+    <Dialog isOpen={userId !== null} onClose={onClose} size="lg">
+      {userId && <ProfileLoader slug={slug} userId={userId} onClose={onClose} />}
     </Dialog>
   );
+}
+
+function ProfileLoader({ slug, userId, onClose }: { slug: string; userId: string; onClose: () => void }) {
+  const { data, error } = usePlayerProfile(slug, userId);
+  const { data: questionsData } = useSignupQuestions(slug);
+
+  if (error) {
+    return (
+      <>
+        <DialogHeader title="Player" onClose={onClose} />
+        <div className="p-5">
+          <Notice tone="danger">{error.message}</Notice>
+        </div>
+      </>
+    );
+  }
+  if (!data) {
+    return (
+      <>
+        <DialogHeader title="Player" onClose={onClose} />
+        <div className="flex items-center gap-2 p-5 text-sm text-fg-muted">
+          <SpinnerIcon /> Loading profile…
+        </div>
+      </>
+    );
+  }
+  return <ProfileBody player={data.player} questions={questionsData?.questions ?? []} onClose={onClose} />;
 }
 
 function Stat({ label, children }: { label: string; children: ReactNode }) {
@@ -33,8 +58,9 @@ function Stat({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function ProfileBody({ player, questions, onClose }: { player: ProfilePlayer; questions: SignupQuestion[]; onClose: () => void }) {
+function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; questions: SignupQuestion[]; onClose: () => void }) {
   const { profile } = player;
+  const name = displayName(player.user);
   const podiums = profile ? podiumSummary(profile) : null;
   const records = profile ? [...profile.records].sort((a, b) => b.date.localeCompare(a.date)) : [];
   const events = profile ? [...profile.events].sort((a, b) => a.placement - b.placement) : [];
@@ -43,8 +69,8 @@ function ProfileBody({ player, questions, onClose }: { player: ProfilePlayer; qu
   return (
     <>
       <DialogHeader
-        title={player.rsn}
-        subtitle={player.discordName}
+        title={player.rsn ?? name}
+        subtitle={player.rsn ? name : "Not signed up for this bingo"}
         onClose={onClose}
         action={
           profile && (
@@ -57,7 +83,9 @@ function ProfileBody({ player, questions, onClose }: { player: ProfilePlayer; qu
       />
       <div className="space-y-6 p-5">
         {!profile ? (
-          <p className="text-sm text-fg-muted">No clan profile — this player isn't registered with the clan bot, or the clan API was unavailable.</p>
+          <p className="text-sm text-fg-muted">
+            {player.tectonicUnavailable ? "The clan API is unavailable right now, so clan standing can't be shown." : "No clan profile — this player isn't registered with the clan bot."}
+          </p>
         ) : (
           <>
             <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">

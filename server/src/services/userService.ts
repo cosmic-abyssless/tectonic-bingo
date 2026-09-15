@@ -25,6 +25,15 @@ export function getUserById(db: Db, userId: string) {
   return db.select().from(users).where(eq(users.id, userId)).get();
 }
 
+/** Display columns only — for player-facing responses where the full row (isAdmin etc.) has no business going out. */
+export function getMinimalUser(db: Db, userId: string) {
+  return db
+    .select({ id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick })
+    .from(users)
+    .where(eq(users.id, userId))
+    .get();
+}
+
 // Only id + display columns: this feeds the partner picker, where the full
 // user row (isAdmin etc.) has no business going to every player.
 export function getUsersByDiscordIds(db: Db, discordIds: string[]) {

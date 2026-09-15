@@ -1,6 +1,7 @@
 import type { DraftPick, DraftTeam } from "@bingo/shared";
 import { CrownIcon } from "../ui/icons";
 import { displayName } from "../ui/user";
+import { PlayerName } from "../tectonic/PlayerName";
 
 // A duo pair is drafted as one pick, so both rows share a pickNumber — show
 // them as one entry so the roster reads the same way the draft was made.
@@ -24,12 +25,16 @@ export function TeamRoster({ team, picks, isCurrent, highlight }: { team: DraftT
         </div>
         <div className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-fg-muted">
           <CrownIcon size={12} className="shrink-0 text-warn" aria-label="Captain" />
-          <span className="truncate">{team.captainRsn || "?"}</span>
+          <PlayerName userId={team.captainUserId} className="truncate">
+            {team.captainRsn || "?"}
+          </PlayerName>
         </div>
         {team.coCaptain && (
           <div className="flex min-w-0 items-center gap-1 text-xs text-fg-muted">
             <CrownIcon size={12} className="shrink-0 text-fg-subtle" aria-label="Co-captain" />
-            <span className="truncate">{team.coCaptain.rsn || "?"}</span>
+            <PlayerName userId={team.coCaptain.userId} className="truncate">
+              {team.coCaptain.rsn || "?"}
+            </PlayerName>
           </div>
         )}
       </div>
@@ -38,7 +43,7 @@ export function TeamRoster({ team, picks, isCurrent, highlight }: { team: DraftT
           <li key={group[0].pickNumber} className="rounded-sm bg-surface px-2.5 py-1 text-sm text-fg-muted">
             {group.map((p) => (
               <div key={p.id} className="truncate">
-                {p.rsn || displayName(p.user)}
+                <PlayerName userId={p.userId}>{p.rsn || displayName(p.user)}</PlayerName>
               </div>
             ))}
           </li>

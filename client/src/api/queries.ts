@@ -3,7 +3,7 @@ import type {
   AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   ModSubmissionsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
-  PickRating, StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
+  PickRating, PlayerProfile, StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
 import { api } from "./client";
 import { optimisticUpdate } from "./optimistic";
@@ -25,6 +25,7 @@ export const queryKeys = {
   myPairing: (slug: string) => ["myPairing", slug] as const,
   partnerCandidates: (slug: string) => ["partnerCandidates", slug] as const,
   draftState: (slug: string) => ["draftState", slug] as const,
+  playerProfile: (slug: string, userId: string) => ["playerProfile", slug, userId] as const,
   stats: (slug: string) => ["stats", slug] as const,
   auditLog: (slug: string, filters: AuditLogFilters) => ["auditLog", slug, filters] as const,
   teamActivity: (slug: string, teamId: string) => ["teamActivity", slug, teamId] as const,
@@ -411,5 +412,16 @@ export function useAdvanceStage(slug: string) {
       queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
       queryClient.invalidateQueries({ queryKey: queryKeys.board(slug) });
     },
+  });
+}
+
+// Clan standing is fetched live, so keep it short-lived; the server caches
+// the upstream call for 60s anyway.
+export function usePlayerProfile(slug: string, userId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.playerProfile(slug, userId ?? ""),
+    queryFn: () => api.get<{ player: PlayerProfile }>(`/api/bingos/${slug}/players/${userId}`),
+    enabled: !!userId,
+    staleTime: 60_000,
   });
 }

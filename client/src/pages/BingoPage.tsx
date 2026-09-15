@@ -3,12 +3,15 @@ import { BingoPageProvider, useBingoPage } from "../headless";
 import { ThemeProvider } from "../themes/ThemeProvider";
 import { useSlot } from "../themes/context";
 import { PageLoading, PageError } from "../themes/default/page/PageStates";
+import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 
 export function BingoPage() {
   const { slug } = useParams<{ slug: string }>();
   return (
     <BingoPageProvider slug={slug!} renderLoading={() => <PageLoading />} renderError={(message) => <PageError message={message} />}>
-      <ThemedSurface />
+      <PlayerProfileProvider slug={slug!}>
+        <ThemedSurface />
+      </PlayerProfileProvider>
     </BingoPageProvider>
   );
 }

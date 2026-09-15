@@ -11,7 +11,7 @@ import { RatingCell } from "./RatingCell";
 import { TeamRoster } from "./TeamRoster";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { AchievementIcons, TierBadge } from "../tectonic/ProfileBadges";
-import { PlayerProfileDialog } from "../tectonic/PlayerProfileDialog";
+import { PlayerName } from "../tectonic/PlayerName";
 import { podiumSummary, podiumTitle } from "../tectonic/profile";
 
 
@@ -78,7 +78,6 @@ function PoolTable({
   onPick,
   picking,
   leftoverMode,
-  onOpen,
 }: {
   pool: DraftUnit[];
   questions: SignupQuestion[];
@@ -89,7 +88,6 @@ function PoolTable({
   onPick: (userId: string) => void;
   picking: boolean;
   leftoverMode: LeftoverMode;
-  onOpen: (entry: DraftPoolEntry) => void;
 }) {
   // Leads land on their favourites first; the toggle flips to ascending.
   const sort = useTableSort<SortKey>(ratings ? "rating" : "rsn", ratings ? "desc" : "asc");
@@ -163,10 +161,7 @@ function PoolTable({
                       </td>
                     )}
                     <td className={`whitespace-nowrap py-2 pr-4 font-medium ${unit.leftover ? "" : "text-fg"}`}>
-                      <AccountTypeIcon accountType={entry.accountType} />{" "}
-                      <button type="button" onClick={() => onOpen(entry)} className="rounded-sm underline-offset-2 hover:underline focus-visible:underline" title="Open player profile">
-                        {entry.signup.rsn}
-                      </button>
+                      <AccountTypeIcon accountType={entry.accountType} /> <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
                     </td>
                     <td className="whitespace-nowrap py-2 pr-4 text-fg-muted">{displayName(entry.user)}</td>
                     {hasLeftovers && <td className="py-2 pr-4 align-middle">{unit.leftover && i === 0 && <Badge tone="warn">{leftoverTag}</Badge>}</td>}
@@ -209,7 +204,6 @@ export function DraftRoom({ slug }: { slug: string }) {
   const [rateError, setRateError] = useState<string | null>(null);
   // Which pool entry's profile dialog is open. Tracked by signup id so the
   // dialog follows live refetches instead of showing a stale snapshot.
-  const [openSignupId, setOpenSignupId] = useState<string | null>(null);
 
   if (stateError) {
     return (
@@ -237,7 +231,6 @@ export function DraftRoom({ slug }: { slug: string }) {
   const scouting = shell.bingo.stage !== "draft";
   const poolCount = state.pool.reduce((n, u) => n + u.entries.length, 0);
   const questions = questionsData?.questions ?? [];
-  const openEntry = openSignupId ? (state.pool.flatMap((u) => u.entries).find((e) => e.signup.id === openSignupId) ?? null) : null;
 
   async function handleStart() {
     setStartError(null);
@@ -348,24 +341,8 @@ export function DraftRoom({ slug }: { slug: string }) {
           onPick={handlePick}
           picking={makePick.isPending}
           leftoverMode={shell.bingo.leftoverMode}
-          onOpen={(entry) => setOpenSignupId(entry.signup.id)}
         />
       </section>
-
-      <PlayerProfileDialog
-        player={
-          openEntry && {
-            rsn: openEntry.signup.rsn,
-            discordName: displayName(openEntry.user),
-            accountType: openEntry.accountType,
-            womStats: openEntry.womStats,
-            profile: openEntry.tectonicProfile,
-            answers: openEntry.answers,
-          }
-        }
-        questions={questions}
-        onClose={() => setOpenSignupId(null)}
-      />
     </div>
   );
 }

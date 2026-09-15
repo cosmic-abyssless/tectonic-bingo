@@ -6,7 +6,7 @@ import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { WomClient } from "./womService";
 import { RuneProfileClient } from "./runeProfileService";
-import { fetchAndPersistPlayerStats } from "./playerStatsService";
+import { fetchAndPersistPlayerStats, getSignupStats } from "./playerStatsService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -108,5 +108,25 @@ describe("audit trail", () => {
     const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.stats_fetch_failed")).get()!;
     expect(row.actorType).toBe("system");
     expect(JSON.parse(row.details)).toEqual({ message: "boom" });
+  });
+});
+
+describe("getSignupStats", () => {
+  it("parses the stored blobs, preferring RuneProfile's account type", async () => {
+    const signup = seedSignup();
+    await fetchAndPersistPlayerStats(db, signup.id, "C osmic", fakeWomClient({ ehb: 42.4, type: "ironman" }), fakeRuneProfileClient({ accountType: { key: "group_ironman" } }));
+
+    const stats = getSignupStats(db, signup.bingoId, signup.userId)!;
+    expect(stats.rsn).toBe("C osmic");
+    expect(stats.womStats).toEqual({ ehb: 42.4 });
+    expect(stats.accountType).toBe("group_ironman");
+    expect(stats.answers).toEqual([]);
+  });
+
+  it("returns null for withdrawn signups and players who never signed up", () => {
+    const signup = seedSignup();
+    expect(getSignupStats(db, signup.bingoId, "nobody")).toBeNull();
+    db.update(schema.signups).set({ status: "withdrawn" }).where(eq(schema.signups.id, signup.id)).run();
+    expect(getSignupStats(db, signup.bingoId, signup.userId)).toBeNull();
   });
 });

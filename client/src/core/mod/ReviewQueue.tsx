@@ -4,6 +4,7 @@ import { useCreatePointAdjustment, useModSubmissions, useReviewSubmission } from
 import { SubmissionStatusBadge } from "../ui/StatusBadge";
 import { timeAgo } from "../ui/time";
 import { displayName } from "../ui/user";
+import { PlayerName } from "../tectonic/PlayerName";
 import { Button } from "../ui/Button";
 import { Badge, Card, EmptyState, FilterChip, Notice } from "../ui/Card";
 import { Field, Input, Textarea } from "../ui/Field";
@@ -163,7 +164,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
                       {isManual && <Badge tone="info">manual</Badge>}
                     </div>
                     <p className="truncate text-sm text-fg-muted">{claimsSummary(row.claims)}</p>
-                    <p className="mt-0.5 text-xs text-fg-subtle">by {row.submittedByUser ? displayName(row.submittedByUser) : "unknown"}</p>
+                    <p className="mt-0.5 text-xs text-fg-subtle">by {row.submittedByUser ? <PlayerName userId={row.submittedByUser.id}>{displayName(row.submittedByUser)}</PlayerName> : "unknown"}</p>
                     {row.screenshots[0] && (
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <ScreenshotAnalysisBadges screenshot={row.screenshots[0]} />

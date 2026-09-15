@@ -2,6 +2,7 @@ import type { SubmissionDetails } from "@bingo/shared";
 import { SubmissionStatusBadge } from "../ui/StatusBadge";
 import { timeAgo } from "../ui/time";
 import { displayName } from "../ui/user";
+import { PlayerName } from "../tectonic/PlayerName";
 import { claimsSummary } from "./claimsSummary";
 import { ScreenshotThumb } from "./ScreenshotThumb";
 
@@ -17,7 +18,11 @@ export function SubmissionRow({ detail }: { detail: SubmissionDetails }) {
           <span className="text-xs text-fg-subtle">{timeAgo(submission.submittedAt)}</span>
         </div>
         <p className="truncate text-sm text-fg">{claimsSummary(claims)}</p>
-        {submittedByUser && <p className="mt-0.5 text-xs text-fg-subtle">by {displayName(submittedByUser)}</p>}
+        {submittedByUser && (
+          <p className="mt-0.5 text-xs text-fg-subtle">
+            by <PlayerName userId={submittedByUser.id}>{displayName(submittedByUser)}</PlayerName>
+          </p>
+        )}
         {submission.reviewerNotes && <p className="mt-0.5 truncate text-xs text-warn">{submission.reviewerNotes}</p>}
       </div>
     </div>

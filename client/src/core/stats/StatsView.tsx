@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import type { ContributionCount, PointsOverTimePoint, Team, Tile, TileHeatmapCell, TimelineEvent } from "@bingo/shared";
 import { useBingo, useBoard, useStats } from "../../api/queries";
 import { displayName } from "../ui/user";
+import { PlayerName } from "../tectonic/PlayerName";
 import { Card, CardHeader } from "../ui/Card";
 import { Select } from "../ui/Field";
 
@@ -90,7 +91,10 @@ function ContributionList({ contributions, teams }: { contributions: Contributio
         return (
           <li key={c.userId} className="flex items-center justify-between text-fg-muted">
             <span>
-              <span className="num text-fg-subtle">#{i + 1}</span> <span className="text-fg">{displayName(c.user)}</span>{" "}
+              <span className="num text-fg-subtle">#{i + 1}</span>{" "}
+              <PlayerName userId={c.userId} className="text-fg">
+                {displayName(c.user)}
+              </PlayerName>{" "}
               <span className="text-fg-subtle">— {team?.name ?? "Unknown team"}</span>
             </span>
             <span className="num shrink-0 font-semibold text-fg">{c.approvedSubmissions}</span>

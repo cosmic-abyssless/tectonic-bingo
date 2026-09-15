@@ -15,6 +15,7 @@ import {
 } from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
 import { displayName } from "../ui/user";
+import { PlayerName } from "../tectonic/PlayerName";
 import { Button, IconButton } from "../ui/Button";
 import { Badge, EmptyState, FilterChip, Notice } from "../ui/Card";
 import { Input, Select } from "../ui/Field";
@@ -421,7 +422,7 @@ export function SignupRoster({ slug }: { slug: string }) {
                         <td className="num py-2 pr-4 text-fg-subtle">{order}</td>
                         <td className="py-2 pr-4 font-medium text-fg">
                           <span className="inline-flex items-center gap-1.5">
-                            {entry.signup.rsn}
+                            <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
                             {entry.signup.rsnVerified && <CheckIcon size={14} className="text-ok" aria-label="Verified against the linked clan account" />}
                           </span>
                         </td>

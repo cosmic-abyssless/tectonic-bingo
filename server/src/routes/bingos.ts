@@ -1,6 +1,6 @@
 import { Router } from "express";
 import fs from "fs";
-import type { ClaimInput } from "@bingo/shared";
+import type { ClaimInput, PlayerProfile } from "@bingo/shared";
 import { UPLOADS_DIR } from "../config";
 import { imageUpload } from "../middleware/upload";
 import { requireAuth } from "../middleware/requireAuth";
@@ -19,9 +19,7 @@ import * as statsService from "../services/statsService";
 import { isOcrEnabled, analyzeSubmissionScreenshot } from "../ocr";
 import { getTectonicClient, TectonicUnavailableError, type TectonicDetailedUser } from "../services/tectonicService";
 import { fetchProfiles } from "../services/tectonicProfileService";
-import { parseWomSummary } from "../services/womService";
-import { parseAccountType } from "../services/runeProfileService";
-import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
+import { fetchAndPersistPlayerStats, getSignupStats, parseStoredPlayerStats } from "../services/playerStatsService";
 import { syncWomTeamRename } from "../services/womCompetitionService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
@@ -475,29 +473,56 @@ router.get(
     // WOM EHB + account type and RuneProfile's account type were fetched
     // once at signup time (playerStatsService.ts) and persisted on the
     // signup row — no live external calls here, just parsing already-stored
-    // JSON. Account type prefers RuneProfile (it distinguishes group
-    // ironman variants; WOM just reports "ironman" for a GIM member),
-    // falling back to WOM for a player who syncs to WOM but isn't set up
-    // with the RuneProfile RuneLite plugin. The raw JSON blobs are internal
-    // only — stripped off `signup` here rather than sent to the client.
+    // JSON. The raw JSON blobs are internal only — stripped off `signup`
+    // here rather than sent to the client.
     const pool = state.pool.map((unit) => ({
       ...unit,
       entries: unit.entries.map((entry) => {
         const { womDataJson, runeProfileDataJson, statsFetchedAt, ...signup } = entry.signup;
         void statsFetchedAt;
-        const womSummary = parseWomSummary(womDataJson ? JSON.parse(womDataJson) : null);
-        const accountType = parseAccountType(runeProfileDataJson ? JSON.parse(runeProfileDataJson) : null) ?? womSummary?.accountType ?? null;
         return {
           ...entry,
           signup,
-          womStats: womSummary ? { ehb: womSummary.ehb } : null,
-          accountType,
+          ...parseStoredPlayerStats({ womDataJson, runeProfileDataJson }),
           tectonicProfile: tectonic.profiles[entry.user.id] ?? null,
         };
       }),
     }));
 
     res.json({ ...state, pool, ratings, tectonicUnavailable: tectonic.unavailable });
+  }),
+);
+
+// One player's card, opened from any name on the page. Same data as a draft
+// pool entry, plus it works for players who are already on a team (or never
+// signed up at all — then it's clan standing only).
+router.get(
+  "/:slug/players/:userId",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const bingo = req.bingo!;
+    const userId = req.params.userId as string;
+    const user = userService.getMinimalUser(db, userId);
+    if (!user) throw new ServiceError(404, "Player not found");
+
+    const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
+    const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
+    // Signup answers follow the draft room's rule: mods and team leads only.
+    const seesAnswers = isMod || (!!myTeam && teamService.isTeamLead(db, myTeam.id, req.user!.id));
+
+    const signup = getSignupStats(db, bingo.id, userId);
+    const tectonic = await fetchProfiles(db, [userId]);
+    const player: PlayerProfile = {
+      user,
+      rsn: signup?.rsn ?? null,
+      womStats: signup?.womStats ?? null,
+      accountType: signup?.accountType ?? null,
+      profile: tectonic.profiles[userId] ?? null,
+      answers: signup && seesAnswers ? signup.answers : null,
+      tectonicUnavailable: tectonic.unavailable,
+    };
+    res.json({ player });
   }),
 );
 
