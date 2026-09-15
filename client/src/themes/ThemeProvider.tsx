@@ -5,6 +5,7 @@ import { tokensToCssVars } from "./tokens";
 import { isKnownTheme, onThemeHmrUpdate, resolveTheme, type ResolvedTheme } from "./registry";
 import { ThemeContext } from "./context";
 import type { ThemeSlots } from "./slots";
+import { useResolvedColorScheme } from "../core/ui/colorScheme";
 
 const DEFAULT_RESOLVED: ResolvedTheme = { key: defaultTheme.key, tokens: defaultTokens, slots: defaultTheme.slots as ThemeSlots };
 
@@ -13,6 +14,7 @@ const DEFAULT_RESOLVED: ResolvedTheme = { key: defaultTheme.key, tokens: default
 // While a non-default theme loads, the tree renders under the default theme
 // (its PageLoading slot is what a loading page shows).
 export function ThemeProvider({ themeKey, children }: { themeKey: string; children: ReactNode }) {
+  const scheme = useResolvedColorScheme();
   const [resolved, setResolved] = useState<ResolvedTheme>(() => (isKnownTheme(themeKey) ? DEFAULT_RESOLVED : (resolveTheme(themeKey) as ResolvedTheme)));
   const requestedKey = useRef(themeKey);
 
@@ -45,9 +47,10 @@ export function ThemeProvider({ themeKey, children }: { themeKey: string; childr
     });
   }, [themeKey]);
 
+  const activeTokens = resolved.tokens[scheme];
   return (
-    <ThemeContext.Provider value={resolved}>
-      <div data-theme={resolved.key} style={tokensToCssVars(resolved.tokens)}>
+    <ThemeContext.Provider value={{ key: resolved.key, tokens: activeTokens, slots: resolved.slots }}>
+      <div data-theme={resolved.key} style={tokensToCssVars(activeTokens)}>
         {children}
       </div>
     </ThemeContext.Provider>

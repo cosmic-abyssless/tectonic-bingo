@@ -33,7 +33,7 @@ export function Dialog({
       isOpen={isOpen}
       onOpenChange={(open) => !open && onClose()}
       isDismissable={isDismissable}
-      className="overlay-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="overlay-backdrop fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 p-4"
     >
       <AriaModal className={`overlay-panel w-full ${MAX_WIDTH[size]} max-h-[90vh] overflow-y-auto rounded-lg border border-outline bg-surface shadow-pop`}>
         <AriaDialog className="outline-none">{children}</AriaDialog>

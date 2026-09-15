@@ -32,6 +32,10 @@ export interface ThemeTokens {
     onSurfaceSubtle: string;
     accent: string;
     onAccent: string;
+    button: string;
+    onButton: string;
+    buttonSecondary: string;
+    onButtonSecondary: string;
     ok: string;
     warn: string;
     danger: string;
@@ -41,16 +45,28 @@ export interface ThemeTokens {
   }>;
 }
 
+/** A theme's tokens for one color scheme — see themes/registry.ts's ThemeDefinition/ResolvedTheme. */
+export interface SchemeTokens {
+  light: ThemeTokens;
+  dark: ThemeTokens;
+}
+
 // The neutral theme's tokens — every value themes/default/tokens.ts had.
-export const defaultTokens: ThemeTokens = {
-  tile: {
-    bg: "#101012",
-    border: "#232327",
-    empty: "#0c0c0e",
-    accent: "#a1a1aa",
-    complete: "#4ade80",
-    frozen: "#60a5fa",
-  },
+// tile is identical in both schemes: default theme's board-tile colors
+// don't change with light/dark, only the CSS-cascade-driven chrome does
+// (defaultTheme sets no chrome override at all, in either scheme).
+const DEFAULT_TILE = {
+  bg: "#101012",
+  border: "#232327",
+  empty: "#0c0c0e",
+  accent: "#a1a1aa",
+  complete: "#4ade80",
+  frozen: "#60a5fa",
+};
+
+export const defaultTokens: SchemeTokens = {
+  light: { tile: DEFAULT_TILE },
+  dark: { tile: DEFAULT_TILE },
 };
 
 export function tokensToCssVars(tokens: ThemeTokens): CSSProperties {
@@ -74,6 +90,10 @@ export function tokensToCssVars(tokens: ThemeTokens): CSSProperties {
     onSurfaceSubtle: "--color-on-surface-subtle",
     accent: "--color-accent",
     onAccent: "--color-on-accent",
+    button: "--color-button",
+    onButton: "--color-on-button",
+    buttonSecondary: "--color-button-secondary",
+    onButtonSecondary: "--color-on-button-secondary",
     ok: "--color-ok",
     warn: "--color-warn",
     danger: "--color-danger",

@@ -8,30 +8,40 @@
 @custom-variant expanded (&[data-expanded]);
 
 /*
- * Design tokens. Minimal high-contrast dark: near-black surfaces separated by
- * hairline borders, one accent, mono numerals. Boards keep their own theming
- * via headless tile components, so nothing here assumes tile colours.
+ * Design tokens. Minimal high-contrast surfaces separated by hairline
+ * borders, one accent, mono numerals. Light is the base palette below;
+ * dark overrides live in the two blocks that follow (system-preference
+ * media query, and an explicit [data-color-scheme="dark"] override — see
+ * client/src/core/ui/colorScheme.ts). Boards keep their own theming via
+ * headless tile components, so nothing here assumes tile colours.
  */
 @theme {
-  --color-background: #09090b;
-  --color-surface: #101012;
-  --color-surface-raised: #17171a;
-  --color-surface-hover: #1c1c20;
+  --color-background: #fafafa;
+  --color-surface: #ffffff;
+  --color-surface-raised: #f4f4f5;
+  --color-surface-hover: #e4e4e7;
 
-  --color-outline: #232327;
-  --color-outline-strong: #34343a;
+  --color-outline: #e4e4e7;
+  --color-outline-strong: #d4d4d8;
 
-  --color-on-surface: #fafafa;
-  --color-on-surface-muted: #a1a1aa;
-  --color-on-surface-subtle: #6b6b74;
+  --color-on-surface: #18181b;
+  --color-on-surface-muted: #71717a;
+  --color-on-surface-subtle: #a1a1aa;
 
-  --color-accent: #e4e4e7;
-  --color-on-accent: #09090b;
+  --color-accent: #18181b;
+  --color-on-accent: #fafafa;
 
-  --color-ok: #4ade80;
-  --color-warn: #fbbf24;
-  --color-danger: #f87171;
-  --color-info: #60a5fa;
+  --color-button: #18181b;
+  --color-on-button: #fafafa;
+  --color-button-secondary: #f4f4f5;
+  --color-on-button-secondary: #18181b;
+
+  --color-ok: #16a34a;
+  --color-warn: #b45309;
+  --color-danger: #dc2626;
+  --color-info: #2563eb;
+
+  --color-scrim: #000000; /* modal backdrop — same in both schemes, not overridden below */
 
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -42,9 +52,56 @@
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root:not([data-color-scheme="light"]) {
+    --color-background: #09090b;
+    --color-surface: #101012;
+    --color-surface-raised: #17171a;
+    --color-surface-hover: #1c1c20;
+    --color-outline: #232327;
+    --color-outline-strong: #34343a;
+    --color-on-surface: #fafafa;
+    --color-on-surface-muted: #a1a1aa;
+    --color-on-surface-subtle: #6b6b74;
+    --color-accent: #e4e4e7;
+    --color-on-accent: #09090b;
+    --color-button: #e4e4e7;
+    --color-on-button: #09090b;
+    --color-button-secondary: #17171a;
+    --color-on-button-secondary: #fafafa;
+    --color-ok: #4ade80;
+    --color-warn: #fbbf24;
+    --color-danger: #f87171;
+    --color-info: #60a5fa;
+    color-scheme: dark;
+  }
+}
+:root[data-color-scheme="dark"] {
+  --color-background: #09090b;
+  --color-surface: #101012;
+  --color-surface-raised: #17171a;
+  --color-surface-hover: #1c1c20;
+  --color-outline: #232327;
+  --color-outline-strong: #34343a;
+  --color-on-surface: #fafafa;
+  --color-on-surface-muted: #a1a1aa;
+  --color-on-surface-subtle: #6b6b74;
+  --color-accent: #e4e4e7;
+  --color-on-accent: #09090b;
+  --color-button: #e4e4e7;
+  --color-on-button: #09090b;
+  --color-button-secondary: #17171a;
+  --color-on-button-secondary: #fafafa;
+  --color-ok: #4ade80;
+  --color-warn: #fbbf24;
+  --color-danger: #f87171;
+  --color-info: #60a5fa;
+  color-scheme: dark;
+}
+
 @layer base {
   html {
-    color-scheme: dark;
+    color-scheme: light;
   }
   body {
     @apply bg-background text-on-surface antialiased;

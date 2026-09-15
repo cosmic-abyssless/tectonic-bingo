@@ -1,11 +1,18 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { useColorSchemePreference } from "./colorScheme";
 import { BugReportDialog } from "./BugReportDialog";
 import { Button, IconButton } from "./Button";
 import { Menu, MenuItem, MenuTrigger } from "./Menu";
-import { AlertIcon, ArrowLeftIcon } from "./icons";
+import { AlertIcon, ArrowLeftIcon, CheckIcon, MonitorIcon, MoonIcon, SunIcon } from "./icons";
 import { avatarUrl, displayName } from "./user";
+
+const COLOR_SCHEME_OPTIONS = [
+  { value: "light", label: "Light", icon: SunIcon },
+  { value: "dark", label: "Dark", icon: MoonIcon },
+  { value: "system", label: "System", icon: MonitorIcon },
+] as const;
 
 /**
  * Top bar shared by every page: optional back link, title/subtitle, page
@@ -27,6 +34,7 @@ export function AppHeader({
 }) {
   const { user, logout } = useAuth();
   const [bugReportOpen, setBugReportOpen] = useState(false);
+  const [colorScheme, setColorScheme] = useColorSchemePreference();
   return (
     <header className="sticky top-0 z-20 border-b-[length:var(--control-border-width,1px)] border-outline bg-surface/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-2.5 sm:px-6">
@@ -65,6 +73,15 @@ export function AppHeader({
                   </MenuItem>
                 )}
                 {menuItems}
+                {COLOR_SCHEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+                  <MenuItem key={value} id={`color-scheme-${value}`} className="justify-between" onAction={() => setColorScheme(value)}>
+                    <span className="flex items-center gap-2">
+                      <Icon size={14} />
+                      {label}
+                    </span>
+                    {colorScheme === value && <CheckIcon size={14} />}
+                  </MenuItem>
+                ))}
                 <MenuItem id="logout" onAction={logout}>
                   Log out
                 </MenuItem>

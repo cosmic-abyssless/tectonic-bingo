@@ -190,3 +190,23 @@ export const NoteIcon = (p: IconProps) => (
     <path d="M6 6.5h4M6 9h2.5" />
   </Svg>
 );
+
+export const SunIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="8" cy="8" r="3" />
+    <path d="M8 1.5v1.5M8 13v1.5M2.5 8H4M12 8h1.5M4.05 4.05l1.1 1.1M10.85 10.85l1.1 1.1M11.95 4.05l-1.1 1.1M5.15 10.85l-1.1 1.1" />
+  </Svg>
+);
+
+export const MoonIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M13.5 9.5A5.75 5.75 0 1 1 6.5 2.5a4.5 4.5 0 0 0 7 7z" />
+  </Svg>
+);
+
+export const MonitorIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="2" y="3" width="12" height="8" rx="1" />
+    <path d="M6 13.5h4M8 11v2.5" />
+  </Svg>
+);
