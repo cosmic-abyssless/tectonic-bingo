@@ -23,7 +23,7 @@ export function isBoardLocked(stage: Stage): boolean {
 export const STAGE_LABEL: Record<Stage, string> = {
   planning: "Planning",
   signup: "Signups open",
-  captains: "Picking captains",
+  captains: "Signups closed",
   draft: "Draft",
   reveal: "Board revealed",
   live: "Live",
@@ -718,6 +718,9 @@ export type BroadcastEvent =
   | { type: "stage_changed"; bingoId: string; payload: { stage: Stage } }
   | { type: "draft_started"; bingoId: string; payload: Record<string, never> }
   | { type: "draft_pick"; bingoId: string; payload: { pickNumber: number; teamId: string; userIds: string[] } }
+  // A team lead starred/noted a signup. Other leads of the same team refetch
+  // draft state; the rating itself stays behind GET /draft's auth.
+  | { type: "draft_rating_changed"; bingoId: string; payload: { teamId: string } }
   | { type: "team_updated"; bingoId: string; payload: { teamId: string } }
   // A duo pairing request was created, answered, cancelled, or dissolved, or a
   // signup changed. Clients refetch their own signup/pairing state and the mod

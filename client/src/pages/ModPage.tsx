@@ -40,7 +40,7 @@ const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; unti
   { key: "board", label: "Board", adminOnly: true, until: "reveal" },
   { key: "lines", label: "Lines", adminOnly: true, until: "reveal" },
   { key: "questions", label: "Signup questions", adminOnly: true, until: "signup" },
-  { key: "teams", label: "Teams", adminOnly: true, from: "signup" },
+  { key: "teams", label: "Captains", adminOnly: true, from: "signup" },
   { key: "mods", label: "Moderators", adminOnly: true },
 ];
 type TabDef = (typeof TABS)[number];

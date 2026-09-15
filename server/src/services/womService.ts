@@ -10,9 +10,10 @@
 // persisting each signup's data once, spread naturally over the signup
 // period, sidesteps both. No env var needed — this is unconditionally on.
 import type { AccountType } from "@bingo/shared";
+import { USER_AGENT } from "../config";
 
 const WOM_BASE_URL = "https://api.wiseoldman.net/v2";
-const USER_AGENT = "tectonic-bingo (player stats)";
+const WOM_USER_AGENT = `${USER_AGENT} player stats`;
 
 type FetchLike = typeof fetch;
 
@@ -29,7 +30,7 @@ export class WomClient {
 
     try {
       const res = await this.fetchImpl(`${WOM_BASE_URL}/players/${encodeURIComponent(rsn)}`, {
-        headers: { "User-Agent": USER_AGENT },
+        headers: { "User-Agent": WOM_USER_AGENT },
       });
       if (res.ok) return await res.json();
       if (res.status === 429) {

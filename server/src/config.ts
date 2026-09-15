@@ -6,6 +6,12 @@ import path from "path";
 // destinations and the static `/uploads` route must use this same directory.
 export const UPLOADS_DIR = process.env.UPLOADS_DIR ?? path.join(__dirname, "../uploads");
 
+// Sent on every outbound request to third-party APIs (Wise Old Man, RuneProfile,
+// the OSRS wiki, tectonic-api). WOM's API rules ask for a way to contact the
+// operator and will IP-ban anonymous abusers, so set USER_AGENT_CONTACT to a
+// Discord handle or email for your deploy. Callers append their purpose.
+export const USER_AGENT = `tectonic-bingo/1.0 (+${process.env.USER_AGENT_CONTACT || "https://github.com/cosmic-abyssless/tectonic-bingo"})`;
+
 // Comma-separated Discord user IDs that bootstrap as site admins on login.
 // Granted admins (users.isAdmin) get every site-admin power except granting
 // site admin itself — that stays with the IDs listed here.

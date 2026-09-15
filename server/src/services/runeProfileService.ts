@@ -12,9 +12,10 @@
 // (30 req/min per IP); an optional RUNEPROFILE_API_KEY raises that to
 // 120/min. See https://api.runeprofile.com/v1/docs.
 import type { AccountType } from "@bingo/shared";
+import { USER_AGENT } from "../config";
 
 const RUNEPROFILE_BASE_URL = "https://api.runeprofile.com/v1";
-const USER_AGENT = "tectonic-bingo (player stats)";
+const RUNEPROFILE_USER_AGENT = `${USER_AGENT} player stats`;
 
 type FetchLike = typeof fetch;
 
@@ -31,7 +32,7 @@ export class RuneProfileClient {
     if (Date.now() < this.rateLimitedUntil) return null;
 
     try {
-      const headers: Record<string, string> = { "User-Agent": USER_AGENT };
+      const headers: Record<string, string> = { "User-Agent": RUNEPROFILE_USER_AGENT };
       if (this.apiKey) headers["X-API-Key"] = this.apiKey;
       const res = await this.fetchImpl(`${RUNEPROFILE_BASE_URL}/accounts/${encodeURIComponent(rsn)}/full`, { headers });
       if (res.ok) return await res.json();

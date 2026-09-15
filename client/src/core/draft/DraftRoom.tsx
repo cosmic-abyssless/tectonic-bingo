@@ -141,8 +141,9 @@ function PoolTable({
                         {isPair && i === 0 && <LinkIcon size={14} aria-label="Duo pair" className="mt-1" />}
                       </td>
                     )}
-                    {ratings && (
-                      <td className="py-1 pr-4 align-middle">
+                    {ratings && i === 0 && (
+                      // Pairs are drafted together, so they carry one rating.
+                      <td className="py-1 pr-4 align-middle" rowSpan={unit.entries.length}>
                         <RatingCell rating={ratings[entry.signup.id]} onChange={(r) => onRate(entry.signup.id, r)} />
                       </td>
                     )}
@@ -245,7 +246,7 @@ export function DraftRoom({ slug }: { slug: string }) {
     <div className="mx-auto w-full max-w-5xl space-y-6 px-6 py-6">
       {scouting ? (
         <Notice tone="info">
-          Scouting. Signups are still {shell.bingo.stage === "signup" ? "open" : "being finalised"} — the draft starts once the mods move the bingo to the draft stage.
+          Scouting. Signups are {shell.bingo.stage === "signup" ? "still open" : "closed"} — the draft starts once the mods move the bingo to the draft stage.
           {isLead && " Star and note players now; your team's ratings carry over into the draft."}
         </Notice>
       ) : !state.draftStarted ? (

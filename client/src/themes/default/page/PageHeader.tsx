@@ -45,11 +45,6 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
           Rules
         </Button>
       )}
-      {page.canScout && (
-        <Button size="sm" variant="ghost" onPress={page.actions.goToDraft}>
-          Scout signups
-        </Button>
-      )}
       {page.canViewStats && (
         <Button size="sm" variant="ghost" onPress={page.actions.goToStats}>
           Stats

@@ -20,12 +20,13 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingos, signups, teamMembers, teams } from "../db/schema";
 import { audit } from "../audit/record";
+import { USER_AGENT } from "../config";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type FetchLike = typeof fetch;
 
 const WOM_BASE_URL = "https://api.wiseoldman.net/v2";
-const USER_AGENT = "tectonic-bingo (WOM competitions)";
+const WOM_USER_AGENT = `${USER_AGENT} WOM competitions`;
 
 export interface WomCompetitionTeamInput {
   name: string;
@@ -92,7 +93,7 @@ export class WomCompetitionClient {
     try {
       res = await this.fetchImpl(`${WOM_BASE_URL}${path}`, {
         method,
-        headers: { "Content-Type": "application/json", "User-Agent": USER_AGENT },
+        headers: { "Content-Type": "application/json", "User-Agent": WOM_USER_AGENT },
         body: JSON.stringify(body),
       });
     } catch (err) {

@@ -308,27 +308,41 @@ export function getTeamRatings(db: Db, teamId: string): Record<string, PickRatin
 }
 
 // Stars 0 clears the rating. Only leads of the team may write; the route
-// resolves the caller's team before calling this.
+// resolves the caller's team before calling this. Duo pairs are drafted as
+// one unit, so a rating on either partner is written to both signups.
 export function setPickRating(db: Db, teamId: string, signupId: string, rating: PickRating): void {
   if (!Number.isInteger(rating.stars) || rating.stars < 0 || rating.stars > MAX_RATING_STARS) {
     throw new ServiceError(400, `Stars must be a whole number from 0 to ${MAX_RATING_STARS}`);
   }
   const note = rating.note.trim().slice(0, 200);
   db.transaction((tx) => {
-    const signup = tx.select({ id: signups.id, bingoId: signups.bingoId, rsn: signups.rsn }).from(signups).where(eq(signups.id, signupId)).get();
+    const signup = tx.select({ id: signups.id, bingoId: signups.bingoId, userId: signups.userId, rsn: signups.rsn }).from(signups).where(eq(signups.id, signupId)).get();
     const team = tx.select({ bingoId: teams.bingoId }).from(teams).where(eq(teams.id, teamId)).get();
     if (!signup || !team || signup.bingoId !== team.bingoId) throw new ServiceError(404, "Signup not found");
 
+    const pair = getAcceptedPairs(tx, team.bingoId).find((p) => p.userIds.includes(signup.userId));
+    const partnerUserId = pair?.userIds.find((id) => id !== signup.userId);
+    const partner = partnerUserId
+      ? tx
+          .select({ id: signups.id, rsn: signups.rsn })
+          .from(signups)
+          .where(and(eq(signups.bingoId, team.bingoId), eq(signups.userId, partnerUserId), eq(signups.status, "active")))
+          .get()
+      : undefined;
+    const rated = partner ? [signup, partner] : [signup];
+    const signupIds = rated.map((s) => s.id);
+    const label = rated.map((s) => s.rsn).join(" & ");
+
     const cleared = rating.stars === 0 && !note;
     if (cleared) {
-      const removed = tx.delete(pickRatings).where(and(eq(pickRatings.teamId, teamId), eq(pickRatings.signupId, signupId))).run();
+      const removed = tx.delete(pickRatings).where(and(eq(pickRatings.teamId, teamId), inArray(pickRatings.signupId, signupIds))).run();
       if (removed.changes === 0) {
         markAuditedNoop();
         return;
       }
     } else {
       tx.insert(pickRatings)
-        .values({ teamId, signupId, stars: rating.stars, note })
+        .values(signupIds.map((id) => ({ teamId, signupId: id, stars: rating.stars, note })))
         .onConflictDoUpdate({ target: [pickRatings.teamId, pickRatings.signupId], set: { stars: rating.stars, note, updatedAt: new Date() } })
         .run();
     }
@@ -338,8 +352,8 @@ export function setPickRating(db: Db, teamId: string, signupId: string, rating: 
       action: "draft.rating_set",
       bingoId: team.bingoId,
       teamId,
-      entity: { type: "signup", id: signupId, label: signup.rsn },
-      details: { rsn: signup.rsn, stars: rating.stars, hasNote: note.length > 0, cleared },
+      entity: { type: "signup", id: signupId, label },
+      details: { rsn: label, stars: rating.stars, hasNote: note.length > 0, cleared },
     });
   });
 }

@@ -8,6 +8,7 @@
 // env vars are set, and every method returns null on failure rather than
 // throwing, so consumers degrade to current behavior when tectonic-api is
 // down or unconfigured.
+import { USER_AGENT } from "../config";
 
 export interface TectonicConfig {
   baseUrl: string;
@@ -129,7 +130,7 @@ export class TectonicClient {
 
     let res: Response;
     try {
-      res = await this.fetchImpl(url, { headers: { Authorization: this.cfg.apiKey } });
+      res = await this.fetchImpl(url, { headers: { Authorization: this.cfg.apiKey, "User-Agent": `${USER_AGENT} clan roster` } });
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       console.warn(`[tectonic] request failed: GET ${path}`, reason);

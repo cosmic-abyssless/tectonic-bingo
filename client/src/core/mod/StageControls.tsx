@@ -9,8 +9,8 @@ import { ArrowLeftIcon, ArrowRightIcon } from "../ui/icons";
 // What advancing *into* each stage does, so a mod knows before confirming.
 const ENTER_EFFECT: Record<Stage, string> = {
   planning: "Signups close; the board becomes editable again.",
-  signup: "Players can sign up and edit their answers. New signups are gated on clan membership.",
-  captains: "Signups close. Pick captains from the Teams tab — each captain gets a team.",
+  signup: "Players can sign up and edit their answers. New signups are gated on clan membership. Captains can be picked from the Captains tab as signups come in.",
+  captains: "Signups close and the roster is final. Captains can keep scouting until the draft starts.",
   draft: "Captains can enter the draft room. Start the draft from there once everyone is present.",
   reveal: "Teams and the board become visible to players. The board locks for editing.",
   live: "Submissions open. If no start time is set, the bingo starts now.",
