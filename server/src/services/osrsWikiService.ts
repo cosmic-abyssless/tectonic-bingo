@@ -16,9 +16,10 @@
 // client is expected to fall back to a placeholder on image load failure
 // rather than this service verifying each icon before returning.
 import type { OsrsItemSearchResult } from "@bingo/shared";
+import { USER_AGENT } from "../config";
 
 const WIKI_BASE_URL = "https://oldschool.runescape.wiki";
-const USER_AGENT = "tectonic-bingo (item search)";
+const WIKI_USER_AGENT = `${USER_AGENT} item search`;
 
 type FetchLike = typeof fetch;
 
@@ -51,7 +52,7 @@ export class OsrsWikiClient {
         format: "json",
       });
       const res = await this.fetchImpl(`${WIKI_BASE_URL}/api.php?${params}`, {
-        headers: { "User-Agent": USER_AGENT },
+        headers: { "User-Agent": WIKI_USER_AGENT },
       });
       if (!res.ok) {
         console.warn(`[osrs-wiki] ${res.status} from GET /api.php (search)`);

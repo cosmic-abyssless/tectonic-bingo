@@ -48,6 +48,7 @@ describe("TectonicClient", () => {
     const call = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(String(call[0])).toBe("http://tectonic.test/api/v1/guilds/guild123/leaderboard?limit=1000");
     expect(call[1].headers.Authorization).toBe("secret-key");
+    expect(call[1].headers["User-Agent"]).toMatch(/^tectonic-bingo\//);
   });
 
   it("throws TectonicUnavailableError on a non-2xx response", async () => {
