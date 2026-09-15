@@ -85,9 +85,9 @@ export function BingoPageProvider({
 
   const isViewingOtherTeam = isMod && !!viewingTeamId && viewingTeamId !== myTeam?.id;
   const canSubmit = bingo.stage === "live" && hasStarted && !isViewingOtherTeam && !!viewingTeamId;
-  // Other teams' numbers stay hidden from players until the bingo is over
-  // (the stats endpoint 403s otherwise); mods see them throughout.
-  const canViewStats = isMod || bingo.stage === "complete";
+  // Players see their own team's stats while live and everyone's once the bingo
+  // is over (the stats endpoint 403s otherwise); mods see them throughout.
+  const canViewStats = isMod || bingo.stage === "complete" || (bingo.stage === "live" && !!myTeam);
 
   // Exact branch order as the old BingoPage.tsx: signup -> planning|captains
   // -> draft -> !viewingTeamId -> board.

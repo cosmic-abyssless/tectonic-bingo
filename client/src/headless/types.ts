@@ -216,7 +216,7 @@ export interface BingoPageModel {
   teams: TeamModel[];
   categories: CategoryModel[];
   stageView: StageView;
-  /** Mods always; players only once the bingo is complete (matches the stats endpoint). */
+  /** Mods always; players on a team once live (own team only), everyone once complete (matches the stats endpoint). */
   canViewStats: boolean;
   /** Team leads (and mods) may browse the draft room before the draft stage to rate signups. */
   canScout: boolean;

@@ -102,8 +102,9 @@ router.get(
   }),
 );
 
-// Stats expose every team's progress, so players only get them once the bingo
-// is over; mods can watch throughout.
+// Stats expose every team's progress, so players only get the full picture once
+// the bingo is over; while it's live they see just their own team. Mods can
+// watch everything throughout.
 router.get(
   "/:slug/stats",
   requireAuth,
@@ -111,14 +112,12 @@ router.get(
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
     const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
-    if (!isMod && bingo.stage !== "complete") throw new ServiceError(403, "Stats aren't visible until the bingo is complete");
+    const seesEveryTeam = isMod || bingo.stage === "complete";
+    const myTeam = seesEveryTeam ? null : teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
+    if (!seesEveryTeam && (bingo.stage !== "live" || !myTeam)) throw new ServiceError(403, "Stats aren't visible until the bingo is complete");
 
-    res.json({
-      pointsOverTime: statsService.getPointsOverTime(db, bingo.id),
-      timeline: statsService.getTimeline(db, bingo.id),
-      contributions: statsService.getContributionCounts(db, bingo.id),
-      heatmap: statsService.getTileHeatmap(db, bingo.id),
-    });
+    const stats = statsService.getStats(db, bingo.id);
+    res.json(myTeam ? statsService.filterStatsForTeam(stats, myTeam.id) : stats);
   }),
 );
 

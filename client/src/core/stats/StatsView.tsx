@@ -113,13 +113,15 @@ function Heatmap({ heatmap, tiles, teams }: { heatmap: TileHeatmapCell[]; tiles:
 
   return (
     <div className="space-y-3">
-      <Select aria-label="Team" value={teamId} onChange={(e) => setTeamId(e.target.value)} className="w-auto!">
-        {teams.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.name}
-          </option>
-        ))}
-      </Select>
+      {teams.length > 1 && (
+        <Select aria-label="Team" value={teamId} onChange={(e) => setTeamId(e.target.value)} className="w-auto!">
+          {teams.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </Select>
+      )}
       <div className="grid max-w-md gap-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
         {Array.from({ length: rows }, (_, r) =>
           Array.from({ length: cols }, (_, c) => {
@@ -162,7 +164,10 @@ export function StatsView({ slug }: { slug: string }) {
   if (error) return <div className="py-24 text-center text-sm text-fg-muted">{error.message}</div>;
   if (!shell || !stats) return <div className="py-24 text-center text-sm text-fg-muted">Loading…</div>;
 
-  const teams = shell.teams;
+  // While the bingo is live the server only returns the viewer's own team, so
+  // scope the team list to whatever actually has rows.
+  const statTeamIds = new Set([...stats.heatmap, ...stats.pointsOverTime, ...stats.contributions].map((r) => r.teamId));
+  const teams = shell.teams.filter((t) => statTeamIds.has(t.id));
   const tiles = boardData?.tiles ?? [];
 
   return (
