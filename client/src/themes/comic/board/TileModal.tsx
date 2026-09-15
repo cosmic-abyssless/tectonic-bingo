@@ -38,7 +38,7 @@ export function TileModal({
       isOpen={isOpen}
       onOpenChange={(open) => !open && onClose()}
       isDismissable
-      className="overlay-backdrop fixed inset-0 z-50 overflow-y-auto bg-black/70 p-4"
+      className="overlay-backdrop fixed inset-0 z-50 overflow-y-auto bg-scrim/70 p-4"
     >
       {/* min-h-full + a centering flex child (rather than centering the
           scroll container itself) so tall content — the book plus its
@@ -76,7 +76,8 @@ function TileDetails({
         <img
           src={tile.imageUrl}
           alt={tile.name}
-          className="border-black border-2 absolute -top-28 -left-12 size-36 shrink-0 object-contain -rotate-12"
+          className="border-2 absolute -top-28 -left-12 size-36 shrink-0 object-contain -rotate-12"
+          style={{ borderColor: colors.INK }}
         />
       )}
       <AriaButton
