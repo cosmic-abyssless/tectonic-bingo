@@ -104,7 +104,7 @@ export function useAnalyzeScreenshot(slug: string) {
 export function useReviewSubmission(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (params: { submissionId: string; action: "approve" | "reject"; reviewerNotes?: string }) =>
+    mutationFn: (params: { submissionId: string; action: "approve" | "reject" | "undo"; reviewerNotes?: string }) =>
       api.patch<ReviewSubmissionResponse>(`/api/bingos/${slug}/mod/submissions/${params.submissionId}`, {
         action: params.action,
         reviewerNotes: params.reviewerNotes,

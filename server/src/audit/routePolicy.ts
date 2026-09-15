@@ -18,7 +18,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "PATCH /api/bingos/:slug/teams/:teamId": ["team.updated"],
 
   // routes/mod.ts, mounted at /api/bingos/:slug/mod
-  "PATCH /api/bingos/:slug/mod/submissions/:id": ["submission.approved", "submission.rejected"],
+  "PATCH /api/bingos/:slug/mod/submissions/:id": ["submission.approved", "submission.rejected", "submission.review_undone"],
   "POST /api/bingos/:slug/mod/teams/:teamId/adjustments": ["points.adjusted"],
   "POST /api/bingos/:slug/mod/stage": ["stage.changed"],
   "POST /api/bingos/:slug/mod/draft/start": ["draft.started"],
