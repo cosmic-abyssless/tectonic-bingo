@@ -67,14 +67,50 @@ const comicChromeLight = {
   borderWidth: "2px",
 };
 
+// "Moonlit comic panel": deep purple night instead of yellow paper, pale
+// lavender ink instead of black ink, a gold accent instead of blue (blue
+// reads muddy against purple; gold pops the way a comic "POW!" burst
+// would, and doubles as the button color). Reuses index.css's *original*
+// vibrant ok/warn/danger/info — comic-light only darkened them for its
+// pale surfaces; a dark surface can use the punchy versions directly, the
+// same logic in reverse.
+const comicTileDark = {
+  bg: "#2e1d4f",
+  border: "#e9d5ff",
+  empty: "#1f1338",
+  accent: "#facc15",
+  complete: "#22c55e",
+  frozen: "#38bdf8",
+};
+
+const comicChromeDark = {
+  background: "#1a0f2e",
+  surface: "#241640",
+  surfaceRaised: "#2e1d4f",
+  surfaceHover: "#3a2760",
+  outline: "#c4b5fd",
+  outlineStrong: "#e9d5ff",
+  onSurface: "#f5f0ff",
+  onSurfaceMuted: "#c4b5fd",
+  onSurfaceSubtle: "#8b7aa8",
+  accent: "#facc15",
+  onAccent: "#1a0f2e",
+  button: "#facc15",
+  onButton: "#1a0f2e",
+  buttonSecondary: "#2e1d4f",
+  onButtonSecondary: "#f5f0ff",
+  ok: "#4ade80",
+  warn: "#fbbf24",
+  danger: "#f87171",
+  info: "#60a5fa",
+  borderWidth: "2px",
+};
+
 const comicTheme: ThemeDefinition = {
   key: "comic",
   tokens: {
     light: { tile: comicTileLight, chrome: comicChromeLight },
-    // Comic doesn't have a real dark palette yet — same as light for now,
-    // so the light/dark *toggle* can be verified before a dedicated dark
-    // palette lands (see docs/dark-mode-plan.md Phase 3).
-    dark: { tile: comicTileLight, chrome: comicChromeLight },
+    dark: { tile: comicTileDark, chrome: comicChromeDark },
   },
   slots: {
     BoardPage: BoardPageLayout,
