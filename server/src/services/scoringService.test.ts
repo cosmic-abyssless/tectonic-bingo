@@ -6,7 +6,7 @@ import * as schema from "../db/schema";
 import { claims, submissions } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createTile, createTask, generateLines, updateTileBonusPoints } from "./boardService";
-import { approveSubmission, rejectSubmission } from "./scoringService";
+import { approveSubmission, rejectSubmission, undoSubmissionReview } from "./scoringService";
 
 // Pure engine evaluation (evaluateGraph/awardedPoints) is covered by
 // engine.test.ts. These are integration tests against a real migrated
@@ -246,6 +246,213 @@ describe("audit trail", () => {
     const details = JSON.parse(rows[0]!.details);
     expect(details.reviewerNotes).toBe("not visible");
     expect(details).not.toHaveProperty("pointsDelta");
+  });
+});
+
+describe("undoSubmissionReview", () => {
+  function teamPoints(teamId: string) {
+    return db
+      .select()
+      .from(schema.teamNodeState)
+      .all()
+      .filter((s) => s.teamId === teamId)
+      .reduce((sum, s) => sum + s.pointsAwarded, 0);
+  }
+
+  it("sends an approved submission back to pending, clears the review, and takes the points back", () => {
+    const fx = seedBaseFixture();
+    const task = itemTask(fx.tileId, { points: 20 }, "Bruma torch");
+    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Bruma torch" }]);
+    approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId, reviewerNotes: "gg" });
+    expect(teamPoints(fx.teamId)).toBe(20);
+
+    const result = undoSubmissionReview(db, { submissionId: sub.id, undoneByUserId: fx.modUserId });
+
+    expect(result.previousStatus).toBe("approved");
+    expect(result.submission.status).toBe("pending");
+    expect(result.submission.reviewedAt).toBeNull();
+    expect(result.submission.reviewedByUserId).toBeNull();
+    expect(result.submission.reviewerNotes).toBeNull();
+    expect(result.nodeIds).toEqual([task.id]);
+    // Both the task and the tile's own ALL node were complete; neither is now.
+    expect(result.uncompletedNodeIds.sort()).toEqual([task.id, fx.tileNodeId].sort());
+    expect(result.pointsDelta).toBe(-20);
+    expect(db.select().from(schema.teamNodeState).all()).toHaveLength(0);
+  });
+
+  it("undoing a rejection is a pure status flip — nothing was ever scored", () => {
+    const fx = seedBaseFixture();
+    const task = itemTask(fx.tileId, { points: 20 }, "Drop");
+    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Drop" }]);
+    rejectSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId, reviewerNotes: "no codeword" });
+
+    const result = undoSubmissionReview(db, { submissionId: sub.id, undoneByUserId: fx.modUserId });
+
+    expect(result.previousStatus).toBe("rejected");
+    expect(result.submission.status).toBe("pending");
+    expect(result.submission.reviewerNotes).toBeNull();
+    expect(result.uncompletedNodeIds).toEqual([]);
+    expect(result.pointsDelta).toBe(0);
+    expect(db.select().from(schema.teamNodeState).all()).toHaveLength(0);
+  });
+
+  it("refuses a submission that is still pending, including one already undone", () => {
+    const fx = seedBaseFixture();
+    const task = itemTask(fx.tileId, { points: 20 }, "Drop");
+    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Drop" }]);
+    expect(() => undoSubmissionReview(db, { submissionId: sub.id, undoneByUserId: fx.modUserId })).toThrow(/not been reviewed/);
+
+    approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId });
+    undoSubmissionReview(db, { submissionId: sub.id, undoneByUserId: fx.modUserId });
+    expect(() => undoSubmissionReview(db, { submissionId: sub.id, undoneByUserId: fx.modUserId })).toThrow(/not been reviewed/);
+    expect(() => undoSubmissionReview(db, { submissionId: "nope", undoneByUserId: fx.modUserId })).toThrow(/not found/);
+  });
+
+  it("an undone submission can be reviewed again, and re-approving awards the points again exactly once", () => {
+    const fx = seedBaseFixture();
+    const task = itemTask(fx.tileId, { points: 20 }, "Drop");
+    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Drop" }]);
+    approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId });
+    undoSubmissionReview(db, { submissionId: sub.id, undoneByUserId: fx.modUserId });
+
+    const rejected = rejectSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId });
+    expect(rejected.submission.status).toBe("rejected");
+    expect(teamPoints(fx.teamId)).toBe(0);
+
+    undoSubmissionReview(db, { submissionId: sub.id, undoneByUserId: fx.modUserId });
+    const approved = approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId });
+    expect(approved.pointsDelta).toBe(20);
+    expect(approved.newlyCompletedNodeIds).toContain(task.id);
+    expect(teamPoints(fx.teamId)).toBe(20);
+  });
+
+  it("undoing one of two SUM contributions drops the SUM below target while the other claim still counts", () => {
+    const fx = seedBaseFixture();
+    const task = sumTask(fx.tileId, { points: 40 }, "Cerberus drop", 2);
+    const leafId = task.children[0]!.id;
+    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: leafId, itemName: "Cerberus drop" }]);
+    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: leafId, itemName: "Cerberus drop" }]);
+    approveSubmission(db, { submissionId: sub1.id, reviewedByUserId: fx.modUserId });
+    approveSubmission(db, { submissionId: sub2.id, reviewedByUserId: fx.modUserId });
+    expect(findState(fx.teamId, task.id)?.pointsAwarded).toBe(40);
+
+    const result = undoSubmissionReview(db, { submissionId: sub1.id, undoneByUserId: fx.modUserId });
+
+    expect(result.pointsDelta).toBe(-40);
+    expect(result.uncompletedNodeIds).toContain(task.id);
+    expect(result.uncompletedNodeIds).not.toContain(leafId); // sub2's claim keeps the leaf itself complete
+    expect(findState(fx.teamId, task.id)).toBeUndefined();
+    expect(findState(fx.teamId, leafId)).toBeDefined();
+  });
+
+  it("undoing the gate's approval withholds the gated task's points again without un-completing it", () => {
+    const fx = seedBaseFixture();
+    const task1 = itemTask(fx.tileId, { points: 25 }, "Vorki");
+    const task2 = itemTask(fx.tileId, { points: 35, pointsGateNodeId: task1.id }, "Draconic visage");
+    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task1.id, itemName: "Vorki" }]);
+    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task2.id, itemName: "Draconic visage" }]);
+    approveSubmission(db, { submissionId: sub1.id, reviewedByUserId: fx.modUserId });
+    approveSubmission(db, { submissionId: sub2.id, reviewedByUserId: fx.modUserId });
+    expect(teamPoints(fx.teamId)).toBe(60);
+
+    const result = undoSubmissionReview(db, { submissionId: sub1.id, undoneByUserId: fx.modUserId });
+
+    expect(result.uncompletedNodeIds.sort()).toEqual([task1.id, fx.tileNodeId].sort());
+    expect(result.pointsDelta).toBe(-60); // task1's 25 plus task2's now-withheld 35
+    expect(findState(fx.teamId, task2.id)?.pointsAwarded).toBe(0);
+    expect(teamPoints(fx.teamId)).toBe(0);
+  });
+
+  it("breaking a completed line takes the line bonus back along with the task", () => {
+    const fx = seedBaseFixture();
+    const bingo = db.select().from(schema.bingos).all()[0]!;
+    const tileIds = [fx.tileId, ...[1, 2].map((col) => createTile(db, { bingoId: bingo.id, name: `Tile ${col}`, boardRow: 0, boardCol: col }).id)];
+    // Only row 0 has tiles, so besides the row line, column 1's line holds
+    // just tile 1 and completes/breaks with it — the other columns and both
+    // diagonals stay complete throughout.
+    const lines = generateLines(db, bingo, 42);
+    const row = lines.find((l) => l.lineType === "row" && l.lineIndex === 0)!;
+    const column1 = lines.find((l) => l.lineType === "column" && l.lineIndex === 1)!;
+    const subs = tileIds.map((tid) => {
+      const task = itemTask(tid, { points: 10 }, "Proof");
+      return submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Proof" }]);
+    });
+    for (const sub of subs) approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId });
+    expect(findState(fx.teamId, row.nodeId)?.pointsAwarded).toBe(42);
+    const before = teamPoints(fx.teamId);
+
+    const result = undoSubmissionReview(db, { submissionId: subs[1]!.id, undoneByUserId: fx.modUserId });
+
+    expect(result.uncompletedNodeIds).toContain(row.nodeId);
+    expect(result.uncompletedNodeIds).toContain(column1.nodeId);
+    expect(result.pointsDelta).toBe(-(10 + 42 + 42));
+    expect(findState(fx.teamId, row.nodeId)).toBeUndefined();
+    expect(teamPoints(fx.teamId)).toBe(before - 94);
+  });
+
+  it("takes a full-tile bonus back when the undo leaves the tile incomplete", () => {
+    const fx = seedBaseFixture();
+    updateTileBonusPoints(db, fx.tileId, 50);
+    const task1 = itemTask(fx.tileId, { points: 25 }, "Vorki");
+    const task2 = itemTask(fx.tileId, { points: 35 }, "Draconic visage");
+    const sub1 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task1.id, itemName: "Vorki" }]);
+    const sub2 = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task2.id, itemName: "Draconic visage" }]);
+    approveSubmission(db, { submissionId: sub1.id, reviewedByUserId: fx.modUserId });
+    approveSubmission(db, { submissionId: sub2.id, reviewedByUserId: fx.modUserId });
+    expect(teamPoints(fx.teamId)).toBe(25 + 35 + 50);
+
+    const result = undoSubmissionReview(db, { submissionId: sub2.id, undoneByUserId: fx.modUserId });
+
+    expect(result.uncompletedNodeIds.sort()).toEqual([task2.id, fx.tileNodeId].sort());
+    expect(result.pointsDelta).toBe(-(35 + 50));
+    expect(findState(fx.teamId, fx.tileNodeId)).toBeUndefined();
+    expect(findState(fx.teamId, task1.id)?.pointsAwarded).toBe(25);
+  });
+
+  it("only recomputes the submitting team — another team's state is untouched", () => {
+    const fx = seedBaseFixture();
+    const bingo = db.select().from(schema.bingos).all()[0]!;
+    const [captainB] = db.insert(schema.users).values({ discordId: "captain-b", discordUsername: "captain_b" }).returning().all();
+    const [teamB] = db.insert(schema.teams).values({ bingoId: bingo.id, captainUserId: captainB.id, name: "Team B", codeword: "other-word" }).returning().all();
+    const task = itemTask(fx.tileId, { points: 20 }, "Drop");
+    const subA = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Drop" }]);
+    const subB = submitAndReturn(teamB.id, captainB.id, [{ nodeId: task.id, itemName: "Drop" }]);
+    approveSubmission(db, { submissionId: subA.id, reviewedByUserId: fx.modUserId });
+    approveSubmission(db, { submissionId: subB.id, reviewedByUserId: fx.modUserId });
+
+    undoSubmissionReview(db, { submissionId: subA.id, undoneByUserId: fx.modUserId });
+
+    expect(teamPoints(fx.teamId)).toBe(0);
+    expect(teamPoints(teamB.id)).toBe(20);
+    expect(findState(teamB.id, task.id)?.pointsAwarded).toBe(20);
+  });
+
+  it("records submission.review_undone with the previous decision, what got un-completed, and the points lost", () => {
+    const fx = seedBaseFixture();
+    const task = itemTask(fx.tileId, { points: 20 }, "Bruma torch");
+    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Bruma torch" }]);
+    approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId, reviewerNotes: "looks good" });
+
+    undoSubmissionReview(db, { submissionId: sub.id, undoneByUserId: fx.modUserId });
+
+    const rows = db.select().from(schema.auditLog).all().filter((r) => r.action === "submission.review_undone");
+    expect(rows).toHaveLength(1);
+    const row = rows[0]!;
+    expect(row.teamId).toBe(fx.teamId);
+    expect(row.actorUserId).toBe(fx.modUserId);
+    expect(row.entityId).toBe(sub.id);
+    const details = JSON.parse(row.details);
+    expect(details).toMatchObject({
+      tileName: "Test Tile",
+      taskLabels: ["Task"],
+      nodeIds: [task.id],
+      previousStatus: "approved",
+      previousReviewerNotes: "looks good",
+      previousReviewedByUserId: fx.modUserId,
+      pointsDelta: -20,
+      submittedByUserId: fx.memberUserId,
+    });
+    expect(details.uncompletedNodeIds.sort()).toEqual([task.id, fx.tileNodeId].sort());
   });
 });
 

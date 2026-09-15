@@ -13,7 +13,7 @@ import * as devSeedService from "../services/devSeedService";
 import * as teamService from "../services/teamService";
 import { syncWomCompetitionAfterDraft } from "../services/womCompetitionService";
 import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
-import { approveSubmission, rejectSubmission } from "../services/scoringService";
+import { approveSubmission, rejectSubmission, undoSubmissionReview } from "../services/scoringService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
 import { queryAuditLog } from "../audit/query";
@@ -43,7 +43,7 @@ router.patch(
     const submission = submissionService.getSubmissionById(db, submissionId);
     if (!submission) throw new ServiceError(404, "Submission not found");
 
-    const { action, reviewerNotes } = req.body as { action?: "approve" | "reject"; reviewerNotes?: string };
+    const { action, reviewerNotes } = req.body as { action?: "approve" | "reject" | "undo"; reviewerNotes?: string };
 
     if (action === "approve") {
       const result = approveSubmission(db, { submissionId, reviewedByUserId: req.user!.id, reviewerNotes });
@@ -67,7 +67,18 @@ router.patch(
       return;
     }
 
-    throw new ServiceError(400, 'action must be "approve" or "reject"');
+    if (action === "undo") {
+      const result = undoSubmissionReview(db, { submissionId, undoneByUserId: req.user!.id });
+      broadcast({
+        type: "submission_reviewed",
+        bingoId: req.bingo!.id,
+        payload: { teamId: submission.teamId, nodeIds: result.nodeIds },
+      });
+      res.json(result);
+      return;
+    }
+
+    throw new ServiceError(400, 'action must be "approve", "reject" or "undo"');
   }),
 );
 

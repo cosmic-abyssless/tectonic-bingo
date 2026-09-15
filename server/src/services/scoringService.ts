@@ -150,3 +150,76 @@ export function rejectSubmission(db: Db, params: RejectSubmissionParams): { subm
     return { submission: updatedSubmission, nodeIds };
   });
 }
+
+export interface UndoSubmissionReviewParams {
+  submissionId: string;
+  undoneByUserId: string;
+}
+
+export interface UndoSubmissionReviewResult {
+  submission: typeof submissions.$inferSelect;
+  nodeIds: string[];
+  previousStatus: "approved" | "rejected";
+  // Nodes that were complete before the undo and aren't any more. Always
+  // empty when the submission had been rejected (its claims never counted).
+  uncompletedNodeIds: string[];
+  // Zero or negative: points the team loses because of the undo.
+  pointsDelta: number;
+}
+
+// Sends a reviewed submission back to pending so it can be re-reviewed. The
+// reviewer fields are cleared (a pending submission has no review); the
+// previous decision survives in the audit entry. Undoing an approval is the
+// same full recompute approval is — the graph is re-evaluated against
+// whatever approved claims remain, so gated points, SUM tallies, lines and
+// tile bonuses all settle on their own.
+export function undoSubmissionReview(db: Db, params: UndoSubmissionReviewParams): UndoSubmissionReviewResult {
+  return db.transaction((tx): UndoSubmissionReviewResult => {
+    const submission = tx.select().from(submissions).where(eq(submissions.id, params.submissionId)).get();
+    if (!submission) throw new ServiceError(404, "Submission not found");
+    if (submission.status === "pending") throw new ServiceError(409, "Submission has not been reviewed");
+    const previousStatus = submission.status;
+    const team = tx.select().from(teams).where(eq(teams.id, submission.teamId)).get()!;
+
+    tx.update(submissions)
+      .set({ status: "pending", reviewedAt: null, reviewedByUserId: null, reviewerNotes: null, updatedAt: new Date() })
+      .where(eq(submissions.id, submission.id))
+      .run();
+
+    const nodeIds = getSubmissionNodeIds(tx, submission.id);
+    let uncompletedNodeIds: string[] = [];
+    let pointsDelta = 0;
+    if (previousStatus === "approved") {
+      const before = tx.select().from(teamNodeState).where(eq(teamNodeState.teamId, submission.teamId)).all();
+      const beforePoints = before.reduce((sum, r) => sum + r.pointsAwarded, 0);
+      const after = rebuildTeamState(tx, submission.teamId);
+      const afterPoints = [...after.values()].reduce((sum, s) => sum + s.pointsAwarded, 0);
+      uncompletedNodeIds = before.map((r) => r.nodeId).filter((id) => !after.has(id));
+      pointsDelta = afterPoints - beforePoints;
+    }
+
+    const updatedSubmission = tx.select().from(submissions).where(eq(submissions.id, submission.id)).get()!;
+
+    const { tileName, taskLabels } = describeSubmissionTarget(tx, team.bingoId, nodeIds);
+    audit(tx, {
+      action: "submission.review_undone",
+      bingoId: team.bingoId,
+      entity: { type: "submission", id: submission.id, label: tileName },
+      teamId: submission.teamId,
+      details: {
+        tileName,
+        taskLabels,
+        nodeIds,
+        previousStatus,
+        previousReviewerNotes: submission.reviewerNotes,
+        previousReviewedByUserId: submission.reviewedByUserId,
+        uncompletedNodeIds,
+        pointsDelta,
+        submittedByUserId: submission.submittedByUserId,
+      },
+      actor: { userId: params.undoneByUserId },
+    });
+
+    return { submission: updatedSubmission, nodeIds, previousStatus, uncompletedNodeIds, pointsDelta };
+  });
+}

@@ -397,7 +397,9 @@ export interface ReviewSubmissionResponse {
   nodeIds: string[];
   /** Nodes (any kind, anywhere in the graph) newly completed by this approval. Empty/absent on reject. */
   newlyCompletedNodeIds?: string[];
-  /** Sum of points newly awarded by this approval. */
+  /** Nodes that stopped being complete when an approval was undone. Absent on approve/reject. */
+  uncompletedNodeIds?: string[];
+  /** Net points change: positive on approve, zero or negative on undo, absent on reject. */
   pointsDelta?: number;
 }
 
