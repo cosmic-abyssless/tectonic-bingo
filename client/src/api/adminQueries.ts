@@ -1,4 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import type { AuditLogFilters, AuditLogResponse } from "@bingo/shared";
+import { api } from "./client";
+import { auditLogQueryString } from "./queries";
 import * as adminApi from "./adminApi";
 
 export const adminQueryKeys = {
@@ -8,10 +11,32 @@ export const adminQueryKeys = {
   userSearch: (scope: string, q: string) => ["adminUserSearch", scope, q] as const,
   captainCandidates: (slug: string) => ["adminCaptainCandidates", slug] as const,
   itemGroups: ["adminItemGroups"] as const,
+  bugReports: ["adminBugReports"] as const,
+  siteAuditLog: (bingoScope: string | null | "all", filters: AuditLogFilters) => ["siteAuditLog", bingoScope, filters] as const,
 };
+
+// The site-wide audit log — every bingo, or just site-level entries
+// (bingoScope: null), or one specific bingo (bingoScope: its id).
+export function useSiteAuditLog(bingoScope: string | null | "all", filters: AuditLogFilters = {}) {
+  return useInfiniteQuery({
+    queryKey: adminQueryKeys.siteAuditLog(bingoScope, filters),
+    queryFn: ({ pageParam }) => {
+      const qs = auditLogQueryString(filters, pageParam);
+      if (bingoScope === "all") return api.get<AuditLogResponse>(`/api/admin/audit-log${qs}`);
+      const bingoParam = `bingoId=${bingoScope === null ? "null" : bingoScope}`;
+      return api.get<AuditLogResponse>(`/api/admin/audit-log${qs}${qs ? "&" : "?"}${bingoParam}`);
+    },
+    initialPageParam: undefined as number | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+  });
+}
 
 export function useItemGroups() {
   return useQuery({ queryKey: adminQueryKeys.itemGroups, queryFn: () => adminApi.getItemGroups() });
+}
+
+export function useBugReports() {
+  return useQuery({ queryKey: adminQueryKeys.bugReports, queryFn: () => adminApi.getBugReports() });
 }
 
 export function useMods(slug: string) {

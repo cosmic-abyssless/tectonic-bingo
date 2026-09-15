@@ -8,6 +8,8 @@ import * as adminApi from "../api/adminApi";
 import { optimisticUpdate } from "../api/optimistic";
 import { UserSearchInput } from "../core/admin/UserSearchInput";
 import { ItemGroupsPanel } from "../core/admin/ItemGroupsPanel";
+import { BugReportsPanel } from "../core/admin/BugReportsPanel";
+import { SiteAuditLog } from "../core/admin/SiteAuditLog";
 import { displayName } from "../core/ui/user";
 import { AppHeader } from "../core/ui/AppHeader";
 import { Button, IconButton } from "../core/ui/Button";
@@ -289,12 +291,21 @@ export function SiteAdminPage() {
   return (
     <div className="min-h-screen bg-bg text-fg">
       <AppHeader back={{ to: "/", label: "All bingos" }} title="Site admin" />
-      <main className="mx-auto flex w-full max-w-6xl flex-wrap items-start gap-6 px-6 py-6">
-        <CreateBingoForm />
-        <ImportBingoPanel />
-        <BingosPanel />
-        {canGrantAdmin && <GrantAdminPanel />}
-        <ItemGroupsPanel />
+      <main className="mx-auto w-full max-w-6xl space-y-6 px-6 py-6">
+        <div className="flex flex-wrap items-start gap-6">
+          <CreateBingoForm />
+          <ImportBingoPanel />
+          <BingosPanel />
+          {canGrantAdmin && <GrantAdminPanel />}
+          <ItemGroupsPanel />
+          <BugReportsPanel />
+        </div>
+        <Card className="w-full">
+          <CardHeader title="Site-wide audit log" description="Every site-level action, across every bingo." />
+          <div className="p-5">
+            <SiteAuditLog />
+          </div>
+        </Card>
       </main>
     </div>
   );

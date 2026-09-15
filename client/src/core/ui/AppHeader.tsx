@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { Button } from "./Button";
+import { BugReportDialog } from "./BugReportDialog";
+import { Button, IconButton } from "./Button";
 import { Menu, MenuItem, MenuTrigger } from "./Menu";
-import { ArrowLeftIcon } from "./icons";
+import { AlertIcon, ArrowLeftIcon } from "./icons";
 import { avatarUrl, displayName } from "./user";
 
 /**
@@ -25,6 +26,7 @@ export function AppHeader({
   children?: ReactNode;
 }) {
   const { user, logout } = useAuth();
+  const [bugReportOpen, setBugReportOpen] = useState(false);
   return (
     <header className="sticky top-0 z-20 border-b-[length:var(--control-border-width,1px)] border-line bg-surface/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-2.5 sm:px-6">
@@ -42,6 +44,14 @@ export function AppHeader({
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {children}
+          {user && (
+            <>
+              <IconButton label="Report a bug" size="sm" onPress={() => setBugReportOpen(true)}>
+                <AlertIcon />
+              </IconButton>
+              <BugReportDialog isOpen={bugReportOpen} onClose={() => setBugReportOpen(false)} />
+            </>
+          )}
           {user && (
             <MenuTrigger>
               <Button variant="ghost" size="sm" aria-label="Account menu" className="pl-1.5">

@@ -364,7 +364,7 @@ export function useStats(slug: string | undefined) {
   });
 }
 
-function auditLogQueryString(filters: AuditLogFilters, cursor?: number): string {
+export function auditLogQueryString(filters: AuditLogFilters, cursor?: number): string {
   const params = new URLSearchParams();
   if (filters.action?.length) params.set("action", filters.action.join(","));
   if (filters.category?.length) params.set("category", filters.category.join(","));
