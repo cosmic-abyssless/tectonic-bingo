@@ -210,3 +210,16 @@ export const MonitorIcon = (p: IconProps) => (
     <path d="M6 13.5h4M8 11v2.5" />
   </Svg>
 );
+
+// Standard "software bug" glyph (a beetle: head, segmented body, legs,
+// antennae) rather than a generic warning triangle — used for the bug
+// report action specifically.
+export const BugIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="8" cy="4.2" r="1.3" />
+    <path d="M6.9 3.1L5.6 1.8M9.1 3.1l1.3-1.3M8 5.5v1.2" />
+    <ellipse cx="8" cy="10.2" rx="3.4" ry="4.2" />
+    <path d="M4.6 8.3h6.8M4.6 12.1h6.8" />
+    <path d="M4.6 7.2H2M11.4 7.2H14M4.3 10.2H1.5M11.7 10.2h2.8M4.8 13.2L2.8 15M11.2 13.2l2 1.8" />
+  </Svg>
+);

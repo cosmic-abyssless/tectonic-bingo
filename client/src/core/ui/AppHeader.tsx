@@ -5,7 +5,7 @@ import { useColorSchemePreference } from "./colorScheme";
 import { BugReportDialog } from "./BugReportDialog";
 import { Button, IconButton } from "./Button";
 import { Menu, MenuItem, MenuTrigger } from "./Menu";
-import { AlertIcon, ArrowLeftIcon, CheckIcon, MonitorIcon, MoonIcon, SunIcon } from "./icons";
+import { ArrowLeftIcon, BugIcon, CheckIcon, MonitorIcon, MoonIcon, SunIcon } from "./icons";
 import { avatarUrl, displayName } from "./user";
 
 const COLOR_SCHEME_OPTIONS = [
@@ -55,7 +55,7 @@ export function AppHeader({
           {user && (
             <>
               <IconButton label="Report a bug" size="sm" onPress={() => setBugReportOpen(true)}>
-                <AlertIcon />
+                <BugIcon />
               </IconButton>
               <BugReportDialog isOpen={bugReportOpen} onClose={() => setBugReportOpen(false)} />
             </>

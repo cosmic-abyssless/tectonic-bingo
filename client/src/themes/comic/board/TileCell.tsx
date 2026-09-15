@@ -3,8 +3,10 @@ import type { TileModel } from "../../../headless/types";
 import { formatCountdown } from "../../../core/ui/time";
 import { TASK_STATUS_DOT } from "../../../core/ui/StatusBadge";
 import { CheckIcon, ClockIcon, LockIcon } from "../../../core/ui/icons";
+import { useResolvedColorScheme } from "../../../core/ui/colorScheme";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { getContrastTextColor, useDominantColor } from "../useDominantColor";
+import { getColors } from "./colors";
 
 /*
  * A little comic book sitting on the tile, cracked open just enough to show
@@ -25,6 +27,8 @@ export const TileCell = memo(function TileCell({
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const scheme = useResolvedColorScheme();
+  const colors = getColors(scheme);
   const dominantColor = useDominantColor(
     tile.imageUrl && !imgFailed ? tile.imageUrl : null,
   );
@@ -32,6 +36,11 @@ export const TileCell = memo(function TileCell({
   // the tile *modal*'s book-page purple) so a no-image tile's cover reads as
   // the same charcoal/cream as the rest of the board, not a separate hue.
   const coverColor = dominantColor ?? "var(--tile-bg)";
+  // The two page-stack slivers (unlike the cover above) keep colors.ts's
+  // purple/plum PAPER family — a little of the modal's "moonlit" book
+  // identity peeking out from behind the charcoal cover, rather than
+  // blending into it.
+  const tickColor = scheme === "dark" ? "rgba(233,213,255,0.35)" : "rgba(0,0,0,0.22)";
   // The price badge sits directly on the cover with no fill of its own, so
   // its own color (border + text) has to adapt to whatever that cover
   // color turns out to be, not the other way around.
@@ -123,7 +132,7 @@ export const TileCell = memo(function TileCell({
             className="absolute overflow-hidden rounded-[3px] border-2"
             style={{
               inset: "2px -2px -3px 0",
-              backgroundColor: "var(--tile-empty)",
+              backgroundColor: colors.PAPER_ALT,
               borderColor: "var(--tile-border)",
             }}
           />
@@ -141,7 +150,7 @@ export const TileCell = memo(function TileCell({
             className="absolute overflow-hidden rounded-[3px] border-2 transition-transform duration-200 [transform:rotateY(-7.5deg)] group-hover:[transform:rotateY(-11.5deg)] group-focus:[transform:rotateY(-11.5deg)] group-data-[search-highlighted]:[transform:rotateY(-11.5deg)]"
             style={{
               inset: "1px -1px -1.5px 0",
-              backgroundColor: "var(--tile-bg)",
+              backgroundColor: colors.PAPER,
               borderColor: "var(--tile-border)",
               transformOrigin: "left center",
             }}
@@ -149,8 +158,7 @@ export const TileCell = memo(function TileCell({
             <div
               className="absolute inset-y-1 right-0 w-2.5"
               style={{
-                backgroundImage:
-                  "repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, rgba(0,0,0,0.22) 3px, rgba(0,0,0,0.22) 4px)",
+                backgroundImage: `repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, ${tickColor} 3px, ${tickColor} 4px)`,
               }}
             />
           </div>
