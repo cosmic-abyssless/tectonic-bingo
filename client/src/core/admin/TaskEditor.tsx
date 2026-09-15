@@ -86,24 +86,24 @@ export function TaskEditor({
   const withholdsPoints = task.pointsGateNodeId != null;
 
   return (
-    <div className="overflow-hidden rounded-md border border-line bg-bg">
+    <div className="overflow-hidden rounded-md border border-outline bg-background">
       <button
         type="button"
         aria-label={`${expanded ? "Collapse" : "Expand"} task: ${task.label}`}
         onClick={() => setExpanded((e) => !e)}
         className="flex h-10 w-full items-center justify-between px-3 text-left transition-colors hover:bg-surface-hover"
       >
-        <span className="text-sm font-medium text-fg">
+        <span className="text-sm font-medium text-on-surface">
           {task.label}{" "}
-          <span className="font-normal text-fg-subtle">
+          <span className="font-normal text-on-surface-subtle">
             — <span className="num">{task.points}</span> pts{isManual ? " · manual" : ""}
           </span>
         </span>
-        <span className="text-fg-subtle">{expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
+        <span className="text-on-surface-subtle">{expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
       </button>
 
       {expanded && (
-        <div className="space-y-4 border-t border-line px-3 py-3" onClick={(e) => e.stopPropagation()}>
+        <div className="space-y-4 border-t border-outline px-3 py-3" onClick={(e) => e.stopPropagation()}>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Label">
               <Input defaultValue={task.label ?? ""} onBlur={(e) => patch({ label: e.target.value })} />
@@ -118,7 +118,7 @@ export function TaskEditor({
           </Field>
 
           <Field label="Scoring mode" as="div">
-            <div className="flex w-fit overflow-hidden rounded-md border border-line-strong">
+            <div className="flex w-fit overflow-hidden rounded-md border border-outline-strong">
               {(
                 [
                   ["Automatic", false],
@@ -129,8 +129,8 @@ export function TaskEditor({
                   key={label}
                   type="button"
                   onClick={() => patch({ kind: manual ? "MANUAL" : "ALL", children: [] })}
-                  className={`h-8 px-3 text-xs font-medium transition-colors ${i > 0 ? "border-l border-line-strong" : ""} ${
-                    isManual === manual ? "bg-accent text-accent-fg" : "bg-bg text-fg-muted hover:text-fg"
+                  className={`h-8 px-3 text-xs font-medium transition-colors ${i > 0 ? "border-l border-outline-strong" : ""} ${
+                    isManual === manual ? "bg-accent text-on-accent" : "bg-background text-on-surface-muted hover:text-on-surface"
                   }`}
                 >
                   {label}
@@ -140,15 +140,15 @@ export function TaskEditor({
           </Field>
 
           <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-            <label title="Can't submit until the previous task is completed" className="flex items-center gap-2 text-xs text-fg-muted">
+            <label title="Can't submit until the previous task is completed" className="flex items-center gap-2 text-xs text-on-surface-muted">
               <input type="checkbox" checked={requiresPrevious} disabled={!previousTaskId} onChange={(e) => patch({ submitGateNodeId: e.target.checked ? previousTaskId : null })} className={CHECKBOX} />
               Requires previous task
             </label>
-            <label title="Can complete early, but points stay 0 until the previous task completes" className="flex items-center gap-2 text-xs text-fg-muted">
+            <label title="Can complete early, but points stay 0 until the previous task completes" className="flex items-center gap-2 text-xs text-on-surface-muted">
               <input type="checkbox" checked={withholdsPoints} disabled={!previousTaskId} onChange={(e) => patch({ pointsGateNodeId: e.target.checked ? previousTaskId : null })} className={CHECKBOX} />
               Withhold points until previous
             </label>
-            <label title="Player may submit an empty-state screenshot beforehand" className="flex items-center gap-2 text-xs text-fg-muted">
+            <label title="Player may submit an empty-state screenshot beforehand" className="flex items-center gap-2 text-xs text-on-surface-muted">
               <input type="checkbox" checked={task.allowsPreLoad} onChange={(e) => patch({ allowsPreLoad: e.target.checked })} className={CHECKBOX} />
               Allows pre-load screenshot
             </label>

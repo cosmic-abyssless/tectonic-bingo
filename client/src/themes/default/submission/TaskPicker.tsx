@@ -8,14 +8,14 @@ export function TaskPicker({ task }: { task: SubmissionFlowModel["task"] }) {
     <>
       {task.options.length > 1 && (
         <Field label="Task" as="div">
-          <div className="flex overflow-hidden rounded-md border border-line-strong">
+          <div className="flex overflow-hidden rounded-md border border-outline-strong">
             {task.options.map((option, i) => (
               <button
                 key={option.id}
                 type="button"
                 onClick={() => task.select(option.id)}
-                className={`h-10 flex-1 text-sm font-medium transition-colors ${i > 0 ? "border-l border-line-strong" : ""} ${
-                  task.selectedId === option.id ? "bg-accent text-accent-fg" : "bg-bg text-fg-muted hover:text-fg"
+                className={`h-10 flex-1 text-sm font-medium transition-colors ${i > 0 ? "border-l border-outline-strong" : ""} ${
+                  task.selectedId === option.id ? "bg-accent text-on-accent" : "bg-background text-on-surface-muted hover:text-on-surface"
                 }`}
               >
                 {option.label}
@@ -26,7 +26,7 @@ export function TaskPicker({ task }: { task: SubmissionFlowModel["task"] }) {
       )}
 
       {task.autoSelected && task.current && (
-        <p className="flex items-center gap-2 text-sm text-fg-muted">
+        <p className="flex items-center gap-2 text-sm text-on-surface-muted">
           <CheckIcon className="text-ok" />
           Submitting for {task.current.label}
         </p>

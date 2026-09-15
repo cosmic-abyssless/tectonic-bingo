@@ -8,7 +8,7 @@ import { Select } from "../ui/Field";
 const FALLBACK_TEAM_COLOR = "#a1a1aa";
 
 function Empty({ children }: { children: string }) {
-  return <p className="text-sm text-fg-subtle">{children}</p>;
+  return <p className="text-sm text-on-surface-subtle">{children}</p>;
 }
 
 function PointsChart({ points, teams }: { points: PointsOverTimePoint[]; teams: Team[] }) {
@@ -35,8 +35,8 @@ function PointsChart({ points, teams }: { points: PointsOverTimePoint[]; teams: 
 
   return (
     <div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full rounded-md border border-line bg-bg">
-        <line x1={pad} y1={y(0)} x2={width - pad} y2={y(0)} stroke="var(--color-line-strong)" strokeWidth={1} />
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full rounded-md border border-outline bg-background">
+        <line x1={pad} y1={y(0)} x2={width - pad} y2={y(0)} stroke="var(--color-outline-strong)" strokeWidth={1} />
         {[...byTeam.entries()].map(([teamId, series]) => {
           const team = teams.find((t) => t.id === teamId);
           const color = team?.color ?? FALLBACK_TEAM_COLOR;
@@ -55,7 +55,7 @@ function PointsChart({ points, teams }: { points: PointsOverTimePoint[]; teams: 
         {[...byTeam.keys()].map((teamId) => {
           const team = teams.find((t) => t.id === teamId);
           return (
-            <span key={teamId} className="flex items-center gap-1.5 text-xs text-fg-muted">
+            <span key={teamId} className="flex items-center gap-1.5 text-xs text-on-surface-muted">
               <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: team?.color ?? FALLBACK_TEAM_COLOR }} />
               {team?.name ?? "Unknown team"}
             </span>
@@ -72,8 +72,8 @@ function TimelineList({ events }: { events: TimelineEvent[] }) {
   return (
     <ol className="max-h-96 space-y-1.5 overflow-y-auto pr-1 text-sm">
       {sorted.map((e, i) => (
-        <li key={i} className="flex items-start gap-2 text-fg-muted">
-          <span className="num mt-0.5 shrink-0 text-xs text-fg-subtle">{new Date(e.at).toLocaleString()}</span>
+        <li key={i} className="flex items-start gap-2 text-on-surface-muted">
+          <span className="num mt-0.5 shrink-0 text-xs text-on-surface-subtle">{new Date(e.at).toLocaleString()}</span>
           <span>{e.label}</span>
         </li>
       ))}
@@ -88,12 +88,12 @@ function ContributionList({ contributions, teams }: { contributions: Contributio
       {contributions.map((c, i) => {
         const team = teams.find((t) => t.id === c.teamId);
         return (
-          <li key={c.userId} className="flex items-center justify-between text-fg-muted">
+          <li key={c.userId} className="flex items-center justify-between text-on-surface-muted">
             <span>
-              <span className="num text-fg-subtle">#{i + 1}</span> <span className="text-fg">{displayName(c.user)}</span>{" "}
-              <span className="text-fg-subtle">— {team?.name ?? "Unknown team"}</span>
+              <span className="num text-on-surface-subtle">#{i + 1}</span> <span className="text-on-surface">{displayName(c.user)}</span>{" "}
+              <span className="text-on-surface-subtle">— {team?.name ?? "Unknown team"}</span>
             </span>
-            <span className="num shrink-0 font-semibold text-fg">{c.approvedSubmissions}</span>
+            <span className="num shrink-0 font-semibold text-on-surface">{c.approvedSubmissions}</span>
           </li>
         );
       })}
@@ -133,7 +133,7 @@ function Heatmap({ heatmap, tiles, teams }: { heatmap: TileHeatmapCell[]; tiles:
               <div
                 key={tile.id}
                 title={`${tile.name}: ${cell?.completedTasks ?? 0}/${cell?.totalTasks ?? 0} tasks`}
-                className="flex aspect-square items-center justify-center overflow-hidden rounded-sm border border-line px-0.5 text-center text-[9px] leading-tight text-fg"
+                className="flex aspect-square items-center justify-center overflow-hidden rounded-sm border border-outline px-0.5 text-center text-[9px] leading-tight text-on-surface"
                 // Team colour at 8% opacity for untouched tiles, ramping to ~85% when complete.
                 style={{ backgroundColor: `color-mix(in srgb, ${teamColor} ${Math.round(8 + frac * 77)}%, transparent)` }}
               >
@@ -161,8 +161,8 @@ export function StatsView({ slug }: { slug: string }) {
   const { data: stats, error } = useStats(slug);
   const { data: boardData } = useBoard(slug);
 
-  if (error) return <div className="py-24 text-center text-sm text-fg-muted">{error.message}</div>;
-  if (!shell || !stats) return <div className="py-24 text-center text-sm text-fg-muted">Loading…</div>;
+  if (error) return <div className="py-24 text-center text-sm text-on-surface-muted">{error.message}</div>;
+  if (!shell || !stats) return <div className="py-24 text-center text-sm text-on-surface-muted">Loading…</div>;
 
   // While the bingo is live the server only returns the viewer's own team, so
   // scope the team list to whatever actually has rows.

@@ -8,7 +8,7 @@ import { LockIcon } from "./icons";
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
 
-  if (loading) return <div className="flex min-h-screen items-center justify-center bg-bg text-sm text-fg-muted">Loading…</div>;
+  if (loading) return <div className="flex min-h-screen items-center justify-center bg-background text-sm text-on-surface-muted">Loading…</div>;
   if (!user) return <Navigate to="/login" replace />;
   // Mirrors the server's requireGuildMember: every bingo route 403s for
   // these users, so explain why instead of showing a broken page.

@@ -44,13 +44,13 @@ export function ModsManager({ slug }: { slug: string }) {
         <UserSearchInput scope={slug} onSelect={add} />
       </Field>
       <div>
-        <p className="mb-2 text-sm font-medium text-fg">
-          Current moderators <span className="num text-fg-subtle">({data?.mods.length ?? 0})</span>
+        <p className="mb-2 text-sm font-medium text-on-surface">
+          Current moderators <span className="num text-on-surface-subtle">({data?.mods.length ?? 0})</span>
         </p>
-        <ul className="divide-y divide-line rounded-md border border-line bg-surface">
+        <ul className="divide-y divide-outline rounded-md border border-outline bg-surface">
           {data?.mods.map((mod) => (
             <li key={mod.id} className="flex items-center justify-between px-3 py-2 text-sm">
-              <span className="text-fg">{displayName(mod.user)}</span>
+              <span className="text-on-surface">{displayName(mod.user)}</span>
               <Button variant="ghost" size="sm" className="text-danger" onPress={() => remove(mod.userId)}>
                 Remove
               </Button>

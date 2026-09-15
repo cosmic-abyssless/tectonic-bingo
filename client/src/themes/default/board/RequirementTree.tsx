@@ -6,7 +6,7 @@ function Check() {
 }
 
 function rowClass(dim: boolean, submitted: boolean) {
-  return `flex items-baseline gap-2 text-sm ${dim ? "text-fg-subtle line-through" : submitted ? "text-fg-muted" : "text-fg"}`;
+  return `flex items-baseline gap-2 text-sm ${dim ? "text-on-surface-subtle line-through" : submitted ? "text-on-surface-muted" : "text-on-surface"}`;
 }
 
 // A leaf (ITEM or SUM) row — the model already carries dim/submitted/
@@ -15,7 +15,7 @@ function rowClass(dim: boolean, submitted: boolean) {
 function LeafOrSumRow({ node }: { node: RequirementNodeModel }) {
   return (
     <li className={rowClass(node.dim, node.submitted)}>
-      <span className="text-fg-subtle">·</span>
+      <span className="text-on-surface-subtle">·</span>
       {node.progress && (
         <span className={`num text-xs font-medium ${node.complete ? "text-ok" : "text-warn"}`}>
           {node.progress.current}/{node.progress.target}
@@ -36,9 +36,9 @@ export function RequirementTree({ node, root }: { node: RequirementNodeModel; ro
     );
   }
   return (
-    <div className={root ? "" : "ml-2 border-l border-line pl-3"}>
+    <div className={root ? "" : "ml-2 border-l border-outline pl-3"}>
       {node.showHeading && (
-        <span className={`inline-flex items-center gap-1 text-[11px] uppercase tracking-wide ${node.complete ? "text-ok" : "text-fg-subtle"}`}>
+        <span className={`inline-flex items-center gap-1 text-[11px] uppercase tracking-wide ${node.complete ? "text-ok" : "text-on-surface-subtle"}`}>
           {node.label}
           {node.complete && <Check />}
         </span>

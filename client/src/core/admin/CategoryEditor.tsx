@@ -36,13 +36,13 @@ export function CategoryEditor({ slug, categories }: { slug: string; categories:
 
   return (
     <div>
-      <p className="mb-2 text-sm font-medium text-fg">Categories</p>
+      <p className="mb-2 text-sm font-medium text-on-surface">Categories</p>
       {categories.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">
           {categories.map((cat) => (
-            <div key={cat.id} className="flex h-8 items-center gap-1.5 rounded-full border border-line bg-surface pl-1.5 pr-1">
+            <div key={cat.id} className="flex h-8 items-center gap-1.5 rounded-full border border-outline bg-surface pl-1.5 pr-1">
               <input type="color" aria-label={`${cat.label} color`} value={cat.colorHex ?? "#64748b"} onChange={(e) => recolor(cat.id, e.target.value)} className="size-5 cursor-pointer rounded-full border-none bg-transparent" />
-              <span className="text-sm text-fg">{cat.label}</span>
+              <span className="text-sm text-on-surface">{cat.label}</span>
               <IconButton size="sm" label={`Remove ${cat.label}`} onPress={() => remove(cat.id)}>
                 <XIcon size={12} />
               </IconButton>

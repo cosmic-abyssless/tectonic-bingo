@@ -219,7 +219,7 @@ export const TileCell = memo(function TileCell({
       )}
 
       {tile.freeze.isFrozen && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-bg/70 text-[var(--tile-frozen)]">
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-background/70 text-[var(--tile-frozen)]">
           <LockIcon />
           <span className="num font-mono text-[11px] font-semibold leading-none">
             {formatCountdown(tile.freeze.remainingMs)}
@@ -234,7 +234,7 @@ export const TileCell = memo(function TileCell({
       )}
 
       {tile.progress.totalTasks > 0 && (
-        <span className="num absolute bottom-1 left-1 z-20 rounded-sm bg-bg/80 px-1 py-0.5 text-[9px] font-semibold leading-none text-fg-muted">
+        <span className="num absolute bottom-1 left-1 z-20 rounded-sm bg-background/80 px-1 py-0.5 text-[9px] font-semibold leading-none text-on-surface-muted">
           {tile.progress.pointsAwarded}/{tile.progress.totalPoints}
         </span>
       )}
@@ -247,7 +247,7 @@ export const TileCell = memo(function TileCell({
               <span
                 key={task.id}
                 title={`${task.label}: ${task.status.replace(/_/g, " ")}`}
-                className={`inline-flex size-4 items-center justify-center rounded-full text-[9px] font-bold leading-none text-bg ${TASK_STATUS_DOT[task.status]}`}
+                className={`inline-flex size-4 items-center justify-center rounded-full text-[9px] font-bold leading-none text-background ${TASK_STATUS_DOT[task.status]}`}
               >
                 {task.index + 1}
               </span>

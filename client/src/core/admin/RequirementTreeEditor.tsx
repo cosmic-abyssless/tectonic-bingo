@@ -66,13 +66,13 @@ function SharedMark({ tasks }: { tasks: string[] }) {
 // instead of up to four separate buttons.
 function SplitAddButton({ primaryLabel, onPrimary, options }: { primaryLabel: string; onPrimary: () => void; options: { label: string; onClick: () => void }[] }) {
   return (
-    <div className="inline-flex shrink-0 overflow-hidden rounded-md border border-line-strong">
+    <div className="inline-flex shrink-0 overflow-hidden rounded-md border border-outline-strong">
       <Button variant="ghost" size="sm" onPress={onPrimary} className="rounded-none border-0">
         <PlusIcon size={12} /> {primaryLabel}
       </Button>
       {options.length > 0 && (
         <MenuTrigger>
-          <Button variant="ghost" size="sm" aria-label="More add options" className="rounded-none border-0 border-l border-line-strong px-1.5">
+          <Button variant="ghost" size="sm" aria-label="More add options" className="rounded-none border-0 border-l border-outline-strong px-1.5">
             <ChevronDownIcon size={12} />
           </Button>
           <Menu onAction={(key) => options.find((o) => o.label === key)?.onClick()}>
@@ -262,11 +262,11 @@ function GroupNode(props: NodeProps) {
   }
 
   return (
-    <div className={isRoot ? "" : "border-l-2 border-line pl-3"}>
+    <div className={isRoot ? "" : "border-l-2 border-outline pl-3"}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
         {isShared && <SharedMark tasks={sharedWithTasks} />}
         {ownLabel && (
-          <span className="num shrink-0 text-xs text-fg-subtle" title="Shown in this task's own tree, and in other tasks' &quot;+ existing condition&quot; picker once saved">
+          <span className="num shrink-0 text-xs text-on-surface-subtle" title="Shown in this task's own tree, and in other tasks' &quot;+ existing condition&quot; picker once saved">
             Condition {ownLabel}
           </span>
         )}
@@ -363,7 +363,7 @@ function GroupNode(props: NodeProps) {
           />
         </div>
       )}
-      {children.length === 0 && <p className="mb-2 text-xs text-fg-subtle">No requirements yet — add an item or a condition.</p>}
+      {children.length === 0 && <p className="mb-2 text-xs text-on-surface-subtle">No requirements yet — add an item or a condition.</p>}
       <ul className="space-y-1.5">
         {children.map((child, i) => (
           // Inputs are uncontrolled (save on blur); include length so removing a sibling remounts the rest.
@@ -386,7 +386,7 @@ function GroupNode(props: NodeProps) {
 function RemoveButton({ shared, label, what, onPress, className }: { shared: boolean; label: string; what: string; onPress: () => void; className?: string }) {
   const title = shared ? `Unlink from this task — the ${what} itself is only deleted if this was its last use` : undefined;
   return shared ? (
-    <Button variant="ghost" size="sm" aria-label={label} onPress={onPress} className={`h-7 px-2 text-fg-subtle hover:text-danger ${className ?? ""}`}>
+    <Button variant="ghost" size="sm" aria-label={label} onPress={onPress} className={`h-7 px-2 text-on-surface-subtle hover:text-danger ${className ?? ""}`}>
       <span title={title}>unlink</span>
     </Button>
   ) : (
@@ -412,10 +412,10 @@ function ItemLeafRow({ node, path, remove, existingLeaves, sharedNodeIds }: Node
   const sharedWithTasks = isShared ? Array.from(new Set((existingLeaves ?? []).filter((l) => l.id === node.id).map((l) => l.taskLabel))) : [];
 
   return (
-    <div className="flex h-8 items-center gap-2 rounded-md border border-line bg-surface px-2">
+    <div className="flex h-8 items-center gap-2 rounded-md border border-outline bg-surface px-2">
       {isShared && <SharedMark tasks={sharedWithTasks} />}
       <ChipIcon name={name} className="size-4" />
-      <span className="flex-1 truncate text-xs text-fg">{name}</span>
+      <span className="flex-1 truncate text-xs text-on-surface">{name}</span>
       {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${name}` : `Remove ${name}`} what="item" onPress={() => remove(path)} />}
     </div>
   );

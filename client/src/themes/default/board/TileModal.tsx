@@ -26,7 +26,7 @@ function TileDetails({ tile, onClose, onSubmit }: { tile: TileModel; onClose: ()
         <div className="flex min-w-0 items-center gap-4">
           {tile.imageUrl && <img src={tile.imageUrl} alt="" className="size-14 shrink-0 object-contain" />}
           <div className="min-w-0">
-            <Heading slot="title" className="text-lg font-semibold text-fg">
+            <Heading slot="title" className="text-lg font-semibold text-on-surface">
               {tile.name}
             </Heading>
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -35,7 +35,7 @@ function TileDetails({ tile, onClose, onSubmit }: { tile: TileModel; onClose: ()
                   {tile.category.label}
                 </Badge>
               )}
-              <span className="num text-sm text-fg-muted">
+              <span className="num text-sm text-on-surface-muted">
                 {tile.progress.totalTasks > 0 ? `${tile.progress.pointsAwarded}/` : ""}
                 {tile.progress.totalPoints} pts
               </span>
@@ -60,7 +60,7 @@ function TileDetails({ tile, onClose, onSubmit }: { tile: TileModel; onClose: ()
         </div>
       </div>
 
-      <div className="grid divide-x divide-line" style={{ gridTemplateColumns: `repeat(${Math.max(tile.tasks.length, 1)}, minmax(0, 1fr))` }}>
+      <div className="grid divide-x divide-outline" style={{ gridTemplateColumns: `repeat(${Math.max(tile.tasks.length, 1)}, minmax(0, 1fr))` }}>
         {tile.tasks.map((task) => (
           <TaskPanel key={task.id} task={task} />
         ))}

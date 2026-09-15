@@ -48,26 +48,26 @@ export function DetailsView({ details }: { details: unknown }) {
       {changes && (
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <div className="mb-1 font-medium text-fg-subtle">Before</div>
+            <div className="mb-1 font-medium text-on-surface-subtle">Before</div>
             {Object.entries(changes.before).map(([k, v]) => (
-              <div key={k} className="text-fg-muted">
-                <span className="text-fg-subtle">{k}:</span> {String(v)}
+              <div key={k} className="text-on-surface-muted">
+                <span className="text-on-surface-subtle">{k}:</span> {String(v)}
               </div>
             ))}
           </div>
           <div>
-            <div className="mb-1 font-medium text-fg-subtle">After</div>
+            <div className="mb-1 font-medium text-on-surface-subtle">After</div>
             {Object.entries(changes.after).map(([k, v]) => (
-              <div key={k} className="text-fg-muted">
-                <span className="text-fg-subtle">{k}:</span> {String(v)}
+              <div key={k} className="text-on-surface-muted">
+                <span className="text-on-surface-subtle">{k}:</span> {String(v)}
               </div>
             ))}
           </div>
         </div>
       )}
       {Object.entries(rest).map(([k, v]) => (
-        <div key={k} className="text-fg-muted">
-          <span className="text-fg-subtle">{k}:</span> {typeof v === "object" ? JSON.stringify(v) : String(v)}
+        <div key={k} className="text-on-surface-muted">
+          <span className="text-on-surface-subtle">{k}:</span> {typeof v === "object" ? JSON.stringify(v) : String(v)}
         </div>
       ))}
     </div>
@@ -127,7 +127,7 @@ export function AuditLog({ slug }: { slug: string }) {
       {isError ? (
         <Notice tone="danger">{error instanceof Error ? error.message : "Failed to load the audit log"}</Notice>
       ) : isLoading ? (
-        <p className="py-20 text-center text-sm text-fg-muted">Loading…</p>
+        <p className="py-20 text-center text-sm text-on-surface-muted">Loading…</p>
       ) : entries.length === 0 ? (
         <EmptyState icon={<ListIcon />} title="No activity yet">
           Actions taken on this bingo will show up here as they happen.
@@ -142,22 +142,22 @@ export function AuditLog({ slug }: { slug: string }) {
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex flex-wrap items-center gap-1.5">
                       <AuditActionBadge action={entry.action} />
-                      {entry.team && <span className="text-xs text-fg-subtle">{entry.team.name}</span>}
+                      {entry.team && <span className="text-xs text-on-surface-subtle">{entry.team.name}</span>}
                     </div>
-                    <p className="text-sm text-fg">{entry.label}</p>
-                    <p className="mt-0.5 text-xs text-fg-subtle">
+                    <p className="text-sm text-on-surface">{entry.label}</p>
+                    <p className="mt-0.5 text-xs text-on-surface-subtle">
                       {entry.actor ? displayName(entry.actor) : entry.actorType} · {entry.actorRole}
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-                    <span title={new Date(entry.at).toLocaleString()} className="text-xs text-fg-subtle">
+                    <span title={new Date(entry.at).toLocaleString()} className="text-xs text-on-surface-subtle">
                       {timeAgo(entry.at)}
                     </span>
-                    <span className="text-fg-subtle">{isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
+                    <span className="text-on-surface-subtle">{isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
                   </div>
                 </div>
                 {isExpanded && (
-                  <div className="border-t border-line bg-bg px-4 py-3">
+                  <div className="border-t border-outline bg-background px-4 py-3">
                     <DetailsView details={entry.details} />
                   </div>
                 )}

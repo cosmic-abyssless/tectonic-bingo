@@ -7,7 +7,7 @@ import type { ComponentProps, ReactNode } from "react";
  */
 
 export const inputClass =
-  "w-full rounded-md border border-line-strong bg-bg px-3 text-fg placeholder:text-fg-subtle transition-colors focus:border-fg/60 disabled:opacity-50 disabled:cursor-not-allowed";
+  "w-full rounded-md border border-outline-strong bg-background px-3 text-on-surface placeholder:text-on-surface-subtle transition-colors focus:border-on-surface/60 disabled:opacity-50 disabled:cursor-not-allowed";
 
 // Mirrors Button's sizes so controls sit flush next to buttons. Callers must
 // use `size` rather than passing h-* classes — `h-10` here would win anyway.
@@ -33,9 +33,9 @@ export function Select({ className, size = "md", ...props }: Omit<ComponentProps
 export function Field({ label, hint, children, className, as: Tag = "label" }: { label: ReactNode; hint?: ReactNode; children: ReactNode; className?: string; as?: "label" | "div" }) {
   return (
     <Tag className={`block ${className ?? ""}`}>
-      <span className="mb-1.5 block text-xs font-medium text-fg-muted">{label}</span>
+      <span className="mb-1.5 block text-xs font-medium text-on-surface-muted">{label}</span>
       {children}
-      {hint && <span className="mt-1.5 block text-xs text-fg-subtle">{hint}</span>}
+      {hint && <span className="mt-1.5 block text-xs text-on-surface-subtle">{hint}</span>}
     </Tag>
   );
 }

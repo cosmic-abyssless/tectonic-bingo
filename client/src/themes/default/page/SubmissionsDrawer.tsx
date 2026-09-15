@@ -53,7 +53,7 @@ export function SubmissionsDrawer({
       />
 
       {submissions.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-5 py-3">
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-outline px-5 py-3">
           {FILTERS.map(({ key, label }) => (
             <FilterChip key={key} active={filter === key} count={countFor(key)} onPress={() => setFilter(key)}>
               {label}
@@ -79,30 +79,30 @@ export function SubmissionsDrawer({
           </EmptyState>
         </div>
       ) : shown.length === 0 ? (
-        <p className="p-5 text-sm text-fg-subtle">
+        <p className="p-5 text-sm text-on-surface-subtle">
           No {filter === "all" ? "" : `${filter} `}submissions{submitter && ` by ${submitter}`}.
         </p>
       ) : (
-        <ul className="divide-y divide-line">
+        <ul className="divide-y divide-outline">
           {shown.map((s) => (
             <li key={s.id} className="flex items-start gap-4 px-5 py-4 transition-colors hover:bg-surface-hover">
               <ScreenshotThumb url={s.thumbnailUrl ?? undefined} />
 
               <div className="min-w-0 flex-1">
                 <div className="mb-1 flex flex-wrap items-center gap-2">
-                  <span className="truncate text-sm font-medium text-fg">{s.tileName ?? "Unknown tile"}</span>
+                  <span className="truncate text-sm font-medium text-on-surface">{s.tileName ?? "Unknown tile"}</span>
                   {s.taskLabels.map((label) => (
                     <Badge key={label}>{label}</Badge>
                   ))}
                 </div>
-                <p className="truncate text-sm text-fg-muted">{s.summary}</p>
-                {s.submittedBy && <p className="mt-0.5 text-xs text-fg-subtle">by {s.submittedBy}</p>}
+                <p className="truncate text-sm text-on-surface-muted">{s.summary}</p>
+                {s.submittedBy && <p className="mt-0.5 text-xs text-on-surface-subtle">by {s.submittedBy}</p>}
                 {s.reviewerNotes && <p className="mt-0.5 truncate text-xs text-warn">{s.reviewerNotes}</p>}
               </div>
 
               <div className="flex shrink-0 flex-col items-end gap-1 text-right">
                 <SubmissionStatusBadge status={s.status} />
-                <span className="text-xs text-fg-subtle">{s.timeAgo}</span>
+                <span className="text-xs text-on-surface-subtle">{s.timeAgo}</span>
               </div>
             </li>
           ))}

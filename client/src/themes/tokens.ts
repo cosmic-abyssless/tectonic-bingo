@@ -7,10 +7,10 @@ import type { CSSProperties } from "react";
 //   applied by ThemeProvider as inline CSS custom properties on the page
 //   root. `tile` replaces the old themes/default/tokens.ts board-only vars;
 //   `chrome` is optional and, because Tailwind v4 compiles utilities like
-//   `bg-bg`/`text-fg` to `var(--color-bg)`/`var(--color-fg)` (the index.css
-//   @theme block is not `inline`), setting `--color-bg` here re-skins every
-//   one of those utilities under the provider div for free — no component
-//   needs to know about theming.
+//   `bg-background`/`text-on-surface` to `var(--color-background)`/`var(--color-on-surface)`
+//   (the index.css @theme block is not `inline`), setting `--color-background`
+//   here re-skins every one of those utilities under the provider div for
+//   free — no component needs to know about theming.
 export interface ThemeTokens {
   tile: {
     bg: string;
@@ -21,17 +21,17 @@ export interface ThemeTokens {
     frozen: string;
   };
   chrome?: Partial<{
-    bg: string;
+    background: string;
     surface: string;
     surfaceRaised: string;
     surfaceHover: string;
-    line: string;
-    lineStrong: string;
-    fg: string;
-    fgMuted: string;
-    fgSubtle: string;
+    outline: string;
+    outlineStrong: string;
+    onSurface: string;
+    onSurfaceMuted: string;
+    onSurfaceSubtle: string;
     accent: string;
-    accentFg: string;
+    onAccent: string;
     ok: string;
     warn: string;
     danger: string;
@@ -63,17 +63,17 @@ export function tokensToCssVars(tokens: ThemeTokens): CSSProperties {
     "--tile-frozen": tokens.tile.frozen,
   };
   const chromeVarByKey: Record<keyof NonNullable<ThemeTokens["chrome"]>, string> = {
-    bg: "--color-bg",
+    background: "--color-background",
     surface: "--color-surface",
     surfaceRaised: "--color-surface-raised",
     surfaceHover: "--color-surface-hover",
-    line: "--color-line",
-    lineStrong: "--color-line-strong",
-    fg: "--color-fg",
-    fgMuted: "--color-fg-muted",
-    fgSubtle: "--color-fg-subtle",
+    outline: "--color-outline",
+    outlineStrong: "--color-outline-strong",
+    onSurface: "--color-on-surface",
+    onSurfaceMuted: "--color-on-surface-muted",
+    onSurfaceSubtle: "--color-on-surface-subtle",
     accent: "--color-accent",
-    accentFg: "--color-accent-fg",
+    onAccent: "--color-on-accent",
     ok: "--color-ok",
     warn: "--color-warn",
     danger: "--color-danger",

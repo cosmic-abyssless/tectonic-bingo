@@ -16,26 +16,26 @@ export function TaskPanel({ task }: { task: TaskModel }) {
     <div className="p-5">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-sm font-semibold text-fg">{task.label}</span>
+          <span className="text-sm font-semibold text-on-surface">{task.label}</span>
           {task.complete && <Check />}
           {task.isManual && <Badge tone="info">Judged by mods</Badge>}
           {task.locked && (
             <TooltipTrigger delay={200}>
               <Focusable>
-                <span role="img" aria-label="Locked" tabIndex={0} className="inline-flex text-fg-muted">
+                <span role="img" aria-label="Locked" tabIndex={0} className="inline-flex text-on-surface-muted">
                   <LockIcon size={14} />
                 </span>
               </Focusable>
-              <Tooltip offset={6} className="overlay-panel z-30 max-w-56 rounded-md border border-line bg-surface-raised px-3 py-2 text-xs leading-relaxed text-fg shadow-pop">
+              <Tooltip offset={6} className="overlay-panel z-30 max-w-56 rounded-md border border-outline bg-surface-raised px-3 py-2 text-xs leading-relaxed text-on-surface shadow-pop">
                 {task.lockedReason ?? "This task depends on a previous task."}
               </Tooltip>
             </TooltipTrigger>
           )}
         </div>
-        <span className="num shrink-0 text-sm font-medium text-fg-muted">{task.points} pts</span>
+        <span className="num shrink-0 text-sm font-medium text-on-surface-muted">{task.points} pts</span>
       </div>
 
-      <p className="mb-3 text-sm leading-relaxed text-fg-muted">{task.description}</p>
+      <p className="mb-3 text-sm leading-relaxed text-on-surface-muted">{task.description}</p>
 
       {!task.isManual && task.tree && <RequirementTree node={task.tree} root />}
 

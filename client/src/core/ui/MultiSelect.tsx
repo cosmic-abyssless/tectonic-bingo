@@ -35,15 +35,15 @@ export function MultiSelect({
 
   return (
     <MenuTrigger>
-      <Button variant="secondary" size="sm" className={selected.length > 0 ? "border-fg" : ""}>
-        <span className="text-fg-subtle">{label}:</span> {summary}
+      <Button variant="secondary" size="sm" className={selected.length > 0 ? "border-on-surface" : ""}>
+        <span className="text-on-surface-subtle">{label}:</span> {summary}
         <ChevronDownIcon size={14} />
       </Button>
       <Menu selectionMode="multiple" shouldCloseOnSelect={false} selectedKeys={selectedSet} onSelectionChange={handleSelectionChange} items={options}>
         {(option) => (
           <MenuItem id={option.key} textValue={option.label}>
             <span className="min-w-0 flex-1 truncate">{option.label}</span>
-            {option.count !== undefined && option.count > 0 && <span className="num text-fg-subtle">{option.count}</span>}
+            {option.count !== undefined && option.count > 0 && <span className="num text-on-surface-subtle">{option.count}</span>}
           </MenuItem>
         )}
       </Menu>

@@ -79,9 +79,9 @@ function TeamCard({ slug, team, onDelete }: { slug: string; team: TeamWithMember
     <Disclosure
       title={
         <>
-          <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: team.color ?? "var(--color-line-strong)" }} />
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">{team.name}</span>
-          <span className="num text-xs text-fg-subtle">
+          <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: team.color ?? "var(--color-outline-strong)" }} />
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-on-surface">{team.name}</span>
+          <span className="num text-xs text-on-surface-subtle">
             {team.members.length} {team.members.length === 1 ? "member" : "members"}
           </span>
         </>
@@ -97,20 +97,20 @@ function TeamCard({ slug, team, onDelete }: { slug: string; team: TeamWithMember
               aria-label={`${team.name} color`}
               value={team.color ?? "#6366f1"}
               onChange={(e) => update({ color: e.target.value })}
-              className="size-10 shrink-0 cursor-pointer rounded-md border border-line-strong bg-bg p-1"
+              className="size-10 shrink-0 cursor-pointer rounded-md border border-outline-strong bg-background p-1"
             />
           </div>
           <Field label="Password" hint="Must be visible in every screenshot the team submits.">
             <Input key={team.codeword} defaultValue={team.codeword} onBlur={(e) => setPassword(e.target.value)} className="num" />
           </Field>
           <Field label={`Members (${team.members.length})`} as="div">
-            <ul className="divide-y divide-line rounded-md border border-line">
+            <ul className="divide-y divide-outline rounded-md border border-outline">
               {team.members.map(({ user, isCaptain, isCoCaptain, isDrafted }) => (
                 <li key={user.id} className="flex h-9 items-center gap-2 px-3 text-sm">
                   {isCaptain && <CrownIcon size={14} className="shrink-0 text-warn" aria-label="Captain" />}
-                  {isCoCaptain && <CrownIcon size={14} className="shrink-0 text-fg-subtle" aria-label="Co-captain" />}
-                  <span className="min-w-0 flex-1 truncate text-fg">{displayName(user)}</span>
-                  {isDrafted && <span className="text-xs text-fg-subtle">drafted</span>}
+                  {isCoCaptain && <CrownIcon size={14} className="shrink-0 text-on-surface-subtle" aria-label="Co-captain" />}
+                  <span className="min-w-0 flex-1 truncate text-on-surface">{displayName(user)}</span>
+                  {isDrafted && <span className="text-xs text-on-surface-subtle">drafted</span>}
                   {!isCaptain && !isCoCaptain && !isDrafted && (
                     <IconButton label={`Remove ${displayName(user)}`} size="sm" onPress={() => removeMember(user)}>
                       <XIcon size={12} />
@@ -216,11 +216,11 @@ export function TeamManager({ slug }: { slug: string }) {
     <div className="max-w-2xl space-y-4">
       <Card className="space-y-3 p-4">
         <div>
-          <p className="text-sm font-medium text-fg">Create a team</p>
-          {summary && <p className="mt-1 text-sm text-fg-muted">{summary}</p>}
+          <p className="text-sm font-medium text-on-surface">Create a team</p>
+          {summary && <p className="mt-1 text-sm text-on-surface-muted">{summary}</p>}
         </div>
         {candidates.length === 0 ? (
-          <p className="text-sm text-fg-subtle">No eligible signups — everyone who signed up is already on a team, or no one has signed up yet.</p>
+          <p className="text-sm text-on-surface-subtle">No eligible signups — everyone who signed up is already on a team, or no one has signed up yet.</p>
         ) : (
           <div className="space-y-3">
             <Field label="Captain">

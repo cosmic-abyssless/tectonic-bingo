@@ -61,7 +61,7 @@ function BuyinCell({ slug, entry }: { slug: string; entry: RosterEntry }) {
   return (
     <label className="flex cursor-pointer select-none items-center gap-2">
       <input type="checkbox" checked={received} onChange={toggle} disabled={markBuyin.isPending} className="size-4 cursor-pointer accent-accent" />
-      <span className={`text-xs ${received ? "text-ok" : "text-fg-subtle"}`}>{received ? "Received" : "Not received"}</span>
+      <span className={`text-xs ${received ? "text-ok" : "text-on-surface-subtle"}`}>{received ? "Received" : "Not received"}</span>
     </label>
   );
 }
@@ -146,7 +146,7 @@ function DevSeedPanel({ slug }: { slug: string }) {
         {error && <p className="text-xs text-danger">{error}</p>}
       </div>
       {lastSeed && lastSeed.source !== "tectonic" && (
-        <p className="mt-2 text-xs text-fg-muted">
+        <p className="mt-2 text-xs text-on-surface-muted">
           {lastSeed.source === "mixed" ? "Some" : "All"} of the {lastSeed.signups.length} seeded signups are synthetic TestBot users.{" "}
           {lastSeed.tectonicConfigured
             ? "The clan roster ran out of unused members."
@@ -179,7 +179,7 @@ function PartnerCell({ slug, entry, roster }: { slug: string; entry: RosterEntry
   if (entry.pairing) {
     return (
       <div className="flex items-center gap-1">
-        <span className="text-fg">{partnerRsn(entry, roster)}</span>
+        <span className="text-on-surface">{partnerRsn(entry, roster)}</span>
         <IconButton label="Unpair" size="sm" onPress={() => run(() => unpair.mutateAsync(entry.pairing!.id))} isDisabled={unpair.isPending}>
           <XIcon size={12} />
         </IconButton>
@@ -188,7 +188,7 @@ function PartnerCell({ slug, entry, roster }: { slug: string; entry: RosterEntry
     );
   }
 
-  if (entry.signup.status !== "active") return <span className="text-fg-subtle">—</span>;
+  if (entry.signup.status !== "active") return <span className="text-on-surface-subtle">—</span>;
 
   const candidates = roster.filter((r) => r.signup.status === "active" && !r.pairing && r.signup.id !== entry.signup.id);
   return (
@@ -348,8 +348,8 @@ export function SignupRoster({ slug }: { slug: string }) {
         </Notice>
       )}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-fg-muted">
-          <span className="num text-fg">{activeCount}</span> active signup{activeCount !== 1 ? "s" : ""}
+        <p className="text-sm text-on-surface-muted">
+          <span className="num text-on-surface">{activeCount}</span> active signup{activeCount !== 1 ? "s" : ""}
           {withdrawnCount > 0 && (
             <>
               , <span className="num">{withdrawnCount}</span> withdrawn
@@ -386,12 +386,12 @@ export function SignupRoster({ slug }: { slug: string }) {
             )}
           </div>
           {sorted.length === 0 ? (
-            <p className="text-sm text-fg-muted">No signups match these filters.</p>
+            <p className="text-sm text-on-surface-muted">No signups match these filters.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-line">
+                  <tr className="border-b border-outline">
                     <SortHeader label="#" sortKey="order" sort={sort} />
                     <SortHeader label="RSN" sortKey="rsn" sort={sort} />
                     <SortHeader label="Discord" sortKey="discord" sort={sort} />
@@ -405,20 +405,20 @@ export function SignupRoster({ slug }: { slug: string }) {
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-line">
+                <tbody className="divide-y divide-outline">
                   {sorted.map(({ order, entry }) => {
                     const answerByQ = new Map(entry.answers.map((a) => [a.questionId, a.value]));
                     return (
                       <tr key={entry.signup.id}>
-                        <td className="num py-2 pr-4 text-fg-subtle">{order}</td>
-                        <td className="py-2 pr-4 font-medium text-fg">
+                        <td className="num py-2 pr-4 text-on-surface-subtle">{order}</td>
+                        <td className="py-2 pr-4 font-medium text-on-surface">
                           <span className="inline-flex items-center gap-1.5">
                             {entry.signup.rsn}
                             {entry.signup.rsnVerified && <CheckIcon size={14} className="text-ok" aria-label="Verified against the linked clan account" />}
                           </span>
                         </td>
-                        <td className="py-2 pr-4 text-fg-muted">{displayName(entry.user)}</td>
-                        <td className="py-2 pr-4 text-fg-muted">
+                        <td className="py-2 pr-4 text-on-surface-muted">{displayName(entry.user)}</td>
+                        <td className="py-2 pr-4 text-on-surface-muted">
                           <time dateTime={entry.signup.createdAt} title={new Date(entry.signup.createdAt).toLocaleString()} className="num whitespace-nowrap">
                             {timeAgo(entry.signup.createdAt)}
                           </time>
@@ -438,7 +438,7 @@ export function SignupRoster({ slug }: { slug: string }) {
                           </td>
                         )}
                         {questions.map((q) => (
-                          <td key={q.id} className="py-2 pr-4 text-fg-muted">
+                          <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
                             {answerByQ.get(q.id) ?? "—"}
                           </td>
                         ))}

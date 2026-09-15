@@ -10,15 +10,15 @@ export function ScreenshotDropzone({ screenshot }: { screenshot: SubmissionFlowM
         type="button"
         onClick={screenshot.openFilePicker}
         className={`relative block w-full rounded-md border border-dashed transition-colors ${
-          screenshot.dragOver ? "border-fg bg-surface-raised" : "border-line-strong hover:border-fg/60"
+          screenshot.dragOver ? "border-on-surface bg-surface-raised" : "border-outline-strong hover:border-on-surface/60"
         } ${screenshot.previewUrl ? "h-52" : "h-40"}`}
       >
         {screenshot.previewUrl ? (
           <img src={screenshot.previewUrl} alt="Preview" className="absolute inset-0 h-full w-full rounded-md object-contain p-2" />
         ) : (
-          <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-fg-subtle">
+          <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-on-surface-subtle">
             <ImageIcon size={28} />
-            <span className="text-sm text-fg-muted">Drag & drop or click to upload</span>
+            <span className="text-sm text-on-surface-muted">Drag & drop or click to upload</span>
             <span className="text-xs">PNG, JPG, WebP — max {MAX_UPLOAD_MB} MB</span>
           </span>
         )}

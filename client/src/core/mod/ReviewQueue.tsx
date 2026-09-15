@@ -39,7 +39,7 @@ function ScreenshotAnalysisBadges({ screenshot }: { screenshot: SubmissionScreen
     );
   }
   if (screenshot.scrapeStatus === "pending" || screenshot.scrapeStatus === "processing") {
-    return <span className="text-xs text-fg-subtle">Analyzing screenshot…</span>;
+    return <span className="text-xs text-on-surface-subtle">Analyzing screenshot…</span>;
   }
   return null;
 }
@@ -131,7 +131,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
       {error && expandedId === null && <Notice tone="danger">{error}</Notice>}
 
       {isLoading ? (
-        <p className="py-20 text-center text-sm text-fg-muted">Loading…</p>
+        <p className="py-20 text-center text-sm text-on-surface-muted">Loading…</p>
       ) : visible.length === 0 ? (
         <EmptyState icon={<CheckIcon />} title="Nothing to review">
           {filter === "pending" ? "New submissions show up here as they come in." : "No submissions match this filter."}
@@ -155,15 +155,15 @@ export function ReviewQueue({ slug }: { slug: string }) {
 
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                      <span className="text-sm font-semibold text-fg">{row.tile.name}</span>
+                      <span className="text-sm font-semibold text-on-surface">{row.tile.name}</span>
                       {row.leaves.map((leaf) => (
                         <Badge key={leaf.id}>{leaf.label ?? "Item"}</Badge>
                       ))}
                       <Badge>{row.team.name}</Badge>
                       {isManual && <Badge tone="info">manual</Badge>}
                     </div>
-                    <p className="truncate text-sm text-fg-muted">{claimsSummary(row.claims)}</p>
-                    <p className="mt-0.5 text-xs text-fg-subtle">by {row.submittedByUser ? displayName(row.submittedByUser) : "unknown"}</p>
+                    <p className="truncate text-sm text-on-surface-muted">{claimsSummary(row.claims)}</p>
+                    <p className="mt-0.5 text-xs text-on-surface-subtle">by {row.submittedByUser ? displayName(row.submittedByUser) : "unknown"}</p>
                     {row.screenshots[0] && (
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <ScreenshotAnalysisBadges screenshot={row.screenshots[0]} />
@@ -174,8 +174,8 @@ export function ReviewQueue({ slug }: { slug: string }) {
 
                   <div className="flex shrink-0 flex-col items-end gap-1 text-right">
                     <SubmissionStatusBadge status={row.submission.status} />
-                    <span className="text-xs text-fg-subtle">{timeAgo(row.submission.submittedAt)}</span>
-                    {canReview && <span className="text-fg-subtle">{isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>}
+                    <span className="text-xs text-on-surface-subtle">{timeAgo(row.submission.submittedAt)}</span>
+                    {canReview && <span className="text-on-surface-subtle">{isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>}
                     {!canReview && (
                       <Button variant="ghost" size="sm" onPress={() => undoReview(row)} isDisabled={review.isPending}>
                         Undo review
@@ -185,14 +185,14 @@ export function ReviewQueue({ slug }: { slug: string }) {
                 </div>
 
                 {isExpanded && canReview && (
-                  <div className="space-y-3 border-t border-line bg-bg px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                  <div className="space-y-3 border-t border-outline bg-background px-4 py-4" onClick={(e) => e.stopPropagation()}>
                     {row.screenshots.map((ss) => (
                       <div key={ss.id}>
                         <a href={ss.storageUrl} target="_blank" rel="noreferrer" title="Open full size in new tab" className="block">
                           <img
                             src={ss.storageUrl}
                             alt={ss.screenshotType}
-                            className="max-h-[60vh] w-full rounded-md border border-line bg-black object-contain transition-colors hover:border-line-strong"
+                            className="max-h-[60vh] w-full rounded-md border border-outline bg-black object-contain transition-colors hover:border-outline-strong"
                           />
                         </a>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -226,7 +226,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
                       </Button>
                     </div>
 
-                    <div className="border-t border-line pt-3">
+                    <div className="border-t border-outline pt-3">
                       {adjustOpenFor === row.submission.id ? (
                         <div className="flex flex-wrap items-end gap-2">
                           <Field label="Points +/-">

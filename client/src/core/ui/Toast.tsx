@@ -36,14 +36,14 @@ export function ToastRegion() {
         const tone = TONE[t.content.tone ?? "info"];
         const Icon = tone.icon;
         return (
-          <AriaToast toast={t} className="toast-item flex items-start gap-3 rounded-lg border border-line bg-surface-raised p-3 pl-4 shadow-pop outline-none">
+          <AriaToast toast={t} className="toast-item flex items-start gap-3 rounded-lg border border-outline bg-surface-raised p-3 pl-4 shadow-pop outline-none">
             <Icon className={`mt-0.5 shrink-0 ${tone.cls}`} />
             <ToastContent className="min-w-0 flex-1">
-              <Text slot="title" className="block text-sm font-medium text-fg">
+              <Text slot="title" className="block text-sm font-medium text-on-surface">
                 {t.content.title}
               </Text>
               {t.content.description && (
-                <Text slot="description" className="mt-0.5 block text-sm text-fg-muted">
+                <Text slot="description" className="mt-0.5 block text-sm text-on-surface-muted">
                   {t.content.description}
                 </Text>
               )}

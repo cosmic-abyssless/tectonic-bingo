@@ -10,7 +10,7 @@ import { useSlot } from "../../context";
 // a dot grid in CSS: each "tile" of the background is one dot on a
 // transparent field, then `backgroundSize` sets the grid spacing.
 const DOT_GRID_STYLE: CSSProperties = {
-  backgroundColor: "var(--color-bg)",
+  backgroundColor: "var(--color-background)",
   backgroundImage:
     "radial-gradient(#00000080, 15%, transparent 16%), radial-gradient(#00000080, 15%, transparent 16%)",
   backgroundSize: "14px 14px",
@@ -45,7 +45,7 @@ export function BoardPageLayout() {
   const SubmissionModal = useSlot("SubmissionModal");
 
   return (
-    <div className="min-h-screen text-fg" style={DOT_GRID_STYLE}>
+    <div className="min-h-screen text-on-surface" style={DOT_GRID_STYLE}>
       <PageHeader page={page} />
 
       <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">

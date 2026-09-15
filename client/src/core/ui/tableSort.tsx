@@ -36,7 +36,7 @@ export function SortHeader<K extends string>({ label, sortKey, sort, className =
   const active = sort.key === sortKey;
   return (
     <th aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined} className={`pb-2 pr-4 whitespace-nowrap text-left text-xs font-medium uppercase tracking-wide ${className}`}>
-      <button type="button" onClick={() => sort.toggle(sortKey)} className={`select-none transition-colors hover:text-fg ${active ? "text-fg" : "text-fg-subtle"}`}>
+      <button type="button" onClick={() => sort.toggle(sortKey)} className={`select-none transition-colors hover:text-on-surface ${active ? "text-on-surface" : "text-on-surface-subtle"}`}>
         {label} {active && (sort.dir === "asc" ? "↑" : "↓")}
       </button>
     </th>

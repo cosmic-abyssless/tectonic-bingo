@@ -21,7 +21,7 @@ export function StatsPage() {
   if (!shell) return null;
 
   return (
-    <div className="min-h-screen bg-bg text-fg">
+    <div className="min-h-screen bg-background text-on-surface">
       <AppHeader back={{ to: `/b/${slug}`, label: "Back to bingo" }} title="Stats" subtitle={shell.bingo.name} />
       <StatsView slug={slug!} />
     </div>

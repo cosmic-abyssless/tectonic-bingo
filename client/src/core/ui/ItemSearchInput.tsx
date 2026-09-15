@@ -207,10 +207,10 @@ export function ItemSearchInput({
         <div
           ref={dropdownRef}
           style={{ position: "fixed", top: dropdownRect.bottom + 4, left: dropdownRect.left, width: Math.max(dropdownRect.width, 220), zIndex: 9999 }}
-          className="max-h-64 overflow-y-auto rounded-md border border-line bg-surface-raised p-1 shadow-pop"
+          className="max-h-64 overflow-y-auto rounded-md border border-outline bg-surface-raised p-1 shadow-pop"
         >
           {loading && suggestions.length === 0 ? (
-            <div className="px-2.5 py-1.5 text-sm text-fg-subtle">Searching…</div>
+            <div className="px-2.5 py-1.5 text-sm text-on-surface-subtle">Searching…</div>
           ) : (
             suggestions.map((s, i) => (
               <button
@@ -230,7 +230,7 @@ export function ItemSearchInput({
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => pick(s)}
                 className={`flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-sm ${
-                  i === highlighted ? "bg-accent text-accent-fg" : "text-fg hover:bg-surface-hover"
+                  i === highlighted ? "bg-accent text-on-accent" : "text-on-surface hover:bg-surface-hover"
                 }`}
               >
                 {s.kind === "item" ? (
@@ -251,7 +251,7 @@ export function ItemSearchInput({
                       <LayersIcon size={14} />
                     </span>
                     <span className="truncate">{s.group.name}</span>
-                    <span className={`num ml-auto shrink-0 text-xs ${i === highlighted ? "text-accent-fg/70" : "text-fg-subtle"}`}>group · {s.group.itemNames.length}</span>
+                    <span className={`num ml-auto shrink-0 text-xs ${i === highlighted ? "text-on-accent/70" : "text-on-surface-subtle"}`}>group · {s.group.itemNames.length}</span>
                   </>
                 )}
               </button>

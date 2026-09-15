@@ -40,17 +40,17 @@ const comicTheme: ThemeDefinition = {
     // it reads distinctly from the orange tile accent and green/blue status
     // dots.
     chrome: {
-      bg: "#ffc526",
+      background: "#ffc526",
       surface: "#ffffff",
       surfaceRaised: "#fff4d6",
       surfaceHover: "#dbeafe",
-      line: "#000000",
-      lineStrong: "#000000",
-      fg: "#000000",
-      fgMuted: "#57534e",
-      fgSubtle: "#78716c",
+      outline: "#000000",
+      outlineStrong: "#000000",
+      onSurface: "#000000",
+      onSurfaceMuted: "#57534e",
+      onSurfaceSubtle: "#78716c",
       accent: "#2563eb",
-      accentFg: "#ffffff",
+      onAccent: "#ffffff",
       // index.css's global ok/warn/danger/info are tuned to sit on a dark
       // surface (e.g. warn #fbbf24, a light amber that's unreadable on the
       // header's now-white bg) — darkened here to keep 4.5:1+ contrast

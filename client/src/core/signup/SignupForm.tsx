@@ -33,7 +33,7 @@ function QuestionField({ question, value, onChange }: { question: SignupQuestion
     return (
       <label className="flex cursor-pointer select-none items-center gap-2.5">
         <input type="checkbox" checked={value === "true"} onChange={(e) => onChange(e.target.checked ? "true" : "false")} className="size-4 cursor-pointer accent-accent" />
-        <span className="text-sm text-fg-muted">{label}</span>
+        <span className="text-sm text-on-surface-muted">{label}</span>
       </label>
     );
   }

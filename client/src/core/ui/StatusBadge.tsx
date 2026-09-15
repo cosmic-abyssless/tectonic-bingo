@@ -13,7 +13,7 @@ export function SubmissionStatusBadge({ status }: { status: SubmissionStatus }) 
 }
 
 export const TASK_STATUS_DOT: Record<NodeStatus, string> = {
-  not_started: "bg-fg-subtle/50",
+  not_started: "bg-on-surface-subtle/50",
   in_progress: "bg-warn",
   pending_approval: "bg-info",
   completed: "bg-ok",

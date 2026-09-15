@@ -1,4 +1,4 @@
-// Literal hex, not `text-fg-muted`/`text-ok`/etc: TaskPanel and
+// Literal hex, not `text-on-surface-muted`/`text-ok`/etc: TaskPanel and
 // RequirementTree only ever render inside TileModal, which
 // react-aria-components portals out next to the end of <body> — outside the
 // DOM subtree ThemeProvider sets theme CSS variables on (see
