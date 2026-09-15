@@ -1,18 +1,13 @@
 import type { SubmissionModel } from "../../../headless/types";
 import { ImageIcon } from "../../../core/ui/icons";
+import { useResolvedColorScheme } from "../../../core/ui/colorScheme";
 import { COMIC_FONT } from "../font";
-import { INK, INK_BODY, INK_SUBTLE, GREEN, ORANGE, RED } from "./colors";
+import { getColors } from "./colors";
 
 const STATUS_LABEL: Record<SubmissionModel["status"], string> = {
   pending: "Pending",
   approved: "Approved",
   rejected: "Rejected",
-};
-
-const STATUS_COLOR: Record<SubmissionModel["status"], string> = {
-  pending: ORANGE,
-  approved: GREEN,
-  rejected: RED,
 };
 
 // A comic-styled stand-in for the shared, cross-theme <SubmissionRow> —
@@ -28,6 +23,12 @@ export function SubmissionBubble({
 }: {
   submission: SubmissionModel;
 }) {
+  const { INK, INK_BODY, INK_SUBTLE, GREEN, ORANGE, RED } = getColors(useResolvedColorScheme());
+  const STATUS_COLOR: Record<SubmissionModel["status"], string> = {
+    pending: ORANGE,
+    approved: GREEN,
+    rejected: RED,
+  };
   const meta = submission.submittedBy
     ? `by ${submission.submittedBy} ${submission.timeAgo}`
     : submission.timeAgo;

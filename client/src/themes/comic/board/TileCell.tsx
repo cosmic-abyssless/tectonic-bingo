@@ -3,8 +3,10 @@ import type { TileModel } from "../../../headless/types";
 import { formatCountdown } from "../../../core/ui/time";
 import { TASK_STATUS_DOT } from "../../../core/ui/StatusBadge";
 import { CheckIcon, ClockIcon, LockIcon } from "../../../core/ui/icons";
+import { useResolvedColorScheme } from "../../../core/ui/colorScheme";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { getContrastTextColor, useDominantColor } from "../useDominantColor";
+import { getColors } from "./colors";
 
 /*
  * A little comic book sitting on the tile, cracked open just enough to show
@@ -25,10 +27,11 @@ export const TileCell = memo(function TileCell({
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const colors = getColors(useResolvedColorScheme());
   const dominantColor = useDominantColor(
     tile.imageUrl && !imgFailed ? tile.imageUrl : null,
   );
-  const coverColor = dominantColor ?? "#ffead4";
+  const coverColor = dominantColor ?? colors.PAPER;
   // The price badge sits directly on the cover with no fill of its own, so
   // its own color (border + text) has to adapt to whatever that cover
   // color turns out to be, not the other way around.
@@ -120,7 +123,7 @@ export const TileCell = memo(function TileCell({
             className="absolute overflow-hidden rounded-[3px] border-2"
             style={{
               inset: "2px -2px -3px 0",
-              backgroundColor: "#e6d9b8",
+              backgroundColor: colors.PAPER_ALT,
               borderColor: "var(--tile-border)",
             }}
           />
@@ -138,7 +141,7 @@ export const TileCell = memo(function TileCell({
             className="absolute overflow-hidden rounded-[3px] border-2 transition-transform duration-200 [transform:rotateY(-7.5deg)] group-hover:[transform:rotateY(-11.5deg)] group-focus:[transform:rotateY(-11.5deg)] group-data-[search-highlighted]:[transform:rotateY(-11.5deg)]"
             style={{
               inset: "1px -1px -1.5px 0",
-              backgroundColor: "#f2ead4",
+              backgroundColor: colors.PAPER,
               borderColor: "var(--tile-border)",
               transformOrigin: "left center",
             }}
@@ -177,7 +180,7 @@ export const TileCell = memo(function TileCell({
               />
             ) : null}
             <span
-              className="absolute inset-x-1 top-1.5 w-fit h-fit truncate px-[0.35em] py-[0.15em] text-center uppercase leading-none text-black"
+              className="absolute inset-x-1 top-1.5 w-fit h-fit truncate px-[0.35em] py-[0.15em] text-center uppercase leading-none"
               style={{
                 backgroundColor: "#d2412d",
                 color: "#fff",

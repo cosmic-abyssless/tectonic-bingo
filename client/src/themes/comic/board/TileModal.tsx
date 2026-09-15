@@ -8,15 +8,11 @@ import {
 import type { TileModel } from "../../../headless/types";
 import { SubmissionBubble } from "./SubmissionBubble";
 import { XIcon } from "../../../core/ui/icons";
+import { useResolvedColorScheme } from "../../../core/ui/colorScheme";
 import { useSlot } from "../../context";
 import { COMIC_FONT } from "../font";
+import { getColors } from "./colors";
 
-const PAGE_BG = "#f2ead4";
-// Literal, not `var(--tile-border)`: react-aria-components' ModalOverlay
-// portals this whole dialog out next to the end of <body>, outside the DOM
-// subtree ThemeProvider sets that CSS variable on — every `var(--tile-border)`
-// reference in this file was silently resolving to nothing.
-const BORDER_COLOR = "#000000";
 const BORDER_WIDTH = 5;
 
 // A 12-point jagged starburst — alternating an outer radius (48% from
@@ -71,6 +67,7 @@ function TileDetails({
   onSubmit?: () => void;
 }) {
   const TaskPanel = useSlot("TaskPanel");
+  const colors = getColors(useResolvedColorScheme());
   const pageCount = Math.max(tile.tasks.length, 1);
 
   return (
@@ -85,10 +82,12 @@ function TileDetails({
       <AriaButton
         aria-label="Close"
         onPress={onClose}
-        className="cursor-pointer absolute right-0 -top-4 flex size-12 shrink-0 items-center justify-center rounded-full border-[3px] bg-white text-black transition-transform duration-100 pressed:scale-95 hover:-translate-y-0.5 z-51"
+        className="cursor-pointer absolute right-0 -top-4 flex size-12 shrink-0 items-center justify-center rounded-full border-[3px] transition-transform duration-100 pressed:scale-95 hover:-translate-y-0.5 z-51"
         style={{
-          borderColor: BORDER_COLOR,
-          boxShadow: `3px 3px 0 ${BORDER_COLOR}`,
+          backgroundColor: colors.PAPER_RAISED,
+          color: colors.INK,
+          borderColor: colors.INK,
+          boxShadow: `3px 3px 0 ${colors.INK}`,
         }}
       >
         <XIcon size={24} />
@@ -118,8 +117,8 @@ function TileDetails({
         >
           <path
             d="M 5,88 Q 25,83 50,88 Q 75,83 95,88 L 95,12 Q 75,7 50,12 Q 25,7 5,12 Z"
-            fill={PAGE_BG}
-            stroke={BORDER_COLOR}
+            fill={colors.PAPER}
+            stroke={colors.INK}
             strokeWidth={BORDER_WIDTH}
             vectorEffect="non-scaling-stroke"
           />
@@ -127,7 +126,7 @@ function TileDetails({
         <div
           className="relative flex w-full min-h-168"
           style={{
-            backgroundColor: PAGE_BG,
+            backgroundColor: colors.PAPER,
             clipPath: "url(#comic-book-clip)",
             boxShadow:
               "inset 0 14px 18px -14px rgba(0,0,0,0.5), inset 0 -14px 18px -14px rgba(0,0,0,0.5)",
@@ -145,7 +144,7 @@ function TileDetails({
               className="relative h-full"
               style={
                 i < tile.tasks.length - 1
-                  ? { borderRight: `${BORDER_WIDTH}px solid ${BORDER_COLOR}` }
+                  ? { borderRight: `${BORDER_WIDTH}px solid ${colors.INK}` }
                   : undefined
               }
             >
@@ -161,16 +160,18 @@ function TileDetails({
           {tile.submissions.map((s) => (
             <div
               key={s.id}
-              className="relative ml-6 max-w-[92%] self-start rounded-2xl border-[3px] bg-white px-4 py-3"
+              className="relative ml-6 max-w-[92%] self-start rounded-2xl border-[3px] px-4 py-3"
               style={{
-                borderColor: BORDER_COLOR,
+                backgroundColor: colors.PAPER_RAISED,
+                borderColor: colors.INK,
                 boxShadow: "3px 3px 0 rgba(0,0,0,0.2)",
               }}
             >
               <div
-                className="absolute -left-2.5 bottom-4 size-4 border-b-[3px] border-l-[3px] bg-white"
+                className="absolute -left-2.5 bottom-4 size-4 border-b-[3px] border-l-[3px]"
                 style={{
-                  borderColor: BORDER_COLOR,
+                  backgroundColor: colors.PAPER_RAISED,
+                  borderColor: colors.INK,
                   transform: "rotate(45deg)",
                 }}
               />
