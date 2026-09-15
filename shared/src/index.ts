@@ -518,10 +518,10 @@ export interface TectonicProfile {
   achievements: { name: string; thumbnail: string }[]; // sorted by display order
   records: TectonicProfileRecord[];
   events: { name: string; placement: number; solo: boolean }[]; // only placements that scored points
-  combatAchievementCount: number;
 }
 
-// A clan record the player currently holds (as runner or teammate).
+// A clan record the player currently holds (as runner or teammate) that still
+// places on the clan leaderboard.
 export interface TectonicProfileRecord {
   displayName: string; // boss/activity
   category: string;
@@ -530,6 +530,7 @@ export interface TectonicProfileRecord {
   value: number;
   date: string;
   teamSize: number;
+  position: number; // 1 = clan best for that boss
 }
 
 // ---------------------------------------------------------------------------
@@ -631,7 +632,8 @@ export interface DraftPick {
 }
 
 export interface WomPlayerStats {
-  ehb: number;
+  ehb: number; // efficient hours bossed
+  ehp: number; // efficient hours played
 }
 
 // Unified account type — sourced from RuneProfile when it has the player

@@ -66,10 +66,11 @@ const FAKE_WOM_TYPE_WEIGHTS: Array<[string, number]> = [
 
 function fakePlayerStats(rsn: string): { womDataJson: string; runeProfileDataJson: string } {
   const ehb = Math.round(Math.random() * 2000 * 100) / 100;
+  const ehp = Math.round(Math.random() * 3000 * 100) / 100;
   const womType = weightedPick(FAKE_WOM_TYPE_WEIGHTS);
   const runeProfileType = weightedPick(FAKE_RUNEPROFILE_TYPE_WEIGHTS);
   return {
-    womDataJson: JSON.stringify({ ehb, type: womType }),
+    womDataJson: JSON.stringify({ ehb, ehp, type: womType }),
     runeProfileDataJson: JSON.stringify({ username: rsn, accountType: { id: 0, key: runeProfileType, name: runeProfileType } }),
   };
 }

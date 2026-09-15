@@ -25,3 +25,37 @@ export function AchievementIcons({ profile, large = false }: { profile: Tectonic
     </span>
   );
 }
+
+const MEDAL_CLASS: Record<number, string> = {
+  1: "border-gold/60 bg-gold/15 text-gold",
+  2: "border-silver/60 bg-silver/15 text-silver",
+  3: "border-bronze/60 bg-bronze/15 text-bronze",
+};
+
+/** "#1" / "#2" / "#3" pill in medal colours; plainer past the podium. */
+export function Medal({ place, className = "" }: { place: number; className?: string }) {
+  const tone = MEDAL_CLASS[place] ?? "border-line text-fg-muted";
+  const ordinal = place === 1 ? "1st" : place === 2 ? "2nd" : place === 3 ? "3rd" : `${place}th`;
+  return (
+    <span className={`num inline-flex h-5 min-w-7 items-center justify-center rounded-sm border px-1 text-xs font-semibold ${tone} ${className}`} title={ordinal}>
+      #{place}
+    </span>
+  );
+}
+
+/** Total followed by the gold/silver/bronze split; just the total when there's nothing to split. */
+export function PlaceBreakdown({ total, first, second, third }: { total: number; first: number; second: number; third: number }) {
+  if (total === 0) return <>0</>;
+  return (
+    <>
+      {total}
+      <span className="ml-1 text-xs font-normal">
+        <span className="text-gold">{first}</span>
+        <span className="text-fg-subtle">/</span>
+        <span className="text-silver">{second}</span>
+        <span className="text-fg-subtle">/</span>
+        <span className="text-bronze">{third}</span>
+      </span>
+    </>
+  );
+}

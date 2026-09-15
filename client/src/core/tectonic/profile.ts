@@ -48,10 +48,24 @@ export function formatRecordValue(value: number, valueType: string): string {
 
 export const isBingoEvent = (e: { name: string; solo: boolean }) => !e.solo && /bingo/i.test(e.name);
 
+function placeCounts(places: number[]) {
+  const count = (place: number) => places.filter((p) => p === place).length;
+  return { total: places.length, first: count(1), second: count(2), third: count(3) };
+}
+
+/** How many of the player's held clan records sit at #1 / #2 / #3. */
+export function recordSummary(profile: TectonicProfile) {
+  return placeCounts(profile.records.map((r) => r.position));
+}
+
+export function recordTitle(profile: TectonicProfile): string {
+  const r = recordSummary(profile);
+  return `${r.first}× #1 · ${r.second}× #2 · ${r.third}× #3`;
+}
+
 /** Placement counts for the scored events, split out so the table can show "3 podiums" with a breakdown tooltip. */
 export function podiumSummary(profile: TectonicProfile) {
-  const count = (place: number) => profile.events.filter((e) => e.placement === place).length;
-  return { total: profile.events.length, first: count(1), second: count(2), third: count(3), bingoWins: profile.events.filter((e) => e.placement === 1 && isBingoEvent(e)).length };
+  return { ...placeCounts(profile.events.map((e) => e.placement)), bingoWins: profile.events.filter((e) => e.placement === 1 && isBingoEvent(e)).length };
 }
 
 export function podiumTitle(profile: TectonicProfile): string {

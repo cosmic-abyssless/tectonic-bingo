@@ -10,24 +10,28 @@ import { SortHeader, compareSortValues, useTableSort, type TableSort } from "../
 import { RatingCell } from "./RatingCell";
 import { TeamRoster } from "./TeamRoster";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
-import { AchievementIcons, TierBadge } from "../tectonic/ProfileBadges";
+import { AchievementIcons, PlaceBreakdown, TierBadge } from "../tectonic/ProfileBadges";
 import { PlayerName } from "../tectonic/PlayerName";
-import { podiumSummary, podiumTitle } from "../tectonic/profile";
+import { podiumSummary, podiumTitle, recordSummary, recordTitle } from "../tectonic/profile";
 
 
-// "rating" | "rsn" | "discord" | "tier" | "records" | "podiums" | "ehb" | a signup question's id — anything the pool table can sort by.
+// "rating" | "rsn" | "discord" | "tier" | "records" | "podiums" | "ehb" | "ehp" | a signup question's id — anything the pool table can sort by.
 type SortKey = string;
 
 type Ratings = Record<string, PickRating>;
+
+// Golds outrank silvers outrank bronzes, so a single #1 beats three #3s.
+const placeScore = (p: { first: number; second: number; third: number }) => p.first * 10_000 + p.second * 100 + p.third;
 
 function poolSortValue(entry: DraftPoolEntry, key: SortKey, ratings: Ratings): string | number {
   if (key === "rating") return ratings[entry.signup.id]?.stars ?? 0;
   if (key === "rsn") return entry.signup.rsn.toLowerCase();
   if (key === "discord") return displayName(entry.user).toLowerCase();
   if (key === "tier") return entry.tectonicProfile?.points ?? -1;
-  if (key === "records") return entry.tectonicProfile?.records.length ?? -1;
-  if (key === "podiums") return entry.tectonicProfile?.events.length ?? -1;
+  if (key === "records") return entry.tectonicProfile ? placeScore(recordSummary(entry.tectonicProfile)) : -1;
+  if (key === "podiums") return entry.tectonicProfile ? placeScore(podiumSummary(entry.tectonicProfile)) : -1;
   if (key === "ehb") return entry.womStats?.ehb ?? -1;
+  if (key === "ehp") return entry.womStats?.ehp ?? -1;
   return (entry.answers?.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
 }
 
@@ -57,9 +61,11 @@ function ProfileCells({ profile }: { profile: TectonicProfile | null }) {
       <td className="py-2 pr-4">
         <TierBadge profile={profile} />
       </td>
-      <td className="num py-2 pr-4 text-fg-muted">{profile.records.length}</td>
+      <td className="num py-2 pr-4 text-fg-muted" title={recordTitle(profile)}>
+        <PlaceBreakdown {...recordSummary(profile)} />
+      </td>
       <td className="num py-2 pr-4 text-fg-muted" title={podiumTitle(profile)}>
-        {podiums.total}
+        <PlaceBreakdown {...podiums} />
         {podiums.bingoWins > 0 && <span className="ml-1 text-xs text-fg-subtle">({podiums.bingoWins} bingo)</span>}
       </td>
       <td className="py-2 pr-4">
@@ -133,7 +139,12 @@ function PoolTable({
                 <th className="pb-2 pr-4" />
               </>
             )}
-            {showWomStats && <SortHeader label="EHB" sortKey="ehb" sort={sort} />}
+            {showWomStats && (
+              <>
+                <SortHeader label="EHB" sortKey="ehb" sort={sort} />
+                <SortHeader label="EHP" sortKey="ehp" sort={sort} />
+              </>
+            )}
             {showAnswers && questions.map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />)}
             {canPick && <th className="pb-2" />}
           </tr>
@@ -166,7 +177,12 @@ function PoolTable({
                     <td className="whitespace-nowrap py-2 pr-4 text-fg-muted">{displayName(entry.user)}</td>
                     {hasLeftovers && <td className="py-2 pr-4 align-middle">{unit.leftover && i === 0 && <Badge tone="warn">{leftoverTag}</Badge>}</td>}
                     {showProfiles && <ProfileCells profile={entry.tectonicProfile} />}
-                    {showWomStats && <td className="num whitespace-nowrap py-2 pr-4 text-fg-muted">{entry.womStats ? Math.round(entry.womStats.ehb).toLocaleString() : "—"}</td>}
+                    {showWomStats && (
+                      <>
+                        <td className="num whitespace-nowrap py-2 pr-4 text-fg-muted">{entry.womStats ? Math.round(entry.womStats.ehb).toLocaleString() : "—"}</td>
+                        <td className="num whitespace-nowrap py-2 pr-4 text-fg-muted">{entry.womStats ? Math.round(entry.womStats.ehp).toLocaleString() : "—"}</td>
+                      </>
+                    )}
                     {showAnswers &&
                       questions.map((q) => (
                         <td key={q.id} className="py-2 pr-4 text-fg-muted">

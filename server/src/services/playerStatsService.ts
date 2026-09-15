@@ -32,7 +32,7 @@ export interface StoredPlayerStats {
 export function parseStoredPlayerStats(row: { womDataJson: string | null; runeProfileDataJson: string | null }): StoredPlayerStats {
   const womSummary = parseWomSummary(row.womDataJson ? JSON.parse(row.womDataJson) : null);
   const accountType = parseAccountType(row.runeProfileDataJson ? JSON.parse(row.runeProfileDataJson) : null) ?? womSummary?.accountType ?? null;
-  return { womStats: womSummary ? { ehb: womSummary.ehb } : null, accountType };
+  return { womStats: womSummary ? { ehb: womSummary.ehb, ehp: womSummary.ehp } : null, accountType };
 }
 
 /** A player's active signup for this bingo with its stored stats parsed and their answers, or null. */

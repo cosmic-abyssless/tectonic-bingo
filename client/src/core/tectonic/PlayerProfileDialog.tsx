@@ -6,8 +6,8 @@ import { Badge, Notice } from "../ui/Card";
 import { SpinnerIcon } from "../ui/icons";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { displayName } from "../ui/user";
-import { AchievementIcons, TierBadge } from "./ProfileBadges";
-import { formatRecordValue, isBingoEvent, podiumSummary } from "./profile";
+import { AchievementIcons, Medal, PlaceBreakdown, TierBadge } from "./ProfileBadges";
+import { formatRecordValue, isBingoEvent, podiumSummary, recordSummary } from "./profile";
 
 /**
  * One player's card: clan standing (tier, records, event placements), account
@@ -62,7 +62,8 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
   const { profile } = player;
   const name = displayName(player.user);
   const podiums = profile ? podiumSummary(profile) : null;
-  const records = profile ? [...profile.records].sort((a, b) => b.date.localeCompare(a.date)) : [];
+  const recordPlaces = profile ? recordSummary(profile) : null;
+  const records = profile ? [...profile.records].sort((a, b) => a.position - b.position || b.date.localeCompare(a.date)) : [];
   const events = profile ? [...profile.events].sort((a, b) => a.placement - b.placement) : [];
   const answerFor = (questionId: string) => player.answers?.find((a) => a.questionId === questionId)?.value;
 
@@ -88,28 +89,31 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
           </p>
         ) : (
           <>
-            <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
+            <div className="grid grid-cols-3 gap-4 sm:grid-cols-5">
               <Stat label="Tier">
                 <TierBadge profile={profile} showRank={false} />
               </Stat>
               <Stat label="Clan rank">#{profile.rank}</Stat>
-              <Stat label="Records">{profile.records.length}</Stat>
+              <Stat label="Records">
+                <PlaceBreakdown {...recordPlaces!} />
+              </Stat>
               <Stat label="Podiums">
-                {podiums!.total}
-                <span className="ml-1 text-xs font-normal text-fg-subtle">
-                  {podiums!.first}/{podiums!.second}/{podiums!.third}
-                </span>
+                <PlaceBreakdown {...podiums!} />
               </Stat>
               <Stat label="Bingo wins">{podiums!.bingoWins}</Stat>
-              <Stat label="Combat ach.">{profile.combatAchievementCount.toLocaleString()}</Stat>
             </div>
-            {player.womStats && <p className="text-xs text-fg-subtle">{Math.round(player.womStats.ehb).toLocaleString()} EHB on Wise Old Man.</p>}
+            {player.womStats && (
+              <p className="text-xs text-fg-subtle">
+                <span className="num">{Math.round(player.womStats.ehb).toLocaleString()}</span> EHB · <span className="num">{Math.round(player.womStats.ehp).toLocaleString()}</span> EHP on Wise Old Man.
+              </p>
+            )}
 
             <Section title={`Records held (${records.length})`} empty="No current clan records.">
               {records.length > 0 && (
                 <table className="w-full text-sm">
                   <thead className="text-left text-xs text-fg-subtle">
                     <tr>
+                      <th className="py-1 pr-3 font-medium">Place</th>
                       <th className="py-1 pr-3 font-medium">Boss</th>
                       <th className="py-1 pr-3 font-medium">Time</th>
                       <th className="py-1 pr-3 font-medium">Team</th>
@@ -119,6 +123,9 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
                   <tbody className="divide-y divide-line">
                     {records.map((r, i) => (
                       <tr key={i}>
+                        <td className="py-1.5 pr-3">
+                          <Medal place={r.position} />
+                        </td>
                         <td className="py-1.5 pr-3">
                           <span className="text-fg">{r.displayName}</span>
                           {r.category !== r.displayName && <span className="ml-1.5 text-xs text-fg-subtle">{r.category}</span>}
@@ -138,7 +145,7 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
                 <ul className="divide-y divide-line text-sm">
                   {events.map((e, i) => (
                     <li key={i} className="flex items-center gap-2 py-1.5">
-                      <span className="num w-8 shrink-0 font-medium text-fg">#{e.placement}</span>
+                      <Medal place={e.placement} className="shrink-0" />
                       <span className="min-w-0 flex-1 truncate">{e.name}</span>
                       {isBingoEvent(e) && <Badge tone="info">Bingo</Badge>}
                       {e.solo && <Badge>Solo</Badge>}

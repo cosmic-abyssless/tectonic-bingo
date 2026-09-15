@@ -14,29 +14,39 @@ export interface ProfilesResult {
 
 const NO_PROFILES: ProfilesResult = { profiles: {}, unavailable: false };
 
-/** Trim the tectonic-api payload down to what the UI shows. */
-export function toProfile(u: TectonicDetailedUser): TectonicProfile {
+/**
+ * Trim the tectonic-api payload down to what the UI shows. Only records that
+ * still place on the clan leaderboard are kept — a user's record list also
+ * includes runs that have since been beaten.
+ */
+export function toProfile(u: TectonicDetailedUser, positions: Map<number, number>): TectonicProfile {
   return {
     points: u.points,
     rank: u.rank,
     tier: u.tier ? { name: u.tier.name, icon: u.tier.icon ?? null } : null,
     achievements: [...u.achievements].sort((a, b) => a.order - b.order).map((a) => ({ name: a.name, thumbnail: a.thumbnail })),
-    records: u.records.map((r) => ({
-      displayName: r.display_name,
-      category: r.category,
-      solo: r.solo,
-      valueType: r.value_type,
-      value: r.value,
-      date: r.date,
-      teamSize: r.team.length,
-    })),
+    records: u.records.flatMap((r) => {
+      const position = positions.get(r.record_id);
+      if (position === undefined) return [];
+      return [
+        {
+          displayName: r.display_name,
+          category: r.category,
+          solo: r.solo,
+          valueType: r.value_type,
+          value: r.value,
+          date: r.date,
+          teamSize: r.team.length,
+          position,
+        },
+      ];
+    }),
     events: u.events.map((e) => ({ name: e.name, placement: e.placement, solo: e.solo })),
-    combatAchievementCount: u.combat_achievements.length,
   };
 }
 
 /**
- * Live clan profiles for a set of our users, in one batched tectonic-api call
+ * Live clan profiles for a set of our users, in two batched tectonic-api calls
  * (the client caches by URL for 60s). Never throws: an outage yields no
  * profiles and `unavailable: true` so the draft keeps working without them.
  */
@@ -47,9 +57,10 @@ export async function fetchProfiles(db: Db, userIds: string[], client: TectonicC
   const userIdByDiscordId = new Map(rows.map((r) => [r.discordId, r.id]));
 
   let detailed: TectonicDetailedUser[];
+  let positions: Map<number, number>;
   try {
     // Sorted so the same set of players hits the same cached URL.
-    detailed = await client.getDetailedUsers([...userIdByDiscordId.keys()].sort());
+    [detailed, positions] = await Promise.all([client.getDetailedUsers([...userIdByDiscordId.keys()].sort()), client.getRecordPositions()]);
   } catch (err) {
     if (!(err instanceof TectonicUnavailableError)) throw err;
     return { profiles: {}, unavailable: true };
@@ -58,7 +69,7 @@ export async function fetchProfiles(db: Db, userIds: string[], client: TectonicC
   const profiles: Record<string, TectonicProfile> = {};
   for (const u of detailed) {
     const userId = userIdByDiscordId.get(u.user_id);
-    if (userId) profiles[userId] = toProfile(u);
+    if (userId) profiles[userId] = toProfile(u, positions);
   }
   return { profiles, unavailable: false };
 }

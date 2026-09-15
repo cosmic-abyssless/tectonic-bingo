@@ -118,7 +118,7 @@ describe("getSignupStats", () => {
 
     const stats = getSignupStats(db, signup.bingoId, signup.userId)!;
     expect(stats.rsn).toBe("C osmic");
-    expect(stats.womStats).toEqual({ ehb: 42.4 });
+    expect(stats.womStats).toEqual({ ehb: 42.4, ehp: 0 });
     expect(stats.accountType).toBe("group_ironman");
     expect(stats.answers).toEqual([]);
   });
