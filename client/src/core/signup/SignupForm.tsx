@@ -179,6 +179,12 @@ export function SignupForm({ slug }: { slug: string }) {
           description={existing ? "You can update your answers or withdraw while signups are open." : "Fill this out to join the bingo."}
         />
         <div className="space-y-5 p-5">
+          {existing && mySignup?.atRisk && (
+            <Notice tone="warn" icon={<AlertIcon />}>
+              Teams get an equal number of picks, and you're among the newest signups that don't fit a full round right now. You'll be{" "}
+              {shell?.bingo.leftoverMode === "singles" ? "drafted in a final singles round" : "left out of the draft"} unless more players sign up or another team is added.
+            </Notice>
+          )}
           {rsnOptions.length > 0 ? (
             <Field
               label={rsnLabel}

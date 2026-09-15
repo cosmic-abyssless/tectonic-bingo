@@ -18,7 +18,7 @@ import { displayName } from "../ui/user";
 import { Button, IconButton } from "../ui/Button";
 import { Badge, EmptyState, FilterChip, Notice } from "../ui/Card";
 import { Input, Select } from "../ui/Field";
-import { CheckIcon, UsersIcon, XIcon } from "../ui/icons";
+import { AlertIcon, CheckIcon, UsersIcon, XIcon } from "../ui/icons";
 import { SortHeader, compareSortValues, useTableSort } from "../ui/tableSort";
 import { timeAgo } from "../ui/time";
 
@@ -245,6 +245,7 @@ function StatusCell({ slug, entry, canWithdraw }: { slug: string; entry: RosterE
   return (
     <div className="flex items-center gap-1">
       <Badge tone={active ? "ok" : "neutral"}>{entry.signup.status}</Badge>
+      {entry.leftover && <Badge tone="warn">at risk</Badge>}
       {active && canWithdraw && (
         <IconButton label={`Withdraw ${entry.signup.rsn}'s signup`} size="sm" onPress={() => setConfirming(true)}>
           <XIcon size={12} />
@@ -317,6 +318,9 @@ export function SignupRoster({ slug }: { slug: string }) {
 
   const activeCount = roster.filter((r) => r.signup.status === "active").length;
   const withdrawnCount = roster.length - activeCount;
+  const leftoverCount = roster.filter((r) => r.leftover).length;
+  const teamCount = bingoData?.teams.length ?? 0;
+  const leftoverMode = bingoData?.bingo.leftoverMode;
   // Each chip's count reflects the other filter so the numbers show what
   // clicking it would leave on screen.
   const buyinCount = (f: BuyinFilter) => roster.filter((r) => matchesBuyin(r, f) && matchesPair(r, pairFilter)).length;
@@ -336,6 +340,13 @@ export function SignupRoster({ slug }: { slug: string }) {
   return (
     <div className="space-y-4">
       {devMode && bingoData?.bingo.stage === "signup" && <DevSeedPanel slug={slug} />}
+      {leftoverCount > 0 && (
+        <Notice tone="warn" icon={<AlertIcon />}>
+          <span className="num">{leftoverCount}</span> newest signup{leftoverCount !== 1 ? "s" : ""} {leftoverCount !== 1 ? "don't" : "doesn't"} fit a full round of{" "}
+          <span className="num">{teamCount}</span> teams and will be {leftoverMode === "singles" ? "drafted in a singles round" : "cut from the draft"} unless more players sign up or a
+          team is added.{bingoData?.bingo.warnLeftovers ? " They can see this warning on their signup page." : " Turn on the warning in Settings to tell them."}
+        </Notice>
+      )}
       <div className="flex items-center justify-between">
         <p className="text-sm text-fg-muted">
           <span className="num text-fg">{activeCount}</span> active signup{activeCount !== 1 ? "s" : ""}

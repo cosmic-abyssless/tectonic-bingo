@@ -119,7 +119,9 @@ router.post(
 router.get(
   "/signups",
   asyncHandler(async (req, res) => {
-    res.json({ signups: signupService.getAllSignups(db, req.bingo!.id) });
+    const leftovers = draftService.getLeftoverUserIds(db, req.bingo!);
+    const signups = signupService.getAllSignups(db, req.bingo!.id).map((entry) => ({ ...entry, leftover: leftovers.has(entry.user.id) }));
+    res.json({ signups });
   }),
 );
 

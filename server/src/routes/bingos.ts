@@ -277,7 +277,9 @@ router.get(
   requireBingo,
   asyncHandler(async (req, res) => {
     const result = signupService.getSignupForUser(db, req.bingo!.id, req.user!.id);
-    res.json({ signup: result?.signup ?? null, answers: result?.answers ?? [] });
+    // Only warn while the mods have opted in and the player can still act on it.
+    const atRisk = !!result?.signup && result.signup.status === "active" && req.bingo!.warnLeftovers && draftService.getLeftoverUserIds(db, req.bingo!).has(req.user!.id);
+    res.json({ signup: result?.signup ?? null, answers: result?.answers ?? [], atRisk });
   }),
 );
 
@@ -460,7 +462,7 @@ router.get(
     if (!canView) throw new ServiceError(403, "The draft room is only visible to signed-up players and mods");
 
     const ledTeamId = myTeam && teamService.isTeamLead(db, myTeam.id, req.user!.id) ? myTeam.id : null;
-    const state = draftService.getDraftState(db, bingo.id, { includeAnswers: isMod || !!ledTeamId });
+    const state = draftService.getDraftState(db, bingo, { includeAnswers: isMod || !!ledTeamId });
     // Scouting notes are private to the lead's own team.
     const ratings = ledTeamId ? draftService.getTeamRatings(db, ledTeamId) : {};
 

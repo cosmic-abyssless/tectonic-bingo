@@ -74,6 +74,11 @@ export interface User {
 export const SIGNUP_MODES = ["solo", "duo"] as const;
 export type SignupMode = (typeof SIGNUP_MODES)[number];
 
+// What happens to signups that don't fill a full draft round (teams stay
+// equal-sized): dropped from the draft, or drafted in a final singles round.
+export const LEFTOVER_MODES = ["cut", "singles"] as const;
+export type LeftoverMode = (typeof LEFTOVER_MODES)[number];
+
 // Keep in sync with server/src/middleware/upload.ts (the server can't import this at runtime).
 export const MAX_UPLOAD_MB = 5;
 export const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
@@ -88,6 +93,8 @@ export interface Bingo {
   boardRows: number;
   boardCols: number;
   signupMode: SignupMode;
+  leftoverMode: LeftoverMode;
+  warnLeftovers: boolean;
   buyinAmount: number | null;
   bonusPotAmount: number;
   rulesMarkdown: string | null;
@@ -437,6 +444,8 @@ export interface SignupAnswerInput {
 export interface MySignupResponse {
   signup: Signup | null;
   answers: SignupAnswer[];
+  // The bingo warns leftovers and this signup is currently one of them.
+  atRisk: boolean;
 }
 
 // A tectonic-api-linked RSN.
@@ -466,6 +475,8 @@ export interface RosterEntry {
   collectedByUser?: User | null;
   // Duo mode, mod roster only: the accepted pairing this player is in.
   pairing?: SignupPairing | null;
+  // Mod roster only: undrafted and not fitting a full draft round (see LeftoverMode).
+  leftover?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -599,6 +610,7 @@ export interface DraftTeam extends Team {
 export interface DraftUnit {
   pairingId: string | null;
   entries: DraftPoolEntry[];
+  leftover: boolean; // doesn't fit a full round: cut, or drafted in the singles round
 }
 
 // A team's private scouting note on a signup. Shared by captain and
@@ -614,7 +626,8 @@ export interface DraftState {
   picks: DraftPick[]; // a pair shares one pickNumber across two rows
   pool: DraftUnit[];
   draftStarted: boolean;
-  currentPick: { pickNumber: number; round: number; teamId: string } | null;
+  // singlesRound: the main pool is empty and leftovers are being drafted.
+  currentPick: { pickNumber: number; round: number; teamId: string; singlesRound: boolean } | null;
   ratings: Record<string, PickRating>; // by signupId; empty unless the viewer leads a team
 }
 

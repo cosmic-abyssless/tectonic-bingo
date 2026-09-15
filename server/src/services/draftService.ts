@@ -47,6 +47,7 @@ export interface DraftPoolEntry {
 export interface DraftUnit {
   pairingId: string | null;
   entries: DraftPoolEntry[];
+  leftover: boolean; // doesn't fit a full round — see markLeftovers
 }
 
 export interface DraftState {
@@ -54,7 +55,9 @@ export interface DraftState {
   picks: ((typeof draftPicks.$inferSelect) & { user: MinimalUser; rsn: string })[];
   pool: DraftUnit[];
   draftStarted: boolean;
-  currentPick: { pickNumber: number; round: number; teamId: string } | null;
+  // singlesRound: the main pool is empty and leftovers are being drafted
+  // (leftoverMode "singles" only).
+  currentPick: { pickNumber: number; round: number; teamId: string; singlesRound: boolean } | null;
 }
 
 // Groups undrafted signups into units. Pairs whose other half is missing
@@ -65,16 +68,33 @@ function groupIntoUnits(db: Db, bingoId: string, entries: DraftPoolEntry[]): Dra
   for (const { pairing, userIds } of getAcceptedPairs(db, bingoId)) {
     const pair = userIds.map((id) => byUserId.get(id)).filter((e): e is DraftPoolEntry => !!e);
     if (pair.length !== 2) continue;
-    units.push({ pairingId: pairing.id, entries: pair });
+    units.push({ pairingId: pairing.id, entries: pair, leftover: false });
     for (const id of userIds) byUserId.delete(id);
   }
-  for (const entry of byUserId.values()) units.push({ pairingId: null, entries: [entry] });
+  for (const entry of byUserId.values()) units.push({ pairingId: null, entries: [entry], leftover: false });
   return units;
+}
+
+// Every team drafts the same number of units, so with T teams the newest
+// (total units mod T) units don't fit a full round. Units already drafted
+// count towards the total so the answer is stable mid-draft. A pair is as
+// new as its later signup. Nothing is marked until there are 2 teams, since
+// the team count is what decides it.
+export function markLeftovers(units: DraftUnit[], teamCount: number, draftedUnitCount: number): void {
+  if (teamCount < 2) return;
+  const leftoverCount = (draftedUnitCount + units.length) % teamCount;
+  const newestFirst = [...units].sort((a, b) => signedUpAt(b) - signedUpAt(a));
+  for (const unit of newestFirst.slice(0, leftoverCount)) unit.leftover = true;
+}
+
+function signedUpAt(unit: DraftUnit): number {
+  return Math.max(...unit.entries.map((e) => e.signup.createdAt.getTime()));
 }
 
 // includeAnswers gates signup-answer visibility — only mods and team leads
 // should see what a prospective draftee wrote on the signup form.
-export function getDraftState(db: Db, bingoId: string, opts: { includeAnswers: boolean }): DraftState {
+export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: boolean }): DraftState {
+  const bingoId = bingo.id;
   const teamRows = db.select().from(teams).where(eq(teams.bingoId, bingoId)).all();
   const draftStarted = teamRows.length > 0 && teamRows.every((t) => t.draftOrder != null);
   const sortedTeamRows = draftStarted ? [...teamRows].sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0)) : teamRows;
@@ -127,16 +147,35 @@ export function getDraftState(db: Db, bingoId: string, opts: { includeAnswers: b
     answers: opts.includeAnswers ? poolAnswers.filter((a) => a.signupId === s.id) : null,
   }));
   const pool = groupIntoUnits(db, bingoId, poolEntries);
+  const draftedUnitCount = new Set(pickRows.map((p) => p.pickNumber)).size;
+  markLeftovers(pool, orderedTeams.length, draftedUnitCount);
 
   let currentPick: DraftState["currentPick"] = null;
-  if (draftStarted && pool.length > 0) {
+  const pickable = draftablePool(pool, bingo);
+  if (draftStarted && pickable.length > 0) {
     const pickNumber = nextPickNumber(db, bingoId);
     const round = Math.ceil(pickNumber / orderedTeams.length);
     const teamIndex = pickOrderTeamIndex(orderedTeams.length, pickNumber);
-    currentPick = { pickNumber, round, teamId: orderedTeams[teamIndex]!.id };
+    currentPick = { pickNumber, round, teamId: orderedTeams[teamIndex]!.id, singlesRound: pickable.every((u) => u.leftover) };
   }
 
   return { teams: orderedTeams, picks, pool, draftStarted, currentPick };
+}
+
+// Which units may be drafted next: the main pool while it lasts, then (in
+// singles mode) the leftovers. The snake simply carries on into the singles
+// round, so whoever picked last in the final full round picks first.
+function draftablePool(pool: DraftUnit[], bingo: Bingo): DraftUnit[] {
+  const main = pool.filter((u) => !u.leftover);
+  if (main.length > 0) return main;
+  return bingo.leftoverMode === "singles" ? pool : [];
+}
+
+// User ids of undrafted signups currently at risk of being cut / pushed to
+// the singles round. Used by the roster and the signup page.
+export function getLeftoverUserIds(db: Db, bingo: Bingo): Set<string> {
+  const { pool } = getDraftState(db, bingo, { includeAnswers: false });
+  return new Set(pool.filter((u) => u.leftover).flatMap((u) => u.entries.map((e) => e.user.id)));
 }
 
 function shuffled<T>(arr: T[]): T[] {
@@ -222,6 +261,14 @@ export function makePick(db: Db, params: MakePickParams) {
 
       const alreadyDrafted = tx.select({ id: teamMembers.id }).from(teamMembers).where(and(inArray(teamMembers.teamId, teamIds), eq(teamMembers.userId, userId))).get();
       if (alreadyDrafted) throw new ServiceError(400, "That player has already been drafted");
+    }
+
+    const { pool } = getDraftState(tx, bingo, { includeAnswers: false });
+    if (!draftablePool(pool, bingo).some((u) => u.entries.some((e) => e.user.id === pickedUserId))) {
+      throw new ServiceError(
+        400,
+        bingo.leftoverMode === "singles" ? "Leftover signups are drafted in the singles round, after the main pool is empty" : "That signup doesn't fit a full round and isn't being drafted",
+      );
     }
 
     const picks = userIds.map((userId) =>

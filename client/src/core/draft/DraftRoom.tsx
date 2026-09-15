@@ -1,10 +1,10 @@
 import { useState } from "react";
-import type { DraftPoolEntry, DraftUnit, AccountType, PickRating, SignupQuestion } from "@bingo/shared";
+import type { DraftPoolEntry, DraftUnit, AccountType, LeftoverMode, PickRating, SignupQuestion } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
 import { useBingo, useDraftState, useMakePick, useSetPickRating, useSignupQuestions, useStartDraft } from "../../api/queries";
 import { displayName } from "../ui/user";
 import { Button } from "../ui/Button";
-import { Card, Notice } from "../ui/Card";
+import { Badge, Card, Notice } from "../ui/Card";
 import { LinkIcon } from "../ui/icons";
 import { SortHeader, compareSortValues, useTableSort, type TableSort } from "../ui/tableSort";
 import { RatingCell } from "./RatingCell";
@@ -74,6 +74,7 @@ function PoolTable({
   canPick,
   onPick,
   picking,
+  leftoverMode,
 }: {
   pool: DraftUnit[];
   questions: SignupQuestion[];
@@ -83,6 +84,7 @@ function PoolTable({
   canPick: boolean;
   onPick: (userId: string) => void;
   picking: boolean;
+  leftoverMode: LeftoverMode;
 }) {
   // Leads land on their favourites first; the toggle flips to ascending.
   const sort = useTableSort<SortKey>(ratings ? "rating" : "rsn", ratings ? "desc" : "asc");
@@ -96,6 +98,11 @@ function PoolTable({
   // integration effectively unused for this bingo), same reasoning.
   const showWomStats = entries.some((e) => e.womStats !== null);
   const hasPairs = pool.some((u) => u.entries.length > 1);
+  // Leftovers wait until the main pool is empty (singles round) or are never
+  // drafted (cut); the Draft button follows draftService.draftablePool.
+  const hasLeftovers = pool.some((u) => u.leftover);
+  const mainPoolEmpty = pool.every((u) => u.leftover);
+  const leftoverTag = leftoverMode === "singles" ? "Singles round" : "Cut";
 
   const sorted = pool
     .map((u) => sortUnit(u, sort, ratingOf))
@@ -112,6 +119,7 @@ function PoolTable({
             {ratings && <SortHeader label="Rating" sortKey="rating" sort={sort} />}
             <SortHeader label="RSN" sortKey="rsn" sort={sort} />
             <SortHeader label="Discord" sortKey="discord" sort={sort} />
+            {hasLeftovers && <th className="pb-2 pr-4" />}
             {showWomStats && <SortHeader label="EHB" sortKey="ehb" sort={sort} />}
             {showAnswers && questions.map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />)}
             {canPick && <th className="pb-2" />}
@@ -121,8 +129,9 @@ function PoolTable({
             button and are marked by a link icon down the left edge. */}
         {sorted.map((unit) => {
           const isPair = unit.entries.length > 1;
+          const draftable = !unit.leftover || (mainPoolEmpty && leftoverMode === "singles");
           return (
-            <tbody key={unit.pairingId ?? unit.entries[0].signup.id} className="border-t border-line">
+            <tbody key={unit.pairingId ?? unit.entries[0].signup.id} className={`border-t border-line ${unit.leftover ? "text-fg-subtle" : ""}`}>
               {unit.entries.map((entry, i) => {
                 const answerByQ = new Map((entry.answers ?? []).map((a) => [a.questionId, a.value]));
                 return (
@@ -137,10 +146,11 @@ function PoolTable({
                         <RatingCell rating={ratings[entry.signup.id]} onChange={(r) => onRate(entry.signup.id, r)} />
                       </td>
                     )}
-                    <td className="whitespace-nowrap py-2 pr-4 font-medium text-fg">
+                    <td className={`whitespace-nowrap py-2 pr-4 font-medium ${unit.leftover ? "" : "text-fg"}`}>
                       <AccountTypeIcon accountType={entry.accountType} /> {entry.signup.rsn}
                     </td>
                     <td className="whitespace-nowrap py-2 pr-4 text-fg-muted">{displayName(entry.user)}</td>
+                    {hasLeftovers && <td className="py-2 pr-4 align-middle">{unit.leftover && i === 0 && <Badge tone="warn">{leftoverTag}</Badge>}</td>}
                     {showWomStats && <td className="num whitespace-nowrap py-2 pr-4 text-fg-muted">{entry.womStats ? Math.round(entry.womStats.ehb).toLocaleString() : "—"}</td>}
                     {showAnswers &&
                       questions.map((q) => (
@@ -150,7 +160,7 @@ function PoolTable({
                       ))}
                     {canPick && i === 0 && (
                       <td className="py-1 text-right align-middle" rowSpan={unit.entries.length}>
-                        <Button size="sm" variant="primary" onPress={() => onPick(entry.user.id)} isDisabled={picking}>
+                        <Button size="sm" variant="primary" onPress={() => onPick(entry.user.id)} isDisabled={picking || !draftable}>
                           {isPair ? "Draft pair" : "Draft"}
                         </Button>
                       </td>
@@ -202,6 +212,7 @@ export function DraftRoom({ slug }: { slug: string }) {
   // Before the draft stage the room is a scouting view: leads (and mods)
   // browse and rate signups; nothing can start or be picked yet.
   const scouting = shell.bingo.stage !== "draft";
+  const poolCount = state.pool.reduce((n, u) => n + u.entries.length, 0);
 
   async function handleStart() {
     setStartError(null);
@@ -256,12 +267,20 @@ export function DraftRoom({ slug }: { slug: string }) {
       ) : state.currentPick ? (
         <Card className="p-4">
           <p className="num text-xs uppercase tracking-wide text-fg-subtle">
-            Round {state.currentPick.round} · Pick {state.currentPick.pickNumber}
+            {state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick {state.currentPick.pickNumber}
           </p>
           <p className="text-lg font-semibold text-fg">{currentTeam?.name ?? "…"} is on the clock</p>
         </Card>
       ) : (
-        <Notice tone="ok">Draft complete. {isMod ? "Advance to the reveal stage from the mod panel when you're ready." : "The board is revealed next."}</Notice>
+        <Notice tone="ok">
+          Draft complete. {isMod ? "Advance to the reveal stage from the mod panel when you're ready." : "The board is revealed next."}
+          {poolCount > 0 && (
+            <>
+              {" "}
+              <span className="num">{poolCount}</span> leftover signup{poolCount === 1 ? " was" : "s were"} not drafted.
+            </>
+          )}
+        </Notice>
       )}
 
       {isMyTurn && <Notice tone="ok">It's your turn to pick.</Notice>}
@@ -283,7 +302,7 @@ export function DraftRoom({ slug }: { slug: string }) {
 
       <section>
         <h3 className="mb-2 text-sm font-semibold text-fg">
-          Available players <span className="num font-normal text-fg-subtle">({state.pool.reduce((n, u) => n + u.entries.length, 0)})</span>
+          Available players <span className="num font-normal text-fg-subtle">({poolCount})</span>
         </h3>
         {(pickError || rateError) && (
           <Notice tone="danger" className="mb-2">
@@ -298,6 +317,7 @@ export function DraftRoom({ slug }: { slug: string }) {
           canPick={canAct}
           onPick={handlePick}
           picking={makePick.isPending}
+          leftoverMode={shell.bingo.leftoverMode}
         />
       </section>
     </div>

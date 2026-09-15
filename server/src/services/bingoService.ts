@@ -274,6 +274,8 @@ export interface UpdateBingoSettingsParams {
   description?: string | null;
   theme?: string;
   signupMode?: "solo" | "duo";
+  leftoverMode?: "cut" | "singles";
+  warnLeftovers?: boolean;
   buyinAmount?: number | null;
   bonusPotAmount?: number;
   rulesMarkdown?: string | null;

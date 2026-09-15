@@ -42,6 +42,12 @@ export const bingos = sqliteTable('bingos', {
   // 'duo': players pair up during signup and are drafted as a unit. Only
   // changeable while the bingo has no signups.
   signupMode: text('signup_mode', { enum: ['solo', 'duo'] }).notNull().default('solo'),
+  // Teams end up equal-sized, so signups that don't fill a full draft round
+  // are "leftovers": either cut from the draft, or drafted in a final singles
+  // round once the main pool is empty.
+  leftoverMode: text('leftover_mode', { enum: ['cut', 'singles'] }).notNull().default('cut'),
+  // Show at-risk signups a notice on the signup page.
+  warnLeftovers: integer('warn_leftovers', { mode: 'boolean' }).notNull().default(false),
   buyinAmount: integer('buyin_amount'), // GP per player, nullable until decided
   // Extra GP added to the pot on top of buy-ins (sponsorships, donations to
   // raise the stakes). The actual pot total is buyinAmount × paid signups +
