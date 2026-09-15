@@ -250,6 +250,21 @@ export const draftPicks = sqliteTable('draft_picks', {
   uniqueIndex('draft_picks_bingo_user_unq').on(t.bingoId, t.userId),
 ]);
 
+// "I want to do this tile" — a player's hand raised on a tile, visible to
+// their own team so work can be split up without a side channel. One row per
+// (tile, user); the team is stored so the board read path can load a team's
+// interests in one query without joining membership.
+export const tileInterests = sqliteTable('tile_interests', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  tileId: text('tile_id').notNull().references(() => tiles.id),
+  teamId: text('team_id').notNull().references(() => teams.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => [
+  uniqueIndex('tile_interests_tile_user_unq').on(t.tileId, t.userId),
+  index('tile_interests_team_idx').on(t.teamId),
+]);
+
 // A team's private notes on a signup while scouting before/during the draft.
 // Shared between captain and co-captain; visible to mods.
 export const pickRatings = sqliteTable('pick_ratings', {

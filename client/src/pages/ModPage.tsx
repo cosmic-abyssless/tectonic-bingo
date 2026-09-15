@@ -16,6 +16,7 @@ import { LineEditor } from "../core/admin/LineEditor";
 import { QuestionBuilder } from "../core/admin/QuestionBuilder";
 import { TeamManager } from "../core/admin/TeamManager";
 import { AppHeader } from "../core/ui/AppHeader";
+import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { Button } from "../core/ui/Button";
 import { Dialog, DialogHeader } from "../core/ui/Dialog";
 import { MenuItem } from "../core/ui/Menu";
@@ -124,46 +125,48 @@ export function ModPage() {
       <main className="mx-auto w-full max-w-6xl space-y-6 px-6 py-6">
         <StageControls slug={slug} bingo={shell.bingo} />
 
-        <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key))}>
-          <TabList>
-            {visibleTabs.map((t) => (
-              <Tab key={t.key} id={t.key} dimmed={t.dimmed}>
-                {t.label}
-              </Tab>
-            ))}
-          </TabList>
-          <TabPanel id="submissions">
-            <ReviewQueue slug={slug} />
-          </TabPanel>
-          <TabPanel id="signups">
-            <SignupRoster slug={slug} />
-          </TabPanel>
-          <TabPanel id="audit">
-            <AuditLog slug={slug} />
-          </TabPanel>
-          {isAdmin && (
-            <>
-              <TabPanel id="settings">
-                <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} hasSignups={shell.hasSignups} />
-              </TabPanel>
-              <TabPanel id="board">
-                <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />
-              </TabPanel>
-              <TabPanel id="lines">
-                <LineEditor slug={slug} />
-              </TabPanel>
-              <TabPanel id="questions">
-                <QuestionBuilder slug={slug} />
-              </TabPanel>
-              <TabPanel id="teams">
-                <TeamManager slug={slug} />
-              </TabPanel>
-              <TabPanel id="mods">
-                <ModsManager slug={slug} />
-              </TabPanel>
-            </>
-          )}
-        </Tabs>
+        <PlayerProfileProvider slug={slug}>
+          <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key))}>
+            <TabList>
+              {visibleTabs.map((t) => (
+                <Tab key={t.key} id={t.key} dimmed={t.dimmed}>
+                  {t.label}
+                </Tab>
+              ))}
+            </TabList>
+            <TabPanel id="submissions">
+              <ReviewQueue slug={slug} />
+            </TabPanel>
+            <TabPanel id="signups">
+              <SignupRoster slug={slug} />
+            </TabPanel>
+            <TabPanel id="audit">
+              <AuditLog slug={slug} />
+            </TabPanel>
+            {isAdmin && (
+              <>
+                <TabPanel id="settings">
+                  <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} hasSignups={shell.hasSignups} />
+                </TabPanel>
+                <TabPanel id="board">
+                  <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />
+                </TabPanel>
+                <TabPanel id="lines">
+                  <LineEditor slug={slug} />
+                </TabPanel>
+                <TabPanel id="questions">
+                  <QuestionBuilder slug={slug} />
+                </TabPanel>
+                <TabPanel id="teams">
+                  <TeamManager slug={slug} />
+                </TabPanel>
+                <TabPanel id="mods">
+                  <ModsManager slug={slug} />
+                </TabPanel>
+              </>
+            )}
+          </Tabs>
+        </PlayerProfileProvider>
       </main>
 
       <Dialog isOpen={showNotifPrompt} onClose={dismissNotifPrompt}>

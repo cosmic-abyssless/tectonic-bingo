@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useBingo } from "../api/queries";
 import { StatsView } from "../core/stats/StatsView";
 import { AppHeader } from "../core/ui/AppHeader";
+import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 
 // Stats never themes — always core/, regardless of bingo.theme.
 export function StatsPage() {
@@ -23,7 +24,9 @@ export function StatsPage() {
   return (
     <div className="min-h-screen bg-bg text-fg">
       <AppHeader back={{ to: `/b/${slug}`, label: "Back to bingo" }} title="Stats" subtitle={shell.bingo.name} />
-      <StatsView slug={slug!} />
+      <PlayerProfileProvider slug={slug!}>
+        <StatsView slug={slug!} />
+      </PlayerProfileProvider>
     </div>
   );
 }

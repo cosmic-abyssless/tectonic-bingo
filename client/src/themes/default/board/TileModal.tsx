@@ -3,19 +3,20 @@ import type { TileModel } from "../../../headless/types";
 import { Dialog } from "../../../core/ui/Dialog";
 import { Button, IconButton } from "../../../core/ui/Button";
 import { Badge } from "../../../core/ui/Card";
-import { ClockIcon, XIcon } from "../../../core/ui/icons";
+import { ClockIcon, HandIcon, XIcon } from "../../../core/ui/icons";
+import { PlayerName } from "../../../core/tectonic/PlayerName";
 import { useSlot } from "../../context";
 
 /** `tile` null while `isOpen` transitions closed (kept mounted so it can animate out). */
-export function TileModal({ tile, isOpen, onClose, onSubmit }: { tile: TileModel | null; isOpen: boolean; onClose: () => void; onSubmit?: () => void }) {
+export function TileModal({ tile, isOpen, onClose, onSubmit, onToggleInterest }: { tile: TileModel | null; isOpen: boolean; onClose: () => void; onSubmit?: () => void; onToggleInterest?: () => void }) {
   return (
     <Dialog isOpen={isOpen} onClose={onClose} size="lg">
-      {tile && <TileDetails tile={tile} onClose={onClose} onSubmit={onSubmit} />}
+      {tile && <TileDetails tile={tile} onClose={onClose} onSubmit={onSubmit} onToggleInterest={onToggleInterest} />}
     </Dialog>
   );
 }
 
-function TileDetails({ tile, onClose, onSubmit }: { tile: TileModel; onClose: () => void; onSubmit?: () => void }) {
+function TileDetails({ tile, onClose, onSubmit, onToggleInterest }: { tile: TileModel; onClose: () => void; onSubmit?: () => void; onToggleInterest?: () => void }) {
   const TaskPanel = useSlot("TaskPanel");
   const TileSubmissions = useSlot("TileSubmissions");
   const submitDisabled = tile.progress.allComplete || tile.freeze.isFrozen;
@@ -59,6 +60,30 @@ function TileDetails({ tile, onClose, onSubmit }: { tile: TileModel; onClose: ()
           </IconButton>
         </div>
       </div>
+
+      {(onToggleInterest || tile.interest.people.length > 0) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-5 py-3 text-sm">
+          {onToggleInterest && (
+            <Button variant={tile.interest.mine ? "primary" : "secondary"} size="sm" onPress={onToggleInterest} aria-pressed={tile.interest.mine}>
+              <HandIcon fill={tile.interest.mine ? "currentColor" : "none"} />
+              {tile.interest.mine ? "I'm on this" : "I'll do this"}
+            </Button>
+          )}
+          {tile.interest.people.length > 0 ? (
+            <p className="text-fg-muted">
+              <span className="text-fg-subtle">On this tile: </span>
+              {tile.interest.people.map((p, i) => (
+                <span key={p.id}>
+                  {i > 0 && ", "}
+                  <PlayerName userId={p.id}>{p.displayName}</PlayerName>
+                </span>
+              ))}
+            </p>
+          ) : (
+            <p className="text-fg-subtle">Nobody has claimed this tile yet.</p>
+          )}
+        </div>
+      )}
 
       <div className="grid divide-x divide-line" style={{ gridTemplateColumns: `repeat(${Math.max(tile.tasks.length, 1)}, minmax(0, 1fr))` }}>
         {tile.tasks.map((task) => (

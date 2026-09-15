@@ -103,6 +103,7 @@ export interface AuditDetailsMap {
   "team.member_added": { userId: string; displayName: string };
   "team.member_removed": { userId: string; displayName: string };
   "team.deleted": { name: string; captainName: string; memberCount: number };
+  "team.tile_interest_set": { tileName: string; interested: boolean };
 
   "submission.created": { tileId: string; tileName: string; taskLabels: string[]; claims: { nodeId: string; itemName: string | null; quantity: number }[]; screenshotUrl: string };
   "submission.approved": { tileName: string | null; taskLabels: string[]; nodeIds: string[]; newlyCompletedNodeIds: string[]; pointsDelta: number; reviewerNotes: string | null; submittedByUserId: string };
@@ -303,6 +304,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
   "team.member_added": { category: "team", tone: "ok", visibility: "team", title: "Team member added", label: (i) => `${actor(i)} added ${i.details.displayName} to ${i.teamName ?? "the team"}` },
   "team.member_removed": { category: "team", tone: "warn", visibility: "team", title: "Team member removed", label: (i) => `${actor(i)} removed ${i.details.displayName} from ${i.teamName ?? "the team"}` },
   "team.deleted": { category: "team", tone: "danger", visibility: "mods", title: "Team deleted", label: (i) => `${actor(i)} deleted the team "${i.details.name}"` },
+  "team.tile_interest_set": {
+    category: "team",
+    tone: "neutral",
+    visibility: "team",
+    title: "Tile interest",
+    label: (i) => (i.details.interested ? `${actor(i)} wants to do "${i.details.tileName}"` : `${actor(i)} is no longer on "${i.details.tileName}"`),
+  },
   "submission.created": {
     category: "submission",
     tone: "info",

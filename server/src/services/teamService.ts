@@ -2,10 +2,11 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { FieldChanges } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { draftPicks, pickRatings, signupAnswers, signups, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, users } from "../db/schema";
+import { draftPicks, pickRatings, signupAnswers, signups, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tileInterests, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
 import { PUBLIC_SIGNUP_COLS } from "./signupService";
+import { MINIMAL_USER_COLS } from "./userService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 
@@ -72,16 +73,49 @@ export interface TeamProgressSummary {
   nodeStates: (typeof teamNodeState.$inferSelect)[];
   adjustments: (typeof teamPointAdjustments.$inferSelect)[];
   totalPoints: number;
+  interests: { tileId: string; user: Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">; createdAt: Date }[];
 }
 
 export function getTeamProgress(db: Db, teamId: string): TeamProgressSummary {
   const nodeStates = db.select().from(teamNodeState).where(eq(teamNodeState.teamId, teamId)).all();
   const adjustments = db.select().from(teamPointAdjustments).where(eq(teamPointAdjustments.teamId, teamId)).all();
+  const interests = db
+    .select({ tileId: tileInterests.tileId, user: MINIMAL_USER_COLS, createdAt: tileInterests.createdAt })
+    .from(tileInterests)
+    .innerJoin(users, eq(tileInterests.userId, users.id))
+    .where(eq(tileInterests.teamId, teamId))
+    .all();
 
   const nodePoints = nodeStates.reduce((sum, s) => sum + s.pointsAwarded, 0);
   const adjustmentPoints = adjustments.reduce((sum, a) => sum + a.amount, 0);
 
-  return { nodeStates, adjustments, totalPoints: nodePoints + adjustmentPoints };
+  return { nodeStates, adjustments, totalPoints: nodePoints + adjustmentPoints, interests };
+}
+
+// A member raises (or lowers) their hand for a tile. Team-scoped so leaving a
+// team takes the hand down with it; the tile must belong to the team's bingo.
+export function setTileInterest(db: Db, teamId: string, userId: string, tileId: string, interested: boolean): void {
+  db.transaction((tx) => {
+    const team = tx.select({ bingoId: teams.bingoId }).from(teams).where(eq(teams.id, teamId)).get();
+    const tile = tx.select({ id: tiles.id, bingoId: tiles.bingoId, name: tiles.name }).from(tiles).where(eq(tiles.id, tileId)).get();
+    if (!team || !tile || tile.bingoId !== team.bingoId) throw new ServiceError(404, "Tile not found");
+
+    const where = and(eq(tileInterests.tileId, tileId), eq(tileInterests.userId, userId));
+    const existing = tx.select({ id: tileInterests.id }).from(tileInterests).where(where).get();
+    if (interested === !!existing) {
+      markAuditedNoop();
+      return;
+    }
+    if (interested) tx.insert(tileInterests).values({ tileId, teamId, userId }).run();
+    else tx.delete(tileInterests).where(where).run();
+    audit(tx, {
+      action: "team.tile_interest_set",
+      bingoId: team.bingoId,
+      entity: { type: "tile", id: tileId, label: tile.name },
+      teamId,
+      details: { tileName: tile.name, interested },
+    });
+  });
 }
 
 // The only way to hand out points outside the node graph now that approval
@@ -299,6 +333,7 @@ export function removeTeamMember(db: Db, teamId: string, userId: string): void {
     const pick = tx.select({ id: draftPicks.id }).from(draftPicks).where(and(eq(draftPicks.teamId, teamId), eq(draftPicks.userId, userId))).get();
     if (pick) throw new ServiceError(409, "This player was drafted onto the team and can't be removed");
     const displayName = userLabelById(tx, userId);
+    tx.delete(tileInterests).where(and(eq(tileInterests.teamId, teamId), eq(tileInterests.userId, userId))).run();
     tx.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).run();
     audit(tx, {
       action: "team.member_removed",
@@ -327,6 +362,7 @@ export function deleteTeam(db: Db, teamId: string): void {
       details: { name: team.name, captainName: userLabelById(tx, team.captainUserId) ?? "Unknown", memberCount },
     });
     tx.delete(pickRatings).where(eq(pickRatings.teamId, teamId)).run();
+    tx.delete(tileInterests).where(eq(tileInterests.teamId, teamId)).run();
     tx.delete(teamMembers).where(eq(teamMembers.teamId, teamId)).run();
     tx.delete(teams).where(eq(teams.id, teamId)).run();
   });

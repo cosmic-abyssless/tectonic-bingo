@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useBingo } from "../api/queries";
 import { DraftRoom } from "../core/draft/DraftRoom";
 import { AppHeader } from "../core/ui/AppHeader";
+import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 
 // Draft room never themes — always core/, regardless of bingo.theme.
 export function DraftPage() {
@@ -23,7 +24,9 @@ export function DraftPage() {
   return (
     <div className="min-h-screen bg-bg text-fg">
       <AppHeader back={{ to: `/b/${slug}`, label: "Back to bingo" }} title="Draft" subtitle={shell.bingo.name} />
-      <DraftRoom slug={slug!} />
+      <PlayerProfileProvider slug={slug!}>
+        <DraftRoom slug={slug!} />
+      </PlayerProfileProvider>
     </div>
   );
 }

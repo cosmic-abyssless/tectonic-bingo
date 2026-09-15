@@ -79,10 +79,15 @@ describe("WomClient.getPlayerByUsername", () => {
 
 describe("parseWomSummary", () => {
   it("maps all four WOM types onto the shared AccountType enum", () => {
-    expect(parseWomSummary(playerBody(1, "regular"))).toEqual({ ehb: 1, accountType: "normal" });
-    expect(parseWomSummary(playerBody(2, "ironman"))).toEqual({ ehb: 2, accountType: "ironman" });
-    expect(parseWomSummary(playerBody(3, "hardcore"))).toEqual({ ehb: 3, accountType: "hardcore_ironman" });
-    expect(parseWomSummary(playerBody(4, "ultimate"))).toEqual({ ehb: 4, accountType: "ultimate_ironman" });
+    expect(parseWomSummary(playerBody(1, "regular"))).toEqual({ ehb: 1, ehp: 0, accountType: "normal" });
+    expect(parseWomSummary(playerBody(2, "ironman"))).toEqual({ ehb: 2, ehp: 0, accountType: "ironman" });
+    expect(parseWomSummary(playerBody(3, "hardcore"))).toEqual({ ehb: 3, ehp: 0, accountType: "hardcore_ironman" });
+    expect(parseWomSummary(playerBody(4, "ultimate"))).toEqual({ ehb: 4, ehp: 0, accountType: "ultimate_ironman" });
+  });
+
+  it("reads ehp when present and defaults it to 0 for older blobs", () => {
+    expect(parseWomSummary({ ehb: 1, ehp: 250.5, type: "regular" })?.ehp).toBe(250.5);
+    expect(parseWomSummary({ ehb: 1, type: "regular" })?.ehp).toBe(0);
   });
 
   it("falls back to unknown for an unrecognized or missing type", () => {

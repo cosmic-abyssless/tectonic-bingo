@@ -59,6 +59,7 @@ export function getWomClient(): WomClient {
 
 export interface WomPlayerSummary {
   ehb: number;
+  ehp: number;
   accountType: AccountType;
 }
 
@@ -72,6 +73,7 @@ const WOM_TYPE_MAP: Record<string, AccountType> = {
 
 interface StoredWomPlayer {
   ehb?: unknown;
+  ehp?: unknown;
   type?: unknown;
 }
 
@@ -81,5 +83,6 @@ export function parseWomSummary(raw: unknown): WomPlayerSummary | null {
   const player = raw as StoredWomPlayer;
   if (typeof player.ehb !== "number") return null;
   const accountType = (typeof player.type === "string" && WOM_TYPE_MAP[player.type]) || "unknown";
-  return { ehb: player.ehb, accountType };
+  // Blobs stored before EHP was read lack it; treat as 0 rather than dropping the whole summary.
+  return { ehb: player.ehb, ehp: typeof player.ehp === "number" ? player.ehp : 0, accountType };
 }

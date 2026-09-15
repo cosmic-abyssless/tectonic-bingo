@@ -7,7 +7,8 @@ import {
 } from "react-aria-components";
 import type { TileModel } from "../../../headless/types";
 import { SubmissionBubble } from "./SubmissionBubble";
-import { XIcon } from "../../../core/ui/icons";
+import { HandIcon, XIcon } from "../../../core/ui/icons";
+import { PlayerName } from "../../../core/tectonic/PlayerName";
 import { useSlot } from "../../context";
 import { COMIC_FONT } from "../font";
 
@@ -31,11 +32,13 @@ export function TileModal({
   isOpen,
   onClose,
   onSubmit,
+  onToggleInterest,
 }: {
   tile: TileModel | null;
   isOpen: boolean;
   onClose: () => void;
   onSubmit?: () => void;
+  onToggleInterest?: () => void;
 }) {
   return (
     <ModalOverlay
@@ -52,7 +55,7 @@ export function TileModal({
         <AriaModal className="overlay-panel w-full max-w-3xl outline-none">
           <AriaDialog className="outline-none">
             {tile && (
-              <TileDetails tile={tile} onClose={onClose} onSubmit={onSubmit} />
+              <TileDetails tile={tile} onClose={onClose} onSubmit={onSubmit} onToggleInterest={onToggleInterest} />
             )}
           </AriaDialog>
         </AriaModal>
@@ -65,10 +68,12 @@ function TileDetails({
   tile,
   onClose,
   onSubmit,
+  onToggleInterest,
 }: {
   tile: TileModel;
   onClose: () => void;
   onSubmit?: () => void;
+  onToggleInterest?: () => void;
 }) {
   const TaskPanel = useSlot("TaskPanel");
   const pageCount = Math.max(tile.tasks.length, 1);
@@ -154,6 +159,44 @@ function TileDetails({
           ))}
         </div>
       </div>
+      {/* Who's on this tile: a speech bubble with a shout-out button. */}
+      {(onToggleInterest || tile.interest.people.length > 0) && (
+        <div
+          className="relative z-0 mx-2 mt-4 flex flex-wrap items-center gap-3 rounded-2xl border-[3px] bg-white px-4 py-3 text-black"
+          style={{ borderColor: BORDER_COLOR, boxShadow: "3px 3px 0 rgba(0,0,0,0.2)", fontFamily: COMIC_FONT }}
+        >
+          {onToggleInterest && (
+            <AriaButton
+              onPress={onToggleInterest}
+              aria-pressed={tile.interest.mine}
+              className="cursor-pointer flex items-center gap-1.5 rounded-full border-[3px] px-3 py-1 text-sm font-bold uppercase transition-transform duration-100 pressed:scale-95 hover:-translate-y-0.5"
+              style={{
+                borderColor: BORDER_COLOR,
+                boxShadow: `2px 2px 0 ${BORDER_COLOR}`,
+                backgroundColor: tile.interest.mine ? "#facc15" : "white",
+              }}
+            >
+              <HandIcon size={16} fill={tile.interest.mine ? "currentColor" : "none"} />
+              {tile.interest.mine ? "I'm on it!" : "I'll do this!"}
+            </AriaButton>
+          )}
+          <span className="text-sm">
+            {tile.interest.people.length > 0 ? (
+              <>
+                <span className="font-bold uppercase">On it: </span>
+                {tile.interest.people.map((p, i) => (
+                  <span key={p.id}>
+                    {i > 0 && ", "}
+                    <PlayerName userId={p.id}>{p.displayName}</PlayerName>
+                  </span>
+                ))}
+              </>
+            ) : (
+              "Nobody has called this one yet."
+            )}
+          </span>
+        </div>
+      )}
       {/* Submissions as a stack of chat bubbles floating below the book,
           each with a small tail on its left edge, near the bottom. */}
       {tile.submissions.length > 0 && (

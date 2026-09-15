@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { AuditCategory, AuditEntry } from "@bingo/shared";
 import { useAuditLog, useBingo } from "../../api/queries";
 import { displayName } from "../ui/user";
+import { PlayerName } from "../tectonic/PlayerName";
 import { timeAgo } from "../ui/time";
 import { AuditActionBadge } from "../ui/AuditActionBadge";
 import { Button } from "../ui/Button";
@@ -146,7 +147,7 @@ export function AuditLog({ slug }: { slug: string }) {
                     </div>
                     <p className="text-sm text-fg">{entry.label}</p>
                     <p className="mt-0.5 text-xs text-fg-subtle">
-                      {entry.actor ? displayName(entry.actor) : entry.actorType} · {entry.actorRole}
+                      {entry.actor ? <PlayerName userId={entry.actor.id}>{displayName(entry.actor)}</PlayerName> : entry.actorType} · {entry.actorRole}
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1 text-right">

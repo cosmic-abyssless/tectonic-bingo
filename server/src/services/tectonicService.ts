@@ -83,6 +83,14 @@ export interface TectonicRosterUser {
   rsns: TectonicRsn[];
 }
 
+/** `GET /guilds/{id}?detailed=true` — only the fields we read. */
+export interface TectonicGuildDetails {
+  position_count: number;
+  // Every record currently placing within the guild's leaderboard
+  // (position 1..position_count per boss). Absent when the guild has none.
+  records?: { record_id: number; position: number }[];
+}
+
 export function getTectonicConfig(): TectonicConfig | null {
   const baseUrl = process.env.TECTONIC_API_URL;
   const apiKey = process.env.TECTONIC_API_KEY;
@@ -164,6 +172,16 @@ export class TectonicClient {
   async getDetailedUser(discordId: string): Promise<TectonicDetailedUser | null> {
     const users = await this.getDetailedUsers([discordId]);
     return users.find((u) => u.user_id === discordId) ?? null;
+  }
+
+  /**
+   * Leaderboard position (1 = clan best) of every record that currently
+   * places. A user's own record list has no positions, so this is how we tell
+   * a held #1 apart from a run that's since been beaten.
+   */
+  async getRecordPositions(): Promise<Map<number, number>> {
+    const guild = await this.get<TectonicGuildDetails>(`/api/v1/guilds/${this.cfg.guildId}?detailed=true`);
+    return new Map((guild.records ?? []).map((r) => [r.record_id, r.position]));
   }
 }
 

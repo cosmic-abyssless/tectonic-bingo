@@ -22,6 +22,7 @@ import {
   teamPointAdjustments,
   teams,
   tileCategories,
+  tileInterests,
   tiles,
   users,
 } from "../db/schema";
@@ -198,6 +199,7 @@ export function deleteBingo(db: Db, bingoId: string): void {
     tx.delete(teamNodeState).where(inArray(teamNodeState.teamId, teamIds)).run();
     tx.delete(draftPicks).where(eq(draftPicks.bingoId, bingoId)).run();
     tx.delete(pickRatings).where(inArray(pickRatings.teamId, teamIds)).run();
+    tx.delete(tileInterests).where(inArray(tileInterests.teamId, teamIds)).run();
     tx.delete(teamMembers).where(inArray(teamMembers.teamId, teamIds)).run();
     tx.delete(teams).where(eq(teams.bingoId, bingoId)).run();
     tx.delete(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).run();

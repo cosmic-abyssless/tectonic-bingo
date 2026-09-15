@@ -333,6 +333,16 @@ export interface TeamProgressSummary {
   nodeStates: TeamNodeState[];
   adjustments: PointAdjustment[];
   totalPoints: number;
+  // Everyone on the team who has raised a hand for a tile. Same visibility
+  // as the rest of the team's progress.
+  interests: TileInterest[];
+}
+
+/** A team member saying "I'll take this tile". */
+export interface TileInterest {
+  tileId: string;
+  user: MinimalUser;
+  createdAt: string;
 }
 
 export interface ScreenshotAnalysis {
@@ -501,6 +511,36 @@ export interface RosterEntry {
   pairing?: SignupPairing | null;
   // Mod roster only: undrafted and not fitting a full draft round (see LeftoverMode).
   leftover?: boolean;
+  // Mod roster only: clan standing from tectonic-api; null when the player
+  // isn't registered there or the lookup was unavailable.
+  tectonicProfile?: TectonicProfile | null;
+}
+
+// ---------------------------------------------------------------------------
+// Clan profile (tectonic-api GET /guilds/:id/users/:ids), trimmed to what the
+// draft room and mod roster show. Fetched live, never persisted.
+// ---------------------------------------------------------------------------
+
+export interface TectonicProfile {
+  points: number;
+  rank: number; // 1-based standing in the clan by points
+  tier: { name: string; icon: string | null } | null; // icon: URL, Discord emoji `<:name:id>`, or rank slug
+  achievements: { name: string; thumbnail: string }[]; // sorted by display order
+  records: TectonicProfileRecord[];
+  events: { name: string; placement: number; solo: boolean }[]; // only placements that scored points
+}
+
+// A clan record the player currently holds (as runner or teammate) that still
+// places on the clan leaderboard.
+export interface TectonicProfileRecord {
+  displayName: string; // boss/activity
+  category: string;
+  solo: boolean;
+  valueType: string; // "time" (OSRS game ticks, 0.6s each) or "depth"
+  value: number;
+  date: string;
+  teamSize: number;
+  position: number; // 1 = clan best for that boss
 }
 
 // ---------------------------------------------------------------------------
@@ -602,7 +642,8 @@ export interface DraftPick {
 }
 
 export interface WomPlayerStats {
-  ehb: number;
+  ehb: number; // efficient hours bossed
+  ehp: number; // efficient hours played
 }
 
 // Unified account type — sourced from RuneProfile when it has the player
@@ -623,6 +664,21 @@ export interface DraftPoolEntry {
   womStats: WomPlayerStats | null;
   // RuneProfile (by RSN) ?? WOM (by womId) ?? null. See AccountType.
   accountType: AccountType | null;
+  // Live clan standing; null when unregistered with the clan bot or when
+  // tectonic-api was unavailable (see DraftState.tectonicUnavailable).
+  tectonicProfile: TectonicProfile | null;
+}
+
+// One player's card, opened from any name on the page (GET /:slug/players/:userId).
+// Same fields the draft pool carries, resolved for a single user.
+export interface PlayerProfile {
+  user: MinimalUser;
+  rsn: string | null; // their signup RSN for this bingo; null when they never signed up
+  accountType: AccountType | null;
+  womStats: WomPlayerStats | null;
+  profile: TectonicProfile | null;
+  answers: SignupAnswer[] | null; // null unless the viewer is a mod or team lead
+  tectonicUnavailable: boolean;
 }
 
 export interface DraftTeam extends Team {
@@ -653,6 +709,7 @@ export interface DraftState {
   // singlesRound: the main pool is empty and leftovers are being drafted.
   currentPick: { pickNumber: number; round: number; teamId: string; singlesRound: boolean } | null;
   ratings: Record<string, PickRating>; // by signupId; empty unless the viewer leads a team
+  tectonicUnavailable: boolean; // the clan API lookup failed, so every tectonicProfile is null
 }
 
 // ---------------------------------------------------------------------------
@@ -721,6 +778,9 @@ export type BroadcastEvent =
   // A team lead starred/noted a signup. Other leads of the same team refetch
   // draft state; the rating itself stays behind GET /draft's auth.
   | { type: "draft_rating_changed"; bingoId: string; payload: { teamId: string } }
+  // Someone on a team raised or lowered a hand for a tile; teammates refetch
+  // progress so the board shows who's on what.
+  | { type: "tile_interest_changed"; bingoId: string; payload: { teamId: string } }
   | { type: "team_updated"; bingoId: string; payload: { teamId: string } }
   // A duo pairing request was created, answered, cancelled, or dissolved, or a
   // signup changed. Clients refetch their own signup/pairing state and the mod

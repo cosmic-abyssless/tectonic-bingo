@@ -69,6 +69,7 @@ export function BoardPageLayout() {
         tile={modalTile}
         isOpen={page.openTile.id !== null}
         onClose={page.openTile.close}
+        onToggleInterest={modalTile?.interest.canToggle ? () => page.tileInterest.toggle(modalTile.id) : undefined}
         onSubmit={page.canSubmit ? () => page.submit.show(page.openTile.id ?? undefined) : undefined}
       />
     </div>

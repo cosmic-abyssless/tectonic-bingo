@@ -7,6 +7,7 @@ import { Notice } from "../ui/Card";
 import { Dialog, DialogHeader } from "../ui/Dialog";
 import { Field, Input } from "../ui/Field";
 import { CrownIcon } from "../ui/icons";
+import { PlayerName } from "../tectonic/PlayerName";
 
 /** Who's on a team. The captain can also rename it from here. */
 export function TeamInfoDialog({ slug, team, onClose }: { slug: string; team: TeamModel | null; onClose: () => void }) {
@@ -50,7 +51,9 @@ function TeamInfo({ slug, team, onClose }: { slug: string; team: TeamModel; onCl
           {team.members.map((member) => (
             <li key={member.id} className="flex items-center gap-3 px-3 py-2 text-sm">
               <img src={member.avatarUrl} alt="" className="size-6 rounded-full" />
-              <span className="truncate text-fg">{member.displayName}</span>
+              <PlayerName userId={member.id} className="truncate text-fg">
+                {member.displayName}
+              </PlayerName>
               {member.isCaptain && <CrownIcon size={14} className="shrink-0 text-warn" aria-label="Captain" />}
               {member.isCoCaptain && <CrownIcon size={14} className="shrink-0 text-fg-subtle" aria-label="Co-captain" />}
             </li>

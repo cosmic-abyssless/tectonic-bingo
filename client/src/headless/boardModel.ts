@@ -1,7 +1,7 @@
 // Pure builders that turn raw server shapes into the view models in
 // ./types.ts. No React, no hooks — safe to call from anywhere, including
 // providers and (if ever wanted) tests. See docs/headless-theming-plan.md §2.
-import { isBoardLocked, type BoardLine, type GraphNode, type NodeStatus, type Stage, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory } from "@bingo/shared";
+import { isBoardLocked, type BoardLine, type GraphNode, type NodeStatus, type Stage, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { summarizeTileProgress, getFreezeUnlockAt, groupSubmissionsByTile, type TileProgressSummary } from "../core/board/tileProgress";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete, type LeafClaimMaps } from "../core/board/taskClaims";
 import { collectLeaves, conditionHeading } from "../core/board/requirementTree";
@@ -198,7 +198,8 @@ export function buildLineModels(lines: BoardLine[], tiles: Tile[], nodeStates: T
 // tiles/categories/nodeStates/teamSubmissions/bingoStartsAt, not on `now`,
 // search, or canSubmit. Call once via useMemo keyed on those data
 // references; finalizeTileModels() is the cheap per-tick pass on top.
-export type StaticTileModel = Omit<TileModel, "dimmed" | "canSubmit" | "freeze"> & {
+export type StaticTileModel = Omit<TileModel, "dimmed" | "canSubmit" | "freeze" | "interest"> & {
+  interest: Omit<TileModel["interest"], "canToggle">;
   freezeUnlocksAt: number | null;
   hasFreezePeriod: boolean;
   freezeDurationMinutes: number;
@@ -210,8 +211,10 @@ export function buildTileModelsStatic(args: {
   nodeStates: TeamNodeState[];
   teamSubmissions: SubmissionDetails[];
   bingoStartsAt: string | null;
+  interests: TileInterest[];
+  viewerUserId: string;
 }): StaticTileModel[] {
-  const { tiles, categories, nodeStates, teamSubmissions, bingoStartsAt } = args;
+  const { tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId } = args;
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const claimMaps = buildLeafClaimMaps(teamSubmissions);
 
@@ -220,6 +223,8 @@ export function buildTileModelsStatic(args: {
     submissionIdsByTile.set(tileId, new Set(list.map((d) => d.submission.id)));
   }
   const allSubmissionModels = buildSubmissionModels(tiles, teamSubmissions);
+  const interestsByTile = new Map<string, TileInterest[]>();
+  for (const i of interests) interestsByTile.set(i.tileId, [...(interestsByTile.get(i.tileId) ?? []), i]);
 
   return tiles.map((tile) => {
     const categoryRow = tile.categoryId ? categoryById.get(tile.categoryId) : undefined;
@@ -227,6 +232,7 @@ export function buildTileModelsStatic(args: {
     const summary = summarizeTileProgress(tile, nodeStates, teamSubmissions);
     const freezeUnlocksAt = getFreezeUnlockAt(bingoStartsAt, tile);
     const submissionIds = submissionIdsByTile.get(tile.id);
+    const tileInterests = interestsByTile.get(tile.id) ?? [];
 
     return {
       id: tile.id,
@@ -254,6 +260,10 @@ export function buildTileModelsStatic(args: {
       freezeUnlocksAt,
       hasFreezePeriod: tile.hasFreezePeriod,
       freezeDurationMinutes: tile.freezeDurationMinutes,
+      interest: {
+        people: tileInterests.map((i) => ({ id: i.user.id, displayName: displayName(i.user) })),
+        mine: tileInterests.some((i) => i.user.id === viewerUserId),
+      },
     };
   });
 }
@@ -267,12 +277,13 @@ export function buildTileModelsStatic(args: {
 // anything — it's keyed on `progress` object reference as a stand-in for
 // "same static snapshot", since buildTileModelsStatic always creates every
 // field of one tile together in a single pass.
-export function finalizeTileModels(staticTiles: StaticTileModel[], now: number, matchIds: Set<string> | null, canSubmit: boolean, prev: ReadonlyMap<string, TileModel>): TileModel[] {
+export function finalizeTileModels(staticTiles: StaticTileModel[], now: number, matchIds: Set<string> | null, canSubmit: boolean, canToggleInterest: boolean, prev: ReadonlyMap<string, TileModel>): TileModel[] {
   return staticTiles.map((s) => {
     const isFrozen = !!(s.freezeUnlocksAt && now < s.freezeUnlocksAt);
     const remainingMs = s.freezeUnlocksAt ? s.freezeUnlocksAt - now : 0;
     const dimmed = matchIds !== null && !matchIds.has(s.id);
     const tileCanSubmit = canSubmit && !s.progress.allComplete && !isFrozen;
+    const canToggle = canToggleInterest && !s.progress.allComplete;
 
     const prevModel = prev.get(s.id);
     if (
@@ -281,17 +292,19 @@ export function finalizeTileModels(staticTiles: StaticTileModel[], now: number, 
       prevModel.freeze.isFrozen === isFrozen &&
       prevModel.freeze.remainingMs === remainingMs &&
       prevModel.dimmed === dimmed &&
-      prevModel.canSubmit === tileCanSubmit
+      prevModel.canSubmit === tileCanSubmit &&
+      prevModel.interest.canToggle === canToggle
     ) {
       return prevModel;
     }
 
-    const { freezeUnlocksAt, hasFreezePeriod, freezeDurationMinutes, ...rest } = s;
+    const { freezeUnlocksAt, hasFreezePeriod, freezeDurationMinutes, interest, ...rest } = s;
     return {
       ...rest,
       freeze: { hasFreezePeriod, durationMinutes: freezeDurationMinutes, unlocksAt: freezeUnlocksAt, isFrozen, remainingMs },
       dimmed,
       canSubmit: tileCanSubmit,
+      interest: { ...interest, canToggle },
     };
   });
 }
@@ -308,13 +321,16 @@ export function buildBoard(args: {
   now: number;
   matchIds: Set<string> | null;
   canSubmit: boolean;
+  canToggleInterest: boolean;
+  interests: TileInterest[];
+  viewerUserId: string;
   totalPoints: number | null;
   prev: ReadonlyMap<string, TileModel>;
 }): BoardModel {
-  const { tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, totalPoints, prev } = args;
+  const { tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, totalPoints, prev } = args;
 
-  const staticTiles = buildTileModelsStatic({ tiles, categories, nodeStates, teamSubmissions, bingoStartsAt });
-  const finalized = finalizeTileModels(staticTiles, now, matchIds, canSubmit, prev);
+  const staticTiles = buildTileModelsStatic({ tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId });
+  const finalized = finalizeTileModels(staticTiles, now, matchIds, canSubmit, canToggleInterest, prev);
 
   const grid: (TileModel | null)[][] = Array.from({ length: bingoRows }, () => Array.from({ length: bingoCols }, () => null));
   const tileById = new Map<string, TileModel>();

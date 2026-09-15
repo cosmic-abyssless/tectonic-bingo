@@ -8,6 +8,7 @@ import * as bingoService from "../services/bingoService";
 import * as submissionService from "../services/submissionService";
 import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
+import { fetchProfiles } from "../services/tectonicProfileService";
 import * as pairingService from "../services/pairingService";
 import * as devSeedService from "../services/devSeedService";
 import * as teamService from "../services/teamService";
@@ -131,7 +132,13 @@ router.get(
   "/signups",
   asyncHandler(async (req, res) => {
     const leftovers = draftService.getLeftoverUserIds(db, req.bingo!);
-    const signups = signupService.getAllSignups(db, req.bingo!.id).map((entry) => ({ ...entry, leftover: leftovers.has(entry.user.id) }));
+    const roster = signupService.getAllSignups(db, req.bingo!.id);
+    const tectonic = await fetchProfiles(db, roster.map((entry) => entry.user.id));
+    const signups = roster.map((entry) => ({
+      ...entry,
+      leftover: leftovers.has(entry.user.id),
+      tectonicProfile: tectonic.profiles[entry.user.id] ?? null,
+    }));
     res.json({ signups });
   }),
 );

@@ -8,6 +8,7 @@ import { Select } from "../../../core/ui/Field";
 import { ImageIcon } from "../../../core/ui/icons";
 import { SubmissionStatusBadge } from "../../../core/ui/StatusBadge";
 import { ScreenshotThumb } from "../../../core/submissions/ScreenshotThumb";
+import { PlayerName } from "../../../core/tectonic/PlayerName";
 
 type Filter = SubmissionStatus | "all";
 const FILTERS: { key: Filter; label: string }[] = [
@@ -96,7 +97,11 @@ export function SubmissionsDrawer({
                   ))}
                 </div>
                 <p className="truncate text-sm text-fg-muted">{s.summary}</p>
-                {s.submittedBy && <p className="mt-0.5 text-xs text-fg-subtle">by {s.submittedBy}</p>}
+                {s.detail.submittedByUser && (
+                  <p className="mt-0.5 text-xs text-fg-subtle">
+                    by <PlayerName userId={s.detail.submittedByUser.id}>{s.submittedBy}</PlayerName>
+                  </p>
+                )}
                 {s.reviewerNotes && <p className="mt-0.5 truncate text-xs text-warn">{s.reviewerNotes}</p>}
               </div>
 
