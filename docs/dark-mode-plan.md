@@ -30,9 +30,9 @@ Alongside this, the token system is being completed, not just renamed:
    reference here is Material Design 3's color-role system — every color a
    UI element sits *on* gets an explicit `on-X` partner naming the color used
    *on top of* it. We are **not** adopting the full M3 spec (~30 roles,
-   including several — tertiary, containers, inverse-surface, scrim — with no
-   analog anywhere in this app); we're adapting the pairing *pattern* to the
-   roles this app actually has:
+   including several — tertiary, containers, inverse-surface — with no analog
+   anywhere in this app); we're adapting the pairing *pattern* to the roles
+   this app actually has:
 
    | Old | New |
    |---|---|
@@ -51,50 +51,89 @@ Alongside this, the token system is being completed, not just renamed:
    fills today — those are used as translucent tints/borders, not surfaces
    something sits "on").
 
-2. **Add the one pairing that's genuinely missing.** `client/src/core/ui/Button.tsx`'s
-   primary and secondary variants currently reach into the generic
-   `accent`/`onAccent` and `surfaceRaised`/`onSurface` tokens directly —
-   there's no dedicated "this is a button" role, so a theme can't style
-   buttons distinctly from e.g. a focus ring or a link without also changing
-   those. Adding `button`/`onButton` and `buttonSecondary`/`onButtonSecondary`
-   (initial values identical to what they already resolve to today, so zero
-   visual change) gives buttons their own token identity. Ghost and danger
-   variants are already correctly modeled as transparent/tinted treatments
-   over existing generic tokens (`surfaceHover`, `danger`) — they don't need
-   their own roles; only variants with a real *filled surface* need one.
+2. **Add the token pairings that are genuinely missing.** Found by reading
+   every `core/ui` component that renders a colored surface (`Button`,
+   `Dialog`, `Card`/`Badge`/`Notice`, `Menu`, `Toast`, `Field`,
+   `StatusBadge`) and by grepping for opacity-modified and raw
+   (non-token) color usages across every `.tsx` file
+   (`grep -rhoE "(bg|text|border|ring|outline|decoration|divide)-(black|white|accent|ok|warn|danger|info|fg|line)(/[0-9]+)?"`),
+   which surfaces exactly the spots reaching for a color outside the token
+   system instead of using (or missing) a proper role:
+   - **`button` / `onButton` and `buttonSecondary` / `onButtonSecondary`** —
+     `client/src/core/ui/Button.tsx`'s primary and secondary variants
+     currently reach into the generic `accent`/`onAccent` and
+     `surfaceRaised`/`onSurface` tokens directly — there's no dedicated
+     "this is a button" role, so a theme can't style buttons distinctly from
+     e.g. a focus ring or a link without also changing those. Initial values
+     identical to what they already resolve to today (zero visual change).
+     `ghost`/`danger` variants are already correctly modeled as
+     transparent/tinted treatments over existing generic tokens
+     (`surfaceHover`, `danger`) — they don't need their own roles; only
+     variants with a real *filled surface* need one.
+   - **`scrim`** — `client/src/core/ui/Dialog.tsx:36` and comic's
+     `themes/comic/board/TileModal.tsx:45` both hardcode `bg-black/70` for
+     the modal backdrop; this is a real, standard role (Material Design 3
+     has this exact one, literally named "scrim") that the app is just
+     missing. A scrim conventionally stays the same dark value regardless of
+     the page's own light/dark scheme (dimming whatever's behind it is the
+     whole point, on either background) — one value, no light/dark variant
+     needed, unlike every other new/renamed token here.
+   - **Confirmed NOT gaps, checked rather than assumed**: `Notice`/`Badge`'s
+     `ok`/`warn`/`danger`/`info` tones (`core/ui/Card.tsx`'s `TONE` map) are
+     border+text only, never a solid fill with text on top — no
+     `onOk`/`onWarn`-style pairing needed. `StatusBadge.tsx`'s `TASK_STATUS_DOT`
+     solid-fill dots (`bg-warn`/`bg-info`/`bg-ok`) are plain circles with
+     nothing rendered on top of them. Links (`Markdown.tsx`, several
+     `pages/*`) deliberately reuse `text-fg`/underline rather than a
+     dedicated link color. Form inputs (`Field.tsx`) already compose cleanly
+     from existing generic tokens. None of these need new roles.
 
 3. **Audit and fix hardcoded colors that would otherwise ignore the new dark
-   mode.** Found via `grep -rlnE "#[0-9a-fA-F]{3,8}\b" client/src --include=*.ts --include=*.tsx`,
-   excluding the token-definition files themselves:
-   - **Legitimate, leave alone**: `core/admin/CategoryEditor.tsx` and
-     `core/admin/TeamManager.tsx`'s color-picker defaults (`#6366f1`,
+   mode.** Found via `grep -rlnE "#[0-9a-fA-F]{3,8}\b" client/src --include=*.ts --include=*.tsx`
+   plus the raw-Tailwind-neutral grep above, excluding the token-definition
+   files themselves:
+   - **Legitimate, leave alone** (confirmed with the user): `core/admin/CategoryEditor.tsx`
+     and `core/admin/TeamManager.tsx`'s color-picker defaults (`#6366f1`,
      `#64748b`) — user-assignable category/team colors, not theme colors.
      `pages/Login.tsx`'s `#5865F2`/`#4752c4` — Discord's own brand blurple for
      the "Continue with Discord" button; must stay fixed regardless of app
      theme. `themes/comic/useDominantColor.ts`'s `#000000`/`#ffffff` — a
      WCAG-luminance contrast pick for text color *on an extracted tile-image
-     color*, not a theme color. **Do not touch any of these.**
+     color*, not a theme color. `core/mod/ReviewQueue.tsx`'s `bg-black`
+     screenshot-preview letterbox — a photo-viewer matte, conventionally
+     fixed black regardless of page theme. **Do not touch any of these.**
    - **Real gaps, fixed in Phase 4**: `themes/comic/dotGrid.ts`'s halftone
      dots are a hardcoded `#00000080` (semi-transparent black) — invisible
      against comic-dark's purple background. `themes/comic/board/TileCell.tsx`'s
      `coverColor` fallback and two parchment-gradient shades (`#ffead4`,
      `#e6d9b8`, `#f2ead4`) are comic-*light*-specific paper-texture art
-     direction that would look wrong under comic-dark. `themes/comic/board/colors.ts`
+     direction that would look wrong under comic-dark, as is its freeze-badge
+     label's raw `text-black`. `themes/comic/board/TileModal.tsx` turns out to
+     have its **own separate, undocumented hardcoding**, distinct from
+     `colors.ts` below — a local `PAGE_BG = "#f2ead4"` / `BORDER_COLOR = "#000000"`
+     pair (same portal reasoning, just never consolidated into the shared
+     file), plus several raw Tailwind `bg-white`/`text-black`/`border-black`
+     classes on the close button and submission-bubble chrome (confirmed
+     with the user: these should shift to a dark parchment tone in
+     comic-dark, not stay literal white paper). `themes/comic/board/colors.ts`
      (`INK`, `INK_BODY`, `GREEN`, `BLUE`, `ORANGE`, etc.) is **already**
      deliberately hardcoded, for a real structural reason its own file
-     comment documents: `TaskPanel`/`TileModal`/`RequirementTree` render
-     through a react-aria `Popover`/`Modal` portal, which mounts at the end
-     of `<body>` — **outside** the DOM subtree `ThemeProvider` sets its CSS
-     custom properties on, so `var(--color-x)` doesn't resolve there.
-     Confirmed via the installed `react-aria-components@1.21.1`'s type defs
-     (`node_modules/react-aria-components/dist/types/exports/{Modal,Popover}.d.ts`)
+     comment documents: `TaskPanel`/`TileModal`/`RequirementTree`/`SubmissionBubble`
+     render through a react-aria `Popover`/`Modal` portal, which mounts at
+     the end of `<body>` — **outside** the DOM subtree `ThemeProvider` sets
+     its CSS custom properties on, so `var(--color-x)` doesn't resolve
+     there. Confirmed via the installed `react-aria-components@1.21.1`'s
+     type defs (`node_modules/react-aria-components/dist/types/exports/{Modal,Popover}.d.ts`)
      that there's no portal-container override API in this version (no
      `UNSTABLE_PortalProvider`/`portalContainer` prop) — re-architecting
      around that is a separate, riskier task, **out of scope here**. The fix
-     is to give `colors.ts` a light *and* dark constant set and have the
-     three portaled consumers pick between them via the same scheme hook
-     everything else uses — the portal boundary no longer means "frozen at
-     one scheme forever," even though the values stay literal hex.
+     is to extend `colors.ts` with light *and* dark values for everything
+     above (consolidating `TileModal.tsx`'s separate local constants and raw
+     Tailwind classes into it too, closing that second hardcoding pattern)
+     and have every portaled/decorative consumer pick between them via the
+     same scheme hook everything else uses — the portal boundary no longer
+     means "frozen at one scheme forever," even though the values stay
+     literal hex.
 
 Researched by reading, in full, the current `index.css`,
 `themes/{tokens,registry,ThemeProvider,context}.ts`, `themes/default/index.ts`,
@@ -114,9 +153,14 @@ trap to avoid.
 - Reloading the page after picking an explicit Light or Dark shows that
   scheme immediately — no flash of the other one.
 - A comic-themed bingo's board, draft, and stats pages, and an open tile's
-  modal (task panel, requirement tree), all switch from the yellow/cream/black
-  daytime look to the new purple/lavender/gold night look together — nothing
-  stays frozen on the old palette.
+  modal (task panel, requirement tree, submission bubbles, the book-page
+  parchment and speech-bubble chrome), all switch from the
+  yellow/cream/white/black daytime look to the new
+  purple/lavender/dark-parchment/gold night look together — nothing stays
+  frozen on the old palette.
+- Every modal's backdrop (`Dialog.tsx` and comic's `TileModal.tsx`) uses the
+  new `scrim` token instead of raw black, and looks the same as it does
+  today in both schemes (scrim doesn't change with light/dark).
 - A default-themed bingo, and every non-bingo-scoped page, look **exactly**
   as they do today when the resolved scheme is Dark (this is a rename +
   additive feature, not a redesign of the existing dark look).
@@ -133,14 +177,17 @@ trap to avoid.
 - `--tile-bg` / `ThemeTokens.tile.bg` / `defaultTokens.*.tile.bg` /
   `bg-[var(--tile-bg)]` — an unrelated per-board-theme tile color, not the
   `bg`→`background` token being renamed.
-- The three "legitimate, leave alone" hardcoded colors listed in Context
+- The four "legitimate, leave alone" hardcoded colors listed in Context
   item 3 (category/team color pickers, Discord brand color, dominant-color
-  luminance contrast pick).
-- Any slot *component* file (`BoardPageLayout.tsx`, `TileCell.tsx`, every
-  file under `themes/default/**` and `themes/comic/**` other than the ones
-  named in Phase 3/4 below) — the light/dark axis is designed so that no slot
-  component needs to know schemes exist at all. If a phase below seems to
-  require editing one, stop and re-read Phase 3 — it's very likely not
+  luminance contrast pick, `ReviewQueue.tsx`'s screenshot-preview matte).
+- Any slot *component* file (`BoardPageLayout.tsx`, every file under
+  `themes/default/**` and `themes/comic/**` other than the ones named in
+  Phase 3/4 — `themes/comic/index.ts`, `dotGrid.ts`, `board/TileCell.tsx`,
+  `board/colors.ts`, `board/TaskPanel.tsx`, `board/TileModal.tsx`,
+  `board/RequirementTree.tsx`, `board/SubmissionBubble.tsx`) — the
+  light/dark axis is designed so that no *other* slot component needs to
+  know schemes exist at all. If a phase below seems to require editing one
+  outside this list, stop and re-read Phase 3 — it's very likely not
   necessary.
 
 ---
@@ -225,7 +272,7 @@ errors on any of them.
 
 ---
 
-## Phase 2 — Light/dark toggle infrastructure + new button tokens
+## Phase 2 — Light/dark toggle infrastructure + new button/scrim tokens
 
 Comic is intentionally **not** given a real dark palette yet in this phase —
 its `dark` tokens are set equal to its `light` tokens, so the toggle
@@ -235,8 +282,9 @@ comic actually looks.
 ### 2a. `client/src/index.css`
 
 Add a light palette as the base `@theme` values, move the *current* (Phase 1
-renamed, value-unchanged) values into dark-scheme override blocks, and add
-the two new button-role token pairs. Current full file content — rewrite
+renamed, value-unchanged) values into dark-scheme override blocks, add the
+two new button-role token pairs, and add `scrim` (a single value, no
+light/dark split — see Context item 2). Current full file content — rewrite
 `@theme` and the 3 `@apply` lines in `@layer base` per below; everything
 else in the file (`@custom-variant`, `@layer utilities`, the animation
 `@media`/`@keyframes` block) is untouched:
@@ -267,6 +315,8 @@ else in the file (`@custom-variant`, `@layer utilities`, the animation
   --color-warn: #b45309;
   --color-danger: #dc2626;
   --color-info: #2563eb;
+
+  --color-scrim: #000000; /* modal backdrop — same in both schemes, not overridden below */
 
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -338,10 +388,10 @@ vibrant dark-surface defaults, for contrast against light surfaces — the
 exact same reasoning `themes/comic/index.ts`'s existing comment already gives
 for why *its* light palette does the same thing.
 
-### 2b. `client/src/core/ui/Button.tsx`
+### 2b. `client/src/core/ui/Button.tsx` and `client/src/core/ui/Dialog.tsx`
 
-Change the `primary` variant's classes from `bg-accent text-accent-fg
-hover:bg-fg border-transparent` (post—Phase-1-rename:
+In `Button.tsx`, change the `primary` variant's classes from `bg-accent
+text-accent-fg hover:bg-fg border-transparent` (post—Phase-1-rename:
 `bg-accent text-on-accent hover:bg-on-surface border-transparent`) to
 `bg-button text-on-button hover:bg-on-surface border-transparent`. Change
 `secondary` from `bg-surface-raised text-fg hover:bg-surface-hover
@@ -349,6 +399,10 @@ border-line-strong` (post-rename: `bg-surface-raised text-on-surface
 hover:bg-surface-hover border-outline-strong`) to `bg-button-secondary
 text-on-button-secondary hover:bg-surface-hover border-outline-strong`.
 `ghost` and `danger` variants are unchanged.
+
+In `Dialog.tsx`, change the `ModalOverlay`'s `bg-black/70` to `bg-scrim/70`
+(same visual result — `--color-scrim` is `#000000` in both schemes — but
+now token-backed instead of a raw hardcoded color).
 
 ### 2c. `client/src/core/ui/preferences.ts`
 
@@ -700,31 +754,73 @@ value now depends on the resolved scheme. Update its three call sites —
 `StatsPageLayout.tsx` — from `style={DOT_GRID_STYLE}` to
 `style={useDotGridStyle()}`, importing the hook instead of the constant.)
 
-**`client/src/themes/comic/board/TileCell.tsx`** — give `coverColor`'s
-fallback (`#ffead4`) and the two parchment-gradient shades (`#e6d9b8`,
-`#f2ead4`) dark-purple-toned counterparts, selected via
-`useResolvedColorScheme()` the same way. Review the freeze-badge color
-(`#d2412d`/`#fff`) while you're in this file and decide whether it should
-stay fixed (a solid badge color, similar reasoning to Discord's fixed brand
-button) or also get a light/dark pair — use your judgment on which reads
-better, there's no strong reason to require either answer.
+**`client/src/themes/comic/board/colors.ts`** — extend with `dark`
+counterparts for everything already there, **plus new `PAPER`/`PAPER_ALT`/
+`PAPER_RAISED` roles** to absorb the parchment/paper colors currently
+duplicated as separate literals in `TileCell.tsx` and `TileModal.tsx` (see
+below). Turn the module into a `getColors(scheme: "light" | "dark")`
+function (or a `LIGHT`/`DARK` object pair) rather than flat exported
+constants, since every consumer now needs to pick a set at render time via
+`useResolvedColorScheme()`:
 
-**`client/src/themes/comic/board/colors.ts`** — add a `dark` sibling
-constant set (or turn the module into a `getColors(scheme)` function) with
-dark-appropriate versions of `INK`, `INK_BODY`, `INK_SUBTLE`, `GREEN`,
-`BLUE`, `BLUE_TINT`, `ORANGE`, `ORANGE_LINE`, `RED`, `RULE` (`ORANGE_LINE`
-name itself is unrelated to the token rename — see "Must not change" — but
-it does still need a dark-mode-appropriate *value* here, since it's a real
-comic-panel-art color). Update the three portaled consumers —
-`themes/comic/board/TaskPanel.tsx`, `TileModal.tsx`, `RequirementTree.tsx` —
-to call `useResolvedColorScheme()` and pick the matching color set.
+```ts
+// light (current values, unchanged) vs. dark (new)
+INK: "#000000"        → "#e9d5ff"   // pale lavender ink instead of black
+INK_BODY: "#1c1917"   → "#f5f0ff"
+INK_SUBTLE: "#78716c" → "#8b7aa8"
+GREEN: "#0e9f4f"       (unchanged both — still reads fine on purple)
+BLUE: "#1d4ed8"        (unchanged both)
+BLUE_TINT: "#bfdbfe"  → "#3a2760"   // needs to stay a *tint behind BLUE text*, not literal light blue, in dark
+ORANGE: "#c2410c"      (unchanged both)
+ORANGE_LINE: "#f97316" (unchanged both)
+RED: "#b91c1c"          (unchanged both)
+RULE: "rgba(0,0,0,0.25)" → "rgba(255,255,255,0.25)"
+PAPER: "#f2ead4"       → "#2e1d4f"   // the book-page / cover-color-fallback / speech-bubble parchment tone
+PAPER_ALT: "#e6d9b8"   → "#251a3f"   // second stop for TileCell's two-tone gradient
+PAPER_RAISED: "#ffffff" → "#3a2760"  // was flat white (close button, speech-bubble fill) — a raised, lighter parchment in dark
+```
+These are a first-pass proposal, same caveat as Phase 3's palette — adjust
+after seeing it live. Update the portaled consumers —
+`themes/comic/board/TaskPanel.tsx`, `RequirementTree.tsx`,
+`SubmissionBubble.tsx`, `TileModal.tsx` — to call `useResolvedColorScheme()`
+and pick the matching set.
+
+**`client/src/themes/comic/board/TileModal.tsx`** needs more than a
+palette swap — it currently has its **own separate local hardcoding**
+that was never routed through `colors.ts` at all: a local
+`const PAGE_BG = "#f2ead4"` and `const BORDER_COLOR = "#000000"`, plus raw
+Tailwind `bg-white`/`text-black`/`border-black` classes on the close button
+(`bg-white text-black`, `borderColor: BORDER_COLOR`) and the two
+submission-bubble elements (`bg-white`, `borderColor: BORDER_COLOR`). Delete
+the two local constants; import `PAPER`/`PAPER_RAISED`/`INK` from
+`colors.ts` instead (`PAGE_BG` → `PAPER`, `BORDER_COLOR` → `INK`, the raw
+`bg-white`/`text-black` close-button and speech-bubble classes → inline
+`style` using `PAPER_RAISED`/`INK` the same way the rest of the file already
+sets `style={{ borderColor: ... }}`). Confirmed with the user: in
+comic-dark this should read as dark parchment, not stay literal white paper.
+
+**`client/src/themes/comic/board/TileCell.tsx`** — `coverColor`'s fallback
+(currently a separate literal `"#ffead4"`) and the two parchment-gradient
+`backgroundColor` values (currently separate literals `"#e6d9b8"`/`"#f2ead4"`)
+should import and reuse `colors.ts`'s new `PAPER`/`PAPER_ALT` (same values,
+just deduplicated into the shared file instead of three near-identical
+literals maintained separately) via `useResolvedColorScheme()`. Also fix
+the freeze-badge label's raw `text-black` (line ~180) to use `colors.ts`'s
+`INK` the same way. The freeze badge's own background (`#d2412d`) and its
+`color: "#fff"` are a separate, solid badge fill — use your judgment on
+whether that one stays fixed (similar reasoning to Discord's fixed brand
+button — a solid badge color that doesn't need to track scheme) or also
+gets a light/dark pair; no strong reason to require either answer.
 
 **Verification**: open a tile modal on a comic-themed bingo in both Light
-and Dark — confirm the task panel / requirement tree / modal chrome now
-switches palette along with everything else, instead of staying frozen on
-the light/cream look. Confirm the halftone dot grid is visible (not
-washed-out/invisible) against the dark purple background. Console-error
-check; `npx tsc --noEmit`.
+and Dark — confirm the task panel / requirement tree / submission bubbles /
+modal chrome (close button, book-page background, speech-bubble background)
+all switch palette together, instead of some pieces staying frozen on the
+light/cream/white look while others follow. Confirm the halftone dot grid
+is visible (not washed-out/invisible) against the dark purple background.
+Confirm `Dialog.tsx`'s and `TileModal.tsx`'s modal backdrops (`bg-scrim/70`)
+look the same as they always have, in both schemes. Console-error check;
+`npx tsc --noEmit`.
 
 **Commit this phase.**
 
@@ -736,9 +832,11 @@ check; `npx tsc --noEmit`.
 cd client
 npx tsc --noEmit
 grep -rn "text-fg\b\|border-fg\b\|bg-fg\b\|text-fg-muted\|text-fg-subtle\|text-accent-fg\|border-line\b\|border-line-strong\b\|bg-bg\b\|--color-bg\b\|--color-fg\b\|--color-line\b" src   # expect 0 real hits anywhere (known exclusions from Phase 1/Must-not-change aside)
+grep -rn "bg-black/70\|bg-white\b\|text-black\b\|border-black\b" src/core/ui/Dialog.tsx src/themes/comic/board/TileModal.tsx   # expect 0 hits — both should be fully token/colors.ts-backed now
 ```
 Live browser pass, both themes × all three color-scheme choices, across:
 BingoList, ModPage (submissions + audit log), SiteAdminPage, board page,
-Draft page, Stats page, a submission modal, an open tile modal, the signup
-form. No console errors anywhere. No `server/` diff. Re-read the Acceptance
-bar at the top of this doc and confirm every line item holds.
+Draft page, Stats page, a submission modal, an open tile modal (task panel,
+requirement tree, submission bubbles), the signup form. No console errors
+anywhere. No `server/` diff. Re-read the Acceptance bar at the top of this
+doc and confirm every line item holds.
