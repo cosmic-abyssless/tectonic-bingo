@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
-  ModSubmissionsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PendingCountResponse,
+  MinimalUser, ModSubmissionsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   PickRating, PlayerProfile, StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
@@ -59,6 +59,25 @@ export function useTeamProgress(slug: string | undefined, teamId: string | undef
     queryKey: queryKeys.teamProgress(slug ?? "", teamId ?? ""),
     queryFn: () => api.get<TeamProgressSummary>(`/api/bingos/${slug}/teams/${teamId}/progress`),
     enabled: !!slug && !!teamId,
+  });
+}
+
+// Raising a hand should feel instant, so the viewer's own interest lands in the
+// cached team progress before the server confirms it. Only the acting user's
+// team is ever affected, so the caller passes that team id.
+export function useSetTileInterest(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ teamId, tileId, user, interested }: { teamId: string; tileId: string; user: MinimalUser; interested: boolean }) =>
+      optimisticUpdate<TeamProgressSummary>(
+        queryClient,
+        queryKeys.teamProgress(slug, teamId),
+        (prev) => ({
+          ...prev,
+          interests: [...prev.interests.filter((i) => !(i.tileId === tileId && i.user.id === user.id)), ...(interested ? [{ tileId, user, createdAt: new Date().toISOString() }] : [])],
+        }),
+        () => api.put<TeamProgressSummary>(`/api/bingos/${slug}/tiles/${tileId}/interest`, { interested }),
+      ),
   });
 }
 

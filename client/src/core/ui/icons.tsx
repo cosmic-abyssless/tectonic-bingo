@@ -190,3 +190,11 @@ export const NoteIcon = (p: IconProps) => (
     <path d="M6 6.5h4M6 9h2.5" />
   </Svg>
 );
+
+/** Raised hand — "I'll take this". Pass fill="currentColor" to light it up. */
+export const HandIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5 8V3.5a1 1 0 0 1 2 0V7M7 6.5V2.5a1 1 0 0 1 2 0V7M9 6.5V3.5a1 1 0 0 1 2 0V8" />
+    <path d="M11 8V5.5a1 1 0 0 1 2 0V10a4.5 4.5 0 0 1-4.5 4.5H8a4 4 0 0 1-3.2-1.6L2.6 9.9a1 1 0 0 1 1.6-1.2L5 10V8" />
+  </Svg>
+);

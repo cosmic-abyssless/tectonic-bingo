@@ -333,6 +333,16 @@ export interface TeamProgressSummary {
   nodeStates: TeamNodeState[];
   adjustments: PointAdjustment[];
   totalPoints: number;
+  // Everyone on the team who has raised a hand for a tile. Same visibility
+  // as the rest of the team's progress.
+  interests: TileInterest[];
+}
+
+/** A team member saying "I'll take this tile". */
+export interface TileInterest {
+  tileId: string;
+  user: MinimalUser;
+  createdAt: string;
 }
 
 export interface ScreenshotAnalysis {
@@ -768,6 +778,9 @@ export type BroadcastEvent =
   // A team lead starred/noted a signup. Other leads of the same team refetch
   // draft state; the rating itself stays behind GET /draft's auth.
   | { type: "draft_rating_changed"; bingoId: string; payload: { teamId: string } }
+  // Someone on a team raised or lowered a hand for a tile; teammates refetch
+  // progress so the board shows who's on what.
+  | { type: "tile_interest_changed"; bingoId: string; payload: { teamId: string } }
   | { type: "team_updated"; bingoId: string; payload: { teamId: string } }
   // A duo pairing request was created, answered, cancelled, or dissolved, or a
   // signup changed. Clients refetch their own signup/pairing state and the mod

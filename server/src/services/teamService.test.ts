@@ -4,7 +4,8 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { and, eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { addTeamMember, createPointAdjustment, createTeam, deleteTeam, getCaptainCandidates, getTeamsWithMembers, isTeamLead, removeTeamMember, updateTeam } from "./teamService";
+import { addTeamMember, createPointAdjustment, createTeam, deleteTeam, getCaptainCandidates, getTeamProgress, getTeamsWithMembers, isTeamLead, removeTeamMember, setTileInterest, updateTeam } from "./teamService";
+import { createTile } from "./boardService";
 import { adminPair } from "./pairingService";
 import { ServiceError } from "./errors";
 
@@ -266,5 +267,51 @@ describe("createTeam with a co-captain", () => {
     expect(() => createTeam(db, { bingoId: bingo.id, captainUserId: captain.id })).toThrow(/pick them as the co-captain/);
     expect(() => createTeam(db, { bingoId: bingo.id, captainUserId: captain2.id, coCaptainUserId: member.id })).toThrow(/paired with someone else/);
     expect(() => createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, coCaptainUserId: member.id })).not.toThrow();
+  });
+});
+
+describe("tile interests", () => {
+  function seedTeamAndTile() {
+    const { bingo, captain, member } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    addTeamMember(db, team.id, member.id);
+    const tile = createTile(db, { bingoId: bingo.id, name: "Zulrah", boardRow: 0, boardCol: 0 });
+    return { bingo, team, tile, captain, member };
+  }
+
+  it("raises and lowers a hand, shown in the team's progress with who raised it", () => {
+    const { team, tile, captain, member } = seedTeamAndTile();
+    setTileInterest(db, team.id, captain.id, tile.id, true);
+    setTileInterest(db, team.id, member.id, tile.id, true);
+    expect(getTeamProgress(db, team.id).interests.map((i) => [i.tileId, i.user.id])).toEqual([
+      [tile.id, captain.id],
+      [tile.id, member.id],
+    ]);
+
+    setTileInterest(db, team.id, captain.id, tile.id, false);
+    expect(getTeamProgress(db, team.id).interests.map((i) => i.user.id)).toEqual([member.id]);
+
+    const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "team.tile_interest_set")).all();
+    expect(rows).toHaveLength(3);
+    expect(rows.every((r) => r.teamId === team.id && r.visibility === "team")).toBe(true);
+    expect(JSON.parse(rows[2]!.details)).toEqual({ tileName: "Zulrah", interested: false });
+  });
+
+  it("is idempotent and rejects tiles from another bingo", () => {
+    const { team, tile, captain } = seedTeamAndTile();
+    setTileInterest(db, team.id, captain.id, tile.id, true);
+    setTileInterest(db, team.id, captain.id, tile.id, true);
+    expect(db.select().from(schema.tileInterests).all()).toHaveLength(1);
+
+    const other = db.insert(schema.bingos).values({ slug: "other", name: "Other", boardRows: 1, boardCols: 1, createdByUserId: captain.id }).returning().get();
+    const foreign = createTile(db, { bingoId: other.id, name: "Foreign", boardRow: 0, boardCol: 0 });
+    expect(() => setTileInterest(db, team.id, captain.id, foreign.id, true)).toThrow(ServiceError);
+  });
+
+  it("drops a member's hands when they leave the team", () => {
+    const { team, tile, member } = seedTeamAndTile();
+    setTileInterest(db, team.id, member.id, tile.id, true);
+    removeTeamMember(db, team.id, member.id);
+    expect(getTeamProgress(db, team.id).interests).toEqual([]);
   });
 });

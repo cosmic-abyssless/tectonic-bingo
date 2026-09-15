@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNodeInput, NodeStatus } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { bingoLines, claims, nodeEdges, submissions, teamNodeState, tileCategories, tiles } from "../db/schema";
+import { bingoLines, claims, nodeEdges, submissions, teamNodeState, tileCategories, tileInterests, tiles } from "../db/schema";
 import { ServiceError } from "./errors";
 import { deleteNode, deleteSubtree, getFullGraph, getNodeTree, getNodeTrees, insertSubtree, replaceSubtree } from "./graphService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
@@ -239,6 +239,7 @@ export function deleteTile(db: Db, id: string): void {
       return;
     }
     const taskCount = tx.select({ id: nodeEdges.id }).from(nodeEdges).where(eq(nodeEdges.parentId, tile.nodeId)).all().length;
+    tx.delete(tileInterests).where(eq(tileInterests.tileId, id)).run();
     tx.delete(tiles).where(eq(tiles.id, id)).run(); // must precede deleting the node it FKs to
     deleteSubtree(tx, tile.nodeId);
     audit(tx, {

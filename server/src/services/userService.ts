@@ -26,12 +26,10 @@ export function getUserById(db: Db, userId: string) {
 }
 
 /** Display columns only — for player-facing responses where the full row (isAdmin etc.) has no business going out. */
+export const MINIMAL_USER_COLS = { id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick };
+
 export function getMinimalUser(db: Db, userId: string) {
-  return db
-    .select({ id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick })
-    .from(users)
-    .where(eq(users.id, userId))
-    .get();
+  return db.select(MINIMAL_USER_COLS).from(users).where(eq(users.id, userId)).get();
 }
 
 // Only id + display columns: this feeds the partner picker, where the full

@@ -64,6 +64,13 @@
       "when": 1789435234269,
       "tag": "0008_bug_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1789459109787,
+      "tag": "0009_tile_interests",
+      "breakpoints": true
     }
   ]
 }

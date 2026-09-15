@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { STAGE_LABEL, nextMilestone, type Bingo, type BoardLine, type SubmissionDetails, type TeamNodeState, type Tile, type TileCategory } from "@bingo/shared";
-import { useBingo, useBoard, useDraftState, usePendingCount, useTeamProgress, useTeamSubmissions } from "../api/queries";
+import { STAGE_LABEL, nextMilestone, type Bingo, type BoardLine, type SubmissionDetails, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
+import { useBingo, useBoard, useDraftState, usePendingCount, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { displayName, avatarUrl } from "../core/ui/user";
 import { useHasPassed } from "../core/ui/useHasPassed";
@@ -31,6 +31,7 @@ const BingoPageRawContext = createContext<BingoPageRaw | null>(null);
 const EMPTY_TILES: Tile[] = [];
 const EMPTY_LINES: BoardLine[] = [];
 const EMPTY_NODE_STATES: TeamNodeState[] = [];
+const EMPTY_INTERESTS: TileInterest[] = [];
 const EMPTY_SUBMISSIONS: SubmissionDetails[] = [];
 
 export function BingoPageProvider({
@@ -54,6 +55,7 @@ export function BingoPageProvider({
 
   const { viewingTeamId, setViewingTeamId } = useViewingTeam(shell?.myTeam ?? null);
   const { data: progressData } = useTeamProgress(slug, viewingTeamId ?? undefined);
+  const setTileInterest = useSetTileInterest(slug);
   const { data: submissionsData } = useTeamSubmissions(slug, viewingTeamId ?? undefined);
   const { data: pendingData } = usePendingCount(slug, !!shell?.isMod);
   // Only fetches while actually on the draft stage — same net effect as the
@@ -81,10 +83,14 @@ export function BingoPageProvider({
 
   const { bingo, categories: categoriesRaw, teams, isMod, myTeam } = shell;
   const nodeStates = progressData?.nodeStates ?? EMPTY_NODE_STATES;
+  const interests = progressData?.interests ?? EMPTY_INTERESTS;
   const teamSubmissions = submissionsData?.submissions ?? EMPTY_SUBMISSIONS;
 
   const isViewingOtherTeam = isMod && !!viewingTeamId && viewingTeamId !== myTeam?.id;
   const canSubmit = bingo.stage === "live" && hasStarted && !isViewingOtherTeam && !!viewingTeamId;
+  // Hands go up on your own team's board only, from reveal onwards (the
+  // board isn't visible to players before that) until the bingo is over.
+  const canToggleInterest = !!myTeam && viewingTeamId === myTeam.id && (bingo.stage === "reveal" || bingo.stage === "live");
   // Players see their own team's stats while live and everyone's once the bingo
   // is over (the stats endpoint 403s otherwise); mods see them throughout.
   const canViewStats = isMod || bingo.stage === "complete" || (bingo.stage === "live" && !!myTeam);
@@ -171,6 +177,13 @@ export function BingoPageProvider({
       goToMod: () => navigate(`/b/${slug}/mod`),
       goToDraft: () => navigate(`/b/${slug}/draft`),
     },
+    tileInterest: {
+      toggle: (tileId) => {
+        if (!canToggleInterest) return;
+        const mine = interests.some((i) => i.tileId === tileId && i.user.id === user.id);
+        setTileInterest.mutate({ teamId: myTeam.id, tileId, user, interested: !mine });
+      },
+    },
   };
 
   const raw: BingoPageRaw = { slug, bingo, tiles, categories: categoriesRaw, nodeStates, teamSubmissions };
@@ -189,6 +202,9 @@ export function BingoPageProvider({
           bingoCols={bingo.boardCols}
           searchQuery={search.query}
           canSubmit={canSubmit}
+          canToggleInterest={canToggleInterest}
+          interests={interests}
+          viewerUserId={user.id}
           totalPoints={progressData?.totalPoints ?? null}
         >
           {children}

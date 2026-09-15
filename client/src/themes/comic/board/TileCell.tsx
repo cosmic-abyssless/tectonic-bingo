@@ -2,7 +2,7 @@ import { memo, useState, type CSSProperties } from "react";
 import type { TileModel } from "../../../headless/types";
 import { formatCountdown } from "../../../core/ui/time";
 import { TASK_STATUS_DOT } from "../../../core/ui/StatusBadge";
-import { CheckIcon, ClockIcon, LockIcon } from "../../../core/ui/icons";
+import { CheckIcon, ClockIcon, HandIcon, LockIcon } from "../../../core/ui/icons";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { getContrastTextColor, useDominantColor } from "../useDominantColor";
 
@@ -236,6 +236,17 @@ export const TileCell = memo(function TileCell({
       {tile.progress.totalTasks > 0 && (
         <span className="num absolute bottom-1 left-1 z-20 rounded-sm bg-bg/80 px-1 py-0.5 text-[9px] font-semibold leading-none text-fg-muted">
           {tile.progress.pointsAwarded}/{tile.progress.totalPoints}
+        </span>
+      )}
+
+      {tile.interest.people.length > 0 && !tile.progress.allComplete && (
+        <span
+          title={`On this tile: ${tile.interest.people.map((p) => p.displayName).join(", ")}`}
+          className="absolute right-1 top-1 z-20 inline-flex items-center gap-0.5 rounded-full border-2 border-black px-1 py-0.5 text-[9px] font-bold leading-none text-black"
+          style={{ background: tile.interest.mine ? "#facc15" : "#ffffff", fontFamily: COMIC_FONT }}
+        >
+          <HandIcon size={10} fill={tile.interest.mine ? "currentColor" : "none"} />
+          {tile.interest.people.length > 1 && <span className="num">{tile.interest.people.length}</span>}
         </span>
       )}
 

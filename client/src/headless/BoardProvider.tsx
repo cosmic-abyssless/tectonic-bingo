@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useRef, type ReactNode } from "react";
-import type { BoardLine, SubmissionDetails, TeamNodeState, Tile, TileCategory } from "@bingo/shared";
+import type { BoardLine, SubmissionDetails, TeamNodeState, Tile, TileCategory, TileInterest } from "@bingo/shared";
 import { tileMatchesSearch } from "../core/board/requirementTree";
 import { buildBoard } from "./boardModel";
 import { useNowTick } from "./useNowTick";
@@ -18,6 +18,9 @@ export function BoardProvider({
   bingoCols,
   searchQuery,
   canSubmit,
+  canToggleInterest,
+  interests,
+  viewerUserId,
   totalPoints,
   children,
 }: {
@@ -31,6 +34,9 @@ export function BoardProvider({
   bingoCols: number;
   searchQuery: string;
   canSubmit: boolean;
+  canToggleInterest: boolean;
+  interests: TileInterest[];
+  viewerUserId: string;
   totalPoints: number | null;
   children: ReactNode;
 }) {
@@ -70,13 +76,16 @@ export function BoardProvider({
       now,
       matchIds,
       canSubmit,
+      canToggleInterest,
+      interests,
+      viewerUserId,
       totalPoints,
       prev: prevRef.current,
     });
     prevRef.current = built.tileById;
     return built;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, totalPoints]);
+  }, [tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, totalPoints]);
 
   return <BoardContext.Provider value={board}>{children}</BoardContext.Provider>;
 }

@@ -2,7 +2,7 @@ import { memo, useState, type CSSProperties } from "react";
 import type { TileModel } from "../../../headless/types";
 import { formatCountdown } from "../../../core/ui/time";
 import { TASK_STATUS_DOT } from "../../../core/ui/StatusBadge";
-import { CheckIcon, ClockIcon, LockIcon } from "../../../core/ui/icons";
+import { CheckIcon, ClockIcon, HandIcon, LockIcon } from "../../../core/ui/icons";
 
 /*
  * Board tile. All colours come from the `--tile-*` variables set by the
@@ -56,6 +56,16 @@ export const TileCell = memo(function TileCell({ tile, onOpen }: { tile: TileMod
       {tile.freeze.hasFreezePeriod && !tile.freeze.isFrozen && (
         <span className="absolute left-1 top-1 z-10 text-[var(--tile-frozen)] drop-shadow">
           <ClockIcon size={14} />
+        </span>
+      )}
+
+      {tile.interest.people.length > 0 && !tile.progress.allComplete && (
+        <span
+          className={`absolute right-1 top-1 z-20 flex items-center gap-0.5 rounded-sm bg-bg/80 px-1 py-0.5 text-[9px] font-semibold leading-none ${tile.interest.mine ? "text-fg" : "text-fg-muted"}`}
+          title={`On this tile: ${tile.interest.people.map((p) => p.displayName).join(", ")}`}
+        >
+          <HandIcon size={11} fill={tile.interest.mine ? "currentColor" : "none"} />
+          {tile.interest.people.length > 1 && <span className="num">{tile.interest.people.length}</span>}
         </span>
       )}
 

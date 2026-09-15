@@ -137,6 +137,14 @@ export interface TileModel {
   dimmed: boolean;
   /** page.canSubmit && !allComplete && !isFrozen — TileModal's submitDisabled, inverted. */
   canSubmit: boolean;
+  /** Teammates who have raised a hand for this tile, oldest first. */
+  interest: {
+    people: { id: string; displayName: string }[];
+    /** The viewer is one of them. */
+    mine: boolean;
+    /** Viewer is on the team whose board this is and the tile isn't done — page.tileInterest.toggle() works. */
+    canToggle: boolean;
+  };
 }
 
 // Not rendered by the default theme; exposed for a theme that wants line
@@ -242,6 +250,8 @@ export interface BingoPageModel {
   submit: { open: boolean; initialTileId: string | undefined; initialFile: File | undefined; show(tileId?: string, file?: File): void; hide(): void };
   /** logout lives in core AppHeader's own user menu, not here. */
   actions: { goHome(): void; goToStats(): void; goToMod(): void; goToDraft(): void };
+  /** Raise/lower the viewer's hand for a tile on their own team. No-op unless tile.interest.canToggle. */
+  tileInterest: { toggle(tileId: string): void };
 }
 
 export interface SubmissionFlowModel {
