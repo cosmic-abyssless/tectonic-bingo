@@ -17,6 +17,7 @@ import modRouter from "./routes/mod";
 import adminRouter from "./routes/admin";
 import siteAdminRouter from "./routes/siteAdmin";
 import osrsItemsRouter from "./routes/osrsItems";
+import bugReportsRouter from "./routes/bugReports";
 import { errorHandler } from "./middleware/errorHandler";
 import { requireGuildMember } from "./middleware/requireGuildMember";
 import { auditContext } from "./audit/middleware";
@@ -116,6 +117,7 @@ app.use("/api/bingos", requireGuildMember, bingosRouter);
 app.use("/api/bingos/:slug/mod", requireGuildMember, modRouter);
 app.use("/api/bingos/:slug/admin", requireGuildMember, adminRouter);
 app.use("/api/osrs-items", osrsItemsRouter);
+app.use("/api/bug-reports", bugReportsRouter);
 
 // Serve the built client (client/dist) so the whole site — API, WS, and
 // frontend — comes from one origin in production: no CORS, no cookie-domain

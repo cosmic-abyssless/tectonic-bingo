@@ -57,6 +57,13 @@
       "when": 1789432004945,
       "tag": "0007_captains_and_leftovers",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1789435234269,
+      "tag": "0008_bug_reports",
+      "breakpoints": true
     }
   ]
 }
