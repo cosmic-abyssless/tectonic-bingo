@@ -21,6 +21,8 @@ import { Input, Select } from "../ui/Field";
 import { AlertIcon, CheckIcon, UsersIcon, XIcon } from "../ui/icons";
 import { SortHeader, compareSortValues, useTableSort } from "../ui/tableSort";
 import { timeAgo } from "../ui/time";
+import { TierBadge } from "../tectonic/ProfileBadges";
+import { formatTierName } from "../tectonic/profile";
 
 function csvEscape(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
@@ -33,13 +35,15 @@ function partnerRsn(entry: RosterEntry, roster: RosterEntry[]): string | null {
 }
 
 function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: string }[], isDuo: boolean): string {
-  const headers = ["#", "RSN", "Discord", "Status", "Buy-in", "Collected by", ...(isDuo ? ["Partner"] : []), ...questionPrompts.map((q) => q.prompt)];
+  const headers = ["#", "RSN", "Discord", "Tier", "Points", "Status", "Buy-in", "Collected by", ...(isDuo ? ["Partner"] : []), ...questionPrompts.map((q) => q.prompt)];
   const rows = roster.map((entry, i) => {
     const answerByQ = new Map(entry.answers.map((a) => [a.questionId, a.value]));
     return [
       String(i + 1),
       entry.signup.rsn,
       displayName(entry.user),
+      entry.tectonicProfile?.tier ? formatTierName(entry.tectonicProfile.tier.name) : "",
+      entry.tectonicProfile ? String(entry.tectonicProfile.points) : "",
       entry.signup.status,
       entry.signup.buyinReceivedAt ? "received" : "not received",
       entry.collectedByUser ? displayName(entry.collectedByUser) : "",
@@ -292,6 +296,7 @@ function rosterSortValue({ order, entry }: NumberedEntry, key: SortKey, roster: 
   if (key === "order") return order;
   if (key === "rsn") return entry.signup.rsn.toLowerCase();
   if (key === "discord") return displayName(entry.user).toLowerCase();
+  if (key === "tier") return entry.tectonicProfile?.points ?? -1;
   if (key === "status") return entry.signup.status;
   if (key === "buyin") return isPaid(entry) ? 1 : 0;
   if (key === "collectedBy") return entry.collectedByUser ? displayName(entry.collectedByUser).toLowerCase() : "";
@@ -321,6 +326,8 @@ export function SignupRoster({ slug }: { slug: string }) {
   const leftoverCount = roster.filter((r) => r.leftover).length;
   const teamCount = bingoData?.teams.length ?? 0;
   const leftoverMode = bingoData?.bingo.leftoverMode;
+  // Clan standing column only when tectonic-api knows at least one player.
+  const showTier = roster.some((r) => r.tectonicProfile);
   // Each chip's count reflects the other filter so the numbers show what
   // clicking it would leave on screen.
   const buyinCount = (f: BuyinFilter) => roster.filter((r) => matchesBuyin(r, f) && matchesPair(r, pairFilter)).length;
@@ -395,6 +402,7 @@ export function SignupRoster({ slug }: { slug: string }) {
                     <SortHeader label="#" sortKey="order" sort={sort} />
                     <SortHeader label="RSN" sortKey="rsn" sort={sort} />
                     <SortHeader label="Discord" sortKey="discord" sort={sort} />
+                    {showTier && <SortHeader label="Tier" sortKey="tier" sort={sort} />}
                     <SortHeader label="Signed up" sortKey="order" sort={sort} />
                     <SortHeader label="Status" sortKey="status" sort={sort} />
                     <SortHeader label="Buy-in" sortKey="buyin" sort={sort} />
@@ -418,6 +426,7 @@ export function SignupRoster({ slug }: { slug: string }) {
                           </span>
                         </td>
                         <td className="py-2 pr-4 text-fg-muted">{displayName(entry.user)}</td>
+                        {showTier && <td className="py-2 pr-4 text-fg-muted">{entry.tectonicProfile ? <TierBadge profile={entry.tectonicProfile} /> : "—"}</td>}
                         <td className="py-2 pr-4 text-fg-muted">
                           <time dateTime={entry.signup.createdAt} title={new Date(entry.signup.createdAt).toLocaleString()} className="num whitespace-nowrap">
                             {timeAgo(entry.signup.createdAt)}

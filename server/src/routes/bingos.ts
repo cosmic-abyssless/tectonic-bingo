@@ -18,6 +18,7 @@ import * as userService from "../services/userService";
 import * as statsService from "../services/statsService";
 import { isOcrEnabled, analyzeSubmissionScreenshot } from "../ocr";
 import { getTectonicClient, TectonicUnavailableError, type TectonicDetailedUser } from "../services/tectonicService";
+import { fetchProfiles } from "../services/tectonicProfileService";
 import { parseWomSummary } from "../services/womService";
 import { parseAccountType } from "../services/runeProfileService";
 import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
@@ -465,6 +466,12 @@ router.get(
     // Scouting notes are private to the lead's own team.
     const ratings = ledTeamId ? draftService.getTeamRatings(db, ledTeamId) : {};
 
+    // Clan standing (points, tier, records, event placements) is fetched live
+    // from tectonic-api in one batched call so it stays current through weeks
+    // of signups; the client caches it for 60s. Public clan data, so it's
+    // shown to everyone who can see the draft room.
+    const tectonic = await fetchProfiles(db, state.pool.flatMap((unit) => unit.entries.map((entry) => entry.user.id)));
+
     // WOM EHB + account type and RuneProfile's account type were fetched
     // once at signup time (playerStatsService.ts) and persisted on the
     // signup row — no live external calls here, just parsing already-stored
@@ -485,11 +492,12 @@ router.get(
           signup,
           womStats: womSummary ? { ehb: womSummary.ehb } : null,
           accountType,
+          tectonicProfile: tectonic.profiles[entry.user.id] ?? null,
         };
       }),
     }));
 
-    res.json({ ...state, pool, ratings });
+    res.json({ ...state, pool, ratings, tectonicUnavailable: tectonic.unavailable });
   }),
 );
 

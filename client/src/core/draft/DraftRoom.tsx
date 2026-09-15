@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { DraftPoolEntry, DraftUnit, AccountType, LeftoverMode, PickRating, SignupQuestion } from "@bingo/shared";
+import type { DraftPoolEntry, DraftUnit, LeftoverMode, PickRating, SignupQuestion, TectonicProfile } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
 import { useBingo, useDraftState, useMakePick, useSetPickRating, useSignupQuestions, useStartDraft } from "../../api/queries";
 import { displayName } from "../ui/user";
@@ -9,44 +9,13 @@ import { LinkIcon } from "../ui/icons";
 import { SortHeader, compareSortValues, useTableSort, type TableSort } from "../ui/tableSort";
 import { RatingCell } from "./RatingCell";
 import { TeamRoster } from "./TeamRoster";
-import ironmanBadge from "../ui/icons/Ironman_chat_badge.png";
-import ultimateBadge from "../ui/icons/Ultimate_ironman_chat_badge.png";
-import hardcoreBadge from "../ui/icons/Hardcore_ironman_chat_badge.png";
-import groupBadge from "../ui/icons/Group_ironman_chat_badge.png";
-import hardcoreGroupBadge from "../ui/icons/Hardcore_group_ironman_chat_badge.png";
-import unrankedGroupBadge from "../ui/icons/Unranked_group_ironman_chat_badge.png";
-
-const ACCOUNT_TYPE_LABEL: Record<AccountType, string> = {
-  normal: "Main",
-  ironman: "Ironman",
-  ultimate_ironman: "Ultimate Ironman",
-  hardcore_ironman: "Hardcore Ironman",
-  group_ironman: "Group Ironman",
-  hardcore_group_ironman: "Hardcore Group Ironman",
-  unranked_group_ironman: "Unranked Group Ironman",
-  unknown: "Unranked",
-};
-
-// OSRS's own in-game chat badges (client/src/core/ui/icons), from
-// RuneProfile — unlike WOM, it distinguishes group ironman variants. No
-// icon at all for a main (normal) or unranked account.
-const ACCOUNT_TYPE_BADGE: Partial<Record<AccountType, string>> = {
-  ironman: ironmanBadge,
-  ultimate_ironman: ultimateBadge,
-  hardcore_ironman: hardcoreBadge,
-  group_ironman: groupBadge,
-  hardcore_group_ironman: hardcoreGroupBadge,
-  unranked_group_ironman: unrankedGroupBadge,
-};
-
-function AccountTypeIcon({ accountType }: { accountType: AccountType | null | undefined }) {
-  const badge = accountType && ACCOUNT_TYPE_BADGE[accountType];
-  if (!badge) return null;
-  return <img src={badge} alt={ACCOUNT_TYPE_LABEL[accountType]} title={ACCOUNT_TYPE_LABEL[accountType]} className="inline-block align-[-2px]" />;
-}
+import { AccountTypeIcon } from "../ui/AccountTypeIcon";
+import { AchievementIcons, TierBadge } from "../tectonic/ProfileBadges";
+import { PlayerProfileDialog } from "../tectonic/PlayerProfileDialog";
+import { podiumSummary, podiumTitle } from "../tectonic/profile";
 
 
-// "rating" | "rsn" | "discord" | "ehb" | a signup question's id — anything the pool table can sort by.
+// "rating" | "rsn" | "discord" | "tier" | "records" | "podiums" | "ehb" | a signup question's id — anything the pool table can sort by.
 type SortKey = string;
 
 type Ratings = Record<string, PickRating>;
@@ -55,6 +24,9 @@ function poolSortValue(entry: DraftPoolEntry, key: SortKey, ratings: Ratings): s
   if (key === "rating") return ratings[entry.signup.id]?.stars ?? 0;
   if (key === "rsn") return entry.signup.rsn.toLowerCase();
   if (key === "discord") return displayName(entry.user).toLowerCase();
+  if (key === "tier") return entry.tectonicProfile?.points ?? -1;
+  if (key === "records") return entry.tectonicProfile?.records.length ?? -1;
+  if (key === "podiums") return entry.tectonicProfile?.events.length ?? -1;
   if (key === "ehb") return entry.womStats?.ehb ?? -1;
   return (entry.answers?.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
 }
@@ -66,6 +38,37 @@ function sortUnit(unit: DraftUnit, sort: TableSort<SortKey>, ratings: Ratings): 
   return { ...unit, entries };
 }
 
+// Tier · Records · Podiums · Achievements — the at-a-glance clan signals;
+// the full lists live in PlayerProfileDialog.
+function ProfileCells({ profile }: { profile: TectonicProfile | null }) {
+  if (!profile) {
+    return (
+      <>
+        <td className="py-2 pr-4 text-fg-subtle">—</td>
+        <td className="py-2 pr-4" />
+        <td className="py-2 pr-4" />
+        <td className="py-2 pr-4" />
+      </>
+    );
+  }
+  const podiums = podiumSummary(profile);
+  return (
+    <>
+      <td className="py-2 pr-4">
+        <TierBadge profile={profile} />
+      </td>
+      <td className="num py-2 pr-4 text-fg-muted">{profile.records.length}</td>
+      <td className="num py-2 pr-4 text-fg-muted" title={podiumTitle(profile)}>
+        {podiums.total}
+        {podiums.bingoWins > 0 && <span className="ml-1 text-xs text-fg-subtle">({podiums.bingoWins} bingo)</span>}
+      </td>
+      <td className="py-2 pr-4">
+        <AchievementIcons profile={profile} />
+      </td>
+    </>
+  );
+}
+
 function PoolTable({
   pool,
   questions,
@@ -75,6 +78,7 @@ function PoolTable({
   onPick,
   picking,
   leftoverMode,
+  onOpen,
 }: {
   pool: DraftUnit[];
   questions: SignupQuestion[];
@@ -85,6 +89,7 @@ function PoolTable({
   onPick: (userId: string) => void;
   picking: boolean;
   leftoverMode: LeftoverMode;
+  onOpen: (entry: DraftPoolEntry) => void;
 }) {
   // Leads land on their favourites first; the toggle flips to ascending.
   const sort = useTableSort<SortKey>(ratings ? "rating" : "rsn", ratings ? "desc" : "asc");
@@ -97,6 +102,8 @@ function PoolTable({
   // Skip the WOM columns entirely if nobody in the pool has stats (WOM
   // integration effectively unused for this bingo), same reasoning.
   const showWomStats = entries.some((e) => e.womStats !== null);
+  // Clan standing columns only when tectonic-api knows at least one player.
+  const showProfiles = entries.some((e) => e.tectonicProfile !== null);
   const hasPairs = pool.some((u) => u.entries.length > 1);
   // Leftovers wait until the main pool is empty (singles round) or are never
   // drafted (cut); the Draft button follows draftService.draftablePool.
@@ -120,6 +127,14 @@ function PoolTable({
             <SortHeader label="RSN" sortKey="rsn" sort={sort} />
             <SortHeader label="Discord" sortKey="discord" sort={sort} />
             {hasLeftovers && <th className="pb-2 pr-4" />}
+            {showProfiles && (
+              <>
+                <SortHeader label="Tier" sortKey="tier" sort={sort} />
+                <SortHeader label="Records" sortKey="records" sort={sort} />
+                <SortHeader label="Podiums" sortKey="podiums" sort={sort} />
+                <th className="pb-2 pr-4" />
+              </>
+            )}
             {showWomStats && <SortHeader label="EHB" sortKey="ehb" sort={sort} />}
             {showAnswers && questions.map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />)}
             {canPick && <th className="pb-2" />}
@@ -148,10 +163,14 @@ function PoolTable({
                       </td>
                     )}
                     <td className={`whitespace-nowrap py-2 pr-4 font-medium ${unit.leftover ? "" : "text-fg"}`}>
-                      <AccountTypeIcon accountType={entry.accountType} /> {entry.signup.rsn}
+                      <AccountTypeIcon accountType={entry.accountType} />{" "}
+                      <button type="button" onClick={() => onOpen(entry)} className="rounded-sm underline-offset-2 hover:underline focus-visible:underline" title="Open player profile">
+                        {entry.signup.rsn}
+                      </button>
                     </td>
                     <td className="whitespace-nowrap py-2 pr-4 text-fg-muted">{displayName(entry.user)}</td>
                     {hasLeftovers && <td className="py-2 pr-4 align-middle">{unit.leftover && i === 0 && <Badge tone="warn">{leftoverTag}</Badge>}</td>}
+                    {showProfiles && <ProfileCells profile={entry.tectonicProfile} />}
                     {showWomStats && <td className="num whitespace-nowrap py-2 pr-4 text-fg-muted">{entry.womStats ? Math.round(entry.womStats.ehb).toLocaleString() : "—"}</td>}
                     {showAnswers &&
                       questions.map((q) => (
@@ -188,6 +207,9 @@ export function DraftRoom({ slug }: { slug: string }) {
   const [startError, setStartError] = useState<string | null>(null);
   const [pickError, setPickError] = useState<string | null>(null);
   const [rateError, setRateError] = useState<string | null>(null);
+  // Which pool entry's profile dialog is open. Tracked by signup id so the
+  // dialog follows live refetches instead of showing a stale snapshot.
+  const [openSignupId, setOpenSignupId] = useState<string | null>(null);
 
   if (stateError) {
     return (
@@ -214,6 +236,8 @@ export function DraftRoom({ slug }: { slug: string }) {
   // browse and rate signups; nothing can start or be picked yet.
   const scouting = shell.bingo.stage !== "draft";
   const poolCount = state.pool.reduce((n, u) => n + u.entries.length, 0);
+  const questions = questionsData?.questions ?? [];
+  const openEntry = openSignupId ? (state.pool.flatMap((u) => u.entries).find((e) => e.signup.id === openSignupId) ?? null) : null;
 
   async function handleStart() {
     setStartError(null);
@@ -310,17 +334,38 @@ export function DraftRoom({ slug }: { slug: string }) {
             {pickError ?? rateError}
           </Notice>
         )}
+        {state.tectonicUnavailable && (
+          <Notice tone="warn" className="mb-2">
+            The clan API is unavailable right now, so tiers, records and event placements are hidden.
+          </Notice>
+        )}
         <PoolTable
           pool={state.pool}
-          questions={questionsData?.questions ?? []}
+          questions={questions}
           ratings={isLead ? state.ratings : null}
           onRate={handleRate}
           canPick={canAct}
           onPick={handlePick}
           picking={makePick.isPending}
           leftoverMode={shell.bingo.leftoverMode}
+          onOpen={(entry) => setOpenSignupId(entry.signup.id)}
         />
       </section>
+
+      <PlayerProfileDialog
+        player={
+          openEntry && {
+            rsn: openEntry.signup.rsn,
+            discordName: displayName(openEntry.user),
+            accountType: openEntry.accountType,
+            womStats: openEntry.womStats,
+            profile: openEntry.tectonicProfile,
+            answers: openEntry.answers,
+          }
+        }
+        questions={questions}
+        onClose={() => setOpenSignupId(null)}
+      />
     </div>
   );
 }

@@ -501,6 +501,35 @@ export interface RosterEntry {
   pairing?: SignupPairing | null;
   // Mod roster only: undrafted and not fitting a full draft round (see LeftoverMode).
   leftover?: boolean;
+  // Mod roster only: clan standing from tectonic-api; null when the player
+  // isn't registered there or the lookup was unavailable.
+  tectonicProfile?: TectonicProfile | null;
+}
+
+// ---------------------------------------------------------------------------
+// Clan profile (tectonic-api GET /guilds/:id/users/:ids), trimmed to what the
+// draft room and mod roster show. Fetched live, never persisted.
+// ---------------------------------------------------------------------------
+
+export interface TectonicProfile {
+  points: number;
+  rank: number; // 1-based standing in the clan by points
+  tier: { name: string; icon: string | null } | null; // icon: URL, Discord emoji `<:name:id>`, or rank slug
+  achievements: { name: string; thumbnail: string }[]; // sorted by display order
+  records: TectonicProfileRecord[];
+  events: { name: string; placement: number; solo: boolean }[]; // only placements that scored points
+  combatAchievementCount: number;
+}
+
+// A clan record the player currently holds (as runner or teammate).
+export interface TectonicProfileRecord {
+  displayName: string; // boss/activity
+  category: string;
+  solo: boolean;
+  valueType: string; // "time" (OSRS game ticks, 0.6s each) or "depth"
+  value: number;
+  date: string;
+  teamSize: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -623,6 +652,9 @@ export interface DraftPoolEntry {
   womStats: WomPlayerStats | null;
   // RuneProfile (by RSN) ?? WOM (by womId) ?? null. See AccountType.
   accountType: AccountType | null;
+  // Live clan standing; null when unregistered with the clan bot or when
+  // tectonic-api was unavailable (see DraftState.tectonicUnavailable).
+  tectonicProfile: TectonicProfile | null;
 }
 
 export interface DraftTeam extends Team {
@@ -653,6 +685,7 @@ export interface DraftState {
   // singlesRound: the main pool is empty and leftovers are being drafted.
   currentPick: { pickNumber: number; round: number; teamId: string; singlesRound: boolean } | null;
   ratings: Record<string, PickRating>; // by signupId; empty unless the viewer leads a team
+  tectonicUnavailable: boolean; // the clan API lookup failed, so every tectonicProfile is null
 }
 
 // ---------------------------------------------------------------------------
