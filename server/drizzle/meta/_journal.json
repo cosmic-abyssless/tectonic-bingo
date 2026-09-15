@@ -50,6 +50,20 @@
       "when": 1789400759090,
       "tag": "0006_audit_log",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1789430385470,
+      "tag": "0007_bug_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1789431597958,
+      "tag": "0008_bug_report_bingo_id",
+      "breakpoints": true
     }
   ]
 }

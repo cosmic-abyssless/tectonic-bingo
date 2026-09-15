@@ -264,6 +264,25 @@ export const itemGroupItems = sqliteTable('item_group_items', {
   uniqueIndex('item_group_items_group_name_unq').on(t.groupId, t.itemName),
 ]);
 
+// Site-wide bug reports, submitted from the header button on any page. Not
+// scoped to a bingo — a bug can happen anywhere in the app.
+export const bugReports = sqliteTable('bug_reports', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  // Best-effort tag: the bingo whose pages the reporter's URL was under at
+  // submit time (resolved server-side from pageUrl), or null off-bingo
+  // (bingo list, site admin). No FK, same convention as auditLog.bingoId —
+  // a report should survive that bingo's later deletion.
+  bingoId: text('bingo_id'),
+  reporterUserId: text('reporter_user_id').notNull().references(() => users.id),
+  description: text('description').notNull(),
+  pageUrl: text('page_url'), // window.location.pathname at submit time — debugging context
+  userAgent: text('user_agent'), // navigator.userAgent — same
+  status: text('status', { enum: ['open', 'resolved'] }).notNull().default('open'),
+  resolvedByUserId: text('resolved_by_user_id').references(() => users.id),
+  resolvedAt: integer('resolved_at', { mode: 'timestamp' }),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+});
+
 // ---------------------------------------------------------------------------
 // NODE GRAPH
 //

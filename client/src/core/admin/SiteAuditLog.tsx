@@ -1,99 +1,67 @@
 import { useMemo, useState } from "react";
-import type { AuditCategory, AuditEntry } from "@bingo/shared";
-import { useAuditLog, useBingo } from "../../api/queries";
+import type { AuditCategory } from "@bingo/shared";
+import { useSiteAuditLog } from "../../api/adminQueries";
+import { useBingos } from "../../api/queries";
+import { CATEGORIES, DetailsView, buildCsv } from "../mod/AuditLog";
 import { displayName } from "../ui/user";
 import { timeAgo } from "../ui/time";
 import { AuditActionBadge } from "../ui/AuditActionBadge";
 import { Button } from "../ui/Button";
 import { Card, EmptyState, Notice } from "../ui/Card";
 import { ChevronDownIcon, ChevronRightIcon, ListIcon } from "../ui/icons";
+import { Menu, MenuItem, MenuTrigger } from "../ui/Menu";
 import { MultiSelect } from "../ui/MultiSelect";
 
-// Shared with SiteAuditLog.tsx — bug_report entries are bingo-scoped when
-// reported from a bingo's own pages, so this filter is meaningful in both.
-export const CATEGORIES: { key: AuditCategory; label: string }[] = [
-  { key: "bingo", label: "Bingo" },
-  { key: "settings", label: "Settings" },
-  { key: "board", label: "Board" },
-  { key: "signup", label: "Signups" },
-  { key: "draft", label: "Draft" },
-  { key: "team", label: "Teams" },
-  { key: "submission", label: "Submissions" },
-  { key: "points", label: "Points" },
-  { key: "moderation", label: "Moderation" },
-  { key: "system", label: "System" },
-  { key: "bug_report", label: "Bug reports" },
-  { key: "http", label: "Unaudited" },
-];
+type BingoScope = string | null | "all";
 
-export function csvEscape(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
-}
-
-export function buildCsv(entries: AuditEntry[]): string {
-  const headers = ["Time", "Action", "Actor", "Team", "Label"];
-  const rows = entries.map((e) => [new Date(e.at).toISOString(), e.action, e.actor ? displayName(e.actor) : e.actorType, e.team?.name ?? "", e.label]);
-  return [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
-}
-
-// A before/after diff for a `changes` field; every other detail key renders
-// as a plain key/value line.
-export function DetailsView({ details }: { details: unknown }) {
-  if (!details || typeof details !== "object") return null;
-  const { changes, ...rest } = details as { changes?: { before: Record<string, unknown>; after: Record<string, unknown> } };
-
+// Single-select sibling of MultiSelect — "All bingos" / "Site-wide only" /
+// one specific bingo. A checklist doesn't fit here since these are mutually
+// exclusive scopes, not independent filters.
+function BingoScopeFilter({ options, value, onChange }: { options: { key: string; label: string }[]; value: BingoScope; onChange: (v: BingoScope) => void }) {
+  const selectedKey = value === "all" ? "all" : (value ?? "null");
+  const summary = options.find((o) => o.key === selectedKey)?.label ?? "All bingos";
   return (
-    <div className="space-y-2 text-xs">
-      {changes && (
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <div className="mb-1 font-medium text-fg-subtle">Before</div>
-            {Object.entries(changes.before).map(([k, v]) => (
-              <div key={k} className="text-fg-muted">
-                <span className="text-fg-subtle">{k}:</span> {String(v)}
-              </div>
-            ))}
-          </div>
-          <div>
-            <div className="mb-1 font-medium text-fg-subtle">After</div>
-            {Object.entries(changes.after).map(([k, v]) => (
-              <div key={k} className="text-fg-muted">
-                <span className="text-fg-subtle">{k}:</span> {String(v)}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {Object.entries(rest).map(([k, v]) => (
-        <div key={k} className="text-fg-muted">
-          <span className="text-fg-subtle">{k}:</span> {typeof v === "object" ? JSON.stringify(v) : String(v)}
-        </div>
-      ))}
-    </div>
+    <MenuTrigger>
+      <Button variant="secondary" size="sm" className={value !== "all" ? "border-fg" : ""}>
+        <span className="text-fg-subtle">Bingo:</span> {summary}
+        <ChevronDownIcon size={14} />
+      </Button>
+      <Menu
+        selectionMode="single"
+        selectedKeys={new Set([selectedKey])}
+        onSelectionChange={(keys) => {
+          const k = [...keys][0] as string | undefined;
+          onChange(k === undefined || k === "all" ? "all" : k === "null" ? null : k);
+        }}
+        items={options}
+      >
+        {(option) => <MenuItem id={option.key} textValue={option.label}>{option.label}</MenuItem>}
+      </Menu>
+    </MenuTrigger>
   );
 }
 
-export function AuditLog({ slug }: { slug: string }) {
+// Site admin's counterpart to core/mod/AuditLog.tsx — every bingo (or just
+// site-level entries, or one bingo), not one bingo's own log.
+export function SiteAuditLog() {
   const [categories, setCategories] = useState<string[]>([]);
-  const [teamIds, setTeamIds] = useState<string[]>([]);
   const [actorUserIds, setActorUserIds] = useState<string[]>([]);
+  const [bingoScope, setBingoScope] = useState<BingoScope>("all");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const { data: shell } = useBingo(slug);
-  const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useAuditLog(slug, {
+  const { data: bingosData } = useBingos();
+  const bingos = bingosData?.bingos ?? [];
+  const bingoById = useMemo(() => new Map(bingos.map((b) => [b.id, b])), [bingos]);
+  const bingoScopeOptions = useMemo(() => [{ key: "all", label: "All bingos" }, { key: "null", label: "Site-wide only" }, ...bingos.map((b) => ({ key: b.id, label: b.name }))], [bingos]);
+
+  const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useSiteAuditLog(bingoScope, {
     category: categories.length ? (categories as AuditCategory[]) : undefined,
-    teamId: teamIds.length ? teamIds : undefined,
     actorUserId: actorUserIds.length ? actorUserIds : undefined,
   });
 
   const entries = useMemo(() => data?.pages.flatMap((p) => p.entries) ?? [], [data]);
-  const teamOptions = useMemo(() => (shell?.teams ?? []).map((t) => ({ key: t.id, label: t.name })), [shell]);
 
-  // Every distinct actor seen across loaded pages — there's no dedicated
-  // "everyone who could ever act on this bingo" endpoint, so the picker
-  // grows as more history loads rather than listing every mod/player upfront.
   const actorOptions = useMemo(() => {
     const byId = new Map<string, { key: string; label: string; count: number }>();
     for (const e of entries) {
@@ -112,11 +80,11 @@ export function AuditLog({ slug }: { slug: string }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="w-full space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <MultiSelect label="Category" options={CATEGORIES} selected={categories} onChange={setCategories} />
-        {teamOptions.length > 0 && <MultiSelect label="Team" options={teamOptions} selected={teamIds} onChange={setTeamIds} />}
         {actorOptions.length > 0 && <MultiSelect label="User" options={actorOptions} selected={actorUserIds} onChange={setActorUserIds} />}
+        <BingoScopeFilter options={bingoScopeOptions} value={bingoScope} onChange={setBingoScope} />
         <div className="ml-auto">
           <Button size="sm" onPress={copyCsv} isDisabled={entries.length === 0}>
             {copied ? "Copied" : "Copy as CSV"}
@@ -130,19 +98,20 @@ export function AuditLog({ slug }: { slug: string }) {
         <p className="py-20 text-center text-sm text-fg-muted">Loading…</p>
       ) : entries.length === 0 ? (
         <EmptyState icon={<ListIcon />} title="No activity yet">
-          Actions taken on this bingo will show up here as they happen.
+          Actions taken across the site will show up here as they happen.
         </EmptyState>
       ) : (
         <div className="space-y-2">
           {entries.map((entry) => {
             const isExpanded = expandedId === entry.id;
+            const bingoName = entry.bingoId ? (bingoById.get(entry.bingoId)?.name ?? null) : null;
             return (
               <Card key={entry.id} className="overflow-hidden">
                 <div className="flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors hover:bg-surface-hover" onClick={() => setExpandedId(isExpanded ? null : entry.id)}>
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex flex-wrap items-center gap-1.5">
                       <AuditActionBadge action={entry.action} />
-                      {entry.team && <span className="text-xs text-fg-subtle">{entry.team.name}</span>}
+                      {entry.team ? <span className="text-xs text-fg-subtle">{entry.team.name}</span> : bingoName ? <span className="text-xs text-fg-subtle">{bingoName}</span> : null}
                     </div>
                     <p className="text-sm text-fg">{entry.label}</p>
                     <p className="mt-0.5 text-xs text-fg-subtle">

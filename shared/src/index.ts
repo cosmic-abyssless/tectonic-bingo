@@ -266,6 +266,28 @@ export interface SubmissionDetails {
   submittedByUser: MinimalUser | null;
 }
 
+export type BugReportStatus = "open" | "resolved";
+
+// Submitted from the header button on any page. bingoId is a best-effort tag
+// (resolved server-side from the reporter's page URL) — null when reported
+// off-bingo (bingo list, site admin).
+export interface BugReport {
+  id: string;
+  bingoId: string | null;
+  reporterUserId: string;
+  description: string;
+  pageUrl: string | null;
+  userAgent: string | null;
+  status: BugReportStatus;
+  resolvedByUserId: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+export interface BugReportWithReporter extends BugReport {
+  reporter: MinimalUser | null;
+}
+
 // Minimal display info for a leaf a submission's claims touched — enough for
 // the review queue to label each claim without fetching the whole board graph.
 export interface ClaimedLeaf {

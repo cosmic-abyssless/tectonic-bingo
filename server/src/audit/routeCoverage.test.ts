@@ -50,6 +50,7 @@ describe("route coverage", () => {
     const { default: modRouter } = await import("../routes/mod");
     const { default: adminRouter } = await import("../routes/admin");
     const { default: siteAdminRouter } = await import("../routes/siteAdmin");
+    const { default: bugReportsRouter } = await import("../routes/bugReports");
     const { AUDITED_ROUTES } = await import("./routePolicy");
 
     const routes = [
@@ -57,6 +58,7 @@ describe("route coverage", () => {
       ...routesFor(modRouter, "/api/bingos/:slug/mod"),
       ...routesFor(adminRouter, "/api/bingos/:slug/admin"),
       ...routesFor(siteAdminRouter, "/api/admin"),
+      ...routesFor(bugReportsRouter, "/api/bug-reports"),
     ];
 
     // Sanity check the dev-gated routes actually registered under our env vars.

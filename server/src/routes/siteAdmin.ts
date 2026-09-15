@@ -7,6 +7,7 @@ import { db } from "../db";
 import * as bingoService from "../services/bingoService";
 import * as bingoExportService from "../services/bingoExportService";
 import * as itemGroupService from "../services/itemGroupService";
+import * as bugReportService from "../services/bugReportService";
 import * as userService from "../services/userService";
 import { ServiceError } from "../services/errors";
 import { queryAuditLog } from "../audit/query";
@@ -143,6 +144,26 @@ router.delete(
   asyncHandler(async (req, res) => {
     itemGroupService.deleteItemGroup(db, req.params.id as string);
     res.status(204).end();
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Bug reports — site-wide, submitted from the header button on any page
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/bug-reports",
+  asyncHandler(async (_req, res) => {
+    res.json({ bugReports: bugReportService.getBugReports(db) });
+  }),
+);
+router.patch(
+  "/bug-reports/:id",
+  asyncHandler(async (req, res) => {
+    const { resolved } = req.body as { resolved?: boolean };
+    if (typeof resolved !== "boolean") throw new ServiceError(400, "resolved must be a boolean");
+    const bugReport = bugReportService.resolveBugReport(db, req.params.id as string, { resolved, resolvedByUserId: req.user!.id });
+    res.json({ bugReport });
   }),
 );
 

@@ -15,7 +15,7 @@ export type AuditActorRole = "admin" | "mod" | "player" | "system";
 // Matches client/src/core/ui/Card.tsx's Badge TONE keys.
 export type AuditTone = "neutral" | "info" | "ok" | "warn" | "danger";
 
-export type AuditCategory = "bingo" | "settings" | "board" | "signup" | "draft" | "team" | "submission" | "points" | "moderation" | "system" | "http";
+export type AuditCategory = "bingo" | "settings" | "board" | "signup" | "draft" | "team" | "submission" | "points" | "moderation" | "system" | "http" | "bug_report";
 
 export type AuditEntityType =
   | "bingo"
@@ -31,7 +31,8 @@ export type AuditEntityType =
   | "adjustment"
   | "signup"
   | "pairing"
-  | "http";
+  | "http"
+  | "bug_report";
 
 /** Changed fields only — before/after per key, never a full row snapshot. */
 export type FieldChanges<T> = { before: Partial<T>; after: Partial<T> };
@@ -138,6 +139,9 @@ export interface AuditDetailsMap {
   // Fallback-only: written by the server's finish-middleware for any
   // successful non-GET /api/* mutation that recorded nothing itself.
   "http.mutation": { method: string; originalUrl: string; routePath: string | null; params: Record<string, unknown>; body: unknown; file: string | null };
+
+  "bug_report.created": { description: string; pageUrl: string | null };
+  "bug_report.resolved": { resolved: boolean };
 }
 
 export interface TaskSnapshot {
@@ -359,6 +363,20 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Unaudited action",
     label: (i) => `${actor(i)} performed ${i.details.method} ${i.details.routePath ?? i.details.originalUrl} (not yet instrumented)`,
+  },
+  "bug_report.created": {
+    category: "bug_report",
+    tone: "warn",
+    visibility: "mods",
+    title: "Bug report submitted",
+    label: (i) => `${actor(i)} reported a bug: "${i.details.description.length > 60 ? `${i.details.description.slice(0, 60)}…` : i.details.description}"`,
+  },
+  "bug_report.resolved": {
+    category: "bug_report",
+    tone: "ok",
+    visibility: "mods",
+    title: "Bug report resolved",
+    label: (i) => `${actor(i)} marked a bug report ${i.details.resolved ? "resolved" : "reopened"}`,
   },
 };
 

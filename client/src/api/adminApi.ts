@@ -1,6 +1,6 @@
 import type {
-  Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, SignupQuestion, Team, TeamMember, Tile,
-  TileCategory, User,
+  Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, SignupQuestion, Team,
+  TeamMember, Tile, TileCategory, User,
 } from "@bingo/shared";
 import { api } from "./client";
 
@@ -38,6 +38,13 @@ export function updateItemGroup(id: string, payload: Partial<{ name: string; des
 }
 export function deleteItemGroup(id: string) {
   return api.delete(`/api/admin/item-groups/${id}`);
+}
+
+export function getBugReports() {
+  return api.get<{ bugReports: BugReportWithReporter[] }>("/api/admin/bug-reports");
+}
+export function resolveBugReport(id: string, resolved: boolean) {
+  return api.patch<{ bugReport: BugReportWithReporter }>(`/api/admin/bug-reports/${id}`, { resolved });
 }
 
 const base = (slug: string) => `/api/bingos/${slug}/admin`;
