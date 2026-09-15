@@ -166,7 +166,7 @@ export function BingoSettingsForm({
             <option value="singles">Singles round</option>
           </Select>
         </Field>
-        <label className="flex items-center gap-2 text-sm text-fg">
+        <label className="flex items-center gap-2 text-sm text-on-surface">
           <input type="checkbox" checked={form.warnLeftovers} onChange={(e) => setForm({ ...form, warnLeftovers: e.target.checked })} className="size-4 cursor-pointer accent-accent" />
           Warn at-risk signups on their signup page
         </label>
@@ -181,8 +181,8 @@ export function BingoSettingsForm({
             <Input type="number" value={form.bonusPotAmount} onChange={(e) => setForm({ ...form, bonusPotAmount: e.target.value })} className="num" />
           </Field>
         </div>
-        <p className="text-sm text-fg-muted">
-          Total pot: <span className="num font-semibold text-fg">{potTotal.toLocaleString()} GP</span> — <span className="num">{paidSignupCount}</span> paid signup
+        <p className="text-sm text-on-surface-muted">
+          Total pot: <span className="num font-semibold text-on-surface">{potTotal.toLocaleString()} GP</span> — <span className="num">{paidSignupCount}</span> paid signup
           {paidSignupCount === 1 ? "" : "s"} × <span className="num">{(bingo.buyinAmount ?? 0).toLocaleString()}</span> GP buy-in, plus bonus
         </p>
       </Section>
@@ -234,14 +234,14 @@ export function BingoSettingsForm({
           label={
             <span className="flex items-center justify-between">
               Rules (Markdown)
-              <button type="button" onClick={() => setShowPreview((p) => !p)} className="text-xs text-fg-muted underline-offset-2 hover:text-fg hover:underline">
+              <button type="button" onClick={() => setShowPreview((p) => !p)} className="text-xs text-on-surface-muted underline-offset-2 hover:text-on-surface hover:underline">
                 {showPreview ? "Edit" : "Preview"}
               </button>
             </span>
           }
         >
           {showPreview ? (
-            <div className="min-h-[120px] rounded-md border border-line bg-surface px-3 py-2">
+            <div className="min-h-[120px] rounded-md border border-outline bg-surface px-3 py-2">
               <Markdown>{form.rulesMarkdown || "*(nothing yet)*"}</Markdown>
             </div>
           ) : (
@@ -251,7 +251,7 @@ export function BingoSettingsForm({
       </Section>
 
       <Section title="Export">
-        <p className="text-sm text-fg-muted">
+        <p className="text-sm text-on-surface-muted">
           Download this bingo's board and settings as a file — categories, tiles, tasks, lines, and signup questions. Tile images and everything
           environment-specific (teams, signups, submissions, moderators) are left out. Import it as a new bingo from the site admin page.
         </p>
@@ -274,7 +274,7 @@ export function BingoSettingsForm({
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <Disclosure defaultExpanded title={<span className="flex-1 text-sm font-semibold text-fg">{title}</span>}>
+    <Disclosure defaultExpanded title={<span className="flex-1 text-sm font-semibold text-on-surface">{title}</span>}>
       <div className="space-y-4">{children}</div>
     </Disclosure>
   );
@@ -291,15 +291,15 @@ function WomSection({ enabled, onToggle, children }: { enabled: boolean; onToggl
   useEffect(() => setExpanded(enabled), [enabled]);
 
   return (
-    <div className="rounded-lg border border-line bg-surface">
+    <div className="rounded-lg border border-outline bg-surface">
       <div className="flex h-12 w-full items-center gap-3 px-4">
-        <button type="button" onClick={() => setExpanded((v) => !v)} className="flex flex-1 items-center gap-3 text-left text-sm font-semibold text-fg">
+        <button type="button" onClick={() => setExpanded((v) => !v)} className="flex flex-1 items-center gap-3 text-left text-sm font-semibold text-on-surface">
           Wise Old Man
-          <span className="text-fg-subtle">{expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
+          <span className="text-on-surface-subtle">{expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
         </button>
         <Switch isSelected={enabled} onChange={onToggle} aria-label="Enable Wise Old Man integration" />
       </div>
-      {expanded && <div className="space-y-4 border-t border-line p-4">{children}</div>}
+      {expanded && <div className="space-y-4 border-t border-outline p-4">{children}</div>}
     </div>
   );
 }

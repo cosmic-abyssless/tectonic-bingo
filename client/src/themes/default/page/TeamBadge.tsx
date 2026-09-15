@@ -12,7 +12,7 @@ export function TeamBadge({ team, onPress }: { team: TeamModel; onPress: () => v
     <Button size="sm" style={teamBadgeStyle(team)} onPress={onPress}>
       {team.color && <span className="size-2 rounded-full" style={{ backgroundColor: team.color }} />}
       {team.name}
-      <UsersIcon className="text-fg-subtle" />
+      <UsersIcon className="text-on-surface-subtle" />
     </Button>
   );
 }

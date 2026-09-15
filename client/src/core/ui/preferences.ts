@@ -8,6 +8,8 @@ import { useCallback, useSyncExternalStore } from "react";
 const PREFERENCES = {
   // What to do with mod tabs whose stage has passed or hasn't arrived yet.
   outOfStageTabs: ["hide", "dim"],
+  // Light/dark appearance — "system" tracks the OS preference live.
+  colorScheme: ["system", "light", "dark"],
 } as const satisfies Record<string, readonly string[]>;
 
 type PreferenceKey = keyof typeof PREFERENCES;

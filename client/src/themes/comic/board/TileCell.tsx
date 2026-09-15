@@ -3,8 +3,10 @@ import type { TileModel } from "../../../headless/types";
 import { formatCountdown } from "../../../core/ui/time";
 import { TASK_STATUS_DOT } from "../../../core/ui/StatusBadge";
 import { CheckIcon, ClockIcon, HandIcon, LockIcon } from "../../../core/ui/icons";
+import { useResolvedColorScheme } from "../../../core/ui/colorScheme";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { getContrastTextColor, useDominantColor } from "../useDominantColor";
+import { getColors } from "./colors";
 
 /*
  * A little comic book sitting on the tile, cracked open just enough to show
@@ -25,10 +27,20 @@ export const TileCell = memo(function TileCell({
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const scheme = useResolvedColorScheme();
+  const colors = getColors(scheme);
   const dominantColor = useDominantColor(
     tile.imageUrl && !imgFailed ? tile.imageUrl : null,
   );
-  const coverColor = dominantColor ?? "#ffead4";
+  // Falls back to the tile's own bg token (not colors.ts's PAPER, which is
+  // the tile *modal*'s book-page purple) so a no-image tile's cover reads as
+  // the same charcoal/cream as the rest of the board, not a separate hue.
+  const coverColor = dominantColor ?? "var(--tile-bg)";
+  // The two page-stack slivers (unlike the cover above) keep colors.ts's
+  // purple/plum PAPER family — a little of the modal's "moonlit" book
+  // identity peeking out from behind the charcoal cover, rather than
+  // blending into it.
+  const tickColor = scheme === "dark" ? "rgba(233,213,255,0.35)" : "rgba(0,0,0,0.22)";
   // The price badge sits directly on the cover with no fill of its own, so
   // its own color (border + text) has to adapt to whatever that cover
   // color turns out to be, not the other way around.
@@ -120,7 +132,7 @@ export const TileCell = memo(function TileCell({
             className="absolute overflow-hidden rounded-[3px] border-2"
             style={{
               inset: "2px -2px -3px 0",
-              backgroundColor: "#e6d9b8",
+              backgroundColor: colors.PAPER_ALT,
               borderColor: "var(--tile-border)",
             }}
           />
@@ -138,7 +150,7 @@ export const TileCell = memo(function TileCell({
             className="absolute overflow-hidden rounded-[3px] border-2 transition-transform duration-200 [transform:rotateY(-7.5deg)] group-hover:[transform:rotateY(-11.5deg)] group-focus:[transform:rotateY(-11.5deg)] group-data-[search-highlighted]:[transform:rotateY(-11.5deg)]"
             style={{
               inset: "1px -1px -1.5px 0",
-              backgroundColor: "#f2ead4",
+              backgroundColor: colors.PAPER,
               borderColor: "var(--tile-border)",
               transformOrigin: "left center",
             }}
@@ -146,8 +158,7 @@ export const TileCell = memo(function TileCell({
             <div
               className="absolute inset-y-1 right-0 w-2.5"
               style={{
-                backgroundImage:
-                  "repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, rgba(0,0,0,0.22) 3px, rgba(0,0,0,0.22) 4px)",
+                backgroundImage: `repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, ${tickColor} 3px, ${tickColor} 4px)`,
               }}
             />
           </div>
@@ -177,7 +188,7 @@ export const TileCell = memo(function TileCell({
               />
             ) : null}
             <span
-              className="absolute inset-x-1 top-1.5 w-fit h-fit truncate px-[0.35em] py-[0.15em] text-center uppercase leading-none text-black"
+              className="absolute inset-x-1 top-1.5 w-fit h-fit truncate px-[0.35em] py-[0.15em] text-center uppercase leading-none"
               style={{
                 backgroundColor: "#d2412d",
                 color: "#fff",
@@ -219,7 +230,7 @@ export const TileCell = memo(function TileCell({
       )}
 
       {tile.freeze.isFrozen && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-bg/70 text-[var(--tile-frozen)]">
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-background/70 text-[var(--tile-frozen)]">
           <LockIcon />
           <span className="num font-mono text-[11px] font-semibold leading-none">
             {formatCountdown(tile.freeze.remainingMs)}
@@ -234,7 +245,7 @@ export const TileCell = memo(function TileCell({
       )}
 
       {tile.progress.totalTasks > 0 && (
-        <span className="num absolute bottom-1 left-1 z-20 rounded-sm bg-bg/80 px-1 py-0.5 text-[9px] font-semibold leading-none text-fg-muted">
+        <span className="num absolute bottom-1 left-1 z-20 rounded-sm bg-background/80 px-1 py-0.5 text-[9px] font-semibold leading-none text-on-surface-muted">
           {tile.progress.pointsAwarded}/{tile.progress.totalPoints}
         </span>
       )}
@@ -258,7 +269,7 @@ export const TileCell = memo(function TileCell({
               <span
                 key={task.id}
                 title={`${task.label}: ${task.status.replace(/_/g, " ")}`}
-                className={`inline-flex size-4 items-center justify-center rounded-full text-[9px] font-bold leading-none text-bg ${TASK_STATUS_DOT[task.status]}`}
+                className={`inline-flex size-4 items-center justify-center rounded-full text-[9px] font-bold leading-none text-background ${TASK_STATUS_DOT[task.status]}`}
               >
                 {task.index + 1}
               </span>

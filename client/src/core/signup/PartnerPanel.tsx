@@ -78,12 +78,12 @@ export function PartnerPanel({ slug }: { slug: string }) {
 
         {!state.partner && state.incoming.length > 0 && (
           <div className="space-y-2">
-            <p className="text-sm text-fg-muted">Players who want to pair with you</p>
-            <ul className="divide-y divide-line rounded-md border border-line">
+            <p className="text-sm text-on-surface-muted">Players who want to pair with you</p>
+            <ul className="divide-y divide-outline rounded-md border border-outline">
               {state.incoming.map(({ pairing, requester }) => (
                 <li key={pairing.id} className="flex items-center gap-3 px-3 py-2">
-                  <UsersIcon className="shrink-0 text-fg-subtle" />
-                  <span className="flex-1 truncate text-sm text-fg">{partyName(requester)}</span>
+                  <UsersIcon className="shrink-0 text-on-surface-subtle" />
+                  <span className="flex-1 truncate text-sm text-on-surface">{partyName(requester)}</span>
                   <Button size="sm" variant="ghost" isDisabled={busy} onPress={() => run(() => respond.mutateAsync({ pairingId: pairing.id, accept: false }))}>
                     Decline
                   </Button>

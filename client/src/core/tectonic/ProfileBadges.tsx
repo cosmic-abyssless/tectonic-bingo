@@ -8,7 +8,7 @@ export function TierBadge({ profile, showRank = true }: { profile: TectonicProfi
   const title = `${tierName} · ${profile.points.toLocaleString()} pts${showRank ? ` · #${profile.rank} in clan` : ""}`;
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap" title={title}>
-      {icon ? <img src={icon} alt={tierName} className="size-4 object-contain" /> : <span className="text-fg-subtle">{tierName}</span>}
+      {icon ? <img src={icon} alt={tierName} className="size-4 object-contain" /> : <span className="text-on-surface-subtle">{tierName}</span>}
       <span className="num">{profile.points.toLocaleString()}</span>
     </span>
   );
@@ -34,7 +34,7 @@ const MEDAL_CLASS: Record<number, string> = {
 
 /** "#1" / "#2" / "#3" pill in medal colours; plainer past the podium. */
 export function Medal({ place, className = "" }: { place: number; className?: string }) {
-  const tone = MEDAL_CLASS[place] ?? "border-line text-fg-muted";
+  const tone = MEDAL_CLASS[place] ?? "border-outline text-on-surface-muted";
   const ordinal = place === 1 ? "1st" : place === 2 ? "2nd" : place === 3 ? "3rd" : `${place}th`;
   return (
     <span className={`num inline-flex h-5 min-w-7 items-center justify-center rounded-sm border px-1 text-xs font-semibold ${tone} ${className}`} title={ordinal}>
@@ -51,9 +51,9 @@ export function PlaceBreakdown({ total, first, second, third }: { total: number;
       {total}
       <span className="ml-1 text-xs font-normal">
         <span className="text-gold">{first}</span>
-        <span className="text-fg-subtle">/</span>
+        <span className="text-on-surface-subtle">/</span>
         <span className="text-silver">{second}</span>
-        <span className="text-fg-subtle">/</span>
+        <span className="text-on-surface-subtle">/</span>
         <span className="text-bronze">{third}</span>
       </span>
     </>

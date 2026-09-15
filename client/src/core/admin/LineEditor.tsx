@@ -49,23 +49,23 @@ export function LineEditor({ slug }: { slug: string }) {
           {generating ? "Generating…" : "Generate lines from board"}
         </Button>
       </div>
-      <p className="text-xs text-fg-subtle">
+      <p className="text-xs text-on-surface-subtle">
         Generates every row, column, and (if the board is square) both diagonals from the current tile layout. Re-running replaces the existing lines — do it again after resizing the board.
       </p>
 
       {lines.length > 0 && (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-fg-subtle">
+            <tr className="text-left text-xs uppercase tracking-wide text-on-surface-subtle">
               <th className="pb-2 font-medium">Line</th>
               <th className="w-28 pb-2 font-medium">Points</th>
               <th className="w-10 pb-2"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-line">
+          <tbody className="divide-y divide-outline">
             {lines.map((line) => (
               <tr key={line.id}>
-                <td className="py-1.5 capitalize text-fg">
+                <td className="py-1.5 capitalize text-on-surface">
                   {line.lineType} {line.lineIndex + 1}
                 </td>
                 <td className="py-1.5">

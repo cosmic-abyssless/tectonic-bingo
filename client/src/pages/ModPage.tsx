@@ -109,7 +109,7 @@ export function ModPage() {
   };
 
   return (
-    <div className="min-h-screen bg-bg text-fg">
+    <div className="min-h-screen bg-background text-on-surface">
       <AppHeader
         back={{ to: `/b/${slug}`, label: "Back to bingo" }}
         title="Mod panel"
@@ -117,7 +117,7 @@ export function ModPage() {
         menuItems={
           <MenuItem id="outOfStageTabs" className="justify-between" onAction={() => setOutOfStageTabs(outOfStageTabs === "hide" ? "dim" : "hide")}>
             Out-of-stage tabs
-            <span className="text-xs text-fg-subtle">{outOfStageTabs === "hide" ? "Hidden" : "Dimmed"}</span>
+            <span className="text-xs text-on-surface-subtle">{outOfStageTabs === "hide" ? "Hidden" : "Dimmed"}</span>
           </MenuItem>
         }
       />
@@ -172,7 +172,7 @@ export function ModPage() {
       <Dialog isOpen={showNotifPrompt} onClose={dismissNotifPrompt}>
         <DialogHeader title="Enable notifications?" onClose={dismissNotifPrompt} />
         <div className="space-y-4 p-5">
-          <p className="text-sm leading-relaxed text-fg-muted">
+          <p className="text-sm leading-relaxed text-on-surface-muted">
             Get a browser notification whenever a new submission arrives for review, even if this tab is in the background.
           </p>
           <div className="flex justify-end gap-2">

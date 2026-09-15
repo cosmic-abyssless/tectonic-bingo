@@ -100,8 +100,8 @@ function GroupRow({ group }: { group: ItemGroup }) {
         <>
           <div className="flex items-start justify-between gap-2">
             <div>
-              <div className="text-sm font-semibold text-fg">{group.name}</div>
-              {group.description && <div className="text-xs text-fg-muted">{group.description}</div>}
+              <div className="text-sm font-semibold text-on-surface">{group.name}</div>
+              {group.description && <div className="text-xs text-on-surface-muted">{group.description}</div>}
             </div>
             <div className="flex shrink-0 gap-1">
               <Button variant="ghost" size="sm" onPress={() => setEditing(true)}>
@@ -112,7 +112,7 @@ function GroupRow({ group }: { group: ItemGroup }) {
               </Button>
             </div>
           </div>
-          <div className="text-xs text-fg-muted">{group.itemNames.join(", ")}</div>
+          <div className="text-xs text-on-surface-muted">{group.itemNames.join(", ")}</div>
           {error && <Notice tone="danger">{error}</Notice>}
         </>
       )}
@@ -137,11 +137,11 @@ export function ItemGroupsPanel() {
         />
       </div>
       {isLoading ? (
-        <p className="px-5 pb-5 text-sm text-fg-muted">Loading…</p>
+        <p className="px-5 pb-5 text-sm text-on-surface-muted">Loading…</p>
       ) : groups.length === 0 ? (
-        <p className="px-5 pb-5 text-sm text-fg-subtle">No item groups yet.</p>
+        <p className="px-5 pb-5 text-sm text-on-surface-subtle">No item groups yet.</p>
       ) : (
-        <ul className="divide-y divide-line border-t border-line">
+        <ul className="divide-y divide-outline border-t border-outline">
           {groups.map((g) => <GroupRow key={g.id} group={g} />)}
         </ul>
       )}

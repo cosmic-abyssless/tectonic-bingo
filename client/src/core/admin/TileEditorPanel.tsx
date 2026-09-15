@@ -139,7 +139,7 @@ function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string;
             type="button"
             aria-label="Upload tile image"
             onClick={() => fileInputRef.current?.click()}
-            className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line-strong bg-bg text-fg-subtle transition-colors hover:border-fg/60 hover:text-fg-muted disabled:cursor-not-allowed"
+            className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-outline-strong bg-background text-on-surface-subtle transition-colors hover:border-on-surface/60 hover:text-on-surface-muted disabled:cursor-not-allowed"
           >
             {tile.imageUrl ? <img src={tile.imageUrl} alt="" className="size-full object-contain" /> : uploading ? <span className="text-xs">…</span> : <ImageIcon size={20} />}
           </button>
@@ -159,7 +159,7 @@ function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string;
                 ))}
               </Select>
             </Field>
-            <label className="mt-6 flex h-10 items-center gap-2 text-sm text-fg-muted">
+            <label className="mt-6 flex h-10 items-center gap-2 text-sm text-on-surface-muted">
               <input type="checkbox" defaultChecked={tile.hasFreezePeriod} onChange={(e) => patch({ hasFreezePeriod: e.target.checked })} className="size-4 accent-accent" />
               Freeze period
             </label>
@@ -168,7 +168,7 @@ function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string;
                 <Input type="number" className="num w-32" defaultValue={tile.freezeDurationMinutes} onBlur={(e) => patch({ freezeDurationMinutes: Number(e.target.value) || 0 })} />
               </Field>
             )}
-            <label className="mt-6 flex h-10 items-center gap-2 text-sm text-fg-muted">
+            <label className="mt-6 flex h-10 items-center gap-2 text-sm text-on-surface-muted">
               <input
                 type="checkbox"
                 checked={bonusEnabled}
@@ -187,8 +187,8 @@ function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string;
 
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-sm font-medium text-fg">
-              Tasks <span className="num text-fg-subtle">({tile.node.children.length})</span>
+            <p className="text-sm font-medium text-on-surface">
+              Tasks <span className="num text-on-surface-subtle">({tile.node.children.length})</span>
             </p>
             <Button size="sm" onPress={addTask}>
               <PlusIcon size={14} /> Add task

@@ -123,7 +123,7 @@ export function SearchableSelect({
       onMouseDown={(e) => e.preventDefault()}
       onClick={() => select(opt.id)}
       className={`w-full px-3 py-1.5 text-left text-sm transition-colors ${
-        flatIndexMap.get(opt.id) === highlighted ? "bg-accent text-accent-fg" : "text-fg hover:bg-surface-hover"
+        flatIndexMap.get(opt.id) === highlighted ? "bg-accent text-on-accent" : "text-on-surface hover:bg-surface-hover"
       }`}
     >
       {opt.label}
@@ -151,9 +151,9 @@ export function SearchableSelect({
             if (!readOnly) setOpen(true);
           }}
           onKeyDown={readOnly ? undefined : handleKeyDown}
-          className={`${controlClass()} ${readOnly ? "cursor-default select-none text-fg-muted" : "pr-9"}`}
+          className={`${controlClass()} ${readOnly ? "cursor-default select-none text-on-surface-muted" : "pr-9"}`}
         />
-        {!readOnly && <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-fg-subtle" />}
+        {!readOnly && <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-subtle" />}
       </div>
 
       {open && dropdownRect && (
@@ -166,16 +166,16 @@ export function SearchableSelect({
             width: dropdownRect.width,
             zIndex: 9999,
           }}
-          className="max-h-60 overflow-y-auto rounded-md border border-line bg-surface-raised shadow-pop"
+          className="max-h-60 overflow-y-auto rounded-md border border-outline bg-surface-raised shadow-pop"
         >
           {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-fg-subtle">No matches</div>
+            <div className="px-3 py-2 text-sm text-on-surface-subtle">No matches</div>
           ) : (
             <>
               {ungrouped.map(renderOption)}
               {[...groups.entries()].map(([group, opts]) => (
                 <div key={group}>
-                  <div className="sticky top-0 border-b border-line bg-surface-raised px-3 py-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+                  <div className="sticky top-0 border-b border-outline bg-surface-raised px-3 py-1 text-xs font-semibold uppercase tracking-wide text-on-surface-subtle">
                     {group}
                   </div>
                   {opts.map(renderOption)}

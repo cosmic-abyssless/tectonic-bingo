@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import type { DraftPoolEntry, DraftUnit, LeftoverMode, PickRating, SignupQuestion, TectonicProfile } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
 import { useBingo, useDraftState, useMakePick, useSetPickRating, useSignupQuestions, useStartDraft } from "../../api/queries";
@@ -13,6 +13,12 @@ import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { AchievementIcons, PlaceBreakdown, TierBadge } from "../tectonic/ProfileBadges";
 import { PlayerName } from "../tectonic/PlayerName";
 import { podiumSummary, podiumTitle, recordSummary, recordTitle } from "../tectonic/profile";
+
+// Themeable via --font-heading/--font-heading-weight (set by ThemeProvider
+// from tokens.chrome.headingFont/headingWeight); both fall back to a no-op
+// (this element's own weight class) outside a themed page, or when a theme
+// sets a font but not a weight.
+const HEADING_FONT: CSSProperties = { fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" };
 
 
 // "rating" | "rsn" | "discord" | "tier" | "records" | "podiums" | "ehb" | "ehp" | a signup question's id — anything the pool table can sort by.
@@ -48,7 +54,7 @@ function ProfileCells({ profile }: { profile: TectonicProfile | null }) {
   if (!profile) {
     return (
       <>
-        <td className="py-2 pr-4 text-fg-subtle">—</td>
+        <td className="py-2 pr-4 text-on-surface-subtle">—</td>
         <td className="py-2 pr-4" />
         <td className="py-2 pr-4" />
         <td className="py-2 pr-4" />
@@ -61,12 +67,12 @@ function ProfileCells({ profile }: { profile: TectonicProfile | null }) {
       <td className="py-2 pr-4">
         <TierBadge profile={profile} />
       </td>
-      <td className="num py-2 pr-4 text-fg-muted" title={recordTitle(profile)}>
+      <td className="num py-2 pr-4 text-on-surface-muted" title={recordTitle(profile)}>
         <PlaceBreakdown {...recordSummary(profile)} />
       </td>
-      <td className="num py-2 pr-4 text-fg-muted" title={podiumTitle(profile)}>
+      <td className="num py-2 pr-4 text-on-surface-muted" title={podiumTitle(profile)}>
         <PlaceBreakdown {...podiums} />
-        {podiums.bingoWins > 0 && <span className="ml-1 text-xs text-fg-subtle">({podiums.bingoWins} bingo)</span>}
+        {podiums.bingoWins > 0 && <span className="ml-1 text-xs text-on-surface-subtle">({podiums.bingoWins} bingo)</span>}
       </td>
       <td className="py-2 pr-4">
         <AchievementIcons profile={profile} />
@@ -119,13 +125,13 @@ function PoolTable({
     .map((u) => sortUnit(u, sort, ratingOf))
     .sort((a, b) => sort.order(compareSortValues(poolSortValue(a.entries[0], sort.key, ratingOf), poolSortValue(b.entries[0], sort.key, ratingOf))));
 
-  if (pool.length === 0) return <p className="text-sm text-fg-subtle">No one left to draft.</p>;
+  if (pool.length === 0) return <p className="text-sm text-on-surface-subtle">No one left to draft.</p>;
 
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-line">
+          <tr className="border-b border-outline">
             {hasPairs && <th className="pb-2 pr-2" />}
             {ratings && <SortHeader label="Rating" sortKey="rating" sort={sort} />}
             <SortHeader label="RSN" sortKey="rsn" sort={sort} />
@@ -155,13 +161,13 @@ function PoolTable({
           const isPair = unit.entries.length > 1;
           const draftable = !unit.leftover || (mainPoolEmpty && leftoverMode === "singles");
           return (
-            <tbody key={unit.pairingId ?? unit.entries[0].signup.id} className={`border-t border-line ${unit.leftover ? "text-fg-subtle" : ""}`}>
+            <tbody key={unit.pairingId ?? unit.entries[0].signup.id} className={`border-t border-outline ${unit.leftover ? "text-on-surface-subtle" : ""}`}>
               {unit.entries.map((entry, i) => {
                 const answerByQ = new Map((entry.answers ?? []).map((a) => [a.questionId, a.value]));
                 return (
                   <tr key={entry.signup.id}>
                     {hasPairs && (
-                      <td className="w-6 pr-2 align-middle text-fg-subtle">
+                      <td className="w-6 pr-2 align-middle text-on-surface-subtle">
                         {isPair && i === 0 && <LinkIcon size={14} aria-label="Duo pair" className="mt-1" />}
                       </td>
                     )}
@@ -171,21 +177,21 @@ function PoolTable({
                         <RatingCell rating={ratings[entry.signup.id]} onChange={(r) => onRate(entry.signup.id, r)} />
                       </td>
                     )}
-                    <td className={`whitespace-nowrap py-2 pr-4 font-medium ${unit.leftover ? "" : "text-fg"}`}>
+                    <td className={`whitespace-nowrap py-2 pr-4 font-medium ${unit.leftover ? "" : "text-on-surface"}`}>
                       <AccountTypeIcon accountType={entry.accountType} /> <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
                     </td>
-                    <td className="whitespace-nowrap py-2 pr-4 text-fg-muted">{displayName(entry.user)}</td>
+                    <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">{displayName(entry.user)}</td>
                     {hasLeftovers && <td className="py-2 pr-4 align-middle">{unit.leftover && i === 0 && <Badge tone="warn">{leftoverTag}</Badge>}</td>}
                     {showProfiles && <ProfileCells profile={entry.tectonicProfile} />}
                     {showWomStats && (
                       <>
-                        <td className="num whitespace-nowrap py-2 pr-4 text-fg-muted">{entry.womStats ? Math.round(entry.womStats.ehb).toLocaleString() : "—"}</td>
-                        <td className="num whitespace-nowrap py-2 pr-4 text-fg-muted">{entry.womStats ? Math.round(entry.womStats.ehp).toLocaleString() : "—"}</td>
+                        <td className="num whitespace-nowrap py-2 pr-4 text-on-surface-muted">{entry.womStats ? Math.round(entry.womStats.ehb).toLocaleString() : "—"}</td>
+                        <td className="num whitespace-nowrap py-2 pr-4 text-on-surface-muted">{entry.womStats ? Math.round(entry.womStats.ehp).toLocaleString() : "—"}</td>
                       </>
                     )}
                     {showAnswers &&
                       questions.map((q) => (
-                        <td key={q.id} className="py-2 pr-4 text-fg-muted">
+                        <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
                           {answerByQ.get(q.id) ?? "—"}
                         </td>
                       ))}
@@ -229,7 +235,7 @@ export function DraftRoom({ slug }: { slug: string }) {
     );
   }
   if (!shell || !state || !user) {
-    return <div className="py-24 text-center text-fg-muted">Loading…</div>;
+    return <div className="py-24 text-center text-on-surface-muted">Loading…</div>;
   }
 
   const isMod = shell.isMod;
@@ -285,8 +291,8 @@ export function DraftRoom({ slug }: { slug: string }) {
       ) : !state.draftStarted ? (
         <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
-            <p className="font-semibold text-fg">The draft hasn't started</p>
-            <p className="text-sm text-fg-muted">
+            <p className="font-semibold text-on-surface">The draft hasn't started</p>
+            <p className="text-sm text-on-surface-muted">
               {state.teams.length} team{state.teams.length === 1 ? "" : "s"} ready.{" "}
               {state.teams.length < 2 ? "Create at least 2 teams from the mod panel first." : "Starting randomizes the pick order."}
             </p>
@@ -300,10 +306,10 @@ export function DraftRoom({ slug }: { slug: string }) {
         </Card>
       ) : state.currentPick ? (
         <Card className="p-4">
-          <p className="num text-xs uppercase tracking-wide text-fg-subtle">
+          <p className="num text-xs uppercase tracking-wide text-on-surface-subtle">
             {state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick {state.currentPick.pickNumber}
           </p>
-          <p className="text-lg font-semibold text-fg">{currentTeam?.name ?? "…"} is on the clock</p>
+          <p className="text-lg font-semibold text-on-surface">{currentTeam?.name ?? "…"} is on the clock</p>
         </Card>
       ) : (
         <Notice tone="ok">
@@ -320,7 +326,9 @@ export function DraftRoom({ slug }: { slug: string }) {
       {isMyTurn && <Notice tone="ok">It's your turn to pick.</Notice>}
 
       <section>
-        <h3 className="mb-3 text-sm font-semibold text-fg">Teams</h3>
+        <h3 className="mb-3 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+          Teams
+        </h3>
         {/* grid-flow-col + a minimum column width, in a scrollable row —
             handles a handful of teams (spread to fill width) and a large
             number of teams (scrolls instead of squeezing RSNs unreadable). */}
@@ -331,12 +339,12 @@ export function DraftRoom({ slug }: { slug: string }) {
             ))}
           </div>
         </div>
-        {state.teams.length === 0 && <p className="text-sm text-fg-subtle">No teams yet.</p>}
+        {state.teams.length === 0 && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
       </section>
 
       <section>
-        <h3 className="mb-2 text-sm font-semibold text-fg">
-          Available players <span className="num font-normal text-fg-subtle">({poolCount})</span>
+        <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+          Available players <span className="num font-normal text-on-surface-subtle">({poolCount})</span>
         </h3>
         {(pickError || rateError) && (
           <Notice tone="danger" className="mb-2">
@@ -348,16 +356,18 @@ export function DraftRoom({ slug }: { slug: string }) {
             The clan API is unavailable right now, so tiers, records and event placements are hidden.
           </Notice>
         )}
-        <PoolTable
-          pool={state.pool}
-          questions={questions}
-          ratings={isLead ? state.ratings : null}
-          onRate={handleRate}
-          canPick={canAct}
-          onPick={handlePick}
-          picking={makePick.isPending}
-          leftoverMode={shell.bingo.leftoverMode}
-        />
+        <Card className="p-4">
+          <PoolTable
+            pool={state.pool}
+            questions={questions}
+            ratings={isLead ? state.ratings : null}
+            onRate={handleRate}
+            canPick={canAct}
+            onPick={handlePick}
+            picking={makePick.isPending}
+            leftoverMode={shell.bingo.leftoverMode}
+          />
+        </Card>
       </section>
     </div>
   );

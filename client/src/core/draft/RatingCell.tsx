@@ -25,7 +25,7 @@ export function RatingCell({ rating = EMPTY_RATING, onChange }: { rating?: PickR
               aria-checked={n === rating.stars}
               aria-label={`${n} star${n === 1 ? "" : "s"}`}
               onClick={() => onChange({ ...rating, stars: n === rating.stars ? 0 : n })}
-              className={`flex size-6 items-center justify-center rounded-sm transition-colors hover:text-warn ${lit ? "text-warn" : "text-fg-subtle"}`}
+              className={`flex size-6 items-center justify-center rounded-sm transition-colors hover:text-warn ${lit ? "text-warn" : "text-on-surface-subtle"}`}
             >
               <StarIcon size={14} fill={lit ? "currentColor" : "none"} />
             </button>
@@ -41,10 +41,10 @@ function NotePopover({ note, onSave }: { note: string; onSave: (note: string) =>
   const [draft, setDraft] = useState(note);
   return (
     <DialogTrigger onOpenChange={(open) => open && setDraft(note)}>
-      <IconButton label={note ? `Note: ${note}` : "Add note"} size="sm" className={note ? "text-fg" : "text-fg-subtle"}>
+      <IconButton label={note ? `Note: ${note}` : "Add note"} size="sm" className={note ? "text-on-surface" : "text-on-surface-subtle"}>
         <NoteIcon size={14} fill={note ? "currentColor" : "none"} fillOpacity={0.25} />
       </IconButton>
-      <Popover placement="bottom end" offset={6} className="overlay-panel w-64 rounded-md border border-line bg-surface-raised p-3 shadow-pop outline-none">
+      <Popover placement="bottom end" offset={6} className="overlay-panel w-64 rounded-md border border-outline bg-surface-raised p-3 shadow-pop outline-none">
         <AriaDialog aria-label="Pick note" className="space-y-2 outline-none">
           {({ close }) => (
             <>

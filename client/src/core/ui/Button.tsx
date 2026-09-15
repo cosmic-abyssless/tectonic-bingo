@@ -5,9 +5,9 @@ export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md";
 
 const VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-accent-fg hover:bg-fg border-transparent",
-  secondary: "bg-surface-raised text-fg hover:bg-surface-hover border-line-strong",
-  ghost: "bg-transparent text-fg-muted hover:text-fg hover:bg-surface-hover border-transparent",
+  primary: "bg-button text-on-button hover:bg-on-surface border-transparent",
+  secondary: "bg-button-secondary text-on-button-secondary hover:bg-button-secondary-hover border-button-secondary-border",
+  ghost: "bg-transparent text-on-surface-muted hover:text-on-surface hover:bg-surface-hover border-transparent",
   danger: "bg-transparent text-danger hover:bg-danger/10 border-danger/40",
 };
 
@@ -37,7 +37,7 @@ export function IconButton({ label, className, size = "md", ...props }: ButtonPr
     <AriaButton
       aria-label={label}
       {...props}
-      className={`hit-40 inline-flex items-center justify-center rounded-md text-fg-muted hover:text-fg hover:bg-surface-hover transition-colors duration-100 pressed:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${size === "sm" ? "size-7" : "size-9"} ${className ?? ""}`}
+      className={`hit-40 inline-flex items-center justify-center rounded-md text-on-surface-muted hover:text-on-surface hover:bg-surface-hover transition-colors duration-100 pressed:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${size === "sm" ? "size-7" : "size-9"} ${className ?? ""}`}
     />
   );
 }

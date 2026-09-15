@@ -9,11 +9,11 @@ import { ChevronDownIcon, ChevronRightIcon } from "./icons";
  */
 export function Disclosure({ title, defaultExpanded = false, children, className }: { title: ReactNode; defaultExpanded?: boolean; children: ReactNode; className?: string }) {
   return (
-    <AriaDisclosure defaultExpanded={defaultExpanded} className={`group rounded-lg border border-line bg-surface ${className ?? ""}`}>
+    <AriaDisclosure defaultExpanded={defaultExpanded} className={`group rounded-lg border border-outline bg-surface ${className ?? ""}`}>
       <Heading className="m-0">
         <AriaButton slot="trigger" className="flex h-12 w-full items-center gap-3 rounded-lg px-4 text-left transition-colors hover:bg-surface-hover group-expanded:rounded-b-none">
           {title}
-          <span className="text-fg-subtle">
+          <span className="text-on-surface-subtle">
             <ChevronDownIcon className="hidden group-expanded:block" />
             <ChevronRightIcon className="group-expanded:hidden" />
           </span>
@@ -22,7 +22,7 @@ export function Disclosure({ title, defaultExpanded = false, children, className
       {/* Border/padding live on an inner div: the collapsed panel is hidden via
           content-visibility, which still paints the panel's own box. */}
       <DisclosurePanel>
-        <div className="border-t border-line p-4">{children}</div>
+        <div className="border-t border-outline p-4">{children}</div>
       </DisclosurePanel>
     </AriaDisclosure>
   );

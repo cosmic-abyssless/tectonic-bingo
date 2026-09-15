@@ -45,29 +45,29 @@ function TeamInfo({ slug, team, onClose }: { slug: string; team: TeamModel; onCl
             </Button>
           </form>
         )}
-        {team.isLead && !team.canRename && <p className="text-sm text-fg-subtle">Team names are locked once the bingo is live.</p>}
+        {team.isLead && !team.canRename && <p className="text-sm text-on-surface-subtle">Team names are locked once the bingo is live.</p>}
         {rename.error && <Notice tone="danger">{rename.error.message}</Notice>}
-        <ul className="divide-y divide-line rounded-md border border-line">
+        <ul className="divide-y divide-outline rounded-md border border-outline">
           {team.members.map((member) => (
             <li key={member.id} className="flex items-center gap-3 px-3 py-2 text-sm">
               <img src={member.avatarUrl} alt="" className="size-6 rounded-full" />
-              <PlayerName userId={member.id} className="truncate text-fg">
+              <PlayerName userId={member.id} className="truncate text-on-surface">
                 {member.displayName}
               </PlayerName>
               {member.isCaptain && <CrownIcon size={14} className="shrink-0 text-warn" aria-label="Captain" />}
-              {member.isCoCaptain && <CrownIcon size={14} className="shrink-0 text-fg-subtle" aria-label="Co-captain" />}
+              {member.isCoCaptain && <CrownIcon size={14} className="shrink-0 text-on-surface-subtle" aria-label="Co-captain" />}
             </li>
           ))}
         </ul>
 
         {activity.length > 0 && (
           <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-fg-subtle">Recent activity</h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-on-surface-subtle">Recent activity</h3>
             <ul className="space-y-2">
               {activity.map((entry) => (
                 <li key={entry.id} className="flex items-start justify-between gap-3 text-sm">
-                  <span className="text-fg-muted">{entry.label}</span>
-                  <span className="shrink-0 text-xs text-fg-subtle">{entry.timeAgo}</span>
+                  <span className="text-on-surface-muted">{entry.label}</span>
+                  <span className="shrink-0 text-xs text-on-surface-subtle">{entry.timeAgo}</span>
                 </li>
               ))}
             </ul>

@@ -7,10 +7,10 @@ import type { CSSProperties } from "react";
 //   applied by ThemeProvider as inline CSS custom properties on the page
 //   root. `tile` replaces the old themes/default/tokens.ts board-only vars;
 //   `chrome` is optional and, because Tailwind v4 compiles utilities like
-//   `bg-bg`/`text-fg` to `var(--color-bg)`/`var(--color-fg)` (the index.css
-//   @theme block is not `inline`), setting `--color-bg` here re-skins every
-//   one of those utilities under the provider div for free — no component
-//   needs to know about theming.
+//   `bg-background`/`text-on-surface` to `var(--color-background)`/`var(--color-on-surface)`
+//   (the index.css @theme block is not `inline`), setting `--color-background`
+//   here re-skins every one of those utilities under the provider div for
+//   free — no component needs to know about theming.
 export interface ThemeTokens {
   tile: {
     bg: string;
@@ -21,36 +21,72 @@ export interface ThemeTokens {
     frozen: string;
   };
   chrome?: Partial<{
-    bg: string;
+    background: string;
     surface: string;
     surfaceRaised: string;
     surfaceHover: string;
-    line: string;
-    lineStrong: string;
-    fg: string;
-    fgMuted: string;
-    fgSubtle: string;
+    outline: string;
+    outlineStrong: string;
+    onSurface: string;
+    onSurfaceMuted: string;
+    onSurfaceSubtle: string;
     accent: string;
-    accentFg: string;
+    onAccent: string;
+    button: string;
+    onButton: string;
+    buttonSecondary: string;
+    onButtonSecondary: string;
+    /** Secondary button's own border — split out from outlineStrong so a
+     *  theme can give secondary buttons a border that matches their fill
+     *  instead of inheriting whatever outlineStrong is used for elsewhere
+     *  (form fields, dividers, etc). */
+    buttonSecondaryBorder: string;
+    /** Secondary button's own hover fill — split out from surfaceHover for
+     *  the same reason as buttonSecondaryBorder: a generic neutral hover
+     *  can clash against a colored secondary fill. */
+    buttonSecondaryHover: string;
     ok: string;
     warn: string;
     danger: string;
     info: string;
     /** CSS length, e.g. "2px" — width of Button/AppHeader's borders. */
     borderWidth: string;
+    /** CSS font-family, e.g. '"Bangers", cursive' — applied to AppHeader's
+     *  title and Card/CardHeader's title, so a theme's display font shows up
+     *  on page/section headings without any of those core/ui components
+     *  needing to know about theming. Falls back to `inherit` when unset. */
+    headingFont: string;
+    /** CSS font-weight for the same headings, e.g. "400" — a dense display
+     *  font (Bangers) paired with the default bold weight gets illegible
+     *  fast, so a theme using one should normally set this too. Falls back
+     *  to `revert` when unset, i.e. whatever the element's own class would
+     *  set (its normal, non-heading-font weight). */
+    headingWeight: string;
   }>;
 }
 
+/** A theme's tokens for one color scheme — see themes/registry.ts's ThemeDefinition/ResolvedTheme. */
+export interface SchemeTokens {
+  light: ThemeTokens;
+  dark: ThemeTokens;
+}
+
 // The neutral theme's tokens — every value themes/default/tokens.ts had.
-export const defaultTokens: ThemeTokens = {
-  tile: {
-    bg: "#101012",
-    border: "#232327",
-    empty: "#0c0c0e",
-    accent: "#a1a1aa",
-    complete: "#4ade80",
-    frozen: "#60a5fa",
-  },
+// tile is identical in both schemes: default theme's board-tile colors
+// don't change with light/dark, only the CSS-cascade-driven chrome does
+// (defaultTheme sets no chrome override at all, in either scheme).
+const DEFAULT_TILE = {
+  bg: "#101012",
+  border: "#232327",
+  empty: "#0c0c0e",
+  accent: "#a1a1aa",
+  complete: "#4ade80",
+  frozen: "#60a5fa",
+};
+
+export const defaultTokens: SchemeTokens = {
+  light: { tile: DEFAULT_TILE },
+  dark: { tile: DEFAULT_TILE },
 };
 
 export function tokensToCssVars(tokens: ThemeTokens): CSSProperties {
@@ -63,22 +99,30 @@ export function tokensToCssVars(tokens: ThemeTokens): CSSProperties {
     "--tile-frozen": tokens.tile.frozen,
   };
   const chromeVarByKey: Record<keyof NonNullable<ThemeTokens["chrome"]>, string> = {
-    bg: "--color-bg",
+    background: "--color-background",
     surface: "--color-surface",
     surfaceRaised: "--color-surface-raised",
     surfaceHover: "--color-surface-hover",
-    line: "--color-line",
-    lineStrong: "--color-line-strong",
-    fg: "--color-fg",
-    fgMuted: "--color-fg-muted",
-    fgSubtle: "--color-fg-subtle",
+    outline: "--color-outline",
+    outlineStrong: "--color-outline-strong",
+    onSurface: "--color-on-surface",
+    onSurfaceMuted: "--color-on-surface-muted",
+    onSurfaceSubtle: "--color-on-surface-subtle",
     accent: "--color-accent",
-    accentFg: "--color-accent-fg",
+    onAccent: "--color-on-accent",
+    button: "--color-button",
+    onButton: "--color-on-button",
+    buttonSecondary: "--color-button-secondary",
+    onButtonSecondary: "--color-on-button-secondary",
+    buttonSecondaryBorder: "--color-button-secondary-border",
+    buttonSecondaryHover: "--color-button-secondary-hover",
     ok: "--color-ok",
     warn: "--color-warn",
     danger: "--color-danger",
     info: "--color-info",
     borderWidth: "--control-border-width",
+    headingFont: "--font-heading",
+    headingWeight: "--font-heading-weight",
   };
   if (tokens.chrome) {
     for (const [key, value] of Object.entries(tokens.chrome)) {

@@ -14,24 +14,24 @@ function groupByPick(picks: DraftPick[]): DraftPick[][] {
 export function TeamRoster({ team, picks, isCurrent, highlight }: { team: DraftTeam; picks: DraftPick[]; isCurrent?: boolean; highlight?: boolean }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <div className="h-4 text-[11px] font-medium uppercase tracking-wide text-fg">{isCurrent && "On the clock"}</div>
+      <div className="h-4 text-[11px] font-medium uppercase tracking-wide text-on-surface">{isCurrent && "On the clock"}</div>
       <div
-        className={`w-full rounded-md border px-2.5 py-2 transition-colors ${isCurrent ? "border-fg bg-surface-raised" : highlight ? "border-line-strong bg-surface-raised" : "border-line bg-surface"}`}
+        className={`w-full rounded-md border px-2.5 py-2 transition-colors ${isCurrent ? "border-on-surface bg-surface-raised" : highlight ? "border-outline-strong bg-surface-raised" : "border-outline bg-surface"}`}
         style={team.color && !isCurrent ? { borderColor: `${team.color}99` } : undefined}
       >
         <div className="flex min-w-0 items-center gap-1.5">
           {team.color && <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: team.color }} />}
-          <span className="truncate text-sm font-semibold text-fg">{team.name}</span>
+          <span className="truncate text-sm font-semibold text-on-surface">{team.name}</span>
         </div>
-        <div className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-fg-muted">
+        <div className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-on-surface-muted">
           <CrownIcon size={12} className="shrink-0 text-warn" aria-label="Captain" />
           <PlayerName userId={team.captainUserId} className="truncate">
             {team.captainRsn || "?"}
           </PlayerName>
         </div>
         {team.coCaptain && (
-          <div className="flex min-w-0 items-center gap-1 text-xs text-fg-muted">
-            <CrownIcon size={12} className="shrink-0 text-fg-subtle" aria-label="Co-captain" />
+          <div className="flex min-w-0 items-center gap-1 text-xs text-on-surface-muted">
+            <CrownIcon size={12} className="shrink-0 text-on-surface-subtle" aria-label="Co-captain" />
             <PlayerName userId={team.coCaptain.userId} className="truncate">
               {team.coCaptain.rsn || "?"}
             </PlayerName>
@@ -40,7 +40,7 @@ export function TeamRoster({ team, picks, isCurrent, highlight }: { team: DraftT
       </div>
       <ul className="w-full space-y-1">
         {groupByPick(picks).map((group) => (
-          <li key={group[0].pickNumber} className="rounded-sm bg-surface px-2.5 py-1 text-sm text-fg-muted">
+          <li key={group[0].pickNumber} className="rounded-sm bg-surface px-2.5 py-1 text-sm text-on-surface-muted">
             {group.map((p) => (
               <div key={p.id} className="truncate">
                 <PlayerName userId={p.userId}>{p.rsn || displayName(p.user)}</PlayerName>

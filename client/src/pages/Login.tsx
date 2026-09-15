@@ -47,13 +47,13 @@ function DevLoginPanel() {
   if (!users || users.length === 0) return null;
 
   return (
-    <div className="w-full border-t border-line pt-5">
+    <div className="w-full border-t border-outline pt-5">
       <p className="mb-3 text-center text-[11px] font-medium uppercase tracking-widest text-warn">Dev — log in as</p>
       <div className="flex flex-wrap justify-center gap-1.5">
         {users.map((u) => (
           <Button key={u.id} size="sm" onPress={() => loginAs(u.discordId)} isDisabled={pending === u.discordId}>
             {displayName(u)}
-            {u.isAdmin && <span className="text-fg-subtle">admin</span>}
+            {u.isAdmin && <span className="text-on-surface-subtle">admin</span>}
           </Button>
         ))}
       </div>
@@ -75,10 +75,10 @@ export function Login() {
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
-      <div className="flex w-full max-w-sm flex-col items-center gap-6 rounded-lg border border-line bg-surface px-8 py-10">
+      <div className="flex w-full max-w-sm flex-col items-center gap-6 rounded-lg border border-outline bg-surface px-8 py-10">
         <div className="text-center">
-          <h1 className="text-xl font-semibold text-fg">Tectonic Bingo</h1>
-          <p className="mt-1 text-sm text-fg-muted">Sign in with the Discord account you use in the clan.</p>
+          <h1 className="text-xl font-semibold text-on-surface">Tectonic Bingo</h1>
+          <p className="mt-1 text-sm text-on-surface-muted">Sign in with the Discord account you use in the clan.</p>
         </div>
         {error && (
           <Notice tone="danger" icon={<AlertIcon />} className="w-full">

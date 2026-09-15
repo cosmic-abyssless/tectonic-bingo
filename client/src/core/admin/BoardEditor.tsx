@@ -77,8 +77,8 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
       </fieldset>
 
       <div>
-        <p className="mb-2 text-sm font-medium text-fg">
-          Board <span className="num text-fg-subtle">({bingo.boardRows}×{bingo.boardCols})</span>
+        <p className="mb-2 text-sm font-medium text-on-surface">
+          Board <span className="num text-on-surface-subtle">({bingo.boardRows}×{bingo.boardCols})</span>
         </p>
         <div className="grid w-full max-w-3xl gap-1" style={{ gridTemplateColumns: `repeat(${bingo.boardCols}, minmax(70px, 1fr))` }}>
           {Array.from({ length: bingo.boardRows }, (_, row) =>
@@ -93,11 +93,11 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
                   disabled={pending}
                   onClick={() => setSelectedTileId(tile.id)}
                   style={category?.colorHex ? { borderColor: category.colorHex } : undefined}
-                  className="flex aspect-square flex-col items-center justify-center overflow-hidden rounded-md border-2 border-line-strong bg-surface p-1 text-center transition-colors hover:bg-surface-hover disabled:opacity-60"
+                  className="flex aspect-square flex-col items-center justify-center overflow-hidden rounded-md border-2 border-outline-strong bg-surface p-1 text-center transition-colors hover:bg-surface-hover disabled:opacity-60"
                 >
                   {tile.imageUrl && <img src={tile.imageUrl} alt="" className="mb-0.5 size-8 object-contain" />}
-                  <span className="line-clamp-2 text-[10px] leading-tight text-fg">{tile.name}</span>
-                  <span className="num text-[9px] text-fg-subtle">
+                  <span className="line-clamp-2 text-[10px] leading-tight text-on-surface">{tile.name}</span>
+                  <span className="num text-[9px] text-on-surface-subtle">
                     {tile.node.children.length} task{tile.node.children.length !== 1 ? "s" : ""}
                   </span>
                 </button>
@@ -107,7 +107,7 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
                   aria-label={`Create tile at row ${row}, column ${col}`}
                   disabled={locked}
                   onClick={() => createAt(row, col)}
-                  className="flex aspect-square items-center justify-center rounded-md border-2 border-dashed border-line text-fg-subtle transition-colors hover:border-line-strong hover:text-fg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex aspect-square items-center justify-center rounded-md border-2 border-dashed border-outline text-on-surface-subtle transition-colors hover:border-outline-strong hover:text-on-surface-muted disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <PlusIcon />
                 </button>

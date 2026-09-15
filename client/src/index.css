@@ -8,31 +8,44 @@
 @custom-variant expanded (&[data-expanded]);
 
 /*
- * Design tokens. Minimal high-contrast dark: near-black surfaces separated by
- * hairline borders, one accent, mono numerals. Boards keep their own theming
- * via headless tile components, so nothing here assumes tile colours.
+ * Design tokens. Minimal high-contrast surfaces separated by hairline
+ * borders, one accent, mono numerals. Light is the base palette below;
+ * dark overrides live in the two blocks that follow (system-preference
+ * media query, and an explicit [data-color-scheme="dark"] override — see
+ * client/src/core/ui/colorScheme.ts). Boards keep their own theming via
+ * headless tile components, so nothing here assumes tile colours.
  */
 @theme {
-  --color-bg: #09090b;
-  --color-surface: #101012;
-  --color-surface-raised: #17171a;
-  --color-surface-hover: #1c1c20;
+  --color-background: #fafafa;
+  --color-surface: #ffffff;
+  --color-surface-raised: #f4f4f5;
+  --color-surface-hover: #e4e4e7;
 
-  --color-line: #232327;
-  --color-line-strong: #34343a;
+  --color-outline: #e4e4e7;
+  --color-outline-strong: #d4d4d8;
 
-  --color-fg: #fafafa;
-  --color-fg-muted: #a1a1aa;
-  --color-fg-subtle: #6b6b74;
+  --color-on-surface: #18181b;
+  --color-on-surface-muted: #71717a;
+  --color-on-surface-subtle: #a1a1aa;
 
-  --color-accent: #e4e4e7;
-  --color-accent-fg: #09090b;
+  --color-accent: #18181b;
+  --color-on-accent: #fafafa;
 
-  --color-ok: #4ade80;
-  --color-warn: #fbbf24;
-  --color-danger: #f87171;
-  --color-info: #60a5fa;
-  /* Placement medals (clan records, event podiums). */
+  --color-button: #18181b;
+  --color-on-button: #fafafa;
+  --color-button-secondary: #f4f4f5;
+  --color-on-button-secondary: #18181b;
+  --color-button-secondary-border: #d4d4d8; /* same as outline-strong by default */
+  --color-button-secondary-hover: #e4e4e7; /* same as surface-hover by default */
+
+  --color-ok: #16a34a;
+  --color-warn: #b45309;
+  --color-danger: #dc2626;
+  --color-info: #2563eb;
+
+  --color-scrim: #000000; /* modal backdrop — same in both schemes, not overridden below */
+
+  /* Placement medals (clan records, event podiums) — same in both schemes, not overridden below. */
   --color-gold: #fbbf24;
   --color-silver: #cbd5e1;
   --color-bronze: #d97706;
@@ -46,16 +59,67 @@
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 
-@layer base {
-  html {
+@media (prefers-color-scheme: dark) {
+  :root:not([data-color-scheme="light"]) {
+    --color-background: #09090b;
+    --color-surface: #101012;
+    --color-surface-raised: #17171a;
+    --color-surface-hover: #1c1c20;
+    --color-outline: #232327;
+    --color-outline-strong: #34343a;
+    --color-on-surface: #fafafa;
+    --color-on-surface-muted: #a1a1aa;
+    --color-on-surface-subtle: #6b6b74;
+    --color-accent: #e4e4e7;
+    --color-on-accent: #09090b;
+    --color-button: #e4e4e7;
+    --color-on-button: #09090b;
+    --color-button-secondary: #17171a;
+    --color-on-button-secondary: #fafafa;
+    --color-button-secondary-border: #34343a;
+    --color-button-secondary-hover: #1c1c20;
+    --color-ok: #4ade80;
+    --color-warn: #fbbf24;
+    --color-danger: #f87171;
+    --color-info: #60a5fa;
     color-scheme: dark;
   }
+}
+:root[data-color-scheme="dark"] {
+  --color-background: #09090b;
+  --color-surface: #101012;
+  --color-surface-raised: #17171a;
+  --color-surface-hover: #1c1c20;
+  --color-outline: #232327;
+  --color-outline-strong: #34343a;
+  --color-on-surface: #fafafa;
+  --color-on-surface-muted: #a1a1aa;
+  --color-on-surface-subtle: #6b6b74;
+  --color-accent: #e4e4e7;
+  --color-on-accent: #09090b;
+  --color-button: #e4e4e7;
+  --color-on-button: #09090b;
+  --color-button-secondary: #17171a;
+  --color-on-button-secondary: #fafafa;
+  --color-button-secondary-border: #34343a;
+  --color-button-secondary-hover: #1c1c20;
+  --color-ok: #4ade80;
+  --color-warn: #fbbf24;
+  --color-danger: #f87171;
+  --color-info: #60a5fa;
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
   body {
-    @apply bg-bg text-fg antialiased;
+    @apply bg-background text-on-surface antialiased;
     font-feature-settings: "cv11", "ss01";
   }
   * {
-    @apply border-line;
+    @apply border-outline;
   }
   h1, h2, h3 {
     text-wrap: balance;
@@ -66,7 +130,7 @@
   /* Visible keyboard focus everywhere; pointer focus stays quiet. */
   :where(button, a, input, select, textarea, [role="button"], [tabindex]):focus-visible,
   [data-focus-visible] {
-    @apply outline-2 outline-offset-2 outline-fg/80;
+    @apply outline-2 outline-offset-2 outline-on-surface/80;
   }
   :where(button, a, input, select, textarea, [role="button"]):focus:not(:focus-visible) {
     outline: none;

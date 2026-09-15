@@ -1,11 +1,10 @@
 import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useBingo } from "../api/queries";
-import { DraftRoom } from "../core/draft/DraftRoom";
-import { AppHeader } from "../core/ui/AppHeader";
 import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
+import { ThemeProvider } from "../themes/ThemeProvider";
+import { useSlot } from "../themes/context";
 
-// Draft room never themes — always core/, regardless of bingo.theme.
 export function DraftPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -22,11 +21,15 @@ export function DraftPage() {
   if (!shell) return null;
 
   return (
-    <div className="min-h-screen bg-bg text-fg">
-      <AppHeader back={{ to: `/b/${slug}`, label: "Back to bingo" }} title="Draft" subtitle={shell.bingo.name} />
+    <ThemeProvider themeKey={shell.bingo.theme}>
       <PlayerProfileProvider slug={slug!}>
-        <DraftRoom slug={slug!} />
+        <DraftPageSlot slug={slug!} bingoName={shell.bingo.name} />
       </PlayerProfileProvider>
-    </div>
+    </ThemeProvider>
   );
+}
+
+function DraftPageSlot({ slug, bingoName }: { slug: string; bingoName: string }) {
+  const DraftPage = useSlot("DraftPage");
+  return <DraftPage slug={slug} bingoName={bingoName} />;
 }

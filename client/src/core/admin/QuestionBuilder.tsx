@@ -114,7 +114,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                 </div>
                 <Input aria-label="Question prompt" defaultValue={q.prompt} onBlur={(e) => patch(q.id, { prompt: e.target.value })} className="min-w-0 flex-1" />
                 <TypeSelect aria-label="Question type" value={q.type} onChange={(type) => patch(q.id, { type })} />
-                <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-fg-muted">
+                <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-on-surface-muted">
                   <input type="checkbox" checked={q.required} onChange={(e) => patch(q.id, { required: e.target.checked })} className="size-4 accent-accent" />
                   Required
                 </label>

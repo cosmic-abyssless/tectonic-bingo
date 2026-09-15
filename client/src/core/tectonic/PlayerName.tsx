@@ -32,7 +32,7 @@ export function PlayerName({ userId, children, className = "" }: { userId: strin
         open(userId);
       }}
       title="View player profile"
-      className={`cursor-pointer rounded-sm text-left underline decoration-fg-subtle/60 decoration-dotted underline-offset-[3px] transition-colors hover:text-fg hover:decoration-fg hover:decoration-solid focus-visible:decoration-fg focus-visible:decoration-solid focus-visible:outline-none ${className}`}
+      className={`cursor-pointer rounded-sm text-left underline decoration-on-surface-subtle/60 decoration-dotted underline-offset-[3px] transition-colors hover:text-on-surface hover:decoration-on-surface hover:decoration-solid focus-visible:decoration-on-surface focus-visible:decoration-solid focus-visible:outline-none ${className}`}
     >
       {children}
     </button>

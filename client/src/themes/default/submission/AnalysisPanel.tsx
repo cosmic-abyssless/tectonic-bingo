@@ -4,12 +4,12 @@ import { AlertIcon, CheckIcon, SpinnerIcon } from "../../../core/ui/icons";
 
 export function AnalysisPanel({ analysis }: { analysis: SubmissionFlowModel["analysis"] }) {
   if (analysis.status === "failed") {
-    return <p className="mt-2 text-xs text-fg-subtle">Screenshot analysis unavailable — select your tile and item manually.</p>;
+    return <p className="mt-2 text-xs text-on-surface-subtle">Screenshot analysis unavailable — select your tile and item manually.</p>;
   }
 
   if (analysis.status === "analyzing") {
     return (
-      <p className="mt-2 flex items-center gap-2 text-sm text-fg-muted">
+      <p className="mt-2 flex items-center gap-2 text-sm text-on-surface-muted">
         <SpinnerIcon className="animate-spin" />
         Analyzing screenshot…
       </p>
@@ -22,15 +22,15 @@ export function AnalysisPanel({ analysis }: { analysis: SubmissionFlowModel["ana
       <Notice tone={result.codewordFound ? "ok" : "warn"} icon={result.codewordFound ? <CheckIcon /> : <AlertIcon />} className="mt-2">
         <p className="font-medium">{result.codewordFound ? `Codeword '${result.codeword}' found` : `Codeword '${result.codeword}' not visible`}</p>
         {result.warnings.map((w, i) => (
-          <p key={i} className="text-xs leading-snug text-fg-muted">
+          <p key={i} className="text-xs leading-snug text-on-surface-muted">
             {w}
           </p>
         ))}
-        <p className="text-xs text-fg-muted">
+        <p className="text-xs text-on-surface-muted">
           {result.detected ? (
             <>
-              Detected: <span className="font-medium text-fg">{result.detected.itemName}</span>
-              <span className="text-fg-subtle"> — {result.detected.tileName}</span>
+              Detected: <span className="font-medium text-on-surface">{result.detected.itemName}</span>
+              <span className="text-on-surface-subtle"> — {result.detected.tileName}</span>
             </>
           ) : (
             "No matching bingo item detected"

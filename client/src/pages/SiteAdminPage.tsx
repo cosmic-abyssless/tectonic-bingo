@@ -135,7 +135,7 @@ function ImportBingoPanel() {
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="w-full rounded-md border border-dashed border-line-strong px-3 py-4 text-center text-sm text-fg-muted transition-colors hover:border-fg/60 hover:text-fg"
+          className="w-full rounded-md border border-dashed border-outline-strong px-3 py-4 text-center text-sm text-on-surface-muted transition-colors hover:border-on-surface/60 hover:text-on-surface"
         >
           {fileName || "Choose an export file…"}
         </button>
@@ -149,7 +149,7 @@ function ImportBingoPanel() {
             <Field label="Slug (used in the URL)">
               <Input value={slug} onChange={(e) => setSlug(slugify(e.target.value))} className="font-mono" />
             </Field>
-            <p className="text-xs text-fg-subtle">
+            <p className="text-xs text-on-surface-subtle">
               {parsedDoc.tiles.length} tile{parsedDoc.tiles.length === 1 ? "" : "s"}, {parsedDoc.categories.length} categor{parsedDoc.categories.length === 1 ? "y" : "ies"},{" "}
               {parsedDoc.signupQuestions.length} signup question{parsedDoc.signupQuestions.length === 1 ? "" : "s"}
             </p>
@@ -216,13 +216,13 @@ function BingosPanel() {
       <div className="space-y-3 p-5">
         {error && <Notice tone="danger">{error}</Notice>}
         {bingos.length === 0 ? (
-          <p className="text-sm text-fg-subtle">No bingos yet.</p>
+          <p className="text-sm text-on-surface-subtle">No bingos yet.</p>
         ) : (
-          <ul className="divide-y divide-line rounded-md border border-line">
+          <ul className="divide-y divide-outline rounded-md border border-outline">
             {bingos.map((bingo) => (
               <li key={bingo.id} className="space-y-3 px-3 py-2">
                 <div className="flex items-center gap-3">
-                  <Link to={`/b/${bingo.slug}/mod`} className="min-w-0 flex-1 truncate text-sm text-fg hover:underline">
+                  <Link to={`/b/${bingo.slug}/mod`} className="min-w-0 flex-1 truncate text-sm text-on-surface hover:underline">
                     {bingo.name}
                   </Link>
                   <Badge tone={bingo.stage === "live" ? "ok" : "neutral"}>{STAGE_LABEL[bingo.stage]}</Badge>
@@ -279,9 +279,9 @@ export function SiteAdminPage() {
   const { user, canGrantAdmin } = useAuth();
   if (!user?.isAdmin) {
     return (
-      <div className="flex min-h-screen items-center justify-center gap-1 bg-bg text-sm text-fg-muted">
+      <div className="flex min-h-screen items-center justify-center gap-1 bg-background text-sm text-on-surface-muted">
         Site admin access required.
-        <Link to="/" className="text-fg underline underline-offset-2">
+        <Link to="/" className="text-on-surface underline underline-offset-2">
           Back to bingos
         </Link>
       </div>
@@ -289,7 +289,7 @@ export function SiteAdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-bg text-fg">
+    <div className="min-h-screen bg-background text-on-surface">
       <AppHeader back={{ to: "/", label: "All bingos" }} title="Site admin" />
       <main className="mx-auto w-full max-w-6xl space-y-6 px-6 py-6">
         <div className="flex flex-wrap items-start gap-6">

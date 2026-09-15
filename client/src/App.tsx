@@ -3,6 +3,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { WebSocketProvider } from "./context/WebSocketContext";
 import { ProtectedRoute } from "./core/ui/ProtectedRoute";
 import { ToastRegion } from "./core/ui/Toast";
+import { useSyncColorSchemeAttribute } from "./core/ui/colorScheme";
 import { Login } from "./pages/Login";
 import { BingoList } from "./pages/BingoList";
 import { BingoPage } from "./pages/BingoPage";
@@ -21,6 +22,7 @@ function AdminRedirect() {
 }
 
 export default function App() {
+  useSyncColorSchemeAttribute();
   return (
     <BrowserRouter>
       <AuthProvider>

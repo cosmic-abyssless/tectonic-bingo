@@ -40,7 +40,7 @@ function ProfileLoader({ slug, userId, onClose }: { slug: string; userId: string
     return (
       <>
         <DialogHeader title="Player" onClose={onClose} />
-        <div className="flex items-center gap-2 p-5 text-sm text-fg-muted">
+        <div className="flex items-center gap-2 p-5 text-sm text-on-surface-muted">
           <SpinnerIcon /> Loading profile…
         </div>
       </>
@@ -52,8 +52,8 @@ function ProfileLoader({ slug, userId, onClose }: { slug: string; userId: string
 function Stat({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
-      <div className="text-[11px] uppercase tracking-wide text-fg-subtle">{label}</div>
-      <div className="num mt-0.5 truncate text-sm font-medium text-fg">{children}</div>
+      <div className="text-[11px] uppercase tracking-wide text-on-surface-subtle">{label}</div>
+      <div className="num mt-0.5 truncate text-sm font-medium text-on-surface">{children}</div>
     </div>
   );
 }
@@ -84,7 +84,7 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
       />
       <div className="space-y-6 p-5">
         {!profile ? (
-          <p className="text-sm text-fg-muted">
+          <p className="text-sm text-on-surface-muted">
             {player.tectonicUnavailable ? "The clan API is unavailable right now, so clan standing can't be shown." : "No clan profile — this player isn't registered with the clan bot."}
           </p>
         ) : (
@@ -103,7 +103,7 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
               <Stat label="Bingo wins">{podiums!.bingoWins}</Stat>
             </div>
             {player.womStats && (
-              <p className="text-xs text-fg-subtle">
+              <p className="text-xs text-on-surface-subtle">
                 <span className="num">{Math.round(player.womStats.ehb).toLocaleString()}</span> EHB · <span className="num">{Math.round(player.womStats.ehp).toLocaleString()}</span> EHP on Wise Old Man.
               </p>
             )}
@@ -111,7 +111,7 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
             <Section title={`Records held (${records.length})`} empty="No current clan records.">
               {records.length > 0 && (
                 <table className="w-full text-sm">
-                  <thead className="text-left text-xs text-fg-subtle">
+                  <thead className="text-left text-xs text-on-surface-subtle">
                     <tr>
                       <th className="py-1 pr-3 font-medium">Place</th>
                       <th className="py-1 pr-3 font-medium">Boss</th>
@@ -120,19 +120,19 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
                       <th className="py-1 font-medium">Date</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-line">
+                  <tbody className="divide-y divide-outline">
                     {records.map((r, i) => (
                       <tr key={i}>
                         <td className="py-1.5 pr-3">
                           <Medal place={r.position} />
                         </td>
                         <td className="py-1.5 pr-3">
-                          <span className="text-fg">{r.displayName}</span>
-                          {r.category !== r.displayName && <span className="ml-1.5 text-xs text-fg-subtle">{r.category}</span>}
+                          <span className="text-on-surface">{r.displayName}</span>
+                          {r.category !== r.displayName && <span className="ml-1.5 text-xs text-on-surface-subtle">{r.category}</span>}
                         </td>
                         <td className="num py-1.5 pr-3 whitespace-nowrap">{formatRecordValue(r.value, r.valueType)}</td>
-                        <td className="py-1.5 pr-3 text-fg-muted">{r.solo ? "Solo" : `${r.teamSize} players`}</td>
-                        <td className="num py-1.5 whitespace-nowrap text-fg-muted">{new Date(r.date).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</td>
+                        <td className="py-1.5 pr-3 text-on-surface-muted">{r.solo ? "Solo" : `${r.teamSize} players`}</td>
+                        <td className="num py-1.5 whitespace-nowrap text-on-surface-muted">{new Date(r.date).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -142,7 +142,7 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
 
             <Section title={`Event placements (${events.length})`} empty="No scored event placements yet.">
               {events.length > 0 && (
-                <ul className="divide-y divide-line text-sm">
+                <ul className="divide-y divide-outline text-sm">
                   {events.map((e, i) => (
                     <li key={i} className="flex items-center gap-2 py-1.5">
                       <Medal place={e.placement} className="shrink-0" />
@@ -162,8 +162,8 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
             <dl className="space-y-2 text-sm">
               {questions.map((q) => (
                 <div key={q.id}>
-                  <dt className="text-xs text-fg-subtle">{q.prompt}</dt>
-                  <dd className="text-fg">{answerFor(q.id) || <span className="text-fg-subtle">—</span>}</dd>
+                  <dt className="text-xs text-on-surface-subtle">{q.prompt}</dt>
+                  <dd className="text-on-surface">{answerFor(q.id) || <span className="text-on-surface-subtle">—</span>}</dd>
                 </div>
               ))}
             </dl>
@@ -177,8 +177,8 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
 function Section({ title, empty, children }: { title: string; empty?: string; children: ReactNode }) {
   return (
     <section>
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-fg-subtle">{title}</h3>
-      {children || <p className="text-sm text-fg-subtle">{empty}</p>}
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-on-surface-subtle">{title}</h3>
+      {children || <p className="text-sm text-on-surface-subtle">{empty}</p>}
     </section>
   );
 }

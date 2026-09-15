@@ -13,9 +13,9 @@ export function UserSearchInput({ scope, onSelect, placeholder = "Search by Disc
     <div className="relative">
       <Input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={placeholder} />
       {query.trim() && (
-        <div className="mt-1 max-h-48 overflow-y-auto rounded-md border border-line bg-surface-raised">
+        <div className="mt-1 max-h-48 overflow-y-auto rounded-md border border-outline bg-surface-raised">
           {isFetching ? (
-            <div className="px-3 py-2 text-sm text-fg-subtle">Searching…</div>
+            <div className="px-3 py-2 text-sm text-on-surface-subtle">Searching…</div>
           ) : data && data.users.length > 0 ? (
             data.users.map((user) => (
               <button
@@ -25,13 +25,13 @@ export function UserSearchInput({ scope, onSelect, placeholder = "Search by Disc
                   onSelect(user);
                   setQuery("");
                 }}
-                className="w-full px-3 py-1.5 text-left text-sm text-fg transition-colors hover:bg-surface-hover"
+                className="w-full px-3 py-1.5 text-left text-sm text-on-surface transition-colors hover:bg-surface-hover"
               >
-                {displayName(user)} <span className="text-fg-subtle">({user.discordUsername})</span>
+                {displayName(user)} <span className="text-on-surface-subtle">({user.discordUsername})</span>
               </button>
             ))
           ) : (
-            <div className="px-3 py-2 text-sm text-fg-subtle">No matches</div>
+            <div className="px-3 py-2 text-sm text-on-surface-subtle">No matches</div>
           )}
         </div>
       )}

@@ -14,19 +14,19 @@ export function StageStepper({ stage, onSelect }: { stage: Stage; onSelect?: (st
       {STAGE_ORDER.map((s, i) => {
         const state = i < currentIdx ? "done" : i === currentIdx ? "current" : "todo";
         const pillClass = `whitespace-nowrap rounded-sm px-1.5 py-0.5 text-[11px] font-medium leading-4 ${
-          state === "current" ? "bg-accent text-accent-fg" : state === "done" ? "text-fg-muted" : "text-fg-subtle"
+          state === "current" ? "bg-accent text-on-accent" : state === "done" ? "text-on-surface-muted" : "text-on-surface-subtle"
         }`;
         return (
           <li key={s} className="flex shrink-0 items-center gap-2" aria-current={state === "current" ? "step" : undefined}>
             {onSelect && state !== "current" ? (
-              <button type="button" onClick={() => onSelect(s)} className={`${pillClass} transition-colors hover:bg-surface-hover hover:text-fg`}>
+              <button type="button" onClick={() => onSelect(s)} className={`${pillClass} transition-colors hover:bg-surface-hover hover:text-on-surface`}>
                 {STAGE_LABEL[s]}
               </button>
             ) : (
               <span className={pillClass}>{STAGE_LABEL[s]}</span>
             )}
             {/* shrink-0 keeps the connector from collapsing under the pill when the row is tight. */}
-            {i < STAGE_ORDER.length - 1 && <span className={`h-px w-3 shrink-0 ${i < currentIdx ? "bg-line-strong" : "bg-line"}`} />}
+            {i < STAGE_ORDER.length - 1 && <span className={`h-px w-3 shrink-0 ${i < currentIdx ? "bg-outline-strong" : "bg-outline"}`} />}
           </li>
         );
       })}
@@ -43,23 +43,23 @@ export function MilestoneCountdown({ milestone, className }: { milestone: StageM
   const at = milestone.at ? new Date(milestone.at) : null;
   const upcoming = at !== null && at.getTime() > Date.now();
   return (
-    <div className={`flex items-baseline gap-2 text-sm text-fg-muted ${className ?? ""}`}>
-      <ClockIcon className="shrink-0 self-center text-fg-subtle" />
+    <div className={`flex items-baseline gap-2 text-sm text-on-surface-muted ${className ?? ""}`}>
+      <ClockIcon className="shrink-0 self-center text-on-surface-subtle" />
       <span>
         {milestone.label}
         {upcoming ? (
           <>
             {" in "}
-            <CountdownTimer target={at.getTime()} className="text-fg" />
+            <CountdownTimer target={at.getTime()} className="text-on-surface" />
           </>
         ) : at ? (
-          <span className="text-fg-subtle"> — waiting on a mod</span>
+          <span className="text-on-surface-subtle"> — waiting on a mod</span>
         ) : (
-          <span className="text-fg-subtle"> — time to be announced</span>
+          <span className="text-on-surface-subtle"> — time to be announced</span>
         )}
       </span>
       {upcoming && (
-        <time dateTime={at.toISOString()} className="num hidden text-xs text-fg-subtle sm:inline" title={at.toLocaleString()}>
+        <time dateTime={at.toISOString()} className="num hidden text-xs text-on-surface-subtle sm:inline" title={at.toLocaleString()}>
           {at.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}
         </time>
       )}

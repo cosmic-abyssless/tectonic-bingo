@@ -37,7 +37,7 @@ export const TileCell = memo(function TileCell({ tile, onOpen }: { tile: TileMod
           }`}
         />
       ) : (
-        <div className="absolute inset-0 flex items-center justify-center px-1 text-center text-[10px] leading-tight text-fg-muted">{tile.name}</div>
+        <div className="absolute inset-0 flex items-center justify-center px-1 text-center text-[10px] leading-tight text-on-surface-muted">{tile.name}</div>
       )}
 
       {tile.progress.allComplete && !tile.freeze.isFrozen && (
@@ -47,7 +47,7 @@ export const TileCell = memo(function TileCell({ tile, onOpen }: { tile: TileMod
       )}
 
       {tile.freeze.isFrozen && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-bg/70 text-[var(--tile-frozen)]">
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-background/70 text-[var(--tile-frozen)]">
           <LockIcon />
           <span className="num font-mono text-[11px] font-semibold leading-none">{formatCountdown(tile.freeze.remainingMs)}</span>
         </div>
@@ -61,7 +61,7 @@ export const TileCell = memo(function TileCell({ tile, onOpen }: { tile: TileMod
 
       {tile.interest.people.length > 0 && !tile.progress.allComplete && (
         <span
-          className={`absolute right-1 top-1 z-20 flex items-center gap-0.5 rounded-sm bg-bg/80 px-1 py-0.5 text-[9px] font-semibold leading-none ${tile.interest.mine ? "text-fg" : "text-fg-muted"}`}
+          className={`absolute right-1 top-1 z-20 flex items-center gap-0.5 rounded-sm bg-background/80 px-1 py-0.5 text-[9px] font-semibold leading-none ${tile.interest.mine ? "text-on-surface" : "text-on-surface-muted"}`}
           title={`On this tile: ${tile.interest.people.map((p) => p.displayName).join(", ")}`}
         >
           <HandIcon size={11} fill={tile.interest.mine ? "currentColor" : "none"} />
@@ -70,7 +70,7 @@ export const TileCell = memo(function TileCell({ tile, onOpen }: { tile: TileMod
       )}
 
       {tile.progress.totalTasks > 0 && (
-        <span className="num absolute bottom-1 left-1 z-20 rounded-sm bg-bg/80 px-1 py-0.5 text-[9px] font-semibold leading-none text-fg-muted">
+        <span className="num absolute bottom-1 left-1 z-20 rounded-sm bg-background/80 px-1 py-0.5 text-[9px] font-semibold leading-none text-on-surface-muted">
           {tile.progress.pointsAwarded}/{tile.progress.totalPoints}
         </span>
       )}
@@ -83,7 +83,7 @@ export const TileCell = memo(function TileCell({ tile, onOpen }: { tile: TileMod
               <span
                 key={task.id}
                 title={`${task.label}: ${task.status.replace(/_/g, " ")}`}
-                className={`inline-flex size-4 items-center justify-center rounded-full text-[9px] font-bold leading-none text-bg ${TASK_STATUS_DOT[task.status]}`}
+                className={`inline-flex size-4 items-center justify-center rounded-full text-[9px] font-bold leading-none text-background ${TASK_STATUS_DOT[task.status]}`}
               >
                 {task.index + 1}
               </span>

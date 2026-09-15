@@ -1,23 +1,9 @@
-import { CSSProperties } from "react";
 import { useBingoPage, useBoardModel, useTileModel } from "../../../headless";
 import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
 import { useScreenshotCapture } from "../../../headless/useScreenshotCapture";
 import { ScreenshotDropOverlay } from "../../../core/ui/ScreenshotDropOverlay";
 import { useSlot } from "../../context";
-
-// Ben-Day dot shading over the page background — the classic comic-book
-// halftone texture. A repeating radial-gradient is the cheapest way to get
-// a dot grid in CSS: each "tile" of the background is one dot on a
-// transparent field, then `backgroundSize` sets the grid spacing.
-const DOT_GRID_STYLE: CSSProperties = {
-  backgroundColor: "var(--color-bg)",
-  backgroundImage:
-    "radial-gradient(#00000080, 15%, transparent 16%), radial-gradient(#00000080, 15%, transparent 16%)",
-  backgroundSize: "14px 14px",
-  backgroundPosition: "0 0, 7px 7px",
-  position: "relative",
-  zIndex: 1,
-};
+import { useDotGridStyle } from "../dotGrid";
 
 export function BoardPageLayout() {
   const page = useBingoPage();
@@ -28,6 +14,7 @@ export function BoardPageLayout() {
   // "hover" treatment on the board itself, tying the two together.
   const highlightedTileId = page.search.showDropdown ? page.search.results[page.search.highlightedIndex]?.id ?? null : null;
   const { dragActive } = useScreenshotCapture(page);
+  const dotGridStyle = useDotGridStyle();
 
   const PageHeader = useSlot("PageHeader");
   const SignupStage = useSlot("SignupStage");
@@ -45,7 +32,7 @@ export function BoardPageLayout() {
   const SubmissionModal = useSlot("SubmissionModal");
 
   return (
-    <div className="min-h-screen text-fg" style={DOT_GRID_STYLE}>
+    <div className="min-h-screen text-on-surface" style={dotGridStyle}>
       <PageHeader page={page} />
 
       <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">

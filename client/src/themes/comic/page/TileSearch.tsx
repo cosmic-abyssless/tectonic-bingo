@@ -27,7 +27,7 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
   // A single state drives both cues, since they're really the same "you're
   // talking to this bubble right now" moment: outline + tail go accent and
   // the hard shadow lifts further off the page while the input has focus.
-  const outlineColor = search.focused ? "var(--color-accent)" : "var(--color-line)";
+  const outlineColor = search.focused ? "var(--color-accent)" : "var(--color-outline)";
   const liftPx = search.focused ? 6 : 3;
 
   return (
@@ -39,7 +39,7 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
         {/* Icon, input, and clear button are plain flex children — not
             absolutely positioned — so they stay inside the bubble's padded
             content box no matter how wide the pill ends up being. */}
-        <SearchIcon className="pointer-events-none shrink-0 text-fg-subtle" />
+        <SearchIcon className="pointer-events-none shrink-0 text-on-surface-subtle" />
         <Input
           ref={search.inputRef}
           type="text"
@@ -59,7 +59,7 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
               search.clear();
               search.inputRef.current?.focus();
             }}
-            className="hit-40 flex shrink-0 items-center justify-center rounded-sm text-fg-subtle transition-colors hover:text-fg"
+            className="hit-40 flex shrink-0 items-center justify-center rounded-sm text-on-surface-subtle transition-colors hover:text-on-surface"
           >
             <XIcon />
           </button>
@@ -77,13 +77,13 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => search.choose(tile.id)}
-              className={`flex w-full items-center px-3 py-2 text-left text-sm transition-colors ${i === search.highlightedIndex ? "bg-surface-hover text-fg" : "text-fg-muted hover:bg-surface-hover"}`}
+              className={`flex w-full items-center px-3 py-2 text-left text-sm transition-colors ${i === search.highlightedIndex ? "bg-surface-hover text-on-surface" : "text-on-surface-muted hover:bg-surface-hover"}`}
             >
               <span className="truncate font-medium">{tile.name}</span>
             </button>
           ))}
           {search.overflowCount > 0 && (
-            <p className="border-t border-line px-3 py-2 text-xs text-fg-subtle">
+            <p className="border-t border-outline px-3 py-2 text-xs text-on-surface-subtle">
               {search.overflowCount} more — keep typing to narrow down
             </p>
           )}

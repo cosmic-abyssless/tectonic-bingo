@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tectonic Bingo</title>
+    <!-- Sets data-color-scheme before first paint, avoiding a flash of the
+         wrong scheme — the React-driven equivalent (core/ui/colorScheme.ts's
+         useSyncColorSchemeAttribute) only runs after the bundle loads and
+         hydrates, which is too late. Mirrors core/ui/preferences.ts's exact
+         storage format (plain string, "pref:" + key, no JSON encoding). -->
+    <script>
+      try {
+        var p = localStorage.getItem("pref:colorScheme");
+        if (p === "light" || p === "dark") document.documentElement.setAttribute("data-color-scheme", p);
+      } catch (e) {}
+    </script>
     <!-- Comic-lettering display font for the "comic" theme (themes/comic/font.ts).
          Loaded globally here since it's a build-time asset, same as any other
          web font — but only the comic theme's own components reference it. -->

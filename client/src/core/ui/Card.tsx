@@ -2,15 +2,23 @@ import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 
 /** Flat surface with a hairline border. Elevation comes from borders, not shadows. */
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div {...props} className={`rounded-lg border border-line bg-surface ${className ?? ""}`} />;
+  return <div {...props} className={`rounded-lg border border-outline bg-surface ${className ?? ""}`} />;
 }
+
+// Themeable via --font-heading/--font-heading-weight (set by ThemeProvider
+// from tokens.chrome.headingFont/headingWeight); both fall back to a no-op
+// (this element's own weight class) outside a themed page, or when a theme
+// sets a font but not a weight.
+const HEADING_FONT: CSSProperties = { fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" };
 
 export function CardHeader({ title, description, action }: { title: ReactNode; description?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
+    <div className="flex items-start justify-between gap-4 border-b border-outline px-5 py-4">
       <div className="min-w-0">
-        <h2 className="text-sm font-semibold text-fg">{title}</h2>
-        {description && <p className="mt-0.5 text-sm text-fg-muted">{description}</p>}
+        <h2 className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+          {title}
+        </h2>
+        {description && <p className="mt-0.5 text-sm text-on-surface-muted">{description}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </div>
@@ -18,7 +26,7 @@ export function CardHeader({ title, description, action }: { title: ReactNode; d
 }
 
 const TONE = {
-  neutral: "border-line text-fg-muted",
+  neutral: "border-outline text-on-surface-muted",
   info: "border-info/30 text-info",
   ok: "border-ok/30 text-ok",
   warn: "border-warn/30 text-warn",
@@ -30,7 +38,7 @@ export function Notice({ tone = "neutral", icon, children, className }: { tone?:
   return (
     <div role={tone === "danger" ? "alert" : undefined} className={`flex items-start gap-2.5 rounded-md border bg-surface-raised px-3 py-2.5 text-sm ${TONE[tone]} ${className ?? ""}`}>
       {icon && <span className="mt-0.5 shrink-0">{icon}</span>}
-      <div className="min-w-0 flex-1 text-fg-muted [&_strong]:text-fg">{children}</div>
+      <div className="min-w-0 flex-1 text-on-surface-muted [&_strong]:text-on-surface">{children}</div>
     </div>
   );
 }
@@ -39,9 +47,9 @@ export function Notice({ tone = "neutral", icon, children, className }: { tone?:
 export function EmptyState({ icon, title, children, action }: { icon?: ReactNode; title: ReactNode; children?: ReactNode; action?: ReactNode }) {
   return (
     <Card className="flex flex-col items-center px-6 py-14 text-center">
-      {icon && <div className="mb-4 text-fg-subtle [&_svg]:size-7">{icon}</div>}
-      <h2 className="text-lg font-semibold text-fg">{title}</h2>
-      {children && <div className="mt-2 max-w-md text-sm text-fg-muted">{children}</div>}
+      {icon && <div className="mb-4 text-on-surface-subtle [&_svg]:size-7">{icon}</div>}
+      <h2 className="text-lg font-semibold text-on-surface">{title}</h2>
+      {children && <div className="mt-2 max-w-md text-sm text-on-surface-muted">{children}</div>}
       {action && <div className="mt-6">{action}</div>}
     </Card>
   );
@@ -63,11 +71,11 @@ export function FilterChip({ active, count, children, onPress }: { active: boole
       aria-pressed={active}
       onClick={onPress}
       className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors ${
-        active ? "border-fg bg-accent text-accent-fg" : "border-line text-fg-muted hover:border-line-strong hover:text-fg"
+        active ? "border-on-surface bg-accent text-on-accent" : "border-outline text-on-surface-muted hover:border-outline-strong hover:text-on-surface"
       }`}
     >
       {children}
-      {count !== undefined && count > 0 && <span className={`num ${active ? "text-accent-fg/70" : "text-fg-subtle"}`}>{count}</span>}
+      {count !== undefined && count > 0 && <span className={`num ${active ? "text-on-accent/70" : "text-on-surface-subtle"}`}>{count}</span>}
     </button>
   );
 }

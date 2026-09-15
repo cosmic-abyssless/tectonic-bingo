@@ -1,15 +1,22 @@
 import { defaultTheme } from "./default";
 import { defaultTokens, type ThemeTokens } from "./tokens";
 import type { ThemeSlots } from "./slots";
-import type { ThemeContextValue } from "./context";
 
 export interface ThemeDefinition {
   key: string;
-  tokens?: Partial<ThemeTokens>;
+  tokens?: { light?: Partial<ThemeTokens>; dark?: Partial<ThemeTokens> };
   slots?: Partial<ThemeSlots>;
 }
 
-export type ResolvedTheme = ThemeContextValue;
+// Distinct from ThemeContextValue (themes/context.ts), which holds a single
+// ThemeTokens already resolved for the CURRENT scheme — this holds both, so
+// ThemeProvider can pick the right one whenever the scheme changes without
+// re-resolving/re-fetching the theme itself.
+export interface ResolvedTheme {
+  key: string;
+  tokens: { light: ThemeTokens; dark: ThemeTokens };
+  slots: ThemeSlots;
+}
 
 // Follow-up themes register here as one line each.
 const loaders: Record<string, () => Promise<{ default: ThemeDefinition }>> = {
@@ -46,10 +53,17 @@ export function isKnownTheme(key: string): boolean {
   return key in loaders;
 }
 
+function mergeSchemeTokens(base: ThemeTokens, def?: Partial<ThemeTokens>): ThemeTokens {
+  return { tile: { ...base.tile, ...def?.tile }, chrome: { ...base.chrome, ...def?.chrome } };
+}
+
 export function mergeTheme(base: ResolvedTheme, def: ThemeDefinition): ResolvedTheme {
   return {
     key: def.key,
-    tokens: { ...base.tokens, ...def.tokens, tile: { ...base.tokens.tile, ...def.tokens?.tile }, chrome: { ...base.tokens.chrome, ...def.tokens?.chrome } },
+    tokens: {
+      light: mergeSchemeTokens(base.tokens.light, def.tokens?.light),
+      dark: mergeSchemeTokens(base.tokens.dark, def.tokens?.dark),
+    },
     slots: { ...base.slots, ...def.slots },
   };
 }

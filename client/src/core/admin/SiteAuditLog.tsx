@@ -22,8 +22,8 @@ function BingoScopeFilter({ options, value, onChange }: { options: { key: string
   const summary = options.find((o) => o.key === selectedKey)?.label ?? "All bingos";
   return (
     <MenuTrigger>
-      <Button variant="secondary" size="sm" className={value !== "all" ? "border-fg" : ""}>
-        <span className="text-fg-subtle">Bingo:</span> {summary}
+      <Button variant="secondary" size="sm" className={value !== "all" ? "border-on-surface" : ""}>
+        <span className="text-on-surface-subtle">Bingo:</span> {summary}
         <ChevronDownIcon size={14} />
       </Button>
       <Menu
@@ -95,7 +95,7 @@ export function SiteAuditLog() {
       {isError ? (
         <Notice tone="danger">{error instanceof Error ? error.message : "Failed to load the audit log"}</Notice>
       ) : isLoading ? (
-        <p className="py-20 text-center text-sm text-fg-muted">Loading…</p>
+        <p className="py-20 text-center text-sm text-on-surface-muted">Loading…</p>
       ) : entries.length === 0 ? (
         <EmptyState icon={<ListIcon />} title="No activity yet">
           Actions taken across the site will show up here as they happen.
@@ -111,22 +111,22 @@ export function SiteAuditLog() {
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex flex-wrap items-center gap-1.5">
                       <AuditActionBadge action={entry.action} />
-                      {entry.team ? <span className="text-xs text-fg-subtle">{entry.team.name}</span> : bingoName ? <span className="text-xs text-fg-subtle">{bingoName}</span> : null}
+                      {entry.team ? <span className="text-xs text-on-surface-subtle">{entry.team.name}</span> : bingoName ? <span className="text-xs text-on-surface-subtle">{bingoName}</span> : null}
                     </div>
-                    <p className="text-sm text-fg">{entry.label}</p>
-                    <p className="mt-0.5 text-xs text-fg-subtle">
+                    <p className="text-sm text-on-surface">{entry.label}</p>
+                    <p className="mt-0.5 text-xs text-on-surface-subtle">
                       {entry.actor ? displayName(entry.actor) : entry.actorType} · {entry.actorRole}
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-                    <span title={new Date(entry.at).toLocaleString()} className="text-xs text-fg-subtle">
+                    <span title={new Date(entry.at).toLocaleString()} className="text-xs text-on-surface-subtle">
                       {timeAgo(entry.at)}
                     </span>
-                    <span className="text-fg-subtle">{isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
+                    <span className="text-on-surface-subtle">{isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
                   </div>
                 </div>
                 {isExpanded && (
-                  <div className="border-t border-line bg-bg px-4 py-3">
+                  <div className="border-t border-outline bg-background px-4 py-3">
                     <DetailsView details={entry.details} />
                   </div>
                 )}
