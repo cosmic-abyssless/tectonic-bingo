@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Type-checks + builds both workspaces (server: tsc; client: tsc + vite build).
+      - run: npm run build
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Server unit tests (vitest). No .env needed — every env-dependent code
+      # path in src/ falls back to a safe default or is exercised via mocks.
+      - run: npm test
+
+  migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Catches a schema.ts edit whose migration was never generated/committed:
+      # regenerating against the current schema should produce no new files.
+      - name: Check schema.ts matches the committed migrations
+        working-directory: server
+        run: |
+          npx drizzle-kit generate
+          if [ -n "$(git status --porcelain drizzle)" ]; then
+            echo "::error::schema.ts changed without a matching migration. Run 'npm run db:generate --workspace=server' and commit the result."
+            git status --porcelain drizzle
+            git diff drizzle
+            exit 1
+          fi
+      # Catches a broken/malformed migration by replaying every committed
+      # migration against a brand-new database, the same way a real deploy would.
+      - name: Apply all migrations to a fresh database
+        working-directory: server
+        run: DB_PATH=./data/ci-check.db npx drizzle-kit migrate
