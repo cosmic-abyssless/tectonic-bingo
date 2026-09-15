@@ -9,7 +9,7 @@
 // node; a line is a node referenced by a BingoLine row. NodeStatus is
 // derived at read time, never stored (see TeamNodeState).
 
-import type { AuditVisibility } from "./audit";
+import type { AuditVisibility } from "./audit.ts";
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
@@ -707,5 +707,5 @@ export type BroadcastEvent =
   // log / team activity queries and refetch under their own auth.
   | { type: "audit_appended"; bingoId: string; payload: { teamId: string | null; visibility: AuditVisibility } };
 
-export * from "./audit";
-export * from "./bingoExport";
+export * from "./audit.ts";
+export * from "./bingoExport.ts";

@@ -7,7 +7,7 @@
 // compile-time half of "a new action can't silently escape the log" (the
 // other two are the server's routeCoverage test and the http.mutation
 // fallback — see server/src/audit/routePolicy.ts and middleware.ts).
-import type { MinimalUser, Stage } from "./index";
+import type { MinimalUser, Stage } from "./index.ts";
 
 export type AuditVisibility = "mods" | "team" | "public";
 export type AuditActorType = "user" | "system" | "dev";

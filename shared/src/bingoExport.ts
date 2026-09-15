@@ -9,7 +9,7 @@
 // server/src/services/bingoExportService.ts's importBingo() rejects a
 // document whose formatVersion is newer than this build understands, but
 // must keep reading every older version forever.
-import type { NodeKind, SignupMode, SignupQuestionType } from "./index";
+import type { NodeKind, SignupMode, SignupQuestionType } from "./index.ts";
 
 export const BINGO_EXPORT_FORMAT_VERSION = 1;
 
