@@ -67,17 +67,23 @@ const comicChromeLight = {
   borderWidth: "2px",
 };
 
-// "Moonlit comic panel": deep purple night instead of yellow paper, pale
-// lavender ink instead of black ink, a gold accent instead of blue (blue
-// reads muddy against purple; gold pops the way a comic "POW!" burst
-// would, and doubles as the button color). Reuses index.css's *original*
-// vibrant ok/warn/danger/info — comic-light only darkened them for its
-// pale surfaces; a dark surface can use the punchy versions directly, the
-// same logic in reverse.
+// "Moonlit comic panel": deep purple night page, pale lavender ink instead
+// of black ink, a gold accent instead of blue (blue reads muddy against
+// purple; gold pops the way a comic "POW!" burst would). Tiles and the
+// header/search/team-banner chrome are charcoal rather than purple — an
+// all-purple board read as an overload, so those surfaces are neutral dark
+// grays instead, with the purple page background and lavender outline/ink
+// left to carry the "night" identity. A forest green stands in for the
+// default (secondary) button fill — the nav-style buttons ("Mod panel",
+// "Select team", etc.) that used to blend into the purple chrome now pop
+// against the charcoal instead; gold stays reserved for the primary button
+// and accent role. Reuses index.css's *original* vibrant ok/warn/danger/
+// info — comic-light only darkened them for its pale surfaces; a dark
+// surface can use the punchy versions directly, the same logic in reverse.
 const comicTileDark = {
-  bg: "#2e1d4f",
+  bg: "#242428",
   border: "#e9d5ff",
-  empty: "#1f1338",
+  empty: "#1c1c20",
   accent: "#facc15",
   complete: "#22c55e",
   frozen: "#38bdf8",
@@ -85,9 +91,9 @@ const comicTileDark = {
 
 const comicChromeDark = {
   background: "#1a0f2e",
-  surface: "#241640",
-  surfaceRaised: "#2e1d4f",
-  surfaceHover: "#3a2760",
+  surface: "#38383e",
+  surfaceRaised: "#44444c",
+  surfaceHover: "#505058",
   outline: "#c4b5fd",
   outlineStrong: "#e9d5ff",
   onSurface: "#f5f0ff",
@@ -97,8 +103,8 @@ const comicChromeDark = {
   onAccent: "#1a0f2e",
   button: "#facc15",
   onButton: "#1a0f2e",
-  buttonSecondary: "#2e1d4f",
-  onButtonSecondary: "#f5f0ff",
+  buttonSecondary: "#2f6b4a",
+  onButtonSecondary: "#f0fff4",
   ok: "#4ade80",
   warn: "#fbbf24",
   danger: "#f87171",
