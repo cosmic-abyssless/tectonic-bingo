@@ -56,6 +56,8 @@ export interface AuditDetailsMap {
       description: string | null;
       theme: string;
       signupMode: string;
+      leftoverMode: string;
+      warnLeftovers: boolean;
       buyinAmount: number | null;
       bonusPotAmount: number;
       rulesMarkdown: string | null;
@@ -113,6 +115,7 @@ export interface AuditDetailsMap {
 
   "draft.started": { order: { teamId: string; name: string; draftOrder: number }[] };
   "draft.pick": { pickNumber: number; userIds: string[]; displayNames: string[]; pair: boolean };
+  "draft.rating_set": { rsn: string; stars: number; hasNote: boolean; cleared: boolean };
 
   "pairing.requested": { requesterUserId: string; targetDiscordId: string };
   "pairing.accepted": { requesterUserId: string; targetDiscordId: string; partnerUserId: string | null };
@@ -334,6 +337,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     title: "Draft pick",
     label: (i) => `${actor(i)} drafted ${i.details.displayNames.join(" & ")}${onBehalf(i)}`,
   },
+  "draft.rating_set": {
+    category: "draft",
+    tone: "neutral",
+    visibility: "team",
+    title: "Pick rated",
+    label: (i) => (i.details.cleared ? `${actor(i)} cleared their rating of ${i.details.rsn}` : `${actor(i)} rated ${i.details.rsn} ${i.details.stars}/3${i.details.hasNote ? " with a note" : ""}`),
+  },
   "pairing.requested": { category: "signup", tone: "neutral", visibility: "mods", title: "Duo pairing requested", label: (i) => `${actor(i)} requested a duo pairing` },
   "pairing.accepted": { category: "signup", tone: "ok", visibility: "mods", title: "Duo pairing accepted", label: (i) => `${actor(i)} accepted a duo pairing` },
   "pairing.declined": { category: "signup", tone: "warn", visibility: "mods", title: "Duo pairing declined", label: (i) => `${actor(i)} declined a duo pairing` },
@@ -349,7 +359,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
   "pairing.unpaired": { category: "signup", tone: "warn", visibility: "mods", title: "Duo pairing split by a mod", label: (i) => `${actor(i)} split up ${i.details.displayNames.join(" & ")}` },
   "signup.created": { category: "signup", tone: "ok", visibility: "mods", title: "Signup created", label: (i) => `${actor(i)} signed up as ${i.details.rsn}${i.details.reactivated ? " (re-signup)" : ""}` },
   "signup.updated": { category: "signup", tone: "neutral", visibility: "mods", title: "Signup updated", label: (i) => `${actor(i)} updated their signup${i.details.rsn ? ` (RSN → ${i.details.rsn.after})` : ""}` },
-  "signup.withdrawn": { category: "signup", tone: "warn", visibility: "mods", title: "Signup withdrawn", label: (i) => `${actor(i)} withdrew their signup (${i.details.rsn})` },
+  "signup.withdrawn": {
+    category: "signup",
+    tone: "warn",
+    visibility: "mods",
+    title: "Signup withdrawn",
+    label: (i) => (i.onBehalfOfName ? `${actor(i)} withdrew ${i.onBehalfOfName}'s signup (${i.details.rsn})` : `${actor(i)} withdrew their signup (${i.details.rsn})`),
+  },
   "signup.buyin_marked": {
     category: "signup",
     tone: "ok",

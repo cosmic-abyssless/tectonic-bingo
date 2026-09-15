@@ -213,6 +213,15 @@ describe("audit trail", () => {
     withdrawSignup(db, bingo, signup.id);
     const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.withdrawn")).get()!;
     expect(JSON.parse(row.details)).toEqual({ rsn: "MyRsn" });
+    expect(row.onBehalfOfUserId).toBeNull();
+  });
+
+  it("a mod withdrawal records who the signup belonged to", () => {
+    const { bingo, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "MyRsn", answers: [] });
+    withdrawSignup(db, bingo, signup.id, { byMod: true });
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.withdrawn")).get()!;
+    expect(row.onBehalfOfUserId).toBe(memberId);
   });
 
   it("markBuyin records the before receivedAt state and the collector's name", () => {

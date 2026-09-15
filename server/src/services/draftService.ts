@@ -5,7 +5,7 @@ import { draftPicks, pickRatings, signupAnswers, signups, teamMembers, teams, us
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
 import { isTeamLead } from "./teamService";
-import { audit } from "../audit/record";
+import { audit, markAuditedNoop } from "../audit/record";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -314,15 +314,32 @@ export function setPickRating(db: Db, teamId: string, signupId: string, rating: 
     throw new ServiceError(400, `Stars must be a whole number from 0 to ${MAX_RATING_STARS}`);
   }
   const note = rating.note.trim().slice(0, 200);
-  if (rating.stars === 0 && !note) {
-    db.delete(pickRatings).where(and(eq(pickRatings.teamId, teamId), eq(pickRatings.signupId, signupId))).run();
-    return;
-  }
-  const signup = db.select({ id: signups.id, bingoId: signups.bingoId }).from(signups).where(eq(signups.id, signupId)).get();
-  const team = db.select({ bingoId: teams.bingoId }).from(teams).where(eq(teams.id, teamId)).get();
-  if (!signup || !team || signup.bingoId !== team.bingoId) throw new ServiceError(404, "Signup not found");
-  db.insert(pickRatings)
-    .values({ teamId, signupId, stars: rating.stars, note })
-    .onConflictDoUpdate({ target: [pickRatings.teamId, pickRatings.signupId], set: { stars: rating.stars, note, updatedAt: new Date() } })
-    .run();
+  db.transaction((tx) => {
+    const signup = tx.select({ id: signups.id, bingoId: signups.bingoId, rsn: signups.rsn }).from(signups).where(eq(signups.id, signupId)).get();
+    const team = tx.select({ bingoId: teams.bingoId }).from(teams).where(eq(teams.id, teamId)).get();
+    if (!signup || !team || signup.bingoId !== team.bingoId) throw new ServiceError(404, "Signup not found");
+
+    const cleared = rating.stars === 0 && !note;
+    if (cleared) {
+      const removed = tx.delete(pickRatings).where(and(eq(pickRatings.teamId, teamId), eq(pickRatings.signupId, signupId))).run();
+      if (removed.changes === 0) {
+        markAuditedNoop();
+        return;
+      }
+    } else {
+      tx.insert(pickRatings)
+        .values({ teamId, signupId, stars: rating.stars, note })
+        .onConflictDoUpdate({ target: [pickRatings.teamId, pickRatings.signupId], set: { stars: rating.stars, note, updatedAt: new Date() } })
+        .run();
+    }
+    // Ratings are a team's private scouting notes, so the entry stays
+    // team-scoped rather than joining the mod-visible signup history.
+    audit(tx, {
+      action: "draft.rating_set",
+      bingoId: team.bingoId,
+      teamId,
+      entity: { type: "signup", id: signupId, label: signup.rsn },
+      details: { rsn: signup.rsn, stars: rating.stars, hasNote: note.length > 0, cleared },
+    });
+  });
 }

@@ -121,7 +121,9 @@ describe("audit trail", () => {
     createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, name: "A" });
     createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
     const p1 = seedUser("p1");
-    createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p1.id, rsn: "p1", answers: [] });
+    const p2 = seedUser("p2");
+    // Two signups for two teams so neither is a leftover (see markLeftovers).
+    for (const p of [p1, p2]) createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p.id, rsn: p.discordUsername, answers: [] });
     startDraft(db, bingo);
     const first = db.select().from(schema.teams).where(and(eq(schema.teams.bingoId, bingo.id), eq(schema.teams.draftOrder, 1))).get()!;
 
@@ -410,6 +412,13 @@ describe("pick ratings", () => {
 
     setPickRating(db, teamA.id, signup.id, { stars: 0, note: "" });
     expect(getTeamRatings(db, teamA.id)).toEqual({});
+
+    const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.rating_set")).all();
+    expect(rows.map((r) => [r.teamId, JSON.parse(r.details)])).toEqual([
+      [teamA.id, { rsn: "p1", stars: 2, hasNote: true, cleared: false }],
+      [teamA.id, { rsn: "p1", stars: 3, hasNote: false, cleared: false }],
+      [teamA.id, { rsn: "p1", stars: 0, hasNote: false, cleared: true }],
+    ]);
   });
 
   it("rejects out-of-range stars and signups from another bingo", () => {

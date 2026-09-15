@@ -284,6 +284,7 @@ export function withdrawSignup(db: Db, bingo: Bingo, signupId: string, { byMod =
       bingoId: bingo.id,
       entity: { type: "signup", id: signupId, label: existing.rsn },
       details: { rsn: existing.rsn },
+      onBehalfOfUserId: byMod ? existing.userId : null,
     });
     return updated;
   });

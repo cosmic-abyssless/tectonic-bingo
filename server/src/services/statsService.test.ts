@@ -175,7 +175,14 @@ describe("filterStatsForTeam", () => {
     submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId);
     submitAndApprove(fx.teamBId, task.id, fx.memberUserId, fx.modUserId);
     db.insert(stageTransitions).values({ bingoId: fx.bingoId, fromStage: "reveal", toStage: "live", changedByUserId: fx.modUserId }).run();
-    db.insert(draftPicks).values({ bingoId: fx.bingoId, pickNumber: 1, teamId: fx.teamBId, userId: fx.memberUserId, pickedByUserId: fx.modUserId }).run();
+    // A pick for each team so team A's timeline never depends on who was
+    // first to complete (both approvals can land in the same millisecond).
+    db.insert(draftPicks)
+      .values([
+        { bingoId: fx.bingoId, pickNumber: 1, teamId: fx.teamAId, userId: fx.modUserId, pickedByUserId: fx.modUserId },
+        { bingoId: fx.bingoId, pickNumber: 2, teamId: fx.teamBId, userId: fx.memberUserId, pickedByUserId: fx.modUserId },
+      ])
+      .run();
 
     const own = filterStatsForTeam(getStats(db, fx.bingoId), fx.teamAId);
     for (const rows of [own.pointsOverTime, own.timeline, own.contributions, own.heatmap]) {
