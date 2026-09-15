@@ -21,6 +21,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       break;
     case "team_updated":
       queryClient.invalidateQueries({ queryKey: ["bingo"] });
+      // The scouting/draft room lists teams from draft state.
+      queryClient.invalidateQueries({ queryKey: ["draftState"] });
       break;
     case "bingo_changed":
       queryClient.invalidateQueries({ queryKey: ["bingo"] });
@@ -33,12 +35,16 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       // Team count and leftover settings decide who is at risk of being cut.
       queryClient.invalidateQueries({ queryKey: ["mySignup"] });
       queryClient.invalidateQueries({ queryKey: ["signupRoster"] });
+      queryClient.invalidateQueries({ queryKey: ["draftState"] });
       break;
     case "draft_started":
     case "draft_pick":
       queryClient.invalidateQueries({ queryKey: ["draftState"] });
       // A drafted player now has a team, so their bingo shell's myTeam changes.
       queryClient.invalidateQueries({ queryKey: ["bingo"] });
+      break;
+    case "draft_rating_changed":
+      queryClient.invalidateQueries({ queryKey: ["draftState"] });
       break;
     case "signup_changed":
       // Signups, pairings, and who is eligible to captain all move together.
@@ -47,6 +53,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       queryClient.invalidateQueries({ queryKey: ["myPairing"] });
       queryClient.invalidateQueries({ queryKey: ["partnerCandidates"] });
       queryClient.invalidateQueries({ queryKey: ["adminCaptainCandidates"] });
+      // Leads scouting the pool see new/withdrawn signups and pairs live.
+      queryClient.invalidateQueries({ queryKey: ["draftState"] });
       break;
     case "audit_appended":
       queryClient.invalidateQueries({ queryKey: ["auditLog"] });

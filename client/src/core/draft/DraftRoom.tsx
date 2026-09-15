@@ -141,8 +141,9 @@ function PoolTable({
                         {isPair && i === 0 && <LinkIcon size={14} aria-label="Duo pair" className="mt-1" />}
                       </td>
                     )}
-                    {ratings && (
-                      <td className="py-1 pr-4 align-middle">
+                    {ratings && i === 0 && (
+                      // Pairs are drafted together, so they carry one rating.
+                      <td className="py-1 pr-4 align-middle" rowSpan={unit.entries.length}>
                         <RatingCell rating={ratings[entry.signup.id]} onChange={(r) => onRate(entry.signup.id, r)} />
                       </td>
                     )}

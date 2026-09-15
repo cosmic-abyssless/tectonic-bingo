@@ -431,4 +431,26 @@ describe("pick ratings", () => {
     expect(() => setPickRating(db, teamA.id, signup.id, { stars: 4, note: "" })).toThrow(ServiceError);
     expect(() => setPickRating(db, teamA.id, "nope", { stars: 1, note: "" })).toThrow(ServiceError);
   });
+
+  it("rates both halves of a duo pair as one unit", () => {
+    const bingo = seedBingo({ signupMode: "duo", stage: "signup" });
+    const cap = seedCaptain(bingo.id, "cap");
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: cap.id });
+    const [a, b] = ["a", "b"].map((d) => seedUser(d));
+    const signupA = createSignup(db, bingo, { bingoId: bingo.id, userId: a!.id, rsn: "a", answers: [] });
+    const signupB = createSignup(db, bingo, { bingoId: bingo.id, userId: b!.id, rsn: "b", answers: [] });
+    adminPair(db, bingo, { userIdA: a!.id, userIdB: b!.id, createdByUserId: cap.id });
+
+    setPickRating(db, team.id, signupA.id, { stars: 2, note: "strong duo" });
+    expect(getTeamRatings(db, team.id)).toEqual({
+      [signupA.id]: { stars: 2, note: "strong duo" },
+      [signupB.id]: { stars: 2, note: "strong duo" },
+    });
+
+    setPickRating(db, team.id, signupB.id, { stars: 0, note: "" });
+    expect(getTeamRatings(db, team.id)).toEqual({});
+
+    const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.rating_set")).all();
+    expect(rows.map((r) => JSON.parse(r.details).rsn)).toEqual(["a & b", "b & a"]);
+  });
 });
