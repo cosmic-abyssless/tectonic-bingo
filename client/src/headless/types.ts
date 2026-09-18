@@ -86,6 +86,16 @@ export interface TaskModel {
   available: boolean;
   /** null for a MANUAL task. */
   tree: RequirementNodeModel | null;
+  /** Teammates who have raised a hand for this part, oldest first. */
+  interest: TaskInterestModel;
+}
+
+export interface TaskInterestModel {
+  people: { id: string; displayName: string }[];
+  /** The viewer is one of them. */
+  mine: boolean;
+  /** Viewer is on the team whose board this is and the part isn't done — page.tileInterest.toggle() works. */
+  canToggle: boolean;
 }
 
 export interface SubmissionModel {
@@ -137,12 +147,16 @@ export interface TileModel {
   dimmed: boolean;
   /** page.canSubmit && !allComplete && !isFrozen — TileModal's submitDisabled, inverted. */
   canSubmit: boolean;
-  /** Teammates who have raised a hand for this tile, oldest first. */
+  /**
+   * Tile-level rollup of the per-task interest: everyone on any part of this
+   * tile (deduped, oldest first). Cells use it for a badge; the per-part truth
+   * lives on each TaskModel.interest.
+   */
   interest: {
     people: { id: string; displayName: string }[];
-    /** The viewer is one of them. */
+    /** The viewer is on at least one part. */
     mine: boolean;
-    /** Viewer is on the team whose board this is and the tile isn't done — page.tileInterest.toggle() works. */
+    /** Viewer is on the team whose board this is and the tile isn't done — some part can still be toggled. */
     canToggle: boolean;
   };
 }
@@ -246,12 +260,12 @@ export interface BingoPageModel {
   /** Roster of `viewing.team` (TeamBadge press for players, roster button beside TeamSelector for mods → TeamInfoDialog). */
   teamInfo: { open: boolean; show(): void; hide(): void };
   drawer: { open: boolean; show(): void; hide(): void };
-  /** show() also hides the drawer. initialFile seeds/replaces the flow's screenshot (drag-drop/paste-to-submit) — re-passing a new File while already open feeds it into the still-mounted flow. */
-  submit: { open: boolean; initialTileId: string | undefined; initialFile: File | undefined; show(tileId?: string, file?: File): void; hide(): void };
+  /** show() also hides the drawer. initialFile seeds/replaces the flow's screenshot (drag-drop/paste-to-submit) — re-passing a new File while already open feeds it into the still-mounted flow. initialTaskId preselects a part of that tile (per-part Submit buttons). */
+  submit: { open: boolean; initialTileId: string | undefined; initialTaskId: string | undefined; initialFile: File | undefined; show(tileId?: string, file?: File, taskId?: string): void; hide(): void };
   /** logout lives in core AppHeader's own user menu, not here. */
   actions: { goHome(): void; goToStats(): void; goToMod(): void; goToDraft(): void };
-  /** Raise/lower the viewer's hand for a tile on their own team. No-op unless tile.interest.canToggle. */
-  tileInterest: { toggle(tileId: string): void };
+  /** Raise/lower the viewer's hand for one part (task) of a tile on their own team. No-op unless task.interest.canToggle. */
+  tileInterest: { toggle(tileId: string, taskId: string): void };
 }
 
 export interface SubmissionFlowModel {

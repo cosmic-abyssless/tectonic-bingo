@@ -112,14 +112,18 @@ export function buildRequirementTree(
 }
 
 // Ports TileModal.tsx's gate/lock loop + SubmissionModal's getAvailableTasks
-// semantics (available = not complete and not locked).
-export function buildTaskModels(tile: Tile, summary: TileProgressSummary, maps: LeafClaimMaps): TaskModel[] {
+// semantics (available = not complete and not locked). Interest arrives here
+// without `canToggle` (that depends on the viewer's team/stage, patched in by
+// finalizeTileModels) so the static half stays viewer-agnostic apart from
+// `mine`.
+export function buildTaskModels(tile: Tile, summary: TileProgressSummary, maps: LeafClaimMaps, interestsByTask: ReadonlyMap<string, TileInterest[]>, viewerUserId: string): StaticTaskModel[] {
   const tasks = tile.node.children;
   return tasks.map((task) => {
     const gate = task.submitGateNodeId ? tasks.find((t) => t.id === task.submitGateNodeId) : undefined;
     const locked = gate ? summary.statusByNodeId.get(gate.id) !== "completed" : false;
     const complete = summary.statusByNodeId.get(task.id) === "completed";
     const isManual = task.kind === "MANUAL";
+    const taskInterests = interestsByTask.get(task.id) ?? [];
     return {
       id: task.id,
       label: task.label,
@@ -135,6 +139,10 @@ export function buildTaskModels(tile: Tile, summary: TileProgressSummary, maps: 
       lockedReason: locked && gate ? `${task.label} cannot be submitted until ${gate.label} is completed.` : null,
       available: !complete && !locked,
       tree: isManual ? null : buildRequirementTree(task, maps, summary.statusByNodeId),
+      interest: {
+        people: taskInterests.map((i) => ({ id: i.user.id, displayName: displayName(i.user) })),
+        mine: taskInterests.some((i) => i.user.id === viewerUserId),
+      },
     };
   });
 }
@@ -198,7 +206,10 @@ export function buildLineModels(lines: BoardLine[], tiles: Tile[], nodeStates: T
 // tiles/categories/nodeStates/teamSubmissions/bingoStartsAt, not on `now`,
 // search, or canSubmit. Call once via useMemo keyed on those data
 // references; finalizeTileModels() is the cheap per-tick pass on top.
-export type StaticTileModel = Omit<TileModel, "dimmed" | "canSubmit" | "freeze" | "interest"> & {
+export type StaticTaskModel = Omit<TaskModel, "interest"> & { interest: Omit<TaskModel["interest"], "canToggle"> };
+
+export type StaticTileModel = Omit<TileModel, "dimmed" | "canSubmit" | "freeze" | "interest" | "tasks"> & {
+  tasks: StaticTaskModel[];
   interest: Omit<TileModel["interest"], "canToggle">;
   freezeUnlocksAt: number | null;
   hasFreezePeriod: boolean;
@@ -223,8 +234,9 @@ export function buildTileModelsStatic(args: {
     submissionIdsByTile.set(tileId, new Set(list.map((d) => d.submission.id)));
   }
   const allSubmissionModels = buildSubmissionModels(tiles, teamSubmissions);
-  const interestsByTile = new Map<string, TileInterest[]>();
-  for (const i of interests) interestsByTile.set(i.tileId, [...(interestsByTile.get(i.tileId) ?? []), i]);
+  // Interest is stored per task; the tile keeps a deduped rollup for its badge.
+  const interestsByTask = new Map<string, TileInterest[]>();
+  for (const i of interests) interestsByTask.set(i.taskId, [...(interestsByTask.get(i.taskId) ?? []), i]);
 
   return tiles.map((tile) => {
     const categoryRow = tile.categoryId ? categoryById.get(tile.categoryId) : undefined;
@@ -232,7 +244,9 @@ export function buildTileModelsStatic(args: {
     const summary = summarizeTileProgress(tile, nodeStates, teamSubmissions);
     const freezeUnlocksAt = getFreezeUnlockAt(bingoStartsAt, tile);
     const submissionIds = submissionIdsByTile.get(tile.id);
-    const tileInterests = interestsByTile.get(tile.id) ?? [];
+    const tasks = buildTaskModels(tile, summary, claimMaps, interestsByTask, viewerUserId);
+    const people = new Map<string, { id: string; displayName: string }>();
+    for (const task of tasks) for (const p of task.interest.people) if (!people.has(p.id)) people.set(p.id, p);
 
     return {
       id: tile.id,
@@ -255,14 +269,14 @@ export function buildTileModelsStatic(args: {
         label: task.label ?? "",
         status: summary.statusByNodeId.get(task.id) ?? "not_started",
       })),
-      tasks: buildTaskModels(tile, summary, claimMaps),
+      tasks,
       submissions: submissionIds ? allSubmissionModels.filter((s) => submissionIds.has(s.id)) : [],
       freezeUnlocksAt,
       hasFreezePeriod: tile.hasFreezePeriod,
       freezeDurationMinutes: tile.freezeDurationMinutes,
       interest: {
-        people: tileInterests.map((i) => ({ id: i.user.id, displayName: displayName(i.user) })),
-        mine: tileInterests.some((i) => i.user.id === viewerUserId),
+        people: [...people.values()],
+        mine: tasks.some((t) => t.interest.mine),
       },
     };
   });
@@ -298,9 +312,13 @@ export function finalizeTileModels(staticTiles: StaticTileModel[], now: number, 
       return prevModel;
     }
 
-    const { freezeUnlocksAt, hasFreezePeriod, freezeDurationMinutes, interest, ...rest } = s;
+    const { freezeUnlocksAt, hasFreezePeriod, freezeDurationMinutes, interest, tasks, ...rest } = s;
+    // Reuse the previous tasks array when only per-tick fields moved; a new
+    // static snapshot or a canToggle flip rebuilds it.
+    const reuseTasks = prevModel && prevModel.progress === s.progress && prevModel.interest.canToggle === canToggle;
     return {
       ...rest,
+      tasks: reuseTasks ? prevModel.tasks : tasks.map((t) => ({ ...t, interest: { ...t.interest, canToggle: canToggleInterest && !t.complete } })),
       freeze: { hasFreezePeriod, durationMinutes: freezeDurationMinutes, unlocksAt: freezeUnlocksAt, isFrozen, remainingMs },
       dimmed,
       canSubmit: tileCanSubmit,

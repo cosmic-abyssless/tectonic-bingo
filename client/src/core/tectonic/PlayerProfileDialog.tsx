@@ -70,17 +70,16 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
   return (
     <>
       <DialogHeader
-        title={player.rsn ?? name}
+        title={
+          <>
+            {/* Account type leads the name, like the in-game chat badge. */}
+            <AccountTypeIcon accountType={player.accountType} size={22} className="shrink-0" />
+            <span className="truncate">{player.rsn ?? name}</span>
+          </>
+        }
         subtitle={player.rsn ? name : "Not signed up for this bingo"}
         onClose={onClose}
-        action={
-          profile && (
-            <div className="flex items-center gap-3">
-              <AchievementIcons profile={profile} large />
-              <AccountTypeIcon accountType={player.accountType} />
-            </div>
-          )
-        }
+        action={profile && <AchievementIcons profile={profile} large />}
       />
       <div className="space-y-6 p-5">
         {!profile ? (

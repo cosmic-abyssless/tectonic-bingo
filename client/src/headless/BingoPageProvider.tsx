@@ -73,6 +73,7 @@ export function BingoPageProvider({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitInitialTileId, setSubmitInitialTileId] = useState<string | undefined>(undefined);
+  const [submitInitialTaskId, setSubmitInitialTaskId] = useState<string | undefined>(undefined);
   const [submitInitialFile, setSubmitInitialFile] = useState<File | undefined>(undefined);
 
   const search = useTileSearch(tiles, (tileId) => setOpenTileId(tileId));
@@ -115,8 +116,9 @@ export function BingoPageProvider({
   const canScout = (bingo.stage === "signup" || bingo.stage === "captains") && (isMod || !!myTeamModel?.isLead);
   const viewingTeamModel = teamModels.find((t) => t.id === viewingTeamId) ?? null;
 
-  const openSubmit = (tileId?: string, file?: File) => {
+  const openSubmit = (tileId?: string, file?: File, taskId?: string) => {
     setSubmitInitialTileId(tileId);
+    setSubmitInitialTaskId(tileId ? taskId : undefined);
     setSubmitInitialFile(file);
     setDrawerOpen(false);
     setSubmitOpen(true);
@@ -163,11 +165,13 @@ export function BingoPageProvider({
     submit: {
       open: submitOpen,
       initialTileId: submitInitialTileId,
+      initialTaskId: submitInitialTaskId,
       initialFile: submitInitialFile,
       show: openSubmit,
       hide: () => {
         setSubmitOpen(false);
         setSubmitInitialTileId(undefined);
+        setSubmitInitialTaskId(undefined);
         setSubmitInitialFile(undefined);
       },
     },
@@ -178,10 +182,10 @@ export function BingoPageProvider({
       goToDraft: () => navigate(`/b/${slug}/draft`),
     },
     tileInterest: {
-      toggle: (tileId) => {
+      toggle: (tileId, taskId) => {
         if (!canToggleInterest) return;
-        const mine = interests.some((i) => i.tileId === tileId && i.user.id === user.id);
-        setTileInterest.mutate({ teamId: myTeam.id, tileId, user, interested: !mine });
+        const mine = interests.some((i) => i.taskId === taskId && i.user.id === user.id);
+        setTileInterest.mutate({ teamId: myTeam.id, tileId, taskId, user, interested: !mine });
       },
     },
   };

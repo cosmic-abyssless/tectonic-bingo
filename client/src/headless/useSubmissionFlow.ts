@@ -17,11 +17,14 @@ interface StagedClaim {
 
 export function useSubmissionFlow({
   initialTileId,
+  initialTaskId,
   initialFile,
   onClose,
   onSuccess,
 }: {
   initialTileId?: string;
+  /** Pre-picks a part of `initialTileId`; ignored without a tile. */
+  initialTaskId?: string;
   initialFile?: File;
   onClose: () => void;
   onSuccess: () => void;
@@ -29,7 +32,7 @@ export function useSubmissionFlow({
   const { slug, bingo, tiles, categories, nodeStates, teamSubmissions } = useBingoPageRaw();
 
   const [selectedTileId, setSelectedTileId] = useState(initialTileId ?? "");
-  const [selectedTaskId, setSelectedTaskId] = useState("");
+  const [selectedTaskId, setSelectedTaskId] = useState(initialTileId ? (initialTaskId ?? "") : "");
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [stagedClaims, setStagedClaims] = useState<StagedClaim[]>([]);
   const [imageFile, setImageFile] = useState<File | null>(null);

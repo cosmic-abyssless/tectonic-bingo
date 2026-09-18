@@ -545,18 +545,19 @@ router.put(
   }),
 );
 
-// A player raises or lowers their hand for a tile on their own team's board.
+// A player raises or lowers their hand for one part (task) of a tile on their
+// own team's board.
 router.put(
-  "/:slug/tiles/:tileId/interest",
+  "/:slug/tiles/:tileId/tasks/:taskId/interest",
   requireAuth,
   requireBingo,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
     const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
-    if (!myTeam) throw new ServiceError(403, "You need to be on a team to claim a tile");
+    if (!myTeam) throw new ServiceError(403, "You need to be on a team to claim a task");
 
     const { interested } = req.body as { interested?: boolean };
-    teamService.setTileInterest(db, myTeam.id, req.user!.id, req.params.tileId as string, interested === true);
+    teamService.setTileInterest(db, myTeam.id, req.user!.id, req.params.tileId as string, req.params.taskId as string, interested === true);
     broadcast({ type: "tile_interest_changed", bingoId: bingo.id, payload: { teamId: myTeam.id } });
     res.json(teamService.getTeamProgress(db, myTeam.id));
   }),

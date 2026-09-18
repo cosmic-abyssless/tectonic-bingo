@@ -59,9 +59,17 @@ export interface ThemeSlots {
   // actually skip re-rendering unchanged tiles — see BoardGrid.tsx.
   TileCell: ComponentType<{ tile: TileModel; onOpen: (tileId: string) => void; isSearchHighlighted?: boolean }>;
   PreStartBanner: ComponentType<{ startsAt: number }>;
-  // onToggleInterest flips the viewer's hand for the open tile; only wired when
-  // tile.interest.canToggle, so themes can hide the control otherwise.
-  TileModal: ComponentType<{ tile: TileModel | null; isOpen: boolean; onClose: () => void; onSubmit?: () => void; onToggleInterest?: () => void }>;
+  // onSubmit opens the submission flow for the open tile, optionally pre-picking
+  // one of its parts. onToggleInterest flips the viewer's hand for a part; only
+  // wired when some part has interest.canToggle — themes should still check
+  // task.interest.canToggle per part before showing the control.
+  TileModal: ComponentType<{
+    tile: TileModel | null;
+    isOpen: boolean;
+    onClose: () => void;
+    onSubmit?: (taskId?: string) => void;
+    onToggleInterest?: (taskId: string) => void;
+  }>;
   TaskPanel: ComponentType<{ task: TaskModel }>;
   RequirementTree: ComponentType<{ node: RequirementNodeModel; root?: boolean }>;
   TileSubmissions: ComponentType<{ submissions: SubmissionModel[] }>;

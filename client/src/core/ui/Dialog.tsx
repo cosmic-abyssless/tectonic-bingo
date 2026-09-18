@@ -42,11 +42,11 @@ export function Dialog({
   );
 }
 
-export function DialogHeader({ title, subtitle, onClose, action }: { title: string; subtitle?: string; onClose: () => void; action?: ReactNode }) {
+export function DialogHeader({ title, subtitle, onClose, action }: { title: ReactNode; subtitle?: string; onClose: () => void; action?: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-outline p-5">
       <div className="min-w-0">
-        <Heading slot="title" className="text-base font-semibold text-on-surface">
+        <Heading slot="title" className="flex items-center gap-2 text-base font-semibold text-on-surface">
           {title}
         </Heading>
         {subtitle && <p className="mt-0.5 text-sm text-on-surface-muted">{subtitle}</p>}

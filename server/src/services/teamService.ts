@@ -2,7 +2,7 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { FieldChanges } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { draftPicks, pickRatings, signupAnswers, signups, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tileInterests, tiles, users } from "../db/schema";
+import { draftPicks, nodeEdges, nodes, pickRatings, signupAnswers, signups, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tileInterests, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
 import { PUBLIC_SIGNUP_COLS } from "./signupService";
@@ -73,14 +73,14 @@ export interface TeamProgressSummary {
   nodeStates: (typeof teamNodeState.$inferSelect)[];
   adjustments: (typeof teamPointAdjustments.$inferSelect)[];
   totalPoints: number;
-  interests: { tileId: string; user: Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">; createdAt: Date }[];
+  interests: { tileId: string; taskId: string; user: Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">; createdAt: Date }[];
 }
 
 export function getTeamProgress(db: Db, teamId: string): TeamProgressSummary {
   const nodeStates = db.select().from(teamNodeState).where(eq(teamNodeState.teamId, teamId)).all();
   const adjustments = db.select().from(teamPointAdjustments).where(eq(teamPointAdjustments.teamId, teamId)).all();
   const interests = db
-    .select({ tileId: tileInterests.tileId, user: MINIMAL_USER_COLS, createdAt: tileInterests.createdAt })
+    .select({ tileId: tileInterests.tileId, taskId: tileInterests.taskId, user: MINIMAL_USER_COLS, createdAt: tileInterests.createdAt })
     .from(tileInterests)
     .innerJoin(users, eq(tileInterests.userId, users.id))
     .where(eq(tileInterests.teamId, teamId))
@@ -92,28 +92,36 @@ export function getTeamProgress(db: Db, teamId: string): TeamProgressSummary {
   return { nodeStates, adjustments, totalPoints: nodePoints + adjustmentPoints, interests };
 }
 
-// A member raises (or lowers) their hand for a tile. Team-scoped so leaving a
-// team takes the hand down with it; the tile must belong to the team's bingo.
-export function setTileInterest(db: Db, teamId: string, userId: string, tileId: string, interested: boolean): void {
+// A member raises (or lowers) their hand for one part (task) of a tile.
+// Team-scoped so leaving a team takes the hand down with it; the task must be
+// a direct child of the tile's root and the tile must belong to the team's bingo.
+export function setTileInterest(db: Db, teamId: string, userId: string, tileId: string, taskId: string, interested: boolean): void {
   db.transaction((tx) => {
     const team = tx.select({ bingoId: teams.bingoId }).from(teams).where(eq(teams.id, teamId)).get();
-    const tile = tx.select({ id: tiles.id, bingoId: tiles.bingoId, name: tiles.name }).from(tiles).where(eq(tiles.id, tileId)).get();
+    const tile = tx.select({ id: tiles.id, bingoId: tiles.bingoId, name: tiles.name, nodeId: tiles.nodeId }).from(tiles).where(eq(tiles.id, tileId)).get();
     if (!team || !tile || tile.bingoId !== team.bingoId) throw new ServiceError(404, "Tile not found");
+    const task = tx
+      .select({ label: nodes.label })
+      .from(nodeEdges)
+      .innerJoin(nodes, eq(nodeEdges.childId, nodes.id))
+      .where(and(eq(nodeEdges.parentId, tile.nodeId), eq(nodeEdges.childId, taskId)))
+      .get();
+    if (!task) throw new ServiceError(404, "Task not found on this tile");
 
-    const where = and(eq(tileInterests.tileId, tileId), eq(tileInterests.userId, userId));
+    const where = and(eq(tileInterests.taskId, taskId), eq(tileInterests.userId, userId));
     const existing = tx.select({ id: tileInterests.id }).from(tileInterests).where(where).get();
     if (interested === !!existing) {
       markAuditedNoop();
       return;
     }
-    if (interested) tx.insert(tileInterests).values({ tileId, teamId, userId }).run();
+    if (interested) tx.insert(tileInterests).values({ tileId, taskId, teamId, userId }).run();
     else tx.delete(tileInterests).where(where).run();
     audit(tx, {
       action: "team.tile_interest_set",
       bingoId: team.bingoId,
       entity: { type: "tile", id: tileId, label: tile.name },
       teamId,
-      details: { tileName: tile.name, interested },
+      details: { tileName: tile.name, taskLabel: task.label ?? "Untitled part", interested },
     });
   });
 }

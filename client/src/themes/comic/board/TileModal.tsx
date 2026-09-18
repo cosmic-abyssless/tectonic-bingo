@@ -111,8 +111,8 @@ export function TileModal({
   tile: TileModel | null;
   isOpen: boolean;
   onClose: () => void;
-  onSubmit?: () => void;
-  onToggleInterest?: () => void;
+  onSubmit?: (taskId?: string) => void;
+  onToggleInterest?: (taskId: string) => void;
 }) {
   return (
     // mode="wait": switching straight from one tile to another (via the
@@ -701,8 +701,8 @@ function FlyingBook({
 }: {
   tile: TileModel;
   onClose: () => void;
-  onSubmit?: () => void;
-  onToggleInterest?: () => void;
+  onSubmit?: (taskId?: string) => void;
+  onToggleInterest?: (taskId: string) => void;
 }) {
   const [isPresent, safeToRemove] = usePresence();
   const [scope, animate] = useAnimate<HTMLDivElement>();
@@ -1392,7 +1392,10 @@ function SummaryPage({
         >
           {onToggleInterest && (
             <AriaButton
-              onPress={onToggleInterest}
+              onPress={() => {
+                const first = tile.tasks[0]?.id;
+                if (first) onToggleInterest(first);
+              }}
               aria-pressed={tile.interest.mine}
               className="cursor-pointer flex items-center gap-1.5 rounded-full border-[3px] px-3 py-1 text-sm font-bold uppercase transition-transform duration-100 pressed:scale-95 hover:-translate-y-0.5"
               style={{

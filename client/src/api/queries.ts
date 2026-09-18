@@ -64,19 +64,20 @@ export function useTeamProgress(slug: string | undefined, teamId: string | undef
 
 // Raising a hand should feel instant, so the viewer's own interest lands in the
 // cached team progress before the server confirms it. Only the acting user's
-// team is ever affected, so the caller passes that team id.
+// team is ever affected, so the caller passes that team id. Interest is per
+// task (a tile "part"), so the same user can be on several parts of one tile.
 export function useSetTileInterest(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ teamId, tileId, user, interested }: { teamId: string; tileId: string; user: MinimalUser; interested: boolean }) =>
+    mutationFn: ({ teamId, tileId, taskId, user, interested }: { teamId: string; tileId: string; taskId: string; user: MinimalUser; interested: boolean }) =>
       optimisticUpdate<TeamProgressSummary>(
         queryClient,
         queryKeys.teamProgress(slug, teamId),
         (prev) => ({
           ...prev,
-          interests: [...prev.interests.filter((i) => !(i.tileId === tileId && i.user.id === user.id)), ...(interested ? [{ tileId, user, createdAt: new Date().toISOString() }] : [])],
+          interests: [...prev.interests.filter((i) => !(i.taskId === taskId && i.user.id === user.id)), ...(interested ? [{ tileId, taskId, user, createdAt: new Date().toISOString() }] : [])],
         }),
-        () => api.put<TeamProgressSummary>(`/api/bingos/${slug}/tiles/${tileId}/interest`, { interested }),
+        () => api.put<TeamProgressSummary>(`/api/bingos/${slug}/tiles/${tileId}/tasks/${taskId}/interest`, { interested }),
       ),
   });
 }
