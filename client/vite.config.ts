@@ -32,6 +32,10 @@ export default defineConfig({
         target: apiTarget,
         changeOrigin: true,
       },
+      "/wiki-icons": {
+        target: apiTarget,
+        changeOrigin: true,
+      },
       "/ws": {
         target: wsTarget,
         ws: true,

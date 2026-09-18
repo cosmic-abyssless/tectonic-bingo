@@ -6,6 +6,11 @@ import path from "path";
 // destinations and the static `/uploads` route must use this same directory.
 export const UPLOADS_DIR = process.env.UPLOADS_DIR ?? path.join(__dirname, "../uploads");
 
+// Cached OSRS wiki item icons (middleware/wikiIcons.ts). Under the uploads dir so it
+// lives on the same persistent volume, but it is a disposable cache: anything in
+// here is re-fetched on demand.
+export const WIKI_ICONS_DIR = path.join(UPLOADS_DIR, "wiki-icons");
+
 // Sent on every outbound request to third-party APIs (Wise Old Man, RuneProfile,
 // the OSRS wiki, tectonic-api). WOM's API rules ask for a way to contact the
 // operator and will IP-ban anonymous abusers, so set USER_AGENT_CONTACT to a
