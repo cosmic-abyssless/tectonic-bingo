@@ -1580,8 +1580,21 @@ function SwipeZone({ side, leaf, face, swipe }: { side: "left" | "right"; leaf: 
       under?.closest<HTMLElement>("button, a, [role='button'], label, input, select, textarea, summary")?.click();
     },
   });
+  // The zone covers part of the page, so a mouse wheel over it scrolls the page too.
+  const zoneRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const zone = zoneRef.current;
+    if (!zone) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      swipe.scroll(e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY);
+    };
+    zone.addEventListener("wheel", onWheel, { passive: false });
+    return () => zone.removeEventListener("wheel", onWheel);
+  }, [swipe]);
   return (
     <div
+      ref={zoneRef}
       aria-hidden="true"
       data-swipe-zone={side}
       className="absolute inset-y-0"
