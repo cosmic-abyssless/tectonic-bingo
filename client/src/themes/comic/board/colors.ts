@@ -153,6 +153,19 @@ export function pageColors(c: ComicColors): ComicColors {
   return c.page ? { ...c, ...c.page, page: undefined } : c;
 }
 
+/** The blue of a frozen tile: the freeze colour pulled toward the palette's blue, so washed over cream paper it stays blue rather than going grey-green. */
+export function iceBlue(c: ComicColors): string {
+  return `color-mix(in srgb, ${c.FROZEN} 55%, ${c.BLUE})`;
+}
+
+/** The palette for a tile's pages (see pageColors), washed with the freeze blue if the tile is frozen — the blue taken from the theme's own colours, not the page stock's. */
+export function tilePageColors(c: ComicColors, frozen: boolean): ComicColors {
+  const page = pageColors(c);
+  if (!frozen) return page;
+  const wash = (paper: string, pct: number) => `color-mix(in srgb, ${iceBlue(c)} ${pct}%, ${paper})`;
+  return { ...page, PAPER: wash(page.PAPER, 42), PAPER_ALT: wash(page.PAPER_ALT, 52), PAPER_RAISED: wash(page.PAPER_RAISED, 28) };
+}
+
 /**
  * The "TECTONIC" masthead: white lettering on a red box, in every palette,
  * because it's meant to read as a comic publisher's logo (think Marvel's) —

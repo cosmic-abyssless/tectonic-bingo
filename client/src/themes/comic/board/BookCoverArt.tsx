@@ -4,7 +4,7 @@ import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { getContrastTextColor, useDominantColor } from "../useDominantColor";
 import { thumbUrl, fullUrl } from "../../../api/imageVariants";
 import { formatCountdown } from "../../../core/ui/time";
-import { pageColors, TECTONIC_LOGO, type ComicColors } from "./colors";
+import { iceBlue, pageColors, TECTONIC_LOGO, type ComicColors } from "./colors";
 
 /*
  * The face of a tile's comic book cover: extracted-from-artwork background,
@@ -84,7 +84,7 @@ export function BookCoverArt({
           />
         </div>
       ) : null}
-      {frozen && <FrozenIce colors={colors} />}
+      {frozen && <FrozenWash colors={colors} />}
       {/* Masthead + the tile's points, left-aligned in a row so the score
           reads right off the logo instead of floating in its own corner. */}
       <div className="absolute inset-x-[3cqw] top-[3.5cqw] flex items-baseline gap-[1.8cqw]">
@@ -118,6 +118,7 @@ export function BookCoverArt({
         </div>
       )}
 
+      {frozen && <Icicles colors={colors} />}
       {frozen && <FreezeTimer colors={colors} remainingMs={tile.freeze.remainingMs} />}
     </div>
   );
@@ -130,40 +131,50 @@ const ICICLES: [number, number, number][] = [
   [54, 11, 28], [65, 8, 19], [73, 10, 33], [83, 8, 16], [91, 11, 24],
 ];
 
+const frost = (colors: ComicColors, pct: number) => `color-mix(in srgb, ${iceBlue(colors)} ${pct}%, transparent)`;
+
 /**
- * A frozen tile's cover, iced over: a blue wash (the artwork still shows
- * through), a frosted rim, and icicles hanging from the top edge — drawn
- * before the masthead so the lettering stays on top of the ice.
+ * A frozen tile's cover, tinted freeze-blue: the artwork keeps its light and
+ * dark but takes the blue's hue (a "color" blend), heaviest at the top, and
+ * the rim is frosted. Drawn under the masthead so the lettering stays put.
  */
-function FrozenIce({ colors }: { colors: ComicColors }) {
+function FrozenWash({ colors }: { colors: ComicColors }) {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0"
+      style={{
+        background: `linear-gradient(to bottom, ${frost(colors, 92)}, ${frost(colors, 72)} 45%, ${frost(colors, 46)} 80%)`,
+        mixBlendMode: "color",
+        boxShadow: `inset 0 0 12cqw color-mix(in srgb, ${colors.ICE} 80%, transparent)`,
+      }}
+    />
+  );
+}
+
+/**
+ * Icicles hanging from the top edge, over everything on the cover (the
+ * lettering shows through them): translucent ice with a shaded facet and a
+ * glint, outlined down their two sides only — no line along the top.
+ */
+function Icicles({ colors }: { colors: ComicColors }) {
   const ink = pageColors(colors).LINE;
-  const drop = ([x, w, len]: [number, number, number]) => `M${x} 0Q${x + w * 0.15} ${len * 0.55} ${x + w / 2} ${len}Q${x + w * 0.85} ${len * 0.55} ${x + w} 0Z`;
+  const drop = ([x, w, len]: [number, number, number]) => `M${x} 0Q${x + w * 0.15} ${len * 0.55} ${x + w / 2} ${len}Q${x + w * 0.85} ${len * 0.55} ${x + w} 0`;
   // The right-hand half of each icicle, shaded.
   const facet = ([x, w, len]: [number, number, number]) => `M${x + w / 2} 0H${x + w}Q${x + w * 0.85} ${len * 0.55} ${x + w / 2} ${len}Z`;
-  const glint = ([x, w, len]: [number, number, number]) => `M${x + w * 0.27} 4Q${x + w * 0.3} ${len * 0.32} ${x + w * 0.38} ${len * 0.52}`;
-  const frost = (pct: number) => `color-mix(in srgb, ${colors.FROZEN} ${pct}%, transparent)`;
+  const glint = ([x, w, len]: [number, number, number]) => `M${x + w * 0.27} 3Q${x + w * 0.3} ${len * 0.32} ${x + w * 0.38} ${len * 0.52}`;
   return (
-    <>
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background: `linear-gradient(to bottom, ${frost(60)}, ${frost(34)} 40%, ${frost(16)} 75%)`,
-          boxShadow: `inset 0 0 12cqw color-mix(in srgb, ${colors.ICE} 75%, transparent)`,
-        }}
-      />
-      <svg viewBox="0 0 100 40" className="pointer-events-none absolute inset-x-0 top-0 block w-full overflow-visible" aria-hidden="true">
-        <g strokeLinejoin="round" strokeLinecap="round">
-          {ICICLES.map((ic) => (
-            <g key={ic[0]}>
-              <path d={drop(ic)} fill={colors.ICE} stroke={ink} strokeWidth={1.1} />
-              <path d={facet(ic)} fill={colors.ICE_DEEP} />
-              <path d={glint(ic)} fill="none" stroke={colors.ICE_SHINE} strokeWidth={1.1} />
-            </g>
-          ))}
-          <path d="M-3 -3H103V3.6H-3Z" fill={colors.ICE} stroke={ink} strokeWidth={1.1} />
-        </g>
-      </svg>
-    </>
+    <svg viewBox="0 0 100 40" className="pointer-events-none absolute inset-x-0 top-0 block w-full overflow-visible" aria-hidden="true">
+      <g strokeLinejoin="round" strokeLinecap="round">
+        {ICICLES.map((ic) => (
+          <g key={ic[0]}>
+            <path d={`${drop(ic)}Z`} fill={colors.ICE} fillOpacity={0.4} />
+            <path d={facet(ic)} fill={colors.ICE_DEEP} fillOpacity={0.32} />
+            <path d={drop(ic)} fill="none" stroke={ink} strokeOpacity={0.75} strokeWidth={0.9} />
+            <path d={glint(ic)} fill="none" stroke={colors.ICE_SHINE} strokeOpacity={0.9} strokeWidth={1.1} />
+          </g>
+        ))}
+      </g>
+    </svg>
   );
 }
 
@@ -172,20 +183,20 @@ function FreezeTimer({ colors, remainingMs }: { colors: ComicColors; remainingMs
   const ink = pageColors(colors).LINE;
   return (
     <div
-      className="pointer-events-none absolute left-1/2 flex items-center gap-[1.6cqw] whitespace-nowrap leading-none"
+      className="pointer-events-none absolute left-1/2 flex items-center gap-[2.4cqw] whitespace-nowrap leading-none"
       style={{
-        top: "66cqw",
+        top: "64cqw",
         transform: "translate(-50%, -50%) rotate(-3deg)",
-        padding: "2.2cqw 4cqw",
+        padding: "3cqw 5.5cqw",
         background: colors.ICE,
         color: colors.ON_ICE,
-        border: `1cqw solid ${ink}`,
-        boxShadow: `1.6cqw 1.6cqw 0 ${ink}`,
+        border: `1.3cqw solid ${ink}`,
+        boxShadow: `2cqw 2cqw 0 ${ink}`,
         fontFamily: COMIC_FONT,
-        fontSize: "11cqw",
+        fontSize: "17cqw",
       }}
     >
-      <svg viewBox="0 0 24 24" className="h-[10cqw] w-[10cqw] shrink-0" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg viewBox="0 0 24 24" className="h-[15cqw] w-[15cqw] shrink-0" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10M9 4l3 2.5L15 4M9 20l3-2.5 3 2.5" />
       </svg>
       <span className="num">{formatCountdown(remainingMs)}</span>

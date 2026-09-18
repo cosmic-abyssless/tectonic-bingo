@@ -4,7 +4,7 @@ import { motion, type Variants } from "motion/react";
 import type { TileModel } from "../../../headless/types";
 import { COMIC_FONT } from "../font";
 import { BookBackArt, BookCoverArt, coverTaskMark } from "./BookCoverArt";
-import { pageColors, type ComicColors } from "./colors";
+import { pageColors, tilePageColors, type ComicColors } from "./colors";
 
 /*
  * The comic book itself — a stack of leaves hinged along the spine, with a
@@ -156,7 +156,7 @@ export function ClosedBook({
   // The pages inside can be a different stock from the rest of the theme —
   // and the whole book, cover included, is outlined in the page ink, so the
   // cover's outline matches the pages'.
-  const page = pageColors(colors);
+  const page = tilePageColors(colors, frozen);
   const ink = page.LINE;
   // Ink outlines: about 1px on a tile-sized book, 6–8px on the open spread.
   const pageBorder = `${bw(0.012)} solid ${ink}`;

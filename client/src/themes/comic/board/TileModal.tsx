@@ -51,7 +51,7 @@ import {
 import { ComicBurstRays } from "../ui/ComicBurst";
 import { PageFooter } from "./PageFooter";
 import { getBookPose, setBookAway } from "./bookFlight";
-import { pageColors, TECTONIC_LOGO, type ComicColors } from "./colors";
+import { pageColors, tilePageColors, TECTONIC_LOGO, type ComicColors } from "./colors";
 
 /*
  * The tile modal IS the tile's comic book, opened — and it's a whole comic:
@@ -770,7 +770,7 @@ function FlyingBook({
   const burstRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
   const { colors } = useComic();
-  const page = pageColors(colors);
+  const page = tilePageColors(colors, tile.freeze.isFrozen);
   const tileId = tile.id;
 
   // Phone view (≤640px): one page at a time. The book is unchanged — the
@@ -1235,7 +1235,7 @@ function TileDetails({
   const { pageCount, innerLeaves } = bookShape(tile, single);
   const ordered = orderTasks(tile);
   // What's printed on the pages is drawn in the page stock, not the surrounding theme.
-  const page = pageColors(colors);
+  const page = tilePageColors(colors, tile.freeze.isFrozen);
 
   // The pages, in reading order.
   const pages: ReactNode[] = [
