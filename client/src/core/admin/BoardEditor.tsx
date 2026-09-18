@@ -8,6 +8,7 @@ import { previewGraphNode } from "../board/requirementTree";
 import { Notice } from "../ui/Card";
 import { LockIcon, PlusIcon } from "../ui/icons";
 import { CategoryEditor } from "./CategoryEditor";
+import { thumbUrl } from "../../api/imageVariants";
 import { TileEditorPanel } from "./TileEditorPanel";
 
 export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: Bingo; categories: TileCategory[] }) {
@@ -95,7 +96,7 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
                   style={category?.colorHex ? { borderColor: category.colorHex } : undefined}
                   className="flex aspect-square flex-col items-center justify-center overflow-hidden rounded-md border-2 border-outline-strong bg-surface p-1 text-center transition-colors hover:bg-surface-hover disabled:opacity-60"
                 >
-                  {tile.imageUrl && <img src={tile.imageUrl} alt="" className="mb-0.5 size-8 object-contain" />}
+                  {tile.imageUrl && <img src={thumbUrl(tile.imageUrl)} alt="" className="mb-0.5 size-8 object-contain" />}
                   <span className="line-clamp-2 text-[10px] leading-tight text-on-surface">{tile.name}</span>
                   <span className="num text-[9px] text-on-surface-subtle">
                     {tile.node.children.length} task{tile.node.children.length !== 1 ? "s" : ""}

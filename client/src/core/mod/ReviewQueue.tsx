@@ -11,6 +11,7 @@ import { Field, Input, Textarea } from "../ui/Field";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { ScreenshotThumb } from "../submissions/ScreenshotThumb";
 import { claimsSummary } from "../submissions/claimsSummary";
+import { fullUrl } from "../../api/imageVariants";
 
 function KeyCap({ children }: { children: React.ReactNode }) {
   return (
@@ -257,7 +258,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
                       <div key={ss.id}>
                         <a href={ss.storageUrl} target="_blank" rel="noreferrer" title="Open full size in new tab" className="block">
                           <img
-                            src={ss.storageUrl}
+                            src={fullUrl(ss.storageUrl)}
                             alt={ss.screenshotType}
                             className="max-h-[60vh] w-full rounded-md border border-outline bg-black object-contain transition-colors hover:border-outline-strong"
                           />

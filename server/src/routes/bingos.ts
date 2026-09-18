@@ -53,7 +53,7 @@ function matchRsn(member: TectonicDetailedUser | null, rsn: string): { womId: st
   return match ? { womId: match.wom_id, rsnVerified: true } : { womId: null, rsnVerified: false };
 }
 
-const upload = imageUpload(UPLOADS_DIR);
+const upload = imageUpload(UPLOADS_DIR, { variants: true });
 // Separate instance for analysis — memory only, nothing saved to disk.
 const analyzeUpload = imageUpload();
 

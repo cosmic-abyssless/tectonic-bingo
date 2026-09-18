@@ -3,6 +3,7 @@ import type { TileModel } from "../../../headless/types";
 import { formatCountdown } from "../../../core/ui/time";
 import { TASK_STATUS_DOT } from "../../../core/ui/StatusBadge";
 import { CheckIcon, ClockIcon, HandIcon, LockIcon } from "../../../core/ui/icons";
+import { thumbUrl } from "../../../api/imageVariants";
 
 /*
  * Board tile. All colours come from the `--tile-*` variables set by the
@@ -29,7 +30,7 @@ export const TileCell = memo(function TileCell({ tile, onOpen }: { tile: TileMod
     >
       {tile.imageUrl && !imgFailed ? (
         <img
-          src={tile.imageUrl}
+          src={thumbUrl(tile.imageUrl)}
           alt={tile.name}
           onError={() => setImgFailed(true)}
           className={`absolute inset-0 h-full w-full object-contain p-1.5 transition-transform duration-150 ${

@@ -22,6 +22,7 @@ import { PlayerName } from "../../../core/tectonic/PlayerName";
 import { formatCountdown } from "../../../core/ui/time";
 import { useResolvedColorScheme } from "../../../core/ui/colorScheme";
 import { useSlot, useThemeTokens } from "../../context";
+import { thumbUrl } from "../../../api/imageVariants";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { CaptionBox } from "../ui/CaptionBox";
@@ -1146,6 +1147,7 @@ function TileDetails({
               pose={{ coverAngle: CLOSED_BOOK.coverAngle, pageAngle: CLOSED_BOOK.pageAngle }}
               coverInside={face(0, "back")}
               leaves={leaves}
+              coverImageVariant="full"
             />
           </div>
         </div>
@@ -1204,7 +1206,7 @@ function TileDetails({
       {tile.imageUrl && (
         <img
           data-extra
-          src={tile.imageUrl}
+          src={thumbUrl(tile.imageUrl)}
           alt={tile.name}
           className="border-2 absolute -top-[8.25rem] -left-14 size-36 shrink-0 object-contain -rotate-12"
           style={{ borderColor: colors.INK, opacity: 0 }}

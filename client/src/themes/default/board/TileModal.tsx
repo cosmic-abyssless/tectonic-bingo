@@ -6,6 +6,7 @@ import { Badge } from "../../../core/ui/Card";
 import { ClockIcon, HandIcon, XIcon } from "../../../core/ui/icons";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
 import { useSlot } from "../../context";
+import { thumbUrl } from "../../../api/imageVariants";
 
 /** `tile` null while `isOpen` transitions closed (kept mounted so it can animate out). */
 export function TileModal({
@@ -48,7 +49,7 @@ function TileDetails({
     <>
       <div className="flex items-start justify-between gap-4 border-b p-5" style={{ borderColor: tile.category?.color ?? undefined }}>
         <div className="flex min-w-0 items-center gap-4">
-          {tile.imageUrl && <img src={tile.imageUrl} alt="" className="size-14 shrink-0 object-contain" />}
+          {tile.imageUrl && <img src={thumbUrl(tile.imageUrl)} alt="" className="size-14 shrink-0 object-contain" />}
           <div className="min-w-0">
             <Heading slot="title" className="text-lg font-semibold text-on-surface">
               {tile.name}
