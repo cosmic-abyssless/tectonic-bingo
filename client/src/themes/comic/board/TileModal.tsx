@@ -1548,7 +1548,7 @@ function TaskPage({
         <div className="mb-4 border-b-[3px] pb-4 pr-12" style={{ borderColor: colors.INK }}>
           <div className="flex flex-wrap items-center gap-3">
             {onSubmit && (
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col items-start gap-1">
                 <ComicButton
                   variant="primary"
                   isDisabled={submitDisabled}
@@ -1557,7 +1557,7 @@ function TaskPage({
                   Submit
                 </ComicButton>
                 {submitReason && (
-                  <span className="text-xs" style={{ color: colors.INK_SUBTLE }}>
+                  <span className="max-w-[180px] text-xs leading-tight" style={{ color: colors.INK_SUBTLE }}>
                     {submitReason}
                   </span>
                 )}
