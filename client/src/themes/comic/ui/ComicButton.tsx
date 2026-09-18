@@ -1,6 +1,7 @@
-import { Button as AriaButton, type ButtonProps as AriaButtonProps } from "react-aria-components";
+import { Button as AriaButton, type ButtonProps as AriaButtonProps, type PressEvent } from "react-aria-components";
 import type { CSSProperties, ReactNode } from "react";
 import { COMIC_FONT } from "../font";
+import { sfxAt } from "../fx/SfxLayer";
 import { useComic } from "./useComic";
 
 export type ComicButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "yellow";
@@ -18,10 +19,12 @@ export interface ComicButtonProps extends AriaButtonProps {
   children?: ReactNode;
   /** Slight tilt in degrees for a hand-placed look. */
   tilt?: number;
+  /** Custom SFX text, or false to disable automatic sound burst. */
+  sfx?: string | false;
 }
 
 /** Bangers-lettered, ink-bordered, hard-shadowed button that presses into its shadow. */
-export function ComicButton({ variant = "secondary", size = "md", tilt = 0, className, style, ...props }: ComicButtonProps) {
+export function ComicButton({ variant = "secondary", size = "md", tilt = 0, sfx, className, style, onPress, ...props }: ComicButtonProps) {
   const { colors } = useComic();
   const fills: Record<ComicButtonVariant, { bg: string; fg: string; border: string }> = {
     primary: { bg: colors.RED, fg: "#fffaf0", border: colors.INK },
@@ -43,9 +46,18 @@ export function ComicButton({ variant = "secondary", size = "md", tilt = 0, clas
     ["--comic-ink" as string]: colors.INK,
     ...style,
   };
+
+  const handlePress = (e: PressEvent) => {
+    if (sfx !== false) {
+      sfxAt(e.target, sfx ? { text: sfx } : undefined);
+    }
+    onPress?.(e);
+  };
+
   return (
     <AriaButton
       {...props}
+      onPress={handlePress}
       style={s}
       className={`comic-press inline-flex items-center justify-center whitespace-nowrap rounded-md border-[3px] select-none uppercase leading-none disabled:cursor-not-allowed disabled:opacity-40 ${raised ? "" : "hover:underline"} ${SIZE[size]} ${className ?? ""}`}
     />
@@ -53,12 +65,21 @@ export function ComicButton({ variant = "secondary", size = "md", tilt = 0, clas
 }
 
 /** Round close/icon button in the same idiom. */
-export function ComicIconButton({ label, className, style, ...props }: AriaButtonProps & { label: string; style?: CSSProperties }) {
+export function ComicIconButton({ label, sfx, className, style, onPress, ...props }: AriaButtonProps & { label: string; sfx?: string | false; style?: CSSProperties }) {
   const { colors } = useComic();
+
+  const handlePress = (e: PressEvent) => {
+    if (sfx !== false) {
+      sfxAt(e.target, sfx ? { text: sfx } : undefined);
+    }
+    onPress?.(e);
+  };
+
   return (
     <AriaButton
       aria-label={label}
       {...props}
+      onPress={handlePress}
       style={{ background: colors.PAPER_RAISED, color: colors.INK, borderColor: colors.INK, boxShadow: `3px 3px 0 ${colors.INK}`, ["--comic-ink" as string]: colors.INK, ...style }}
       className={`comic-press inline-flex size-10 items-center justify-center rounded-full border-[3px] disabled:opacity-40 ${className ?? ""}`}
     />
