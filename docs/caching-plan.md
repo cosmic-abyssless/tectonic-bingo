@@ -3,7 +3,10 @@
 **Status:** approved plan, not yet implemented. Written 2026-09-18 against
 `main` at `8db94a0` (PR #64, image variants, merged).
 **Scope:** https://github.com/cosmic-abyssless/tectonic-bingo/issues/63 —
-aggressively cache tile images, wiki images, and the board structure.
+aggressively cache tile images, wiki images, and the board structure — **and
+show the wiki item icons in the player-facing tile modal** (revised the same
+day: icons are now a user-facing feature, so they get a server-side cache and
+client rendering, not just admin-editor treatment).
 **No schema or migration changes anywhere in this plan.** No service worker.
 
 ## What was measured (so you don't re-derive it)
@@ -19,12 +22,24 @@ aggressively cache tile images, wiki images, and the board structure.
   written once, atomically, and never regenerated
   (`server/src/middleware/imageVariants.ts`). So a `/uploads/...` URL's bytes
   never change → safe to mark `immutable`.
-- **Wiki icons** load only in the admin editor (`client/src/core/ui/ItemSearchInput.tsx`
-  `iconUrlFor()` ~line 13 and the dropdown's server-provided `iconUrl`;
-  `client/src/core/admin/RequirementTreeEditor.tsx` ~line 40). The wiki CDN
-  sends `max-age=300, s-maxage=86400, stale-while-revalidate=300` — 5 minutes
-  of browser cache. 248 distinct items, icons are a few hundred bytes each.
-  **Decision: not proxying them in this plan** (see "Out of scope").
+- **Wiki icons today** load only in the admin editor
+  (`client/src/core/ui/ItemSearchInput.tsx` `iconUrlFor()` ~line 13 and the
+  dropdown's server-provided `iconUrl` from `server/src/services/osrsWikiService.ts`;
+  `client/src/core/admin/RequirementTreeEditor.tsx` ~line 40), straight from
+  `https://oldschool.runescape.wiki/images/<Name_With_Underscores>.png`. The
+  wiki CDN sends `max-age=300, s-maxage=86400, stale-while-revalidate=300` (5
+  minutes of browser cache) and has no ETag. Icons are tiny (a few hundred
+  bytes). **This plan puts them in the player-facing tile modal**, so every
+  player's browser would otherwise hit the wiki directly — see Phases 4-5.
+- **Item names in the data**: 249 distinct `nodes.item_name` values across all
+  bingos (228 in the live comic bingo), on `ITEM` leaves (`428` leaf rows).
+  Sampling 14 real names against the wiki's URL convention: **13 returned an
+  icon** (`200 image/png`, 289-1198 bytes); 1 (`Rift guardian`, a pet whose
+  file has a different name) was a `404`. Some names in this app are
+  bingo-specific labels rather than real items ("Any Cerberus drop", "Waves
+  1-3 proof") and will never have an icon. So: expect roughly 90% coverage,
+  and the UI must degrade to "no icon" silently, and the server must remember
+  misses (negative caching) instead of re-asking the wiki.
 - **Board API**: `GET /api/bingos/:slug/board` is **175,747 B raw / 17,747 B
   gzipped** (25 tiles, 532 nodes), served **uncompressed** with no
   `Cache-Control`; Express's weak ETag already gives `304`s. It renders as an
@@ -217,7 +232,159 @@ request → "Block request URL", reload → tiles still render from cache; then
 unblock). Log out → the key is gone. Switch to a second dev user (if
 available) → their board is fetched, not the first user's.
 
-## Phase 4 — Refetch after a WebSocket reconnect
+## Phase 4 — Wiki icon cache (server)
+
+Goal: players never hit the OSRS wiki directly; each icon is fetched once,
+kept on disk, and served from our origin with long cache headers. The admin
+editor keeps using direct wiki URLs (it shows icons for candidate items that
+aren't in the DB yet) — do not change it.
+
+### 4a. `server/src/services/itemNames.ts` — which names are allowed
+
+`getKnownItemNames(): Set<string>` — the distinct trimmed `nodes.item_name`
+values where `kind = 'ITEM'` and not null, across all bingos, memoised for 60
+seconds (module-level `{ at, set }`; use `db` from `./db` and drizzle like the
+other services). This is the abuse gate: the route below only ever asks the
+wiki about names the app actually uses, so an unauthenticated visitor cannot
+make the server fetch arbitrary wiki files.
+
+### 4b. `server/src/middleware/wikiIcons.ts` — the route
+
+```ts
+export interface WikiIconOptions {
+  dir: string;                               // cache dir: path.join(UPLOADS_DIR, "wiki-icons")
+  isKnownName: (name: string) => boolean;    // wraps getKnownItemNames().has
+  fetchImpl?: typeof fetch;                  // injectable for tests
+  now?: () => number;                        // injectable for tests
+  enabled?: () => boolean;                   // false → never contact the wiki (serve cache only)
+}
+export function serveWikiIcons(opts: WikiIconOptions): RequestHandler;
+export function iconFileName(name: string): string; // `${sha1(name.trim()).hex.slice(0,16)}.png`
+```
+
+Mounted in `server/src/index.ts` as `app.use("/wiki-icons", serveWikiIcons({...}))`
+next to `/uploads`. **It is deliberately NOT under `/api`** (it is public static
+reference data, cached publicly). URL shape: `GET /wiki-icons/<encodeURIComponent(name)>.png`
+(and `HEAD`). Behaviour, in order:
+
+1. Decode the name, `trim()`. Reject with `404` if it is empty, longer than 120
+   chars, contains a control character, or `!isKnownName(name)`. (Nothing else
+   about the name is trusted; the on-disk file name is the hash, never the name.)
+2. If `dir/<hash>.png` exists → `res.sendFile` it with `Cache-Control: public,
+   max-age=2592000` (30 days — NOT `immutable`: wiki art is rarely but not
+   never updated, and our URL isn't content-addressed). `Content-Type: image/png`.
+3. Else if `dir/<hash>.miss` exists and is younger than 7 days (by mtime) →
+   `404` with `Cache-Control: public, max-age=86400`.
+4. Else if `enabled()` is false → `404`, `Cache-Control: no-store`, no fetch.
+5. Else fetch `https://oldschool.runescape.wiki/images/` +
+   `encodeURIComponent(name.replace(/ /g, "_")) + ".png"` with
+   `User-Agent: ${USER_AGENT} icon cache` (`USER_AGENT` from `server/src/config.ts`),
+   `AbortSignal.timeout(10_000)`:
+   - `200` **and** `content-type: image/png` **and** body ≤ 64 KB → write to a
+     temp file and `rename` into place (atomic, same as `imageService.ts`), then
+     serve as in step 2.
+   - `404` → write an empty `<hash>.miss` file, respond `404` as in step 3.
+   - anything else (5xx, timeout, network error, wrong content type, oversize)
+     → respond `404` with `Cache-Control: no-store`, write **no** marker, and
+     remember the failure in memory for 60 s so a flaky wiki isn't hammered.
+6. **Concurrency**: dedupe in-flight fetches per name (a `Map<hash, Promise>`
+   like `inFlight` in `server/src/middleware/imageVariants.ts`) and cap
+   simultaneous wiki fetches at 4 (a tiny queue/semaphore). A tile modal asks
+   for ~10-30 icons at once.
+
+`enabled` = the existing switch: reuse `isOsrsItemSearchEnabled()` from
+`server/src/routes/osrsItems.ts` (`OSRS_ITEM_SEARCH_DISABLED=true` is what
+E2E/CI set so nothing reaches the real wiki). Export it from where it lives or
+move it to `config.ts`; do not invent a second env var.
+
+### 4c. Tests — `server/src/middleware/wikiIcons.test.ts`
+
+In-process Express + `fetch` like `imageVariants.test.ts`, with an injected
+`fetchImpl` (no real network) and a temp dir. Cover: unknown name → `404` and
+the injected fetch is never called; first request fetches once, writes
+`<hash>.png`, returns `200 image/png` with `max-age=2592000`; second request
+does not fetch; 6 concurrent first requests → exactly 1 fetch; wiki `404` →
+`404` + a `.miss` marker + no second fetch within the TTL, and a refetch after
+advancing `now()` past 7 days; wiki `500`/thrown error → `404` `no-store`, no
+marker; non-`image/png` or oversize body rejected; `enabled: () => false` →
+serves a pre-seeded cached file but never fetches; names with traversal
+characters (`..%2F..%2Fx`) → `404` and nothing written outside `dir`.
+
+### 4d. Warm-up script — `server/scripts/warm-wiki-icons.ts`
+
+Node script (pattern: `server/scripts/ocr-smoke.ts` / `wipe-db.ts`; add
+`"wiki-icons:warm": "tsx scripts/warm-wiki-icons.ts"` to `server/package.json`,
+matching how the other scripts are run). Reads `getKnownItemNames()`, and for
+each name with neither `<hash>.png` nor a fresh `<hash>.miss` performs the same
+fetch-and-store as the route (export the fetch-and-store function from
+`wikiIcons.ts` and reuse it — do not duplicate), **sequentially with a 500 ms
+delay** (polite to the wiki), then prints `fetched / cached-miss / already
+cached / failed` counts. It must be safe to re-run. Purpose: run once after
+deploy so the first players don't pay the cold fetch; the route still works
+without it.
+
+**Manual check** (no writes beyond `server/uploads/wiki-icons/`):
+`curl -sI http://localhost:5173/wiki-icons/Justiciar%20faceguard.png` → `200`,
+`image/png`, `max-age=2592000`; the file appears under `server/uploads/wiki-icons/`;
+a repeat is served without touching the wiki (server log shows no fetch).
+`curl -sI .../wiki-icons/Definitely%20not%20an%20item.png` → `404` and **no**
+file and no wiki request. `curl -sI .../wiki-icons/Rift%20guardian.png` →
+`404` with `max-age=86400`, and a `.miss` file.
+
+## Phase 5 — Show the icons in the tile modal (client)
+
+### 5a. URL helper + shared component
+
+- `client/src/api/wikiIcons.ts`: `wikiIconUrl(name: string | null | undefined):
+  string | undefined` → `/wiki-icons/${encodeURIComponent(name.trim())}.png`;
+  `undefined` for null/empty. (Sibling of `client/src/api/imageVariants.ts`.)
+- `client/src/core/ui/ItemIcon.tsx`: `<ItemIcon url={string | null} className? />`
+  renders `<img src={url} alt="" loading="lazy" decoding="async"
+  draggable={false} className="size-5 shrink-0 object-contain" />` and, on
+  `onError`, hides itself (local `useState` → render `null`). Decorative (`alt=""`),
+  because the item name is always printed next to it. Returns `null` when
+  `url` is null. Both themes use this one component.
+
+### 5b. Model (`client/src/headless/types.ts`, `client/src/headless/boardModel.ts`)
+
+`RequirementNodeModel` (the interface already has `items: string[]`, added for
+SUM bullets):
+
+- add `iconUrl: string | null` — for an `ITEM` leaf, `wikiIconUrl(node.itemName)
+  ?? null`; `null` for everything else;
+- change `items: string[]` → `items: { name: string; iconUrl: string | null }[]`
+  (SUM only; `[]` otherwise), built from `sumItemNames(node)` in
+  `client/src/core/board/labels.ts` (keep that function returning `string[]` —
+  `leafLabel` uses it) mapped through `wikiIconUrl`.
+
+In `buildRequirementTree` (`boardModel.ts`) set both fields in the ITEM, SUM and
+composite branches (composite: `iconUrl: null`, `items: []`).
+
+### 5c. Render (`client/src/themes/comic/board/RequirementTree.tsx`,
+`client/src/themes/default/board/RequirementTree.tsx`)
+
+- ITEM leaf row (`LeafRow` / `LeafOrSumRow`): `<ItemIcon url={node.iconUrl} />`
+  immediately before the label, vertically centred with the first text line.
+- SUM leaf: if `items.length > 1` (the bullet list) put an `<ItemIcon>` before
+  each bullet's text (`item.iconUrl`); if `items.length === 1` show that item's
+  icon before the inline label; `items.length === 0` → no icon.
+- Comic: keep it inside the existing row's flex layout (checkbox, icon, label,
+  progress); on the papyrus pages the icon has a transparent background so it
+  needs no extra chrome. Keep the row `gap-2`; do not add borders/backgrounds.
+- A missing icon simply disappears (`ItemIcon` renders `null` after `onError`) —
+  no placeholder box, no layout jump beyond the icon's own width.
+
+Do **not** change the submission picker (`TilePicker`/`RequirementPicker`), the
+board cells, or the admin editor in this plan.
+
+**Manual check**: open a tile with real item leaves (e.g. TOB ISSUE 1 → Page 1
+Justiciar pieces, a SUM; a `COUNT`/`ANY` checklist like Pets) in the comic theme
+and the default theme: icons appear beside the items; a no-icon item
+(`Rift guardian`) shows just its text; DevTools → Network shows the icons
+requested from `/wiki-icons/...` (not `oldschool.runescape.wiki`) and, on the
+second open, served from cache with no request.
+
+## Phase 6 — Refetch after a WebSocket reconnect
 
 In `client/src/context/WebSocketContext.tsx`, track whether the socket has
 connected before (a `useRef<boolean>`). In `ws.onopen`, if it is a
@@ -228,7 +395,7 @@ own queries are already loading). Manual check: with a board open, stop and
 restart the server (`server` dev process); when the socket reconnects the page
 refetches without a manual reload.
 
-## Phase 5 — Persist the comic cover's dominant colour (small polish)
+## Phase 7 — Persist the comic cover's dominant colour (small polish)
 
 `client/src/themes/comic/useDominantColor.ts` keeps its per-URL result in an
 in-memory `Map` only, so every reload re-decodes each cover image on a canvas
@@ -248,6 +415,10 @@ frame with no colour flash.
   hits), `/board` transfers ~18 KB gzipped (or a `304`), and the grid renders
   before the `/board` response arrives.
 - `curl -sI` shows the header values in Phases 1–2 exactly.
+- The tile modal shows wiki icons next to item requirements in both themes;
+  players' browsers never request `oldschool.runescape.wiki`; the server
+  contacts the wiki at most once per icon (or once per 7 days for a miss) and
+  never for a name that isn't an item in the DB.
 - Admin edits during `planning` still show up live (the `bingo_changed` →
   `["board"]` invalidation is untouched and still refetches).
 - Logging out clears the persisted board; switching users never shows the
@@ -257,7 +428,8 @@ frame with no colour flash.
 
 - The `serveImageVariants` behaviour (generate-on-demand, redirect fallback,
   path-traversal guard) — only the header on the redirect branch is added.
-- No `Cache-Control: public` or `max-age` on `/api/*` responses; no caching of
+- No `Cache-Control: public` or `max-age` on `/api/*` responses (the wiki icon
+  route lives at `/wiki-icons`, outside `/api`, precisely so this holds); no caching of
   the shell, progress, submissions, or any per-user/stateful endpoint.
 - No service worker / PWA plugin. (An SPA with live WebSocket state behind
   Discord auth risks serving stale board state; long-lived headers on hashed and
@@ -268,12 +440,12 @@ frame with no colour flash.
 
 ## Out of scope (deliberately deferred)
 
-- **Wiki icon caching proxy** (`/api/osrs-items/icon/:name` → disk cache with
-  long headers). Icons appear only in the admin editor, so the benefit is small
-  (wiki icons already cache for 5 minutes; ~248 icons, well under 1 MB). If
-  they ever appear in player views, build it then: descriptive User-Agent
-  (`config.ts` `USER_AGENT`), strict name validation so it can't be an open
-  proxy, rate limiting, and a cold-cache miss path.
+- Wiki icons in the admin editor and in the submission pickers: the editor
+  stays on direct wiki URLs (it previews items not in the DB yet), and the
+  pickers are a follow-up once the modal rendering is proven.
+- Resolving icons whose wiki file has a different name (e.g. `Rift guardian`) —
+  they just show no icon. If it matters later, add an optional per-item icon
+  override rather than guessing file names.
 - Persisting the bingo shell / team progress (user-specific and cheap).
 - IndexedDB (localStorage's ~5M-character quota comfortably fits ~350 KB × 3).
 - Server-side board memoisation or an explicit version/`updatedAt` column —
