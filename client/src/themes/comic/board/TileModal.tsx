@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import {
   AnimatePresence,
   animate as animateValue,
@@ -24,6 +24,7 @@ import { useSlot, useThemeTokens } from "../../context";
 import { thumbUrl } from "../../../api/imageVariants";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
+import { useEdgeSwipe } from "./useEdgeSwipe";
 import { PageColorsContext, useComic } from "../ui/useComic";
 import { CaptionBox } from "../ui/CaptionBox";
 import {
@@ -157,6 +158,18 @@ const EDGE_BAND = 0.12;
 const EDGE_BAND_HELD = 0.45;
 // How far in a hovered page can be peeled, as a fraction of its width.
 const MAX_HOVER_PEEL = 0.5;
+// Phones: the strips that turn pages by touch. They sit just inside the
+// outer edges of the visible page — the OS keeps the outermost ~20px of the
+// screen for its own back/forward swipe, and the overlay's padding already
+// puts the page 16px in — and everywhere else on the page belongs to the
+// page (its own scrolling, its buttons).
+const SWIPE_ZONE_INSET = 4;
+const SWIPE_ZONE_WIDTH = 48;
+// A drag turns the page if it gets this far (as a fraction of the page's width)...
+const SWIPE_COMMIT = 0.35;
+// ...or if it's let go moving toward the spine at least this fast (px/ms).
+const SWIPE_FLICK = 0.3;
+const SWIPE_FLICK_MIN_TRAVEL = 30;
 const TURN_EASE = [0.45, 0, 0.15, 1] as const;
 // The interactive page turn (hover-curl → flip) — halved from an original
 // 0.75 per feedback that the book felt sluggish to page through. Kept as
@@ -589,6 +602,13 @@ function peelGeometry(W: number, H: number, depth: number, v: number) {
   return { kept, folded: peeled.map(reflect), fold, n, reflect };
 }
 
+interface PageSwipe {
+  begin: (leaf: number, side: Side) => boolean;
+  move: (leaf: number, side: Side, travel: number, clientY: number) => void;
+  end: (leaf: number, side: Side, travel: number, velocity: number, cancelled: boolean) => void;
+  scroll: (dy: number) => void;
+}
+
 interface CurlState {
   leaf: number;
   side: Side;
@@ -904,6 +924,70 @@ function FlyingBook({
     [draw, scope],
   );
 
+  // The touch peel (phones), driven by the edge zones. The fold follows the
+  // finger's travel from where it landed: a front face's page peels in from its
+  // outer edge (depth = travel), while a back face — the previous page, lying
+  // on the half of the book that's off-screen — has to be dragged a whole page
+  // width before any of it shows (depth = W + travel). A release past the
+  // threshold turns the page (the [spread] effect carries on from wherever the
+  // finger left the fold); anything less eases the fold back out.
+  const frameSize = useCallback(() => {
+    const frame = scope.current?.querySelector<HTMLElement>(FRAME);
+    if (!frame) return null;
+    const rect = frame.getBoundingClientRect();
+    return { rect, W: rect.width / 2, H: rect.height };
+  }, [scope]);
+
+  const swipe = useMemo(
+    () => ({
+      begin: (leaf: number, side: Side) => {
+        if (turning.current) return false;
+        curling.current?.anim?.stop();
+        setCurlCopy({ leaf, side });
+        return true;
+      },
+      move: (leaf: number, side: Side, travel: number, clientY: number) => {
+        const size = frameSize();
+        if (!size) return;
+        const { rect, W, H } = size;
+        const depth = side === "back" ? W + Math.min(travel, W) : Math.min(travel, 2 * W);
+        const v = Math.max(-1, Math.min(1, (clientY - rect.top - H / 2) / (H / 2)));
+        draw({ leaf, side, depth, v });
+      },
+      end: (leaf: number, side: Side, travel: number, velocity: number, cancelled: boolean) => {
+        const size = frameSize();
+        const W = size?.W ?? 0;
+        const commit = !cancelled && (travel >= W * SWIPE_COMMIT || (velocity >= SWIPE_FLICK && travel >= SWIPE_FLICK_MIN_TRAVEL));
+        if (commit) {
+          flipTo(spreadRef.current + (side === "front" ? 1 : -1));
+          return;
+        }
+        const current = curling.current;
+        if (!current) {
+          setCurlCopy(null);
+          return;
+        }
+        const { state } = current;
+        current.anim?.stop();
+        current.anim = animateValue(state.depth, side === "back" ? W : 0, {
+          duration: 0.22,
+          ease: "easeOut",
+          onUpdate: (depth) => draw({ ...state, depth }),
+          onComplete: () => {
+            draw(null);
+            setCurlCopy(null);
+          },
+        });
+      },
+      // A vertical drag that started in a zone scrolls the page beneath it.
+      scroll: (dy: number) => {
+        const scroller = scope.current?.querySelector<HTMLElement>(`${leafSelector(spreadRef.current + 1)} > [data-face="front"] .overflow-y-auto`);
+        scroller?.scrollBy({ top: dy });
+      },
+    }),
+    [draw, flipTo, frameSize, scope],
+  );
+
   // Turn the pages. The leaf crossing the spine does so as a peel: from
   // wherever the reader has it curled (or from the middle of its edge),
   // the fold sweeps across the page to the spine, the fold-back growing
@@ -1079,6 +1163,7 @@ function FlyingBook({
               onFlipTo={flipTo}
               onStep={step}
               onCurl={curl}
+              swipe={swipe}
               onClose={onClose}
               onSubmit={onSubmit}
               onToggleInterest={onToggleInterest}
@@ -1101,6 +1186,7 @@ function TileDetails({
   onFlipTo,
   onStep,
   onCurl,
+  swipe,
   onClose,
   onSubmit,
   onToggleInterest,
@@ -1117,6 +1203,8 @@ function TileDetails({
   /** One step of paging: a spread on desktop, a page on a phone. */
   onStep: (dir: 1 | -1) => void;
   onCurl: (leaf: number, side: Side, at: Point | null) => void;
+  /** Phone touch peel (see FlyingBook.swipe). */
+  swipe: PageSwipe;
   onClose: () => void;
   onSubmit?: (taskId?: string) => void;
   onToggleInterest?: (taskId: string) => void;
@@ -1294,6 +1382,11 @@ function TileDetails({
         {!single && spread >= 1 && (
           <EdgeBand side="left" leaf={spread} face="back" onCurl={(at) => onCurl(spread, "back", at)} onFlip={() => onFlipTo(spread - 1)} />
         )}
+        {/* Phones: the visible page is the frame's right half. Its outer edge
+            turns it forward; its spine-side edge (the screen's left) brings
+            the previous page back. */}
+        {single && spread < lastSpread && <SwipeZone side="right" leaf={spread + 1} face="front" swipe={swipe} />}
+        {single && spread >= 1 && <SwipeZone side="left" leaf={spread} face="back" swipe={swipe} />}
       </div>
       </div>
 
@@ -1466,6 +1559,38 @@ function EdgeBand({
         setHeld(false);
         onFlip();
       }}
+    />
+  );
+}
+
+/**
+ * A strip along one edge of the visible page on a phone, taking the drags
+ * that turn it (see useEdgeSwipe). It covers part of the page, so vertical
+ * drags are handed to the page's scroller and taps to whatever's beneath.
+ */
+function SwipeZone({ side, leaf, face, swipe }: { side: "left" | "right"; leaf: number; face: Side; swipe: PageSwipe }) {
+  const handlers = useEdgeSwipe({
+    dir: side === "right" ? -1 : 1,
+    onBegin: () => swipe.begin(leaf, face),
+    onProgress: (travel, y) => swipe.move(leaf, face, travel, y),
+    onEnd: ({ travel, velocity, cancelled }) => swipe.end(leaf, face, travel, velocity, cancelled),
+    onScroll: swipe.scroll,
+    onTap: ({ x, y }, zone) => {
+      const under = document.elementsFromPoint(x, y).find((el) => !zone.contains(el));
+      under?.closest<HTMLElement>("button, a, [role='button'], label, input, select, textarea, summary")?.click();
+    },
+  });
+  return (
+    <div
+      aria-hidden="true"
+      data-swipe-zone={side}
+      className="absolute inset-y-0"
+      style={{
+        width: SWIPE_ZONE_WIDTH,
+        touchAction: "none",
+        ...(side === "right" ? { right: SWIPE_ZONE_INSET } : { left: `calc(50% + ${SWIPE_ZONE_INSET}px)` }),
+      }}
+      {...handlers}
     />
   );
 }
