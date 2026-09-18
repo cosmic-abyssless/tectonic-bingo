@@ -177,6 +177,11 @@ const COVER_SWING = 0.49;
 // alone drifts in and out of proportion with the book across viewport
 // shapes, since the two are capped by unrelated formulas.
 const BOOK_MAX_WIDTH = "min(56rem, calc((100vh - 10rem) * 4 / 3))";
+// On a phone the root is ONE page wide (2:3), and the modal must fit the
+// visible viewport without scrolling: dynamic viewport height (so iOS's toolbars
+// count), minus the overlay's padding (2rem) and the nav row under the book
+// (1.25rem margin + 2.5rem buttons) with a little slack.
+const PHONE_BOOK_MAX_WIDTH = "calc((100dvh - 6rem) / 1.5)";
 
 /**
  * The open book's sunbeams (see ui/ComicBurst for the rays themselves) in
@@ -1084,8 +1089,10 @@ function FlyingBook({
       onOpenChange={(open) => !open && onClose()}
       isDismissable
       // On a phone the book is drawn twice the screen's width (see `single`);
-      // the half that's off-screen must not grow a horizontal scrollbar.
-      className={`fixed inset-0 z-50 overflow-y-auto p-4 ${single ? "overflow-x-hidden" : ""}`}
+      // the half that's off-screen must not scroll, and neither may the overlay
+      // itself: the book is sized to fit (PHONE_BOOK_MAX_WIDTH), and only a page's
+      // own content scrolls, so nothing competes with the page-turn gestures.
+      className={`fixed inset-0 z-50 p-4 ${single ? "overflow-hidden" : "overflow-y-auto"}`}
     >
       {/* The scrim is its own layer (not the overlay's background) so it
           can fade on its own clock while the book's in flight above it. */}
@@ -1095,10 +1102,10 @@ function FlyingBook({
           scroll container itself) so tall content — the book plus its
           floating title and the nav — scrolls into view instead of having
           its top clipped by the centering. */}
-      <div className="flex min-h-full items-center justify-center py-10">
+      <div className={`flex min-h-full items-center justify-center ${single ? "" : "py-10"}`}>
         {/* Width is what sizes the book (it's 4:3), so it's capped by the
             viewport's height too — an open comic should fit on screen. */}
-        <AriaModal className="w-full outline-none" style={{ maxWidth: BOOK_MAX_WIDTH }}>
+        <AriaModal className="w-full outline-none" style={{ maxWidth: single ? PHONE_BOOK_MAX_WIDTH : BOOK_MAX_WIDTH }}>
           <AriaDialog aria-label={tile.name} className="outline-none">
             <TileDetails
               ref={scope}
@@ -1329,9 +1336,10 @@ function TileDetails({
       </div>
       </div>
 
-      {/* The trimmings: floating tilted artwork, the close button, and the
-          page nav under the book. */}
-      {tile.imageUrl && (
+      {/* The trimmings: floating tilted artwork (not on a phone, where it takes
+          space the book needs), the close button, and the page nav under the
+          book. */}
+      {tile.imageUrl && !single && (
         <img
           data-extra
           src={thumbUrl(tile.imageUrl)}
