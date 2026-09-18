@@ -1,26 +1,104 @@
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import {
+  AnimatePresence,
+  animate as animateValue,
+  stagger,
+  useAnimate,
+  usePresence,
+  useReducedMotion,
+  type AnimationPlaybackControls,
+  type AnimationSequence,
+} from "motion/react";
 import {
   Button as AriaButton,
   Dialog as AriaDialog,
-  Heading,
   Modal as AriaModal,
   ModalOverlay,
 } from "react-aria-components";
-import type { TileModel } from "../../../headless/types";
+import type { SubmissionModel, TaskModel, TileModel } from "../../../headless/types";
 import { SubmissionBubble } from "./SubmissionBubble";
-import { HandIcon, XIcon } from "../../../core/ui/icons";
+import { ArrowLeftIcon, ArrowRightIcon, HandIcon, XIcon } from "../../../core/ui/icons";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
+import { formatCountdown } from "../../../core/ui/time";
 import { useResolvedColorScheme } from "../../../core/ui/colorScheme";
-import { useSlot } from "../../context";
-import { COMIC_FONT } from "../font";
-import { getColors } from "./colors";
+import { useSlot, useThemeTokens } from "../../context";
+import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
+import {
+  BASE_DEPTH,
+  BASE_SHADOW,
+  BASE_STAGGER,
+  BASE_STAGGER_CSS,
+  bw,
+  CLOSED_BOOK,
+  ClosedBook,
+  FIRST_LEAF_STAGGER,
+  FIRST_LEAF_STAGGER_CSS,
+  LEAF_GAP,
+  leafSelector,
+  Page,
+  PageEdgeTicks,
+  type LeafFaces,
+} from "./ClosedBook";
+import { getBookPose, setBookAway } from "./bookFlight";
+import { getColors, type ComicColors } from "./colors";
 
-const BORDER_WIDTH = 5;
-
-// A 12-point jagged starburst — alternating an outer radius (48% from
-// center) with an inner radius (30%) every 15° — the classic comic "POW!"
-// callout shape. All percentages, so it scales to whatever box it's given.
-const BURST_CLIP_PATH =
-  "polygon(50% 2%, 57.76% 21.02%, 74% 8.43%, 71.21% 28.79%, 91.57% 26%, 78.98% 42.24%, 98% 50%, 78.98% 57.76%, 91.57% 74%, 71.21% 71.21%, 74% 91.57%, 57.76% 78.98%, 50% 98%, 42.24% 78.98%, 26% 91.57%, 28.79% 71.21%, 8.43% 74%, 21.02% 57.76%, 2% 50%, 21.02% 42.24%, 8.43% 26%, 28.79% 28.79%, 26% 8.43%, 42.24% 21.02%)";
+/*
+ * The tile modal IS the tile's comic book, opened — and it's a whole comic:
+ *
+ *   page 1        the issue's summary and progress (inside the front cover)
+ *   pages 2…n+1   one per task
+ *   last page     the submissions
+ *
+ * Pages sit on leaves the way they do in a real comic: the cover's inside is
+ * page 1, then each leaf carries a page on its front and one on its back, so
+ * spread N shows the back of leaf N on the left and the front of leaf N+1
+ * on the right.
+ *
+ * Turning a page is a peel (see peelGeometry / renderCurl): hovering in
+ * from a page's outer edge folds its corner or edge back under the pointer,
+ * showing the print on its other side; clicking (or the nav under the
+ * book, or the arrow keys) carries that fold on across the page to the
+ * spine, laying the page over onto the facing one. At that instant the leaf
+ * itself is put into its turned position underneath — the same picture —
+ * and the fold-back is taken away.
+ *
+ *   open   — the cell's little book (TileCell) is hidden and an identical
+ *            full-size copy takes off from that exact spot, straightens up
+ *            and grows as it flies to the middle of the screen; then its
+ *            cover swings open. Nothing is swapped or faded in: what you're
+ *            reading at the end is the very same book that left the board.
+ *   close  — the reverse: any turned leaves flip back, the cover closes
+ *            over them, the book shrinks back to wherever its tile now sits
+ *            on the board (re-measured, in case the page scrolled) and the
+ *            cell's own copy takes over on the same frame.
+ *
+ * Geometry: the open book is two 2:3 pages side by side (so 4:3 overall),
+ * spine down the middle. The closed book — cover over the right-hand page
+ * — is therefore exactly one page wide, which is what measureFlight scales
+ * the tile's book up to.
+ *
+ * The hand-off is pixel-exact because both ends are the same drawing
+ * (ClosedBook, sized off `--bw`) in the same 2D/3D structure as TileCell:
+ *
+ *   TileCell:  frame (2D: perspective, clip)  >  book (3D: tilt, hover)  >  ClosedBook
+ *   here:      frame (2D: perspective, clip, translate + scale)  >  flyer (3D: tilt)  >  ClosedBook
+ *
+ * The 2D frame carries the flight's translate/scale so the perspective and
+ * the crop live inside it and scale with the book — the frame's
+ * perspective is set to the tile's (a fixed multiple of the tile book's
+ * width) divided by the flight scale, which is the same projection once
+ * scaled down, and the crop is the tile's same "bottom 27.78% of the book",
+ * animated in over the last stretch of the landing.
+ *
+ * All the choreography is imperative — `animate()` sequences for the
+ * flight, direct DOM writes for the peel — rather than declarative
+ * variants: the flight's start/end point is only known at runtime, the
+ * exit has to run while the tile model that opened this is already gone
+ * (AnimatePresence keeps this mounted with its last props until
+ * `safeToRemove`), and the leaves are plain divs the sequences pose inline
+ * before first paint. react-aria's own CSS enter/exit hooks
+ * (overlay-backdrop / overlay-panel) are deliberately not used here.
+ */
 
 /** `tile` null while `isOpen` transitions closed (kept mounted so it can animate out). */
 export function TileModal({
@@ -37,30 +115,585 @@ export function TileModal({
   onToggleInterest?: () => void;
 }) {
   return (
-    <ModalOverlay
-      isOpen={isOpen}
-      onOpenChange={(open) => !open && onClose()}
-      isDismissable
-      className="overlay-backdrop fixed inset-0 z-50 overflow-y-auto bg-scrim/70 p-4"
-    >
-      {/* min-h-full + a centering flex child (rather than centering the
-          scroll container itself) so tall content — the book plus its
-          floating title and stacked submission bubbles — scrolls into view
-          instead of having its top clipped by the centering. */}
-      <div className="flex min-h-full items-center justify-center py-10">
-        <AriaModal className="overlay-panel w-full max-w-3xl outline-none">
-          <AriaDialog className="outline-none">
-            {tile && (
-              <TileDetails tile={tile} onClose={onClose} onSubmit={onSubmit} onToggleInterest={onToggleInterest} />
-            )}
-          </AriaDialog>
-        </AriaModal>
-      </div>
-    </ModalOverlay>
+    // mode="wait": switching straight from one tile to another (via the
+    // search box) flies the first book home before the next takes off,
+    // rather than two overlays fighting.
+    <AnimatePresence mode="wait">
+      {isOpen && tile && (
+        <FlyingBook key={tile.id} tile={tile} onClose={onClose} onSubmit={onSubmit} onToggleInterest={onToggleInterest} />
+      )}
+    </AnimatePresence>
   );
 }
 
-function TileDetails({
+// A turned leaf lies flat on the left (-180°); an unturned one flat on the
+// right (0°).
+const OPEN_ANGLE = -180;
+// TileCell's crop: the bottom 27.78% of the book past the tile's bottom
+// edge, and everything past 9.52% of the book's width beyond its sides.
+const TILE_CROP_BOTTOM = 0.2778;
+const TILE_CROP_SIDE = 0.0952;
+// The strip along a page's outer edge that turns it — as a fraction of the
+// page's width — and how far it stretches inward once you've got hold of
+// the page, so it keeps following the pointer.
+const EDGE_BAND = 0.12;
+const EDGE_BAND_HELD = 0.45;
+// How far in a hovered page can be peeled, as a fraction of its width.
+const MAX_HOVER_PEEL = 0.5;
+const TURN_EASE = [0.45, 0, 0.15, 1] as const;
+// The interactive page turn (hover-curl → flip) — halved from an original
+// 0.75 per feedback that the book felt sluggish to page through. Kept as
+// its own constant, separate from the cover's own swing below: an earlier
+// pass tied the cover to this same fast pace and it read as too rushed for
+// the book actually opening, even though this speed was right for turning
+// pages.
+const TURN_DURATION = 0.375;
+// The cover's opening (and, mirrored, closing) swing — paced independently
+// so it can run a little gentler than TURN_DURATION above. ~0.65x the
+// original 0.75s, not the full 0.5x page-turn now uses.
+const COVER_SWING = 0.49;
+
+// The open book's own max width — capped by both a flat rem size and the
+// viewport's height, so it always fits on screen. Shared with ComicBurst
+// below so the burst's size stays proportional to the book's ACTUAL
+// rendered size on any given screen, not to raw viewport units — vmin
+// alone drifts in and out of proportion with the book across viewport
+// shapes, since the two are capped by unrelated formulas.
+const BOOK_MAX_WIDTH = "min(56rem, calc((100vh - 10rem) * 4 / 3))";
+
+// A soft, warm sunlight tone — deliberately a literal, not a ComicColors
+// token: this sits on the modal's scrim, which is the same black in both
+// color schemes, so it doesn't want to change with them either.
+const BURST_COLOR = "#fff3c4";
+
+/**
+ * A slow-turning ring of comic sunbeams behind the open book — rays
+ * radiating out from its center, mostly hidden behind the book itself and
+ * reaching toward the browser window's own edges, not just past the
+ * book's. Pure atmosphere, faded in and out by FlyingBook alongside the
+ * scrim (see `burst` in the enter/exit sequences). Rendered as its own
+ * `fixed` layer outside the book's scrolling container — `fixed`
+ * positioning already keeps an oversized descendant here from ever
+ * growing the modal a scrollbar (it's outside document flow entirely,
+ * unlike the curl layer's own oversized bits, which needed an explicit
+ * clip for exactly that reason).
+ *
+ * Sized off `vmax` (the LARGER of viewport width/height, not `vmin`, and
+ * not BOOK_MAX_WIDTH) so it scales with the WINDOW rather than the book,
+ * which is capped at a flat max size — on a big monitor a book-relative
+ * burst reads as a small circle floating in the middle. 180vmax clears
+ * the viewport's own diagonal (at most ~141vmax, a perfect square) on any
+ * aspect ratio, so the rays' reach is bounded by their own fade, not by
+ * running out of box first.
+ *
+ * The rays are a `repeating-conic-gradient` (solid color, transparent gap,
+ * repeat around the circle) rather than a drawn shape — the standard
+ * lightweight way to get true radiating beams in CSS. A `closest-side`
+ * radial mask holds them near full strength close to center (behind the
+ * book anyway) and lets them fade GRADUALLY over nearly the whole rest of
+ * the radius, so they stay visible most of the way out toward the window
+ * edges rather than dying out early. `mix-blend-mode: screen` reads the
+ * rays as light against the scrim's black rather than flat paint.
+ */
+function ComicBurst({ burstRef, reduceMotion }: { burstRef: Ref<HTMLDivElement>; reduceMotion: boolean }) {
+  const fade = "radial-gradient(circle closest-side, black 0%, black 18%, transparent 96%)";
+  return (
+    <div ref={burstRef} className="pointer-events-none fixed inset-0 flex items-center justify-center" style={{ opacity: 0 }}>
+      <div
+        className={reduceMotion ? undefined : "animate-[spin_100s_linear_infinite]"}
+        style={{
+          width: "180vmax",
+          aspectRatio: "1",
+          borderRadius: "50%",
+          background: `repeating-conic-gradient(${BURST_COLOR} 0deg 7deg, transparent 7deg 18deg)`,
+          maskImage: fade,
+          WebkitMaskImage: fade,
+          opacity: 0.4,
+          mixBlendMode: "screen",
+        }}
+      />
+    </div>
+  );
+}
+
+type Point = { x: number; y: number };
+type Side = "front" | "back";
+
+/** Layout of the comic: how many pages, how many leaves, how far it can be read. */
+function bookShape(tile: TileModel) {
+  const pageCount = tile.tasks.length + 2;
+  // The last spread with something on its left-hand page.
+  const lastSpread = Math.floor((pageCount - 1) / 2);
+  // Leaves under the cover: enough that the last spread has a right-hand
+  // page (blank if the count's odd).
+  const innerLeaves = lastSpread + 1;
+  return { pageCount, lastSpread, innerLeaves, leafCount: innerLeaves + 1 };
+}
+
+/** Depth of leaf `k` when `turned` leaves (the cover included) lie on the left: the top of each stack at 0, the rest behind it. */
+function leafDepth(k: number, turned: number): number {
+  return k < turned ? -(turned - 1 - k) * LEAF_GAP : -(k - turned) * LEAF_GAP;
+}
+
+/**
+ * Segments moving a leaf from one depth to another around a page turn that
+ * starts at `at` and lasts `turn`. A leaf coming up to the top of its stack
+ * rises once the turn's done — until then it's behind the turning leaf,
+ * and already in front of the base sheet. A leaf being pushed deeper
+ * mustn't drop behind the base sheet while it's still in view — it dips
+ * just short of the base for the duration of the turn, then settles once
+ * the turning leaf has landed on it.
+ */
+function depthSegments(selector: string, from: number, to: number, at: number, turn: number): AnimationSequence {
+  if (to === from) return [];
+  if (to > from) return [[selector, { z: [from, to] }, { duration: 0.1, at: at + turn }]];
+  const hold = Math.max(to, -BASE_DEPTH + 0.5);
+  return [
+    [selector, { z: [from, hold] }, { duration: 0.15, at }],
+    [selector, { z: [hold, to] }, { duration: 0.1, at: at + turn }],
+  ];
+}
+
+interface Flight {
+  /** Offset from the closed book's resting spot (the right-hand page) to the tile's book, in px. */
+  dx: number;
+  dy: number;
+  /** Tile book height / page height. */
+  scale: number;
+  /** Where in the frame's own box the closed book is centered, in px — the transform origin. */
+  originX: number;
+  originY: number;
+  /** The vanishing point: the book's center, less any hover lift the tile's book has (its frame's stays put). */
+  perspectiveOriginY: number;
+  /** The frame's perspective (px) that reproduces the tile's, once scaled by `scale`. */
+  perspective: number;
+  /** The tile book's hinge angles at that moment, so the swap is seamless even mid-hover. */
+  coverAngle: number;
+  pageAngle: number;
+  /** clip-path values: the tile's crop, and none (a hair below the book so nothing's ever cut). */
+  clipCropped: string;
+  clipOpen: string;
+}
+
+// Where the closed book (= the right-hand page) sits when the modal is at
+// rest, worked out from the never-transformed root's box alone so it stays
+// right mid-animation, when the book itself is off somewhere else. With no
+// tile to fly from/to (not on screen), it's a plain pop from the center.
+function measureFlight(root: HTMLElement, tileId: string): Flight {
+  const rootRect = root.getBoundingClientRect();
+  const pageWidth = rootRect.width / 2;
+  const pageHeight = pageWidth * 1.5;
+  // The closed book is the frame's right half, so the tile's side crops sit
+  // just outside that half: a little past the frame's right edge, and most
+  // of the way across from its left. (Only the empty left half is cut.)
+  const clipCropped = `inset(-9999px ${-pageWidth * TILE_CROP_SIDE}px ${pageHeight * TILE_CROP_BOTTOM}px ${pageWidth * (1 - TILE_CROP_SIDE)}px)`;
+  const clipOpen = `inset(-9999px -9999px ${-pageHeight * 0.1}px -9999px)`;
+  const originX = rootRect.width * 0.75;
+  const originY = pageHeight / 2;
+  const pose = getBookPose(tileId, { coverAngle: CLOSED_BOOK.coverAngle, pageAngle: CLOSED_BOOK.pageAngle });
+  if (!pose) {
+    return {
+      dx: 0,
+      dy: 0,
+      scale: 0.45,
+      originX,
+      originY,
+      perspectiveOriginY: originY,
+      perspective: (CLOSED_BOOK.perspective * pageWidth) / 0.45,
+      coverAngle: CLOSED_BOOK.coverAngle,
+      pageAngle: CLOSED_BOOK.pageAngle,
+      clipCropped,
+      clipOpen,
+    };
+  }
+  const scale = pose.height / pageHeight;
+  return {
+    dx: pose.cx - (rootRect.left + originX),
+    dy: pose.cy - (rootRect.top + originY),
+    scale,
+    originX,
+    originY,
+    // In the frame's own (unscaled) px, so the tile's lift is ÷ scale.
+    perspectiveOriginY: originY - pose.lift / scale,
+    // The tile projects its book with perspective = k × its frame width;
+    // ours is applied inside a frame scaled by `scale`, so it's that ÷ scale.
+    perspective: (CLOSED_BOOK.perspective * pose.frameWidth) / scale,
+    coverAngle: pose.coverAngle,
+    pageAngle: pose.pageAngle,
+    clipCropped,
+    clipOpen,
+  };
+}
+
+// Selectors, scoped to the root by useAnimate. (The scrim sits outside that
+// root, up on the overlay, so it's passed in as an element.)
+const FRAME = "[data-frame]";
+const FLYER = "[data-flyer]";
+const COVER = leafSelector(0);
+const PAGE_FRONT = leafSelector(1);
+const BASE = "[data-book-base]";
+const EXTRAS = "[data-extra]";
+// The next page's number showing through the cover's dog-ear (ClosedBook's
+// RevealedPageMark) — only there once a task's done, and only meant to be
+// seen under the closed cover, so it goes as the cover swings open.
+const PAGE_MARK = "[data-page-mark]";
+
+// Writes the closed-at-the-tile pose as plain inline styles, so the first
+// painted frame already has the book over the tile before the animation's
+// first tick has run. (Motion then takes the values over from its own
+// keyframes — its transform order is translate → scale → rotate, matched
+// here.)
+function poseAtTile(frame: HTMLElement, flyer: HTMLElement, cover: HTMLElement, page: HTMLElement, base: HTMLElement, f: Flight) {
+  frame.style.transformOrigin = `${f.originX}px ${f.originY}px`;
+  frame.style.perspectiveOrigin = `${f.originX}px ${f.perspectiveOriginY}px`;
+  frame.style.perspective = `${f.perspective}px`;
+  frame.style.transform = `translateX(${f.dx}px) translateY(${f.dy}px) scale(${f.scale})`;
+  frame.style.clipPath = f.clipCropped;
+  flyer.style.transformOrigin = `${f.originX}px ${f.originY}px`;
+  flyer.style.transform = `rotateY(${CLOSED_BOOK.tilt}deg)`;
+  cover.style.transform = `rotateY(${f.coverAngle}deg)`;
+  page.style.transform = `${FIRST_LEAF_STAGGER_CSS} rotateY(${f.pageAngle}deg)`;
+  base.style.transform = `${BASE_STAGGER_CSS} translateZ(${-BASE_DEPTH}px)`;
+}
+
+// The closed book's stagger — the first leaf and the base sheet poking out
+// from under the cover — and the open book's flush stack. Explicit start
+// values everywhere: these are plain elements whose inline transform
+// Motion can't reliably read the stagger back out of, and animating from
+// a wrong guess is a visible snap.
+const FLUSH = { y: "0%", scaleX: 1, scaleY: 1 };
+const PAGE_TO_FLUSH = {
+  y: [FIRST_LEAF_STAGGER.y, FLUSH.y],
+  scaleX: [FIRST_LEAF_STAGGER.scaleX, FLUSH.scaleX],
+  scaleY: [FIRST_LEAF_STAGGER.scaleY, FLUSH.scaleY],
+};
+const PAGE_TO_STAGGERED = FIRST_LEAF_STAGGER;
+const BASE_TO_FLUSH = {
+  y: [BASE_STAGGER.y, FLUSH.y],
+  scaleX: [BASE_STAGGER.scaleX, FLUSH.scaleX],
+  scaleY: [BASE_STAGGER.scaleY, FLUSH.scaleY],
+  z: -BASE_DEPTH,
+};
+const BASE_TO_STAGGERED = { ...BASE_STAGGER, z: -BASE_DEPTH };
+
+// Paced with COVER_SWING (~0.65x the original) rather than TURN_DURATION's
+// faster 0.5x — every duration and `at` here is the pre-speedup value
+// ×0.65.
+const FLIGHT_SPRING = { type: "spring", duration: 0.52, bounce: 0.2 } as const;
+
+function enterSequence(backdrop: Element, burst: Element, from: Flight, hasMark: boolean): AnimationSequence {
+  return [
+    // (A selector matching nothing is skipped, hence the flag.)
+    ...(hasMark ? ([[PAGE_MARK, { opacity: 0 }, { duration: 0.15, ease: "easeOut", at: 0.26 }]] as AnimationSequence) : []),
+    [backdrop, { opacity: 1 }, { duration: 0.29, ease: "easeOut", at: 0 }],
+    // Take off: one spring for the whole trip so it arrives with a little
+    // overshoot, like something landing in your hands. The frame carries
+    // the move and the growth, the flyer inside straightens up — same
+    // spring, so they read as one motion.
+    [FRAME, { x: [from.dx, 0], y: [from.dy, 0], scale: [from.scale, 1] }, { ...FLIGHT_SPRING, at: 0 }],
+    [FLYER, { rotateY: [CLOSED_BOOK.tilt, 0] }, { ...FLIGHT_SPRING, at: 0 }],
+    // The tile's crop lets go as the book lifts out of its slot — and the
+    // closed-book stagger (the first leaf and base sheet poking a hair past
+    // the cover, which is exactly what the crop was hiding) has to be gone
+    // by that same moment, or the page stack pokes out past where the crop
+    // used to sit, bare, for the rest of the flight. So it resolves on that
+    // same fast, early beat, independently of the fan angle below.
+    [FRAME, { clipPath: [from.clipCropped, from.clipOpen] }, { duration: 0.13, ease: "easeOut", at: 0 }],
+    [PAGE_FRONT, PAGE_TO_FLUSH, { duration: 0.13, ease: "easeOut", at: 0 }],
+    [BASE, BASE_TO_FLUSH, { duration: 0.13, ease: "easeOut", at: 0 }],
+    // Cover swings open while the book is still settling — the two overlap
+    // so it reads as one continuous gesture, not fly-then-open. The first
+    // leaf's own fan angle flattens on the cover's own schedule.
+    [COVER, { rotateY: [from.coverAngle, OPEN_ANGLE] }, { duration: COVER_SWING, ease: TURN_EASE, at: 0.26 }],
+    [PAGE_FRONT, { rotateY: [from.pageAngle, 0] }, { duration: 0.39, ease: TURN_EASE, at: "<" }],
+    // The beams wait for the cover to actually finish swinging open —
+    // they're the last thing to arrive, once there's a settled book to
+    // shine behind, not a hint of light before it's even open.
+    [burst, { opacity: 1 }, { duration: 0.33, ease: "easeOut", at: 0.26 + COVER_SWING }],
+    // Then the trimmings pop in on top.
+    [EXTRAS, { opacity: [0, 1], scale: [0.4, 1] }, { type: "spring", duration: 0.39, bounce: 0.45, delay: stagger(0.04), at: 0.55 }],
+  ];
+}
+
+const RETURN_EASE = [0.55, 0.05, 0.6, 0.55] as const;
+
+interface LeafPose {
+  angle: number;
+  z: number;
+}
+
+function exitSequence(
+  backdrop: Element,
+  burst: Element,
+  to: Flight,
+  poses: Map<number, LeafPose>,
+  spread: number,
+  hasMark: boolean,
+): AnimationSequence {
+  // Paced to match enterSequence — every duration and `at` below is the
+  // pre-speedup value ×0.65, the same scale COVER_SWING uses, so closing
+  // reads as the opening gesture in reverse rather than a different speed.
+  const seq: AnimationSequence = [
+    [EXTRAS, { opacity: 0, scale: 0.5 }, { duration: 0.12, ease: "easeIn", at: 0 }],
+    // The beams go the instant closing starts, not lingering into it —
+    // gone before there's much of anything left open to shine behind.
+    [burst, { opacity: 0 }, { duration: 0.2, ease: "easeIn", at: 0 }],
+  ];
+  // Any leaves the reader turned flip back first, last-turned first, so the
+  // cover has a closed stack to shut over. The first leaf comes to rest at
+  // whatever fan angle the cell's copy is holding right now.
+  for (let k = spread; k >= 1; k--) {
+    const pose = poses.get(k) ?? { angle: 0, z: 0 };
+    const at = (spread - k) * 0.045;
+    seq.push([leafSelector(k), { rotateY: k === 1 ? to.pageAngle : 0 }, { duration: 0.29, ease: TURN_EASE, at }]);
+    seq.push(...depthSegments(leafSelector(k), pose.z, leafDepth(k, 1), at, 0.29));
+  }
+  const lead = spread >= 1 ? 0.2 + (spread - 1) * 0.045 : 0;
+  if (spread === 0) {
+    seq.push([PAGE_FRONT, { rotateY: to.pageAngle }, { duration: 0.26, ease: "easeIn", at: 0.1 }]);
+  }
+  const coverPose = poses.get(0) ?? { angle: OPEN_ANGLE, z: 0 };
+  seq.push(
+    // Cover closes over the pages.
+    [COVER, { rotateY: to.coverAngle }, { duration: 0.36, ease: [0.55, 0, 0.3, 1], at: 0.03 + lead }],
+    // The revealed page number comes back as the cover settles over it.
+    ...(hasMark ? ([[PAGE_MARK, { opacity: 1 }, { duration: 0.15, ease: "easeIn", at: 0.24 + lead }]] as AnimationSequence) : []),
+    ...depthSegments(COVER, coverPose.z, 0, 0.03 + lead, 0.36),
+    // Then it shrinks back down to its tile, sliding into the tile's slot
+    // (the crop) over the last stretch. No fade-out: it lands fully visible
+    // and the cell's own copy takes over on the same frame it's unmounted
+    // (see `finish` in FlyingBook).
+    [FRAME, { x: to.dx, y: to.dy, scale: to.scale }, { duration: 0.33, ease: RETURN_EASE, at: 0.26 + lead }],
+    [FLYER, { rotateY: CLOSED_BOOK.tilt }, { duration: 0.33, ease: RETURN_EASE, at: 0.26 + lead }],
+    // The stagger snaps back in sync with the crop, not before it — earlier
+    // and the page stack would poke out past where the crop's about to sit,
+    // bare, for a beat.
+    [PAGE_FRONT, PAGE_TO_STAGGERED, { duration: 0.1, ease: "easeIn", at: 0.49 + lead }],
+    [BASE, BASE_TO_STAGGERED, { duration: 0.1, ease: "easeIn", at: 0.49 + lead }],
+    [FRAME, { clipPath: to.clipCropped }, { duration: 0.1, ease: "easeIn", at: 0.49 + lead }],
+    [backdrop, { opacity: 0 }, { duration: 0.26, ease: "easeIn", at: 0.29 + lead }],
+  );
+  return seq;
+}
+
+// prefers-reduced-motion: no flight, no page turn — the book just appears
+// open, with a plain crossfade.
+function reducedEnterSequence(backdrop: Element, burst: Element): AnimationSequence {
+  return [
+    [backdrop, { opacity: 1 }, { duration: 0.15, at: 0 }],
+    [burst, { opacity: 1 }, { duration: 0.15, at: 0 }],
+    [`${FRAME}, ${EXTRAS}`, { opacity: [0, 1] }, { duration: 0.15, at: 0 }],
+  ];
+}
+function reducedExitSequence(backdrop: Element, burst: Element): AnimationSequence {
+  return [
+    [backdrop, { opacity: 0 }, { duration: 0.12, at: 0 }],
+    [burst, { opacity: 0 }, { duration: 0.12, at: 0 }],
+    [`${FRAME}, ${EXTRAS}`, { opacity: 0 }, { duration: 0.12, at: 0 }],
+  ];
+}
+
+// ---- The peel ---------------------------------------------------------
+
+/** Sutherland–Hodgman against one half-plane: the part of `poly` where `signedDistance` ≤ 0. */
+function clipPolygon(poly: Point[], signedDistance: (p: Point) => number): Point[] {
+  const out: Point[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i]!;
+    const b = poly[(i + 1) % poly.length]!;
+    const da = signedDistance(a);
+    const db = signedDistance(b);
+    if (da <= 0) out.push(a);
+    if ((da <= 0) !== (db <= 0)) {
+      const t = da / (da - db);
+      out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+    }
+  }
+  return out;
+}
+
+const toClipPolygon = (poly: Point[]) => `polygon(${poly.map((p) => `${p.x.toFixed(2)}px ${p.y.toFixed(2)}px`).join(", ")})`;
+const toSvgPoints = (poly: Point[]) => poly.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
+
+/**
+ * Where a page is folded, and how. Worked out on one canonical page: width
+ * W, height H, spine at x = 0, outer edge at x = W. `depth` is how far in
+ * from the outer edge the page's edge has been brought (0 = flat; W×2 has
+ * the fold at the spine, the page fully turned over); `v` is where along
+ * the edge it's held, from -1 (top corner) through 0 (middle) to 1 (bottom
+ * corner).
+ *
+ * The fold line passes midway between the edge and where the edge has been
+ * brought to, at height `v`, so under a pointer the page's edge lands
+ * right on it. Its angle runs from vertical at the middle of the edge (a
+ * rectangular strip peels back) to 45° at a corner (a corner triangle),
+ * tilting toward whichever corner's nearer.
+ */
+function peelGeometry(W: number, H: number, depth: number, v: number) {
+  const y = (H / 2) * (1 + Math.max(-1, Math.min(1, v)));
+  const toward = v >= 0 ? 1 : -1;
+  const theta = Math.min(1, Math.abs(v)) * (Math.PI / 4);
+  // Unit normal pointing out toward the peeled part.
+  const n = { x: Math.cos(theta), y: toward * Math.sin(theta) };
+  const fold = { x: W - depth / 2, y };
+  const dist = (p: Point) => (p.x - fold.x) * n.x + (p.y - fold.y) * n.y;
+  const page: Point[] = [
+    { x: 0, y: 0 },
+    { x: W, y: 0 },
+    { x: W, y: H },
+    { x: 0, y: H },
+  ];
+  const kept = clipPolygon(page, dist);
+  const peeled = clipPolygon(page, (p) => -dist(p));
+  const reflect = (p: Point) => {
+    const d = dist(p);
+    return { x: p.x - 2 * d * n.x, y: p.y - 2 * d * n.y };
+  };
+  return { kept, folded: peeled.map(reflect), fold, n, reflect };
+}
+
+interface CurlState {
+  leaf: number;
+  side: Side;
+  depth: number;
+  v: number;
+  /** Opacity of the shadow the fold-back casts (default CURL_SHADOW); fades out over a turn. */
+  shadow?: number;
+}
+
+const CURL_SHADOW = 0.4;
+
+/** The book-level elements the peel draws into. */
+interface CurlDom {
+  frame: HTMLElement;
+  layer: HTMLElement;
+  sheet: HTMLElement;
+  clip: HTMLElement;
+  copy: HTMLElement;
+  shade: HTMLElement;
+  outline: SVGSVGElement;
+  outlinePoly: SVGPolygonElement;
+}
+
+function findCurlDom(root: HTMLElement): CurlDom | null {
+  const frame = root.querySelector<HTMLElement>(FRAME);
+  const layer = root.querySelector<HTMLElement>("[data-curl-layer]");
+  const sheet = root.querySelector<HTMLElement>("[data-curl-sheet]");
+  const clip = root.querySelector<HTMLElement>("[data-curl-clip]");
+  const copy = root.querySelector<HTMLElement>("[data-curl-copy]");
+  const shade = root.querySelector<HTMLElement>("[data-curl-shade]");
+  const outline = root.querySelector<SVGSVGElement>("[data-curl-outline]");
+  const outlinePoly = outline?.querySelector<SVGPolygonElement>("polygon") ?? null;
+  if (!frame || !layer || !sheet || !clip || !copy || !shade || !outline || !outlinePoly) return null;
+  return { frame, layer, sheet, clip, copy, shade, outline, outlinePoly };
+}
+
+const faceOf = (root: HTMLElement, leaf: number, side: Side) =>
+  root.querySelector<HTMLElement>(`${leafSelector(leaf)} > [data-face="${side}"]`);
+
+/**
+ * Draws the page of `state` peeled back, or (null) everything flat.
+ *
+ * Two things happen. The page's face gets a clip-path that cuts the peeled
+ * part away, so whatever's under it (the next leaf) shows through. And the
+ * book-level curl layer draws the fold-back: the cut region reflected
+ * across the fold, filled with a copy of the page's OTHER side (rendered
+ * pre-mirrored by TileDetails, so that after the fold's reflection it reads
+ * the right way round — as the print on the back of a real peeled corner
+ * does), shaded from crease to tip, outlined in ink at the page's border
+ * weight, and casting a shadow. That layer spans both pages, so a turn can
+ * carry the fold-back right across the spine onto the facing page.
+ *
+ * Coordinates: peelGeometry works on a canonical page (spine left, outer
+ * edge right). A right-hand page is that page shifted right by one page
+ * width; a left-hand page is it mirrored about the spine. A face's own
+ * coordinates run outer-edge-right for a front face and outer-edge-left
+ * for a back face (see PageFace), which is the same mapping.
+ */
+function renderCurl(root: HTMLElement, dom: CurlDom, ink: string, state: CurlState | null, prevFace: HTMLElement | null) {
+  if (prevFace) prevFace.style.clipPath = "";
+  if (!state || state.depth < 0.5) {
+    dom.layer.style.display = "none";
+    return;
+  }
+  const face = faceOf(root, state.leaf, state.side);
+  if (!face) {
+    dom.layer.style.display = "none";
+    return;
+  }
+  const W = dom.frame.clientWidth / 2;
+  const H = dom.frame.clientHeight;
+  const { kept, folded, fold, n } = peelGeometry(W, H, state.depth, state.v);
+  const right = state.side === "front";
+  // Canonical → the frame's coordinates (and, one and the same, the face's).
+  const px = (x: number) => (right ? W + x : W - x);
+  const toFrame = (poly: Point[]) => poly.map((p) => ({ x: px(p.x), y: p.y }));
+  const toFace = (poly: Point[]) => poly.map((p) => ({ x: right ? p.x : W - p.x, y: p.y }));
+
+  face.style.clipPath = toClipPolygon(toFace(kept));
+
+  const foldedFrame = toFrame(folded);
+  dom.layer.style.display = "block";
+  const shadow = state.shadow ?? CURL_SHADOW;
+  dom.sheet.style.filter =
+    shadow > 0.005
+      ? `drop-shadow(${((right ? 1 : -1) * W * 0.006).toFixed(1)}px ${(W * 0.012).toFixed(1)}px ${(W * 0.03).toFixed(1)}px rgba(0,0,0,${shadow.toFixed(3)}))`
+      : "none";
+  dom.clip.style.clipPath = toClipPolygon(foldedFrame);
+
+  // The copy sits over the page's own box, pre-mirrored across the box's
+  // center line; reflecting that across the fold puts the other side's
+  // print where the fold-back is, reading correctly. As one affine matrix
+  // in the copy's own coordinates (origin its top-left corner).
+  const nf = { x: right ? n.x : -n.x, y: n.y };
+  const foldF = { x: px(fold.x), y: fold.y };
+  const boxLeft = right ? W : 0;
+  // Reflection across the fold line: p' = F + R (p - F), R = I - 2nnᵀ
+  // (flips the component along the normal, keeps the one along the line).
+  const r11 = 1 - 2 * nf.x * nf.x;
+  const r12 = -2 * nf.x * nf.y;
+  const r22 = 1 - 2 * nf.y * nf.y;
+  // Compose with the pre-mirror m(p) = (W - x, y) in box coordinates, then
+  // express everything in box coordinates (frame x − boxLeft).
+  const fx = foldF.x - boxLeft;
+  const fy = foldF.y;
+  // p_box → mirrored → frame-relative-to-box reflected:
+  //   q = (W - x, y);  p' = F + R (q - F)
+  const a = -r11;
+  const b = -r12;
+  const c = r12;
+  const d = r22;
+  const e = fx + r11 * (W - fx) + r12 * (0 - fy);
+  const f = fy + r12 * (W - fx) + r22 * (0 - fy);
+  dom.copy.style.transform = `matrix(${a.toFixed(5)}, ${b.toFixed(5)}, ${c.toFixed(5)}, ${d.toFixed(5)}, ${e.toFixed(2)}, ${f.toFixed(2)})`;
+
+  // Shade from the crease to the tip, across the frame: CSS gradient
+  // angles run clockwise from "up", and the fold-back lies on the inner
+  // side of the fold (-n).
+  const dir = { x: -nf.x, y: -nf.y };
+  const angle = (Math.atan2(dir.x, -dir.y) * 180) / Math.PI;
+  const rad = (angle * Math.PI) / 180;
+  const frameW = W * 2;
+  const lineLength = Math.abs(frameW * Math.sin(rad)) + Math.abs(H * Math.cos(rad));
+  const creaseAt = (foldF.x - frameW / 2) * dir.x + (foldF.y - H / 2) * dir.y + lineLength / 2;
+  // The crease shading fades with the cast shadow: a fold-back the size
+  // of a whole page with a dark crease band sweeping across it reads as a
+  // shadow moving over the print, not paper laying down.
+  const t = shadow / CURL_SHADOW;
+  const reach = Math.min(state.depth, W) * 0.9;
+  dom.shade.style.backgroundImage =
+    t > 0.01
+      ? `linear-gradient(${angle.toFixed(1)}deg, rgba(0,0,0,${(0.28 * t).toFixed(3)}) ${creaseAt.toFixed(1)}px, rgba(0,0,0,${(0.05 * t).toFixed(3)}) ${(creaseAt + reach * 0.35).toFixed(1)}px, rgba(255,255,255,${(0.18 * t).toFixed(3)}) ${(creaseAt + reach).toFixed(1)}px)`
+      : "none";
+
+  // Ink outline at the page's own border weight.
+  dom.outline.setAttribute("viewBox", `0 0 ${frameW} ${H}`);
+  dom.outlinePoly.setAttribute("points", toSvgPoints(foldedFrame));
+  dom.outlinePoly.setAttribute("stroke", ink);
+  dom.outlinePoly.setAttribute("stroke-width", `${face.clientLeft}`);
+}
+
+function FlyingBook({
   tile,
   onClose,
   onSubmit,
@@ -71,99 +704,691 @@ function TileDetails({
   onSubmit?: () => void;
   onToggleInterest?: () => void;
 }) {
-  const TaskPanel = useSlot("TaskPanel");
+  const [isPresent, safeToRemove] = usePresence();
+  const [scope, animate] = useAnimate<HTMLDivElement>();
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const burstRef = useRef<HTMLDivElement>(null);
+  const reduceMotion = useReducedMotion();
   const colors = getColors(useResolvedColorScheme());
-  const pageCount = Math.max(tile.tasks.length, 1);
+  const tileId = tile.id;
+  const { lastSpread, leafCount } = bookShape(tile);
+
+  // Which spread is open (0 = page 1 | page 2). `spreadRef` mirrors it
+  // synchronously so pointer handlers that race a re-render see the truth.
+  const [spread, setSpread] = useState(0);
+  const spreadRef = useRef(0);
+  // Where each leaf currently is (angle, depth) — the "from" for depth
+  // keyframes and what the exit flips back from.
+  const poses = useRef<Map<number, LeafPose>>(new Map());
+  // Which page the curl layer is showing the other side of, if any.
+  const [curlCopy, setCurlCopy] = useState<{ leaf: number; side: Side } | null>(null);
+
+  const flipTo = useCallback(
+    (next: number) => {
+      const clamped = Math.max(0, Math.min(lastSpread, next));
+      if (clamped === spreadRef.current) return;
+      spreadRef.current = clamped;
+      setSpread(clamped);
+    },
+    [lastSpread],
+  );
+
+  // Take off. useLayoutEffect so the measuring + first keyframe land before
+  // the browser paints the freshly mounted overlay at rest.
+  useLayoutEffect(() => {
+    const root = scope.current;
+    const frame = root?.querySelector<HTMLElement>(FRAME);
+    const flyer = root?.querySelector<HTMLElement>(FLYER);
+    const cover = root?.querySelector<HTMLElement>(COVER);
+    const page = root?.querySelector<HTMLElement>(PAGE_FRONT);
+    const base = root?.querySelector<HTMLElement>(BASE);
+    const backdrop = backdropRef.current;
+    const burst = burstRef.current;
+    // Where every leaf ends up once the book's open: cover turned, the rest
+    // stacked on the right.
+    for (let k = 0; k < leafCount; k++) poses.current.set(k, { angle: k === 0 ? OPEN_ANGLE : 0, z: leafDepth(k, 1) });
+    if (!root || !frame || !flyer || !cover || !page || !base || !backdrop || !burst) {
+      setBookAway(tileId);
+      return;
+    }
+    const mark = root.querySelector<HTMLElement>(PAGE_MARK);
+    if (reduceMotion) {
+      // The book simply appears open, in place.
+      cover.style.transform = `rotateY(${OPEN_ANGLE}deg)`;
+      page.style.transform = "rotateY(0deg)";
+      base.style.transform = `translateZ(${-BASE_DEPTH}px)`;
+      base.style.filter = "none";
+      if (mark) mark.style.opacity = "0";
+      setBookAway(tileId);
+      animate(reducedEnterSequence(backdrop, burst));
+      return;
+    }
+    // Measure the cell's book BEFORE hiding it, pose our copy over it
+    // (inline, so it's there on the first paint), and only then hide the
+    // original — both changes land in this same layout pass, so the swap
+    // is invisible.
+    const flight = measureFlight(root, tileId);
+    poseAtTile(frame, flyer, cover, page, base, flight);
+    // The base sheet's shadow only belongs to the closed book (see
+    // BASE_SHADOW) — drop it right here, at the swap, while it's still
+    // occluded under the cover either way.
+    base.style.filter = "none";
+    frame.style.opacity = "1";
+    setBookAway(tileId);
+    animate(enterSequence(backdrop, burst, flight, !!mark));
+    // Runs once, on mount: the flight is from wherever the tile was then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The peel in progress, if any: which face, how far, and the animation
+  // easing it (shut, or on over the spine) if one's running.
+  const curling = useRef<{ state: CurlState; face: HTMLElement; anim: AnimationPlaybackControls | null } | null>(null);
+  const turning = useRef(false);
+
+  const draw = useCallback(
+    (state: CurlState | null) => {
+      const root = scope.current;
+      if (!root) return;
+      const dom = findCurlDom(root);
+      if (!dom) return;
+      const prev = curling.current;
+      const prevFace = prev && (!state || prev.state.leaf !== state.leaf || prev.state.side !== state.side) ? prev.face : null;
+      renderCurl(root, dom, colors.INK, state, prevFace);
+      if (!state) {
+        if (prev) prev.face.style.clipPath = "";
+        curling.current = null;
+        return;
+      }
+      const face = faceOf(root, state.leaf, state.side);
+      if (!face) return;
+      curling.current = { state, face, anim: prev && prev.face === face ? prev.anim : null };
+    },
+    [colors.INK, scope],
+  );
+
+  // The hover curl: `at` is the pointer in viewport coordinates, or null to
+  // let the page settle flat again, which eases the crease back out to the
+  // edge rather than snapping. Direct DOM writes per move, so it tracks the
+  // pointer exactly. Hands off while a turn is in progress.
+  const curl = useCallback(
+    (leaf: number, side: Side, at: Point | null) => {
+      const root = scope.current;
+      const frame = root?.querySelector<HTMLElement>(FRAME);
+      if (!root || !frame || turning.current) return;
+      const current = curling.current;
+      if (at) {
+        current?.anim?.stop();
+        const rect = frame.getBoundingClientRect();
+        const W = rect.width / 2;
+        const H = rect.height;
+        const spineX = rect.left + W;
+        const fromSpine = side === "front" ? at.x - spineX : spineX - at.x;
+        const depth = Math.min(W * MAX_HOVER_PEEL, Math.max(0, W - fromSpine));
+        const v = (at.y - rect.top - H / 2) / (H / 2);
+        if (!current || current.state.leaf !== leaf || current.state.side !== side) setCurlCopy({ leaf, side });
+        draw({ leaf, side, depth, v });
+        return;
+      }
+      if (!current) return;
+      const { state } = current;
+      const anim = animateValue(state.depth, 0, {
+        duration: 0.22,
+        ease: "easeOut",
+        onUpdate: (depth) => draw({ ...state, depth }),
+        onComplete: () => {
+          draw(null);
+          setCurlCopy(null);
+        },
+      });
+      current.anim = anim;
+    },
+    [draw, scope],
+  );
+
+  // Turn the pages. The leaf crossing the spine does so as a peel: from
+  // wherever the reader has it curled (or from the middle of its edge),
+  // the fold sweeps across the page to the spine, the fold-back growing
+  // over the facing page, and at the end the leaf is put into its turned
+  // position underneath — the same picture — and the fold-back taken away.
+  // Meanwhile the other leaves shuffle a hair in depth so the two stacks
+  // keep sorting.
+  const prevSpread = useRef(0);
+  useEffect(() => {
+    if (spread === prevSpread.current) return;
+    const forward = spread > prevSpread.current;
+    prevSpread.current = spread;
+    const turned = spread + 1;
+    const root = scope.current;
+    // The leaf that crosses: forward, the right-hand page's leaf; back, the
+    // left-hand page's.
+    const leaf = forward ? spread : spread + 1;
+    const side: Side = forward ? "front" : "back";
+    const turn = reduceMotion ? 0 : TURN_DURATION;
+
+    const seq: AnimationSequence = [];
+    for (let k = 0; k < leafCount; k++) {
+      const pose = poses.current.get(k) ?? { angle: 0, z: 0 };
+      const z = leafDepth(k, turned);
+      if (k !== leaf) seq.push(...depthSegments(leafSelector(k), pose.z, z, 0, turn));
+      poses.current.set(k, { angle: k < turned ? OPEN_ANGLE : 0, z });
+    }
+    if (seq.length) animate(seq);
+
+    const target = forward ? OPEN_ANGLE : 0;
+    const land = () => {
+      const el = root?.querySelector<HTMLElement>(leafSelector(leaf));
+      const z = leafDepth(leaf, turned);
+      // Inline first so the very next paint has it there, then tell Motion
+      // so its own values agree.
+      if (el) el.style.transform = `translateZ(${z}px) rotateY(${target}deg)`;
+      animate(leafSelector(leaf), { rotateY: target, z }, { duration: 0 });
+    };
+    if (reduceMotion || !root) {
+      land();
+      draw(null);
+      setCurlCopy(null);
+      return;
+    }
+    turning.current = true;
+    const current = curling.current;
+    const from =
+      current && current.state.leaf === leaf && current.state.side === side ? current.state : { leaf, side, depth: 0, v: 0 };
+    current?.anim?.stop();
+    setCurlCopy({ leaf, side });
+    const W = (root.querySelector<HTMLElement>(FRAME)?.clientWidth ?? 0) / 2;
+    const anim = animateValue(0, 1, {
+      duration: turn,
+      ease: TURN_EASE,
+      // The fold sweeps to the spine and straightens up; the shadow it casts
+      // fades away as the page lays itself down.
+      onUpdate: (p) =>
+        draw({
+          leaf,
+          side,
+          depth: from.depth + (2 * W - from.depth) * p,
+          v: from.v * (1 - p),
+          // Gone by a third of the way across.
+          shadow: CURL_SHADOW * Math.max(0, 1 - p * 3),
+        }),
+      onComplete: () => {
+        land();
+        // Let the landed leaf paint before the fold-back goes, so there's
+        // never a frame with neither.
+        requestAnimationFrame(() => {
+          draw(null);
+          setCurlCopy(null);
+          turning.current = false;
+        });
+      },
+    });
+    curling.current = { state: from, face: faceOf(root, leaf, side)!, anim };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spread]);
+
+  // Fly home. AnimatePresence has already dropped us from its children
+  // (isPresent false) but keeps us mounted until safeToRemove.
+  useEffect(() => {
+    if (isPresent) return;
+    const root = scope.current;
+    const frame = root?.querySelector<HTMLElement>(FRAME);
+    const base = root?.querySelector<HTMLElement>(BASE);
+    const backdrop = backdropRef.current;
+    const burst = burstRef.current;
+    // Let the board take clicks straight away — the overlay's just scenery now.
+    if (overlayRef.current) overlayRef.current.style.pointerEvents = "none";
+    curling.current?.anim?.stop();
+    draw(null);
+    // Both updates are batched into one React commit: the cell's copy
+    // reappears on exactly the frame this one is unmounted, no fade
+    // either side.
+    const finish = () => {
+      setBookAway(null);
+      safeToRemove();
+    };
+    if (!root || !frame || !base || !backdrop || !burst) {
+      finish();
+      return;
+    }
+    // Bring the base sheet's shadow back before it's closed again — it's
+    // occluded under the cover regardless of exactly when in the close it
+    // returns.
+    base.style.filter = BASE_SHADOW;
+    if (reduceMotion) {
+      animate(reducedExitSequence(backdrop, burst)).then(finish, finish);
+      return;
+    }
+    // Re-measured: the board may have scrolled, or the tile changed size,
+    // since the book took off. The perspective can be swapped for the
+    // landing's right now, unseen: the open book is flat (no tilt, every
+    // leaf lying flat), so it projects the same at any depth.
+    const flight = measureFlight(root, tileId);
+    frame.style.perspective = `${flight.perspective}px`;
+    frame.style.perspectiveOrigin = `${flight.originX}px ${flight.perspectiveOriginY}px`;
+    animate(exitSequence(backdrop, burst, flight, poses.current, spreadRef.current, !!root.querySelector(PAGE_MARK))).then(finish, finish);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPresent]);
+
+  // Arrow keys turn the pages. On the document rather than the dialog, so
+  // they work wherever focus has ended up inside the modal — but not while
+  // typing in a field.
+  useEffect(() => {
+    if (!isPresent) return;
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      e.preventDefault();
+      flipTo(spreadRef.current + (e.key === "ArrowRight" ? 1 : -1));
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [isPresent, flipTo]);
 
   return (
-    <div className="relative">
+    <ModalOverlay
+      ref={overlayRef}
+      isOpen
+      onOpenChange={(open) => !open && onClose()}
+      isDismissable
+      className="fixed inset-0 z-50 overflow-y-auto p-4"
+    >
+      {/* The scrim is its own layer (not the overlay's background) so it
+          can fade on its own clock while the book's in flight above it. */}
+      <div ref={backdropRef} className="pointer-events-none fixed inset-0 bg-scrim/70" style={{ opacity: 0 }} />
+      <ComicBurst burstRef={burstRef} reduceMotion={!!reduceMotion} />
+      {/* min-h-full + a centering flex child (rather than centering the
+          scroll container itself) so tall content — the book plus its
+          floating title and the nav — scrolls into view instead of having
+          its top clipped by the centering. */}
+      <div className="flex min-h-full items-center justify-center py-10">
+        {/* Width is what sizes the book (it's 4:3), so it's capped by the
+            viewport's height too — an open comic should fit on screen. */}
+        <AriaModal className="w-full outline-none" style={{ maxWidth: BOOK_MAX_WIDTH }}>
+          <AriaDialog aria-label={tile.name} className="outline-none">
+            <TileDetails
+              ref={scope}
+              tile={tile}
+              colors={colors}
+              spread={spread}
+              lastSpread={lastSpread}
+              curlCopy={curlCopy}
+              onFlipTo={flipTo}
+              onCurl={curl}
+              onClose={onClose}
+              onSubmit={onSubmit}
+              onToggleInterest={onToggleInterest}
+            />
+          </AriaDialog>
+        </AriaModal>
+      </div>
+    </ModalOverlay>
+  );
+}
+
+function TileDetails({
+  ref,
+  tile,
+  colors,
+  spread,
+  lastSpread,
+  curlCopy,
+  onFlipTo,
+  onCurl,
+  onClose,
+  onSubmit,
+  onToggleInterest,
+}: {
+  ref: Ref<HTMLDivElement>;
+  tile: TileModel;
+  colors: ComicColors;
+  spread: number;
+  lastSpread: number;
+  curlCopy: { leaf: number; side: Side } | null;
+  onFlipTo: (spread: number) => void;
+  onCurl: (leaf: number, side: Side, at: Point | null) => void;
+  onClose: () => void;
+  onSubmit?: () => void;
+  onToggleInterest?: () => void;
+}) {
+  const TaskPanel = useSlot("TaskPanel");
+  const tokens = useThemeTokens();
+  const { pageCount, innerLeaves } = bookShape(tile);
+
+  // The pages, in reading order.
+  const pages: ReactNode[] = [
+    <SummaryPage key="summary" tile={tile} colors={colors} onSubmit={onSubmit} onToggleInterest={onToggleInterest} />,
+    ...tile.tasks.map((task) => <TaskPage key={task.id} task={task} TaskPanel={TaskPanel} />),
+    <SubmissionsPage key="submissions" submissions={tile.submissions} colors={colors} />,
+  ];
+
+  // Page i (0-based) as it appears on a face: numbered and scrollable.
+  // Fronts are right-hand pages, backs left-hand ones. The copy drawn on a
+  // fold-back is the same page without its gutter shadow.
+  const face = (i: number, side: Side, gutter = true): ReactNode => (
+    <BookPage colors={colors} side={side === "front" ? "right" : "left"} no={i + 1} total={pageCount} gutter={gutter}>
+      {pages[i]}
+    </BookPage>
+  );
+  // Leaf k (1-based) carries page 2k on its front and 2k+1 on its back —
+  // pages[2k-1] and pages[2k] here.
+  const leaves: LeafFaces[] = Array.from({ length: innerLeaves }, (_, idx) => {
+    const k = idx + 1;
+    return { front: face(2 * k - 1, "front"), back: 2 * k < pageCount ? face(2 * k, "back") : undefined };
+  });
+
+  // What the curl layer shows on the fold-back: the OTHER side of the page
+  // being peeled — a front face's leaf's back (page 2k+1), or a back
+  // face's front (page 2k) — ticks included, so they're there the moment
+  // any peel shows, not just once the turn lands on the real leaf face.
+  const copySide: Side | null = curlCopy ? (curlCopy.side === "front" ? "back" : "front") : null;
+  const copyContent: ReactNode = (() => {
+    if (!curlCopy || !copySide) return null;
+    const k = curlCopy.leaf;
+    const i = curlCopy.side === "front" ? 2 * k : 2 * k - 1;
+    if (k < 1 || i >= pageCount) return null;
+    return face(i, copySide, false);
+  })();
+
+  const leftPage = 2 * spread + 1;
+  const rightPage = leftPage + 1 <= pageCount ? leftPage + 1 : null;
+
+  return (
+    // The root is the size reference: `--bw` (the closed book's width, which
+    // every length in ClosedBook is a fraction of) is half of it — one page
+    // of the two-page spread.
+    <div
+      ref={ref}
+      className="relative [container-type:inline-size]"
+      style={{ ["--bw" as string]: "50cqw" }}
+    >
+      {/* The 2D frame — the flight's translate/scale, the perspective and
+          the tile's crop all live here, mirroring TileCell's frame. Starts
+          invisible; FlyingBook's layout effect poses it over the tile and
+          reveals it before first paint. */}
+      <div
+        data-frame
+        className="relative w-full aspect-[4/3]"
+        style={{ opacity: 0, willChange: "transform" }}
+      >
+        {/* The book's 3D box — two 2:3 pages side by side, spine at the
+            center — carrying the tilt. preserve-3d so the hinge rotations
+            inside compose with it. */}
+        <div data-flyer className="absolute inset-0" style={{ transformStyle: "preserve-3d" }}>
+          {/* The closed book sits over the right-hand page. */}
+          <div className="absolute inset-y-0 right-0 w-1/2" style={{ transformStyle: "preserve-3d" }}>
+            <ClosedBook
+              tile={tile}
+              colors={colors}
+              coverFallback={tokens.tile.bg}
+              frozen={tile.freeze.isFrozen}
+              pose={{ coverAngle: CLOSED_BOOK.coverAngle, pageAngle: CLOSED_BOOK.pageAngle }}
+              coverInside={face(0, "back")}
+              leaves={leaves}
+            />
+          </div>
+        </div>
+
+        {/* The fold-back of a peeling page, drawn by renderCurl: the clipped
+            sheet (a pre-mirrored copy of the page's other side, ticks along
+            its own edge included, shaded), its ink outline, and a shadow.
+            Spans both pages so a turn can carry it across the spine. The
+            outer box clips: the reflected copy can
+            reach well outside the book, and a transformed box that pokes
+            out of the scrolling overlay would grow it a scrollbar. It's a
+            little bigger than the book so the shadow isn't cut; the sheet
+            inside is exactly the book's box, so its coordinates are the
+            frame's. */}
+        <div
+          data-curl-layer
+          className="pointer-events-none absolute overflow-hidden"
+          style={{ inset: bw(-0.12), display: "none" }}
+        >
+          <div data-curl-sheet className="absolute" style={{ inset: bw(0.12) }}>
+            <div data-curl-clip className="absolute inset-0">
+              <div
+                data-curl-copy
+                className="absolute top-0 h-full w-1/2 overflow-hidden"
+                style={{
+                  left: curlCopy?.side === "back" ? 0 : "50%",
+                  backgroundColor: colors.PAPER,
+                  border: `${bw(0.012)} solid transparent`,
+                  transformOrigin: "0 0",
+                }}
+              >
+                {copyContent}
+                {copySide && <PageEdgeTicks colors={colors} side={copySide} />}
+              </div>
+              <div data-curl-shade className="absolute inset-0" />
+            </div>
+            <svg data-curl-outline className="absolute inset-0 h-full w-full overflow-visible" preserveAspectRatio="none">
+              <polygon fill="none" strokeLinejoin="round" />
+            </svg>
+          </div>
+        </div>
+
+        {/* The page-turning strips, in the flat frame rather than on the
+            leaves, so the page can change shape under the pointer without
+            the strip ever moving out from under it. The right-hand page is
+            the next leaf's front; the left-hand one is this spread's leaf,
+            turned, so its back. */}
+        {spread < lastSpread && (
+          <EdgeBand side="right" onCurl={(at) => onCurl(spread + 1, "front", at)} onFlip={() => onFlipTo(spread + 1)} />
+        )}
+        {spread >= 1 && <EdgeBand side="left" onCurl={(at) => onCurl(spread, "back", at)} onFlip={() => onFlipTo(spread - 1)} />}
+      </div>
+
+      {/* The trimmings: floating tilted artwork, the close button, and the
+          page nav under the book. */}
       {tile.imageUrl && (
         <img
+          data-extra
           src={tile.imageUrl}
           alt={tile.name}
-          className="border-2 absolute -top-28 -left-12 size-36 shrink-0 object-contain -rotate-12"
-          style={{ borderColor: colors.INK }}
+          className="border-2 absolute -top-[8.25rem] -left-14 size-36 shrink-0 object-contain -rotate-12"
+          style={{ borderColor: colors.INK, opacity: 0 }}
         />
       )}
       <AriaButton
+        data-extra
         aria-label="Close"
         onPress={onClose}
-        className="cursor-pointer absolute right-0 -top-4 flex size-12 shrink-0 items-center justify-center rounded-full border-[3px] transition-transform duration-100 pressed:scale-95 hover:-translate-y-0.5 z-51"
+        className="cursor-pointer absolute -right-4 -top-4 flex size-12 shrink-0 items-center justify-center rounded-full border-[3px] pressed:scale-95 hover:-translate-y-0.5 z-51"
         style={{
           backgroundColor: colors.PAPER_RAISED,
           color: colors.INK,
           borderColor: colors.INK,
           boxShadow: `3px 3px 0 ${colors.INK}`,
+          opacity: 0,
         }}
       >
         <XIcon size={24} />
       </AriaButton>
-      {/* The book: the scalloped top/bottom wave. The visible shape (fill +
-          border) is drawn as a real SVG path with `stroke` — the only
-          reliable way to get a border that follows a curve like this.
-          The HTML content below is clipped to a slightly SMALLER copy of
-          the same path (`comic-book-clip`, inset ~2% on every point) so
-          there's a guaranteed visible band of the SVG's own fill+stroke
-          around it — clipping the content to the *exact* same coordinates
-          left the border's visibility riding on the two independently
-          scaled coordinate systems (objectBoundingBox vs viewBox) lining
-          up to the pixel, which wasn't happening. */}
-      <svg width="0" height="0" className="absolute">
-        <defs>
-          <clipPath id="comic-book-clip" clipPathUnits="objectBoundingBox">
-            <path d="M 0.07,0.86 Q 0.27,0.81 0.5,0.86 Q 0.73,0.81 0.93,0.86 L 0.93,0.14 Q 0.73,0.09 0.5,0.14 Q 0.27,0.09 0.07,0.14 Z" />
-          </clipPath>
-        </defs>
-      </svg>
-      <div className="relative w-full">
-        <svg
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          className="absolute inset-0 size-full"
-        >
-          <path
-            d="M 5,88 Q 25,83 50,88 Q 75,83 95,88 L 95,12 Q 75,7 50,12 Q 25,7 5,12 Z"
-            fill={colors.PAPER}
-            stroke={colors.INK}
-            strokeWidth={BORDER_WIDTH}
-            vectorEffect="non-scaling-stroke"
-          />
-        </svg>
-        <div
-          className="relative flex w-full min-h-168"
-          style={{
-            backgroundColor: colors.PAPER,
-            clipPath: "url(#comic-book-clip)",
-            boxShadow:
-              "inset 0 14px 18px -14px rgba(0,0,0,0.5), inset 0 -14px 18px -14px rgba(0,0,0,0.5)",
-          }}
-        />
-        <div
-          className="absolute top-0 left-0 grid w-full min-h-168 px-8 pt-20 pb-20"
-          style={{
-            gridTemplateColumns: `repeat(${pageCount}, minmax(0, 1fr))`,
-          }}
-        >
-          {tile.tasks.map((task, i) => (
-            <div
-              key={task.id}
-              className="relative h-full"
-              style={
-                i < tile.tasks.length - 1
-                  ? { borderRight: `${BORDER_WIDTH}px solid ${colors.INK}` }
-                  : undefined
-              }
-            >
-              <TaskPanel task={task} />
-            </div>
-          ))}
-        </div>
+      <div data-extra className="mt-5 flex items-center justify-center gap-4" style={{ opacity: 0, color: colors.INK, fontFamily: COMIC_FONT }}>
+        <NavButton label="Previous page" onPress={() => onFlipTo(spread - 1)} disabled={spread <= 0} colors={colors}>
+          <ArrowLeftIcon size={20} />
+        </NavButton>
+        <span className="min-w-32 text-center text-lg uppercase tabular-nums">
+          {rightPage ? `Pages ${leftPage}–${rightPage}` : `Page ${leftPage}`} <span style={{ color: colors.INK_SUBTLE }}>of {pageCount}</span>
+        </span>
+        <NavButton label="Next page" onPress={() => onFlipTo(spread + 1)} disabled={spread >= lastSpread} colors={colors}>
+          <ArrowRightIcon size={20} />
+        </NavButton>
       </div>
-      {/* Who's on this tile: a speech bubble with a shout-out button. */}
+    </div>
+  );
+}
+
+function NavButton({
+  label,
+  onPress,
+  disabled,
+  colors,
+  children,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled: boolean;
+  colors: ComicColors;
+  children: ReactNode;
+}) {
+  return (
+    <AriaButton
+      aria-label={label}
+      onPress={onPress}
+      isDisabled={disabled}
+      className="flex size-10 cursor-pointer items-center justify-center rounded-full border-[3px] transition-transform duration-100 pressed:scale-95 hover:-translate-y-0.5 disabled:cursor-default disabled:opacity-35 disabled:hover:translate-y-0"
+      style={{ backgroundColor: colors.PAPER_RAISED, color: colors.INK, borderColor: colors.INK, boxShadow: `2px 2px 0 ${colors.INK}` }}
+    >
+      {children}
+    </AriaButton>
+  );
+}
+
+// A page on a face: the scrollable content and its number at the foot.
+function BookPage({
+  colors,
+  side,
+  no,
+  total,
+  gutter = true,
+  children,
+}: {
+  colors: ComicColors;
+  side: "left" | "right";
+  no: number;
+  total: number;
+  gutter?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <Page colors={colors} side={side} gutter={gutter}>
+        <div style={{ paddingBottom: bw(0.12) }}>{children}</div>
+      </Page>
+      <div
+        className="pointer-events-none absolute inset-x-0 text-center text-[0.8em] uppercase"
+        style={{ bottom: bw(0.035), color: colors.INK_SUBTLE, fontFamily: COMIC_FONT, fontSize: bw(0.028) }}
+      >
+        {no} / {total}
+      </div>
+    </>
+  );
+}
+
+/**
+ * The strip along one page's outer edge that turns it. Hovering in from the
+ * edge peels the page back under the pointer; while it's held the strip
+ * widens so the peel keeps following further in, and a click anywhere on
+ * it turns the page. Pointer-only — keyboard users have the nav and the
+ * arrow keys.
+ */
+function EdgeBand({
+  side,
+  onCurl,
+  onFlip,
+}: {
+  side: "left" | "right";
+  onCurl: (at: Point | null) => void;
+  onFlip: () => void;
+}) {
+  const [held, setHeld] = useState(false);
+  const isMouse = (e: React.PointerEvent) => e.pointerType === "mouse";
+
+  return (
+    <div
+      aria-hidden="true"
+      className="absolute inset-y-0 cursor-pointer"
+      style={{ [side]: 0, width: `${(held ? EDGE_BAND_HELD : EDGE_BAND) * 50}%` }}
+      onPointerEnter={(e) => {
+        if (!isMouse(e)) return;
+        setHeld(true);
+        onCurl({ x: e.clientX, y: e.clientY });
+      }}
+      onPointerMove={(e) => isMouse(e) && onCurl({ x: e.clientX, y: e.clientY })}
+      onPointerLeave={(e) => {
+        if (!isMouse(e)) return;
+        setHeld(false);
+        onCurl(null);
+      }}
+      onClick={() => {
+        setHeld(false);
+        onFlip();
+      }}
+    />
+  );
+}
+
+// Page 1: the issue's masthead, title and progress, with the "I'll do
+// this!" shout-out and, when the viewer can, a way to submit.
+function SummaryPage({
+  tile,
+  colors,
+  onSubmit,
+  onToggleInterest,
+}: {
+  tile: TileModel;
+  colors: ComicColors;
+  onSubmit?: () => void;
+  onToggleInterest?: () => void;
+}) {
+  const { progress, freeze } = tile;
+  const pointsPct = progress.totalPoints > 0 ? Math.round((progress.pointsAwarded / progress.totalPoints) * 100) : 0;
+  const submitLabel = progress.allComplete ? "Complete" : freeze.isFrozen ? "Frozen" : "Submit proof";
+
+  return (
+    <div className="flex flex-col gap-5 p-6" style={{ color: colors.INK }}>
+      <div className="flex flex-col items-start gap-2">
+        <span
+          className="px-[0.5em] py-[0.2em] uppercase leading-none"
+          style={{ backgroundColor: "#d2412d", color: "#fff", fontFamily: COMIC_LOGO_FONT, fontWeight: 800, fontSize: "1rem", letterSpacing: "0.02em" }}
+        >
+          Tectonic
+        </span>
+        <h2 className="text-4xl leading-none" style={{ fontFamily: COMIC_FONT }}>
+          {tile.name}
+        </h2>
+        {tile.category && (
+          <span className="text-sm uppercase tracking-wide" style={{ fontFamily: COMIC_FONT, color: tile.category.color ?? colors.INK_SUBTLE }}>
+            {tile.category.label}
+          </span>
+        )}
+      </div>
+
+      <section className="flex flex-col gap-2">
+        <div className="flex items-baseline justify-between">
+          <span className="text-lg uppercase" style={{ fontFamily: COMIC_FONT }}>
+            Progress
+          </span>
+          <span className="num text-2xl leading-none" style={{ fontFamily: COMIC_FONT }}>
+            {progress.pointsAwarded}
+            <span style={{ color: colors.INK_SUBTLE }}> / {progress.totalPoints}</span>
+            <span className="text-[0.6em]"> pts</span>
+          </span>
+        </div>
+        <div className="h-4 w-full overflow-hidden border-[3px]" style={{ borderColor: colors.INK, backgroundColor: colors.PAPER_RAISED }}>
+          <div className="h-full transition-[width] duration-500" style={{ width: `${pointsPct}%`, backgroundColor: colors.GREEN }} />
+        </div>
+        <span className="text-sm" style={{ color: colors.INK_BODY }}>
+          {progress.totalTasks === 0
+            ? "No parts to complete yet."
+            : progress.allComplete
+              ? "All parts complete!"
+              : `${progress.completedTasks} of ${progress.totalTasks} part${progress.totalTasks === 1 ? "" : "s"} complete.`}
+        </span>
+        {freeze.hasFreezePeriod && (
+          <span className="text-sm" style={{ color: freeze.isFrozen ? colors.BLUE : colors.INK_SUBTLE }}>
+            {freeze.isFrozen
+              ? `Frozen — unlocks in ${formatCountdown(freeze.remainingMs)}.`
+              : `Freeze tile: locked for ${freeze.durationMinutes} min once a part's approved.`}
+          </span>
+        )}
+      </section>
+
       {(onToggleInterest || tile.interest.people.length > 0) && (
-        <div
-          className="relative z-0 mx-2 mt-4 flex flex-wrap items-center gap-3 rounded-2xl border-[3px] px-4 py-3"
-          style={{ backgroundColor: colors.PAPER_RAISED, borderColor: colors.INK, color: colors.INK, boxShadow: "3px 3px 0 rgba(0,0,0,0.2)", fontFamily: COMIC_FONT }}
+        <section
+          className="flex flex-wrap items-center gap-3 rounded-2xl border-[3px] px-4 py-3"
+          style={{ backgroundColor: colors.PAPER_RAISED, borderColor: colors.INK, boxShadow: "3px 3px 0 rgba(0,0,0,0.2)", fontFamily: COMIC_FONT }}
         >
           {onToggleInterest && (
             <AriaButton
@@ -196,34 +1421,49 @@ function TileDetails({
               "Nobody has called this one yet."
             )}
           </span>
-        </div>
+        </section>
       )}
-      {/* Submissions as a stack of chat bubbles floating below the book,
-          each with a small tail on its left edge, near the bottom. */}
-      {tile.submissions.length > 0 && (
-        <div className="relative z-0 flex flex-col gap-4 px-2">
-          {tile.submissions.map((s) => (
-            <div
-              key={s.id}
-              className="relative ml-6 max-w-[92%] self-start rounded-2xl border-[3px] px-4 py-3"
-              style={{
-                backgroundColor: colors.PAPER_RAISED,
-                borderColor: colors.INK,
-                boxShadow: "3px 3px 0 rgba(0,0,0,0.2)",
-              }}
-            >
-              <div
-                className="absolute -left-2.5 bottom-4 size-4 border-b-[3px] border-l-[3px]"
-                style={{
-                  backgroundColor: colors.PAPER_RAISED,
-                  borderColor: colors.INK,
-                  transform: "rotate(45deg)",
-                }}
-              />
-              <SubmissionBubble submission={s} />
-            </div>
-          ))}
-        </div>
+
+      {onSubmit && (
+        <AriaButton
+          onPress={onSubmit}
+          isDisabled={!tile.canSubmit}
+          className="cursor-pointer self-start rounded-full border-[3px] px-5 py-2 text-base font-bold uppercase transition-transform duration-100 pressed:scale-95 hover:-translate-y-0.5 disabled:cursor-default disabled:opacity-50 disabled:hover:translate-y-0"
+          style={{ borderColor: colors.INK, boxShadow: `3px 3px 0 ${colors.INK}`, backgroundColor: colors.ORANGE_LINE, color: "#fff", fontFamily: COMIC_FONT }}
+        >
+          {submitLabel}
+        </AriaButton>
+      )}
+    </div>
+  );
+}
+
+function TaskPage({ task, TaskPanel }: { task: TaskModel; TaskPanel: React.ComponentType<{ task: TaskModel }> }) {
+  return <TaskPanel task={task} />;
+}
+
+// The last page: every submission for this tile, newest first, each in its
+// own speech bubble.
+function SubmissionsPage({ submissions, colors }: { submissions: SubmissionModel[]; colors: ComicColors }) {
+  return (
+    <div className="flex flex-col gap-4 p-5" style={{ color: colors.INK }}>
+      <h3 className="text-2xl uppercase leading-none" style={{ fontFamily: COMIC_FONT }}>
+        Submissions
+      </h3>
+      {submissions.length === 0 ? (
+        <p className="text-sm" style={{ color: colors.INK_SUBTLE }}>
+          Nothing submitted for this issue yet.
+        </p>
+      ) : (
+        submissions.map((s) => (
+          <div
+            key={s.id}
+            className="relative rounded-2xl border-[3px] px-4 py-3"
+            style={{ backgroundColor: colors.PAPER_RAISED, borderColor: colors.INK, boxShadow: "3px 3px 0 rgba(0,0,0,0.2)" }}
+          >
+            <SubmissionBubble submission={s} />
+          </div>
+        ))
       )}
     </div>
   );

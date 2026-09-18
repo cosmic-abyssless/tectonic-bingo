@@ -1,21 +1,59 @@
-import { memo, useState, type CSSProperties } from "react";
+import { memo, type CSSProperties } from "react";
+import { motion, type Variants } from "motion/react";
+import { useFocusRing } from "react-aria";
 import type { TileModel } from "../../../headless/types";
 import { formatCountdown } from "../../../core/ui/time";
-import { TASK_STATUS_DOT } from "../../../core/ui/StatusBadge";
 import { CheckIcon, ClockIcon, HandIcon, LockIcon } from "../../../core/ui/icons";
 import { useResolvedColorScheme } from "../../../core/ui/colorScheme";
-import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
-import { getContrastTextColor, useDominantColor } from "../useDominantColor";
+import { useThemeTokens } from "../../context";
+import { COMIC_FONT } from "../font";
+import { bw, CLOSED_BOOK, ClosedBook, FIRST_LEAF_STAGGER } from "./ClosedBook";
+import { registerBook, useIsBookAway } from "./bookFlight";
 import { getColors } from "./colors";
 
 /*
  * A little comic book sitting on the tile, cracked open just enough to show
- * it has pages — a static "pages" layer sitting behind a "cover" layer (the
- * artwork + title lettering) that's hinged along its spine (the left edge)
- * and folded open in 3D (perspective + rotateY) so it lifts toward the
- * viewer rather than just rotating flat. Hovering opens it further, inviting
- * the click that reveals the full thing in the tile modal.
+ * it has pages — the shared ClosedBook drawing (pages + hinged cover) in a
+ * 3D box that's tilted 3/4-on to the viewer. Hovering opens it further,
+ * inviting the click that sends it flying out into the tile modal (see
+ * TileModal, which renders the same ClosedBook at full size).
+ *
+ * All of the book's motion is Motion variants driven from the <button>:
+ * whileHover / whileTap on the button propagate "hover" / "press" down to
+ * the book, page and cover, and `animate` does the same for keyboard focus
+ * and the search dropdown's highlight — one spring for everything, so the
+ * three layers always move together, and an interrupted hover (mouse in,
+ * straight back out) settles physically instead of snapping.
  */
+
+// Snappy but with a little overshoot — a comic book should feel springy.
+const BOOK_SPRING = { type: "spring", stiffness: 420, damping: 24, mass: 0.7 } as const;
+const PRESS_SPRING = { type: "spring", stiffness: 700, damping: 32 } as const;
+
+// The whole book: a static 3/4-view tilt at rest, grows and lifts a touch
+// on hover, squashes back down slightly while pressed.
+const bookVariants: Variants = {
+  rest: { rotateY: CLOSED_BOOK.tilt, scale: 1, y: "0%", transition: BOOK_SPRING },
+  hover: { rotateY: CLOSED_BOOK.tilt, scale: 1.06, y: "-5%", transition: BOOK_SPRING },
+  press: { rotateY: CLOSED_BOOK.tilt, scale: 0.98, y: "-3%", transition: PRESS_SPRING },
+};
+// Front page: always the angle halfway between the flat back page (0) and
+// the cover, so the stack reads as evenly fanned the whole time; and
+// always staggered a hair out from under the cover, so it reads as a
+// stack at all.
+const pageVariants: Variants = {
+  rest: { rotateY: CLOSED_BOOK.pageAngle, ...FIRST_LEAF_STAGGER, transition: BOOK_SPRING },
+  hover: { rotateY: -13, ...FIRST_LEAF_STAGGER, transition: BOOK_SPRING },
+  press: { rotateY: -10, ...FIRST_LEAF_STAGGER, transition: PRESS_SPRING },
+};
+// Cover: hinged along the spine, opens further on hover.
+const coverVariants: Variants = {
+  rest: { rotateY: CLOSED_BOOK.coverAngle, transition: BOOK_SPRING },
+  hover: { rotateY: -26, transition: BOOK_SPRING },
+  press: { rotateY: -20, transition: PRESS_SPRING },
+};
+const hingeVariants = { page: pageVariants, cover: coverVariants };
+
 export const TileCell = memo(function TileCell({
   tile,
   onOpen,
@@ -25,68 +63,79 @@ export const TileCell = memo(function TileCell({
   onOpen: (tileId: string) => void;
   isSearchHighlighted?: boolean;
 }) {
-  const [imgFailed, setImgFailed] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
-  const scheme = useResolvedColorScheme();
-  const colors = getColors(scheme);
-  const dominantColor = useDominantColor(
-    tile.imageUrl && !imgFailed ? tile.imageUrl : null,
-  );
-  // Falls back to the tile's own bg token (not colors.ts's PAPER, which is
-  // the tile *modal*'s book-page purple) so a no-image tile's cover reads as
-  // the same charcoal/cream as the rest of the board, not a separate hue.
-  const coverColor = dominantColor ?? "var(--tile-bg)";
-  // The two page-stack slivers (unlike the cover above) keep colors.ts's
-  // purple/plum PAPER family — a little of the modal's "moonlit" book
-  // identity peeking out from behind the charcoal cover, rather than
-  // blending into it.
-  const tickColor = scheme === "dark" ? "rgba(233,213,255,0.35)" : "rgba(0,0,0,0.22)";
-  // The price badge sits directly on the cover with no fill of its own, so
-  // its own color (border + text) has to adapt to whatever that cover
-  // color turns out to be, not the other way around.
-  const priceTextColor = getContrastTextColor(dominantColor);
+  // Focus-visible, not plain focus: react-aria tracks the interaction
+  // modality app-wide, so this is true after Tabbing to the tile (or when
+  // focus is restored to it after closing its modal with Escape), but not
+  // after clicking it, or after closing its modal with the pointer — a
+  // tile you've just clicked away from shouldn't sit there lit up.
+  const { isFocusVisible, focusProps } = useFocusRing();
+  const colors = getColors(useResolvedColorScheme());
+  const tokens = useThemeTokens();
+  // While this tile's book is off in the modal, the cell's own copy hides —
+  // the modal's copy took off from exactly this spot, and lands back here.
+  const isAway = useIsBookAway(tile.id);
 
   const style = (
     tile.accentColor ? { "--tile-accent": tile.accentColor } : {}
   ) as CSSProperties;
-  // Focus (keyboard or otherwise — same "you're interacting with this right
-  // now" idea as the search bubble's blue outline) takes priority over the
-  // frozen/complete indicator colors; the shadow "lifts" further too, same
-  // as the search bubble does on its own focus.
-  const borderColor = isFocused
+  // The tile is a faint slot the book sits in, not a card: an ink tint
+  // that's densest at the bottom edge (where the book's cropped, so it
+  // reads as tucked into a pocket) and fades to nothing toward the top,
+  // with no outline of its own — the book carries the weight and the tint
+  // just marks the bingo cell's bounds. Keyboard focus (same "you're
+  // interacting with this right now" idea as the search bubble's blue
+  // outline) gets an accent outline and the comic offset shadow; frozen and
+  // complete tiles get a hairline in their color.
+  const stateColor = isFocusVisible
     ? "var(--color-accent)"
     : tile.freeze.isFrozen
       ? "var(--tile-frozen)"
       : tile.progress.allComplete
         ? "var(--tile-complete)"
-        : "var(--tile-border)";
-  const liftPx = isFocused ? 5 : 3;
+        : null;
+  // Outlines are inset box-shadows, not a border: a transparent border
+  // around a gradient background leaves an anti-aliasing hairline along its
+  // inner edge in Chrome, and a real border would shift the layout.
+  const outline = stateColor
+    ? isFocusVisible
+      ? `inset 0 0 0 1.5px ${stateColor}, 4px 4px 0 ${stateColor}`
+      : `inset 0 0 0 1.5px ${stateColor}`
+    : "none";
+  const isLifted = isFocusVisible || !!isSearchHighlighted;
 
   return (
-    <button
+    <motion.button
+      // Just the two focus handlers, not a spread of focusProps: its wider
+      // DOMAttributes type clashes with motion's own onAnimationStart.
+      onFocus={focusProps.onFocus}
+      onBlur={focusProps.onBlur}
       onClick={() => onOpen(tile.id)}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
       title={tile.name}
-      data-search-highlighted={isSearchHighlighted ? "" : undefined}
+      initial="rest"
+      animate={isLifted ? "hover" : "rest"}
+      whileHover="hover"
+      whileTap="press"
       style={{
         ...style,
-        borderColor,
-        boxShadow: `${liftPx}px ${liftPx}px 0 ${borderColor}`,
+        backgroundImage:
+          "linear-gradient(to top, color-mix(in srgb, var(--tile-border) 16%, transparent), color-mix(in srgb, var(--tile-border) 5%, transparent) 55%, transparent)",
+        boxShadow: outline,
       }}
-      className={`group relative aspect-square w-full cursor-pointer rounded-xl border-[3px] bg-[var(--tile-bg)] outline-none transition-[border-color,box-shadow] duration-150 [container-type:inline-size] ${
+      className={`group relative aspect-square w-full cursor-pointer rounded-lg border-0 outline-none transition-[box-shadow] duration-150 [container-type:inline-size] ${
         tile.dimmed ? "pointer-events-none opacity-20 saturate-0" : ""
       }`}
     >
-      {/* The book — sized bigger than the tile and anchored near the top, so
-          its bottom third would naturally land past the tile's own bottom
-          edge. clip-path here (not overflow-hidden on the button) crops
-          exactly that: top/left/right get no clip at all (huge negative
-          inset, so the book can freely poke up over the tile above it),
-          bottom clips at the tile's edge. This has to live on THIS div —
-          the one perspective is set on, not yet 3D-rotated itself — rather
-          than up on the button: clip-path travels with an element's own
-          transform, so applying it to something that's already rotated
+      {/* The book's frame — a 2D box, sized bigger than the tile and anchored
+          near the top, so the book's bottom third would naturally land past
+          the tile's own bottom edge. clip-path here (not overflow-hidden on
+          the button) crops it to the tile: the bottom at the tile's edge,
+          left/right at the tile's edges too (the book's soft shadow reaches
+          further right than the 8% margin), and no clip at all on top (huge
+          negative inset, so the book can freely poke up over the tile above
+          it). This has to live on THIS div — the perspective container, not
+          yet 3D-rotated itself —
+          rather than up on the button: clip-path travels with an element's
+          own transform, so applying it to something that's already rotated
           would tilt the crop line with it, and applying it several levels
           up on an ancestor of the rotated/preserve-3d subtree wasn't
           reliably honored.
@@ -97,127 +146,52 @@ export const TileCell = memo(function TileCell({
           bottom would land at 9% + 126% = 135%, i.e. 35% of tile height
           past the tile's own bottom edge. As a fraction of THIS div's own
           height (its clip-path's percentage basis): 35 / 126 ≈ 27.78%.
-          Retune this if top-[9%], inset-x-[8%], or the aspect ratio change.
-          drop-shadow (not box-shadow) so the shadow is cast by the book's
-          actual rendered silhouette after the 3D tilt, instead of rotating
-          along with it like a box-shadow would. */}
+          Sides likewise: the tile's edge is 8% of tile width past this div
+          on each side, i.e. 8 / 84 ≈ 9.52% of its own width. Retune these
+          if top-[9%], inset-x-[8%], or the aspect ratio change — and
+          TileModal's matching bottom crop with it.
+          `--bw` is the book's width, which every length inside ClosedBook
+          is a fraction of; the perspective is a fixed multiple of it too,
+          so the tilt projects identically at any tile size (and TileModal
+          reproduces it for the flight). Visibility (the "book is away in
+          the modal" state) lives here too, on a plain div: putting an
+          `animate` object on an intermediate motion element would stop the
+          button's variant labels propagating down to the book/page/cover.
+          It flips with no transition on purpose — the modal's copy takes
+          over / hands back on the very same frame. */}
       <div
-        className="absolute inset-x-[8%] top-[9%]"
+        ref={(el) => registerBook(tile.id, el)}
+        className="absolute inset-x-[8%] top-[9%] aspect-[2/3]"
         style={{
-          perspective: 500,
-          filter: "drop-shadow(3px 10px 8px rgba(0,0,0,0.45))",
-          clipPath: "inset(-9999px -9999px 27.78% -9999px)",
+          ["--bw" as string]: "84cqw",
+          perspective: bw(CLOSED_BOOK.perspective),
+          clipPath: "inset(-9999px -9.52% 27.78% -9.52%)",
+          opacity: isAway ? 0 : 1,
         }}
       >
-        {/* Static 3/4-view tilt for the whole book, so it reads as sitting at
-            an angle rather than facing the viewer flat-on. preserve-3d makes
-            the pages/cover children's own transforms compose within this
-            tilted frame instead of flattening against it. On hover, focus,
-            or when this is the tile the search dropdown currently has
-            highlighted (data-search-highlighted, set by the caller), the
-            book also grows slightly and lifts up a touch, on top of (and in
-            the same transform as) that base tilt. The cover's own
-            fold-open angle animates separately, on its own element. */}
-        <div
-          className="relative aspect-[2/3] w-full transition-transform duration-200 [transform:rotateY(-15deg)] group-hover:[transform:rotateY(-15deg)_scale(1.05)_translateY(-4%)] group-focus:[transform:rotateY(-15deg)_scale(1.05)_translateY(-4%)] group-data-[search-highlighted]:[transform:rotateY(-15deg)_scale(1.05)_translateY(-4%)]"
+        {/* The book's 3D box: preserve-3d makes the pages/cover children's
+            own hinge rotations compose within this tilted frame instead of
+            flattening against it. */}
+        <motion.div
+          data-book
+          variants={bookVariants}
+          className="absolute inset-0"
           style={{ transformStyle: "preserve-3d" }}
         >
-          {/* Back page — flat and fully static, the bottom of the stack. A
-              single flat sheet peeking out reads as a binder's lone insert,
-              so this sits a couple pixels past the front page's right/bottom
-              edges (away from the spine, which stays flush left/top on
-              both) — that stagger is what reads as a stack of pages rather
-              than one page in a cover. */}
-          <div
-            className="absolute overflow-hidden rounded-[3px] border-2"
-            style={{
-              inset: "2px -2px -3px 0",
-              backgroundColor: colors.PAPER_ALT,
-              borderColor: "var(--tile-border)",
-            }}
+          {/* Cover falls back to the tile's own bg token (not colors.ts's
+              PAPER, which is the modal's book-page purple) so a no-image
+              tile's cover reads as the same charcoal/cream as the rest of
+              the board, not a separate hue. Passed as the resolved hex
+              rather than var(--tile-bg) so the modal's copy (portaled out
+              of the theme's CSS-variable scope) can use the same value. */}
+          <ClosedBook
+            tile={tile}
+            colors={colors}
+            coverFallback={tokens.tile.bg}
+            frozen={tile.freeze.isFrozen}
+            variants={hingeVariants}
           />
-          {/* Front page — inset exactly halfway between the back page above
-              and the cover's own flush inset-0, so the stack reads as evenly
-              spaced. Its rotation is kept at that same midpoint too, at rest
-              AND on hover: back page holds 0deg (flat, its own transform),
-              cover holds -15deg at rest / -23deg on hover, so this page sits
-              at -7.5deg at rest / -11.5deg on hover — literally the angle
-              halfway between the other two the whole time, rather than
-              starting flush with the cover and only diverging once you
-              hover. Same hinge (transform-origin) as the cover so it opens
-              with it on hover/focus/search-highlight. */}
-          <div
-            className="absolute overflow-hidden rounded-[3px] border-2 transition-transform duration-200 [transform:rotateY(-7.5deg)] group-hover:[transform:rotateY(-11.5deg)] group-focus:[transform:rotateY(-11.5deg)] group-data-[search-highlighted]:[transform:rotateY(-11.5deg)]"
-            style={{
-              inset: "1px -1px -1.5px 0",
-              backgroundColor: colors.PAPER,
-              borderColor: "var(--tile-border)",
-              transformOrigin: "left center",
-            }}
-          >
-            <div
-              className="absolute inset-y-1 right-0 w-2.5"
-              style={{
-                backgroundImage: `repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, ${tickColor} 3px, ${tickColor} 4px)`,
-              }}
-            />
-          </div>
-
-          {/* Cover — the artwork + title, hinged along the spine (left edge)
-              and folded open in 3D (relative to the book's own tilted frame
-              above) so it lifts toward the viewer rather than just rotating
-              flat; opens a bit further on hover, focus, or search-highlight
-              — same treatment for all three. Background color is extracted
-              from the artwork itself (falls back to the theme's accent
-              while that's loading, or when there's no image). */}
-          <div
-            className="absolute inset-0 overflow-hidden rounded-[3px] border-[3px] transition-[transform,background-color] duration-200 [transform:rotateY(-15deg)] group-hover:[transform:rotateY(-23deg)] group-focus:[transform:rotateY(-23deg)] group-data-[search-highlighted]:[transform:rotateY(-23deg)]"
-            style={{
-              borderColor: "var(--tile-border)",
-              backgroundColor: coverColor,
-              transformOrigin: "left center",
-            }}
-          >
-            {tile.imageUrl && !imgFailed ? (
-              <img
-                src={tile.imageUrl}
-                alt={tile.name}
-                onError={() => setImgFailed(true)}
-                className={`absolute inset-0 h-fit w-full object-contain p-[8%] pt-[18%] ${tile.freeze.isFrozen ? "opacity-30 saturate-0" : ""}`}
-                style={{ objectPosition: "50% 35%" }}
-              />
-            ) : null}
-            <span
-              className="absolute inset-x-1 top-1.5 w-fit h-fit truncate px-[0.35em] py-[0.15em] text-center uppercase leading-none"
-              style={{
-                backgroundColor: "#d2412d",
-                color: "#fff",
-                fontFamily: COMIC_LOGO_FONT,
-                fontWeight: 800,
-                fontSize: "8cqw",
-                letterSpacing: "0.02em",
-              }}
-            >
-              TECTONIC
-            </span>
-
-            {/* Price badge — tucked right into the top-right corner, like a
-                vintage comic's own cover price mark. No outline/fill of its
-                own — just text stamped on the artwork — so its color has to
-                adapt to the extracted cover color's contrast. */}
-            <div
-              className="absolute right-2 top-2 z-10 leading-none"
-              style={{
-                color: priceTextColor,
-                fontFamily: COMIC_FONT,
-                fontSize: "7cqw",
-              }}
-            >
-              {tile.progress.totalPoints}
-              <span style={{ fontSize: "0.7em", marginLeft: "0.04em" }}>¢</span>
-            </div>
-          </div>
-        </div>
+        </motion.div>
       </div>
 
       {tile.progress.allComplete && !tile.freeze.isFrozen && (
@@ -244,12 +218,6 @@ export const TileCell = memo(function TileCell({
         </span>
       )}
 
-      {tile.progress.totalTasks > 0 && (
-        <span className="num absolute bottom-1 left-1 z-20 rounded-sm bg-background/80 px-1 py-0.5 text-[9px] font-semibold leading-none text-on-surface-muted">
-          {tile.progress.pointsAwarded}/{tile.progress.totalPoints}
-        </span>
-      )}
-
       {tile.interest.people.length > 0 && !tile.progress.allComplete && (
         <span
           title={`On this tile: ${tile.interest.people.map((p) => p.displayName).join(", ")}`}
@@ -260,23 +228,6 @@ export const TileCell = memo(function TileCell({
           {tile.interest.people.length > 1 && <span className="num">{tile.interest.people.length}</span>}
         </span>
       )}
-
-      {tile.progress.totalTasks > 1 && (
-        <div className="absolute bottom-1 right-1 z-20 flex gap-0.5">
-          {tile.taskStatuses.map((task) => {
-            if (task.status === "not_started") return null;
-            return (
-              <span
-                key={task.id}
-                title={`${task.label}: ${task.status.replace(/_/g, " ")}`}
-                className={`inline-flex size-4 items-center justify-center rounded-full text-[9px] font-bold leading-none text-background ${TASK_STATUS_DOT[task.status]}`}
-              >
-                {task.index + 1}
-              </span>
-            );
-          })}
-        </div>
-      )}
-    </button>
+    </motion.button>
   );
 });
