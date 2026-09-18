@@ -1545,27 +1545,20 @@ function TaskPage({
 
       {/* Part Action Bar */}
       {(onSubmit || showCrew) && (
-        <div className="mb-4 border-b-[3px] pb-4 pr-12" style={{ borderColor: colors.INK }}>
+        <div className="mb-4 border-b-[3px] pb-3 pr-12" style={{ borderColor: colors.INK }}>
           <div className="flex flex-wrap items-center gap-3">
             {onSubmit && (
-              <div className="flex flex-col items-start gap-1">
-                <ComicButton
-                  variant="primary"
-                  isDisabled={submitDisabled}
-                  onPress={() => onSubmit(task.id)}
-                >
-                  Submit
-                </ComicButton>
-                {submitReason && (
-                  <span className="max-w-[180px] text-xs leading-tight" style={{ color: colors.INK_SUBTLE }}>
-                    {submitReason}
-                  </span>
-                )}
-              </div>
+              <ComicButton
+                variant="primary"
+                isDisabled={submitDisabled}
+                onPress={() => onSubmit(task.id)}
+              >
+                Submit
+              </ComicButton>
             )}
 
             {showCrew && (
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <div className="flex min-w-0 items-center gap-2">
                 {canClaim && (
                   <ComicButton
                     variant={interest.mine ? "yellow" : "secondary"}
@@ -1593,6 +1586,12 @@ function TaskPage({
               </div>
             )}
           </div>
+
+          {submitReason && (
+            <div className="mt-1.5 text-xs leading-tight" style={{ color: colors.INK_SUBTLE }}>
+              {submitReason}
+            </div>
+          )}
         </div>
       )}
 
