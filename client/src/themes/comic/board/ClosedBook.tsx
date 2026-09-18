@@ -1,3 +1,4 @@
+import { useDragScroll } from "./dragScroll";
 import type { CSSProperties, ReactNode } from "react";
 import { motion, type Variants } from "motion/react";
 import type { TileModel } from "../../../headless/types";
@@ -495,21 +496,30 @@ export function Page({
   colors,
   side,
   gutter = true,
+  dragScroll = false,
   children,
 }: {
   colors: ComicColors;
   side: "left" | "right";
   /** Off for a copy of the page drawn on a fold-back, where a gutter shadow would float mid-sheet. */
   gutter?: boolean;
+  /** Scroll by touch drag in script rather than natively (phones: see dragScroll.ts). */
+  dragScroll?: boolean;
   children: ReactNode;
 }) {
+  const scroll = useDragScroll(dragScroll);
   const gutterShadow =
     side === "left"
       ? `inset ${bw(-0.04)} 0 ${bw(0.04)} ${bw(-0.03)} rgba(0,0,0,0.35)`
       : `inset ${bw(0.04)} 0 ${bw(0.04)} ${bw(-0.03)} rgba(0,0,0,0.35)`;
   return (
     <div className="pointer-events-none absolute inset-0" style={{ boxShadow: gutter ? gutterShadow : undefined, color: colors.INK_BODY }}>
-      <div className="pointer-events-auto h-full overflow-y-auto" style={{ direction: side === "right" ? "rtl" : "ltr", overscrollBehavior: "contain" }}>
+      <div
+        ref={scroll.ref}
+        className="pointer-events-auto h-full overflow-y-auto"
+        style={{ direction: side === "right" ? "rtl" : "ltr", overscrollBehavior: "contain", touchAction: dragScroll ? "none" : undefined }}
+        {...scroll.handlers}
+      >
         <div style={{ direction: "ltr", [side === "right" ? "paddingRight" : "paddingLeft"]: bw(0.035) }}>{children}</div>
       </div>
     </div>

@@ -25,6 +25,7 @@ import { thumbUrl } from "../../../api/imageVariants";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { useEdgeSwipe } from "./useEdgeSwipe";
+import { fling, stopFling } from "./dragScroll";
 import { PageColorsContext, useComic } from "../ui/useComic";
 import { CaptionBox } from "../ui/CaptionBox";
 import {
@@ -607,6 +608,7 @@ interface PageSwipe {
   move: (leaf: number, side: Side, travel: number, clientY: number) => void;
   end: (leaf: number, side: Side, travel: number, velocity: number, cancelled: boolean) => void;
   scroll: (dy: number) => void;
+  scrollEnd: (velocity: number) => void;
 }
 
 interface CurlState {
@@ -982,7 +984,13 @@ function FlyingBook({
       // A vertical drag that started in a zone scrolls the page beneath it.
       scroll: (dy: number) => {
         const scroller = scope.current?.querySelector<HTMLElement>(`${leafSelector(spreadRef.current + 1)} > [data-face="front"] .overflow-y-auto`);
-        scroller?.scrollBy({ top: dy });
+        if (!scroller) return;
+        stopFling(scroller);
+        scroller.scrollBy({ top: dy });
+      },
+      scrollEnd: (velocity: number) => {
+        const scroller = scope.current?.querySelector<HTMLElement>(`${leafSelector(spreadRef.current + 1)} > [data-face="front"] .overflow-y-auto`);
+        if (scroller) fling(scroller, velocity);
       },
     }),
     [draw, flipTo, frameSize, scope],
@@ -1255,7 +1263,7 @@ function TileDetails({
     i === 0 ? "Contents" : i === pageCount - 1 ? "Submissions" : `Part ${ordered[i - 1]!.number} of ${tile.tasks.length}`;
   const face = (i: number, side: Side, gutter = true): ReactNode => (
     <PageColorsContext.Provider value={page}>
-      <BookPage colors={page} side={side === "front" ? "right" : "left"} no={i + 1} role={roleOf(i)} gutter={gutter}>
+      <BookPage colors={page} side={side === "front" ? "right" : "left"} no={i + 1} role={roleOf(i)} gutter={gutter} dragScroll={single}>
         {pages[i]}
       </BookPage>
     </PageColorsContext.Provider>
@@ -1471,6 +1479,7 @@ function BookPage({
   no,
   role,
   gutter = true,
+  dragScroll = false,
   children,
 }: {
   colors: ComicColors;
@@ -1478,11 +1487,12 @@ function BookPage({
   no: number;
   role: string;
   gutter?: boolean;
+  dragScroll?: boolean;
   children: ReactNode;
 }) {
   return (
     <>
-      <Page colors={colors} side={side} gutter={gutter}>
+      <Page colors={colors} side={side} gutter={gutter} dragScroll={dragScroll}>
         <div style={{ paddingBottom: bw(0.12) }}>{children}</div>
       </Page>
       <PageFooter colors={colors} side={side} no={no} role={role} />
@@ -1575,6 +1585,7 @@ function SwipeZone({ side, leaf, face, swipe }: { side: "left" | "right"; leaf: 
     onProgress: (travel, y) => swipe.move(leaf, face, travel, y),
     onEnd: ({ travel, velocity, cancelled }) => swipe.end(leaf, face, travel, velocity, cancelled),
     onScroll: swipe.scroll,
+    onScrollEnd: swipe.scrollEnd,
     onTap: ({ x, y }, zone) => {
       const under = document.elementsFromPoint(x, y).find((el) => !zone.contains(el));
       under?.closest<HTMLElement>("button, a, [role='button'], label, input, select, textarea, summary")?.click();

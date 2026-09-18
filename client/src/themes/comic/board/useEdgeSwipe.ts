@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import { releaseVelocity } from "./dragScroll";
 
 // How far a touch may wander before it's a gesture rather than a tap (px).
 const SLOP = 8;
@@ -18,6 +19,8 @@ interface EdgeSwipeOptions {
   onEnd: (result: { travel: number; velocity: number; cancelled: boolean }) => void;
   /** The gesture was recognised as vertical: scroll the page under it by this much. */
   onScroll: (dy: number) => void;
+  /** A vertical drag ended: how fast the page was moving, in scrollTop px/ms (for a fling). */
+  onScrollEnd: (velocity: number) => void;
   /** The touch was a tap, not a drag. */
   onTap: (at: { x: number; y: number }, zone: HTMLElement) => void;
 }
@@ -43,6 +46,8 @@ export function useEdgeSwipe(options: EdgeSwipeOptions) {
     t0: number;
     mode: "pending" | "turn" | "scroll" | "ignore";
     samples: { t: number; travel: number }[];
+    scrolled: number;
+    scrollSamples: [number, number][];
     travel: number;
     y: number;
     raf: number;
@@ -67,6 +72,8 @@ export function useEdgeSwipe(options: EdgeSwipeOptions) {
       t0: e.timeStamp,
       mode: "pending",
       samples: [{ t: e.timeStamp, travel: 0 }],
+      scrolled: 0,
+      scrollSamples: [[e.timeStamp, 0]],
       travel: 0,
       y: e.clientY,
       raf: 0,
@@ -83,8 +90,11 @@ export function useEdgeSwipe(options: EdgeSwipeOptions) {
       s.mode = Math.abs(dy) > Math.abs(dx) ? "scroll" : Math.sign(dx) === opts.current.dir ? "turn" : "ignore";
     }
     if (s.mode === "scroll") {
-      opts.current.onScroll(s.lastY - e.clientY);
+      const dy = s.lastY - e.clientY;
+      opts.current.onScroll(dy);
       s.lastY = e.clientY;
+      s.scrolled += dy;
+      s.scrollSamples.push([e.timeStamp, s.scrolled]);
       return;
     }
     if (s.mode !== "turn") return;
@@ -116,6 +126,9 @@ export function useEdgeSwipe(options: EdgeSwipeOptions) {
       const span = last.t - first.t;
       opts.current.onEnd({ travel: s.travel, velocity: span > 0 ? (last.travel - first.travel) / span : 0, cancelled });
       return;
+    }
+    if (s.mode === "scroll" && !cancelled) {
+      opts.current.onScrollEnd(releaseVelocity([...s.scrollSamples, [e.timeStamp, s.scrolled]], e.timeStamp));
     }
     if (s.mode === "pending" && !cancelled && e.timeStamp - s.t0 < TAP_MAX_MS) {
       opts.current.onTap({ x: e.clientX, y: e.clientY }, e.currentTarget);
