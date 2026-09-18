@@ -48,15 +48,15 @@ export function TeamBanner({
       <AriaButton
         onPress={team ? onOpen : () => setMenuOpen(true)}
         aria-label={team ? `${team.name} — team info` : "Select team"}
-        className="flex min-w-0 flex-1 cursor-pointer items-stretch text-left outline-none transition-colors hovered:bg-[var(--comic-yellow)] focus-visible:bg-[var(--comic-yellow)]"
+        className="group flex min-w-0 flex-1 cursor-pointer items-stretch text-left outline-none transition-colors hovered:bg-[var(--comic-yellow)] focus-visible:bg-[var(--comic-yellow)]"
         style={{ ["--comic-yellow" as string]: colors.YELLOW, ["--comic-on-yellow" as string]: colors.ON_YELLOW }}
       >
         <span className="flex min-w-0 flex-1 items-center gap-2 px-3">
-          <span className="truncate text-xl uppercase leading-none hovered:text-[var(--comic-on-yellow)]" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em" }}>
+          <span className="truncate text-xl uppercase leading-none group-hovered:text-[var(--comic-on-yellow)] group-focus-visible:text-[var(--comic-on-yellow)]" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em" }}>
             {team?.name ?? "Select team"}
           </span>
           {team && (
-            <span className="hidden whitespace-nowrap text-xs font-semibold uppercase tracking-wider sm:inline" style={{ color: colors.INK_SUBTLE }}>
+            <span className="hidden whitespace-nowrap text-xs font-semibold uppercase tracking-wider group-hovered:!text-[var(--comic-on-yellow)] group-focus-visible:!text-[var(--comic-on-yellow)] sm:inline" style={{ color: colors.INK_SUBTLE }}>
               {isOtherTeam ? "Mod view" : "Your board"}
             </span>
           )}
@@ -81,7 +81,7 @@ export function TeamBanner({
         <MenuTrigger isOpen={menuOpen} onOpenChange={setMenuOpen}>
           <AriaButton
             aria-label="Switch team"
-            className="flex shrink-0 cursor-pointer items-center border-l-[3px] px-2 outline-none transition-colors hovered:bg-[var(--comic-yellow)] focus-visible:bg-[var(--comic-yellow)] hovered:text-[var(--comic-on-yellow)] pressed:bg-[var(--comic-yellow)]"
+            className="flex shrink-0 cursor-pointer items-center border-l-[3px] px-2 outline-none transition-colors hovered:bg-[var(--comic-yellow)] focus-visible:bg-[var(--comic-yellow)] hovered:!text-[var(--comic-on-yellow)] focus-visible:!text-[var(--comic-on-yellow)] pressed:bg-[var(--comic-yellow)] pressed:!text-[var(--comic-on-yellow)]"
             style={{ borderColor: colors.LINE, color: colors.INK, ["--comic-yellow" as string]: colors.YELLOW, ["--comic-on-yellow" as string]: colors.ON_YELLOW }}
           >
             <ChevronDownIcon />
