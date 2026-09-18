@@ -11,6 +11,9 @@ const apiTarget = process.env.VITE_API_TARGET || "http://localhost:3001";
 const wsTarget = apiTarget.replace(/^http/, "ws");
 
 export default defineConfig({
+  // A new build id discards every persisted board (api/boardCache.ts), so a
+  // changed response shape can never be hydrated into new code.
+  define: { __BUILD_ID__: JSON.stringify(process.env.GITHUB_SHA ?? String(Date.now())) },
   plugins: [react(), tailwindcss()],
   server: {
     port: clientPort,
