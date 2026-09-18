@@ -1005,35 +1005,48 @@ function FlyingBook({
   // keep sorting.
   const prevSpread = useRef(0);
   useEffect(() => {
-    if (spread === prevSpread.current) return;
-    const forward = spread > prevSpread.current;
+    const previous = prevSpread.current;
+    if (spread === previous) return;
+    const forward = spread > previous;
     prevSpread.current = spread;
     const turned = spread + 1;
     const root = scope.current;
-    // The leaf that crosses: forward, the right-hand page's leaf; back, the
-    // left-hand page's.
-    const leaf = forward ? spread : spread + 1;
+    // The leaf that crosses is the one on top of the stack it's leaving:
+    // forward, the right-hand page's leaf; back, the left-hand page's. A jump
+    // of more than one page (a contents row) carries the leaves in between
+    // over with it — they're hidden under the crossing leaf, so they just
+    // change sides.
+    const leaf = forward ? previous + 1 : previous;
+    const skipped = (k: number) => (forward ? k > previous + 1 && k <= spread : k > spread && k < previous);
+    // After a jump forward, the page that ends up on top of the right-hand stack
+    // is what the crossing leaf's peel should uncover.
+    const uncovered = forward && spread > previous + 1 ? turned : -1;
     const side: Side = forward ? "front" : "back";
     const turn = reduceMotion ? 0 : TURN_DURATION;
+
+    const setLeaf = (k: number, angle: number, z: number) => {
+      const el = root?.querySelector<HTMLElement>(leafSelector(k));
+      // Inline first so the very next paint has it there, then tell Motion
+      // so its own values agree.
+      if (el) el.style.transform = `translateZ(${z}px) rotateY(${angle}deg)`;
+      animate(leafSelector(k), { rotateY: angle, z }, { duration: 0 });
+    };
 
     const seq: AnimationSequence = [];
     for (let k = 0; k < leafCount; k++) {
       const pose = poses.current.get(k) ?? { angle: 0, z: 0 };
       const z = leafDepth(k, turned);
-      if (k !== leaf) seq.push(...depthSegments(leafSelector(k), pose.z, z, 0, turn));
+      if (skipped(k)) setLeaf(k, forward ? OPEN_ANGLE : 0, z);
+      else if (k === uncovered) {
+        setLeaf(k, 0, -LEAF_GAP / 2);
+        seq.push([leafSelector(k), { z: [-LEAF_GAP / 2, z] }, { duration: 0.1, at: turn }]);
+      } else if (k !== leaf) seq.push(...depthSegments(leafSelector(k), pose.z, z, 0, turn));
       poses.current.set(k, { angle: k < turned ? OPEN_ANGLE : 0, z });
     }
     if (seq.length) animate(seq);
 
     const target = forward ? OPEN_ANGLE : 0;
-    const land = () => {
-      const el = root?.querySelector<HTMLElement>(leafSelector(leaf));
-      const z = leafDepth(leaf, turned);
-      // Inline first so the very next paint has it there, then tell Motion
-      // so its own values agree.
-      if (el) el.style.transform = `translateZ(${z}px) rotateY(${target}deg)`;
-      animate(leafSelector(leaf), { rotateY: target, z }, { duration: 0 });
-    };
+    const land = () => setLeaf(leaf, target, leafDepth(leaf, turned));
     if (reduceMotion || !root) {
       land();
       draw(null);
