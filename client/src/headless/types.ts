@@ -109,6 +109,7 @@ export interface SubmissionModel {
   status: SubmissionStatus;
   submittedAt: string;
   timeAgo: string;
+  /** The first screenshot's original URL — views derive the thumb/full variant they need (api/imageVariants). */
   thumbnailUrl: string | null;
   /** claimsSummary() — e.g. "2× Bruma torch, Vorki". */
   summary: string;

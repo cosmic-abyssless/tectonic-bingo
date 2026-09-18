@@ -204,7 +204,7 @@ router.patch(
   }),
 );
 
-const tileImageUpload = imageUpload(path.join(UPLOADS_DIR, "tiles"));
+const tileImageUpload = imageUpload(path.join(UPLOADS_DIR, "tiles"), { variants: true });
 router.post(
   "/tiles/:id/image",
   tileImageUpload.single("image"),

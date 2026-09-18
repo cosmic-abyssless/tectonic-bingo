@@ -64,7 +64,7 @@ export function getContrastTextColor(color: string | null): string {
 // never hits a tainted-canvas CORS error; if it ever did, or the image
 // fails to load, this just resolves to null and the caller falls back to
 // its own default color.
-export function useDominantColor(imageUrl: string | null): string | null {
+export function useDominantColor(imageUrl: string | null | undefined): string | null {
   const [color, setColor] = useState<string | null>(() => (imageUrl ? cache.get(imageUrl) ?? null : null));
 
   useEffect(() => {

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { TileModel } from "../../../headless/types";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { getContrastTextColor, useDominantColor } from "../useDominantColor";
+import { thumbUrl, fullUrl } from "../../../api/imageVariants";
 import { TECTONIC_LOGO, type ComicColors } from "./colors";
 
 /*
@@ -41,15 +42,18 @@ export function BookCoverArt({
   colors,
   fallbackColor,
   frozen = false,
+  variant = "thumb",
 }: {
   tile: TileModel;
   colors: ComicColors;
   /** Cover color while the artwork's dominant color is loading, or when there's no artwork. */
   fallbackColor: string;
   frozen?: boolean;
+  /** Which display variant of the artwork to load — "thumb" on the board cell, "full" in the modal. */
+  variant?: "thumb" | "full";
 }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const imageUrl = tile.imageUrl && !imgFailed ? tile.imageUrl : null;
+  const imageUrl = tile.imageUrl && !imgFailed ? (variant === "thumb" ? thumbUrl(tile.imageUrl) : fullUrl(tile.imageUrl)) : null;
   const dominantColor = useDominantColor(imageUrl);
   // The masthead row and the plain "P1" mark sit directly on the cover with
   // no fill of their own, so their color adapts to whatever the cover color
@@ -147,13 +151,16 @@ export function BookBackArt({
   tile,
   colors,
   fallbackColor,
+  variant = "thumb",
 }: {
   tile: TileModel;
   colors: ComicColors;
   fallbackColor: string;
+  /** Which display variant of the artwork to load — same as the front cover's. */
+  variant?: "thumb" | "full";
 }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const imageUrl = tile.imageUrl && !imgFailed ? tile.imageUrl : null;
+  const imageUrl = tile.imageUrl && !imgFailed ? (variant === "thumb" ? thumbUrl(tile.imageUrl) : fullUrl(tile.imageUrl)) : null;
   const dominantColor = useDominantColor(imageUrl);
   const textColor = getContrastTextColor(dominantColor ?? fallbackColor);
   const names = tileContributors(tile);

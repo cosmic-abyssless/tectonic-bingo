@@ -134,6 +134,7 @@ export function ClosedBook({
   pose,
   coverInside,
   leaves = [{}],
+  coverImageVariant = "thumb",
 }: {
   tile: TileModel;
   colors: ComicColors;
@@ -148,6 +149,8 @@ export function ClosedBook({
   coverInside?: ReactNode;
   /** The leaves under the cover, first (topmost) first. At least one is always drawn. */
   leaves?: LeafFaces[];
+  /** Which display variant of the cover artwork to load ("thumb" on the board, "full" in the modal). */
+  coverImageVariant?: "thumb" | "full";
 }) {
   // The pages inside can be a different stock from the rest of the theme —
   // and the whole book, cover included, is outlined in the page ink, so the
@@ -199,7 +202,7 @@ export function ClosedBook({
             transform: `${BACK_STAGGER_CSS} translateZ(${-BACK_DEPTH}px) rotateY(180deg)`,
           }}
         >
-          <BookBackArt tile={tile} colors={page} fallbackColor={coverFallback} />
+          <BookBackArt tile={tile} colors={page} fallbackColor={coverFallback} variant={coverImageVariant} />
         </div>
       )}
 
@@ -278,7 +281,7 @@ export function ClosedBook({
             transform: "translateZ(1px)",
           }}
         >
-          <BookCoverArt tile={tile} colors={colors} fallbackColor={coverFallback} frozen={frozen} />
+          <BookCoverArt tile={tile} colors={colors} fallbackColor={coverFallback} frozen={frozen} variant={coverImageVariant} />
           {dogEar && <CoverDogEar colors={page} pageFill={page.PAPER} />}
         </div>
         {/* The inside of the cover is page 1: page weight of outline, and
