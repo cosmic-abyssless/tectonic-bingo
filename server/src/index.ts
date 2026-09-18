@@ -24,6 +24,7 @@ import { auditContext } from "./audit/middleware";
 import { initWebSocketServer } from "./ws";
 import { sqlite } from "./db";
 import { UPLOADS_DIR, getAdminDiscordIds } from "./config";
+import { serveImageVariants } from "./middleware/imageVariants";
 import { getTectonicConfig } from "./services/tectonicService";
 
 const REQUIRED_ENV = [
@@ -110,7 +111,7 @@ app.use(auditContext);
 
 // Uploads — serve screenshots and tile images stored locally.
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-app.use("/uploads", express.static(UPLOADS_DIR));
+app.use("/uploads", serveImageVariants(UPLOADS_DIR), express.static(UPLOADS_DIR));
 
 // Routes
 app.use("/auth", authRouter);

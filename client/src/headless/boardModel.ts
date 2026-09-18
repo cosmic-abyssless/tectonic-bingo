@@ -9,7 +9,6 @@ import { leafLabel, sumItemNames } from "../core/board/labels";
 import { claimsSummary } from "../core/submissions/claimsSummary";
 import { timeAgo } from "../core/ui/time";
 import { avatarUrl, displayName } from "../core/ui/user";
-import { thumbUrl } from "../api/imageVariants";
 import type { BoardModel, CategoryModel, LineModel, RequirementNodeModel, SubmissionModel, TaskModel, TeamModel, TileModel } from "./types";
 
 // Moved from BoardGrid.tsx, unchanged.
@@ -176,7 +175,7 @@ export function buildSubmissionModels(tiles: Tile[], submissions: SubmissionDeta
       status: detail.submission.status,
       submittedAt: detail.submission.submittedAt,
       timeAgo: timeAgo(detail.submission.submittedAt),
-      thumbnailUrl: thumbUrl(detail.screenshots[0]?.storageUrl) ?? null,
+      thumbnailUrl: detail.screenshots[0]?.storageUrl ?? null,
       summary: claimsSummary(detail.claims),
       submittedBy: detail.submittedByUser ? displayName(detail.submittedByUser) : null,
       reviewerNotes: detail.submission.reviewerNotes,

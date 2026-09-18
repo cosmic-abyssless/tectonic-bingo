@@ -1,4 +1,5 @@
 import type { SubmissionModel } from "../../../headless/types";
+import { thumbUrl } from "../../../api/imageVariants";
 import { ImageIcon } from "../../../core/ui/icons";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
 import { InkTag } from "../ui/CaptionBox";
@@ -25,7 +26,7 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
       <div className="flex items-start gap-3">
         {submission.thumbnailUrl ? (
           <a href={submission.thumbnailUrl} target="_blank" rel="noreferrer" className="shrink-0 -rotate-3 cursor-pointer border-[3px] outline-none transition-[filter] hover:brightness-90 focus-visible:ring-2" style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, padding: 2, boxShadow: `2px 2px 0 ${colors.LINE}` }} title="View screenshot">
-            <img src={submission.thumbnailUrl} alt="Submission screenshot" className="block size-14 object-cover" />
+            <img src={thumbUrl(submission.thumbnailUrl)} alt="Submission screenshot" className="block size-14 object-cover" />
           </a>
         ) : (
           <div className="flex size-14 shrink-0 -rotate-3 items-center justify-center border-[3px]" style={{ borderColor: colors.LINE, color: colors.INK_SUBTLE, background: colors.PAPER }} aria-hidden>

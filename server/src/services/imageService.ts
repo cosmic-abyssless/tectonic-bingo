@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import fs from "fs";
 import path from "path";
 
 // Display variants generated alongside every uploaded image (issue #61). The
@@ -13,13 +14,17 @@ export const THUMB_MAX_WIDTH = 256;
 // enlarged view and detail modals). Kept well under the 4K original so it
 // stays light to transfer while remaining legible for review.
 export const FULL_MAX_WIDTH = 1600;
-// JPEG re-encode quality. Screenshots are flat UI captures, so a moderate
+// WebP re-encode quality. Screenshots are flat UI captures, so a moderate
 // quality is visually lossless while shrinking the payload dramatically.
-export const VARIANT_JPEG_QUALITY = 82;
+export const VARIANT_WEBP_QUALITY = 80;
 
 export const THUMB_SUFFIX = "-thumb";
 export const FULL_SUFFIX = "-full";
-export const VARIANT_EXT = ".jpg";
+export const VARIANT_EXT = ".webp";
+
+// Matches a variant's file name, capturing the original's base name (no
+// extension) and which variant it is.
+export const VARIANT_NAME_RE = /^(.+)-(thumb|full)\.webp$/;
 
 // Derives the public URL for a variant from the original's URL. Both variants
 // share the original's base name, so no DB schema change is needed.
@@ -42,7 +47,7 @@ export interface GeneratedVariants {
 }
 
 /**
- * Writes `-thumb` and `-full` JPEG variants beside `originalPath`, resized to
+ * Writes `-thumb` and `-full` WebP variants beside `originalPath`, resized to
  * their width caps and auto-rotated from EXIF. The original is never modified.
  * Best-effort: any processing failure logs a warning and resolves with `null`
  * so the upload still succeeds and callers fall back to the original URL.
@@ -65,11 +70,20 @@ export async function generateVariants(originalPath: string): Promise<GeneratedV
   }
 }
 
+// Written to a temp file and renamed into place, so a request that races the
+// generation never reads a half-written variant.
 async function writeVariant(originalPath: string, outPath: string, maxWidth: number): Promise<string> {
-  await sharp(originalPath)
-    .rotate()
-    .resize({ width: maxWidth, withoutEnlargement: true })
-    .jpeg({ quality: VARIANT_JPEG_QUALITY, mozjpeg: true })
-    .toFile(outPath);
+  const tmpPath = `${outPath}.${process.pid}-${Math.random().toString(36).slice(2, 8)}.tmp`;
+  try {
+    await sharp(originalPath)
+      .rotate()
+      .resize({ width: maxWidth, withoutEnlargement: true })
+      .webp({ quality: VARIANT_WEBP_QUALITY })
+      .toFile(tmpPath);
+    await fs.promises.rename(tmpPath, outPath);
+  } catch (err) {
+    await fs.promises.rm(tmpPath, { force: true });
+    throw err;
+  }
   return outPath;
 }

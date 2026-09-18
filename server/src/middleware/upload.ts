@@ -10,7 +10,7 @@ export const MAX_UPLOAD_MB = 5;
 export const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
 export interface ImageUploadOptions {
-  // When true, writes `-thumb` and `-full` JPEG display variants beside the
+  // When true, writes `-thumb` and `-full` WebP display variants beside the
   // original (issue #61). The original is always kept for OCR + full-size.
   variants?: boolean;
 }

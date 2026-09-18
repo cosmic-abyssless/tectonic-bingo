@@ -10,7 +10,7 @@ function tmpDir(): string {
 }
 
 describe("generateVariants", () => {
-  it("writes thumb + full JPEG variants and leaves the original untouched", async () => {
+  it("writes thumb + full WebP variants and leaves the original untouched", async () => {
     const dir = tmpDir();
     const original = path.join(dir, "shot.png");
     // 3000x2000 original — larger than both caps, so both variants downscale.
@@ -27,9 +27,14 @@ describe("generateVariants", () => {
     expect(result!.fullPath).toBe(fullPath);
 
     const thumb = await sharp(thumbPath).metadata();
+    expect(thumb.format).toBe("webp");
     expect(thumb.width).toBe(THUMB_MAX_WIDTH);
     const full = await sharp(fullPath).metadata();
+    expect(full.format).toBe("webp");
     expect(full.width).toBe(FULL_MAX_WIDTH);
+
+    // No temp files left behind by the atomic write.
+    expect(fs.readdirSync(dir).filter((f) => f.endsWith(".tmp"))).toEqual([]);
 
     // Original bytes unchanged (variant generation must not touch it).
     expect(fs.statSync(original).size).toBe(before);
