@@ -79,6 +79,8 @@ export interface TaskModel {
   description: string | null;
   notes: string | null;
   points: number;
+  /** What this part has actually awarded so far (0 until it's complete). */
+  pointsAwarded: number;
   kind: NodeKind;
   isManual: boolean;
   allowsPreLoad: boolean;
@@ -133,6 +135,8 @@ export interface TileModel {
     totalTasks: number;
     pointsAwarded: number;
     totalPoints: number;
+    /** The part of pointsAwarded that came from the tile's own full-completion bonus. */
+    bonusAwarded: number;
     allComplete: boolean;
   };
   /** TileCell's per-task dot row. */

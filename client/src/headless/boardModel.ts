@@ -133,6 +133,7 @@ export function buildTaskModels(tile: Tile, summary: TileProgressSummary, maps: 
       description: task.description,
       notes: task.notes,
       points: task.points,
+      pointsAwarded: summary.pointsByNodeId.get(task.id) ?? 0,
       kind: task.kind,
       isManual,
       allowsPreLoad: task.allowsPreLoad,
@@ -264,6 +265,7 @@ export function buildTileModelsStatic(args: {
         totalTasks: summary.totalTasks,
         pointsAwarded: summary.pointsAwarded,
         totalPoints: summary.totalPoints,
+        bonusAwarded: summary.bonusAwarded,
         allComplete: summary.allComplete,
       },
       taskStatuses: tile.node.children.map((task, i) => ({

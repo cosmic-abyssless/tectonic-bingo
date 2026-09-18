@@ -126,6 +126,15 @@ export function tileContributors(tile: TileModel): string[] {
   return names;
 }
 
+function PointsRow({ label, points }: { label: string; points: number }) {
+  return (
+    <li className="flex items-baseline justify-between gap-[2cqw]">
+      <span className="truncate">{label}</span>
+      <span className="num shrink-0">{points}¢</span>
+    </li>
+  );
+}
+
 /**
  * The back of a finished tile's comic book: the same cover color as the
  * front, a "THE END" and a credits box listing everyone who contributed.
@@ -160,26 +169,39 @@ export function BookBackArt({
           The End
         </span>
         {/* The cover art again, smaller, with a big check stamped on its
-            corner so a finished tile reads as done at a glance. */}
-        <div className="relative h-[38cqw] w-[38cqw] shrink-0">
-          {imageUrl && (
-            <img
-              src={imageUrl}
-              alt=""
-              onError={() => setImgFailed(true)}
-              className="h-full w-full object-contain"
-              style={{ filter: `drop-shadow(1.2cqw 1.2cqw 0 ${colors.INK})` }}
-              draggable={false}
-            />
-          )}
-          <span
-            className="absolute -right-[7cqw] -top-[4cqw] flex h-[15cqw] w-[15cqw] rotate-[8deg] items-center justify-center rounded-full"
-            style={{ background: colors.GREEN, border: `1cqw solid ${colors.INK}`, boxShadow: `1.2cqw 1.2cqw 0 ${colors.INK}`, color: "#fff" }}
-          >
-            <svg viewBox="0 0 16 16" className="h-[9cqw] w-[9cqw]" fill="none" stroke="currentColor" strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round" aria-label="Complete">
-              <path d="M3 8.5l3 3 7-7" />
-            </svg>
-          </span>
+            corner so a finished tile reads as done at a glance — and beside
+            it what the tile paid out, part by part. */}
+        <div className="flex w-full shrink-0 items-center gap-[5cqw] pl-[3cqw]">
+          <div className="relative h-[34cqw] w-[34cqw] shrink-0">
+            {imageUrl && (
+              <img
+                src={imageUrl}
+                alt=""
+                onError={() => setImgFailed(true)}
+                className="h-full w-full object-contain"
+                style={{ filter: `drop-shadow(1.2cqw 1.2cqw 0 ${colors.INK})` }}
+                draggable={false}
+              />
+            )}
+            <span
+              className="absolute -left-[5cqw] -top-[4cqw] flex h-[14cqw] w-[14cqw] -rotate-[8deg] items-center justify-center rounded-full"
+              style={{ background: colors.GREEN, border: `1cqw solid ${colors.INK}`, boxShadow: `1.2cqw 1.2cqw 0 ${colors.INK}`, color: "#fff" }}
+            >
+              <svg viewBox="0 0 16 16" className="h-[8.5cqw] w-[8.5cqw]" fill="none" stroke="currentColor" strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round" aria-label="Complete">
+                <path d="M3 8.5l3 3 7-7" />
+              </svg>
+            </span>
+          </div>
+          <ul className="flex min-w-0 flex-1 flex-col gap-[1.4cqw] leading-none" style={{ fontFamily: COMIC_FONT, fontSize: "7.4cqw", letterSpacing: "0.02em" }}>
+            {tile.tasks.map((task, i) => (
+              <PointsRow key={task.id} label={task.label || `Part ${i + 1}`} points={task.pointsAwarded} />
+            ))}
+            {tile.progress.bonusAwarded > 0 && <PointsRow label="Bonus" points={tile.progress.bonusAwarded} />}
+            <li className="mt-[1cqw] flex items-baseline justify-between gap-[2cqw] border-t-[0.9cqw] pt-[1.6cqw]" style={{ borderColor: "currentcolor", fontSize: "10cqw" }}>
+              <span>Total</span>
+              <span className="num shrink-0">{tile.progress.pointsAwarded}¢</span>
+            </li>
+          </ul>
         </div>
         <div
           className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-[0.9cqw] px-[4cqw] py-[3.5cqw]"

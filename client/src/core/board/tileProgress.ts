@@ -7,6 +7,10 @@ export interface TileProgressSummary {
   pointsAwarded: number;
   totalPoints: number;
   allComplete: boolean;
+  /** Points the tile's own root node awarded (its full-completion bonus). */
+  bonusAwarded: number;
+  /** Points each completed node awarded, by node id. */
+  pointsByNodeId: Map<string, number>;
   statusByNodeId: Map<string, NodeStatus>;
 }
 
@@ -88,6 +92,8 @@ export function summarizeTileProgress(tile: Tile, nodeStates: TeamNodeState[], t
     pointsAwarded,
     totalPoints,
     allComplete: tasks.length > 0 && completedTasks === tasks.length,
+    bonusAwarded: pointsByNodeId.get(tile.node.id) ?? 0,
+    pointsByNodeId,
     statusByNodeId,
   };
 }
