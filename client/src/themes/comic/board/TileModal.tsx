@@ -43,6 +43,7 @@ import {
   type LeafFaces,
 } from "./ClosedBook";
 import { ComicBurstRays } from "../ui/ComicBurst";
+import { PageFooter } from "./PageFooter";
 import { getBookPose, setBookAway } from "./bookFlight";
 import { getColors, type ComicColors } from "./colors";
 
@@ -1049,8 +1050,12 @@ function TileDetails({
   // Page i (0-based) as it appears on a face: numbered and scrollable.
   // Fronts are right-hand pages, backs left-hand ones. The copy drawn on a
   // fold-back is the same page without its gutter shadow.
+  // What a page is, printed at its spine-side foot: contents, part k of m,
+  // or the submissions.
+  const roleOf = (i: number) =>
+    i === 0 ? "Contents" : i === pageCount - 1 ? "Submissions" : `Part ${i} of ${tile.tasks.length}`;
   const face = (i: number, side: Side, gutter = true): ReactNode => (
-    <BookPage colors={colors} side={side === "front" ? "right" : "left"} no={i + 1} total={pageCount} gutter={gutter}>
+    <BookPage colors={colors} side={side === "front" ? "right" : "left"} no={i + 1} role={roleOf(i)} gutter={gutter}>
       {pages[i]}
     </BookPage>
   );
@@ -1073,9 +1078,6 @@ function TileDetails({
     if (k < 1 || i >= pageCount) return null;
     return face(i, copySide, false);
   })();
-
-  const leftPage = 2 * spread + 1;
-  const rightPage = leftPage + 1 <= pageCount ? leftPage + 1 : null;
 
   return (
     // The root is the size reference: `--bw` (the closed book's width, which
@@ -1192,8 +1194,12 @@ function TileDetails({
         <NavButton label="Previous page" onPress={() => onFlipTo(spread - 1)} disabled={spread <= 0} colors={colors}>
           <ArrowLeftIcon size={20} />
         </NavButton>
-        <span className="min-w-32 text-center text-lg uppercase tabular-nums">
-          {rightPage ? `Pages ${leftPage}–${rightPage}` : `Page ${leftPage}`} <span style={{ color: colors.INK_SUBTLE }}>of {pageCount}</span>
+        {/* A yellow tab, like a bookmark: which spread of how many. */}
+        <span
+          className="min-w-32 -rotate-1 border-[3px] px-3 py-1 text-center text-base uppercase leading-none tabular-nums"
+          style={{ background: colors.YELLOW, borderColor: colors.INK, color: colors.INK, boxShadow: `2px 2px 0 ${colors.INK}` }}
+        >
+          Spread {spread + 1} / {lastSpread + 1}
         </span>
         <NavButton label="Next page" onPress={() => onFlipTo(spread + 1)} disabled={spread >= lastSpread} colors={colors}>
           <ArrowRightIcon size={20} />
@@ -1229,19 +1235,20 @@ function NavButton({
   );
 }
 
-// A page on a face: the scrollable content and its number at the foot.
+// A page on a face: the scrollable content, and a footer strip under it —
+// PAGE n on the outer edge, what the page is at the spine.
 function BookPage({
   colors,
   side,
   no,
-  total,
+  role,
   gutter = true,
   children,
 }: {
   colors: ComicColors;
   side: "left" | "right";
   no: number;
-  total: number;
+  role: string;
   gutter?: boolean;
   children: ReactNode;
 }) {
@@ -1250,12 +1257,7 @@ function BookPage({
       <Page colors={colors} side={side} gutter={gutter}>
         <div style={{ paddingBottom: bw(0.12) }}>{children}</div>
       </Page>
-      <div
-        className="pointer-events-none absolute inset-x-0 text-center text-[0.8em] uppercase"
-        style={{ bottom: bw(0.035), color: colors.INK_SUBTLE, fontFamily: COMIC_FONT, fontSize: bw(0.028) }}
-      >
-        {no} / {total}
-      </div>
+      <PageFooter colors={colors} side={side} no={no} role={role} />
     </>
   );
 }
