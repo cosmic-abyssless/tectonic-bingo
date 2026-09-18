@@ -40,7 +40,9 @@ export interface ThemeSlots {
   // (page.canScout) — the way into the scouting room before the draft.
   ScoutBanner: ComponentType<{ onOpen: () => void }>;
   DraftStage: ComponentType<{ draft: BingoPageModel["draft"]; milestone: StageMilestone | null; onOpenDraft: () => void }>;
-  NoTeamStage: ComponentType<{ isMod: boolean }>;
+  // `selector` (mods only) lets a theme list the teams right on this screen
+  // instead of pointing at a menu.
+  NoTeamStage: ComponentType<{ isMod: boolean; selector?: TeamSelectorModel }>;
   RulesDialog: ComponentType<{ isOpen: boolean; markdown: string; onClose: () => void }>;
   TeamInfoDialog: ComponentType<{ slug: string; team: TeamModel | null; onClose: () => void }>;
   SubmissionsDrawer: ComponentType<{ isOpen: boolean; submissions: SubmissionModel[]; onClose: () => void; onSubmit?: () => void }>;

@@ -2,20 +2,18 @@ import type { BingoPageModel } from "../../../headless/types";
 import { useAuth } from "../../../context/AuthContext";
 import { AppHeader } from "../../../core/ui/AppHeader";
 import { CountdownTimer } from "../../../core/ui/CountdownTimer";
-import { ShieldIcon, UsersIcon } from "../../../core/ui/icons";
-import { useSlot } from "../../context";
+import { ShieldIcon } from "../../../core/ui/icons";
 import { COMIC_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { useComic } from "../ui/useComic";
 import { comicHeaderProps } from "./headerStyle";
 import { HeaderMenu, type HeaderMenuEntry } from "./HeaderMenu";
+import { SubmitButton } from "./SubmitButton";
 
 /** Masthead: the issue title in Bangers, stage in a caption box, actions as ink buttons with burst counters. */
 export function PageHeader({ page }: { page: BingoPageModel }) {
   const { user } = useAuth();
   const { colors } = useComic();
-  const TeamSelector = useSlot("TeamSelector");
-  const TeamBadge = useSlot("TeamBadge");
 
   // The same entries the inline buttons show, for the narrow-screen hamburger.
   const menuEntries: HeaderMenuEntry[] = [
@@ -66,24 +64,20 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
           )}
         </span>
       }
+      // Top-right on a phone, beside the user icon (AppHeader lays that out).
+      mobileMenu={
+        <div className="md:hidden">
+          <HeaderMenu entries={menuEntries} />
+        </div>
+      }
       {...comicHeaderProps()}
     >
-      {page.isMod && page.teams.length > 0 && (
-        <>
-          <TeamSelector selector={page.teamSelector} />
-          {page.viewing.team && (
-            <ComicButton size="sm" aria-label={`${page.viewing.team.name} roster`} className="px-2" onPress={page.teamInfo.show}>
-              <UsersIcon />
-            </ComicButton>
-          )}
-        </>
-      )}
-      {!page.isMod && page.myTeam && <TeamBadge team={page.myTeam} onPress={page.teamInfo.show} />}
-      {/* The two route changes are links, grouped right after the team
-          selector; everything after them acts on the page and stays a
-          button. The mod panel gets an icon and sits well away from Submit
-          so it isn't hit by accident. Below `md` the whole group collapses
-          into the hamburger; Submit and the team stay put. */}
+      {/* (The team — identity, roster, and for mods the switcher — lives in
+          the TeamBanner under the search box now, not up here.)
+          The two route changes are links; everything after them acts on the
+          page and stays a button. The mod panel gets an icon and sits well
+          away from Submit so it isn't hit by accident. Below `md` the whole
+          group collapses into the hamburger. */}
       <div className="hidden items-center gap-2 md:flex">
         {page.canViewStats && (
           <ComicButton size="sm" href={`/b/${page.slug}/stats`}>
@@ -98,7 +92,7 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
           </ComicButton>
         )}
         {page.bingo.rulesMarkdown && (
-          <ComicButton size="sm" variant="ghost" onPress={page.rules.show}>
+          <ComicButton size="sm" tilt={1} onPress={page.rules.show}>
             Rules
           </ComicButton>
         )}
@@ -109,22 +103,8 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
           </ComicButton>
         )}
       </div>
-      <div className="md:hidden">
-        <HeaderMenu entries={menuEntries} />
-      </div>
-      {page.canSubmit && (
-        <ComicButton
-          size="sm"
-          variant="primary"
-          tilt={1.5}
-          sfx={{ text: "SUBMIT!", size: 130 }}
-          onPress={() => {
-            page.submit.show();
-          }}
-        >
-          Submit
-        </ComicButton>
-      )}
+      {/* On phones Submit lives beside the team banner instead. */}
+      {page.canSubmit && <SubmitButton onPress={() => page.submit.show()} className="max-md:hidden" />}
     </AppHeader>
   );
 }

@@ -24,6 +24,7 @@ export function AppHeader({
   title,
   subtitle,
   menuItems,
+  mobileMenu,
   children,
   className,
   titleClassName,
@@ -33,6 +34,14 @@ export function AppHeader({
   title: ReactNode;
   subtitle?: ReactNode;
   menuItems?: ReactNode;
+  /**
+   * A collapsed-navigation control (a hamburger) for narrow screens. When
+   * given, the header lays out as a phone bar: title and this menu, the bug
+   * report and the account button on the top row (menu at the far right,
+   * after the user icon), with `children` wrapping onto a row of their own below. Without
+   * it the header is unchanged. The caller hides it at ≥md itself.
+   */
+  mobileMenu?: ReactNode;
   children?: ReactNode;
   /** Extra classes on the <header>; themes use these to re-skin the bar. */
   className?: string;
@@ -42,10 +51,56 @@ export function AppHeader({
   const { user, logout } = useAuth();
   const [bugReportOpen, setBugReportOpen] = useState(false);
   const [colorScheme, setColorScheme] = useColorSchemePreference();
+  const compact = !!mobileMenu;
+
+  // The bug-report button and the signed-in user's menu.
+  const utility = (
+    <>
+      {user && (
+        <>
+          <IconButton label="Report a bug" size="sm" onPress={() => setBugReportOpen(true)}>
+            <BugIcon />
+          </IconButton>
+          <BugReportDialog isOpen={bugReportOpen} onClose={() => setBugReportOpen(false)} />
+        </>
+      )}
+      {user && (
+        <MenuTrigger>
+          <Button variant="ghost" size="sm" aria-label="Account menu" className="pl-1.5">
+            <img src={avatarUrl(user)} alt="" className="size-6 rounded-full" />
+            <span className="hidden sm:inline">{displayName(user)}</span>
+          </Button>
+          <Menu>
+            {user.isAdmin && (
+              <MenuItem id="admin" href="/admin">
+                Site admin
+              </MenuItem>
+            )}
+            {menuItems}
+            {COLOR_SCHEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+              <MenuItem key={value} id={`color-scheme-${value}`} className="justify-between" onAction={() => setColorScheme(value)}>
+                <span className="flex items-center gap-2">
+                  <Icon size={14} />
+                  {label}
+                </span>
+                {colorScheme === value && <CheckIcon size={14} />}
+              </MenuItem>
+            ))}
+            <MenuItem id="logout" onAction={logout}>
+              Log out
+            </MenuItem>
+          </Menu>
+        </MenuTrigger>
+      )}
+    </>
+  );
+
   return (
     <header className={`sticky top-0 z-20 border-b-[length:var(--control-border-width,1px)] border-outline bg-surface/90 backdrop-blur ${className ?? ""}`} style={style}>
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-2.5 sm:px-6">
-        <div className="flex min-w-0 items-center gap-2">
+        {/* In the phone bar the title takes the row's slack (basis 0, so it
+            never forces the utility group to wrap) and truncates if it must. */}
+        <div className={`flex min-w-0 items-center gap-2 ${compact ? "flex-1 md:flex-none" : ""}`}>
           {back && (
             <Link to={back.to} aria-label={back.label} className="hit-40 relative flex size-8 items-center justify-center rounded-md text-on-surface-muted transition-colors hover:bg-surface-hover hover:text-on-surface">
               <ArrowLeftIcon />
@@ -60,45 +115,23 @@ export function AppHeader({
           </div>
         </div>
 
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          {children}
-          {user && (
-            <>
-              <IconButton label="Report a bug" size="sm" onPress={() => setBugReportOpen(true)}>
-                <BugIcon />
-              </IconButton>
-              <BugReportDialog isOpen={bugReportOpen} onClose={() => setBugReportOpen(false)} />
-            </>
-          )}
-          {user && (
-            <MenuTrigger>
-              <Button variant="ghost" size="sm" aria-label="Account menu" className="pl-1.5">
-                <img src={avatarUrl(user)} alt="" className="size-6 rounded-full" />
-                <span className="hidden sm:inline">{displayName(user)}</span>
-              </Button>
-              <Menu>
-                {user.isAdmin && (
-                  <MenuItem id="admin" href="/admin">
-                    Site admin
-                  </MenuItem>
-                )}
-                {menuItems}
-                {COLOR_SCHEME_OPTIONS.map(({ value, label, icon: Icon }) => (
-                  <MenuItem key={value} id={`color-scheme-${value}`} className="justify-between" onAction={() => setColorScheme(value)}>
-                    <span className="flex items-center gap-2">
-                      <Icon size={14} />
-                      {label}
-                    </span>
-                    {colorScheme === value && <CheckIcon size={14} />}
-                  </MenuItem>
-                ))}
-                <MenuItem id="logout" onAction={logout}>
-                  Log out
-                </MenuItem>
-              </Menu>
-            </MenuTrigger>
-          )}
-        </div>
+        {compact ? (
+          <>
+            {/* Phone: page actions on a row of their own (order-3, full
+                width); the menu, bug report and user sit top-right. From md
+                up it's the usual single bar: actions, then the utilities. */}
+            <div className="order-3 flex basis-full flex-wrap items-center gap-2 md:order-2 md:ml-auto md:basis-auto">{children}</div>
+            <div className="order-2 flex items-center gap-2 md:order-3">
+              {utility}
+              {mobileMenu}
+            </div>
+          </>
+        ) : (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {children}
+            {utility}
+          </div>
+        )}
       </div>
     </header>
   );

@@ -25,6 +25,10 @@ export interface ThemeTokens {
     surface: string;
     surfaceRaised: string;
     surfaceHover: string;
+    /** Fill of text inputs, selects and switch tracks. Falls back to
+     *  `background` when unset, which is right for most themes but not one
+     *  whose page background is loud (the comic theme's yellow). */
+    field: string;
     outline: string;
     outlineStrong: string;
     onSurface: string;
@@ -103,6 +107,7 @@ export function tokensToCssVars(tokens: ThemeTokens): CSSProperties {
     surface: "--color-surface",
     surfaceRaised: "--color-surface-raised",
     surfaceHover: "--color-surface-hover",
+    field: "--field-bg",
     outline: "--color-outline",
     outlineStrong: "--color-outline-strong",
     onSurface: "--color-on-surface",

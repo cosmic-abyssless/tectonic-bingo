@@ -15,6 +15,7 @@ import { PageHeader } from "./page/PageHeader";
 import { SubmissionsDrawer } from "./page/SubmissionsDrawer";
 import { RulesDialog } from "./page/RulesDialog";
 import { TeamInfoDialog } from "./page/TeamInfoDialog";
+import { NoTeamStage } from "./page/NoTeamStage";
 import { ComicDialog, ComicDialogHeader } from "./ui/ComicDialog";
 import { SubmissionModal } from "./submission/SubmissionModal";
 import { ScreenshotDropzone } from "./submission/ScreenshotDropzone";
@@ -59,6 +60,7 @@ const comicChromeLight = {
   surface: "#ffffff",
   surfaceRaised: "#fff4d6",
   surfaceHover: "#dbeafe",
+  field: "#ffffff",
   outline: "#000000",
   outlineStrong: "#000000",
   onSurface: "#000000",
@@ -174,6 +176,7 @@ const comicTheme: ThemeDefinition = {
     SubmissionsDrawer,
     RulesDialog,
     TeamInfoDialog,
+    NoTeamStage,
     DialogFrame: ComicDialog,
     DialogHeader: ComicDialogHeader,
     SubmissionModal,

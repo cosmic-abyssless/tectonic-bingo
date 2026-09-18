@@ -7,7 +7,7 @@ import type { ComponentProps, ReactNode } from "react";
  */
 
 export const inputClass =
-  "w-full rounded-md border border-outline-strong bg-background px-3 text-on-surface placeholder:text-on-surface-subtle transition-colors focus:border-on-surface/60 disabled:opacity-50 disabled:cursor-not-allowed";
+  "w-full rounded-md border border-outline-strong bg-[var(--field-bg,var(--color-background))] px-3 text-on-surface placeholder:text-on-surface-subtle transition-colors focus:border-on-surface/60 disabled:opacity-50 disabled:cursor-not-allowed";
 
 // Mirrors Button's sizes so controls sit flush next to buttons. Callers must
 // use `size` rather than passing h-* classes — `h-10` here would win anyway.

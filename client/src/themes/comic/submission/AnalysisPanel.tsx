@@ -33,13 +33,17 @@ export function AnalysisPanel({ analysis }: { analysis: SubmissionFlowModel["ana
 
   if (analysis.status === "done" && analysis.result) {
     const r = analysis.result;
+    // Only a hit gets a stamp. The check can miss a codeword that's really
+    // there, so a miss is a neutral note — never a red "rejected" verdict.
     return (
-      <CaptionBox tone={r.codewordFound ? "green" : "red"} tilt={0.4} className="pr-24">
-        <Stamp kind={r.codewordFound ? "approved" : "rejected"} size="sm" rotate={10} className="absolute right-2 top-2">
-          {r.codewordFound ? "Codeword OK" : "No codeword"}
-        </Stamp>
+      <CaptionBox tone={r.codewordFound ? "green" : "yellow"} tilt={0.4} className={r.codewordFound ? "pr-24" : undefined}>
+        {r.codewordFound && (
+          <Stamp kind="approved" size="sm" rotate={10} className="absolute right-2 top-2">
+            Codeword OK
+          </Stamp>
+        )}
         <p className="text-base font-semibold" style={{ color: colors.INK }}>
-          {r.codewordFound ? `Codeword '${r.codeword}' spotted.` : `Codeword '${r.codeword}' isn't visible.`}
+          {r.codewordFound ? `Codeword '${r.codeword}' spotted.` : `Couldn't spot codeword '${r.codeword}' — make sure it's visible.`}
         </p>
         {r.warnings.map((w, i) => (
           <p key={i} className="text-xs leading-snug" style={{ color: colors.INK_BODY }}>

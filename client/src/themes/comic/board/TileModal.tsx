@@ -25,7 +25,6 @@ import { useSlot, useThemeTokens } from "../../context";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { CaptionBox } from "../ui/CaptionBox";
-import { Stamp } from "../ui/Stamp";
 import {
   BASE_DEPTH,
   BASE_SHADOW,
@@ -33,6 +32,7 @@ import {
   BASE_STAGGER_CSS,
   bw,
   CLOSED_BOOK,
+  FLIP_ANGLE,
   ClosedBook,
   FIRST_LEAF_STAGGER,
   FIRST_LEAF_STAGGER_CSS,
@@ -125,7 +125,15 @@ export function TileModal({
     // rather than two overlays fighting.
     <AnimatePresence mode="wait">
       {isOpen && tile && (
-        <FlyingBook key={tile.id} tile={tile} onClose={onClose} onSubmit={onSubmit} onToggleInterest={onToggleInterest} />
+        // A finished tile is read-only: nothing left to submit or claim, so
+        // the pages get no such callbacks and render no such buttons.
+        <FlyingBook
+          key={tile.id}
+          tile={tile}
+          onClose={onClose}
+          onSubmit={tile.progress.allComplete ? undefined : onSubmit}
+          onToggleInterest={tile.progress.allComplete ? undefined : onToggleInterest}
+        />
       )}
     </AnimatePresence>
   );
@@ -186,6 +194,24 @@ function ComicBurst({ burstRef, reduceMotion }: { burstRef: Ref<HTMLDivElement>;
 type Point = { x: number; y: number };
 type Side = "front" | "back";
 
+/** A task and its own number (its place in the tile's task list — what its label and badge say). */
+interface OrderedTask {
+  task: TaskModel;
+  number: number;
+}
+
+/**
+ * The tasks in page order: what's still to do first, in its original order,
+ * then what's done, also in its original order — so finished parts drop to
+ * the back of the book (5 tasks with the first 2 done read P3, P4, P5, P1,
+ * P2). Each keeps its own number; only its place in the book moves.
+ */
+function orderTasks(tile: TileModel): OrderedTask[] {
+  return tile.tasks
+    .map((task, i) => ({ task, number: i + 1 }))
+    .sort((a, b) => Number(a.task.complete) - Number(b.task.complete));
+}
+
 /** Layout of the comic: how many pages, how many leaves, how far it can be read. */
 function bookShape(tile: TileModel) {
   const pageCount = tile.tasks.length + 2;
@@ -237,6 +263,8 @@ interface Flight {
   /** The tile book's hinge angles at that moment, so the swap is seamless even mid-hover. */
   coverAngle: number;
   pageAngle: number;
+  /** The whole book's resting turn: the tilt, plus FLIP_ANGLE for a finished tile shown on its back cover. */
+  flyerTurn: number;
   /** clip-path values: the tile's crop, and none (a hair below the book so nothing's ever cut). */
   clipCropped: string;
   clipOpen: string;
@@ -246,7 +274,8 @@ interface Flight {
 // rest, worked out from the never-transformed root's box alone so it stays
 // right mid-animation, when the book itself is off somewhere else. With no
 // tile to fly from/to (not on screen), it's a plain pop from the center.
-function measureFlight(root: HTMLElement, tileId: string): Flight {
+function measureFlight(root: HTMLElement, tileId: string, flipped: boolean): Flight {
+  const flyerTurn = CLOSED_BOOK.tilt + (flipped ? FLIP_ANGLE : 0);
   // The pan wrapper (the book's own two-page box) rather than the root: on
   // phones it's twice the root's width and shifted, and its rect is what the
   // frame actually sits in. On desktop it IS the root's box.
@@ -272,6 +301,7 @@ function measureFlight(root: HTMLElement, tileId: string): Flight {
       perspective: (CLOSED_BOOK.perspective * pageWidth) / 0.45,
       coverAngle: CLOSED_BOOK.coverAngle,
       pageAngle: CLOSED_BOOK.pageAngle,
+      flyerTurn,
       clipCropped,
       clipOpen,
     };
@@ -290,6 +320,7 @@ function measureFlight(root: HTMLElement, tileId: string): Flight {
     perspective: (CLOSED_BOOK.perspective * pose.frameWidth) / scale,
     coverAngle: pose.coverAngle,
     pageAngle: pose.pageAngle,
+    flyerTurn,
     clipCropped,
     clipOpen,
   };
@@ -320,7 +351,7 @@ function poseAtTile(frame: HTMLElement, flyer: HTMLElement, cover: HTMLElement, 
   frame.style.transform = `translateX(${f.dx}px) translateY(${f.dy}px) scale(${f.scale})`;
   frame.style.clipPath = f.clipCropped;
   flyer.style.transformOrigin = `${f.originX}px ${f.originY}px`;
-  flyer.style.transform = `rotateY(${CLOSED_BOOK.tilt}deg)`;
+  flyer.style.transform = `rotateY(${f.flyerTurn}deg)`;
   cover.style.transform = `rotateY(${f.coverAngle}deg)`;
   page.style.transform = `${FIRST_LEAF_STAGGER_CSS} rotateY(${f.pageAngle}deg)`;
   base.style.transform = `${BASE_STAGGER_CSS} translateZ(${-BASE_DEPTH}px)`;
@@ -361,7 +392,9 @@ function enterSequence(backdrop: Element, burst: Element, from: Flight, hasMark:
     // the move and the growth, the flyer inside straightens up — same
     // spring, so they read as one motion.
     [FRAME, { x: [from.dx, 0], y: [from.dy, 0], scale: [from.scale, 1] }, { ...FLIGHT_SPRING, at: 0 }],
-    [FLYER, { rotateY: [CLOSED_BOOK.tilt, 0] }, { ...FLIGHT_SPRING, at: 0 }],
+    // (A finished tile's book takes off on its back cover and turns over to
+    // its front on the way — FLYER's start angle carries the extra half turn.)
+    [FLYER, { rotateY: [from.flyerTurn, 0] }, { ...FLIGHT_SPRING, at: 0 }],
     // The tile's crop lets go as the book lifts out of its slot — and the
     // closed-book stagger (the first leaf and base sheet poking a hair past
     // the cover, which is exactly what the crop was hiding) has to be gone
@@ -434,7 +467,7 @@ function exitSequence(
     // and the cell's own copy takes over on the same frame it's unmounted
     // (see `finish` in FlyingBook).
     [FRAME, { x: to.dx, y: to.dy, scale: to.scale }, { duration: 0.33, ease: RETURN_EASE, at: 0.26 + lead }],
-    [FLYER, { rotateY: CLOSED_BOOK.tilt }, { duration: 0.33, ease: RETURN_EASE, at: 0.26 + lead }],
+    [FLYER, { rotateY: to.flyerTurn }, { duration: 0.33, ease: RETURN_EASE, at: 0.26 + lead }],
     // The stagger snaps back in sync with the crop, not before it — earlier
     // and the page stack would poke out past where the crop's about to sit,
     // bare, for a beat.
@@ -790,7 +823,7 @@ function FlyingBook({
     // (inline, so it's there on the first paint), and only then hide the
     // original — both changes land in this same layout pass, so the swap
     // is invisible.
-    const flight = measureFlight(root, tileId);
+    const flight = measureFlight(root, tileId, tile.progress.allComplete);
     poseAtTile(frame, flyer, cover, page, base, flight);
     // The base sheet's shadow only belongs to the closed book (see
     // BASE_SHADOW) — drop it right here, at the swap, while it's still
@@ -992,7 +1025,7 @@ function FlyingBook({
     // since the book took off. The perspective can be swapped for the
     // landing's right now, unseen: the open book is flat (no tilt, every
     // leaf lying flat), so it projects the same at any depth.
-    const flight = measureFlight(root, tileId);
+    const flight = measureFlight(root, tileId, tile.progress.allComplete);
     frame.style.perspective = `${flight.perspective}px`;
     frame.style.perspectiveOrigin = `${flight.originX}px ${flight.perspectiveOriginY}px`;
     animate(exitSequence(backdrop, burst, flight, poses.current, spreadRef.current, !!root.querySelector(PAGE_MARK))).then(finish, finish);
@@ -1100,27 +1133,29 @@ function TileDetails({
   const TaskPanel = useSlot("TaskPanel");
   const tokens = useThemeTokens();
   const { pageCount, innerLeaves } = bookShape(tile);
+  const ordered = orderTasks(tile);
 
   // The pages, in reading order.
   const pages: ReactNode[] = [
     <SummaryPage
       key="summary"
       tile={tile}
+      ordered={ordered}
       colors={colors}
-      onGoToTask={(index) => {
-        // Task `index` is page index + 2 (1-based): odd pages are left-hand.
-        onFlipTo(Math.floor((index + 1) / 2));
-        if (single) onFocus((index + 2) % 2 === 1 ? "left" : "right");
+      onGoToTask={(position) => {
+        // The task at `position` is on page position + 2 (1-based): odd pages are left-hand.
+        onFlipTo(Math.floor((position + 1) / 2));
+        if (single) onFocus((position + 2) % 2 === 1 ? "left" : "right");
       }}
       onSubmit={onSubmit}
-      onToggleInterest={onToggleInterest ? () => onToggleInterest(tile.tasks[0]?.id ?? "") : undefined}
+      onToggleInterest={onToggleInterest ? () => onToggleInterest(ordered[0]?.task.id ?? "") : undefined}
     />,
-    ...tile.tasks.map((task, index) => (
+    ...ordered.map(({ task, number }) => (
       <TaskPage
         key={task.id}
         tile={tile}
         task={task}
-        index={index}
+        number={number}
         colors={colors}
         TaskPanel={TaskPanel}
         onSubmit={onSubmit}
@@ -1136,7 +1171,7 @@ function TileDetails({
   // What a page is, printed at its spine-side foot: contents, part k of m,
   // or the submissions.
   const roleOf = (i: number) =>
-    i === 0 ? "Contents" : i === pageCount - 1 ? "Submissions" : `Part ${i} of ${tile.tasks.length}`;
+    i === 0 ? "Contents" : i === pageCount - 1 ? "Submissions" : `Part ${ordered[i - 1]!.number} of ${tile.tasks.length}`;
   const face = (i: number, side: Side, gutter = true): ReactNode => (
     <BookPage colors={colors} side={side === "front" ? "right" : "left"} no={i + 1} role={roleOf(i)} gutter={gutter}>
       {pages[i]}
@@ -1436,14 +1471,18 @@ function EdgeBand({
 // this!" shout-out and, when the viewer can, a way to submit.
 function SummaryPage({
   tile,
+  ordered,
   colors,
   onGoToTask,
   onSubmit,
   onToggleInterest,
 }: {
   tile: TileModel;
+  /** The tasks in page order (see orderTasks). */
+  ordered: OrderedTask[];
   colors: ComicColors;
-  onGoToTask?: (index: number) => void;
+  /** Takes the task's position in page order, not its own number. */
+  onGoToTask?: (position: number) => void;
   onSubmit?: () => void;
   onToggleInterest?: () => void;
 }) {
@@ -1504,13 +1543,13 @@ function SummaryPage({
       </div>
 
       {/* Parts (table of contents) */}
-      {tile.tasks.length > 0 && (
+      {ordered.length > 0 && (
         <section className="flex flex-col gap-2">
           <h3 className="text-xl uppercase leading-none" style={{ fontFamily: COMIC_FONT }}>
             Parts
           </h3>
           <ol className="flex flex-col gap-2">
-            {tile.tasks.map((task, i) => {
+            {ordered.map(({ task, number }, i) => {
               const tone = task.complete
                 ? colors.OK
                 : task.status === "pending_approval"
@@ -1541,7 +1580,7 @@ function SummaryPage({
                         color: task.complete || task.status !== "not_started" ? "#fffaf0" : colors.INK,
                       }}
                     >
-                      {task.complete ? <CheckIcon size={14} /> : task.locked ? <LockIcon size={12} /> : i + 1}
+                      {task.complete ? <CheckIcon size={14} /> : task.locked ? <LockIcon size={12} /> : number}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-base leading-tight font-bold" style={{ fontFamily: COMIC_FONT }}>
@@ -1593,7 +1632,7 @@ function SummaryPage({
 function TaskPage({
   tile,
   task,
-  index,
+  number,
   colors,
   TaskPanel,
   onSubmit,
@@ -1601,7 +1640,8 @@ function TaskPage({
 }: {
   tile: TileModel;
   task: TaskModel;
-  index: number;
+  /** The task's own number (its place in the tile's task list), whatever page it's on. */
+  number: number;
   colors: ComicColors;
   TaskPanel: React.ComponentType<{ task: TaskModel }>;
   onSubmit?: (taskId?: string) => void;
@@ -1634,11 +1674,11 @@ function TaskPage({
         }}
         aria-hidden
       >
-        {index + 1}
+        {number}
       </div>
 
       {/* Part Action Bar */}
-      {(onSubmit || showCrew) && (
+      {!tile.progress.allComplete && (onSubmit || showCrew) && (
         <div className="mb-4 border-b-[3px] pb-3 pr-12" style={{ borderColor: colors.INK }}>
           <div className="flex flex-wrap items-center gap-3">
             {onSubmit && (
@@ -1694,18 +1734,12 @@ function TaskPage({
         <TaskPanel task={task} />
       </div>
 
-      {/* Part footer stamp */}
-      <div className="mt-4 pt-2 border-t-[2px] border-dashed flex items-center justify-between" style={{ borderColor: `${colors.INK}44` }}>
+      {/* (The approved / pending / locked stamp is the one TaskPanel draws
+          beside the part's title — not repeated down here.) */}
+      <div className="mt-4 pt-2 border-t-[2px] border-dashed" style={{ borderColor: `${colors.INK}44` }}>
         <span className="text-xs uppercase font-bold tracking-wider" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
-          Part {index + 1} of {tile.tasks.length}
+          Part {number} of {tile.tasks.length}
         </span>
-        {task.complete ? (
-          <Stamp kind="approved" rotate={-4} size="sm">Approved</Stamp>
-        ) : task.status === "pending_approval" ? (
-          <Stamp kind="pending" rotate={3} size="sm">Pending</Stamp>
-        ) : task.locked ? (
-          <Stamp kind="locked" rotate={-2} size="sm">Locked</Stamp>
-        ) : null}
       </div>
     </div>
   );

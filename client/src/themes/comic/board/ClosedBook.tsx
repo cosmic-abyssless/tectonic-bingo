@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { motion, type Variants } from "motion/react";
 import type { TileModel } from "../../../headless/types";
 import { COMIC_FONT } from "../font";
-import { BookCoverArt, coverTaskMark } from "./BookCoverArt";
+import { BookBackArt, BookCoverArt, coverTaskMark } from "./BookCoverArt";
 import type { ComicColors } from "./colors";
 
 /*
@@ -59,6 +59,15 @@ export const LEAF_GAP = 2;
  * leaf deep) and the modal put it at the same depth.
  */
 export const BASE_DEPTH = LEAF_GAP * 1.25;
+
+/**
+ * How far the whole book is turned over to show a finished tile's back
+ * cover, on top of the resting tilt. Both ends of the tile↔modal flight
+ * have to agree on this, and on BACK_DEPTH.
+ */
+export const FLIP_ANGLE = 180;
+/** The back cover's depth: behind the base sheet and every leaf the modal stacks. */
+export const BACK_DEPTH = 12;
 
 /** Selector for leaf `k` (0 = cover, 1 = first page leaf, …) within the book. */
 export const leafSelector = (k: number) => `[data-leaf="${k}"]`;
@@ -154,6 +163,26 @@ export function ClosedBook({
         }}
       />
 
+      {/* A finished tile's BACK cover: a face at the very back of the stack,
+          turned to face away — so it's invisible from the front, and once
+          the whole 3D box is turned over (FLIP_ANGLE, done by whoever owns
+          the box: TileCell at rest, TileModal's flight) it's the face you
+          see, with the credits on it. */}
+      {tile.progress.allComplete && (
+        <div
+          data-book-back
+          className="absolute inset-0 overflow-hidden"
+          style={{
+            border: coverBorder,
+            backfaceVisibility: "hidden",
+            WebkitBackfaceVisibility: "hidden",
+            transform: `translateZ(${-BACK_DEPTH}px) rotateY(180deg)`,
+          }}
+        >
+          <BookBackArt tile={tile} colors={colors} fallbackColor={coverFallback} />
+        </div>
+      )}
+
       {/* Further leaves, deepest first, tucked behind the first: flush with
           the cover (their open position), so while the book's closed the
           cover hides them entirely. */}
@@ -246,7 +275,6 @@ export function ClosedBook({
             boxShadow: LIFTED_PAGE_SHADOW,
           }}
         >
-          <PaperShade />
           {coverInside}
         </div>
       </Layer>
@@ -367,16 +395,10 @@ function PageFace({
         ...(side === "back" ? { borderRightWidth: 0, transform: "rotateY(180deg) translateZ(1px)", boxShadow: LIFTED_PAGE_SHADOW } : { transform: "translateZ(1px)" }),
       }}
     >
-      <PaperShade />
       {children}
       <PageEdgeTicks colors={colors} side={side} />
     </div>
   );
-}
-
-/** A faint halftone over paper — first in DOM order so content paints over it. */
-function PaperShade() {
-  return <div aria-hidden className="comic-shade pointer-events-none absolute inset-0" style={{ opacity: 0.12 }} />;
 }
 
 /**

@@ -16,7 +16,8 @@ export function TaskPanel({ task }: { task: TaskModel }) {
   const RequirementTree = useSlot("RequirementTree");
   const { colors } = useComic();
 
-  const statusStamp = task.complete ? "approved" : task.status === "pending_approval" ? "pending" : task.locked ? "locked" : null;
+  // No stamp for a locked part: the "Locked" badge beside the points says it.
+  const statusStamp = task.complete ? "approved" : task.status === "pending_approval" ? "pending" : null;
 
   return (
     <div className="relative">
@@ -55,13 +56,20 @@ export function TaskPanel({ task }: { task: TaskModel }) {
             </Tooltip>
           </TooltipTrigger>
         )}
-        {statusStamp && <Stamp kind={statusStamp} size="sm" rotate={-6} className="ml-auto" />}
       </div>
 
-      {task.description && (
-        <p className="mb-4 text-[15px] leading-relaxed first-letter:float-left first-letter:mr-1 first-letter:font-[Bangers] first-letter:text-[1.9em] first-letter:leading-[0.85]" style={{ color: colors.INK_BODY }}>
-          {task.description}
-        </p>
+      {/* The status stamp rides beside the brief, not up in the points row. */}
+      {(task.description || statusStamp) && (
+        <div className="mb-4 flex items-start gap-3">
+          {task.description ? (
+            <p className="min-w-0 flex-1 text-[15px] leading-relaxed first-letter:float-left first-letter:mr-1 first-letter:font-[Bangers] first-letter:text-[1.9em] first-letter:leading-[0.85]" style={{ color: colors.INK_BODY }}>
+              {task.description}
+            </p>
+          ) : (
+            <span className="flex-1" />
+          )}
+          {statusStamp && <Stamp kind={statusStamp} size="sm" rotate={-6} className="shrink-0" />}
+        </div>
       )}
 
       {!task.isManual && task.tree && (

@@ -8,7 +8,7 @@ export function RulesDialog({ isOpen, markdown, onClose }: { isOpen: boolean; ma
     <ComicDialog isOpen={isOpen && !!markdown} onClose={onClose} size="lg">
       <ComicDialogHeader title="The Rules" subtitle="Read before you play." tone="blue" onClose={onClose} />
       <div className="p-5">
-        <CaptionBox tone="paper" tilt={-0.3} className="px-5 py-4">
+        <CaptionBox tone="paper" className="px-5 py-4">
           <Markdown>{markdown}</Markdown>
         </CaptionBox>
       </div>
