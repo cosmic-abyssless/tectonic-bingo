@@ -67,15 +67,21 @@ export function BookCoverArt({
       className="absolute inset-0 overflow-hidden transition-colors duration-200 [container-type:inline-size]"
       style={{ backgroundColor: dominantColor ?? fallbackColor }}
     >
+      {/* The artwork is an ordinary block image inside a padded wrapper, so its
+          height comes from its own aspect ratio. (It used to be an absolutely
+          positioned <img> with `height: fit-content`, which WebKit ignores for
+          images: the box stretched to the whole cover and the art was pushed down
+          and cut off on iOS.) Percent padding is of the cover's width either way. */}
       {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={tile.name}
-          onError={() => setImgFailed(true)}
-          className={`absolute inset-0 h-fit w-full object-contain p-[8%] pt-[18%] ${frozen ? "opacity-30 saturate-0" : ""}`}
-          style={{ objectPosition: "50% 35%" }}
-          draggable={false}
-        />
+        <div className="absolute inset-x-0 top-0 p-[8%] pt-[18%]">
+          <img
+            src={imageUrl}
+            alt={tile.name}
+            onError={() => setImgFailed(true)}
+            className={`block h-auto w-full ${frozen ? "opacity-30 saturate-0" : ""}`}
+            draggable={false}
+          />
+        </div>
       ) : null}
       {/* Masthead + the tile's points, left-aligned in a row so the score
           reads right off the logo instead of floating in its own corner. */}
