@@ -54,7 +54,7 @@ export function Stamp({
   return (
     <motion.span
       aria-hidden={kind !== "custom" ? undefined : true}
-      className={`comic-stamp pointer-events-none z-[10] inline-flex select-none items-center justify-center whitespace-nowrap border-[3px] uppercase leading-none ${positioned ? "" : "relative"} ${fontSize} ${pad} ${className ?? ""}`}
+      className={`comic-stamp pointer-events-none inline-flex select-none items-center justify-center whitespace-nowrap border-[3px] uppercase leading-none ${positioned ? "" : "relative"} ${fontSize} ${pad} ${className ?? ""}`}
       style={{
         fontFamily: COMIC_FONT,
         letterSpacing: "0.08em",

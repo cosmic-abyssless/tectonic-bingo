@@ -1484,53 +1484,12 @@ function SummaryPage({
         </section>
       )}
 
-      {/* Global interest shout-out */}
-      {(onToggleInterest || tile.interest.people.length > 0) && (
-        <section
-          className="flex flex-wrap items-center gap-3 rounded-2xl border-[3px] px-4 py-3"
-          style={{ backgroundColor: colors.PAPER_RAISED, borderColor: colors.INK, boxShadow: "2px 2px 0 rgba(0,0,0,0.2)", fontFamily: COMIC_FONT }}
-        >
-          {onToggleInterest && (
-            <AriaButton
-              onPress={onToggleInterest}
-              aria-pressed={tile.interest.mine}
-              className="cursor-pointer flex items-center gap-1.5 rounded-full border-[3px] px-3 py-1 text-sm font-bold uppercase transition-transform duration-100 pressed:scale-95 hover:-translate-y-0.5"
-              style={{
-                borderColor: colors.INK,
-                boxShadow: `2px 2px 0 ${colors.INK}`,
-                backgroundColor: tile.interest.mine ? "#facc15" : colors.PAPER_RAISED,
-                color: colors.INK,
-              }}
-            >
-              <HandIcon size={16} fill={tile.interest.mine ? "currentColor" : "none"} />
-              {tile.interest.mine ? "I'm on it!" : "I'll do this!"}
-            </AriaButton>
-          )}
-          <span className="text-sm">
-            {tile.interest.people.length > 0 ? (
-              <>
-                <span className="font-bold uppercase">On it: </span>
-                {tile.interest.people.map((p, i) => (
-                  <span key={p.id}>
-                    {i > 0 && ", "}
-                    <PlayerName userId={p.id}>{p.displayName}</PlayerName>
-                  </span>
-                ))}
-              </>
-            ) : (
-              "Nobody has called this one yet."
-            )}
-          </span>
-        </section>
-      )}
-
       {onSubmit && (
         <ComicButton
           variant="primary"
-          isDisabled={!tile.canSubmit}
           onPress={() => onSubmit()}
         >
-          {submitLabel}
+          Submit
         </ComicButton>
       )}
     </div>
@@ -1570,7 +1529,7 @@ function TaskPage({
     <div className="relative flex min-h-full flex-col p-6" style={{ color: colors.INK }}>
       {/* Tilted Part Number Badge */}
       <div
-        className="absolute right-5 top-5 z-[10] flex size-10 items-center justify-center border-[3px] text-2xl font-black"
+        className="absolute right-5 top-5 flex size-10 items-center justify-center border-[3px] text-2xl font-black"
         style={{
           fontFamily: COMIC_FONT,
           borderColor: colors.INK,
