@@ -247,7 +247,10 @@ interface Flight {
 // right mid-animation, when the book itself is off somewhere else. With no
 // tile to fly from/to (not on screen), it's a plain pop from the center.
 function measureFlight(root: HTMLElement, tileId: string): Flight {
-  const rootRect = root.getBoundingClientRect();
+  // The pan wrapper (the book's own two-page box) rather than the root: on
+  // phones it's twice the root's width and shifted, and its rect is what the
+  // frame actually sits in. On desktop it IS the root's box.
+  const rootRect = (root.querySelector<HTMLElement>("[data-pan]") ?? root).getBoundingClientRect();
   const pageWidth = rootRect.width / 2;
   const pageHeight = pageWidth * 1.5;
   // The closed book is the frame's right half, so the tile's side crops sit
@@ -701,6 +704,58 @@ function FlyingBook({
     [lastSpread],
   );
 
+  // Phone view (≤640px): one page at a time. The book is unchanged — the
+  // same two-page spread — but drawn twice as wide as the screen and panned
+  // (`focus` says which half is showing), so the tile↔modal flight and every
+  // page geometry stay exactly as on desktop. Paging steps through pages,
+  // not spreads: left page, right page, turn, left page…
+  const [single, setSingle] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
+  const singleRef = useRef(single);
+  singleRef.current = single;
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)");
+    const onChange = () => setSingle(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  // Starts on the right: that's where the closed book flies to. Once it's
+  // open the view pans left to page 1.
+  const [focus, setFocus] = useState<"left" | "right">("right");
+  const focusRef = useRef<"left" | "right">("right");
+  const setFocusBoth = useCallback((f: "left" | "right") => {
+    focusRef.current = f;
+    setFocus(f);
+  }, []);
+  useEffect(() => {
+    if (!singleRef.current) return;
+    const id = window.setTimeout(() => setFocusBoth("left"), reduceMotion ? 0 : 900);
+    return () => window.clearTimeout(id);
+    // Once, on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // One step of paging: a spread on desktop, a page on a phone.
+  const step = useCallback(
+    (dir: 1 | -1) => {
+      if (!singleRef.current) {
+        flipTo(spreadRef.current + dir);
+        return;
+      }
+      const f = focusRef.current;
+      if (dir === 1) {
+        if (f === "left") setFocusBoth("right");
+        else if (spreadRef.current < lastSpread) {
+          flipTo(spreadRef.current + 1);
+          setFocusBoth("left");
+        }
+      } else if (f === "right") setFocusBoth("left");
+      else if (spreadRef.current > 0) {
+        flipTo(spreadRef.current - 1);
+        setFocusBoth("right");
+      }
+    },
+    [flipTo, lastSpread, setFocusBoth],
+  );
+
   // Take off. useLayoutEffect so the measuring + first keyframe land before
   // the browser paints the freshly mounted overlay at rest.
   useLayoutEffect(() => {
@@ -917,6 +972,14 @@ function FlyingBook({
       finish();
       return;
     }
+    // Phone view: the closed book lives on the right half, so snap the pan
+    // there (no transition) before measuring — otherwise the flight home is
+    // aimed from where the book WOULD be, off-screen.
+    const pan = root.querySelector<HTMLElement>("[data-pan]");
+    if (pan && singleRef.current && focusRef.current === "left") {
+      pan.style.transition = "none";
+      pan.style.translate = "-50% 0";
+    }
     // Bring the base sheet's shadow back before it's closed again — it's
     // occluded under the cover regardless of exactly when in the close it
     // returns.
@@ -946,11 +1009,11 @@ function FlyingBook({
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       e.preventDefault();
-      flipTo(spreadRef.current + (e.key === "ArrowRight" ? 1 : -1));
+      step(e.key === "ArrowRight" ? 1 : -1);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [isPresent, flipTo]);
+  }, [isPresent, step]);
 
   return (
     <ModalOverlay
@@ -958,7 +1021,9 @@ function FlyingBook({
       isOpen
       onOpenChange={(open) => !open && onClose()}
       isDismissable
-      className="fixed inset-0 z-50 overflow-y-auto p-4"
+      // On a phone the book is drawn twice the screen's width (see `single`);
+      // the half that's off-screen must not grow a horizontal scrollbar.
+      className={`fixed inset-0 z-50 overflow-y-auto p-4 ${single ? "overflow-x-hidden" : ""}`}
     >
       {/* The scrim is its own layer (not the overlay's background) so it
           can fade on its own clock while the book's in flight above it. */}
@@ -980,7 +1045,11 @@ function FlyingBook({
               spread={spread}
               lastSpread={lastSpread}
               curlCopy={curlCopy}
+              single={single}
+              focus={focus}
+              onFocus={setFocusBoth}
               onFlipTo={flipTo}
+              onStep={step}
               onCurl={curl}
               onClose={onClose}
               onSubmit={onSubmit}
@@ -1000,7 +1069,11 @@ function TileDetails({
   spread,
   lastSpread,
   curlCopy,
+  single,
+  focus,
+  onFocus,
   onFlipTo,
+  onStep,
   onCurl,
   onClose,
   onSubmit,
@@ -1012,7 +1085,13 @@ function TileDetails({
   spread: number;
   lastSpread: number;
   curlCopy: { leaf: number; side: Side } | null;
+  /** Phone view: one page at a time — which half of the book is showing. */
+  single: boolean;
+  focus: "left" | "right";
+  onFocus: (focus: "left" | "right") => void;
   onFlipTo: (spread: number) => void;
+  /** One step of paging: a spread on desktop, a page on a phone. */
+  onStep: (dir: 1 | -1) => void;
   onCurl: (leaf: number, side: Side, at: Point | null) => void;
   onClose: () => void;
   onSubmit?: (taskId?: string) => void;
@@ -1028,7 +1107,11 @@ function TileDetails({
       key="summary"
       tile={tile}
       colors={colors}
-      onGoToTask={(index) => onFlipTo(Math.floor((index + 1) / 2))}
+      onGoToTask={(index) => {
+        // Task `index` is page index + 2 (1-based): odd pages are left-hand.
+        onFlipTo(Math.floor((index + 1) / 2));
+        if (single) onFocus((index + 2) % 2 === 1 ? "left" : "right");
+      }}
       onSubmit={onSubmit}
       onToggleInterest={onToggleInterest ? () => onToggleInterest(tile.tasks[0]?.id ?? "") : undefined}
     />,
@@ -1083,11 +1166,21 @@ function TileDetails({
     // The root is the size reference: `--bw` (the closed book's width, which
     // every length in ClosedBook is a fraction of) is half of it — one page
     // of the two-page spread.
+    // On a phone (`single`) the root is ONE page wide, so `--bw` is all of it,
+    // and the pan wrapper below is two pages wide, shifted to the half in view.
     <div
       ref={ref}
       className="relative [container-type:inline-size]"
-      style={{ ["--bw" as string]: "50cqw" }}
+      style={{ ["--bw" as string]: single ? "100cqw" : "50cqw" }}
     >
+      <div
+        data-pan
+        style={
+          single
+            ? { width: "200%", translate: focus === "right" ? "-50% 0" : "0 0", transition: "translate 350ms cubic-bezier(0.45, 0, 0.15, 1)" }
+            : undefined
+        }
+      >
       {/* The 2D frame — the flight's translate/scale, the perspective and
           the tile's crop all live here, mirroring TileCell's frame. Starts
           invisible; FlyingBook's layout effect poses it over the tile and
@@ -1158,12 +1251,13 @@ function TileDetails({
             the strip ever moving out from under it. The right-hand page is
             the next leaf's front; the left-hand one is this spread's leaf,
             turned, so its back. */}
-        {spread < lastSpread && (
+        {!single && spread < lastSpread && (
           <EdgeBand side="right" leaf={spread + 1} face="front" onCurl={(at) => onCurl(spread + 1, "front", at)} onFlip={() => onFlipTo(spread + 1)} />
         )}
-        {spread >= 1 && (
+        {!single && spread >= 1 && (
           <EdgeBand side="left" leaf={spread} face="back" onCurl={(at) => onCurl(spread, "back", at)} onFlip={() => onFlipTo(spread - 1)} />
         )}
+      </div>
       </div>
 
       {/* The trimmings: floating tilted artwork, the close button, and the
@@ -1193,17 +1287,18 @@ function TileDetails({
         <XIcon size={24} />
       </AriaButton>
       <div data-extra className="mt-5 flex items-center justify-center gap-4" style={{ opacity: 0, color: colors.INK, fontFamily: COMIC_FONT }}>
-        <NavButton label="Previous page" onPress={() => onFlipTo(spread - 1)} disabled={spread <= 0} colors={colors}>
+        <NavButton label="Previous page" onPress={() => onStep(-1)} disabled={single ? focus === "left" && spread <= 0 : spread <= 0} colors={colors}>
           <ArrowLeftIcon size={20} />
         </NavButton>
-        {/* A yellow tab, like a bookmark: which spread of how many. */}
+        {/* A yellow tab, like a bookmark: which spread of how many — or, on
+            a phone, which page. */}
         <span
           className="min-w-32 -rotate-1 border-[3px] px-3 py-1 text-center text-base uppercase leading-none tabular-nums"
           style={{ background: colors.YELLOW, borderColor: colors.INK, color: colors.INK, boxShadow: `2px 2px 0 ${colors.INK}` }}
         >
-          Spread {spread + 1} / {lastSpread + 1}
+          {single ? `Page ${2 * spread + (focus === "left" ? 1 : 2)} / ${pageCount}` : `Spread ${spread + 1} / ${lastSpread + 1}`}
         </span>
-        <NavButton label="Next page" onPress={() => onFlipTo(spread + 1)} disabled={spread >= lastSpread} colors={colors}>
+        <NavButton label="Next page" onPress={() => onStep(1)} disabled={single ? focus === "right" && spread >= lastSpread : spread >= lastSpread} colors={colors}>
           <ArrowRightIcon size={20} />
         </NavButton>
       </div>
