@@ -246,6 +246,7 @@ export function ClosedBook({
             boxShadow: LIFTED_PAGE_SHADOW,
           }}
         >
+          <PaperShade />
           {coverInside}
         </div>
       </Layer>
@@ -366,10 +367,16 @@ function PageFace({
         ...(side === "back" ? { borderRightWidth: 0, transform: "rotateY(180deg) translateZ(1px)", boxShadow: LIFTED_PAGE_SHADOW } : { transform: "translateZ(1px)" }),
       }}
     >
+      <PaperShade />
       {children}
       <PageEdgeTicks colors={colors} side={side} />
     </div>
   );
+}
+
+/** A faint halftone over paper — first in DOM order so content paints over it. */
+function PaperShade() {
+  return <div aria-hidden className="comic-shade pointer-events-none absolute inset-0" style={{ opacity: 0.12 }} />;
 }
 
 /**

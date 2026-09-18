@@ -59,6 +59,13 @@ export function BookCoverArt({
       className="absolute inset-0 overflow-hidden transition-colors duration-200 [container-type:inline-size]"
       style={{ backgroundColor: dominantColor ?? fallbackColor }}
     >
+      {/* Halftone shading over the cover's lower half, under the artwork
+          and lettering — the printed-comic dot texture. */}
+      <div
+        aria-hidden
+        className="comic-shade pointer-events-none absolute inset-0"
+        style={{ maskImage: "linear-gradient(to top, black, transparent 60%)", WebkitMaskImage: "linear-gradient(to top, black, transparent 60%)" }}
+      />
       {imageUrl ? (
         <img
           src={imageUrl}
