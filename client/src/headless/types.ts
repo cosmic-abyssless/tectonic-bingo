@@ -13,6 +13,8 @@ export interface ActivityEntryModel {
   at: number;
   timeAgo: string;
   actorName: string | null;
+  /** For linking the name to the player's profile; null for system events. */
+  actorId: string | null;
 }
 
 export interface CategoryModel {

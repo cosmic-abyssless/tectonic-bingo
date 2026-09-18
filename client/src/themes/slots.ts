@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { StageMilestone } from "@bingo/shared";
 import type {
   BingoPageModel,
@@ -44,6 +44,14 @@ export interface ThemeSlots {
   RulesDialog: ComponentType<{ isOpen: boolean; markdown: string; onClose: () => void }>;
   TeamInfoDialog: ComponentType<{ slug: string; team: TeamModel | null; onClose: () => void }>;
   SubmissionsDrawer: ComponentType<{ isOpen: boolean; submissions: SubmissionModel[]; onClose: () => void; onSubmit?: () => void }>;
+
+  // The frame + header the core dialogs (bug report, player profile) are
+  // built from, so a theme can dress them without reimplementing them. Read
+  // with useOptionalSlot, not useSlot: those dialogs also mount on pages
+  // outside any ThemeProvider (mod panel, site admin), where they fall back
+  // to the core Dialog/DialogHeader.
+  DialogFrame: ComponentType<{ isOpen: boolean; onClose: () => void; size?: "md" | "lg"; isDismissable?: boolean; children: ReactNode }>;
+  DialogHeader: ComponentType<{ title: ReactNode; subtitle?: string; onClose: () => void; action?: ReactNode }>;
 
   // Board.
   // highlightedTileId is optional and only meaningful to a theme whose

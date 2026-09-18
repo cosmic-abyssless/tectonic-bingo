@@ -15,6 +15,7 @@ import { PageHeader } from "./page/PageHeader";
 import { SubmissionsDrawer } from "./page/SubmissionsDrawer";
 import { RulesDialog } from "./page/RulesDialog";
 import { TeamInfoDialog } from "./page/TeamInfoDialog";
+import { ComicDialog, ComicDialogHeader } from "./ui/ComicDialog";
 import { SubmissionModal } from "./submission/SubmissionModal";
 import { ScreenshotDropzone } from "./submission/ScreenshotDropzone";
 import { AnalysisPanel } from "./submission/AnalysisPanel";
@@ -173,6 +174,8 @@ const comicTheme: ThemeDefinition = {
     SubmissionsDrawer,
     RulesDialog,
     TeamInfoDialog,
+    DialogFrame: ComicDialog,
+    DialogHeader: ComicDialogHeader,
     SubmissionModal,
     ScreenshotDropzone,
     AnalysisPanel,

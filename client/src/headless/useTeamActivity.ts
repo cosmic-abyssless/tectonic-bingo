@@ -18,6 +18,7 @@ export function useTeamActivityModel(slug: string | undefined, teamId: string | 
         at: new Date(e.at).getTime(),
         timeAgo: timeAgo(e.at),
         actorName: e.actor ? displayName(e.actor) : null,
+        actorId: e.actor?.id ?? null,
       })),
     [data],
   );

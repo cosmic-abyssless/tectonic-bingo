@@ -92,7 +92,18 @@ function TeamDetails({ slug, team, onClose }: { slug: string; team: TeamModel; o
             <ul className="space-y-1.5">
               {activity.map((entry) => (
                 <li key={entry.id} className="flex items-start justify-between gap-3 text-sm">
-                  <span style={{ color: colors.INK_BODY }}>{entry.label}</span>
+                  <span style={{ color: colors.INK_BODY }}>
+                    {/* Labels are server-built sentences that begin with the
+                        actor's name — link that name to their profile. */}
+                    {entry.actorId && entry.actorName && entry.label.startsWith(entry.actorName) ? (
+                      <>
+                        <PlayerName userId={entry.actorId}>{entry.actorName}</PlayerName>
+                        {entry.label.slice(entry.actorName.length)}
+                      </>
+                    ) : (
+                      entry.label
+                    )}
+                  </span>
                   <InkTag className="shrink-0">{entry.timeAgo}</InkTag>
                 </li>
               ))}

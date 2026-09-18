@@ -2,10 +2,11 @@ import { useState } from "react";
 import * as bugReportsApi from "../../api/bugReportsApi";
 import { Button } from "./Button";
 import { Notice } from "./Card";
-import { Dialog, DialogHeader } from "./Dialog";
 import { Textarea } from "./Field";
+import { useDialogParts } from "./useDialogParts";
 
 export function BugReportDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const { Dialog, DialogHeader } = useDialogParts();
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
