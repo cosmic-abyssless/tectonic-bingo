@@ -1,7 +1,8 @@
 # Caching for the board and images (issue #63) — implementation plan
 
-**Status:** approved plan, not yet implemented. Written 2026-09-18 against
-`main` at `8db94a0` (PR #64, image variants, merged).
+**Status:** implemented on branch `caching` (2026-09-18), one commit per phase.
+Written against `main` at `8db94a0` (PR #64, image variants, merged). See
+"As implemented" at the end for where the code differs from this plan.
 **Scope:** https://github.com/cosmic-abyssless/tectonic-bingo/issues/63 —
 aggressively cache tile images, wiki images, and the board structure — **and
 show the wiki item icons in the player-facing tile modal** (revised the same
@@ -451,3 +452,30 @@ frame with no colour flash.
 - Server-side board memoisation or an explicit version/`updatedAt` column —
   the ETag already makes revalidation cheap, and the structure is frozen from
   `live` anyway.
+
+## As implemented
+
+Everything above shipped as written, with these differences and additions:
+
+- **Phase 4 needed two extra wiring changes** the plan missed: the Vite dev proxy
+  (`client/vite.config.ts`) forwards `/wiki-icons` like `/uploads`, and the SPA
+  fallback regex in `server/src/index.ts` excludes `wiki-icons` (otherwise an
+  unknown icon would 404 as `index.html`). The disk-cache logic is a reusable
+  `createWikiIconCache` (used by both the route and `scripts/warm-wiki-icons.ts`)
+  in `server/src/middleware/wikiIcons.ts`; `WIKI_ICONS_DIR` lives in `config.ts`.
+- **Phase 5: a missing icon leaves an empty, same-size slot** instead of
+  disappearing, so item names in a list stay aligned with the ones that have icons
+  (`core/ui/ItemIcon.tsx`). The `img` also fades with its row when the part is done.
+- **Phase 2**: the API is compressed with brotli/gzip via `compression`; the two
+  `private, no-cache` headers come from `middleware/cacheControl.ts`.
+- **Phase 3** persists with plain helpers (`client/src/api/boardCache.ts`, 9 unit
+  tests) rather than a persistence plugin; the client gained `vitest` (`npm test -w client`).
+- **Phase 7**: `themes/comic/dominantColorStore.ts` (5 unit tests) holds the storage
+  logic; `useDominantColor.ts` only seeds from it and records results.
+
+Measured after implementing (dev server, comic bingo): second board load makes
+no image requests (all cache hits); `/board` is served brotli-compressed with
+`Cache-Control: private, no-cache`; a stored board paints the grid while `/board`
+is still in flight and is then replaced by the revalidated response; after a
+server restart the page refetches by itself once the socket reconnects; the
+warm-up script cached 240 of 249 item icons (9 not on the wiki, 0 failed, 717 KB).
