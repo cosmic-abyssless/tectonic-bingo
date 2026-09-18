@@ -127,8 +127,7 @@ export function BookCoverArt({
 // Icicles hanging from the top edge, as [left edge, width, length] in the
 // cover's width / 100 (the SVG's own units, so it scales with the cover).
 const ICICLES: [number, number, number][] = [
-  [-2, 10, 15], [8, 9, 25], [17, 11, 17], [28, 8, 31], [36, 10, 20], [46, 8, 14],
-  [54, 11, 28], [65, 8, 19], [73, 10, 33], [83, 8, 16], [91, 11, 24],
+  [-2, 13, 15], [10, 12, 27], [23, 13, 17], [36, 11, 32], [48, 13, 20], [61, 12, 29], [73, 13, 18], [86, 15, 25],
 ];
 
 const frost = (colors: ComicColors, pct: number) => `color-mix(in srgb, ${iceBlue(colors)} ${pct}%, transparent)`;
