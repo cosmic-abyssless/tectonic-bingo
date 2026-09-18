@@ -71,7 +71,7 @@ export function TaskPanel({ task }: { task: TaskModel }) {
       )}
 
       {task.notes && (
-        <CaptionBox tone="yellow" title="Editor's note" tilt={-0.6} className="mt-4">
+        <CaptionBox tone="yellow" title="Notes" tilt={-0.6} className="mt-4">
           <p className="text-sm leading-relaxed" style={{ color: colors.INK_BODY }}>
             {task.notes}
           </p>

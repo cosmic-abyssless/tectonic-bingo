@@ -22,7 +22,7 @@ export function AnalysisPanel({ analysis }: { analysis: SubmissionFlowModel["ana
       <CaptionBox tone="cyan" tilt={-0.4}>
         <p className="flex items-center gap-2 text-lg uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
           <SpinnerIcon className="animate-spin" />
-          Meanwhile, at the lab…
+          Analyzing screenshot…
         </p>
         <p className="mt-1 text-xs" style={{ color: colors.INK_BODY }}>
           Scanning the screenshot for the codeword and a matching item.

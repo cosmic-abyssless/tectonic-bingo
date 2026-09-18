@@ -62,7 +62,7 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
 
       {submission.reviewerNotes && (
         <p className="mt-2 border-l-[3px] pl-2 text-xs leading-relaxed" style={{ borderColor: colors.BAD, color: colors.BAD }}>
-          <span className="uppercase tracking-wider">Judges: </span>
+          <span className="uppercase tracking-wider">Reviewer: </span>
           {submission.reviewerNotes}
         </p>
       )}

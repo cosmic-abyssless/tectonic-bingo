@@ -5,7 +5,7 @@ import { ComicField } from "./ComicField";
 
 export function TilePicker({ tile }: { tile: SubmissionFlowModel["tile"] }) {
   return (
-    <ComicField label="Which issue?">
+    <ComicField label="Tile">
       <SearchableSelect value={tile.selectedId} options={tile.options} placeholder="Search tiles…" onChange={tile.select} />
     </ComicField>
   );
@@ -15,7 +15,7 @@ export function RequirementPicker({ requirement, quantity }: { requirement: Subm
   if (!requirement.visible) return null;
   return (
     <>
-      <ComicField label="Which item?">
+      <ComicField label="Requirement">
         <SearchableSelect
           key={requirement.pickerKey}
           value={requirement.selectedId}
@@ -27,7 +27,7 @@ export function RequirementPicker({ requirement, quantity }: { requirement: Subm
       </ComicField>
 
       {quantity.visible && (
-        <ComicField label="How many?" hint={`${quantity.needed} needed in total`}>
+        <ComicField label="Quantity" hint={`${quantity.needed} needed in total`}>
           <Input type="number" min={1} max={quantity.max} value={quantity.value} onChange={(e) => quantity.set(parseInt(e.target.value) || 1)} className="num" />
         </ComicField>
       )}

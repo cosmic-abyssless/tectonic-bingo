@@ -23,7 +23,9 @@ export function ComicField({
   return (
     <Tag className={`block ${className ?? ""}`}>
       <span
-        className="mb-1 inline-block border-[2px] border-b-0 px-2 pb-0.5 pt-px text-base uppercase leading-none tracking-wide"
+        // Overlaps the control's own 3px top border (-mb) so the tab reads as
+        // a folder tab attached to the field, not a caption floating above it.
+        className="relative z-[1] -mb-[3px] inline-block rounded-t-sm border-[3px] border-b-0 px-2 pb-0.5 pt-px text-base uppercase leading-none tracking-wide"
         style={{ fontFamily: COMIC_FONT, borderColor: colors.INK, background: colors.YELLOW, color: "#0b0b0d" }}
       >
         {label}

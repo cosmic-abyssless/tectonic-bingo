@@ -14,7 +14,7 @@ export function ScreenshotDropzone({ screenshot }: { screenshot: SubmissionFlowM
   const { colors } = useComic();
   const has = !!screenshot.previewUrl;
   return (
-    <ComicField label="Exhibit A" as="div">
+    <ComicField label="Screenshot" as="div">
       <button
         type="button"
         onClick={screenshot.openFilePicker}
@@ -43,7 +43,7 @@ export function ScreenshotDropzone({ screenshot }: { screenshot: SubmissionFlowM
           <span className="absolute inset-0 flex flex-col items-center justify-center gap-1.5" style={{ color: colors.INK_SUBTLE }}>
             <ImageIcon size={30} />
             <span className="text-2xl uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
-              {screenshot.dragOver ? "Drop it!" : "Paste photo here"}
+              {screenshot.dragOver ? "Drop it!" : "Drop or paste a screenshot"}
             </span>
             <span className="text-xs">Drag & drop or click · PNG, JPG, WebP · max {MAX_UPLOAD_MB} MB</span>
           </span>

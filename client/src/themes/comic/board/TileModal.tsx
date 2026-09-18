@@ -1397,23 +1397,25 @@ function SummaryPage({
             {" "}/ {progress.totalTasks} done
           </span>
         </CaptionBox>
-        {freeze.hasFreezePeriod && (
-          <CaptionBox tone="cyan" title={freeze.isFrozen ? "On ice" : "Freeze period"} className="col-span-2">
+        {/* unlocksAt is null before the bingo starts; once the freeze is over
+            (started, not frozen) there's nothing left to say, so no box. */}
+        {freeze.hasFreezePeriod && (freeze.isFrozen || freeze.unlocksAt === null) && (
+          <CaptionBox tone="cyan" title={freeze.isFrozen ? "Frozen" : "Freeze period"} className="col-span-2">
             <span className="flex items-center gap-2 text-sm" style={{ color: colors.INK }}>
               <ClockIcon size={14} />
               {freeze.isFrozen
-                ? `Thaws in ${formatCountdown(freeze.remainingMs)}`
-                : `Locks for ${freeze.durationMinutes} min after each approval`}
+                ? `Unlocks in ${formatCountdown(freeze.remainingMs)}`
+                : `Locked for ${freeze.durationMinutes} minutes after the start of the bingo`}
             </span>
           </CaptionBox>
         )}
       </div>
 
-      {/* In this issue (Table of Contents) */}
+      {/* Parts (table of contents) */}
       {tile.tasks.length > 0 && (
         <section className="flex flex-col gap-2">
           <h3 className="text-xl uppercase leading-none" style={{ fontFamily: COMIC_FONT }}>
-            In this issue
+            Parts
           </h3>
           <ol className="flex flex-col gap-2">
             {tile.tasks.map((task, i) => {
@@ -1522,7 +1524,7 @@ function TaskPage({
     : task.locked
       ? (task.lockedReason ?? "Locked.")
       : tile.freeze.isFrozen
-        ? "On ice until the freeze ends."
+        ? "Frozen until the freeze period ends."
         : null;
 
   return (
@@ -1641,19 +1643,11 @@ function SubmissionsPage({ submissions, colors }: { submissions: SubmissionModel
       {submissions.length === 0 ? (
         <CaptionBox tone="paper" tilt={-1} className="mx-auto mt-6 max-w-xs text-center">
           <p className="text-sm" style={{ color: colors.INK_BODY }}>
-            No submissions yet. Be the first to write in!
+            No submissions yet. Submit the first one.
           </p>
         </CaptionBox>
       ) : (
-        submissions.map((s) => (
-          <div
-            key={s.id}
-            className="relative rounded-2xl border-[3px] px-4 py-3"
-            style={{ backgroundColor: colors.PAPER_RAISED, borderColor: colors.INK, boxShadow: "3px 3px 0 rgba(0,0,0,0.2)" }}
-          >
-            <SubmissionBubble submission={s} />
-          </div>
-        ))
+        submissions.map((s) => <SubmissionBubble key={s.id} submission={s} />)
       )}
     </div>
   );
