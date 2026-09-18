@@ -32,15 +32,15 @@ function deriveNodeStatuses(
   approvedLeafIds: Set<string>,
   out: Map<string, NodeStatus>,
 ): NodeStatus {
-  if (completedNodeIds.has(node.id)) {
-    out.set(node.id, "completed");
-    return "completed";
-  }
+  // Children are visited even when this node is complete: a finished tile's
+  // root is completed, but its tasks still need their own statuses.
+  const childStatuses = node.children.map((c) => deriveNodeStatuses(c, completedNodeIds, pendingLeafIds, approvedLeafIds, out));
   let status: NodeStatus;
-  if (node.kind === "ITEM" || node.kind === "MANUAL") {
+  if (completedNodeIds.has(node.id)) {
+    status = "completed";
+  } else if (node.kind === "ITEM" || node.kind === "MANUAL") {
     status = pendingLeafIds.has(node.id) ? "pending_approval" : approvedLeafIds.has(node.id) ? "in_progress" : "not_started";
   } else {
-    const childStatuses = node.children.map((c) => deriveNodeStatuses(c, completedNodeIds, pendingLeafIds, approvedLeafIds, out));
     status = childStatuses.includes("pending_approval") ? "pending_approval" : childStatuses.includes("in_progress") ? "in_progress" : "not_started";
   }
   out.set(node.id, status);
