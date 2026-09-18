@@ -222,8 +222,11 @@ function orderTasks(tile: TileModel): OrderedTask[] {
 }
 
 /** Layout of the comic: how many pages, how many leaves, how far it can be read. */
-function bookShape(tile: TileModel) {
+function bookShape(tile: TileModel, single = false) {
   const pageCount = tile.tasks.length + 2;
+  // Phone: every page is the front of its own leaf (page j on leaf j+1; the
+  // backs are blank paper) and `spread` is simply the index of the page showing.
+  if (single) return { pageCount, lastSpread: pageCount - 1, innerLeaves: pageCount, leafCount: pageCount + 1 };
   // The last spread with something on its left-hand page.
   const lastSpread = Math.floor((pageCount - 1) / 2);
   // Leaves under the cover: enough that the last spread has a right-hand
@@ -747,10 +750,25 @@ function FlyingBook({
   const { colors } = useComic();
   const page = pageColors(colors);
   const tileId = tile.id;
-  const { lastSpread, leafCount } = bookShape(tile);
 
-  // Which spread is open (0 = page 1 | page 2). `spreadRef` mirrors it
-  // synchronously so pointer handlers that race a re-render see the truth.
+  // Phone view (≤640px): one page at a time. The book is unchanged — the
+  // same two-page-wide frame, so the tile↔modal flight and every geometry stay
+  // exactly as on desktop — but the closed book sits on its right half and the
+  // cover folds a full 180° onto the off-screen left half, revealing the first
+  // page (the summary) on the right. Every page is the front of its own leaf
+  // (see bookShape), and turning a page lifts that leaf onto the left half.
+  const [single, setSingle] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)");
+    const onChange = () => setSingle(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  const { lastSpread, leafCount } = bookShape(tile, single);
+
+  // Which spread is open (desktop: 0 = page 1 | page 2; phone: the page
+  // showing). `spreadRef` mirrors it synchronously so pointer handlers that
+  // race a re-render see the truth.
   const [spread, setSpread] = useState(0);
   const spreadRef = useRef(0);
   // Where each leaf currently is (angle, depth) — the "from" for depth
@@ -769,57 +787,8 @@ function FlyingBook({
     [lastSpread],
   );
 
-  // Phone view (≤640px): one page at a time. The book is unchanged — the
-  // same two-page spread — but drawn twice as wide as the screen and panned
-  // (`focus` says which half is showing), so the tile↔modal flight and every
-  // page geometry stay exactly as on desktop. Paging steps through pages,
-  // not spreads: left page, right page, turn, left page…
-  const [single, setSingle] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
-  const singleRef = useRef(single);
-  singleRef.current = single;
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 640px)");
-    const onChange = () => setSingle(mq.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-  // Starts on the right: that's where the closed book flies to. Once it's
-  // open the view pans left to page 1.
-  const [focus, setFocus] = useState<"left" | "right">("right");
-  const focusRef = useRef<"left" | "right">("right");
-  const setFocusBoth = useCallback((f: "left" | "right") => {
-    focusRef.current = f;
-    setFocus(f);
-  }, []);
-  useEffect(() => {
-    if (!singleRef.current) return;
-    const id = window.setTimeout(() => setFocusBoth("left"), reduceMotion ? 0 : 900);
-    return () => window.clearTimeout(id);
-    // Once, on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   // One step of paging: a spread on desktop, a page on a phone.
-  const step = useCallback(
-    (dir: 1 | -1) => {
-      if (!singleRef.current) {
-        flipTo(spreadRef.current + dir);
-        return;
-      }
-      const f = focusRef.current;
-      if (dir === 1) {
-        if (f === "left") setFocusBoth("right");
-        else if (spreadRef.current < lastSpread) {
-          flipTo(spreadRef.current + 1);
-          setFocusBoth("left");
-        }
-      } else if (f === "right") setFocusBoth("left");
-      else if (spreadRef.current > 0) {
-        flipTo(spreadRef.current - 1);
-        setFocusBoth("right");
-      }
-    },
-    [flipTo, lastSpread, setFocusBoth],
-  );
+  const step = useCallback((dir: 1 | -1) => flipTo(spreadRef.current + dir), [flipTo]);
 
   // Take off. useLayoutEffect so the measuring + first keyframe land before
   // the browser paints the freshly mounted overlay at rest.
@@ -1039,14 +1008,6 @@ function FlyingBook({
       finish();
       return;
     }
-    // Phone view: the closed book lives on the right half, so snap the pan
-    // there (no transition) before measuring — otherwise the flight home is
-    // aimed from where the book WOULD be, off-screen.
-    const pan = root.querySelector<HTMLElement>("[data-pan]");
-    if (pan && singleRef.current && focusRef.current === "left") {
-      pan.style.transition = "none";
-      pan.style.translate = "-50% 0";
-    }
     // Bring the base sheet's shadow back before it's closed again — it's
     // occluded under the cover regardless of exactly when in the close it
     // returns.
@@ -1115,8 +1076,6 @@ function FlyingBook({
               lastSpread={lastSpread}
               curlCopy={curlCopy}
               single={single}
-              focus={focus}
-              onFocus={setFocusBoth}
               onFlipTo={flipTo}
               onStep={step}
               onCurl={curl}
@@ -1139,8 +1098,6 @@ function TileDetails({
   lastSpread,
   curlCopy,
   single,
-  focus,
-  onFocus,
   onFlipTo,
   onStep,
   onCurl,
@@ -1154,10 +1111,8 @@ function TileDetails({
   spread: number;
   lastSpread: number;
   curlCopy: { leaf: number; side: Side } | null;
-  /** Phone view: one page at a time — which half of the book is showing. */
+  /** Phone view: one page at a time (the book's right half; see bookShape). */
   single: boolean;
-  focus: "left" | "right";
-  onFocus: (focus: "left" | "right") => void;
   onFlipTo: (spread: number) => void;
   /** One step of paging: a spread on desktop, a page on a phone. */
   onStep: (dir: 1 | -1) => void;
@@ -1168,7 +1123,7 @@ function TileDetails({
 }) {
   const TaskPanel = useSlot("TaskPanel");
   const tokens = useThemeTokens();
-  const { pageCount, innerLeaves } = bookShape(tile);
+  const { pageCount, innerLeaves } = bookShape(tile, single);
   const ordered = orderTasks(tile);
   // What's printed on the pages is drawn in the page stock, not the surrounding theme.
   const page = pageColors(colors);
@@ -1181,9 +1136,9 @@ function TileDetails({
       ordered={ordered}
       colors={page}
       onGoToTask={(position) => {
-        // The task at `position` is on page position + 2 (1-based): odd pages are left-hand.
-        onFlipTo(Math.floor((position + 1) / 2));
-        if (single) onFocus((position + 2) % 2 === 1 ? "left" : "right");
+        // Phone: the task at `position` is page index position + 1, and the spread IS the page
+        // index. Desktop: it is page position + 2 (1-based), and odd pages are left-hand.
+        onFlipTo(single ? position + 1 : Math.floor((position + 1) / 2));
       }}
       onSubmit={onSubmit}
       onToggleInterest={onToggleInterest ? () => onToggleInterest(ordered[0]?.task.id ?? "") : undefined}
@@ -1218,9 +1173,11 @@ function TileDetails({
     </PageColorsContext.Provider>
   );
   // Leaf k (1-based) carries page 2k on its front and 2k+1 on its back —
-  // pages[2k-1] and pages[2k] here.
+  // pages[2k-1] and pages[2k] here. On a phone every page is on the front of its
+  // own leaf (leaf k = pages[k-1]) and the backs are blank paper.
   const leaves: LeafFaces[] = Array.from({ length: innerLeaves }, (_, idx) => {
     const k = idx + 1;
+    if (single) return { front: face(k - 1, "front"), back: undefined };
     return { front: face(2 * k - 1, "front"), back: 2 * k < pageCount ? face(2 * k, "back") : undefined };
   });
 
@@ -1232,6 +1189,10 @@ function TileDetails({
   const copyContent: ReactNode = (() => {
     if (!curlCopy || !copySide) return null;
     const k = curlCopy.leaf;
+    if (single) {
+      // The other side of a leaf's front is blank paper; the other side of its (blank) back is the page.
+      return k >= 1 && k <= pageCount && curlCopy.side === "back" ? face(k - 1, "front", false) : null;
+    }
     const i = curlCopy.side === "front" ? 2 * k : 2 * k - 1;
     if (k < 1 || i >= pageCount) return null;
     return face(i, copySide, false);
@@ -1252,7 +1213,7 @@ function TileDetails({
         data-pan
         style={
           single
-            ? { width: "200%", translate: focus === "right" ? "-50% 0" : "0 0", transition: "translate 350ms cubic-bezier(0.45, 0, 0.15, 1)" }
+            ? { width: "200%", translate: "-50% 0" }
             : undefined
         }
       >
@@ -1277,7 +1238,7 @@ function TileDetails({
               coverFallback={tokens.tile.bg}
               frozen={tile.freeze.isFrozen}
               pose={{ coverAngle: CLOSED_BOOK.coverAngle, pageAngle: CLOSED_BOOK.pageAngle }}
-              coverInside={face(0, "back")}
+              coverInside={single ? undefined : face(0, "back")}
               leaves={leaves}
               coverImageVariant="full"
             />
@@ -1364,7 +1325,7 @@ function TileDetails({
         <XIcon size={24} />
       </AriaButton>
       <div data-extra className="mt-5 flex items-center justify-center gap-4" style={{ opacity: 0, color: page.INK, fontFamily: COMIC_FONT }}>
-        <NavButton label="Previous page" onPress={() => onStep(-1)} disabled={single ? focus === "left" && spread <= 0 : spread <= 0} colors={page}>
+        <NavButton label="Previous page" onPress={() => onStep(-1)} disabled={spread <= 0} colors={page}>
           <ArrowLeftIcon size={20} />
         </NavButton>
         {/* A yellow tab, like a bookmark: which spread of how many — or, on
@@ -1373,9 +1334,9 @@ function TileDetails({
           className="min-w-32 -rotate-1 border-[3px] px-3 py-1 text-center text-base uppercase leading-none tabular-nums"
           style={{ background: page.YELLOW, borderColor: page.LINE, color: page.ON_YELLOW, boxShadow: `2px 2px 0 ${page.LINE}` }}
         >
-          {single ? `Page ${2 * spread + (focus === "left" ? 1 : 2)} / ${pageCount}` : `Spread ${spread + 1} / ${lastSpread + 1}`}
+          {single ? `Page ${spread + 1} / ${pageCount}` : `Spread ${spread + 1} / ${lastSpread + 1}`}
         </span>
-        <NavButton label="Next page" onPress={() => onStep(1)} disabled={single ? focus === "right" && spread >= lastSpread : spread >= lastSpread} colors={page}>
+        <NavButton label="Next page" onPress={() => onStep(1)} disabled={spread >= lastSpread} colors={page}>
           <ArrowRightIcon size={20} />
         </NavButton>
       </div>
