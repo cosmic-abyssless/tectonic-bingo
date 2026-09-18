@@ -413,6 +413,10 @@ function PageFace({
       style={{
         border,
         backgroundColor: colors.PAPER,
+        // react-aria's modal scroll lock (iOS only) sets `overscroll-behavior:
+        // contain` on every element; on this clipping box it stops a touch
+        // scroll ever reaching the page's own scroller inside it.
+        overscrollBehavior: "auto",
         backfaceVisibility: "hidden",
         WebkitBackfaceVisibility: "hidden",
         ...(side === "back" ? { borderRightWidth: 0, transform: "rotateY(180deg) translateZ(1px)", boxShadow: LIFTED_PAGE_SHADOW } : { transform: "translateZ(1px)" }),

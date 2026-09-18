@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import {
   AnimatePresence,
   animate as animateValue,
@@ -24,6 +24,7 @@ import { useSlot, useThemeTokens } from "../../context";
 import { thumbUrl } from "../../../api/imageVariants";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
+import { useEdgeSwipe } from "./useEdgeSwipe";
 import { PageColorsContext, useComic } from "../ui/useComic";
 import { CaptionBox } from "../ui/CaptionBox";
 import {
@@ -157,6 +158,18 @@ const EDGE_BAND = 0.12;
 const EDGE_BAND_HELD = 0.45;
 // How far in a hovered page can be peeled, as a fraction of its width.
 const MAX_HOVER_PEEL = 0.5;
+// Phones: the strips that turn pages by touch. They sit just inside the
+// outer edges of the visible page — the OS keeps the outermost ~20px of the
+// screen for its own back/forward swipe, and the overlay's padding already
+// puts the page 16px in — and everywhere else on the page belongs to the
+// page (its own scrolling, its buttons).
+const SWIPE_ZONE_INSET = 4;
+const SWIPE_ZONE_WIDTH = 48;
+// A drag turns the page if it gets this far (as a fraction of the page's width)...
+const SWIPE_COMMIT = 0.35;
+// ...or if it's let go moving toward the spine at least this fast (px/ms).
+const SWIPE_FLICK = 0.3;
+const SWIPE_FLICK_MIN_TRAVEL = 30;
 const TURN_EASE = [0.45, 0, 0.15, 1] as const;
 // The interactive page turn (hover-curl → flip) — halved from an original
 // 0.75 per feedback that the book felt sluggish to page through. Kept as
@@ -177,6 +190,11 @@ const COVER_SWING = 0.49;
 // alone drifts in and out of proportion with the book across viewport
 // shapes, since the two are capped by unrelated formulas.
 const BOOK_MAX_WIDTH = "min(56rem, calc((100vh - 10rem) * 4 / 3))";
+// On a phone the root is ONE page wide (2:3), and the modal must fit the
+// visible viewport without scrolling: dynamic viewport height (so iOS's toolbars
+// count), minus the overlay's padding (2rem) and the nav row under the book
+// (1.25rem margin + 2.5rem buttons) with a little slack.
+const PHONE_BOOK_MAX_WIDTH = "calc((100dvh - 6rem) / 1.5)";
 
 /**
  * The open book's sunbeams (see ui/ComicBurst for the rays themselves) in
@@ -217,8 +235,11 @@ function orderTasks(tile: TileModel): OrderedTask[] {
 }
 
 /** Layout of the comic: how many pages, how many leaves, how far it can be read. */
-function bookShape(tile: TileModel) {
+function bookShape(tile: TileModel, single = false) {
   const pageCount = tile.tasks.length + 2;
+  // Phone: every page is the front of its own leaf (page j on leaf j+1; the
+  // backs are blank paper) and `spread` is simply the index of the page showing.
+  if (single) return { pageCount, lastSpread: pageCount - 1, innerLeaves: pageCount, leafCount: pageCount + 1 };
   // The last spread with something on its left-hand page.
   const lastSpread = Math.floor((pageCount - 1) / 2);
   // Leaves under the cover: enough that the last spread has a right-hand
@@ -581,6 +602,13 @@ function peelGeometry(W: number, H: number, depth: number, v: number) {
   return { kept, folded: peeled.map(reflect), fold, n, reflect };
 }
 
+interface PageSwipe {
+  begin: (leaf: number, side: Side) => boolean;
+  move: (leaf: number, side: Side, travel: number, clientY: number) => void;
+  end: (leaf: number, side: Side, travel: number, velocity: number, cancelled: boolean) => void;
+  scroll: (dy: number) => void;
+}
+
 interface CurlState {
   leaf: number;
   side: Side;
@@ -742,10 +770,25 @@ function FlyingBook({
   const { colors } = useComic();
   const page = pageColors(colors);
   const tileId = tile.id;
-  const { lastSpread, leafCount } = bookShape(tile);
 
-  // Which spread is open (0 = page 1 | page 2). `spreadRef` mirrors it
-  // synchronously so pointer handlers that race a re-render see the truth.
+  // Phone view (≤640px): one page at a time. The book is unchanged — the
+  // same two-page-wide frame, so the tile↔modal flight and every geometry stay
+  // exactly as on desktop — but the closed book sits on its right half and the
+  // cover folds a full 180° onto the off-screen left half, revealing the first
+  // page (the summary) on the right. Every page is the front of its own leaf
+  // (see bookShape), and turning a page lifts that leaf onto the left half.
+  const [single, setSingle] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)");
+    const onChange = () => setSingle(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  const { lastSpread, leafCount } = bookShape(tile, single);
+
+  // Which spread is open (desktop: 0 = page 1 | page 2; phone: the page
+  // showing). `spreadRef` mirrors it synchronously so pointer handlers that
+  // race a re-render see the truth.
   const [spread, setSpread] = useState(0);
   const spreadRef = useRef(0);
   // Where each leaf currently is (angle, depth) — the "from" for depth
@@ -764,57 +807,8 @@ function FlyingBook({
     [lastSpread],
   );
 
-  // Phone view (≤640px): one page at a time. The book is unchanged — the
-  // same two-page spread — but drawn twice as wide as the screen and panned
-  // (`focus` says which half is showing), so the tile↔modal flight and every
-  // page geometry stay exactly as on desktop. Paging steps through pages,
-  // not spreads: left page, right page, turn, left page…
-  const [single, setSingle] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
-  const singleRef = useRef(single);
-  singleRef.current = single;
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 640px)");
-    const onChange = () => setSingle(mq.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-  // Starts on the right: that's where the closed book flies to. Once it's
-  // open the view pans left to page 1.
-  const [focus, setFocus] = useState<"left" | "right">("right");
-  const focusRef = useRef<"left" | "right">("right");
-  const setFocusBoth = useCallback((f: "left" | "right") => {
-    focusRef.current = f;
-    setFocus(f);
-  }, []);
-  useEffect(() => {
-    if (!singleRef.current) return;
-    const id = window.setTimeout(() => setFocusBoth("left"), reduceMotion ? 0 : 900);
-    return () => window.clearTimeout(id);
-    // Once, on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   // One step of paging: a spread on desktop, a page on a phone.
-  const step = useCallback(
-    (dir: 1 | -1) => {
-      if (!singleRef.current) {
-        flipTo(spreadRef.current + dir);
-        return;
-      }
-      const f = focusRef.current;
-      if (dir === 1) {
-        if (f === "left") setFocusBoth("right");
-        else if (spreadRef.current < lastSpread) {
-          flipTo(spreadRef.current + 1);
-          setFocusBoth("left");
-        }
-      } else if (f === "right") setFocusBoth("left");
-      else if (spreadRef.current > 0) {
-        flipTo(spreadRef.current - 1);
-        setFocusBoth("right");
-      }
-    },
-    [flipTo, lastSpread, setFocusBoth],
-  );
+  const step = useCallback((dir: 1 | -1) => flipTo(spreadRef.current + dir), [flipTo]);
 
   // Take off. useLayoutEffect so the measuring + first keyframe land before
   // the browser paints the freshly mounted overlay at rest.
@@ -930,6 +924,70 @@ function FlyingBook({
     [draw, scope],
   );
 
+  // The touch peel (phones), driven by the edge zones. The fold follows the
+  // finger's travel from where it landed: a front face's page peels in from its
+  // outer edge (depth = travel), while a back face — the previous page, lying
+  // on the half of the book that's off-screen — has to be dragged a whole page
+  // width before any of it shows (depth = W + travel). A release past the
+  // threshold turns the page (the [spread] effect carries on from wherever the
+  // finger left the fold); anything less eases the fold back out.
+  const frameSize = useCallback(() => {
+    const frame = scope.current?.querySelector<HTMLElement>(FRAME);
+    if (!frame) return null;
+    const rect = frame.getBoundingClientRect();
+    return { rect, W: rect.width / 2, H: rect.height };
+  }, [scope]);
+
+  const swipe = useMemo(
+    () => ({
+      begin: (leaf: number, side: Side) => {
+        if (turning.current) return false;
+        curling.current?.anim?.stop();
+        setCurlCopy({ leaf, side });
+        return true;
+      },
+      move: (leaf: number, side: Side, travel: number, clientY: number) => {
+        const size = frameSize();
+        if (!size) return;
+        const { rect, W, H } = size;
+        const depth = side === "back" ? W + Math.min(travel, W) : Math.min(travel, 2 * W);
+        const v = Math.max(-1, Math.min(1, (clientY - rect.top - H / 2) / (H / 2)));
+        draw({ leaf, side, depth, v });
+      },
+      end: (leaf: number, side: Side, travel: number, velocity: number, cancelled: boolean) => {
+        const size = frameSize();
+        const W = size?.W ?? 0;
+        const commit = !cancelled && (travel >= W * SWIPE_COMMIT || (velocity >= SWIPE_FLICK && travel >= SWIPE_FLICK_MIN_TRAVEL));
+        if (commit) {
+          flipTo(spreadRef.current + (side === "front" ? 1 : -1));
+          return;
+        }
+        const current = curling.current;
+        if (!current) {
+          setCurlCopy(null);
+          return;
+        }
+        const { state } = current;
+        current.anim?.stop();
+        current.anim = animateValue(state.depth, side === "back" ? W : 0, {
+          duration: 0.22,
+          ease: "easeOut",
+          onUpdate: (depth) => draw({ ...state, depth }),
+          onComplete: () => {
+            draw(null);
+            setCurlCopy(null);
+          },
+        });
+      },
+      // A vertical drag that started in a zone scrolls the page beneath it.
+      scroll: (dy: number) => {
+        const scroller = scope.current?.querySelector<HTMLElement>(`${leafSelector(spreadRef.current + 1)} > [data-face="front"] .overflow-y-auto`);
+        scroller?.scrollBy({ top: dy });
+      },
+    }),
+    [draw, flipTo, frameSize, scope],
+  );
+
   // Turn the pages. The leaf crossing the spine does so as a peel: from
   // wherever the reader has it curled (or from the middle of its edge),
   // the fold sweeps across the page to the spine, the fold-back growing
@@ -1034,14 +1092,6 @@ function FlyingBook({
       finish();
       return;
     }
-    // Phone view: the closed book lives on the right half, so snap the pan
-    // there (no transition) before measuring — otherwise the flight home is
-    // aimed from where the book WOULD be, off-screen.
-    const pan = root.querySelector<HTMLElement>("[data-pan]");
-    if (pan && singleRef.current && focusRef.current === "left") {
-      pan.style.transition = "none";
-      pan.style.translate = "-50% 0";
-    }
     // Bring the base sheet's shadow back before it's closed again — it's
     // occluded under the cover regardless of exactly when in the close it
     // returns.
@@ -1084,8 +1134,10 @@ function FlyingBook({
       onOpenChange={(open) => !open && onClose()}
       isDismissable
       // On a phone the book is drawn twice the screen's width (see `single`);
-      // the half that's off-screen must not grow a horizontal scrollbar.
-      className={`fixed inset-0 z-50 overflow-y-auto p-4 ${single ? "overflow-x-hidden" : ""}`}
+      // the half that's off-screen must not scroll, and neither may the overlay
+      // itself: the book is sized to fit (PHONE_BOOK_MAX_WIDTH), and only a page's
+      // own content scrolls, so nothing competes with the page-turn gestures.
+      className={`fixed inset-0 z-50 p-4 ${single ? "overflow-hidden" : "overflow-y-auto"}`}
     >
       {/* The scrim is its own layer (not the overlay's background) so it
           can fade on its own clock while the book's in flight above it. */}
@@ -1095,10 +1147,10 @@ function FlyingBook({
           scroll container itself) so tall content — the book plus its
           floating title and the nav — scrolls into view instead of having
           its top clipped by the centering. */}
-      <div className="flex min-h-full items-center justify-center py-10">
+      <div className={`flex min-h-full items-center justify-center ${single ? "" : "py-10"}`}>
         {/* Width is what sizes the book (it's 4:3), so it's capped by the
             viewport's height too — an open comic should fit on screen. */}
-        <AriaModal className="w-full outline-none" style={{ maxWidth: BOOK_MAX_WIDTH }}>
+        <AriaModal className="w-full outline-none" style={{ maxWidth: single ? PHONE_BOOK_MAX_WIDTH : BOOK_MAX_WIDTH }}>
           <AriaDialog aria-label={tile.name} className="outline-none">
             <TileDetails
               ref={scope}
@@ -1108,11 +1160,10 @@ function FlyingBook({
               lastSpread={lastSpread}
               curlCopy={curlCopy}
               single={single}
-              focus={focus}
-              onFocus={setFocusBoth}
               onFlipTo={flipTo}
               onStep={step}
               onCurl={curl}
+              swipe={swipe}
               onClose={onClose}
               onSubmit={onSubmit}
               onToggleInterest={onToggleInterest}
@@ -1132,11 +1183,10 @@ function TileDetails({
   lastSpread,
   curlCopy,
   single,
-  focus,
-  onFocus,
   onFlipTo,
   onStep,
   onCurl,
+  swipe,
   onClose,
   onSubmit,
   onToggleInterest,
@@ -1147,21 +1197,21 @@ function TileDetails({
   spread: number;
   lastSpread: number;
   curlCopy: { leaf: number; side: Side } | null;
-  /** Phone view: one page at a time — which half of the book is showing. */
+  /** Phone view: one page at a time (the book's right half; see bookShape). */
   single: boolean;
-  focus: "left" | "right";
-  onFocus: (focus: "left" | "right") => void;
   onFlipTo: (spread: number) => void;
   /** One step of paging: a spread on desktop, a page on a phone. */
   onStep: (dir: 1 | -1) => void;
   onCurl: (leaf: number, side: Side, at: Point | null) => void;
+  /** Phone touch peel (see FlyingBook.swipe). */
+  swipe: PageSwipe;
   onClose: () => void;
   onSubmit?: (taskId?: string) => void;
   onToggleInterest?: (taskId: string) => void;
 }) {
   const TaskPanel = useSlot("TaskPanel");
   const tokens = useThemeTokens();
-  const { pageCount, innerLeaves } = bookShape(tile);
+  const { pageCount, innerLeaves } = bookShape(tile, single);
   const ordered = orderTasks(tile);
   // What's printed on the pages is drawn in the page stock, not the surrounding theme.
   const page = pageColors(colors);
@@ -1174,9 +1224,9 @@ function TileDetails({
       ordered={ordered}
       colors={page}
       onGoToTask={(position) => {
-        // The task at `position` is on page position + 2 (1-based): odd pages are left-hand.
-        onFlipTo(Math.floor((position + 1) / 2));
-        if (single) onFocus((position + 2) % 2 === 1 ? "left" : "right");
+        // Phone: the task at `position` is page index position + 1, and the spread IS the page
+        // index. Desktop: it is page position + 2 (1-based), and odd pages are left-hand.
+        onFlipTo(single ? position + 1 : Math.floor((position + 1) / 2));
       }}
       onSubmit={onSubmit}
       onToggleInterest={onToggleInterest ? () => onToggleInterest(ordered[0]?.task.id ?? "") : undefined}
@@ -1211,9 +1261,11 @@ function TileDetails({
     </PageColorsContext.Provider>
   );
   // Leaf k (1-based) carries page 2k on its front and 2k+1 on its back —
-  // pages[2k-1] and pages[2k] here.
+  // pages[2k-1] and pages[2k] here. On a phone every page is on the front of its
+  // own leaf (leaf k = pages[k-1]) and the backs are blank paper.
   const leaves: LeafFaces[] = Array.from({ length: innerLeaves }, (_, idx) => {
     const k = idx + 1;
+    if (single) return { front: face(k - 1, "front"), back: undefined };
     return { front: face(2 * k - 1, "front"), back: 2 * k < pageCount ? face(2 * k, "back") : undefined };
   });
 
@@ -1225,6 +1277,10 @@ function TileDetails({
   const copyContent: ReactNode = (() => {
     if (!curlCopy || !copySide) return null;
     const k = curlCopy.leaf;
+    if (single) {
+      // The other side of a leaf's front is blank paper; the other side of its (blank) back is the page.
+      return k >= 1 && k <= pageCount && curlCopy.side === "back" ? face(k - 1, "front", false) : null;
+    }
     const i = curlCopy.side === "front" ? 2 * k : 2 * k - 1;
     if (k < 1 || i >= pageCount) return null;
     return face(i, copySide, false);
@@ -1245,7 +1301,7 @@ function TileDetails({
         data-pan
         style={
           single
-            ? { width: "200%", translate: focus === "right" ? "-50% 0" : "0 0", transition: "translate 350ms cubic-bezier(0.45, 0, 0.15, 1)" }
+            ? { width: "200%", translate: "-50% 0" }
             : undefined
         }
       >
@@ -1270,7 +1326,7 @@ function TileDetails({
               coverFallback={tokens.tile.bg}
               frozen={tile.freeze.isFrozen}
               pose={{ coverAngle: CLOSED_BOOK.coverAngle, pageAngle: CLOSED_BOOK.pageAngle }}
-              coverInside={face(0, "back")}
+              coverInside={single ? undefined : face(0, "back")}
               leaves={leaves}
               coverImageVariant="full"
             />
@@ -1326,12 +1382,18 @@ function TileDetails({
         {!single && spread >= 1 && (
           <EdgeBand side="left" leaf={spread} face="back" onCurl={(at) => onCurl(spread, "back", at)} onFlip={() => onFlipTo(spread - 1)} />
         )}
+        {/* Phones: the visible page is the frame's right half. Its outer edge
+            turns it forward; its spine-side edge (the screen's left) brings
+            the previous page back. */}
+        {single && spread < lastSpread && <SwipeZone side="right" leaf={spread + 1} face="front" swipe={swipe} />}
+        {single && spread >= 1 && <SwipeZone side="left" leaf={spread} face="back" swipe={swipe} />}
       </div>
       </div>
 
-      {/* The trimmings: floating tilted artwork, the close button, and the
-          page nav under the book. */}
-      {tile.imageUrl && (
+      {/* The trimmings: floating tilted artwork (not on a phone, where it takes
+          space the book needs), the close button, and the page nav under the
+          book. */}
+      {tile.imageUrl && !single && (
         <img
           data-extra
           src={thumbUrl(tile.imageUrl)}
@@ -1356,7 +1418,7 @@ function TileDetails({
         <XIcon size={24} />
       </AriaButton>
       <div data-extra className="mt-5 flex items-center justify-center gap-4" style={{ opacity: 0, color: page.INK, fontFamily: COMIC_FONT }}>
-        <NavButton label="Previous page" onPress={() => onStep(-1)} disabled={single ? focus === "left" && spread <= 0 : spread <= 0} colors={page}>
+        <NavButton label="Previous page" onPress={() => onStep(-1)} disabled={spread <= 0} colors={page}>
           <ArrowLeftIcon size={20} />
         </NavButton>
         {/* A yellow tab, like a bookmark: which spread of how many — or, on
@@ -1365,9 +1427,9 @@ function TileDetails({
           className="min-w-32 -rotate-1 border-[3px] px-3 py-1 text-center text-base uppercase leading-none tabular-nums"
           style={{ background: page.YELLOW, borderColor: page.LINE, color: page.ON_YELLOW, boxShadow: `2px 2px 0 ${page.LINE}` }}
         >
-          {single ? `Page ${2 * spread + (focus === "left" ? 1 : 2)} / ${pageCount}` : `Spread ${spread + 1} / ${lastSpread + 1}`}
+          {single ? `Page ${spread + 1} / ${pageCount}` : `Spread ${spread + 1} / ${lastSpread + 1}`}
         </span>
-        <NavButton label="Next page" onPress={() => onStep(1)} disabled={single ? focus === "right" && spread >= lastSpread : spread >= lastSpread} colors={page}>
+        <NavButton label="Next page" onPress={() => onStep(1)} disabled={spread >= lastSpread} colors={page}>
           <ArrowRightIcon size={20} />
         </NavButton>
       </div>
@@ -1497,6 +1559,51 @@ function EdgeBand({
         setHeld(false);
         onFlip();
       }}
+    />
+  );
+}
+
+/**
+ * A strip along one edge of the visible page on a phone, taking the drags
+ * that turn it (see useEdgeSwipe). It covers part of the page, so vertical
+ * drags are handed to the page's scroller and taps to whatever's beneath.
+ */
+function SwipeZone({ side, leaf, face, swipe }: { side: "left" | "right"; leaf: number; face: Side; swipe: PageSwipe }) {
+  const handlers = useEdgeSwipe({
+    dir: side === "right" ? -1 : 1,
+    onBegin: () => swipe.begin(leaf, face),
+    onProgress: (travel, y) => swipe.move(leaf, face, travel, y),
+    onEnd: ({ travel, velocity, cancelled }) => swipe.end(leaf, face, travel, velocity, cancelled),
+    onScroll: swipe.scroll,
+    onTap: ({ x, y }, zone) => {
+      const under = document.elementsFromPoint(x, y).find((el) => !zone.contains(el));
+      under?.closest<HTMLElement>("button, a, [role='button'], label, input, select, textarea, summary")?.click();
+    },
+  });
+  // The zone covers part of the page, so a mouse wheel over it scrolls the page too.
+  const zoneRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const zone = zoneRef.current;
+    if (!zone) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      swipe.scroll(e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY);
+    };
+    zone.addEventListener("wheel", onWheel, { passive: false });
+    return () => zone.removeEventListener("wheel", onWheel);
+  }, [swipe]);
+  return (
+    <div
+      ref={zoneRef}
+      aria-hidden="true"
+      data-swipe-zone={side}
+      className="absolute inset-y-0"
+      style={{
+        width: SWIPE_ZONE_WIDTH,
+        touchAction: "none",
+        ...(side === "right" ? { right: SWIPE_ZONE_INSET } : { left: `calc(50% + ${SWIPE_ZONE_INSET}px)` }),
+      }}
+      {...handlers}
     />
   );
 }
