@@ -7,7 +7,6 @@ import { ComicButton } from "../ui/ComicButton";
 import { CaptionBox } from "../ui/CaptionBox";
 import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
-import { sfxAt } from "../fx/SfxLayer";
 import { SubmissionBubble } from "../board/SubmissionBubble";
 import { COMIC_FONT } from "../font";
 
@@ -60,8 +59,8 @@ export function SubmissionsDrawer({
             <ComicButton
               variant="yellow"
               size="sm"
-              onPress={(e) => {
-                sfxAt(e.target, { text: "SUBMIT!" });
+              sfx="SUBMIT!"
+              onPress={() => {
                 onSubmit();
               }}
             >

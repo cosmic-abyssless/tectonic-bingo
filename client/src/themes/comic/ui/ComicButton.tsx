@@ -19,8 +19,8 @@ export interface ComicButtonProps extends AriaButtonProps {
   children?: ReactNode;
   /** Slight tilt in degrees for a hand-placed look. */
   tilt?: number;
-  /** Custom SFX text, or false to disable automatic sound burst. */
-  sfx?: string | false;
+  /** Custom SFX text/options, or false to disable automatic sound burst. */
+  sfx?: string | { text?: string; size?: number; fill?: string } | false;
 }
 
 /** Bangers-lettered, ink-bordered, hard-shadowed button that presses into its shadow. */
@@ -49,7 +49,8 @@ export function ComicButton({ variant = "secondary", size = "md", tilt = 0, sfx,
 
   const handlePress = (e: PressEvent) => {
     if (sfx !== false) {
-      sfxAt(e.target, sfx ? { text: sfx } : undefined);
+      const opts = typeof sfx === "string" ? { text: sfx } : sfx;
+      sfxAt(e.target, opts);
     }
     onPress?.(e);
   };
@@ -65,12 +66,13 @@ export function ComicButton({ variant = "secondary", size = "md", tilt = 0, sfx,
 }
 
 /** Round close/icon button in the same idiom. */
-export function ComicIconButton({ label, sfx, className, style, onPress, ...props }: AriaButtonProps & { label: string; sfx?: string | false; style?: CSSProperties }) {
+export function ComicIconButton({ label, sfx, className, style, onPress, ...props }: AriaButtonProps & { label: string; sfx?: string | { text?: string; size?: number; fill?: string } | false; style?: CSSProperties }) {
   const { colors } = useComic();
 
   const handlePress = (e: PressEvent) => {
     if (sfx !== false) {
-      sfxAt(e.target, sfx ? { text: sfx } : undefined);
+      const opts = typeof sfx === "string" ? { text: sfx } : sfx;
+      sfxAt(e.target, opts);
     }
     onPress?.(e);
   };

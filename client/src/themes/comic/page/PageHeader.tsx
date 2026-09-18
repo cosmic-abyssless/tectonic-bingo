@@ -7,7 +7,6 @@ import { useSlot } from "../../context";
 import { COMIC_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { useComic } from "../ui/useComic";
-import { sfxAt } from "../fx/SfxLayer";
 import { comicHeaderProps } from "./headerStyle";
 
 /** Masthead: the issue title in Bangers, stage in a caption box, actions as ink buttons with burst counters. */
@@ -73,8 +72,8 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
           size="sm"
           variant="primary"
           tilt={1.5}
-          onPress={(e) => {
-            sfxAt(e.target, { text: "SUBMIT!", size: 130 });
+          sfx={{ text: "SUBMIT!", size: 130 }}
+          onPress={() => {
             page.submit.show();
           }}
         >

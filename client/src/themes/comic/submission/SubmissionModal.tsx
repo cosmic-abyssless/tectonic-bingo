@@ -3,7 +3,6 @@ import { useSlot } from "../../context";
 import { ComicDialog, ComicDialogHeader } from "../ui/ComicDialog";
 import { ComicButton } from "../ui/ComicButton";
 import { CaptionBox } from "../ui/CaptionBox";
-import { sfxAt } from "../fx/SfxLayer";
 
 /**
  * The submission form: exhibit
@@ -44,8 +43,8 @@ export function SubmissionModal({ flow }: { flow: SubmissionFlowModel }) {
           size="lg"
           className="w-full"
           isDisabled={!flow.submit.isValid || busy}
-          onPress={(e) => {
-            sfxAt(e.target, { text: "SUBMITTED!", size: 150 });
+          sfx={{ text: "SUBMITTED!", size: 150 }}
+          onPress={() => {
             void flow.submit.run();
           }}
         >
