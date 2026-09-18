@@ -71,7 +71,10 @@ app.use(
   })
 );
 
-app.use(express.json());
+// Default 100kb is too small for a bingo board import/export document — a
+// board with many tiles and deep requirement trees can run several MB of
+// JSON (see POST /api/admin/bingos/import).
+app.use(express.json({ limit: "50mb" }));
 
 // Session middleware — backed by SQLite so sessions survive a server restart
 // (the express-session default MemoryStore does not).
