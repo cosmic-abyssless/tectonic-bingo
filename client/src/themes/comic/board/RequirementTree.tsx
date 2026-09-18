@@ -23,7 +23,15 @@ function LeafRow({ node, colors }: { node: RequirementNodeModel; colors: ComicCo
     <li className={`flex items-start gap-2 text-sm leading-snug ${node.dim ? "line-through" : ""}`} style={{ color }}>
       <Box done={node.complete} dim={node.dim} colors={colors} />
       <span className="min-w-0 flex-1">
-        {node.label}
+        {node.items.length > 1 ? (
+          <ul className="list-disc space-y-0.5 pl-4">
+            {node.items.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        ) : (
+          node.label
+        )}
         {node.submitted && !node.complete && !node.dim && (
           <span className="ml-1.5 text-[10px] uppercase tracking-wider" style={{ color: colors.WARN }}>
             submitted

@@ -15,12 +15,18 @@ import { PageHeader } from "./page/PageHeader";
 import { SubmissionsDrawer } from "./page/SubmissionsDrawer";
 import { RulesDialog } from "./page/RulesDialog";
 import { TeamInfoDialog } from "./page/TeamInfoDialog";
+import { NoTeamStage } from "./page/NoTeamStage";
+import { ComicDialog, ComicDialogHeader } from "./ui/ComicDialog";
 import { SubmissionModal } from "./submission/SubmissionModal";
 import { ScreenshotDropzone } from "./submission/ScreenshotDropzone";
 import { AnalysisPanel } from "./submission/AnalysisPanel";
 import { TilePicker, RequirementPicker } from "./submission/Pickers";
 import { TaskPicker } from "./submission/TaskPicker";
 import { StagedClaimsList } from "./submission/StagedClaimsList";
+// The theme's shared classes (comic-press, comic-rays, comic-halftone, the
+// dialog keyframes…). Was imported on feat/mico-work but dropped when that
+// work landed on main, leaving every one of them unstyled.
+import "./comic.css";
 
 // Starter scaffold for the "comic" theme — see docs/theming.md for the full
 // writer's guide (resolution/fallback rules, what a slot may import, the
@@ -54,6 +60,7 @@ const comicChromeLight = {
   surface: "#ffffff",
   surfaceRaised: "#fff4d6",
   surfaceHover: "#dbeafe",
+  field: "#ffffff",
   outline: "#000000",
   outlineStrong: "#000000",
   onSurface: "#000000",
@@ -169,6 +176,9 @@ const comicTheme: ThemeDefinition = {
     SubmissionsDrawer,
     RulesDialog,
     TeamInfoDialog,
+    NoTeamStage,
+    DialogFrame: ComicDialog,
+    DialogHeader: ComicDialogHeader,
     SubmissionModal,
     ScreenshotDropzone,
     AnalysisPanel,

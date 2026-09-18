@@ -13,6 +13,8 @@ export interface ActivityEntryModel {
   at: number;
   timeAgo: string;
   actorName: string | null;
+  /** For linking the name to the player's profile; null for system events. */
+  actorId: string | null;
 }
 
 export interface CategoryModel {
@@ -53,6 +55,8 @@ export interface RequirementNodeModel {
   kind: NodeKind;
   /** leafLabel() for leaves, conditionHeading() for composites. */
   label: string;
+  /** SUM only: the names of the items that count toward it, for themes that list them instead of showing the joined label. */
+  items: string[];
   isLeaf: boolean;
   status: NodeStatus;
   complete: boolean;

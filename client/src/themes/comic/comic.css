@@ -93,7 +93,36 @@
 .comic-press {
   transition:
     transform 90ms ease-out,
+    translate 90ms ease-out,
     box-shadow 90ms ease-out;
+}
+/* Hover feedback. `translate` (not `transform`) so a button's inline tilt
+ * survives; !important on the shadow because the shadow is set inline. */
+.comic-lift:hover:not(:disabled):not([data-pressed]) {
+  translate: -1px -1px;
+  box-shadow: 5px 5px 0 var(--comic-ink, #0b0b0d) !important;
+  filter: brightness(0.96);
+}
+.comic-ghost:hover:not(:disabled) {
+  background: var(--comic-yellow, #f5d63d) !important;
+  color: #0b0b0d !important;
+}
+
+/* Navigation: a link, not a button — underlined ink lettering, no frame. */
+.comic-link {
+  color: var(--comic-ink, #0b0b0d);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  padding-inline: 0.5rem;
+  border-radius: 0.25rem;
+  transition: background-color 90ms ease-out;
+}
+.comic-link:hover,
+.comic-link:focus-visible {
+  background: var(--comic-yellow, #f5d63d);
+  color: #0b0b0d;
 }
 .comic-press[data-pressed],
 .comic-press:active {

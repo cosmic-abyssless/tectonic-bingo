@@ -6,7 +6,12 @@ import { SfxLayer } from "./SfxLayer";
 export function ComicPage({ children }: { children: ReactNode }) {
   const style = usePageStyle();
   return (
-    <div className="relative min-h-screen text-on-surface" style={style}>
+    // overflow-y: clip (not hidden — no scroll container, so the sticky
+    // header still sticks): each tile's book frame is laid out ~35% of a tile
+    // taller than the tile and only VISUALLY cropped (clip-path), so the last
+    // row's frames would otherwise stretch the document past this yellow
+    // root and show the bare body colour as a strip under the board.
+    <div className="relative min-h-screen overflow-y-clip text-on-surface" style={style}>
       <Halftone />
       <div className="relative z-[1]">{children}</div>
       <SfxLayer />

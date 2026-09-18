@@ -29,7 +29,11 @@ import type { ComicColors } from "./colors";
 export function coverTaskMark(tile: TileModel): { label: string; dogEared: boolean } | null {
   const { completedTasks, totalTasks, allComplete } = tile.progress;
   if (totalTasks === 0 || allComplete) return null;
-  return { label: `P${completedTasks + 1}`, dogEared: completedTasks > 0 };
+  // The first part still to do — that's the first page of the book now, since
+  // finished parts move to the back — not "how many are done, plus one",
+  // which would be wrong the moment parts finish out of order.
+  const next = tile.tasks.findIndex((t) => !t.complete);
+  return { label: `P${(next === -1 ? completedTasks : next) + 1}`, dogEared: completedTasks > 0 };
 }
 
 export function BookCoverArt({
@@ -101,6 +105,103 @@ export function BookCoverArt({
           {mark.label}
         </div>
       )}
+    </div>
+  );
+}
+
+/** How many names the back cover lists before "+N more". */
+const BACK_COVER_NAMES = 4;
+
+/**
+ * Who got a finished tile over the line: the distinct people behind its
+ * approved submissions, in the order they first contributed.
+ */
+export function tileContributors(tile: TileModel): string[] {
+  const names: string[] = [];
+  // Submissions come newest first; the credits read oldest first.
+  for (const s of [...tile.submissions].reverse()) {
+    if (s.status !== "approved" || !s.submittedBy) continue;
+    if (!names.includes(s.submittedBy)) names.push(s.submittedBy);
+  }
+  return names;
+}
+
+/**
+ * The back of a finished tile's comic book: the same cover color as the
+ * front, a "THE END" and a credits box listing everyone who contributed.
+ * Interior only, like BookCoverArt — the caller (ClosedBook) owns the
+ * bordered, back-facing element it fills — and likewise sized entirely in
+ * container-query units of the cover's own width, so it's the same drawing
+ * on the tile and in the modal's flying copy.
+ */
+export function BookBackArt({
+  tile,
+  colors,
+  fallbackColor,
+}: {
+  tile: TileModel;
+  colors: ComicColors;
+  fallbackColor: string;
+}) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const imageUrl = tile.imageUrl && !imgFailed ? tile.imageUrl : null;
+  const dominantColor = useDominantColor(imageUrl);
+  const textColor = getContrastTextColor(dominantColor);
+  const names = tileContributors(tile);
+  const shown = names.slice(0, BACK_COVER_NAMES);
+  const more = names.length - shown.length;
+
+  return (
+    // The container is this outer box; the cqw lengths live one level down
+    // (a box's own cqw resolve against its ancestor's container, not itself).
+    <div className="absolute inset-0 overflow-hidden [container-type:inline-size]" style={{ backgroundColor: dominantColor ?? fallbackColor, color: textColor }}>
+      <div className="absolute inset-0 flex flex-col items-center gap-[3cqw] px-[6cqw] pb-[6cqw] pt-[6cqw]">
+        <span className="uppercase leading-none" style={{ fontFamily: COMIC_LOGO_FONT, fontWeight: 800, fontSize: "13cqw", letterSpacing: "0.03em" }}>
+          The End
+        </span>
+        {/* The cover art again, smaller, with a big check stamped on its
+            corner so a finished tile reads as done at a glance. */}
+        <div className="relative h-[38cqw] w-[38cqw] shrink-0">
+          {imageUrl && (
+            <img
+              src={imageUrl}
+              alt=""
+              onError={() => setImgFailed(true)}
+              className="h-full w-full object-contain"
+              style={{ filter: `drop-shadow(1.2cqw 1.2cqw 0 ${colors.INK})` }}
+              draggable={false}
+            />
+          )}
+          <span
+            className="absolute -right-[7cqw] -top-[4cqw] flex h-[15cqw] w-[15cqw] rotate-[8deg] items-center justify-center rounded-full"
+            style={{ background: colors.GREEN, border: `1cqw solid ${colors.INK}`, boxShadow: `1.2cqw 1.2cqw 0 ${colors.INK}`, color: "#fff" }}
+          >
+            <svg viewBox="0 0 16 16" className="h-[9cqw] w-[9cqw]" fill="none" stroke="currentColor" strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round" aria-label="Complete">
+              <path d="M3 8.5l3 3 7-7" />
+            </svg>
+          </span>
+        </div>
+        <div
+          className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-[0.9cqw] px-[4cqw] py-[3.5cqw]"
+          style={{ borderColor: colors.INK, background: colors.PAPER_RAISED, color: colors.INK, boxShadow: `1.6cqw 1.6cqw 0 ${colors.INK}` }}
+        >
+          <span className="mb-[2cqw] uppercase leading-none" style={{ fontFamily: COMIC_FONT, fontSize: "6.6cqw", letterSpacing: "0.04em", color: colors.INK_SUBTLE }}>
+            Completed by
+          </span>
+          <ul className="flex min-h-0 flex-col gap-[1.2cqw] leading-none" style={{ fontFamily: COMIC_FONT, fontSize: "8.4cqw", letterSpacing: "0.02em" }}>
+            {shown.map((name) => (
+              <li key={name} className="truncate">
+                {name}
+              </li>
+            ))}
+            {more > 0 && (
+              <li className="truncate" style={{ color: colors.INK_SUBTLE }}>
+                +{more} more
+              </li>
+            )}
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }

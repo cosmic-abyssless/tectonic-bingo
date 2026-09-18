@@ -9,7 +9,7 @@ const TEXT: Record<Exclude<StampKind, "custom">, string> = {
   approved: "APPROVED",
   rejected: "REJECTED",
   pending: "PENDING",
-  frozen: "ON ICE",
+  frozen: "FROZEN",
   done: "DONE!",
   locked: "LOCKED",
 };
