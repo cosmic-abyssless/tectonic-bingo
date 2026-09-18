@@ -4,6 +4,7 @@ import { ThemeProvider } from "../themes/ThemeProvider";
 import { useSlot } from "../themes/context";
 import { PageLoading, PageError } from "../themes/default/page/PageStates";
 import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
+import { useRememberTheme } from "../themes/rememberedTheme";
 
 export function BingoPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -19,8 +20,9 @@ export function BingoPage() {
 // this way).
 function ThemedSurface({ slug }: { slug: string }) {
   const page = useBingoPage();
+  useRememberTheme(slug, page.themeKey);
   return (
-    <ThemeProvider themeKey={page.themeKey}>
+    <ThemeProvider themeKey={page.themeKey} fallback={<PageLoading />}>
       <PlayerProfileProvider slug={slug}>
         <BoardPageSlot />
       </PlayerProfileProvider>

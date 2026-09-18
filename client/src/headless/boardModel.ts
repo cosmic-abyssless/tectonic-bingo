@@ -6,6 +6,7 @@ import { summarizeTileProgress, getFreezeUnlockAt, groupSubmissionsByTile, type 
 import { buildLeafClaimMaps, itemLeafValue, leafComplete, type LeafClaimMaps } from "../core/board/taskClaims";
 import { collectLeaves, conditionHeading } from "../core/board/requirementTree";
 import { leafLabel, sumItemNames } from "../core/board/labels";
+import { wikiIconUrl } from "../api/wikiIcons";
 import { claimsSummary } from "../core/submissions/claimsSummary";
 import { timeAgo } from "../core/ui/time";
 import { avatarUrl, displayName } from "../core/ui/user";
@@ -57,6 +58,7 @@ export function buildRequirementTree(
       kind: node.kind,
       label: leafLabel(node),
       items: [],
+      iconUrl: wikiIconUrl(node.itemName) ?? null,
       isLeaf: true,
       status: statusByNodeId.get(node.id) ?? "not_started",
       complete,
@@ -77,7 +79,8 @@ export function buildRequirementTree(
       id: node.id,
       kind: node.kind,
       label: leafLabel(node),
-      items: sumItemNames(node),
+      items: sumItemNames(node).map((name) => ({ name, iconUrl: wikiIconUrl(name) ?? null })),
+      iconUrl: null,
       isLeaf: true,
       status: statusByNodeId.get(node.id) ?? "not_started",
       complete,
@@ -102,6 +105,7 @@ export function buildRequirementTree(
     kind: node.kind,
     label: conditionHeading(node),
     items: [],
+    iconUrl: null,
     isLeaf: false,
     status: statusByNodeId.get(node.id) ?? "not_started",
     complete: nodeComplete,

@@ -1,9 +1,24 @@
 import { useEffect, useState } from "react";
+import { persistColors, readPersistedColors } from "./dominantColorStore";
 
 // Per-URL cache — the same tile image is drawn by every board that shows
 // it, and its color never changes, so there's no reason to ever redo this
-// twice for the same URL.
-const cache = new Map<string, string | null>();
+// twice for the same URL. Seeded from localStorage (dominantColorStore.ts), so a
+// page load doesn't re-decode images it has already seen and the cover paints in
+// its final colour on the first frame.
+const cache = new Map<string, string | null>(readPersistedColors());
+
+let persistTimer: ReturnType<typeof setTimeout> | undefined;
+function remember(url: string, color: string | null) {
+  cache.delete(url); // re-insert so the newest results sort last (that's what gets kept)
+  cache.set(url, color);
+  if (color === null || persistTimer !== undefined) return;
+  // Batched: a board resolves a couple of dozen covers in a burst.
+  persistTimer = setTimeout(() => {
+    persistTimer = undefined;
+    persistColors(cache);
+  }, 500);
+}
 
 const SAMPLE_SIZE = 24;
 // Coarser buckets than the raw 0-255 channel range group "basically the
@@ -95,11 +110,11 @@ export function useDominantColor(imageUrl: string | null | undefined): string | 
       } catch {
         result = null;
       }
-      cache.set(imageUrl, result);
+      remember(imageUrl, result);
       if (!cancelled) setColor(result);
     };
     img.onerror = () => {
-      cache.set(imageUrl, null);
+      remember(imageUrl, null);
       if (!cancelled) setColor(null);
     };
     img.src = imageUrl;

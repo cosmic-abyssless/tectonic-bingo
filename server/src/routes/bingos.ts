@@ -1,3 +1,4 @@
+import { privateRevalidate } from "../middleware/cacheControl";
 import { Router } from "express";
 import fs from "fs";
 import type { ClaimInput, PlayerProfile } from "@bingo/shared";
@@ -69,6 +70,7 @@ router.get(
 router.get(
   "/:slug",
   requireBingo,
+  privateRevalidate,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
     const isMod = req.user ? bingoService.isBingoMod(db, bingo.id, req.user.id, req.user.isAdmin) : false;
@@ -90,6 +92,7 @@ router.get(
 router.get(
   "/:slug/board",
   requireBingo,
+  privateRevalidate,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
     const isMod = req.user ? bingoService.isBingoMod(db, bingo.id, req.user.id, req.user.isAdmin) : false;

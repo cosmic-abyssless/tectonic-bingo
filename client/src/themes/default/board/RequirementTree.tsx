@@ -1,5 +1,6 @@
 import type { RequirementNodeModel } from "../../../headless/types";
 import { CheckIcon } from "../../../core/ui/icons";
+import { ItemIcon } from "../../../core/ui/ItemIcon";
 
 function Check() {
   return <CheckIcon size={12} className="shrink-0 text-ok" aria-label="complete" />;
@@ -13,6 +14,8 @@ function rowClass(dim: boolean, submitted: boolean) {
 // complete/progress precomputed (see headless/boardModel.ts's
 // buildRequirementTree), so this only renders them.
 function LeafOrSumRow({ node }: { node: RequirementNodeModel }) {
+  const iconUrl = node.iconUrl ?? (node.items.length === 1 ? node.items[0]!.iconUrl : null);
+  const iconClass = `inline-block -my-1 mr-1.5 align-middle ${node.dim ? "opacity-60" : ""}`;
   return (
     <li className={rowClass(node.dim, node.submitted)}>
       {node.items.length <= 1 && <span className="text-on-surface-subtle">·</span>}
@@ -24,11 +27,17 @@ function LeafOrSumRow({ node }: { node: RequirementNodeModel }) {
       {node.items.length > 1 ? (
         <ul className="list-disc space-y-0.5 pl-4">
           {node.items.map((item) => (
-            <li key={item}>{item}</li>
+            <li key={item.name}>
+              <ItemIcon url={item.iconUrl} className={iconClass} />
+              {item.name}
+            </li>
           ))}
         </ul>
       ) : (
-        node.label
+        <span>
+          <ItemIcon url={iconUrl} className={iconClass} />
+          {node.label}
+        </span>
       )}
       {node.complete && <Check />}
     </li>

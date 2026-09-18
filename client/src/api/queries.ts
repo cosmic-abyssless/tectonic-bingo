@@ -5,7 +5,9 @@ import type {
   ReviewSubmissionResponse, RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   PickRating, PlayerProfile, StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
+import { useAuth } from "../context/AuthContext";
 import { api } from "./client";
+import { readBoardCache, writeBoardCache } from "./boardCache";
 import { optimisticUpdate } from "./optimistic";
 
 // Centralized so WebSocketProvider can invalidate the same keys queries use.
@@ -46,11 +48,22 @@ export function useBingo(slug: string | undefined) {
   });
 }
 
+// The board structure is persisted per user (see boardCache.ts): a stored copy
+// is the query's initial data, so the grid paints immediately on load, but it is
+// marked stale (initialDataUpdatedAt: 0) so it always revalidates — a cheap 304
+// when nothing changed — and every fresh response is stored again.
 export function useBoard(slug: string | undefined) {
+  const userId = useAuth().user?.id;
   return useQuery({
     queryKey: queryKeys.board(slug ?? ""),
-    queryFn: () => api.get<BoardResponse>(`/api/bingos/${slug}/board`),
+    queryFn: async () => {
+      const board = await api.get<BoardResponse>(`/api/bingos/${slug}/board`);
+      if (userId && slug) writeBoardCache(userId, slug, __BUILD_ID__, board);
+      return board;
+    },
     enabled: !!slug,
+    initialData: () => (userId && slug ? readBoardCache<BoardResponse>(userId, slug, __BUILD_ID__) : undefined),
+    initialDataUpdatedAt: 0,
   });
 }
 

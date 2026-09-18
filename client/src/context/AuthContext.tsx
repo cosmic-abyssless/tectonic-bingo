@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { User } from "@bingo/shared";
+import { clearBoardCache } from "../api/boardCache";
 
 interface AuthState {
   user: User | null;
@@ -32,6 +33,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await fetch("/auth/logout", { method: "POST", credentials: "include" });
+    // The persisted board is per user; do not leave it behind on a shared browser.
+    clearBoardCache();
     setUser(null);
   };
 

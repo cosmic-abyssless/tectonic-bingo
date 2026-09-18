@@ -1,5 +1,6 @@
 import type { RequirementNodeModel } from "../../../headless/types";
 import { CheckIcon } from "../../../core/ui/icons";
+import { ItemIcon } from "../../../core/ui/ItemIcon";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
 import type { ComicColors } from "./colors";
@@ -17,7 +18,12 @@ function Box({ done, dim, colors }: { done: boolean; dim: boolean; colors: Comic
   );
 }
 
+// Inline with the text (so long names still wrap), sized to sit in a text line
+// without making the row taller; faded with the row once it's done or not needed.
+const ICON_CLASS = "mr-1.5 inline-block -my-1 align-middle";
+
 function LeafRow({ node, colors }: { node: RequirementNodeModel; colors: ComicColors }) {
+  const iconUrl = node.iconUrl ?? (node.items.length === 1 ? node.items[0]!.iconUrl : null);
   const color = node.dim ? colors.INK_SUBTLE : node.submitted && !node.complete ? colors.WARN : colors.INK_BODY;
   return (
     <li className={`flex items-start gap-2 text-sm leading-snug ${node.dim ? "line-through" : ""}`} style={{ color }}>
@@ -26,11 +32,17 @@ function LeafRow({ node, colors }: { node: RequirementNodeModel; colors: ComicCo
         {node.items.length > 1 ? (
           <ul className="list-disc space-y-0.5 pl-4">
             {node.items.map((item) => (
-              <li key={item}>{item}</li>
+              <li key={item.name}>
+                <ItemIcon url={item.iconUrl} className={`${ICON_CLASS} ${node.dim ? "opacity-60" : ""}`} />
+                {item.name}
+              </li>
             ))}
           </ul>
         ) : (
-          node.label
+          <>
+            <ItemIcon url={iconUrl} className={`${ICON_CLASS} ${node.dim ? "opacity-60" : ""}`} />
+            {node.label}
+          </>
         )}
         {node.submitted && !node.complete && !node.dim && (
           <span className="ml-1.5 text-[10px] uppercase tracking-wider" style={{ color: colors.WARN }}>
