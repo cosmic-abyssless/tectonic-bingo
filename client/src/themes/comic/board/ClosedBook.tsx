@@ -111,6 +111,7 @@ export function ClosedBook({
   pose,
   coverInside,
   leaves = [{}],
+  coverImageVariant = "thumb",
 }: {
   tile: TileModel;
   colors: ComicColors;
@@ -125,6 +126,8 @@ export function ClosedBook({
   coverInside?: ReactNode;
   /** The leaves under the cover, first (topmost) first. At least one is always drawn. */
   leaves?: LeafFaces[];
+  /** Which display variant of the cover artwork to load ("thumb" on the board, "full" in the modal). */
+  coverImageVariant?: "thumb" | "full";
 }) {
   const ink = colors.INK;
   // Ink outlines: about 1px on a tile-sized book, 6–8px on the open spread.
@@ -229,7 +232,7 @@ export function ClosedBook({
             transform: "translateZ(1px)",
           }}
         >
-          <BookCoverArt tile={tile} colors={colors} fallbackColor={coverFallback} frozen={frozen} />
+          <BookCoverArt tile={tile} colors={colors} fallbackColor={coverFallback} frozen={frozen} variant={coverImageVariant} />
           {dogEar && <CoverDogEar colors={colors} />}
         </div>
         {/* The inside of the cover is page 1: page weight of outline, and

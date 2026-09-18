@@ -31,6 +31,7 @@
     "passport": "^0.7.0",
     "passport-discord": "^0.1.4",
     "ppu-paddle-ocr": "^6.4.3",
+    "sharp": "^0.34.3",
     "ws": "^8.19.0"
   },
   "devDependencies": {
