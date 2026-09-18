@@ -14,9 +14,9 @@ export function Halftone() {
       <div className="comic-halftone comic-halftone-fine" />
       <div
         className="comic-rays pointer-events-none fixed left-1/2 top-0 z-0 size-[220vmax] -translate-x-1/2 -translate-y-1/2"
-        style={{ ["--comic-ray" as string]: scheme === "dark" ? "rgba(247,236,210,0.035)" : "rgba(11,11,13,0.05)", maskImage: "radial-gradient(circle at 50% 50%, #000 0, transparent 55%)", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 0, transparent 55%)" } as CSSProperties}
+        style={{ ["--comic-ray" as string]: colors.RAY, maskImage: "radial-gradient(circle at 50% 50%, #000 0, transparent 55%)", WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 0, transparent 55%)" } as CSSProperties}
       />
-      <div className="pointer-events-none fixed inset-0 z-0" style={{ boxShadow: `inset 0 0 120px ${colors.INK}55` }} />
+      <div className="pointer-events-none fixed inset-0 z-0" style={{ boxShadow: `inset 0 0 120px ${colors.SCRIM}55` }} />
     </div>
   );
 }

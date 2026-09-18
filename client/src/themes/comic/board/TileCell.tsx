@@ -3,13 +3,13 @@ import { motion, type Variants } from "motion/react";
 import { useFocusRing } from "react-aria";
 import type { TileModel } from "../../../headless/types";
 import { formatCountdown } from "../../../core/ui/time";
-import { CheckIcon, ClockIcon, HandIcon, LockIcon } from "../../../core/ui/icons";
-import { useResolvedColorScheme } from "../../../core/ui/colorScheme";
+import { ClockIcon, HandIcon, LockIcon } from "../../../core/ui/icons";
 import { useThemeTokens } from "../../context";
 import { COMIC_FONT } from "../font";
-import { bw, CLOSED_BOOK, ClosedBook, FIRST_LEAF_STAGGER } from "./ClosedBook";
+import { useComic } from "../ui/useComic";
+import { sfxAt } from "../fx/SfxLayer";
+import { BACK_VIEW, bw, CLOSED_BOOK, ClosedBook, FIRST_LEAF_STAGGER } from "./ClosedBook";
 import { registerBook, useIsBookAway } from "./bookFlight";
-import { getColors } from "./colors";
 
 /*
  * A little comic book sitting on the tile, cracked open just enough to show
@@ -32,11 +32,15 @@ const PRESS_SPRING = { type: "spring", stiffness: 700, damping: 32 } as const;
 
 // The whole book: a static 3/4-view tilt at rest, grows and lifts a touch
 // on hover, squashes back down slightly while pressed.
-const bookVariants: Variants = {
-  rest: { rotateY: CLOSED_BOOK.tilt, scale: 1, y: "0%", transition: BOOK_SPRING },
-  hover: { rotateY: CLOSED_BOOK.tilt, scale: 1.06, y: "-5%", transition: BOOK_SPRING },
-  press: { rotateY: CLOSED_BOOK.tilt, scale: 0.98, y: "-3%", transition: PRESS_SPRING },
-};
+// A finished tile's book is turned over on its back cover (BACK_VIEW), which
+// mirrors the 3/4 view — so it leans the other way, top corner forward.
+const makeBookVariants = ({ rotateX, rotateY }: { rotateX: number; rotateY: number }): Variants => ({
+  rest: { rotateX, rotateY, scale: 1, y: "0%", transition: BOOK_SPRING },
+  hover: { rotateX, rotateY, scale: 1.06, y: "-5%", transition: BOOK_SPRING },
+  press: { rotateX, rotateY, scale: 0.98, y: "-3%", transition: PRESS_SPRING },
+});
+const bookVariants = makeBookVariants({ rotateX: 0, rotateY: CLOSED_BOOK.tilt });
+const flippedBookVariants = makeBookVariants(BACK_VIEW);
 // Front page: always the angle halfway between the flat back page (0) and
 // the cover, so the stack reads as evenly fanned the whole time; and
 // always staggered a hair out from under the cover, so it reads as a
@@ -69,7 +73,7 @@ export const TileCell = memo(function TileCell({
   // after clicking it, or after closing its modal with the pointer — a
   // tile you've just clicked away from shouldn't sit there lit up.
   const { isFocusVisible, focusProps } = useFocusRing();
-  const colors = getColors(useResolvedColorScheme());
+  const { colors } = useComic();
   const tokens = useThemeTokens();
   // While this tile's book is off in the modal, the cell's own copy hides —
   // the modal's copy took off from exactly this spot, and lands back here.
@@ -109,7 +113,12 @@ export const TileCell = memo(function TileCell({
       // DOMAttributes type clashes with motion's own onAnimationStart.
       onFocus={focusProps.onFocus}
       onBlur={focusProps.onBlur}
-      onClick={() => onOpen(tile.id)}
+      onClick={(e) => {
+        // A comic sound-effect burst where you clicked — or, for a
+        // keyboard-triggered click (no pointer position), on the tile itself.
+        sfxAt(e.detail === 0 ? e.currentTarget : e);
+        onOpen(tile.id);
+      }}
       title={tile.name}
       initial="rest"
       animate={isLifted ? "hover" : "rest"}
@@ -174,7 +183,7 @@ export const TileCell = memo(function TileCell({
             flattening against it. */}
         <motion.div
           data-book
-          variants={bookVariants}
+          variants={tile.progress.allComplete ? flippedBookVariants : bookVariants}
           className="absolute inset-0"
           style={{ transformStyle: "preserve-3d" }}
         >
@@ -194,14 +203,9 @@ export const TileCell = memo(function TileCell({
         </motion.div>
       </div>
 
-      {tile.progress.allComplete && !tile.freeze.isFrozen && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[var(--tile-complete)]/40">
-          <CheckIcon
-            className="size-1/2 text-[var(--tile-complete)] drop-shadow"
-            strokeWidth={2.5}
-          />
-        </div>
-      )}
+      {/* (A finished tile used to get a big check laid over it; now its book
+          is turned over on the back cover, credits and all — the green
+          hairline outline still marks it.) */}
 
       {tile.freeze.isFrozen && (
         <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-background/70 text-[var(--tile-frozen)]">
@@ -212,7 +216,10 @@ export const TileCell = memo(function TileCell({
         </div>
       )}
 
-      {tile.freeze.hasFreezePeriod && !tile.freeze.isFrozen && (
+      {/* A freeze that's coming (the bingo hasn't started, so unlocksAt is
+          still null) gets the clock; while it's running the overlay above
+          covers it, and once it's over there's nothing left to flag. */}
+      {tile.freeze.hasFreezePeriod && tile.freeze.unlocksAt === null && (
         <span className="absolute left-1 top-1 z-10 text-[var(--tile-frozen)] drop-shadow">
           <ClockIcon size={14} />
         </span>
@@ -221,8 +228,13 @@ export const TileCell = memo(function TileCell({
       {tile.interest.people.length > 0 && !tile.progress.allComplete && (
         <span
           title={`On this tile: ${tile.interest.people.map((p) => p.displayName).join(", ")}`}
-          className="absolute right-1 top-1 z-20 inline-flex items-center gap-0.5 rounded-full border-2 border-black px-1 py-0.5 text-[9px] font-bold leading-none text-black"
-          style={{ background: tile.interest.mine ? "#facc15" : "#ffffff", fontFamily: COMIC_FONT }}
+          className="absolute right-1 top-1 z-20 inline-flex items-center gap-0.5 rounded-full border-2 px-1 py-0.5 text-[9px] font-bold leading-none"
+          style={{
+            background: tile.interest.mine ? colors.YELLOW : colors.PAPER_RAISED,
+            color: tile.interest.mine ? colors.ON_YELLOW : colors.INK,
+            borderColor: colors.LINE,
+            fontFamily: COMIC_FONT,
+          }}
         >
           <HandIcon size={10} fill={tile.interest.mine ? "currentColor" : "none"} />
           {tile.interest.people.length > 1 && <span className="num">{tile.interest.people.length}</span>}

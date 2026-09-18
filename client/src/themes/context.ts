@@ -19,6 +19,11 @@ export function useSlot<K extends SlotName>(name: K): ThemeSlots[K] {
   return ctx.slots[name];
 }
 
+/** Like useSlot, but undefined (instead of throwing) outside a ThemeProvider — for core components that also mount on un-themed pages. */
+export function useOptionalSlot<K extends SlotName>(name: K): ThemeSlots[K] | undefined {
+  return useContext(ThemeContext)?.slots[name];
+}
+
 export function useThemeTokens(): ThemeTokens {
   const ctx = useContext(ThemeContext);
   if (!ctx) throw new Error("useThemeTokens must be used within ThemeProvider");

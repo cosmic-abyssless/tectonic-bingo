@@ -175,4 +175,16 @@ describe("queryTeamActivity", () => {
     const mod = queryTeamActivity(db, "b1", "teamX", { isMod: true });
     expect(mod.entries.map((e) => e.action)).toEqual(["team.updated"]);
   });
+
+  it("leaves out automatic screenshot analysis results, for mods too (they stay in the mod panel's audit log)", () => {
+    row({ teamId: "teamX", visibility: "mods" as AuditVisibility, action: "submission.screenshot_analysis_failed" as AuditAction });
+    row({ teamId: "teamX", visibility: "mods" as AuditVisibility, action: "submission.screenshot_analyzed" as AuditAction });
+    row({ teamId: "teamX", visibility: "team" as AuditVisibility, action: "team.updated" as AuditAction, details: JSON.stringify({ changes: { before: {}, after: {} } }) });
+
+    const mod = queryTeamActivity(db, "b1", "teamX", { isMod: true });
+    expect(mod.entries.map((e) => e.action)).toEqual(["team.updated"]);
+
+    const full = queryAuditLog(db, { bingoId: "b1" }, {}, {});
+    expect(full.entries.map((e) => e.action)).toContain("submission.screenshot_analysis_failed");
+  });
 });

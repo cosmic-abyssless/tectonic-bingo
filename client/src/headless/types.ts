@@ -13,6 +13,8 @@ export interface ActivityEntryModel {
   at: number;
   timeAgo: string;
   actorName: string | null;
+  /** For linking the name to the player's profile; null for system events. */
+  actorId: string | null;
 }
 
 export interface CategoryModel {
@@ -53,6 +55,8 @@ export interface RequirementNodeModel {
   kind: NodeKind;
   /** leafLabel() for leaves, conditionHeading() for composites. */
   label: string;
+  /** SUM only: the names of the items that count toward it, for themes that list them instead of showing the joined label. */
+  items: string[];
   isLeaf: boolean;
   status: NodeStatus;
   complete: boolean;
@@ -75,6 +79,8 @@ export interface TaskModel {
   description: string | null;
   notes: string | null;
   points: number;
+  /** What this part has actually awarded so far (0 until it's complete). */
+  pointsAwarded: number;
   kind: NodeKind;
   isManual: boolean;
   allowsPreLoad: boolean;
@@ -129,6 +135,8 @@ export interface TileModel {
     totalTasks: number;
     pointsAwarded: number;
     totalPoints: number;
+    /** The part of pointsAwarded that came from the tile's own full-completion bonus. */
+    bonusAwarded: number;
     allComplete: boolean;
   };
   /** TileCell's per-task dot row. */

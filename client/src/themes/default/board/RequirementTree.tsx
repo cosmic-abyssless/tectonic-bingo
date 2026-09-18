@@ -15,13 +15,21 @@ function rowClass(dim: boolean, submitted: boolean) {
 function LeafOrSumRow({ node }: { node: RequirementNodeModel }) {
   return (
     <li className={rowClass(node.dim, node.submitted)}>
-      <span className="text-on-surface-subtle">·</span>
+      {node.items.length <= 1 && <span className="text-on-surface-subtle">·</span>}
       {node.progress && (
         <span className={`num text-xs font-medium ${node.complete ? "text-ok" : "text-warn"}`}>
           {node.progress.current}/{node.progress.target}
         </span>
       )}
-      {node.label}
+      {node.items.length > 1 ? (
+        <ul className="list-disc space-y-0.5 pl-4">
+          {node.items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      ) : (
+        node.label
+      )}
       {node.complete && <Check />}
     </li>
   );

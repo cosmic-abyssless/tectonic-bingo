@@ -5,7 +5,7 @@ import { isBoardLocked, type BoardLine, type GraphNode, type NodeStatus, type St
 import { summarizeTileProgress, getFreezeUnlockAt, groupSubmissionsByTile, type TileProgressSummary } from "../core/board/tileProgress";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete, type LeafClaimMaps } from "../core/board/taskClaims";
 import { collectLeaves, conditionHeading } from "../core/board/requirementTree";
-import { leafLabel } from "../core/board/labels";
+import { leafLabel, sumItemNames } from "../core/board/labels";
 import { claimsSummary } from "../core/submissions/claimsSummary";
 import { timeAgo } from "../core/ui/time";
 import { avatarUrl, displayName } from "../core/ui/user";
@@ -57,6 +57,7 @@ export function buildRequirementTree(
       id: node.id,
       kind: node.kind,
       label: leafLabel(node),
+      items: [],
       isLeaf: true,
       status: statusByNodeId.get(node.id) ?? "not_started",
       complete,
@@ -77,6 +78,7 @@ export function buildRequirementTree(
       id: node.id,
       kind: node.kind,
       label: leafLabel(node),
+      items: sumItemNames(node),
       isLeaf: true,
       status: statusByNodeId.get(node.id) ?? "not_started",
       complete,
@@ -100,6 +102,7 @@ export function buildRequirementTree(
     id: node.id,
     kind: node.kind,
     label: conditionHeading(node),
+    items: [],
     isLeaf: false,
     status: statusByNodeId.get(node.id) ?? "not_started",
     complete: nodeComplete,
@@ -131,6 +134,7 @@ export function buildTaskModels(tile: Tile, summary: TileProgressSummary, maps: 
       description: task.description,
       notes: task.notes,
       points: task.points,
+      pointsAwarded: summary.pointsByNodeId.get(task.id) ?? 0,
       kind: task.kind,
       isManual,
       allowsPreLoad: task.allowsPreLoad,
@@ -262,6 +266,7 @@ export function buildTileModelsStatic(args: {
         totalTasks: summary.totalTasks,
         pointsAwarded: summary.pointsAwarded,
         totalPoints: summary.totalPoints,
+        bonusAwarded: summary.bonusAwarded,
         allComplete: summary.allComplete,
       },
       taskStatuses: tile.node.children.map((task, i) => ({

@@ -1,9 +1,11 @@
 import { Dialog as AriaDialog, Heading, Modal as AriaModal, ModalOverlay } from "react-aria-components";
 import type { CSSProperties, ReactNode } from "react";
+import { useReducedMotion } from "motion/react";
 import { useThemeTokens } from "../../context";
 import { tokensToCssVars } from "../../tokens";
 import { XIcon } from "../../../core/ui/icons";
 import { COMIC_FONT } from "../font";
+import { ComicBurstRays } from "./ComicBurst";
 import { ComicIconButton } from "./ComicButton";
 import { useComic } from "./useComic";
 
@@ -25,13 +27,20 @@ export function useThemeVarsInPortal(): CSSProperties {
   return { ...tokensToCssVars(tokens), ...vars };
 }
 
-/** Halftone + rays backdrop shared by every comic overlay. */
+/**
+ * Scrim + sunbeams + halftone backdrop shared by every comic overlay. The
+ * beams are the same slow-turning ones the tile modal has (ComicBurstRays);
+ * they fade in and out with the overlay itself via its CSS keyframes.
+ */
 export function ComicBackdrop({ className }: { className?: string }) {
   const { colors } = useComic();
+  const reduceMotion = useReducedMotion();
   return (
     <div aria-hidden className={`pointer-events-none absolute inset-0 overflow-hidden ${className ?? ""}`}>
-      <div className="absolute inset-0" style={{ background: colors.INK, opacity: 0.78 }} />
-      <div className="comic-rays comic-rays-spin absolute left-1/2 top-1/2 size-[250vmax] -translate-x-1/2 -translate-y-1/2" style={{ ["--comic-ray" as string]: "rgba(255,255,255,0.06)" }} />
+      <div className="absolute inset-0" style={{ background: colors.SCRIM, opacity: 0.7 }} />
+      <div className="absolute inset-0 flex items-center justify-center">
+        <ComicBurstRays reduceMotion={!!reduceMotion} />
+      </div>
       <div className="comic-halftone" style={{ position: "absolute", ["--comic-halftone-ink" as string]: colors.YELLOW, ["--comic-halftone-opacity" as string]: 0.18 } as CSSProperties} />
     </div>
   );
@@ -71,7 +80,7 @@ export function ComicDialog({
       <AriaModal className={`comic-panel-pop relative w-full ${MAX_WIDTH[size]} ${className ?? ""}`}>
         <div
           className="relative max-h-[90vh] overflow-y-auto border-[3px]"
-          style={{ background: colors.PAPER, borderColor: colors.INK, boxShadow: `8px 8px 0 ${colors.INK}, 8px 8px 0 3px ${colors.YELLOW}` }}
+          style={{ background: colors.PAPER, borderColor: colors.LINE, boxShadow: `8px 8px 0 ${colors.LINE}, 8px 8px 0 3px ${colors.YELLOW}` }}
         >
           <AriaDialog className="outline-none">{children}</AriaDialog>
         </div>
@@ -84,11 +93,11 @@ export function ComicDialog({
 export function ComicDialogHeader({ title, subtitle, onClose, action, tone = "yellow" }: { title: ReactNode; subtitle?: ReactNode; onClose: () => void; action?: ReactNode; tone?: "yellow" | "red" | "blue" }) {
   const { colors } = useComic();
   const fill = { yellow: colors.YELLOW, red: colors.RED, blue: colors.BLUE }[tone];
-  const fg = tone === "yellow" ? colors.INK : "#fffaf0";
+  const fg = tone === "yellow" ? colors.ON_YELLOW : colors.ON_LOUD;
   return (
-    <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b-[3px] px-5 py-3" style={{ background: fill, borderColor: colors.INK, color: fg }}>
+    <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b-[3px] px-5 py-3" style={{ background: fill, borderColor: colors.LINE, color: fg }}>
       <div className="min-w-0">
-        <Heading slot="title" className="truncate text-3xl uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: fg === colors.INK ? colors.INK : "#fffaf0" }}>
+        <Heading slot="title" className="truncate text-3xl uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: fg }}>
           {title}
         </Heading>
         {subtitle && (

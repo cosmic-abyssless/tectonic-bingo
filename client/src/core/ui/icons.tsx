@@ -231,3 +231,18 @@ export const BugIcon = (p: IconProps) => (
     <path d="M4.6 7.2H2M11.4 7.2H14M4.3 10.2H1.5M11.7 10.2h2.8M4.8 13.2L2.8 15M11.2 13.2l2 1.8" />
   </Svg>
 );
+
+// Moderator-only entry points (the mod panel).
+export const ShieldIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 1.5l5.5 2v4.2c0 3.2-2.3 5.6-5.5 6.8C4.8 13.3 2.5 10.9 2.5 7.7V3.5L8 1.5z" />
+    <path d="M5.8 8l1.7 1.7L10.4 6.6" />
+  </Svg>
+);
+
+// Hamburger — collapses the header's entries on narrow screens.
+export const MenuIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />
+  </Svg>
+);
