@@ -72,7 +72,7 @@ export function SfxLayer() {
             animate={{ y: ["-50%", "-50%", "-60%", "-110%"], scale: [0.3, 1.15, 1, 0.85], rotate: [-20, 6, -3, 3], opacity: [0, 1, 1, 0] }}
             transition={{ duration: LIFE_MS / 1000, times: [0, 0.25, 0.55, 1], ease: [0.2, 0.9, 0.3, 1] }}
           >
-            <Burst fill={s.fill ?? [colors.YELLOW, colors.RED, colors.CYAN, colors.MAGENTA][s.id % 4]} color={s.id % 4 === 1 || s.id % 4 === 3 ? "#fffaf0" : colors.INK} rotate={s.rotate} spikes={12 + (s.id % 4) * 2}>
+            <Burst fill={s.fill ?? [colors.YELLOW, colors.RED, colors.CYAN, colors.MAGENTA][s.id % 4]} color={s.id % 4 === 1 || s.id % 4 === 3 ? colors.ON_LOUD : colors.INK} rotate={s.rotate} spikes={12 + (s.id % 4) * 2}>
               {s.text}
             </Burst>
           </motion.div>

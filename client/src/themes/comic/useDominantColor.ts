@@ -43,15 +43,14 @@ function extractDominantColor(ctx: CanvasRenderingContext2D): string | null {
 }
 
 // Picks black or white — whichever reads better — against a color this
-// hook returned. `rgbColor` must be exactly the `rgb(r, g, b)` string this
-// module produces (or null/anything else, which just defaults to black);
-// it doesn't try to parse arbitrary CSS colors like `var(--tile-accent)`.
-export function getContrastTextColor(rgbColor: string | null): string {
-  const match = rgbColor ? /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/.exec(rgbColor) : null;
-  if (!match) return "#000000";
-  const r = Number(match[1]);
-  const g = Number(match[2]);
-  const b = Number(match[3]);
+// hook returned (`rgb(r, g, b)`) or a 6-digit hex fallback; anything else
+// (a `var(--…)`, null) defaults to black.
+export function getContrastTextColor(color: string | null): string {
+  const rgb = color ? /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/.exec(color) : null;
+  const hex = color ? /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color) : null;
+  const m = rgb ?? hex;
+  if (!m) return "#000000";
+  const [r, g, b] = rgb ? [Number(m[1]), Number(m[2]), Number(m[3])] : [parseInt(m[1]!, 16), parseInt(m[2]!, 16), parseInt(m[3]!, 16)];
   // Perceived (not WCAG-relative) luminance — plenty accurate for a plain
   // light/dark text-color decision.
   const luminance = 0.299 * r + 0.587 * g + 0.114 * b;

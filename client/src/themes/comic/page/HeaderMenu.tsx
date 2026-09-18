@@ -36,7 +36,7 @@ export function HeaderMenu({ entries }: { entries: HeaderMenuEntry[] }) {
       <Popover
         placement="bottom end"
         offset={8}
-        style={{ ...portalVars, background: colors.PAPER_RAISED, borderColor: colors.INK, boxShadow: `4px 4px 0 ${colors.INK}` }}
+        style={{ ...portalVars, background: colors.PAPER_RAISED, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.LINE}` }}
         className="comic-panel-pop z-[60] min-w-48 overflow-hidden rounded-md border-[3px] outline-none"
       >
         <AriaMenu className="divide-y-2 outline-none" style={{ borderColor: colors.RULE }}>
@@ -46,7 +46,7 @@ export function HeaderMenu({ entries }: { entries: HeaderMenuEntry[] }) {
               id={entry.id}
               textValue={entry.text}
               onAction={entry.onAction}
-              className="flex cursor-pointer items-center gap-2 px-3 py-2.5 text-lg uppercase outline-none focus:bg-[var(--comic-yellow)] hovered:bg-[var(--comic-yellow)] focus:text-[#0b0b0d] hovered:text-[#0b0b0d]"
+              className="flex cursor-pointer items-center gap-2 px-3 py-2.5 text-lg uppercase outline-none focus:bg-[var(--comic-yellow)] hovered:bg-[var(--comic-yellow)] focus:text-[var(--comic-on-yellow)] hovered:text-[var(--comic-on-yellow)]"
               style={{ color: colors.INK, borderColor: colors.RULE, fontFamily: COMIC_FONT, letterSpacing: "0.04em" }}
             >
               {entry.label}

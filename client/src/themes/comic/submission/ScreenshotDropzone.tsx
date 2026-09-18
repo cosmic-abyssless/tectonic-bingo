@@ -20,21 +20,21 @@ export function ScreenshotDropzone({ screenshot }: { screenshot: SubmissionFlowM
         onClick={screenshot.openFilePicker}
         className={`comic-press relative block w-full border-[3px] transition-[transform,background-color] ${has ? "h-56" : "h-40"}`}
         style={{
-          borderColor: colors.INK,
+          borderColor: colors.LINE,
           borderStyle: has ? "solid" : "dashed",
           background: screenshot.dragOver ? colors.YELLOW_TINT : has ? colors.PAPER_RAISED : colors.PAPER_ALT,
-          boxShadow: `4px 4px 0 ${colors.INK}`,
+          boxShadow: `4px 4px 0 ${colors.LINE}`,
         }}
       >
         {has ? (
           <>
             <img src={screenshot.previewUrl!} alt="Preview" className="absolute inset-0 h-full w-full object-contain p-3" />
             {/* tape strips */}
-            <span aria-hidden className="absolute -top-2 left-6 h-4 w-14 -rotate-6" style={{ background: colors.YELLOW, opacity: 0.85, border: `2px solid ${colors.INK}` }} />
-            <span aria-hidden className="absolute -top-2 right-6 h-4 w-14 rotate-6" style={{ background: colors.YELLOW, opacity: 0.85, border: `2px solid ${colors.INK}` }} />
+            <span aria-hidden className="absolute -top-2 left-6 h-4 w-14 -rotate-6" style={{ background: colors.YELLOW, opacity: 0.85, border: `2px solid ${colors.LINE}` }} />
+            <span aria-hidden className="absolute -top-2 right-6 h-4 w-14 rotate-6" style={{ background: colors.YELLOW, opacity: 0.85, border: `2px solid ${colors.LINE}` }} />
             <span
               className="absolute bottom-2 right-2 border-[2px] px-2 py-0.5 text-sm uppercase leading-none"
-              style={{ fontFamily: COMIC_FONT, borderColor: colors.INK, background: colors.PAPER, color: colors.INK }}
+              style={{ fontFamily: COMIC_FONT, borderColor: colors.LINE, background: colors.PAPER, color: colors.INK }}
             >
               Click to swap
             </span>

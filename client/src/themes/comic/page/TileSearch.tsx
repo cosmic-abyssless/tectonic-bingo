@@ -75,7 +75,7 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
       {search.showDropdown && (
         <div
           className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-md border-[3px]"
-          style={{ borderColor: colors.INK, background: colors.PAPER_RAISED, boxShadow: `4px 4px 0 ${colors.INK}`, color: colors.INK }}
+          style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `4px 4px 0 ${colors.LINE}`, color: colors.INK }}
         >
           {search.results.map((tile, i) => {
             const active = i === search.highlightedIndex;
@@ -86,9 +86,9 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => search.choose(tile.id)}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors"
-                style={{ background: active ? colors.YELLOW : undefined, color: active ? "#0b0b0d" : colors.INK }}
+                style={{ background: active ? colors.YELLOW : undefined, color: active ? colors.ON_YELLOW : colors.INK }}
               >
-                <span className="w-5 shrink-0 text-base leading-none" style={{ fontFamily: COMIC_FONT, color: active ? "#0b0b0d" : colors.INK_SUBTLE }}>
+                <span className="w-5 shrink-0 text-base leading-none" style={{ fontFamily: COMIC_FONT, color: active ? colors.ON_YELLOW : colors.INK_SUBTLE }}>
                   {i + 1}.
                 </span>
                 <span className="truncate text-sm font-medium">{tile.name}</span>
@@ -96,7 +96,7 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
             );
           })}
           {search.overflowCount > 0 && (
-            <p className="border-t-[3px] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ borderColor: colors.INK, color: colors.INK_SUBTLE }}>
+            <p className="border-t-[3px] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ borderColor: colors.LINE, color: colors.INK_SUBTLE }}>
               {search.overflowCount} more — keep typing
             </p>
           )}

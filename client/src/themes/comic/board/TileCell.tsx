@@ -4,13 +4,12 @@ import { useFocusRing } from "react-aria";
 import type { TileModel } from "../../../headless/types";
 import { formatCountdown } from "../../../core/ui/time";
 import { ClockIcon, HandIcon, LockIcon } from "../../../core/ui/icons";
-import { useResolvedColorScheme } from "../../../core/ui/colorScheme";
 import { useThemeTokens } from "../../context";
 import { COMIC_FONT } from "../font";
+import { useComic } from "../ui/useComic";
 import { sfxAt } from "../fx/SfxLayer";
 import { bw, CLOSED_BOOK, ClosedBook, FIRST_LEAF_STAGGER, FLIP_ANGLE } from "./ClosedBook";
 import { registerBook, useIsBookAway } from "./bookFlight";
-import { getColors } from "./colors";
 
 /*
  * A little comic book sitting on the tile, cracked open just enough to show
@@ -74,7 +73,7 @@ export const TileCell = memo(function TileCell({
   // after clicking it, or after closing its modal with the pointer — a
   // tile you've just clicked away from shouldn't sit there lit up.
   const { isFocusVisible, focusProps } = useFocusRing();
-  const colors = getColors(useResolvedColorScheme());
+  const { colors } = useComic();
   const tokens = useThemeTokens();
   // While this tile's book is off in the modal, the cell's own copy hides —
   // the modal's copy took off from exactly this spot, and lands back here.
@@ -229,8 +228,13 @@ export const TileCell = memo(function TileCell({
       {tile.interest.people.length > 0 && !tile.progress.allComplete && (
         <span
           title={`On this tile: ${tile.interest.people.map((p) => p.displayName).join(", ")}`}
-          className="absolute right-1 top-1 z-20 inline-flex items-center gap-0.5 rounded-full border-2 border-black px-1 py-0.5 text-[9px] font-bold leading-none text-black"
-          style={{ background: tile.interest.mine ? "#facc15" : "#ffffff", fontFamily: COMIC_FONT }}
+          className="absolute right-1 top-1 z-20 inline-flex items-center gap-0.5 rounded-full border-2 px-1 py-0.5 text-[9px] font-bold leading-none"
+          style={{
+            background: tile.interest.mine ? colors.YELLOW : colors.PAPER_RAISED,
+            color: tile.interest.mine ? colors.ON_YELLOW : colors.INK,
+            borderColor: colors.LINE,
+            fontFamily: COMIC_FONT,
+          }}
         >
           <HandIcon size={10} fill={tile.interest.mine ? "currentColor" : "none"} />
           {tile.interest.people.length > 1 && <span className="num">{tile.interest.people.length}</span>}

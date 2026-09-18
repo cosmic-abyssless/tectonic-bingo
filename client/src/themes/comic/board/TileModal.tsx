@@ -20,10 +20,10 @@ import { SubmissionBubble } from "./SubmissionBubble";
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ClockIcon, HandIcon, LockIcon, XIcon } from "../../../core/ui/icons";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
 import { formatCountdown } from "../../../core/ui/time";
-import { useResolvedColorScheme } from "../../../core/ui/colorScheme";
 import { useSlot, useThemeTokens } from "../../context";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
+import { useComic } from "../ui/useComic";
 import { CaptionBox } from "../ui/CaptionBox";
 import {
   BASE_DEPTH,
@@ -45,7 +45,7 @@ import {
 import { ComicBurstRays } from "../ui/ComicBurst";
 import { PageFooter } from "./PageFooter";
 import { getBookPose, setBookAway } from "./bookFlight";
-import { getColors, type ComicColors } from "./colors";
+import { TECTONIC_LOGO, type ComicColors } from "./colors";
 
 /*
  * The tile modal IS the tile's comic book, opened — and it's a whole comic:
@@ -713,7 +713,7 @@ function FlyingBook({
   const backdropRef = useRef<HTMLDivElement>(null);
   const burstRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
-  const colors = getColors(useResolvedColorScheme());
+  const { colors } = useComic();
   const tileId = tile.id;
   const { lastSpread, leafCount } = bookShape(tile);
 
@@ -1303,7 +1303,7 @@ function TileDetails({
           src={tile.imageUrl}
           alt={tile.name}
           className="border-2 absolute -top-[8.25rem] -left-14 size-36 shrink-0 object-contain -rotate-12"
-          style={{ borderColor: colors.INK, opacity: 0 }}
+          style={{ borderColor: colors.LINE, opacity: 0 }}
         />
       )}
       <AriaButton
@@ -1314,8 +1314,8 @@ function TileDetails({
         style={{
           backgroundColor: colors.PAPER_RAISED,
           color: colors.INK,
-          borderColor: colors.INK,
-          boxShadow: `3px 3px 0 ${colors.INK}`,
+          borderColor: colors.LINE,
+          boxShadow: `3px 3px 0 ${colors.LINE}`,
           opacity: 0,
         }}
       >
@@ -1329,7 +1329,7 @@ function TileDetails({
             a phone, which page. */}
         <span
           className="min-w-32 -rotate-1 border-[3px] px-3 py-1 text-center text-base uppercase leading-none tabular-nums"
-          style={{ background: colors.YELLOW, borderColor: colors.INK, color: colors.INK, boxShadow: `2px 2px 0 ${colors.INK}` }}
+          style={{ background: colors.YELLOW, borderColor: colors.LINE, color: colors.ON_YELLOW, boxShadow: `2px 2px 0 ${colors.LINE}` }}
         >
           {single ? `Page ${2 * spread + (focus === "left" ? 1 : 2)} / ${pageCount}` : `Spread ${spread + 1} / ${lastSpread + 1}`}
         </span>
@@ -1360,7 +1360,7 @@ function NavButton({
       onPress={onPress}
       isDisabled={disabled}
       className="flex size-10 cursor-pointer items-center justify-center rounded-full border-[3px] transition-transform duration-100 pressed:scale-95 hover:-translate-y-0.5 disabled:cursor-default disabled:opacity-35 disabled:hover:translate-y-0"
-      style={{ backgroundColor: colors.PAPER_RAISED, color: colors.INK, borderColor: colors.INK, boxShadow: `2px 2px 0 ${colors.INK}` }}
+      style={{ backgroundColor: colors.PAPER_RAISED, color: colors.INK, borderColor: colors.LINE, boxShadow: `2px 2px 0 ${colors.LINE}` }}
     >
       {children}
     </AriaButton>
@@ -1495,8 +1495,8 @@ function SummaryPage({
       {/* Masthead header */}
       <div className="flex flex-col items-start gap-2">
         <span
-          className="px-[0.5em] py-[0.2em] uppercase leading-none"
-          style={{ backgroundColor: "#d2412d", color: "#fff", fontFamily: COMIC_LOGO_FONT, fontWeight: 800, fontSize: "1rem", letterSpacing: "0.02em" }}
+          className="comic-logo uppercase"
+          style={{ backgroundColor: TECTONIC_LOGO.bg, color: TECTONIC_LOGO.fg, fontFamily: COMIC_LOGO_FONT, fontWeight: 800, fontSize: "1rem", letterSpacing: "0.02em" }}
         >
           Tectonic
         </span>
@@ -1565,25 +1565,25 @@ function SummaryPage({
                     onClick={() => onGoToTask?.(i)}
                     className="comic-press flex w-full items-center gap-3 border-[3px] px-3 py-2 text-left outline-none transition-transform duration-100 hover:-translate-y-0.5"
                     style={{
-                      borderColor: colors.INK,
+                      borderColor: colors.LINE,
                       background: colors.PAPER_RAISED,
-                      boxShadow: `2px 2px 0 ${colors.INK}`,
+                      boxShadow: `2px 2px 0 ${colors.LINE}`,
                       color: colors.INK,
                     }}
                   >
                     <span
-                      className="flex size-7 shrink-0 items-center justify-center border-2 text-sm font-bold"
+                      className="flex size-7 shrink-0 items-center justify-center border-2 text-sm"
                       style={{
                         fontFamily: COMIC_FONT,
-                        borderColor: colors.INK,
+                        borderColor: colors.LINE,
                         background: tone,
-                        color: task.complete || task.status !== "not_started" ? "#fffaf0" : colors.INK,
+                        color: task.complete || task.status !== "not_started" ? colors.ON_LOUD : colors.INK,
                       }}
                     >
                       {task.complete ? <CheckIcon size={14} /> : task.locked ? <LockIcon size={12} /> : number}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-base leading-tight font-bold" style={{ fontFamily: COMIC_FONT }}>
+                      <span className="block truncate text-base leading-tight" style={{ fontFamily: COMIC_FONT }}>
                         {task.label}
                       </span>
                       <span className="block truncate text-xs" style={{ color: claimed.length > 0 ? colors.INK_BODY : tone }}>
@@ -1603,7 +1603,7 @@ function SummaryPage({
                         )}
                       </span>
                     </span>
-                    <span className="num shrink-0 text-sm font-bold" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+                    <span className="num shrink-0 text-sm" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
                       {task.points} pts
                     </span>
                     <span className="shrink-0 text-xs uppercase" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
@@ -1663,13 +1663,13 @@ function TaskPage({
     <div className="relative flex min-h-full flex-col p-6" style={{ color: colors.INK }}>
       {/* Tilted Part Number Badge */}
       <div
-        className="absolute right-5 top-5 flex size-10 items-center justify-center border-[3px] text-2xl font-black"
+        className="absolute right-5 top-5 flex size-10 items-center justify-center border-[3px] text-2xl"
         style={{
           fontFamily: COMIC_FONT,
-          borderColor: colors.INK,
+          borderColor: colors.LINE,
           background: colors.YELLOW,
-          color: colors.INK,
-          boxShadow: `3px 3px 0 ${colors.INK}`,
+          color: colors.ON_YELLOW,
+          boxShadow: `3px 3px 0 ${colors.LINE}`,
           transform: "rotate(6deg)",
         }}
         aria-hidden
@@ -1679,7 +1679,7 @@ function TaskPage({
 
       {/* Part Action Bar */}
       {!tile.progress.allComplete && (onSubmit || showCrew) && (
-        <div className="mb-4 border-b-[3px] pb-3 pr-12" style={{ borderColor: colors.INK }}>
+        <div className="mb-4 border-b-[3px] pb-3 pr-12" style={{ borderColor: colors.LINE }}>
           <div className="flex flex-wrap items-center gap-3">
             {onSubmit && (
               <ComicButton
@@ -1736,8 +1736,8 @@ function TaskPage({
 
       {/* (The approved / pending / locked stamp is the one TaskPanel draws
           beside the part's title — not repeated down here.) */}
-      <div className="mt-4 pt-2 border-t-[2px] border-dashed" style={{ borderColor: `${colors.INK}44` }}>
-        <span className="text-xs uppercase font-bold tracking-wider" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
+      <div className="mt-4 pt-2 border-t-[2px] border-dashed" style={{ borderColor: `${colors.LINE}44` }}>
+        <span className="text-xs uppercase tracking-wider" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
           Part {number} of {tile.tasks.length}
         </span>
       </div>
@@ -1755,11 +1755,11 @@ function SubmissionsPage({ submissions, colors }: { submissions: SubmissionModel
           Submissions
         </h3>
         <span
-          className="rounded-full border-[2px] px-2 py-0.5 text-xs font-bold uppercase"
+          className="rounded-full border-[2px] px-2 py-0.5 text-xs uppercase"
           style={{
-            borderColor: colors.INK,
+            borderColor: colors.LINE,
             background: colors.YELLOW,
-            color: colors.INK,
+            color: colors.ON_YELLOW,
             fontFamily: COMIC_FONT,
           }}
         >

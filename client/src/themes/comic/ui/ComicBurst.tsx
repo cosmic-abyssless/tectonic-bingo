@@ -1,7 +1,4 @@
-// A soft, warm sunlight tone — deliberately a literal, not a ComicColors
-// token: it sits on a modal scrim that is the same black in both color
-// schemes, so it doesn't want to change with them either.
-export const BURST_COLOR = "#fff3c4";
+import { useComic } from "./useComic";
 
 /**
  * The slow-turning sunbeams behind an open modal: rays radiating from the
@@ -22,6 +19,7 @@ export const BURST_COLOR = "#fff3c4";
  * class, so the small-screen and reduced-motion rules in comic.css apply.
  */
 export function ComicBurstRays({ reduceMotion = false }: { reduceMotion?: boolean }) {
+  const { colors } = useComic();
   const fade = "radial-gradient(circle closest-side, black 0%, black 18%, transparent 96%)";
   return (
     <div
@@ -31,7 +29,7 @@ export function ComicBurstRays({ reduceMotion = false }: { reduceMotion?: boolea
         width: "180vmax",
         aspectRatio: "1",
         borderRadius: "50%",
-        background: `repeating-conic-gradient(${BURST_COLOR} 0deg 7deg, transparent 7deg 18deg)`,
+        background: `repeating-conic-gradient(${colors.BURST} 0deg 7deg, transparent 7deg 18deg)`,
         maskImage: fade,
         WebkitMaskImage: fade,
         opacity: 0.4,

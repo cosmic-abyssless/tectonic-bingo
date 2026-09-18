@@ -53,7 +53,7 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
       back={user?.isAdmin ? { to: "/", label: "All bingos" } : undefined}
       title={page.bingo.name}
       subtitle={
-        <span className="inline-flex items-center border-2 px-1.5 py-px text-xs uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.06em", borderColor: colors.INK, background: colors.PAPER_RAISED, color: colors.INK }}>
+        <span className="inline-flex items-center border-2 px-1.5 py-px text-xs uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.06em", borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK }}>
           {page.showEndCountdown && page.bingo.endsAt ? (
             <>
               <CountdownTimer target={page.bingo.endsAt} />
@@ -112,7 +112,7 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
 function Counter({ n }: { n: number }) {
   const { colors } = useComic();
   return (
-    <span className="num -my-1 inline-flex min-w-5 items-center justify-center rounded-full border-2 px-1 text-xs" style={{ background: colors.YELLOW, color: colors.INK, borderColor: colors.INK, fontFamily: COMIC_FONT }}>
+    <span className="num -my-1 inline-flex min-w-5 items-center justify-center rounded-full border-2 px-1 text-xs" style={{ background: colors.YELLOW, color: colors.ON_YELLOW, borderColor: colors.LINE, fontFamily: COMIC_FONT }}>
       {n}
     </span>
   );

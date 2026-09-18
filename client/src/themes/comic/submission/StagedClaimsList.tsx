@@ -11,7 +11,7 @@ export function StagedClaimsList({ staged }: { staged: SubmissionFlowModel["stag
     <>
       {staged.items.length > 0 && (
         <ComicField label="Also in this screenshot" as="div">
-          <ul className="border-[3px]" style={{ borderColor: colors.INK, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.INK}` }}>
+          <ul className="border-[3px]" style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.LINE}` }}>
             {staged.items.map((item, i) => (
               <li
                 key={i}

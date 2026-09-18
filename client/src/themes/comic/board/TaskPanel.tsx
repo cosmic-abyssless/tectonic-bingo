@@ -29,11 +29,11 @@ export function TaskPanel({ task }: { task: TaskModel }) {
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <InkTag fill={colors.YELLOW}>
+        <InkTag fill={colors.YELLOW} color={colors.ON_YELLOW}>
           <span className="num">{task.points} pts</span>
         </InkTag>
         {task.isManual && (
-          <InkTag color="#fffaf0" fill={colors.BLUE}>
+          <InkTag color={colors.ON_LOUD} fill={colors.BLUE}>
             Judged by mods
           </InkTag>
         )}
@@ -50,7 +50,7 @@ export function TaskPanel({ task }: { task: TaskModel }) {
             <Tooltip
               offset={6}
               className="z-[80] max-w-56 border-[3px] px-3 py-2 text-xs leading-relaxed"
-              style={{ borderColor: colors.INK, backgroundColor: colors.PAPER_RAISED, color: colors.INK, boxShadow: `3px 3px 0 ${colors.INK}` }}
+              style={{ borderColor: colors.LINE, backgroundColor: colors.PAPER_RAISED, color: colors.INK, boxShadow: `3px 3px 0 ${colors.LINE}` }}
             >
               {task.lockedReason ?? "This part depends on a previous part."}
             </Tooltip>

@@ -12,9 +12,15 @@
 // Silver Age covers were printed with. Dark mode is a "night issue": the
 // paper goes to a deep ink-navy and the ink goes to pale cream, while the
 // process colors stay loud so bursts and stamps still pop.
+import { DARK_PALETTE } from "../darkPalettes";
+
 export interface ComicColors {
-  /** Line-art black (or pale cream in dark mode). Borders, lettering. */
+  /** Lettering: headings, labels, the darkest text. */
   INK: string;
+  /** Line art: borders, outlines, hard offset shadows. Same as INK in the
+   *  light palette; dark palettes split them so a page can have, say, black
+   *  or neon-cyan panel lines under cream lettering. */
+  LINE: string;
   /** Body copy — a hair softer than INK so paragraphs don't shout. */
   INK_BODY: string;
   /** Captions, metadata, disabled. */
@@ -58,10 +64,25 @@ export interface ComicColors {
 
   /** Halftone dot ink for the page background. */
   HALFTONE: string;
+
+  /** Lettering on a saturated fill (primary button, stamps, coloured tags, dialog headers). */
+  ON_LOUD: string;
+  /** Lettering on the YELLOW fill (score tab, yellow buttons, hovered menu rows). */
+  ON_YELLOW: string;
+  /** Outlined display lettering (the page title): fill + the hard stroke/drop. */
+  TITLE_FILL: string;
+  TITLE_STROKE: string;
+  /** Modal scrim, and the sunbeams that turn behind an open modal. */
+  SCRIM: string;
+  BURST: string;
+  /** Translucent line colour for the page's speed-line rays and inline halftone shading. */
+  RAY: string;
+  SHADE: string;
 }
 
 const LIGHT: ComicColors = {
   INK: "#0b0b0d",
+  LINE: "#0b0b0d",
   INK_BODY: "#1d1b18",
   INK_SUBTLE: "#6b6259",
   RULE: "rgba(11,11,13,0.22)",
@@ -94,47 +115,27 @@ const LIGHT: ComicColors = {
   ORANGE_LINE: "#ff7a1a",
 
   HALFTONE: "#0b0b0d",
-};
 
-const DARK: ComicColors = {
-  INK: "#f7ecd2",
-  INK_BODY: "#ede0c4",
-  INK_SUBTLE: "#a89c86",
-  RULE: "rgba(247,236,210,0.22)",
-
-  PAPER: "#16183a",
-  PAPER_ALT: "#101230",
-  PAPER_RAISED: "#1f2350",
-
-  YELLOW: "#ffd400",
-  RED: "#ff3b30",
-  BLUE: "#4f7dff",
-  CYAN: "#27c3ff",
-  MAGENTA: "#ff2e93",
-  GREEN: "#2ecc71",
-  ORANGE: "#ff8c2e",
-  PURPLE: "#a06cff",
-
-  YELLOW_TINT: "#4a3d00",
-  BLUE_TINT: "#1a2a66",
-  RED_TINT: "#5a1a18",
-  GREEN_TINT: "#153f2a",
-  CYAN_TINT: "#0f3a4d",
-
-  OK: "#2ecc71",
-  WARN: "#ff8c2e",
-  BAD: "#ff3b30",
-  INFO: "#4f7dff",
-  FROZEN: "#27c3ff",
-
-  ORANGE_LINE: "#ff8c2e",
-
-  HALFTONE: "#7f8bff",
+  ON_LOUD: "#fffaf0",
+  ON_YELLOW: "#0b0b0d",
+  TITLE_FILL: "#ffffff",
+  TITLE_STROKE: "#000000",
+  SCRIM: "#0b0b0d",
+  BURST: "#fff3c4",
+  RAY: "rgba(11,11,13,0.10)",
+  SHADE: "rgba(11,11,13,0.30)",
 };
 
 export function getColors(scheme: "light" | "dark"): ComicColors {
-  return scheme === "dark" ? DARK : LIGHT;
+  return scheme === "dark" ? DARK_PALETTE.colors : LIGHT;
 }
+
+/**
+ * The "TECTONIC" masthead: white lettering on a red box, in every palette,
+ * because it's meant to read as a comic publisher's logo (think Marvel's) —
+ * a fixed brand mark, not something the theme recolours.
+ */
+export const TECTONIC_LOGO = { bg: "#d2412d", fg: "#ffffff" } as const;
 
 /** Hard offset "printed" drop shadow used on every raised comic surface. */
 export function hardShadow(ink: string, px = 4): string {

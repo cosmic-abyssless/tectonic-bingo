@@ -55,11 +55,11 @@ export function Burst({
     >
       <svg viewBox="0 0 100 100" className="absolute inset-0 size-full overflow-visible">
         <polygon points={burstPoints(spikes, 34, 50, 5)} fill={colors.INK} transform="translate(2.5 3)" />
-        <polygon points={burstPoints(spikes, 34, 50, 5)} fill={fill ?? colors.YELLOW} stroke={colors.INK} strokeWidth={3} strokeLinejoin="round" />
+        <polygon points={burstPoints(spikes, 34, 50, 5)} fill={fill ?? colors.YELLOW} stroke={colors.LINE} strokeWidth={3} strokeLinejoin="round" />
       </svg>
       <div
         className={`absolute inset-0 flex items-center justify-center text-center uppercase leading-none ${textClassName ?? ""}`}
-        style={{ fontFamily: COMIC_FONT, color: color ?? colors.INK, fontSize: "24cqw", letterSpacing: "0.02em", WebkitTextStroke: color === "#fffaf0" ? `0.6px ${colors.INK}` : undefined }}
+        style={{ fontFamily: COMIC_FONT, color: color ?? colors.INK, fontSize: "24cqw", letterSpacing: "0.02em", WebkitTextStroke: color === colors.ON_LOUD ? `0.6px ${colors.LINE}` : undefined }}
       >
         {children}
       </div>

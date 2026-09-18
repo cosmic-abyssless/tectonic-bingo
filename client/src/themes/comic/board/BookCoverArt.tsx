@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { TileModel } from "../../../headless/types";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { getContrastTextColor, useDominantColor } from "../useDominantColor";
-import type { ComicColors } from "./colors";
+import { TECTONIC_LOGO, type ComicColors } from "./colors";
 
 /*
  * The face of a tile's comic book cover: extracted-from-artwork background,
@@ -54,7 +54,7 @@ export function BookCoverArt({
   // The masthead row and the plain "P1" mark sit directly on the cover with
   // no fill of their own, so their color adapts to whatever the cover color
   // turns out to be, not the other way around.
-  const priceTextColor = getContrastTextColor(dominantColor);
+  const priceTextColor = getContrastTextColor(dominantColor ?? fallbackColor);
   const { pointsAwarded, totalPoints } = tile.progress;
   const mark = coverTaskMark(tile);
 
@@ -77,10 +77,10 @@ export function BookCoverArt({
           reads right off the logo instead of floating in its own corner. */}
       <div className="absolute inset-x-[3cqw] top-[3.5cqw] flex items-baseline gap-[1.8cqw]">
         <span
-          className="w-fit h-fit shrink-0 truncate px-[0.35em] py-[0.15em] text-center uppercase leading-none"
+          className="comic-logo w-fit h-fit shrink-0 truncate text-center uppercase"
           style={{
-            backgroundColor: "#d2412d",
-            color: "#fff",
+            backgroundColor: TECTONIC_LOGO.bg,
+            color: TECTONIC_LOGO.fg,
             fontFamily: COMIC_LOGO_FONT,
             fontWeight: 800,
             fontSize: "9.5cqw",
@@ -155,7 +155,7 @@ export function BookBackArt({
   const [imgFailed, setImgFailed] = useState(false);
   const imageUrl = tile.imageUrl && !imgFailed ? tile.imageUrl : null;
   const dominantColor = useDominantColor(imageUrl);
-  const textColor = getContrastTextColor(dominantColor);
+  const textColor = getContrastTextColor(dominantColor ?? fallbackColor);
   const names = tileContributors(tile);
   const shown = names.slice(0, BACK_COVER_NAMES);
   const more = names.length - shown.length;
@@ -179,13 +179,13 @@ export function BookBackArt({
                 alt=""
                 onError={() => setImgFailed(true)}
                 className="h-full w-full object-contain"
-                style={{ filter: `drop-shadow(1.2cqw 1.2cqw 0 ${colors.INK})` }}
+                style={{ filter: `drop-shadow(1.2cqw 1.2cqw 0 ${colors.LINE})` }}
                 draggable={false}
               />
             )}
             <span
               className="absolute -left-[5cqw] -top-[4cqw] flex h-[14cqw] w-[14cqw] -rotate-[8deg] items-center justify-center rounded-full"
-              style={{ background: colors.GREEN, border: `1cqw solid ${colors.INK}`, boxShadow: `1.2cqw 1.2cqw 0 ${colors.INK}`, color: "#fff" }}
+              style={{ background: colors.GREEN, border: `1cqw solid ${colors.LINE}`, boxShadow: `1.2cqw 1.2cqw 0 ${colors.LINE}`, color: colors.ON_LOUD }}
             >
               <svg viewBox="0 0 16 16" className="h-[8.5cqw] w-[8.5cqw]" fill="none" stroke="currentColor" strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round" aria-label="Complete">
                 <path d="M3 8.5l3 3 7-7" />
@@ -205,7 +205,7 @@ export function BookBackArt({
         </div>
         <div
           className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-[0.9cqw] px-[4cqw] py-[3.5cqw]"
-          style={{ borderColor: colors.INK, background: colors.PAPER_RAISED, color: colors.INK, boxShadow: `1.6cqw 1.6cqw 0 ${colors.INK}` }}
+          style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK, boxShadow: `1.6cqw 1.6cqw 0 ${colors.LINE}` }}
         >
           <span className="mb-[2cqw] uppercase leading-none" style={{ fontFamily: COMIC_FONT, fontSize: "6.6cqw", letterSpacing: "0.04em", color: colors.INK_SUBTLE }}>
             Completed by

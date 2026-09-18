@@ -10,7 +10,7 @@ import { useComic } from "../ui/useComic";
 /** Team color as a small ink-edged square — the comic take on the dot. */
 export function Swatch({ color, size = 12 }: { color: string | null | undefined; size?: number }) {
   const { colors } = useComic();
-  return <span className="shrink-0 border-2" style={{ width: size, height: size, background: color ?? colors.PAPER_ALT, borderColor: colors.INK }} aria-hidden />;
+  return <span className="shrink-0 border-2" style={{ width: size, height: size, background: color ?? colors.PAPER_ALT, borderColor: colors.LINE }} aria-hidden />;
 }
 
 /**
@@ -29,7 +29,7 @@ export function TeamMenu({ selector, triggerRef }: { selector: TeamSelectorModel
       placement="bottom end"
       offset={8}
       triggerRef={triggerRef}
-      style={{ ...portalVars, background: colors.PAPER_RAISED, borderColor: colors.INK, boxShadow: `4px 4px 0 ${colors.INK}` }}
+      style={{ ...portalVars, background: colors.PAPER_RAISED, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.LINE}` }}
       className="comic-panel-pop z-[60] min-w-52 overflow-hidden rounded-md border-[3px] outline-none"
     >
       <AriaMenu
@@ -42,7 +42,7 @@ export function TeamMenu({ selector, triggerRef }: { selector: TeamSelectorModel
             key={team.id}
             id={team.id}
             textValue={team.name}
-            className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm outline-none focus:bg-[var(--comic-yellow)] hovered:bg-[var(--comic-yellow)] focus:text-[#0b0b0d] hovered:text-[#0b0b0d]"
+            className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm outline-none focus:bg-[var(--comic-yellow)] hovered:bg-[var(--comic-yellow)] focus:text-[var(--comic-on-yellow)] hovered:text-[var(--comic-on-yellow)]"
             style={{ color: colors.INK, borderColor: colors.RULE }}
           >
             <Swatch color={team.color} />

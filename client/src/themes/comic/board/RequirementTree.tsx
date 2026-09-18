@@ -10,7 +10,7 @@ function Box({ done, dim, colors }: { done: boolean; dim: boolean; colors: Comic
     <span
       aria-hidden
       className="mt-0.5 flex size-4 shrink-0 items-center justify-center border-2"
-      style={{ borderColor: dim ? colors.INK_SUBTLE : colors.INK, background: done ? colors.OK : colors.PAPER_RAISED, color: "#fffaf0", transform: "rotate(-2deg)" }}
+      style={{ borderColor: dim ? colors.INK_SUBTLE : colors.LINE, background: done ? colors.OK : colors.PAPER_RAISED, color: colors.ON_LOUD, transform: "rotate(-2deg)" }}
     >
       {done && <CheckIcon size={11} />}
     </span>
@@ -59,7 +59,7 @@ export function RequirementTree({ node, root }: { node: RequirementNodeModel; ro
     );
   }
   return (
-    <div className={root ? "" : "ml-1.5 border-l-[3px] pl-3"} style={root ? undefined : { borderColor: node.complete ? colors.OK : colors.INK }}>
+    <div className={root ? "" : "ml-1.5 border-l-[3px] pl-3"} style={root ? undefined : { borderColor: node.complete ? colors.OK : colors.LINE }}>
       {node.showHeading && (
         <span className="inline-flex items-center gap-1.5 text-base uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: node.complete ? colors.OK : colors.INK }}>
           {node.label}

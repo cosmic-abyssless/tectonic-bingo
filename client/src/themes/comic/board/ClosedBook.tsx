@@ -316,7 +316,7 @@ function CoverDogEar({ colors }: { colors: ComicColors }) {
         <polygon
           points="0,0 0,100 100,100"
           fill={colors.PAPER}
-          stroke={colors.INK}
+          stroke={colors.LINE}
           strokeWidth={(COVER_BORDER / DOG_EAR) * 100}
           strokeLinejoin="round"
         />

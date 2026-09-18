@@ -18,17 +18,17 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
   return (
     <article
       className="relative border-[3px] p-3 pr-4"
-      style={{ borderColor: colors.INK, background: colors.PAPER_RAISED, boxShadow: `4px 4px 0 ${colors.INK}`, color: colors.INK_BODY }}
+      style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `4px 4px 0 ${colors.LINE}`, color: colors.INK_BODY }}
     >
       <Stamp kind={stampKind} size="sm" rotate={-10} className="absolute -right-2 -top-3" />
 
       <div className="flex items-start gap-3">
         {submission.thumbnailUrl ? (
-          <a href={submission.thumbnailUrl} target="_blank" rel="noreferrer" className="shrink-0 -rotate-3 cursor-pointer border-[3px] outline-none transition-[filter] hover:brightness-90 focus-visible:ring-2" style={{ borderColor: colors.INK, background: "#fff", padding: 2, boxShadow: `2px 2px 0 ${colors.INK}` }} title="View screenshot">
+          <a href={submission.thumbnailUrl} target="_blank" rel="noreferrer" className="shrink-0 -rotate-3 cursor-pointer border-[3px] outline-none transition-[filter] hover:brightness-90 focus-visible:ring-2" style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, padding: 2, boxShadow: `2px 2px 0 ${colors.LINE}` }} title="View screenshot">
             <img src={submission.thumbnailUrl} alt="Submission screenshot" className="block size-14 object-cover" />
           </a>
         ) : (
-          <div className="flex size-14 shrink-0 -rotate-3 items-center justify-center border-[3px]" style={{ borderColor: colors.INK, color: colors.INK_SUBTLE, background: colors.PAPER }} aria-hidden>
+          <div className="flex size-14 shrink-0 -rotate-3 items-center justify-center border-[3px]" style={{ borderColor: colors.LINE, color: colors.INK_SUBTLE, background: colors.PAPER }} aria-hidden>
             <ImageIcon size={16} />
           </div>
         )}

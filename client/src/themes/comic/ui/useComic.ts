@@ -12,6 +12,10 @@ export function useComic(): { colors: ComicColors; vars: CSSProperties; scheme: 
 export function comicVars(c: ComicColors): CSSProperties {
   return {
     "--comic-ink": c.INK,
+    "--comic-line": c.LINE,
+    "--comic-on-yellow": c.ON_YELLOW,
+    "--comic-title-fill": c.TITLE_FILL,
+    "--comic-title-stroke": c.TITLE_STROKE,
     "--comic-paper": c.PAPER,
     "--comic-paper-raised": c.PAPER_RAISED,
     "--comic-cyan": c.CYAN,
@@ -19,7 +23,7 @@ export function comicVars(c: ComicColors): CSSProperties {
     "--comic-yellow": c.YELLOW,
     "--comic-red": c.RED,
     "--comic-halftone-ink": c.HALFTONE,
-    "--comic-ray": c.INK === "#0b0b0d" ? "rgba(11,11,13,0.10)" : "rgba(247,236,210,0.07)",
-    "--comic-shade-ink": c.INK === "#0b0b0d" ? "rgba(11,11,13,0.30)" : "rgba(247,236,210,0.18)",
+    "--comic-ray": c.RAY,
+    "--comic-shade-ink": c.SHADE,
   } as CSSProperties;
 }

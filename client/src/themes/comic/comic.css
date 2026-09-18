@@ -5,6 +5,37 @@
  * so this file stays scheme-agnostic.
  */
 
+/* ---- Lettering ------------------------------------------------------- */
+
+/* Bangers only ships one weight; a bold request is faked by the browser and
+ * smears the letterforms. Pin every element lettered in it to 400, even when
+ * a core component or a parent class asked for semibold/bold. */
+[style*="Bangers"],
+[style*="--font-heading"],
+[style*="Bangers"] *:not([style*="Sofia"]),
+[style*="--font-heading"] *:not([style*="Sofia"]) {
+  font-weight: 400 !important;
+  font-synthesis: none;
+}
+
+/* The TECTONIC masthead box. The lettering is trimmed to its cap height so the
+ * red shows the same amount above and below it (a font's line box leaves more
+ * room under the baseline than over the caps). Browsers without text-box-trim
+ * get the same result from asymmetric padding, worked out for this font:
+ * its baseline sits 0.125em further from the bottom than the caps sit from the
+ * top, so the top padding is that much larger. */
+.comic-logo {
+  line-height: 0.8;
+  padding: 0.125em 0.18em 0;
+}
+@supports (text-box: trim-both cap alphabetic) {
+  .comic-logo {
+    text-box: trim-both cap alphabetic;
+    line-height: 1;
+    padding: 0.12em 0.18em;
+  }
+}
+
 /* ---- Print effects -------------------------------------------------- */
 
 /* Halftone dot field. Density is controlled by the mask; corners are heavier
@@ -58,17 +89,16 @@
   background-size: 5px 5px;
 }
 
-/* Cover lettering: white with a thin black outline and a hard black drop.
- * Always literal black (not --comic-ink, which is cream in dark mode) so it
- * reads on any background. Sized in em so it scales with the font. */
+/* Display lettering: a light fill with a thin outline and a hard drop in the
+ * palette's title stroke. Sized in em so it scales with the font. */
 .comic-outline-text {
-  color: #fff;
+  color: var(--comic-title-fill, #fff);
   text-shadow:
-    -0.03em -0.03em 0 #000,
-    0.03em -0.03em 0 #000,
-    -0.03em 0.03em 0 #000,
-    0.03em 0.03em 0 #000,
-    0.08em 0.08em 0 #000;
+    -0.03em -0.03em 0 var(--comic-title-stroke, #000),
+    0.03em -0.03em 0 var(--comic-title-stroke, #000),
+    -0.03em 0.03em 0 var(--comic-title-stroke, #000),
+    0.03em 0.03em 0 var(--comic-title-stroke, #000),
+    0.08em 0.08em 0 var(--comic-title-stroke, #000);
 }
 
 /* Radial speed lines. */
@@ -85,8 +115,8 @@
 
 /* Thick ink frame with a hard offset shadow. */
 .comic-ink-panel {
-  border: 3px solid var(--comic-ink, #0b0b0d);
-  box-shadow: var(--comic-shadow-x, 5px) var(--comic-shadow-y, 5px) 0 var(--comic-ink, #0b0b0d);
+  border: 3px solid var(--comic-line, #0b0b0d);
+  box-shadow: var(--comic-shadow-x, 5px) var(--comic-shadow-y, 5px) 0 var(--comic-line, #0b0b0d);
 }
 
 /* Pushable: translates into its shadow while pressed. */
@@ -100,12 +130,12 @@
  * survives; !important on the shadow because the shadow is set inline. */
 .comic-lift:hover:not(:disabled):not([data-pressed]) {
   translate: -1px -1px;
-  box-shadow: 5px 5px 0 var(--comic-ink, #0b0b0d) !important;
+  box-shadow: 5px 5px 0 var(--comic-line, #0b0b0d) !important;
   filter: brightness(0.96);
 }
 .comic-ghost:hover:not(:disabled) {
   background: var(--comic-yellow, #f5d63d) !important;
-  color: #0b0b0d !important;
+  color: var(--comic-on-yellow, #0b0b0d) !important;
 }
 
 /* Navigation: a link, not a button — underlined ink lettering, no frame. */
@@ -122,12 +152,12 @@
 .comic-link:hover,
 .comic-link:focus-visible {
   background: var(--comic-yellow, #f5d63d);
-  color: #0b0b0d;
+  color: var(--comic-on-yellow, #0b0b0d);
 }
 .comic-press[data-pressed],
 .comic-press:active {
   transform: translate(3px, 3px);
-  box-shadow: 1px 1px 0 var(--comic-ink, #0b0b0d) !important;
+  box-shadow: 1px 1px 0 var(--comic-line, #0b0b0d) !important;
 }
 
 /* ---- Keyframes ------------------------------------------------------ */
@@ -214,13 +244,13 @@
 /* Page text scroll area inside the book. */
 .comic-page-scroll {
   scrollbar-width: thin;
-  scrollbar-color: var(--comic-ink, #0b0b0d) transparent;
+  scrollbar-color: var(--comic-line, #0b0b0d) transparent;
 }
 .comic-page-scroll::-webkit-scrollbar {
   width: 6px;
 }
 .comic-page-scroll::-webkit-scrollbar-thumb {
-  background: var(--comic-ink, #0b0b0d);
+  background: var(--comic-line, #0b0b0d);
 }
 
 /* Wavy paper edge for dialogs (mask applied on a wrapper, border drawn by an SVG). */
