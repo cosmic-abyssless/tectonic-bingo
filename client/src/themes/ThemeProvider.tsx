@@ -1,21 +1,21 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { defaultTheme } from "./default";
-import { defaultTokens } from "./tokens";
 import { tokensToCssVars } from "./tokens";
-import { isKnownTheme, onThemeHmrUpdate, resolveTheme, type ResolvedTheme } from "./registry";
+import { onThemeHmrUpdate, peekTheme, resolveTheme, type ResolvedTheme } from "./registry";
 import { ThemeContext } from "./context";
-import type { ThemeSlots } from "./slots";
 import { useResolvedColorScheme } from "../core/ui/colorScheme";
-
-const DEFAULT_RESOLVED: ResolvedTheme = { key: defaultTheme.key, tokens: defaultTokens, slots: defaultTheme.slots as ThemeSlots };
 
 // Not React.lazy/Suspense: we need a whole ThemeDefinition object, caching
 // across remounts, and an admin theme-key edit must not re-suspend the tree.
-// While a non-default theme loads, the tree renders under the default theme
-// (its PageLoading slot is what a loading page shows).
-export function ThemeProvider({ themeKey, children }: { themeKey: string; children: ReactNode }) {
+// While a non-default theme's chunk is still loading, `fallback` (a neutral
+// loading state) is shown instead of the page: rendering the page under the
+// default theme and swapping when the real one arrives paints a visibly
+// un-themed page for a few frames. Themes are preloaded early (see
+// rememberedTheme.ts) so this is rarely on screen for long. Once a theme is
+// showing, a later change of `themeKey` keeps the current one until the new one
+// is ready rather than falling back to the loading state.
+export function ThemeProvider({ themeKey, children, fallback = null }: { themeKey: string; children: ReactNode; fallback?: ReactNode }) {
   const scheme = useResolvedColorScheme();
-  const [resolved, setResolved] = useState<ResolvedTheme>(() => (isKnownTheme(themeKey) ? DEFAULT_RESOLVED : (resolveTheme(themeKey) as ResolvedTheme)));
+  const [resolved, setResolved] = useState<ResolvedTheme | null>(() => peekTheme(themeKey));
   const requestedKey = useRef(themeKey);
 
   useEffect(() => {
@@ -46,6 +46,8 @@ export function ThemeProvider({ themeKey, children }: { themeKey: string; childr
       }
     });
   }, [themeKey]);
+
+  if (!resolved) return <>{fallback}</>;
 
   const activeTokens = resolved.tokens[scheme];
   return (

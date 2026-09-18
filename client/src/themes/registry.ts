@@ -43,8 +43,12 @@ const DEFAULT_RESOLVED: ResolvedTheme = { key: defaultTheme.key, tokens: default
 // import.meta.hot is statically undefined and every module is loaded
 // exactly once.
 const cache: Map<string, Promise<ResolvedTheme>> = import.meta.hot?.data.themeCache ?? new Map();
+// The same themes once loaded, so a provider can start on a theme synchronously
+// (peekTheme) instead of rendering the default theme while the chunk loads.
+const loaded: Map<string, ResolvedTheme> = import.meta.hot?.data.themeLoaded ?? new Map();
 const hmrListeners: Set<() => void> = import.meta.hot?.data.hmrListeners ?? new Set();
 if (import.meta.hot) {
+  import.meta.hot.data.themeLoaded = loaded;
   import.meta.hot.data.themeCache = cache;
   import.meta.hot.data.hmrListeners = hmrListeners;
 }
@@ -68,6 +72,20 @@ export function mergeTheme(base: ResolvedTheme, def: ThemeDefinition): ResolvedT
   };
 }
 
+/**
+ * The theme for `key` if it is available right now: the default theme (or an
+ * unknown key, which resolves to it) always is; a lazy theme only once its chunk
+ * has loaded. null means "not yet" — call resolveTheme / preloadTheme.
+ */
+export function peekTheme(key: string): ResolvedTheme | null {
+  return loaders[key] ? (loaded.get(key) ?? null) : DEFAULT_RESOLVED;
+}
+
+/** Starts loading a lazy theme's chunk without waiting for it (a no-op for the default theme or an unknown key). */
+export function preloadTheme(key: string | null | undefined): void {
+  if (key && loaders[key]) void resolveTheme(key);
+}
+
 // "default" or an unknown key resolves synchronously to the merged default
 // theme. A known lazy key resolves asynchronously, cached per key; an import
 // failure warns and falls back to default (never throws).
@@ -78,7 +96,11 @@ export function resolveTheme(key: string): ResolvedTheme | Promise<ResolvedTheme
   let cached = cache.get(key);
   if (!cached) {
     cached = loader()
-      .then((mod) => mergeTheme(DEFAULT_RESOLVED, mod.default))
+      .then((mod) => {
+        const theme = mergeTheme(DEFAULT_RESOLVED, mod.default);
+        loaded.set(key, theme);
+        return theme;
+      })
       .catch((err) => {
         console.warn(`[themes] failed to load theme "${key}", falling back to default`, err);
         return DEFAULT_RESOLVED;
@@ -108,6 +130,8 @@ export function onThemeHmrUpdate(listener: () => void): () => void {
   return () => hmrListeners.delete(listener);
 }
 export function pushThemeHmrUpdate(def: ThemeDefinition): void {
-  cache.set(def.key, Promise.resolve(mergeTheme(DEFAULT_RESOLVED, def)));
+  const theme = mergeTheme(DEFAULT_RESOLVED, def);
+  loaded.set(def.key, theme);
+  cache.set(def.key, Promise.resolve(theme));
   hmrListeners.forEach((listener) => listener());
 }
