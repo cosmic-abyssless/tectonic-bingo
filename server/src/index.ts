@@ -4,6 +4,7 @@ import "./env";
 import path from "path";
 import fs from "fs";
 import http from "http";
+import compression from "compression";
 import express from "express";
 import session from "express-session";
 import createSqliteStoreFactory from "better-sqlite3-session-store";
@@ -77,6 +78,10 @@ app.use(
 // board with many tiles and deep requirement trees can run several MB of
 // JSON (see POST /api/admin/bingos/import).
 app.use(express.json({ limit: "50mb" }));
+
+// gzip/deflate for API JSON (the board is ~175 KB raw, ~18 KB compressed). The
+// default filter skips already-compressed types, so images pass through.
+app.use(compression());
 
 // Session middleware — backed by SQLite so sessions survive a server restart
 // (the express-session default MemoryStore does not).
