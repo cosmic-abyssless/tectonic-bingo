@@ -10,6 +10,17 @@ import { TileModal } from "./board/TileModal";
 import { TaskPanel } from "./board/TaskPanel";
 import { RequirementTree } from "./board/RequirementTree";
 import { TeamBanner } from "./page/TeamBanner";
+import { TeamSelector, TeamBadge } from "./page/TeamSelector";
+import { PageHeader } from "./page/PageHeader";
+import { SubmissionsDrawer } from "./page/SubmissionsDrawer";
+import { RulesDialog } from "./page/RulesDialog";
+import { TeamInfoDialog } from "./page/TeamInfoDialog";
+import { SubmissionModal } from "./submission/SubmissionModal";
+import { ScreenshotDropzone } from "./submission/ScreenshotDropzone";
+import { AnalysisPanel } from "./submission/AnalysisPanel";
+import { TilePicker, RequirementPicker } from "./submission/Pickers";
+import { TaskPicker } from "./submission/TaskPicker";
+import { StagedClaimsList } from "./submission/StagedClaimsList";
 
 // Starter scaffold for the "comic" theme — see docs/theming.md for the full
 // writer's guide (resolution/fallback rules, what a slot may import, the
@@ -149,9 +160,22 @@ const comicTheme: ThemeDefinition = {
     TaskPanel,
     RequirementTree,
     TeamBanner,
+    TeamSelector,
+    TeamBadge,
     TileSearch,
     TileCell,
     TileModal,
+    PageHeader,
+    SubmissionsDrawer,
+    RulesDialog,
+    TeamInfoDialog,
+    SubmissionModal,
+    ScreenshotDropzone,
+    AnalysisPanel,
+    TilePicker,
+    TaskPicker,
+    RequirementPicker,
+    StagedClaimsList,
   },
 };
 

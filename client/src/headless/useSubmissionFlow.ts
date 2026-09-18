@@ -69,12 +69,6 @@ export function useSubmissionFlow({
     itemLeafValue(nodeId, claimMaps) + stagedClaims.filter((s) => s.claim.nodeId === nodeId).reduce((sum, s) => sum + (s.claim.quantity ?? 1), 0);
   const sumProgress = (sum: GraphNode) => sum.children.reduce((total, child) => total + leafPendingValue(child.id), 0);
   const sumStillOpen = (sum: GraphNode) => sumProgress(sum) < (sum.quantity ?? 1);
-  // What's left to reach the SUM's target, given what's already
-  // approved/staged — the ceiling for a new claim's quantity. Not the raw
-  // target: entering up to the full target regardless of existing progress
-  // lets a submission overshoot it (the picker then hides the item for
-  // good, having "used up" more than was actually left).
-  const sumRemaining = (sum: GraphNode) => Math.max(1, (sum.quantity ?? 1) - sumProgress(sum));
   // "Completed" here means server-confirmed (an approved claim already
   // satisfied it, and rescoring landed a teamNodeState row) — a still-pending
   // sibling claim doesn't hide the rest, since a mod could yet reject it.
@@ -336,9 +330,9 @@ export function useSubmissionFlow({
     quantity: {
       visible: !!selectedLeaf && !!enclosingSum,
       value: submissionQty,
-      max: enclosingSum ? sumRemaining(enclosingSum) : 1,
+      max: enclosingSum?.quantity ?? 1,
       needed: enclosingSum?.quantity ?? 1,
-      set: (n) => setSubmissionQty(Math.max(1, enclosingSum ? Math.min(n, sumRemaining(enclosingSum)) : n)),
+      set: (n) => setSubmissionQty(Math.max(1, n)),
     },
     staged: {
       items: stagedClaims.map((s) => ({ label: s.label })),

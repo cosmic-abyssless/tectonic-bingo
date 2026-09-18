@@ -1,98 +1,71 @@
 import type { SubmissionModel } from "../../../headless/types";
 import { ImageIcon } from "../../../core/ui/icons";
-import { useResolvedColorScheme } from "../../../core/ui/colorScheme";
-import { COMIC_FONT } from "../font";
-import { getColors } from "./colors";
+import { PlayerName } from "../../../core/tectonic/PlayerName";
+import { InkTag } from "../ui/CaptionBox";
+import { Stamp } from "../ui/Stamp";
+import { useComic } from "../ui/useComic";
 
-const STATUS_LABEL: Record<SubmissionModel["status"], string> = {
-  pending: "Pending",
-  approved: "Approved",
-  rejected: "Rejected",
-};
-
-// A comic-styled stand-in for the shared, cross-theme <SubmissionRow> —
-// that one stacks screenshot/status/claims/author/notes into a tall column,
-// tuned for dense mod-dashboard lists. Here each submission gets a whole
-// chat bubble to itself, so the same info spreads wider instead: a
-// thumbnail beside the claims summary, with the author/time and status
-// sharing one line underneath. Which part (A/B) it's for isn't shown here —
-// that's already conveyed by which page of the book the tile modal has
-// open when you submit.
-export function SubmissionBubble({
-  submission,
-}: {
-  submission: SubmissionModel;
-}) {
-  const { INK, INK_BODY, INK_SUBTLE, GREEN, ORANGE, RED } = getColors(useResolvedColorScheme());
-  const STATUS_COLOR: Record<SubmissionModel["status"], string> = {
-    pending: ORANGE,
-    approved: GREEN,
-    rejected: RED,
-  };
-  const meta = submission.submittedBy
-    ? `by ${submission.submittedBy} ${submission.timeAgo}`
-    : submission.timeAgo;
+/**
+ * A submission rendered as a postcard-ish paper card
+ * with a screenshot "photo" clipped to the corner, the claim summary as the
+ * body text, sender + time as the sign-off, and a rubber stamp for status.
+ */
+export function SubmissionBubble({ submission, showTile = false }: { submission: SubmissionModel; showTile?: boolean }) {
+  const { colors } = useComic();
+  const stampKind = submission.status;
+  const who = submission.detail.submittedByUser;
 
   return (
-    <div>
-      <div className="flex items-center gap-3">
+    <article
+      className="relative border-[3px] p-3 pr-4"
+      style={{ borderColor: colors.INK, background: colors.PAPER_RAISED, boxShadow: `4px 4px 0 ${colors.INK}`, color: colors.INK_BODY }}
+    >
+      <Stamp kind={stampKind} size="sm" rotate={-10} className="absolute -right-2 -top-3" />
+
+      <div className="flex items-start gap-3">
         {submission.thumbnailUrl ? (
-          <a
-            href={submission.thumbnailUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="shrink-0"
-            title="View screenshot"
-          >
-            <img
-              src={submission.thumbnailUrl}
-              alt="Submission screenshot"
-              className="size-12 rounded-md border-2 object-cover"
-              style={{ borderColor: INK }}
-            />
+          <a href={submission.thumbnailUrl} target="_blank" rel="noreferrer" className="shrink-0 -rotate-3 border-[3px] outline-none focus-visible:ring-2" style={{ borderColor: colors.INK, background: "#fff", padding: 2, boxShadow: `2px 2px 0 ${colors.INK}` }} title="View screenshot">
+            <img src={submission.thumbnailUrl} alt="Submission screenshot" className="block size-14 object-cover" />
           </a>
         ) : (
-          <div
-            className="flex size-12 shrink-0 items-center justify-center rounded-md border-2"
-            style={{ borderColor: INK, color: INK_SUBTLE }}
-            aria-hidden
-          >
-            <ImageIcon size={14} />
+          <div className="flex size-14 shrink-0 -rotate-3 items-center justify-center border-[3px]" style={{ borderColor: colors.INK, color: colors.INK_SUBTLE, background: colors.PAPER }} aria-hidden>
+            <ImageIcon size={16} />
           </div>
         )}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm" style={{ color: INK_BODY }}>
+
+        <div className="min-w-0 flex-1 pr-10">
+          {showTile && (
+            <p className="mb-1 truncate text-xs uppercase tracking-wider" style={{ color: colors.INK_SUBTLE }}>
+              {submission.tileName}
+            </p>
+          )}
+          {submission.taskLabels.length > 0 && (
+            <div className="mb-1 flex flex-wrap gap-1">
+              {submission.taskLabels.map((l) => (
+                <InkTag key={l} className="!text-xs">
+                  {l}
+                </InkTag>
+              ))}
+            </div>
+          )}
+          <p className="text-sm leading-snug" style={{ color: colors.INK }}>
             {submission.summary}
           </p>
-          <div className="mt-0.5 flex items-baseline justify-between gap-2">
-            <span
-              className="truncate text-[11px]"
-              style={{ color: INK_SUBTLE }}
-            >
-              {meta}
-            </span>
-            <span
-              className="shrink-0 text-xs uppercase"
-              style={{
-                fontFamily: COMIC_FONT,
-                color: STATUS_COLOR[submission.status],
-                letterSpacing: "0.04em",
-              }}
-            >
-              {STATUS_LABEL[submission.status]}
-            </span>
-          </div>
+          <p className="mt-1 text-xs italic" style={{ color: colors.INK_SUBTLE }}>
+            {"— "}
+            {who ? <PlayerName userId={who.id}>{submission.submittedBy ?? "someone"}</PlayerName> : submission.submittedBy ?? "someone"}
+            {", "}
+            {submission.timeAgo}
+          </p>
         </div>
       </div>
 
       {submission.reviewerNotes && (
-        <p
-          className="mt-2 border-l-2 pl-2 text-xs"
-          style={{ borderColor: RED, color: RED }}
-        >
+        <p className="mt-2 border-l-[3px] pl-2 text-xs leading-relaxed" style={{ borderColor: colors.BAD, color: colors.BAD }}>
+          <span className="uppercase tracking-wider">Judges: </span>
           {submission.reviewerNotes}
         </p>
       )}
-    </div>
+    </article>
   );
 }

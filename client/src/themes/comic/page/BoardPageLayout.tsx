@@ -3,7 +3,7 @@ import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
 import { useScreenshotCapture } from "../../../headless/useScreenshotCapture";
 import { ScreenshotDropOverlay } from "../../../core/ui/ScreenshotDropOverlay";
 import { useSlot } from "../../context";
-import { useDotGridStyle } from "../dotGrid";
+import { ComicPage } from "../fx/ComicPage";
 
 export function BoardPageLayout() {
   const page = useBingoPage();
@@ -14,7 +14,6 @@ export function BoardPageLayout() {
   // "hover" treatment on the board itself, tying the two together.
   const highlightedTileId = page.search.showDropdown ? page.search.results[page.search.highlightedIndex]?.id ?? null : null;
   const { dragActive } = useScreenshotCapture(page);
-  const dotGridStyle = useDotGridStyle();
 
   const PageHeader = useSlot("PageHeader");
   const SignupStage = useSlot("SignupStage");
@@ -32,7 +31,7 @@ export function BoardPageLayout() {
   const SubmissionModal = useSlot("SubmissionModal");
 
   return (
-    <div className="min-h-screen text-on-surface" style={dotGridStyle}>
+    <ComicPage>
       <PageHeader page={page} />
 
       <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
@@ -72,6 +71,7 @@ export function BoardPageLayout() {
       {page.submit.open && (
         <SubmissionFlowHost
           initialTileId={page.submit.initialTileId}
+          initialTaskId={page.submit.initialTaskId}
           initialFile={page.submit.initialFile}
           onClose={page.submit.hide}
           onSuccess={() => {}}
@@ -110,6 +110,6 @@ export function BoardPageLayout() {
             : undefined
         }
       />
-    </div>
+    </ComicPage>
   );
 }
