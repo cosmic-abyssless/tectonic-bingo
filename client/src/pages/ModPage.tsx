@@ -58,10 +58,17 @@ export function ModPage() {
   const { data: shell } = useBingo(slug);
   const { user } = useAuth();
   const isAdmin = !!user?.isAdmin;
-  const [tab, setTab] = useState("submissions");
+  const stage = shell?.bingo.stage;
+  const [tab, setTab] = useState(() => (stage === "planning" && isAdmin ? "settings" : "submissions"));
+
+  // When a newly created or planning-stage bingo loads, default admin to settings instead of submissions
+  useEffect(() => {
+    if (stage === "planning" && isAdmin && tab === "submissions") {
+      setTab("settings");
+    }
+  }, [stage, isAdmin, tab]);
   const [outOfStageTabs, setOutOfStageTabs] = usePreference("outOfStageTabs");
 
-  const stage = shell?.bingo.stage;
   const visibleTabs = useMemo(() => {
     if (!stage) return [];
     const allowed = TABS.filter((t) => !t.adminOnly || isAdmin).map((t) => ({ ...t, dimmed: isOutOfStage(t, stage) }));

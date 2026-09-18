@@ -105,6 +105,10 @@ const TEAM_ACTIVITY_DEFAULT_LIMIT = 50;
 // by category too. The full picture (including these) is still available in
 // the mod panel's Audit log tab via queryAuditLog.
 const TEAM_ACTIVITY_CATEGORIES: AuditCategory[] = ["submission", "points", "team"];
+// Hands going up and down on tile parts are coordination chatter, not
+// history; the board already shows who's on what.
+const TEAM_ACTIVITY_EXCLUDED_ACTIONS: AuditAction[] = ["team.tile_interest_set"];
+const TEAM_ACTIVITY_ACTIONS = TEAM_ACTIVITY_CATEGORIES.flatMap(actionsInCategory).filter((a) => !TEAM_ACTIVITY_EXCLUDED_ACTIONS.includes(a));
 
 // Player rule: their own team's team/public rows, plus site-wide public
 // rows (team_id null). A mod instead sees every row scoped to this team,
@@ -126,7 +130,7 @@ export function queryTeamActivity(
   const conditions = [
     eq(auditLog.bingoId, bingoId),
     visibilityRule,
-    inArray(auditLog.action, TEAM_ACTIVITY_CATEGORIES.flatMap(actionsInCategory)),
+    inArray(auditLog.action, TEAM_ACTIVITY_ACTIONS),
   ];
   if (opts.cursor !== undefined) conditions.push(lt(auditLog.id, opts.cursor));
 

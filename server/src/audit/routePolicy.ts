@@ -16,7 +16,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "POST /api/bingos/:slug/signup/pairing/:pairingId/respond": ["pairing.declined", "pairing.accepted"],
   "POST /api/bingos/:slug/draft/pick": ["draft.pick"],
   "PUT /api/bingos/:slug/draft/ratings/:signupId": ["draft.rating_set"],
-  "PUT /api/bingos/:slug/tiles/:tileId/interest": ["team.tile_interest_set"],
+  "PUT /api/bingos/:slug/tiles/:tileId/tasks/:taskId/interest": ["team.tile_interest_set"],
   "PATCH /api/bingos/:slug/teams/:teamId": ["team.updated"],
 
   // routes/mod.ts, mounted at /api/bingos/:slug/mod

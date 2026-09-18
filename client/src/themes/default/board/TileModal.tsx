@@ -8,7 +8,19 @@ import { PlayerName } from "../../../core/tectonic/PlayerName";
 import { useSlot } from "../../context";
 
 /** `tile` null while `isOpen` transitions closed (kept mounted so it can animate out). */
-export function TileModal({ tile, isOpen, onClose, onSubmit, onToggleInterest }: { tile: TileModel | null; isOpen: boolean; onClose: () => void; onSubmit?: () => void; onToggleInterest?: () => void }) {
+export function TileModal({
+  tile,
+  isOpen,
+  onClose,
+  onSubmit,
+  onToggleInterest,
+}: {
+  tile: TileModel | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit?: (taskId?: string) => void;
+  onToggleInterest?: (taskId: string) => void;
+}) {
   return (
     <Dialog isOpen={isOpen} onClose={onClose} size="lg">
       {tile && <TileDetails tile={tile} onClose={onClose} onSubmit={onSubmit} onToggleInterest={onToggleInterest} />}
@@ -16,10 +28,21 @@ export function TileModal({ tile, isOpen, onClose, onSubmit, onToggleInterest }:
   );
 }
 
-function TileDetails({ tile, onClose, onSubmit, onToggleInterest }: { tile: TileModel; onClose: () => void; onSubmit?: () => void; onToggleInterest?: () => void }) {
+function TileDetails({
+  tile,
+  onClose,
+  onSubmit,
+  onToggleInterest,
+}: {
+  tile: TileModel;
+  onClose: () => void;
+  onSubmit?: (taskId?: string) => void;
+  onToggleInterest?: (taskId: string) => void;
+}) {
   const TaskPanel = useSlot("TaskPanel");
   const TileSubmissions = useSlot("TileSubmissions");
   const submitDisabled = tile.progress.allComplete || tile.freeze.isFrozen;
+  const showInterestRow = !!onToggleInterest || tile.tasks.some((t) => t.interest.people.length > 0);
 
   return (
     <>
@@ -51,7 +74,7 @@ function TileDetails({ tile, onClose, onSubmit, onToggleInterest }: { tile: Tile
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {onSubmit && (
-            <Button variant="primary" size="sm" onPress={onSubmit} isDisabled={submitDisabled}>
+            <Button variant="primary" size="sm" onPress={() => onSubmit()} isDisabled={submitDisabled}>
               {tile.progress.allComplete ? "Complete" : tile.freeze.isFrozen ? "Frozen" : "Submit"}
             </Button>
           )}
@@ -61,31 +84,35 @@ function TileDetails({ tile, onClose, onSubmit, onToggleInterest }: { tile: Tile
         </div>
       </div>
 
-      {(onToggleInterest || tile.interest.people.length > 0) && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-outline px-5 py-3 text-sm">
-          {onToggleInterest && (
-            <Button variant={tile.interest.mine ? "primary" : "secondary"} size="sm" onPress={onToggleInterest} aria-pressed={tile.interest.mine}>
-              <HandIcon fill={tile.interest.mine ? "currentColor" : "none"} />
-              {tile.interest.mine ? "I'm on this" : "I'll do this"}
-            </Button>
-          )}
-          {tile.interest.people.length > 0 ? (
-            <p className="text-on-surface-muted">
-              <span className="text-on-surface-subtle">On this tile: </span>
-              {tile.interest.people.map((p, i) => (
-                <span key={p.id}>
-                  {i > 0 && ", "}
-                  <PlayerName userId={p.id}>{p.displayName}</PlayerName>
-                </span>
-              ))}
-            </p>
-          ) : (
-            <p className="text-on-surface-subtle">Nobody has claimed this tile yet.</p>
-          )}
-        </div>
+      {showInterestRow && (
+        <ul className="divide-y divide-outline border-b border-outline text-sm">
+          {tile.tasks.map((task) => (
+            <li key={task.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-2.5">
+              <span className="min-w-0 flex-1 truncate font-medium text-on-surface">{task.label}</span>
+              {task.interest.people.length > 0 ? (
+                <p className="text-on-surface-muted">
+                  {task.interest.people.map((p, i) => (
+                    <span key={p.id}>
+                      {i > 0 && ", "}
+                      <PlayerName userId={p.id}>{p.displayName}</PlayerName>
+                    </span>
+                  ))}
+                </p>
+              ) : (
+                <p className="text-on-surface-subtle">Unclaimed</p>
+              )}
+              {onToggleInterest && task.interest.canToggle && (
+                <Button variant={task.interest.mine ? "primary" : "secondary"} size="sm" onPress={() => onToggleInterest(task.id)} aria-pressed={task.interest.mine}>
+                  <HandIcon fill={task.interest.mine ? "currentColor" : "none"} />
+                  {task.interest.mine ? "I'm on this" : "I'll do this"}
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
 
-      <div className="grid divide-x divide-outline" style={{ gridTemplateColumns: `repeat(${Math.max(tile.tasks.length, 1)}, minmax(0, 1fr))` }}>
+      <div className="grid grid-cols-1 divide-y divide-outline md:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] md:divide-y-0 md:divide-x">
         {tile.tasks.map((task) => (
           <TaskPanel key={task.id} task={task} />
         ))}

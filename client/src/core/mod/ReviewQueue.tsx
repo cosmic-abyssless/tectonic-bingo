@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ModSubmissionRow, SubmissionScreenshot, SubmissionStatus } from "@bingo/shared";
 import { useCreatePointAdjustment, useModSubmissions, useReviewSubmission } from "../../api/queries";
 import { SubmissionStatusBadge } from "../ui/StatusBadge";
@@ -11,6 +11,14 @@ import { Field, Input, Textarea } from "../ui/Field";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { ScreenshotThumb } from "../submissions/ScreenshotThumb";
 import { claimsSummary } from "../submissions/claimsSummary";
+
+function KeyCap({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="inline-flex items-center justify-center rounded border border-outline bg-surface px-1.5 py-0.5 font-mono text-[10px] font-semibold text-on-surface-subtle shadow-xs">
+      {children}
+    </kbd>
+  );
+}
 
 type Filter = SubmissionStatus | "all";
 const FILTERS: { key: Filter; label: string }[] = [
@@ -106,14 +114,72 @@ export function ReviewQueue({ slug }: { slug: string }) {
     }
   }
 
+  // Keyboard navigation & shortcuts for reviewing submissions
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      // Don't intercept when user is typing in an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) {
+        return;
+      }
+
+      if (e.key === "ArrowDown" || e.key === "ArrowRight" || e.key === "j" || e.key === "J") {
+        e.preventDefault();
+        const pendingRows = visible.filter((r) => r.submission.status === "pending");
+        if (pendingRows.length === 0) return;
+        const currIndex = pendingRows.findIndex((r) => r.submission.id === expandedId);
+        const next = currIndex === -1 || currIndex >= pendingRows.length - 1 ? pendingRows[0] : pendingRows[currIndex + 1];
+        setExpandedId(next.submission.id);
+      } else if (e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "k" || e.key === "K") {
+        e.preventDefault();
+        const pendingRows = visible.filter((r) => r.submission.status === "pending");
+        if (pendingRows.length === 0) return;
+        const currIndex = pendingRows.findIndex((r) => r.submission.id === expandedId);
+        const prev = currIndex <= 0 ? pendingRows[pendingRows.length - 1] : pendingRows[currIndex - 1];
+        setExpandedId(prev.submission.id);
+      } else if (e.key === "a" || e.key === "A") {
+        if (!expandedId) return;
+        const curr = visible.find((r) => r.submission.id === expandedId && r.submission.status === "pending");
+        if (curr && !review.isPending) {
+          e.preventDefault();
+          submitReview(curr, "approve");
+        }
+      } else if (e.key === "r" || e.key === "R") {
+        if (!expandedId) return;
+        const curr = visible.find((r) => r.submission.id === expandedId && r.submission.status === "pending");
+        if (curr) {
+          e.preventDefault();
+          const textarea = document.getElementById(`notes-${curr.submission.id}`);
+          if (textarea) textarea.focus();
+        }
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [expandedId, visible, review.isPending, notes]);
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-1.5">
-        {FILTERS.map(({ key, label }) => (
-          <FilterChip key={key} active={filter === key} count={counts[key]} onPress={() => setFilter(key)}>
-            {label}
-          </FilterChip>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-1.5">
+          {FILTERS.map(({ key, label }) => (
+            <FilterChip key={key} active={filter === key} count={counts[key]} onPress={() => setFilter(key)}>
+              {label}
+            </FilterChip>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 text-xs text-on-surface-subtle">
+          <span className="flex items-center gap-1">
+            <KeyCap>↑</KeyCap><KeyCap>↓</KeyCap> or <KeyCap>J</KeyCap><KeyCap>K</KeyCap> Navigate
+          </span>
+          <span className="flex items-center gap-1">
+            <KeyCap>A</KeyCap> Approve
+          </span>
+          <span className="flex items-center gap-1">
+            <KeyCap>R</KeyCap> Reject
+          </span>
+        </div>
       </div>
 
       {allTeams.length > 0 && (
@@ -208,6 +274,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
 
                     <Field label="Notes (optional)">
                       <Textarea
+                        id={`notes-${row.submission.id}`}
                         value={notes[row.submission.id] ?? ""}
                         onChange={(e) => setNotes((prev) => ({ ...prev, [row.submission.id]: e.target.value }))}
                         placeholder="Visible to the submitting player…"
@@ -220,10 +287,16 @@ export function ReviewQueue({ slug }: { slug: string }) {
 
                     <div className="flex gap-2">
                       <Button variant="primary" className="flex-1" onPress={() => submitReview(row, "approve")} isDisabled={review.isPending}>
-                        {review.isPending ? "…" : "Approve"}
+                        <span className="flex items-center justify-center gap-1.5">
+                          {review.isPending ? "…" : "Approve"}
+                          <KeyCap>A</KeyCap>
+                        </span>
                       </Button>
                       <Button variant="danger" className="flex-1" onPress={() => submitReview(row, "reject")} isDisabled={review.isPending}>
-                        Reject
+                        <span className="flex items-center justify-center gap-1.5">
+                          Reject
+                          <KeyCap>R</KeyCap>
+                        </span>
                       </Button>
                     </div>
 

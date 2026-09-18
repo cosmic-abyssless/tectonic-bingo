@@ -29,8 +29,15 @@ const ACCOUNT_TYPE_BADGE: Partial<Record<AccountType, string>> = {
   unranked_group_ironman: unrankedGroupBadge,
 };
 
-export function AccountTypeIcon({ accountType }: { accountType: AccountType | null | undefined }) {
+/**
+ * The badges are 10x13 (13x13 for UIM) pixel art. `size` is the rendered
+ * height in px; the default is native. Scaled copies use nearest-neighbour
+ * so the pixels stay crisp instead of going blurry.
+ */
+export function AccountTypeIcon({ accountType, size, className = "" }: { accountType: AccountType | null | undefined; size?: number; className?: string }) {
   const badge = accountType && ACCOUNT_TYPE_BADGE[accountType];
   if (!badge) return null;
-  return <img src={badge} alt={ACCOUNT_TYPE_LABEL[accountType]} title={ACCOUNT_TYPE_LABEL[accountType]} className="inline-block align-[-2px]" />;
+  const label = ACCOUNT_TYPE_LABEL[accountType];
+  const style = size ? { height: size, width: "auto", imageRendering: "pixelated" as const } : undefined;
+  return <img src={badge} alt={label} title={label} className={`inline-block align-[-2px] ${className}`} style={style} />;
 }

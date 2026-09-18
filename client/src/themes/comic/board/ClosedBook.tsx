@@ -221,7 +221,13 @@ export function ClosedBook({
       >
         <div
           className="absolute inset-0 overflow-hidden"
-          style={{ border: coverBorder, backfaceVisibility: "hidden", clipPath: dogEar ? DOG_EAR_CLIP : undefined }}
+          style={{
+            border: coverBorder,
+            backfaceVisibility: "hidden",
+            WebkitBackfaceVisibility: "hidden",
+            clipPath: dogEar ? DOG_EAR_CLIP : undefined,
+            transform: "translateZ(1px)",
+          }}
         >
           <BookCoverArt tile={tile} colors={colors} fallbackColor={coverFallback} frozen={frozen} />
           {dogEar && <CoverDogEar colors={colors} />}
@@ -235,7 +241,8 @@ export function ClosedBook({
             borderRightWidth: 0,
             backgroundColor: colors.PAPER,
             backfaceVisibility: "hidden",
-            transform: "rotateY(180deg)",
+            WebkitBackfaceVisibility: "hidden",
+            transform: "rotateY(180deg) translateZ(1px)",
             boxShadow: LIFTED_PAGE_SHADOW,
           }}
         >
@@ -355,7 +362,8 @@ function PageFace({
         border,
         backgroundColor: colors.PAPER,
         backfaceVisibility: "hidden",
-        ...(side === "back" ? { borderRightWidth: 0, transform: "rotateY(180deg)", boxShadow: LIFTED_PAGE_SHADOW } : undefined),
+        WebkitBackfaceVisibility: "hidden",
+        ...(side === "back" ? { borderRightWidth: 0, transform: "rotateY(180deg) translateZ(1px)", boxShadow: LIFTED_PAGE_SHADOW } : { transform: "translateZ(1px)" }),
       }}
     >
       {children}

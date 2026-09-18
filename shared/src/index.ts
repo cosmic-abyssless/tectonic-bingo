@@ -333,14 +333,16 @@ export interface TeamProgressSummary {
   nodeStates: TeamNodeState[];
   adjustments: PointAdjustment[];
   totalPoints: number;
-  // Everyone on the team who has raised a hand for a tile. Same visibility
-  // as the rest of the team's progress.
+  // Everyone on the team who has raised a hand for a part of a tile. Same
+  // visibility as the rest of the team's progress.
   interests: TileInterest[];
 }
 
-/** A team member saying "I'll take this tile". */
+/** A team member saying "I'll take this part" of a tile. */
 export interface TileInterest {
   tileId: string;
+  /** The task node (a direct child of the tile's root) the hand is raised on. */
+  taskId: string;
   user: MinimalUser;
   createdAt: string;
 }

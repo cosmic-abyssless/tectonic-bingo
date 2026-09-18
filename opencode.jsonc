@@ -1,0 +1,17 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    // Motion AI Kit (motion.dev/docs/ai-kit). Docs/example search is free;
+    // motion-plus needs a Motion+ sign-in from the agent's MCP settings.
+    "motion": {
+      "type": "remote",
+      "url": "https://mcp.motion.dev",
+      "enabled": true
+    },
+    "motion-plus": {
+      "type": "remote",
+      "url": "https://mcp.motion.dev/plus",
+      "enabled": true
+    }
+  }
+}

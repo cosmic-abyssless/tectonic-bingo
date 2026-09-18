@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useColorSchemePreference } from "./colorScheme";
@@ -25,18 +25,25 @@ export function AppHeader({
   subtitle,
   menuItems,
   children,
+  className,
+  titleClassName,
+  style,
 }: {
   back?: { to: string; label: string };
   title: ReactNode;
   subtitle?: ReactNode;
   menuItems?: ReactNode;
   children?: ReactNode;
+  /** Extra classes on the <header>; themes use these to re-skin the bar. */
+  className?: string;
+  titleClassName?: string;
+  style?: CSSProperties;
 }) {
   const { user, logout } = useAuth();
   const [bugReportOpen, setBugReportOpen] = useState(false);
   const [colorScheme, setColorScheme] = useColorSchemePreference();
   return (
-    <header className="sticky top-0 z-20 border-b-[length:var(--control-border-width,1px)] border-outline bg-surface/90 backdrop-blur">
+    <header className={`sticky top-0 z-20 border-b-[length:var(--control-border-width,1px)] border-outline bg-surface/90 backdrop-blur ${className ?? ""}`} style={style}>
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-2.5 sm:px-6">
         <div className="flex min-w-0 items-center gap-2">
           {back && (
@@ -46,7 +53,7 @@ export function AppHeader({
           )}
           <div className="min-w-0 leading-tight">
             {/* Themeable via --font-heading/--font-heading-weight — both no-ops outside a themed page */}
-            <div className="truncate text-sm font-semibold text-on-surface" style={{ fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" }}>
+            <div className={`truncate text-sm font-semibold text-on-surface ${titleClassName ?? ""}`} style={{ fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" }}>
               {title}
             </div>
             {subtitle && <div className="truncate text-xs text-on-surface-muted">{subtitle}</div>}

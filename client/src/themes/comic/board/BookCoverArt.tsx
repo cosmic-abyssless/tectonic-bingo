@@ -95,7 +95,7 @@ export function BookCoverArt({
           plain mark. Once dog-eared, ClosedBook draws it on the fold. */}
       {mark && !mark.dogEared && (
         <div
-          className="absolute right-[4cqw] top-[4cqw] z-10 leading-none"
+          className="absolute right-[4cqw] top-[4cqw] leading-none"
           style={{ color: priceTextColor, fontFamily: COMIC_FONT, fontSize: "8.3cqw" }}
         >
           {mark.label}

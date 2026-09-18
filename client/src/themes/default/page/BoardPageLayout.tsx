@@ -54,7 +54,7 @@ export function BoardPageLayout() {
       <ScreenshotDropOverlay visible={dragActive} />
 
       {page.submit.open && (
-        <SubmissionFlowHost initialTileId={page.submit.initialTileId} initialFile={page.submit.initialFile} onClose={page.submit.hide} onSuccess={() => {}}>
+        <SubmissionFlowHost initialTileId={page.submit.initialTileId} initialTaskId={page.submit.initialTaskId} initialFile={page.submit.initialFile} onClose={page.submit.hide} onSuccess={() => {}}>
           {(flow) => <SubmissionModal flow={flow} />}
         </SubmissionFlowHost>
       )}
@@ -69,8 +69,8 @@ export function BoardPageLayout() {
         tile={modalTile}
         isOpen={page.openTile.id !== null}
         onClose={page.openTile.close}
-        onToggleInterest={modalTile?.interest.canToggle ? () => page.tileInterest.toggle(modalTile.id) : undefined}
-        onSubmit={page.canSubmit ? () => page.submit.show(page.openTile.id ?? undefined) : undefined}
+        onToggleInterest={modalTile?.interest.canToggle ? (taskId) => page.tileInterest.toggle(modalTile.id, taskId) : undefined}
+        onSubmit={page.canSubmit ? (taskId) => page.submit.show(page.openTile.id ?? undefined, undefined, taskId) : undefined}
       />
     </div>
   );

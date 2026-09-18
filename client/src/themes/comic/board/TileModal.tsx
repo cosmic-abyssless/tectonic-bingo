@@ -17,12 +17,15 @@ import {
 } from "react-aria-components";
 import type { SubmissionModel, TaskModel, TileModel } from "../../../headless/types";
 import { SubmissionBubble } from "./SubmissionBubble";
-import { ArrowLeftIcon, ArrowRightIcon, HandIcon, XIcon } from "../../../core/ui/icons";
+import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ClockIcon, HandIcon, LockIcon, XIcon } from "../../../core/ui/icons";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
 import { formatCountdown } from "../../../core/ui/time";
 import { useResolvedColorScheme } from "../../../core/ui/colorScheme";
 import { useSlot, useThemeTokens } from "../../context";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
+import { ComicButton } from "../ui/ComicButton";
+import { CaptionBox } from "../ui/CaptionBox";
+import { Stamp } from "../ui/Stamp";
 import {
   BASE_DEPTH,
   BASE_SHADOW,
@@ -111,8 +114,8 @@ export function TileModal({
   tile: TileModel | null;
   isOpen: boolean;
   onClose: () => void;
-  onSubmit?: () => void;
-  onToggleInterest?: () => void;
+  onSubmit?: (taskId?: string) => void;
+  onToggleInterest?: (taskId: string) => void;
 }) {
   return (
     // mode="wait": switching straight from one tile to another (via the
@@ -701,8 +704,8 @@ function FlyingBook({
 }: {
   tile: TileModel;
   onClose: () => void;
-  onSubmit?: () => void;
-  onToggleInterest?: () => void;
+  onSubmit?: (taskId?: string) => void;
+  onToggleInterest?: (taskId: string) => void;
 }) {
   const [isPresent, safeToRemove] = usePresence();
   const [scope, animate] = useAnimate<HTMLDivElement>();
@@ -1048,8 +1051,8 @@ function TileDetails({
   onFlipTo: (spread: number) => void;
   onCurl: (leaf: number, side: Side, at: Point | null) => void;
   onClose: () => void;
-  onSubmit?: () => void;
-  onToggleInterest?: () => void;
+  onSubmit?: (taskId?: string) => void;
+  onToggleInterest?: (taskId: string) => void;
 }) {
   const TaskPanel = useSlot("TaskPanel");
   const tokens = useThemeTokens();
@@ -1057,8 +1060,26 @@ function TileDetails({
 
   // The pages, in reading order.
   const pages: ReactNode[] = [
-    <SummaryPage key="summary" tile={tile} colors={colors} onSubmit={onSubmit} onToggleInterest={onToggleInterest} />,
-    ...tile.tasks.map((task) => <TaskPage key={task.id} task={task} TaskPanel={TaskPanel} />),
+    <SummaryPage
+      key="summary"
+      tile={tile}
+      colors={colors}
+      onGoToTask={(index) => onFlipTo(Math.floor((index + 1) / 2))}
+      onSubmit={onSubmit}
+      onToggleInterest={onToggleInterest ? () => onToggleInterest(tile.tasks[0]?.id ?? "") : undefined}
+    />,
+    ...tile.tasks.map((task, index) => (
+      <TaskPage
+        key={task.id}
+        tile={tile}
+        task={task}
+        index={index}
+        colors={colors}
+        TaskPanel={TaskPanel}
+        onSubmit={onSubmit}
+        onToggleInterest={onToggleInterest}
+      />
+    )),
     <SubmissionsPage key="submissions" submissions={tile.submissions} colors={colors} />,
   ];
 
@@ -1324,11 +1345,13 @@ function EdgeBand({
 function SummaryPage({
   tile,
   colors,
+  onGoToTask,
   onSubmit,
   onToggleInterest,
 }: {
   tile: TileModel;
   colors: ComicColors;
+  onGoToTask?: (index: number) => void;
   onSubmit?: () => void;
   onToggleInterest?: () => void;
 }) {
@@ -1338,6 +1361,7 @@ function SummaryPage({
 
   return (
     <div className="flex flex-col gap-5 p-6" style={{ color: colors.INK }}>
+      {/* Masthead header */}
       <div className="flex flex-col items-start gap-2">
         <span
           className="px-[0.5em] py-[0.2em] uppercase leading-none"
@@ -1345,7 +1369,7 @@ function SummaryPage({
         >
           Tectonic
         </span>
-        <h2 className="text-4xl leading-none" style={{ fontFamily: COMIC_FONT }}>
+        <h2 className="text-3xl leading-none" style={{ fontFamily: COMIC_FONT }}>
           {tile.name}
         </h2>
         {tile.category && (
@@ -1355,105 +1379,271 @@ function SummaryPage({
         )}
       </div>
 
-      <section className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between">
-          <span className="text-lg uppercase" style={{ fontFamily: COMIC_FONT }}>
-            Progress
-          </span>
-          <span className="num text-2xl leading-none" style={{ fontFamily: COMIC_FONT }}>
+      {/* Comic progress caption boxes */}
+      <div className="grid grid-cols-2 gap-3">
+        <CaptionBox tone="yellow" title="Points">
+          <span className="num text-2xl" style={{ fontFamily: COMIC_FONT, color: progress.pointsAwarded >= progress.totalPoints && progress.totalPoints > 0 ? colors.OK : colors.INK }}>
             {progress.pointsAwarded}
-            <span style={{ color: colors.INK_SUBTLE }}> / {progress.totalPoints}</span>
-            <span className="text-[0.6em]"> pts</span>
           </span>
-        </div>
-        <div className="h-4 w-full overflow-hidden border-[3px]" style={{ borderColor: colors.INK, backgroundColor: colors.PAPER_RAISED }}>
-          <div className="h-full transition-[width] duration-500" style={{ width: `${pointsPct}%`, backgroundColor: colors.GREEN }} />
-        </div>
-        <span className="text-sm" style={{ color: colors.INK_BODY }}>
-          {progress.totalTasks === 0
-            ? "No parts to complete yet."
-            : progress.allComplete
-              ? "All parts complete!"
-              : `${progress.completedTasks} of ${progress.totalTasks} part${progress.totalTasks === 1 ? "" : "s"} complete.`}
-        </span>
+          <span className="num text-base" style={{ color: colors.INK_SUBTLE }}>
+            {" "}/ {progress.totalPoints}
+          </span>
+        </CaptionBox>
+        <CaptionBox tone="paper" title="Parts">
+          <span className="num text-2xl" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+            {progress.completedTasks}
+          </span>
+          <span className="num text-base" style={{ color: colors.INK_SUBTLE }}>
+            {" "}/ {progress.totalTasks} done
+          </span>
+        </CaptionBox>
         {freeze.hasFreezePeriod && (
-          <span className="text-sm" style={{ color: freeze.isFrozen ? colors.BLUE : colors.INK_SUBTLE }}>
-            {freeze.isFrozen
-              ? `Frozen — unlocks in ${formatCountdown(freeze.remainingMs)}.`
-              : `Freeze tile: locked for ${freeze.durationMinutes} min once a part's approved.`}
-          </span>
+          <CaptionBox tone="cyan" title={freeze.isFrozen ? "On ice" : "Freeze period"} className="col-span-2">
+            <span className="flex items-center gap-2 text-sm" style={{ color: colors.INK }}>
+              <ClockIcon size={14} />
+              {freeze.isFrozen
+                ? `Thaws in ${formatCountdown(freeze.remainingMs)}`
+                : `Locks for ${freeze.durationMinutes} min after each approval`}
+            </span>
+          </CaptionBox>
         )}
-      </section>
+      </div>
 
-      {(onToggleInterest || tile.interest.people.length > 0) && (
-        <section
-          className="flex flex-wrap items-center gap-3 rounded-2xl border-[3px] px-4 py-3"
-          style={{ backgroundColor: colors.PAPER_RAISED, borderColor: colors.INK, boxShadow: "3px 3px 0 rgba(0,0,0,0.2)", fontFamily: COMIC_FONT }}
-        >
-          {onToggleInterest && (
-            <AriaButton
-              onPress={onToggleInterest}
-              aria-pressed={tile.interest.mine}
-              className="cursor-pointer flex items-center gap-1.5 rounded-full border-[3px] px-3 py-1 text-sm font-bold uppercase transition-transform duration-100 pressed:scale-95 hover:-translate-y-0.5"
-              style={{
-                borderColor: colors.INK,
-                boxShadow: `2px 2px 0 ${colors.INK}`,
-                backgroundColor: tile.interest.mine ? "#facc15" : colors.PAPER_RAISED,
-                color: colors.INK,
-              }}
-            >
-              <HandIcon size={16} fill={tile.interest.mine ? "currentColor" : "none"} />
-              {tile.interest.mine ? "I'm on it!" : "I'll do this!"}
-            </AriaButton>
-          )}
-          <span className="text-sm">
-            {tile.interest.people.length > 0 ? (
-              <>
-                <span className="font-bold uppercase">On it: </span>
-                {tile.interest.people.map((p, i) => (
-                  <span key={p.id}>
-                    {i > 0 && ", "}
-                    <PlayerName userId={p.id}>{p.displayName}</PlayerName>
-                  </span>
-                ))}
-              </>
-            ) : (
-              "Nobody has called this one yet."
-            )}
-          </span>
+      {/* In this issue (Table of Contents) */}
+      {tile.tasks.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h3 className="text-xl uppercase leading-none" style={{ fontFamily: COMIC_FONT }}>
+            In this issue
+          </h3>
+          <ol className="flex flex-col gap-2">
+            {tile.tasks.map((task, i) => {
+              const tone = task.complete
+                ? colors.OK
+                : task.status === "pending_approval"
+                  ? colors.WARN
+                  : task.status === "in_progress"
+                    ? colors.BLUE
+                    : colors.INK_SUBTLE;
+              const claimed = task.interest.people;
+              return (
+                <li key={task.id}>
+                  <button
+                    type="button"
+                    onClick={() => onGoToTask?.(i)}
+                    className="comic-press flex w-full items-center gap-3 border-[3px] px-3 py-2 text-left outline-none transition-transform duration-100 hover:-translate-y-0.5"
+                    style={{
+                      borderColor: colors.INK,
+                      background: colors.PAPER_RAISED,
+                      boxShadow: `2px 2px 0 ${colors.INK}`,
+                      color: colors.INK,
+                    }}
+                  >
+                    <span
+                      className="flex size-7 shrink-0 items-center justify-center border-2 text-sm font-bold"
+                      style={{
+                        fontFamily: COMIC_FONT,
+                        borderColor: colors.INK,
+                        background: tone,
+                        color: task.complete || task.status !== "not_started" ? "#fffaf0" : colors.INK,
+                      }}
+                    >
+                      {task.complete ? <CheckIcon size={14} /> : task.locked ? <LockIcon size={12} /> : i + 1}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-base leading-tight font-bold" style={{ fontFamily: COMIC_FONT }}>
+                        {task.label}
+                      </span>
+                      <span className="block truncate text-xs" style={{ color: claimed.length > 0 ? colors.INK_BODY : tone }}>
+                        {claimed.length > 0 ? (
+                          <>
+                            <HandIcon size={10} className="mr-1 inline-block align-[-1px]" fill={task.interest.mine ? "currentColor" : "none"} />
+                            {claimed.map((p) => p.displayName).join(", ")}
+                          </>
+                        ) : task.complete ? (
+                          "Approved"
+                        ) : task.status === "pending_approval" ? (
+                          "Awaiting judges"
+                        ) : task.locked ? (
+                          "Locked"
+                        ) : (
+                          "Not started"
+                        )}
+                      </span>
+                    </span>
+                    <span className="num shrink-0 text-sm font-bold" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+                      {task.points} pts
+                    </span>
+                    <span className="shrink-0 text-xs uppercase" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
+                      p.{i + 2}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
         </section>
       )}
 
       {onSubmit && (
-        <AriaButton
-          onPress={onSubmit}
-          isDisabled={!tile.canSubmit}
-          className="cursor-pointer self-start rounded-full border-[3px] px-5 py-2 text-base font-bold uppercase transition-transform duration-100 pressed:scale-95 hover:-translate-y-0.5 disabled:cursor-default disabled:opacity-50 disabled:hover:translate-y-0"
-          style={{ borderColor: colors.INK, boxShadow: `3px 3px 0 ${colors.INK}`, backgroundColor: colors.ORANGE_LINE, color: "#fff", fontFamily: COMIC_FONT }}
+        <ComicButton
+          variant="primary"
+          onPress={() => onSubmit()}
         >
-          {submitLabel}
-        </AriaButton>
+          Submit
+        </ComicButton>
       )}
     </div>
   );
 }
 
-function TaskPage({ task, TaskPanel }: { task: TaskModel; TaskPanel: React.ComponentType<{ task: TaskModel }> }) {
-  return <TaskPanel task={task} />;
+function TaskPage({
+  tile,
+  task,
+  index,
+  colors,
+  TaskPanel,
+  onSubmit,
+  onToggleInterest,
+}: {
+  tile: TileModel;
+  task: TaskModel;
+  index: number;
+  colors: ComicColors;
+  TaskPanel: React.ComponentType<{ task: TaskModel }>;
+  onSubmit?: (taskId?: string) => void;
+  onToggleInterest?: (taskId: string) => void;
+}) {
+  const { interest } = task;
+  const canClaim = !!onToggleInterest && interest.canToggle;
+  const showCrew = canClaim || interest.people.length > 0;
+  const submitDisabled = task.complete || task.locked || tile.freeze.isFrozen;
+  const submitReason = task.complete
+    ? "Already approved."
+    : task.locked
+      ? (task.lockedReason ?? "Locked.")
+      : tile.freeze.isFrozen
+        ? "On ice until the freeze ends."
+        : null;
+
+  return (
+    <div className="relative flex min-h-full flex-col p-6" style={{ color: colors.INK }}>
+      {/* Tilted Part Number Badge */}
+      <div
+        className="absolute right-5 top-5 flex size-10 items-center justify-center border-[3px] text-2xl font-black"
+        style={{
+          fontFamily: COMIC_FONT,
+          borderColor: colors.INK,
+          background: colors.YELLOW,
+          color: colors.INK,
+          boxShadow: `3px 3px 0 ${colors.INK}`,
+          transform: "rotate(6deg)",
+        }}
+        aria-hidden
+      >
+        {index + 1}
+      </div>
+
+      {/* Part Action Bar */}
+      {(onSubmit || showCrew) && (
+        <div className="mb-4 border-b-[3px] pb-3 pr-12" style={{ borderColor: colors.INK }}>
+          <div className="flex flex-wrap items-center gap-3">
+            {onSubmit && (
+              <ComicButton
+                variant="primary"
+                isDisabled={submitDisabled}
+                onPress={() => onSubmit(task.id)}
+              >
+                Submit
+              </ComicButton>
+            )}
+
+            {showCrew && (
+              <div className="flex min-w-0 items-center gap-2">
+                {canClaim && (
+                  <ComicButton
+                    variant={interest.mine ? "yellow" : "secondary"}
+                    aria-pressed={interest.mine}
+                    onPress={() => onToggleInterest!(task.id)}
+                  >
+                    <HandIcon size={16} fill={interest.mine ? "currentColor" : "none"} />
+                    {interest.mine ? "I'm on it" : "I'll do this"}
+                  </ComicButton>
+                )}
+                <span className="min-w-0 text-sm" style={{ color: interest.people.length > 0 ? colors.INK_BODY : colors.INK_SUBTLE }}>
+                  {interest.people.length > 0 ? (
+                    <>
+                      {interest.people.map((p, i) => (
+                        <span key={p.id}>
+                          {i > 0 && ", "}
+                          <PlayerName userId={p.id}>{p.displayName}</PlayerName>
+                        </span>
+                      ))}
+                    </>
+                  ) : (
+                    "Unclaimed"
+                  )}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {submitReason && (
+            <div className="mt-1.5 text-xs leading-tight" style={{ color: colors.INK_SUBTLE }}>
+              {submitReason}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Main Task Requirements & Checklist */}
+      <div className="flex-1">
+        <TaskPanel task={task} />
+      </div>
+
+      {/* Part footer stamp */}
+      <div className="mt-4 pt-2 border-t-[2px] border-dashed flex items-center justify-between" style={{ borderColor: `${colors.INK}44` }}>
+        <span className="text-xs uppercase font-bold tracking-wider" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
+          Part {index + 1} of {tile.tasks.length}
+        </span>
+        {task.complete ? (
+          <Stamp kind="approved" rotate={-4} size="sm">Approved</Stamp>
+        ) : task.status === "pending_approval" ? (
+          <Stamp kind="pending" rotate={3} size="sm">Pending</Stamp>
+        ) : task.locked ? (
+          <Stamp kind="locked" rotate={-2} size="sm">Locked</Stamp>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 // The last page: every submission for this tile, newest first, each in its
 // own speech bubble.
 function SubmissionsPage({ submissions, colors }: { submissions: SubmissionModel[]; colors: ComicColors }) {
   return (
-    <div className="flex flex-col gap-4 p-5" style={{ color: colors.INK }}>
-      <h3 className="text-2xl uppercase leading-none" style={{ fontFamily: COMIC_FONT }}>
-        Submissions
-      </h3>
+    <div className="flex flex-col gap-4 p-6" style={{ color: colors.INK }}>
+      <div className="flex items-center justify-between">
+        <h3 className="text-2xl uppercase leading-none" style={{ fontFamily: COMIC_FONT }}>
+          Submissions
+        </h3>
+        <span
+          className="rounded-full border-[2px] px-2 py-0.5 text-xs font-bold uppercase"
+          style={{
+            borderColor: colors.INK,
+            background: colors.YELLOW,
+            color: colors.INK,
+            fontFamily: COMIC_FONT,
+          }}
+        >
+          {submissions.length} {submissions.length === 1 ? "entry" : "entries"}
+        </span>
+      </div>
       {submissions.length === 0 ? (
-        <p className="text-sm" style={{ color: colors.INK_SUBTLE }}>
-          Nothing submitted for this issue yet.
-        </p>
+        <CaptionBox tone="paper" tilt={-1} className="mx-auto mt-6 max-w-xs text-center">
+          <p className="text-sm" style={{ color: colors.INK_BODY }}>
+            No submissions yet. Be the first to write in!
+          </p>
+        </CaptionBox>
       ) : (
         submissions.map((s) => (
           <div

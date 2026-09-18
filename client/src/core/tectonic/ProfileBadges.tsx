@@ -18,9 +18,9 @@ export function TierBadge({ profile, showRank = true }: { profile: TectonicProfi
 export function AchievementIcons({ profile, large = false }: { profile: TectonicProfile; large?: boolean }) {
   if (profile.achievements.length === 0) return null;
   return (
-    <span className="inline-flex items-center gap-1">
+    <span className={`inline-flex items-center ${large ? "gap-1.5" : "gap-1"}`}>
       {profile.achievements.map((a) => (
-        <img key={a.name} src={a.thumbnail} alt={a.name} title={a.name} className={`${large ? "size-5" : "size-4"} object-contain`} />
+        <img key={a.name} src={a.thumbnail} alt={a.name} title={a.name} className={`${large ? "size-7" : "size-4"} object-contain`} />
       ))}
     </span>
   );
