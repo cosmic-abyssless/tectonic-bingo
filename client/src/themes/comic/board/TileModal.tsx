@@ -1159,9 +1159,11 @@ function TileDetails({
             the next leaf's front; the left-hand one is this spread's leaf,
             turned, so its back. */}
         {spread < lastSpread && (
-          <EdgeBand side="right" onCurl={(at) => onCurl(spread + 1, "front", at)} onFlip={() => onFlipTo(spread + 1)} />
+          <EdgeBand side="right" leaf={spread + 1} face="front" onCurl={(at) => onCurl(spread + 1, "front", at)} onFlip={() => onFlipTo(spread + 1)} />
         )}
-        {spread >= 1 && <EdgeBand side="left" onCurl={(at) => onCurl(spread, "back", at)} onFlip={() => onFlipTo(spread - 1)} />}
+        {spread >= 1 && (
+          <EdgeBand side="left" leaf={spread} face="back" onCurl={(at) => onCurl(spread, "back", at)} onFlip={() => onFlipTo(spread - 1)} />
+        )}
       </div>
 
       {/* The trimmings: floating tilted artwork, the close button, and the
@@ -1268,21 +1270,51 @@ function BookPage({
  * widens so the peel keeps following further in, and a click anywhere on
  * it turns the page. Pointer-only — keyboard users have the nav and the
  * arrow keys.
+ *
+ * The strip sits over the page's own scroller, so it eats wheel events — and
+ * once held it covers the outer 45% of the page. It hands them back: a wheel
+ * over the strip scrolls the page it belongs to (`leaf`/`face`), as long as
+ * that page can actually move in that direction.
  */
 function EdgeBand({
   side,
+  leaf,
+  face,
   onCurl,
   onFlip,
 }: {
   side: "left" | "right";
+  leaf: number;
+  face: Side;
   onCurl: (at: Point | null) => void;
   onFlip: () => void;
 }) {
   const [held, setHeld] = useState(false);
+  const bandRef = useRef<HTMLDivElement>(null);
   const isMouse = (e: React.PointerEvent) => e.pointerType === "mouse";
+
+  // A native, non-passive listener: React's onWheel is passive, and this has
+  // to preventDefault when it scrolls the page (or the modal behind would
+  // scroll too).
+  useEffect(() => {
+    const band = bandRef.current;
+    if (!band) return;
+    const onWheel = (e: WheelEvent) => {
+      const scroller = band.parentElement?.querySelector<HTMLElement>(`${leafSelector(leaf)} > [data-face="${face}"] .overflow-y-auto`);
+      if (!scroller) return;
+      const atTop = scroller.scrollTop <= 0;
+      const atBottom = scroller.scrollTop >= scroller.scrollHeight - scroller.clientHeight - 1;
+      if ((e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) return;
+      e.preventDefault();
+      scroller.scrollBy({ top: e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY });
+    };
+    band.addEventListener("wheel", onWheel, { passive: false });
+    return () => band.removeEventListener("wheel", onWheel);
+  }, [leaf, face]);
 
   return (
     <div
+      ref={bandRef}
       aria-hidden="true"
       className="absolute inset-y-0 cursor-pointer"
       style={{ [side]: 0, width: `${(held ? EDGE_BAND_HELD : EDGE_BAND) * 50}%` }}

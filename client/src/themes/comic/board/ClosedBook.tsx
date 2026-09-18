@@ -453,7 +453,7 @@ export function Page({
       : `inset ${bw(0.04)} 0 ${bw(0.04)} ${bw(-0.03)} rgba(0,0,0,0.35)`;
   return (
     <div className="pointer-events-none absolute inset-0" style={{ boxShadow: gutter ? gutterShadow : undefined, color: colors.INK_BODY }}>
-      <div className="pointer-events-auto h-full overflow-y-auto" style={{ direction: side === "right" ? "rtl" : "ltr" }}>
+      <div className="pointer-events-auto h-full overflow-y-auto" style={{ direction: side === "right" ? "rtl" : "ltr", overscrollBehavior: "contain" }}>
         <div style={{ direction: "ltr", [side === "right" ? "paddingRight" : "paddingLeft"]: bw(0.035) }}>{children}</div>
       </div>
     </div>
