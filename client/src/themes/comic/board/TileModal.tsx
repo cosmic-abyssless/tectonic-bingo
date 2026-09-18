@@ -42,6 +42,7 @@ import {
   PageEdgeTicks,
   type LeafFaces,
 } from "./ClosedBook";
+import { ComicBurstRays } from "../ui/ComicBurst";
 import { getBookPose, setBookAway } from "./bookFlight";
 import { getColors, type ComicColors } from "./colors";
 
@@ -164,57 +165,19 @@ const COVER_SWING = 0.49;
 // shapes, since the two are capped by unrelated formulas.
 const BOOK_MAX_WIDTH = "min(56rem, calc((100vh - 10rem) * 4 / 3))";
 
-// A soft, warm sunlight tone — deliberately a literal, not a ComicColors
-// token: this sits on the modal's scrim, which is the same black in both
-// color schemes, so it doesn't want to change with them either.
-const BURST_COLOR = "#fff3c4";
-
 /**
- * A slow-turning ring of comic sunbeams behind the open book — rays
- * radiating out from its center, mostly hidden behind the book itself and
- * reaching toward the browser window's own edges, not just past the
- * book's. Pure atmosphere, faded in and out by FlyingBook alongside the
- * scrim (see `burst` in the enter/exit sequences). Rendered as its own
- * `fixed` layer outside the book's scrolling container — `fixed`
- * positioning already keeps an oversized descendant here from ever
- * growing the modal a scrollbar (it's outside document flow entirely,
- * unlike the curl layer's own oversized bits, which needed an explicit
- * clip for exactly that reason).
- *
- * Sized off `vmax` (the LARGER of viewport width/height, not `vmin`, and
- * not BOOK_MAX_WIDTH) so it scales with the WINDOW rather than the book,
- * which is capped at a flat max size — on a big monitor a book-relative
- * burst reads as a small circle floating in the middle. 180vmax clears
- * the viewport's own diagonal (at most ~141vmax, a perfect square) on any
- * aspect ratio, so the rays' reach is bounded by their own fade, not by
- * running out of box first.
- *
- * The rays are a `repeating-conic-gradient` (solid color, transparent gap,
- * repeat around the circle) rather than a drawn shape — the standard
- * lightweight way to get true radiating beams in CSS. A `closest-side`
- * radial mask holds them near full strength close to center (behind the
- * book anyway) and lets them fade GRADUALLY over nearly the whole rest of
- * the radius, so they stay visible most of the way out toward the window
- * edges rather than dying out early. `mix-blend-mode: screen` reads the
- * rays as light against the scrim's black rather than flat paint.
+ * The open book's sunbeams (see ui/ComicBurst for the rays themselves) in
+ * their own `fixed` layer outside the book's scrolling container — `fixed`
+ * positioning keeps an oversized descendant from ever growing the modal a
+ * scrollbar (it's outside document flow entirely, unlike the curl layer's
+ * own oversized bits, which needed an explicit clip for exactly that
+ * reason). Pure atmosphere, faded in and out by FlyingBook's enter/exit
+ * sequences (`burst`), so this layer owns the opacity.
  */
 function ComicBurst({ burstRef, reduceMotion }: { burstRef: Ref<HTMLDivElement>; reduceMotion: boolean }) {
-  const fade = "radial-gradient(circle closest-side, black 0%, black 18%, transparent 96%)";
   return (
     <div ref={burstRef} className="pointer-events-none fixed inset-0 flex items-center justify-center" style={{ opacity: 0 }}>
-      <div
-        className={reduceMotion ? undefined : "animate-[spin_100s_linear_infinite]"}
-        style={{
-          width: "180vmax",
-          aspectRatio: "1",
-          borderRadius: "50%",
-          background: `repeating-conic-gradient(${BURST_COLOR} 0deg 7deg, transparent 7deg 18deg)`,
-          maskImage: fade,
-          WebkitMaskImage: fade,
-          opacity: 0.4,
-          mixBlendMode: "screen",
-        }}
-      />
+      <ComicBurstRays reduceMotion={reduceMotion} />
     </div>
   );
 }
