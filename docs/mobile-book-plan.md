@@ -1,7 +1,7 @@
 # Comic tile modal on phones: full cover fold, edge-swipe page curl — implementation plan
 
 **Status:** approved plan, not yet implemented. Written 2026-09-18 against
-`main` at `a7aaa64` (the `caching` branch, unmerged, does not touch these files).
+`main` at `062595a` (the unmerged `caching` branch does not touch `TileModal.tsx`).
 **Scope:** the comic theme's tile modal (`client/src/themes/comic/board/`) when the
 viewport is a phone (`matchMedia("(max-width: 640px)")`, called `single`). **Desktop
 behaviour must not change.** No schema, API or server changes.
