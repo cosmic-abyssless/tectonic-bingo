@@ -21,6 +21,10 @@ import { AnalysisPanel } from "./submission/AnalysisPanel";
 import { TilePicker, RequirementPicker } from "./submission/Pickers";
 import { TaskPicker } from "./submission/TaskPicker";
 import { StagedClaimsList } from "./submission/StagedClaimsList";
+// The theme's shared classes (comic-press, comic-rays, comic-halftone, the
+// dialog keyframes…). Was imported on feat/mico-work but dropped when that
+// work landed on main, leaving every one of them unstyled.
+import "./comic.css";
 
 // Starter scaffold for the "comic" theme — see docs/theming.md for the full
 // writer's guide (resolution/fallback rules, what a slot may import, the

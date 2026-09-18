@@ -2,7 +2,7 @@ import type { BingoPageModel } from "../../../headless/types";
 import { useAuth } from "../../../context/AuthContext";
 import { AppHeader } from "../../../core/ui/AppHeader";
 import { CountdownTimer } from "../../../core/ui/CountdownTimer";
-import { UsersIcon } from "../../../core/ui/icons";
+import { ShieldIcon, UsersIcon } from "../../../core/ui/icons";
 import { useSlot } from "../../context";
 import { COMIC_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
@@ -45,20 +45,25 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
         </>
       )}
       {!page.isMod && page.myTeam && <TeamBadge team={page.myTeam} onPress={page.teamInfo.show} />}
-      {page.bingo.rulesMarkdown && (
-        <ComicButton size="sm" variant="ghost" onPress={page.rules.show}>
-          Rules
-        </ComicButton>
-      )}
+      {/* The two route changes are links, grouped right after the team
+          selector; everything after them acts on the page and stays a
+          button. The mod panel gets an icon and sits well away from Submit
+          so it isn't hit by accident. */}
       {page.canViewStats && (
-        <ComicButton size="sm" variant="ghost" onPress={page.actions.goToStats}>
+        <ComicButton size="sm" href={`/b/${page.slug}/stats`}>
           Stats
         </ComicButton>
       )}
       {page.isMod && (
-        <ComicButton size="sm" onPress={page.actions.goToMod}>
+        <ComicButton size="sm" href={`/b/${page.slug}/mod`}>
+          <ShieldIcon />
           Mod panel
           {page.pendingCount > 0 && <Counter n={page.pendingCount} />}
+        </ComicButton>
+      )}
+      {page.bingo.rulesMarkdown && (
+        <ComicButton size="sm" variant="ghost" onPress={page.rules.show}>
+          Rules
         </ComicButton>
       )}
       {page.teamSelector.selectedId && (

@@ -24,7 +24,7 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
 
       <div className="flex items-start gap-3">
         {submission.thumbnailUrl ? (
-          <a href={submission.thumbnailUrl} target="_blank" rel="noreferrer" className="shrink-0 -rotate-3 border-[3px] outline-none focus-visible:ring-2" style={{ borderColor: colors.INK, background: "#fff", padding: 2, boxShadow: `2px 2px 0 ${colors.INK}` }} title="View screenshot">
+          <a href={submission.thumbnailUrl} target="_blank" rel="noreferrer" className="shrink-0 -rotate-3 cursor-pointer border-[3px] outline-none transition-[filter] hover:brightness-90 focus-visible:ring-2" style={{ borderColor: colors.INK, background: "#fff", padding: 2, boxShadow: `2px 2px 0 ${colors.INK}` }} title="View screenshot">
             <img src={submission.thumbnailUrl} alt="Submission screenshot" className="block size-14 object-cover" />
           </a>
         ) : (
