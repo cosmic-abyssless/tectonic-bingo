@@ -46,6 +46,9 @@ export function serveImageVariants(rootDir: string): RequestHandler {
       await pending;
 
       if (fs.existsSync(variantPath)) return next();
+      // Not cacheable: a variant that couldn't be made now may be makeable later,
+      // and the static handler serves variants with a year-long cache.
+      res.set("Cache-Control", "no-store");
       res.redirect(`${req.baseUrl}${path.posix.join(path.posix.dirname(rel), originalName)}`);
     } catch {
       next();

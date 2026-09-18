@@ -25,6 +25,7 @@ import { initWebSocketServer } from "./ws";
 import { sqlite } from "./db";
 import { UPLOADS_DIR, getAdminDiscordIds } from "./config";
 import { serveImageVariants } from "./middleware/imageVariants";
+import { INDEX_HTML_CACHE_CONTROL, clientDistStaticOptions, uploadsStaticOptions } from "./middleware/staticCaching";
 import { getTectonicConfig } from "./services/tectonicService";
 
 const REQUIRED_ENV = [
@@ -111,7 +112,7 @@ app.use(auditContext);
 
 // Uploads — serve screenshots and tile images stored locally.
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-app.use("/uploads", serveImageVariants(UPLOADS_DIR), express.static(UPLOADS_DIR));
+app.use("/uploads", serveImageVariants(UPLOADS_DIR), express.static(UPLOADS_DIR, uploadsStaticOptions));
 
 // Routes
 app.use("/auth", authRouter);
@@ -133,13 +134,13 @@ app.use("/api/bug-reports", bugReportsRouter);
 // vite.config.ts's proxy setup), so this block never engages there.
 const CLIENT_DIST = path.join(__dirname, "../../client/dist");
 if (fs.existsSync(CLIENT_DIST)) {
-  app.use(express.static(CLIENT_DIST));
+  app.use(express.static(CLIENT_DIST, clientDistStaticOptions(CLIENT_DIST)));
   // SPA fallback: any GET that isn't one of the routes above (API, auth,
   // uploads, ws) falls through to index.html, so client-side routing
   // (react-router) still resolves a direct navigation or refresh on a deep
   // link like /bingos/some-slug.
   app.get(/^\/(?!api|auth|uploads|ws).*/, (_req, res) => {
-    res.sendFile(path.join(CLIENT_DIST, "index.html"));
+    res.sendFile(path.join(CLIENT_DIST, "index.html"), { headers: { "Cache-Control": INDEX_HTML_CACHE_CONTROL } });
   });
 }
 
