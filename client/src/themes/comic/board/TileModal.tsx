@@ -23,16 +23,19 @@ import { formatCountdown } from "../../../core/ui/time";
 import { useSlot, useThemeTokens } from "../../context";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
-import { useComic } from "../ui/useComic";
+import { PageColorsContext, useComic } from "../ui/useComic";
 import { CaptionBox } from "../ui/CaptionBox";
 import {
   BASE_DEPTH,
   BASE_SHADOW,
   BASE_STAGGER,
+  BACK_STAGGER,
+  BACK_STAGGER_CSS,
   BASE_STAGGER_CSS,
   bw,
   CLOSED_BOOK,
-  FLIP_ANGLE,
+  BACK_DEPTH,
+  BACK_VIEW,
   ClosedBook,
   FIRST_LEAF_STAGGER,
   FIRST_LEAF_STAGGER_CSS,
@@ -45,7 +48,7 @@ import {
 import { ComicBurstRays } from "../ui/ComicBurst";
 import { PageFooter } from "./PageFooter";
 import { getBookPose, setBookAway } from "./bookFlight";
-import { TECTONIC_LOGO, type ComicColors } from "./colors";
+import { pageColors, TECTONIC_LOGO, type ComicColors } from "./colors";
 
 /*
  * The tile modal IS the tile's comic book, opened — and it's a whole comic:
@@ -263,8 +266,11 @@ interface Flight {
   /** The tile book's hinge angles at that moment, so the swap is seamless even mid-hover. */
   coverAngle: number;
   pageAngle: number;
-  /** The whole book's resting turn: the tilt, plus FLIP_ANGLE for a finished tile shown on its back cover. */
+  /** The whole book's resting pose: the tilt, or BACK_VIEW for a finished tile shown on its back cover. */
   flyerTurn: number;
+  flyerTilt: number;
+  /** A finished tile: its book is shown from behind, so the back cover is there to move with the base sheet. */
+  flipped: boolean;
   /** clip-path values: the tile's crop, and none (a hair below the book so nothing's ever cut). */
   clipCropped: string;
   clipOpen: string;
@@ -275,7 +281,7 @@ interface Flight {
 // right mid-animation, when the book itself is off somewhere else. With no
 // tile to fly from/to (not on screen), it's a plain pop from the center.
 function measureFlight(root: HTMLElement, tileId: string, flipped: boolean): Flight {
-  const flyerTurn = CLOSED_BOOK.tilt + (flipped ? FLIP_ANGLE : 0);
+  const { rotateX: flyerTilt, rotateY: flyerTurn } = flipped ? BACK_VIEW : { rotateX: 0, rotateY: CLOSED_BOOK.tilt };
   // The pan wrapper (the book's own two-page box) rather than the root: on
   // phones it's twice the root's width and shifted, and its rect is what the
   // frame actually sits in. On desktop it IS the root's box.
@@ -302,6 +308,8 @@ function measureFlight(root: HTMLElement, tileId: string, flipped: boolean): Fli
       coverAngle: CLOSED_BOOK.coverAngle,
       pageAngle: CLOSED_BOOK.pageAngle,
       flyerTurn,
+      flyerTilt,
+      flipped,
       clipCropped,
       clipOpen,
     };
@@ -321,6 +329,8 @@ function measureFlight(root: HTMLElement, tileId: string, flipped: boolean): Fli
     coverAngle: pose.coverAngle,
     pageAngle: pose.pageAngle,
     flyerTurn,
+    flyerTilt,
+    flipped,
     clipCropped,
     clipOpen,
   };
@@ -333,6 +343,8 @@ const FLYER = "[data-flyer]";
 const COVER = leafSelector(0);
 const PAGE_FRONT = leafSelector(1);
 const BASE = "[data-book-base]";
+// A finished tile's back cover, staggered like the base sheet it sits against.
+const BACK = "[data-book-back]";
 const EXTRAS = "[data-extra]";
 // The next page's number showing through the cover's dog-ear (ClosedBook's
 // RevealedPageMark) — only there once a task's done, and only meant to be
@@ -344,17 +356,18 @@ const PAGE_MARK = "[data-page-mark]";
 // first tick has run. (Motion then takes the values over from its own
 // keyframes — its transform order is translate → scale → rotate, matched
 // here.)
-function poseAtTile(frame: HTMLElement, flyer: HTMLElement, cover: HTMLElement, page: HTMLElement, base: HTMLElement, f: Flight) {
+function poseAtTile(frame: HTMLElement, flyer: HTMLElement, cover: HTMLElement, page: HTMLElement, base: HTMLElement, back: HTMLElement | null, f: Flight) {
   frame.style.transformOrigin = `${f.originX}px ${f.originY}px`;
   frame.style.perspectiveOrigin = `${f.originX}px ${f.perspectiveOriginY}px`;
   frame.style.perspective = `${f.perspective}px`;
   frame.style.transform = `translateX(${f.dx}px) translateY(${f.dy}px) scale(${f.scale})`;
   frame.style.clipPath = f.clipCropped;
   flyer.style.transformOrigin = `${f.originX}px ${f.originY}px`;
-  flyer.style.transform = `rotateY(${f.flyerTurn}deg)`;
+  flyer.style.transform = `rotateX(${f.flyerTilt}deg) rotateY(${f.flyerTurn}deg)`;
   cover.style.transform = `rotateY(${f.coverAngle}deg)`;
   page.style.transform = `${FIRST_LEAF_STAGGER_CSS} rotateY(${f.pageAngle}deg)`;
   base.style.transform = `${BASE_STAGGER_CSS} translateZ(${-BASE_DEPTH}px)`;
+  if (back) back.style.transform = `${BACK_STAGGER_CSS} translateZ(${-BACK_DEPTH}px) rotateY(180deg)`;
 }
 
 // The closed book's stagger — the first leaf and the base sheet poking out
@@ -376,6 +389,16 @@ const BASE_TO_FLUSH = {
   z: -BASE_DEPTH,
 };
 const BASE_TO_STAGGERED = { ...BASE_STAGGER, z: -BASE_DEPTH };
+// The back cover moves with the base: staggered while closed, flush once open.
+const BACK_TO_FLUSH = {
+  x: [BACK_STAGGER.x, "0%"],
+  y: [BACK_STAGGER.y, FLUSH.y],
+  scaleX: [BACK_STAGGER.scaleX, FLUSH.scaleX],
+  scaleY: [BACK_STAGGER.scaleY, FLUSH.scaleY],
+  z: -BACK_DEPTH,
+  rotateY: 180,
+};
+const BACK_TO_STAGGERED = { ...BACK_STAGGER, z: -BACK_DEPTH, rotateY: 180 };
 
 // Paced with COVER_SWING (~0.65x the original) rather than TURN_DURATION's
 // faster 0.5x — every duration and `at` here is the pre-speedup value
@@ -394,7 +417,7 @@ function enterSequence(backdrop: Element, burst: Element, from: Flight, hasMark:
     [FRAME, { x: [from.dx, 0], y: [from.dy, 0], scale: [from.scale, 1] }, { ...FLIGHT_SPRING, at: 0 }],
     // (A finished tile's book takes off on its back cover and turns over to
     // its front on the way — FLYER's start angle carries the extra half turn.)
-    [FLYER, { rotateY: [from.flyerTurn, 0] }, { ...FLIGHT_SPRING, at: 0 }],
+    [FLYER, { rotateX: [from.flyerTilt, 0], rotateY: [from.flyerTurn, 0] }, { ...FLIGHT_SPRING, at: 0 }],
     // The tile's crop lets go as the book lifts out of its slot — and the
     // closed-book stagger (the first leaf and base sheet poking a hair past
     // the cover, which is exactly what the crop was hiding) has to be gone
@@ -404,6 +427,7 @@ function enterSequence(backdrop: Element, burst: Element, from: Flight, hasMark:
     [FRAME, { clipPath: [from.clipCropped, from.clipOpen] }, { duration: 0.13, ease: "easeOut", at: 0 }],
     [PAGE_FRONT, PAGE_TO_FLUSH, { duration: 0.13, ease: "easeOut", at: 0 }],
     [BASE, BASE_TO_FLUSH, { duration: 0.13, ease: "easeOut", at: 0 }],
+    ...(from.flipped ? ([[BACK, BACK_TO_FLUSH, { duration: 0.13, ease: "easeOut", at: 0 }]] as AnimationSequence) : []),
     // Cover swings open while the book is still settling — the two overlap
     // so it reads as one continuous gesture, not fly-then-open. The first
     // leaf's own fan angle flattens on the cover's own schedule.
@@ -467,12 +491,13 @@ function exitSequence(
     // and the cell's own copy takes over on the same frame it's unmounted
     // (see `finish` in FlyingBook).
     [FRAME, { x: to.dx, y: to.dy, scale: to.scale }, { duration: 0.33, ease: RETURN_EASE, at: 0.26 + lead }],
-    [FLYER, { rotateY: to.flyerTurn }, { duration: 0.33, ease: RETURN_EASE, at: 0.26 + lead }],
+    [FLYER, { rotateX: to.flyerTilt, rotateY: to.flyerTurn }, { duration: 0.33, ease: RETURN_EASE, at: 0.26 + lead }],
     // The stagger snaps back in sync with the crop, not before it — earlier
     // and the page stack would poke out past where the crop's about to sit,
     // bare, for a beat.
     [PAGE_FRONT, PAGE_TO_STAGGERED, { duration: 0.1, ease: "easeIn", at: 0.49 + lead }],
     [BASE, BASE_TO_STAGGERED, { duration: 0.1, ease: "easeIn", at: 0.49 + lead }],
+    ...(to.flipped ? ([[BACK, BACK_TO_STAGGERED, { duration: 0.1, ease: "easeIn", at: 0.49 + lead }]] as AnimationSequence) : []),
     [FRAME, { clipPath: to.clipCropped }, { duration: 0.1, ease: "easeIn", at: 0.49 + lead }],
     [backdrop, { opacity: 0 }, { duration: 0.26, ease: "easeIn", at: 0.29 + lead }],
   );
@@ -714,6 +739,7 @@ function FlyingBook({
   const burstRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
   const { colors } = useComic();
+  const page = pageColors(colors);
   const tileId = tile.id;
   const { lastSpread, leafCount } = bookShape(tile);
 
@@ -814,6 +840,8 @@ function FlyingBook({
       page.style.transform = "rotateY(0deg)";
       base.style.transform = `translateZ(${-BASE_DEPTH}px)`;
       base.style.filter = "none";
+      const back = root.querySelector<HTMLElement>(BACK);
+      if (back) back.style.transform = `translateZ(${-BACK_DEPTH}px) rotateY(180deg)`;
       if (mark) mark.style.opacity = "0";
       setBookAway(tileId);
       animate(reducedEnterSequence(backdrop, burst));
@@ -824,7 +852,7 @@ function FlyingBook({
     // original — both changes land in this same layout pass, so the swap
     // is invisible.
     const flight = measureFlight(root, tileId, tile.progress.allComplete);
-    poseAtTile(frame, flyer, cover, page, base, flight);
+    poseAtTile(frame, flyer, cover, page, base, root.querySelector<HTMLElement>(BACK), flight);
     // The base sheet's shadow only belongs to the closed book (see
     // BASE_SHADOW) — drop it right here, at the swap, while it's still
     // occluded under the cover either way.
@@ -849,7 +877,7 @@ function FlyingBook({
       if (!dom) return;
       const prev = curling.current;
       const prevFace = prev && (!state || prev.state.leaf !== state.leaf || prev.state.side !== state.side) ? prev.face : null;
-      renderCurl(root, dom, colors.INK, state, prevFace);
+      renderCurl(root, dom, page.LINE, state, prevFace);
       if (!state) {
         if (prev) prev.face.style.clipPath = "";
         curling.current = null;
@@ -859,7 +887,7 @@ function FlyingBook({
       if (!face) return;
       curling.current = { state, face, anim: prev && prev.face === face ? prev.anim : null };
     },
-    [colors.INK, scope],
+    [page.LINE, scope],
   );
 
   // The hover curl: `at` is the pointer in viewport coordinates, or null to
@@ -1134,6 +1162,8 @@ function TileDetails({
   const tokens = useThemeTokens();
   const { pageCount, innerLeaves } = bookShape(tile);
   const ordered = orderTasks(tile);
+  // What's printed on the pages is drawn in the page stock, not the surrounding theme.
+  const page = pageColors(colors);
 
   // The pages, in reading order.
   const pages: ReactNode[] = [
@@ -1141,7 +1171,7 @@ function TileDetails({
       key="summary"
       tile={tile}
       ordered={ordered}
-      colors={colors}
+      colors={page}
       onGoToTask={(position) => {
         // The task at `position` is on page position + 2 (1-based): odd pages are left-hand.
         onFlipTo(Math.floor((position + 1) / 2));
@@ -1156,13 +1186,13 @@ function TileDetails({
         tile={tile}
         task={task}
         number={number}
-        colors={colors}
+        colors={page}
         TaskPanel={TaskPanel}
         onSubmit={onSubmit}
         onToggleInterest={onToggleInterest}
       />
     )),
-    <SubmissionsPage key="submissions" submissions={tile.submissions} colors={colors} />,
+    <SubmissionsPage key="submissions" submissions={tile.submissions} colors={page} />,
   ];
 
   // Page i (0-based) as it appears on a face: numbered and scrollable.
@@ -1173,9 +1203,11 @@ function TileDetails({
   const roleOf = (i: number) =>
     i === 0 ? "Contents" : i === pageCount - 1 ? "Submissions" : `Part ${ordered[i - 1]!.number} of ${tile.tasks.length}`;
   const face = (i: number, side: Side, gutter = true): ReactNode => (
-    <BookPage colors={colors} side={side === "front" ? "right" : "left"} no={i + 1} role={roleOf(i)} gutter={gutter}>
-      {pages[i]}
-    </BookPage>
+    <PageColorsContext.Provider value={page}>
+      <BookPage colors={page} side={side === "front" ? "right" : "left"} no={i + 1} role={roleOf(i)} gutter={gutter}>
+        {pages[i]}
+      </BookPage>
+    </PageColorsContext.Provider>
   );
   // Leaf k (1-based) carries page 2k on its front and 2k+1 on its back —
   // pages[2k-1] and pages[2k] here.
@@ -1265,13 +1297,13 @@ function TileDetails({
                 className="absolute top-0 h-full w-1/2 overflow-hidden"
                 style={{
                   left: curlCopy?.side === "back" ? 0 : "50%",
-                  backgroundColor: colors.PAPER,
+                  backgroundColor: page.PAPER,
                   border: `${bw(0.012)} solid transparent`,
                   transformOrigin: "0 0",
                 }}
               >
                 {copyContent}
-                {copySide && <PageEdgeTicks colors={colors} side={copySide} />}
+                {copySide && <PageEdgeTicks colors={page} side={copySide} />}
               </div>
               <div data-curl-shade className="absolute inset-0" />
             </div>
@@ -1312,28 +1344,28 @@ function TileDetails({
         onPress={onClose}
         className="cursor-pointer absolute -right-4 -top-4 flex size-12 shrink-0 items-center justify-center rounded-full border-[3px] pressed:scale-95 hover:-translate-y-0.5 z-51"
         style={{
-          backgroundColor: colors.PAPER_RAISED,
-          color: colors.INK,
-          borderColor: colors.LINE,
-          boxShadow: `3px 3px 0 ${colors.LINE}`,
+          backgroundColor: page.PAPER_RAISED,
+          color: page.INK,
+          borderColor: page.LINE,
+          boxShadow: `3px 3px 0 ${page.LINE}`,
           opacity: 0,
         }}
       >
         <XIcon size={24} />
       </AriaButton>
-      <div data-extra className="mt-5 flex items-center justify-center gap-4" style={{ opacity: 0, color: colors.INK, fontFamily: COMIC_FONT }}>
-        <NavButton label="Previous page" onPress={() => onStep(-1)} disabled={single ? focus === "left" && spread <= 0 : spread <= 0} colors={colors}>
+      <div data-extra className="mt-5 flex items-center justify-center gap-4" style={{ opacity: 0, color: page.INK, fontFamily: COMIC_FONT }}>
+        <NavButton label="Previous page" onPress={() => onStep(-1)} disabled={single ? focus === "left" && spread <= 0 : spread <= 0} colors={page}>
           <ArrowLeftIcon size={20} />
         </NavButton>
         {/* A yellow tab, like a bookmark: which spread of how many — or, on
             a phone, which page. */}
         <span
           className="min-w-32 -rotate-1 border-[3px] px-3 py-1 text-center text-base uppercase leading-none tabular-nums"
-          style={{ background: colors.YELLOW, borderColor: colors.LINE, color: colors.ON_YELLOW, boxShadow: `2px 2px 0 ${colors.LINE}` }}
+          style={{ background: page.YELLOW, borderColor: page.LINE, color: page.ON_YELLOW, boxShadow: `2px 2px 0 ${page.LINE}` }}
         >
           {single ? `Page ${2 * spread + (focus === "left" ? 1 : 2)} / ${pageCount}` : `Spread ${spread + 1} / ${lastSpread + 1}`}
         </span>
-        <NavButton label="Next page" onPress={() => onStep(1)} disabled={single ? focus === "right" && spread >= lastSpread : spread >= lastSpread} colors={colors}>
+        <NavButton label="Next page" onPress={() => onStep(1)} disabled={single ? focus === "right" && spread >= lastSpread : spread >= lastSpread} colors={page}>
           <ArrowRightIcon size={20} />
         </NavButton>
       </div>
@@ -1577,7 +1609,7 @@ function SummaryPage({
                         fontFamily: COMIC_FONT,
                         borderColor: colors.LINE,
                         background: tone,
-                        color: task.complete || task.status !== "not_started" ? colors.ON_LOUD : colors.INK,
+                        color: colors.ON_LOUD,
                       }}
                     >
                       {task.complete ? <CheckIcon size={14} /> : task.locked ? <LockIcon size={12} /> : number}

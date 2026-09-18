@@ -78,6 +78,15 @@ export interface ComicColors {
   /** Translucent line colour for the page's speed-line rays and inline halftone shading. */
   RAY: string;
   SHADE: string;
+
+  /**
+   * Overrides for everything printed on the comic book's pages (and only
+   * there: the cover, board, header and dialogs keep the base palette). A
+   * dark scheme uses it to make the pages read as paper — a warm stock with
+   * dark ink — instead of the dark surface colour. Unset, the pages use the
+   * base palette. Resolve with pageColors().
+   */
+  page?: Partial<Omit<ComicColors, "page">>;
 }
 
 const LIGHT: ComicColors = {
@@ -128,6 +137,11 @@ const LIGHT: ComicColors = {
 
 export function getColors(scheme: "light" | "dark"): ComicColors {
   return scheme === "dark" ? DARK_PALETTE.colors : LIGHT;
+}
+
+/** The palette for what's printed on the book's pages: the base palette with its `page` overrides applied. */
+export function pageColors(c: ComicColors): ComicColors {
+  return c.page ? { ...c, ...c.page, page: undefined } : c;
 }
 
 /**

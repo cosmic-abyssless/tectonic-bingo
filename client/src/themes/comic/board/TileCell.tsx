@@ -8,7 +8,7 @@ import { useThemeTokens } from "../../context";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
 import { sfxAt } from "../fx/SfxLayer";
-import { bw, CLOSED_BOOK, ClosedBook, FIRST_LEAF_STAGGER, FLIP_ANGLE } from "./ClosedBook";
+import { BACK_VIEW, bw, CLOSED_BOOK, ClosedBook, FIRST_LEAF_STAGGER } from "./ClosedBook";
 import { registerBook, useIsBookAway } from "./bookFlight";
 
 /*
@@ -32,15 +32,15 @@ const PRESS_SPRING = { type: "spring", stiffness: 700, damping: 32 } as const;
 
 // The whole book: a static 3/4-view tilt at rest, grows and lifts a touch
 // on hover, squashes back down slightly while pressed.
-// A finished tile's book is turned over on its back cover (FLIP_ANGLE on top
-// of the tilt), which mirrors the 3/4 view — so it leans the other way.
-const makeBookVariants = (turn: number): Variants => ({
-  rest: { rotateY: turn, scale: 1, y: "0%", transition: BOOK_SPRING },
-  hover: { rotateY: turn, scale: 1.06, y: "-5%", transition: BOOK_SPRING },
-  press: { rotateY: turn, scale: 0.98, y: "-3%", transition: PRESS_SPRING },
+// A finished tile's book is turned over on its back cover (BACK_VIEW), which
+// mirrors the 3/4 view — so it leans the other way, top corner forward.
+const makeBookVariants = ({ rotateX, rotateY }: { rotateX: number; rotateY: number }): Variants => ({
+  rest: { rotateX, rotateY, scale: 1, y: "0%", transition: BOOK_SPRING },
+  hover: { rotateX, rotateY, scale: 1.06, y: "-5%", transition: BOOK_SPRING },
+  press: { rotateX, rotateY, scale: 0.98, y: "-3%", transition: PRESS_SPRING },
 });
-const bookVariants = makeBookVariants(CLOSED_BOOK.tilt);
-const flippedBookVariants = makeBookVariants(CLOSED_BOOK.tilt + FLIP_ANGLE);
+const bookVariants = makeBookVariants({ rotateX: 0, rotateY: CLOSED_BOOK.tilt });
+const flippedBookVariants = makeBookVariants(BACK_VIEW);
 // Front page: always the angle halfway between the flat back page (0) and
 // the cover, so the stack reads as evenly fanned the whole time; and
 // always staggered a hair out from under the cover, so it reads as a
