@@ -2,8 +2,7 @@ import { memo, type CSSProperties } from "react";
 import { motion, type Variants } from "motion/react";
 import { useFocusRing } from "react-aria";
 import type { TileModel } from "../../../headless/types";
-import { formatCountdown } from "../../../core/ui/time";
-import { ClockIcon, HandIcon, LockIcon } from "../../../core/ui/icons";
+import { ClockIcon, HandIcon } from "../../../core/ui/icons";
 import { useThemeTokens } from "../../context";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
@@ -29,34 +28,48 @@ import { registerBook, useIsBookAway } from "./bookFlight";
 // Snappy but with a little overshoot — a comic book should feel springy.
 const BOOK_SPRING = { type: "spring", stiffness: 420, damping: 24, mass: 0.7 } as const;
 const PRESS_SPRING = { type: "spring", stiffness: 700, damping: 32 } as const;
+// A frozen tile's book moves as if it's stuck in ice: heavy and just past
+// critically damped, so it creeps to where it's going with no bounce at all.
+const FROZEN_SPRING = { type: "spring", stiffness: 45, damping: 16, mass: 1.4 } as const;
+const FROZEN_PRESS_SPRING = { type: "spring", stiffness: 130, damping: 26 } as const;
+
+interface Springs {
+  hover: typeof BOOK_SPRING | typeof FROZEN_SPRING;
+  press: typeof PRESS_SPRING | typeof FROZEN_PRESS_SPRING;
+}
+const NORMAL: Springs = { hover: BOOK_SPRING, press: PRESS_SPRING };
+const FROZEN: Springs = { hover: FROZEN_SPRING, press: FROZEN_PRESS_SPRING };
 
 // The whole book: a static 3/4-view tilt at rest, grows and lifts a touch
 // on hover, squashes back down slightly while pressed.
 // A finished tile's book is turned over on its back cover (BACK_VIEW), which
 // mirrors the 3/4 view — so it leans the other way, top corner forward.
-const makeBookVariants = ({ rotateX, rotateY }: { rotateX: number; rotateY: number }): Variants => ({
-  rest: { rotateX, rotateY, scale: 1, y: "0%", transition: BOOK_SPRING },
-  hover: { rotateX, rotateY, scale: 1.06, y: "-5%", transition: BOOK_SPRING },
-  press: { rotateX, rotateY, scale: 0.98, y: "-3%", transition: PRESS_SPRING },
+const makeBookVariants = ({ rotateX, rotateY }: { rotateX: number; rotateY: number }, { hover, press }: Springs): Variants => ({
+  rest: { rotateX, rotateY, scale: 1, y: "0%", transition: hover },
+  hover: { rotateX, rotateY, scale: 1.06, y: "-5%", transition: hover },
+  press: { rotateX, rotateY, scale: 0.98, y: "-3%", transition: press },
 });
-const bookVariants = makeBookVariants({ rotateX: 0, rotateY: CLOSED_BOOK.tilt });
-const flippedBookVariants = makeBookVariants(BACK_VIEW);
 // Front page: always the angle halfway between the flat back page (0) and
 // the cover, so the stack reads as evenly fanned the whole time; and
 // always staggered a hair out from under the cover, so it reads as a
 // stack at all.
-const pageVariants: Variants = {
-  rest: { rotateY: CLOSED_BOOK.pageAngle, ...FIRST_LEAF_STAGGER, transition: BOOK_SPRING },
-  hover: { rotateY: -13, ...FIRST_LEAF_STAGGER, transition: BOOK_SPRING },
-  press: { rotateY: -10, ...FIRST_LEAF_STAGGER, transition: PRESS_SPRING },
-};
 // Cover: hinged along the spine, opens further on hover.
-const coverVariants: Variants = {
-  rest: { rotateY: CLOSED_BOOK.coverAngle, transition: BOOK_SPRING },
-  hover: { rotateY: -26, transition: BOOK_SPRING },
-  press: { rotateY: -20, transition: PRESS_SPRING },
-};
-const hingeVariants = { page: pageVariants, cover: coverVariants };
+const makeHingeVariants = ({ hover, press }: Springs) => ({
+  page: {
+    rest: { rotateY: CLOSED_BOOK.pageAngle, ...FIRST_LEAF_STAGGER, transition: hover },
+    hover: { rotateY: -13, ...FIRST_LEAF_STAGGER, transition: hover },
+    press: { rotateY: -10, ...FIRST_LEAF_STAGGER, transition: press },
+  } satisfies Variants,
+  cover: {
+    rest: { rotateY: CLOSED_BOOK.coverAngle, transition: hover },
+    hover: { rotateY: -26, transition: hover },
+    press: { rotateY: -20, transition: press },
+  } satisfies Variants,
+});
+// [normal, frozen], each for the 3/4 view and (finished tiles) the back-cover view.
+const bookVariants = [makeBookVariants({ rotateX: 0, rotateY: CLOSED_BOOK.tilt }, NORMAL), makeBookVariants({ rotateX: 0, rotateY: CLOSED_BOOK.tilt }, FROZEN)] as const;
+const flippedBookVariants = [makeBookVariants(BACK_VIEW, NORMAL), makeBookVariants(BACK_VIEW, FROZEN)] as const;
+const hingeVariants = [makeHingeVariants(NORMAL), makeHingeVariants(FROZEN)] as const;
 
 export const TileCell = memo(function TileCell({
   tile,
@@ -106,6 +119,7 @@ export const TileCell = memo(function TileCell({
       : `inset 0 0 0 1.5px ${stateColor}`
     : "none";
   const isLifted = isFocusVisible || !!isSearchHighlighted;
+  const frozenIdx = tile.freeze.isFrozen ? 1 : 0;
 
   return (
     <motion.button
@@ -183,7 +197,7 @@ export const TileCell = memo(function TileCell({
             flattening against it. */}
         <motion.div
           data-book
-          variants={tile.progress.allComplete ? flippedBookVariants : bookVariants}
+          variants={(tile.progress.allComplete ? flippedBookVariants : bookVariants)[frozenIdx]}
           className="absolute inset-0"
           style={{ transformStyle: "preserve-3d" }}
         >
@@ -198,7 +212,7 @@ export const TileCell = memo(function TileCell({
             colors={colors}
             coverFallback={tokens.tile.bg}
             frozen={tile.freeze.isFrozen}
-            variants={hingeVariants}
+            variants={hingeVariants[frozenIdx]}
           />
         </motion.div>
       </div>
@@ -207,18 +221,9 @@ export const TileCell = memo(function TileCell({
           is turned over on the back cover, credits and all — the green
           hairline outline still marks it.) */}
 
-      {tile.freeze.isFrozen && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-background/70 text-[var(--tile-frozen)]">
-          <LockIcon />
-          <span className="num font-mono text-[11px] font-semibold leading-none">
-            {formatCountdown(tile.freeze.remainingMs)}
-          </span>
-        </div>
-      )}
-
       {/* A freeze that's coming (the bingo hasn't started, so unlocksAt is
-          still null) gets the clock; while it's running the overlay above
-          covers it, and once it's over there's nothing left to flag. */}
+          still null) gets the clock; while it's running the cover itself is
+          iced over, and once it's over there's nothing left to flag. */}
       {tile.freeze.hasFreezePeriod && tile.freeze.unlocksAt === null && (
         <span className="absolute left-1 top-1 z-10 text-[var(--tile-frozen)] drop-shadow">
           <ClockIcon size={14} />

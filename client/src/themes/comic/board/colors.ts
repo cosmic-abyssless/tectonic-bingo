@@ -58,6 +58,11 @@ export interface ComicColors {
   BAD: string;
   INFO: string;
   FROZEN: string;
+  /** Ice on a frozen tile's cover: the icicles' body, their shaded facet and glints, and lettering set on ice. */
+  ICE: string;
+  ICE_DEEP: string;
+  ICE_SHINE: string;
+  ON_ICE: string;
 
   /** Kept for existing consumers. */
   ORANGE_LINE: string;
@@ -120,6 +125,10 @@ const LIGHT: ComicColors = {
   BAD: "#c9161a",
   INFO: "#1f4fd8",
   FROZEN: "#00a8e1",
+  ICE: "#cfeeff",
+  ICE_DEEP: "#7fc3ea",
+  ICE_SHINE: "#ffffff",
+  ON_ICE: "#0a3550",
 
   ORANGE_LINE: "#ff7a1a",
 
