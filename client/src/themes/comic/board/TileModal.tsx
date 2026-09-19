@@ -30,7 +30,7 @@ import { PageColorsContext, useComic } from "../ui/useComic";
 import { CaptionBox } from "../ui/CaptionBox";
 import {
   BASE_DEPTH,
-  BASE_SHADOW,
+  baseShadow,
   BASE_STAGGER,
   BACK_STAGGER,
   BACK_STAGGER_CSS,
@@ -206,10 +206,10 @@ const PHONE_BOOK_MAX_WIDTH = "calc((100dvh - 6rem) / 1.5)";
  * reason). Pure atmosphere, faded in and out by FlyingBook's enter/exit
  * sequences (`burst`), so this layer owns the opacity.
  */
-function ComicBurst({ burstRef, reduceMotion }: { burstRef: Ref<HTMLDivElement>; reduceMotion: boolean }) {
+function ComicBurst({ burstRef, reduceMotion, tint }: { burstRef: Ref<HTMLDivElement>; reduceMotion: boolean; tint?: string }) {
   return (
     <div ref={burstRef} className="pointer-events-none fixed inset-0 flex items-center justify-center" style={{ opacity: 0 }}>
-      <ComicBurstRays reduceMotion={reduceMotion} />
+      <ComicBurstRays reduceMotion={reduceMotion} color={tint} />
     </div>
   );
 }
@@ -1116,7 +1116,7 @@ function FlyingBook({
     // Bring the base sheet's shadow back before it's closed again — it's
     // occluded under the cover regardless of exactly when in the close it
     // returns.
-    base.style.filter = BASE_SHADOW;
+    base.style.filter = baseShadow(colors, tile.progress.allComplete);
     if (reduceMotion) {
       animate(reducedExitSequence(backdrop, burst)).then(finish, finish);
       return;
@@ -1163,7 +1163,7 @@ function FlyingBook({
       {/* The scrim is its own layer (not the overlay's background) so it
           can fade on its own clock while the book's in flight above it. */}
       <div ref={backdropRef} className="pointer-events-none fixed inset-0 bg-scrim/70" style={{ opacity: 0 }} />
-      <ComicBurst burstRef={burstRef} reduceMotion={!!reduceMotion} />
+      <ComicBurst burstRef={burstRef} reduceMotion={!!reduceMotion} tint={tile.progress.allComplete ? colors.OK : undefined} />
       {/* min-h-full + a centering flex child (rather than centering the
           scroll container itself) so tall content — the book plus its
           floating title and the nav — scrolls into view instead of having

@@ -18,7 +18,7 @@ import { useComic } from "./useComic";
  * black rather than flat paint. Rotation is the shared `comic-rays-spin`
  * class, so the small-screen and reduced-motion rules in comic.css apply.
  */
-export function ComicBurstRays({ reduceMotion = false }: { reduceMotion?: boolean }) {
+export function ComicBurstRays({ reduceMotion = false, color }: { reduceMotion?: boolean; color?: string }) {
   const { colors } = useComic();
   const fade = "radial-gradient(circle closest-side, black 0%, black 18%, transparent 96%)";
   return (
@@ -29,7 +29,7 @@ export function ComicBurstRays({ reduceMotion = false }: { reduceMotion?: boolea
         width: "180vmax",
         aspectRatio: "1",
         borderRadius: "50%",
-        background: `repeating-conic-gradient(${colors.BURST} 0deg 7deg, transparent 7deg 18deg)`,
+        background: `repeating-conic-gradient(${color ?? colors.BURST} 0deg 7deg, transparent 7deg 18deg)`,
         maskImage: fade,
         WebkitMaskImage: fade,
         opacity: 0.4,

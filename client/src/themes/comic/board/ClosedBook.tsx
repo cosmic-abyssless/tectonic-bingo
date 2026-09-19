@@ -117,7 +117,11 @@ export const BACK_STAGGER_CSS = "translateX(2.5%) translateY(0.6%) scaleX(1.025)
  * above — while the base is still occluded under the cover either way, so
  * there's nothing to fade.
  */
-export const BASE_SHADOW = `drop-shadow(${bw(0.0375)} ${bw(0.125)} ${bw(0.1)} rgba(0,0,0,0.45))`;
+export function baseShadow(colors: ComicColors, complete: boolean): string {
+  // A finished book casts a green shadow instead of a black one.
+  const color = complete ? `color-mix(in srgb, ${colors.OK} 75%, transparent)` : "rgba(0,0,0,0.45)";
+  return `drop-shadow(${bw(0.0375)} ${bw(0.125)} ${bw(0.1)} ${color})`;
+}
 
 export interface LeafFaces {
   /** Printed on the front — the right-hand page while this leaf's unturned. */
@@ -179,7 +183,7 @@ export function ClosedBook({
         style={{
           backgroundColor: page.PAPER_ALT,
           border: pageBorder,
-          filter: BASE_SHADOW,
+          filter: baseShadow(colors, tile.progress.allComplete),
           transformOrigin: "left top",
           transform: `${BASE_STAGGER_CSS} translateZ(${-BASE_DEPTH}px)`,
         }}
