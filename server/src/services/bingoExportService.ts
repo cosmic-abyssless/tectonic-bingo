@@ -9,7 +9,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { BINGO_EXPORT_FORMAT_VERSION, type BingoExportDocument, type ExportNode } from "@bingo/shared";
 import type { GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { bingos } from "../db/schema";
+import { bingos, nodeEdges } from "../db/schema";
 import { ServiceError } from "./errors";
 import * as bingoService from "./bingoService";
 import * as boardService from "./boardService";
@@ -50,6 +50,16 @@ export function exportBingo(db: Db, bingoId: string): BingoExportDocument {
   const flatNodes: { exportNode: ExportNode; graphNode: GraphNode }[] = [];
 
   function buildExportNode(node: GraphNode): ExportNode {
+    const met = localIdByRealNodeId.get(node.id);
+    if (met !== undefined) {
+      // A node with more than one parent, met again: refer back to the copy already
+      // written (see ExportNode.reuse) rather than exporting it twice.
+      return {
+        localId: met, kind: node.kind, label: node.label, description: node.description, notes: node.notes, points: node.points,
+        minCount: node.minCount, quantity: node.quantity, itemName: node.itemName, pointsGateLocalId: null, submitGateLocalId: null,
+        allowsPreLoad: node.allowsPreLoad, reuse: true, children: [],
+      };
+    }
     const localId = nextLocalId++;
     localIdByRealNodeId.set(node.id, localId);
     const exportNode: ExportNode = {
@@ -80,7 +90,9 @@ export function exportBingo(db: Db, bingoId: string): BingoExportDocument {
     hasFreezePeriod: t.hasFreezePeriod,
     freezeDurationMinutes: t.freezeDurationMinutes,
     notes: t.notes,
-    // The tile's own node is a bare ALL wrapper with no configurable fields — never exported itself.
+    // The tile's own node is an ALL wrapper: never exported itself, but its points are the
+    // full-completion bonus, and its children are the tasks.
+    bonusPoints: t.node.points,
     tasks: t.node.children.map(buildExportNode),
   }));
 
@@ -115,6 +127,8 @@ export function exportBingo(db: Db, bingoId: string): BingoExportDocument {
       boardRows: bingo.boardRows,
       boardCols: bingo.boardCols,
       signupMode: bingo.signupMode,
+      leftoverMode: bingo.leftoverMode,
+      warnLeftovers: bingo.warnLeftovers,
       buyinAmount: bingo.buyinAmount,
       bonusPotAmount: bingo.bonusPotAmount,
       rulesMarkdown: bingo.rulesMarkdown,
@@ -140,7 +154,13 @@ function assertValidDocument(doc: BingoExportDocument): void {
   if (!Array.isArray(doc.categories) || !Array.isArray(doc.tiles) || !Array.isArray(doc.lines) || !Array.isArray(doc.signupQuestions)) {
     throw new ServiceError(400, "Malformed import file: expected categories/tiles/lines/signupQuestions arrays");
   }
+  if (doc.bingo.leftoverMode !== undefined && doc.bingo.leftoverMode !== "cut" && doc.bingo.leftoverMode !== "singles") {
+    throw new ServiceError(400, "Malformed import file: unknown leftover mode");
+  }
   for (const t of doc.tiles) {
+    if (t.bonusPoints !== undefined && (!Number.isInteger(t.bonusPoints) || t.bonusPoints < 0)) {
+      throw new ServiceError(400, `Malformed import file: tile "${t.name}" has an invalid bonus`);
+    }
     if (t.boardRow < 0 || t.boardRow >= doc.bingo.boardRows || t.boardCol < 0 || t.boardCol >= doc.bingo.boardCols) {
       throw new ServiceError(400, `Malformed import file: tile "${t.name}" is positioned outside the declared board dimensions`);
     }
@@ -158,7 +178,9 @@ function toGraphNodeInput(node: ExportNode): GraphNodeInput {
     quantity: node.quantity ?? undefined,
     itemName: node.itemName,
     allowsPreLoad: node.allowsPreLoad,
-    children: node.children.map(toGraphNodeInput),
+    // A `reuse` stub isn't created (it is an already-created node's other parent linking to it,
+    // done after creation: see the linking step in importBingo).
+    children: node.children.filter((c) => !c.reuse).map(toGraphNodeInput),
     // Gates are deliberately omitted — a gate can reference a node created
     // later (anywhere in the bingo), so they're resolved in a second pass
     // once every node has a real id. See setNodeGates below.
@@ -194,6 +216,8 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
     });
     bingoService.updateBingoSettings(tx, bingo.id, {
       signupMode: doc.bingo.signupMode,
+      ...(doc.bingo.leftoverMode !== undefined ? { leftoverMode: doc.bingo.leftoverMode } : {}),
+      ...(doc.bingo.warnLeftovers !== undefined ? { warnLeftovers: doc.bingo.warnLeftovers } : {}),
       buyinAmount: doc.bingo.buyinAmount,
       bonusPotAmount: doc.bingo.bonusPotAmount,
       rulesMarkdown: doc.bingo.rulesMarkdown,
@@ -208,6 +232,8 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
     // Pass 1: create every tile and its task tree, gates stripped (a gate
     // may reference a node in a tile not yet created).
     const nodeIdByLocal = new Map<number, string>();
+    // Parents that have a `reuse` child: their full child order, to be rebuilt once every node exists.
+    const reordered: { parentId: string; childLocalIds: number[] }[] = [];
     const pendingGates: { realNodeId: string; pointsGateLocalId: number | null; submitGateLocalId: number | null }[] = [];
 
     function mapCreatedNode(exportNode: ExportNode, createdNode: GraphNode): void {
@@ -217,8 +243,10 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
       }
       // createTask's returned tree preserves input child order (insertSubtree
       // assigns sortOrder by array index; getNodeTree sorts by the same
-      // field), so parallel-walking both trees by index is safe.
-      exportNode.children.forEach((child, i) => mapCreatedNode(child, createdNode.children[i]!));
+      // field), so parallel-walking both trees by index is safe: over the
+      // children that were created, i.e. without the `reuse` stubs.
+      if (exportNode.children.some((c) => c.reuse)) reordered.push({ parentId: createdNode.id, childLocalIds: exportNode.children.map((c) => c.localId) });
+      exportNode.children.filter((c) => !c.reuse).forEach((child, i) => mapCreatedNode(child, createdNode.children[i]!));
     }
 
     for (const t of doc.tiles) {
@@ -235,9 +263,24 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
         freezeDurationMinutes: t.freezeDurationMinutes,
         notes: t.notes,
       });
-      t.tasks.forEach((task, i) => {
-        const created = boardService.createTask(tx, tile.id, toGraphNodeInput(task), i);
-        mapCreatedNode(task, created);
+      if (t.bonusPoints) boardService.updateTileBonusPoints(tx, tile.id, t.bonusPoints);
+      if (t.tasks.some((task) => task.reuse)) reordered.push({ parentId: tile.nodeId, childLocalIds: t.tasks.map((task) => task.localId) });
+      t.tasks
+        .filter((task) => !task.reuse)
+        .forEach((task, i) => {
+          const created = boardService.createTask(tx, tile.id, toGraphNodeInput(task), i);
+          mapCreatedNode(task, created);
+        });
+    }
+
+    // Link the nodes that have more than one parent: every node exists now, so each parent that
+    // had a `reuse` child gets its edges rebuilt in the exported order, the shared node included.
+    for (const { parentId, childLocalIds } of reordered) {
+      tx.delete(nodeEdges).where(eq(nodeEdges.parentId, parentId)).run();
+      childLocalIds.forEach((localId, i) => {
+        const childId = nodeIdByLocal.get(localId);
+        if (childId === undefined) throw new ServiceError(400, `Malformed import file: reference to unknown node ${localId}`);
+        tx.insert(nodeEdges).values({ parentId, childId, sortOrder: i }).run();
       });
     }
 
@@ -249,14 +292,19 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
       });
     }
 
-    // Lines are deterministic from board dimensions + tile positions —
-    // regenerate the structure, then apply each line's exact exported points.
-    boardService.generateLines(tx, bingo, 15);
-    const createdLines = boardService.getLines(tx, bingo.id);
-    const lineIdByKey = new Map(createdLines.map((l) => [`${l.lineType}:${l.lineIndex}`, l.id]));
-    for (const line of doc.lines) {
-      const lineId = lineIdByKey.get(`${line.lineType}:${line.lineIndex}`);
-      if (lineId) boardService.updateLinePoints(tx, lineId, line.points);
+    // Lines are deterministic from board dimensions + tile positions — regenerate the
+    // structure, then apply each line's exact exported points. But a bingo can have any subset
+    // of them (none yet, or some deleted one by one), and the import must not add bonuses the
+    // source never had: with no lines in the file, don't generate any; otherwise generate them
+    // all and drop the ones the file doesn't list.
+    if (doc.lines.length > 0) {
+      boardService.generateLines(tx, bingo, 15);
+      const wanted = new Map(doc.lines.map((l) => [`${l.lineType}:${l.lineIndex}`, l.points]));
+      for (const line of boardService.getLines(tx, bingo.id)) {
+        const points = wanted.get(`${line.lineType}:${line.lineIndex}`);
+        if (points === undefined) boardService.deleteLine(tx, line.id);
+        else boardService.updateLinePoints(tx, line.id, points);
+      }
     }
 
     for (const q of doc.signupQuestions) {
