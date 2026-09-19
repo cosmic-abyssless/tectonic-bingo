@@ -40,6 +40,32 @@ export function rememberedThemeForPath(pathname: string, storage: StorageLike | 
   return match ? rememberedTheme(decodeURIComponent(match[1]!), storage) : null;
 }
 
+// The theme's page colour, so the wait for its chunk can be painted in that colour
+// (see ThemeProvider) rather than the default page colour — which flashes, then
+// jumps to the theme's own.
+const BG_KEY_PREFIX = "theme-bg:v1:";
+// Only plain colours are ever applied: this is read from storage and set as a style.
+const COLOR = /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%/]+\))$/i;
+
+export function rememberThemeBackground(themeKey: string, scheme: "light" | "dark", color: string, storage: StorageLike | null = defaultStorage()): void {
+  if (!COLOR.test(color)) return;
+  try {
+    storage?.setItem(`${BG_KEY_PREFIX}${themeKey}:${scheme}`, color);
+  } catch {
+    // Best-effort.
+  }
+}
+
+/** The page colour this theme last had in this colour scheme, or null. */
+export function rememberedThemeBackground(themeKey: string, scheme: "light" | "dark", storage: StorageLike | null = defaultStorage()): string | null {
+  try {
+    const color = storage?.getItem(`${BG_KEY_PREFIX}${themeKey}:${scheme}`) ?? null;
+    return color && COLOR.test(color) ? color : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Keeps the remembered theme for `slug` current. */
 export function useRememberTheme(slug: string | undefined, themeKey: string | undefined): void {
   useEffect(() => {

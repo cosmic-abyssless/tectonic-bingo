@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { rememberTheme, rememberedTheme, rememberedThemeForPath } from "./rememberedTheme";
+import { rememberTheme, rememberThemeBackground, rememberedTheme, rememberedThemeBackground, rememberedThemeForPath } from "./rememberedTheme";
 
 function memoryStorage() {
   const data = new Map<string, string>();
@@ -52,5 +52,24 @@ describe("rememberedTheme", () => {
     expect(rememberedTheme("comics", broken)).toBeNull();
     expect(() => rememberTheme("comics", "comic", null)).not.toThrow();
     expect(rememberedThemeForPath("/b/comics", null)).toBeNull();
+  });
+});
+
+describe("rememberedThemeBackground", () => {
+  it("is remembered per theme and colour scheme", () => {
+    const s = memoryStorage();
+    rememberThemeBackground("comic", "light", "#ffc526", s);
+    rememberThemeBackground("comic", "dark", "rgb(20, 20, 24)", s);
+    expect(rememberedThemeBackground("comic", "light", s)).toBe("#ffc526");
+    expect(rememberedThemeBackground("comic", "dark", s)).toBe("rgb(20, 20, 24)");
+    expect(rememberedThemeBackground("other", "light", s)).toBeNull();
+  });
+
+  it("only ever stores or returns plain colours", () => {
+    const s = memoryStorage();
+    rememberThemeBackground("comic", "light", "red; background: url(https://evil.example/x)", s);
+    expect(rememberedThemeBackground("comic", "light", s)).toBeNull();
+    s.data.set("theme-bg:v1:comic:dark", "url(https://evil.example/x)");
+    expect(rememberedThemeBackground("comic", "dark", s)).toBeNull();
   });
 });
