@@ -1,6 +1,7 @@
 # Test data generator: implementation plan
 
-Status: **approved plan, ready to implement.** Written to be executed without
+Status: **implemented** (see `docs/test-data-generator.md` for how to use it; the differences
+from this plan are listed at the end of this file). Written to be executed without
 conversation context. The requirements are in
 `docs/test-data-generator-requirements.md`; this is how they get built.
 `docs/audit-log.md` explains the audit log the generator has to feed, and
@@ -555,6 +556,27 @@ times, the audit tab has no `http.mutation` rows for the generator's
 requests, and after teardown `GET /api/dev/bingos` is empty, the
 `uploads/` folder has no generator files, and the audit tab of another
 bingo is untouched.
+
+## As built: differences from this plan
+
+- **Timeline for stages before live.** The table under Phase 3 anchors "now" wrongly for
+  `signup`..`reveal` (it would put the draft in the future for `--stage draft`). As built,
+  the moments are fixed offsets from `startsAt` (signups open -21d, captains -5d, draft -3d,
+  reveal -2d, created -23d) and `startsAt` is chosen so `now` lands inside the target stage
+  (`server/scripts/testdata/timeline.ts`). A stage still ahead of the target just has
+  scheduled future dates.
+- **Two tiles can't be played** (PETS, SLAYER BOSSES): a submit gate on a part that shares
+  leaves with another part refuses every claim. The generator detects and skips such parts
+  (`deadlockedParts` in `board.ts`); see `docs/test-data-generator.md`.
+- **Pacing.** Per-team progress is paced along the schedule its target implies
+  (`PACE_EXPONENT`), otherwise easy tiles were done so early that "50% through" already had
+  70-80% of the final submissions.
+- The write order of team naming and raised hands was merged into one date-ordered pass so
+  the audit log has no out-of-order rows.
+- The clock function is `now()` in `server/src/clock.ts`; services import it as `clockNow`
+  where a local `now` variable already exists.
+- Phase 2's tests use the service layer plus a live check against a running server
+  instead of stubbed request objects; the route-coverage test includes the dev router.
 
 ## Acceptance
 
