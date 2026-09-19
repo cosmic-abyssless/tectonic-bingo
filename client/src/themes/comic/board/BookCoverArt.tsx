@@ -262,8 +262,22 @@ export function BookBackArt({
     // (a box's own cqw resolve against its ancestor's container, not itself).
     <div className="absolute inset-0 overflow-hidden [container-type:inline-size]" style={{ backgroundColor: dominantColor ?? fallbackColor, color: textColor }}>
       <div className="absolute inset-0 flex flex-col items-center gap-[3cqw] px-[6cqw] pb-[6cqw] pt-[6cqw]">
-        <span className="uppercase leading-none" style={{ fontFamily: COMIC_LOGO_FONT, fontWeight: 800, fontSize: "13cqw", letterSpacing: "0.03em" }}>
-          The End
+        {/* The same rubber stamp as a finished part's page (ui/Stamp), drawn in the
+            cover's own units, on the paper colour so it reads on any cover. */}
+        <span
+          className="my-[1cqw] shrink-0 -rotate-3 whitespace-nowrap uppercase leading-none"
+          style={{
+            fontFamily: COMIC_FONT,
+            fontSize: "11.5cqw",
+            letterSpacing: "0.08em",
+            color: colors.OK,
+            background: colors.PAPER_RAISED,
+            border: `1.2cqw solid ${colors.OK}`,
+            boxShadow: `0 0 0 0.8cqw ${colors.PAPER_RAISED}, 0 0 0 1.7cqw ${colors.OK}`,
+            padding: "1.6cqw 3.5cqw",
+          }}
+        >
+          Completed
         </span>
         {/* The cover art again, smaller, with a big check stamped on its
             corner so a finished tile reads as done at a glance — and beside
