@@ -1,3 +1,4 @@
+import { now as clockNow } from "../clock";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -117,8 +118,8 @@ export function createBingo(db: Db, params: CreateBingoParams) {
     const { source, ...row } = params;
     const existing = tx.select().from(bingos).where(eq(bingos.slug, row.slug)).get();
     if (existing) throw new ServiceError(409, "A bingo with this slug already exists");
-    const bingo = tx.insert(bingos).values(row).returning().get();
-    tx.insert(bingoModerators).values({ bingoId: bingo.id, userId: row.createdByUserId }).run();
+    const bingo = tx.insert(bingos).values({ ...row, createdAt: clockNow() }).returning().get();
+    tx.insert(bingoModerators).values({ bingoId: bingo.id, userId: row.createdByUserId, createdAt: clockNow() }).run();
     audit(tx, {
       action: "bingo.created",
       bingoId: bingo.id,
@@ -153,7 +154,7 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
     // one, otherwise the moment the bingo was last put live, which the transition logged below
     // records. (This used to stamp "now" into startsAt the first time the bingo went live, which
     // pinned the freeze to that first time: moving back to reveal and live again never restarted it.)
-    const now = params.now ?? new Date();
+    const now = params.now ?? clockNow();
 
     tx.update(bingos).set({ stage: params.toStage }).where(eq(bingos.id, bingo.id)).run();
     tx.insert(stageTransitions)
@@ -236,7 +237,7 @@ export function addModerator(db: Db, params: { bingoId: string; userId: string }
       markAuditedNoop();
       return existing;
     }
-    const mod = tx.insert(bingoModerators).values(params).returning().get();
+    const mod = tx.insert(bingoModerators).values({ ...params, createdAt: clockNow() }).returning().get();
     audit(tx, {
       action: "moderator.added",
       bingoId: params.bingoId,

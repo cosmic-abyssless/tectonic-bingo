@@ -3,6 +3,7 @@
 import crypto from "node:crypto";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { db } from "../db";
+import { isDevModeActive } from "../devMode";
 import { runWithAuditContext, type AuditContext } from "./context";
 import { audit, redactBody } from "./record";
 
@@ -19,6 +20,18 @@ export function auditContext(req: Request, res: Response, next: NextFunction): v
   };
   req.audit = ctx;
 
+  // Dev-only clock override: lets the test-data generator play a bingo forward at spoofed times through
+  // the real endpoints. Ignored outside dev mode.
+  const devNow = isDevModeActive() ? req.header("x-dev-now") : undefined;
+  if (devNow) {
+    const at = new Date(devNow);
+    if (Number.isNaN(at.getTime())) {
+      res.status(400).json({ error: "X-Dev-Now must be an ISO date" });
+      return;
+    }
+    ctx.now = at;
+  }
+
   // Closes over `ctx` directly rather than calling getAuditContext(): a
   // res.on("finish") callback fires outside the AsyncLocalStorage run() that
   // wrapped the handler, so the ambient store would already be gone.
@@ -27,6 +40,7 @@ export function auditContext(req: Request, res: Response, next: NextFunction): v
     if (!isMutation || res.statusCode >= 400 || ctx.recorded > 0 || ctx.skip) return;
 
     audit(db, {
+      now: ctx.now,
       action: "http.mutation",
       bingoId: req.bingo?.id ?? null,
       entity: { type: "http", id: null, label: `${req.method} ${req.originalUrl}` },

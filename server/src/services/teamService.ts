@@ -1,3 +1,4 @@
+import { now as clockNow } from "../clock";
 import { and, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { FieldChanges } from "@bingo/shared";
@@ -114,7 +115,7 @@ export function setTileInterest(db: Db, teamId: string, userId: string, tileId: 
       markAuditedNoop();
       return;
     }
-    if (interested) tx.insert(tileInterests).values({ tileId, taskId, teamId, userId }).run();
+    if (interested) tx.insert(tileInterests).values({ tileId, taskId, teamId, userId, createdAt: clockNow() }).run();
     else tx.delete(tileInterests).where(where).run();
     audit(tx, {
       action: "team.tile_interest_set",
@@ -139,7 +140,7 @@ export interface CreatePointAdjustmentParams {
 export function createPointAdjustment(db: Db, params: CreatePointAdjustmentParams) {
   if (!params.reason.trim()) throw new ServiceError(400, "reason is required");
   return db.transaction((tx) => {
-    const adjustment = tx.insert(teamPointAdjustments).values(params).returning().get();
+    const adjustment = tx.insert(teamPointAdjustments).values({ ...params, createdAt: clockNow() }).returning().get();
     audit(tx, {
       action: "points.adjusted",
       bingoId: params.bingoId,
@@ -241,11 +242,11 @@ export function createTeam(db: Db, params: CreateTeamParams) {
 
     const team = tx
       .insert(teams)
-      .values({ bingoId: params.bingoId, captainUserId: params.captainUserId, name: params.name ?? "New Team", codeword, color: nextTeamColor(tx, params.bingoId) })
+      .values({ bingoId: params.bingoId, captainUserId: params.captainUserId, name: params.name ?? "New Team", codeword, color: nextTeamColor(tx, params.bingoId), createdAt: clockNow(), updatedAt: clockNow() })
       .returning()
       .get();
-    tx.insert(teamMembers).values({ teamId: team.id, userId: params.captainUserId, isCaptain: true }).run();
-    if (coCaptainUserId) tx.insert(teamMembers).values({ teamId: team.id, userId: coCaptainUserId, isCoCaptain: true }).run();
+    tx.insert(teamMembers).values({ teamId: team.id, userId: params.captainUserId, isCaptain: true, joinedAt: clockNow() }).run();
+    if (coCaptainUserId) tx.insert(teamMembers).values({ teamId: team.id, userId: coCaptainUserId, isCoCaptain: true, joinedAt: clockNow() }).run();
     audit(tx, {
       action: "team.created",
       bingoId: params.bingoId,
@@ -316,7 +317,7 @@ export function addTeamMember(db: Db, teamId: string, userId: string) {
     const team = tx.select().from(teams).where(eq(teams.id, teamId)).get();
     if (!team) throw new ServiceError(404, "Team not found");
     assertUserNotOnATeam(tx, team.bingoId, userId);
-    const member = tx.insert(teamMembers).values({ teamId, userId, isCaptain: false }).returning().get();
+    const member = tx.insert(teamMembers).values({ teamId, userId, isCaptain: false, joinedAt: clockNow() }).returning().get();
     audit(tx, {
       action: "team.member_added",
       bingoId: team.bingoId,

@@ -9,6 +9,7 @@ import { createTile, createTask } from "./boardService";
 import { getTeamNodeStatuses } from "./boardService";
 import { createSubmission, getAllSubmissionsForBingo, getTeamSubmissions, markScreenshotAnalysisFailed, recordScreenshotAnalysis } from "./submissionService";
 import { ServiceError } from "./errors";
+import { runWithAuditContext } from "../audit/context";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -58,6 +59,23 @@ afterEach(() => {
 });
 
 describe("createSubmission", () => {
+  it("stamps the submission with the request's clock (dev X-Dev-Now), not the real time", () => {
+    const { bingo, teamId, memberUserId } = seed();
+    const task = addTask(addTile(bingo.id).id, { sortOrder: 0, points: 20 });
+    const at = new Date("2026-03-04T21:30:00Z"); // well after the bingo started
+
+    const submission = runWithAuditContext({ requestId: "r", actorUserId: null, actorType: "system", actorRole: "system", recorded: 0, skip: null, now: at }, () =>
+      createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId: task.leafId, itemName: "x" }], screenshotUrl: "/x.png" }),
+    );
+
+    expect(submission.submittedAt).toEqual(at);
+    expect(submission.createdAt).toEqual(at);
+    const screenshot = db.select().from(schema.submissionScreenshots).where(eq(schema.submissionScreenshots.submissionId, submission.id)).get()!;
+    expect(screenshot.uploadedAt).toEqual(at);
+    const audited = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "submission.created")).get()!;
+    expect(audited.createdAt).toEqual(at);
+  });
+
   it("succeeds on a plain task and marks it pending_approval", () => {
     const { bingo, teamId, memberUserId } = seed();
     const tile = addTile(bingo.id);

@@ -1,3 +1,4 @@
+import { now as clockNow } from "../clock";
 import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -172,13 +173,13 @@ export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
     if (existing) {
       tx.delete(signupAnswers).where(eq(signupAnswers.signupId, existing.id)).run();
       tx.update(signups)
-        .set({ ...values, status: "active", buyinReceivedAt: null, buyinCollectedByUserId: null, buyinRecordedByUserId: null, createdAt: new Date() })
+        .set({ ...values, status: "active", buyinReceivedAt: null, buyinCollectedByUserId: null, buyinRecordedByUserId: null, createdAt: clockNow() })
         .where(eq(signups.id, existing.id))
         .run();
     }
     const signup = existing
       ? tx.select(PUBLIC_SIGNUP_COLS).from(signups).where(eq(signups.id, existing.id)).get()!
-      : tx.insert(signups).values({ bingoId: params.bingoId, userId: params.userId, ...values }).returning(PUBLIC_SIGNUP_COLS).get();
+      : tx.insert(signups).values({ bingoId: params.bingoId, userId: params.userId, ...values, createdAt: clockNow() }).returning(PUBLIC_SIGNUP_COLS).get();
     for (const a of params.answers) {
       tx.insert(signupAnswers).values({ signupId: signup.id, questionId: a.questionId, value: a.value }).run();
     }
@@ -353,7 +354,7 @@ export function markBuyin(db: Db, bingo: Bingo, signupId: string, params: MarkBu
     const updated = tx
       .update(signups)
       .set({
-        buyinReceivedAt: params.received ? new Date() : null,
+        buyinReceivedAt: params.received ? clockNow() : null,
         buyinCollectedByUserId: collectedByUserId,
         buyinRecordedByUserId: params.received ? params.recordedByUserId : null,
       })

@@ -9,6 +9,7 @@
 // Called fire-and-forget from the signup routes (never awaited in the
 // response path — a flaky third-party API should never slow down or fail
 // someone's signup) and from the dev seed-signups tool. Never throws.
+import { now as clockNow } from "../clock";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { and, eq } from "drizzle-orm";
 import type { AccountType, SignupAnswer, WomPlayerStats } from "@bingo/shared";
@@ -67,7 +68,7 @@ export async function fetchAndPersistPlayerStats(
       .set({
         womDataJson: womData ? JSON.stringify(womData) : null,
         runeProfileDataJson: runeProfileData ? JSON.stringify(runeProfileData) : null,
-        statsFetchedAt: new Date(),
+        statsFetchedAt: clockNow(),
       })
       .where(eq(signups.id, signupId))
       .run();

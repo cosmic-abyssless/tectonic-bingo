@@ -1,3 +1,4 @@
+import { now as clockNow } from "../clock";
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -289,9 +290,9 @@ export function makePick(db: Db, params: MakePickParams) {
     }
 
     const picks = userIds.map((userId) =>
-      tx.insert(draftPicks).values({ bingoId: bingo.id, pickNumber, teamId: currentTeam.id, userId, pickedByUserId: actingUserId }).returning().get(),
+      tx.insert(draftPicks).values({ bingoId: bingo.id, pickNumber, teamId: currentTeam.id, userId, pickedByUserId: actingUserId, createdAt: clockNow() }).returning().get(),
     );
-    for (const userId of userIds) tx.insert(teamMembers).values({ teamId: currentTeam.id, userId, isCaptain: false }).run();
+    for (const userId of userIds) tx.insert(teamMembers).values({ teamId: currentTeam.id, userId, isCaptain: false, joinedAt: clockNow() }).run();
 
     const userRows = tx.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, userIds)).all();
     const displayNameById = new Map(userRows.map((u) => [u.id, u.discordGuildNick ?? u.discordGlobalName ?? u.discordUsername]));
@@ -360,7 +361,7 @@ export function setPickRating(db: Db, teamId: string, signupId: string, rating: 
     } else {
       tx.insert(pickRatings)
         .values(signupIds.map((id) => ({ teamId, signupId: id, stars: rating.stars, note })))
-        .onConflictDoUpdate({ target: [pickRatings.teamId, pickRatings.signupId], set: { stars: rating.stars, note, updatedAt: new Date() } })
+        .onConflictDoUpdate({ target: [pickRatings.teamId, pickRatings.signupId], set: { stars: rating.stars, note, updatedAt: clockNow() } })
         .run();
     }
     // Ratings are a team's private scouting notes, so the entry stays

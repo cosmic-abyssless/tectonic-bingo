@@ -8,6 +8,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { audit } from "./record";
 import { auditContext, auditSkip } from "./middleware";
 import { asyncHandler } from "../middleware/errorHandler";
+import { now } from "../clock";
 
 // auditContext's fallback writes through the module-level `db` singleton
 // (server/src/db/index.ts), so point it at our in-memory test DB before the
@@ -50,6 +51,10 @@ function buildApp() {
     res.status(200).json({ ok: true });
   });
 
+  app.post("/api/clock", (_req, res) => {
+    res.status(200).json({ now: now().toISOString() });
+  });
+
   app.get("/api/read-only", (_req, res) => {
     res.status(200).json({ ok: true });
   });
@@ -72,11 +77,11 @@ afterEach(() => {
   warnSpy.mockRestore();
 });
 
-async function post(server: import("http").Server, path: string, body?: unknown) {
+async function post(server: import("http").Server, path: string, body?: unknown, headers: Record<string, string> = {}) {
   const port = (server.address() as { port: number }).port;
   return fetch(`http://localhost:${port}${path}`, {
     method: path.includes("read-only") ? "GET" : "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: body ? JSON.stringify(body) : undefined,
   });
 }
@@ -154,6 +159,65 @@ describe("audit fallback middleware", () => {
       const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "http.mutation")).get()!;
       const details = JSON.parse(row.details);
       expect(details.routePath).toBe("/api/unaudited");
+    } finally {
+      server.close();
+    }
+  });
+});
+
+describe("X-Dev-Now (dev-only request clock)", () => {
+  const AT = "2026-01-05T10:00:00.000Z";
+  const saved = { NODE_ENV: process.env.NODE_ENV, DEV_LOGIN_ENABLED: process.env.DEV_LOGIN_ENABLED };
+  afterEach(() => {
+    process.env.NODE_ENV = saved.NODE_ENV;
+    if (saved.DEV_LOGIN_ENABLED === undefined) delete process.env.DEV_LOGIN_ENABLED;
+    else process.env.DEV_LOGIN_ENABLED = saved.DEV_LOGIN_ENABLED;
+  });
+
+  it("in dev mode, sets the request's clock and the time of the rows it audits", async () => {
+    process.env.DEV_LOGIN_ENABLED = "true";
+    const server = buildApp().listen(0);
+    try {
+      const clock = (await (await post(server, "/api/clock", undefined, { "X-Dev-Now": AT })).json()) as { now: string };
+      expect(clock.now).toBe(AT);
+
+      await post(server, "/api/audited", undefined, { "X-Dev-Now": AT });
+      expect(db.select().from(schema.auditLog).all()[0]!.createdAt.toISOString()).toBe(AT);
+
+      // The http.mutation fallback runs after the response, outside the request's async context: it must still carry the time.
+      await post(server, "/api/unaudited", undefined, { "X-Dev-Now": AT });
+      const fallback = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "http.mutation")).get()!;
+      expect(fallback.createdAt.toISOString()).toBe(AT);
+    } finally {
+      server.close();
+    }
+  });
+
+  it("rejects a header that is not a date", async () => {
+    process.env.DEV_LOGIN_ENABLED = "true";
+    const server = buildApp().listen(0);
+    try {
+      const res = await post(server, "/api/clock", undefined, { "X-Dev-Now": "yesterday-ish" });
+      expect(res.status).toBe(400);
+    } finally {
+      server.close();
+    }
+  });
+
+  it("is ignored when dev mode is off, and in production even if the flag is set", async () => {
+    const server = buildApp().listen(0);
+    try {
+      delete process.env.DEV_LOGIN_ENABLED;
+      let clock = (await (await post(server, "/api/clock", undefined, { "X-Dev-Now": AT })).json()) as { now: string };
+      expect(clock.now).not.toBe(AT);
+
+      process.env.DEV_LOGIN_ENABLED = "true";
+      process.env.NODE_ENV = "production";
+      clock = (await (await post(server, "/api/clock", undefined, { "X-Dev-Now": AT })).json()) as { now: string };
+      expect(clock.now).not.toBe(AT);
+
+      const garbage = await post(server, "/api/clock", undefined, { "X-Dev-Now": "not a date" });
+      expect(garbage.status).toBe(200); // outside dev mode the header is not even looked at
     } finally {
       server.close();
     }

@@ -1,3 +1,4 @@
+import { now as clockNow } from "../clock";
 import { eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -159,7 +160,7 @@ export function approveSubmission(db: Db, params: ApproveSubmissionParams): Appr
     const team = tx.select().from(teams).where(eq(teams.id, submission.teamId)).get()!;
 
     tx.update(submissions)
-      .set({ status: "approved", reviewedAt: new Date(), reviewedByUserId: params.reviewedByUserId, reviewerNotes: params.reviewerNotes ?? null, updatedAt: new Date() })
+      .set({ status: "approved", reviewedAt: clockNow(), reviewedByUserId: params.reviewedByUserId, reviewerNotes: params.reviewerNotes ?? null, updatedAt: clockNow() })
       .where(eq(submissions.id, submission.id))
       .run();
 
@@ -206,7 +207,7 @@ export function rejectSubmission(db: Db, params: RejectSubmissionParams): { subm
     const team = tx.select().from(teams).where(eq(teams.id, submission.teamId)).get()!;
 
     tx.update(submissions)
-      .set({ status: "rejected", reviewedAt: new Date(), reviewedByUserId: params.reviewedByUserId, reviewerNotes: params.reviewerNotes ?? null, updatedAt: new Date() })
+      .set({ status: "rejected", reviewedAt: clockNow(), reviewedByUserId: params.reviewedByUserId, reviewerNotes: params.reviewerNotes ?? null, updatedAt: clockNow() })
       .where(eq(submissions.id, submission.id))
       .run();
 
@@ -258,7 +259,7 @@ export function undoSubmissionReview(db: Db, params: UndoSubmissionReviewParams)
     const team = tx.select().from(teams).where(eq(teams.id, submission.teamId)).get()!;
 
     tx.update(submissions)
-      .set({ status: "pending", reviewedAt: null, reviewedByUserId: null, reviewerNotes: null, updatedAt: new Date() })
+      .set({ status: "pending", reviewedAt: null, reviewedByUserId: null, reviewerNotes: null, updatedAt: clockNow() })
       .where(eq(submissions.id, submission.id))
       .run();
 

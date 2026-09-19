@@ -13,6 +13,8 @@ export interface AuditContext {
   recorded: number;
   /** Set via auditSkip() to suppress the fallback for a route that intentionally records nothing. */
   skip: string | null;
+  /** Dev only: the request's clock, from the X-Dev-Now header (see clock.ts). Absent outside dev mode. */
+  now?: Date;
 }
 
 const storage = new AsyncLocalStorage<AuditContext>();

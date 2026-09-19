@@ -1,3 +1,4 @@
+import { isDevModeActive } from "../devMode";
 import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireBingo } from "../middleware/requireBingo";
@@ -223,7 +224,7 @@ router.delete(
 // Dev-only test data helper — route only exists at all when explicitly
 // enabled, same gate as /auth/dev-login, so it's not reachable in production
 // even by a mod who knows the URL.
-if (process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "true") {
+if (isDevModeActive()) {
   router.post(
     "/dev/seed-signups",
     asyncHandler(async (req, res) => {

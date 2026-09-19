@@ -1,3 +1,4 @@
+import { isDevModeActive } from "../devMode";
 import { Router, Request, Response } from "express";
 import passport from "passport";
 import { eq, notLike } from "drizzle-orm";
@@ -33,7 +34,7 @@ router.post("/logout", (req: Request, res: Response) => {
 // user by discordId, through the real session machinery (req.login uses the
 // same serializeUser/deserializeUser as a real login). Never available
 // unless explicitly enabled.
-if (process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "true") {
+if (isDevModeActive()) {
   // Unauthenticated on purpose — it's how you log in — but only exists at
   // all under the same dev gate as the login endpoint below. Excludes the
   // dev/seed-signups tool's throwaway test bots so the list stays focused

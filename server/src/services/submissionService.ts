@@ -1,3 +1,4 @@
+import { now as clockNow } from "../clock";
 import { eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { ClaimInput, NodeKind } from "@bingo/shared";
@@ -36,7 +37,7 @@ export interface CreateSubmissionParams {
 // for UX, but this is the enforcement.
 export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionParams) {
   return db.transaction((tx) => {
-    const now = params.now ?? new Date();
+    const now = params.now ?? clockNow();
 
     if (bingo.stage !== "live") {
       throw new ServiceError(400, "Submissions are only open while the bingo is live");
@@ -101,11 +102,11 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
 
     const submission = tx
       .insert(submissions)
-      .values({ teamId: params.teamId, submittedByUserId: params.submittedByUserId })
+      .values({ teamId: params.teamId, submittedByUserId: params.submittedByUserId, submittedAt: now, createdAt: now, updatedAt: now })
       .returning()
       .get();
 
-    tx.insert(submissionScreenshots).values({ submissionId: submission.id, storageUrl: params.screenshotUrl }).run();
+    tx.insert(submissionScreenshots).values({ submissionId: submission.id, storageUrl: params.screenshotUrl, uploadedAt: now }).run();
 
     for (const claim of params.claims) {
       tx.insert(claims)
@@ -162,7 +163,7 @@ export function recordScreenshotAnalysis(
       codewordVerified: result.codewordFound,
       detectedItemName: result.detectedItemName,
       scrapeStatus: "completed",
-      scrapedAt: new Date(),
+      scrapedAt: clockNow(),
     })
     .where(eq(submissionScreenshots.submissionId, submissionId))
     .run();

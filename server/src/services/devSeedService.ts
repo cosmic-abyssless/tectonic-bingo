@@ -1,3 +1,4 @@
+import { now as clockNow } from "../clock";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { eq, inArray } from "drizzle-orm";
 import * as schema from "../db/schema";
@@ -142,7 +143,7 @@ export function seedTestSignups(db: Db, bingo: Bingo, count: number, tectonicRos
     }
 
     const { womDataJson, runeProfileDataJson } = fakePlayerStats(rsnForStats);
-    db.update(signups).set({ womDataJson, runeProfileDataJson, statsFetchedAt: new Date() }).where(eq(signups.id, signup.id)).run();
+    db.update(signups).set({ womDataJson, runeProfileDataJson, statsFetchedAt: clockNow() }).where(eq(signups.id, signup.id)).run();
     created.push(signup);
   }
   const source: SeedSource = realCount === created.length ? "tectonic" : realCount === 0 ? "synthetic" : "mixed";

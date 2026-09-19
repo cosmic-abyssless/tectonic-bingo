@@ -1,5 +1,6 @@
 // Must be the first import — see env.ts for why a plain dotenv.config() call
 // positioned before these other imports does not actually run first.
+import { isDevModeActive } from "./devMode";
 import "./env";
 import path from "path";
 import fs from "fs";
@@ -188,7 +189,7 @@ initWebSocketServer(server);
 
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
-  const devModeActive = process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "true";
+  const devModeActive = isDevModeActive();
   console.log(`Dev mode (dev-login, seed-signups): ${devModeActive ? "ENABLED" : "disabled"} (NODE_ENV=${process.env.NODE_ENV ?? "<unset>"}, DEV_LOGIN_ENABLED=${process.env.DEV_LOGIN_ENABLED ?? "<unset>"})`);
   console.log(
     `Tectonic API integration: ${getTectonicConfig() ? "ENABLED" : "disabled"} (requires TECTONIC_API_URL, TECTONIC_API_KEY, TECTONIC_GUILD_ID)`,

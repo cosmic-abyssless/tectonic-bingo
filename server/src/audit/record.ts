@@ -1,6 +1,7 @@
 // The single write path onto audit_log. Called from inside service
 // functions, inside the caller's own transaction, so an audit row is atomic
 // with the mutation it describes. See docs/audit-log-plan.md.
+import { now as clockNow } from "../clock";
 import { AUDIT_ACTIONS, type AuditAction, type AuditActorRole, type AuditActorType, type AuditDetailsMap, type AuditEntityType, type AuditVisibility, type FieldChanges } from "@bingo/shared";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -70,7 +71,7 @@ export function audit<A extends AuditAction>(db: Queryable, input: AuditInput<A>
       entityLabel: input.entity.label ?? null,
       teamId: input.teamId ?? null,
       details: detailsJson,
-      createdAt: input.now ?? new Date(),
+      createdAt: input.now ?? clockNow(),
     })
     .returning({ id: auditLog.id })
     .get();
