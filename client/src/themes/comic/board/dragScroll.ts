@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
-// Touch scrolling done by hand, for the pages of the book on a phone. iOS
-// won't start a native scroll in an overflow box that sits inside the book's
-// 3D-transformed leaves (the touch lands on it, but nothing scrolls and nothing
-// is cancelled), so the page's scroller takes its touches (`touch-action: none`)
-// and moves itself.
+// Scrolling done by hand, for the pages of the book. The browsers' own scroll
+// targeting is unreliable for an overflow box inside the book's 3D-transformed
+// leaves: iOS won't start a touch scroll there at all (the touch lands on it, but
+// nothing scrolls and nothing is cancelled), Firefox can ignore the wheel, and
+// Chrome sometimes drops the first wheel notch. So a page's scroller takes the
+// wheel (always) and touch drags (on a phone, `touch-action: none`) and moves itself.
 
 const SLOP = 8;
 const VELOCITY_WINDOW = 100; // ms of the end of a drag that a fling's speed is measured over
@@ -48,9 +49,12 @@ export function releaseVelocity(samples: [number, number][], now: number) {
 }
 
 /**
- * Pointer handlers that scroll their own element by touch drag, with a fling
- * on release. Spread them on a scroller with `touch-action: none`. Only
- * touch and pen are handled; a mouse keeps the wheel and scrollbar.
+ * Scrolls its own element by hand. The wheel always: each notch (or trackpad
+ * delta) moves the page, and is left alone only when there is nothing to scroll
+ * or the page is already at the end in that direction, so it can go on to
+ * whatever is behind. Touch drags too when `enabled` (a phone), with a fling on
+ * release: spread the handlers on a scroller with `touch-action: none`. Only
+ * touch and pen are handled by the handlers; a mouse keeps its scrollbar.
  */
 export function useDragScroll(enabled: boolean) {
   const ref = useRef<HTMLDivElement>(null);
@@ -61,6 +65,24 @@ export function useDragScroll(enabled: boolean) {
     return () => {
       if (el) stopFling(el);
     };
+  }, []);
+
+  // The wheel: a native, non-passive listener (React's is passive and can't cancel).
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.deltaY === 0) return; // pinch-zoom on a trackpad, or a sideways scroll
+      const room = el.scrollHeight - el.clientHeight;
+      if (room <= 0) return;
+      if ((e.deltaY < 0 && el.scrollTop <= 0) || (e.deltaY > 0 && el.scrollTop >= room - 1)) return;
+      const dy = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * el.clientHeight : e.deltaY;
+      e.preventDefault();
+      stopFling(el);
+      el.scrollTop += dy;
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
   // The touch is ours: cancel the browser's own handling of it. `touch-action: none`
