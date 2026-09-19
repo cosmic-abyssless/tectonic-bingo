@@ -285,7 +285,7 @@ Algorithm (entries are newest first, as every query returns them):
 
 `condense` renderers to add in `AUDIT_ACTIONS` (n = inputs.length; "tiles" =
 distinct `details.tileName` in first-seen order, rendered as `"A", "B"` when
-≤ 3 distinct, else `${count} tiles`):
+≤ 3 distinct, else `${count} tiles`; as shipped they are joined with `, ` and a final ` and `, e.g. `"A", "B" and "C"`):
 
 | action | condensed label |
 |---|---|
