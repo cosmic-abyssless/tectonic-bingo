@@ -577,6 +577,45 @@ describe("editing the board after teams have progress", () => {
     expect(db.select().from(schema.claims).all()).toHaveLength(1);
   });
 
+  it("refuses to change what a claimed requirement asks for, but allows the same change on an unclaimed one", () => {
+    const fx = seedBaseFixture();
+    const task = addTask(fx.tileId, { kind: "ALL", points: 20, children: [{ kind: "ITEM", itemName: "Vorki" }, { kind: "ITEM", itemName: "Visage" }] });
+    const [vorki, visage] = task.children;
+    approveSubmission(db, { submissionId: submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: vorki.id, itemName: "Vorki" }]).id, reviewedByUserId: fx.modUserId });
+    const tree = (children: GraphNodeInput[]) => ({ kind: "ALL" as const, label: "Task", description: "desc", points: 20, children });
+
+    // Another item under the claimed id, or another kind: old proof would count toward the new ask.
+    expect(() => updateNode(db, task.id, tree([{ id: vorki.id, kind: "ITEM", itemName: "Dragon pickaxe" }, { id: visage.id, kind: "ITEM", itemName: "Visage" }]))).toThrow(/Can't change "Vorki"/);
+    expect(() => updateNode(db, task.id, tree([{ id: vorki.id, kind: "MANUAL", label: "Vorki" }, { id: visage.id, kind: "ITEM", itemName: "Visage" }]))).toThrow(/Can't change/);
+    expect(db.select().from(schema.nodes).all().find((n) => n.id === vorki.id)?.itemName).toBe("Vorki");
+
+    // The unclaimed sibling can change freely.
+    updateNode(db, task.id, tree([{ id: vorki.id, kind: "ITEM", itemName: "Vorki" }, { id: visage.id, kind: "ITEM", itemName: "Dragon pickaxe" }]));
+    expect(db.select().from(schema.nodes).all().find((n) => n.id === visage.id)?.itemName).toBe("Dragon pickaxe");
+  });
+
+  it("keeps a line from counting as complete once a tile is added to it, and counts it again if that tile goes", () => {
+    const fx = seedBaseFixture(); // tile at (0,0) on a 3x3 board
+    const bingo = db.select().from(schema.bingos).get()!;
+    const t01 = createTile(db, { bingoId: bingo.id, name: "T01", boardRow: 0, boardCol: 1 });
+    generateLines(db, bingo, 15);
+    for (const [tileId, item] of [[fx.tileId, "Vorki"], [t01.id, "Visage"]] as const) {
+      const task = itemTask(tileId, { points: 10 }, item);
+      approveSubmission(db, { submissionId: submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: item }]).id, reviewedByUserId: fx.modUserId });
+    }
+    const row0 = db.select().from(schema.bingoLines).all().find((l) => l.lineType === "row" && l.lineIndex === 0)!;
+    expect(findState(fx.teamId, row0.nodeId)?.pointsAwarded).toBe(15);
+
+    const t02 = createTile(db, { bingoId: bingo.id, name: "T02", boardRow: 0, boardCol: 2 });
+    itemTask(t02.id, { points: 10 }, "Dragon pickaxe");
+    rescoreBingo(db, bingo.id);
+    expect(findState(fx.teamId, row0.nodeId)).toBeUndefined();
+
+    deleteTile(db, t02.id);
+    rescoreBingo(db, bingo.id);
+    expect(findState(fx.teamId, row0.nodeId)?.pointsAwarded).toBe(15);
+  });
+
   it("deletes an unclaimed task, its team state, and the raised hands on it, then re-scores", () => {
     const { fx } = completedTask(20);
     const open = itemTask(fx.tileId, { points: 10 }, "Dragon pickaxe");

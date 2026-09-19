@@ -200,7 +200,8 @@ export function setNodeGates(tx: Tx, nodeId: string, gates: { pointsGateNodeId: 
 // anything else is created fresh. Every id touched (reused or new) is
 // recorded in `touched` so the caller can garbage-collect what's left over.
 function reconcileSubtree(tx: Tx, bingoId: string, input: GraphNodeInput, touched: Set<string>): string {
-  const existing = input.id ? tx.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, input.id)).get() : undefined;
+  const existing = input.id ? tx.select({ id: nodes.id, kind: nodes.kind, itemName: nodes.itemName }).from(nodes).where(eq(nodes.id, input.id)).get() : undefined;
+  if (existing) assertClaimedNodeKeepsMeaning(tx, existing, input);
   const id = existing ? existing.id : tx.insert(nodes).values({ ...nodeFields(bingoId, input), ...(input.id ? { id: input.id } : {}) }).returning().get().id;
   if (existing) tx.update(nodes).set(nodeFields(bingoId, input)).where(eq(nodes.id, id)).run();
   touched.add(id);
@@ -234,6 +235,25 @@ function collectDescendants(tx: Tx, rootId: string): Set<string> {
   return seen;
 }
 
+function claimsOn(tx: Tx, nodeId: string): number {
+  return tx.select({ id: claims.id }).from(claims).where(eq(claims.nodeId, nodeId)).all().length;
+}
+
+function nodeName(tx: Tx, nodeId: string): string {
+  const node = tx.select({ label: nodes.label, itemName: nodes.itemName }).from(nodes).where(eq(nodes.id, nodeId)).get();
+  return node?.label ?? node?.itemName ?? "this requirement";
+}
+
+// Claims match by node id and the engine doesn't re-check the item name, so an edit that keeps
+// a claimed node's id but changes what it asks for (another item, another kind) would quietly
+// count teams' old proof toward the new requirement. Points, labels and descriptions can change.
+function assertClaimedNodeKeepsMeaning(tx: Tx, existing: { id: string; kind: string; itemName: string | null }, input: GraphNodeInput): void {
+  if (existing.kind === input.kind && existing.itemName === (input.itemName ?? null)) return;
+  const claimed = claimsOn(tx, existing.id);
+  if (claimed === 0) return;
+  throw new ServiceError(409, `Can't change "${nodeName(tx, existing.id)}" into something else: ${claimed} submission claim${claimed === 1 ? "" : "s"} refer to it. Add a new requirement instead.`);
+}
+
 // Unconditionally deletes `id` (and its edges), then recurses into its
 // former children via deleteNodeIfOrphaned — so a child still reachable from
 // elsewhere in the DAG (e.g. a leaf shared by two tasks) survives, and one
@@ -241,10 +261,9 @@ function collectDescendants(tx: Tx, rootId: string): Set<string> {
 function deleteNodeForce(tx: Tx, id: string): void {
   // Proof teams have already submitted for this node points at it, so it can't go: the caller
   // (an edit made while the bingo is live) is told which one, and the whole change is rolled back.
-  const claimed = tx.select({ id: claims.id }).from(claims).where(eq(claims.nodeId, id)).all().length;
+  const claimed = claimsOn(tx, id);
   if (claimed > 0) {
-    const node = tx.select({ label: nodes.label, itemName: nodes.itemName }).from(nodes).where(eq(nodes.id, id)).get();
-    throw new ServiceError(409, `Can't remove "${node?.label ?? node?.itemName ?? "this requirement"}": ${claimed} submission claim${claimed === 1 ? "" : "s"} refer to it. Edit it instead of removing it.`);
+    throw new ServiceError(409, `Can't remove "${nodeName(tx, id)}": ${claimed} submission claim${claimed === 1 ? "" : "s"} refer to it. Edit it instead of removing it.`);
   }
   // Derived or soft references: a team's completed-node rows are recomputed after the edit, and a
   // raised hand on a task that no longer exists means nothing.

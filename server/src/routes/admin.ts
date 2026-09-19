@@ -185,6 +185,7 @@ router.patch(
   asyncHandler(async (req, res) => {
     bingoService.assertBoardEditable(req.bingo!);
     const tile = boardService.updateTile(db, req.params.id as string, req.body);
+    rescoreBingo(db, req.bingo!.id);
     res.json({ tile });
   }),
 );
