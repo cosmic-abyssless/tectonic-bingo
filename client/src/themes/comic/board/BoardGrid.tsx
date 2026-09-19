@@ -1,6 +1,9 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useTime } from "motion/react";
 import type { BoardModel } from "../../../headless/types";
 import { useSlot } from "../../context";
+import { LineCompletionWash } from "./LineCompletionWash";
+import { BOOST_MS, buildStopsByTileId } from "./linePulse";
 
 // Smallest a tile is allowed to get when the board shrinks to fit the
 // screen's height — below this the books stop being legible, so a short
@@ -66,6 +69,34 @@ export function BoardGrid({
   const PreStartBanner = useSlot("PreStartBanner");
   const gridRef = useRef<HTMLDivElement>(null);
   const fitWidth = useFitWidth(gridRef, board.rows, board.cols);
+  const time = useTime();
+  const linePulseKey = board.lines.map((line) => `${line.id}:${Number(line.complete)}:${line.tileIds.join(",")}`).join("|");
+  const stopsByTileId = useMemo(() => {
+    const posById = new Map(board.tiles.map((tile) => [tile.id, { row: tile.row, col: tile.col }]));
+    return buildStopsByTileId(board.lines, posById);
+  }, [linePulseKey]);
+  const seenCompleteRef = useRef<Set<string> | null>(null);
+  const boostedUntilRef = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    const seen = seenCompleteRef.current;
+    const completeIds = new Set(board.lines.filter((line) => line.complete).map((line) => line.id));
+    if (seen === null) {
+      seenCompleteRef.current = completeIds;
+      return;
+    }
+    for (const id of completeIds) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        boostedUntilRef.current.set(id, Date.now() + BOOST_MS);
+      }
+    }
+    for (const id of [...seen]) {
+      if (!completeIds.has(id)) {
+        seen.delete(id);
+        boostedUntilRef.current.delete(id);
+      }
+    }
+  }, [linePulseKey]);
 
   return (
     // On a phone the board runs edge to edge (cancelling the page's own
@@ -114,7 +145,13 @@ export function BoardGrid({
               {Array.from({ length: board.cols }, (_, col) => {
                 const tile = board.grid[row]?.[col];
                 if (!tile) return <EmptyCell key={`empty-${row}-${col}`} row={row} col={col} />;
-                return <TileCell key={tile.id} tile={tile} onOpen={onOpenTile} isSearchHighlighted={tile.id === highlightedTileId} />;
+                const stops = stopsByTileId.get(tile.id);
+                return (
+                  <div key={tile.id} className="relative aspect-square w-full">
+                    {stops && !tile.dimmed && <LineCompletionWash time={time} stops={stops} boostedUntilRef={boostedUntilRef} />}
+                    <TileCell tile={tile} onOpen={onOpenTile} isSearchHighlighted={tile.id === highlightedTileId} />
+                  </div>
+                );
               })}
             </div>
           );
