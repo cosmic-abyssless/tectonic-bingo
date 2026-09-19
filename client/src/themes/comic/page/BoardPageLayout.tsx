@@ -27,6 +27,7 @@ export function BoardPageLayout() {
   const BoardGrid = useSlot("BoardGrid");
   const RulesDialog = useSlot("RulesDialog");
   const TeamInfoDialog = useSlot("TeamInfoDialog");
+  const PointBreakdownDialog = useSlot("PointBreakdownDialog");
   const SubmissionsDrawer = useSlot("SubmissionsDrawer");
   const TileModal = useSlot("TileModal");
   const SubmissionModal = useSlot("SubmissionModal");
@@ -67,6 +68,7 @@ export function BoardPageLayout() {
                       isOtherTeam={page.viewing.isOtherTeam}
                       totalPoints={board.totalPoints}
                       onOpen={page.teamInfo.show}
+                      onOpenPoints={page.pointBreakdown.show}
                       selector={page.isMod && page.teams.length > 0 ? page.teamSelector : undefined}
                     />
                   </div>
@@ -105,6 +107,8 @@ export function BoardPageLayout() {
         team={page.teamInfo.open ? page.viewing.team : null}
         onClose={page.teamInfo.hide}
       />
+
+      <PointBreakdownDialog team={page.pointBreakdown.open ? page.viewing.team : null} onClose={page.pointBreakdown.hide} />
 
       <SubmissionsDrawer
         isOpen={page.drawer.open}

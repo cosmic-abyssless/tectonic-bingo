@@ -125,6 +125,11 @@ export interface AuditDetailsMap {
   "submission.screenshot_analysis_failed": Record<string, never>;
 
   "points.adjusted": { amount: number; reason: string };
+  /** One row per node whose awarded points changed when a submission was reviewed (or a review undone). */
+  "points.earned": PointChangeDetails;
+  "points.lost": PointChangeDetails;
+  /** Net change for one team after a board edit re-scored the bingo (only written when non-zero). */
+  "points.rescored": { delta: number };
 
   // startsAtBackfilled: only on entries written before a start date stopped being filled in by a stage change.
   "stage.changed": { from: Stage; to: Stage; startsAtBackfilled?: boolean };
@@ -163,6 +168,19 @@ export interface AuditDetailsMap {
   "bug_report.resolved": { resolved: boolean };
 }
 
+export interface PointChangeDetails {
+  /** Which kind of points: a task's own points, a tile's full-completion bonus, or a line bonus. */
+  source: "task" | "tile_bonus" | "line";
+  nodeId: string;
+  /** What to call it: the task's label (or item name), the tile's name, or "Row 3" / "Column 2" / "Diagonal 1". */
+  nodeLabel: string;
+  /** The tile it belongs to (null for a line). */
+  tileName: string | null;
+  /** Always positive; earned vs. lost is the action. */
+  points: number;
+  submissionId: string;
+}
+
 export interface TaskSnapshot {
   kind: string;
   label: string | null;
@@ -196,10 +214,55 @@ export interface AuditActionDef<A extends AuditAction> {
   title: string;
   /** Full sentence, e.g. "Alice renamed Old Name to New Name". */
   label(input: AuditLabelInput<A>): string;
+  /**
+   * The label for a group of two or more entries of this action, newest first (see
+   * condenseAuditEntries). Only actions that define it are ever grouped; leave it off anything whose
+   * individual rows must stay visible (points, for one).
+   */
+  condense?(inputs: AuditLabelInput<A>[]): string;
 }
 
 const actor = (i: { actorName: string | null }) => i.actorName ?? "Someone";
 const onBehalf = (i: { onBehalfOfName: string | null }) => (i.onBehalfOfName ? ` (on behalf of ${i.onBehalfOfName})` : "");
+/** "a, b and c". */
+function joinList(parts: string[]): string {
+  return parts.length <= 1 ? (parts[0] ?? "") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+/** The tiles a group of entries touched: `"A" and "B"`, or a count once there are more than three. */
+function describeTiles(inputs: { details: { tileName: string | null } }[]): string {
+  const names = [...new Set(inputs.map((i) => i.details.tileName).filter((n): n is string => !!n))];
+  if (names.length === 0) return "a tile";
+  return names.length <= 3 ? joinList(names.map((n) => `"${n}"`)) : `${names.length} tiles`;
+}
+
+/**
+ * What a submission (or several) was for: "1 Armadyl crossbow", "3× Bandos hilt and 1 Armadyl crossbow",
+ * "proof of Part B" for a manual task, or "a screenshot" when nothing is known (rows written before claims
+ * were recorded). Item names are proper nouns, so they are never pluralised.
+ */
+export function describeClaims(details: { claims?: { itemName: string | null; quantity: number }[]; taskLabels?: string[] }): string {
+  const claims = details.claims ?? [];
+  const items = new Map<string, number>();
+  let manualClaims = 0;
+  for (const c of claims) {
+    if (c.itemName) items.set(c.itemName, (items.get(c.itemName) ?? 0) + c.quantity);
+    else manualClaims++;
+  }
+  const parts = [...items].map(([name, quantity]) => (quantity === 1 ? `1 ${name}` : `${quantity}× ${name}`));
+  if (manualClaims > 0) {
+    const labels = [...new Set(details.taskLabels ?? [])].slice(0, manualClaims);
+    parts.push(labels.length > 0 ? `proof of ${joinList(labels)}` : "proof");
+  }
+  return parts.length > 0 ? joinList(parts) : "a screenshot";
+}
+
+const pointsFor = (d: PointChangeDetails) =>
+  d.source === "task"
+    ? `task points for "${d.nodeLabel}" on "${d.tileName ?? "a tile"}"`
+    : d.source === "tile_bonus"
+      ? `the tile bonus for completing all of "${d.nodeLabel}"`
+      : `the line bonus for ${d.nodeLabel}`;
 
 export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
   "bingo.created": {
@@ -302,7 +365,14 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
         ? `${actor(i)} renamed ${i.details.changes.before.name ?? i.entityLabel ?? "the team"} to "${i.details.changes.after.name}"${onBehalf(i)}`
         : `${actor(i)} updated ${i.teamName ?? i.entityLabel ?? "the team"}${onBehalf(i)}`,
   },
-  "team.member_added": { category: "team", tone: "ok", visibility: "team", title: "Team member added", label: (i) => `${actor(i)} added ${i.details.displayName} to ${i.teamName ?? "the team"}` },
+  "team.member_added": {
+    category: "team",
+    tone: "ok",
+    visibility: "team",
+    title: "Team member added",
+    label: (i) => `${actor(i)} added ${i.details.displayName} to ${i.teamName ?? "the team"}`,
+    condense: (inputs) => `${actor(inputs[0]!)} added ${joinList([...inputs].reverse().map((i) => i.details.displayName))} to ${inputs[0]!.teamName ?? "the team"}`,
+  },
   "team.member_removed": { category: "team", tone: "warn", visibility: "team", title: "Team member removed", label: (i) => `${actor(i)} removed ${i.details.displayName} from ${i.teamName ?? "the team"}` },
   "team.deleted": { category: "team", tone: "danger", visibility: "mods", title: "Team deleted", label: (i) => `${actor(i)} deleted the team "${i.details.name}"` },
   "team.tile_interest_set": {
@@ -317,14 +387,17 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     tone: "info",
     visibility: "team",
     title: "Submission created",
-    label: (i) => `${actor(i)} submitted a screenshot for "${i.details.tileName}"`,
+    label: (i) => `${actor(i)} submitted ${describeClaims(i.details)} for "${i.details.tileName}"`,
+    condense: (inputs) =>
+      `${actor(inputs[0]!)} submitted ${describeClaims({ claims: inputs.flatMap((i) => i.details.claims), taskLabels: inputs.flatMap((i) => i.details.taskLabels) })} for ${describeTiles(inputs)}`,
   },
   "submission.approved": {
     category: "submission",
     tone: "ok",
     visibility: "team",
     title: "Submission approved",
-    label: (i) => `${actor(i)} approved a submission for "${i.details.tileName ?? "a tile"}"${i.details.pointsDelta ? ` (+${i.details.pointsDelta} pts)` : ""}`,
+    label: (i) => `${actor(i)} approved a submission for "${i.details.tileName ?? "a tile"}"`,
+    condense: (inputs) => `${actor(inputs[0]!)} approved ${inputs.length} submissions for ${describeTiles(inputs)}`,
   },
   "submission.rejected": {
     category: "submission",
@@ -332,6 +405,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "team",
     title: "Submission rejected",
     label: (i) => `${actor(i)} rejected a submission for "${i.details.tileName ?? "a tile"}"`,
+    condense: (inputs) => `${actor(inputs[0]!)} rejected ${inputs.length} submissions for ${describeTiles(inputs)}`,
   },
   "submission.review_undone": {
     category: "submission",
@@ -339,7 +413,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "team",
     title: "Review undone",
     label: (i) =>
-      `${actor(i)} sent a${i.details.previousStatus === "approved" ? "n approved" : " rejected"} submission for "${i.details.tileName ?? "a tile"}" back to pending${i.details.pointsDelta ? ` (${i.details.pointsDelta} pts)` : ""}`,
+      `${actor(i)} sent a${i.details.previousStatus === "approved" ? "n approved" : " rejected"} submission for "${i.details.tileName ?? "a tile"}" back to pending`,
   },
   "submission.screenshot_analyzed": {
     category: "submission",
@@ -355,6 +429,27 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "team",
     title: "Points adjusted",
     label: (i) => `${actor(i)} adjusted ${i.teamName ?? "the team"}'s points by ${i.details.amount > 0 ? "+" : ""}${i.details.amount} (${i.details.reason})`,
+  },
+  "points.earned": {
+    category: "points",
+    tone: "ok",
+    visibility: "team",
+    title: "Points earned",
+    label: (i) => `${i.teamName ?? "The team"} earned +${i.details.points} pts: ${pointsFor(i.details)}`,
+  },
+  "points.lost": {
+    category: "points",
+    tone: "warn",
+    visibility: "team",
+    title: "Points lost",
+    label: (i) => `${i.teamName ?? "The team"} lost ${i.details.points} pts: ${pointsFor(i.details)} (no longer complete)`,
+  },
+  "points.rescored": {
+    category: "points",
+    tone: "info",
+    visibility: "team",
+    title: "Points re-scored",
+    label: (i) => `${i.teamName ?? "The team"}'s points changed by ${i.details.delta > 0 ? "+" : ""}${i.details.delta} after a board change`,
   },
   "stage.changed": {
     category: "bingo",
@@ -465,6 +560,8 @@ export interface AuditEntry {
   team: { id: string; name: string; color: string | null } | null;
   requestId: string | null;
   details: unknown;
+  /** Present only on an entry that stands for several (see condenseAuditEntries): how many, which rows, and when the oldest happened. */
+  condensed?: { count: number; ids: number[]; oldestAt: string };
 }
 
 export interface AuditLogResponse {
@@ -486,9 +583,21 @@ export interface AuditLogFilters {
 }
 
 /** Renders an entry's label at read time from its (self-contained) details — the server does this once, but the client can too (CSV export, headless models). */
-export function renderAuditLabel(entry: Pick<AuditEntry, "action" | "details" | "entityLabel" | "actor" | "team" | "onBehalfOf">): string {
+export function renderAuditLabel(entry: AuditLabelSource): string {
   const def = AUDIT_ACTIONS[entry.action] as AuditActionDef<AuditAction>;
-  const actorName = entry.actor ? (entry.actor.discordGuildNick ?? entry.actor.discordGlobalName ?? entry.actor.discordUsername) : null;
-  const onBehalfOfName = entry.onBehalfOf ? (entry.onBehalfOf.discordGuildNick ?? entry.onBehalfOf.discordGlobalName ?? entry.onBehalfOf.discordUsername) : null;
-  return def.label({ details: entry.details as never, entityLabel: entry.entityLabel, actorName, teamName: entry.team?.name ?? null, onBehalfOfName });
+  return def.label(toAuditLabelInput(entry));
+}
+
+export type AuditLabelSource = Pick<AuditEntry, "action" | "details" | "entityLabel" | "actor" | "team" | "onBehalfOf">;
+
+/** The names and details a label renderer works from, resolved from an entry. */
+export function toAuditLabelInput(entry: AuditLabelSource): AuditLabelInput<AuditAction> {
+  const name = (u: MinimalUser) => u.discordGuildNick ?? u.discordGlobalName ?? u.discordUsername;
+  return {
+    details: entry.details as never,
+    entityLabel: entry.entityLabel,
+    actorName: entry.actor ? name(entry.actor) : null,
+    teamName: entry.team?.name ?? null,
+    onBehalfOfName: entry.onBehalfOf ? name(entry.onBehalfOf) : null,
+  };
 }

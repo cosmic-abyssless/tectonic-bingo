@@ -33,7 +33,8 @@ export interface ThemeSlots {
   // Pressing the badge opens TeamInfoDialog.
   TeamBadge: ComponentType<{ team: TeamModel; onPress: () => void }>;
   TileSearch: ComponentType<{ search: TileSearchModel }>;
-  TeamBanner: ComponentType<{ team: TeamModel; isOtherTeam: boolean; totalPoints: number | null }>;
+  // Pressing the point total opens PointBreakdownDialog (onOpenPoints).
+  TeamBanner: ComponentType<{ team: TeamModel; isOtherTeam: boolean; totalPoints: number | null; onOpenPoints?: () => void }>;
   PlanningStage: ComponentType<{ stage: "planning" | "captains" }>;
   SignupStage: ComponentType<{ slug: string }>;
   // Shown above the signup/closed stage content to mods and team leads
@@ -45,6 +46,8 @@ export interface ThemeSlots {
   NoTeamStage: ComponentType<{ isMod: boolean; selector?: TeamSelectorModel }>;
   RulesDialog: ComponentType<{ isOpen: boolean; markdown: string; onClose: () => void }>;
   TeamInfoDialog: ComponentType<{ slug: string; team: TeamModel | null; onClose: () => void }>;
+  // Where the team's points come from, opened from the point total on the banner. Open while `team` is set; reads its data with usePointBreakdown().
+  PointBreakdownDialog: ComponentType<{ team: TeamModel | null; onClose: () => void }>;
   SubmissionsDrawer: ComponentType<{ isOpen: boolean; submissions: SubmissionModel[]; onClose: () => void; onSubmit?: () => void }>;
 
   // The frame + header the core dialogs (bug report, player profile) are

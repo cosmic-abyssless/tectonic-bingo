@@ -9,6 +9,7 @@ import { deleteAllSignups, seedTestSignups } from "./devSeedService";
 import type { TectonicRosterUser } from "./tectonicService";
 import { parseWomSummary } from "./womService";
 import { parseAccountType } from "./runeProfileService";
+import { parseStoredCaStats } from "./combatAchievements";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -122,6 +123,11 @@ describe("seedTestSignups", () => {
 
       const accountType = parseAccountType(JSON.parse(row.runeProfileDataJson!));
       expect(accountType).not.toBeNull();
+
+      const ca = parseStoredCaStats(row.caCurrentJson);
+      expect(ca).not.toBeNull();
+      expect(ca!.points).toBeGreaterThanOrEqual(0);
+      expect(row.caPeakJson).toBe(row.caCurrentJson);
     }
   });
 });

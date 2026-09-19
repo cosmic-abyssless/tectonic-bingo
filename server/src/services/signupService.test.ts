@@ -131,6 +131,27 @@ describe("getAllSignups / markBuyin", () => {
     expect(roster).toHaveLength(1);
     expect(roster[0].user.discordUsername).toBe("member");
     expect(roster[0].answers).toEqual([expect.objectContaining({ value: "A" })]);
+    expect(roster[0].caCurrent).toBeNull();
+    expect(roster[0].caPeak).toBeNull();
+  });
+
+  it("exposes persisted Current/Peak CA without the raw RuneProfile blob", () => {
+    const { bingo, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "MyRsn", answers: [] });
+    db.update(schema.signups)
+      .set({
+        caCurrentJson: JSON.stringify({ tier: "easy", points: 41 }),
+        caPeakJson: JSON.stringify({ tier: "master", points: 1965 }),
+        runeProfileDataJson: JSON.stringify({ username: "secret-alt", combatAchievements: [] }),
+      })
+      .where(eq(schema.signups.id, signup.id))
+      .run();
+
+    const roster = getAllSignups(db, bingo.id);
+    expect(roster[0].caCurrent).toEqual({ tier: "easy", points: 41 });
+    expect(roster[0].caPeak).toEqual({ tier: "master", points: 1965 });
+    expect(JSON.stringify(roster[0])).not.toContain("secret-alt");
+    expect(roster[0].signup).not.toHaveProperty("runeProfileDataJson");
   });
 
   it("records who collected and who recorded the buy-in, and can unmark it", () => {
