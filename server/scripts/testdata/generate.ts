@@ -98,7 +98,6 @@ async function main(): Promise<void> {
   if (board.deadlocked.size > 0) {
     log(`WARNING: ${board.deadlocked.size} parts can never be completed on this board, so the run leaves them alone:`);
     for (const reason of board.deadlocked.values()) log(`  ${reason}`);
-    log("  (PETS and SLAYER BOSSES share their items across two pages and gate Page 2 behind Page 1: see docs/test-data-generator.md)");
   }
 
   const byUserId = new Map(players.filter((p) => p.userId).map((p) => [p.userId!, p]));
@@ -107,6 +106,7 @@ async function main(): Promise<void> {
   const hands = handEvents(ctx, teamRows.map((t) => ({ teamId: t.id, members: t.players })), board);
   await runInOrder([...nameTeamEvents(ctx, seeds), ...hands.events], new Date(Math.min(tl.startsAt.getTime(), ctx.limit.getTime())));
   const raised = hands.raised;
+  const nameById = new Map((await fetchTeams(ctx)).map((t) => [t.id, t.name]));
   log(`${seeds.length} teams named, ${raised.length} hands raised`);
   if (args.stage === "reveal") return done(args.slug);
 
@@ -121,7 +121,7 @@ async function main(): Promise<void> {
     const supply = t.players.reduce((sum, p) => sum + p.skill * p.activity * args.days, 0);
     const costMult = clamp((0.6 * supply) / (target * totalCost), 0.25, 3);
     const team: SimTeam = {
-      id: t.id, name: t.name, members: t.players, target, costMult, completed: new Set(), dirty: false,
+      id: t.id, name: nameById.get(t.id) ?? t.name, members: t.players, target, costMult, completed: new Set(), dirty: false,
       pref: new Map(board.tiles.map((tile) => [tile.id, simRng.between(0.6, 1.6)])),
       parts: new Map(),
     };

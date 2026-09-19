@@ -220,9 +220,13 @@ describe.skipIf(!fs.existsSync(EXPORT_PATH))("the real board", () => {
     expect(board.tiles.filter((t) => t.freezeMs > 0)).toHaveLength(8);
   });
 
-  it("finds the parts that can never be finished: PETS and SLAYER BOSSES share their items across a gated page", () => {
-    const stuck = [...board.deadlocked.keys()].map((id) => board.partById.get(id)!);
-    expect(stuck.map((p) => `${p.tileName} ${p.label}`).sort()).toEqual(["PETS Page 1", "PETS Page 2", "SLAYER BOSSES Page 1", "SLAYER BOSSES Page 2"]);
+  it("finds no part that can never be finished, including PETS and SLAYER BOSSES, whose pages share their items", () => {
+    expect([...board.deadlocked.values()]).toEqual([]);
+    const pets = board.tiles.find((t) => t.name === "PETS")!;
+    const [page1, page2] = pets.parts as [PartModel, PartModel];
+    expect([...page1.leafIds].sort()).toEqual([...page2.leafIds].sort()); // the same items under both pages
+    // A shared item can be claimed before Page 1 is done (it counts toward Page 1), as on the server.
+    expect(board.claimable(page2.leafIds[0]!, new Set())).toBe(true);
   });
 
   it("agrees with the server's gate rule: a gated page opens once its gate is complete, and not before", () => {
@@ -264,9 +268,44 @@ describe.skipIf(!fs.existsSync(EXPORT_PATH))("the real board", () => {
 });
 
 describe("deadlockedParts", () => {
-  it("is empty for parts with no shared, gated leaves", () => {
-    const part = (id: string, leafIds: string[]) => ({ id, leafIds, tileName: "T", label: id }) as PartModel;
+  const part = (id: string, leafIds: string[]) => ({ id, leafIds, tileName: "T", label: id }) as PartModel;
+
+  it("is empty when the gates open in order", () => {
     const stuck = deadlockedParts([part("a", ["l1"]), part("b", ["l2"])], (leaf, done) => leaf === "l1" || done.has("a"));
     expect(stuck.size).toBe(0);
+  });
+
+  it("finds parts each waiting on the other", () => {
+    const stuck = deadlockedParts([part("a", ["l1"]), part("b", ["l2"]), part("free", ["l3"])], (leaf, done) => leaf === "l3" || (leaf === "l1" && done.has("b")) || (leaf === "l2" && done.has("a")));
+    expect([...stuck.keys()].sort()).toEqual(["a", "b"]);
+  });
+});
+
+describe("claimable on a board with shared items", () => {
+  const item = (id: string, itemName: string): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, children: [] });
+  const part = (id: string, label: string, kind: GraphNode["kind"], children: GraphNode[], gate: string | null = null): GraphNode => ({ ...item(id, ""), kind, label, itemName: null, points: 10, submitGateNodeId: gate, children });
+  const tile = (children: GraphNode[]): Tile => ({ id: "t", name: "PETS", boardRow: 0, boardCol: 0, hasFreezePeriod: false, freezeDurationMinutes: 0, node: part("root", "", "ALL", children) }) as unknown as Tile;
+
+  it("allows a shared item while the gated page is locked, and an item only under the gated page once it opens", () => {
+    const shared = item("shared", "A");
+    const only2 = item("only2", "B");
+    const board = buildBoard([tile([part("p1", "Page 1", "COUNT", [shared]), part("p2", "Page 2", "COUNT", [shared, only2], "p1")])], []);
+    expect(board.claimable("shared", new Set())).toBe(true);
+    expect(board.claimable("only2", new Set())).toBe(false);
+    expect(board.claimable("only2", new Set(["p1"]))).toBe(true);
+    expect(board.deadlocked.size).toBe(0);
+  });
+
+  it("refuses an item shared only by gated pages", () => {
+    const shared = item("shared", "A");
+    const board = buildBoard([tile([part("p1", "Page 1", "COUNT", [item("other", "Z")]), part("p2", "Page 2", "COUNT", [shared], "p1"), part("p3", "Page 3", "COUNT", [shared], "p1")])], []);
+    expect(board.claimable("shared", new Set())).toBe(false);
+    expect(board.claimable("shared", new Set(["p1"]))).toBe(true);
+  });
+
+  it("checks a gate carried by the item itself", () => {
+    const board = buildBoard([tile([part("p1", "Page 1", "COUNT", [item("first", "A")]), { ...item("second", "B"), submitGateNodeId: "first" }])], []);
+    expect(board.claimable("second", new Set())).toBe(false);
+    expect(board.claimable("second", new Set(["first"]))).toBe(true);
   });
 });

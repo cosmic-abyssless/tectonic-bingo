@@ -565,9 +565,11 @@ bingo is untouched.
   reveal -2d, created -23d) and `startsAt` is chosen so `now` lands inside the target stage
   (`server/scripts/testdata/timeline.ts`). A stage still ahead of the target just has
   scheduled future dates.
-- **Two tiles can't be played** (PETS, SLAYER BOSSES): a submit gate on a part that shares
-  leaves with another part refuses every claim. The generator detects and skips such parts
-  (`deadlockedParts` in `board.ts`); see `docs/test-data-generator.md`.
+- **A server bug found on the way:** PETS and SLAYER BOSSES share their items across two
+  pages with Page 2 submit-gated behind Page 1, and the server refused every first claim
+  (it checked the gate of every page above the item). Fixed in `graphService.submitGateBlock`
+  (a claim is refused only if every route up to the tile is gated); the generator mirrors
+  the rule and warns about any part that could still never be finished (`deadlockedParts`).
 - **Pacing.** Per-team progress is paced along the schedule its target implies
   (`PACE_EXPONENT`), otherwise easy tiles were done so early that "50% through" already had
   70-80% of the final submissions.

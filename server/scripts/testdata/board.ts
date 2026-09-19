@@ -130,31 +130,22 @@ export function buildBoard(tiles: Tile[], boardLines: BoardLine[]): BoardInfo {
   };
   for (const tile of tiles) visit(tile.node);
 
-  const ancestorsOf = (id: string): Set<string> => {
-    const seen = new Set<string>();
-    const walk = (n: string) => {
-      for (const p of parents.get(n) ?? []) {
-        if (!seen.has(p)) {
-          seen.add(p);
-          walk(p);
-        }
-      }
+  // Mirrors the server (graphService.submitGateBlock): a claim is refused only when EVERY route from its item up
+  // to the tile passes through a node whose submit gate the team hasn't completed. An item shared by two pages
+  // counts toward both, so an ungated page keeps it submittable.
+  const claimable = (leafId: string, completed: ReadonlySet<string>): boolean => {
+    const memo = new Map<string, boolean>();
+    const closed = (nodeId: string): boolean => {
+      const known = memo.get(nodeId);
+      if (known !== undefined) return known;
+      const gate = nodesById.get(nodeId)?.submitGateNodeId;
+      const above = [...(parents.get(nodeId) ?? [])];
+      const result = (!!gate && !completed.has(gate)) || (above.length > 0 && above.every(closed));
+      memo.set(nodeId, result);
+      return result;
     };
-    walk(id);
-    return seen;
+    return !closed(leafId);
   };
-  // A claim is rejected while ANY ancestor of its leaf (through every path, including another part that
-  // shares the leaf) names a submit gate that isn't complete. Cached, since the tree never changes here.
-  const gatesCache = new Map<string, string[]>();
-  const gatesOf = (leafId: string): string[] => {
-    let gates = gatesCache.get(leafId);
-    if (!gates) {
-      gates = [...ancestorsOf(leafId)].map((a) => nodesById.get(a)?.submitGateNodeId).filter((g): g is string => !!g);
-      gatesCache.set(leafId, gates);
-    }
-    return gates;
-  };
-  const claimable = (leafId: string, completed: ReadonlySet<string>) => gatesOf(leafId).every((g) => completed.has(g));
 
   const tileInfos: TileInfo[] = tiles
     .slice()
@@ -207,8 +198,9 @@ export function buildBoard(tiles: Tile[], boardLines: BoardLine[]): BoardInfo {
 /**
  * Parts that can never be finished because of how the gates are wired. A fixed point: start with nothing
  * complete, and keep marking a part complete while at least one of its leaves is claimable. Whatever never
- * gets marked can't be started. On the real board this catches PETS and SLAYER BOSSES, whose two pages share
- * their leaf items while Page 2 is gated behind Page 1: the first claim is refused for the gate on Page 2.
+ * gets marked can't be started. (Two pages that share their items with Page 2 gated behind Page 1, as on
+ * PETS and SLAYER BOSSES, are fine: the shared items are claimable through Page 1. That used to be a real
+ * dead end on the server, fixed by graphService.submitGateBlock; the check stays as a guard for the board.)
  */
 export function deadlockedParts(parts: PartModel[], claimable: (leafId: string, completed: ReadonlySet<string>) => boolean): Map<string, string> {
   const completed = new Set<string>();
@@ -225,7 +217,7 @@ export function deadlockedParts(parts: PartModel[], claimable: (leafId: string, 
   }
   const stuck = new Map<string, string>();
   for (const part of parts) {
-    if (!completed.has(part.id)) stuck.set(part.id, `${part.tileName} ${part.label}: every claim on its items is refused by a submit gate on a part that shares them`);
+    if (!completed.has(part.id)) stuck.set(part.id, `${part.tileName} ${part.label}: every claim on its items is refused by a submit gate that can never open`);
   }
   return stuck;
 }

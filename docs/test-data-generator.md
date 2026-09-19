@@ -92,15 +92,16 @@ target (say `signup`), the later dates are simply scheduled in the future.
   a team's points by +15.
 - Everything is stamped in date order, so the audit log reads the way a real one would.
 
-## Known limitation: PETS and SLAYER BOSSES can't be started
+## PETS and SLAYER BOSSES (pages that share their items)
 
-On the real board these two tiles' pages **share the same items** and Page 2 is submit-
-gated behind Page 1. The server checks a claim's submit gates on *every* part above the
-item, including the other page, so the first claim is refused ("Page 2: the previous
-requirement must be completed first") and it can never be satisfied. This is an app bug,
-not a generator quirk: the generator detects such parts up front, prints them, and leaves
-them alone. When the app is fixed they'll be played like any other tile with no change
-here.
+On these tiles both pages hold the *same* items, on purpose: a drop counts toward each
+page once, so the same pet can't be counted twice, and Page 2's target includes what
+Page 1 already has. Page 2 is also submit-gated behind Page 1. The server used to refuse
+every first claim on such a tile (it checked the gate of *every* page above the item), so
+neither page could ever be started; a claim is now refused only when every page it counts
+toward is gated (`submitGateBlock` in `graphService.ts`). The generator mirrors that rule
+in `board.ts`, plays these tiles like any other, and still checks for parts that can never
+be finished (a warning is printed if the board ever has one).
 
 ## Running against a private server (leave your dev database alone)
 
