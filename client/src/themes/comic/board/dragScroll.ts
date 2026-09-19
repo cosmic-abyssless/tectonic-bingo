@@ -63,6 +63,20 @@ export function useDragScroll(enabled: boolean) {
     };
   }, []);
 
+  // The touch is ours: cancel the browser's own handling of it. `touch-action: none`
+  // asks for that, but iOS doesn't always honour it, and without a cancel a drag
+  // here would also scroll whatever is behind the modal (the document). React's
+  // onTouchMove is passive and can't cancel, hence a native listener.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !enabled) return;
+    const cancel = (e: TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
+    };
+    el.addEventListener("touchmove", cancel, { passive: false });
+    return () => el.removeEventListener("touchmove", cancel);
+  }, [enabled]);
+
   const onPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLElement>) => {
       if (!enabled || !e.isPrimary || e.pointerType === "mouse") return;

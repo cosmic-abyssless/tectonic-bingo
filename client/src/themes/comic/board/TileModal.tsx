@@ -1605,6 +1605,9 @@ function SwipeZone({ side, leaf, face, swipe }: { side: "left" | "right"; leaf: 
     },
   });
   // The zone covers part of the page, so a mouse wheel over it scrolls the page too.
+  // Touches in it are ours, so the browser's own handling of them is cancelled (a
+  // native listener: React's onTouchMove is passive) — else a drag here would also
+  // scroll the document behind the modal.
   const zoneRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const zone = zoneRef.current;
@@ -1613,8 +1616,15 @@ function SwipeZone({ side, leaf, face, swipe }: { side: "left" | "right"; leaf: 
       e.preventDefault();
       swipe.scroll(e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY);
     };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
+    };
     zone.addEventListener("wheel", onWheel, { passive: false });
-    return () => zone.removeEventListener("wheel", onWheel);
+    zone.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      zone.removeEventListener("wheel", onWheel);
+      zone.removeEventListener("touchmove", onTouchMove);
+    };
   }, [swipe]);
   return (
     <div
