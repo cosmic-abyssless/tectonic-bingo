@@ -65,6 +65,21 @@ const PORT = process.env.PORT ?? 3001;
 // dev, where there's no proxy in front and this is a no-op.
 app.set("trust proxy", 1);
 
+// Unauthenticated, no session, no SPA. Must be registered before static
+// files and the index.html fallback — otherwise GET /health is the React
+// app, which client-navigates to `/`. Railway healthcheck path: `/health`.
+function health(_req: express.Request, res: express.Response): void {
+  try {
+    sqlite.prepare("SELECT 1").get();
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ ok: true });
+  } catch {
+    res.status(503).setHeader("Cache-Control", "no-store").json({ ok: false });
+  }
+}
+app.get("/health", health);
+app.get("/api/health", health);
+
 // CORS - allow requests from the React client. Only matters when the client
 // is served from a different origin than this API (local dev, where Vite
 // runs on its own port) — a same-origin production deploy (see the static
@@ -135,20 +150,6 @@ app.use(
   "/wiki-icons",
   serveWikiIcons({ dir: WIKI_ICONS_DIR, isKnownName: (name) => getKnownItemNames().has(name), enabled: isOsrsItemSearchEnabled }),
 );
-
-// Railway (and any PaaS) healthcheck — unauthenticated, no guild gate.
-// Point the platform healthcheck at GET /health. SQLite is one process /
-// one file: do not scale this service above a single replica sharing the
-// same DB_PATH volume (WAL lock / corruption). Sequential replace + this
-// check is how deploys drain without 502s on a dead container.
-app.get("/health", (_req, res) => {
-  try {
-    sqlite.prepare("SELECT 1").get();
-    res.json({ ok: true });
-  } catch {
-    res.status(503).json({ ok: false });
-  }
-});
 
 // Routes
 app.use("/auth", authRouter);

@@ -20,6 +20,10 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       // Proxy API and auth requests to the Express server during dev
+      "/health": {
+        target: apiTarget,
+        changeOrigin: true,
+      },
       "/api": {
         target: apiTarget,
         changeOrigin: true,
