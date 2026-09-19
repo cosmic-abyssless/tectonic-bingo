@@ -19,6 +19,7 @@ import type { SubmissionModel, TaskModel, TileModel } from "../../../headless/ty
 import { SubmissionBubble } from "./SubmissionBubble";
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ClockIcon, HandIcon, LockIcon, XIcon } from "../../../core/ui/icons";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
+import { TaskInterestPeople } from "../../../core/ui/TaskInterestPeople";
 import { formatCountdown } from "../../../core/ui/time";
 import { useResolvedColorScheme } from "../../../core/ui/colorScheme";
 import { useSlot, useThemeTokens } from "../../context";
@@ -1569,20 +1570,7 @@ function TaskPage({
                     {interest.mine ? "I'm on it" : "I'll do this"}
                   </ComicButton>
                 )}
-                <span className="min-w-0 text-sm" style={{ color: interest.people.length > 0 ? colors.INK_BODY : colors.INK_SUBTLE }}>
-                  {interest.people.length > 0 ? (
-                    <>
-                      {interest.people.map((p, i) => (
-                        <span key={p.id}>
-                          {i > 0 && ", "}
-                          <PlayerName userId={p.id}>{p.displayName}</PlayerName>
-                        </span>
-                      ))}
-                    </>
-                  ) : (
-                    "Unclaimed"
-                  )}
-                </span>
+                <TaskInterestPeople interest={interest} maxInline={1} variant="comic" />
               </div>
             )}
           </div>

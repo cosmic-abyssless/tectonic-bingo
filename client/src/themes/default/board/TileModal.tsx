@@ -4,7 +4,7 @@ import { Dialog } from "../../../core/ui/Dialog";
 import { Button, IconButton } from "../../../core/ui/Button";
 import { Badge } from "../../../core/ui/Card";
 import { ClockIcon, HandIcon, XIcon } from "../../../core/ui/icons";
-import { PlayerName } from "../../../core/tectonic/PlayerName";
+import { TaskInterestPeople } from "../../../core/ui/TaskInterestPeople";
 import { useSlot } from "../../context";
 
 /** `tile` null while `isOpen` transitions closed (kept mounted so it can animate out). */
@@ -89,18 +89,7 @@ function TileDetails({
           {tile.tasks.map((task) => (
             <li key={task.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-2.5">
               <span className="min-w-0 flex-1 truncate font-medium text-on-surface">{task.label}</span>
-              {task.interest.people.length > 0 ? (
-                <p className="text-on-surface-muted">
-                  {task.interest.people.map((p, i) => (
-                    <span key={p.id}>
-                      {i > 0 && ", "}
-                      <PlayerName userId={p.id}>{p.displayName}</PlayerName>
-                    </span>
-                  ))}
-                </p>
-              ) : (
-                <p className="text-on-surface-subtle">Unclaimed</p>
-              )}
+              <TaskInterestPeople interest={task.interest} maxInline={1} variant="default" />
               {onToggleInterest && task.interest.canToggle && (
                 <Button variant={task.interest.mine ? "primary" : "secondary"} size="sm" onPress={() => onToggleInterest(task.id)} aria-pressed={task.interest.mine}>
                   <HandIcon fill={task.interest.mine ? "currentColor" : "none"} />
