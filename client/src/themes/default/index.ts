@@ -17,6 +17,7 @@ import { NoTeamStage } from "./page/NoTeamStage";
 import { RulesDialog } from "./page/RulesDialog";
 import { SubmissionsDrawer } from "./page/SubmissionsDrawer";
 import { TeamInfoDialog } from "../../core/teams/TeamInfoDialog";
+import { PointBreakdownDialog } from "../../core/teams/PointBreakdownDialog";
 import { Dialog, DialogHeader } from "../../core/ui/Dialog";
 import { BoardGrid } from "./board/BoardGrid";
 import { RowLabel } from "./board/RowLabel";
@@ -59,6 +60,7 @@ export const defaultTheme: ThemeDefinition = {
     RulesDialog,
     SubmissionsDrawer,
     TeamInfoDialog,
+    PointBreakdownDialog,
     DialogFrame: Dialog,
     DialogHeader,
     BoardGrid,

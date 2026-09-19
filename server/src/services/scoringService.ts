@@ -1,7 +1,7 @@
 import { eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { claims, nodes, submissions, teamNodeState, teams, tiles } from "../db/schema";
+import { bingoLines, claims, nodes, submissions, teamNodeState, teams, tiles } from "../db/schema";
 import { ServiceError } from "./errors";
 import { awardedPoints, evaluateGraph } from "./engine";
 import { getApprovedClaims, getFullGraph } from "./graphService";
@@ -20,6 +20,58 @@ function describeSubmissionTarget(tx: Tx, bingoId: string, nodeIds: string[]): {
   const tileName = nodeIds.length ? (tileForLeaf(tx, nodeIds[0]!, tileByNodeId)?.name ?? null) : null;
   const leafRows = nodeIds.length ? tx.select({ id: nodes.id, label: nodes.label }).from(nodes).where(inArray(nodes.id, nodeIds)).all() : [];
   return { tileName, taskLabels: leafRows.map((n) => n.label).filter((l): l is string => !!l) };
+}
+
+function lineLabel(line: { lineType: string; lineIndex: number }): string {
+  if (line.lineType === "row") return `Row ${line.lineIndex + 1}`;
+  if (line.lineType === "column") return `Column ${line.lineIndex + 1}`;
+  if (line.lineType === "diagonal") return `Diagonal ${line.lineIndex + 1}`;
+  return "a custom line";
+}
+
+// Writes a points.earned / points.lost row for every node whose awarded points changed, so the
+// activity feed shows what kind of points moved and for what. Called AFTER the submission's own
+// audit row, so the log is in causal order (the approval, then the points it awarded: tasks, then the
+// tile bonus, then lines) and a newest-first feed lists the points above the approval. A
+// node's points can change without it newly completing (a points gate opening releases a task's
+// withheld points), hence the comparison of awarded points rather than of completed nodes.
+function recordPointChanges(
+  tx: Tx,
+  params: { bingoId: string; teamId: string; submissionId: string; reviewerUserId: string },
+  before: { nodeId: string; pointsAwarded: number }[],
+  after: Map<string, { pointsAwarded: number }>,
+): void {
+  const beforeById = new Map(before.map((r) => [r.nodeId, r.pointsAwarded]));
+  const changed = [...new Set([...beforeById.keys(), ...after.keys()])]
+    .map((nodeId) => ({ nodeId, delta: (after.get(nodeId)?.pointsAwarded ?? 0) - (beforeById.get(nodeId) ?? 0) }))
+    .filter((c) => c.delta !== 0);
+  if (changed.length === 0) return;
+
+  const tileByNodeId = new Map(tx.select().from(tiles).where(eq(tiles.bingoId, params.bingoId)).all().map((t) => [t.nodeId, t]));
+  const lineByNodeId = new Map(tx.select().from(bingoLines).where(eq(bingoLines.bingoId, params.bingoId)).all().map((l) => [l.nodeId, l]));
+  const nodeRows = new Map(tx.select({ id: nodes.id, label: nodes.label, itemName: nodes.itemName }).from(nodes).where(inArray(nodes.id, changed.map((c) => c.nodeId))).all().map((n) => [n.id, n]));
+
+  const rows = changed.map(({ nodeId, delta }) => {
+    const tile = tileByNodeId.get(nodeId);
+    const line = lineByNodeId.get(nodeId);
+    if (tile) return { order: 1, delta, details: { source: "tile_bonus" as const, nodeId, nodeLabel: tile.name, tileName: tile.name } };
+    if (line) return { order: 2, delta, details: { source: "line" as const, nodeId, nodeLabel: lineLabel(line), tileName: null } };
+    const node = nodeRows.get(nodeId);
+    return { order: 0, delta, details: { source: "task" as const, nodeId, nodeLabel: node?.label ?? node?.itemName ?? "a task", tileName: tileForLeaf(tx, nodeId, tileByNodeId)?.name ?? null } };
+  });
+  // Tasks, then tile bonuses, then lines (stable within each kind, so the order is deterministic).
+  rows.sort((a, b) => a.order - b.order);
+
+  for (const { delta, details } of rows) {
+    audit(tx, {
+      action: delta > 0 ? "points.earned" : "points.lost",
+      bingoId: params.bingoId,
+      entity: { type: "node", id: details.nodeId, label: details.nodeLabel },
+      teamId: params.teamId,
+      details: { ...details, points: Math.abs(delta), submissionId: params.submissionId },
+      actor: { userId: params.reviewerUserId },
+    });
+  }
 }
 
 // Distinct leaf nodes a submission's claims target.
@@ -64,8 +116,17 @@ export function rebuildTeamState(tx: Tx, teamId: string): Map<string, { complete
  */
 export function rescoreBingo(db: Db, bingoId: string): void {
   db.transaction((tx) => {
-    for (const team of tx.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all()) {
-      rebuildTeamState(tx, team.id);
+    for (const team of tx.select({ id: teams.id, name: teams.name }).from(teams).where(eq(teams.bingoId, bingoId)).all()) {
+      const before = tx.select().from(teamNodeState).where(eq(teamNodeState.teamId, team.id)).all().reduce((sum, r) => sum + r.pointsAwarded, 0);
+      const after = [...rebuildTeamState(tx, team.id).values()].reduce((sum, s) => sum + s.pointsAwarded, 0);
+      if (after === before) continue;
+      audit(tx, {
+        action: "points.rescored",
+        bingoId,
+        entity: { type: "team", id: team.id, label: team.name },
+        teamId: team.id,
+        details: { delta: after - before },
+      });
     }
   });
 }
@@ -123,6 +184,7 @@ export function approveSubmission(db: Db, params: ApproveSubmissionParams): Appr
       details: { tileName, taskLabels, nodeIds, newlyCompletedNodeIds, pointsDelta, reviewerNotes: params.reviewerNotes ?? null, submittedByUserId: submission.submittedByUserId },
       actor: { userId: params.reviewedByUserId },
     });
+    recordPointChanges(tx, { bingoId: team.bingoId, teamId: submission.teamId, submissionId: submission.id, reviewerUserId: params.reviewedByUserId }, before, after);
 
     return { submission: updatedSubmission, nodeIds, newlyCompletedNodeIds, pointsDelta };
   });
@@ -203,6 +265,7 @@ export function undoSubmissionReview(db: Db, params: UndoSubmissionReviewParams)
     const nodeIds = getSubmissionNodeIds(tx, submission.id);
     let uncompletedNodeIds: string[] = [];
     let pointsDelta = 0;
+    let scoreChange: { before: { nodeId: string; pointsAwarded: number }[]; after: Map<string, { pointsAwarded: number }> } | null = null;
     if (previousStatus === "approved") {
       const before = tx.select().from(teamNodeState).where(eq(teamNodeState.teamId, submission.teamId)).all();
       const beforePoints = before.reduce((sum, r) => sum + r.pointsAwarded, 0);
@@ -210,6 +273,7 @@ export function undoSubmissionReview(db: Db, params: UndoSubmissionReviewParams)
       const afterPoints = [...after.values()].reduce((sum, s) => sum + s.pointsAwarded, 0);
       uncompletedNodeIds = before.map((r) => r.nodeId).filter((id) => !after.has(id));
       pointsDelta = afterPoints - beforePoints;
+      scoreChange = { before, after };
     }
 
     const updatedSubmission = tx.select().from(submissions).where(eq(submissions.id, submission.id)).get()!;
@@ -233,6 +297,9 @@ export function undoSubmissionReview(db: Db, params: UndoSubmissionReviewParams)
       },
       actor: { userId: params.undoneByUserId },
     });
+    if (scoreChange) {
+      recordPointChanges(tx, { bingoId: team.bingoId, teamId: submission.teamId, submissionId: submission.id, reviewerUserId: params.undoneByUserId }, scoreChange.before, scoreChange.after);
+    }
 
     return { submission: updatedSubmission, nodeIds, previousStatus, uncompletedNodeIds, pointsDelta };
   });

@@ -1,44 +1,104 @@
-// Fetches WOM + RuneProfile data for a signup's RSN and persists the raw
-// responses onto the signup row, once, at signup time — see
-// docs/tectonic-api-integration-plan.md. Draft-time reads
-// (draftService/routes/bingos.ts) then just parse the stored JSON; no live
-// external calls in that hot path. Data can go stale between signup and
-// draft day (a player could re-roll their ironman status, sync WOM, etc.)
-// — accepted tradeoff for what's a reference display, not authoritative.
+// Fetches WOM + RuneProfile data for a signup's RSN (and RuneProfile for
+// other currently Tectonic-linked RSNs, for Peak CA) and persists the raw
+// signed-up-RSN blobs plus derived CA snapshots. Draft/roster reads parse
+// stored JSON only — no live external calls in those hot paths.
 //
-// Called fire-and-forget from the signup routes (never awaited in the
-// response path — a flaky third-party API should never slow down or fail
-// someone's signup) and from the dev seed-signups tool. Never throws.
+// Called fire-and-forget from the signup routes and the mod Refresh-stats
+// route (never awaited in the response path). Dev seed-signups fabricates
+// stats locally and does not call this. Never throws.
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { and, eq } from "drizzle-orm";
-import type { AccountType, SignupAnswer, WomPlayerStats } from "@bingo/shared";
+import type { AccountType, CombatAchievementStats, SignupAnswer, WomPlayerStats } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { signupAnswers, signups } from "../db/schema";
+import { signupAnswers, signups, users } from "../db/schema";
 import { getWomClient, parseWomSummary, type WomClient } from "./womService";
 import { getRuneProfileClient, parseAccountType, type RuneProfileClient } from "./runeProfileService";
+import { getTectonicClient, TectonicUnavailableError, type TectonicClient } from "./tectonicService";
+import { deriveCombatAchievements, parseStoredCaStats, peakCombatAchievements } from "./combatAchievements";
 import { audit } from "../audit/record";
+import { broadcast } from "../ws";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
 export interface StoredPlayerStats {
   womStats: WomPlayerStats | null;
   accountType: AccountType | null;
+  caCurrent: CombatAchievementStats | null;
+  caPeak: CombatAchievementStats | null;
+  statsFetchedAt: Date | null;
 }
 
-// Parses the JSON blobs persisted above into what clients see. Account type
-// prefers RuneProfile (it distinguishes group ironman variants; WOM just
-// reports "ironman" for a GIM member), falling back to WOM for a player who
-// syncs to WOM but isn't set up with the RuneProfile RuneLite plugin.
-export function parseStoredPlayerStats(row: { womDataJson: string | null; runeProfileDataJson: string | null }): StoredPlayerStats {
+export interface FetchPlayerStatsOpts {
+  discordId?: string | null;
+  linkedRsns?: string[] | null;
+  womClient?: WomClient;
+  runeProfileClient?: RuneProfileClient;
+  tectonicClient?: TectonicClient | null;
+}
+
+function uniqueRsns(primary: string, extras: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const rsn of [primary, ...extras]) {
+    const key = rsn.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(rsn.trim());
+  }
+  return out;
+}
+
+async function linkedRsnsForUser(
+  discordId: string | null | undefined,
+  preloaded: string[] | null | undefined,
+  tectonicClient: TectonicClient | null | undefined,
+): Promise<string[] | null> {
+  if (preloaded) return preloaded;
+  if (!discordId) return null;
+  const client = tectonicClient === undefined ? getTectonicClient() : tectonicClient;
+  if (!client) return null;
+  try {
+    const member = await client.getDetailedUser(discordId);
+    return (member?.rsns ?? []).map((r) => r.rsn);
+  } catch (err) {
+    if (err instanceof TectonicUnavailableError) return null;
+    throw err;
+  }
+}
+
+// Parses persisted blobs + derived CA columns into what clients see.
+// Account type prefers RuneProfile (it distinguishes group ironman variants;
+// WOM just reports "ironman" for a GIM member), falling back to WOM.
+export function parseStoredPlayerStats(row: {
+  womDataJson: string | null;
+  runeProfileDataJson: string | null;
+  caCurrentJson?: string | null;
+  caPeakJson?: string | null;
+  statsFetchedAt?: Date | null;
+}): StoredPlayerStats {
   const womSummary = parseWomSummary(row.womDataJson ? JSON.parse(row.womDataJson) : null);
   const accountType = parseAccountType(row.runeProfileDataJson ? JSON.parse(row.runeProfileDataJson) : null) ?? womSummary?.accountType ?? null;
-  return { womStats: womSummary ? { ehb: womSummary.ehb, ehp: womSummary.ehp } : null, accountType };
+  return {
+    womStats: womSummary ? { ehb: womSummary.ehb, ehp: womSummary.ehp } : null,
+    accountType,
+    caCurrent: parseStoredCaStats(row.caCurrentJson),
+    caPeak: parseStoredCaStats(row.caPeakJson),
+    statsFetchedAt: row.statsFetchedAt ?? null,
+  };
 }
 
 /** A player's active signup for this bingo with its stored stats parsed and their answers, or null. */
 export function getSignupStats(db: Db, bingoId: string, userId: string): (StoredPlayerStats & { rsn: string; answers: SignupAnswer[] }) | null {
   const signup = db
-    .select({ id: signups.id, rsn: signups.rsn, womDataJson: signups.womDataJson, runeProfileDataJson: signups.runeProfileDataJson })
+    .select({
+      id: signups.id,
+      rsn: signups.rsn,
+      womDataJson: signups.womDataJson,
+      runeProfileDataJson: signups.runeProfileDataJson,
+      caCurrentJson: signups.caCurrentJson,
+      caPeakJson: signups.caPeakJson,
+      statsFetchedAt: signups.statsFetchedAt,
+    })
     .from(signups)
     .where(and(eq(signups.bingoId, bingoId), eq(signups.userId, userId), eq(signups.status, "active")))
     .get();
@@ -47,26 +107,45 @@ export function getSignupStats(db: Db, bingoId: string, userId: string): (Stored
   return { rsn: signup.rsn, answers, ...parseStoredPlayerStats(signup) };
 }
 
-export async function fetchAndPersistPlayerStats(
-  db: Db,
-  signupId: string,
-  rsn: string,
-  womClient: WomClient = getWomClient(),
-  runeProfileClient: RuneProfileClient = getRuneProfileClient(),
-): Promise<void> {
-  // Test hook — skips the WOM/RuneProfile network calls entirely. Used by
-  // the E2E suite (docs/e2e-testing-plan.md) so a real signup during tests
-  // never hits those live APIs.
+export async function fetchAndPersistPlayerStats(db: Db, signupId: string, rsn: string, opts: FetchPlayerStatsOpts = {}): Promise<void> {
+  // Test hook — skips WOM/RuneProfile/Tectonic network calls entirely. Used
+  // by the E2E suite so a real signup during tests never hits those live APIs.
   if (process.env.PLAYER_STATS_FETCH_DISABLED === "true") return;
 
-  const signup = db.select({ bingoId: signups.bingoId }).from(signups).where(eq(signups.id, signupId)).get();
+  const signup = db.select({ bingoId: signups.bingoId, userId: signups.userId }).from(signups).where(eq(signups.id, signupId)).get();
+  const discordId =
+    opts.discordId !== undefined
+      ? opts.discordId
+      : signup
+        ? (db.select({ discordId: users.discordId }).from(users).where(eq(users.id, signup.userId)).get()?.discordId ?? null)
+        : null;
+
+  const womClient = opts.womClient ?? getWomClient();
+  const runeProfileClient = opts.runeProfileClient ?? getRuneProfileClient();
 
   try {
-    const [womData, runeProfileData] = await Promise.all([womClient.getPlayerByUsername(rsn), runeProfileClient.getAccountFull(rsn)]);
+    const [womData, runeProfileData, linked] = await Promise.all([
+      womClient.getPlayerByUsername(rsn),
+      runeProfileClient.getAccountFull(rsn),
+      linkedRsnsForUser(discordId, opts.linkedRsns, opts.tectonicClient),
+    ]);
+
+    const caCurrent = deriveCombatAchievements(runeProfileData);
+    const altStats: Array<CombatAchievementStats | null> = [];
+    if (linked) {
+      for (const other of uniqueRsns(rsn, linked)) {
+        if (other.toLowerCase() === rsn.trim().toLowerCase()) continue;
+        altStats.push(deriveCombatAchievements(await runeProfileClient.getAccountFull(other)));
+      }
+    }
+    const caPeak = linked ? peakCombatAchievements([caCurrent, ...altStats]) : caCurrent;
+
     db.update(signups)
       .set({
         womDataJson: womData ? JSON.stringify(womData) : null,
         runeProfileDataJson: runeProfileData ? JSON.stringify(runeProfileData) : null,
+        caCurrentJson: caCurrent ? JSON.stringify(caCurrent) : null,
+        caPeakJson: caPeak ? JSON.stringify(caPeak) : null,
         statsFetchedAt: new Date(),
       })
       .where(eq(signups.id, signupId))
@@ -78,6 +157,7 @@ export async function fetchAndPersistPlayerStats(
       details: { womFound: !!womData, runeProfileFound: !!runeProfileData },
       actor: "system",
     });
+    if (signup?.bingoId) broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: {} });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`[player-stats] failed to fetch/persist for signup ${signupId} (${rsn})`, message);

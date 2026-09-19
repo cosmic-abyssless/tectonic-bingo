@@ -85,6 +85,13 @@
       "when": 1789786669717,
       "tag": "0011_bug_report_palette",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1789786669718,
+      "tag": "0012_signup_ca_stats",
+      "breakpoints": true
     }
   ]
 }

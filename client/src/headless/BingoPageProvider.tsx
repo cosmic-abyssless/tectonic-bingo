@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { STAGE_LABEL, nextMilestone, type BingoShellResponse, type BoardLine, type SubmissionDetails, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
+import { STAGE_LABEL, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { useBingo, useBoard, useDraftState, usePendingCount, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { displayName, avatarUrl } from "../core/ui/user";
@@ -33,6 +33,7 @@ const EMPTY_LINES: BoardLine[] = [];
 const EMPTY_NODE_STATES: TeamNodeState[] = [];
 const EMPTY_INTERESTS: TileInterest[] = [];
 const EMPTY_SUBMISSIONS: SubmissionDetails[] = [];
+const EMPTY_ADJUSTMENTS: PointAdjustment[] = [];
 
 export function BingoPageProvider({
   slug,
@@ -70,6 +71,7 @@ export function BingoPageProvider({
   const [openTileId, setOpenTileId] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [teamInfoOpen, setTeamInfoOpen] = useState(false);
+  const [pointBreakdownOpen, setPointBreakdownOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitInitialTileId, setSubmitInitialTileId] = useState<string | undefined>(undefined);
@@ -161,6 +163,7 @@ export function BingoPageProvider({
     openTile: { id: openTileId, open: setOpenTileId, close: () => setOpenTileId(null) },
     rules: { open: rulesOpen, show: () => setRulesOpen(true), hide: () => setRulesOpen(false) },
     teamInfo: { open: teamInfoOpen, show: () => setTeamInfoOpen(true), hide: () => setTeamInfoOpen(false) },
+    pointBreakdown: { open: pointBreakdownOpen, show: () => setPointBreakdownOpen(true), hide: () => setPointBreakdownOpen(false) },
     drawer: { open: drawerOpen, show: () => setDrawerOpen(true), hide: () => setDrawerOpen(false) },
     submit: {
       open: submitOpen,
@@ -210,6 +213,7 @@ export function BingoPageProvider({
           interests={interests}
           viewerUserId={user.id}
           totalPoints={progressData?.totalPoints ?? null}
+          adjustments={progressData?.adjustments ?? EMPTY_ADJUSTMENTS}
         >
           {children}
         </BoardProvider>
