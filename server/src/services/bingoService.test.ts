@@ -6,6 +6,7 @@ import * as schema from "../db/schema";
 import { bingos } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { addModerator, advanceStage, assertBoardEditable, createBingo, deleteBingo, removeModerator, toPublicBingo, updateBingoSettings } from "./bingoService";
+import { effectiveStartsAt } from "./bingoStart";
 import { createTask, createTile } from "./boardService";
 import { createTeam } from "./teamService";
 import { ServiceError } from "./errors";
@@ -26,32 +27,53 @@ afterEach(() => {
 });
 
 describe("advanceStage", () => {
-  it("backfills startsAt when going live with none set", () => {
+  // The start date is only ever what an admin set. What tile freezes (and the submission gate) run from is
+  // the "effective" start: that date, or else when the bingo was last put live (see bingoStart.ts).
+  it("never writes a start date: going live with none set leaves it empty, and counts from the moment it went live", () => {
     const bingo = seedBingo({ startsAt: null });
     const now = new Date("2026-03-01T00:00:00Z");
 
     const updated = advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: bingo.createdByUserId, now });
 
-    expect(updated.startsAt).toEqual(now);
+    expect(updated.startsAt).toBeNull();
+    expect(effectiveStartsAt(db, updated)).toEqual(now);
   });
 
-  it("backfills startsAt when going live with one still in the future", () => {
-    const bingo = seedBingo({ startsAt: new Date("2099-01-01T00:00:00Z") });
+  it("leaves a start date an admin set alone, whether it is still ahead or already past", () => {
     const now = new Date("2026-03-01T00:00:00Z");
-
-    const updated = advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: bingo.createdByUserId, now });
-
-    expect(updated.startsAt).toEqual(now);
+    const bingo = seedBingo();
+    for (const scheduled of [new Date("2099-01-01T00:00:00Z"), new Date("2026-02-27T18:00:00Z")]) {
+      db.update(bingos).set({ stage: "reveal", startsAt: scheduled }).where(eq(bingos.id, bingo.id)).run();
+      const updated = advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: bingo.createdByUserId, now });
+      expect(updated.startsAt).toEqual(scheduled);
+      expect(effectiveStartsAt(db, updated)).toEqual(scheduled); // the admin's date wins over the moment it went live
+    }
   });
 
-  it("leaves an already-past startsAt untouched when going live", () => {
-    const scheduled = new Date("2026-02-27T18:00:00Z");
-    const bingo = seedBingo({ startsAt: scheduled });
+  it("restarts the count when the bingo is put live again (reveal, live, reveal, live), if no start date is set", () => {
+    const bingo = seedBingo({ startsAt: null });
+    const by = bingo.createdByUserId;
+    const first = new Date("2026-03-01T10:00:00Z");
+    const second = new Date("2026-03-03T09:00:00Z");
+
+    advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: by, now: first });
+    advanceStage(db, { bingoId: bingo.id, toStage: "reveal", changedByUserId: by, now: new Date("2026-03-02T00:00:00Z") });
+    expect(effectiveStartsAt(db, db.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!)).toEqual(first); // while it's back in reveal: still the last time it was live
+
+    const live = advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: by, now: second });
+    expect(effectiveStartsAt(db, live)).toEqual(second);
+  });
+
+  it("has no effective start while the bingo has never been live and no date is set", () => {
+    const bingo = seedBingo({ startsAt: null });
+    expect(effectiveStartsAt(db, bingo)).toBeNull();
+  });
+
+  it("records the transition with the time it happened", () => {
+    const bingo = seedBingo({ startsAt: null });
     const now = new Date("2026-03-01T00:00:00Z");
-
-    const updated = advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: bingo.createdByUserId, now });
-
-    expect(updated.startsAt).toEqual(scheduled);
+    advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: bingo.createdByUserId, now });
+    expect(db.select().from(schema.stageTransitions).where(eq(schema.stageTransitions.bingoId, bingo.id)).get()!.createdAt).toEqual(now);
   });
 
   it("does not touch startsAt for transitions other than going live", () => {
@@ -89,12 +111,10 @@ describe("advanceStage", () => {
     expect(rows[0]).toMatchObject({ fromStage: "reveal", toStage: "live" });
   });
 
-  it("keeps stage and startsAt in sync via the bingos row too", () => {
+  it("updates the stage on the bingos row", () => {
     const bingo = seedBingo({ startsAt: null });
     advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: bingo.createdByUserId });
-    const row = db.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!;
-    expect(row.stage).toBe("live");
-    expect(row.startsAt).not.toBeNull();
+    expect(db.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!.stage).toBe("live");
   });
 });
 

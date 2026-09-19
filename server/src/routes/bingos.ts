@@ -9,6 +9,7 @@ import { requireBingo } from "../middleware/requireBingo";
 import { asyncHandler } from "../middleware/errorHandler";
 import { db } from "../db";
 import * as bingoService from "../services/bingoService";
+import { effectiveStartsAt } from "../services/bingoStart";
 import * as boardService from "../services/boardService";
 import * as teamService from "../services/teamService";
 import * as submissionService from "../services/submissionService";
@@ -77,7 +78,9 @@ router.get(
     const myTeam = req.user ? teamService.getUserTeamForBingo(db, bingo.id, req.user.id) : null;
     const paidSignupCount = signupService.getPaidSignupCount(db, bingo.id);
     res.json({
-      bingo: bingoService.toPublicBingo(bingo),
+      // effectiveStartsAt: when the bingo counts as started (see bingoStart.ts) — the settings' start date, or else
+      // when it was last put live. The client runs tile freezes and "has it started" from this, not from startsAt.
+      bingo: { ...bingoService.toPublicBingo(bingo), effectiveStartsAt: effectiveStartsAt(db, bingo) },
       categories: boardService.getCategories(db, bingo.id),
       teams: teamService.getTeamsWithMembers(db, bingo.id),
       isMod,

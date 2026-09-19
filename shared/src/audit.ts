@@ -126,7 +126,8 @@ export interface AuditDetailsMap {
 
   "points.adjusted": { amount: number; reason: string };
 
-  "stage.changed": { from: Stage; to: Stage; startsAtBackfilled: boolean };
+  // startsAtBackfilled: only on entries written before a start date stopped being filled in by a stage change.
+  "stage.changed": { from: Stage; to: Stage; startsAtBackfilled?: boolean };
 
   "draft.started": { order: { teamId: string; name: string; draftOrder: number }[] };
   "draft.pick": { pickNumber: number; userIds: string[]; displayNames: string[]; pair: boolean };
