@@ -8,6 +8,7 @@ import {
   useModPair,
   useModUnpair,
   useModWithdrawSignup,
+  useRefreshSignupStats,
   useSeedTestSignups,
   useSignupRoster,
   useSignupQuestions,
@@ -19,7 +20,8 @@ import { PlayerName } from "../tectonic/PlayerName";
 import { Button, IconButton } from "../ui/Button";
 import { Badge, EmptyState, FilterChip, Notice } from "../ui/Card";
 import { Input, Select } from "../ui/Field";
-import { AlertIcon, CheckIcon, UsersIcon, XIcon } from "../ui/icons";
+import { AlertIcon, CheckIcon, RefreshIcon, UsersIcon, XIcon } from "../ui/icons";
+import { CaCell, formatCaTier } from "../signup/caStats";
 import { SortHeader, compareSortValues, useTableSort } from "../ui/tableSort";
 import { timeAgo } from "../ui/time";
 import { TierBadge } from "../tectonic/ProfileBadges";
@@ -36,7 +38,20 @@ function partnerRsn(entry: RosterEntry, roster: RosterEntry[]): string | null {
 }
 
 function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: string }[], isDuo: boolean): string {
-  const headers = ["#", "RSN", "Discord", "Tier", "Points", "Status", "Buy-in", "Collected by", ...(isDuo ? ["Partner"] : []), ...questionPrompts.map((q) => q.prompt)];
+  const headers = [
+    "#",
+    "RSN",
+    "Discord",
+    "Tier",
+    "Points",
+    "Status",
+    "Current CA",
+    "Peak CA",
+    "Buy-in",
+    "Collected by",
+    ...(isDuo ? ["Partner"] : []),
+    ...questionPrompts.map((q) => q.prompt),
+  ];
   const rows = roster.map((entry, i) => {
     const answerByQ = new Map(entry.answers.map((a) => [a.questionId, a.value]));
     return [
@@ -46,6 +61,8 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
       entry.tectonicProfile?.tier ? formatTierName(entry.tectonicProfile.tier.name) : "",
       entry.tectonicProfile ? String(entry.tectonicProfile.points) : "",
       entry.signup.status,
+      formatCaTier(entry.caCurrent),
+      formatCaTier(entry.caPeak),
       entry.signup.buyinReceivedAt ? "received" : "not received",
       entry.collectedByUser ? displayName(entry.collectedByUser) : "",
       ...(isDuo ? [partnerRsn(entry, roster) ?? ""] : []),
@@ -53,6 +70,15 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
     ];
   });
   return [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
+}
+
+function RefreshStatsButton({ slug, signupId, rsn }: { slug: string; signupId: string; rsn: string }) {
+  const refresh = useRefreshSignupStats(slug);
+  return (
+    <IconButton label={`Refresh stats for ${rsn}`} size="sm" onPress={() => refresh.mutate(signupId)} isDisabled={refresh.isPending}>
+      <RefreshIcon size={12} />
+    </IconButton>
+  );
 }
 
 function BuyinCell({ slug, entry }: { slug: string; entry: RosterEntry }) {
@@ -299,6 +325,8 @@ function rosterSortValue({ order, entry }: NumberedEntry, key: SortKey, roster: 
   if (key === "discord") return displayName(entry.user).toLowerCase();
   if (key === "tier") return entry.tectonicProfile?.points ?? -1;
   if (key === "status") return entry.signup.status;
+  if (key === "caCurrent") return entry.caCurrent?.points ?? -1;
+  if (key === "caPeak") return entry.caPeak?.points ?? -1;
   if (key === "buyin") return isPaid(entry) ? 1 : 0;
   if (key === "collectedBy") return entry.collectedByUser ? displayName(entry.collectedByUser).toLowerCase() : "";
   // Paired rows first (sorted by partner), unpaired rows after — so the
@@ -406,6 +434,8 @@ export function SignupRoster({ slug }: { slug: string }) {
                     {showTier && <SortHeader label="Tier" sortKey="tier" sort={sort} />}
                     <SortHeader label="Signed up" sortKey="order" sort={sort} />
                     <SortHeader label="Status" sortKey="status" sort={sort} />
+                    <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} />
+                    <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} />
                     <SortHeader label="Buy-in" sortKey="buyin" sort={sort} />
                     <SortHeader label="Collected by" sortKey="collectedBy" sort={sort} />
                     {isDuo && <SortHeader label="Partner" sortKey="partner" sort={sort} />}
@@ -435,6 +465,15 @@ export function SignupRoster({ slug }: { slug: string }) {
                         </td>
                         <td className="py-2 pr-4">
                           <StatusCell slug={slug} entry={entry} canWithdraw={canWithdraw} />
+                        </td>
+                        <td className="py-2 pr-4 text-on-surface-muted">
+                          <CaCell stats={entry.caCurrent} />
+                        </td>
+                        <td className="py-2 pr-4 text-on-surface-muted">
+                          <span className="inline-flex items-center gap-1">
+                            <CaCell stats={entry.caPeak} />
+                            <RefreshStatsButton slug={slug} signupId={entry.signup.id} rsn={entry.signup.rsn} />
+                          </span>
                         </td>
                         <td className="py-2 pr-4">
                           <BuyinCell slug={slug} entry={entry} />

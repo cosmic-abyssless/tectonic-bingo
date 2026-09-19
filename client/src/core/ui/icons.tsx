@@ -246,3 +246,10 @@ export const MenuIcon = (p: IconProps) => (
     <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />
   </Svg>
 );
+
+export const RefreshIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M13.5 8A5.5 5.5 0 1 1 11 3.6" />
+    <path d="M13.5 2.5v4h-4" />
+  </Svg>
+);

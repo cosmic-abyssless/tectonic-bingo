@@ -1,9 +1,11 @@
 import { Router } from "express";
+import { eq } from "drizzle-orm";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireBingo } from "../middleware/requireBingo";
 import { requireBingoMod } from "../middleware/requireBingoMod";
 import { asyncHandler } from "../middleware/errorHandler";
 import { db } from "../db";
+import * as schema from "../db/schema";
 import * as bingoService from "../services/bingoService";
 import * as submissionService from "../services/submissionService";
 import * as signupService from "../services/signupService";
@@ -14,9 +16,11 @@ import * as devSeedService from "../services/devSeedService";
 import * as teamService from "../services/teamService";
 import { syncWomCompetitionAfterDraft } from "../services/womCompetitionService";
 import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
+import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
 import { approveSubmission, rejectSubmission, undoSubmissionReview } from "../services/scoringService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
+import { markAuditedNoop } from "../audit/record";
 import { queryAuditLog } from "../audit/query";
 import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility } from "@bingo/shared";
 
@@ -190,6 +194,18 @@ router.delete(
   asyncHandler(async (req, res) => {
     pairingService.unpair(db, req.bingo!, req.params.id as string);
     broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    res.status(204).end();
+  }),
+);
+
+router.post(
+  "/signups/:signupId/refresh-stats",
+  asyncHandler(async (req, res) => {
+    const signupId = req.params.signupId as string;
+    const row = db.select({ id: schema.signups.id, rsn: schema.signups.rsn, bingoId: schema.signups.bingoId }).from(schema.signups).where(eq(schema.signups.id, signupId)).get();
+    if (!row || row.bingoId !== req.bingo!.id) throw new ServiceError(404, "Signup not found");
+    markAuditedNoop();
+    void fetchAndPersistPlayerStats(db, row.id, row.rsn);
     res.status(204).end();
   }),
 );

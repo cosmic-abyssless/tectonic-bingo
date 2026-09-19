@@ -8,6 +8,7 @@ import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { displayName } from "../ui/user";
 import { AchievementIcons, Medal, PlaceBreakdown, TierBadge } from "./ProfileBadges";
 import { formatRecordValue, isBingoEvent, podiumSummary, recordSummary } from "./profile";
+import { caTitle, formatCaTier } from "../signup/caStats";
 
 /**
  * One player's card: clan standing (tier, records, event placements), account
@@ -85,6 +86,16 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
         action={profile && <AchievementIcons profile={profile} large />}
       />
       <div className="space-y-6 p-5">
+        {(player.caCurrent || player.caPeak || player.rsn) && (
+          <div className="grid grid-cols-2 gap-4">
+            <Stat label="Current CA">
+              <span title={caTitle(player.caCurrent)}>{formatCaTier(player.caCurrent)}</span>
+            </Stat>
+            <Stat label="Peak CA">
+              <span title={caTitle(player.caPeak)}>{formatCaTier(player.caPeak)}</span>
+            </Stat>
+          </div>
+        )}
         {!profile ? (
           <p className="text-sm text-on-surface-muted">
             {player.tectonicUnavailable ? "The clan API is unavailable right now, so clan standing can't be shown." : "No clan profile — this player isn't registered with the clan bot."}

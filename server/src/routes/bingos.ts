@@ -22,6 +22,7 @@ import { isOcrEnabled, analyzeSubmissionScreenshot } from "../ocr";
 import { getTectonicClient, TectonicUnavailableError, type TectonicDetailedUser } from "../services/tectonicService";
 import { fetchProfiles } from "../services/tectonicProfileService";
 import { fetchAndPersistPlayerStats, getSignupStats, parseStoredPlayerStats } from "../services/playerStatsService";
+import { parseStoredCaStats } from "../services/combatAchievements";
 import { syncWomTeamRename } from "../services/womCompetitionService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
@@ -283,7 +284,14 @@ router.get(
     const result = signupService.getSignupForUser(db, req.bingo!.id, req.user!.id);
     // Only warn while the mods have opted in and the player can still act on it.
     const atRisk = !!result?.signup && result.signup.status === "active" && req.bingo!.warnLeftovers && draftService.getLeftoverUserIds(db, req.bingo!).has(req.user!.id);
-    res.json({ signup: result?.signup ?? null, answers: result?.answers ?? [], atRisk });
+    res.json({
+      signup: result?.signup ?? null,
+      answers: result?.answers ?? [],
+      atRisk,
+      caCurrent: result ? parseStoredCaStats(result.caCurrentJson) : null,
+      caPeak: result ? parseStoredCaStats(result.caPeakJson) : null,
+      statsFetchedAt: result?.statsFetchedAt ? result.statsFetchedAt.toISOString() : null,
+    });
   }),
 );
 
@@ -328,8 +336,12 @@ router.post(
     });
     // Fire-and-forget: WOM/RuneProfile data is a reference display, not
     // load-bearing — never let a flaky third-party API slow down or fail a
-    // signup. See playerStatsService.ts.
-    void fetchAndPersistPlayerStats(db, signup.id, signup.rsn);
+    // signup. Broadcast after persist (playerStatsService) so clients see CA.
+    // Immediate broadcast still covers the new row before stats land.
+    void fetchAndPersistPlayerStats(db, signup.id, signup.rsn, {
+      discordId: req.user!.discordId,
+      linkedRsns: (member?.rsns ?? []).map((r) => r.rsn),
+    });
     broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.status(201).json({ signup });
   }),
@@ -343,11 +355,15 @@ router.patch(
     const existing = signupService.getSignupForUser(db, req.bingo!.id, req.user!.id);
     if (!existing) throw new ServiceError(404, "You haven't signed up for this bingo");
     const { rsn, answers } = req.body as { rsn?: string; answers?: signupService.SignupAnswerInput[] };
-    const verification = rsn !== undefined ? matchRsn((await getTectonicMembership(req.user!.discordId)).member, rsn) : {};
+    const membership = await getTectonicMembership(req.user!.discordId);
+    const verification = rsn !== undefined ? matchRsn(membership.member, rsn) : {};
     const signup = signupService.updateSignup(db, req.bingo!, existing.signup.id, { rsn, answers, ...verification });
     // Re-fetch on any update, not just an RSN change — cheap, and keeps the
     // stored snapshot from going stale if someone edits other fields.
-    void fetchAndPersistPlayerStats(db, signup.id, signup.rsn);
+    void fetchAndPersistPlayerStats(db, signup.id, signup.rsn, {
+      discordId: req.user!.discordId,
+      linkedRsns: (membership.member?.rsns ?? []).map((r) => r.rsn),
+    });
     broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.json({ signup });
   }),
@@ -486,12 +502,16 @@ router.get(
     const pool = state.pool.map((unit) => ({
       ...unit,
       entries: unit.entries.map((entry) => {
-        const { womDataJson, runeProfileDataJson, statsFetchedAt, ...signup } = entry.signup;
+        const { womDataJson, runeProfileDataJson, statsFetchedAt, caCurrentJson, caPeakJson, ...signup } = entry.signup;
         void statsFetchedAt;
+        const parsed = parseStoredPlayerStats({ womDataJson, runeProfileDataJson, caCurrentJson, caPeakJson });
         return {
           ...entry,
           signup,
-          ...parseStoredPlayerStats({ womDataJson, runeProfileDataJson }),
+          womStats: parsed.womStats,
+          accountType: parsed.accountType,
+          caCurrent: parsed.caCurrent,
+          caPeak: parsed.caPeak,
           tectonicProfile: tectonic.profiles[entry.user.id] ?? null,
         };
       }),
@@ -526,6 +546,8 @@ router.get(
       rsn: signup?.rsn ?? null,
       womStats: signup?.womStats ?? null,
       accountType: signup?.accountType ?? null,
+      caCurrent: signup?.caCurrent ?? null,
+      caPeak: signup?.caPeak ?? null,
       profile: tectonic.profiles[userId] ?? null,
       answers: signup && seesAnswers ? signup.answers : null,
       tectonicUnavailable: tectonic.unavailable,
