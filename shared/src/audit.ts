@@ -125,6 +125,11 @@ export interface AuditDetailsMap {
   "submission.screenshot_analysis_failed": Record<string, never>;
 
   "points.adjusted": { amount: number; reason: string };
+  /** One row per node whose awarded points changed when a submission was reviewed (or a review undone). */
+  "points.earned": PointChangeDetails;
+  "points.lost": PointChangeDetails;
+  /** Net change for one team after a board edit re-scored the bingo (only written when non-zero). */
+  "points.rescored": { delta: number };
 
   // startsAtBackfilled: only on entries written before a start date stopped being filled in by a stage change.
   "stage.changed": { from: Stage; to: Stage; startsAtBackfilled?: boolean };
@@ -161,6 +166,19 @@ export interface AuditDetailsMap {
 
   "bug_report.created": { description: string; pageUrl: string | null; palette: string | null };
   "bug_report.resolved": { resolved: boolean };
+}
+
+export interface PointChangeDetails {
+  /** Which kind of points: a task's own points, a tile's full-completion bonus, or a line bonus. */
+  source: "task" | "tile_bonus" | "line";
+  nodeId: string;
+  /** What to call it: the task's label (or item name), the tile's name, or "Row 3" / "Column 2" / "Diagonal 1". */
+  nodeLabel: string;
+  /** The tile it belongs to (null for a line). */
+  tileName: string | null;
+  /** Always positive; earned vs. lost is the action. */
+  points: number;
+  submissionId: string;
 }
 
 export interface TaskSnapshot {
@@ -200,6 +218,12 @@ export interface AuditActionDef<A extends AuditAction> {
 
 const actor = (i: { actorName: string | null }) => i.actorName ?? "Someone";
 const onBehalf = (i: { onBehalfOfName: string | null }) => (i.onBehalfOfName ? ` (on behalf of ${i.onBehalfOfName})` : "");
+const pointsFor = (d: PointChangeDetails) =>
+  d.source === "task"
+    ? `task points for "${d.nodeLabel}" on "${d.tileName ?? "a tile"}"`
+    : d.source === "tile_bonus"
+      ? `the tile bonus for completing all of "${d.nodeLabel}"`
+      : `the line bonus for ${d.nodeLabel}`;
 
 export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
   "bingo.created": {
@@ -324,7 +348,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     tone: "ok",
     visibility: "team",
     title: "Submission approved",
-    label: (i) => `${actor(i)} approved a submission for "${i.details.tileName ?? "a tile"}"${i.details.pointsDelta ? ` (+${i.details.pointsDelta} pts)` : ""}`,
+    label: (i) => `${actor(i)} approved a submission for "${i.details.tileName ?? "a tile"}"`,
   },
   "submission.rejected": {
     category: "submission",
@@ -339,7 +363,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "team",
     title: "Review undone",
     label: (i) =>
-      `${actor(i)} sent a${i.details.previousStatus === "approved" ? "n approved" : " rejected"} submission for "${i.details.tileName ?? "a tile"}" back to pending${i.details.pointsDelta ? ` (${i.details.pointsDelta} pts)` : ""}`,
+      `${actor(i)} sent a${i.details.previousStatus === "approved" ? "n approved" : " rejected"} submission for "${i.details.tileName ?? "a tile"}" back to pending`,
   },
   "submission.screenshot_analyzed": {
     category: "submission",
@@ -355,6 +379,27 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "team",
     title: "Points adjusted",
     label: (i) => `${actor(i)} adjusted ${i.teamName ?? "the team"}'s points by ${i.details.amount > 0 ? "+" : ""}${i.details.amount} (${i.details.reason})`,
+  },
+  "points.earned": {
+    category: "points",
+    tone: "ok",
+    visibility: "team",
+    title: "Points earned",
+    label: (i) => `${i.teamName ?? "The team"} earned +${i.details.points} pts: ${pointsFor(i.details)}`,
+  },
+  "points.lost": {
+    category: "points",
+    tone: "warn",
+    visibility: "team",
+    title: "Points lost",
+    label: (i) => `${i.teamName ?? "The team"} lost ${i.details.points} pts: ${pointsFor(i.details)} (no longer complete)`,
+  },
+  "points.rescored": {
+    category: "points",
+    tone: "info",
+    visibility: "team",
+    title: "Points re-scored",
+    label: (i) => `${i.teamName ?? "The team"}'s points changed by ${i.details.delta > 0 ? "+" : ""}${i.details.delta} after a board change`,
   },
   "stage.changed": {
     category: "bingo",
