@@ -72,8 +72,16 @@ export function TeamBanner({
           <AriaButton
             onPress={onOpenPoints}
             aria-label={`${team.name}: ${totalPoints.toLocaleString()} points, see the breakdown`}
-            className="flex shrink-0 cursor-pointer items-center gap-1 border-l-[3px] px-3 text-xl leading-none outline-none transition-[filter] hovered:brightness-90 focus-visible:brightness-90 pressed:brightness-75"
-            style={{ fontFamily: COMIC_FONT, background: colors.YELLOW, borderColor: colors.LINE, color: colors.ON_YELLOW }}
+            className="flex shrink-0 cursor-pointer items-center gap-1 border-l-[3px] bg-[var(--tab-bg)] px-3 text-xl leading-none text-[var(--tab-fg)] outline-none transition-colors hovered:bg-[var(--tab-hover-bg)] hovered:text-[var(--tab-hover-fg)] focus-visible:bg-[var(--tab-hover-bg)] focus-visible:text-[var(--tab-hover-fg)] pressed:brightness-125"
+            // Yellow at rest; on hover it flips to yellow-on-ink, so the tab visibly reacts even though it is already yellow.
+            style={{
+              fontFamily: COMIC_FONT,
+              borderColor: colors.LINE,
+              ["--tab-bg" as string]: colors.YELLOW,
+              ["--tab-fg" as string]: colors.ON_YELLOW,
+              ["--tab-hover-bg" as string]: colors.LINE,
+              ["--tab-hover-fg" as string]: colors.YELLOW,
+            }}
           >
             <span className="num">{totalPoints.toLocaleString()}</span>
             <span className="text-sm">pts</span>

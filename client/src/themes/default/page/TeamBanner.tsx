@@ -14,7 +14,7 @@ export function TeamBanner({ team, isOtherTeam, totalPoints, onOpenPoints }: { t
       </div>
       {totalPoints !== null &&
         (onOpenPoints ? (
-          <Button variant="ghost" size="sm" className="-mr-1.5" onPress={onOpenPoints} aria-label={`${team.name}: ${totalPoints.toLocaleString()} points, see the breakdown`}>
+          <Button variant="ghost" size="sm" className="-mr-1.5 hover:!border-button-secondary-border hover:!bg-button-secondary-hover" onPress={onOpenPoints} aria-label={`${team.name}: ${totalPoints.toLocaleString()} points, see the breakdown`}>
             <span className="num font-semibold text-on-surface">{totalPoints.toLocaleString()}</span> <span className="font-normal text-on-surface-subtle">pts</span>
           </Button>
         ) : (
