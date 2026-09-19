@@ -3,10 +3,10 @@ import type { LineModel } from "../../../headless/types";
 export const LINE_PULSE_PERIOD_MS = 2400;
 export const LINE_PULSE_PHASE = Math.PI / 2.5;
 
-export const IDLE_BASE = 0.1;
-export const IDLE_AMP = 0.1;
-export const BOOST_BASE = 0.18;
-export const BOOST_AMP = 0.32;
+export const IDLE_BASE = 0.02;
+export const IDLE_AMP = 0.18;
+export const BOOST_BASE = 0.08;
+export const BOOST_AMP = 0.42;
 export const BOOST_MS = 2500;
 
 export interface LinePulseStop {
