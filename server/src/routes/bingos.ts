@@ -1,3 +1,4 @@
+import { devSkipsOcr } from "../devMode";
 import { privateRevalidate } from "../middleware/cacheControl";
 import { Router } from "express";
 import fs from "fs";
@@ -225,7 +226,7 @@ router.post(
     // Runs after responding — OCR (~1.6s+) shouldn't hold up submission
     // creation. Populates the same fields the mod panel shows (issue #7);
     // failure here just leaves that panel without OCR info for this one.
-    if (isOcrEnabled()) {
+    if (isOcrEnabled() && !devSkipsOcr(req.header("x-dev-skip-ocr"))) {
       const filePath = req.file.path;
       const submissionId = submission.id;
       (async () => {

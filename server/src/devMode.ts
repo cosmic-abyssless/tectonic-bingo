@@ -5,3 +5,8 @@
 export function isDevModeActive(): boolean {
   return process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "true";
 }
+
+/** Dev only: the X-Dev-Skip-Ocr header lets the test data generator skip the background screenshot analysis on a submission. */
+export function devSkipsOcr(headerValue: string | undefined): boolean {
+  return isDevModeActive() && headerValue === "1";
+}

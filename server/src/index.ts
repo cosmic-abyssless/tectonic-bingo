@@ -13,6 +13,7 @@ import cors from "cors";
 import passport from "passport";
 import { configurePassport } from "./auth/discord";
 import authRouter from "./routes/auth";
+import devRouter from "./routes/dev";
 import meRouter from "./routes/me";
 import bingosRouter from "./routes/bingos";
 import modRouter from "./routes/mod";
@@ -160,6 +161,8 @@ app.use("/api/bingos", requireGuildMember, bingosRouter);
 app.use("/api/bingos/:slug/mod", requireGuildMember, modRouter);
 app.use("/api/bingos/:slug/admin", requireGuildMember, adminRouter);
 app.use("/api/osrs-items", osrsItemsRouter);
+// Dev-only tooling (test data generator): only exists while dev mode is on.
+if (isDevModeActive()) app.use("/api/dev", devRouter);
 app.use("/api/bug-reports", bugReportsRouter);
 
 // Serve the built client (client/dist) so the whole site — API, WS, and
