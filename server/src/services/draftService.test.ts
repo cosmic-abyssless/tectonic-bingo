@@ -7,7 +7,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createTeam } from "./teamService";
 import { createSignup } from "./signupService";
 import { adminPair } from "./pairingService";
-import { getDraftState, getLeftoverUserIds, getTeamRatings, makePick, pickOrderTeamIndex, setPickRating, startDraft } from "./draftService";
+import { canViewDraftRoom, draftRoomForbiddenMessage, getDraftState, getLeftoverUserIds, getTeamRatings, makePick, pickOrderTeamIndex, setPickRating, startDraft } from "./draftService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -38,6 +38,32 @@ beforeEach(() => {
 });
 afterEach(() => {
   sqlite.close();
+});
+
+describe("canViewDraftRoom", () => {
+  const signedUpPlayer = { isMod: false, isLead: false, isOnTeam: false, isSignedUp: true };
+  const lead = { isMod: false, isLead: true, isOnTeam: true, isSignedUp: true };
+  const mod = { isMod: true, isLead: false, isOnTeam: false, isSignedUp: false };
+  const outsider = { isMod: false, isLead: false, isOnTeam: false, isSignedUp: false };
+
+  it("blocks signed-up non-leads during signup and captains", () => {
+    expect(canViewDraftRoom("signup", signedUpPlayer)).toBe(false);
+    expect(canViewDraftRoom("captains", signedUpPlayer)).toBe(false);
+    expect(canViewDraftRoom("signup", lead)).toBe(true);
+    expect(canViewDraftRoom("captains", mod)).toBe(true);
+  });
+
+  it("lets signed-up non-leads watch during draft", () => {
+    expect(canViewDraftRoom("draft", signedUpPlayer)).toBe(true);
+    expect(canViewDraftRoom("draft", outsider)).toBe(false);
+    expect(canViewDraftRoom("draft", lead)).toBe(true);
+    expect(canViewDraftRoom("draft", mod)).toBe(true);
+  });
+
+  it("uses scouting copy before draft and draft-room copy after", () => {
+    expect(draftRoomForbiddenMessage("captains")).toMatch(/scouting/i);
+    expect(draftRoomForbiddenMessage("draft")).toMatch(/draft room/i);
+  });
 });
 
 describe("pickOrderTeamIndex", () => {
