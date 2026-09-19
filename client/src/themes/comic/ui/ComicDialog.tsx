@@ -8,6 +8,7 @@ import { COMIC_FONT } from "../font";
 import { ComicBurstRays } from "./ComicBurst";
 import { ComicIconButton } from "./ComicButton";
 import { useComic } from "./useComic";
+import { useModalDepth } from "./modalStack";
 
 const MAX_WIDTH = {
   md: "max-w-lg",
@@ -31,17 +32,25 @@ export function useThemeVarsInPortal(): CSSProperties {
  * Scrim + sunbeams + halftone backdrop shared by every comic overlay. The
  * beams are the same slow-turning ones the tile modal has (ComicBurstRays);
  * they fade in and out with the overlay itself via its CSS keyframes.
+ *
+ * A modal opened on top of another one (see useModalDepth) skips the beams and
+ * halftone and just dims what's behind: the first modal already has its beams.
  */
 export function ComicBackdrop({ className }: { className?: string }) {
   const { colors } = useComic();
   const reduceMotion = useReducedMotion();
+  const stacked = useModalDepth() > 0;
   return (
     <div aria-hidden className={`pointer-events-none absolute inset-0 overflow-hidden ${className ?? ""}`}>
-      <div className="absolute inset-0" style={{ background: colors.SCRIM, opacity: 0.7 }} />
-      <div className="absolute inset-0 flex items-center justify-center">
-        <ComicBurstRays reduceMotion={!!reduceMotion} />
-      </div>
-      <div className="comic-halftone" style={{ position: "absolute", ["--comic-halftone-ink" as string]: colors.YELLOW, ["--comic-halftone-opacity" as string]: 0.18 } as CSSProperties} />
+      <div className="absolute inset-0" style={{ background: colors.SCRIM, opacity: stacked ? 0.55 : 0.7 }} />
+      {!stacked && (
+        <>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <ComicBurstRays reduceMotion={!!reduceMotion} />
+          </div>
+          <div className="comic-halftone" style={{ position: "absolute", ["--comic-halftone-ink" as string]: colors.YELLOW, ["--comic-halftone-opacity" as string]: 0.18 } as CSSProperties} />
+        </>
+      )}
     </div>
   );
 }

@@ -49,6 +49,7 @@ import {
   type LeafFaces,
 } from "./ClosedBook";
 import { ComicBurstRays } from "../ui/ComicBurst";
+import { useModalDepth } from "../ui/modalStack";
 import { PageFooter } from "./PageFooter";
 import { getBookPose, setBookAway } from "./bookFlight";
 import { pageColors, tilePageColors, TECTONIC_LOGO, type ComicColors } from "./colors";
@@ -207,9 +208,11 @@ const PHONE_BOOK_MAX_WIDTH = "calc((100dvh - 6rem) / 1.5)";
  * sequences (`burst`), so this layer owns the opacity.
  */
 function ComicBurst({ burstRef, reduceMotion, tint }: { burstRef: Ref<HTMLDivElement>; reduceMotion: boolean; tint?: string }) {
+  // Opened on top of another modal (which already has its beams): no beams of its own, only the scrim.
+  const stacked = useModalDepth() > 0;
   return (
     <div ref={burstRef} className="pointer-events-none fixed inset-0 flex items-center justify-center" style={{ opacity: 0 }}>
-      <ComicBurstRays reduceMotion={reduceMotion} color={tint} />
+      {!stacked && <ComicBurstRays reduceMotion={reduceMotion} color={tint} />}
     </div>
   );
 }
