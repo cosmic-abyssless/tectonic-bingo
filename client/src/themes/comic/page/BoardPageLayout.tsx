@@ -58,8 +58,9 @@ export function BoardPageLayout() {
                   yet still gets it, as the "Select team" menu. */}
               {(page.viewing.team || (page.isMod && page.teams.length > 0)) && (
                 // On a phone this row is the banner filling the space with
-                // Submit to its right (Submit leaves the masthead there).
-                <div className="flex items-center gap-3 max-md:w-full">
+                // Submit to its right (Submit leaves the masthead there), and it
+                // sits above the search box rather than under it.
+                <div className="flex items-center gap-3 max-md:order-first max-md:w-full">
                   <div className="min-w-0 flex-1 md:flex-none">
                     <TeamBanner
                       team={page.viewing.team}
