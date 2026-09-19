@@ -19,6 +19,7 @@ import type { SubmissionModel, TaskModel, TileModel } from "../../../headless/ty
 import { SubmissionBubble } from "./SubmissionBubble";
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ClockIcon, HandIcon, LockIcon, XIcon } from "../../../core/ui/icons";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
+import { TaskInterestPeople } from "../../../core/ui/TaskInterestPeople";
 import { formatCountdown } from "../../../core/ui/time";
 import { useSlot, useThemeTokens } from "../../context";
 import { thumbUrl } from "../../../api/imageVariants";
@@ -1274,9 +1275,13 @@ function TileDetails({
   // Fronts are right-hand pages, backs left-hand ones. The copy drawn on a
   // fold-back is the same page without its gutter shadow.
   // What a page is, printed at its spine-side foot: contents, part k of m,
-  // or the submissions.
-  const roleOf = (i: number) =>
-    i === 0 ? "Contents" : i === pageCount - 1 ? "Submissions" : `Part ${ordered[i - 1]!.number} of ${tile.tasks.length}`;
+  // or the submissions. Blank if beyond pageCount.
+  const roleOf = (i: number) => {
+    if (i < 0 || i >= pageCount) return "";
+    if (i === 0) return "Contents";
+    if (i === pageCount - 1) return "Submissions";
+    return ordered[i - 1] ? `Part ${ordered[i - 1].number} of ${tile.tasks.length}` : "";
+  };
   const face = (i: number, side: Side, gutter = true): ReactNode => (
     <PageColorsContext.Provider value={page}>
       <BookPage colors={page} side={side === "front" ? "right" : "left"} no={i + 1} role={roleOf(i)} gutter={gutter} dragScroll={single}>
@@ -1290,7 +1295,10 @@ function TileDetails({
   const leaves: LeafFaces[] = Array.from({ length: innerLeaves }, (_, idx) => {
     const k = idx + 1;
     if (single) return { front: face(k - 1, "front"), back: undefined };
-    return { front: face(2 * k - 1, "front"), back: 2 * k < pageCount ? face(2 * k, "back") : undefined };
+    return {
+      front: 2 * k - 1 < pageCount ? face(2 * k - 1, "front") : undefined,
+      back: 2 * k < pageCount ? face(2 * k, "back") : undefined,
+    };
   });
 
   // What the curl layer shows on the fold-back: the OTHER side of the page
@@ -1883,20 +1891,7 @@ function TaskPage({
                     {interest.mine ? "I'm on it" : "I'll do this"}
                   </ComicButton>
                 )}
-                <span className="min-w-0 text-sm" style={{ color: interest.people.length > 0 ? colors.INK_BODY : colors.INK_SUBTLE }}>
-                  {interest.people.length > 0 ? (
-                    <>
-                      {interest.people.map((p, i) => (
-                        <span key={p.id}>
-                          {i > 0 && ", "}
-                          <PlayerName userId={p.id}>{p.displayName}</PlayerName>
-                        </span>
-                      ))}
-                    </>
-                  ) : (
-                    "Unclaimed"
-                  )}
-                </span>
+                <TaskInterestPeople interest={interest} variant="comic" />
               </div>
             )}
           </div>
