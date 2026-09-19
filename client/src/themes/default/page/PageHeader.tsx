@@ -8,16 +8,16 @@ import { UsersIcon } from "../../../core/ui/icons";
 import { useSlot } from "../../context";
 
 export function PageHeader({ page }: { page: BingoPageModel }) {
-  const { user } = useAuth();
+  const { user, devMode } = useAuth();
   const TeamSelector = useSlot("TeamSelector");
   const TeamBadge = useSlot("TeamBadge");
 
   return (
     <AppHeader
-      // "/" only shows the bingo list to admins (everyone else gets bounced
-      // straight back to their own bingo — see BingoList.tsx), so the back
+      // "/" only shows the bingo list to admins and dev-login (everyone else
+      // gets bounced to the latest bingo — see BingoList.tsx), so the back
       // link would just be a dead loop for anyone else.
-      back={user?.isAdmin ? { to: "/", label: "All bingos" } : undefined}
+      back={user?.isAdmin || devMode ? { to: "/", label: "All bingos" } : undefined}
       title={page.bingo.name}
       subtitle={
         page.showEndCountdown && page.bingo.endsAt ? (
