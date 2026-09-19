@@ -27,7 +27,7 @@ function LeafOrSumRow({ node }: { node: RequirementNodeModel }) {
         </span>
       )}
       {node.items.length > 1 ? (
-        <ul className="list-disc space-y-0.5 pl-4">
+        <ul className="space-y-0.5">
           {node.items.map((item) => (
             <li key={item.name}>
               <ItemIcon url={item.iconUrl} className={iconClass} />

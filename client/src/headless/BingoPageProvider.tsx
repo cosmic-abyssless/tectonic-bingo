@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { STAGE_LABEL, nextMilestone, type Bingo, type BoardLine, type SubmissionDetails, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
+import { STAGE_LABEL, nextMilestone, type BingoShellResponse, type BoardLine, type SubmissionDetails, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { useBingo, useBoard, useDraftState, usePendingCount, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { displayName, avatarUrl } from "../core/ui/user";
@@ -18,7 +18,7 @@ import type { BingoPageModel, StageView } from "./types";
 // only get the headless barrel's clean models.
 interface BingoPageRaw {
   slug: string;
-  bingo: Bingo;
+  bingo: BingoShellResponse["bingo"];
   tiles: Tile[];
   categories: TileCategory[];
   nodeStates: TeamNodeState[];
@@ -65,7 +65,7 @@ export function BingoPageProvider({
 
   usePageEvents(shell);
   // Mirrors the server's submission gate: nothing can be submitted before startsAt.
-  const hasStarted = useHasPassed(shell?.bingo.startsAt);
+  const hasStarted = useHasPassed(shell?.bingo.effectiveStartsAt);
 
   const [openTileId, setOpenTileId] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -132,7 +132,7 @@ export function BingoPageProvider({
       stage: bingo.stage,
       stageLabel: STAGE_LABEL[bingo.stage],
       rulesMarkdown: bingo.rulesMarkdown,
-      startsAt: bingo.startsAt ? new Date(bingo.startsAt).getTime() : null,
+      startsAt: bingo.effectiveStartsAt ? new Date(bingo.effectiveStartsAt).getTime() : null,
       endsAt: bingo.endsAt ? new Date(bingo.endsAt).getTime() : null,
       boardRows: bingo.boardRows,
       boardCols: bingo.boardCols,
@@ -201,7 +201,7 @@ export function BingoPageProvider({
           lines={lines}
           nodeStates={nodeStates}
           teamSubmissions={teamSubmissions}
-          bingoStartsAt={bingo.startsAt}
+          bingoStartsAt={bingo.effectiveStartsAt}
           bingoRows={bingo.boardRows}
           bingoCols={bingo.boardCols}
           searchQuery={search.query}

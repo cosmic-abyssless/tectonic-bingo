@@ -137,25 +137,22 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
       throw new ServiceError(400, `Bingo is already in the "${bingo.stage}" stage`);
     }
 
-    // `startsAt` is normally set ahead of time (a scheduled kickoff mods can
-    // point a countdown at), but createSubmission also gates on it — a mod
-    // advancing to "live" without one already set (or with one still in the
-    // future) would otherwise leave the board showing live while every
-    // submission is rejected with "the bingo has not started yet". Advancing
-    // to live is itself a statement that the bingo starts now, so backfill it
-    // here rather than leaving stage and startsAt able to disagree.
+    // `startsAt` is only ever what an admin set in the settings; it is not written here. Tile freezes
+    // and the submission gate run from the effective start (bingoStart.ts): that date if there is
+    // one, otherwise the moment the bingo was last put live, which the transition logged below
+    // records. (This used to stamp "now" into startsAt the first time the bingo went live, which
+    // pinned the freeze to that first time: moving back to reveal and live again never restarted it.)
     const now = params.now ?? new Date();
-    const startsAt = params.toStage === "live" && (!bingo.startsAt || bingo.startsAt > now) ? now : undefined;
 
-    tx.update(bingos).set({ stage: params.toStage, ...(startsAt ? { startsAt } : {}) }).where(eq(bingos.id, bingo.id)).run();
+    tx.update(bingos).set({ stage: params.toStage }).where(eq(bingos.id, bingo.id)).run();
     tx.insert(stageTransitions)
-      .values({ bingoId: bingo.id, fromStage: bingo.stage as Stage, toStage: params.toStage, changedByUserId: params.changedByUserId })
+      .values({ bingoId: bingo.id, fromStage: bingo.stage as Stage, toStage: params.toStage, changedByUserId: params.changedByUserId, createdAt: now })
       .run();
     audit(tx, {
       action: "stage.changed",
       bingoId: bingo.id,
       entity: { type: "bingo", id: bingo.id, label: bingo.name },
-      details: { from: bingo.stage as Stage, to: params.toStage, startsAtBackfilled: !!startsAt },
+      details: { from: bingo.stage as Stage, to: params.toStage },
       actor: { userId: params.changedByUserId },
       now: params.now,
     });

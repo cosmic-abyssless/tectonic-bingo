@@ -187,6 +187,51 @@ describe("createSubmission", () => {
     ).not.toThrow();
   });
 
+  describe("with no start date set, the freeze runs from when the bingo was last put live", () => {
+    const wentLive = (bingo: { id: string; createdByUserId: string }, at: Date) =>
+      db.insert(schema.stageTransitions).values({ bingoId: bingo.id, fromStage: "reveal", toStage: "live", changedByUserId: bingo.createdByUserId, createdAt: at }).run();
+    const attempt = (bingo: Parameters<typeof createSubmission>[1], teamId: string, memberUserId: string, nodeId: string, now: Date) =>
+      createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId, itemName: "x" }], screenshotUrl: "/x.png", now });
+
+    it("counts from the moment it went live, and is frozen until the window is over", () => {
+      const { bingo, teamId, memberUserId } = seed({ startsAt: null });
+      const live = new Date("2026-03-01T10:00:00Z");
+      wentLive(bingo, live);
+      const task = addTask(addTile(bingo.id, { hasFreezePeriod: true, freezeDurationMinutes: 120 }).id, { sortOrder: 0, points: 20 });
+
+      expect(() => attempt(bingo, teamId, memberUserId, task.leafId, new Date(live.getTime() + 60 * 60_000))).toThrow(/frozen/);
+      expect(() => attempt(bingo, teamId, memberUserId, task.leafId, new Date(live.getTime() + 121 * 60_000))).not.toThrow();
+    });
+
+    it("restarts when it is put live again", () => {
+      const { bingo, teamId, memberUserId } = seed({ startsAt: null });
+      wentLive(bingo, new Date("2026-03-01T10:00:00Z"));
+      const second = new Date("2026-03-05T10:00:00Z");
+      wentLive(bingo, second);
+      const task = addTask(addTile(bingo.id, { hasFreezePeriod: true, freezeDurationMinutes: 120 }).id, { sortOrder: 0, points: 20 });
+
+      // Days after the first time it went live, but only an hour after the second.
+      expect(() => attempt(bingo, teamId, memberUserId, task.leafId, new Date(second.getTime() + 60 * 60_000))).toThrow(/frozen/);
+    });
+
+    it("is not started at all if the bingo was never put live and has no date", () => {
+      const { bingo, teamId, memberUserId } = seed({ startsAt: null });
+      const task = addTask(addTile(bingo.id).id, { sortOrder: 0, points: 20 });
+      expect(() => attempt(bingo, teamId, memberUserId, task.leafId, NOW)).toThrow(/has not started/);
+    });
+
+    it("prefers the date an admin set, even over a later time it went live", () => {
+      const startsAt = new Date("2026-03-10T12:00:00Z");
+      const { bingo, teamId, memberUserId } = seed({ startsAt });
+      wentLive(bingo, new Date("2026-03-01T00:00:00Z")); // put live early, before the start date
+      const task = addTask(addTile(bingo.id, { hasFreezePeriod: true, freezeDurationMinutes: 120 }).id, { sortOrder: 0, points: 20 });
+
+      expect(() => attempt(bingo, teamId, memberUserId, task.leafId, new Date("2026-03-05T00:00:00Z"))).toThrow(/has not started/); // live, but before the date
+      expect(() => attempt(bingo, teamId, memberUserId, task.leafId, new Date(startsAt.getTime() + 60 * 60_000))).toThrow(/frozen/); // 26h-style: frozen until date + freeze
+      expect(() => attempt(bingo, teamId, memberUserId, task.leafId, new Date(startsAt.getTime() + 121 * 60_000))).not.toThrow();
+    });
+  });
+
   it("rejects submitGateNodeId until the gate is completed for the team, then accepts", () => {
     const { bingo, teamId, memberUserId } = seed();
     const tile = addTile(bingo.id);

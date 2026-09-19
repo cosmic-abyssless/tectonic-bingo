@@ -124,7 +124,7 @@ export function useSubmissionFlow({
     if (!match) return;
     const matchedTile = tiles.find((t) => t.id === match.tileId);
     if (!matchedTile) return;
-    const freezeUnlocksAt = getFreezeUnlockAt(bingo.startsAt, matchedTile);
+    const freezeUnlocksAt = getFreezeUnlockAt(bingo.effectiveStartsAt, matchedTile);
     if (freezeUnlocksAt && Date.now() < freezeUnlocksAt) return;
     // The matched leaf may be nested under a task's ALL/ANY/COUNT/SUM wrapper
     // — find the task (direct tile child) that owns it.
@@ -276,7 +276,7 @@ export function useSubmissionFlow({
     const catTiles = tiles.filter((t) => t.categoryId === (cat?.id ?? null)).sort((a, b) => a.boardRow - b.boardRow || a.boardCol - b.boardCol);
     return catTiles.flatMap((t) => {
       const available = getAvailableTasks(t, statusByNodeId);
-      const freezeUnlocksAt = getFreezeUnlockAt(bingo.startsAt, t);
+      const freezeUnlocksAt = getFreezeUnlockAt(bingo.effectiveStartsAt, t);
       const frozen = !!(freezeUnlocksAt && Date.now() < freezeUnlocksAt);
       if (available.length === 0 || frozen) return [];
       return [{ id: t.id, label: t.name, group: cat?.label }];

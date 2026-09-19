@@ -366,7 +366,11 @@ export interface BingoListResponse {
 }
 
 export interface BingoShellResponse {
-  bingo: Bingo;
+  /**
+   * `effectiveStartsAt`: when the bingo counts as started — the start date set in the settings, or if there is
+   * none, when it was last put live (null if neither). Tile freezes and "submissions open" run from it.
+   */
+  bingo: Bingo & { effectiveStartsAt: string | null };
   categories: TileCategory[];
   teams: TeamWithMembers[];
   isMod: boolean;

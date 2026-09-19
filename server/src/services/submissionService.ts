@@ -5,6 +5,7 @@ import * as schema from "../db/schema";
 import { claims, nodes, submissions, submissionScreenshots, teamNodeState, teams, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { findAncestorIds } from "./graphService";
+import { effectiveStartsAt } from "./bingoStart";
 import { audit } from "../audit/record";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -40,7 +41,8 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
     if (bingo.stage !== "live") {
       throw new ServiceError(400, "Submissions are only open while the bingo is live");
     }
-    if (!bingo.startsAt || now < bingo.startsAt) {
+    const startsAt = effectiveStartsAt(tx, bingo);
+    if (!startsAt || now < startsAt) {
       throw new ServiceError(400, "The bingo has not started yet");
     }
     if (params.claims.length === 0) throw new ServiceError(400, "At least one claim is required");
@@ -66,7 +68,7 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
     const tile = tileRows.find((t) => t.id === [...tilesTouched][0])!;
 
     if (tile.hasFreezePeriod) {
-      const unlockAt = new Date(bingo.startsAt.getTime() + tile.freezeDurationMinutes * 60_000);
+      const unlockAt = new Date(startsAt.getTime() + tile.freezeDurationMinutes * 60_000);
       if (now < unlockAt) {
         throw new ServiceError(400, `This tile is frozen until ${unlockAt.toISOString()}`);
       }
