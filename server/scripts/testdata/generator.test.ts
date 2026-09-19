@@ -1,0 +1,272 @@
+import fs from "node:fs";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+import type { GraphNode, Tile } from "@bingo/shared";
+import { DIFFICULTY, buildBoard, deadlockedParts, difficultyOf, planSubmissions, type Claim, type PartModel } from "./board";
+import { UsageError, defaultSlug, parseArgs } from "./common";
+import { chooseMods, makePlayers, pairUp, playingProbability } from "./people";
+import { Rng } from "./rng";
+import { runInOrder } from "./setup";
+import { DAY, HOUR, TARGET_STAGES, buildTimeline, runLimit } from "./timeline";
+
+describe("Rng", () => {
+  it("repeats for a seed, and differs between seeds", () => {
+    const a = new Rng(42);
+    const b = new Rng(42);
+    expect(Array.from({ length: 5 }, () => a.float())).toEqual(Array.from({ length: 5 }, () => b.float()));
+    expect(new Rng(1).float()).not.toBe(new Rng(2).float());
+  });
+
+  it("keeps forks independent of what the parent does afterwards", () => {
+    const first = new Rng(7);
+    const forkBefore = first.fork("people").float();
+    const second = new Rng(7);
+    second.float();
+    second.float();
+    expect(second.fork("people").float()).toBe(forkBefore);
+    expect(new Rng(7).fork("a").float()).not.toBe(new Rng(7).fork("b").float());
+  });
+
+  it("stays in range, never picks a zero weight, and shuffles without losing anything", () => {
+    const rng = new Rng(3);
+    for (let i = 0; i < 500; i++) {
+      const n = rng.int(2, 5);
+      expect(n).toBeGreaterThanOrEqual(2);
+      expect(n).toBeLessThanOrEqual(5);
+      expect(rng.weighted([["never", 0], ["always", 1]])).toBe("always");
+    }
+    expect(rng.shuffle([1, 2, 3, 4, 5]).sort()).toEqual([1, 2, 3, 4, 5]);
+    expect(() => rng.weighted([["x", 0]])).toThrow();
+  });
+});
+
+describe("buildTimeline", () => {
+  const now = new Date("2026-09-19T12:00:00Z");
+  const of = (stage: (typeof TARGET_STAGES)[number], progress = 0.5) => buildTimeline(stage, { now, progress, days: 9 });
+
+  it("puts now inside the target stage", () => {
+    const t = (stage: (typeof TARGET_STAGES)[number]) => of(stage);
+    expect(t("signup").signupOpensAt.getTime()).toBeLessThan(now.getTime());
+    expect(t("signup").captainsAt.getTime()).toBeGreaterThan(now.getTime());
+    expect(t("captains").captainsAt.getTime()).toBeLessThan(now.getTime());
+    expect(t("captains").draftAt.getTime()).toBeGreaterThan(now.getTime());
+    expect(t("draft").draftAt.getTime()).toBeLessThan(now.getTime());
+    expect(t("draft").revealAt.getTime()).toBeGreaterThan(now.getTime());
+    expect(t("reveal").revealAt.getTime()).toBeLessThan(now.getTime());
+    expect(t("reveal").startsAt.getTime()).toBeGreaterThan(now.getTime());
+    expect(t("live").startsAt.getTime()).toBeLessThan(now.getTime());
+    expect(t("live").endsAt.getTime()).toBeGreaterThan(now.getTime());
+    expect(t("complete").endsAt.getTime()).toBeLessThan(now.getTime());
+    expect(t("complete").completeAt.getTime()).toBeLessThan(now.getTime());
+  });
+
+  it("keeps the moments in order for every stage", () => {
+    for (const stage of TARGET_STAGES) {
+      const tl = of(stage);
+      const order = [tl.createdAt, tl.signupOpensAt, tl.captainsAt, tl.draftAt, tl.revealAt, tl.startsAt, tl.endsAt, tl.completeAt].map((d) => d.getTime());
+      expect(order, stage).toEqual([...order].sort((a, b) => a - b));
+    }
+  });
+
+  it("places a live bingo the requested share of the way through", () => {
+    for (const progress of [0.1, 0.5, 0.9]) {
+      const tl = of("live", progress);
+      expect((now.getTime() - tl.startsAt.getTime()) / (tl.endsAt.getTime() - tl.startsAt.getTime())).toBeCloseTo(progress, 6);
+    }
+    expect(of("live").endsAt.getTime() - of("live").startsAt.getTime()).toBe(9 * DAY);
+  });
+
+  it("stops a run at now, except a finished bingo, which runs to when it was completed", () => {
+    expect(runLimit(of("live"))).toEqual(now);
+    expect(runLimit(of("draft"))).toEqual(now);
+    expect(runLimit(of("complete"))).toEqual(of("complete").completeAt);
+  });
+});
+
+describe("people", () => {
+  it("makes the same, distinct people for a seed", () => {
+    const a = makePlayers(new Rng(5), 88, "testdata-x");
+    const b = makePlayers(new Rng(5), 88, "testdata-x");
+    expect(a).toEqual(b);
+    expect(new Set(a.map((p) => p.name)).size).toBe(88);
+    expect(new Set(a.map((p) => p.discordId)).size).toBe(88);
+    expect(a.every((p) => p.discordId.startsWith("testdata-") && p.skill >= 0.1 && p.skill <= 0.95)).toBe(true);
+  });
+
+  it("pairs off about the requested share, symmetrically, and picks mods from the unpaired", () => {
+    const players = makePlayers(new Rng(9), 88, "testdata-x");
+    const pairs = pairUp(players, new Rng(1), 0.6);
+    expect(pairs.length).toBe(26);
+    for (const [a, b] of pairs) {
+      expect(a.partnerIndex).toBe(b.index);
+      expect(b.partnerIndex).toBe(a.index);
+    }
+    const mods = chooseMods(players, new Rng(2), 3);
+    expect(mods).toHaveLength(3);
+    expect(mods.every((m) => m.isMod && m.partnerIndex === null && m.reviewWindows.length === 3)).toBe(true);
+  });
+
+  it("is more active in the evening than overnight, and adds up to their hours a day", () => {
+    const [p] = makePlayers(new Rng(1), 1, "testdata-x");
+    p!.offset = 0;
+    p!.activity = 3;
+    const at = (h: number) => new Date(Date.UTC(2026, 0, 1, h));
+    expect(playingProbability(p!, at(20))).toBeGreaterThan(playingProbability(p!, at(11)));
+    expect(playingProbability(p!, at(11))).toBeGreaterThan(playingProbability(p!, at(4)));
+    const perDay = Array.from({ length: 24 }, (_, h) => playingProbability(p!, at(h))).reduce((a, b) => a + b, 0);
+    expect(perDay).toBeCloseTo(3, 5);
+  });
+});
+
+describe("parseArgs", () => {
+  const now = new Date("2026-09-19T14:32:00Z");
+
+  it("has the defaults from the plan", () => {
+    const a = parseArgs([], now);
+    expect(a).toMatchObject({ stage: "live", progress: 0.5, days: 9, teams: 6, teamSize: 14, mods: 3, me: null, base: "http://localhost:3001", dryRun: false });
+    expect(a.slug).toBe("testdata-20260919-1432");
+    expect(defaultSlug(now)).toBe("testdata-20260919-1432");
+  });
+
+  it("reads options and flags", () => {
+    const a = parseArgs(["--stage", "draft", "--seed", "7", "--me", "123", "--dry-run", "--teams", "4"], now);
+    expect(a).toMatchObject({ stage: "draft", seed: 7, me: "123", dryRun: true, teams: 4 });
+  });
+
+  it("refuses what it can't use", () => {
+    expect(() => parseArgs(["--stage", "nope"], now)).toThrow(UsageError);
+    expect(() => parseArgs(["--progress", "3"], now)).toThrow(/from 0.02 to 1/);
+    expect(() => parseArgs(["--teams", "2.5"], now)).toThrow(/whole number/);
+    expect(() => parseArgs(["--bogus", "1"], now)).toThrow(/Unknown option/);
+    expect(() => parseArgs(["--slug", "real-bingo"], now)).toThrow(/testdata-/);
+    expect(() => parseArgs(["--slug", "testdata-UPPER"], now)).toThrow(UsageError);
+    expect(() => parseArgs(["stray"], now)).toThrow(/Unexpected/);
+  });
+});
+
+describe("runInOrder", () => {
+  it("runs by date, keeps the given order for ties, and skips anything after the limit", async () => {
+    const ran: string[] = [];
+    const at = (h: number) => new Date(Date.UTC(2026, 0, 1, h));
+    const count = await runInOrder(
+      [
+        { at: at(5), run: async () => void ran.push("five") },
+        { at: at(1), run: async () => void ran.push("one-a") },
+        { at: at(1), run: async () => void ran.push("one-b") },
+        { at: at(9), run: async () => void ran.push("nine") },
+      ],
+      at(6),
+    );
+    expect(ran).toEqual(["one-a", "one-b", "five"]);
+    expect(count).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The board, against the real export
+// ---------------------------------------------------------------------------
+
+interface ExportTask {
+  localId: number;
+  kind: GraphNode["kind"];
+  label: string | null;
+  points?: number;
+  minCount?: number | null;
+  quantity?: number | null;
+  itemName?: string | null;
+  submitGateLocalId?: number | null;
+  pointsGateLocalId?: number | null;
+  children?: ExportTask[];
+}
+interface ExportDoc {
+  tiles: { name: string; boardRow: number; boardCol: number; hasFreezePeriod: boolean; freezeDurationMinutes: number; bonusPoints: number; tasks: ExportTask[] }[];
+}
+
+const EXPORT_PATH = path.resolve(__dirname, "../../../tectonic-comics-bingo-export.json");
+
+function toNode(t: ExportTask): GraphNode {
+  return {
+    id: `n${t.localId}`, bingoId: "b", kind: t.kind, label: t.label ?? null, description: null, notes: null, points: t.points ?? 0,
+    minCount: t.minCount ?? null, quantity: t.quantity ?? null, itemName: t.itemName ?? null,
+    pointsGateNodeId: t.pointsGateLocalId ? `n${t.pointsGateLocalId}` : null,
+    submitGateNodeId: t.submitGateLocalId ? `n${t.submitGateLocalId}` : null,
+    allowsPreLoad: false, children: (t.children ?? []).map(toNode),
+  };
+}
+
+function loadRealBoard() {
+  const doc = JSON.parse(fs.readFileSync(EXPORT_PATH, "utf-8")) as ExportDoc;
+  const tiles = doc.tiles.map((t, i): Tile => ({
+    id: `tile-${i}`, name: t.name, boardRow: t.boardRow, boardCol: t.boardCol, hasFreezePeriod: t.hasFreezePeriod, freezeDurationMinutes: t.freezeDurationMinutes,
+    node: { ...toNode({ localId: 100000 + i, kind: "ALL", label: null, points: t.bonusPoints, children: t.tasks }) },
+  } as unknown as Tile));
+  return { doc, board: buildBoard(tiles, []) };
+}
+
+describe.skipIf(!fs.existsSync(EXPORT_PATH))("the real board", () => {
+  const { doc, board } = loadRealBoard();
+
+  it("knows how hard every tile is (a new or renamed tile needs a row in DIFFICULTY)", () => {
+    const unknown = doc.tiles.map((t) => t.name).filter((name) => !(name.toUpperCase() in DIFFICULTY));
+    expect(unknown).toEqual([]);
+    const unused = Object.keys(DIFFICULTY).filter((name) => !doc.tiles.some((t) => t.name.toUpperCase() === name));
+    expect(unused).toEqual([]);
+  });
+
+  it("reads 25 tiles of two pages", () => {
+    expect(board.tiles).toHaveLength(25);
+    expect(board.parts).toHaveLength(50);
+    expect(board.tiles.every((t) => t.parts.length === 2 && t.bonus === 20)).toBe(true);
+    expect(board.tiles.filter((t) => t.freezeMs > 0)).toHaveLength(8);
+  });
+
+  it("finds the parts that can never be finished: PETS and SLAYER BOSSES share their items across a gated page", () => {
+    const stuck = [...board.deadlocked.keys()].map((id) => board.partById.get(id)!);
+    expect(stuck.map((p) => `${p.tileName} ${p.label}`).sort()).toEqual(["PETS Page 1", "PETS Page 2", "SLAYER BOSSES Page 1", "SLAYER BOSSES Page 2"]);
+  });
+
+  it("agrees with the server's gate rule: a gated page opens once its gate is complete, and not before", () => {
+    const nightmare = board.tiles.find((t) => t.name === "NIGHTMARE")!;
+    const [page1, page2] = nightmare.parts as [PartModel, PartModel];
+    const leaf = page2.leafIds[0]!;
+    expect(board.claimable(leaf, new Set())).toBe(false);
+    expect(board.claimable(leaf, new Set([page1.id]))).toBe(true);
+    expect(board.claimable(page1.leafIds[0]!, new Set())).toBe(true);
+  });
+
+  it("plans submissions that actually finish every reachable part", () => {
+    const rng = new Rng(11);
+    for (const part of board.parts) {
+      if (board.deadlocked.has(part.id)) continue;
+      const plan = planSubmissions(part.node, rng);
+      expect(plan.length, `${part.tileName} ${part.label}`).toBeGreaterThan(0);
+      const claims = plan.flat();
+      for (const submission of plan) {
+        expect(new Set(submission.map((c) => c.nodeId)).size).toBe(submission.length);
+        expect(submission.every((c) => part.leafIds.includes(c.nodeId))).toBe(true);
+      }
+      const total = (list: Claim[]) => list.reduce((sum, c) => sum + (c.quantity ?? 1), 0);
+      if (part.node.kind === "SUM") expect(total(claims), `${part.tileName} ${part.label}`).toBe(part.node.quantity);
+      if (part.node.kind === "COUNT") expect(new Set(claims.map((c) => c.nodeId)).size).toBe(part.node.minCount);
+    }
+  });
+
+  it("plans the same submissions for a seed", () => {
+    const part = board.parts.find((p) => p.tileName === "NIGHTMARE" && p.index === 0)!;
+    expect(planSubmissions(part.node, new Rng(4))).toEqual(planSubmissions(part.node, new Rng(4)));
+  });
+
+  it("makes TOB ISSUE 2 Page 2 far harder and rarer than most tiles, and slayer bosses easy", () => {
+    expect(difficultyOf("TOB ISSUE 2", 1)).toEqual({ effort: 40, eligible: 0.12 });
+    expect(difficultyOf("SLAYER BOSSES", 0).eligible).toBeGreaterThan(0.9);
+    expect(difficultyOf("Some new tile", 0)).toEqual({ effort: 5, eligible: 0.7 });
+  });
+});
+
+describe("deadlockedParts", () => {
+  it("is empty for parts with no shared, gated leaves", () => {
+    const part = (id: string, leafIds: string[]) => ({ id, leafIds, tileName: "T", label: id }) as PartModel;
+    const stuck = deadlockedParts([part("a", ["l1"]), part("b", ["l2"])], (leaf, done) => leaf === "l1" || done.has("a"));
+    expect(stuck.size).toBe(0);
+  });
+});
