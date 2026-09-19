@@ -19,9 +19,10 @@ team's info dialog:
    crossbow for "GWD ISSUE 2"`.
 3. **An optional `condensed` form of the log.** `?condensed=1` on the read
    endpoints collapses runs of alike entries: five `comfy hug approved a
-   submission for …` rows become `comfy hug approved 5 submissions for …`,
-   and the points rows underneath them become one `Comfy earned +200 pts (…)`
-   row. The team activity feed uses it; the mod panel's Audit log tab does not.
+   submission for …` rows become `comfy hug approved 5 submissions for …`.
+   **Points entries are never condensed**: each `earned +N pts: …` row stays
+   its own line, so the feed always shows exactly what was scored and why.
+   The team activity feed uses it; the mod panel's Audit log tab does not.
 
 Work in the order below and **commit after each phase** (each leaves the app
 working and the suites green). Verification commands are at the end.
@@ -291,13 +292,14 @@ distinct `details.tileName` in first-seen order, rendered as `"A", "B"` when
 | `submission.created` | `${actor} submitted ${mergedClaims} for ${tiles}` where `mergedClaims` = `describeClaims` over the concatenation of every member's `claims`/`taskLabels` |
 | `submission.approved` | `${actor} approved ${n} submissions for ${tiles}` |
 | `submission.rejected` | `${actor} rejected ${n} submissions for ${tiles}` |
-| `points.earned` | `${team} earned +${total} pts: ${breakdown}` |
-| `points.lost` | `${team} lost ${total} pts: ${breakdown}` |
 | `team.member_added` | `${actor} added ${names joined} to ${team}` |
 
-`breakdown` lists the non-zero sources in the order task → tile bonus → line:
-`${sum} task points (${count} tasks)` / `${sum} tile bonus` / `${sum} line bonus (${count} lines)` — singular when count is 1 — joined with `", "`. Example:
-`Comfy earned +200 pts: 135 task points (5 tasks), 50 tile bonus, 15 line bonus (1 line)`.
+`points.earned`, `points.lost`, `points.rescored` and `points.adjusted` get
+**no** `condense` renderer, deliberately: every point change stays its own
+line even in the condensed feed, so a run of five approvals reads as one
+"approved 5 submissions" line followed by each individual "+20 pts: task
+points for …" / "+50 pts: the tile bonus …" / "+15 pts: the line bonus …"
+row in order. Do not add one later without changing this plan.
 
 Actor-led condensed labels must still **start with the actor name** so the
 comic dialog's `PlayerName` link keeps working.
@@ -316,12 +318,13 @@ comic dialog's `PlayerName` link keeps working.
 Tests, new file `server/src/audit/condense.test.ts` (build `AuditEntry`
 objects by hand; no DB needed):
 1. Five `submission.approved` by one mod for one team, interleaved with their
-   `points.earned` rows → two entries: `approved 5 submissions for "A", "B"`
-   with `condensed.count 5`, and one `earned +… pts` with the breakdown; `ids`
-   contain every member; positions are those of the newest members.
+   `points.earned` rows → one `approved 5 submissions for "A", "B"` entry with
+   `condensed.count 5` and `ids` containing every approval, placed where the
+   newest approval was, and **every `points.earned` row still present,
+   unchanged and in its original relative order**.
 2. A different actor in the middle splits the run (two groups, not one).
-3. An action without `condense` (e.g. `points.adjusted`) is passed through
-   untouched, even inside a run.
+3. An action without `condense` (e.g. `points.adjusted`, `team.updated`) is
+   passed through untouched, even inside a run.
 4. A bucket of one entry is returned unchanged (no `condensed` field).
 5. `submission.created` group merges item quantities across submissions.
 
@@ -383,9 +386,9 @@ cd ../client && ../node_modules/.bin/tsc --noEmit && ../node_modules/.bin/vitest
 Manual check on the dev server (`npm run dev` at the root, which starts
 server and client; a dev-login is available in non-production): as a mod, approve a few submissions for one
 team in a row, then open that team's info dialog. The Recent activity list
-should show one "approved N submissions" line and one "earned +X pts: …"
-breakdown line under it; the mod panel's Audit log tab should show every row
-separately with the `points.*` rows carrying their own labels. Submit a
+should show one "approved N submissions" line with every individual
+"earned +X pts: …" row still listed beneath it; the mod panel's Audit log
+tab should show every row separately, approvals included. Submit a
 screenshot as a player and confirm the label names the item and quantity.
 
 ## Acceptance
