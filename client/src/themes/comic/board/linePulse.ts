@@ -3,10 +3,10 @@ import type { LineModel } from "../../../headless/types";
 export const LINE_PULSE_PERIOD_MS = 2400;
 export const LINE_PULSE_PHASE = Math.PI / 2.5;
 
-export const IDLE_BASE = 0.02;
-export const IDLE_AMP = 0.18;
-export const BOOST_BASE = 0.08;
-export const BOOST_AMP = 0.42;
+export const IDLE_BASE = 0;
+export const IDLE_AMP = 0.2;
+export const BOOST_BASE = 0;
+export const BOOST_AMP = 0.5;
 export const BOOST_MS = 2500;
 
 export interface TilePos {
@@ -81,7 +81,7 @@ export function pulseOpacityForIndex(
   const boosted = (boostedUntilByLineId.get(lineId) ?? 0) > nowMs;
   const base = boosted ? BOOST_BASE : IDLE_BASE;
   const amp = boosted ? BOOST_AMP : IDLE_AMP;
-  if (reducedMotion) return base;
+  if (reducedMotion) return amp * 0.5;
   const wave = 0.5 * (1 + Math.sin((2 * Math.PI * timeMs) / LINE_PULSE_PERIOD_MS - index * LINE_PULSE_PHASE));
   return base + amp * wave;
 }

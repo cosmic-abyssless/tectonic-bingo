@@ -80,16 +80,20 @@ describe("buildStopsByTileId", () => {
 describe("pulseOpacityAt", () => {
   const idle = [{ lineId: "r0", index: 0, length: 3, angleDeg: 90 }];
 
-  it("is idle base when reduced motion", () => {
-    expect(pulseOpacityAt(0, idle, new Map(), 0, true)).toBe(IDLE_BASE);
+  it("is a static mid-wave when reduced motion", () => {
+    expect(pulseOpacityAt(0, idle, new Map(), 0, true)).toBeCloseTo(IDLE_AMP * 0.5);
   });
 
-  it("uses boost base when reduced motion and the line is boosted", () => {
-    expect(pulseOpacityAt(0, idle, new Map([["r0", 100]]), 50, true)).toBe(BOOST_BASE);
+  it("uses a stronger static mid-wave when reduced motion and the line is boosted", () => {
+    expect(pulseOpacityAt(0, idle, new Map([["r0", 100]]), 50, true)).toBeCloseTo(BOOST_AMP * 0.5);
   });
 
   it("waves from mid idle at t=0, index 0", () => {
     expect(pulseOpacityAt(0, idle, new Map(), 0, false)).toBeCloseTo(IDLE_BASE + IDLE_AMP * 0.5);
+  });
+
+  it("troughs to zero at three-quarter period", () => {
+    expect(pulseOpacityAt((LINE_PULSE_PERIOD_MS * 3) / 4, idle, new Map(), 0, false)).toBeCloseTo(0);
   });
 
   it("peaks idle at a quarter period", () => {
