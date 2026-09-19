@@ -7,6 +7,7 @@ import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createTile, createTask } from "./boardService";
 import { getTeamNodeStatuses } from "./boardService";
+import { getNodeTree } from "./graphService";
 import { createSubmission, getAllSubmissionsForBingo, getTeamSubmissions, markScreenshotAnalysisFailed, recordScreenshotAnalysis } from "./submissionService";
 import { ServiceError } from "./errors";
 import { runWithAuditContext } from "../audit/context";
@@ -264,6 +265,56 @@ describe("createSubmission", () => {
     expect(() => createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims, ...base })).not.toThrow();
   });
 
+});
+
+// PETS and SLAYER BOSSES: two pages that share their items, Page 2 submit-gated behind Page 1. An item counts
+// toward both pages, so it must stay submittable while only the ungated page is unlocked; an item that sits only
+// under a gated page still waits for its gate.
+describe("submit gates on pages that share items", () => {
+  function sharedPages() {
+    const { bingo, teamId, memberUserId } = seed();
+    const tile = addTile(bingo.id);
+    const page1 = createTask(db, tile.id, { kind: "COUNT", minCount: 1, label: "Page 1", description: "d", points: 40, children: [{ kind: "ITEM", itemName: "A" }, { kind: "ITEM", itemName: "B" }] }, 0);
+    const page2 = createTask(db, tile.id, { kind: "COUNT", minCount: 2, label: "Page 2", description: "d", points: 60, submitGateNodeId: page1.id, children: [{ kind: "ITEM", itemName: "C" }] }, 1);
+    const [a, b] = page1.children;
+    // Page 2 reuses Page 1's two items (the same nodes), as the real import does.
+    [a!, b!].forEach((leaf, i) => db.insert(schema.nodeEdges).values({ parentId: page2.id, childId: leaf.id, sortOrder: i + 1 }).run());
+    const c = getNodeTree(db, page2.id)!.children.find((n) => n.itemName === "C")!;
+    const submit = (nodeId: string, itemName: string) => () =>
+      createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId, itemName }], ...base });
+    return { bingo, teamId, memberUserId, page1, a: a!, b: b!, c, submit };
+  }
+
+  it("accepts a shared item while the gated page is still locked, because it counts toward the ungated one", () => {
+    const { a, submit } = sharedPages();
+    expect(submit(a.id, "A")).not.toThrow();
+  });
+
+  it("still refuses an item that sits only under the gated page, until the gate is complete", () => {
+    const { teamId, page1, c, submit } = sharedPages();
+    expect(submit(c.id, "C")).toThrow(/Page 2: the previous requirement must be completed first/);
+    db.insert(schema.teamNodeState).values({ teamId, nodeId: page1.id, completedAt: NOW, pointsAwarded: 40 }).run();
+    expect(submit(c.id, "C")).not.toThrow();
+  });
+
+  it("refuses a submission that mixes a shared item with one that is still locked", () => {
+    const { bingo, teamId, memberUserId, a, c } = sharedPages();
+    expect(() =>
+      createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId: a.id, itemName: "A" }, { nodeId: c.id, itemName: "C" }], ...base }),
+    ).toThrow(/must be completed first/);
+  });
+
+  it("refuses an item shared by two pages when every page it counts toward is gated", () => {
+    const { bingo, teamId, memberUserId, page1 } = sharedPages();
+    const tile = db.select().from(schema.tiles).all()[0]!;
+    const page3 = createTask(db, tile.id, { kind: "COUNT", minCount: 1, label: "Page 3", description: "d", points: 10, submitGateNodeId: page1.id, children: [{ kind: "ITEM", itemName: "D" }] }, 2);
+    const page4 = createTask(db, tile.id, { kind: "COUNT", minCount: 1, label: "Page 4", description: "d", points: 10, submitGateNodeId: page1.id, children: [] }, 3);
+    db.insert(schema.nodeEdges).values({ parentId: page4.id, childId: page3.children[0]!.id, sortOrder: 0 }).run();
+
+    expect(() =>
+      createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId: page3.children[0]!.id, itemName: "D" }], ...base }),
+    ).toThrow(/must be completed first/);
+  });
 });
 
 describe("audit trail", () => {

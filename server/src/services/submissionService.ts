@@ -5,7 +5,7 @@ import type { ClaimInput, NodeKind } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { claims, nodes, submissions, submissionScreenshots, teamNodeState, teams, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
-import { findAncestorIds } from "./graphService";
+import { findAncestorIds, submitGateBlock } from "./graphService";
 import { effectiveStartsAt } from "./bingoStart";
 import { audit } from "../audit/record";
 
@@ -75,20 +75,15 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
       }
     }
 
-    // submitGateNodeId: every ancestor of a claimed leaf (up to and including
-    // the tile) that names a gate must have that gate already complete for
-    // this team.
+    // submitGateNodeId: a claim is refused while every route from its item up to the tile passes through a
+    // node whose gate this team hasn't completed (see graphService.submitGateBlock: an item shared by two
+    // pages counts toward both, so an ungated page keeps it submittable).
     const completedNodeIds = new Set(
       tx.select({ nodeId: teamNodeState.nodeId }).from(teamNodeState).where(eq(teamNodeState.teamId, params.teamId)).all().map((r) => r.nodeId),
     );
     for (const leafId of nodeIds) {
-      const ancestorIds = [...findAncestorIds(tx, leafId)];
-      const ancestors = tx.select().from(nodes).where(inArray(nodes.id, ancestorIds)).all();
-      for (const ancestor of ancestors) {
-        if (ancestor.submitGateNodeId && !completedNodeIds.has(ancestor.submitGateNodeId)) {
-          throw new ServiceError(400, `${ancestor.label ?? "This requirement"}: the previous requirement must be completed first`);
-        }
-      }
+      const blockedBy = submitGateBlock(tx, leafId, completedNodeIds);
+      if (blockedBy !== null) throw new ServiceError(400, `${blockedBy}: the previous requirement must be completed first`);
     }
 
     for (const claim of params.claims) {

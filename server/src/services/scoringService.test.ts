@@ -739,3 +739,51 @@ describe("points audit entries", () => {
     expect(auditRows().filter((r) => r.action === "points.rescored")).toHaveLength(1);
   });
 });
+
+// PETS and SLAYER BOSSES: two pages over the SAME items. A drop counts once toward each page, and Page 2's target
+// includes what Page 1 already has ("obtain X more" is cumulative), so the same pet can't be counted twice.
+describe("pages that share their items", () => {
+  function sharedTile(kinds: { page1: GraphNodeInput; page2: GraphNodeInput }) {
+    const fx = seedBaseFixture();
+    const page1 = addTask(fx.tileId, { label: "Page 1", points: 40, children: [{ kind: "ITEM", itemName: "A" }, { kind: "ITEM", itemName: "B" }, { kind: "ITEM", itemName: "C" }], ...kinds.page1 });
+    const page2 = addTask(fx.tileId, { label: "Page 2", points: 60, children: [], ...kinds.page2 });
+    page1.children.forEach((leaf, i) => db.insert(schema.nodeEdges).values({ parentId: page2.id, childId: leaf.id, sortOrder: i }).run());
+    const [a, b, c] = page1.children;
+    const approve = (claimRows: { nodeId: string; itemName: string; quantity?: number }[]) =>
+      approveSubmission(db, { submissionId: submitAndReturn(fx.teamId, fx.memberUserId, claimRows).id, reviewedByUserId: fx.modUserId });
+    return { fx, page1, page2, a: a!, b: b!, c: c!, approve };
+  }
+
+  it("COUNT: one item finishes Page 1 and counts toward Page 2, which needs a second different one", () => {
+    const { fx, page1, page2, a, b, approve } = sharedTile({ page1: { kind: "COUNT", minCount: 1 }, page2: { kind: "COUNT", minCount: 2 } });
+
+    approve([{ nodeId: a.id, itemName: "A" }]);
+    expect(findState(fx.teamId, page1.id)?.pointsAwarded).toBe(40);
+    expect(findState(fx.teamId, page2.id)).toBeUndefined();
+
+    approve([{ nodeId: b.id, itemName: "B" }]);
+    expect(findState(fx.teamId, page2.id)?.pointsAwarded).toBe(60);
+  });
+
+  it("COUNT: the same item again is not a second one", () => {
+    const { fx, page2, a, b, approve } = sharedTile({ page1: { kind: "COUNT", minCount: 1 }, page2: { kind: "COUNT", minCount: 2 } });
+
+    approve([{ nodeId: a.id, itemName: "A" }]);
+    approve([{ nodeId: a.id, itemName: "A" }]);
+    expect(findState(fx.teamId, page2.id)).toBeUndefined();
+
+    approve([{ nodeId: b.id, itemName: "B" }]);
+    expect(findState(fx.teamId, page2.id)).toBeDefined();
+  });
+
+  it("SUM: drops count toward both pages, so Page 2's higher target includes Page 1's", () => {
+    const { fx, page1, page2, a, b, approve } = sharedTile({ page1: { kind: "SUM", quantity: 2 }, page2: { kind: "SUM", quantity: 3 } });
+
+    approve([{ nodeId: a.id, itemName: "A", quantity: 2 }]);
+    expect(findState(fx.teamId, page1.id)?.pointsAwarded).toBe(40);
+    expect(findState(fx.teamId, page2.id)).toBeUndefined(); // 2 of 3
+
+    approve([{ nodeId: b.id, itemName: "B" }]);
+    expect(findState(fx.teamId, page2.id)?.pointsAwarded).toBe(60); // 3 of 3, with no extra work for Page 1's
+  });
+});
