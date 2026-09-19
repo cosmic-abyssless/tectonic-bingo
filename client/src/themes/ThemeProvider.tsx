@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { rememberThemeBackground, rememberedThemeBackground } from "./rememberedTheme";
 import { tokensToCssVars } from "./tokens";
 import { onThemeHmrUpdate, peekTheme, resolveTheme, type ResolvedTheme } from "./registry";
 import { ThemeContext } from "./context";
@@ -47,9 +48,19 @@ export function ThemeProvider({ themeKey, children, fallback = null }: { themeKe
     });
   }, [themeKey]);
 
-  if (!resolved) return <>{fallback}</>;
+  const activeTokens = resolved?.tokens[scheme];
+  const pageColor = activeTokens?.chrome?.background;
+  useEffect(() => {
+    if (resolved && pageColor) rememberThemeBackground(resolved.key, scheme, pageColor);
+  }, [resolved, scheme, pageColor]);
 
-  const activeTokens = resolved.tokens[scheme];
+  // Still loading: paint the wait in the colour this theme's page had last time, so a
+  // reload goes straight from that colour to the finished page rather than default
+  // colour -> themed colour.
+  if (!resolved || !activeTokens) {
+    const waitingColor = rememberedThemeBackground(themeKey, scheme);
+    return <div style={{ minHeight: "100dvh", backgroundColor: waitingColor ?? undefined }}>{fallback}</div>;
+  }
   return (
     <ThemeContext.Provider value={{ key: resolved.key, tokens: activeTokens, slots: resolved.slots, palette: resolved.palettes[scheme] }}>
       <div data-theme={resolved.key} style={tokensToCssVars(activeTokens)}>
