@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingos } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { addModerator, advanceStage, assertBoardEditable, createBingo, deleteBingo, removeModerator, toPublicBingo, updateBingoSettings } from "./bingoService";
+import { addModerator, advanceStage, assertBoardEditable, assertQuestionsEditable, createBingo, deleteBingo, removeModerator, toPublicBingo, updateBingoSettings } from "./bingoService";
 import { effectiveStartsAt } from "./bingoStart";
 import { createTask, createTile } from "./boardService";
 import { createTeam } from "./teamService";
@@ -151,12 +151,22 @@ describe("updateBingoSettings — WOM fields", () => {
 });
 
 describe("assertBoardEditable", () => {
-  it.each(["planning", "signup", "captains", "draft", "reveal"] as const)("allows edits during %s", (stage) => {
+  it.each(["planning", "signup", "captains", "draft", "reveal", "live"] as const)("allows edits during %s", (stage) => {
     expect(() => assertBoardEditable(seedBingo({ stage }))).not.toThrow();
   });
 
-  it.each(["live", "complete"] as const)("locks the board during %s", (stage) => {
-    expect(() => assertBoardEditable(seedBingo({ stage }))).toThrow(ServiceError);
+  it("locks the board once the bingo is complete", () => {
+    expect(() => assertBoardEditable(seedBingo({ stage: "complete" }))).toThrow(ServiceError);
+  });
+});
+
+describe("assertQuestionsEditable", () => {
+  it.each(["planning", "signup", "captains", "draft", "reveal"] as const)("allows edits during %s", (stage) => {
+    expect(() => assertQuestionsEditable(seedBingo({ stage }))).not.toThrow();
+  });
+
+  it.each(["live", "complete"] as const)("still locks signup questions during %s", (stage) => {
+    expect(() => assertQuestionsEditable(seedBingo({ stage }))).toThrow(ServiceError);
   });
 });
 

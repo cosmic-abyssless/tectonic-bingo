@@ -11,6 +11,7 @@ import { db } from "../db";
 import * as bingoService from "../services/bingoService";
 import * as bingoExportService from "../services/bingoExportService";
 import * as boardService from "../services/boardService";
+import { rescoreBingo } from "../services/scoringService";
 import * as signupService from "../services/signupService";
 import * as teamService from "../services/teamService";
 import * as userService from "../services/userService";
@@ -175,6 +176,7 @@ router.post(
     };
     if (!name || boardRow === undefined || boardCol === undefined) throw new ServiceError(400, "name, boardRow, and boardCol are required");
     const tile = boardService.createTile(db, { bingoId: req.bingo!.id, name, boardRow, boardCol, categoryId, hasFreezePeriod, freezeDurationMinutes, notes });
+    rescoreBingo(db, req.bingo!.id);
     res.status(201).json({ tile });
   }),
 );
@@ -191,6 +193,7 @@ router.delete(
   asyncHandler(async (req, res) => {
     bingoService.assertBoardEditable(req.bingo!);
     boardService.deleteTile(db, req.params.id as string);
+    rescoreBingo(db, req.bingo!.id);
     res.status(204).end();
   }),
 );
@@ -201,6 +204,7 @@ router.patch(
     const { points } = req.body as { points?: number };
     if (points === undefined) throw new ServiceError(400, "points is required");
     const tile = boardService.updateTileBonusPoints(db, req.params.id as string, points);
+    rescoreBingo(db, req.bingo!.id);
     res.json({ tile });
   }),
 );
@@ -228,6 +232,7 @@ router.post(
     const { sortOrder, ...input } = req.body as GraphNodeInput & { sortOrder?: number };
     if (!input.kind) throw new ServiceError(400, "kind is required");
     const task = boardService.createTask(db, req.params.tileId as string, input, sortOrder);
+    rescoreBingo(db, req.bingo!.id);
     res.status(201).json({ task });
   }),
 );
@@ -236,6 +241,7 @@ router.patch(
   asyncHandler(async (req, res) => {
     bingoService.assertBoardEditable(req.bingo!);
     const task = boardService.updateNode(db, req.params.id as string, req.body as GraphNodeInput);
+    rescoreBingo(db, req.bingo!.id);
     res.json({ task });
   }),
 );
@@ -244,6 +250,7 @@ router.delete(
   asyncHandler(async (req, res) => {
     bingoService.assertBoardEditable(req.bingo!);
     boardService.deleteTask(db, req.params.id as string);
+    rescoreBingo(db, req.bingo!.id);
     res.status(204).end();
   }),
 );
@@ -264,6 +271,7 @@ router.post(
     bingoService.assertBoardEditable(req.bingo!);
     const { pointsPerLine } = req.body as { pointsPerLine?: number };
     const lines = boardService.generateLines(db, req.bingo!, pointsPerLine);
+    rescoreBingo(db, req.bingo!.id);
     res.status(201).json({ lines });
   }),
 );
@@ -274,6 +282,7 @@ router.patch(
     const { points } = req.body as { points?: number };
     if (points === undefined) throw new ServiceError(400, "points is required");
     const line = boardService.updateLinePoints(db, req.params.id as string, points);
+    rescoreBingo(db, req.bingo!.id);
     res.json({ line });
   }),
 );
@@ -282,6 +291,7 @@ router.delete(
   asyncHandler(async (req, res) => {
     bingoService.assertBoardEditable(req.bingo!);
     boardService.deleteLine(db, req.params.id as string);
+    rescoreBingo(db, req.bingo!.id);
     res.status(204).end();
   }),
 );
@@ -299,7 +309,7 @@ router.get(
 router.post(
   "/questions",
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
+    bingoService.assertQuestionsEditable(req.bingo!);
     const { prompt, type } = req.body as { prompt?: string; type?: string };
     if (!prompt || !type) throw new ServiceError(400, "prompt and type are required");
     const question = signupService.createQuestion(db, { bingoId: req.bingo!.id, ...req.body });
@@ -309,7 +319,7 @@ router.post(
 router.patch(
   "/questions/:id",
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
+    bingoService.assertQuestionsEditable(req.bingo!);
     const question = signupService.updateQuestion(db, req.params.id as string, req.body);
     res.json({ question });
   }),
@@ -317,7 +327,7 @@ router.patch(
 router.delete(
   "/questions/:id",
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
+    bingoService.assertQuestionsEditable(req.bingo!);
     signupService.deleteQuestion(db, req.params.id as string);
     res.status(204).end();
   }),
@@ -325,7 +335,7 @@ router.delete(
 router.post(
   "/questions/reorder",
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
+    bingoService.assertQuestionsEditable(req.bingo!);
     const { orderedIds } = req.body as { orderedIds?: string[] };
     if (!Array.isArray(orderedIds)) throw new ServiceError(400, "orderedIds must be an array");
     signupService.reorderQuestions(db, req.bingo!.id, orderedIds);

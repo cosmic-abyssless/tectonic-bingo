@@ -56,16 +56,27 @@ export function toPublicBingo<T extends { womGroupVerificationCode: string | nul
   return rest;
 }
 
-// Board/task/question edits are allowed until the game goes live (including
-// during reveal) — once play has started, structural changes would be unfair.
-// Mirrors isBoardLocked in @bingo/shared (server can't runtime-import it).
+// "Play has started": what team names and player ratings lock on. Mirrors isBoardLocked
+// in @bingo/shared (server can't runtime-import it).
 export function isBoardLocked(bingo: typeof bingos.$inferSelect): boolean {
   return bingo.stage === "live" || bingo.stage === "complete";
 }
 
+// The board (tiles, tasks, requirements, points, lines, categories) can be edited right up to
+// the end, live included, so a mistake can be fixed mid-event; what a live edit does to teams
+// that already have progress is handled where it is made (edits re-score every team, and what
+// teams have submitted proof for can't be removed). Once the bingo is complete the results are
+// final. Mirrors isBoardEditingLocked in @bingo/shared.
 export function assertBoardEditable(bingo: typeof bingos.$inferSelect): void {
+  if (bingo.stage === "complete") {
+    throw new ServiceError(400, "The board can't be edited once the bingo is complete");
+  }
+}
+
+// Signup questions only matter while people are signing up: locked once play starts, as before.
+export function assertQuestionsEditable(bingo: typeof bingos.$inferSelect): void {
   if (isBoardLocked(bingo)) {
-    throw new ServiceError(400, `The board is locked once the game is live (current stage: ${bingo.stage})`);
+    throw new ServiceError(400, `Signup questions are locked once the game is live (current stage: ${bingo.stage})`);
   }
 }
 

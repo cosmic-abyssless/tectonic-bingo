@@ -2,7 +2,8 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { bingoLines, claims, nodeEdges, nodes, submissions, tiles } from "../db/schema";
+import { bingoLines, claims, nodeEdges, nodes, submissions, teamNodeState, tileInterests, tiles } from "../db/schema";
+import { ServiceError } from "./errors";
 import type { ApprovedClaim, EngineNode } from "./engine";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -238,6 +239,17 @@ function collectDescendants(tx: Tx, rootId: string): Set<string> {
 // elsewhere in the DAG (e.g. a leaf shared by two tasks) survives, and one
 // that isn't is cleaned up too.
 function deleteNodeForce(tx: Tx, id: string): void {
+  // Proof teams have already submitted for this node points at it, so it can't go: the caller
+  // (an edit made while the bingo is live) is told which one, and the whole change is rolled back.
+  const claimed = tx.select({ id: claims.id }).from(claims).where(eq(claims.nodeId, id)).all().length;
+  if (claimed > 0) {
+    const node = tx.select({ label: nodes.label, itemName: nodes.itemName }).from(nodes).where(eq(nodes.id, id)).get();
+    throw new ServiceError(409, `Can't remove "${node?.label ?? node?.itemName ?? "this requirement"}": ${claimed} submission claim${claimed === 1 ? "" : "s"} refer to it. Edit it instead of removing it.`);
+  }
+  // Derived or soft references: a team's completed-node rows are recomputed after the edit, and a
+  // raised hand on a task that no longer exists means nothing.
+  tx.delete(teamNodeState).where(eq(teamNodeState.nodeId, id)).run();
+  tx.delete(tileInterests).where(eq(tileInterests.taskId, id)).run();
   const childIds = tx.select({ childId: nodeEdges.childId }).from(nodeEdges).where(eq(nodeEdges.parentId, id)).all().map((r) => r.childId);
   tx.delete(nodeEdges).where(or(eq(nodeEdges.parentId, id), eq(nodeEdges.childId, id))).run();
   tx.delete(nodes).where(eq(nodes.id, id)).run();

@@ -27,6 +27,9 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
     case "bingo_changed":
       queryClient.invalidateQueries({ queryKey: ["bingo"] });
       queryClient.invalidateQueries({ queryKey: ["board"] });
+      // A board edit made while live re-scores every team, so everyone's progress moves too.
+      queryClient.invalidateQueries({ queryKey: ["teamProgress"] });
+      queryClient.invalidateQueries({ queryKey: ["teamSubmissions"] });
       queryClient.invalidateQueries({ queryKey: ["adminLines"] });
       queryClient.invalidateQueries({ queryKey: ["adminQuestions"] });
       queryClient.invalidateQueries({ queryKey: ["adminMods"] });

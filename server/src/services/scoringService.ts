@@ -56,6 +56,20 @@ export function rebuildTeamState(tx: Tx, teamId: string): Map<string, { complete
   return newState;
 }
 
+/**
+ * Recomputes every team's completed nodes and points from their approved claims. Scores are a
+ * snapshot taken when a submission is reviewed, so they go stale when the board itself changes
+ * (a task's points, its requirements, a line's bonus...): an edit made while the bingo is live
+ * calls this so nobody keeps points from a rule that no longer exists.
+ */
+export function rescoreBingo(db: Db, bingoId: string): void {
+  db.transaction((tx) => {
+    for (const team of tx.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all()) {
+      rebuildTeamState(tx, team.id);
+    }
+  });
+}
+
 export interface ApproveSubmissionParams {
   submissionId: string;
   reviewedByUserId: string;
