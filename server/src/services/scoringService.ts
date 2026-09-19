@@ -30,8 +30,9 @@ function lineLabel(line: { lineType: string; lineIndex: number }): string {
 }
 
 // Writes a points.earned / points.lost row for every node whose awarded points changed, so the
-// activity feed shows what kind of points moved and for what. Called BEFORE the submission's own
-// audit row, so newest-first the feed reads "approved a submission" followed by its points. A
+// activity feed shows what kind of points moved and for what. Called AFTER the submission's own
+// audit row, so the log is in causal order (the approval, then the points it awarded: tasks, then the
+// tile bonus, then lines) and a newest-first feed lists the points above the approval. A
 // node's points can change without it newly completing (a points gate opening releases a task's
 // withheld points), hence the comparison of awarded points rather than of completed nodes.
 function recordPointChanges(
@@ -174,8 +175,6 @@ export function approveSubmission(db: Db, params: ApproveSubmissionParams): Appr
 
     const updatedSubmission = tx.select().from(submissions).where(eq(submissions.id, submission.id)).get()!;
 
-    recordPointChanges(tx, { bingoId: team.bingoId, teamId: submission.teamId, submissionId: submission.id, reviewerUserId: params.reviewedByUserId }, before, after);
-
     const { tileName, taskLabels } = describeSubmissionTarget(tx, team.bingoId, nodeIds);
     audit(tx, {
       action: "submission.approved",
@@ -185,6 +184,7 @@ export function approveSubmission(db: Db, params: ApproveSubmissionParams): Appr
       details: { tileName, taskLabels, nodeIds, newlyCompletedNodeIds, pointsDelta, reviewerNotes: params.reviewerNotes ?? null, submittedByUserId: submission.submittedByUserId },
       actor: { userId: params.reviewedByUserId },
     });
+    recordPointChanges(tx, { bingoId: team.bingoId, teamId: submission.teamId, submissionId: submission.id, reviewerUserId: params.reviewedByUserId }, before, after);
 
     return { submission: updatedSubmission, nodeIds, newlyCompletedNodeIds, pointsDelta };
   });
@@ -265,6 +265,7 @@ export function undoSubmissionReview(db: Db, params: UndoSubmissionReviewParams)
     const nodeIds = getSubmissionNodeIds(tx, submission.id);
     let uncompletedNodeIds: string[] = [];
     let pointsDelta = 0;
+    let scoreChange: { before: { nodeId: string; pointsAwarded: number }[]; after: Map<string, { pointsAwarded: number }> } | null = null;
     if (previousStatus === "approved") {
       const before = tx.select().from(teamNodeState).where(eq(teamNodeState.teamId, submission.teamId)).all();
       const beforePoints = before.reduce((sum, r) => sum + r.pointsAwarded, 0);
@@ -272,7 +273,7 @@ export function undoSubmissionReview(db: Db, params: UndoSubmissionReviewParams)
       const afterPoints = [...after.values()].reduce((sum, s) => sum + s.pointsAwarded, 0);
       uncompletedNodeIds = before.map((r) => r.nodeId).filter((id) => !after.has(id));
       pointsDelta = afterPoints - beforePoints;
-      recordPointChanges(tx, { bingoId: team.bingoId, teamId: submission.teamId, submissionId: submission.id, reviewerUserId: params.undoneByUserId }, before, after);
+      scoreChange = { before, after };
     }
 
     const updatedSubmission = tx.select().from(submissions).where(eq(submissions.id, submission.id)).get()!;
@@ -296,6 +297,9 @@ export function undoSubmissionReview(db: Db, params: UndoSubmissionReviewParams)
       },
       actor: { userId: params.undoneByUserId },
     });
+    if (scoreChange) {
+      recordPointChanges(tx, { bingoId: team.bingoId, teamId: submission.teamId, submissionId: submission.id, reviewerUserId: params.undoneByUserId }, scoreChange.before, scoreChange.after);
+    }
 
     return { submission: updatedSubmission, nodeIds, previousStatus, uncompletedNodeIds, pointsDelta };
   });

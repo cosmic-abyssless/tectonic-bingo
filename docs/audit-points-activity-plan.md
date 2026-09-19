@@ -1,6 +1,12 @@
 # Audit log: points as their own entries, item-level submission labels, condensed activity feed
 
-Status: **approved plan, ready to implement.** Written to be executed without
+Status: **implemented.** One change from the text below: the `points.*` rows are
+written *after* the submission row (causal order, so a newest-first feed lists the
+points above the approval), and a condensed group is placed at its *oldest*
+member's position so a batch's points stay together above its summary line.
+Everything that says "before" / "newest member" below is superseded by that.
+
+Original status: **approved plan, ready to implement.** Written to be executed without
 conversation context. Read `docs/audit-log.md` first (the day-to-day guide to
 the audit log); `docs/audit-log-plan.md` has the original design if something
 here is unclear.

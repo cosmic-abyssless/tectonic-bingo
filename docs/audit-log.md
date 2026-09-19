@@ -26,8 +26,9 @@ entries within the page: five `comfy hug approved a submission for …` rows
 become `comfy hug approved 5 submissions for …`. A run is consecutive entries
 by the same actor for the same team; inside it, every action that defines a
 `condense` renderer in the registry (submission created/approved/rejected,
-team member added) is merged into one entry at its newest member's position,
-with `condensed: { count, ids, oldestAt }` set. Everything else is left as it
+team member added) is merged into one entry at its oldest member's position
+(so a batch's points stay together above the line that summarises it), with
+`condensed: { count, ids, oldestAt }` set. Everything else is left as it
 is, deliberately including every `points.*` entry, so point awards stay
 granular. The cursor still counts raw rows, so a group never spans two pages.
 The team dialog's Recent activity asks for it; the mod panel's tab does not.
@@ -38,8 +39,9 @@ The grouping itself is `condenseAuditEntries` in `shared/src/auditCondense.ts`.
 Points are recorded apart from the submission that earned them: each node
 whose awarded points changed on an approval or an undone review gets a
 `points.earned` / `points.lost` entry (`source`: `task`, `tile_bonus` or
-`line`), written just before the `submission.*` entry so newest-first the
-feed reads the approval followed by its points. A board edit made while the
+`line`), written just after the `submission.*` entry so the log is in causal
+order (a newest-first feed lists the points above the approval that awarded
+them). A board edit made while the
 bingo is live records a net `points.rescored` per team whose total moved.
 `submission.created` labels name what was submitted (`describeClaims`).
 

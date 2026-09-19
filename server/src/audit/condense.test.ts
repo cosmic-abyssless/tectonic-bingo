@@ -44,24 +44,25 @@ const created = (tileName: string, itemName: string, quantity = 1) =>
 
 describe("condenseAuditEntries", () => {
   it("collapses five approvals into one line and leaves every points entry as it was, in order", () => {
-    // Newest first, as the queries return: each approval sits above the points it awarded.
+    // Newest first, as the queries return: each approval sits below the points it awarded (they were written after it).
     const page = [
-      approved("Vorkath"), earned(20), // newest approval
-      approved("Vorkath"), earned(25),
-      approved("Zulrah"), earned(30),
-      approved("Zulrah"), earned(35),
-      approved("Cerberus"), earned(40),
+      earned(20), approved("Vorkath"), // newest approval
+      earned(25), approved("Vorkath"),
+      earned(30), approved("Zulrah"),
+      earned(35), approved("Zulrah"),
+      earned(40), approved("Cerberus"),
     ];
 
     const out = condenseAuditEntries(page);
 
-    expect(out.map((e) => e.action)).toEqual(["submission.approved", "points.earned", "points.earned", "points.earned", "points.earned", "points.earned"]);
-    expect(out[0]!.label).toBe('mod1 approved 5 submissions for "Vorkath", "Zulrah" and "Cerberus"');
-    expect(out[0]!.id).toBe(page[0]!.id);
-    expect(out[0]!.condensed).toEqual({ count: 5, ids: [0, 2, 4, 6, 8].map((i) => page[i]!.id), oldestAt: page[8]!.at });
+    // The batch's points stay together above the one line that summarises it, which sits where the oldest approval was.
+    expect(out.map((e) => e.action)).toEqual(["points.earned", "points.earned", "points.earned", "points.earned", "points.earned", "submission.approved"]);
+    expect(out[5]!.label).toBe('mod1 approved 5 submissions for "Vorkath", "Zulrah" and "Cerberus"');
+    expect(out[5]!.id).toBe(page[1]!.id); // the newest member still supplies the id and timestamp
+    expect(out[5]!.condensed).toEqual({ count: 5, ids: [1, 3, 5, 7, 9].map((i) => page[i]!.id), oldestAt: page[9]!.at });
     // Every points entry survives untouched (same objects, same order).
-    expect(out.slice(1)).toEqual([1, 3, 5, 7, 9].map((i) => page[i]!));
-    expect(out.slice(1).every((e) => e.condensed === undefined)).toBe(true);
+    expect(out.slice(0, 5)).toEqual([0, 2, 4, 6, 8].map((i) => page[i]!));
+    expect(out.slice(0, 5).every((e) => e.condensed === undefined)).toBe(true);
   });
 
   it("switches to a count once approvals span more than three tiles", () => {
@@ -90,10 +91,10 @@ describe("condenseAuditEntries", () => {
 
     const out = condenseAuditEntries([approved("A"), adjusted, approved("B"), renamed, approved("C")]);
 
-    expect(out.map((e) => e.action)).toEqual(["submission.approved", "points.adjusted", "team.updated"]);
-    expect(out[0]!.condensed?.count).toBe(3);
-    expect(out[1]).toBe(adjusted);
-    expect(out[2]).toBe(renamed);
+    expect(out.map((e) => e.action)).toEqual(["points.adjusted", "team.updated", "submission.approved"]);
+    expect(out[0]).toBe(adjusted);
+    expect(out[1]).toBe(renamed);
+    expect(out[2]!.condensed?.count).toBe(3);
   });
 
   it("returns a lone entry unchanged, with no condensed marker", () => {

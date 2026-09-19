@@ -182,8 +182,8 @@ describe("queryTeamActivity", () => {
     const points = () =>
       row({ teamId: "teamX", visibility: "team" as AuditVisibility, actorType: "user", action: "points.earned" as AuditAction, details: JSON.stringify({ source: "task", nodeId: "n", nodeLabel: "Part A", tileName: "Vorkath", points: 20, submissionId: "s" }) });
     for (const tile of ["A", "B", "C"]) {
-      points();
       approval(tile);
+      points();
     }
 
     const raw = queryTeamActivity(db, "b1", "teamX", { isMod: true, limit: 4 });
@@ -191,14 +191,14 @@ describe("queryTeamActivity", () => {
 
     expect(raw.entries).toHaveLength(4);
     expect(condensed.nextCursor).toBe(raw.nextCursor);
-    // Four raw rows: approval C, its points, approval B, its points, becomes one approval line plus two points lines.
-    expect(condensed.entries.map((e) => e.action)).toEqual(["submission.approved", "points.earned", "points.earned"]);
-    expect(condensed.entries[0]!.condensed?.count).toBe(2);
-    expect(condensed.entries[0]!.label).toBe('Someone approved 2 submissions for "C" and "B"');
+    // Four raw rows: C's points, approval C, B's points, approval B, become two points lines above one approval line.
+    expect(condensed.entries.map((e) => e.action)).toEqual(["points.earned", "points.earned", "submission.approved"]);
+    expect(condensed.entries[2]!.condensed?.count).toBe(2);
+    expect(condensed.entries[2]!.label).toBe('Someone approved 2 submissions for "C" and "B"');
 
     const everything = queryTeamActivity(db, "b1", "teamX", { isMod: true, condensed: true });
-    expect(everything.entries.map((e) => e.action)).toEqual(["submission.approved", "points.earned", "points.earned", "points.earned"]);
-    expect(everything.entries[0]!.condensed?.count).toBe(3);
+    expect(everything.entries.map((e) => e.action)).toEqual(["points.earned", "points.earned", "points.earned", "submission.approved"]);
+    expect(everything.entries[3]!.condensed?.count).toBe(3);
   });
 
   it("leaves out automatic screenshot analysis results, for mods too (they stay in the mod panel's audit log)", () => {

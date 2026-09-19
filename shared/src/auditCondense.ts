@@ -14,9 +14,10 @@ function merge(members: AuditEntry[]): AuditEntry {
 
 function condenseRun(run: AuditEntry[]): AuditEntry[] {
   const buckets = new Map<AuditAction, AuditEntry[]>();
-  // Each slot is either an entry to keep as it is, or the action whose bucket goes there (the position of its newest member).
+  // Each slot is either an entry to keep as it is, or the action whose bucket goes there (the position of its OLDEST member).
+  // Walking oldest to newest, then flipping back, keeps a batch's points together above the one line that summarises it.
   const slots: (AuditEntry | AuditAction)[] = [];
-  for (const entry of run) {
+  for (const entry of [...run].reverse()) {
     if (!AUDIT_ACTIONS[entry.action].condense) {
       slots.push(entry);
       continue;
@@ -28,13 +29,14 @@ function condenseRun(run: AuditEntry[]): AuditEntry[] {
       slots.push(entry.action);
     }
   }
-  return slots.map((slot) => (typeof slot === "string" ? merge(buckets.get(slot)!) : slot));
+  // Buckets were filled oldest first; merge wants newest first.
+  return slots.reverse().map((slot) => (typeof slot === "string" ? merge(buckets.get(slot)!.reverse()) : slot));
 }
 
 /**
  * Collapses runs of alike entries. A "run" is a stretch of consecutive entries (newest first, as every
  * query returns them) by the same actor for the same team. Inside a run, every action that defines
- * `condense` is merged into one entry, placed where its newest member was; everything else, including
+ * `condense` is merged into one entry, placed where its oldest member was; everything else, including
  * every points entry, is left exactly as it is. Groups never span pages: the cursor still counts raw rows.
  */
 export function condenseAuditEntries(entries: AuditEntry[]): AuditEntry[] {

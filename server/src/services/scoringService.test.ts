@@ -660,7 +660,7 @@ describe("points audit entries", () => {
     auditRows().filter((r) => r.action === action).map((r) => ({ id: r.id, teamId: r.teamId, ...JSON.parse(r.details) }));
   const bingoOf = () => db.select().from(schema.bingos).get()!;
 
-  it("approving records each kind of points as its own entry, before the approval row", () => {
+  it("approving records each kind of points as its own entry, after the approval row", () => {
     const fx = seedBaseFixture();
     updateTileBonusPoints(db, fx.tileId, 50);
     generateLines(db, bingoOf(), 15); // on this 3x3 board a lone tile completes row 0, column 0 and one diagonal
@@ -680,7 +680,7 @@ describe("points audit entries", () => {
     expect(earned[0]).toMatchObject({ tileName: "Test Tile", submissionId: sub.id, teamId: fx.teamId });
     expect(earned[2]!.tileName).toBeNull();
     const approvedId = auditRows().find((r) => r.action === "submission.approved")!.id;
-    expect(earned.every((e) => e.id < approvedId)).toBe(true);
+    expect(earned.every((e) => e.id > approvedId)).toBe(true);
     expect(pointRows("points.lost")).toHaveLength(0);
     expect(JSON.parse(auditRows().find((r) => r.action === "submission.approved")!.details).pointsDelta).toBe(20 + 50 + 45);
   });
@@ -709,7 +709,7 @@ describe("points audit entries", () => {
 
     expect(pointRows("points.lost").map((e) => [e.source, e.points])).toEqual([["task", 20], ["tile_bonus", 50]]);
     const undoId = auditRows().find((r) => r.action === "submission.review_undone")!.id;
-    expect(pointRows("points.lost").every((e) => e.id < undoId)).toBe(true);
+    expect(pointRows("points.lost").every((e) => e.id > undoId)).toBe(true);
   });
 
   it("rejecting writes no points rows", () => {
