@@ -17,7 +17,8 @@ export function TaskPanel({ task }: { task: TaskModel }) {
   const { colors } = useComic();
 
   // No stamp for a locked part: the "Locked" badge beside the points says it.
-  const statusStamp = task.complete ? "approved" : task.status === "pending_approval" ? "pending" : null;
+  // (A part is "completed"; "approved" is for a submission.)
+  const statusStamp = task.complete ? "completed" : task.status === "pending_approval" ? "pending" : null;
 
   return (
     <div className="relative">

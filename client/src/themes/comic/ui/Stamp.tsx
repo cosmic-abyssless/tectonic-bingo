@@ -3,10 +3,11 @@ import { motion, useReducedMotion } from "motion/react";
 import { COMIC_FONT } from "../font";
 import { useComic } from "./useComic";
 
-export type StampKind = "approved" | "rejected" | "pending" | "frozen" | "done" | "locked" | "custom";
+export type StampKind = "approved" | "completed" | "rejected" | "pending" | "frozen" | "done" | "locked" | "custom";
 
 const TEXT: Record<Exclude<StampKind, "custom">, string> = {
   approved: "APPROVED",
+  completed: "COMPLETED",
   rejected: "REJECTED",
   pending: "PENDING",
   frozen: "FROZEN",
@@ -36,6 +37,7 @@ export function Stamp({
   const reduced = useReducedMotion();
   const color = {
     approved: colors.OK,
+    completed: colors.OK,
     done: colors.OK,
     rejected: colors.BAD,
     pending: colors.WARN,

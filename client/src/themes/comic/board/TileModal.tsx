@@ -1758,7 +1758,7 @@ function SummaryPage({
                             {claimed.map((p) => p.displayName).join(", ")}
                           </>
                         ) : task.complete ? (
-                          "Approved"
+                          "Completed"
                         ) : task.status === "pending_approval" ? (
                           "Awaiting judges"
                         ) : task.status === "in_progress" ? (
