@@ -24,6 +24,8 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "POST /api/bingos/:slug/mod/teams/:teamId/adjustments": ["points.adjusted"],
   "POST /api/bingos/:slug/mod/stage": ["stage.changed"],
   "POST /api/bingos/:slug/mod/draft/start": ["draft.started"],
+  "POST /api/bingos/:slug/mod/draft/shuffle": ["draft.order_shuffled"],
+  "PUT /api/bingos/:slug/mod/draft/order": ["draft.order_set"],
   "POST /api/bingos/:slug/mod/pairings": ["pairing.admin_paired"],
   "DELETE /api/bingos/:slug/mod/pairings/:id": ["pairing.unpaired"],
   "PATCH /api/bingos/:slug/mod/signups/:id/buyin": ["signup.buyin_marked"],

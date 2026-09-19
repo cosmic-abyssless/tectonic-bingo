@@ -7,7 +7,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createTeam } from "./teamService";
 import { createSignup } from "./signupService";
 import { adminPair } from "./pairingService";
-import { canViewDraftRoom, draftRoomForbiddenMessage, getDraftState, getLeftoverUserIds, getTeamRatings, makePick, pickOrderTeamIndex, setPickRating, startDraft } from "./draftService";
+import { canViewDraftRoom, draftRoomForbiddenMessage, getDraftState, getLeftoverUserIds, getTeamRatings, makePick, pickOrderTeamIndex, setDraftOrder, setPickRating, shuffleDraftOrder, startDraft } from "./draftService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -31,6 +31,12 @@ function seedCaptain(bingoId: string, discordId: string) {
   const user = seedUser(discordId);
   db.insert(schema.signups).values({ bingoId, userId: user.id, rsn: discordId }).run();
   return user;
+}
+
+function beginDraft(bingo: typeof schema.bingos.$inferSelect, teamIds?: string[]) {
+  const teams = db.select().from(schema.teams).where(eq(schema.teams.bingoId, bingo.id)).all();
+  setDraftOrder(db, bingo, teamIds ?? teams.map((t) => t.id));
+  return startDraft(db, bingo);
 }
 
 beforeEach(() => {
@@ -87,7 +93,7 @@ describe("startDraft", () => {
     const bingo = seedBingo();
     const captain = seedCaptain(bingo.id, "captain");
     createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
-    expect(() => startDraft(db, bingo)).toThrow(/at least 2 teams/i);
+    expect(() => startDraft(db, bingo)).toThrow(/set pick order/i);
   });
 
   it("rejects starting outside the draft stage", () => {
@@ -99,17 +105,26 @@ describe("startDraft", () => {
     expect(() => startDraft(db, bingo)).toThrow(ServiceError);
   });
 
-  it("assigns a distinct draftOrder 1..N to every team", () => {
+  it("rejects starting before pick order is set", () => {
     const bingo = seedBingo();
     const c1 = seedCaptain(bingo.id, "c1");
     const c2 = seedCaptain(bingo.id, "c2");
-    const c3 = seedCaptain(bingo.id, "c3");
     createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
     createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
-    createTeam(db, { bingoId: bingo.id, captainUserId: c3.id });
+    expect(() => startDraft(db, bingo)).toThrow(/set pick order/i);
+  });
 
-    const teams = startDraft(db, bingo);
-    expect(teams.map((t) => t.draftOrder).sort()).toEqual([1, 2, 3]);
+  it("sets draftStarted without shuffling", () => {
+    const bingo = seedBingo();
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
+    const a = createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, name: "A" });
+    const b = createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
+    setDraftOrder(db, bingo, [b.id, a.id]);
+    startDraft(db, bingo);
+    expect(db.select().from(schema.bingos).where(eq(schema.bingos.id, bingo.id)).get()!.draftStarted).toBe(true);
+    expect(db.select().from(schema.teams).where(eq(schema.teams.id, b.id)).get()!.draftOrder).toBe(1);
+    expect(db.select().from(schema.teams).where(eq(schema.teams.id, a.id)).get()!.draftOrder).toBe(2);
   });
 
   it("rejects starting twice", () => {
@@ -118,8 +133,57 @@ describe("startDraft", () => {
     const c2 = seedCaptain(bingo.id, "c2");
     createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
     createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
-    startDraft(db, bingo);
+    beginDraft(bingo);
     expect(() => startDraft(db, bingo)).toThrow(/already started/i);
+  });
+});
+
+describe("shuffleDraftOrder", () => {
+  it("assigns a distinct draftOrder 1..N and locks picks", () => {
+    const bingo = seedBingo();
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
+    const c3 = seedCaptain(bingo.id, "c3");
+    createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
+    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
+    createTeam(db, { bingoId: bingo.id, captainUserId: c3.id });
+
+    const { teams, lockedUntil } = shuffleDraftOrder(db, bingo);
+    expect(teams.map((t) => t.draftOrder).sort()).toEqual([1, 2, 3]);
+    expect(lockedUntil.getTime()).toBeGreaterThan(Date.now());
+    expect(getDraftState(db, bingo, { includeAnswers: false }).orderReady).toBe(true);
+  });
+
+  it("rejects fewer than 2 teams", () => {
+    const bingo = seedBingo();
+    const captain = seedCaptain(bingo.id, "captain");
+    createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    expect(() => shuffleDraftOrder(db, bingo)).toThrow(/at least 2 teams/i);
+  });
+});
+
+describe("setDraftOrder", () => {
+  it("writes a dense 1..N order and clears the reveal lock", () => {
+    const bingo = seedBingo();
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
+    const a = createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, name: "A" });
+    const b = createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
+    shuffleDraftOrder(db, bingo);
+    const teams = setDraftOrder(db, bingo, [b.id, a.id]);
+    expect(teams.find((t) => t.id === b.id)!.draftOrder).toBe(1);
+    expect(teams.find((t) => t.id === a.id)!.draftOrder).toBe(2);
+    expect(db.select().from(schema.bingos).where(eq(schema.bingos.id, bingo.id)).get()!.draftOrderLockedUntil).toBeNull();
+  });
+
+  it("rejects a list that is not a permutation of current teams", () => {
+    const bingo = seedBingo();
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
+    const a = createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
+    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
+    expect(() => setDraftOrder(db, bingo, [a.id])).toThrow(/exactly once/i);
+    expect(() => setDraftOrder(db, bingo, [a.id, a.id])).toThrow(/exactly once/i);
   });
 });
 
@@ -131,7 +195,7 @@ describe("audit trail", () => {
     createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, name: "A" });
     createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
 
-    startDraft(db, bingo);
+    beginDraft(bingo);
 
     const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.started")).get()!;
     expect(row.visibility).toBe("public");
@@ -150,7 +214,7 @@ describe("audit trail", () => {
     const p2 = seedUser("p2");
     // Two signups for two teams so neither is a leftover (see markLeftovers).
     for (const p of [p1, p2]) createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p.id, rsn: p.discordUsername, answers: [] });
-    startDraft(db, bingo);
+    beginDraft(bingo);
     const first = db.select().from(schema.teams).where(and(eq(schema.teams.bingoId, bingo.id), eq(schema.teams.draftOrder, 1))).get()!;
 
     const [admin] = db.insert(schema.users).values({ discordId: "siteadmin", discordUsername: "siteadmin" }).returning().all();
@@ -173,7 +237,7 @@ describe("makePick", () => {
     const p1 = seedUser("p1");
     const p2 = seedUser("p2");
     for (const p of [p1, p2]) createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p.id, rsn: p.discordUsername, answers: [] });
-    startDraft(db, bingo);
+    beginDraft(bingo);
     const teams = db.select().from(schema.teams).where(eq(schema.teams.bingoId, bingo.id)).all();
     const first = teams.find((t) => t.draftOrder === 1)!;
     const second = teams.find((t) => t.draftOrder === 2)!;
@@ -188,6 +252,28 @@ describe("makePick", () => {
     createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
     const p1 = seedUser("p1");
     expect(() => makePick(db, { bingo, pickedUserId: p1.id, actingUserId: c1.id, actingIsAdmin: false })).toThrow(/hasn't started/i);
+  });
+
+  it("rejects a pick while the shuffle reveal lock is active", () => {
+    const bingo = seedBingo();
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
+    createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
+    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
+    const p1 = seedUser("p1");
+    createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p1.id, rsn: "p1", answers: [] });
+    shuffleDraftOrder(db, bingo);
+    startDraft(db, bingo);
+    const first = db.select().from(schema.teams).where(and(eq(schema.teams.bingoId, bingo.id), eq(schema.teams.draftOrder, 1))).get()!;
+    expect(() => makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false })).toThrow(/still being revealed/i);
+  });
+
+  it("locks shuffle and start after the first pick", () => {
+    const { bingo, first, second, p1 } = setup();
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    expect(() => shuffleDraftOrder(db, bingo)).toThrow(/locked after the first pick/i);
+    expect(() => setDraftOrder(db, bingo, [first.id, second.id])).toThrow(/locked after the first pick/i);
+    expect(() => startDraft(db, bingo)).toThrow(/already started/i);
   });
 
   it("rejects a pick from the captain whose team isn't on the clock", () => {
@@ -245,7 +331,7 @@ describe("getDraftState", () => {
     expect(before.currentPick).toBeNull();
     expect(before.pool).toHaveLength(2);
 
-    startDraft(db, bingo);
+    beginDraft(bingo);
     const teams = db.select().from(schema.teams).where(eq(schema.teams.bingoId, bingo.id)).all();
     const first = teams.find((t) => t.draftOrder === 1)!;
     makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
@@ -269,7 +355,7 @@ describe("getDraftState", () => {
     const p2 = seedUser("p2");
     createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p2.id, rsn: "p2", answers: [] });
 
-    startDraft(db, bingo);
+    beginDraft(bingo);
     const teams = db.select().from(schema.teams).where(eq(schema.teams.bingoId, bingo.id)).all();
     const first = teams.find((t) => t.draftOrder === 1)!;
     makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
@@ -293,6 +379,23 @@ describe("getDraftState", () => {
     const withoutAnswers = getDraftState(db, bingo, { includeAnswers: false });
     expect(withoutAnswers.pool[0]!.entries[0]!.answers).toBeNull();
   });
+
+  it("hides currentPick until the shuffle reveal lock expires", () => {
+    const bingo = seedBingo();
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
+    createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
+    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
+    const p1 = seedUser("p1");
+    createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p1.id, rsn: "p1", answers: [] });
+    shuffleDraftOrder(db, bingo);
+    startDraft(db, bingo);
+    const locked = getDraftState(db, bingo, { includeAnswers: false });
+    expect(locked.orderReady).toBe(true);
+    expect(locked.draftStarted).toBe(true);
+    expect(locked.orderLockedUntil).not.toBeNull();
+    expect(locked.currentPick).toBeNull();
+  });
 });
 
 describe("duo mode", () => {
@@ -310,7 +413,7 @@ describe("duo mode", () => {
     const [p1, p2, solo] = ["p1", "p2", "solo"].map((d) => seedUser(d));
     for (const p of [p1!, p2!, solo!]) createSignup(db, signupStage, { bingoId: bingo.id, userId: p.id, rsn: p.discordUsername, answers: [] });
     const pairing = adminPair(db, signupStage, { userIdA: p1!.id, userIdB: p2!.id, createdByUserId: c1.id });
-    startDraft(db, bingo);
+    beginDraft(bingo);
     const teams = db.select().from(schema.teams).where(eq(schema.teams.bingoId, bingo.id)).all();
     const first = teams.find((t) => t.draftOrder === 1)!;
     const second = teams.find((t) => t.draftOrder === 2)!;
@@ -367,7 +470,7 @@ describe("leftovers", () => {
       db.insert(schema.signups).values({ bingoId: bingo.id, userId: user.id, rsn: d, createdAt: new Date(1_700_000_000_000 + i * 60_000) }).run();
       return user;
     });
-    startDraft(db, bingo);
+    beginDraft(bingo);
     const teams = db.select().from(schema.teams).where(eq(schema.teams.bingoId, bingo.id)).all();
     const first = teams.find((t) => t.draftOrder === 1)!;
     const second = teams.find((t) => t.draftOrder === 2)!;

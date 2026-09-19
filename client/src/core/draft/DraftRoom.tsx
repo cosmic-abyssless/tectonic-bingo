@@ -1,11 +1,14 @@
-import { useState, type CSSProperties } from "react";
-import type { DraftPoolEntry, DraftUnit, LeftoverMode, PickRating, SignupQuestion, TectonicProfile } from "@bingo/shared";
+import { useEffect, useState, type CSSProperties } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { useQueryClient } from "@tanstack/react-query";
+import type { DraftPoolEntry, DraftTeam, DraftUnit, LeftoverMode, PickRating, SignupQuestion, TectonicProfile } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
-import { useBingo, useDraftState, useMakePick, useSetPickRating, useSignupQuestions, useStartDraft } from "../../api/queries";
+import { queryKeys, useBingo, useDraftState, useMakePick, useSetDraftOrder, useSetPickRating, useShuffleDraftOrder, useSignupQuestions, useStartDraft } from "../../api/queries";
 import { displayName } from "../ui/user";
-import { Button } from "../ui/Button";
+import { Button, IconButton } from "../ui/Button";
 import { Badge, Card, Notice } from "../ui/Card";
-import { LinkIcon } from "../ui/icons";
+import { Dialog, DialogHeader } from "../ui/Dialog";
+import { ChevronDownIcon, ChevronUpIcon, LinkIcon } from "../ui/icons";
 import { SortHeader, compareSortValues, useTableSort, type TableSort } from "../ui/tableSort";
 import { RatingCell } from "./RatingCell";
 import { TeamRoster } from "./TeamRoster";
@@ -213,19 +216,99 @@ function PoolTable({
   );
 }
 
+function PickOrderDialog({
+  isOpen,
+  onClose,
+  teams,
+  onSave,
+  saving,
+  error,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  teams: DraftTeam[];
+  onSave: (teamIds: string[]) => Promise<void>;
+  saving: boolean;
+  error: string | null;
+}) {
+  const [ids, setIds] = useState<string[]>([]);
+  useEffect(() => {
+    if (isOpen) setIds(teams.map((t) => t.id));
+  }, [isOpen, teams]);
+  const byId = new Map(teams.map((t) => [t.id, t]));
+
+  function move(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (j < 0 || j >= ids.length) return;
+    const next = [...ids];
+    const a = next[i]!;
+    next[i] = next[j]!;
+    next[j] = a;
+    setIds(next);
+  }
+
+  return (
+    <Dialog isOpen={isOpen} onClose={onClose}>
+      <DialogHeader title="Pick order" subtitle="First in the list picks first." onClose={onClose} />
+      <div className="space-y-4 p-5">
+        <ol className="space-y-1">
+          {ids.map((id, i) => {
+            const team = byId.get(id);
+            if (!team) return null;
+            return (
+              <li key={id} className="flex items-center gap-2 rounded-md border border-outline bg-surface px-2 py-1.5">
+                <span className="num w-6 shrink-0 text-xs text-on-surface-subtle">{i + 1}</span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-on-surface">{team.name}</span>
+                <IconButton label="Move up" size="sm" onPress={() => move(i, -1)} isDisabled={i === 0}>
+                  <ChevronUpIcon />
+                </IconButton>
+                <IconButton label="Move down" size="sm" onPress={() => move(i, 1)} isDisabled={i === ids.length - 1}>
+                  <ChevronDownIcon />
+                </IconButton>
+              </li>
+            );
+          })}
+        </ol>
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onPress={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onPress={() => onSave(ids)} isDisabled={saving || ids.length < 2}>
+            {saving ? "Saving…" : "Save order"}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
 export function DraftRoom({ slug }: { slug: string }) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const reducedMotion = useReducedMotion();
   const { data: shell } = useBingo(slug);
   const { data: state, error: stateError } = useDraftState(slug);
   const { data: questionsData } = useSignupQuestions(slug);
+  const shuffleOrder = useShuffleDraftOrder(slug);
+  const setOrder = useSetDraftOrder(slug);
   const startDraft = useStartDraft(slug);
   const makePick = useMakePick(slug);
   const setRating = useSetPickRating(slug);
-  const [startError, setStartError] = useState<string | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
   const [pickError, setPickError] = useState<string | null>(null);
   const [rateError, setRateError] = useState<string | null>(null);
-  // Which pool entry's profile dialog is open. Tracked by signup id so the
-  // dialog follows live refetches instead of showing a stale snapshot.
+  const [orderOpen, setOrderOpen] = useState(false);
+
+  useEffect(() => {
+    if (!state?.orderLockedUntil) return;
+    const remaining = new Date(state.orderLockedUntil).getTime() - Date.now();
+    if (remaining <= 0) return;
+    const t = window.setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) });
+    }, remaining + 50);
+    return () => window.clearTimeout(t);
+  }, [state?.orderLockedUntil, queryClient, slug]);
 
   if (stateError) {
     return (
@@ -253,13 +336,36 @@ export function DraftRoom({ slug }: { slug: string }) {
   const scouting = shell.bingo.stage !== "draft";
   const poolCount = state.pool.reduce((n, u) => n + u.entries.length, 0);
   const questions = questionsData?.questions ?? [];
+  const lockMs = state.orderLockedUntil ? Math.max(0, new Date(state.orderLockedUntil).getTime() - Date.now()) : 0;
+  const revealing = lockMs > 0;
+  const canControlOrder = isAdmin && !scouting && state.picks.length === 0;
+  const busy = shuffleOrder.isPending || setOrder.isPending || startDraft.isPending;
+
+  async function handleShuffle() {
+    setOrderError(null);
+    try {
+      await shuffleOrder.mutateAsync();
+    } catch (e: unknown) {
+      setOrderError(e instanceof Error ? e.message : "Failed to shuffle pick order");
+    }
+  }
+
+  async function handleSaveOrder(teamIds: string[]) {
+    setOrderError(null);
+    try {
+      await setOrder.mutateAsync(teamIds);
+      setOrderOpen(false);
+    } catch (e: unknown) {
+      setOrderError(e instanceof Error ? e.message : "Failed to set pick order");
+    }
+  }
 
   async function handleStart() {
-    setStartError(null);
+    setOrderError(null);
     try {
       await startDraft.mutateAsync();
     } catch (e: unknown) {
-      setStartError(e instanceof Error ? e.message : "Failed to start the draft");
+      setOrderError(e instanceof Error ? e.message : "Failed to start the draft");
     }
   }
 
@@ -293,16 +399,53 @@ export function DraftRoom({ slug }: { slug: string }) {
           <div>
             <p className="font-semibold text-on-surface">The draft hasn't started</p>
             <p className="text-sm text-on-surface-muted">
-              {state.teams.length} team{state.teams.length === 1 ? "" : "s"} ready.{" "}
-              {state.teams.length < 2 ? "Create at least 2 teams from the mod panel first." : "Starting randomizes the pick order."}
+              {state.teams.length} team{state.teams.length === 1 ? "" : "s"}.{" "}
+              {state.teams.length < 2
+                ? "Create at least 2 teams from the mod panel first."
+                : state.orderReady
+                  ? revealing
+                    ? "Revealing pick order."
+                    : "Pick order is set."
+                  : "Shuffle or set pick order, then start."}
             </p>
-            {startError && <p className="mt-1 text-sm text-danger">{startError}</p>}
+            {orderError && <p className="mt-1 text-sm text-danger">{orderError}</p>}
           </div>
-          {isMod && (
-            <Button variant="primary" onPress={handleStart} isDisabled={state.teams.length < 2 || startDraft.isPending}>
-              {startDraft.isPending ? "Starting…" : "Start draft"}
-            </Button>
+          {canControlOrder && (
+            <div className="flex flex-wrap gap-2">
+              <Button onPress={handleShuffle} isDisabled={state.teams.length < 2 || busy}>
+                {shuffleOrder.isPending ? "Shuffling…" : "Shuffle pick order"}
+              </Button>
+              <Button onPress={() => { setOrderError(null); setOrderOpen(true); }} isDisabled={state.teams.length < 2 || busy}>
+                Pick order
+              </Button>
+              <Button variant="primary" onPress={handleStart} isDisabled={!state.orderReady || busy}>
+                {startDraft.isPending ? "Starting…" : "Start draft"}
+              </Button>
+            </div>
           )}
+        </Card>
+      ) : canControlOrder ? (
+        <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div>
+            <p className="font-semibold text-on-surface">{revealing ? "Revealing pick order" : state.currentPick ? `${currentTeam?.name ?? "…"} is on the clock` : "Draft started"}</p>
+            {state.currentPick && (
+              <p className="num text-xs uppercase tracking-wide text-on-surface-subtle">
+                {state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick {state.currentPick.pickNumber}
+              </p>
+            )}
+            {orderError && <p className="mt-1 text-sm text-danger">{orderError}</p>}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button onPress={handleShuffle} isDisabled={busy}>
+              {shuffleOrder.isPending ? "Shuffling…" : "Shuffle pick order"}
+            </Button>
+            <Button onPress={() => { setOrderError(null); setOrderOpen(true); }} isDisabled={busy}>
+              Pick order
+            </Button>
+            <Button variant="primary" isDisabled>
+              Start draft
+            </Button>
+          </div>
         </Card>
       ) : state.currentPick ? (
         <Card className="p-4">
@@ -311,6 +454,8 @@ export function DraftRoom({ slug }: { slug: string }) {
           </p>
           <p className="text-lg font-semibold text-on-surface">{currentTeam?.name ?? "…"} is on the clock</p>
         </Card>
+      ) : revealing ? (
+        <Notice tone="info">Revealing pick order.</Notice>
       ) : (
         <Notice tone="ok">
           Draft complete. {isMod ? "Advance to the reveal stage from the mod panel when you're ready." : "The board is revealed next."}
@@ -335,12 +480,36 @@ export function DraftRoom({ slug }: { slug: string }) {
         <div className="overflow-x-auto">
           <div className="grid auto-cols-[minmax(140px,1fr)] grid-flow-col gap-3">
             {state.teams.map((team) => (
-              <TeamRoster key={team.id} team={team} picks={state.picks.filter((p) => p.teamId === team.id)} isCurrent={currentTeam?.id === team.id} />
+              <motion.div
+                key={team.id}
+                layout
+                transition={
+                  reducedMotion || !revealing
+                    ? { duration: 0 }
+                    : { type: "tween", duration: Math.min(2, Math.max(0.4, lockMs / 1000)), ease: [0.22, 1, 0.36, 1] }
+                }
+              >
+                <TeamRoster
+                  team={team}
+                  picks={state.picks.filter((p) => p.teamId === team.id)}
+                  isCurrent={currentTeam?.id === team.id}
+                  showOrder={state.orderReady}
+                />
+              </motion.div>
             ))}
           </div>
         </div>
         {state.teams.length === 0 && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
       </section>
+
+      <PickOrderDialog
+        isOpen={orderOpen}
+        onClose={() => setOrderOpen(false)}
+        teams={state.teams}
+        onSave={handleSaveOrder}
+        saving={setOrder.isPending}
+        error={orderError}
+      />
 
       <section>
         <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>

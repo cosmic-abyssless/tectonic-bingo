@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireBingo } from "../middleware/requireBingo";
 import { requireBingoMod } from "../middleware/requireBingoMod";
+import { requireAdmin } from "../middleware/requireAdmin";
 import { asyncHandler } from "../middleware/errorHandler";
 import { db } from "../db";
 import * as bingoService from "../services/bingoService";
@@ -120,7 +121,38 @@ router.post(
 );
 
 router.post(
+  "/draft/shuffle",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { teams, lockedUntil } = draftService.shuffleDraftOrder(db, req.bingo!);
+    const order = teams
+      .filter((t) => t.draftOrder != null)
+      .sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0))
+      .map((t) => ({ teamId: t.id, draftOrder: t.draftOrder! }));
+    broadcast({ type: "draft_order_shuffled", bingoId: req.bingo!.id, payload: { lockedUntil: lockedUntil.toISOString(), order } });
+    res.json({ teams, lockedUntil: lockedUntil.toISOString() });
+  }),
+);
+
+router.put(
+  "/draft/order",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { teamIds } = req.body as { teamIds?: string[] };
+    if (!Array.isArray(teamIds)) throw new ServiceError(400, "teamIds is required");
+    const teams = draftService.setDraftOrder(db, req.bingo!, teamIds);
+    const order = teams
+      .filter((t) => t.draftOrder != null)
+      .sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0))
+      .map((t) => ({ teamId: t.id, draftOrder: t.draftOrder! }));
+    broadcast({ type: "draft_order_set", bingoId: req.bingo!.id, payload: { order } });
+    res.json({ teams });
+  }),
+);
+
+router.post(
   "/draft/start",
+  requireAdmin,
   asyncHandler(async (req, res) => {
     const teams = draftService.startDraft(db, req.bingo!);
     broadcast({ type: "draft_started", bingoId: req.bingo!.id, payload: {} });

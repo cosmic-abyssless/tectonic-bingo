@@ -118,6 +118,7 @@ export interface Bingo {
   womGroupId: string | null;
   womCompetitionId: number | null;
   womSyncError: string | null;
+  draftStarted: boolean;
   createdByUserId: string;
   createdAt: string;
 }
@@ -717,10 +718,13 @@ export interface PickRating {
 export const MAX_RATING_STARS = 3;
 
 export interface DraftState {
-  teams: DraftTeam[]; // sorted by draftOrder once the draft has started
+  teams: DraftTeam[]; // sorted by draftOrder once pick order is set
   picks: DraftPick[]; // a pair shares one pickNumber across two rows
   pool: DraftUnit[];
   draftStarted: boolean;
+  orderReady: boolean; // ≥2 teams with a dense draftOrder 1..N
+  // ISO timestamp until which picks are blocked after a shuffle. Null if unlocked.
+  orderLockedUntil: string | null;
   // singlesRound: the main pool is empty and leftovers are being drafted.
   currentPick: { pickNumber: number; round: number; teamId: string; singlesRound: boolean } | null;
   ratings: Record<string, PickRating>; // by signupId; empty unless the viewer leads a team
@@ -789,6 +793,8 @@ export type BroadcastEvent =
   | { type: "submission_reviewed"; bingoId: string; payload: { teamId: string; nodeIds: string[] } }
   | { type: "stage_changed"; bingoId: string; payload: { stage: Stage } }
   | { type: "draft_started"; bingoId: string; payload: Record<string, never> }
+  | { type: "draft_order_shuffled"; bingoId: string; payload: { lockedUntil: string; order: { teamId: string; draftOrder: number }[] } }
+  | { type: "draft_order_set"; bingoId: string; payload: { order: { teamId: string; draftOrder: number }[] } }
   | { type: "draft_pick"; bingoId: string; payload: { pickNumber: number; teamId: string; userIds: string[] } }
   // A team lead starred/noted a signup. Other leads of the same team refetch
   // draft state; the rating itself stays behind GET /draft's auth.
