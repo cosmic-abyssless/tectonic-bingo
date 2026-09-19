@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import sharp from "sharp";
 import { count, eq, getTableColumns, inArray } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { exportBingo, importBingo } from "./bingoExportService";
+import { exportBingo, importBingo, importBingoWithImages } from "./bingoExportService";
 import { createCategory, createTask, createTile, deleteLine, generateLines, getBoardLines, getBoardTiles, updateLinePoints, updateTileBonusPoints } from "./boardService";
 import { createQuestion } from "./signupService";
 import { getBingoBySlug } from "./bingoService";
@@ -379,9 +383,11 @@ describe("every column is accounted for", () => {
 
   it("tiles", () => {
     const { bingo } = seedFullBingo();
-    const tile = exportBingo(db, bingo.id).tiles[0]!;
-    // categoryLocalId is categoryId; bonusPoints is the tile's own node's points; tasks are its node's children.
-    accounted(schema.tiles, Object.keys(tile).map((k) => (k === "categoryLocalId" ? "categoryId" : k)), ["id", "bingoId", "nodeId", "imageUrl", "createdAt"], ["bonusPoints", "tasks"]);
+    const uploads = makeUploads();
+    const tile = exportBingo(db, bingo.id, { uploadsDir: uploads.dir }).tiles.find((t) => t.name === "Tile A")!;
+    // categoryLocalId is categoryId; image is imageUrl (the file itself); bonusPoints is the tile's own node's points; tasks are its node's children.
+    const renamed: Record<string, string> = { categoryLocalId: "categoryId", image: "imageUrl" };
+    accounted(schema.tiles, Object.keys(tile).map((k) => renamed[k] ?? k), ["id", "bingoId", "nodeId", "createdAt"], ["bonusPoints", "tasks"]);
     expect(Object.keys(tile)).toEqual(expect.arrayContaining(["bonusPoints", "tasks"]));
   });
 
@@ -397,5 +403,136 @@ describe("every column is accounted for", () => {
     const doc = exportBingo(db, bingo.id);
     accounted(schema.tileCategories, Object.keys(doc.categories[0]!), ["id", "bingoId"], ["localId"]);
     accounted(schema.signupQuestions, Object.keys(doc.signupQuestions[0]!), ["id", "bingoId"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tile images
+// ---------------------------------------------------------------------------
+
+let uploadsToClean: string[] = [];
+afterEach(() => {
+  for (const dir of uploadsToClean) fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  uploadsToClean = [];
+});
+
+// An uploads folder holding a real image for Tile A (whose imageUrl the seed data points at it).
+function makeUploads() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bingo-images-"));
+  uploadsToClean.push(dir);
+  fs.mkdirSync(path.join(dir, "tiles"), { recursive: true });
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAFklEQVR4nGP8z8Dwn4EIwESMolGFuBQCAHP+Af/3rtd1AAAAAElFTkSuQmCC", "base64");
+  fs.writeFileSync(path.join(dir, "tiles", "tile-a.png"), png);
+  db.update(schema.tiles).set({ imageUrl: "/uploads/tiles/tile-a.png" }).where(eq(schema.tiles.name, "Tile A")).run();
+  return { dir, png, tilesDir: path.join(dir, "tiles") };
+}
+
+const asImage = (bytes: Buffer, contentType = "image/png") => ({ contentType, data: bytes.toString("base64") });
+const tileFiles = (tilesDir: string) => fs.readdirSync(tilesDir).filter((f) => f !== "tile-a.png").sort();
+
+async function importWithImage(image: unknown, slug: string, uploadsDir: string) {
+  const { bingo, admin } = seedFullBingo();
+  const doc = JSON.parse(JSON.stringify(exportBingo(db, bingo.id))) as BingoExportDocument;
+  (doc.tiles.find((t) => t.name === "Tile B") as { image?: unknown }).image = image;
+  return importBingoWithImages(db, doc, { slug, createdByUserId: admin.id }, uploadsDir);
+}
+
+describe("exporting tile images", () => {
+  it("embeds the original file, only when asked, and never the server path", () => {
+    const { bingo } = seedFullBingo();
+    const { dir, png } = makeUploads();
+
+    const withImages = exportBingo(db, bingo.id, { uploadsDir: dir });
+    const tileA = withImages.tiles.find((t) => t.name === "Tile A")!;
+    expect(tileA.image).toEqual({ contentType: "image/png", data: png.toString("base64") });
+    expect(withImages.tiles.filter((t) => t.image)).toHaveLength(1); // the others have no image
+    expect(JSON.stringify(withImages)).not.toContain("/uploads");
+
+    expect(exportBingo(db, bingo.id).tiles.some((t) => t.image)).toBe(false);
+  });
+
+  it("skips what it can't or shouldn't read: a missing file, an external link, anything outside the tiles folder", () => {
+    const { bingo } = seedFullBingo();
+    const { dir } = makeUploads();
+    fs.writeFileSync(path.join(dir, "secret.png"), "not for export");
+    const setUrl = (imageUrl: string) => db.update(schema.tiles).set({ imageUrl }).where(eq(schema.tiles.name, "Tile A")).run();
+
+    for (const url of ["/uploads/tiles/missing.png", "https://example.com/a.png", "/uploads/tiles/../secret.png", "/uploads/secret.png", "/uploads/tiles/a.svg", "../../etc/passwd"]) {
+      setUrl(url);
+      expect(exportBingo(db, bingo.id, { uploadsDir: dir }).tiles.find((t) => t.name === "Tile A")!.image).toBeUndefined();
+    }
+  });
+});
+
+describe("importing tile images", () => {
+  it("stores the file under a new name, with its display variants, and points the tile at it", async () => {
+    const { bingo: source, admin } = seedFullBingo();
+    const { dir, png, tilesDir } = makeUploads();
+    const doc = exportBingo(db, source.id, { uploadsDir: dir });
+
+    const imported = await importBingoWithImages(db, doc, { slug: "with-image", createdByUserId: admin.id }, dir);
+
+    const tile = getBoardTiles(db, imported.id).find((t) => t.name === "Tile A")!;
+    expect(tile.imageUrl).toMatch(/^\/uploads\/tiles\/\d+-[a-z0-9]+\.png$/);
+    expect(tile.imageUrl).not.toBe("/uploads/tiles/tile-a.png");
+    const stored = path.join(dir, tile.imageUrl!.replace("/uploads/", ""));
+    expect(fs.readFileSync(stored).equals(png)).toBe(true);
+    const base = stored.slice(0, -".png".length);
+    expect(fs.existsSync(`${base}-thumb.webp`)).toBe(true);
+    expect(fs.existsSync(`${base}-full.webp`)).toBe(true);
+    // The source's own tile is untouched, and tiles without an image stay without.
+    expect(getBoardTiles(db, source.id).find((t) => t.name === "Tile A")!.imageUrl).toBe("/uploads/tiles/tile-a.png");
+    expect(getBoardTiles(db, imported.id).find((t) => t.name === "Tile B")!.imageUrl).toBeNull();
+    expect(tileFiles(tilesDir)).toHaveLength(3); // the image + its two variants
+  });
+
+  it("identifies the image by its bytes, not by what the document says it is", async () => {
+    const { dir, png, tilesDir } = makeUploads();
+    const jpeg = await sharp(png).jpeg().toBuffer();
+    const imported = await importWithImage(asImage(jpeg, "image/png"), "lying-type", dir);
+    expect(getBoardTiles(db, imported.id).find((t) => t.name === "Tile B")!.imageUrl).toMatch(/\.jpg$/);
+    expect(tileFiles(tilesDir).some((f) => f.endsWith(".jpg"))).toBe(true);
+  });
+
+  it("an older file with no images still imports, with no images", async () => {
+    const { bingo, admin } = seedFullBingo();
+    const { dir, tilesDir } = makeUploads();
+    const imported = await importBingoWithImages(db, exportBingo(db, bingo.id), { slug: "no-images", createdByUserId: admin.id }, dir);
+    expect(getBoardTiles(db, imported.id).every((t) => t.imageUrl === null)).toBe(true);
+    expect(tileFiles(tilesDir)).toEqual([]);
+  });
+
+  const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><script>alert(1)</script></svg>');
+  const rejected: [string, () => unknown][] = [
+    ["not an object", () => "just a string"],
+    ["not base64", () => ({ contentType: "image/png", data: "not base64 !!!" })],
+    ["empty", () => ({ contentType: "image/png", data: "" })],
+    ["not an image at all", () => asImage(Buffer.from("hello, not a picture"))],
+    ["an SVG", () => asImage(svg, "image/svg+xml")],
+    ["over 5 MB", () => asImage(Buffer.alloc(5 * 1024 * 1024 + 1, 0), "image/png")],
+  ];
+  for (const [label, make] of rejected) {
+    it(`rejects an image that is ${label}, before writing anything or creating a bingo`, async () => {
+      const { dir, tilesDir } = makeUploads();
+      await expect(importWithImage(make(), `bad-${label.replace(/\W+/g, "-")}`, dir)).rejects.toBeInstanceOf(ServiceError);
+      expect(getBingoBySlug(db, `bad-${label.replace(/\W+/g, "-")}`)).toBeUndefined();
+      expect(tileFiles(tilesDir)).toEqual([]);
+    });
+  }
+
+  it("rejects a truncated real image", async () => {
+    const { dir, png, tilesDir } = makeUploads();
+    const truncated = png.subarray(0, Math.floor(png.length / 2));
+    await expect(importWithImage(asImage(truncated), "truncated", dir)).rejects.toBeInstanceOf(ServiceError);
+    expect(tileFiles(tilesDir)).toEqual([]);
+  });
+
+  it("removes the files it wrote if the import then fails", async () => {
+    const { bingo, admin } = seedFullBingo();
+    const { dir, tilesDir } = makeUploads();
+    const doc = exportBingo(db, bingo.id, { uploadsDir: dir });
+    // "source" is already taken, so the import fails after the images were stored.
+    await expect(importBingoWithImages(db, doc, { slug: "source", createdByUserId: admin.id }, dir)).rejects.toThrow(/already exists/);
+    expect(tileFiles(tilesDir)).toEqual([]);
   });
 });

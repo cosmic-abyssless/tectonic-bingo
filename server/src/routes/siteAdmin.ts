@@ -2,7 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { asyncHandler } from "../middleware/errorHandler";
-import { isAdminDiscordId } from "../config";
+import { isAdminDiscordId, UPLOADS_DIR } from "../config";
 import { db } from "../db";
 import * as bingoService from "../services/bingoService";
 import * as bingoExportService from "../services/bingoExportService";
@@ -56,7 +56,7 @@ router.post(
     if (!/^[a-z0-9-]+$/.test(slug)) {
       throw new ServiceError(400, "slug must be lowercase letters, numbers, and hyphens only");
     }
-    const bingo = bingoExportService.importBingo(db, document, { slug, name, createdByUserId: req.user!.id });
+    const bingo = await bingoExportService.importBingoWithImages(db, document, { slug, name, createdByUserId: req.user!.id }, UPLOADS_DIR);
     res.status(201).json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );

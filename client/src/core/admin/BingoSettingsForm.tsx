@@ -72,12 +72,13 @@ export function BingoSettingsForm({
   const [saved, setSaved] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [includeImages, setIncludeImages] = useState(true);
 
   async function exportBoard() {
     setExporting(true);
     setExportError(null);
     try {
-      const doc = await adminApi.exportBingo(slug);
+      const doc = await adminApi.exportBingo(slug, includeImages);
       const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -252,9 +253,15 @@ export function BingoSettingsForm({
 
       <Section title="Export">
         <p className="text-sm text-on-surface-muted">
-          Download this bingo's board and settings as a file — categories, tiles, tasks, lines, and signup questions. Tile images and everything
-          environment-specific (teams, signups, submissions, moderators) are left out. Import it as a new bingo from the site admin page.
+          Download this bingo's board and settings as a file — categories, tiles, tasks, lines, and signup questions. Everything
+          environment-specific (teams, signups, submissions, moderators, dates) is left out. Import it as a new bingo from the site admin page.
         </p>
+        <div className="flex items-center gap-3">
+          <Switch isSelected={includeImages} onChange={setIncludeImages}>
+            Include tile images
+          </Switch>
+          <span className="text-xs text-on-surface-subtle">(makes the file much larger)</span>
+        </div>
         <Button onPress={exportBoard} isDisabled={exporting}>
           {exporting ? "Exporting…" : "Export board & settings"}
         </Button>

@@ -84,7 +84,8 @@ router.patch(
 router.get(
   "/export",
   asyncHandler(async (req, res) => {
-    res.json(bingoExportService.exportBingo(db, req.bingo!.id));
+    // Tile images are embedded unless the caller opts out (?images=0): the file is much bigger with them.
+    res.json(bingoExportService.exportBingo(db, req.bingo!.id, req.query.images === "0" ? {} : { uploadsDir: UPLOADS_DIR }));
   }),
 );
 

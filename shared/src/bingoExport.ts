@@ -5,8 +5,9 @@
 //
 // What is deliberately NOT in a document: teams, signups, submissions, moderators, the
 // stage, every schedule date (they belong to one event), the Wise Old Man integration
-// (its ids and verification code), tile images (server-relative upload paths), and
-// the global item groups (not scoped to a bingo). Everything else a bingo's admin can
+// (its ids and verification code), and the global item groups (not scoped to a bingo).
+// Tile images are in only when the export asked for them (ExportTile.image), never as
+// the server-relative upload path. Everything else a bingo's admin can
 // configure is; if you add a setting or a board field, add it here too, and to the
 // round-trip test in bingoExportService.test.ts.
 //
@@ -57,6 +58,16 @@ export interface ExportCategory {
   sortOrder: number;
 }
 
+/**
+ * A tile's artwork, embedded in the document: the original uploaded file, base64 encoded (the
+ * display variants are rebuilt on import). `contentType` is informational: import checks what the
+ * bytes really are, and accepts only PNG, JPEG, WebP and GIF, at most 5 MB each.
+ */
+export interface ExportImage {
+  contentType: string;
+  data: string;
+}
+
 export interface ExportTile {
   name: string;
   boardRow: number;
@@ -71,6 +82,8 @@ export interface ExportTile {
    * older files, meaning no bonus.
    */
   bonusPoints?: number;
+  /** Present only when the export included images and this tile has one. */
+  image?: ExportImage;
   tasks: ExportNode[];
 }
 

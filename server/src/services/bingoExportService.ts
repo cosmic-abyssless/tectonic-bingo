@@ -1,8 +1,9 @@
 // Export/import a bingo's board + settings as a single portable document
 // (issue #36) — for migrating a bingo's reusable setup across environments.
 // Deliberately excludes anything environment-specific or user-identity-
-// linked: teams, signups, submissions, moderators, WOM state, tile images
-// (server-relative upload paths that wouldn't resolve elsewhere anyway).
+// linked: teams, signups, submissions, moderators, WOM state. Tile images
+// are embedded (base64) only when asked for — never as the server-relative
+// upload path, which wouldn't resolve elsewhere.
 // Import always creates a brand-new bingo — never overwrites an existing one.
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -15,6 +16,7 @@ import * as bingoService from "./bingoService";
 import * as boardService from "./boardService";
 import * as signupService from "./signupService";
 import { setNodeGates } from "./graphService";
+import { decodeExportImage, readTileImage, removeFiles, storeTileImage, type DecodedImage } from "./exportImages";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -36,7 +38,12 @@ function resolveGateLocal(realId: string | null, localIdByRealNodeId: Map<string
   return local;
 }
 
-export function exportBingo(db: Db, bingoId: string): BingoExportDocument {
+export interface ExportOptions {
+  /** Embed each tile's image, read from `<uploadsDir>/tiles`. Without it, no images are exported. */
+  uploadsDir?: string;
+}
+
+export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}): BingoExportDocument {
   const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get();
   if (!bingo) throw new ServiceError(404, "Bingo not found");
 
@@ -82,6 +89,11 @@ export function exportBingo(db: Db, bingoId: string): BingoExportDocument {
     return exportNode;
   }
 
+  const imageField = (imageUrl: string | null) => {
+    const image = options.uploadsDir && imageUrl ? readTileImage(options.uploadsDir, imageUrl) : null;
+    return image ? { image } : {};
+  };
+
   const tiles = tileRows.map((t) => ({
     name: t.name,
     boardRow: t.boardRow,
@@ -93,6 +105,7 @@ export function exportBingo(db: Db, bingoId: string): BingoExportDocument {
     // The tile's own node is an ALL wrapper: never exported itself, but its points are the
     // full-completion bonus, and its children are the tasks.
     bonusPoints: t.node.points,
+    ...imageField(t.imageUrl),
     tasks: t.node.children.map(buildExportNode),
   }));
 
@@ -200,7 +213,36 @@ export interface ImportBingoParams {
   createdByUserId: string;
 }
 
-export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBingoParams) {
+/**
+ * Imports a document that may carry tile images. Files can't be part of the database transaction,
+ * so: check every image first (nothing is written for a document with a bad one), write the files,
+ * then run the import, and delete what was written if that fails.
+ */
+export async function importBingoWithImages(db: Db, doc: BingoExportDocument, params: ImportBingoParams, uploadsDir: string) {
+  assertValidDocument(doc);
+  const decoded: [number, DecodedImage][] = [];
+  for (const [i, tile] of doc.tiles.entries()) {
+    if (tile.image !== undefined) decoded.push([i, await decodeExportImage(tile.image, tile.name)]);
+  }
+  if (decoded.length === 0) return importBingo(db, doc, params);
+
+  const written: string[] = [];
+  try {
+    const imageUrls = new Map<number, string>();
+    for (const [i, image] of decoded) {
+      const stored = await storeTileImage(uploadsDir, image);
+      written.push(...stored.files);
+      imageUrls.set(i, stored.url);
+    }
+    return importBingo(db, doc, params, imageUrls);
+  } catch (err) {
+    removeFiles(written);
+    throw err;
+  }
+}
+
+/** `imageUrls`: the stored image for a tile, by its index in `doc.tiles` (see importBingoWithImages). */
+export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBingoParams, imageUrls?: ReadonlyMap<number, string>) {
   assertValidDocument(doc);
 
   return db.transaction((tx) => {
@@ -249,7 +291,7 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
       exportNode.children.filter((c) => !c.reuse).forEach((child, i) => mapCreatedNode(child, createdNode.children[i]!));
     }
 
-    for (const t of doc.tiles) {
+    for (const [tileIndex, t] of doc.tiles.entries()) {
       if (t.categoryLocalId !== null && !categoryIdByLocal.has(t.categoryLocalId)) {
         throw new ServiceError(400, `Malformed import file: tile "${t.name}" references an unknown category`);
       }
@@ -262,6 +304,7 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
         hasFreezePeriod: t.hasFreezePeriod,
         freezeDurationMinutes: t.freezeDurationMinutes,
         notes: t.notes,
+        imageUrl: imageUrls?.get(tileIndex) ?? null,
       });
       if (t.bonusPoints) boardService.updateTileBonusPoints(tx, tile.id, t.bonusPoints);
       if (t.tasks.some((task) => task.reuse)) reordered.push({ parentId: tile.nodeId, childLocalIds: t.tasks.map((task) => task.localId) });
