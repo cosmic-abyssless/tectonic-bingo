@@ -14,10 +14,17 @@ import type { AuditVisibility } from "./audit.ts";
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
 
-// Structural board edits are locked once the game is live (mirrors server
-// bingoService.assertBoardEditable). Editing during reveal is still allowed.
+// Play has started: team names and player ratings lock on this (see the server's
+// bingoService.isBoardLocked).
 export function isBoardLocked(stage: Stage): boolean {
   return stage === "live" || stage === "complete";
+}
+
+// The board itself (tiles, tasks, points, lines) stays editable through the live stage, so a mistake
+// can be fixed mid-event, and is locked once the bingo is complete (mirrors the server's
+// bingoService.assertBoardEditable).
+export function isBoardEditingLocked(stage: Stage): boolean {
+  return stage === "complete";
 }
 
 export const STAGE_LABEL: Record<Stage, string> = {

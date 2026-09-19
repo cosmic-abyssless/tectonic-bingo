@@ -170,6 +170,37 @@ export interface CreateTileParams {
 // points, and the tile completes once every task does. Its own `points`
 // default to 0 (no bonus); see updateTileBonusPoints for the optional
 // full-completion bonus, awarded the same way once all tasks are complete.
+// Lines are ALL nodes over the tile nodes in their row, column or diagonal, wired up by
+// generateLines from the tiles that exist at the time. The board can be edited while live, so
+// a tile created or moved after that has to join the lines it now sits in and leave the ones
+// it left, or a row could be completed without it (or a line could keep a member that moved
+// away). "custom" lines have admin-chosen members and are left alone.
+function syncTileLines(tx: Tx, tile: typeof tiles.$inferSelect): void {
+  const lines = tx.select().from(bingoLines).where(eq(bingoLines.bingoId, tile.bingoId)).all();
+  if (lines.length === 0) return;
+  const bingo = tx.select({ boardCols: schema.bingos.boardCols }).from(schema.bingos).where(eq(schema.bingos.id, tile.bingoId)).get()!;
+  // The tile's position within the line, or null when it isn't a member.
+  const positionIn = (line: typeof bingoLines.$inferSelect): number | null => {
+    if (line.lineType === "row") return line.lineIndex === tile.boardRow ? tile.boardCol : null;
+    if (line.lineType === "column") return line.lineIndex === tile.boardCol ? tile.boardRow : null;
+    if (line.lineType === "diagonal" && line.lineIndex === 0) return tile.boardRow === tile.boardCol ? tile.boardRow : null;
+    if (line.lineType === "diagonal") return tile.boardCol === bingo.boardCols - 1 - tile.boardRow ? tile.boardRow : null;
+    return null;
+  };
+  for (const line of lines) {
+    if (line.lineType === "custom") continue;
+    const sortOrder = positionIn(line);
+    const edge = tx.select({ id: nodeEdges.id }).from(nodeEdges).where(and(eq(nodeEdges.parentId, line.nodeId), eq(nodeEdges.childId, tile.nodeId))).get();
+    if (sortOrder === null) {
+      if (edge) tx.delete(nodeEdges).where(eq(nodeEdges.id, edge.id)).run();
+    } else if (edge) {
+      tx.update(nodeEdges).set({ sortOrder }).where(eq(nodeEdges.id, edge.id)).run();
+    } else {
+      tx.insert(nodeEdges).values({ parentId: line.nodeId, childId: tile.nodeId, sortOrder }).run();
+    }
+  }
+}
+
 export function createTile(db: Db, params: CreateTileParams) {
   return db.transaction((tx) => {
     const existing = tx
@@ -180,6 +211,7 @@ export function createTile(db: Db, params: CreateTileParams) {
     if (existing) throw new ServiceError(409, `A tile already exists at row ${params.boardRow}, col ${params.boardCol}`);
     const nodeId = insertSubtree(tx, params.bingoId, { kind: "ALL" });
     const tile = tx.insert(tiles).values({ ...params, nodeId }).returning().get();
+    syncTileLines(tx, tile);
     audit(tx, {
       action: "tile.created",
       bingoId: params.bingoId,
@@ -194,6 +226,7 @@ export function updateTile(db: Db, id: string, params: Partial<Omit<CreateTilePa
     const existing = tx.select().from(tiles).where(eq(tiles.id, id)).get();
     if (!existing) throw new ServiceError(404, "Tile not found");
     const updated = tx.update(tiles).set(params).where(eq(tiles.id, id)).returning().get();
+    if (updated.boardRow !== existing.boardRow || updated.boardCol !== existing.boardCol) syncTileLines(tx, updated);
 
     const changes = diffFields(existing, updated, { only: Object.keys(params) as (keyof typeof existing)[] });
     if (changes) {

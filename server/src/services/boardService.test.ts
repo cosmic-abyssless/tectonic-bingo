@@ -201,6 +201,40 @@ describe("generateLines", () => {
     expect(lines.some((l) => l.lineType === "diagonal")).toBe(false);
   });
 
+  it("puts a tile created afterwards into the lines it sits in, and only those", () => {
+    const bingo = seedBingo({ boardRows: 3, boardCols: 3 });
+    createTile(db, { bingoId: bingo.id, name: "T00", boardRow: 0, boardCol: 0 });
+    const lines = generateLines(db, bingo, 15);
+    const membersOf = (lineType: string, lineIndex: number) => {
+      const line = lines.find((l) => l.lineType === lineType && l.lineIndex === lineIndex)!;
+      return db.select().from(nodeEdges).where(eq(nodeEdges.parentId, line.nodeId)).all();
+    };
+
+    const tile = createTile(db, { bingoId: bingo.id, name: "T02", boardRow: 0, boardCol: 2 });
+
+    expect(membersOf("row", 0).map((e) => e.childId)).toContain(tile.nodeId);
+    expect(membersOf("row", 0).find((e) => e.childId === tile.nodeId)!.sortOrder).toBe(2);
+    expect(membersOf("column", 2).map((e) => e.childId)).toEqual([tile.nodeId]);
+    expect(membersOf("diagonal", 1).map((e) => e.childId)).toEqual([tile.nodeId]); // top-right to bottom-left
+    expect(membersOf("diagonal", 0).map((e) => e.childId)).not.toContain(tile.nodeId);
+    expect(membersOf("row", 1)).toHaveLength(0);
+  });
+
+  it("moves a tile between lines when its position changes", () => {
+    const bingo = seedBingo({ boardRows: 3, boardCols: 3 });
+    const tile = createTile(db, { bingoId: bingo.id, name: "T", boardRow: 0, boardCol: 2 });
+    const lines = generateLines(db, bingo, 15);
+    const linesWithTile = () =>
+      lines.filter((l) => db.select().from(nodeEdges).where(eq(nodeEdges.parentId, l.nodeId)).all().some((e) => e.childId === tile.nodeId)).map((l) => `${l.lineType} ${l.lineIndex}`).sort();
+    expect(linesWithTile()).toEqual(["column 2", "diagonal 1", "row 0"]);
+
+    updateTile(db, tile.id, { boardRow: 1, boardCol: 1 });
+    expect(linesWithTile()).toEqual(["column 1", "diagonal 0", "diagonal 1", "row 1"]);
+
+    updateTile(db, tile.id, { name: "Renamed" }); // not a move: nothing changes
+    expect(linesWithTile()).toEqual(["column 1", "diagonal 0", "diagonal 1", "row 1"]);
+  });
+
   it("replaces existing generated lines rather than duplicating them", () => {
     const bingo = seedBingo({ boardRows: 2, boardCols: 2 });
     for (let r = 0; r < 2; r++) for (let c = 0; c < 2; c++) createTile(db, { bingoId: bingo.id, name: `T${r}${c}`, boardRow: r, boardCol: c });

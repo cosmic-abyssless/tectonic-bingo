@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { isBoardLocked, type Bingo, type BoardResponse, type Tile, type TileCategory } from "@bingo/shared";
+import { isBoardEditingLocked, type Bingo, type BoardResponse, type Tile, type TileCategory } from "@bingo/shared";
 import { useBoard, queryKeys } from "../../api/queries";
 import * as adminApi from "../../api/adminApi";
 import { optimisticUpdate } from "../../api/optimistic";
@@ -17,8 +17,9 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
   const queryClient = useQueryClient();
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Mirrors the server's assertBoardEditable gate.
-  const locked = isBoardLocked(bingo.stage);
+  // Mirrors the server's assertBoardEditable gate: editable through live, locked once complete.
+  const locked = isBoardEditingLocked(bingo.stage);
+  const live = bingo.stage === "live";
 
   const grid = new Map<string, Tile>();
   for (const tile of tiles) grid.set(`${tile.boardRow},${tile.boardCol}`, tile);
@@ -67,7 +68,12 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
     <div className="space-y-6">
       {locked && (
         <Notice tone="warn" icon={<LockIcon />}>
-          The board is locked once the game is live (current stage: {bingo.stage}). Step the stage back to edit it.
+          The board is locked because the bingo is complete. Step the stage back to edit it.
+        </Notice>
+      )}
+      {live && (
+        <Notice tone="warn">
+          The bingo is live: changes apply immediately for everyone and re-score every team. A requirement teams have already submitted proof for can be edited but not removed.
         </Notice>
       )}
       {error && <Notice tone="danger">{error}</Notice>}

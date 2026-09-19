@@ -130,7 +130,7 @@ function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string;
       <fieldset disabled={locked} className="min-w-0 space-y-5 px-5 pb-5 disabled:opacity-60">
         {locked && (
           <Notice tone="warn" icon={<LockIcon />}>
-            The board is locked once the game is live. Step the stage back to edit it.
+            The board is locked because the bingo is complete. Step the stage back to edit it.
           </Notice>
         )}
         {error && <Notice tone="danger">{error}</Notice>}

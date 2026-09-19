@@ -5,8 +5,9 @@ import type { GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { claims, submissions } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { createTile, createTask, generateLines, updateTileBonusPoints } from "./boardService";
-import { approveSubmission, rejectSubmission, undoSubmissionReview } from "./scoringService";
+import { createTile, createTask, deleteLine, deleteTask, deleteTile, generateLines, updateLinePoints, updateNode, updateTileBonusPoints } from "./boardService";
+import { approveSubmission, rejectSubmission, rescoreBingo, undoSubmissionReview } from "./scoringService";
+import { ServiceError } from "./errors";
 
 // Pure engine evaluation (evaluateGraph/awardedPoints) is covered by
 // engine.test.ts. These are integration tests against a real migrated
@@ -493,3 +494,161 @@ describe("MANUAL leaves — approving IS the completion decision, no separate fl
     expect(findState(fx.teamId, task2.id)?.pointsAwarded).toBe(50);
   });
 });
+
+// The board can be edited while the bingo is live (issue #84). A team's score is a snapshot taken when a
+// submission is reviewed, so every such edit is followed by rescoreBingo, and what teams have already
+// submitted proof for can't be removed out from under them.
+describe("editing the board after teams have progress", () => {
+  const totalPoints = (teamId: string) =>
+    db.select().from(schema.teamNodeState).all().filter((s) => s.teamId === teamId).reduce((sum, s) => sum + s.pointsAwarded, 0);
+
+  function completedTask(points = 20) {
+    const fx = seedBaseFixture();
+    const task = itemTask(fx.tileId, { points }, "Bruma torch");
+    approveSubmission(db, { submissionId: submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Bruma torch" }]).id, reviewedByUserId: fx.modUserId });
+    return { fx, task };
+  }
+
+  it("re-scores every team when a task's points change", () => {
+    const { fx, task } = completedTask(20);
+    const [other] = db.insert(schema.teams).values({ bingoId: db.select().from(schema.bingos).get()!.id, captainUserId: fx.memberUserId, name: "Team B", codeword: "b-word" }).returning().all();
+    approveSubmission(db, { submissionId: submitAndReturn(other.id, fx.memberUserId, [{ nodeId: task.id, itemName: "Bruma torch" }]).id, reviewedByUserId: fx.modUserId });
+    expect(totalPoints(fx.teamId)).toBe(20);
+
+    updateNode(db, task.id, { kind: "ITEM", itemName: "Bruma torch", label: "Task", description: "desc", points: 35 });
+    expect(totalPoints(fx.teamId)).toBe(20); // stale until re-scored: the snapshot is only rebuilt on request
+    rescoreBingo(db, db.select().from(schema.bingos).get()!.id);
+
+    expect(totalPoints(fx.teamId)).toBe(35);
+    expect(totalPoints(other.id)).toBe(35);
+  });
+
+  it("applies a new full-tile bonus or line bonus to teams that already completed the tile", () => {
+    const { fx } = completedTask(20);
+    const bingoId = db.select().from(schema.bingos).get()!.id;
+
+    updateTileBonusPoints(db, fx.tileId, 50);
+    rescoreBingo(db, bingoId);
+    expect(totalPoints(fx.teamId)).toBe(70);
+
+    updateTileBonusPoints(db, fx.tileId, 0);
+    rescoreBingo(db, bingoId);
+    expect(totalPoints(fx.teamId)).toBe(20);
+  });
+
+  it("un-completes a tile for a team when a new requirement is added to it", () => {
+    const { fx } = completedTask(20);
+    const bingoId = db.select().from(schema.bingos).get()!.id;
+    expect(findState(fx.teamId, fx.tileNodeId)).toBeDefined();
+
+    itemTask(fx.tileId, { points: 10 }, "Dragon pickaxe");
+    rescoreBingo(db, bingoId);
+
+    expect(findState(fx.teamId, fx.tileNodeId)).toBeUndefined();
+    expect(totalPoints(fx.teamId)).toBe(20); // what they had earned stays; the new task is open
+  });
+
+  it("refuses to delete a task that teams have submitted proof for, and changes nothing", () => {
+    const { fx, task } = completedTask(20);
+
+    expect(() => deleteTask(db, task.id)).toThrowError(ServiceError);
+    expect(() => deleteTask(db, task.id)).toThrow(/Can't remove/);
+    expect(() => deleteTile(db, fx.tileId)).toThrow(/Can't remove/);
+
+    expect(db.select().from(schema.nodes).all().some((n) => n.id === task.id)).toBe(true);
+    expect(db.select().from(schema.tiles).all()).toHaveLength(1);
+    expect(findState(fx.teamId, task.id)?.pointsAwarded).toBe(20);
+  });
+
+  it("refuses an edit that would drop a claimed requirement, and leaves the task as it was", () => {
+    const fx = seedBaseFixture();
+    const task = addTask(fx.tileId, { kind: "ALL", points: 20, children: [{ kind: "ITEM", itemName: "Vorki" }, { kind: "ITEM", itemName: "Visage" }] });
+    const vorki = task.children[0];
+    approveSubmission(db, { submissionId: submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: vorki.id, itemName: "Vorki" }]).id, reviewedByUserId: fx.modUserId });
+
+    const visage = task.children[1];
+    // Keeping only the other item drops the one teams claimed against.
+    expect(() => updateNode(db, task.id, { kind: "ALL", label: "Task", description: "desc", points: 20, children: [{ id: visage.id, kind: "ITEM", itemName: "Visage" }] })).toThrow(/Vorki/);
+    expect(db.select().from(schema.nodes).all().some((n) => n.id === vorki.id)).toBe(true);
+    expect(db.select().from(schema.claims).all()).toHaveLength(1);
+
+    // Editing it in place (children named by id, as the editor sends them; new points) is fine.
+    updateNode(db, task.id, { kind: "ALL", label: "Task", description: "desc", points: 30, children: [{ id: vorki.id, kind: "ITEM", itemName: "Vorki" }, { id: visage.id, kind: "ITEM", itemName: "Visage" }] });
+    expect(db.select().from(schema.claims).all()).toHaveLength(1);
+  });
+
+  it("refuses to change what a claimed requirement asks for, but allows the same change on an unclaimed one", () => {
+    const fx = seedBaseFixture();
+    const task = addTask(fx.tileId, { kind: "ALL", points: 20, children: [{ kind: "ITEM", itemName: "Vorki" }, { kind: "ITEM", itemName: "Visage" }] });
+    const [vorki, visage] = task.children;
+    approveSubmission(db, { submissionId: submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: vorki.id, itemName: "Vorki" }]).id, reviewedByUserId: fx.modUserId });
+    const tree = (children: GraphNodeInput[]) => ({ kind: "ALL" as const, label: "Task", description: "desc", points: 20, children });
+
+    // Another item under the claimed id, or another kind: old proof would count toward the new ask.
+    expect(() => updateNode(db, task.id, tree([{ id: vorki.id, kind: "ITEM", itemName: "Dragon pickaxe" }, { id: visage.id, kind: "ITEM", itemName: "Visage" }]))).toThrow(/Can't change "Vorki"/);
+    expect(() => updateNode(db, task.id, tree([{ id: vorki.id, kind: "MANUAL", label: "Vorki" }, { id: visage.id, kind: "ITEM", itemName: "Visage" }]))).toThrow(/Can't change/);
+    expect(db.select().from(schema.nodes).all().find((n) => n.id === vorki.id)?.itemName).toBe("Vorki");
+
+    // The unclaimed sibling can change freely.
+    updateNode(db, task.id, tree([{ id: vorki.id, kind: "ITEM", itemName: "Vorki" }, { id: visage.id, kind: "ITEM", itemName: "Dragon pickaxe" }]));
+    expect(db.select().from(schema.nodes).all().find((n) => n.id === visage.id)?.itemName).toBe("Dragon pickaxe");
+  });
+
+  it("keeps a line from counting as complete once a tile is added to it, and counts it again if that tile goes", () => {
+    const fx = seedBaseFixture(); // tile at (0,0) on a 3x3 board
+    const bingo = db.select().from(schema.bingos).get()!;
+    const t01 = createTile(db, { bingoId: bingo.id, name: "T01", boardRow: 0, boardCol: 1 });
+    generateLines(db, bingo, 15);
+    for (const [tileId, item] of [[fx.tileId, "Vorki"], [t01.id, "Visage"]] as const) {
+      const task = itemTask(tileId, { points: 10 }, item);
+      approveSubmission(db, { submissionId: submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: item }]).id, reviewedByUserId: fx.modUserId });
+    }
+    const row0 = db.select().from(schema.bingoLines).all().find((l) => l.lineType === "row" && l.lineIndex === 0)!;
+    expect(findState(fx.teamId, row0.nodeId)?.pointsAwarded).toBe(15);
+
+    const t02 = createTile(db, { bingoId: bingo.id, name: "T02", boardRow: 0, boardCol: 2 });
+    itemTask(t02.id, { points: 10 }, "Dragon pickaxe");
+    rescoreBingo(db, bingo.id);
+    expect(findState(fx.teamId, row0.nodeId)).toBeUndefined();
+
+    deleteTile(db, t02.id);
+    rescoreBingo(db, bingo.id);
+    expect(findState(fx.teamId, row0.nodeId)?.pointsAwarded).toBe(15);
+  });
+
+  it("deletes an unclaimed task, its team state, and the raised hands on it, then re-scores", () => {
+    const { fx } = completedTask(20);
+    const open = itemTask(fx.tileId, { points: 10 }, "Dragon pickaxe");
+    const tile = db.select().from(schema.tiles).get()!;
+    db.insert(schema.tileInterests).values({ tileId: tile.id, taskId: open.id, userId: fx.memberUserId, teamId: fx.teamId }).run();
+    const bingoId = db.select().from(schema.bingos).get()!.id;
+
+    deleteTask(db, open.id);
+    rescoreBingo(db, bingoId);
+
+    expect(db.select().from(schema.tileInterests).all()).toHaveLength(0);
+    expect(findState(fx.teamId, open.id)).toBeUndefined();
+    expect(findState(fx.teamId, fx.tileNodeId)).toBeDefined(); // the tile is complete again with only the claimed task left
+  });
+
+  it("re-scores a line bonus edit and removal", () => {
+    const fx = seedBaseFixture();
+    const bingo = db.select().from(schema.bingos).get()!;
+    const lines = generateLines(db, bingo, 15);
+    const task = itemTask(fx.tileId, { points: 20 }, "Bruma torch");
+    approveSubmission(db, { submissionId: submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Bruma torch" }]).id, reviewedByUserId: fx.modUserId });
+    // Lines are built from the tiles that exist, so the one tile completes every line that passes through it.
+    const done = lines.filter((l) => findState(fx.teamId, l.nodeId));
+    expect(done.length).toBeGreaterThan(1);
+    const before = totalPoints(fx.teamId);
+
+    updateLinePoints(db, done[0].id, 40);
+    rescoreBingo(db, bingo.id);
+    expect(totalPoints(fx.teamId)).toBe(before + 25);
+
+    deleteLine(db, done[1].id);
+    rescoreBingo(db, bingo.id);
+    expect(totalPoints(fx.teamId)).toBe(before + 25 - 15);
+  });
+});
+
