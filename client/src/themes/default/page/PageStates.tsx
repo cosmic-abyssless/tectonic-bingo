@@ -1,5 +1,5 @@
 export function PageLoading() {
-  return <div className="flex min-h-screen items-center justify-center text-on-surface-muted">Loading…</div>;
+  return <div className="delayed-in flex min-h-screen items-center justify-center text-on-surface-muted">Loading…</div>;
 }
 
 export function PageError({ message }: { message: string }) {

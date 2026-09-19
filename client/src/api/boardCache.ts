@@ -13,8 +13,12 @@
 /** Bump when the board response's shape changes, so old copies are ignored. */
 export const BOARD_CACHE_SCHEMA = 1;
 export const BOARD_CACHE_MAX_AGE_MS = 7 * 24 * 3600_000;
-/** Most boards kept per browser, newest first. */
-export const BOARD_CACHE_MAX_ENTRIES = 3;
+/**
+ * Most entries kept per browser, newest first. Besides each board this holds the
+ * page-load queries stored under the same key with `:<part>` on the slug (shell,
+ * team progress, team submissions — see queries.ts), so it allows a few bingos' worth.
+ */
+export const BOARD_CACHE_MAX_ENTRIES = 12;
 
 const PREFIX = "board:v";
 
