@@ -11,3 +11,12 @@ export const privateRevalidate: RequestHandler = (_req, res, next) => {
   res.set("Cache-Control", "private, no-cache");
   next();
 };
+
+// For responses that say who the caller is (/api/me): never stored anywhere, not
+// even by the browser's own HTTP cache. The client keeps its own short-lived copy
+// (authCache.ts) and always revalidates it, so nothing is gained by an HTTP-cache
+// copy of a credential-adjacent response.
+export const noStore: RequestHandler = (_req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+};

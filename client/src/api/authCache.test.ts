@@ -53,6 +53,21 @@ describe("authCache", () => {
     expect(() => writeAuthCache("b1", auth, 0, null)).not.toThrow();
   });
 
+  it("keeps the original timestamp when the same user is re-saved, so it expires with the session", () => {
+    const s = memoryStorage();
+    writeAuthCache("b1", auth, 0, s);
+    writeAuthCache("b1", auth, AUTH_CACHE_MAX_AGE_MS - 1000, s); // a later visit confirms them
+    expect(readAuthCache("b1", AUTH_CACHE_MAX_AGE_MS - 500, s)).toEqual(auth);
+    expect(readAuthCache("b1", AUTH_CACHE_MAX_AGE_MS + 1, s)).toBeNull(); // still measured from the first save
+  });
+
+  it("starts a new clock for a different user", () => {
+    const s = memoryStorage();
+    writeAuthCache("b1", auth, 0, s);
+    writeAuthCache("b1", { ...auth, user: { id: "u2" } }, AUTH_CACHE_MAX_AGE_MS - 1000, s);
+    expect(readAuthCache("b1", AUTH_CACHE_MAX_AGE_MS + 1, s)).toEqual({ ...auth, user: { id: "u2" } });
+  });
+
   it("clears", () => {
     const s = memoryStorage();
     writeAuthCache("b1", auth, 0, s);

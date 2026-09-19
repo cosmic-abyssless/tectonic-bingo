@@ -44,10 +44,23 @@ export function readAuthCache<U>(build: string, now = Date.now(), storage: Stora
   return null;
 }
 
-export function writeAuthCache<U>(build: string, auth: CachedAuth<U>, now = Date.now(), storage: StorageLike | null = defaultStorage()): void {
+/**
+ * Stores the user. Re-saving the same user (every load confirms them) keeps the
+ * ORIGINAL timestamp, so the copy expires a fixed time after they signed in — the
+ * same clock as the 7-day session cookie — rather than being kept alive for as long
+ * as they keep visiting, which could outlast the session it stands for.
+ */
+export function writeAuthCache<U extends { id: string }>(build: string, auth: CachedAuth<U>, now = Date.now(), storage: StorageLike | null = defaultStorage()): void {
   if (!storage) return;
   try {
-    storage.setItem(KEY, JSON.stringify({ ...auth, savedAt: now, build } satisfies Stored<U>));
+    let savedAt = now;
+    try {
+      const previous = JSON.parse(storage.getItem(KEY) ?? "null") as Stored<U> | null;
+      if (previous && previous.build === build && previous.user?.id === auth.user.id && typeof previous.savedAt === "number" && now - previous.savedAt <= AUTH_CACHE_MAX_AGE_MS) savedAt = previous.savedAt;
+    } catch {
+      // Unreadable previous copy: start the clock afresh.
+    }
+    storage.setItem(KEY, JSON.stringify({ ...auth, savedAt, build } satisfies Stored<U>));
   } catch {
     // No room, or storage unavailable: run without a cache.
   }

@@ -4,7 +4,7 @@ import express from "express";
 import type { AddressInfo } from "net";
 import http from "http";
 import type { Server } from "http";
-import { privateRevalidate } from "./cacheControl";
+import { noStore, privateRevalidate } from "./cacheControl";
 
 let server: Server;
 let base: string;
@@ -14,6 +14,7 @@ beforeAll(async () => {
   app.use(compression());
   const big = { tiles: Array.from({ length: 400 }, (_, i) => ({ id: `tile-${i}`, name: "A tile with a fairly long name", points: i })) };
   app.get("/api/board", privateRevalidate, (_req, res) => res.json(big));
+  app.get("/api/me", noStore, (_req, res) => res.status(401).json({ error: "Not authenticated" }));
   app.get("/api/plain", (_req, res) => res.json(big));
   app.get("/image.webp", (_req, res) => {
     res.type("image/webp").send(Buffer.alloc(20_000, 1));
@@ -71,5 +72,13 @@ describe("compression", () => {
   it("leaves images uncompressed", async () => {
     const res = await fetch(`${base}/image.webp`, { headers: { "Accept-Encoding": "gzip" } });
     expect(res.headers.get("content-encoding")).toBeNull();
+  });
+});
+
+describe("noStore", () => {
+  it("forbids storing the response anywhere, on errors too", async () => {
+    const res = await fetch(`${base}/api/me`);
+    expect(res.status).toBe(401);
+    expect(res.headers.get("cache-control")).toBe("no-store");
   });
 });
