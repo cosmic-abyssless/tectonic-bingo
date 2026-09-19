@@ -11,7 +11,7 @@ export function ComicPage({ children }: { children: ReactNode }) {
     // taller than the tile and only VISUALLY cropped (clip-path), so the last
     // row's frames would otherwise stretch the document past this yellow
     // root and show the bare body colour as a strip under the board.
-    <div className="relative min-h-screen overflow-y-clip text-on-surface" style={style}>
+    <div className="relative min-h-dvh overflow-y-clip text-on-surface" style={style}>
       <Halftone />
       <div className="relative z-[1]">{children}</div>
       <SfxLayer />

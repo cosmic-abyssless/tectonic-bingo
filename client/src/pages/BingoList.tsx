@@ -20,7 +20,7 @@ export function BingoList() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       <AppHeader title="Tectonic Bingo" />
 
       <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">

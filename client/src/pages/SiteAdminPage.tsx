@@ -279,7 +279,7 @@ export function SiteAdminPage() {
   const { user, canGrantAdmin } = useAuth();
   if (!user?.isAdmin) {
     return (
-      <div className="flex min-h-screen items-center justify-center gap-1 bg-background text-sm text-on-surface-muted">
+      <div className="flex min-h-dvh items-center justify-center gap-1 bg-background text-sm text-on-surface-muted">
         Site admin access required.
         <Link to="/" className="text-on-surface underline underline-offset-2">
           Back to bingos
@@ -289,7 +289,7 @@ export function SiteAdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-on-surface">
+    <div className="min-h-dvh bg-background text-on-surface">
       <AppHeader back={{ to: "/", label: "All bingos" }} title="Site admin" />
       <main className="mx-auto w-full max-w-6xl space-y-6 px-6 py-6">
         <div className="flex flex-wrap items-start gap-6">

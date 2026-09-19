@@ -26,7 +26,7 @@ export function BoardPageLayout() {
   const SubmissionModal = useSlot("SubmissionModal");
 
   return (
-    <div className="min-h-screen bg-background text-on-surface">
+    <div className="min-h-dvh bg-background text-on-surface">
       <PageHeader page={page} />
 
       <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
