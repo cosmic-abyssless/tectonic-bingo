@@ -1884,7 +1884,7 @@ function TaskPage({
                     {interest.mine ? "I'm on it" : "I'll do this"}
                   </ComicButton>
                 )}
-                <TaskInterestPeople interest={interest} maxInline={1} variant="comic" />
+                <TaskInterestPeople interest={interest} variant="comic" />
               </div>
             )}
           </div>
