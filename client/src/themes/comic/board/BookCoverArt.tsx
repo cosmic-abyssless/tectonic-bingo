@@ -253,6 +253,7 @@ export function BookBackArt({
   const imageUrl = tile.imageUrl && !imgFailed ? (variant === "thumb" ? thumbUrl(tile.imageUrl) : fullUrl(tile.imageUrl)) : null;
   const dominantColor = useDominantColor(imageUrl);
   const textColor = getContrastTextColor(dominantColor ?? fallbackColor);
+  const stampColor = `color-mix(in srgb, ${colors.OK} 70%, ${textColor})`;
   const names = tileContributors(tile);
   const shown = names.slice(0, BACK_COVER_NAMES);
   const more = names.length - shown.length;
@@ -263,18 +264,20 @@ export function BookBackArt({
     <div className="absolute inset-0 overflow-hidden [container-type:inline-size]" style={{ backgroundColor: dominantColor ?? fallbackColor, color: textColor }}>
       <div className="absolute inset-0 flex flex-col items-center gap-[3cqw] px-[6cqw] pb-[6cqw] pt-[6cqw]">
         {/* The same rubber stamp as a finished part's page (ui/Stamp), drawn in the
-            cover's own units, on the paper colour so it reads on any cover. */}
+            cover's own units and with no fill of its own, so the cover shows through.
+            Its green is pulled toward the cover's lettering colour (dark on a light
+            cover, light on a dark one) so it reads on any cover. */}
         <span
           className="my-[1cqw] shrink-0 -rotate-3 whitespace-nowrap uppercase leading-none"
           style={{
             fontFamily: COMIC_FONT,
-            fontSize: "11.5cqw",
+            fontSize: "9cqw",
             letterSpacing: "0.08em",
-            color: colors.OK,
-            background: colors.PAPER_RAISED,
-            border: `1.2cqw solid ${colors.OK}`,
-            boxShadow: `0 0 0 0.8cqw ${colors.PAPER_RAISED}, 0 0 0 1.7cqw ${colors.OK}`,
-            padding: "1.6cqw 3.5cqw",
+            color: stampColor,
+            border: `1cqw solid ${stampColor}`,
+            outline: `0.6cqw solid ${stampColor}`,
+            outlineOffset: "0.6cqw",
+            padding: "1.3cqw 3cqw",
           }}
         >
           Completed
