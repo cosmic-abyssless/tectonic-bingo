@@ -1761,6 +1761,8 @@ function SummaryPage({
                           "Approved"
                         ) : task.status === "pending_approval" ? (
                           "Awaiting judges"
+                        ) : task.status === "in_progress" ? (
+                          "In progress"
                         ) : task.locked ? (
                           "Locked"
                         ) : (
