@@ -219,7 +219,7 @@ export function SignupForm({ slug }: { slug: string }) {
           ))}
 
           {existing && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className={tectonicRsns.length > 1 ? "grid grid-cols-2 gap-4" : undefined}>
               <Field
                 label="Current CA"
                 hint={
@@ -232,9 +232,11 @@ export function SignupForm({ slug }: { slug: string }) {
               >
                 <Input value={mySignup?.statsFetchedAt ? formatCaTier(mySignup.caCurrent) : "Looking up…"} readOnly disabled />
               </Field>
-              <Field label="Peak CA" hint={mySignup?.statsFetchedAt && mySignup.caPeak ? caTitle(mySignup.caPeak) : undefined}>
-                <Input value={mySignup?.statsFetchedAt ? formatCaTier(mySignup.caPeak) : "Looking up…"} readOnly disabled />
-              </Field>
+              {tectonicRsns.length > 1 && (
+                <Field label="Peak CA" hint={mySignup?.statsFetchedAt && mySignup.caPeak ? caTitle(mySignup.caPeak) : undefined}>
+                  <Input value={mySignup?.statsFetchedAt ? formatCaTier(mySignup.caPeak) : "Looking up…"} readOnly disabled />
+                </Field>
+              )}
             </div>
           )}
 
