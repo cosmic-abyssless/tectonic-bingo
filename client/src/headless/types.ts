@@ -15,6 +15,8 @@ export interface ActivityEntryModel {
   actorName: string | null;
   /** For linking the name to the player's profile; null for system events. */
   actorId: string | null;
+  /** How many log entries this line stands for (more than 1 when the feed condensed a run of them). */
+  count: number;
 }
 
 export interface CategoryModel {

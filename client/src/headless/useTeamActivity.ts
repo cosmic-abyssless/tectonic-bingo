@@ -19,6 +19,7 @@ export function useTeamActivityModel(slug: string | undefined, teamId: string | 
         timeAgo: timeAgo(e.at),
         actorName: e.actor ? displayName(e.actor) : null,
         actorId: e.actor?.id ?? null,
+        count: e.condensed?.count ?? 1,
       })),
     [data],
   );

@@ -214,6 +214,12 @@ export interface AuditActionDef<A extends AuditAction> {
   title: string;
   /** Full sentence, e.g. "Alice renamed Old Name to New Name". */
   label(input: AuditLabelInput<A>): string;
+  /**
+   * The label for a group of two or more entries of this action, newest first (see
+   * condenseAuditEntries). Only actions that define it are ever grouped; leave it off anything whose
+   * individual rows must stay visible (points, for one).
+   */
+  condense?(inputs: AuditLabelInput<A>[]): string;
 }
 
 const actor = (i: { actorName: string | null }) => i.actorName ?? "Someone";
@@ -221,6 +227,13 @@ const onBehalf = (i: { onBehalfOfName: string | null }) => (i.onBehalfOfName ? `
 /** "a, b and c". */
 function joinList(parts: string[]): string {
   return parts.length <= 1 ? (parts[0] ?? "") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+/** The tiles a group of entries touched: `"A" and "B"`, or a count once there are more than three. */
+function describeTiles(inputs: { details: { tileName: string | null } }[]): string {
+  const names = [...new Set(inputs.map((i) => i.details.tileName).filter((n): n is string => !!n))];
+  if (names.length === 0) return "a tile";
+  return names.length <= 3 ? joinList(names.map((n) => `"${n}"`)) : `${names.length} tiles`;
 }
 
 /**
@@ -352,7 +365,14 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
         ? `${actor(i)} renamed ${i.details.changes.before.name ?? i.entityLabel ?? "the team"} to "${i.details.changes.after.name}"${onBehalf(i)}`
         : `${actor(i)} updated ${i.teamName ?? i.entityLabel ?? "the team"}${onBehalf(i)}`,
   },
-  "team.member_added": { category: "team", tone: "ok", visibility: "team", title: "Team member added", label: (i) => `${actor(i)} added ${i.details.displayName} to ${i.teamName ?? "the team"}` },
+  "team.member_added": {
+    category: "team",
+    tone: "ok",
+    visibility: "team",
+    title: "Team member added",
+    label: (i) => `${actor(i)} added ${i.details.displayName} to ${i.teamName ?? "the team"}`,
+    condense: (inputs) => `${actor(inputs[0]!)} added ${joinList([...inputs].reverse().map((i) => i.details.displayName))} to ${inputs[0]!.teamName ?? "the team"}`,
+  },
   "team.member_removed": { category: "team", tone: "warn", visibility: "team", title: "Team member removed", label: (i) => `${actor(i)} removed ${i.details.displayName} from ${i.teamName ?? "the team"}` },
   "team.deleted": { category: "team", tone: "danger", visibility: "mods", title: "Team deleted", label: (i) => `${actor(i)} deleted the team "${i.details.name}"` },
   "team.tile_interest_set": {
@@ -368,6 +388,8 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "team",
     title: "Submission created",
     label: (i) => `${actor(i)} submitted ${describeClaims(i.details)} for "${i.details.tileName}"`,
+    condense: (inputs) =>
+      `${actor(inputs[0]!)} submitted ${describeClaims({ claims: inputs.flatMap((i) => i.details.claims), taskLabels: inputs.flatMap((i) => i.details.taskLabels) })} for ${describeTiles(inputs)}`,
   },
   "submission.approved": {
     category: "submission",
@@ -375,6 +397,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "team",
     title: "Submission approved",
     label: (i) => `${actor(i)} approved a submission for "${i.details.tileName ?? "a tile"}"`,
+    condense: (inputs) => `${actor(inputs[0]!)} approved ${inputs.length} submissions for ${describeTiles(inputs)}`,
   },
   "submission.rejected": {
     category: "submission",
@@ -382,6 +405,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "team",
     title: "Submission rejected",
     label: (i) => `${actor(i)} rejected a submission for "${i.details.tileName ?? "a tile"}"`,
+    condense: (inputs) => `${actor(inputs[0]!)} rejected ${inputs.length} submissions for ${describeTiles(inputs)}`,
   },
   "submission.review_undone": {
     category: "submission",
@@ -536,6 +560,8 @@ export interface AuditEntry {
   team: { id: string; name: string; color: string | null } | null;
   requestId: string | null;
   details: unknown;
+  /** Present only on an entry that stands for several (see condenseAuditEntries): how many, which rows, and when the oldest happened. */
+  condensed?: { count: number; ids: number[]; oldestAt: string };
 }
 
 export interface AuditLogResponse {
@@ -557,9 +583,21 @@ export interface AuditLogFilters {
 }
 
 /** Renders an entry's label at read time from its (self-contained) details — the server does this once, but the client can too (CSV export, headless models). */
-export function renderAuditLabel(entry: Pick<AuditEntry, "action" | "details" | "entityLabel" | "actor" | "team" | "onBehalfOf">): string {
+export function renderAuditLabel(entry: AuditLabelSource): string {
   const def = AUDIT_ACTIONS[entry.action] as AuditActionDef<AuditAction>;
-  const actorName = entry.actor ? (entry.actor.discordGuildNick ?? entry.actor.discordGlobalName ?? entry.actor.discordUsername) : null;
-  const onBehalfOfName = entry.onBehalfOf ? (entry.onBehalfOf.discordGuildNick ?? entry.onBehalfOf.discordGlobalName ?? entry.onBehalfOf.discordUsername) : null;
-  return def.label({ details: entry.details as never, entityLabel: entry.entityLabel, actorName, teamName: entry.team?.name ?? null, onBehalfOfName });
+  return def.label(toAuditLabelInput(entry));
+}
+
+export type AuditLabelSource = Pick<AuditEntry, "action" | "details" | "entityLabel" | "actor" | "team" | "onBehalfOf">;
+
+/** The names and details a label renderer works from, resolved from an entry. */
+export function toAuditLabelInput(entry: AuditLabelSource): AuditLabelInput<AuditAction> {
+  const name = (u: MinimalUser) => u.discordGuildNick ?? u.discordGlobalName ?? u.discordUsername;
+  return {
+    details: entry.details as never,
+    entityLabel: entry.entityLabel,
+    actorName: entry.actor ? name(entry.actor) : null,
+    teamName: entry.team?.name ?? null,
+    onBehalfOfName: entry.onBehalfOf ? name(entry.onBehalfOf) : null,
+  };
 }

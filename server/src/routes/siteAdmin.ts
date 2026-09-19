@@ -106,7 +106,7 @@ router.get(
       until: query.until,
       q: query.q,
     };
-    const page = { cursor: query.cursor ? Number(query.cursor) : undefined, limit: query.limit ? Number(query.limit) : undefined };
+    const page = { cursor: query.cursor ? Number(query.cursor) : undefined, limit: query.limit ? Number(query.limit) : undefined, condensed: query.condensed === "1" || query.condensed === "true" };
     // bingoId=<id> scopes to one bingo; "null" scopes to site-level entries; omitted means every bingo.
     const bingoId = query.bingoId === undefined ? "all" : query.bingoId === "null" ? null : query.bingoId;
     res.json(queryAuditLog(db, { bingoId }, filters, page));

@@ -3,7 +3,7 @@
 // pagination. See docs/audit-log-plan.md §"Read API" / "Visibility model".
 import { and, desc, eq, gte, inArray, isNull, like, lt, lte, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { actionsInCategory, AUDIT_ACTIONS, renderAuditLabel, type AuditAction, type AuditCategory, type AuditEntry, type AuditLogFilters, type AuditLogResponse, type AuditVisibility } from "@bingo/shared";
+import { actionsInCategory, AUDIT_ACTIONS, condenseAuditEntries, renderAuditLabel, type AuditAction, type AuditCategory, type AuditEntry, type AuditLogFilters, type AuditLogResponse, type AuditVisibility } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { auditLog, teams, users } from "../db/schema";
 
@@ -74,17 +74,20 @@ function applyFilters(conditions: (ReturnType<typeof eq> | undefined)[], filters
   if (filters.q) conditions.push(or(like(auditLog.entityLabel, `%${filters.q}%`), like(auditLog.action, `%${filters.q}%`)));
 }
 
-function paginate(db: Db, conditions: ReturnType<typeof and>, limit: number): AuditLogResponse {
+// `condensed` collapses runs of alike entries within this page (see condenseAuditEntries); the cursor
+// is computed from the raw rows, so paging is unaffected and a group never spans two pages.
+function paginate(db: Db, conditions: ReturnType<typeof and>, limit: number, condensed = false): AuditLogResponse {
   const rows = db.select().from(auditLog).where(conditions).orderBy(desc(auditLog.id)).limit(limit + 1).all();
   const nextCursor = rows.length > limit ? rows[limit - 1]!.id : null;
-  return { entries: toAuditEntries(db, rows.slice(0, limit)), nextCursor };
+  const entries = toAuditEntries(db, rows.slice(0, limit));
+  return { entries: condensed ? condenseAuditEntries(entries) : entries, nextCursor };
 }
 
 export function queryAuditLog(
   db: Db,
   scope: { bingoId: string | null | "all" },
   filters: AuditLogFilters,
-  page: { cursor?: number; limit?: number } = {},
+  page: { cursor?: number; limit?: number; condensed?: boolean } = {},
 ): AuditLogResponse {
   const limit = Math.min(page.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
   const conditions: (ReturnType<typeof eq> | undefined)[] = [];
@@ -93,7 +96,7 @@ export function queryAuditLog(
   applyFilters(conditions, filters);
   if (page.cursor !== undefined) conditions.push(lt(auditLog.id, page.cursor));
 
-  return paginate(db, and(...conditions.filter((c): c is NonNullable<typeof c> => !!c)), limit);
+  return paginate(db, and(...conditions.filter((c): c is NonNullable<typeof c> => !!c)), limit, page.condensed);
 }
 
 const TEAM_ACTIVITY_DEFAULT_LIMIT = 50;
@@ -124,7 +127,7 @@ export function queryTeamActivity(
   db: Db,
   bingoId: string,
   teamId: string,
-  opts: { isMod: boolean; cursor?: number; limit?: number },
+  opts: { isMod: boolean; cursor?: number; limit?: number; condensed?: boolean },
 ): AuditLogResponse {
   const limit = Math.min(opts.limit ?? TEAM_ACTIVITY_DEFAULT_LIMIT, MAX_LIMIT);
   const visibilityRule = opts.isMod
@@ -141,5 +144,5 @@ export function queryTeamActivity(
   ];
   if (opts.cursor !== undefined) conditions.push(lt(auditLog.id, opts.cursor));
 
-  return paginate(db, and(...conditions), limit);
+  return paginate(db, and(...conditions), limit, opts.condensed);
 }
