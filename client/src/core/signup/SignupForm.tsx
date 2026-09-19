@@ -3,6 +3,7 @@ import type { SignupAnswerInput, SignupQuestion } from "@bingo/shared";
 import { useBingo, useCreateSignup, useMySignup, useMyTectonicRsns, useSignupQuestions, useUpdateSignup, useWithdrawSignup } from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
 import { PartnerPanel } from "./PartnerPanel";
+import { caTitle, formatCaTier } from "./caStats";
 import { Button } from "../ui/Button";
 import { Card, CardHeader, EmptyState, Notice } from "../ui/Card";
 import { Field, Input, Select, Textarea } from "../ui/Field";
@@ -216,6 +217,28 @@ export function SignupForm({ slug }: { slug: string }) {
           {questions.map((q) => (
             <QuestionField key={q.id} question={q} value={answers[q.id] ?? ""} onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))} />
           ))}
+
+          {existing && (
+            <div className={tectonicRsns.length > 1 ? "grid grid-cols-2 gap-4" : undefined}>
+              <Field
+                label="Current CA"
+                hint={
+                  mySignup?.statsFetchedAt
+                    ? mySignup.caCurrent
+                      ? caTitle(mySignup.caCurrent)
+                      : "No RuneProfile for this RSN — sync it there, then save again."
+                    : "Looking up RuneProfile…"
+                }
+              >
+                <Input value={mySignup?.statsFetchedAt ? formatCaTier(mySignup.caCurrent) : "Looking up…"} readOnly disabled />
+              </Field>
+              {tectonicRsns.length > 1 && (
+                <Field label="Peak CA" hint={mySignup?.statsFetchedAt && mySignup.caPeak ? caTitle(mySignup.caPeak) : undefined}>
+                  <Input value={mySignup?.statsFetchedAt ? formatCaTier(mySignup.caPeak) : "Looking up…"} readOnly disabled />
+                </Field>
+              )}
+            </div>
+          )}
 
           {error && <Notice tone="danger">{error}</Notice>}
           {saved && <Notice tone="ok">Saved.</Notice>}

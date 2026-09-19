@@ -1,7 +1,7 @@
 // Pure builders that turn raw server shapes into the view models in
 // ./types.ts. No React, no hooks — safe to call from anywhere, including
 // providers and (if ever wanted) tests. See docs/headless-theming-plan.md §2.
-import { isBoardLocked, type BoardLine, type GraphNode, type NodeStatus, type Stage, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
+import { isBoardLocked, type BoardLine, type GraphNode, type NodeStatus, type PointAdjustment, type Stage, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { summarizeTileProgress, getFreezeUnlockAt, groupSubmissionsByTile, type TileProgressSummary } from "../core/board/tileProgress";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete, type LeafClaimMaps } from "../core/board/taskClaims";
 import { collectLeaves, conditionHeading } from "../core/board/requirementTree";
@@ -354,9 +354,10 @@ export function buildBoard(args: {
   interests: TileInterest[];
   viewerUserId: string;
   totalPoints: number | null;
+  adjustments: PointAdjustment[];
   prev: ReadonlyMap<string, TileModel>;
 }): BoardModel {
-  const { tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, totalPoints, prev } = args;
+  const { tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, totalPoints, adjustments, prev } = args;
 
   const staticTiles = buildTileModelsStatic({ tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId });
   const finalized = finalizeTileModels(staticTiles, now, matchIds, canSubmit, canToggleInterest, prev);
@@ -388,5 +389,8 @@ export function buildBoard(args: {
     now,
     preStart: { isPreStart, startsAt: startMs },
     totalPoints,
+    adjustments: [...adjustments]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .map((a) => ({ id: a.id, amount: a.amount, reason: a.reason, timeAgo: timeAgo(a.createdAt) })),
   };
 }

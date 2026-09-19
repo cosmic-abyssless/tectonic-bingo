@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useRef, type ReactNode } from "react";
-import type { BoardLine, SubmissionDetails, TeamNodeState, Tile, TileCategory, TileInterest } from "@bingo/shared";
+import type { BoardLine, PointAdjustment, SubmissionDetails, TeamNodeState, Tile, TileCategory, TileInterest } from "@bingo/shared";
 import { tileMatchesSearch } from "../core/board/requirementTree";
 import { buildBoard } from "./boardModel";
 import { useNowTick } from "./useNowTick";
@@ -22,6 +22,7 @@ export function BoardProvider({
   interests,
   viewerUserId,
   totalPoints,
+  adjustments,
   children,
 }: {
   tiles: Tile[];
@@ -38,6 +39,7 @@ export function BoardProvider({
   interests: TileInterest[];
   viewerUserId: string;
   totalPoints: number | null;
+  adjustments: PointAdjustment[];
   children: ReactNode;
 }) {
   // Same tickUntil computation as the old BoardGrid.tsx effect (start +
@@ -80,12 +82,13 @@ export function BoardProvider({
       interests,
       viewerUserId,
       totalPoints,
+      adjustments,
       prev: prevRef.current,
     });
     prevRef.current = built.tileById;
     return built;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, totalPoints]);
+  }, [tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, totalPoints, adjustments]);
 
   return <BoardContext.Provider value={board}>{children}</BoardContext.Provider>;
 }

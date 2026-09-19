@@ -19,6 +19,32 @@ this doc is the quick reference for using and extending it day to day.
   / `?bingoId=null` to scope to one bingo or site-level entries only. Not yet
   wired to a page — call it directly if you need it.
 
+### Condensed form
+
+Add `?condensed=1` to any of the three reads to collapse runs of alike
+entries within the page: five `comfy hug approved a submission for …` rows
+become `comfy hug approved 5 submissions for …`. A run is consecutive entries
+by the same actor for the same team; inside it, every action that defines a
+`condense` renderer in the registry (submission created/approved/rejected,
+team member added) is merged into one entry at its oldest member's position
+(so a batch's points stay together above the line that summarises it), with
+`condensed: { count, ids, oldestAt }` set. Everything else is left as it
+is, deliberately including every `points.*` entry, so point awards stay
+granular. The cursor still counts raw rows, so a group never spans two pages.
+The team dialog's Recent activity asks for it; the mod panel's tab does not.
+The grouping itself is `condenseAuditEntries` in `shared/src/auditCondense.ts`.
+
+### Scoring entries
+
+Points are recorded apart from the submission that earned them: each node
+whose awarded points changed on an approval or an undone review gets a
+`points.earned` / `points.lost` entry (`source`: `task`, `tile_bonus` or
+`line`), written just after the `submission.*` entry so the log is in causal
+order (a newest-first feed lists the points above the approval that awarded
+them). A board edit made while the
+bingo is live records a net `points.rescored` per team whose total moved.
+`submission.created` labels name what was submitted (`describeClaims`).
+
 Every read goes through `server/src/audit/query.ts`'s `queryAuditLog` /
 `queryTeamActivity`, which resolve actor/team names and render each entry's
 `label` from `shared/src/audit.ts`'s registry at read time (not stored) —
@@ -30,7 +56,10 @@ wording can change retroactively.
    `AuditDetailsMap` for your new `"entity.verb"` action, and an entry in
    `AUDIT_ACTIONS` (category, tone, default visibility, title, label
    renderer). Missing either one is a TypeScript error the moment you try to
-   call `audit()` with that action — that's the point.
+   call `audit()` with that action — that's the point. Optionally add a
+   `condense(inputs)` renderer if a run of this action should read as one line
+   in the condensed feed (see above); leave it off when each row must stay
+   visible on its own.
 2. **Call `audit()` inside the mutation's own transaction.** In the service
    function, right where the row-level side effect happens:
    ```ts

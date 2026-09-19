@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { DraftPoolEntry, DraftTeam, DraftUnit, LeftoverMode, PickRating, SignupQuestion, TectonicProfile } from "@bingo/shared";
+import { CaCell } from "../signup/caStats";
 import { useAuth } from "../../context/AuthContext";
 import { queryKeys, useBingo, useDraftState, useMakePick, useSetDraftOrder, useSetPickRating, useShuffleDraftOrder, useSignupQuestions, useStartDraft } from "../../api/queries";
 import { displayName } from "../ui/user";
@@ -41,6 +42,8 @@ function poolSortValue(entry: DraftPoolEntry, key: SortKey, ratings: Ratings): s
   if (key === "podiums") return entry.tectonicProfile ? placeScore(podiumSummary(entry.tectonicProfile)) : -1;
   if (key === "ehb") return entry.womStats?.ehb ?? -1;
   if (key === "ehp") return entry.womStats?.ehp ?? -1;
+  if (key === "caCurrent") return entry.caCurrent?.points ?? -1;
+  if (key === "caPeak") return entry.caPeak?.points ?? -1;
   return (entry.answers?.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
 }
 
@@ -115,6 +118,7 @@ function PoolTable({
   // Skip the WOM columns entirely if nobody in the pool has stats (WOM
   // integration effectively unused for this bingo), same reasoning.
   const showWomStats = entries.some((e) => e.womStats !== null);
+  const showCa = entries.some((e) => e.caCurrent !== null || e.caPeak !== null);
   // Clan standing columns only when tectonic-api knows at least one player.
   const showProfiles = entries.some((e) => e.tectonicProfile !== null);
   const hasPairs = pool.some((u) => u.entries.length > 1);
@@ -154,6 +158,12 @@ function PoolTable({
                 <SortHeader label="EHP" sortKey="ehp" sort={sort} />
               </>
             )}
+            {showCa && (
+              <>
+                <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} />
+                <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} />
+              </>
+            )}
             {showAnswers && questions.map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />)}
             {canPick && <th className="pb-2" />}
           </tr>
@@ -190,6 +200,16 @@ function PoolTable({
                       <>
                         <td className="num whitespace-nowrap py-2 pr-4 text-on-surface-muted">{entry.womStats ? Math.round(entry.womStats.ehb).toLocaleString() : "—"}</td>
                         <td className="num whitespace-nowrap py-2 pr-4 text-on-surface-muted">{entry.womStats ? Math.round(entry.womStats.ehp).toLocaleString() : "—"}</td>
+                      </>
+                    )}
+                    {showCa && (
+                      <>
+                        <td className="py-2 pr-4 text-on-surface-muted">
+                          <CaCell stats={entry.caCurrent} />
+                        </td>
+                        <td className="py-2 pr-4 text-on-surface-muted">
+                          <CaCell stats={entry.caPeak} />
+                        </td>
                       </>
                     )}
                     {showAnswers &&

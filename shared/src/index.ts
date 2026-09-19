@@ -496,6 +496,11 @@ export interface MySignupResponse {
   answers: SignupAnswer[];
   // The bingo warns leftovers and this signup is currently one of them.
   atRisk: boolean;
+  caCurrent: CombatAchievementStats | null;
+  caPeak: CombatAchievementStats | null;
+  // Null until the fire-and-forget WOM/RuneProfile fetch stamps the row —
+  // the signup form uses this to tell Looking up apart from Unknown.
+  statsFetchedAt: string | null;
 }
 
 // A tectonic-api-linked RSN.
@@ -530,6 +535,8 @@ export interface RosterEntry {
   // Mod roster only: clan standing from tectonic-api; null when the player
   // isn't registered there or the lookup was unavailable.
   tectonicProfile?: TectonicProfile | null;
+  caCurrent?: CombatAchievementStats | null;
+  caPeak?: CombatAchievementStats | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -662,6 +669,27 @@ export interface WomPlayerStats {
   ehp: number; // efficient hours played
 }
 
+// Official OSRS Combat Achievement reward tier, derived from RuneProfile
+// task completions (points + the Grandmaster all-tasks exception). Null on
+// the wire means Unknown — no RuneProfile data — not the same as None (0 points).
+export const COMBAT_ACHIEVEMENT_TIERS = ["none", "easy", "medium", "hard", "elite", "master", "grandmaster"] as const;
+export type CombatAchievementTier = (typeof COMBAT_ACHIEVEMENT_TIERS)[number];
+
+export const COMBAT_ACHIEVEMENT_TIER_LABEL: Record<CombatAchievementTier, string> = {
+  none: "None",
+  easy: "Easy",
+  medium: "Medium",
+  hard: "Hard",
+  elite: "Elite",
+  master: "Master",
+  grandmaster: "Grandmaster",
+};
+
+export interface CombatAchievementStats {
+  tier: CombatAchievementTier;
+  points: number;
+}
+
 // Unified account type — sourced from RuneProfile when it has the player
 // set up there (it distinguishes group ironman variants; WOM just reports
 // "ironman" for a GIM member), falling back to WOM's coarser type when
@@ -680,6 +708,11 @@ export interface DraftPoolEntry {
   womStats: WomPlayerStats | null;
   // RuneProfile (by RSN) ?? WOM (by womId) ?? null. See AccountType.
   accountType: AccountType | null;
+  // Official CA reward tier for the signed-up RSN. Null = Unknown (no RuneProfile).
+  caCurrent: CombatAchievementStats | null;
+  // Max CA reward tier across currently Tectonic-linked RSNs. Null = none of
+  // those accounts have RuneProfile data. Never names the peak alt.
+  caPeak: CombatAchievementStats | null;
   // Live clan standing; null when unregistered with the clan bot or when
   // tectonic-api was unavailable (see DraftState.tectonicUnavailable).
   tectonicProfile: TectonicProfile | null;
@@ -692,6 +725,8 @@ export interface PlayerProfile {
   rsn: string | null; // their signup RSN for this bingo; null when they never signed up
   accountType: AccountType | null;
   womStats: WomPlayerStats | null;
+  caCurrent: CombatAchievementStats | null;
+  caPeak: CombatAchievementStats | null;
   profile: TectonicProfile | null;
   answers: SignupAnswer[] | null; // null unless the viewer is a mod or team lead
   tectonicUnavailable: boolean;
@@ -816,4 +851,5 @@ export type BroadcastEvent =
   | { type: "audit_appended"; bingoId: string; payload: { teamId: string | null; visibility: AuditVisibility } };
 
 export * from "./audit.ts";
+export * from "./auditCondense.ts";
 export * from "./bingoExport.ts";
