@@ -158,7 +158,7 @@ export interface AuditDetailsMap {
   // successful non-GET /api/* mutation that recorded nothing itself.
   "http.mutation": { method: string; originalUrl: string; routePath: string | null; params: Record<string, unknown>; body: unknown; file: string | null };
 
-  "bug_report.created": { description: string; pageUrl: string | null };
+  "bug_report.created": { description: string; pageUrl: string | null; palette: string | null };
   "bug_report.resolved": { resolved: boolean };
 }
 

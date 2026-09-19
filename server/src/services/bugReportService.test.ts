@@ -27,6 +27,22 @@ afterEach(() => {
   sqlite.close();
 });
 
+describe("createBugReport palette", () => {
+  it("records the palette the reporter was viewing, and lists it back", () => {
+    createBugReport(db, { reporterUserId: reporterId, description: "Cover colour flashes", pageUrl: "/b/x", userAgent: null, palette: "comic · Blackout (dark, system)", bingoId: null });
+    expect(getBugReports(db)[0]!.palette).toBe("comic · Blackout (dark, system)");
+  });
+
+  it("stores null when none is sent (older clients), and caps and trims what is", () => {
+    const none = createBugReport(db, { reporterUserId: reporterId, description: "a", pageUrl: null, userAgent: null, bingoId: null });
+    expect(none.palette).toBeNull();
+    const blank = createBugReport(db, { reporterUserId: reporterId, description: "b", pageUrl: null, userAgent: null, palette: "   ", bingoId: null });
+    expect(blank.palette).toBeNull();
+    const long = createBugReport(db, { reporterUserId: reporterId, description: "c", pageUrl: null, userAgent: null, palette: `  ${"x".repeat(500)}  `, bingoId: null });
+    expect(long.palette).toBe("x".repeat(100));
+  });
+});
+
 describe("createBugReport", () => {
   it("creates an open report with the captured page/user-agent context", () => {
     const report = createBugReport(db, { reporterUserId: reporterId, description: "Board didn't refresh", pageUrl: "/bingos/foo", userAgent: "Mozilla/5.0", bingoId: null });
@@ -97,11 +113,11 @@ describe("resolveBugReport", () => {
 
 describe("audit trail", () => {
   it("createBugReport records bug_report.created, site-scoped (bingoId null) when reported off-bingo", () => {
-    const report = createBugReport(db, { reporterUserId: reporterId, description: "Bug", pageUrl: "/mod", userAgent: null, bingoId: null });
+    const report = createBugReport(db, { reporterUserId: reporterId, description: "Bug", pageUrl: "/mod", userAgent: null, palette: "default · Light (light)", bingoId: null });
     const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "bug_report.created")).get()!;
     expect(row.bingoId).toBeNull();
     expect(row.entityId).toBe(report.id);
-    expect(JSON.parse(row.details)).toEqual({ description: "Bug", pageUrl: "/mod" });
+    expect(JSON.parse(row.details)).toEqual({ description: "Bug", pageUrl: "/mod", palette: "default · Light (light)" });
   });
 
   it("createBugReport tags the audit row with the report's bingoId when reported from a bingo page", () => {

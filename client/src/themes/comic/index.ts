@@ -106,6 +106,7 @@ const comicTheme: ThemeDefinition = {
     light: { tile: comicTileLight, chrome: comicChromeLight },
     dark: { tile: DARK_PALETTE.tile, chrome: { ...DARK_PALETTE.chrome, headingFont: COMIC_FONT } },
   },
+  palettes: { light: "Newsprint", dark: DARK_PALETTE.name },
   slots: {
     BoardPage: BoardPageLayout,
     DraftPage: DraftPageLayout,

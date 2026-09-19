@@ -34,6 +34,7 @@ function BugReportRow({ report, bingo }: { report: BugReportWithReporter; bingo:
         <div className="min-w-0 text-xs text-on-surface-muted">
           {report.reporter ? displayName(report.reporter) : "Unknown user"} · {timeAgo(report.createdAt)}
           {report.pageUrl && <span className="font-mono"> · {report.pageUrl}</span>}
+          {report.palette && <span> · {report.palette}</span>}
         </div>
         <Badge tone={report.status === "resolved" ? "ok" : "warn"}>{report.status === "resolved" ? "Resolved" : "Open"}</Badge>
       </div>

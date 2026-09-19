@@ -1,12 +1,23 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import * as bugReportsApi from "../../api/bugReportsApi";
 import { Button } from "./Button";
 import { Notice } from "./Card";
 import { Textarea } from "./Field";
 import { useDialogParts } from "./useDialogParts";
+import { ThemeContext } from "../../themes/context";
+import { useColorSchemePreference, useResolvedColorScheme } from "./colorScheme";
+
+/** "comic · Blackout (dark, system)" — the look the reporter was seeing, for reproducing a visual bug. */
+function describePalette(themeKey: string | undefined, palette: string | undefined, scheme: "light" | "dark", preference: string): string {
+  return `${themeKey ?? "default"} · ${palette ?? scheme} (${scheme}${preference === "system" ? ", system" : ""})`;
+}
 
 export function BugReportDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { Dialog, DialogHeader } = useDialogParts();
+  // The dialog also mounts on pages with no ThemeProvider around it (the context is then null).
+  const theme = useContext(ThemeContext);
+  const scheme = useResolvedColorScheme();
+  const [schemePreference] = useColorSchemePreference();
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +37,7 @@ export function BugReportDialog({ isOpen, onClose }: { isOpen: boolean; onClose:
         description: description.trim(),
         pageUrl: window.location.pathname,
         userAgent: navigator.userAgent,
+        palette: describePalette(theme?.key, theme?.palette, scheme, schemePreference),
       });
       setSent(true);
     } catch (e: unknown) {

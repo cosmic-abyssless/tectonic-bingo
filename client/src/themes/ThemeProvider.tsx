@@ -51,7 +51,7 @@ export function ThemeProvider({ themeKey, children, fallback = null }: { themeKe
 
   const activeTokens = resolved.tokens[scheme];
   return (
-    <ThemeContext.Provider value={{ key: resolved.key, tokens: activeTokens, slots: resolved.slots }}>
+    <ThemeContext.Provider value={{ key: resolved.key, tokens: activeTokens, slots: resolved.slots, palette: resolved.palettes[scheme] }}>
       <div data-theme={resolved.key} style={tokensToCssVars(activeTokens)}>
         {children}
       </div>

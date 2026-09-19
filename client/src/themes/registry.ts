@@ -6,6 +6,8 @@ export interface ThemeDefinition {
   key: string;
   tokens?: { light?: Partial<ThemeTokens>; dark?: Partial<ThemeTokens> };
   slots?: Partial<ThemeSlots>;
+  /** Names of the theme's palettes, for bug reports ("which look was this?"). Default: "Light" / "Dark". */
+  palettes?: { light?: string; dark?: string };
 }
 
 // Distinct from ThemeContextValue (themes/context.ts), which holds a single
@@ -16,6 +18,7 @@ export interface ResolvedTheme {
   key: string;
   tokens: { light: ThemeTokens; dark: ThemeTokens };
   slots: ThemeSlots;
+  palettes: { light: string; dark: string };
 }
 
 // Follow-up themes register here as one line each.
@@ -23,7 +26,7 @@ const loaders: Record<string, () => Promise<{ default: ThemeDefinition }>> = {
   comic: () => import("./comic"),
 };
 
-const DEFAULT_RESOLVED: ResolvedTheme = { key: defaultTheme.key, tokens: defaultTokens, slots: defaultTheme.slots as ThemeSlots };
+const DEFAULT_RESOLVED: ResolvedTheme = { key: defaultTheme.key, tokens: defaultTokens, slots: defaultTheme.slots as ThemeSlots, palettes: { light: "Light", dark: "Dark" } };
 
 // Both live on import.meta.hot.data rather than plain module-level `const`s.
 // Each lazy theme file self-accepts its own HMR updates (see
@@ -69,6 +72,7 @@ export function mergeTheme(base: ResolvedTheme, def: ThemeDefinition): ResolvedT
       dark: mergeSchemeTokens(base.tokens.dark, def.tokens?.dark),
     },
     slots: { ...base.slots, ...def.slots },
+    palettes: { ...base.palettes, ...def.palettes },
   };
 }
 

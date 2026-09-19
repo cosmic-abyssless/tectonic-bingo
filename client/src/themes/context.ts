@@ -9,6 +9,8 @@ export interface ThemeContextValue {
   key: string;
   tokens: ThemeTokens;
   slots: ThemeSlots;
+  /** Name of the palette in effect (theme + colour scheme), e.g. "Blackout" — recorded on bug reports. */
+  palette: string;
 }
 
 export const ThemeContext = createContext<ThemeContextValue | null>(null);
