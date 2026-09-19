@@ -28,6 +28,8 @@ export function SearchableSelect({
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  // Until when a stray focus/click on the input mustn't reopen the list (see select()).
+  const noReopenUntil = useRef(0);
 
   const selectedLabel = options.find((o) => o.id === value)?.label ?? "";
 
@@ -84,10 +86,35 @@ export function SearchableSelect({
   // Map opt.id → flat index for keyboard highlight
   const flatIndexMap = new Map(filtered.map((opt, i) => [opt.id, i]));
 
-  const select = (id: string) => {
+  // Put the input away: focus goes to the enclosing dialog (or, with none, nowhere),
+  // so a phone's keyboard closes. Not to <body>: a modal's focus trap would just hand
+  // focus back to the first field.
+  const dismissInput = () => {
+    const host = containerRef.current?.closest<HTMLElement>('[role="dialog"]');
+    if (host) host.focus({ preventScroll: true });
+    else inputRef.current?.blur();
+  };
+
+  // `pointer`: picked by tap/click rather than the keyboard. That closes the input
+  // for good and, since touch browsers can send a follow-up click/focus to the
+  // input once the option under the finger has gone, ignores anything that would
+  // reopen the list for a moment.
+  const select = (id: string, pointer = false) => {
     onChange(id);
     setQuery("");
     setOpen(false);
+    if (pointer) {
+      noReopenUntil.current = Date.now() + 500;
+      dismissInput();
+    }
+  };
+  const openList = () => {
+    if (readOnly) return;
+    if (Date.now() <= noReopenUntil.current) {
+      dismissInput();
+      return;
+    }
+    setOpen(true);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -121,7 +148,7 @@ export function SearchableSelect({
       // lands on the input and refocuses it — reopening what we just closed.
       // preventDefault keeps focus put; the pick itself happens on click.
       onMouseDown={(e) => e.preventDefault()}
-      onClick={() => select(opt.id)}
+      onClick={() => select(opt.id, true)}
       className={`w-full px-3 py-1.5 text-left text-sm transition-colors ${
         flatIndexMap.get(opt.id) === highlighted ? "bg-accent text-on-accent" : "text-on-surface hover:bg-surface-hover"
       }`}
@@ -144,12 +171,8 @@ export function SearchableSelect({
             setQuery(e.target.value);
             setOpen(true);
           }}
-          onFocus={() => {
-            if (!readOnly) setOpen(true);
-          }}
-          onClick={() => {
-            if (!readOnly) setOpen(true);
-          }}
+          onFocus={openList}
+          onClick={openList}
           onKeyDown={readOnly ? undefined : handleKeyDown}
           className={`${controlClass()} ${readOnly ? "cursor-default select-none text-on-surface-muted" : "pr-9"}`}
         />
