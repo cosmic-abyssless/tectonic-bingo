@@ -38,6 +38,17 @@ export function coverTaskMark(tile: TileModel): { label: string; dogEared: boole
   return { label: `P${(next === -1 ? completedTasks : next) + 1}`, dogEared: completedTasks > 0 };
 }
 
+/**
+ * Where a cover's colour is read from: always the thumbnail, whichever size the
+ * artwork itself is drawn at. The colour is looked up per image URL, so reading it from
+ * the full-size image (as the modal's copy of the book draws) would start with nothing —
+ * the cover flashing its fallback grey while the big image loads — instead of the colour
+ * the board cell has already found from the same thumbnail.
+ */
+function coverColorSource(imageUrl: string | null | undefined, failed: boolean): string | null {
+  return imageUrl && !failed ? (thumbUrl(imageUrl) ?? null) : null;
+}
+
 export function BookCoverArt({
   tile,
   colors,
@@ -55,7 +66,7 @@ export function BookCoverArt({
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const imageUrl = tile.imageUrl && !imgFailed ? (variant === "thumb" ? thumbUrl(tile.imageUrl) : fullUrl(tile.imageUrl)) : null;
-  const dominantColor = useDominantColor(imageUrl);
+  const dominantColor = useDominantColor(coverColorSource(tile.imageUrl, imgFailed));
   // The masthead row and the plain "P1" mark sit directly on the cover with
   // no fill of their own, so their color adapts to whatever the cover color
   // turns out to be, not the other way around.
@@ -251,7 +262,7 @@ export function BookBackArt({
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const imageUrl = tile.imageUrl && !imgFailed ? (variant === "thumb" ? thumbUrl(tile.imageUrl) : fullUrl(tile.imageUrl)) : null;
-  const dominantColor = useDominantColor(imageUrl);
+  const dominantColor = useDominantColor(coverColorSource(tile.imageUrl, imgFailed));
   const textColor = getContrastTextColor(dominantColor ?? fallbackColor);
   const names = tileContributors(tile);
   const shown = names.slice(0, BACK_COVER_NAMES);
