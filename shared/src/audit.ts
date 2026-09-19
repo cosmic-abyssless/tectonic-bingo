@@ -218,6 +218,32 @@ export interface AuditActionDef<A extends AuditAction> {
 
 const actor = (i: { actorName: string | null }) => i.actorName ?? "Someone";
 const onBehalf = (i: { onBehalfOfName: string | null }) => (i.onBehalfOfName ? ` (on behalf of ${i.onBehalfOfName})` : "");
+/** "a, b and c". */
+function joinList(parts: string[]): string {
+  return parts.length <= 1 ? (parts[0] ?? "") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+/**
+ * What a submission (or several) was for: "1 Armadyl crossbow", "3× Bandos hilt and 1 Armadyl crossbow",
+ * "proof of Part B" for a manual task, or "a screenshot" when nothing is known (rows written before claims
+ * were recorded). Item names are proper nouns, so they are never pluralised.
+ */
+export function describeClaims(details: { claims?: { itemName: string | null; quantity: number }[]; taskLabels?: string[] }): string {
+  const claims = details.claims ?? [];
+  const items = new Map<string, number>();
+  let manualClaims = 0;
+  for (const c of claims) {
+    if (c.itemName) items.set(c.itemName, (items.get(c.itemName) ?? 0) + c.quantity);
+    else manualClaims++;
+  }
+  const parts = [...items].map(([name, quantity]) => (quantity === 1 ? `1 ${name}` : `${quantity}× ${name}`));
+  if (manualClaims > 0) {
+    const labels = [...new Set(details.taskLabels ?? [])].slice(0, manualClaims);
+    parts.push(labels.length > 0 ? `proof of ${joinList(labels)}` : "proof");
+  }
+  return parts.length > 0 ? joinList(parts) : "a screenshot";
+}
+
 const pointsFor = (d: PointChangeDetails) =>
   d.source === "task"
     ? `task points for "${d.nodeLabel}" on "${d.tileName ?? "a tile"}"`
@@ -341,7 +367,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     tone: "info",
     visibility: "team",
     title: "Submission created",
-    label: (i) => `${actor(i)} submitted a screenshot for "${i.details.tileName}"`,
+    label: (i) => `${actor(i)} submitted ${describeClaims(i.details)} for "${i.details.tileName}"`,
   },
   "submission.approved": {
     category: "submission",
