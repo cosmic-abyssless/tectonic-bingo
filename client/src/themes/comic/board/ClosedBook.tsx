@@ -1,9 +1,10 @@
+import { useDragScroll } from "./dragScroll";
 import type { CSSProperties, ReactNode } from "react";
 import { motion, type Variants } from "motion/react";
 import type { TileModel } from "../../../headless/types";
 import { COMIC_FONT } from "../font";
-import { BookCoverArt, coverTaskMark } from "./BookCoverArt";
-import type { ComicColors } from "./colors";
+import { BookBackArt, BookCoverArt, coverTaskMark } from "./BookCoverArt";
+import { pageColors, tilePageColors, type ComicColors } from "./colors";
 
 /*
  * The comic book itself — a stack of leaves hinged along the spine, with a
@@ -60,6 +61,19 @@ export const LEAF_GAP = 2;
  */
 export const BASE_DEPTH = LEAF_GAP * 1.25;
 
+/**
+ * How a finished tile's book is posed: turned over to show its back cover.
+ * The extra 15° past the half turn is the resting tilt mirrored (the spine
+ * is on the right now, so the left edge — where the pages fan out — is the
+ * one that comes toward the viewer), and the top is tipped forward, so the
+ * edges of the page block show along the left and top of the back cover.
+ * Both ends of the tile↔modal flight have to agree on this, and on
+ * BACK_DEPTH.
+ */
+export const BACK_VIEW = { rotateX: -14, rotateY: 198 };
+/** The back cover's depth: behind the base sheet and every leaf the modal stacks. */
+export const BACK_DEPTH = 12;
+
 /** Selector for leaf `k` (0 = cover, 1 = first page leaf, …) within the book. */
 export const leafSelector = (k: number) => `[data-leaf="${k}"]`;
 
@@ -84,6 +98,16 @@ export const FIRST_LEAF_STAGGER_CSS = "translateY(1.04%) scaleX(1.0125) scaleY(1
 export const BASE_STAGGER = { y: "1.667%", scaleX: 1.025, scaleY: 1.00833 };
 export const BASE_STAGGER_CSS = "translateY(1.667%) scaleX(1.025) scaleY(1.00833)";
 /**
+ * The back cover's own stagger, for the turned-over book. It has to cover the
+ * base sheet completely (so the base can't show round it as a second page):
+ * a touch wider than the base's, and — since the turned-over book's left edge
+ * is where the pages fan out — moved out toward the left (+x, in the book's
+ * own mirrored frame), and sitting a little higher than the base so it lines
+ * up with the page it's bound to rather than hanging below it.
+ */
+export const BACK_STAGGER = { x: "2.5%", y: "0.6%", scaleX: 1.025, scaleY: 1.00833 };
+export const BACK_STAGGER_CSS = "translateX(2.5%) translateY(0.6%) scaleX(1.025) scaleY(1.00833)";
+/**
  * The base sheet's own shadow — what grounds the CLOSED book against
  * whatever's behind it. Once the book's open it has to go, not just fade:
  * flush behind the right-hand page still leaves this peeking out past that
@@ -93,7 +117,11 @@ export const BASE_STAGGER_CSS = "translateY(1.667%) scaleX(1.025) scaleY(1.00833
  * above — while the base is still occluded under the cover either way, so
  * there's nothing to fade.
  */
-export const BASE_SHADOW = `drop-shadow(${bw(0.0375)} ${bw(0.125)} ${bw(0.1)} rgba(0,0,0,0.45))`;
+export function baseShadow(colors: ComicColors, complete: boolean): string {
+  // A finished book casts a green shadow instead of a black one.
+  const color = complete ? `color-mix(in srgb, ${colors.OK} 75%, transparent)` : "rgba(0,0,0,0.45)";
+  return `drop-shadow(${bw(0.0375)} ${bw(0.125)} ${bw(0.1)} ${color})`;
+}
 
 export interface LeafFaces {
   /** Printed on the front — the right-hand page while this leaf's unturned. */
@@ -111,6 +139,7 @@ export function ClosedBook({
   pose,
   coverInside,
   leaves = [{}],
+  coverImageVariant = "thumb",
 }: {
   tile: TileModel;
   colors: ComicColors;
@@ -125,10 +154,16 @@ export function ClosedBook({
   coverInside?: ReactNode;
   /** The leaves under the cover, first (topmost) first. At least one is always drawn. */
   leaves?: LeafFaces[];
+  /** Which display variant of the cover artwork to load ("thumb" on the board, "full" in the modal). */
+  coverImageVariant?: "thumb" | "full";
 }) {
-  const ink = colors.INK;
+  // The pages inside can be a different stock from the rest of the theme —
+  // and the whole book, cover included, is outlined in the page ink, so the
+  // cover's outline matches the pages'.
+  const page = tilePageColors(colors, frozen);
+  const ink = page.LINE;
   // Ink outlines: about 1px on a tile-sized book, 6–8px on the open spread.
-  const border = `${bw(0.012)} solid ${ink}`;
+  const pageBorder = `${bw(0.012)} solid ${ink}`;
   const coverBorder = `${bw(COVER_BORDER)} solid ${ink}`;
   const [first = {}, ...rest] = leaves;
   const mark = coverTaskMark(tile);
@@ -146,13 +181,35 @@ export function ClosedBook({
         data-book-base
         className="absolute inset-0"
         style={{
-          backgroundColor: colors.PAPER_ALT,
-          border,
-          filter: BASE_SHADOW,
+          backgroundColor: page.PAPER_ALT,
+          border: pageBorder,
+          filter: baseShadow(colors, tile.progress.allComplete),
           transformOrigin: "left top",
           transform: `${BASE_STAGGER_CSS} translateZ(${-BASE_DEPTH}px)`,
         }}
       />
+
+      {/* A finished tile's BACK cover: a face at the very back of the stack,
+          turned to face away — so it's invisible from the front, and once
+          the whole 3D box is turned over (BACK_VIEW, done by whoever owns
+          the box: TileCell at rest, TileModal's flight) it's the face you
+          see, with the credits on it. */}
+      {tile.progress.allComplete && (
+        <div
+          data-book-back
+          className="absolute inset-0 overflow-hidden"
+          style={{
+            border: coverBorder,
+            backfaceVisibility: "hidden",
+            WebkitBackfaceVisibility: "hidden",
+            // Staggered so it covers the base sheet when the book's turned
+            // over, instead of the base showing round it like a second page.
+            transform: `${BACK_STAGGER_CSS} translateZ(${-BACK_DEPTH}px) rotateY(180deg)`,
+          }}
+        >
+          <BookBackArt tile={tile} colors={page} fallbackColor={coverFallback} variant={coverImageVariant} />
+        </div>
+      )}
 
       {/* Further leaves, deepest first, tucked behind the first: flush with
           the cover (their open position), so while the book's closed the
@@ -171,10 +228,10 @@ export function ClosedBook({
               transform: `translateZ(${-(k - 1) * LEAF_GAP}px)`,
             }}
           >
-            <PageFace colors={colors} border={border} side="front">
+            <PageFace colors={page} border={pageBorder} side="front">
               {faces.front}
             </PageFace>
-            <PageFace colors={colors} border={border} side="back">
+            <PageFace colors={page} border={pageBorder} side="back">
               {faces.back}
             </PageFace>
           </div>
@@ -194,11 +251,11 @@ export function ClosedBook({
           transform: pose ? `${FIRST_LEAF_STAGGER_CSS} rotateY(${pose.pageAngle}deg)` : undefined,
         }}
       >
-        <PageFace colors={colors} border={border} side="front">
+        <PageFace colors={page} border={pageBorder} side="front">
           {first.front}
-          {dogEar && <RevealedPageMark colors={colors} label={dogEar.label} />}
+          {dogEar && <RevealedPageMark colors={page} label={dogEar.label} />}
         </PageFace>
-        <PageFace colors={colors} border={border} side="back">
+        <PageFace colors={page} border={pageBorder} side="back">
           {first.back}
         </PageFace>
       </Layer>
@@ -229,17 +286,17 @@ export function ClosedBook({
             transform: "translateZ(1px)",
           }}
         >
-          <BookCoverArt tile={tile} colors={colors} fallbackColor={coverFallback} frozen={frozen} />
-          {dogEar && <CoverDogEar colors={colors} />}
+          <BookCoverArt tile={tile} colors={colors} fallbackColor={coverFallback} frozen={frozen} variant={coverImageVariant} />
+          {dogEar && <CoverDogEar colors={page} pageFill={page.PAPER} />}
         </div>
         {/* The inside of the cover is page 1: page weight of outline, and
             none at the spine — the right-hand page draws that line. */}
         <div
           className="absolute inset-0 overflow-hidden"
           style={{
-            border,
+            border: pageBorder,
             borderRightWidth: 0,
-            backgroundColor: colors.PAPER,
+            backgroundColor: page.PAPER,
             backfaceVisibility: "hidden",
             WebkitBackfaceVisibility: "hidden",
             transform: "rotateY(180deg) translateZ(1px)",
@@ -277,7 +334,7 @@ const DOG_EAR_CLIP = `polygon(0 0, calc(100% - ${DOG_EAR_CUT}) 0, 100% ${DOG_EAR
  * from is empty (see the cover's clip-path), so the leaf behind shows
  * there — with the next page's number printed on it (RevealedPageMark).
  */
-function CoverDogEar({ colors }: { colors: ComicColors }) {
+function CoverDogEar({ colors, pageFill }: { colors: ComicColors; pageFill: string }) {
   return (
     <div
       className="pointer-events-none absolute right-0 top-0"
@@ -286,8 +343,8 @@ function CoverDogEar({ colors }: { colors: ComicColors }) {
       <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full overflow-visible" preserveAspectRatio="none">
         <polygon
           points="0,0 0,100 100,100"
-          fill={colors.PAPER}
-          stroke={colors.INK}
+          fill={pageFill}
+          stroke={colors.LINE}
           strokeWidth={(COVER_BORDER / DOG_EAR) * 100}
           strokeLinejoin="round"
         />
@@ -361,6 +418,10 @@ function PageFace({
       style={{
         border,
         backgroundColor: colors.PAPER,
+        // react-aria's modal scroll lock (iOS only) sets `overscroll-behavior:
+        // contain` on every element; on this clipping box it stops a touch
+        // scroll ever reaching the page's own scroller inside it.
+        overscrollBehavior: "auto",
         backfaceVisibility: "hidden",
         WebkitBackfaceVisibility: "hidden",
         ...(side === "back" ? { borderRightWidth: 0, transform: "rotateY(180deg) translateZ(1px)", boxShadow: LIFTED_PAGE_SHADOW } : { transform: "translateZ(1px)" }),
@@ -439,21 +500,30 @@ export function Page({
   colors,
   side,
   gutter = true,
+  dragScroll = false,
   children,
 }: {
   colors: ComicColors;
   side: "left" | "right";
   /** Off for a copy of the page drawn on a fold-back, where a gutter shadow would float mid-sheet. */
   gutter?: boolean;
+  /** Scroll by touch drag in script rather than natively (phones: see dragScroll.ts). */
+  dragScroll?: boolean;
   children: ReactNode;
 }) {
+  const scroll = useDragScroll(dragScroll);
   const gutterShadow =
     side === "left"
       ? `inset ${bw(-0.04)} 0 ${bw(0.04)} ${bw(-0.03)} rgba(0,0,0,0.35)`
       : `inset ${bw(0.04)} 0 ${bw(0.04)} ${bw(-0.03)} rgba(0,0,0,0.35)`;
   return (
     <div className="pointer-events-none absolute inset-0" style={{ boxShadow: gutter ? gutterShadow : undefined, color: colors.INK_BODY }}>
-      <div className="pointer-events-auto h-full overflow-y-auto" style={{ direction: side === "right" ? "rtl" : "ltr" }}>
+      <div
+        ref={scroll.ref}
+        className="pointer-events-auto h-full overflow-y-auto"
+        style={{ direction: side === "right" ? "rtl" : "ltr", overscrollBehavior: "contain", touchAction: dragScroll ? "none" : undefined }}
+        {...scroll.handlers}
+      >
         <div style={{ direction: "ltr", [side === "right" ? "paddingRight" : "paddingLeft"]: bw(0.035) }}>{children}</div>
       </div>
     </div>

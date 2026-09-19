@@ -11,6 +11,7 @@ import { ImageIcon, LockIcon, PlusIcon } from "../ui/icons";
 import { TaskEditor, optimisticTasks } from "./TaskEditor";
 import type { ExistingLeaf, ExistingCondition } from "./RequirementTreeEditor";
 import { collectLeaves, collectLabeledConditions, collectSharedNodeIds } from "../board/requirementTree";
+import { thumbUrl } from "../../api/imageVariants";
 
 // Every ITEM leaf on this tile, labeled by which task it's currently under —
 // offered to every OTHER task as a reference (see RequirementTreeEditor's
@@ -141,7 +142,7 @@ function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string;
             onClick={() => fileInputRef.current?.click()}
             className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-outline-strong bg-background text-on-surface-subtle transition-colors hover:border-on-surface/60 hover:text-on-surface-muted disabled:cursor-not-allowed"
           >
-            {tile.imageUrl ? <img src={tile.imageUrl} alt="" className="size-full object-contain" /> : uploading ? <span className="text-xs">…</span> : <ImageIcon size={20} />}
+            {tile.imageUrl ? <img src={thumbUrl(tile.imageUrl)} alt="" className="size-full object-contain" /> : uploading ? <span className="text-xs">…</span> : <ImageIcon size={20} />}
           </button>
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadImage(e.target.files[0])} />
 

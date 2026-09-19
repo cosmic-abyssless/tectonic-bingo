@@ -1,5 +1,6 @@
 import type { RequirementNodeModel } from "../../../headless/types";
 import { CheckIcon } from "../../../core/ui/icons";
+import { ItemIcon } from "../../../core/ui/ItemIcon";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
 import type { ComicColors } from "./colors";
@@ -10,20 +11,46 @@ function Box({ done, dim, colors }: { done: boolean; dim: boolean; colors: Comic
     <span
       aria-hidden
       className="mt-0.5 flex size-4 shrink-0 items-center justify-center border-2"
-      style={{ borderColor: dim ? colors.INK_SUBTLE : colors.INK, background: done ? colors.OK : colors.PAPER_RAISED, color: "#fffaf0", transform: "rotate(-2deg)" }}
+      style={{ borderColor: dim ? colors.INK_SUBTLE : colors.LINE, background: done ? colors.OK : colors.PAPER_RAISED, color: colors.ON_LOUD, transform: "rotate(-2deg)" }}
     >
       {done && <CheckIcon size={11} />}
     </span>
   );
 }
 
+// Inline with the text (so long names still wrap), sized to sit in a text line
+// without making the row taller; faded with the row once it's done or not needed.
+const ICON_CLASS = "mr-1.5 inline-block -my-1 align-middle";
+
 function LeafRow({ node, colors }: { node: RequirementNodeModel; colors: ComicColors }) {
+  const iconUrl = node.iconUrl ?? (node.items.length === 1 ? node.items[0]!.iconUrl : null);
   const color = node.dim ? colors.INK_SUBTLE : node.submitted && !node.complete ? colors.WARN : colors.INK_BODY;
   return (
-    <li className={`flex items-start gap-2 text-sm leading-snug ${node.dim ? "line-through" : ""}`} style={{ color }}>
+    // A SUM never strikes through: its items can be handed in again (duplicates
+    // count), so what's been received is shown as a count beside each instead.
+    <li className={`flex items-start gap-2 text-sm leading-snug ${node.dim && !node.progress ? "line-through" : ""}`} style={{ color }}>
       <Box done={node.complete} dim={node.dim} colors={colors} />
       <span className="min-w-0 flex-1">
-        {node.label}
+        {node.items.length > 1 ? (
+          <ul className="mr-3 list-disc space-y-0.5 pl-4">
+            {node.items.map((item) => (
+              <li key={item.name} className="relative pr-9">
+                <ItemIcon url={item.iconUrl} className={`${ICON_CLASS} ${node.dim ? "opacity-60" : ""}`} />
+                {item.name}
+                {item.count > 0 && (
+                  <span className="num absolute right-0 top-0 text-base leading-snug" style={{ fontFamily: COMIC_FONT, color: colors.OK }}>
+                    ×{item.count}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <>
+            <ItemIcon url={iconUrl} className={`${ICON_CLASS} ${node.dim ? "opacity-60" : ""}`} />
+            {node.label}
+          </>
+        )}
         {node.submitted && !node.complete && !node.dim && (
           <span className="ml-1.5 text-[10px] uppercase tracking-wider" style={{ color: colors.WARN }}>
             submitted
@@ -51,7 +78,7 @@ export function RequirementTree({ node, root }: { node: RequirementNodeModel; ro
     );
   }
   return (
-    <div className={root ? "" : "ml-1.5 border-l-[3px] pl-3"} style={root ? undefined : { borderColor: node.complete ? colors.OK : colors.INK }}>
+    <div className={root ? "" : "ml-1.5 border-l-[3px] pl-3"} style={root ? undefined : { borderColor: node.complete ? colors.OK : colors.LINE }}>
       {node.showHeading && (
         <span className="inline-flex items-center gap-1.5 text-base uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: node.complete ? colors.OK : colors.INK }}>
           {node.label}

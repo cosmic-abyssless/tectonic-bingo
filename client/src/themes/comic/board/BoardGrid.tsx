@@ -1,5 +1,55 @@
+import { useLayoutEffect, useRef, useState } from "react";
 import type { BoardModel } from "../../../headless/types";
 import { useSlot } from "../../context";
+
+// Smallest a tile is allowed to get when the board shrinks to fit the
+// screen's height — below this the books stop being legible, so a short
+// window scrolls instead.
+const MIN_TILE_PX = 104;
+// Air kept under the board (the page's own bottom padding).
+const BOTTOM_AIR_PX = 24;
+
+/**
+ * The widest the board may be so that all of its rows fit between where the
+ * grid starts and the bottom of the window: tiles are square and sized off
+ * the board's width, so height is capped by capping width. Measured (not a
+ * magic offset) because what sits above the grid — the header, the search
+ * row, a wrapped banner — changes with screen size. Null until measured.
+ */
+function useFitWidth(gridRef: React.RefObject<HTMLDivElement | null>, rows: number, cols: number, minTile = MIN_TILE_PX) {
+  const [maxWidth, setMaxWidth] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const measure = () => {
+      const style = getComputedStyle(grid);
+      const gap = parseFloat(style.rowGap) || 0;
+      // With row labels the first track is theirs; it's `auto`, so read it.
+      const tracks = style.gridTemplateColumns.split(" ").map(parseFloat);
+      const labelW = tracks.length > cols ? (tracks[0] ?? 0) + gap : 0;
+      const top = grid.getBoundingClientRect().top + window.scrollY;
+      const avail = window.innerHeight - top - BOTTOM_AIR_PX;
+      const widthFor = (tile: number) => cols * tile + (cols - 1) * gap + labelW;
+      // Rounded DOWN, minus a couple of pixels of slack per tile: rounding
+      // up (or fractional zoom levels) makes the grid a pixel or two too
+      // tall, and that sliver is enough to summon a scrollbar — which then
+      // narrows the window and re-triggers the whole thing. The minimum
+      // tile is applied after, so the slack never eats into it.
+      const fit = Math.floor(widthFor((avail - (rows - 1) * gap) / rows)) - 2 * cols;
+      setMaxWidth(Math.max(Math.ceil(widthFor(minTile)), fit));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    // Fonts and images settling can move the grid's top.
+    const ro = new ResizeObserver(measure);
+    ro.observe(document.body);
+    return () => {
+      window.removeEventListener("resize", measure);
+      ro.disconnect();
+    };
+  }, [gridRef, rows, cols, minTile]);
+  return maxWidth;
+}
 
 export function BoardGrid({
   board,
@@ -14,9 +64,15 @@ export function BoardGrid({
   const TileCell = useSlot("TileCell");
   const EmptyCell = useSlot("EmptyCell");
   const PreStartBanner = useSlot("PreStartBanner");
+  const gridRef = useRef<HTMLDivElement>(null);
+  const fitWidth = useFitWidth(gridRef, board.rows, board.cols);
 
   return (
-    <div className="relative w-full">
+    // On a phone the board runs edge to edge (cancelling the page's own
+    // side padding) with no gaps between tiles, so the books get every pixel
+    // there is. From `sm` up it's centered and no wider than fits the window
+    // (see useFitWidth), so the whole board is on screen without scrolling.
+    <div className="relative w-full max-sm:-mx-3 max-sm:w-auto sm:mx-auto" style={{ maxWidth: fitWidth ?? undefined }}>
       {/* Fades the page's halftone dots out toward the board's own center —
           a circle behind the grid, painted in the page's own background
           color and masked out toward the edges. `closest-side` sizes the
@@ -46,7 +102,8 @@ export function BoardGrid({
           overflow-y to auto too (clipping it) with no way to opt out. Let
           the whole page scroll horizontally on narrow screens instead. */}
       <div
-        className="relative z-10 grid w-full gap-2"
+        ref={gridRef}
+        className="relative z-10 grid w-full gap-2 max-sm:gap-0"
         style={{ gridTemplateColumns: `${board.showRowLabels ? "auto " : ""}repeat(${board.cols}, minmax(65px, 1fr))` }}
       >
         {Array.from({ length: board.rows }, (_, row) => {

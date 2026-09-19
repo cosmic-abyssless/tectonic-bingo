@@ -13,7 +13,7 @@ export function comicHeaderProps(): { className: string; titleClassName: string;
     // text's advance width. Bangers leans right, so its last glyph overhangs
     // that by up to ~0.17em, plus the 0.08em drop shadow: pad for both so
     // nothing gets sliced. Same idea below for descenders + shadow.
-    titleClassName: "comic-outline-text !text-2xl !text-white uppercase tracking-wide pr-[0.3em] pb-[0.15em] -mb-[0.15em]",
-    style: { fontFamily: COMIC_FONT, boxShadow: "0 4px 0 var(--comic-ink, #0b0b0d)" } as CSSProperties,
+    titleClassName: "comic-outline-text !text-2xl max-md:!text-lg !text-[var(--comic-title-fill)] uppercase tracking-wide pr-[0.3em] pb-[0.15em] -mb-[0.15em]",
+    style: { fontFamily: COMIC_FONT, boxShadow: "0 4px 0 var(--comic-line, #0b0b0d)" } as CSSProperties,
   };
 }

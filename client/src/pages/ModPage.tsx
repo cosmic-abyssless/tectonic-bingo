@@ -116,7 +116,7 @@ export function ModPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-on-surface">
+    <div className="min-h-dvh bg-background text-on-surface">
       <AppHeader
         back={{ to: `/b/${slug}`, label: "Back to bingo" }}
         title="Mod panel"

@@ -74,7 +74,7 @@ export function Login() {
   const error = params.get("error");
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
+    <div className="flex min-h-dvh items-center justify-center p-4">
       <div className="flex w-full max-w-sm flex-col items-center gap-6 rounded-lg border border-outline bg-surface px-8 py-10">
         <div className="text-center">
           <h1 className="text-xl font-semibold text-on-surface">Tectonic Bingo</h1>

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { PlayerProfile, SignupQuestion } from "@bingo/shared";
 import { usePlayerProfile, useSignupQuestions } from "../../api/queries";
-import { Dialog, DialogHeader } from "../ui/Dialog";
+import { useDialogParts } from "../ui/useDialogParts";
 import { Badge, Notice } from "../ui/Card";
 import { SpinnerIcon } from "../ui/icons";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
@@ -15,6 +15,7 @@ import { formatRecordValue, isBingoEvent, podiumSummary, recordSummary } from ".
  * open so it can be reached from any name on any page.
  */
 export function PlayerProfileDialog({ slug, userId, onClose }: { slug: string; userId: string | null; onClose: () => void }) {
+  const { Dialog } = useDialogParts();
   return (
     <Dialog isOpen={userId !== null} onClose={onClose} size="lg">
       {userId && <ProfileLoader slug={slug} userId={userId} onClose={onClose} />}
@@ -23,6 +24,7 @@ export function PlayerProfileDialog({ slug, userId, onClose }: { slug: string; u
 }
 
 function ProfileLoader({ slug, userId, onClose }: { slug: string; userId: string; onClose: () => void }) {
+  const { DialogHeader } = useDialogParts();
   const { data, error } = usePlayerProfile(slug, userId);
   const { data: questionsData } = useSignupQuestions(slug);
 
@@ -59,6 +61,7 @@ function Stat({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; questions: SignupQuestion[]; onClose: () => void }) {
+  const { DialogHeader } = useDialogParts();
   const { profile } = player;
   const name = displayName(player.user);
   const podiums = profile ? podiumSummary(profile) : null;

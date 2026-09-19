@@ -285,6 +285,8 @@ export interface BugReport {
   description: string;
   pageUrl: string | null;
   userAgent: string | null;
+  /** The theme and palette the reporter was looking at, e.g. "comic · Blackout (dark, system)". Null on older reports. */
+  palette: string | null;
   status: BugReportStatus;
   resolvedByUserId: string | null;
   resolvedAt: string | null;

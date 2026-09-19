@@ -16,7 +16,9 @@ export function TaskPanel({ task }: { task: TaskModel }) {
   const RequirementTree = useSlot("RequirementTree");
   const { colors } = useComic();
 
-  const statusStamp = task.complete ? "approved" : task.status === "pending_approval" ? "pending" : task.locked ? "locked" : null;
+  // No stamp for a locked part: the "Locked" badge beside the points says it.
+  // (A part is "completed"; "approved" is for a submission.)
+  const statusStamp = task.complete ? "completed" : task.status === "pending_approval" ? "pending" : null;
 
   return (
     <div className="relative">
@@ -28,11 +30,11 @@ export function TaskPanel({ task }: { task: TaskModel }) {
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <InkTag fill={colors.YELLOW}>
+        <InkTag fill={colors.YELLOW} color={colors.ON_YELLOW}>
           <span className="num">{task.points} pts</span>
         </InkTag>
         {task.isManual && (
-          <InkTag color="#fffaf0" fill={colors.BLUE}>
+          <InkTag color={colors.ON_LOUD} fill={colors.BLUE}>
             Judged by mods
           </InkTag>
         )}
@@ -49,19 +51,26 @@ export function TaskPanel({ task }: { task: TaskModel }) {
             <Tooltip
               offset={6}
               className="z-[80] max-w-56 border-[3px] px-3 py-2 text-xs leading-relaxed"
-              style={{ borderColor: colors.INK, backgroundColor: colors.PAPER_RAISED, color: colors.INK, boxShadow: `3px 3px 0 ${colors.INK}` }}
+              style={{ borderColor: colors.LINE, backgroundColor: colors.PAPER_RAISED, color: colors.INK, boxShadow: `3px 3px 0 ${colors.LINE}` }}
             >
               {task.lockedReason ?? "This part depends on a previous part."}
             </Tooltip>
           </TooltipTrigger>
         )}
-        {statusStamp && <Stamp kind={statusStamp} size="sm" rotate={-6} className="ml-auto" />}
       </div>
 
-      {task.description && (
-        <p className="mb-4 text-[15px] leading-relaxed first-letter:float-left first-letter:mr-1 first-letter:font-[Bangers] first-letter:text-[1.9em] first-letter:leading-[0.85]" style={{ color: colors.INK_BODY }}>
-          {task.description}
-        </p>
+      {/* The status stamp rides beside the brief, not up in the points row. */}
+      {(task.description || statusStamp) && (
+        <div className="mb-4 flex items-start gap-3">
+          {task.description ? (
+            <p className="min-w-0 flex-1 text-[15px] leading-relaxed first-letter:float-left first-letter:mr-1 first-letter:font-[Bangers] first-letter:text-[1.9em] first-letter:leading-[0.85]" style={{ color: colors.INK_BODY }}>
+              {task.description}
+            </p>
+          ) : (
+            <span className="flex-1" />
+          )}
+          {statusStamp && <Stamp kind={statusStamp} size="sm" rotate={-6} className="shrink-0" />}
+        </div>
       )}
 
       {!task.isManual && task.tree && (
@@ -71,7 +80,7 @@ export function TaskPanel({ task }: { task: TaskModel }) {
       )}
 
       {task.notes && (
-        <CaptionBox tone="yellow" title="Editor's note" tilt={-0.6} className="mt-4">
+        <CaptionBox tone="yellow" title="Notes" tilt={-0.6} className="mt-4">
           <p className="text-sm leading-relaxed" style={{ color: colors.INK_BODY }}>
             {task.notes}
           </p>

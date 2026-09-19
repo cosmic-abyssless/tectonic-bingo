@@ -5,7 +5,9 @@ import type {
   ReviewSubmissionResponse, RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   PickRating, PlayerProfile, StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
+import { useAuth } from "../context/AuthContext";
 import { api } from "./client";
+import { readBoardCache, writeBoardCache } from "./boardCache";
 import { optimisticUpdate } from "./optimistic";
 
 // Centralized so WebSocketProvider can invalidate the same keys queries use.
@@ -38,27 +40,62 @@ export function useBingos() {
   });
 }
 
+// The page-load queries — the bingo shell, and the viewed team's progress and
+// submissions — are persisted per user alongside the board (same store, keyed by
+// `<slug>:<part>`), so a reload paints the whole page from storage and revalidates
+// behind it instead of showing "Loading…", then a board with nothing done. As with
+// the board, stored data is marked stale (initialDataUpdatedAt: 0), so it always
+// refetches, and every fresh response is stored again.
+function persistedPart<T>(userId: string | undefined, slug: string | undefined, part: string) {
+  const key = slug ? `${slug}:${part}` : undefined;
+  return {
+    initialData: () => (userId && key ? readBoardCache<T>(userId, key, __BUILD_ID__) : undefined),
+    initialDataUpdatedAt: 0,
+    save: (data: T) => {
+      if (userId && key) writeBoardCache(userId, key, __BUILD_ID__, data);
+      return data;
+    },
+  };
+}
+
 export function useBingo(slug: string | undefined) {
+  const persisted = persistedPart<BingoShellResponse>(useAuth().user?.id, slug, "shell");
   return useQuery({
     queryKey: queryKeys.bingo(slug ?? ""),
-    queryFn: () => api.get<BingoShellResponse>(`/api/bingos/${slug}`),
+    queryFn: async () => persisted.save(await api.get<BingoShellResponse>(`/api/bingos/${slug}`)),
     enabled: !!slug,
+    initialData: persisted.initialData,
+    initialDataUpdatedAt: persisted.initialDataUpdatedAt,
   });
 }
 
+// The board structure is persisted per user (see boardCache.ts): a stored copy
+// is the query's initial data, so the grid paints immediately on load, but it is
+// marked stale (initialDataUpdatedAt: 0) so it always revalidates — a cheap 304
+// when nothing changed — and every fresh response is stored again.
 export function useBoard(slug: string | undefined) {
+  const userId = useAuth().user?.id;
   return useQuery({
     queryKey: queryKeys.board(slug ?? ""),
-    queryFn: () => api.get<BoardResponse>(`/api/bingos/${slug}/board`),
+    queryFn: async () => {
+      const board = await api.get<BoardResponse>(`/api/bingos/${slug}/board`);
+      if (userId && slug) writeBoardCache(userId, slug, __BUILD_ID__, board);
+      return board;
+    },
     enabled: !!slug,
+    initialData: () => (userId && slug ? readBoardCache<BoardResponse>(userId, slug, __BUILD_ID__) : undefined),
+    initialDataUpdatedAt: 0,
   });
 }
 
 export function useTeamProgress(slug: string | undefined, teamId: string | undefined) {
+  const persisted = persistedPart<TeamProgressSummary>(useAuth().user?.id, teamId ? slug : undefined, `progress:${teamId}`);
   return useQuery({
     queryKey: queryKeys.teamProgress(slug ?? "", teamId ?? ""),
-    queryFn: () => api.get<TeamProgressSummary>(`/api/bingos/${slug}/teams/${teamId}/progress`),
+    queryFn: async () => persisted.save(await api.get<TeamProgressSummary>(`/api/bingos/${slug}/teams/${teamId}/progress`)),
     enabled: !!slug && !!teamId,
+    initialData: persisted.initialData,
+    initialDataUpdatedAt: persisted.initialDataUpdatedAt,
   });
 }
 
@@ -83,10 +120,13 @@ export function useSetTileInterest(slug: string) {
 }
 
 export function useTeamSubmissions(slug: string | undefined, teamId: string | undefined) {
+  const persisted = persistedPart<TeamSubmissionsResponse>(useAuth().user?.id, teamId ? slug : undefined, `submissions:${teamId}`);
   return useQuery({
     queryKey: queryKeys.teamSubmissions(slug ?? "", teamId ?? ""),
-    queryFn: () => api.get<TeamSubmissionsResponse>(`/api/bingos/${slug}/teams/${teamId}/submissions`),
+    queryFn: async () => persisted.save(await api.get<TeamSubmissionsResponse>(`/api/bingos/${slug}/teams/${teamId}/submissions`)),
     enabled: !!slug && !!teamId,
+    initialData: persisted.initialData,
+    initialDataUpdatedAt: persisted.initialDataUpdatedAt,
   });
 }
 

@@ -71,7 +71,7 @@ export function SubmissionsDrawer({
       />
 
       {submissions.length > 0 && (
-        <div className="flex flex-wrap items-end gap-2 border-b-[3px] px-5 pt-4" style={{ borderColor: colors.INK, background: colors.PAPER_ALT }}>
+        <div className="flex flex-wrap items-end gap-2 border-b-[3px] px-5 pt-4" style={{ borderColor: colors.LINE, background: colors.PAPER_ALT }}>
           {FILTERS.map(({ key, label }) => {
             const active = filter === key;
             const count = countFor(key);
@@ -84,7 +84,7 @@ export function SubmissionsDrawer({
                 className="comic-press relative -mb-[3px] flex items-center gap-2 border-[3px] border-b-0 px-3 pb-2 pt-1.5 text-lg uppercase leading-none tracking-wide transition-transform"
                 style={{
                   fontFamily: COMIC_FONT,
-                  borderColor: colors.INK,
+                  borderColor: colors.LINE,
                   background: active ? colors.PAPER : colors.PAPER_RAISED,
                   color: active ? colors.INK : colors.INK_SUBTLE,
                   transform: active ? "translateY(0)" : "translateY(3px)",
@@ -147,7 +147,7 @@ function EmptySubmissions({ hasSubmit }: { hasSubmit: boolean }) {
       <div className="relative">
         <div
           className="flex h-28 w-40 items-center justify-center border-[3px] text-2xl uppercase"
-          style={{ fontFamily: COMIC_FONT, borderColor: colors.INK, background: colors.PAPER_RAISED, color: colors.INK_SUBTLE, boxShadow: `5px 5px 0 ${colors.INK}` }}
+          style={{ fontFamily: COMIC_FONT, borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK_SUBTLE, boxShadow: `5px 5px 0 ${colors.LINE}` }}
         >
           Empty
         </div>

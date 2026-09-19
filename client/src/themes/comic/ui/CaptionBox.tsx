@@ -33,7 +33,7 @@ export function CaptionBox({
   return (
     <div
       className={`relative border-[3px] px-3 py-2 ${className ?? ""}`}
-      style={{ background: fill, borderColor: colors.INK, color: colors.INK_BODY, boxShadow: `3px 3px 0 ${colors.INK}`, transform: tilt ? `rotate(${tilt}deg)` : undefined, ...style }}
+      style={{ background: fill, borderColor: colors.LINE, color: colors.INK_BODY, boxShadow: `3px 3px 0 ${colors.LINE}`, transform: tilt ? `rotate(${tilt}deg)` : undefined, ...style }}
     >
       {title !== undefined && (
         <div className="mb-1 text-lg uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
@@ -51,7 +51,7 @@ export function InkTag({ children, color, fill, className }: { children: ReactNo
   return (
     <span
       className={`inline-flex items-center gap-1 border-2 px-1.5 py-px text-sm uppercase leading-none ${className ?? ""}`}
-      style={{ fontFamily: COMIC_FONT, letterSpacing: "0.04em", borderColor: colors.INK, background: fill ?? colors.PAPER_RAISED, color: color ?? colors.INK }}
+      style={{ fontFamily: COMIC_FONT, letterSpacing: "0.04em", borderColor: colors.LINE, background: fill ?? colors.PAPER_RAISED, color: color ?? colors.INK }}
     >
       {children}
     </span>

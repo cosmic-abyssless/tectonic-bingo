@@ -1,5 +1,6 @@
 import { pushThemeHmrUpdate, type ThemeDefinition } from "../registry";
 import { COMIC_FONT } from "./font";
+import { DARK_PALETTE } from "./darkPalettes";
 import { BoardPageLayout } from "./page/BoardPageLayout";
 import { DraftPageLayout } from "./page/DraftPageLayout";
 import { StatsPageLayout } from "./page/StatsPageLayout";
@@ -15,12 +16,18 @@ import { PageHeader } from "./page/PageHeader";
 import { SubmissionsDrawer } from "./page/SubmissionsDrawer";
 import { RulesDialog } from "./page/RulesDialog";
 import { TeamInfoDialog } from "./page/TeamInfoDialog";
+import { NoTeamStage } from "./page/NoTeamStage";
+import { ComicDialog, ComicDialogHeader } from "./ui/ComicDialog";
 import { SubmissionModal } from "./submission/SubmissionModal";
 import { ScreenshotDropzone } from "./submission/ScreenshotDropzone";
 import { AnalysisPanel } from "./submission/AnalysisPanel";
 import { TilePicker, RequirementPicker } from "./submission/Pickers";
 import { TaskPicker } from "./submission/TaskPicker";
 import { StagedClaimsList } from "./submission/StagedClaimsList";
+// The theme's shared classes (comic-press, comic-rays, comic-halftone, the
+// dialog keyframes…). Was imported on feat/mico-work but dropped when that
+// work landed on main, leaving every one of them unstyled.
+import "./comic.css";
 
 // Starter scaffold for the "comic" theme — see docs/theming.md for the full
 // writer's guide (resolution/fallback rules, what a slot may import, the
@@ -54,6 +61,7 @@ const comicChromeLight = {
   surface: "#ffffff",
   surfaceRaised: "#fff4d6",
   surfaceHover: "#dbeafe",
+  field: "#ffffff",
   outline: "#000000",
   outlineStrong: "#000000",
   onSurface: "#000000",
@@ -92,66 +100,13 @@ const comicChromeLight = {
   headingWeight: "400",
 };
 
-// "Moonlit comic panel": deep purple night page, pale lavender ink instead
-// of black ink, a gold accent instead of blue (blue reads muddy against
-// purple; gold pops the way a comic "POW!" burst would). Tiles and the
-// header/search/team-banner chrome are charcoal rather than purple — an
-// all-purple board read as an overload, so those surfaces are neutral dark
-// grays instead, with the purple page background and lavender outline/ink
-// left to carry the "night" identity. A forest green stands in for the
-// default (secondary) button fill — the nav-style buttons ("Mod panel",
-// "Select team", etc.) that used to blend into the purple chrome now pop
-// against the charcoal instead; gold stays reserved for the primary button
-// and accent role. Reuses index.css's *original* vibrant ok/warn/danger/
-// info — comic-light only darkened them for its pale surfaces; a dark
-// surface can use the punchy versions directly, the same logic in reverse.
-const comicTileDark = {
-  bg: "#242428",
-  border: "#e9d5ff",
-  empty: "#1c1c20",
-  accent: "#facc15",
-  complete: "#22c55e",
-  frozen: "#38bdf8",
-};
-
-const comicChromeDark = {
-  background: "#1a0f2e",
-  surface: "#38383e",
-  surfaceRaised: "#44444c",
-  surfaceHover: "#505058",
-  outline: "#c4b5fd",
-  outlineStrong: "#e9d5ff",
-  onSurface: "#f5f0ff",
-  onSurfaceMuted: "#c4b5fd",
-  onSurfaceSubtle: "#8b7aa8",
-  accent: "#facc15",
-  onAccent: "#1a0f2e",
-  button: "#facc15",
-  onButton: "#1a0f2e",
-  buttonSecondary: "#2f6b4a",
-  onButtonSecondary: "#f0fff4",
-  // A darker forest green, not outlineStrong's pale lavender — the light
-  // purple border read as a mismatched clash against the green fill; a
-  // shade of the same green reads as a proper border instead.
-  buttonSecondaryBorder: "#1e4a32",
-  // A lighter green, not surfaceHover's neutral gray — hovering a green
-  // button to gray read as a step backward/disabled rather than a hover.
-  buttonSecondaryHover: "#3f8f60",
-  ok: "#4ade80",
-  warn: "#fbbf24",
-  danger: "#f87171",
-  info: "#60a5fa",
-  borderWidth: "2px",
-  headingFont: COMIC_FONT,
-  headingWeight: "400",
-};
-
 const comicTheme: ThemeDefinition = {
   key: "comic",
   tokens: {
     light: { tile: comicTileLight, chrome: comicChromeLight },
-    dark: { tile: comicTileDark, chrome: comicChromeDark },
+    dark: { tile: DARK_PALETTE.tile, chrome: { ...DARK_PALETTE.chrome, headingFont: COMIC_FONT } },
   },
+  palettes: { light: "Newsprint", dark: DARK_PALETTE.name },
   slots: {
     BoardPage: BoardPageLayout,
     DraftPage: DraftPageLayout,
@@ -169,6 +124,9 @@ const comicTheme: ThemeDefinition = {
     SubmissionsDrawer,
     RulesDialog,
     TeamInfoDialog,
+    NoTeamStage,
+    DialogFrame: ComicDialog,
+    DialogHeader: ComicDialogHeader,
     SubmissionModal,
     ScreenshotDropzone,
     AnalysisPanel,

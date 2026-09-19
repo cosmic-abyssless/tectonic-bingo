@@ -167,3 +167,20 @@
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pop-in { from { opacity: 0; transform: translateY(6px) scale(0.985); } to { opacity: 1; transform: none; } }
 @keyframes slide-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* A whole-page "Loading…" that stays invisible for its first 400ms: a load that
+   quick (a cached page waiting on its theme) shouldn't flash text; a slow one still says so. */
+@keyframes delayed-in { to { opacity: 1; } }
+.delayed-in { opacity: 0; animation: delayed-in 0s linear 400ms forwards; }
+
+/* iOS Safari zooms the page in when a text field with type smaller than 16px gets
+   focus. Keep the fields at 16px on touch devices instead of locking the viewport
+   (maximum-scale=1), which would also take pinch-zoom away from everyone. This sits
+   outside the Tailwind layers, so it wins over their text-sm / text-xs. */
+@media (pointer: coarse) {
+  input:where(:not([type]), [type="text"], [type="search"], [type="email"], [type="number"], [type="password"], [type="tel"], [type="url"], [type="date"], [type="datetime-local"], [type="time"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

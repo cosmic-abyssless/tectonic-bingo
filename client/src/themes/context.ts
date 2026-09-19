@@ -9,6 +9,8 @@ export interface ThemeContextValue {
   key: string;
   tokens: ThemeTokens;
   slots: ThemeSlots;
+  /** Name of the palette in effect (theme + colour scheme), e.g. "Blackout" — recorded on bug reports. */
+  palette: string;
 }
 
 export const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -17,6 +19,11 @@ export function useSlot<K extends SlotName>(name: K): ThemeSlots[K] {
   const ctx = useContext(ThemeContext);
   if (!ctx) throw new Error("useSlot must be used within ThemeProvider");
   return ctx.slots[name];
+}
+
+/** Like useSlot, but undefined (instead of throwing) outside a ThemeProvider — for core components that also mount on un-themed pages. */
+export function useOptionalSlot<K extends SlotName>(name: K): ThemeSlots[K] | undefined {
+  return useContext(ThemeContext)?.slots[name];
 }
 
 export function useThemeTokens(): ThemeTokens {

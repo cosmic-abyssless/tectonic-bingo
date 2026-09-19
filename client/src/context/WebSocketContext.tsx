@@ -78,12 +78,20 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let closed = false;
+    // True once a connection has been open. Events broadcast while the socket was
+    // down are gone for good, so on every RE-connect the page's data is refetched;
+    // the first connect needs nothing (the queries are loading anyway).
+    let hasConnected = false;
 
     function connect() {
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
       const ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
       wsRef.current = ws;
 
+      ws.onopen = () => {
+        if (hasConnected) queryClient.invalidateQueries();
+        hasConnected = true;
+      };
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data) as BroadcastEvent;

@@ -22,13 +22,14 @@ function resolveBingoIdFromPageUrl(pageUrl: string | null): string | null {
 router.post(
   "/",
   asyncHandler(async (req, res) => {
-    const { description, pageUrl, userAgent } = req.body as { description?: string; pageUrl?: string; userAgent?: string };
+    const { description, pageUrl, userAgent, palette } = req.body as { description?: string; pageUrl?: string; userAgent?: string; palette?: string };
     if (!description) throw new ServiceError(400, "description is required");
     const bugReport = bugReportService.createBugReport(db, {
       reporterUserId: req.user!.id,
       description,
       pageUrl: pageUrl ?? null,
       userAgent: userAgent ?? null,
+      palette: typeof palette === "string" ? palette : null,
       bingoId: resolveBingoIdFromPageUrl(pageUrl ?? null),
     });
     res.status(201).json({ bugReport });

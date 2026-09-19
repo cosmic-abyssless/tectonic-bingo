@@ -13,6 +13,8 @@ export interface ActivityEntryModel {
   at: number;
   timeAgo: string;
   actorName: string | null;
+  /** For linking the name to the player's profile; null for system events. */
+  actorId: string | null;
 }
 
 export interface CategoryModel {
@@ -53,6 +55,10 @@ export interface RequirementNodeModel {
   kind: NodeKind;
   /** leafLabel() for leaves, conditionHeading() for composites. */
   label: string;
+  /** SUM only: the items that count toward it, for themes that list them instead of showing the joined label — each with how many the team has had approved (duplicates count). */
+  items: { name: string; iconUrl: string | null; count: number }[];
+  /** ITEM leaves only: the item's wiki icon (via our cache), when it has a name to look up. */
+  iconUrl: string | null;
   isLeaf: boolean;
   status: NodeStatus;
   complete: boolean;
@@ -75,6 +81,8 @@ export interface TaskModel {
   description: string | null;
   notes: string | null;
   points: number;
+  /** What this part has actually awarded so far (0 until it's complete). */
+  pointsAwarded: number;
   kind: NodeKind;
   isManual: boolean;
   allowsPreLoad: boolean;
@@ -103,6 +111,7 @@ export interface SubmissionModel {
   status: SubmissionStatus;
   submittedAt: string;
   timeAgo: string;
+  /** The first screenshot's original URL — views derive the thumb/full variant they need (api/imageVariants). */
   thumbnailUrl: string | null;
   /** claimsSummary() — e.g. "2× Bruma torch, Vorki". */
   summary: string;
@@ -129,6 +138,8 @@ export interface TileModel {
     totalTasks: number;
     pointsAwarded: number;
     totalPoints: number;
+    /** The part of pointsAwarded that came from the tile's own full-completion bonus. */
+    bonusAwarded: number;
     allComplete: boolean;
   };
   /** TileCell's per-task dot row. */

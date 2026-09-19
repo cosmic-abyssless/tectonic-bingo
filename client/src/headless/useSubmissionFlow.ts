@@ -9,6 +9,11 @@ import { getAvailableTasks } from "./submissionFlowLogic";
 import { useBingoPageRaw } from "./BingoPageProvider";
 import type { SubmissionFlowModel } from "./types";
 
+// How long a screenshot's analysis may hold up submitting. Past this the
+// submit button is freed and the analysis carries on in the background (its
+// result still fills in whatever the player hasn't picked yet).
+const ANALYSIS_MAX_WAIT_MS = 2000;
+
 // A claim the player has finished picking but not yet submitted; several can go in one screenshot.
 interface StagedClaim {
   claim: ClaimInput;
@@ -42,6 +47,9 @@ export function useSubmissionFlow({
   const [submissionQty, setSubmissionQty] = useState(1);
   const [analysis, setAnalysis] = useState<ScreenshotAnalysis | null>(null);
   const [analysisFailed, setAnalysisFailed] = useState(false);
+  const [analysisOverdue, setAnalysisOverdue] = useState(false);
+  const analysisRun = useRef(0);
+  const overdueTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
 
@@ -137,15 +145,25 @@ export function useSubmissionFlow({
   }, [analysis]);
 
   const runAnalysis = async (file: File) => {
+    // Only the latest screenshot's analysis counts: an older one finishing late
+    // must not overwrite it (or free/hold the submit button for the wrong file).
+    const run = ++analysisRun.current;
+    clearTimeout(overdueTimer.current);
     setAnalysis(null);
     setAnalysisFailed(false);
+    setAnalysisOverdue(false);
+    overdueTimer.current = setTimeout(() => {
+      if (analysisRun.current === run) setAnalysisOverdue(true);
+    }, ANALYSIS_MAX_WAIT_MS);
     try {
       const fd = new FormData();
       fd.append("screenshot", file);
       const result = await analyzeScreenshot.mutateAsync(fd);
-      setAnalysis(result);
+      if (analysisRun.current === run) setAnalysis(result);
     } catch {
-      setAnalysisFailed(true);
+      if (analysisRun.current === run) setAnalysisFailed(true);
+    } finally {
+      if (analysisRun.current === run) clearTimeout(overdueTimer.current);
     }
   };
 
@@ -265,6 +283,8 @@ export function useSubmissionFlow({
     });
   });
 
+  useEffect(() => () => clearTimeout(overdueTimer.current), []);
+
   const analysisStatus: SubmissionFlowModel["analysis"]["status"] = analyzeScreenshot.isPending ? "analyzing" : analysisFailed ? "failed" : analysis ? "done" : "idle";
 
   return {
@@ -343,7 +363,8 @@ export function useSubmissionFlow({
     submit: {
       isValid,
       isSubmitting: createSubmission.isPending,
-      isAnalyzing: analyzeScreenshot.isPending,
+      // Still analysing, but only counts as holding up the submit for so long.
+      isAnalyzing: analyzeScreenshot.isPending && !analysisOverdue,
       error,
       run: handleSubmit,
     },

@@ -1,9 +1,24 @@
 import { useEffect, useState } from "react";
+import { persistColors, readPersistedColors } from "./dominantColorStore";
 
 // Per-URL cache — the same tile image is drawn by every board that shows
 // it, and its color never changes, so there's no reason to ever redo this
-// twice for the same URL.
-const cache = new Map<string, string | null>();
+// twice for the same URL. Seeded from localStorage (dominantColorStore.ts), so a
+// page load doesn't re-decode images it has already seen and the cover paints in
+// its final colour on the first frame.
+const cache = new Map<string, string | null>(readPersistedColors());
+
+let persistTimer: ReturnType<typeof setTimeout> | undefined;
+function remember(url: string, color: string | null) {
+  cache.delete(url); // re-insert so the newest results sort last (that's what gets kept)
+  cache.set(url, color);
+  if (color === null || persistTimer !== undefined) return;
+  // Batched: a board resolves a couple of dozen covers in a burst.
+  persistTimer = setTimeout(() => {
+    persistTimer = undefined;
+    persistColors(cache);
+  }, 500);
+}
 
 const SAMPLE_SIZE = 24;
 // Coarser buckets than the raw 0-255 channel range group "basically the
@@ -43,15 +58,14 @@ function extractDominantColor(ctx: CanvasRenderingContext2D): string | null {
 }
 
 // Picks black or white — whichever reads better — against a color this
-// hook returned. `rgbColor` must be exactly the `rgb(r, g, b)` string this
-// module produces (or null/anything else, which just defaults to black);
-// it doesn't try to parse arbitrary CSS colors like `var(--tile-accent)`.
-export function getContrastTextColor(rgbColor: string | null): string {
-  const match = rgbColor ? /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/.exec(rgbColor) : null;
-  if (!match) return "#000000";
-  const r = Number(match[1]);
-  const g = Number(match[2]);
-  const b = Number(match[3]);
+// hook returned (`rgb(r, g, b)`) or a 6-digit hex fallback; anything else
+// (a `var(--…)`, null) defaults to black.
+export function getContrastTextColor(color: string | null): string {
+  const rgb = color ? /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/.exec(color) : null;
+  const hex = color ? /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color) : null;
+  const m = rgb ?? hex;
+  if (!m) return "#000000";
+  const [r, g, b] = rgb ? [Number(m[1]), Number(m[2]), Number(m[3])] : [parseInt(m[1]!, 16), parseInt(m[2]!, 16), parseInt(m[3]!, 16)];
   // Perceived (not WCAG-relative) luminance — plenty accurate for a plain
   // light/dark text-color decision.
   const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
@@ -65,7 +79,7 @@ export function getContrastTextColor(rgbColor: string | null): string {
 // never hits a tainted-canvas CORS error; if it ever did, or the image
 // fails to load, this just resolves to null and the caller falls back to
 // its own default color.
-export function useDominantColor(imageUrl: string | null): string | null {
+export function useDominantColor(imageUrl: string | null | undefined): string | null {
   const [color, setColor] = useState<string | null>(() => (imageUrl ? cache.get(imageUrl) ?? null : null));
 
   useEffect(() => {
@@ -96,11 +110,11 @@ export function useDominantColor(imageUrl: string | null): string | null {
       } catch {
         result = null;
       }
-      cache.set(imageUrl, result);
+      remember(imageUrl, result);
       if (!cancelled) setColor(result);
     };
     img.onerror = () => {
-      cache.set(imageUrl, null);
+      remember(imageUrl, null);
       if (!cancelled) setColor(null);
     };
     img.src = imageUrl;

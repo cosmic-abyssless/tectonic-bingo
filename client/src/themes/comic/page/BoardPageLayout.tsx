@@ -4,6 +4,8 @@ import { useScreenshotCapture } from "../../../headless/useScreenshotCapture";
 import { ScreenshotDropOverlay } from "../../../core/ui/ScreenshotDropOverlay";
 import { useSlot } from "../../context";
 import { ComicPage } from "../fx/ComicPage";
+import { SubmitButton } from "./SubmitButton";
+import { TeamBanner } from "./TeamBanner";
 
 export function BoardPageLayout() {
   const page = useBingoPage();
@@ -22,7 +24,6 @@ export function BoardPageLayout() {
   const DraftStage = useSlot("DraftStage");
   const NoTeamStage = useSlot("NoTeamStage");
   const TileSearch = useSlot("TileSearch");
-  const TeamBanner = useSlot("TeamBanner");
   const BoardGrid = useSlot("BoardGrid");
   const RulesDialog = useSlot("RulesDialog");
   const TeamInfoDialog = useSlot("TeamInfoDialog");
@@ -47,17 +48,30 @@ export function BoardPageLayout() {
             onOpenDraft={page.actions.goToDraft}
           />
         ) : page.stageView === "noTeam" ? (
-          <NoTeamStage isMod={page.isMod} />
+          <NoTeamStage isMod={page.isMod} selector={page.isMod ? page.teamSelector : undefined} />
         ) : (
           <>
-            <div className="mb-4 flex flex-wrap justify-between gap-4">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
               <TileSearch search={page.search} />
-              {page.viewing.team && (
-                <TeamBanner
-                  team={page.viewing.team}
-                  isOtherTeam={page.viewing.isOtherTeam}
-                  totalPoints={board.totalPoints}
-                />
+              {/* One control for the team: identity, score, the team dialog,
+                  and (mods) the team switcher. A mod with no team picked
+                  yet still gets it, as the "Select team" menu. */}
+              {(page.viewing.team || (page.isMod && page.teams.length > 0)) && (
+                // On a phone this row is the banner filling the space with
+                // Submit to its right (Submit leaves the masthead there), and it
+                // sits above the search box rather than under it.
+                <div className="flex items-center gap-3 max-md:order-first max-md:w-full">
+                  <div className="min-w-0 flex-1 md:flex-none">
+                    <TeamBanner
+                      team={page.viewing.team}
+                      isOtherTeam={page.viewing.isOtherTeam}
+                      totalPoints={board.totalPoints}
+                      onOpen={page.teamInfo.show}
+                      selector={page.isMod && page.teams.length > 0 ? page.teamSelector : undefined}
+                    />
+                  </div>
+                  {page.canSubmit && <SubmitButton onPress={() => page.submit.show()} className="shrink-0 md:hidden" />}
+                </div>
               )}
             </div>
 

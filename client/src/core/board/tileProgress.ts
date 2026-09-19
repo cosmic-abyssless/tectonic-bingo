@@ -7,6 +7,10 @@ export interface TileProgressSummary {
   pointsAwarded: number;
   totalPoints: number;
   allComplete: boolean;
+  /** Points the tile's own root node awarded (its full-completion bonus). */
+  bonusAwarded: number;
+  /** Points each completed node awarded, by node id. */
+  pointsByNodeId: Map<string, number>;
   statusByNodeId: Map<string, NodeStatus>;
 }
 
@@ -22,29 +26,33 @@ function buildClaimNodeIdSets(teamSubmissions: SubmissionDetails[]): { pendingLe
 }
 
 // Bottom-up, mirroring server boardService.getTeamNodeStatuses: a node in
-// completedNodeIds is "completed"; a leaf's status otherwise comes from
-// whether it has a pending or approved claim; a composite's status is the
-// most "active" of its children's (pending_approval > in_progress > not_started).
+// completedNodeIds is "completed"; any other node is "pending_approval" if any
+// leaf beneath it has a pending claim, else "in_progress" if any has an
+// approved one, else "not_started". (Read off the leaves, not the children's
+// statuses: a leaf that's already complete reports "completed", which would
+// hide the claim that got it there from the part above it.)
 function deriveNodeStatuses(
   node: GraphNode,
   completedNodeIds: Set<string>,
   pendingLeafIds: Set<string>,
   approvedLeafIds: Set<string>,
   out: Map<string, NodeStatus>,
-): NodeStatus {
-  if (completedNodeIds.has(node.id)) {
-    out.set(node.id, "completed");
-    return "completed";
-  }
-  let status: NodeStatus;
+): { hasPending: boolean; hasApproved: boolean } {
+  // Children are visited even when this node is complete: a finished tile's
+  // root is completed, but its tasks still need their own statuses.
+  let hasPending = false;
+  let hasApproved = false;
   if (node.kind === "ITEM" || node.kind === "MANUAL") {
-    status = pendingLeafIds.has(node.id) ? "pending_approval" : approvedLeafIds.has(node.id) ? "in_progress" : "not_started";
-  } else {
-    const childStatuses = node.children.map((c) => deriveNodeStatuses(c, completedNodeIds, pendingLeafIds, approvedLeafIds, out));
-    status = childStatuses.includes("pending_approval") ? "pending_approval" : childStatuses.includes("in_progress") ? "in_progress" : "not_started";
+    hasPending = pendingLeafIds.has(node.id);
+    hasApproved = approvedLeafIds.has(node.id);
   }
-  out.set(node.id, status);
-  return status;
+  for (const child of node.children) {
+    const c = deriveNodeStatuses(child, completedNodeIds, pendingLeafIds, approvedLeafIds, out);
+    hasPending ||= c.hasPending;
+    hasApproved ||= c.hasApproved;
+  }
+  out.set(node.id, completedNodeIds.has(node.id) ? "completed" : hasPending ? "pending_approval" : hasApproved ? "in_progress" : "not_started");
+  return { hasPending, hasApproved };
 }
 
 // Same derivation as summarizeTileProgress, merged across every tile — for
@@ -88,6 +96,8 @@ export function summarizeTileProgress(tile: Tile, nodeStates: TeamNodeState[], t
     pointsAwarded,
     totalPoints,
     allComplete: tasks.length > 0 && completedTasks === tasks.length,
+    bonusAwarded: pointsByNodeId.get(tile.node.id) ?? 0,
+    pointsByNodeId,
     statusByNodeId,
   };
 }

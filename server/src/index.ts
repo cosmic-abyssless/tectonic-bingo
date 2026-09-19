@@ -4,6 +4,7 @@ import "./env";
 import path from "path";
 import fs from "fs";
 import http from "http";
+import compression from "compression";
 import express from "express";
 import session from "express-session";
 import createSqliteStoreFactory from "better-sqlite3-session-store";
@@ -23,7 +24,12 @@ import { requireGuildMember } from "./middleware/requireGuildMember";
 import { auditContext } from "./audit/middleware";
 import { initWebSocketServer } from "./ws";
 import { sqlite } from "./db";
-import { UPLOADS_DIR, getAdminDiscordIds } from "./config";
+import { UPLOADS_DIR, WIKI_ICONS_DIR, getAdminDiscordIds } from "./config";
+import { serveImageVariants } from "./middleware/imageVariants";
+import { serveWikiIcons } from "./middleware/wikiIcons";
+import { getKnownItemNames } from "./services/itemNames";
+import { isOsrsItemSearchEnabled } from "./routes/osrsItems";
+import { INDEX_HTML_CACHE_CONTROL, clientDistStaticOptions, uploadsStaticOptions } from "./middleware/staticCaching";
 import { getTectonicConfig } from "./services/tectonicService";
 
 const REQUIRED_ENV = [
@@ -76,6 +82,10 @@ app.use(
 // JSON (see POST /api/admin/bingos/import).
 app.use(express.json({ limit: "50mb" }));
 
+// gzip/deflate for API JSON (the board is ~175 KB raw, ~18 KB compressed). The
+// default filter skips already-compressed types, so images pass through.
+app.use(compression());
+
 // Session middleware — backed by SQLite so sessions survive a server restart
 // (the express-session default MemoryStore does not).
 const SqliteStore = createSqliteStoreFactory(session);
@@ -110,7 +120,14 @@ app.use(auditContext);
 
 // Uploads — serve screenshots and tile images stored locally.
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-app.use("/uploads", express.static(UPLOADS_DIR));
+app.use("/uploads", serveImageVariants(UPLOADS_DIR), express.static(UPLOADS_DIR, uploadsStaticOptions));
+
+// OSRS wiki item icons, fetched once and served from disk (players never hit the
+// wiki). Public reference data, so it lives outside /api and is cached publicly.
+app.use(
+  "/wiki-icons",
+  serveWikiIcons({ dir: WIKI_ICONS_DIR, isKnownName: (name) => getKnownItemNames().has(name), enabled: isOsrsItemSearchEnabled }),
+);
 
 // Routes
 app.use("/auth", authRouter);
@@ -132,13 +149,13 @@ app.use("/api/bug-reports", bugReportsRouter);
 // vite.config.ts's proxy setup), so this block never engages there.
 const CLIENT_DIST = path.join(__dirname, "../../client/dist");
 if (fs.existsSync(CLIENT_DIST)) {
-  app.use(express.static(CLIENT_DIST));
+  app.use(express.static(CLIENT_DIST, clientDistStaticOptions(CLIENT_DIST)));
   // SPA fallback: any GET that isn't one of the routes above (API, auth,
   // uploads, ws) falls through to index.html, so client-side routing
   // (react-router) still resolves a direct navigation or refresh on a deep
   // link like /bingos/some-slug.
-  app.get(/^\/(?!api|auth|uploads|ws).*/, (_req, res) => {
-    res.sendFile(path.join(CLIENT_DIST, "index.html"));
+  app.get(/^\/(?!api|auth|uploads|wiki-icons|ws).*/, (_req, res) => {
+    res.sendFile(path.join(CLIENT_DIST, "index.html"), { headers: { "Cache-Control": INDEX_HTML_CACHE_CONTROL } });
   });
 }
 

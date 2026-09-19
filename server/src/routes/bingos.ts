@@ -1,3 +1,4 @@
+import { privateRevalidate } from "../middleware/cacheControl";
 import { Router } from "express";
 import fs from "fs";
 import type { ClaimInput, PlayerProfile } from "@bingo/shared";
@@ -53,7 +54,7 @@ function matchRsn(member: TectonicDetailedUser | null, rsn: string): { womId: st
   return match ? { womId: match.wom_id, rsnVerified: true } : { womId: null, rsnVerified: false };
 }
 
-const upload = imageUpload(UPLOADS_DIR);
+const upload = imageUpload(UPLOADS_DIR, { variants: true });
 // Separate instance for analysis — memory only, nothing saved to disk.
 const analyzeUpload = imageUpload();
 
@@ -69,6 +70,7 @@ router.get(
 router.get(
   "/:slug",
   requireBingo,
+  privateRevalidate,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
     const isMod = req.user ? bingoService.isBingoMod(db, bingo.id, req.user.id, req.user.isAdmin) : false;
@@ -90,6 +92,7 @@ router.get(
 router.get(
   "/:slug/board",
   requireBingo,
+  privateRevalidate,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
     const isMod = req.user ? bingoService.isBingoMod(db, bingo.id, req.user.id, req.user.isAdmin) : false;

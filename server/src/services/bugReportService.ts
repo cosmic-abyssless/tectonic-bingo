@@ -11,12 +11,15 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Queryable = Db | Tx;
 
 const DESCRIPTION_MAX_LENGTH = 2000;
+const PALETTE_MAX_LENGTH = 100;
 
 export interface CreateBugReportParams {
   reporterUserId: string;
   description: string;
   pageUrl: string | null;
   userAgent: string | null;
+  /** The theme/palette the reporter was viewing; free text from the client, so it is trimmed and capped here. */
+  palette?: string | null;
   /** Best-effort tag resolved by the route from pageUrl; null off-bingo. */
   bingoId: string | null;
 }
@@ -37,6 +40,7 @@ export function createBugReport(db: Db, params: CreateBugReportParams) {
         description,
         pageUrl: params.pageUrl,
         userAgent: params.userAgent,
+        palette: params.palette?.trim().slice(0, PALETTE_MAX_LENGTH) || null,
       })
       .returning()
       .get();
@@ -47,7 +51,7 @@ export function createBugReport(db: Db, params: CreateBugReportParams) {
       action: "bug_report.created",
       bingoId: row.bingoId,
       entity: { type: "bug_report", id: row.id, label: null },
-      details: { description, pageUrl: row.pageUrl },
+      details: { description, pageUrl: row.pageUrl, palette: row.palette },
     });
 
     return row;
