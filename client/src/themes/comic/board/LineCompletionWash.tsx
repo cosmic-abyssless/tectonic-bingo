@@ -1,6 +1,29 @@
 import { memo, type MutableRefObject } from "react";
 import { motion, useReducedMotion, useTransform, type MotionValue } from "motion/react";
-import { pulseOpacityAt, type LinePulseStop } from "./linePulse";
+import { lineWashGradient, type LinePulseStop } from "./linePulse";
+
+function LineWashLayer({
+  time,
+  stop,
+  boostedUntilRef,
+}: {
+  time: MotionValue<number>;
+  stop: LinePulseStop;
+  boostedUntilRef: MutableRefObject<Map<string, number>>;
+}) {
+  const reducedMotion = useReducedMotion();
+  const backgroundImage = useTransform(() =>
+    lineWashGradient(time.get(), stop, boostedUntilRef.current, Date.now(), !!reducedMotion),
+  );
+
+  return (
+    <motion.div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 rounded-lg"
+      style={{ backgroundImage }}
+    />
+  );
+}
 
 export const LineCompletionWash = memo(function LineCompletionWash({
   time,
@@ -11,14 +34,11 @@ export const LineCompletionWash = memo(function LineCompletionWash({
   stops: LinePulseStop[];
   boostedUntilRef: MutableRefObject<Map<string, number>>;
 }) {
-  const reducedMotion = useReducedMotion();
-  const opacity = useTransform(() => pulseOpacityAt(time.get(), stops, boostedUntilRef.current, Date.now(), !!reducedMotion));
-
   return (
-    <motion.div
-      aria-hidden
-      className="pointer-events-none absolute inset-0 rounded-lg"
-      style={{ backgroundColor: "var(--tile-complete)", opacity, willChange: "opacity" }}
-    />
+    <>
+      {stops.map((stop) => (
+        <LineWashLayer key={stop.lineId} time={time} stop={stop} boostedUntilRef={boostedUntilRef} />
+      ))}
+    </>
   );
 });

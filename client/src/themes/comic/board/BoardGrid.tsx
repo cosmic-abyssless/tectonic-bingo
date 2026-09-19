@@ -71,7 +71,10 @@ export function BoardGrid({
   const fitWidth = useFitWidth(gridRef, board.rows, board.cols);
   const time = useTime();
   const linePulseKey = board.lines.map((line) => `${line.id}:${Number(line.complete)}:${line.tileIds.join(",")}`).join("|");
-  const stopsByTileId = useMemo(() => buildStopsByTileId(board.lines), [linePulseKey]);
+  const stopsByTileId = useMemo(() => {
+    const posById = new Map(board.tiles.map((tile) => [tile.id, { row: tile.row, col: tile.col }]));
+    return buildStopsByTileId(board.lines, posById);
+  }, [linePulseKey]);
   const seenCompleteRef = useRef<Set<string> | null>(null);
   const boostedUntilRef = useRef(new Map<string, number>());
   useLayoutEffect(() => {
