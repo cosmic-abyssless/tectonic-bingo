@@ -5,7 +5,7 @@ import { isBoardLocked, type BoardLine, type GraphNode, type NodeStatus, type St
 import { summarizeTileProgress, getFreezeUnlockAt, groupSubmissionsByTile, type TileProgressSummary } from "../core/board/tileProgress";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete, type LeafClaimMaps } from "../core/board/taskClaims";
 import { collectLeaves, conditionHeading } from "../core/board/requirementTree";
-import { leafLabel, sumItemNames } from "../core/board/labels";
+import { leafLabel } from "../core/board/labels";
 import { wikiIconUrl } from "../api/wikiIcons";
 import { claimsSummary } from "../core/submissions/claimsSummary";
 import { timeAgo } from "../core/ui/time";
@@ -79,7 +79,9 @@ export function buildRequirementTree(
       id: node.id,
       kind: node.kind,
       label: leafLabel(node),
-      items: sumItemNames(node).map((name) => ({ name, iconUrl: wikiIconUrl(name) ?? null })),
+      items: node.children
+        .filter((child) => !!child.itemName)
+        .map((child) => ({ name: child.itemName!, iconUrl: wikiIconUrl(child.itemName!) ?? null, count: itemLeafValue(child.id, maps) })),
       iconUrl: null,
       isLeaf: true,
       status: statusByNodeId.get(node.id) ?? "not_started",

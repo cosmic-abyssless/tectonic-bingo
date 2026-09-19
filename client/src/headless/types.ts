@@ -55,8 +55,8 @@ export interface RequirementNodeModel {
   kind: NodeKind;
   /** leafLabel() for leaves, conditionHeading() for composites. */
   label: string;
-  /** SUM only: the items that count toward it, for themes that list them instead of showing the joined label. */
-  items: { name: string; iconUrl: string | null }[];
+  /** SUM only: the items that count toward it, for themes that list them instead of showing the joined label — each with how many the team has had approved (duplicates count). */
+  items: { name: string; iconUrl: string | null; count: number }[];
   /** ITEM leaves only: the item's wiki icon (via our cache), when it has a name to look up. */
   iconUrl: string | null;
   isLeaf: boolean;

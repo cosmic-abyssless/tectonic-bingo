@@ -26,15 +26,22 @@ function LeafRow({ node, colors }: { node: RequirementNodeModel; colors: ComicCo
   const iconUrl = node.iconUrl ?? (node.items.length === 1 ? node.items[0]!.iconUrl : null);
   const color = node.dim ? colors.INK_SUBTLE : node.submitted && !node.complete ? colors.WARN : colors.INK_BODY;
   return (
-    <li className={`flex items-start gap-2 text-sm leading-snug ${node.dim ? "line-through" : ""}`} style={{ color }}>
+    // A SUM never strikes through: its items can be handed in again (duplicates
+    // count), so what's been received is shown as a count beside each instead.
+    <li className={`flex items-start gap-2 text-sm leading-snug ${node.dim && !node.progress ? "line-through" : ""}`} style={{ color }}>
       <Box done={node.complete} dim={node.dim} colors={colors} />
       <span className="min-w-0 flex-1">
         {node.items.length > 1 ? (
-          <ul className="list-disc space-y-0.5 pl-4">
+          <ul className="mr-3 list-disc space-y-0.5 pl-4">
             {node.items.map((item) => (
-              <li key={item.name}>
+              <li key={item.name} className="relative pr-9">
                 <ItemIcon url={item.iconUrl} className={`${ICON_CLASS} ${node.dim ? "opacity-60" : ""}`} />
                 {item.name}
+                {item.count > 0 && (
+                  <span className="num absolute right-0 top-0 text-base leading-snug" style={{ fontFamily: COMIC_FONT, color: colors.OK }}>
+                    ×{item.count}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
