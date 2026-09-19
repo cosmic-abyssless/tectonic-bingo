@@ -22,3 +22,10 @@ export function broadcast(event: BroadcastEvent): void {
     }
   }
 }
+
+export function closeWebSocketServer(): void {
+  if (!wss) return;
+  for (const client of wss.clients) client.terminate();
+  wss.close();
+  wss = null;
+}

@@ -22,7 +22,7 @@ import bugReportsRouter from "./routes/bugReports";
 import { errorHandler } from "./middleware/errorHandler";
 import { requireGuildMember } from "./middleware/requireGuildMember";
 import { auditContext } from "./audit/middleware";
-import { initWebSocketServer } from "./ws";
+import { closeWebSocketServer, initWebSocketServer } from "./ws";
 import { sqlite } from "./db";
 import { UPLOADS_DIR, WIKI_ICONS_DIR, getAdminDiscordIds } from "./config";
 import { serveImageVariants } from "./middleware/imageVariants";
@@ -89,15 +89,22 @@ app.use(compression());
 // Session middleware — backed by SQLite so sessions survive a server restart
 // (the express-session default MemoryStore does not).
 const SqliteStore = createSqliteStoreFactory(session);
+type SessionStoreWithCleanup = InstanceType<typeof SqliteStore> & {
+  startInterval: () => void;
+  clearExpiredSessions: () => void;
+  _sessionCleanup?: NodeJS.Timeout;
+};
+// The store's setInterval is not unref'd (and `expired.clear: false` is
+// ignored — the library does `clear || true`). Replace it so drain can exit.
+(SqliteStore.prototype as SessionStoreWithCleanup).startInterval = function (this: SessionStoreWithCleanup) {
+  const id = setInterval(() => this.clearExpiredSessions(), 15 * 60 * 1000);
+  id.unref();
+  this._sessionCleanup = id;
+};
+const sessionStore = new SqliteStore({ client: sqlite }) as SessionStoreWithCleanup;
 app.use(
   session({
-    store: new SqliteStore({
-      client: sqlite,
-      expired: {
-        clear: true,
-        intervalMs: 15 * 60 * 1000, // 15 min
-      },
-    }),
+    store: sessionStore,
     secret: process.env.SESSION_SECRET!,
     resave: false,
     saveUninitialized: false,
@@ -129,6 +136,20 @@ app.use(
   serveWikiIcons({ dir: WIKI_ICONS_DIR, isKnownName: (name) => getKnownItemNames().has(name), enabled: isOsrsItemSearchEnabled }),
 );
 
+// Railway (and any PaaS) healthcheck — unauthenticated, no guild gate.
+// Point the platform healthcheck at GET /health. SQLite is one process /
+// one file: do not scale this service above a single replica sharing the
+// same DB_PATH volume (WAL lock / corruption). Sequential replace + this
+// check is how deploys drain without 502s on a dead container.
+app.get("/health", (_req, res) => {
+  try {
+    sqlite.prepare("SELECT 1").get();
+    res.json({ ok: true });
+  } catch {
+    res.status(503).json({ ok: false });
+  }
+});
+
 // Routes
 app.use("/auth", authRouter);
 app.use("/api/me", meRouter);
@@ -154,7 +175,7 @@ if (fs.existsSync(CLIENT_DIST)) {
   // uploads, ws) falls through to index.html, so client-side routing
   // (react-router) still resolves a direct navigation or refresh on a deep
   // link like /bingos/some-slug.
-  app.get(/^\/(?!api|auth|uploads|wiki-icons|ws).*/, (_req, res) => {
+  app.get(/^\/(?!api|auth|uploads|wiki-icons|ws|health).*/, (_req, res) => {
     res.sendFile(path.join(CLIENT_DIST, "index.html"), { headers: { "Cache-Control": INDEX_HTML_CACHE_CONTROL } });
   });
 }
@@ -172,3 +193,22 @@ server.listen(PORT, () => {
     `Tectonic API integration: ${getTectonicConfig() ? "ENABLED" : "disabled"} (requires TECTONIC_API_URL, TECTONIC_API_KEY, TECTONIC_GUILD_ID)`,
   );
 });
+
+// SQLite cannot be shared by overlapping replicas. On SIGTERM (Railway
+// replace), drain HTTP, drop WS clients, close the DB, then exit so the
+// new replica can take the volume. Force-exit inside Railway's ~10s grace.
+let shuttingDown = false;
+function shutdown(signal: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[shutdown] ${signal}`);
+  closeWebSocketServer();
+  if (sessionStore._sessionCleanup) clearInterval(sessionStore._sessionCleanup);
+  server.close(() => {
+    sqlite.close();
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(1), 10_000).unref();
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

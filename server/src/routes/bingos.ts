@@ -458,11 +458,13 @@ router.get(
     const bingo = req.bingo!;
     const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
     const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
-    // Visible to mods, captains, and anyone signed up for this bingo — not the general public.
-    const canView = isMod || !!myTeam || !!signupService.getSignupForUser(db, bingo.id, req.user!.id)?.signup;
-    if (!canView) throw new ServiceError(403, "The draft room is only visible to signed-up players and mods");
+    const isLead = !!myTeam && teamService.isTeamLead(db, myTeam.id, req.user!.id);
+    const isSignedUp = !!signupService.getSignupForUser(db, bingo.id, req.user!.id)?.signup;
+    if (!draftService.canViewDraftRoom(bingo.stage, { isMod, isLead, isOnTeam: !!myTeam, isSignedUp })) {
+      throw new ServiceError(403, draftService.draftRoomForbiddenMessage(bingo.stage));
+    }
 
-    const ledTeamId = myTeam && teamService.isTeamLead(db, myTeam.id, req.user!.id) ? myTeam.id : null;
+    const ledTeamId = isLead && myTeam ? myTeam.id : null;
     const state = draftService.getDraftState(db, bingo, { includeAnswers: isMod || !!ledTeamId });
     // Scouting notes are private to the lead's own team.
     const ratings = ledTeamId ? draftService.getTeamRatings(db, ledTeamId) : {};
