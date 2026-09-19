@@ -152,6 +152,10 @@ function ImportBingoPanel() {
             <p className="text-xs text-on-surface-subtle">
               {parsedDoc.tiles.length} tile{parsedDoc.tiles.length === 1 ? "" : "s"}, {parsedDoc.categories.length} categor{parsedDoc.categories.length === 1 ? "y" : "ies"},{" "}
               {parsedDoc.signupQuestions.length} signup question{parsedDoc.signupQuestions.length === 1 ? "" : "s"}
+              {(() => {
+                const images = parsedDoc.tiles.filter((t) => t.image).length;
+                return images > 0 ? `, ${images} tile image${images === 1 ? "" : "s"}` : "";
+              })()}
             </p>
           </>
         )}

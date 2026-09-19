@@ -57,8 +57,9 @@ export function updateBingoSettings(slug: string, payload: Partial<Bingo> & { wo
 export function searchBingoUsers(slug: string, q: string) {
   return api.get<{ users: User[] }>(`${base(slug)}/users?q=${encodeURIComponent(q)}`);
 }
-export function exportBingo(slug: string) {
-  return api.get<BingoExportDocument>(`${base(slug)}/export`);
+/** `includeImages` embeds each tile's artwork in the document, which makes the file much bigger. */
+export function exportBingo(slug: string, includeImages = true) {
+  return api.get<BingoExportDocument>(`${base(slug)}/export${includeImages ? "" : "?images=0"}`);
 }
 
 export function getMods(slug: string) {
