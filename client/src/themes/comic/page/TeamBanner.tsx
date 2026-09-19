@@ -20,6 +20,7 @@ export function TeamBanner({
   isOtherTeam,
   totalPoints,
   onOpen,
+  onOpenPoints,
   selector,
 }: {
   team: TeamModel | null;
@@ -27,6 +28,8 @@ export function TeamBanner({
   totalPoints: number | null;
   /** Opens the team dialog. */
   onOpen?: () => void;
+  /** Opens the point breakdown (pressing the score tab). */
+  onOpenPoints?: () => void;
   /** Mods only: the team list, for the chevron half. */
   selector?: TeamSelectorModel;
 }) {
@@ -44,7 +47,7 @@ export function TeamBanner({
       {/* Team swatch — a vertical ink-edged color bar, like a spine stripe. */}
       <span className="w-3 shrink-0 border-r-[3px]" style={{ background: swatch, borderColor: colors.LINE }} aria-hidden />
 
-      {/* The main half: everything but the chevron. */}
+      {/* The main half: the name (and the whole strip, when there's no team yet). */}
       <AriaButton
         onPress={team ? onOpen : () => setMenuOpen(true)}
         aria-label={team ? `${team.name} — team info` : "Select team"}
@@ -61,8 +64,21 @@ export function TeamBanner({
             </span>
           )}
         </span>
+      </AriaButton>
 
-        {team && totalPoints !== null && (
+      {/* The score tab: its own button, so it opens the breakdown rather than the team dialog. */}
+      {team && totalPoints !== null &&
+        (onOpenPoints ? (
+          <AriaButton
+            onPress={onOpenPoints}
+            aria-label={`${team.name}: ${totalPoints.toLocaleString()} points, see the breakdown`}
+            className="flex shrink-0 cursor-pointer items-center gap-1 border-l-[3px] px-3 text-xl leading-none outline-none transition-[filter] hovered:brightness-90 focus-visible:brightness-90 pressed:brightness-75"
+            style={{ fontFamily: COMIC_FONT, background: colors.YELLOW, borderColor: colors.LINE, color: colors.ON_YELLOW }}
+          >
+            <span className="num">{totalPoints.toLocaleString()}</span>
+            <span className="text-sm">pts</span>
+          </AriaButton>
+        ) : (
           <span
             className="flex shrink-0 items-center gap-1 border-l-[3px] px-3 text-xl leading-none"
             style={{ fontFamily: COMIC_FONT, background: colors.YELLOW, borderColor: colors.LINE, color: colors.ON_YELLOW }}
@@ -70,8 +86,7 @@ export function TeamBanner({
             <span className="num">{totalPoints.toLocaleString()}</span>
             <span className="text-sm">pts</span>
           </span>
-        )}
-      </AriaButton>
+        ))}
 
       {/* The other half of the split: switch team. Only the chevron is the
           MenuTrigger (a trigger wraps every pressable inside it), so the

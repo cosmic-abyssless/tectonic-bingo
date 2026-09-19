@@ -202,6 +202,34 @@ export interface BoardModel {
   preStart: { isPreStart: boolean; startsAt: number | null };
   /** progressData.totalPoints. */
   totalPoints: number | null;
+  /** The viewed team's manual point changes from the mods, newest first (already counted in totalPoints). */
+  adjustments: PointAdjustmentModel[];
+}
+
+/** A moderator's manual points change (a bonus, or a penalty when negative). */
+export interface PointAdjustmentModel {
+  id: string;
+  amount: number;
+  reason: string;
+  timeAgo: string;
+}
+
+/**
+ * Where a team's points come from: per tile (its parts' points and its full-completion bonus), per line
+ * (the line bonus, with the tiles it runs through), and mod adjustments. Everything is derived from what
+ * the board already shows, and `unattributed` is whatever the total holds that none of these account for
+ * (0 when it all adds up).
+ */
+export interface PointBreakdownModel {
+  total: number;
+  /** Tiles that have earned points, biggest first. `points` = the parts plus `bonus`. */
+  tiles: { points: number; items: { tileId: string; name: string; points: number; parts: { id: string; label: string; points: number }[]; bonus: number }[] };
+  /** Lines that have paid out; `tileNames` are the tiles it runs through, in board order. */
+  lines: { points: number; items: { id: string; label: string; points: number; tileNames: string[] }[] };
+  adjustments: { points: number; items: PointAdjustmentModel[] };
+  /** Parts that are complete but whose points are held back (a points gate that hasn't been completed yet). */
+  withheld: { tileId: string; tileName: string; label: string; points: number }[];
+  unattributed: number;
 }
 
 // Exact branch order: signup -> planning|captains -> draft -> !viewingTeamId -> board.
@@ -272,6 +300,8 @@ export interface BingoPageModel {
   rules: { open: boolean; show(): void; hide(): void };
   /** Roster of `viewing.team` (TeamBadge press for players, roster button beside TeamSelector for mods → TeamInfoDialog). */
   teamInfo: { open: boolean; show(): void; hide(): void };
+  /** The point breakdown of `viewing.team` (pressing the point total on the board → PointBreakdownDialog). */
+  pointBreakdown: { open: boolean; show(): void; hide(): void };
   drawer: { open: boolean; show(): void; hide(): void };
   /** show() also hides the drawer. initialFile seeds/replaces the flow's screenshot (drag-drop/paste-to-submit) — re-passing a new File while already open feeds it into the still-mounted flow. initialTaskId preselects a part of that tile (per-part Submit buttons). */
   submit: { open: boolean; initialTileId: string | undefined; initialTaskId: string | undefined; initialFile: File | undefined; show(tileId?: string, file?: File, taskId?: string): void; hide(): void };
