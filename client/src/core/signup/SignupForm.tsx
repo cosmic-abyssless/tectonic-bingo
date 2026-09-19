@@ -232,7 +232,7 @@ export function SignupForm({ slug }: { slug: string }) {
               >
                 <Input value={mySignup?.statsFetchedAt ? formatCaTier(mySignup.caCurrent) : "Looking up…"} readOnly disabled />
               </Field>
-              <Field label="Peak CA" hint={mySignup?.caPeak && mySignup.caPeak.tier !== mySignup.caCurrent?.tier ? "Highest among your linked RSNs. Alts are not named." : undefined}>
+              <Field label="Peak CA" hint={mySignup?.statsFetchedAt && mySignup.caPeak ? caTitle(mySignup.caPeak) : undefined}>
                 <Input value={mySignup?.statsFetchedAt ? formatCaTier(mySignup.caPeak) : "Looking up…"} readOnly disabled />
               </Field>
             </div>
