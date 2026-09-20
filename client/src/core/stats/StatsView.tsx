@@ -7,6 +7,10 @@ import { Card, CardHeader } from "../ui/Card";
 import { Select } from "../ui/Field";
 import { FALLBACK_TEAM_COLOR, PointsChart } from "./PointsChart";
 
+// The timeline and the contributors sit side by side and can each get long, so both scroll at the same height
+// rather than one stretching the page or sitting oddly short beside the other.
+const SCROLL_LIST = "max-h-96 overflow-y-auto pr-1";
+
 function Empty({ children }: { children: string }) {
   return <p className="text-sm text-on-surface-subtle">{children}</p>;
 }
@@ -15,7 +19,7 @@ function TimelineList({ events }: { events: TimelineEvent[] }) {
   const sorted = [...events].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
   if (sorted.length === 0) return <Empty>Nothing has happened yet.</Empty>;
   return (
-    <ol className="max-h-96 space-y-1.5 overflow-y-auto pr-1 text-sm">
+    <ol className={`space-y-1.5 text-sm ${SCROLL_LIST}`}>
       {sorted.map((e, i) => (
         <li key={i} className="flex items-start gap-2 text-on-surface-muted">
           <span className="num mt-0.5 shrink-0 text-xs text-on-surface-subtle">{new Date(e.at).toLocaleString()}</span>
@@ -29,7 +33,7 @@ function TimelineList({ events }: { events: TimelineEvent[] }) {
 function ContributionList({ contributions, teams }: { contributions: ContributionCount[]; teams: Team[] }) {
   if (contributions.length === 0) return <Empty>No approved submissions yet.</Empty>;
   return (
-    <ol className="space-y-1.5 text-sm">
+    <ol className={`space-y-1.5 text-sm ${SCROLL_LIST}`}>
       {contributions.map((c, i) => {
         const team = teams.find((t) => t.id === c.teamId);
         return (
