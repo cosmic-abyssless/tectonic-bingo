@@ -1,6 +1,6 @@
 // What the generator knows about the board: the tiles, parts and lines as the server serves them, how hard each
 // part is, what a team has to submit to finish one, and which claims the server would accept right now.
-import type { BoardLine, GraphNode, Tile } from "@bingo/shared";
+import { exclusivityConflicts, placeLeaves, type BoardLine, type ExclusivityConflict, type ExclusivityRule, type GraphNode, type Tile } from "@bingo/shared";
 import type { Rng } from "./rng";
 
 export interface Claim {
@@ -55,6 +55,8 @@ export interface BoardInfo {
   deadlocked: Map<string, string>;
   /** Whether the server would accept a claim on this leaf, given the nodes a team has completed. */
   claimable(leafId: string, completed: ReadonlySet<string>): boolean;
+  /** The claims a team may not make under the bingo's exclusive-item rules, given the nodes it already has live claims on. */
+  exclusivityConflicts(existing: Iterable<string>, candidates: string[]): ExclusivityConflict[];
 }
 
 /**
@@ -117,7 +119,7 @@ function collectLeaves(node: GraphNode, out: string[] = []): string[] {
   return out;
 }
 
-export function buildBoard(tiles: Tile[], boardLines: BoardLine[]): BoardInfo {
+export function buildBoard(tiles: Tile[], boardLines: BoardLine[], rules: readonly ExclusivityRule[] = []): BoardInfo {
   const nodesById = new Map<string, GraphNode>();
   const parents = new Map<string, Set<string>>();
   const visit = (node: GraphNode) => {
@@ -182,6 +184,7 @@ export function buildBoard(tiles: Tile[], boardLines: BoardLine[]): BoardInfo {
     tileIds: l.node.children.map((c) => tileIdByNodeId.get(c.id)).filter((id): id is string => !!id),
   }));
 
+  const placed = rules.length > 0 ? placeLeaves(tiles) : new Map();
   const parts = tileInfos.flatMap((t) => t.parts);
   const deadlocked = deadlockedParts(parts, claimable);
   return {
@@ -192,6 +195,7 @@ export function buildBoard(tiles: Tile[], boardLines: BoardLine[]): BoardInfo {
     partById: new Map(parts.map((p) => [p.id, p])),
     deadlocked,
     claimable,
+    exclusivityConflicts: (existing, candidates) => exclusivityConflicts(rules, placed, existing, candidates),
   };
 }
 

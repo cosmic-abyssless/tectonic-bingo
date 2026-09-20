@@ -309,3 +309,23 @@ describe("claimable on a board with shared items", () => {
     expect(board.claimable("second", new Set(["first"]))).toBe(true);
   });
 });
+
+describe("exclusive items on the board", () => {
+  const item = (id: string, itemName: string): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, children: [] });
+  const part = (id: string, label: string, children: GraphNode[]): GraphNode => ({ ...item(id, ""), kind: "SUM", label, itemName: null, quantity: 1, points: 10, children });
+  const tile = (id: string, name: string, col: number, parts: GraphNode[]): Tile => ({ id, name, boardRow: 0, boardCol: col, hasFreezePeriod: false, freezeDurationMinutes: 0, node: { ...part(`${id}-root`, "", parts), kind: "ALL" } }) as unknown as Tile;
+  const tiles = [tile("zul", "ZULRAH", 0, [part("z1", "Page 1", [item("zul-snake", "Pet snakeling")])]), tile("pets", "PETS", 1, [part("p1", "Page 1", [item("pets-snake", "Pet snakeling"), item("pets-nid", "Nid")])])];
+  const rules = [{ id: "pets", label: "Pets", itemNames: ["Pet snakeling", "Nid"], scope: "tile" as const }];
+
+  it("locks an item the team already used on another tile, and only that one", () => {
+    const board = buildBoard(tiles, [], rules);
+    const [conflict] = board.exclusivityConflicts(["zul-snake"], ["pets-snake"]);
+    expect(conflict).toMatchObject({ nodeId: "pets-snake", usedOn: "ZULRAH" });
+    expect(board.exclusivityConflicts(["zul-snake"], ["pets-nid"])).toEqual([]);
+    expect(board.exclusivityConflicts([], ["pets-snake"])).toEqual([]);
+  });
+
+  it("has nothing to check without rules", () => {
+    expect(buildBoard(tiles, []).exclusivityConflicts(["zul-snake"], ["pets-snake"])).toEqual([]);
+  });
+});

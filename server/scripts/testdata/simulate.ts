@@ -26,6 +26,8 @@ interface PartState {
   /** Rejected, waiting for the player to re-submit. */
   resubmitting: number;
   replans: number;
+  /** Times the plan was redrawn because its next claim was an item the team already used elsewhere. */
+  conflictReplans: number;
   stuck: boolean;
 }
 
@@ -42,6 +44,8 @@ export interface SimTeam {
   /** The nodes the server says the team has completed. */
   completed: Set<string>;
   dirty: boolean;
+  /** The item nodes of the team's live (pending or approved) submissions, by submission: what exclusive-item rules lock. */
+  live: Map<string, string[]>;
   parts: Map<string, PartState>;
 }
 
@@ -221,6 +225,15 @@ export class Simulation {
       const tile = board.tileById.get(part.tileId)!;
       if (tile.freezeMs > 0 && at.getTime() < ctx.tl.startsAt.getTime() + tile.freezeMs) continue;
       if (!state.plan[state.cursor]!.every((c) => board.claimable(c.nodeId, team.completed))) continue;
+      // An item the team already used elsewhere can't be claimed here: draw the part's plan again (other pets, other
+      // items) a few times, and leave the part alone if it keeps landing on locked ones.
+      if (this.conflicts(team, state.plan[state.cursor]!)) {
+        if (state.conflictReplans >= 5) continue;
+        state.conflictReplans++;
+        this.replan(team, state);
+        state.replans--;
+        continue;
+      }
 
       let score = 1;
       const siblingsDone = tile.parts.filter((p) => p !== part).every((p) => team.completed.has(p.id));
@@ -250,6 +263,10 @@ export class Simulation {
       this.note(new Error("a claim was gated at post time"), "skipped");
       return;
     }
+    if (this.conflicts(team, claims)) {
+      this.note(new Error("an item was used elsewhere in the meantime"), "skipped");
+      return;
+    }
     try {
       const { submission } = await this.ctx.api.as(by.discordId).submit<{ submission: { id: string } }>(`/api/bingos/${this.ctx.slug}/submissions`, claims, { at });
       this.stamp(at);
@@ -257,6 +274,7 @@ export class Simulation {
       if (first) this.rejectedOnce.add(by.index);
       const rec: Submission = { id: submission.id, team, state, claims, by, at, status: "pending", reviewScheduled: false, rejectFirst: first };
       this.pending.push(rec);
+      team.live.set(rec.id, claims.map((c) => c.nodeId));
       state.outstanding++;
       this.summary.submitted++;
     } catch (err) {
@@ -301,6 +319,7 @@ export class Simulation {
       this.maybeUndo(mod, sub, at);
     } else {
       sub.status = "rejected";
+      sub.team.live.delete(sub.id); // a rejection frees the item
       this.summary.rejected++;
       sub.state.resubmitting++;
       const when = new Date(at.getTime() + this.rng.int(10, 60) * MINUTE);
@@ -384,6 +403,10 @@ export class Simulation {
     for (const team of this.teams) await this.refresh(team);
   }
 
+  private conflicts(team: SimTeam, claims: Claim[]): boolean {
+    return this.board.exclusivityConflicts([...team.live.values()].flat(), claims.map((c) => c.nodeId)).length > 0;
+  }
+
   private replan(team: SimTeam, state: PartState): void {
     state.replans++;
     state.plan = planSubmissions(state.part.node, this.rng);
@@ -422,7 +445,7 @@ export function costsFor(part: PartModel, submissions: number, costMult: number,
 
 export function newPartState(part: PartModel, costMult: number, rng: Rng): PartState {
   const plan = planSubmissions(part.node, rng);
-  return { part, plan, costs: costsFor(part, plan.length, costMult, rng), cursor: 0, effort: 0, outstanding: 0, resubmitting: 0, replans: 0, stuck: false };
+  return { part, plan, costs: costsFor(part, plan.length, costMult, rng), cursor: 0, effort: 0, outstanding: 0, resubmitting: 0, replans: 0, conflictReplans: 0, stuck: false };
 }
 
 export const describe = (s: SimSummary): string =>

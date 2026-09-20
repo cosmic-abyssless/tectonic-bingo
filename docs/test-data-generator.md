@@ -103,6 +103,12 @@ toward is gated (`submitGateBlock` in `graphService.ts`). The generator mirrors 
 in `board.ts`, plays these tiles like any other, and still checks for parts that can never
 be finished (a warning is printed if the board ever has one).
 
+The current board no longer shares SLAYER BOSSES items between pages: Page 2 has its own
+copy, and the bingo's *exclusive item* rules (pets: one tile, slayer uniques: one page,
+see `docs/exclusive-items-plan.md`) stop a team using one drop twice. The generator reads
+the rules from the imported bingo, and a simulated team never plans or posts a claim the
+rules would refuse. It draws that part's plan again a few times, then leaves the part alone.
+
 ## Running against a private server (leave your dev database alone)
 
 The generator writes a lot. To keep it out of your normal dev database, run a second

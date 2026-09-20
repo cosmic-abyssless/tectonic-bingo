@@ -1,38 +1,13 @@
 // Exclusive items on the client (docs/exclusive-items-plan.md): which item nodes a team can't claim because it
 // already used the item elsewhere. The server enforces the rule (server/src/services/exclusivityService.ts);
 // this only tells players before they try, using the same shared logic.
-import { exclusivityConflicts, type ExclusivityConflict, type ExclusivityRule, type PlacedLeaf, type SubmissionDetails, type Tile } from "@bingo/shared";
+import { exclusivityConflicts, placeLeaves, type ExclusivityConflict, type ExclusivityRule, type SubmissionDetails, type Tile } from "@bingo/shared";
+
+export { placeLeaves };
 
 /** The item nodes the team can't claim, and why. */
 export type ExclusiveLocks = ReadonlyMap<string, ExclusivityConflict>;
 export const NO_LOCKS: ExclusiveLocks = new Map();
-
-/** Where every item node sits: its tile, and the part(s) (direct children of the tile's root) above it. */
-export function placeLeaves(tiles: Tile[]): Map<string, PlacedLeaf> {
-  const placed = new Map<string, PlacedLeaf>();
-  for (const tile of tiles) {
-    for (const part of tile.node.children) {
-      const stack = [part];
-      const visited = new Set<string>();
-      while (stack.length > 0) {
-        const node = stack.pop()!;
-        if (visited.has(node.id)) continue;
-        visited.add(node.id);
-        if (node.kind === "ITEM") {
-          const existing = placed.get(node.id);
-          const label = part.label ?? "Part";
-          if (!existing) placed.set(node.id, { nodeId: node.id, itemName: node.itemName, tileId: tile.id, tileName: tile.name, partIds: [part.id], partLabels: [label] });
-          else if (existing.tileId === tile.id && !existing.partIds.includes(part.id)) {
-            existing.partIds.push(part.id);
-            existing.partLabels.push(label);
-          }
-        }
-        stack.push(...node.children);
-      }
-    }
-  }
-  return placed;
-}
 
 /**
  * The item nodes a team can't claim given what it already has (pending or approved claims; a rejected one frees

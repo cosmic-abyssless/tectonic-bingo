@@ -9,7 +9,7 @@ import { chooseMods, makePlayers, pairUp, type Player } from "./people";
 import { Rng, clamp } from "./rng";
 import { HOUR, buildTimeline, fmt, runLimit, type Timeline } from "./timeline";
 import { Simulation, describe, newPartState, type SimTeam } from "./simulate";
-import { createTeams, fetchBoard, fetchTeams, handEvents, importBingo, nameTeamEvents, runDraft, runInOrder, runSignups, setStage, type Ctx } from "./setup";
+import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, handEvents, importBingo, nameTeamEvents, runDraft, runInOrder, runSignups, setStage, type Ctx } from "./setup";
 
 function printTimeline(tl: Timeline): void {
   console.log(`[testdata] target stage: ${tl.stage}   now: ${fmt(tl.now)}`);
@@ -94,7 +94,9 @@ async function main(): Promise<void> {
 
   await setStage(ctx, "reveal", tl.revealAt);
   const boardData = await fetchBoard(ctx);
-  const board = buildBoard(boardData.tiles, boardData.lines);
+  const rules = await fetchExclusivityRules(ctx);
+  const board = buildBoard(boardData.tiles, boardData.lines, rules);
+  if (rules.length > 0) log(`exclusive items: ${rules.map((r) => `${r.label} (${r.scope})`).join(", ")}`);
   if (board.deadlocked.size > 0) {
     log(`WARNING: ${board.deadlocked.size} parts can never be completed on this board, so the run leaves them alone:`);
     for (const reason of board.deadlocked.values()) log(`  ${reason}`);
@@ -123,6 +125,7 @@ async function main(): Promise<void> {
     const team: SimTeam = {
       id: t.id, name: nameById.get(t.id) ?? t.name, members: t.players, target, costMult, completed: new Set(), dirty: false,
       pref: new Map(board.tiles.map((tile) => [tile.id, simRng.between(0.6, 1.6)])),
+      live: new Map(),
       parts: new Map(),
     };
     for (const part of board.parts) if (!board.deadlocked.has(part.id)) team.parts.set(part.id, newPartState(part, costMult, simRng));

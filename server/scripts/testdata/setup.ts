@@ -1,7 +1,7 @@
 // Everything before the bingo goes live, driven through the real endpoints at spoofed times: the import, the
 // users and their signups, duo pairings, captains, the draft, team names and raised hands.
 import fs from "node:fs";
-import type { BoardResponse, DraftState, DraftUnit, TeamWithMembers } from "@bingo/shared";
+import type { BoardResponse, DraftState, DraftUnit, ExclusivityRule, TeamWithMembers } from "@bingo/shared";
 import type { Api } from "./client";
 import type { BoardInfo, PartModel } from "./board";
 import type { Player } from "./people";
@@ -207,6 +207,12 @@ export async function runDraft(ctx: Ctx, players: Player[], seeds: TeamSeed[], o
   }
   ctx.log(`draft: ${picks} picks${state.currentPick ? " (left mid-way)" : " (complete)"}, ${fmt(plus(tl.draftAt, 30 * MINUTE))} to ${fmt(at)}`);
   return picks;
+}
+
+/** The bingo's exclusive-item rules (from the imported board), which the simulated teams must respect. */
+export async function fetchExclusivityRules(ctx: Ctx): Promise<ExclusivityRule[]> {
+  const shell = await ctx.api.as(ctx.admin).get<{ bingo: { exclusivityRules?: ExclusivityRule[] } }>(path(ctx, ""));
+  return shell.bingo.exclusivityRules ?? [];
 }
 
 export async function fetchTeams(ctx: Ctx): Promise<TeamWithMembers[]> {

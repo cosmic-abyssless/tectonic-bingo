@@ -5,6 +5,8 @@
 // rules live on the bingo and match by item name; this module is the pure logic, used by the server (refusing a
 // claim, and scoring) and the client (showing what is already used).
 
+import type { Tile } from "./index.ts";
+
 export type ExclusivityScope = "part" | "tile";
 
 export interface ExclusivityRule {
@@ -36,6 +38,37 @@ export interface ExclusivityConflict {
 }
 
 export const normalizeItemName = (name: string): string => name.trim().toLowerCase();
+
+/**
+ * Where every item node of a board sits, from the tile trees (a part is a direct child of a tile's root node; a
+ * node reached under two parts collects both; an item that is itself a part is its own part). The server builds
+ * the same placement from the database (exclusivityService.placeLeaves).
+ */
+export function placeLeaves(tiles: readonly Tile[]): Map<string, PlacedLeaf> {
+  const placed = new Map<string, PlacedLeaf>();
+  for (const tile of tiles) {
+    for (const part of tile.node.children) {
+      const label = part.label ?? "Part";
+      const stack = [part];
+      const visited = new Set<string>();
+      while (stack.length > 0) {
+        const node = stack.pop()!;
+        if (visited.has(node.id)) continue;
+        visited.add(node.id);
+        if (node.kind === "ITEM") {
+          const existing = placed.get(node.id);
+          if (!existing) placed.set(node.id, { nodeId: node.id, itemName: node.itemName, tileId: tile.id, tileName: tile.name, partIds: [part.id], partLabels: [label] });
+          else if (existing.tileId === tile.id && !existing.partIds.includes(part.id)) {
+            existing.partIds.push(part.id);
+            existing.partLabels.push(label);
+          }
+        }
+        stack.push(...node.children);
+      }
+    }
+  }
+  return placed;
+}
 
 /** The key claims on one item name must agree on: the tile, or the tile plus the part(s). */
 export function scopeKey(leaf: PlacedLeaf, scope: ExclusivityScope): string {
