@@ -11,6 +11,7 @@ import { ModPage } from "./pages/ModPage";
 import { DraftPage } from "./pages/DraftPage";
 import { StatsPage } from "./pages/StatsPage";
 import { SiteAdminPage } from "./pages/SiteAdminPage";
+import { ErrorBoundary } from "./core/ui/ErrorBoundary";
 
 // Admin was folded into the Mod Panel — redirect any old /b/:slug/admin
 // links there. Builds an absolute path explicitly since relative Navigate
@@ -25,6 +26,7 @@ export default function App() {
   useSyncColorSchemeAttribute();
   return (
     <BrowserRouter>
+      <ErrorBoundary>
       <AuthProvider>
         <WebSocketProvider>
           <Routes>
@@ -83,6 +85,7 @@ export default function App() {
           <ToastRegion />
         </WebSocketProvider>
       </AuthProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

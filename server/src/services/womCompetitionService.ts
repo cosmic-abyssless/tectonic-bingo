@@ -21,6 +21,7 @@ import * as schema from "../db/schema";
 import { bingos, signups, teamMembers, teams } from "../db/schema";
 import { audit } from "../audit/record";
 import { USER_AGENT } from "../config";
+import { log } from "../log";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type FetchLike = typeof fetch;
@@ -196,7 +197,7 @@ export async function syncWomCompetitionAfterDraft(db: Db, bingoId: string, clie
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`[wom-competition] failed to create competition for bingo ${bingoId}`, message);
+    log.warn("wom competition create failed", { bingoId, err: message });
     db.update(bingos).set({ womSyncError: message }).where(eq(bingos.id, bingoId)).run();
     audit(db, {
       action: "wom.sync_failed",
@@ -232,7 +233,7 @@ export async function syncWomTeamRename(db: Db, bingoId: string, client: WomComp
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`[wom-competition] failed to sync team rename for bingo ${bingoId}`, message);
+    log.warn("wom competition rename failed", { bingoId, err: message });
     db.update(bingos).set({ womSyncError: message }).where(eq(bingos.id, bingoId)).run();
     audit(db, {
       action: "wom.sync_failed",

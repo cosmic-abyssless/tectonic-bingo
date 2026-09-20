@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
 import type { BroadcastEvent } from "@bingo/shared";
+import { log } from "./log";
 
 let wss: WebSocketServer | null = null;
 
@@ -9,7 +10,9 @@ export function initWebSocketServer(server: Server): void {
   wss.on("connection", (socket: WebSocket) => {
     // No auth needed for receiving broadcast events — payloads carry only
     // IDs (v1 leaked team names to every connected client).
-    socket.on("error", () => {});
+    log.info("ws connect", { clients: wss?.clients.size });
+    socket.on("close", () => log.info("ws close", { clients: wss?.clients.size }));
+    socket.on("error", (err) => log.warn("ws error", { err }));
   });
 }
 
