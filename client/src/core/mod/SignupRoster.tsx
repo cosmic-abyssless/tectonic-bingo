@@ -19,7 +19,9 @@ import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { Button, IconButton } from "../ui/Button";
 import { Badge, EmptyState, FilterChip, Notice } from "../ui/Card";
+import { ColumnPicker } from "../ui/ColumnPicker";
 import { Input, Select } from "../ui/Field";
+import { useHiddenColumns } from "../ui/hiddenColumns";
 import { AlertIcon, CheckIcon, RefreshIcon, SpinnerIcon, UsersIcon, XIcon } from "../ui/icons";
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { CaCell, formatCaTier } from "../signup/caStats";
@@ -351,7 +353,9 @@ export function SignupRoster({ slug }: { slug: string }) {
   const [copied, setCopied] = useState(false);
   const [buyinFilter, setBuyinFilter] = useState<BuyinFilter>("all");
   const [pairFilter, setPairFilter] = useState<PairFilter>("all");
+  const [hiddenColumns, setHiddenColumns] = useHiddenColumns("signupRoster");
   const sort = useTableSort<SortKey>("order");
+  const shown = (id: string) => !hiddenColumns.has(id);
 
   const activeCount = roster.filter((r) => r.signup.status === "active").length;
   const withdrawnCount = roster.length - activeCount;
@@ -360,6 +364,19 @@ export function SignupRoster({ slug }: { slug: string }) {
   const leftoverMode = bingoData?.bingo.leftoverMode;
   // Clan standing column only when tectonic-api knows at least one player.
   const showTier = roster.some((r) => r.tectonicProfile);
+  const columnOptions = [
+    { id: "order", label: "#" },
+    { id: "discord", label: "Discord" },
+    ...(showTier ? [{ id: "tier", label: "Tier" }] : []),
+    { id: "signedUp", label: "Signed up" },
+    { id: "status", label: "Status" },
+    { id: "caCurrent", label: "Current CA" },
+    { id: "caPeak", label: "Peak CA" },
+    { id: "buyin", label: "Buy-in" },
+    { id: "collectedBy", label: "Collected by" },
+    ...(isDuo ? [{ id: "partner", label: "Partner" }] : []),
+    ...questions.map((q) => ({ id: q.id, label: q.prompt })),
+  ];
   // Each chip's count reflects the other filter so the numbers show what
   // clicking it would leave on screen.
   const buyinCount = (f: BuyinFilter) => roster.filter((r) => matchesBuyin(r, f) && matchesPair(r, pairFilter)).length;
@@ -395,9 +412,12 @@ export function SignupRoster({ slug }: { slug: string }) {
             </>
           )}
         </p>
-        <Button size="sm" onPress={copyCsv} isDisabled={roster.length === 0}>
-          {copied ? "Copied" : "Copy as CSV"}
-        </Button>
+        <div className="flex items-center gap-2">
+          {roster.length > 0 && <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={setHiddenColumns} />}
+          <Button size="sm" onPress={copyCsv} isDisabled={roster.length === 0}>
+            {copied ? "Copied" : "Copy as CSV"}
+          </Button>
+        </div>
       </div>
 
       {roster.length === 0 ? (
@@ -431,18 +451,18 @@ export function SignupRoster({ slug }: { slug: string }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-outline">
-                    <SortHeader label="#" sortKey="order" sort={sort} />
+                    {shown("order") && <SortHeader label="#" sortKey="order" sort={sort} />}
                     <SortHeader label="RSN" sortKey="rsn" sort={sort} />
-                    <SortHeader label="Discord" sortKey="discord" sort={sort} />
-                    {showTier && <SortHeader label="Tier" sortKey="tier" sort={sort} />}
-                    <SortHeader label="Signed up" sortKey="order" sort={sort} />
-                    <SortHeader label="Status" sortKey="status" sort={sort} />
-                    <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} />
-                    <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} />
-                    <SortHeader label="Buy-in" sortKey="buyin" sort={sort} />
-                    <SortHeader label="Collected by" sortKey="collectedBy" sort={sort} />
-                    {isDuo && <SortHeader label="Partner" sortKey="partner" sort={sort} />}
-                    {questions.map((q) => (
+                    {shown("discord") && <SortHeader label="Discord" sortKey="discord" sort={sort} />}
+                    {showTier && shown("tier") && <SortHeader label="Tier" sortKey="tier" sort={sort} />}
+                    {shown("signedUp") && <SortHeader label="Signed up" sortKey="order" sort={sort} />}
+                    {shown("status") && <SortHeader label="Status" sortKey="status" sort={sort} />}
+                    {shown("caCurrent") && <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} />}
+                    {shown("caPeak") && <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} />}
+                    {shown("buyin") && <SortHeader label="Buy-in" sortKey="buyin" sort={sort} />}
+                    {shown("collectedBy") && <SortHeader label="Collected by" sortKey="collectedBy" sort={sort} />}
+                    {isDuo && shown("partner") && <SortHeader label="Partner" sortKey="partner" sort={sort} />}
+                    {questions.filter((q) => shown(q.id)).map((q) => (
                       <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />
                     ))}
                   </tr>
@@ -453,44 +473,54 @@ export function SignupRoster({ slug }: { slug: string }) {
                     const caLoading = statsRefreshing.has(entry.signup.id);
                     return (
                       <tr key={entry.signup.id}>
-                        <td className="num py-2 pr-4 text-on-surface-subtle">{order}</td>
+                        {shown("order") && <td className="num py-2 pr-4 text-on-surface-subtle">{order}</td>}
                         <td className="py-2 pr-4 font-medium text-on-surface">
                           <span className="inline-flex items-center gap-1.5">
                             <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
                             {entry.signup.rsnVerified && <CheckIcon size={14} className="text-ok" aria-label="Verified against the linked clan account" />}
-                          </span>
-                        </td>
-                        <td className="py-2 pr-4 text-on-surface-muted">{displayName(entry.user)}</td>
-                        {showTier && <td className="py-2 pr-4 text-on-surface-muted">{entry.tectonicProfile ? <TierBadge profile={entry.tectonicProfile} /> : "—"}</td>}
-                        <td className="py-2 pr-4 text-on-surface-muted">
-                          <time dateTime={entry.signup.createdAt} title={new Date(entry.signup.createdAt).toLocaleString()} className="num whitespace-nowrap">
-                            {timeAgo(entry.signup.createdAt)}
-                          </time>
-                        </td>
-                        <td className="py-2 pr-4">
-                          <StatusCell slug={slug} entry={entry} canWithdraw={canWithdraw} />
-                        </td>
-                        <td className="py-2 pr-4 text-on-surface-muted">
-                          <CaCell stats={entry.caCurrent} loading={caLoading} />
-                        </td>
-                        <td className="py-2 pr-4 text-on-surface-muted">
-                          <span className="inline-flex items-center gap-1">
-                            <CaCell stats={entry.caPeak} loading={caLoading} />
                             <RefreshStatsButton slug={slug} signupId={entry.signup.id} rsn={entry.signup.rsn} refreshing={caLoading} />
                           </span>
                         </td>
-                        <td className="py-2 pr-4">
-                          <BuyinCell slug={slug} entry={entry} />
-                        </td>
-                        <td className="py-2 pr-4">
-                          <CollectedByCell slug={slug} entry={entry} />
-                        </td>
-                        {isDuo && (
+                        {shown("discord") && <td className="py-2 pr-4 text-on-surface-muted">{displayName(entry.user)}</td>}
+                        {showTier && shown("tier") && <td className="py-2 pr-4 text-on-surface-muted">{entry.tectonicProfile ? <TierBadge profile={entry.tectonicProfile} /> : "—"}</td>}
+                        {shown("signedUp") && (
+                          <td className="py-2 pr-4 text-on-surface-muted">
+                            <time dateTime={entry.signup.createdAt} title={new Date(entry.signup.createdAt).toLocaleString()} className="num whitespace-nowrap">
+                              {timeAgo(entry.signup.createdAt)}
+                            </time>
+                          </td>
+                        )}
+                        {shown("status") && (
+                          <td className="py-2 pr-4">
+                            <StatusCell slug={slug} entry={entry} canWithdraw={canWithdraw} />
+                          </td>
+                        )}
+                        {shown("caCurrent") && (
+                          <td className="py-2 pr-4 text-on-surface-muted">
+                            <CaCell stats={entry.caCurrent} loading={caLoading} />
+                          </td>
+                        )}
+                        {shown("caPeak") && (
+                          <td className="py-2 pr-4 text-on-surface-muted">
+                            <CaCell stats={entry.caPeak} loading={caLoading} />
+                          </td>
+                        )}
+                        {shown("buyin") && (
+                          <td className="py-2 pr-4">
+                            <BuyinCell slug={slug} entry={entry} />
+                          </td>
+                        )}
+                        {shown("collectedBy") && (
+                          <td className="py-2 pr-4">
+                            <CollectedByCell slug={slug} entry={entry} />
+                          </td>
+                        )}
+                        {isDuo && shown("partner") && (
                           <td className="py-2 pr-4">
                             <PartnerCell slug={slug} entry={entry} roster={roster} />
                           </td>
                         )}
-                        {questions.map((q) => (
+                        {questions.filter((q) => shown(q.id)).map((q) => (
                           <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
                             {answerByQ.get(q.id) ?? "—"}
                           </td>
