@@ -30,12 +30,12 @@ export function ColumnPicker({
 
   return (
     <MenuTrigger>
-      <Button variant="secondary" size="sm">
+      <Button variant="secondary" size="sm" className="!transition-[background-color,color] pressed:!scale-100">
         Columns
         {hiddenCount > 0 && <span className="num text-on-surface-subtle">{hiddenCount} hidden</span>}
         <ChevronDownIcon size={14} />
       </Button>
-      <Menu selectionMode="multiple" shouldCloseOnSelect={false} selectedKeys={selected} onSelectionChange={handleSelectionChange} items={columns.map((c) => ({ key: c.id, label: c.label }))}>
+      <Menu instant selectionMode="multiple" shouldCloseOnSelect={false} selectedKeys={selected} onSelectionChange={handleSelectionChange} items={columns.map((c) => ({ key: c.id, label: c.label }))}>
         {(option) => (
           <MenuItem id={option.key} textValue={option.label}>
             <span className="flex size-3.5 shrink-0 items-center justify-center">
