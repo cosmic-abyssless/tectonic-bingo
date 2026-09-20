@@ -8,7 +8,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createTile, createTask, generateLines } from "./boardService";
 import { approveSubmission } from "./scoringService";
 import { getTeamProgress } from "./teamService";
-import { filterStatsForTeam, getContributionCounts, getPointsOverTime, getStats, getTileHeatmap, getTimeline } from "./statsService";
+import { filterStatsForTeam, getContributionCounts, getPointsOverTime, getStats, getStatsForViewer, getTileHeatmap, getTimeline } from "./statsService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -189,5 +189,50 @@ describe("filterStatsForTeam", () => {
       expect(rows.length).toBeGreaterThan(0);
       expect(rows.every((r) => r.teamId === fx.teamAId)).toBe(true);
     }
+  });
+});
+
+describe("getStatsForViewer", () => {
+  // Team A completes the task a minute before team B, plus a stage change and a draft pick for each team.
+  function seedRace() {
+    const fx = seedFixture();
+    const task = addTask(fx.tileId, { points: 20 });
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId);
+    db.update(teamNodeState).set({ completedAt: new Date(Date.now() - 60_000) }).where(and(eq(teamNodeState.teamId, fx.teamAId), eq(teamNodeState.nodeId, task.id))).run();
+    submitAndApprove(fx.teamBId, task.id, fx.memberUserId, fx.modUserId);
+    db.insert(stageTransitions).values({ bingoId: fx.bingoId, fromStage: "reveal", toStage: "live", changedByUserId: fx.modUserId }).run();
+    db.insert(draftPicks)
+      .values([
+        { bingoId: fx.bingoId, pickNumber: 1, teamId: fx.teamAId, userId: fx.modUserId, pickedByUserId: fx.modUserId },
+        { bingoId: fx.bingoId, pickNumber: 2, teamId: fx.teamBId, userId: fx.memberUserId, pickedByUserId: fx.modUserId },
+      ])
+      .run();
+    return fx;
+  }
+  const types = (timeline: { type: string }[]) => new Set(timeline.map((e) => e.type));
+
+  it("gives a mod everything, including who was first to complete a task", () => {
+    const fx = seedRace();
+    const timeline = getStatsForViewer(db, fx.bingoId, { isMod: true, teamId: null }).timeline;
+    expect(timeline.filter((e) => e.type === "first_completion").map((e) => e.teamId)).toEqual([fx.teamAId]);
+    expect(types(timeline)).toContain("stage_changed");
+  });
+
+  it("hides first completions from a player on a team, even their own team's", () => {
+    const fx = seedRace();
+    for (const teamId of [fx.teamAId, fx.teamBId]) {
+      const timeline = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId }).timeline;
+      expect(types(timeline)).not.toContain("first_completion");
+      expect(timeline.length).toBeGreaterThan(0); // their own picks are still there
+      expect(timeline.every((e) => e.teamId === teamId)).toBe(true);
+    }
+  });
+
+  it("hides first completions from a player who sees every team too (once the bingo is complete)", () => {
+    const fx = seedRace();
+    const stats = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: null });
+    expect(types(stats.timeline)).not.toContain("first_completion");
+    expect(types(stats.timeline)).toContain("draft_pick");
+    expect(stats.pointsOverTime.length).toBeGreaterThan(0);
   });
 });

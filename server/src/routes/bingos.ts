@@ -111,7 +111,8 @@ router.get(
 
 // Stats expose every team's progress, so players only get the full picture once
 // the bingo is over; while it's live they see just their own team. Mods can
-// watch everything throughout.
+// watch everything throughout. "First to complete" events are mods-only, always
+// (statsService.getStatsForViewer).
 router.get(
   "/:slug/stats",
   requireAuth,
@@ -123,8 +124,7 @@ router.get(
     const myTeam = seesEveryTeam ? null : teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
     if (!seesEveryTeam && (bingo.stage !== "live" || !myTeam)) throw new ServiceError(403, "Stats aren't visible until the bingo is complete");
 
-    const stats = statsService.getStats(db, bingo.id);
-    res.json(myTeam ? statsService.filterStatsForTeam(stats, myTeam.id) : stats);
+    res.json(statsService.getStatsForViewer(db, bingo.id, { isMod, teamId: myTeam?.id ?? null }));
   }),
 );
 

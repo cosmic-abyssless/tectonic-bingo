@@ -208,6 +208,23 @@ export function filterStatsForTeam(stats: Stats, teamId: string): Stats {
   return { pointsOverTime: own(stats.pointsOverTime), timeline: own(stats.timeline), contributions: own(stats.contributions), heatmap: own(stats.heatmap) };
 }
 
+// "Team X was first to complete Y" tells every other team what has and hasn't been done yet, so it is for mods
+// only: players never get it, live or after the bingo.
+function withoutFirstCompletions(stats: Stats): Stats {
+  return { ...stats, timeline: stats.timeline.filter((e) => e.type !== "first_completion") };
+}
+
+/**
+ * The stats one viewer may see. Mods get everything. Anyone else loses the first-completion events, and a player
+ * still in the running (`teamId` set) sees only their own team's rows.
+ */
+export function getStatsForViewer(db: Db, bingoId: string, viewer: { isMod: boolean; teamId: string | null }): Stats {
+  const stats = getStats(db, bingoId);
+  if (viewer.isMod) return stats;
+  const visible = withoutFirstCompletions(stats);
+  return viewer.teamId ? filterStatsForTeam(visible, viewer.teamId) : visible;
+}
+
 export interface TileHeatmapCell {
   tileId: string;
   teamId: string;
