@@ -1,7 +1,8 @@
 // Everything before the bingo goes live, driven through the real endpoints at spoofed times: the import, the
 // users and their signups, duo pairings, captains, the draft, team names and raised hands.
 import fs from "node:fs";
-import type { BoardResponse, DraftState, DraftUnit, ExclusivityRule, TeamWithMembers } from "@bingo/shared";
+import type { BoardResponse, DraftState, DraftUnit, ExclusivityRule, SignupQuestion, TeamWithMembers } from "@bingo/shared";
+import { answerQuestions } from "./answers";
 import type { Api } from "./client";
 import type { BoardInfo, PartModel } from "./board";
 import type { Player } from "./people";
@@ -65,6 +66,11 @@ export async function importBingo(ctx: Ctx, exportPath: string, name: string): P
   ctx.log(`imported ${ctx.slug} (created ${fmt(tl.createdAt)}, starts ${fmt(tl.startsAt)}, ends ${fmt(tl.endsAt)})`);
 }
 
+/** The bingo's signup questions (from the imported board), which every player has to answer. */
+export async function fetchSignupQuestions(ctx: Ctx): Promise<SignupQuestion[]> {
+  return (await ctx.api.as(ctx.admin).get<{ questions: SignupQuestion[] }>(path(ctx, "/signup/questions"))).questions;
+}
+
 export async function fetchBoard(ctx: Ctx): Promise<BoardResponse> {
   return ctx.api.as(ctx.admin).get<BoardResponse>(path(ctx, "/board"));
 }
@@ -80,6 +86,7 @@ export async function fetchBoard(ctx: Ctx): Promise<BoardResponse> {
  */
 export async function runSignups(ctx: Ctx, players: Player[], pairs: [Player, Player][]): Promise<void> {
   const { tl, rng } = ctx;
+  const questions = await fetchSignupQuestions(ctx);
   const window = tl.captainsAt.getTime() - tl.signupOpensAt.getTime() - 2 * HOUR;
   for (const p of players) p.signupAt = plus(tl.signupOpensAt, Math.floor(window * Math.pow(rng.float(), 2.2)) + 10 * MINUTE);
 
@@ -93,7 +100,7 @@ export async function runSignups(ctx: Ctx, players: Player[], pairs: [Player, Pl
           const { user } = await ctx.api.as(ctx.admin).post<{ user: { id: string } }>("/api/dev/users", { discordId: p.discordId, discordUsername: p.discordName }, { at: plus(p.signupAt!, -1 * MINUTE) });
           p.userId = user.id;
         }
-        await ctx.api.as(p.discordId).post(path(ctx, "/signup"), { rsn: p.name, answers: [] }, { at: p.signupAt! });
+        await ctx.api.as(p.discordId).post(path(ctx, "/signup"), { rsn: p.name, answers: answerQuestions(questions, p, rng.fork(`answers-${p.index}`)) }, { at: p.signupAt! });
         signedUp.add(p.index);
       },
     });

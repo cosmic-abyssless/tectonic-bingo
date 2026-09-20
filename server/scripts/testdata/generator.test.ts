@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { GraphNode, Tile } from "@bingo/shared";
+import { isBlankAnswer, parseChoices, type GraphNode, type SignupQuestion, type Tile } from "@bingo/shared";
+import { answerQuestions } from "./answers";
 import { DIFFICULTY, buildBoard, deadlockedParts, difficultyOf, planSubmissions, type Claim, type PartModel } from "./board";
 import { UsageError, defaultSlug, parseArgs } from "./common";
 import { chooseMods, makePlayers, pairUp, playingProbability } from "./people";
@@ -327,5 +328,68 @@ describe("exclusive items on the board", () => {
 
   it("has nothing to check without rules", () => {
     expect(buildBoard(tiles, []).exclusivityConflicts(["zul-snake"], ["pets-snake"])).toEqual([]);
+  });
+});
+
+describe("answerQuestions", () => {
+  const question = (over: Partial<SignupQuestion> & Pick<SignupQuestion, "id" | "prompt" | "type">): SignupQuestion =>
+    ({ bingoId: "b", helperText: null, optionsJson: null, required: false, sortOrder: 0, ...over }) as SignupQuestion;
+  const QUESTIONS: SignupQuestion[] = [
+    question({ id: "captain", prompt: "Interested in captaining?", type: "select", optionsJson: JSON.stringify(["Yes", "No", "Maybe"]) }),
+    question({ id: "tz", prompt: "What time zone and/or country are you in?", type: "text", required: true }),
+    question({ id: "bosses", prompt: "Which bosses?", type: "multiselect", optionsJson: JSON.stringify(["Vorkath", "Zulrah", "Hydra", "Nex"]), required: true }),
+    question({ id: "terms", prompt: 'Please read the terms below and write "yes" in the response box to agree', type: "text", required: true }),
+    question({ id: "free", prompt: "Anything else?", type: "textarea" }),
+    question({ id: "flag", prompt: "Have a mic?", type: "boolean", required: true }),
+  ];
+  const players = makePlayers(new Rng(3), 60, "testdata-x");
+
+  it("answers every required question, whoever the player is", () => {
+    for (const player of players) {
+      const answers = new Map(answerQuestions(QUESTIONS, player, new Rng(player.index)).map((a) => [a.questionId, a.value]));
+      for (const q of QUESTIONS.filter((x) => x.required)) expect(isBlankAnswer(q.type, answers.get(q.id)), `${q.id} for player ${player.index}`).toBe(false);
+    }
+  });
+
+  it("gives an exact 'yes' to a question that asks for one, and the player's own time zone", () => {
+    const player = { ...players[0]!, offset: -5 };
+    const answers = new Map(answerQuestions(QUESTIONS, player, new Rng(1)).map((a) => [a.questionId, a.value]));
+    expect(answers.get("terms")).toBe("yes");
+    expect(answers.get("tz")).toBe("UTC-5");
+    expect(answerQuestions(QUESTIONS, { ...player, offset: 0 }, new Rng(1)).find((a) => a.questionId === "tz")!.value).toBe("UTC");
+    expect(answerQuestions(QUESTIONS, { ...player, offset: 2 }, new Rng(1)).find((a) => a.questionId === "tz")!.value).toBe("UTC+2");
+  });
+
+  it("picks real options: one for a single choice, a list in the question's order for multiple choice", () => {
+    for (const player of players) {
+      const answers = new Map(answerQuestions(QUESTIONS, player, new Rng(player.index)).map((a) => [a.questionId, a.value]));
+      const captain = answers.get("captain")!;
+      expect(captain === "" || ["Yes", "No", "Maybe"].includes(captain)).toBe(true);
+      const bosses = parseChoices(answers.get("bosses"));
+      expect(bosses.length).toBeGreaterThan(0);
+      const order = ["Vorkath", "Zulrah", "Hydra", "Nex"];
+      expect(bosses.every((b) => order.includes(b))).toBe(true);
+      expect(bosses).toEqual(order.filter((o) => bosses.includes(o)));
+      expect(new Set(bosses).size).toBe(bosses.length);
+      expect(["true", "false"]).toContain(answers.get("flag"));
+    }
+  });
+
+  it("leaves some optional questions blank, and stronger players tick more choices", () => {
+    const all = players.flatMap((p) => answerQuestions(QUESTIONS, p, new Rng(p.index)).filter((a) => a.questionId === "free"));
+    expect(all.some((a) => a.value === "")).toBe(true);
+    expect(all.some((a) => a.value !== "")).toBe(true);
+    const count = (skill: number) => {
+      const strong = { ...players[0]!, skill };
+      const totals = Array.from({ length: 200 }, (_, i) => parseChoices(answerQuestions(QUESTIONS, strong, new Rng(i)).find((a) => a.questionId === "bosses")!.value).length);
+      return totals.reduce((a, b) => a + b, 0) / totals.length;
+    };
+    expect(count(0.9)).toBeGreaterThan(count(0.1));
+  });
+
+  it("is the same for the same player and seed, and doesn't depend on other players", () => {
+    const player = players[7]!;
+    expect(answerQuestions(QUESTIONS, player, new Rng(5))).toEqual(answerQuestions(QUESTIONS, player, new Rng(5)));
+    expect(answerQuestions([], player, new Rng(5))).toEqual([]);
   });
 });
