@@ -6,6 +6,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { actionsInCategory, AUDIT_ACTIONS, condenseAuditEntries, renderAuditLabel, type AuditAction, type AuditCategory, type AuditEntry, type AuditLogFilters, type AuditLogResponse, type AuditVisibility } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { auditLog, teams, users } from "../db/schema";
+import { rsnsAcrossBingos } from "../services/playerNames";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -26,6 +27,12 @@ function toAuditEntries(db: Db, rows: AuditLogRow[]): AuditEntry[] {
   const teamIds = [...new Set(rows.map((r) => r.teamId).filter((id): id is string => !!id))];
 
   const userById = new Map(userIds.length ? db.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, userIds)).all().map((u) => [u.id, u]) : []);
+  // Named by the RSN they signed up with in the entry's own bingo (the site-wide log spans bingos).
+  const rsns = rsnsAcrossBingos(db, rows.flatMap((r) => [{ bingoId: r.bingoId, userId: r.actorUserId }, { bingoId: r.bingoId, userId: r.onBehalfOfUserId }]));
+  const userFor = (row: AuditLogRow, userId: string | null) => {
+    const user = userId ? userById.get(userId) : undefined;
+    return user ? { ...user, rsn: rsns.get(`${row.bingoId}|${userId}`) ?? null } : null;
+  };
   const teamById = new Map(
     teamIds.length
       ? db.select({ id: teams.id, name: teams.name, color: teams.color }).from(teams).where(inArray(teams.id, teamIds)).all().map((t) => [t.id, t])
@@ -33,8 +40,8 @@ function toAuditEntries(db: Db, rows: AuditLogRow[]): AuditEntry[] {
   );
 
   return rows.map((row) => {
-    const actor = row.actorUserId ? (userById.get(row.actorUserId) ?? null) : null;
-    const onBehalfOf = row.onBehalfOfUserId ? (userById.get(row.onBehalfOfUserId) ?? null) : null;
+    const actor = userFor(row, row.actorUserId);
+    const onBehalfOf = userFor(row, row.onBehalfOfUserId);
     const team = row.teamId ? (teamById.get(row.teamId) ?? null) : null;
     const action = row.action as AuditAction;
     const details = JSON.parse(row.details) as unknown;

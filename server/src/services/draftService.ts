@@ -1,10 +1,12 @@
 import { now as clockNow } from "../clock";
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { playerName } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingos, draftPicks, pickRatings, signupAnswers, signups, teamMembers, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
+import { rsnsInBingo } from "./playerNames";
 import { isTeamLead } from "./teamService";
 import { audit, markAuditedNoop } from "../audit/record";
 import { log } from "../log";
@@ -12,7 +14,7 @@ import { log } from "../log";
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
 
-type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">;
+type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick"> & { rsn?: string | null };
 const MINIMAL_USER_COLS = { id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick };
 
 // Signup/captains scouting is captains + mods only. During draft, signed-up
@@ -183,7 +185,7 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
     ? db.select({ userId: signups.userId, rsn: signups.rsn }).from(signups).where(and(eq(signups.bingoId, bingoId), inArray(signups.userId, pickedUserIds))).all()
     : [];
   const pickedRsnByUserId = new Map(pickedSignupRows.map((s) => [s.userId, s.rsn]));
-  const picks = pickRows.map((p) => ({ ...p, user: pickedUserById.get(p.userId)!, rsn: pickedRsnByUserId.get(p.userId) ?? "" }));
+  const picks = pickRows.map((p) => ({ ...p, user: { ...pickedUserById.get(p.userId)!, rsn: pickedRsnByUserId.get(p.userId) ?? null }, rsn: pickedRsnByUserId.get(p.userId) ?? "" }));
 
   const draftedUserIds = getDraftedUserIds(db, bingoId);
   const activeSignups = db.select().from(signups).where(and(eq(signups.bingoId, bingoId), eq(signups.status, "active"))).all();
@@ -198,7 +200,7 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
 
   const poolEntries: DraftPoolEntry[] = poolSignups.map((s) => ({
     signup: s,
-    user: poolUserById.get(s.userId)!,
+    user: { ...poolUserById.get(s.userId)!, rsn: s.rsn },
     answers: opts.includeAnswers ? poolAnswers.filter((a) => a.signupId === s.id) : null,
   }));
   const pool = groupIntoUnits(db, bingoId, poolEntries);
@@ -392,7 +394,8 @@ export function makePick(db: Db, params: MakePickParams) {
     for (const userId of userIds) tx.insert(teamMembers).values({ teamId: currentTeam.id, userId, isCaptain: false, joinedAt: clockNow() }).run();
 
     const userRows = tx.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, userIds)).all();
-    const displayNameById = new Map(userRows.map((u) => [u.id, u.discordGuildNick ?? u.discordGlobalName ?? u.discordUsername]));
+    const rsns = rsnsInBingo(tx, bingo.id, userIds);
+    const displayNameById = new Map(userRows.map((u) => [u.id, playerName({ ...u, rsn: rsns.get(u.id) })]));
     const displayNames = userIds.map((id) => displayNameById.get(id) ?? "Unknown");
     audit(tx, {
       action: "draft.pick",

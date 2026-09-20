@@ -7,6 +7,7 @@ import { ServiceError } from "./errors";
 import { dissolveForUser, getAcceptedPairs } from "./pairingService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
+import { rsnsInBingo } from "./playerNames";
 import { parseStoredCaStats } from "./combatAchievements";
 import { parseWomSummary } from "./womService";
 
@@ -318,7 +319,8 @@ export function getAllSignups(db: Db, bingoId: string) {
 
   const collectorIds = [...new Set(rows.map((r) => r.signup.buyinCollectedByUserId).filter((id): id is string => !!id))];
   const collectors = collectorIds.length ? db.select().from(users).where(inArray(users.id, collectorIds)).all() : [];
-  const collectorById = new Map(collectors.map((u) => [u.id, u]));
+  const collectorRsns = rsnsInBingo(db, bingoId, collectorIds);
+  const collectorById = new Map(collectors.map((u) => [u.id, { ...u, rsn: collectorRsns.get(u.id) ?? null }]));
 
   const pairingByUserId = new Map<string, (typeof schema.signupPairings.$inferSelect)>();
   for (const { pairing, userIds } of getAcceptedPairs(db, bingoId)) {
@@ -329,7 +331,7 @@ export function getAllSignups(db: Db, bingoId: string) {
     const womSummary = parseWomSummary(r.womDataJson ? JSON.parse(r.womDataJson) : null);
     return {
       signup: r.signup,
-      user: r.user,
+      user: { ...r.user, rsn: r.signup.rsn },
       answers: answers.filter((a) => a.signupId === r.signup.id),
       collectedByUser: r.signup.buyinCollectedByUserId ? (collectorById.get(r.signup.buyinCollectedByUserId) ?? null) : null,
       pairing: pairingByUserId.get(r.signup.userId) ?? null,
@@ -389,7 +391,7 @@ export function markBuyin(db: Db, bingo: Bingo, signupId: string, params: MarkBu
       details: {
         received: params.received,
         collectedByUserId,
-        collectedByName: collectedByUserId ? (userLabelById(tx, collectedByUserId) ?? null) : null,
+        collectedByName: collectedByUserId ? (userLabelById(tx, collectedByUserId, bingo.id) ?? null) : null,
         before: { receivedAt: existing.buyinReceivedAt ? existing.buyinReceivedAt.toISOString() : null },
       },
       actor: { userId: params.recordedByUserId },

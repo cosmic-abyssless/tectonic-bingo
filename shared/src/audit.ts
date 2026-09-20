@@ -8,6 +8,7 @@
 // other two are the server's routeCoverage test and the http.mutation
 // fallback — see server/src/audit/routePolicy.ts and middleware.ts).
 import type { MinimalUser, Stage } from "./index.ts";
+import { playerName } from "./names.ts";
 
 export type AuditVisibility = "mods" | "team" | "public";
 export type AuditActorType = "user" | "system" | "dev";
@@ -610,7 +611,7 @@ export type AuditLabelSource = Pick<AuditEntry, "action" | "details" | "entityLa
 
 /** The names and details a label renderer works from, resolved from an entry. */
 export function toAuditLabelInput(entry: AuditLabelSource): AuditLabelInput<AuditAction> {
-  const name = (u: MinimalUser) => u.discordGuildNick ?? u.discordGlobalName ?? u.discordUsername;
+  const name = (u: MinimalUser) => playerName(u);
   return {
     details: entry.details as never,
     entityLabel: entry.entityLabel,

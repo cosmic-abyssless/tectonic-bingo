@@ -31,6 +31,7 @@ import {
 import { ServiceError } from "./errors";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
+import { rsnsInBingo } from "./playerNames";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -297,8 +298,8 @@ export function addModerator(db: Db, params: { bingoId: string; userId: string }
     audit(tx, {
       action: "moderator.added",
       bingoId: params.bingoId,
-      entity: { type: "user", id: params.userId, label: userLabelById(tx, params.userId) },
-      details: { userId: params.userId, displayName: userLabelById(tx, params.userId) ?? "Unknown user" },
+      entity: { type: "user", id: params.userId, label: userLabelById(tx, params.userId, params.bingoId) },
+      details: { userId: params.userId, displayName: userLabelById(tx, params.userId, params.bingoId) ?? "Unknown user" },
     });
     return mod;
   });
@@ -321,19 +322,21 @@ export function removeModerator(db: Db, params: { bingoId: string; userId: strin
     audit(tx, {
       action: "moderator.removed",
       bingoId: params.bingoId,
-      entity: { type: "user", id: params.userId, label: userLabelById(tx, params.userId) },
-      details: { userId: params.userId, displayName: userLabelById(tx, params.userId) ?? "Unknown user" },
+      entity: { type: "user", id: params.userId, label: userLabelById(tx, params.userId, params.bingoId) },
+      details: { userId: params.userId, displayName: userLabelById(tx, params.userId, params.bingoId) ?? "Unknown user" },
     });
   });
 }
 
 export function getModerators(db: Db, bingoId: string) {
-  return db
+  const rows = db
     .select({ id: bingoModerators.id, bingoId: bingoModerators.bingoId, userId: bingoModerators.userId, createdAt: bingoModerators.createdAt, user: users })
     .from(bingoModerators)
     .innerJoin(users, eq(bingoModerators.userId, users.id))
     .where(eq(bingoModerators.bingoId, bingoId))
     .all();
+  const rsns = rsnsInBingo(db, bingoId, rows.map((r) => r.userId));
+  return rows.map((r) => ({ ...r, user: { ...r.user, rsn: rsns.get(r.userId) ?? null } }));
 }
 
 export interface UpdateBingoSettingsParams {

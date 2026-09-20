@@ -10,6 +10,7 @@ import { PUBLIC_SIGNUP_COLS } from "./signupService";
 import { MINIMAL_USER_COLS } from "./userService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
+import { rsnsInBingo } from "./playerNames";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -41,12 +42,13 @@ export function getTeamsWithMembers(db: Db, bingoId: string) {
     db.select({ userId: draftPicks.userId }).from(draftPicks).where(inArray(draftPicks.teamId, teamIds)).all().map((p) => p.userId),
   );
   const rank = (m: { isCaptain: boolean; isCoCaptain: boolean }) => (m.isCaptain ? 0 : m.isCoCaptain ? 1 : 2);
+  const rsns = rsnsInBingo(db, bingoId, memberRows.map((m) => m.user.id));
   return teamRows.map((team) => ({
     ...team,
     members: memberRows
       .filter((m) => m.teamId === team.id)
       .sort((a, b) => rank(a) - rank(b))
-      .map(({ user, isCaptain, isCoCaptain }) => ({ user, isCaptain, isCoCaptain, isDrafted: draftedUserIds.has(user.id) })),
+      .map(({ user, isCaptain, isCoCaptain }) => ({ user: { ...user, rsn: rsns.get(user.id) ?? null }, isCaptain, isCoCaptain, isDrafted: draftedUserIds.has(user.id) })),
   }));
 }
 
@@ -74,18 +76,21 @@ export interface TeamProgressSummary {
   nodeStates: (typeof teamNodeState.$inferSelect)[];
   adjustments: (typeof teamPointAdjustments.$inferSelect)[];
   totalPoints: number;
-  interests: { tileId: string; taskId: string; user: Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">; createdAt: Date }[];
+  interests: { tileId: string; taskId: string; user: Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick"> & { rsn: string | null }; createdAt: Date }[];
 }
 
 export function getTeamProgress(db: Db, teamId: string): TeamProgressSummary {
   const nodeStates = db.select().from(teamNodeState).where(eq(teamNodeState.teamId, teamId)).all();
   const adjustments = db.select().from(teamPointAdjustments).where(eq(teamPointAdjustments.teamId, teamId)).all();
-  const interests = db
+  const interestRows = db
     .select({ tileId: tileInterests.tileId, taskId: tileInterests.taskId, user: MINIMAL_USER_COLS, createdAt: tileInterests.createdAt })
     .from(tileInterests)
     .innerJoin(users, eq(tileInterests.userId, users.id))
     .where(eq(tileInterests.teamId, teamId))
     .all();
+  const bingoId = getTeamById(db, teamId)?.bingoId;
+  const rsns = bingoId ? rsnsInBingo(db, bingoId, interestRows.map((i) => i.user.id)) : new Map<string, string>();
+  const interests = interestRows.map((i) => ({ ...i, user: { ...i.user, rsn: rsns.get(i.user.id) ?? null } }));
 
   const nodePoints = nodeStates.reduce((sum, s) => sum + s.pointsAwarded, 0);
   const adjustmentPoints = adjustments.reduce((sum, a) => sum + a.amount, 0);
@@ -261,9 +266,9 @@ export function createTeam(db: Db, params: CreateTeamParams) {
       details: {
         name: team.name,
         captainUserId: params.captainUserId,
-        captainName: userLabelById(tx, params.captainUserId) ?? "Unknown",
+        captainName: userLabelById(tx, params.captainUserId, params.bingoId) ?? "Unknown",
         coCaptainUserId,
-        coCaptainName: coCaptainUserId ? (userLabelById(tx, coCaptainUserId) ?? "Unknown") : null,
+        coCaptainName: coCaptainUserId ? (userLabelById(tx, coCaptainUserId, params.bingoId) ?? "Unknown") : null,
         color: team.color,
       },
     });
@@ -327,9 +332,9 @@ export function addTeamMember(db: Db, teamId: string, userId: string) {
     audit(tx, {
       action: "team.member_added",
       bingoId: team.bingoId,
-      entity: { type: "user", id: userId, label: userLabelById(tx, userId) },
+      entity: { type: "user", id: userId, label: userLabelById(tx, userId, team.bingoId) },
       teamId,
-      details: { userId, displayName: userLabelById(tx, userId) ?? "Unknown" },
+      details: { userId, displayName: userLabelById(tx, userId, team.bingoId) ?? "Unknown" },
     });
     return member;
   });
@@ -347,7 +352,7 @@ export function removeTeamMember(db: Db, teamId: string, userId: string): void {
     if (member?.isCoCaptain) throw new ServiceError(400, "Cannot remove the co-captain — delete the team instead");
     const pick = tx.select({ id: draftPicks.id }).from(draftPicks).where(and(eq(draftPicks.teamId, teamId), eq(draftPicks.userId, userId))).get();
     if (pick) throw new ServiceError(409, "This player was drafted onto the team and can't be removed");
-    const displayName = userLabelById(tx, userId);
+    const displayName = userLabelById(tx, userId, team.bingoId);
     tx.delete(tileInterests).where(and(eq(tileInterests.teamId, teamId), eq(tileInterests.userId, userId))).run();
     tx.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).run();
     audit(tx, {
@@ -375,7 +380,7 @@ export function deleteTeam(db: Db, teamId: string): void {
       bingoId: team.bingoId,
       entity: { type: "team", id: teamId, label: team.name },
       teamId,
-      details: { name: team.name, captainName: userLabelById(tx, team.captainUserId) ?? "Unknown", memberCount },
+      details: { name: team.name, captainName: userLabelById(tx, team.captainUserId, team.bingoId) ?? "Unknown", memberCount },
     });
     tx.delete(pickRatings).where(eq(pickRatings.teamId, teamId)).run();
     tx.delete(tileInterests).where(eq(tileInterests.teamId, teamId)).run();
@@ -405,6 +410,7 @@ export function getCaptainCandidates(db: Db, bingoId: string) {
   const pairingByUserId = new Map(getAcceptedPairs(db, bingoId).flatMap(({ pairing, userIds }) => userIds.map((id) => [id, pairing] as const)));
   return rows.map((r) => ({
     ...r,
+    user: { ...r.user, rsn: r.signup.rsn },
     answers: answers.filter((a) => a.signupId === r.signup.id),
     pairing: pairingByUserId.get(r.signup.userId) ?? null,
   }));

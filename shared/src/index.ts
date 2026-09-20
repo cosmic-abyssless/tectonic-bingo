@@ -72,6 +72,12 @@ export interface User {
   discordGlobalName: string | null;
   discordGuildNick: string | null;
   discordAvatar: string | null;
+  /**
+   * The RSN this player signed up with in the bingo the response is about. The server sets it on the users it sends
+   * inside a bingo (a roster, a submission, the stats, the audit log); it is absent on site-level lists, and for an
+   * account with no signup in that bingo (a mod who isn't playing). See playerName.
+   */
+  rsn?: string | null;
   /** Was a member of the clan's Discord server at last login. */
   inGuild: boolean;
   isAdmin: boolean;
@@ -278,7 +284,7 @@ export interface Claim {
   quantity: number;
 }
 
-export type MinimalUser = Pick<User, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">;
+export type MinimalUser = Pick<User, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick" | "rsn">;
 
 export interface SubmissionDetails {
   submission: Submission;
@@ -864,3 +870,4 @@ export * from "./audit.ts";
 export * from "./auditCondense.ts";
 export * from "./bingoExport.ts";
 export * from "./exclusivity.ts";
+export * from "./names.ts";

@@ -3,10 +3,11 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingoLines, nodeEdges, nodes, stageTransitions, submissions, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
 import { findAncestorIds } from "./graphService";
+import { rsnsInBingo } from "./playerNames";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
-type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">;
+type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick"> & { rsn?: string | null };
 const MINIMAL_USER_COLS = { id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick };
 
 export interface PointsOverTimePoint {
@@ -187,7 +188,8 @@ export function getContributionCounts(db: Db, bingoId: string): ContributionCoun
 
   const userIds = [...counts.keys()];
   const userRows = userIds.length ? db.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, userIds)).all() : [];
-  const userById = new Map(userRows.map((u) => [u.id, u]));
+  const rsns = rsnsInBingo(db, bingoId, userIds);
+  const userById = new Map(userRows.map((u) => [u.id, { ...u, rsn: rsns.get(u.id) ?? null }]));
 
   return userIds
     .map((userId) => ({ userId, user: userById.get(userId)!, teamId: counts.get(userId)!.teamId, approvedSubmissions: counts.get(userId)!.count }))

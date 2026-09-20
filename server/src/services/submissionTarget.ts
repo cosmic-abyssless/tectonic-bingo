@@ -98,9 +98,9 @@ export function changeSubmissionAttribution(db: Db, bingo: Bingo, params: { subm
         tileName,
         taskLabels,
         fromUserId: submission.submittedByUserId,
-        fromName: userLabelById(tx, submission.submittedByUserId) ?? "Unknown",
+        fromName: userLabelById(tx, submission.submittedByUserId, bingo.id) ?? "Unknown",
         toUserId: params.userId,
-        toName: userLabelById(tx, params.userId) ?? "Unknown",
+        toName: userLabelById(tx, params.userId, bingo.id) ?? "Unknown",
       },
       actor: { userId: params.changedByUserId },
     });

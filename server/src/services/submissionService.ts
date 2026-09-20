@@ -8,6 +8,7 @@ import { ServiceError } from "./errors";
 import { findAncestorIds, submitGateBlock } from "./graphService";
 import { conflictMessage, conflictsForClaims } from "./exclusivityService";
 import { effectiveStartsAt } from "./bingoStart";
+import { rsnsAcrossBingos } from "./playerNames";
 import { audit } from "../audit/record";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -199,7 +200,7 @@ export function markScreenshotAnalysisFailed(db: Db, submissionId: string) {
   });
 }
 
-export type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">;
+export type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick"> & { rsn?: string | null };
 
 export interface ClaimRow {
   id: string;
@@ -232,13 +233,20 @@ function attachDetails(db: Db, subs: (typeof submissions.$inferSelect)[]): Submi
     .where(inArray(users.id, userIds))
     .all();
   const userById = new Map(userRows.map((u) => [u.id, u]));
+  // Named by the RSN they signed up with in the submission's bingo.
+  const bingoByTeam = new Map(db.select({ id: teams.id, bingoId: teams.bingoId }).from(teams).where(inArray(teams.id, [...new Set(subs.map((s) => s.teamId))])).all().map((t) => [t.id, t.bingoId]));
+  const rsns = rsnsAcrossBingos(db, subs.flatMap((s) => userIds.map((userId) => ({ bingoId: bingoByTeam.get(s.teamId) ?? null, userId }))));
+  const userFor = (s: (typeof subs)[number], userId: string | null): MinimalUser | null => {
+    const user = userId ? userById.get(userId) : undefined;
+    return user ? { ...user, rsn: rsns.get(`${bingoByTeam.get(s.teamId)}|${user.id}`) ?? null } : null;
+  };
 
   return subs.map((s) => ({
     submission: s,
     screenshots: screenshots.filter((sc) => sc.submissionId === s.id),
     claims: claimRows.filter((c) => c.submissionId === s.id),
-    submittedByUser: userById.get(s.submittedByUserId) ?? null,
-    postedByUser: s.postedByUserId ? (userById.get(s.postedByUserId) ?? null) : null,
+    submittedByUser: userFor(s, s.submittedByUserId),
+    postedByUser: userFor(s, s.postedByUserId),
   }));
 }
 

@@ -5,12 +5,12 @@ import * as schema from "../db/schema";
 import { signupPairings, signups, teamMembers, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { audit, markAuditedNoop } from "../audit/record";
-import { userLabel } from "../audit/describe";
+import { userLabel, userLabelById } from "../audit/describe";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
 type Pairing = typeof schema.signupPairings.$inferSelect;
-type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordId" | "discordUsername" | "discordGlobalName" | "discordGuildNick">;
+type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordId" | "discordUsername" | "discordGlobalName" | "discordGuildNick"> & { rsn?: string | null };
 const MINIMAL_USER_COLS = {
   id: users.id,
   discordId: users.discordId,
@@ -121,7 +121,10 @@ export function getPairingState(db: Db, bingoId: string, me: Participant) {
   const outgoing = rows.find((p) => p.status === "pending" && p.requesterUserId === me.id) ?? null;
   const incoming = rows.filter((p) => p.status === "pending" && p.targetDiscordId === me.discordId);
 
-  const party = (user: MinimalUser | null) => ({ user, rsn: signupRsn(db, bingoId, user) });
+  const party = (user: MinimalUser | null) => {
+    const rsn = signupRsn(db, bingoId, user);
+    return { user: user ? { ...user, rsn } : null, rsn };
+  };
 
   // Only worth mentioning while the player is unpaired, and only for endings
   // they didn't choose themselves.
@@ -299,8 +302,8 @@ export function adminPair(db: Db, bingo: Bingo, params: AdminPairParams): Pairin
     audit(tx, {
       action: "pairing.admin_paired",
       bingoId: bingo.id,
-      entity: { type: "pairing", id: pairing.id, label: `${userLabel(a)} & ${userLabel(b)}` },
-      details: { userIds: [a.id, b.id], displayNames: [userLabel(a), userLabel(b)] },
+      entity: { type: "pairing", id: pairing.id, label: `${userLabelById(tx, a.id, bingo.id) ?? userLabel(a)} & ${userLabelById(tx, b.id, bingo.id) ?? userLabel(b)}` },
+      details: { userIds: [a.id, b.id], displayNames: [userLabelById(tx, a.id, bingo.id) ?? userLabel(a), userLabelById(tx, b.id, bingo.id) ?? userLabel(b)] },
       actor: { userId: params.createdByUserId },
     });
     return pairing;
@@ -319,7 +322,7 @@ export function unpair(db: Db, bingo: Bingo, pairingId: string): void {
     tx.update(signupPairings).set({ status: "dissolved", respondedAt: clockNow() }).where(eq(signupPairings.id, pairingId)).run();
 
     const userIds = [pairing.requesterUserId, target?.id].filter((id): id is string => !!id);
-    const displayNames = [requester, target].filter((u): u is MinimalUser => !!u).map(userLabel);
+    const displayNames = [requester, target].filter((u): u is MinimalUser => !!u).map((u) => userLabelById(tx, u.id, bingo.id) ?? userLabel(u));
     audit(tx, {
       action: "pairing.unpaired",
       bingoId: bingo.id,
