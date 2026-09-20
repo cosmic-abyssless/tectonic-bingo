@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Claim, GraphNode, SubmissionDetails } from "@bingo/shared";
+import type { Claim, ExclusivityConflict, GraphNode, SubmissionDetails } from "@bingo/shared";
 import { buildLeafClaimMaps } from "../core/board/taskClaims";
 import { buildRequirementTree } from "./boardModel";
 
@@ -38,5 +38,33 @@ describe("buildRequirementTree: SUM items", () => {
     const tree = buildRequirementTree(sum, maps, new Map())!;
     expect(tree.items.map((i) => i.count)).toEqual([0, 0, 0]);
     expect(tree.submitted).toBe(true);
+  });
+});
+
+describe("buildRequirementTree: exclusive items", () => {
+  const lock = (nodeId: string): [string, ExclusivityConflict] => [nodeId, { nodeId, itemName: "Baron", usedOn: "DT2 ISSUE 1", rule: { id: "r", label: "Pets", itemNames: ["Baron"], scope: "tile" } }];
+
+  it("tags an item the team used elsewhere, without marking it done", () => {
+    const leaf = node({ id: "baron", kind: "ITEM", itemName: "Baron" });
+    const tree = buildRequirementTree(leaf, buildLeafClaimMaps([]), new Map(), false, new Map([lock("baron")]))!;
+    expect(tree.lockedBy).toBe("Used on DT2 ISSUE 1");
+    expect(tree.dim).toBe(false); // dim means done (drawn struck through); a locked item isn't done
+    expect(tree.complete).toBe(false);
+  });
+
+  it("tags the right items of a SUM, and items inside an ANY", () => {
+    const sum = node({ id: "sum", kind: "SUM", quantity: 2, children: [node({ id: "a", kind: "ITEM", itemName: "Baron" }), node({ id: "b", kind: "ITEM", itemName: "Nid" })] });
+    const tree = buildRequirementTree(sum, buildLeafClaimMaps([]), new Map(), false, new Map([lock("a")]))!;
+    expect(tree.items.map((i) => [i.name, i.lockedBy])).toEqual([["Baron", "Used on DT2 ISSUE 1"], ["Nid", null]]);
+
+    const any = node({ id: "any", kind: "ANY", children: [node({ id: "a", kind: "ITEM", itemName: "Baron" }), node({ id: "b", kind: "ITEM", itemName: "Nid" })] });
+    const anyTree = buildRequirementTree(any, buildLeafClaimMaps([]), new Map(), false, new Map([lock("b")]))!;
+    expect(anyTree.children.map((c) => c.lockedBy)).toEqual([null, "Used on DT2 ISSUE 1"]);
+    expect(anyTree.lockedBy).toBeNull();
+  });
+
+  it("locks nothing when no locks are given", () => {
+    const tree = buildRequirementTree(node({ id: "a", kind: "ITEM", itemName: "Baron" }), buildLeafClaimMaps([]), new Map())!;
+    expect(tree.lockedBy).toBeNull();
   });
 });

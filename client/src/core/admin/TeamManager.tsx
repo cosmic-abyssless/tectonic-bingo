@@ -31,7 +31,7 @@ function teamSizeSummary(teamCount: number, totalParticipants: number): string |
   return summary;
 }
 
-const candidateLabel = (c: RosterEntry) => `${c.signup.rsn}${c.signup.rsnVerified ? " ✓" : ""} (${displayName(c.user)})`;
+const candidateLabel = (c: RosterEntry) => `${c.signup.rsn}${c.signup.rsnVerified ? " ✓" : ""}`;
 
 // Removals drop the row from the cached shell right away and put it back if
 // the server refuses, so the UI doesn't wait on the round trip.

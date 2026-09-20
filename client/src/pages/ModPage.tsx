@@ -130,7 +130,7 @@ export function ModPage() {
       />
 
       <main className="mx-auto w-full max-w-6xl space-y-6 px-6 py-6">
-        <StageControls slug={slug} bingo={shell.bingo} />
+        <StageControls slug={slug} bingo={shell.bingo} canChange={isAdmin} />
 
         <PlayerProfileProvider slug={slug}>
           <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key))}>

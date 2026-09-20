@@ -7,8 +7,11 @@ import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createTile, createTask } from "./boardService";
 import { getTeamNodeStatuses } from "./boardService";
+import { getNodeTree } from "./graphService";
+import { updateBingoSettings } from "./bingoService";
 import { createSubmission, getAllSubmissionsForBingo, getTeamSubmissions, markScreenshotAnalysisFailed, recordScreenshotAnalysis } from "./submissionService";
 import { ServiceError } from "./errors";
+import { runWithAuditContext } from "../audit/context";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -58,6 +61,23 @@ afterEach(() => {
 });
 
 describe("createSubmission", () => {
+  it("stamps the submission with the request's clock (dev X-Dev-Now), not the real time", () => {
+    const { bingo, teamId, memberUserId } = seed();
+    const task = addTask(addTile(bingo.id).id, { sortOrder: 0, points: 20 });
+    const at = new Date("2026-03-04T21:30:00Z"); // well after the bingo started
+
+    const submission = runWithAuditContext({ requestId: "r", actorUserId: null, actorType: "system", actorRole: "system", recorded: 0, skip: null, now: at }, () =>
+      createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId: task.leafId, itemName: "x" }], screenshotUrl: "/x.png" }),
+    );
+
+    expect(submission.submittedAt).toEqual(at);
+    expect(submission.createdAt).toEqual(at);
+    const screenshot = db.select().from(schema.submissionScreenshots).where(eq(schema.submissionScreenshots.submissionId, submission.id)).get()!;
+    expect(screenshot.uploadedAt).toEqual(at);
+    const audited = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "submission.created")).get()!;
+    expect(audited.createdAt).toEqual(at);
+  });
+
   it("succeeds on a plain task and marks it pending_approval", () => {
     const { bingo, teamId, memberUserId } = seed();
     const tile = addTile(bingo.id);
@@ -246,6 +266,135 @@ describe("createSubmission", () => {
     expect(() => createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims, ...base })).not.toThrow();
   });
 
+});
+
+// PETS and SLAYER BOSSES: two pages that share their items, Page 2 submit-gated behind Page 1. An item counts
+// toward both pages, so it must stay submittable while only the ungated page is unlocked; an item that sits only
+// under a gated page still waits for its gate.
+describe("submit gates on pages that share items", () => {
+  function sharedPages() {
+    const { bingo, teamId, memberUserId } = seed();
+    const tile = addTile(bingo.id);
+    const page1 = createTask(db, tile.id, { kind: "COUNT", minCount: 1, label: "Page 1", description: "d", points: 40, children: [{ kind: "ITEM", itemName: "A" }, { kind: "ITEM", itemName: "B" }] }, 0);
+    const page2 = createTask(db, tile.id, { kind: "COUNT", minCount: 2, label: "Page 2", description: "d", points: 60, submitGateNodeId: page1.id, children: [{ kind: "ITEM", itemName: "C" }] }, 1);
+    const [a, b] = page1.children;
+    // Page 2 reuses Page 1's two items (the same nodes), as the real import does.
+    [a!, b!].forEach((leaf, i) => db.insert(schema.nodeEdges).values({ parentId: page2.id, childId: leaf.id, sortOrder: i + 1 }).run());
+    const c = getNodeTree(db, page2.id)!.children.find((n) => n.itemName === "C")!;
+    const submit = (nodeId: string, itemName: string) => () =>
+      createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId, itemName }], ...base });
+    return { bingo, teamId, memberUserId, page1, a: a!, b: b!, c, submit };
+  }
+
+  it("accepts a shared item while the gated page is still locked, because it counts toward the ungated one", () => {
+    const { a, submit } = sharedPages();
+    expect(submit(a.id, "A")).not.toThrow();
+  });
+
+  it("still refuses an item that sits only under the gated page, until the gate is complete", () => {
+    const { teamId, page1, c, submit } = sharedPages();
+    expect(submit(c.id, "C")).toThrow(/Page 2: the previous requirement must be completed first/);
+    db.insert(schema.teamNodeState).values({ teamId, nodeId: page1.id, completedAt: NOW, pointsAwarded: 40 }).run();
+    expect(submit(c.id, "C")).not.toThrow();
+  });
+
+  it("refuses a submission that mixes a shared item with one that is still locked", () => {
+    const { bingo, teamId, memberUserId, a, c } = sharedPages();
+    expect(() =>
+      createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId: a.id, itemName: "A" }, { nodeId: c.id, itemName: "C" }], ...base }),
+    ).toThrow(/must be completed first/);
+  });
+
+  it("refuses an item shared by two pages when every page it counts toward is gated", () => {
+    const { bingo, teamId, memberUserId, page1 } = sharedPages();
+    const tile = db.select().from(schema.tiles).all()[0]!;
+    const page3 = createTask(db, tile.id, { kind: "COUNT", minCount: 1, label: "Page 3", description: "d", points: 10, submitGateNodeId: page1.id, children: [{ kind: "ITEM", itemName: "D" }] }, 2);
+    const page4 = createTask(db, tile.id, { kind: "COUNT", minCount: 1, label: "Page 4", description: "d", points: 10, submitGateNodeId: page1.id, children: [] }, 3);
+    db.insert(schema.nodeEdges).values({ parentId: page4.id, childId: page3.children[0]!.id, sortOrder: 0 }).run();
+
+    expect(() =>
+      createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId: page3.children[0]!.id, itemName: "D" }], ...base }),
+    ).toThrow(/must be completed first/);
+  });
+});
+
+// A pet counts on the boss's own tile OR on PETS; a slayer unique on Page 1 OR Page 2 (docs/exclusive-items-plan.md).
+describe("exclusive items", () => {
+  function exclusiveBoard(rules: "on" | "off" = "on") {
+    const { bingo: seeded, teamId, memberUserId } = seed();
+    const tileAt = (name: string, boardCol: number) => addTile(seeded.id, { name, boardRow: 0, boardCol });
+    const [dt2, pets, slayer] = [tileAt("DT2 ISSUE 1", 0), tileAt("PETS", 1), tileAt("SLAYER BOSSES", 2)];
+    const part = (tileId: string, label: string, extra: GraphNodeInput, order: number) => createTask(db, tileId, { label, description: "d", points: 10, ...extra }, order);
+
+    const dt2Page1 = part(dt2.id, "Page 1", { kind: "SUM", quantity: 3, children: [{ kind: "ITEM", itemName: "Baron" }] }, 0);
+    // PETS: both pages hold the SAME two item nodes (shared), as the real tile does.
+    const petsPage1 = part(pets.id, "Page 1", { kind: "COUNT", minCount: 1, children: [{ kind: "ITEM", itemName: "Baron" }, { kind: "ITEM", itemName: "Nid" }] }, 0);
+    const petsPage2 = part(pets.id, "Page 2", { kind: "COUNT", minCount: 2, children: [] }, 1);
+    petsPage1.children.forEach((c, i) => db.insert(schema.nodeEdges).values({ parentId: petsPage2.id, childId: c.id, sortOrder: i }).run());
+    // SLAYER BOSSES: each page has its OWN Kraken tentacle node.
+    const slayerPage1 = part(slayer.id, "Page 1", { kind: "SUM", quantity: 2, children: [{ kind: "ITEM", itemName: "Kraken tentacle" }] }, 0);
+    const slayerPage2 = part(slayer.id, "Page 2", { kind: "SUM", quantity: 2, children: [{ kind: "ITEM", itemName: "Kraken tentacle" }] }, 1);
+
+    updateBingoSettings(db, seeded.id, {
+      exclusivityRules:
+        rules === "on"
+          ? [{ id: "pets", label: "Pets", itemNames: ["Baron", "Nid"], scope: "tile" }, { id: "slayer", label: "Slayer", itemNames: ["Kraken tentacle"], scope: "part" }]
+          : [],
+    });
+    const bingo = db.select().from(schema.bingos).get()!;
+    const node = (parent: { children: { id: string }[] }, i = 0) => parent.children[i]!.id;
+    const claim = (nodeId: string, itemName: string) => ({ nodeId, itemName });
+    const submit = (...claims: { nodeId: string; itemName: string }[]) => () => createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims, ...base });
+    return {
+      teamId, submit, claim,
+      dt2Baron: node(dt2Page1), petsBaron: node(petsPage1, 0), petsNid: node(petsPage1, 1),
+      slayer1: node(slayerPage1), slayer2: node(slayerPage2),
+    };
+  }
+
+  it("allows several claims on the boss's tile, then refuses the same pet on PETS while leaving other pets alone", () => {
+    const b = exclusiveBoard();
+    expect(b.submit(b.claim(b.dt2Baron, "Baron"))).not.toThrow();
+    expect(b.submit(b.claim(b.dt2Baron, "Baron"))).not.toThrow(); // dupes on one tile all count
+    expect(b.submit(b.claim(b.petsBaron, "Baron"))).toThrow(/Baron is already used on DT2 ISSUE 1: Pets can only be used on one tile/);
+    expect(b.submit(b.claim(b.petsNid, "Nid"))).not.toThrow();
+  });
+
+  it("locks the other way round too: a pet claimed on PETS is refused on the boss's tile", () => {
+    const b = exclusiveBoard();
+    expect(b.submit(b.claim(b.petsBaron, "Baron"))).not.toThrow();
+    expect(b.submit(b.claim(b.dt2Baron, "Baron"))).toThrow(/already used on PETS/);
+  });
+
+  it("frees the item when the earlier submission is rejected, and an approved one still locks it", () => {
+    const b = exclusiveBoard();
+    const first = b.submit(b.claim(b.dt2Baron, "Baron"))();
+    expect(b.submit(b.claim(b.petsBaron, "Baron"))).toThrow(/already used/); // pending locks
+    db.update(schema.submissions).set({ status: "approved" }).where(eq(schema.submissions.id, first.id)).run();
+    expect(b.submit(b.claim(b.petsBaron, "Baron"))).toThrow(/already used/);
+    db.update(schema.submissions).set({ status: "rejected" }).where(eq(schema.submissions.id, first.id)).run();
+    expect(b.submit(b.claim(b.petsBaron, "Baron"))).not.toThrow();
+  });
+
+  it("part scope: a slayer unique used on Page 1 is spent for Page 2, but Page 1 can take another", () => {
+    const b = exclusiveBoard();
+    expect(b.submit(b.claim(b.slayer1, "Kraken tentacle"))).not.toThrow();
+    expect(b.submit(b.claim(b.slayer2, "Kraken tentacle"))).toThrow(/Kraken tentacle is already used on SLAYER BOSSES \u00b7 Page 1: Slayer can only be used on one part/);
+    expect(b.submit(b.claim(b.slayer1, "Kraken tentacle"))).not.toThrow();
+  });
+
+  it("refuses one submission that puts an item in two places", () => {
+    const b = exclusiveBoard();
+    expect(b.submit(b.claim(b.slayer1, "Kraken tentacle"), b.claim(b.slayer2, "Kraken tentacle"))).toThrow(/already used on SLAYER BOSSES \u00b7 Page 1/);
+  });
+
+  it("changes nothing for a bingo with no rules", () => {
+    const b = exclusiveBoard("off");
+    expect(b.submit(b.claim(b.dt2Baron, "Baron"))).not.toThrow();
+    expect(b.submit(b.claim(b.petsBaron, "Baron"))).not.toThrow();
+    expect(b.submit(b.claim(b.slayer1, "Kraken tentacle"))).not.toThrow();
+    expect(b.submit(b.claim(b.slayer2, "Kraken tentacle"))).not.toThrow();
+  });
 });
 
 describe("audit trail", () => {

@@ -1,3 +1,5 @@
+import type { ExclusivityRule } from "@bingo/shared";
+import { now as clockNow } from "../clock";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -29,6 +31,7 @@ import {
 import { ServiceError } from "./errors";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
+import { rsnsInBingo } from "./playerNames";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -38,8 +41,10 @@ export type Stage = (typeof STAGE_ORDER)[number];
 // Newest first — the bingo list page redirects non-admins straight to
 // bingos[0] as the "default" bingo (issue #3: simpler than an env var,
 // since there's realistically only ever one active bingo at a time).
+// The list is for picking a bingo, so it never carries the rules text or the exclusive item lists (which need
+// the board revealed; see toViewerBingo).
 export function listBingos(db: Db) {
-  return db.select().from(bingos).orderBy(desc(bingos.createdAt)).all().map(toPublicBingo);
+  return db.select().from(bingos).orderBy(desc(bingos.createdAt)).all().map((b) => toViewerBingo(b, false));
 }
 
 export function getBingoBySlug(db: Db, slug: string) {
@@ -51,9 +56,62 @@ export function getBingoBySlug(db: Db, slug: string) {
 // sends a bingo (or a list of them) to a client goes through this first;
 // routes that only need the row server-side (requireBingo, stage/board
 // checks, the WOM sync itself) use the raw row from getBingoBySlug instead.
-export function toPublicBingo<T extends { womGroupVerificationCode: string | null; draftOrderLockedUntil?: Date | null }>(bingo: T): Omit<T, "womGroupVerificationCode" | "draftOrderLockedUntil"> {
-  const { womGroupVerificationCode: _womGroupVerificationCode, draftOrderLockedUntil: _draftOrderLockedUntil, ...rest } = bingo;
-  return rest;
+export function toPublicBingo<T extends { womGroupVerificationCode: string | null; exclusivityRulesJson: string; draftOrderLockedUntil?: Date | null }>(
+  bingo: T,
+): Omit<T, "womGroupVerificationCode" | "exclusivityRulesJson" | "draftOrderLockedUntil"> & { exclusivityRules: ExclusivityRule[] } {
+  const { womGroupVerificationCode: _womGroupVerificationCode, draftOrderLockedUntil: _draftOrderLockedUntil, exclusivityRulesJson, ...rest } = bingo;
+  return { ...rest, exclusivityRules: parseExclusivityRules(exclusivityRulesJson) };
+}
+
+/**
+ * A bingo as one viewer may see it. The rules text and the exclusive item lists describe the board (which items
+ * are on it), so a player gets neither until the board is revealed, the same point tiles become visible. Mods
+ * always see them.
+ */
+export function toViewerBingo<T extends typeof bingos.$inferSelect>(bingo: T, isMod: boolean) {
+  const publicBingo = toPublicBingo(bingo);
+  if (isMod || isBoardRevealed(bingo)) return publicBingo;
+  return { ...publicBingo, rulesMarkdown: null, exclusivityRules: [] as ExclusivityRule[] };
+}
+
+const MAX_EXCLUSIVITY_RULES = 50;
+const MAX_ITEM_NAMES_PER_RULE = 1000;
+
+/** The rules a bingo row holds. Tolerant on purpose (a bad column reads as no rules): what is stored was validated on the way in. */
+export function parseExclusivityRules(json: string | null | undefined): ExclusivityRule[] {
+  if (!json) return [];
+  try {
+    const value: unknown = JSON.parse(json);
+    return Array.isArray(value) ? (value as ExclusivityRule[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Validates and cleans rules coming from a client or an import: trims, de-duplicates names, mints missing ids. */
+export function normalizeExclusivityRules(input: unknown): ExclusivityRule[] {
+  if (!Array.isArray(input)) throw new ServiceError(400, "exclusivityRules must be an array");
+  if (input.length > MAX_EXCLUSIVITY_RULES) throw new ServiceError(400, `At most ${MAX_EXCLUSIVITY_RULES} exclusivity rules`);
+  return input.map((raw: unknown, i) => {
+    const rule = (raw ?? {}) as Partial<ExclusivityRule>;
+    const label = typeof rule.label === "string" ? rule.label.trim() : "";
+    if (!label) throw new ServiceError(400, `Exclusivity rule ${i + 1} needs a label`);
+    if (rule.scope !== "part" && rule.scope !== "tile") throw new ServiceError(400, `Exclusivity rule "${label}": scope must be "part" or "tile"`);
+    if (!Array.isArray(rule.itemNames)) throw new ServiceError(400, `Exclusivity rule "${label}": itemNames must be an array`);
+    const seen = new Set<string>();
+    const itemNames: string[] = [];
+    for (const name of rule.itemNames) {
+      const trimmed = typeof name === "string" ? name.trim() : "";
+      if (trimmed && !seen.has(trimmed.toLowerCase())) {
+        seen.add(trimmed.toLowerCase());
+        itemNames.push(trimmed);
+      }
+    }
+    if (itemNames.length === 0) throw new ServiceError(400, `Exclusivity rule "${label}" has no items`);
+    if (itemNames.length > MAX_ITEM_NAMES_PER_RULE) throw new ServiceError(400, `Exclusivity rule "${label}" has too many items`);
+    const id = typeof rule.id === "string" && rule.id.trim() ? rule.id.trim() : crypto.randomUUID();
+    return { id, label, itemNames, scope: rule.scope };
+  });
 }
 
 // "Play has started": what team names and player ratings lock on. Mirrors isBoardLocked
@@ -117,8 +175,8 @@ export function createBingo(db: Db, params: CreateBingoParams) {
     const { source, ...row } = params;
     const existing = tx.select().from(bingos).where(eq(bingos.slug, row.slug)).get();
     if (existing) throw new ServiceError(409, "A bingo with this slug already exists");
-    const bingo = tx.insert(bingos).values(row).returning().get();
-    tx.insert(bingoModerators).values({ bingoId: bingo.id, userId: row.createdByUserId }).run();
+    const bingo = tx.insert(bingos).values({ ...row, createdAt: clockNow() }).returning().get();
+    tx.insert(bingoModerators).values({ bingoId: bingo.id, userId: row.createdByUserId, createdAt: clockNow() }).run();
     audit(tx, {
       action: "bingo.created",
       bingoId: bingo.id,
@@ -153,7 +211,7 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
     // one, otherwise the moment the bingo was last put live, which the transition logged below
     // records. (This used to stamp "now" into startsAt the first time the bingo went live, which
     // pinned the freeze to that first time: moving back to reveal and live again never restarted it.)
-    const now = params.now ?? new Date();
+    const now = params.now ?? clockNow();
 
     tx.update(bingos).set({ stage: params.toStage }).where(eq(bingos.id, bingo.id)).run();
     tx.insert(stageTransitions)
@@ -236,12 +294,12 @@ export function addModerator(db: Db, params: { bingoId: string; userId: string }
       markAuditedNoop();
       return existing;
     }
-    const mod = tx.insert(bingoModerators).values(params).returning().get();
+    const mod = tx.insert(bingoModerators).values({ ...params, createdAt: clockNow() }).returning().get();
     audit(tx, {
       action: "moderator.added",
       bingoId: params.bingoId,
-      entity: { type: "user", id: params.userId, label: userLabelById(tx, params.userId) },
-      details: { userId: params.userId, displayName: userLabelById(tx, params.userId) ?? "Unknown user" },
+      entity: { type: "user", id: params.userId, label: userLabelById(tx, params.userId, params.bingoId) },
+      details: { userId: params.userId, displayName: userLabelById(tx, params.userId, params.bingoId) ?? "Unknown user" },
     });
     return mod;
   });
@@ -264,19 +322,21 @@ export function removeModerator(db: Db, params: { bingoId: string; userId: strin
     audit(tx, {
       action: "moderator.removed",
       bingoId: params.bingoId,
-      entity: { type: "user", id: params.userId, label: userLabelById(tx, params.userId) },
-      details: { userId: params.userId, displayName: userLabelById(tx, params.userId) ?? "Unknown user" },
+      entity: { type: "user", id: params.userId, label: userLabelById(tx, params.userId, params.bingoId) },
+      details: { userId: params.userId, displayName: userLabelById(tx, params.userId, params.bingoId) ?? "Unknown user" },
     });
   });
 }
 
 export function getModerators(db: Db, bingoId: string) {
-  return db
+  const rows = db
     .select({ id: bingoModerators.id, bingoId: bingoModerators.bingoId, userId: bingoModerators.userId, createdAt: bingoModerators.createdAt, user: users })
     .from(bingoModerators)
     .innerJoin(users, eq(bingoModerators.userId, users.id))
     .where(eq(bingoModerators.bingoId, bingoId))
     .all();
+  const rsns = rsnsInBingo(db, bingoId, rows.map((r) => r.userId));
+  return rows.map((r) => ({ ...r, user: { ...r.user, rsn: rsns.get(r.userId) ?? null } }));
 }
 
 export interface UpdateBingoSettingsParams {
@@ -289,6 +349,7 @@ export interface UpdateBingoSettingsParams {
   buyinAmount?: number | null;
   bonusPotAmount?: number;
   rulesMarkdown?: string | null;
+  exclusivityRules?: ExclusivityRule[];
   signupOpensAt?: Date | null;
   draftScheduledAt?: Date | null;
   revealScheduledAt?: Date | null;
@@ -312,9 +373,12 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
     if (params.womGroupId != null && !/^\d+$/.test(params.womGroupId)) {
       throw new ServiceError(400, "WOM group ID must be a number");
     }
-    const updated = tx.update(bingos).set(params).where(eq(bingos.id, bingoId)).returning().get();
+    const { exclusivityRules, ...columns } = params;
+    const set: Partial<typeof bingos.$inferInsert> = { ...columns };
+    if (exclusivityRules !== undefined) set.exclusivityRulesJson = JSON.stringify(normalizeExclusivityRules(exclusivityRules));
+    const updated = tx.update(bingos).set(set).where(eq(bingos.id, bingoId)).returning().get();
 
-    const changes = diffFields(existing, updated, { only: Object.keys(params) as (keyof typeof existing)[], redact: ["womGroupVerificationCode"] });
+    const changes = diffFields(existing, updated, { only: Object.keys(set) as (keyof typeof existing)[], redact: ["womGroupVerificationCode"] });
     if (changes) {
       audit(tx, {
         action: "settings.updated",

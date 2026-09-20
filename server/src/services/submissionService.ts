@@ -1,11 +1,14 @@
+import { now as clockNow } from "../clock";
 import { eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { ClaimInput, NodeKind } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { claims, nodes, submissions, submissionScreenshots, teamNodeState, teams, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
-import { findAncestorIds } from "./graphService";
+import { findAncestorIds, submitGateBlock } from "./graphService";
+import { conflictMessage, conflictsForClaims } from "./exclusivityService";
 import { effectiveStartsAt } from "./bingoStart";
+import { rsnsAcrossBingos } from "./playerNames";
 import { audit } from "../audit/record";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -26,7 +29,10 @@ export function tileForLeaf(db: Db | Tx, leafId: string, tileByNodeId: Map<strin
 
 export interface CreateSubmissionParams {
   teamId: string;
+  /** The player the drop belongs to: credited for it. */
   submittedByUserId: string;
+  /** Who uploaded it, when that isn't the same player (see submissionTarget.ts). */
+  postedByUserId?: string | null;
   claims: ClaimInput[];
   screenshotUrl: string;
   now?: Date; // injectable for tests
@@ -36,7 +42,7 @@ export interface CreateSubmissionParams {
 // for UX, but this is the enforcement.
 export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionParams) {
   return db.transaction((tx) => {
-    const now = params.now ?? new Date();
+    const now = params.now ?? clockNow();
 
     if (bingo.stage !== "live") {
       throw new ServiceError(400, "Submissions are only open while the bingo is live");
@@ -74,21 +80,20 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
       }
     }
 
-    // submitGateNodeId: every ancestor of a claimed leaf (up to and including
-    // the tile) that names a gate must have that gate already complete for
-    // this team.
+    // submitGateNodeId: a claim is refused while every route from its item up to the tile passes through a
+    // node whose gate this team hasn't completed (see graphService.submitGateBlock: an item shared by two
+    // pages counts toward both, so an ungated page keeps it submittable).
     const completedNodeIds = new Set(
       tx.select({ nodeId: teamNodeState.nodeId }).from(teamNodeState).where(eq(teamNodeState.teamId, params.teamId)).all().map((r) => r.nodeId),
     );
     for (const leafId of nodeIds) {
-      const ancestorIds = [...findAncestorIds(tx, leafId)];
-      const ancestors = tx.select().from(nodes).where(inArray(nodes.id, ancestorIds)).all();
-      for (const ancestor of ancestors) {
-        if (ancestor.submitGateNodeId && !completedNodeIds.has(ancestor.submitGateNodeId)) {
-          throw new ServiceError(400, `${ancestor.label ?? "This requirement"}: the previous requirement must be completed first`);
-        }
-      }
+      const blockedBy = submitGateBlock(tx, leafId, completedNodeIds);
+      if (blockedBy !== null) throw new ServiceError(400, `${blockedBy}: the previous requirement must be completed first`);
     }
+
+    // Exclusive items: an item the team already has claimed (pending or approved) in another place.
+    const [exclusive] = conflictsForClaims(tx, bingo, params.teamId, nodeIds);
+    if (exclusive) throw new ServiceError(400, conflictMessage(exclusive));
 
     for (const claim of params.claims) {
       const leaf = leafById.get(claim.nodeId)!;
@@ -99,13 +104,14 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
       }
     }
 
+    const postedByUserId = params.postedByUserId && params.postedByUserId !== params.submittedByUserId ? params.postedByUserId : null;
     const submission = tx
       .insert(submissions)
-      .values({ teamId: params.teamId, submittedByUserId: params.submittedByUserId })
+      .values({ teamId: params.teamId, submittedByUserId: params.submittedByUserId, postedByUserId, submittedAt: now, createdAt: now, updatedAt: now })
       .returning()
       .get();
 
-    tx.insert(submissionScreenshots).values({ submissionId: submission.id, storageUrl: params.screenshotUrl }).run();
+    tx.insert(submissionScreenshots).values({ submissionId: submission.id, storageUrl: params.screenshotUrl, uploadedAt: now }).run();
 
     for (const claim of params.claims) {
       tx.insert(claims)
@@ -131,7 +137,9 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
         claims: params.claims.map((c) => ({ nodeId: c.nodeId, itemName: c.itemName ?? null, quantity: c.quantity ?? 1 })),
         screenshotUrl: params.screenshotUrl,
       },
-      actor: { userId: params.submittedByUserId },
+      // Whoever actually posted it is the actor; the player it belongs to is who they acted on behalf of.
+      actor: { userId: postedByUserId ?? params.submittedByUserId },
+      onBehalfOfUserId: postedByUserId ? params.submittedByUserId : null,
     });
 
     return submission;
@@ -162,7 +170,7 @@ export function recordScreenshotAnalysis(
       codewordVerified: result.codewordFound,
       detectedItemName: result.detectedItemName,
       scrapeStatus: "completed",
-      scrapedAt: new Date(),
+      scrapedAt: clockNow(),
     })
     .where(eq(submissionScreenshots.submissionId, submissionId))
     .run();
@@ -192,7 +200,7 @@ export function markScreenshotAnalysisFailed(db: Db, submissionId: string) {
   });
 }
 
-export type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">;
+export type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick"> & { rsn?: string | null };
 
 export interface ClaimRow {
   id: string;
@@ -207,6 +215,7 @@ export interface SubmissionDetails {
   screenshots: (typeof submissionScreenshots.$inferSelect)[];
   claims: ClaimRow[];
   submittedByUser: MinimalUser | null;
+  postedByUser: MinimalUser | null;
 }
 
 // Attaches screenshots, claims, and the submitter's (minimal) user row to a
@@ -217,19 +226,27 @@ function attachDetails(db: Db, subs: (typeof submissions.$inferSelect)[]): Submi
   const submissionIds = subs.map((s) => s.id);
   const screenshots = db.select().from(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, submissionIds)).all();
   const claimRows = db.select().from(claims).where(inArray(claims.submissionId, submissionIds)).all();
-  const userIds = [...new Set(subs.map((s) => s.submittedByUserId))];
+  const userIds = [...new Set(subs.flatMap((s) => (s.postedByUserId ? [s.submittedByUserId, s.postedByUserId] : [s.submittedByUserId])))];
   const userRows = db
     .select({ id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick })
     .from(users)
     .where(inArray(users.id, userIds))
     .all();
   const userById = new Map(userRows.map((u) => [u.id, u]));
+  // Named by the RSN they signed up with in the submission's bingo.
+  const bingoByTeam = new Map(db.select({ id: teams.id, bingoId: teams.bingoId }).from(teams).where(inArray(teams.id, [...new Set(subs.map((s) => s.teamId))])).all().map((t) => [t.id, t.bingoId]));
+  const rsns = rsnsAcrossBingos(db, subs.flatMap((s) => userIds.map((userId) => ({ bingoId: bingoByTeam.get(s.teamId) ?? null, userId }))));
+  const userFor = (s: (typeof subs)[number], userId: string | null): MinimalUser | null => {
+    const user = userId ? userById.get(userId) : undefined;
+    return user ? { ...user, rsn: rsns.get(`${bingoByTeam.get(s.teamId)}|${user.id}`) ?? null } : null;
+  };
 
   return subs.map((s) => ({
     submission: s,
     screenshots: screenshots.filter((sc) => sc.submissionId === s.id),
     claims: claimRows.filter((c) => c.submissionId === s.id),
-    submittedByUser: userById.get(s.submittedByUserId) ?? null,
+    submittedByUser: userFor(s, s.submittedByUserId),
+    postedByUser: userFor(s, s.postedByUserId),
   }));
 }
 

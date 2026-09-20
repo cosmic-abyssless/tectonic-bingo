@@ -1,0 +1,1 @@
+ALTER TABLE `signup_questions` ADD `helper_text` text;

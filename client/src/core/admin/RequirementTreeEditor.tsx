@@ -8,6 +8,7 @@ import { controlClass } from "../ui/Field";
 import { Menu, MenuItem } from "../ui/Menu";
 import { ChevronDownIcon, LinkIcon, PlusIcon, XIcon } from "../ui/icons";
 import { toGraphNodeInput, collectLabeledConditions } from "../board/requirementTree";
+import { describeRules, useRulesFor } from "./exclusiveItems";
 
 /** An ITEM leaf that already exists elsewhere on the same tile — offered as a reference, not retyped. */
 export interface ExistingLeaf {
@@ -410,12 +411,21 @@ function ItemLeafRow({ node, path, remove, existingLeaves, sharedNodeIds }: Node
   // node that's actually the link gets the icon (see sharedNodeIds).
   const isShared = !!node.id && sharedNodeIds.has(node.id);
   const sharedWithTasks = isShared ? Array.from(new Set((existingLeaves ?? []).filter((l) => l.id === node.id).map((l) => l.taskLabel))) : [];
+  const exclusiveRules = useRulesFor(name);
 
   return (
     <div className="flex h-8 items-center gap-2 rounded-md border border-outline bg-surface px-2">
       {isShared && <SharedMark tasks={sharedWithTasks} />}
       <ChipIcon name={name} className="size-4" />
       <span className="flex-1 truncate text-xs text-on-surface">{name}</span>
+      {exclusiveRules.length > 0 && (
+        <span
+          title={`A team can use this item in one place only (${describeRules(exclusiveRules)}). Set in the bingo's settings, under Exclusive items.`}
+          className="shrink-0 rounded border border-outline px-1 text-[10px] uppercase tracking-wide text-on-surface-subtle"
+        >
+          exclusive
+        </span>
+      )}
       {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${name}` : `Remove ${name}`} what="item" onPress={() => remove(path)} />}
     </div>
   );

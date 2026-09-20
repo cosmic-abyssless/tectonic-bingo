@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { SignupAnswerInput, SignupQuestion } from "@bingo/shared";
+import { encodeChoices, isBlankAnswer, parseChoices, type SignupAnswerInput, type SignupQuestion } from "@bingo/shared";
 import { useBingo, useCreateSignup, useMySignup, useMyTectonicRsns, useSignupQuestions, useUpdateSignup, useWithdrawSignup } from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
 import { PartnerPanel } from "./PartnerPanel";
@@ -19,6 +19,47 @@ function parseOptions(question: SignupQuestion): string[] {
   }
 }
 
+/** A group of radio buttons or checkboxes under one label, for the choice questions. */
+function ChoiceGroup({ question, value, onChange, label, hint }: { question: SignupQuestion; value: string; onChange: (v: string) => void; label: React.ReactNode; hint?: string }) {
+  const multiple = question.type === "multiselect";
+  const options = parseOptions(question);
+  const chosen = multiple ? parseChoices(value) : value ? [value] : [];
+  // An answer that is no longer one of the options (the options were edited) stays visible so it can be unticked.
+  const shown = [...options, ...chosen.filter((c) => !options.includes(c))];
+
+  function toggle(option: string, on: boolean) {
+    if (!multiple) return onChange(option);
+    const next = on ? [...chosen, option] : chosen.filter((c) => c !== option);
+    onChange(next.length === 0 ? "" : encodeChoices(shown.filter((o) => next.includes(o))));
+  }
+
+  return (
+    <fieldset>
+      <legend className="mb-1.5 block text-xs font-medium text-on-surface-muted">{label}</legend>
+      <div className="space-y-2">
+        {shown.map((option) => (
+          <label key={option} className="flex cursor-pointer select-none items-center gap-2.5">
+            <input
+              type={multiple ? "checkbox" : "radio"}
+              name={multiple ? undefined : `question-${question.id}`}
+              checked={chosen.includes(option)}
+              onChange={(e) => toggle(option, e.target.checked)}
+              className="size-4 cursor-pointer accent-accent"
+            />
+            <span className="text-sm text-on-surface">{option}</span>
+          </label>
+        ))}
+      </div>
+      {!multiple && !question.required && value && (
+        <button type="button" onClick={() => onChange("")} className="mt-1.5 text-xs text-on-surface-subtle underline underline-offset-2 hover:text-on-surface">
+          Clear
+        </button>
+      )}
+      {hint && <p className="mt-1.5 text-xs text-on-surface-subtle">{hint}</p>}
+    </fieldset>
+  );
+}
+
 function Required() {
   return <span className="ml-1 text-danger">*</span>;
 }
@@ -31,37 +72,31 @@ function QuestionField({ question, value, onChange }: { question: SignupQuestion
     </>
   );
 
+  const hint = question.helperText || undefined;
+
   if (question.type === "boolean") {
     return (
-      <label className="flex cursor-pointer select-none items-center gap-2.5">
-        <input type="checkbox" checked={value === "true"} onChange={(e) => onChange(e.target.checked ? "true" : "false")} className="size-4 cursor-pointer accent-accent" />
-        <span className="text-sm text-on-surface-muted">{label}</span>
-      </label>
+      <div>
+        <label className="flex cursor-pointer select-none items-center gap-2.5">
+          <input type="checkbox" checked={value === "true"} onChange={(e) => onChange(e.target.checked ? "true" : "false")} className="size-4 cursor-pointer accent-accent" />
+          <span className="text-sm text-on-surface-muted">{label}</span>
+        </label>
+        {hint && <p className="mt-1 pl-[1.625rem] text-xs text-on-surface-subtle">{hint}</p>}
+      </div>
     );
   }
   if (question.type === "textarea") {
     return (
-      <Field label={label}>
+      <Field label={label} hint={hint}>
         <Textarea value={value} onChange={(e) => onChange(e.target.value)} rows={3} className="resize-none" />
       </Field>
     );
   }
-  if (question.type === "select") {
-    return (
-      <Field label={label}>
-        <Select value={value} onChange={(e) => onChange(e.target.value)}>
-          <option value="">Select…</option>
-          {parseOptions(question).map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </Select>
-      </Field>
-    );
+  if (question.type === "select" || question.type === "multiselect") {
+    return <ChoiceGroup question={question} value={value} onChange={onChange} label={label} hint={hint} />;
   }
   return (
-    <Field label={label}>
+    <Field label={label} hint={hint}>
       <Input value={value} onChange={(e) => onChange(e.target.value)} />
     </Field>
   );
@@ -139,7 +174,7 @@ export function SignupForm({ slug }: { slug: string }) {
   }
 
   const answerList: SignupAnswerInput[] = questions.map((q) => ({ questionId: q.id, value: answers[q.id] ?? "" }));
-  const missingRequired = questions.some((q) => q.required && !(answers[q.id] ?? "").trim());
+  const missingRequired = questions.some((q) => q.required && isBlankAnswer(q.type, answers[q.id]));
   const isValid = !!rsnValue.trim() && !missingRequired;
 
   async function submit() {

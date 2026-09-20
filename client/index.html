@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tectonic Bingo</title>
+    <!-- Favicon set (public/). The logo is black and red, and a dark tab bar swallows the black, so dark mode gets the
+         same logo on a light plate; the .ico is the fallback for browsers that ignore the media query. -->
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-dark-32.png" media="(prefers-color-scheme: dark)" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!-- Sets data-color-scheme before first paint, avoiding a flash of the
          wrong scheme — the React-driven equivalent (core/ui/colorScheme.ts's
          useSyncColorSchemeAttribute) only runs after the bundle loads and

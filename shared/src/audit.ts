@@ -8,6 +8,7 @@
 // other two are the server's routeCoverage test and the http.mutation
 // fallback — see server/src/audit/routePolicy.ts and middleware.ts).
 import type { MinimalUser, Stage } from "./index.ts";
+import { playerName } from "./names.ts";
 
 export type AuditVisibility = "mods" | "team" | "public";
 export type AuditActorType = "user" | "system" | "dev";
@@ -62,6 +63,7 @@ export interface AuditDetailsMap {
       buyinAmount: number | null;
       bonusPotAmount: number;
       rulesMarkdown: string | null;
+      exclusivityRulesJson: string;
       signupOpensAt: string | null;
       draftScheduledAt: string | null;
       revealScheduledAt: string | null;
@@ -94,7 +96,7 @@ export interface AuditDetailsMap {
   "line.deleted": { lineType: string; lineIndex: number; points: number };
 
   "question.created": { prompt: string; type: string; required: boolean };
-  "question.updated": { changes: FieldChanges<{ prompt: string; type: string; optionsJson: string | null; required: boolean; sortOrder: number }> };
+  "question.updated": { changes: FieldChanges<{ prompt: string; helperText: string | null; type: string; optionsJson: string | null; required: boolean; sortOrder: number }> };
   "question.deleted": { prompt: string; type: string; required: boolean };
   "question.reordered": { order: string[] };
 
@@ -121,6 +123,8 @@ export interface AuditDetailsMap {
     pointsDelta: number;
     submittedByUserId: string;
   };
+  /** A mod changed which player a submission is credited to (someone forgot to pick the player they posted for). */
+  "submission.attribution_changed": { tileName: string | null; taskLabels: string[]; fromUserId: string; fromName: string; toUserId: string; toName: string };
   "submission.screenshot_analyzed": { codewordVerified: boolean; detectedItemName: string | null; textLength: number };
   "submission.screenshot_analysis_failed": Record<string, never>;
 
@@ -138,6 +142,7 @@ export interface AuditDetailsMap {
   "draft.order_shuffled": { order: { teamId: string; name: string; draftOrder: number }[] };
   "draft.order_set": { order: { teamId: string; name: string; draftOrder: number }[] };
   "draft.pick": { pickNumber: number; userIds: string[]; displayNames: string[]; pair: boolean };
+  "draft.pick_undone": { pickNumber: number; userIds: string[]; displayNames: string[]; pair: boolean };
   "draft.rating_set": { rsn: string; stars: number; hasNote: boolean; cleared: boolean };
 
   "pairing.requested": { requesterUserId: string; targetDiscordId: string };
@@ -314,7 +319,8 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     tone: "neutral",
     visibility: "mods",
     title: "Settings updated",
-    label: (i) => `${actor(i)} updated bingo settings (${Object.keys(i.details.changes.after).join(", ") || "no changes"})`,
+    label: (i) =>
+      `${actor(i)} updated bingo settings (${Object.keys(i.details.changes.after).map((k) => (k === "exclusivityRulesJson" ? "exclusive items" : k)).join(", ") || "no changes"})`,
   },
   "moderator.added": {
     category: "moderation",
@@ -389,9 +395,12 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     tone: "info",
     visibility: "team",
     title: "Submission created",
-    label: (i) => `${actor(i)} submitted ${describeClaims(i.details)} for "${i.details.tileName}"`,
-    condense: (inputs) =>
-      `${actor(inputs[0]!)} submitted ${describeClaims({ claims: inputs.flatMap((i) => i.details.claims), taskLabels: inputs.flatMap((i) => i.details.taskLabels) })} for ${describeTiles(inputs)}`,
+    // The audit entry's own "on behalf of" is the player the drop belongs to, when someone else posted it.
+    label: (i) => `${actor(i)} submitted ${describeClaims(i.details)} for "${i.details.tileName}"${onBehalf(i)}`,
+    condense: (inputs) => {
+      const sameOwner = new Set(inputs.map((i) => i.onBehalfOfName ?? "")).size === 1; // only when they were all for the same player
+      return `${actor(inputs[0]!)} submitted ${describeClaims({ claims: inputs.flatMap((i) => i.details.claims), taskLabels: inputs.flatMap((i) => i.details.taskLabels) })} for ${describeTiles(inputs)}${sameOwner ? onBehalf(inputs[0]!) : ""}`;
+    },
   },
   "submission.approved": {
     category: "submission",
@@ -416,6 +425,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     title: "Review undone",
     label: (i) =>
       `${actor(i)} sent a${i.details.previousStatus === "approved" ? "n approved" : " rejected"} submission for "${i.details.tileName ?? "a tile"}" back to pending`,
+  },
+  "submission.attribution_changed": {
+    category: "submission",
+    tone: "warn",
+    visibility: "team",
+    title: "Submission credit changed",
+    label: (i) => `${actor(i)} changed who a submission for "${i.details.tileName ?? "a tile"}" is credited to, from ${i.details.fromName} to ${i.details.toName}`,
   },
   "submission.screenshot_analyzed": {
     category: "submission",
@@ -469,6 +485,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "team",
     title: "Draft pick",
     label: (i) => `${actor(i)} drafted ${i.details.displayNames.join(" & ")}${onBehalf(i)}`,
+  },
+  "draft.pick_undone": {
+    category: "draft",
+    tone: "warn",
+    visibility: "team",
+    title: "Draft pick undone",
+    label: (i) => `${actor(i)} undid the pick of ${i.details.displayNames.join(" & ")}`,
   },
   "draft.rating_set": {
     category: "draft",
@@ -596,7 +619,7 @@ export type AuditLabelSource = Pick<AuditEntry, "action" | "details" | "entityLa
 
 /** The names and details a label renderer works from, resolved from an entry. */
 export function toAuditLabelInput(entry: AuditLabelSource): AuditLabelInput<AuditAction> {
-  const name = (u: MinimalUser) => u.discordGuildNick ?? u.discordGlobalName ?? u.discordUsername;
+  const name = (u: MinimalUser) => playerName(u);
   return {
     details: entry.details as never,
     entityLabel: entry.entityLabel,

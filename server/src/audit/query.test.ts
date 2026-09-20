@@ -95,6 +95,42 @@ describe("queryAuditLog", () => {
     expect(result.entries).toHaveLength(1);
   });
 
+  it("filters by a since/until window, including both ends", () => {
+    for (const day of ["2026-01-01", "2026-02-01", "2026-03-01", "2026-04-01"]) row({ createdAt: new Date(`${day}T12:00:00Z`) });
+    const window = queryAuditLog(db, { bingoId: "b1" }, { since: "2026-02-01T12:00:00Z", until: "2026-03-01T12:00:00Z" }, {});
+    expect(window.entries.map((e) => e.at)).toEqual(["2026-03-01T12:00:00.000Z", "2026-02-01T12:00:00.000Z"]);
+    const untilOnly = queryAuditLog(db, { bingoId: "b1" }, { until: "2026-01-31T00:00:00Z" }, {});
+    expect(untilOnly.entries).toHaveLength(1);
+  });
+
+  it("returns nothing for a window whose start is after its end", () => {
+    row({ createdAt: new Date("2026-02-01T12:00:00Z") });
+    expect(queryAuditLog(db, { bingoId: "b1" }, { since: "2026-03-01T00:00:00Z", until: "2026-01-01T00:00:00Z" }, {}).entries).toHaveLength(0);
+  });
+
+  it("combines the time window with the other filters and pagination", () => {
+    for (let i = 0; i < 4; i++) row({ createdAt: new Date(`2026-05-0${i + 1}T12:00:00Z`), teamId: "t1" });
+    row({ createdAt: new Date("2026-05-02T13:00:00Z"), teamId: "t2" });
+    const page1 = queryAuditLog(db, { bingoId: "b1" }, { since: "2026-05-02T00:00:00Z", teamId: ["t1"] }, { limit: 2 });
+    expect(page1.entries).toHaveLength(2);
+    expect(page1.nextCursor).not.toBeNull();
+    const page2 = queryAuditLog(db, { bingoId: "b1" }, { since: "2026-05-02T00:00:00Z", teamId: ["t1"] }, { limit: 2, cursor: page1.nextCursor! });
+    expect(page2.entries).toHaveLength(1);
+    expect(page2.nextCursor).toBeNull();
+  });
+
+  it("rejects a malformed since or until with a 400", () => {
+    for (const filters of [{ since: "yesterday-ish" }, { until: "not a date" }]) {
+      let error: unknown;
+      try {
+        queryAuditLog(db, { bingoId: "b1" }, filters, {});
+      } catch (e) {
+        error = e;
+      }
+      expect(error).toMatchObject({ status: 400, message: expect.stringMatching(/valid date/) });
+    }
+  });
+
   it("filters by q, matching entityLabel or action", () => {
     row({ entityLabel: "Bruma Warband" });
     row({ entityLabel: "Something else" });

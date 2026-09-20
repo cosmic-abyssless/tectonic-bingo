@@ -51,6 +51,7 @@ describe("route coverage", () => {
     const { default: adminRouter } = await import("../routes/admin");
     const { default: siteAdminRouter } = await import("../routes/siteAdmin");
     const { default: bugReportsRouter } = await import("../routes/bugReports");
+    const { default: devRouter } = await import("../routes/dev");
     const { default: clientErrorsRouter } = await import("../routes/clientErrors");
     const { AUDITED_ROUTES } = await import("./routePolicy");
 
@@ -60,6 +61,7 @@ describe("route coverage", () => {
       ...routesFor(adminRouter, "/api/bingos/:slug/admin"),
       ...routesFor(siteAdminRouter, "/api/admin"),
       ...routesFor(bugReportsRouter, "/api/bug-reports"),
+      ...routesFor(devRouter, "/api/dev"),
       ...routesFor(clientErrorsRouter, "/api/client-errors"),
     ];
 

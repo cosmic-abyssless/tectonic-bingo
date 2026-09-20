@@ -125,6 +125,10 @@ of truth and will drift less than a doc copy. Broadly:
 - **Bingo pages (non-board)**: `DraftPage`, `StatsPage` — whole-page layout
   (header + `core/draft`/`core/stats` content), but unlike `BoardPage`
   still props-only — they don't have a headless model of their own.
+- **Draft reveal**: `DraftPickBurst` — the shape that pops up for everyone
+  watching when a player is drafted. The theme draws only the shape (a
+  fixed-size card or burst with the player names and team); `core/draft`
+  does the pop, the hold and the flight to the team's roster.
 - **Page chrome**: `PageLoading`, `PageError`, `PageHeader`, `TeamSelector`,
   `TeamBadge`, `StageRow`, `TileSearch`, `TeamBanner`, `PlanningStage`,
   `SignupStage`, `DraftStage`, `NoTeamStage`, `RulesDialog`,

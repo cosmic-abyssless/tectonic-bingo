@@ -3,6 +3,7 @@ import { defaultTokens } from "../tokens";
 import { BoardPageLayout } from "./page/BoardPageLayout";
 import { DraftPageLayout } from "./page/DraftPageLayout";
 import { StatsPageLayout } from "./page/StatsPageLayout";
+import { DraftPickBurst } from "./draft/DraftPickBurst";
 import { PageLoading, PageError } from "./page/PageStates";
 import { PageHeader } from "./page/PageHeader";
 import { TeamSelector } from "./page/TeamSelector";
@@ -32,6 +33,7 @@ import { SubmissionModal } from "./submission/SubmissionModal";
 import { ScreenshotDropzone } from "./submission/ScreenshotDropzone";
 import { AnalysisPanel } from "./submission/AnalysisPanel";
 import { TilePicker } from "./submission/TilePicker";
+import { SubmitterPicker } from "./submission/SubmitterPicker";
 import { TaskPicker } from "./submission/TaskPicker";
 import { RequirementPicker } from "./submission/RequirementPicker";
 import { StagedClaimsList } from "./submission/StagedClaimsList";
@@ -45,6 +47,7 @@ export const defaultTheme: ThemeDefinition = {
     BoardPage: BoardPageLayout,
     DraftPage: DraftPageLayout,
     StatsPage: StatsPageLayout,
+    DraftPickBurst,
     PageLoading,
     PageError,
     PageHeader,
@@ -75,6 +78,7 @@ export const defaultTheme: ThemeDefinition = {
     SubmissionModal,
     ScreenshotDropzone,
     AnalysisPanel,
+    SubmitterPicker,
     TilePicker,
     TaskPicker,
     RequirementPicker,

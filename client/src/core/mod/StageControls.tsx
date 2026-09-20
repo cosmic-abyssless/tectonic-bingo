@@ -17,7 +17,8 @@ const ENTER_EFFECT: Record<Stage, string> = {
   complete: "Submissions close; the board and stats stay visible.",
 };
 
-export function StageControls({ slug, bingo }: { slug: string; bingo: Bingo }) {
+/** The stage and what is next. Only site admins can change it: for anyone else there are no buttons, just the read-out. */
+export function StageControls({ slug, bingo, canChange }: { slug: string; bingo: Bingo; canChange: boolean }) {
   const advanceStage = useAdvanceStage(slug);
   const [confirming, setConfirming] = useState<Stage | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,13 +48,13 @@ export function StageControls({ slug, bingo }: { slug: string; bingo: Bingo }) {
           <p className="text-lg font-semibold text-on-surface">{STAGE_LABEL[bingo.stage]}</p>
         </div>
         <div className="flex gap-2">
-          {prevStage && (
+          {canChange && prevStage && (
             <Button size="sm" onPress={() => setConfirming(prevStage)}>
               <ArrowLeftIcon />
               Back to {STAGE_LABEL[prevStage]}
             </Button>
           )}
-          {nextStage && (
+          {canChange && nextStage && (
             <Button size="sm" variant="primary" onPress={() => setConfirming(nextStage)}>
               Advance to {STAGE_LABEL[nextStage]}
               <ArrowRightIcon />
@@ -63,13 +64,13 @@ export function StageControls({ slug, bingo }: { slug: string; bingo: Bingo }) {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <StageStepper stage={bingo.stage} onSelect={setConfirming} />
+        <StageStepper stage={bingo.stage} onSelect={canChange ? setConfirming : undefined} />
         <MilestoneCountdown milestone={nextMilestone(bingo)} />
       </div>
 
       {error && <Notice tone="danger">{error}</Notice>}
 
-      {confirming && (
+      {canChange && confirming && (
         <Notice tone="warn">
           <p className="font-medium text-on-surface">
             Move from {STAGE_LABEL[bingo.stage]} to {STAGE_LABEL[confirming]}?

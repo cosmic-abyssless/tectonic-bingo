@@ -135,7 +135,7 @@ test("full bingo lifecycle", async ({ page, browser }) => {
     const questionRows = page.locator(".bg-slate-900.border.border-slate-700.rounded-lg.p-3.space-y-2");
 
     await page.getByPlaceholder("New question…").fill("What is your preferred combat style?");
-    await page.getByLabel("New question type").selectOption({ label: "Dropdown" });
+    await page.getByLabel("New question type").selectOption({ label: "Single choice" });
     await page.getByPlaceholder("Comma-separated options").fill("Melee, Ranged, Magic");
     await page.getByRole("button", { name: "Add" }).click();
     await expect(questionRows).toHaveCount(1);
@@ -174,7 +174,8 @@ test("full bingo lifecycle", async ({ page, browser }) => {
       // (required-field marker rendered as a nested span; see docs/e2e-
       // testing-plan.md Phase E3 notes).
       await page.getByLabel("RuneScape name").fill(PLAYER_RSNS[discordId]!);
-      await page.getByLabel("What is your preferred combat style?").selectOption({ label: "Melee" });
+      // A single-choice question is a group of radio buttons.
+      await page.getByRole("radio", { name: "Melee" }).check();
       if (discordId === "e2e-p1" || discordId === "e2e-p2") {
         await page.getByLabel("Willing to captain?").check();
       }
@@ -263,7 +264,7 @@ test("full bingo lifecycle", async ({ page, browser }) => {
   const RSN_TO_DISCORD_ID: Record<string, string> = { Trainer1: "e2e-p1", Trainer2: "e2e-p2" };
 
   function onClockColumn(page: Page) {
-    return page.locator("div.flex.min-w-0.flex-col.gap-1", { hasText: "On the clock" });
+    return page.locator("div.flex.min-w-0.flex-col.gap-1", { hasText: "Currently picking" });
   }
 
   async function onClockCaptainRsn(page: Page): Promise<string> {

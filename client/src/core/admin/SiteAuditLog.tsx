@@ -11,6 +11,8 @@ import { Card, EmptyState, Notice } from "../ui/Card";
 import { ChevronDownIcon, ChevronRightIcon, ListIcon } from "../ui/icons";
 import { Menu, MenuItem, MenuTrigger } from "../ui/Menu";
 import { MultiSelect } from "../ui/MultiSelect";
+import { DateTimeRangeFilter } from "../ui/DateTimeRangeFilter";
+import { isRangeSet, type TimeRange } from "../ui/timeRange";
 
 type BingoScope = string | null | "all";
 
@@ -47,6 +49,7 @@ export function SiteAuditLog() {
   const [categories, setCategories] = useState<string[]>([]);
   const [actorUserIds, setActorUserIds] = useState<string[]>([]);
   const [bingoScope, setBingoScope] = useState<BingoScope>("all");
+  const [range, setRange] = useState<TimeRange>({});
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -58,7 +61,10 @@ export function SiteAuditLog() {
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useSiteAuditLog(bingoScope, {
     category: categories.length ? (categories as AuditCategory[]) : undefined,
     actorUserId: actorUserIds.length ? actorUserIds : undefined,
+    since: range.since,
+    until: range.until,
   });
+  const filtered = categories.length > 0 || actorUserIds.length > 0 || bingoScope !== "all" || isRangeSet(range);
 
   const entries = useMemo(() => data?.pages.flatMap((p) => p.entries) ?? [], [data]);
 
@@ -85,6 +91,7 @@ export function SiteAuditLog() {
         <MultiSelect label="Category" options={CATEGORIES} selected={categories} onChange={setCategories} />
         {actorOptions.length > 0 && <MultiSelect label="User" options={actorOptions} selected={actorUserIds} onChange={setActorUserIds} />}
         <BingoScopeFilter options={bingoScopeOptions} value={bingoScope} onChange={setBingoScope} />
+        <DateTimeRangeFilter value={range} onChange={setRange} />
         <div className="ml-auto">
           <Button size="sm" onPress={copyCsv} isDisabled={entries.length === 0}>
             {copied ? "Copied" : "Copy as CSV"}
@@ -97,8 +104,8 @@ export function SiteAuditLog() {
       ) : isLoading ? (
         <p className="py-20 text-center text-sm text-on-surface-muted">Loading…</p>
       ) : entries.length === 0 ? (
-        <EmptyState icon={<ListIcon />} title="No activity yet">
-          Actions taken across the site will show up here as they happen.
+        <EmptyState icon={<ListIcon />} title={filtered ? "No matching activity" : "No activity yet"}>
+          {filtered ? "Nothing in the log matches these filters. Try widening them." : "Actions taken across the site will show up here as they happen."}
         </EmptyState>
       ) : (
         <div className="space-y-2">

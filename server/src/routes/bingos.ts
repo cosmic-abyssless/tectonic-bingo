@@ -1,3 +1,4 @@
+import { devSkipsOcr } from "../devMode";
 import { privateRevalidate } from "../middleware/cacheControl";
 import { Router } from "express";
 import fs from "fs";
@@ -13,6 +14,7 @@ import { effectiveStartsAt } from "../services/bingoStart";
 import * as boardService from "../services/boardService";
 import * as teamService from "../services/teamService";
 import * as submissionService from "../services/submissionService";
+import { resolveSubmissionTarget, resolveSubmissionTeam } from "../services/submissionTarget";
 import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
 import * as pairingService from "../services/pairingService";
@@ -62,8 +64,11 @@ const analyzeUpload = imageUpload();
 
 const router = Router();
 
+// Every route here needs a login: the shell carries each team's roster (players' Discord accounts and RSNs), so
+// nothing about a bingo is served to an anonymous request (see requireLogin.test.ts).
 router.get(
   "/",
+  requireAuth,
   asyncHandler(async (_req, res) => {
     res.json({ bingos: bingoService.listBingos(db) });
   }),
@@ -71,6 +76,7 @@ router.get(
 
 router.get(
   "/:slug",
+  requireAuth,
   requireBingo,
   privateRevalidate,
   asyncHandler(async (req, res) => {
@@ -81,7 +87,7 @@ router.get(
     res.json({
       // effectiveStartsAt: when the bingo counts as started (see bingoStart.ts) — the settings' start date, or else
       // when it was last put live. The client runs tile freezes and "has it started" from this, not from startsAt.
-      bingo: { ...bingoService.toPublicBingo(bingo), effectiveStartsAt: effectiveStartsAt(db, bingo) },
+      bingo: { ...bingoService.toViewerBingo(bingo, isMod), effectiveStartsAt: effectiveStartsAt(db, bingo) },
       categories: boardService.getCategories(db, bingo.id),
       teams: teamService.getTeamsWithMembers(db, bingo.id),
       isMod,
@@ -95,6 +101,7 @@ router.get(
 
 router.get(
   "/:slug/board",
+  requireAuth,
   requireBingo,
   privateRevalidate,
   asyncHandler(async (req, res) => {
@@ -110,7 +117,8 @@ router.get(
 
 // Stats expose every team's progress, so players only get the full picture once
 // the bingo is over; while it's live they see just their own team. Mods can
-// watch everything throughout.
+// watch everything throughout. "First to complete" events are mods-only, always
+// (statsService.getStatsForViewer).
 router.get(
   "/:slug/stats",
   requireAuth,
@@ -122,8 +130,7 @@ router.get(
     const myTeam = seesEveryTeam ? null : teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
     if (!seesEveryTeam && (bingo.stage !== "live" || !myTeam)) throw new ServiceError(403, "Stats aren't visible until the bingo is complete");
 
-    const stats = statsService.getStats(db, bingo.id);
-    res.json(myTeam ? statsService.filterStatsForTeam(stats, myTeam.id) : stats);
+    res.json(statsService.getStatsForViewer(db, bingo.id, { isMod, teamId: myTeam?.id ?? null }));
   }),
 );
 
@@ -192,14 +199,18 @@ router.post(
   upload.single("screenshot"),
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
-    const team = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
-    if (!team) {
+    const { claims: claimsRaw, teamId, forUserId } = req.body as { claims?: string; teamId?: string; forUserId?: string };
+    // Your own team, for yourself or a teammate; a mod may name another team, and then the player it is for.
+    let target;
+    try {
+      target = resolveSubmissionTarget(db, bingo, req.user!, { teamId, forUserId });
+    } catch (err) {
       if (req.file) fs.unlinkSync(req.file.path);
-      throw new ServiceError(403, "You are not on a team for this bingo");
+      throw err;
     }
+    const team = target.team;
     if (!req.file) throw new ServiceError(400, "Screenshot is required");
 
-    const { claims: claimsRaw } = req.body as { claims?: string };
     let claims: ClaimInput[];
     try {
       claims = claimsRaw ? JSON.parse(claimsRaw) : [];
@@ -212,7 +223,8 @@ router.post(
     try {
       submission = submissionService.createSubmission(db, bingo, {
         teamId: team.id,
-        submittedByUserId: req.user!.id,
+        submittedByUserId: target.submittedByUserId,
+        postedByUserId: target.postedByUserId,
         claims,
         screenshotUrl: `/uploads/${req.file.filename}`,
       });
@@ -226,7 +238,7 @@ router.post(
     // Runs after responding — OCR (~1.6s+) shouldn't hold up submission
     // creation. Populates the same fields the mod panel shows (issue #7);
     // failure here just leaves that panel without OCR info for this one.
-    if (isOcrEnabled()) {
+    if (isOcrEnabled() && !devSkipsOcr(req.header("x-dev-skip-ocr"))) {
       const filePath = req.file.path;
       const submissionId = submission.id;
       (async () => {
@@ -250,8 +262,8 @@ router.post(
   auditSkip("read-only OCR analysis — no state changes"),
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
-    const team = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
-    if (!team) throw new ServiceError(403, "You are not on a team for this bingo");
+    // The codeword to look for is the team the screenshot is being submitted to (a mod may name another team).
+    const team = resolveSubmissionTeam(db, bingo, req.user!, (req.body as { teamId?: string }).teamId);
     if (!req.file) throw new ServiceError(400, "Screenshot is required");
 
     if (!isOcrEnabled()) throw new ServiceError(503, "Screenshot analysis is disabled on this server");
@@ -271,6 +283,7 @@ router.post(
 
 router.get(
   "/:slug/signup/questions",
+  requireAuth,
   requireBingo,
   asyncHandler(async (req, res) => {
     res.json({ questions: signupService.getQuestions(db, req.bingo!.id) });
@@ -485,7 +498,7 @@ router.get(
     }
 
     const ledTeamId = isLead && myTeam ? myTeam.id : null;
-    const state = draftService.getDraftState(db, bingo, { includeAnswers: isMod || !!ledTeamId });
+    const state = draftService.getDraftState(db, bingo, { includeAnswers: isMod || !!ledTeamId, hideCut: true });
     // Scouting notes are private to the lead's own team.
     const ratings = ledTeamId ? draftService.getTeamRatings(db, ledTeamId) : {};
 
@@ -607,6 +620,19 @@ router.post(
     const [first] = picks;
     broadcast({ type: "draft_pick", bingoId: bingo.id, payload: { pickNumber: first!.pickNumber, teamId: first!.teamId, userIds: picks.map((p) => p.userId) } });
     res.status(201).json({ picks });
+  }),
+);
+
+// A site admin takes back the latest pick (a misclick). Its players go back into the pool.
+router.post(
+  "/:slug/draft/undo",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const bingo = req.bingo!;
+    const undone = draftService.undoLastPick(db, { bingo, actingUserId: req.user!.id, actingIsAdmin: req.user!.isAdmin });
+    broadcast({ type: "draft_pick_undone", bingoId: bingo.id, payload: undone });
+    res.json({ undone });
   }),
 );
 

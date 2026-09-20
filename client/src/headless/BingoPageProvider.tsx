@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { STAGE_LABEL, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { useBingo, useBoard, useDraftState, usePendingCount, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
@@ -6,11 +6,12 @@ import { useAuth } from "../context/AuthContext";
 import { displayName, avatarUrl } from "../core/ui/user";
 import { useHasPassed } from "../core/ui/useHasPassed";
 import { toCategoryModel, toTeamModel, buildSubmissionModels } from "./boardModel";
+import { lockedLeaves, type ExclusiveLocks } from "../core/board/exclusivity";
 import { useViewingTeam } from "./useViewingTeam";
 import { useTileSearch } from "./useTileSearch";
 import { usePageEvents } from "./usePageEvents";
 import { BoardProvider } from "./BoardProvider";
-import type { BingoPageModel, StageView } from "./types";
+import type { BingoPageModel, StageView, TeamModel } from "./types";
 
 // Internal escape hatch: only useSubmissionFlow.ts (which needs raw
 // tiles/categories/nodeStates/teamSubmissions/bingo for the submission
@@ -23,6 +24,11 @@ interface BingoPageRaw {
   categories: TileCategory[];
   nodeStates: TeamNodeState[];
   teamSubmissions: SubmissionDetails[];
+  /** The team being viewed (a mod's picked team, otherwise your own) and who you are on it, for who a submission is for. */
+  viewingTeam: TeamModel | null;
+  viewerId: string;
+  /** Item nodes the viewed team can't claim because it used them elsewhere (exclusive items). */
+  locks: ExclusiveLocks;
 }
 
 const BingoPageContext = createContext<BingoPageModel | null>(null);
@@ -79,6 +85,8 @@ export function BingoPageProvider({
   const [submitInitialFile, setSubmitInitialFile] = useState<File | undefined>(undefined);
 
   const search = useTileSearch(tiles, (tileId) => setOpenTileId(tileId));
+  const exclusivityRules = shell?.bingo.exclusivityRules;
+  const locks = useMemo(() => lockedLeaves(exclusivityRules ?? [], tiles, submissionsData?.submissions ?? EMPTY_SUBMISSIONS), [exclusivityRules, tiles, submissionsData]);
 
   if (!user) return null;
   if (shellLoading) return renderLoading();
@@ -90,7 +98,8 @@ export function BingoPageProvider({
   const teamSubmissions = submissionsData?.submissions ?? EMPTY_SUBMISSIONS;
 
   const isViewingOtherTeam = isMod && !!viewingTeamId && viewingTeamId !== myTeam?.id;
-  const canSubmit = bingo.stage === "live" && hasStarted && !isViewingOtherTeam && !!viewingTeamId;
+  // Mods can submit for the team they are viewing too (naming the player it is for), so this doesn't depend on whose team it is.
+  const canSubmit = bingo.stage === "live" && hasStarted && !!viewingTeamId;
   // Hands go up on your own team's board only, from reveal onwards (the
   // board isn't visible to players before that) until the bingo is over.
   const canToggleInterest = !!myTeam && viewingTeamId === myTeam.id && (bingo.stage === "reveal" || bingo.stage === "live");
@@ -140,7 +149,7 @@ export function BingoPageProvider({
       boardCols: bingo.boardCols,
     },
     milestone: nextMilestone(bingo),
-    user: { displayName: displayName(user), avatarUrl: avatarUrl(user) },
+    user: { displayName: myTeamModel?.members.find((m) => m.id === user.id)?.displayName ?? displayName(user), avatarUrl: avatarUrl(user) },
     isMod,
     myTeam: myTeamModel,
     teams: teamModels,
@@ -193,7 +202,7 @@ export function BingoPageProvider({
     },
   };
 
-  const raw: BingoPageRaw = { slug, bingo, tiles, categories: categoriesRaw, nodeStates, teamSubmissions };
+  const raw: BingoPageRaw = { slug, bingo, tiles, categories: categoriesRaw, nodeStates, teamSubmissions, viewingTeam: viewingTeamModel, viewerId: user.id, locks };
 
   return (
     <BingoPageRawContext.Provider value={raw}>
@@ -214,6 +223,7 @@ export function BingoPageProvider({
           viewerUserId={user.id}
           totalPoints={progressData?.totalPoints ?? null}
           adjustments={progressData?.adjustments ?? EMPTY_ADJUSTMENTS}
+          locks={locks}
         >
           {children}
         </BoardProvider>

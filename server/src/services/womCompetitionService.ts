@@ -15,6 +15,7 @@
 // failure is persisted onto bingos.womSyncError for the settings panel to
 // surface rather than bubbling up and breaking the stage change or rename
 // that triggered it.
+import { now as clockNow } from "../clock";
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -175,7 +176,7 @@ export async function syncWomCompetitionAfterDraft(db: Db, bingoId: string, clie
   if (rosters.length === 0) return;
 
   try {
-    const startsAt = bingo.startsAt ?? new Date();
+    const startsAt = bingo.startsAt ?? clockNow();
     // WOM requires endsAt > startsAt; fall back to two weeks out when the
     // bingo has no end date scheduled yet.
     const endsAt = bingo.endsAt && bingo.endsAt > startsAt ? bingo.endsAt : new Date(startsAt.getTime() + 14 * 24 * 60 * 60 * 1000);

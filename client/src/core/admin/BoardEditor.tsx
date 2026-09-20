@@ -1,3 +1,4 @@
+import { ExclusiveItemsProvider } from "./exclusiveItems";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { isBoardEditingLocked, type Bingo, type BoardResponse, type Tile, type TileCategory } from "@bingo/shared";
@@ -65,6 +66,7 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
   }
 
   return (
+    <ExclusiveItemsProvider value={bingo.exclusivityRules}>
     <div className="space-y-6">
       {locked && (
         <Notice tone="warn" icon={<LockIcon />}>
@@ -126,5 +128,6 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
 
       <TileEditorPanel slug={slug} tile={selectedTile} categories={categories} locked={locked} onClose={() => setSelectedTileId(null)} />
     </div>
+    </ExclusiveItemsProvider>
   );
 }

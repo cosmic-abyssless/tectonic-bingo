@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingos } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { addModerator, advanceStage, assertBoardEditable, assertQuestionsEditable, createBingo, deleteBingo, removeModerator, toPublicBingo, updateBingoSettings } from "./bingoService";
+import { addModerator, advanceStage, assertBoardEditable, assertQuestionsEditable, createBingo, deleteBingo, normalizeExclusivityRules, parseExclusivityRules, listBingos, removeModerator, toPublicBingo, toViewerBingo, updateBingoSettings } from "./bingoService";
 import { effectiveStartsAt } from "./bingoStart";
 import { createTask, createTile } from "./boardService";
 import { createTeam } from "./teamService";
@@ -126,6 +126,106 @@ describe("toPublicBingo", () => {
     expect(publicBingo.womGroupId).toBe("123");
     expect(publicBingo.womEnabled).toBe(true);
     expect(publicBingo.name).toBe(bingo.name);
+  });
+});
+
+describe("toViewerBingo", () => {
+  const rules = [{ id: "r1", label: "Pets", itemNames: ["Baron", "Nid"], scope: "tile" as const }];
+  // One bingo with rules text and an exclusive item list, moved to the stage under test.
+  const withRules = (stage: (typeof schema.bingos.$inferSelect)["stage"]) => {
+    const existing = db.select().from(bingos).get();
+    if (!existing) return seedBingo({ stage, rulesMarkdown: "Bring a Baron.", exclusivityRulesJson: JSON.stringify(rules) });
+    return db.update(bingos).set({ stage }).where(eq(bingos.id, existing.id)).returning().get();
+  };
+
+  it("holds back the rules text and the exclusive item lists from a player until the board is revealed", () => {
+    for (const stage of ["planning", "signup", "captains", "draft"] as const) {
+      const seen = toViewerBingo(withRules(stage), false);
+      expect(seen.rulesMarkdown, stage).toBeNull();
+      expect(seen.exclusivityRules, stage).toEqual([]);
+    }
+  });
+
+  it("shows them from the reveal on", () => {
+    for (const stage of ["reveal", "live", "complete"] as const) {
+      const seen = toViewerBingo(withRules(stage), false);
+      expect(seen.rulesMarkdown, stage).toBe("Bring a Baron.");
+      expect(seen.exclusivityRules, stage).toEqual(rules);
+    }
+  });
+
+  it("always shows them to a mod, and keeps everything else in either case", () => {
+    const bingo = withRules("signup");
+    expect(toViewerBingo(bingo, true).rulesMarkdown).toBe("Bring a Baron.");
+    expect(toViewerBingo(bingo, true).exclusivityRules).toEqual(rules);
+    const hidden = toViewerBingo(bingo, false);
+    expect(hidden.name).toBe(bingo.name);
+    expect(hidden).not.toHaveProperty("womGroupVerificationCode");
+    expect(hidden).not.toHaveProperty("exclusivityRulesJson");
+  });
+
+  it("keeps them out of the bingo list before the reveal", () => {
+    withRules("signup");
+    const [listed] = listBingos(db);
+    expect(listed!.rulesMarkdown).toBeNull();
+    expect(listed!.exclusivityRules).toEqual([]);
+  });
+});
+
+describe("exclusivity rules", () => {
+  const pets = { id: "r1", label: "Pets", itemNames: ["Baron", "Nid"], scope: "tile" as const };
+
+  it("a new bingo has none, and the public shape exposes the parsed rules instead of the raw column", () => {
+    const bingo = seedBingo();
+    const publicBingo = toPublicBingo(bingo);
+    expect(publicBingo.exclusivityRules).toEqual([]);
+    expect(publicBingo).not.toHaveProperty("exclusivityRulesJson");
+  });
+
+  it("stores rules from the settings, cleaned: trimmed labels and names, duplicates (any case) dropped, missing ids minted", () => {
+    const bingo = seedBingo();
+    const updated = updateBingoSettings(db, bingo.id, {
+      exclusivityRules: [{ id: "", label: "  Pets ", itemNames: [" Baron", "baron", "Nid", " "], scope: "tile" }, { ...pets, id: "keep-me", label: "Slayer", scope: "part" }],
+    });
+    const rules = toPublicBingo(updated).exclusivityRules;
+    expect(rules).toHaveLength(2);
+    expect(rules[0]).toMatchObject({ label: "Pets", itemNames: ["Baron", "Nid"], scope: "tile" });
+    expect(rules[0]!.id.length).toBeGreaterThan(10);
+    expect(rules[1]!.id).toBe("keep-me");
+  });
+
+  it("leaves the rules alone when other settings change, and clears them with an empty list", () => {
+    const bingo = seedBingo();
+    updateBingoSettings(db, bingo.id, { exclusivityRules: [pets] });
+    expect(toPublicBingo(updateBingoSettings(db, bingo.id, { name: "Renamed" })).exclusivityRules).toHaveLength(1);
+    expect(toPublicBingo(updateBingoSettings(db, bingo.id, { exclusivityRules: [] })).exclusivityRules).toEqual([]);
+  });
+
+  it("refuses rules that can't work", () => {
+    const bingo = seedBingo();
+    const bad = (rule: unknown) => () => updateBingoSettings(db, bingo.id, { exclusivityRules: [rule as never] });
+    expect(bad({ ...pets, label: " " })).toThrow(/needs a label/);
+    expect(bad({ ...pets, scope: "board" })).toThrow(/scope must be/);
+    expect(bad({ ...pets, itemNames: [" ", ""] })).toThrow(/no items/);
+    expect(bad({ ...pets, itemNames: "Baron" })).toThrow(/itemNames must be an array/);
+    expect(() => normalizeExclusivityRules("nope")).toThrow(/must be an array/);
+    expect(() => normalizeExclusivityRules(Array.from({ length: 51 }, () => pets))).toThrow(/At most/);
+    expect(toPublicBingo(db.select().from(schema.bingos).get()!).exclusivityRules).toEqual([]); // nothing half-saved
+  });
+
+  it("records the change in the settings audit entry", () => {
+    const bingo = seedBingo();
+    updateBingoSettings(db, bingo.id, { exclusivityRules: [pets] });
+    const row = db.select().from(schema.auditLog).all().find((r) => r.action === "settings.updated")!;
+    const changes = JSON.parse(row.details).changes;
+    expect(Object.keys(changes.after)).toEqual(["exclusivityRulesJson"]);
+    expect(JSON.parse(changes.after.exclusivityRulesJson)[0].label).toBe("Pets");
+  });
+
+  it("reads a bad stored column as no rules", () => {
+    expect(parseExclusivityRules("not json")).toEqual([]);
+    expect(parseExclusivityRules("{}")).toEqual([]);
+    expect(parseExclusivityRules(null)).toEqual([]);
   });
 });
 

@@ -9,6 +9,7 @@
 // node; a line is a node referenced by a BingoLine row. NodeStatus is
 // derived at read time, never stored (see TeamNodeState).
 
+import type { ExclusivityRule } from "./exclusivity.ts";
 import type { AuditVisibility } from "./audit.ts";
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
@@ -71,6 +72,12 @@ export interface User {
   discordGlobalName: string | null;
   discordGuildNick: string | null;
   discordAvatar: string | null;
+  /**
+   * The RSN this player signed up with in the bingo the response is about. The server sets it on the users it sends
+   * inside a bingo (a roster, a submission, the stats, the audit log); it is absent on site-level lists, and for an
+   * account with no signup in that bingo (a mod who isn't playing). See playerName.
+   */
+  rsn?: string | null;
   /** Was a member of the clan's Discord server at last login. */
   inGuild: boolean;
   isAdmin: boolean;
@@ -105,6 +112,8 @@ export interface Bingo {
   buyinAmount: number | null;
   bonusPotAmount: number;
   rulesMarkdown: string | null;
+  /** Items a team may use in one place only (see exclusivity.ts). */
+  exclusivityRules: ExclusivityRule[];
   signupOpensAt: string | null;
   draftScheduledAt: string | null;
   revealScheduledAt: string | null;
@@ -240,7 +249,10 @@ export interface Tile extends TileBase {
 export interface Submission {
   id: string;
   teamId: string;
+  /** The player the drop belongs to (credited for it). */
   submittedByUserId: string;
+  /** Who uploaded it, when that isn't the same player: a teammate at a PC, or a mod. */
+  postedByUserId: string | null;
   status: SubmissionStatus;
   submittedAt: string;
   reviewedAt: string | null;
@@ -272,13 +284,15 @@ export interface Claim {
   quantity: number;
 }
 
-export type MinimalUser = Pick<User, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">;
+export type MinimalUser = Pick<User, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick" | "rsn">;
 
 export interface SubmissionDetails {
   submission: Submission;
   screenshots: SubmissionScreenshot[];
   claims: Claim[];
   submittedByUser: MinimalUser | null;
+  /** Set only when someone else posted it for `submittedByUser`. */
+  postedByUser: MinimalUser | null;
 }
 
 export type BugReportStatus = "open" | "resolved";
@@ -451,17 +465,26 @@ export interface ReviewSubmissionResponse {
   pointsDelta?: number;
 }
 
-export type SignupQuestionType = "text" | "textarea" | "select" | "boolean";
+/**
+ * "select" is a single choice (shown as radio buttons) and "multiselect" is any number of choices (checkboxes), both
+ * from `optionsJson`. A multiselect answer is stored as a JSON list (see signupAnswers.ts).
+ */
+export type SignupQuestionType = "text" | "textarea" | "select" | "multiselect" | "boolean";
 
 export interface SignupQuestion {
   id: string;
   bingoId: string;
   prompt: string;
+  /** Plain text shown under the question on the signup form, when set. */
+  helperText: string | null;
   type: SignupQuestionType;
   optionsJson: string | null;
   required: boolean;
   sortOrder: number;
 }
+
+/** The longest helper text a question may carry. */
+export const MAX_QUESTION_HELPER_TEXT = 500;
 
 export type SignupStatus = "active" | "withdrawn";
 
@@ -763,6 +786,8 @@ export interface DraftState {
   orderLockedUntil: string | null;
   // singlesRound: the main pool is empty and leftovers are being drafted.
   currentPick: { pickNumber: number; round: number; teamId: string; singlesRound: boolean } | null;
+  // Signups cut from the draft (leftover mode "cut", once signups have closed). They are not in `pool`.
+  cutCount: number;
   ratings: Record<string, PickRating>; // by signupId; empty unless the viewer leads a team
   tectonicUnavailable: boolean; // the clan API lookup failed, so every tectonicProfile is null
 }
@@ -780,7 +805,7 @@ export interface PointsOverTimePoint {
   cumulativePoints: number;
 }
 
-export type TimelineEventType = "stage_changed" | "draft_pick" | "line_completed" | "first_completion";
+export type TimelineEventType = "points_earned" | "line_completed" | "point_adjustment" | "first_completion" | "stage_changed";
 
 export interface TimelineEvent {
   at: string;
@@ -832,6 +857,8 @@ export type BroadcastEvent =
   | { type: "draft_order_shuffled"; bingoId: string; payload: { lockedUntil: string; order: { teamId: string; draftOrder: number }[] } }
   | { type: "draft_order_set"; bingoId: string; payload: { order: { teamId: string; draftOrder: number }[] } }
   | { type: "draft_pick"; bingoId: string; payload: { pickNumber: number; teamId: string; userIds: string[] } }
+  // An admin took back the latest pick; its players are back in the pool.
+  | { type: "draft_pick_undone"; bingoId: string; payload: { pickNumber: number; teamId: string; userIds: string[] } }
   // A team lead starred/noted a signup. Other leads of the same team refetch
   // draft state; the rating itself stays behind GET /draft's auth.
   | { type: "draft_rating_changed"; bingoId: string; payload: { teamId: string } }
@@ -855,3 +882,6 @@ export type BroadcastEvent =
 export * from "./audit.ts";
 export * from "./auditCondense.ts";
 export * from "./bingoExport.ts";
+export * from "./exclusivity.ts";
+export * from "./names.ts";
+export * from "./signupAnswers.ts";

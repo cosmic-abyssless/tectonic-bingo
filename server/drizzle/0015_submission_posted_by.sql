@@ -1,0 +1,1 @@
+ALTER TABLE `submissions` ADD `posted_by_user_id` text REFERENCES users(id);

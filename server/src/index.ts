@@ -1,5 +1,6 @@
 // Must be the first import — see env.ts for why a plain dotenv.config() call
 // positioned before these other imports does not actually run first.
+import { isDevModeActive } from "./devMode";
 import "./env";
 import path from "path";
 import fs from "fs";
@@ -12,6 +13,7 @@ import cors from "cors";
 import passport from "passport";
 import { configurePassport } from "./auth/discord";
 import authRouter from "./routes/auth";
+import devRouter from "./routes/dev";
 import meRouter from "./routes/me";
 import bingosRouter from "./routes/bingos";
 import modRouter from "./routes/mod";
@@ -160,6 +162,8 @@ app.use("/api/bingos", requireGuildMember, bingosRouter);
 app.use("/api/bingos/:slug/mod", requireGuildMember, modRouter);
 app.use("/api/bingos/:slug/admin", requireGuildMember, adminRouter);
 app.use("/api/osrs-items", osrsItemsRouter);
+// Dev-only tooling (test data generator): only exists while dev mode is on.
+if (isDevModeActive()) app.use("/api/dev", devRouter);
 app.use("/api/bug-reports", bugReportsRouter);
 app.use("/api/client-errors", clientErrorsRouter);
 
@@ -196,7 +200,7 @@ server.listen(PORT, () => {
     tectonic: Boolean(getTectonicConfig()),
     ocr: process.env.SCREENSHOT_OCR_DISABLED !== "true",
     dbDir: path.dirname(dbPath),
-    devLogin: process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "true",
+    devMode: isDevModeActive(),
   });
 });
 

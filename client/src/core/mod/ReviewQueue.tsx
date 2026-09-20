@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ModSubmissionRow, SubmissionScreenshot, SubmissionStatus } from "@bingo/shared";
-import { useCreatePointAdjustment, useModSubmissions, useReviewSubmission } from "../../api/queries";
+import { useBingo, useChangeSubmissionAttribution, useCreatePointAdjustment, useModSubmissions, useReviewSubmission } from "../../api/queries";
 import { SubmissionStatusBadge } from "../ui/StatusBadge";
 import { timeAgo } from "../ui/time";
 import { displayName } from "../ui/user";
@@ -9,6 +9,7 @@ import { Button } from "../ui/Button";
 import { Badge, Card, EmptyState, FilterChip, Notice } from "../ui/Card";
 import { Field, Input, Textarea } from "../ui/Field";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
+import { SearchableSelect } from "../ui/SearchableSelect";
 import { ScreenshotThumb } from "../submissions/ScreenshotThumb";
 import { claimsSummary } from "../submissions/claimsSummary";
 import { fullUrl } from "../../api/imageVariants";
@@ -54,10 +55,32 @@ function ScreenshotAnalysisBadges({ screenshot }: { screenshot: SubmissionScreen
   return null;
 }
 
+const REVEAL_MARGIN = 12;
+
+/**
+ * Scrolls just far enough that a submission's first screenshot and its Approve / Reject buttons are on screen
+ * together, below the sticky header. If they can't both fit, the screenshot's top wins.
+ */
+function revealReview(submissionId: string) {
+  const first = document.getElementById(`review-shots-${submissionId}`);
+  const actions = document.getElementById(`review-actions-${submissionId}`);
+  if (!first || !actions) return;
+  const top = (document.querySelector("header")?.getBoundingClientRect().height ?? 0) + REVEAL_MARGIN;
+  const bottom = window.innerHeight - REVEAL_MARGIN;
+  const start = first.getBoundingClientRect().top;
+  const end = actions.getBoundingClientRect().bottom;
+  let delta = 0;
+  if (end - start > bottom - top || start < top) delta = start - top;
+  else if (end > bottom) delta = end - bottom;
+  if (Math.abs(delta) >= 1) window.scrollBy({ top: delta, behavior: "smooth" });
+}
+
 export function ReviewQueue({ slug }: { slug: string }) {
   const { data, isLoading } = useModSubmissions(slug);
   const review = useReviewSubmission(slug);
   const adjust = useCreatePointAdjustment(slug);
+  const changeAttribution = useChangeSubmissionAttribution(slug);
+  const { data: shell } = useBingo(slug);
   const submissions = data?.submissions ?? [];
 
   const [filter, setFilter] = useState<Filter>("pending");
@@ -68,6 +91,19 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const [adjustOpenFor, setAdjustOpenFor] = useState<string | null>(null);
   const [adjustAmount, setAdjustAmount] = useState("");
   const [adjustReason, setAdjustReason] = useState("");
+  // Changing who a submission is credited to: which one is being edited, the player picked, and any refusal.
+  const [creditFor, setCreditFor] = useState<string | null>(null);
+  const [creditUserId, setCreditUserId] = useState("");
+  const [creditError, setCreditError] = useState<string | null>(null);
+  // A screenshot's height isn't known until it loads, so a load shortly after opening a submission reveals again.
+  const revealUntil = useRef(0);
+
+  useEffect(() => {
+    if (!expandedId) return;
+    revealUntil.current = Date.now() + 2000;
+    const frame = requestAnimationFrame(() => revealReview(expandedId));
+    return () => cancelAnimationFrame(frame);
+  }, [expandedId]);
 
   const allTeams = [...new Set(submissions.map((s) => s.team.name))].sort();
   const byStatus = filter === "all" ? submissions : submissions.filter((s) => s.submission.status === filter);
@@ -98,6 +134,17 @@ export function ReviewQueue({ slug }: { slug: string }) {
       await review.mutateAsync({ submissionId: row.submission.id, action: "undo" });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Undo failed");
+    }
+  }
+
+  async function saveCredit(row: ModSubmissionRow) {
+    if (!creditUserId) return;
+    setCreditError(null);
+    try {
+      await changeAttribution.mutateAsync({ submissionId: row.submission.id, userId: creditUserId });
+      setCreditFor(null);
+    } catch (e: unknown) {
+      setCreditError(e instanceof Error ? e.message : "Couldn't change the player");
     }
   }
 
@@ -231,7 +278,50 @@ export function ReviewQueue({ slug }: { slug: string }) {
                       {isManual && <Badge tone="info">manual</Badge>}
                     </div>
                     <p className="truncate text-sm text-on-surface-muted">{claimsSummary(row.claims)}</p>
-                    <p className="mt-0.5 text-xs text-on-surface-subtle">by {row.submittedByUser ? <PlayerName userId={row.submittedByUser.id}>{displayName(row.submittedByUser)}</PlayerName> : "unknown"}</p>
+                    <p className="mt-0.5 text-xs text-on-surface-subtle">by {row.submittedByUser ? <PlayerName userId={row.submittedByUser.id}>{displayName(row.submittedByUser)}</PlayerName> : "unknown"}
+                      {row.postedByUser && <> (posted by <PlayerName userId={row.postedByUser.id}>{displayName(row.postedByUser)}</PlayerName>)</>}
+                      {creditFor !== row.submission.id && (
+                        <>
+                          {" · "}
+                          <button
+                            type="button"
+                            className="underline-offset-2 hover:text-on-surface hover:underline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCreditFor(row.submission.id);
+                              setCreditUserId("");
+                              setCreditError(null);
+                            }}
+                          >
+                            Change player
+                          </button>
+                        </>
+                      )}
+                    </p>
+                    {creditFor === row.submission.id && (
+                      <div className="mt-2 max-w-md space-y-2" onClick={(e) => e.stopPropagation()}>
+                        <Field label={`Credit this submission to (a player on ${row.team.name})`}>
+                          <SearchableSelect
+                            value={creditUserId}
+                            options={(shell?.teams.find((t) => t.id === row.team.id)?.members ?? [])
+                              .filter((m) => m.user.id !== row.submission.submittedByUserId)
+                              .map((m) => ({ id: m.user.id, label: displayName(m.user) }))
+                              .sort((a, b) => a.label.localeCompare(b.label))}
+                            placeholder="Search players…"
+                            onChange={setCreditUserId}
+                          />
+                        </Field>
+                        {creditError && <p className="text-xs text-danger">{creditError}</p>}
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="primary" onPress={() => saveCredit(row)} isDisabled={!creditUserId || changeAttribution.isPending}>
+                            Save
+                          </Button>
+                          <Button size="sm" variant="ghost" onPress={() => setCreditFor(null)}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                     {row.screenshots[0] && (
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <ScreenshotAnalysisBadges screenshot={row.screenshots[0]} />
@@ -254,13 +344,16 @@ export function ReviewQueue({ slug }: { slug: string }) {
 
                 {isExpanded && canReview && (
                   <div className="space-y-3 border-t border-outline bg-background px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                    {row.screenshots.map((ss) => (
-                      <div key={ss.id}>
+                    {row.screenshots.map((ss, i) => (
+                      <div key={ss.id} id={i === 0 ? `review-shots-${row.submission.id}` : undefined}>
                         <a href={ss.storageUrl} target="_blank" rel="noreferrer" title="Open full size in new tab" className="block">
                           <img
                             src={fullUrl(ss.storageUrl)}
                             alt={ss.screenshotType}
-                            className="max-h-[60vh] w-full rounded-md border border-outline bg-black object-contain transition-colors hover:border-outline-strong"
+                            // Leaves room for the header, the notes and the buttons (and shares it between screenshots), so they fit together.
+                            style={{ maxHeight: `max(12rem, calc((100dvh - 19rem) / ${row.screenshots.length}))` }}
+                            onLoad={() => Date.now() < revealUntil.current && revealReview(row.submission.id)}
+                            className="w-full rounded-md border border-outline bg-black object-contain transition-colors hover:border-outline-strong"
                           />
                         </a>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -286,7 +379,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
 
                     {error && <Notice tone="danger">{error}</Notice>}
 
-                    <div className="flex gap-2">
+                    <div id={`review-actions-${row.submission.id}`} className="flex gap-2">
                       <Button variant="primary" className="flex-1" onPress={() => submitReview(row, "approve")} isDisabled={review.isPending}>
                         <span className="flex items-center justify-center gap-1.5">
                           {review.isPending ? "…" : "Approve"}

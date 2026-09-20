@@ -1,0 +1,1 @@
+ALTER TABLE `bingos` ADD `exclusivity_rules_json` text DEFAULT '[]' NOT NULL;

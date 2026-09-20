@@ -121,8 +121,7 @@ export function getApprovedClaims(db: Queryable, teamId: string, bingoId: string
 }
 
 // nodeId plus every ancestor reached by walking edges upward. Used to find
-// which tile/line a leaf belongs to (submission-time tile resolution, gate
-// checks against every ancestor's submitGateNodeId).
+// which tile/line a leaf belongs to (submission-time tile resolution).
 export function findAncestorIds(db: Queryable, nodeId: string): Set<string> {
   const seen = new Set<string>([nodeId]);
   let frontier = [nodeId];
@@ -133,6 +132,39 @@ export function findAncestorIds(db: Queryable, nodeId: string): Set<string> {
     frontier = next;
   }
   return seen;
+}
+
+/**
+ * Whether a claim on `leafId` is blocked by a submit gate, and by which requirement: null when it may be
+ * submitted. A claim counts toward every part its item sits under, so it is only refused when EVERY route from
+ * the item up to the tile is closed by a gate the team hasn't completed. An item shared by two pages (PETS,
+ * SLAYER BOSSES) counts toward both, so it can be submitted while only the ungated page is unlocked; an item
+ * that sits only under a gated page waits for that gate, as before.
+ */
+export function submitGateBlock(db: Queryable, leafId: string, completed: ReadonlySet<string>): string | null {
+  const memo = new Map<string, string | null>();
+  const parentsOf = (nodeId: string) => db.select({ parentId: nodeEdges.parentId }).from(nodeEdges).where(eq(nodeEdges.childId, nodeId)).all().map((r) => r.parentId);
+  // The block on the routes above a node (its parents and theirs): null as soon as one route is open. (A task
+  // that is a single item carries its own gate on the item, so the item itself is checked too: see blockAt.)
+  const blockAbove = (nodeId: string): string | null => {
+    const parents = parentsOf(nodeId);
+    if (parents.length === 0) return null;
+    let first: string | null = null;
+    for (const parent of parents) {
+      const block = blockAt(parent);
+      if (block === null) return null;
+      first ??= block;
+    }
+    return first;
+  };
+  const blockAt = (nodeId: string): string | null => {
+    if (memo.has(nodeId)) return memo.get(nodeId)!;
+    const node = db.select({ label: nodes.label, submitGateNodeId: nodes.submitGateNodeId }).from(nodes).where(eq(nodes.id, nodeId)).get();
+    const result = node?.submitGateNodeId && !completed.has(node.submitGateNodeId) ? (node.label ?? "This requirement") : blockAbove(nodeId);
+    memo.set(nodeId, result);
+    return result;
+  };
+  return blockAt(leafId);
 }
 
 // The leaf (ITEM/MANUAL) descendants of a node, per the flat graph shape

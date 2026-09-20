@@ -54,6 +54,9 @@ export const bingos = sqliteTable('bingos', {
   // this — computed in bingoService.calculatePotTotal, not stored.
   bonusPotAmount: integer('bonus_pot_amount').notNull().default(0),
   rulesMarkdown: text('rules_markdown'),
+  // Items a team may use in one place only (docs/exclusive-items-plan.md): a JSON array of
+  // ExclusivityRule, parsed by bingoService.parseExclusivityRules and exposed as `exclusivityRules`.
+  exclusivityRulesJson: text('exclusivity_rules_json').notNull().default('[]'),
   signupOpensAt: integer('signup_opens_at', { mode: 'timestamp' }),
   draftScheduledAt: integer('draft_scheduled_at', { mode: 'timestamp' }),
   revealScheduledAt: integer('reveal_scheduled_at', { mode: 'timestamp' }),
@@ -149,8 +152,10 @@ export const signupQuestions = sqliteTable('signup_questions', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
   prompt: text('prompt').notNull(),
-  type: text('type', { enum: ['text', 'textarea', 'select', 'boolean'] }).notNull(),
-  optionsJson: text('options_json'), // JSON string array; only for type = 'select'
+  // Optional plain-text note shown under the question on the signup form.
+  helperText: text('helper_text'),
+  type: text('type', { enum: ['text', 'textarea', 'select', 'multiselect', 'boolean'] }).notNull(), // select = one choice, multiselect = several
+  optionsJson: text('options_json'), // JSON string array; only for type = 'select' or 'multiselect'
   required: integer('required', { mode: 'boolean' }).notNull().default(false),
   sortOrder: integer('sort_order').notNull().default(0),
 });
@@ -459,7 +464,11 @@ export const teamNodeState = sqliteTable('team_node_state', {
 export const submissions = sqliteTable('submissions', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   teamId: text('team_id').notNull().references(() => teams.id),
+  // The player the drop belongs to: credited for it in the stats and on the board.
   submittedByUserId: text('submitted_by_user_id').notNull().references(() => users.id),
+  // Set only when someone else uploaded the screenshot for that player (a teammate at a PC for a drop on mobile, or a
+  // mod). Null means the player posted it themselves. The audit log's actor is whoever posted.
+  postedByUserId: text('posted_by_user_id').references(() => users.id),
   status: text('status', {
     enum: ['pending', 'approved', 'rejected'],
   }).notNull().default('pending'),

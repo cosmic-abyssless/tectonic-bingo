@@ -6,6 +6,8 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { actionsInCategory, AUDIT_ACTIONS, condenseAuditEntries, renderAuditLabel, type AuditAction, type AuditCategory, type AuditEntry, type AuditLogFilters, type AuditLogResponse, type AuditVisibility } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { auditLog, teams, users } from "../db/schema";
+import { ServiceError } from "../services/errors";
+import { rsnsAcrossBingos } from "../services/playerNames";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -26,6 +28,12 @@ function toAuditEntries(db: Db, rows: AuditLogRow[]): AuditEntry[] {
   const teamIds = [...new Set(rows.map((r) => r.teamId).filter((id): id is string => !!id))];
 
   const userById = new Map(userIds.length ? db.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, userIds)).all().map((u) => [u.id, u]) : []);
+  // Named by the RSN they signed up with in the entry's own bingo (the site-wide log spans bingos).
+  const rsns = rsnsAcrossBingos(db, rows.flatMap((r) => [{ bingoId: r.bingoId, userId: r.actorUserId }, { bingoId: r.bingoId, userId: r.onBehalfOfUserId }]));
+  const userFor = (row: AuditLogRow, userId: string | null) => {
+    const user = userId ? userById.get(userId) : undefined;
+    return user ? { ...user, rsn: rsns.get(`${row.bingoId}|${userId}`) ?? null } : null;
+  };
   const teamById = new Map(
     teamIds.length
       ? db.select({ id: teams.id, name: teams.name, color: teams.color }).from(teams).where(inArray(teams.id, teamIds)).all().map((t) => [t.id, t])
@@ -33,8 +41,8 @@ function toAuditEntries(db: Db, rows: AuditLogRow[]): AuditEntry[] {
   );
 
   return rows.map((row) => {
-    const actor = row.actorUserId ? (userById.get(row.actorUserId) ?? null) : null;
-    const onBehalfOf = row.onBehalfOfUserId ? (userById.get(row.onBehalfOfUserId) ?? null) : null;
+    const actor = userFor(row, row.actorUserId);
+    const onBehalfOf = userFor(row, row.onBehalfOfUserId);
     const team = row.teamId ? (teamById.get(row.teamId) ?? null) : null;
     const action = row.action as AuditAction;
     const details = JSON.parse(row.details) as unknown;
@@ -61,6 +69,13 @@ function toAuditEntries(db: Db, rows: AuditLogRow[]): AuditEntry[] {
   });
 }
 
+// A malformed timestamp would become an Invalid Date inside the query, so refuse it up front.
+function parseWhen(value: string, name: "since" | "until"): Date {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new ServiceError(400, `${name} must be a valid date and time`);
+  return date;
+}
+
 function applyFilters(conditions: (ReturnType<typeof eq> | undefined)[], filters: AuditLogFilters) {
   if (filters.action?.length) conditions.push(inArray(auditLog.action, filters.action));
   if (filters.category?.length) conditions.push(inArray(auditLog.action, filters.category.flatMap(actionsInCategory)));
@@ -69,8 +84,8 @@ function applyFilters(conditions: (ReturnType<typeof eq> | undefined)[], filters
   if (filters.entityType) conditions.push(eq(auditLog.entityType, filters.entityType));
   if (filters.entityId) conditions.push(eq(auditLog.entityId, filters.entityId));
   if (filters.visibility) conditions.push(eq(auditLog.visibility, filters.visibility));
-  if (filters.since) conditions.push(gte(auditLog.createdAt, new Date(filters.since)));
-  if (filters.until) conditions.push(lte(auditLog.createdAt, new Date(filters.until)));
+  if (filters.since) conditions.push(gte(auditLog.createdAt, parseWhen(filters.since, "since")));
+  if (filters.until) conditions.push(lte(auditLog.createdAt, parseWhen(filters.until, "until")));
   if (filters.q) conditions.push(or(like(auditLog.entityLabel, `%${filters.q}%`), like(auditLog.action, `%${filters.q}%`)));
 }
 

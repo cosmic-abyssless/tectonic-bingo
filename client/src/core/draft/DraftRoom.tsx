@@ -1,12 +1,12 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { DraftPoolEntry, DraftTeam, DraftUnit, LeftoverMode, PickRating, SignupQuestion, TectonicProfile } from "@bingo/shared";
+import { formatSignupAnswer, type DraftPoolEntry, type DraftTeam, type DraftUnit, type LeftoverMode, type PickRating, type SignupQuestion, type TectonicProfile } from "@bingo/shared";
 import { CaCell, WomCell } from "../signup/caStats";
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { useAuth } from "../../context/AuthContext";
-import { queryKeys, useBingo, useDraftState, useMakePick, useSetDraftOrder, useSetPickRating, useShuffleDraftOrder, useSignupQuestions, useStartDraft } from "../../api/queries";
-import { displayName } from "../ui/user";
+import { queryKeys, useBingo, useDraftState, useMakePick, useSetDraftOrder, useSetPickRating, useShuffleDraftOrder, useSignupQuestions, useStartDraft, useUndoPick } from "../../api/queries";
+import { discordName } from "../ui/user";
 import { Button, IconButton } from "../ui/Button";
 import { Badge, Card, Notice } from "../ui/Card";
 import { Dialog, DialogHeader } from "../ui/Dialog";
@@ -16,6 +16,11 @@ import { ChevronDownIcon, ChevronUpIcon, LinkIcon } from "../ui/icons";
 import { SortHeader, compareSortValues, useTableSort, type TableSort } from "../ui/tableSort";
 import { RatingCell } from "./RatingCell";
 import { TeamRoster } from "./TeamRoster";
+import { DraftPickReveal } from "./DraftPickReveal";
+import { namesForPick } from "./revealMath";
+import { useDraftReveals } from "./useDraftReveals";
+import { useElementHeight } from "./useElementHeight";
+import { UndoPick } from "./UndoPick";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { AchievementIcons, PlaceBreakdown, TierBadge } from "../tectonic/ProfileBadges";
 import { PlayerName } from "../tectonic/PlayerName";
@@ -39,7 +44,7 @@ const placeScore = (p: { first: number; second: number; third: number }) => p.fi
 function poolSortValue(entry: DraftPoolEntry, key: SortKey, ratings: Ratings): string | number {
   if (key === "rating") return ratings[entry.signup.id]?.stars ?? 0;
   if (key === "rsn") return entry.signup.rsn.toLowerCase();
-  if (key === "discord") return displayName(entry.user).toLowerCase();
+  if (key === "discord") return discordName(entry.user).toLowerCase();
   if (key === "tier") return entry.tectonicProfile?.points ?? -1;
   if (key === "records") return entry.tectonicProfile ? placeScore(recordSummary(entry.tectonicProfile)) : -1;
   if (key === "podiums") return entry.tectonicProfile ? placeScore(podiumSummary(entry.tectonicProfile)) : -1;
@@ -99,6 +104,15 @@ function ProfileCells({ profile, shown }: { profile: TectonicProfile | null; sho
   );
 }
 
+// The Draft button stays pinned to the right edge while the table scrolls sideways. It needs the card's own
+// background so the columns scrolling under it are hidden, and it draws the row divider itself (a sticky cell paints
+// over the table's collapsed borders) plus a soft edge on its left.
+// (Whole class strings, not built up: Tailwind only generates classes it can find written out in the source.)
+const STICKY_HEADER = "sticky right-0 top-0 z-20 bg-surface shadow-[inset_0_-1px_0_0_var(--color-outline),-8px_0_8px_-8px_var(--color-shade)]";
+// The column headings stay at the top of the table's own scroll area, again drawing their divider themselves.
+const STICKY_TOP = "sticky top-0 z-10 bg-surface shadow-[inset_0_-1px_0_0_var(--color-outline)]";
+const STICKY_CELL = "sticky right-0 bg-surface shadow-[inset_0_1px_0_0_var(--color-outline),-8px_0_8px_-8px_var(--color-shade)]";
+
 function PoolTable({
   pool,
   questions,
@@ -108,6 +122,7 @@ function PoolTable({
   onPick,
   picking,
   leftoverMode,
+  maxHeight,
 }: {
   pool: DraftUnit[];
   questions: SignupQuestion[];
@@ -118,6 +133,8 @@ function PoolTable({
   onPick: (userId: string) => void;
   picking: boolean;
   leftoverMode: LeftoverMode;
+  /** The table scrolls inside this height so the teams above it can stay in view. */
+  maxHeight: string;
 }) {
   // Leads land on their favourites first; the toggle flips to ascending.
   const sort = useTableSort<SortKey>(ratings ? "rating" : "rsn", ratings ? "desc" : "asc");
@@ -178,25 +195,25 @@ function PoolTable({
       <div className="flex justify-end">
         <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={setHiddenColumns} />
       </div>
-    <div className="overflow-x-auto">
+    <div className="overflow-auto" style={{ maxHeight }}>
       <table className="w-max min-w-full text-sm [&_td]:align-middle [&_th]:align-middle">
         <thead>
-          <tr className="border-b border-outline">
-            {hasPairs && <th className="pb-2 pr-2" />}
-            {ratings && <SortHeader label="Rating" sortKey="rating" sort={sort} />}
-            <SortHeader label="RSN" sortKey="rsn" sort={sort} />
-            {shown("discord") && <SortHeader label="Discord" sortKey="discord" sort={sort} />}
-            {hasLeftovers && <th className="pb-2 pr-4" />}
-            {showProfiles && shown("tier") && <SortHeader label="Tier" sortKey="tier" sort={sort} />}
-            {showProfiles && shown("records") && <SortHeader label="Records" sortKey="records" sort={sort} />}
-            {showProfiles && shown("podiums") && <SortHeader label="Podiums" sortKey="podiums" sort={sort} />}
-            {showProfiles && shown("achievements") && <th className="pb-2 pr-4" />}
-            {showWomStats && shown("ehb") && <SortHeader label="EHB" sortKey="ehb" sort={sort} />}
-            {showWomStats && shown("ehp") && <SortHeader label="EHP" sortKey="ehp" sort={sort} />}
-            {showCa && shown("caCurrent") && <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} />}
-            {showCa && shown("caPeak") && <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} />}
-            {showAnswers && questions.filter((q) => shown(q.id)).map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />)}
-            {canPick && <th className="pb-2" />}
+          <tr>
+            {hasPairs && <th className={`${STICKY_TOP} pb-2 pr-2`} />}
+            {ratings && <SortHeader label="Rating" sortKey="rating" sort={sort} className={STICKY_TOP} />}
+            <SortHeader label="RSN" sortKey="rsn" sort={sort} className={STICKY_TOP} />
+            {shown("discord") && <SortHeader label="Discord" sortKey="discord" sort={sort} className={STICKY_TOP} />}
+            {hasLeftovers && <th className={`${STICKY_TOP} pb-2 pr-4`} />}
+            {showProfiles && shown("tier") && <SortHeader label="Tier" sortKey="tier" sort={sort} className={STICKY_TOP} />}
+            {showProfiles && shown("records") && <SortHeader label="Records" sortKey="records" sort={sort} className={STICKY_TOP} />}
+            {showProfiles && shown("podiums") && <SortHeader label="Podiums" sortKey="podiums" sort={sort} className={STICKY_TOP} />}
+            {showProfiles && shown("achievements") && <th className={`${STICKY_TOP} pb-2 pr-4`} />}
+            {showWomStats && shown("ehb") && <SortHeader label="EHB" sortKey="ehb" sort={sort} className={STICKY_TOP} />}
+            {showWomStats && shown("ehp") && <SortHeader label="EHP" sortKey="ehp" sort={sort} className={STICKY_TOP} />}
+            {showCa && shown("caCurrent") && <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} className={STICKY_TOP} />}
+            {showCa && shown("caPeak") && <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} className={STICKY_TOP} />}
+            {showAnswers && questions.filter((q) => shown(q.id)).map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} className={STICKY_TOP} />)}
+            {canPick && <th className={`${STICKY_HEADER} pb-2`} />}
           </tr>
         </thead>
         {/* One tbody per unit: a pair's two rows share the group's Draft
@@ -227,7 +244,7 @@ function PoolTable({
                         <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
                       </span>
                     </td>
-                    {shown("discord") && <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">{displayName(entry.user)}</td>}
+                    {shown("discord") && <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">{discordName(entry.user)}</td>}
                     {hasLeftovers && <td className="py-2 pr-4 align-middle">{unit.leftover && i === 0 && <Badge tone="warn">{leftoverTag}</Badge>}</td>}
                     {showProfiles && <ProfileCells profile={entry.tectonicProfile} shown={shown} />}
                     {showWomStats && shown("ehb") && (
@@ -253,11 +270,11 @@ function PoolTable({
                     {showAnswers &&
                       questions.filter((q) => shown(q.id)).map((q) => (
                         <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
-                          {answerByQ.get(q.id) ?? "—"}
+                          {formatSignupAnswer(q.type, answerByQ.get(q.id)) || "—"}
                         </td>
                       ))}
                     {canPick && i === 0 && (
-                      <td className="py-1 text-right align-middle" rowSpan={unit.entries.length}>
+                      <td className={`${STICKY_CELL} py-1 pl-3 text-right align-middle`} rowSpan={unit.entries.length}>
                         <Button size="sm" variant="primary" onPress={() => onPick(entry.user.id)} isDisabled={picking || !draftable}>
                           {isPair ? "Draft pair" : "Draft"}
                         </Button>
@@ -353,11 +370,20 @@ export function DraftRoom({ slug }: { slug: string }) {
   const setOrder = useSetDraftOrder(slug);
   const startDraft = useStartDraft(slug);
   const makePick = useMakePick(slug);
+  const undoPick = useUndoPick(slug);
+  const [undoError, setUndoError] = useState<string | null>(null);
   const setRating = useSetPickRating(slug);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [pickError, setPickError] = useState<string | null>(null);
   const [rateError, setRateError] = useState<string | null>(null);
   const [orderOpen, setOrderOpen] = useState(false);
+  const reveals = useDraftReveals(shell?.bingo.id, state);
+  // The teams stay pinned under the page header while the player table scrolls, so both heights decide how tall the table may be.
+  const [pageHeader, setPageHeader] = useState<Element | null>(null);
+  const [teamsPanel, setTeamsPanel] = useState<HTMLElement | null>(null);
+  useEffect(() => setPageHeader(document.querySelector("header")), []);
+  const headerHeight = useElementHeight(pageHeader);
+  const teamsHeight = useElementHeight(teamsPanel);
 
   useEffect(() => {
     if (!state?.orderLockedUntil) return;
@@ -397,7 +423,13 @@ export function DraftRoom({ slug }: { slug: string }) {
   const questions = questionsData?.questions ?? [];
   const lockMs = state.orderLockedUntil ? Math.max(0, new Date(state.orderLockedUntil).getTime() - Date.now()) : 0;
   const revealing = lockMs > 0;
+  const revealedTeam = reveals.active ? (state.teams.find((t) => t.id === reveals.active!.teamId) ?? null) : null;
   const canControlOrder = isAdmin && !scouting && state.picks.length === 0;
+  // Only the latest pick can be taken back (an admin's fix for a misclick).
+  const latestPickNumber = state.picks.reduce((max, p) => Math.max(max, p.pickNumber), 0);
+  const latestPick = state.picks.find((p) => p.pickNumber === latestPickNumber);
+  const latestPickTeam = latestPick ? (state.teams.find((t) => t.id === latestPick.teamId) ?? null) : null;
+  const canUndo = isAdmin && !scouting && state.draftStarted && !!latestPick && !!latestPickTeam;
   const busy = shuffleOrder.isPending || setOrder.isPending || startDraft.isPending;
 
   async function handleShuffle() {
@@ -434,6 +466,17 @@ export function DraftRoom({ slug }: { slug: string }) {
       await makePick.mutateAsync(pickedUserId);
     } catch (e: unknown) {
       setPickError(e instanceof Error ? e.message : "Failed to make that pick");
+    }
+  }
+
+  async function handleUndo(): Promise<boolean> {
+    setUndoError(null);
+    try {
+      await undoPick.mutateAsync();
+      return true;
+    } catch (e: unknown) {
+      setUndoError(e instanceof Error ? e.message : "Failed to undo that pick");
+      return false;
     }
   }
 
@@ -486,7 +529,7 @@ export function DraftRoom({ slug }: { slug: string }) {
       ) : canControlOrder ? (
         <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
-            <p className="font-semibold text-on-surface">{revealing ? "Revealing pick order" : state.currentPick ? `${currentTeam?.name ?? "…"} is on the clock` : "Draft started"}</p>
+            <p className="font-semibold text-on-surface">{revealing ? "Revealing pick order" : state.currentPick ? `${currentTeam?.name ?? "…"} is currently picking` : "Draft started"}</p>
             {state.currentPick && (
               <p className="num text-xs uppercase tracking-wide text-on-surface-subtle">
                 {state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick {state.currentPick.pickNumber}
@@ -494,24 +537,15 @@ export function DraftRoom({ slug }: { slug: string }) {
             )}
             {orderError && <p className="mt-1 text-sm text-danger">{orderError}</p>}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button onPress={handleShuffle} isDisabled={busy}>
-              {shuffleOrder.isPending ? "Shuffling…" : "Shuffle pick order"}
-            </Button>
-            <Button onPress={() => { setOrderError(null); setOrderOpen(true); }} isDisabled={busy}>
-              Pick order
-            </Button>
-            <Button variant="primary" isDisabled>
-              Start draft
-            </Button>
-          </div>
+          {/* No shuffle or pick-order controls here: the order is fixed once the draft has started. */}
+          <p className="text-sm text-on-surface-subtle">Pick order is locked.</p>
         </Card>
       ) : state.currentPick ? (
         <Card className="p-4">
           <p className="num text-xs uppercase tracking-wide text-on-surface-subtle">
             {state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick {state.currentPick.pickNumber}
           </p>
-          <p className="text-lg font-semibold text-on-surface">{currentTeam?.name ?? "…"} is on the clock</p>
+          <p className="text-lg font-semibold text-on-surface">{currentTeam?.name ?? "…"} is currently picking</p>
         </Card>
       ) : revealing ? (
         <Notice tone="info">Revealing pick order.</Notice>
@@ -524,19 +558,38 @@ export function DraftRoom({ slug }: { slug: string }) {
               <span className="num">{poolCount}</span> leftover signup{poolCount === 1 ? " was" : "s were"} not drafted.
             </>
           )}
+          {state.cutCount > 0 && (
+            <>
+              {" "}
+              <span className="num">{state.cutCount}</span> signup{state.cutCount === 1 ? " was" : "s were"} cut.
+            </>
+          )}
         </Notice>
+      )}
+
+      {canUndo && (
+        <UndoPick
+          // Reset the confirmation whenever the latest pick changes underneath it.
+          key={latestPickNumber}
+          pickNumber={latestPickNumber}
+          names={namesForPick(state.picks, latestPickNumber)}
+          teamName={latestPickTeam!.name}
+          busy={undoPick.isPending}
+          error={undoError}
+          onUndo={handleUndo}
+        />
       )}
 
       {isMyTurn && <Notice tone="ok">It's your turn to pick.</Notice>}
 
-      <section>
-        <h3 className="mb-3 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+      <section ref={setTeamsPanel} className="sticky z-10 -mx-6 bg-background px-6 pb-3 pt-2 shadow-[0_6px_8px_-6px_var(--color-shade)]" style={{ top: headerHeight }}>
+        <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
           Teams
         </h3>
         {/* grid-flow-col + a minimum column width, in a scrollable row —
             handles a handful of teams (spread to fill width) and a large
             number of teams (scrolls instead of squeezing RSNs unreadable). */}
-        <div className="overflow-x-auto">
+        <div className="max-h-[36vh] overflow-auto">
           <div className="grid auto-cols-[minmax(140px,1fr)] grid-flow-col gap-3">
             {state.teams.map((team) => (
               <motion.div
@@ -553,6 +606,7 @@ export function DraftRoom({ slug }: { slug: string }) {
                   picks={state.picks.filter((p) => p.teamId === team.id)}
                   isCurrent={currentTeam?.id === team.id}
                   showOrder={state.orderReady}
+                  hiddenPickNumbers={reveals.hiddenPickNumbers}
                 />
               </motion.div>
             ))}
@@ -560,6 +614,19 @@ export function DraftRoom({ slug }: { slug: string }) {
         </div>
         {state.teams.length === 0 && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
       </section>
+
+      {revealedTeam && reveals.active && (
+        <DraftPickReveal
+          key={reveals.active.pickNumber}
+          pick={reveals.active}
+          names={namesForPick(state.picks, reveals.active.pickNumber)}
+          teamName={revealedTeam.name}
+          teamColor={revealedTeam.color}
+          hurry={reveals.waiting > 0}
+          onArrive={reveals.arrive}
+          onDone={reveals.finish}
+        />
+      )}
 
       <PickOrderDialog
         isOpen={orderOpen}
@@ -594,6 +661,7 @@ export function DraftRoom({ slug }: { slug: string }) {
             onPick={handlePick}
             picking={makePick.isPending}
             leftoverMode={shell.bingo.leftoverMode}
+            maxHeight={`max(14rem, calc(100dvh - ${headerHeight + teamsHeight}px - 11rem))`}
           />
         </Card>
       </section>

@@ -181,6 +181,20 @@ export function useReviewSubmission(slug: string) {
   });
 }
 
+// Moves the credit for a submission to another player of its team (someone forgot to pick the player they posted for).
+export function useChangeSubmissionAttribution(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { submissionId: string; userId: string }) =>
+      api.patch<{ submission: unknown }>(`/api/bingos/${slug}/mod/submissions/${params.submissionId}/attribution`, { userId: params.userId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.modSubmissions(slug) });
+      queryClient.invalidateQueries({ queryKey: ["teamSubmissions", slug] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.stats(slug) });
+    },
+  });
+}
+
 // The only way to hand out points outside the node graph now that approval
 // no longer takes a per-submission points override — e.g. correcting a
 // mistake, or a bonus/penalty with no node behind it.
@@ -401,6 +415,18 @@ export function useStartDraft(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => api.post<{ teams: Team[] }>(`/api/bingos/${slug}/mod/draft/start`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
+    },
+  });
+}
+
+// Site admins only: takes back the latest pick.
+export function useUndoPick(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ undone: { pickNumber: number; teamId: string; userIds: string[] } }>(`/api/bingos/${slug}/draft/undo`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) });
       queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });

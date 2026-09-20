@@ -11,7 +11,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { exportBingo, importBingo, importBingoWithImages } from "./bingoExportService";
 import { createCategory, createTask, createTile, deleteLine, generateLines, getBoardLines, getBoardTiles, updateLinePoints, updateTileBonusPoints } from "./boardService";
 import { createQuestion } from "./signupService";
-import { getBingoBySlug } from "./bingoService";
+import { getBingoBySlug, toPublicBingo, updateBingoSettings } from "./bingoService";
 import { ServiceError } from "./errors";
 import type { BingoExportDocument } from "@bingo/shared";
 
@@ -73,7 +73,7 @@ function seedFullBingo() {
   const row0 = lines.find((l) => l.lineType === "row" && l.lineIndex === 0)!;
   updateLinePoints(db, row0.id, 42);
 
-  createQuestion(db, { bingoId: bingo.id, prompt: "Willing to captain?", type: "boolean", required: true, sortOrder: 0 });
+  createQuestion(db, { bingoId: bingo.id, prompt: "Willing to captain?", helperText: "Captains lead a team of about 14.", type: "boolean", required: true, sortOrder: 0 });
   createQuestion(db, { bingoId: bingo.id, prompt: "Preferred role", type: "select", optionsJson: JSON.stringify(["dps", "support"]), required: false, sortOrder: 1 });
 
   return { bingo, admin, category, tileA, partA, partB, tileB, tileC, tileD, sharedLeaf, sharedBlock };
@@ -148,6 +148,28 @@ describe("importBingo", () => {
     expect(rows).toHaveLength(6); // 2x2 board: 2 rows + 2 cols + 2 diagonals
   });
 
+  it("carries exclusivity rules over, and reads an older file with none", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    updateBingoSettings(db, source.id, { exclusivityRules: [{ id: "r1", label: "Pets", itemNames: ["Baron"], scope: "tile" }] });
+    const doc = exportBingo(db, source.id);
+    expect(doc.bingo.exclusivityRules).toEqual([{ id: "r1", label: "Pets", itemNames: ["Baron"], scope: "tile" }]);
+
+    importBingo(db, doc, { slug: "with-rules", name: "With rules", createdByUserId: admin.id });
+    expect(toPublicBingo(getBingoBySlug(db, "with-rules")!).exclusivityRules.map((r) => [r.label, r.scope])).toEqual([["Pets", "tile"]]);
+
+    const { exclusivityRules: _dropped, ...oldBingo } = doc.bingo;
+    importBingo(db, { ...doc, bingo: oldBingo }, { slug: "no-rules", name: "No rules", createdByUserId: admin.id });
+    expect(toPublicBingo(getBingoBySlug(db, "no-rules")!).exclusivityRules).toEqual([]);
+  });
+
+  it("rejects a document whose exclusivity rules are malformed, leaving no partial bingo", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    const doc = exportBingo(db, source.id);
+    const broken = { ...doc, bingo: { ...doc.bingo, exclusivityRules: [{ id: "x", label: "Pets", itemNames: [], scope: "tile" as const }] } };
+    expect(() => importBingo(db, broken, { slug: "broken", name: "Broken", createdByUserId: admin.id })).toThrow(ServiceError);
+    expect(getBingoBySlug(db, "broken")).toBeUndefined();
+  });
+
   it("carries over settings and signup questions", () => {
     const { bingo: source, admin } = seedFullBingo();
     const doc = exportBingo(db, source.id);
@@ -161,6 +183,17 @@ describe("importBingo", () => {
 
     const questions = db.select().from(schema.signupQuestions).where(eq(schema.signupQuestions.bingoId, imported.id)).all();
     expect(questions.map((q) => q.prompt).sort()).toEqual(["Preferred role", "Willing to captain?"]);
+    expect(Object.fromEntries(questions.map((q) => [q.prompt, q.helperText]))).toEqual({ "Willing to captain?": "Captains lead a team of about 14.", "Preferred role": null });
+  });
+
+  it("imports a file exported before questions had helper text", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    const doc = exportBingo(db, source.id);
+    for (const q of doc.signupQuestions) delete (q as { helperText?: string | null }).helperText;
+    const imported = importBingo(db, doc, { slug: "old-file", name: "Old", createdByUserId: admin.id });
+    const questions = db.select().from(schema.signupQuestions).where(eq(schema.signupQuestions.bingoId, imported.id)).all();
+    expect(questions).toHaveLength(2);
+    expect(questions.every((q) => q.helperText === null)).toBe(true);
   });
 
   it("records bingo.created with source: \"import\", plus per-item audit rows for the created structure", () => {
@@ -370,9 +403,11 @@ describe("every column is accounted for", () => {
   it("bingo settings", () => {
     const { bingo } = seedFullBingo();
     const doc = exportBingo(db, bingo.id);
+    // exclusivityRules is the column exclusivityRulesJson, parsed.
+    const renamed: Record<string, string> = { exclusivityRules: "exclusivityRulesJson" };
     accounted(
       schema.bingos,
-      Object.keys(doc.bingo),
+      Object.keys(doc.bingo).map((k) => renamed[k] ?? k),
       [
         "id", "slug", "stage", "createdByUserId", "createdAt", // identity of this one bingo
         "signupOpensAt", "draftScheduledAt", "revealScheduledAt", "startsAt", "endsAt", // the schedule of one event

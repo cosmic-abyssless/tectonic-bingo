@@ -1,3 +1,4 @@
+import { now as clockNow } from "../clock";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { eq, inArray } from "drizzle-orm";
 import * as schema from "../db/schema";
@@ -139,7 +140,7 @@ function fakeCombatAchievementsBlob(): unknown {
   return FAKE_CA_COMPLETIONS[weightedPick(FAKE_CA_TIER_WEIGHTS)];
 }
 
-function fakePlayerStats(rsn: string): { womDataJson: string; runeProfileDataJson: string; caCurrentJson: string | null; caPeakJson: string | null } {
+export function fakePlayerStats(rsn: string): { womDataJson: string; runeProfileDataJson: string; caCurrentJson: string | null; caPeakJson: string | null } {
   const ehb = Math.round(Math.random() * 2000 * 100) / 100;
   const ehp = Math.round(Math.random() * 3000 * 100) / 100;
   const womType = weightedPick(FAKE_WOM_TYPE_WEIGHTS);
@@ -200,7 +201,7 @@ export function seedTestSignups(db: Db, bingo: Bingo, count: number, tectonicRos
   for (let i = 1; i <= count; i++) {
     const answers: signupService.SignupAnswerInput[] = questions.map((q) => ({
       questionId: q.id,
-      value: q.type === "boolean" ? String(Math.random() < 0.5) : q.type === "select" ? firstOption(q.optionsJson) : "Test answer",
+      value: q.type === "boolean" ? String(Math.random() < 0.5) : q.type === "select" ? firstOption(q.optionsJson) : q.type === "multiselect" ? JSON.stringify([firstOption(q.optionsJson)]) : "Test answer",
     }));
 
     const real = realCandidates[i - 1];
@@ -223,7 +224,7 @@ export function seedTestSignups(db: Db, bingo: Bingo, count: number, tectonicRos
     }
 
     const { womDataJson, runeProfileDataJson, caCurrentJson, caPeakJson } = fakePlayerStats(rsnForStats);
-    db.update(signups).set({ womDataJson, runeProfileDataJson, caCurrentJson, caPeakJson, statsFetchedAt: new Date() }).where(eq(signups.id, signup.id)).run();
+    db.update(signups).set({ womDataJson, runeProfileDataJson, caCurrentJson, caPeakJson, statsFetchedAt: clockNow() }).where(eq(signups.id, signup.id)).run();
     created.push(signup);
   }
   const source: SeedSource = realCount === created.length ? "tectonic" : realCount === 0 ? "synthetic" : "mixed";

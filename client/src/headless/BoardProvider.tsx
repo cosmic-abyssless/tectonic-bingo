@@ -3,6 +3,7 @@ import type { BoardLine, PointAdjustment, SubmissionDetails, TeamNodeState, Tile
 import { tileMatchesSearch } from "../core/board/requirementTree";
 import { buildBoard } from "./boardModel";
 import { useNowTick } from "./useNowTick";
+import type { ExclusiveLocks } from "../core/board/exclusivity";
 import type { BoardModel, TileModel } from "./types";
 
 const BoardContext = createContext<BoardModel | null>(null);
@@ -23,6 +24,7 @@ export function BoardProvider({
   viewerUserId,
   totalPoints,
   adjustments,
+  locks,
   children,
 }: {
   tiles: Tile[];
@@ -40,6 +42,7 @@ export function BoardProvider({
   viewerUserId: string;
   totalPoints: number | null;
   adjustments: PointAdjustment[];
+  locks: ExclusiveLocks;
   children: ReactNode;
 }) {
   // Same tickUntil computation as the old BoardGrid.tsx effect (start +
@@ -83,12 +86,13 @@ export function BoardProvider({
       viewerUserId,
       totalPoints,
       adjustments,
+      locks,
       prev: prevRef.current,
     });
     prevRef.current = built.tileById;
     return built;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, totalPoints, adjustments]);
+  }, [tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, totalPoints, adjustments, locks]);
 
   return <BoardContext.Provider value={board}>{children}</BoardContext.Provider>;
 }

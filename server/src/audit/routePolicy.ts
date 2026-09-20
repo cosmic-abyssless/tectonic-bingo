@@ -15,11 +15,13 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "DELETE /api/bingos/:slug/signup/pairing/:pairingId": ["pairing.cancelled"],
   "POST /api/bingos/:slug/signup/pairing/:pairingId/respond": ["pairing.declined", "pairing.accepted"],
   "POST /api/bingos/:slug/draft/pick": ["draft.pick"],
+  "POST /api/bingos/:slug/draft/undo": ["draft.pick_undone"],
   "PUT /api/bingos/:slug/draft/ratings/:signupId": ["draft.rating_set"],
   "PUT /api/bingos/:slug/tiles/:tileId/tasks/:taskId/interest": ["team.tile_interest_set"],
   "PATCH /api/bingos/:slug/teams/:teamId": ["team.updated"],
 
   // routes/mod.ts, mounted at /api/bingos/:slug/mod
+  "PATCH /api/bingos/:slug/mod/submissions/:id/attribution": ["submission.attribution_changed"],
   "PATCH /api/bingos/:slug/mod/submissions/:id": ["submission.approved", "submission.rejected", "submission.review_undone", "points.earned", "points.lost"],
   "POST /api/bingos/:slug/mod/teams/:teamId/adjustments": ["points.adjusted"],
   "POST /api/bingos/:slug/mod/stage": ["stage.changed"],
@@ -35,7 +37,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "DELETE /api/bingos/:slug/mod/dev/signups": ["dev.signups_wiped"],
 
   // routes/admin.ts, mounted at /api/bingos/:slug/admin
-  "PATCH /api/bingos/:slug/admin/settings": ["settings.updated"],
+  "PATCH /api/bingos/:slug/admin/settings": ["settings.updated", "points.rescored"],
   "POST /api/bingos/:slug/admin/mods": ["moderator.added"],
   "DELETE /api/bingos/:slug/admin/mods/:userId": ["moderator.removed"],
   "POST /api/bingos/:slug/admin/categories": ["category.created"],

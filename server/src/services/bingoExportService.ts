@@ -125,6 +125,7 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
 
   const signupQuestions = signupService.getQuestions(db, bingoId).map((q) => ({
     prompt: q.prompt,
+    helperText: q.helperText,
     type: q.type,
     optionsJson: q.optionsJson,
     required: q.required,
@@ -146,6 +147,7 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
       buyinAmount: bingo.buyinAmount,
       bonusPotAmount: bingo.bonusPotAmount,
       rulesMarkdown: bingo.rulesMarkdown,
+      exclusivityRules: bingoService.parseExclusivityRules(bingo.exclusivityRulesJson),
     },
     categories: categoryRows.map((c) => ({ localId: categoryLocalByReal.get(c.id)!, label: c.label, colorHex: c.colorHex, sortOrder: c.sortOrder })),
     tiles,
@@ -171,6 +173,7 @@ function assertValidDocument(doc: BingoExportDocument): void {
   if (doc.bingo.leftoverMode !== undefined && doc.bingo.leftoverMode !== "cut" && doc.bingo.leftoverMode !== "singles") {
     throw new ServiceError(400, "Malformed import file: unknown leftover mode");
   }
+  if (doc.bingo.exclusivityRules !== undefined) bingoService.normalizeExclusivityRules(doc.bingo.exclusivityRules);
   for (const t of doc.tiles) {
     if (t.bonusPoints !== undefined && (!Number.isInteger(t.bonusPoints) || t.bonusPoints < 0)) {
       throw new ServiceError(400, `Malformed import file: tile "${t.name}" has an invalid bonus`);
@@ -264,6 +267,7 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
       buyinAmount: doc.bingo.buyinAmount,
       bonusPotAmount: doc.bingo.bonusPotAmount,
       rulesMarkdown: doc.bingo.rulesMarkdown,
+      ...(doc.bingo.exclusivityRules !== undefined ? { exclusivityRules: doc.bingo.exclusivityRules } : {}),
     });
 
     const categoryIdByLocal = new Map<number, string>();
@@ -352,7 +356,7 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
     }
 
     for (const q of doc.signupQuestions) {
-      signupService.createQuestion(tx, { bingoId: bingo.id, prompt: q.prompt, type: q.type, optionsJson: q.optionsJson, required: q.required, sortOrder: q.sortOrder });
+      signupService.createQuestion(tx, { bingoId: bingo.id, prompt: q.prompt, helperText: q.helperText ?? null, type: q.type, optionsJson: q.optionsJson, required: q.required, sortOrder: q.sortOrder });
     }
 
     return bingo;

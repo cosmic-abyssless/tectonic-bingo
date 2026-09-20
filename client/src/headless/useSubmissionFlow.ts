@@ -4,6 +4,7 @@ import { useAnalyzeScreenshot, useCreateSubmission } from "../api/queries";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete } from "../core/board/taskClaims";
 import { collectLeaves, collectLeavesWithAncestors } from "../core/board/requirementTree";
 import { leafLabel } from "../core/board/labels";
+import { lockReason } from "../core/board/exclusivity";
 import { deriveBoardNodeStatuses, getFreezeUnlockAt } from "../core/board/tileProgress";
 import { getAvailableTasks } from "./submissionFlowLogic";
 import { useBingoPageRaw } from "./BingoPageProvider";
@@ -34,7 +35,17 @@ export function useSubmissionFlow({
   onClose: () => void;
   onSuccess: () => void;
 }): SubmissionFlowModel {
-  const { slug, bingo, tiles, categories, nodeStates, teamSubmissions } = useBingoPageRaw();
+  const { slug, bingo, tiles, categories, nodeStates, teamSubmissions, locks, viewingTeam, viewerId } = useBingoPageRaw();
+
+  // Who the drop is for. On your own team you default to yourself and may pick a teammate; a mod on another team has to pick.
+  const onViewingTeam = !!viewingTeam?.members.some((m) => m.id === viewerId);
+  const submitterOptions = (viewingTeam?.members ?? [])
+    .map((m) => ({ id: m.id, label: m.id === viewerId ? `${m.displayName} (me)` : m.displayName, isMe: m.id === viewerId }))
+    .sort((a, b) => Number(b.isMe) - Number(a.isMe) || a.label.localeCompare(b.label));
+  const [submitterId, setSubmitterId] = useState(() => (onViewingTeam ? viewerId : submitterOptions.length === 1 ? submitterOptions[0]!.id : ""));
+  // Only ever sent to name another team (mods) or another player.
+  const targetTeamId = viewingTeam && !viewingTeam.isMine ? viewingTeam.id : undefined;
+  const forUserId = submitterId && submitterId !== viewerId ? submitterId : undefined;
 
   const [selectedTileId, setSelectedTileId] = useState(initialTileId ?? "");
   const [selectedTaskId, setSelectedTaskId] = useState(initialTileId ? (initialTaskId ?? "") : "");
@@ -82,8 +93,11 @@ export function useSubmissionFlow({
   // sibling claim doesn't hide the rest, since a mod could yet reject it.
   const ancestorAlreadySatisfied = (ancestors: GraphNode[]) => ancestors.some((a) => statusByNodeId.get(a.id) === "completed");
 
+  // Items the team already used somewhere else (exclusive items) can't be claimed here: they are left out of the
+  // options and listed under the picker with why.
   const openLeaves: GraphNode[] = taskLeaves
     .filter(({ leaf }) => leaf.kind === "ITEM")
+    .filter(({ leaf }) => !locks.has(leaf.id))
     .filter(({ leaf, ancestors }) => {
       // A submission may not claim the same node twice — a leaf already
       // staged in this screenshot can't be offered again (adjust its
@@ -95,6 +109,9 @@ export function useSubmissionFlow({
       return !leafComplete(leaf.id, claimMaps);
     })
     .map(({ leaf }) => leaf);
+  const lockedLeaves: { label: string; reason: string }[] = taskLeaves
+    .filter(({ leaf }) => leaf.kind === "ITEM" && locks.has(leaf.id))
+    .map(({ leaf }) => ({ label: leafLabel(leaf), reason: lockReason(locks.get(leaf.id)!) }));
   const selectedLeaf = openLeaves.find((leaf) => leaf.id === selectedNodeId);
   const selectedLeafAncestors = selectedLeaf ? taskLeaves.find((tl) => tl.leaf.id === selectedLeaf.id)?.ancestors : undefined;
   const selectedLeafParent = selectedLeafAncestors?.[selectedLeafAncestors.length - 1];
@@ -130,6 +147,7 @@ export function useSubmissionFlow({
     // — find the task (direct tile child) that owns it.
     const matchedTask = matchedTile.node.children.find((t) => collectLeaves(t).some((l) => l.id === match.nodeId));
     if (!matchedTask) return;
+    if (locks.has(match.nodeId)) return; // already used elsewhere: don't preselect something the server would refuse
     const available = getAvailableTasks(matchedTile, statusByNodeId);
     if (!available.some((t) => t.id === matchedTask.id)) return;
 
@@ -158,6 +176,7 @@ export function useSubmissionFlow({
     try {
       const fd = new FormData();
       fd.append("screenshot", file);
+      if (targetTeamId) fd.append("teamId", targetTeamId); // the codeword to look for is that team's
       const result = await analyzeScreenshot.mutateAsync(fd);
       if (analysisRun.current === run) setAnalysis(result);
     } catch {
@@ -239,7 +258,7 @@ export function useSubmissionFlow({
     };
   })();
   const pickerEmpty = !selectedNodeId && !isManualTask;
-  const isValid = !!imageFile && !!selectedTileId && (currentClaim !== null || (stagedClaims.length > 0 && pickerEmpty));
+  const isValid = !!imageFile && !!selectedTileId && !!submitterId && (currentClaim !== null || (stagedClaims.length > 0 && pickerEmpty));
 
   const resetPicker = () => {
     setSelectedNodeId("");
@@ -260,6 +279,8 @@ export function useSubmissionFlow({
     formData.append("screenshot", imageFile);
     const claims = [...stagedClaims, ...(currentClaim ? [currentClaim] : [])].map((s) => s.claim);
     formData.append("claims", JSON.stringify(claims));
+    if (targetTeamId) formData.append("teamId", targetTeamId);
+    if (forUserId) formData.append("forUserId", forUserId);
 
     try {
       await createSubmission.mutateAsync(formData);
@@ -288,6 +309,14 @@ export function useSubmissionFlow({
   const analysisStatus: SubmissionFlowModel["analysis"]["status"] = analyzeScreenshot.isPending ? "analyzing" : analysisFailed ? "failed" : analysis ? "done" : "idle";
 
   return {
+    submitter: {
+      visible: !onViewingTeam || submitterOptions.length > 1,
+      required: !onViewingTeam,
+      teamName: viewingTeam?.name ?? "",
+      selectedId: submitterId,
+      options: submitterOptions,
+      select: setSubmitterId,
+    },
     screenshot: {
       file: imageFile,
       previewUrl: imagePreview,
@@ -340,6 +369,7 @@ export function useSubmissionFlow({
       visible: !!selectedTile && !!currentTask && !isManualTask,
       selectedId: selectedNodeId,
       options: openLeaves.map((leaf) => ({ id: leaf.id, label: leafLabel(leaf) })),
+      locked: lockedLeaves,
       readOnly: openLeaves.length === 1,
       select: (id) => {
         setSelectedNodeId(id);

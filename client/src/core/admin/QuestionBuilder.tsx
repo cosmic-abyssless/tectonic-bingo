@@ -7,12 +7,16 @@ import { adminQueryKeys, useQuestions } from "../../api/adminQueries";
 import { Button, IconButton } from "../ui/Button";
 import { Card, EmptyState, Notice } from "../ui/Card";
 import { Input, Select } from "../ui/Field";
+import { MAX_QUESTION_HELPER_TEXT } from "@bingo/shared";
 import { ChevronDownIcon, ChevronUpIcon, ListIcon, XIcon } from "../ui/icons";
+
+const isChoice = (type: SignupQuestionType) => type === "select" || type === "multiselect";
 
 const TYPES: { value: SignupQuestionType; label: string }[] = [
   { value: "text", label: "Short text" },
   { value: "textarea", label: "Long text" },
-  { value: "select", label: "Dropdown" },
+  { value: "select", label: "Single choice" },
+  { value: "multiselect", label: "Multiple choice" },
   { value: "boolean", label: "Yes / No" },
 ];
 
@@ -43,6 +47,8 @@ export function QuestionBuilder({ slug }: { slug: string }) {
   const [newPrompt, setNewPrompt] = useState("");
   const [newType, setNewType] = useState<SignupQuestionType>("text");
   const [newOptions, setNewOptions] = useState("");
+  const [newHelper, setNewHelper] = useState("");
+  const [newRequired, setNewRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.questions(slug) });
@@ -51,19 +57,23 @@ export function QuestionBuilder({ slug }: { slug: string }) {
     if (!newPrompt.trim()) return;
     setError(null);
     const options = newOptions.split(",").map((s) => s.trim()).filter(Boolean);
-    if (newType === "select" && options.length === 0) {
-      setError("Add at least one option for a dropdown question");
+    if (isChoice(newType) && options.length === 0) {
+      setError("Add at least one option for a choice question");
       return;
     }
     try {
       await adminApi.createQuestion(slug, {
         prompt: newPrompt.trim(),
+        helperText: newHelper.trim() || undefined,
+        required: newRequired,
         type: newType,
         sortOrder: questions.length,
-        optionsJson: newType === "select" ? JSON.stringify(options) : undefined,
+        optionsJson: isChoice(newType) ? JSON.stringify(options) : undefined,
       });
       setNewPrompt("");
       setNewOptions("");
+      setNewHelper("");
+      setNewRequired(false);
       invalidate();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to add question");
@@ -122,9 +132,17 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                   <XIcon size={12} />
                 </IconButton>
               </div>
-              {q.type === "select" && (
+              <Input
+                aria-label="Helper text"
+                defaultValue={q.helperText ?? ""}
+                onBlur={(e) => e.target.value.trim() !== (q.helperText ?? "") && patch(q.id, { helperText: e.target.value })}
+                maxLength={MAX_QUESTION_HELPER_TEXT}
+                placeholder="Helper text shown under the question (optional)"
+                size="sm"
+              />
+              {isChoice(q.type) && (
                 <Input
-                  aria-label="Dropdown options"
+                  aria-label="Choice options"
                   defaultValue={parseOptions(q.optionsJson)}
                   onBlur={(e) => patch(q.id, { optionsJson: JSON.stringify(e.target.value.split(",").map((s) => s.trim()).filter(Boolean)) })}
                   placeholder="Comma-separated options"
@@ -142,18 +160,30 @@ export function QuestionBuilder({ slug }: { slug: string }) {
             aria-label="New question"
             value={newPrompt}
             onChange={(e) => setNewPrompt(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && newType !== "select" && add()}
+            onKeyDown={(e) => e.key === "Enter" && !isChoice(newType) && add()}
             placeholder="New question…"
             className="min-w-0 flex-1"
           />
           <TypeSelect aria-label="New question type" value={newType} onChange={setNewType} />
+          <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-on-surface-muted">
+            <input type="checkbox" aria-label="New question required" checked={newRequired} onChange={(e) => setNewRequired(e.target.checked)} className="size-4 accent-accent" />
+            Required
+          </label>
           <Button onPress={add} isDisabled={!newPrompt.trim()} className="shrink-0">
             Add
           </Button>
         </div>
-        {newType === "select" && (
+        <Input
+          aria-label="New question helper text"
+          value={newHelper}
+          onChange={(e) => setNewHelper(e.target.value)}
+          maxLength={MAX_QUESTION_HELPER_TEXT}
+          placeholder="Helper text shown under the question (optional)"
+          size="sm"
+        />
+        {isChoice(newType) && (
           <Input
-            aria-label="Dropdown options"
+            aria-label="Choice options"
             value={newOptions}
             onChange={(e) => setNewOptions(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && add()}

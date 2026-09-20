@@ -46,6 +46,7 @@ A site-wide administrator with permission to create, configure, and manage Bingo
 ### Moderator
 A trusted clan member whose elevated permissions are scoped to a single specific Bingo, granted by an Admin (or inherited by Site Admins).
 - **Capabilities:** Review submissions (approve / reject), view all team boards, inspect audit logs, adjust team points manually.
+- **Not:** Change the Bingo's stage or run the draft's pick order; those are for Admins. The stage read-out shows, without the buttons.
 - **Rules:** A Moderator **can** also be a Player in the same Bingo, and **is permitted** to approve their own team's submissions, as they are trusted clan members.
 
 ### Captain
@@ -57,6 +58,7 @@ A designated player who leads a Team during a Bingo.
 Any clan member participating in a Bingo as a competitor.
 - **Capabilities:** Sign up, view the board, make Submissions for their team, view team progress.
 - **Rules:** Belongs to exactly one Team per Bingo once drafted.
+- **Name:** Inside a Bingo a Player is named by the RSN they signed up with, not their Discord name (rosters, submissions, stats, the audit log, the draft, the header). The server puts it on `rsn` for every user it sends within a Bingo, and `playerName` prefers it. An account with no Signup in that Bingo, like a Moderator who isn't playing, falls back to the Discord name, as do site-level lists. A Discord name is only shown where it is labelled as one (the "Discord" columns of the roster and draft room, the profile subtitle). Audit entries written before this keep the names they were stored with.
 
 ---
 
@@ -66,6 +68,8 @@ Any clan member participating in a Bingo as a competitor.
 A player's registration for a specific Bingo, submitted during the `signup` stage.
 - **Status:** Active or Withdrawn.
 - **Rules:** Includes answers to custom signup questions set by the Admin (e.g. timezone, gear tier, OSRS RSN).
+- **Question types:** Short text, long text, yes/no, **single choice** (radio buttons, one option) and **multiple choice** (checkboxes, any number of options). A multiple-choice answer is stored as a JSON list and shown as "Melee, Magic"; a required one needs at least one option ticked.
+- **Question helper text:** Each signup question can carry optional plain-text helper text (up to 500 characters), shown under it on the signup form. It is exported and imported with the Bingo.
 
 ### Duo
 Two players who register to enter the Bingo together and must be drafted onto the same team as a single unit.
@@ -142,6 +146,9 @@ A single proof package submitted by a player on behalf of their Team to claim co
 - **Status:** `pending` → `approved` | `rejected`.
 - **Reviewer:** Must be reviewed by a Moderator (or Admin/Site Admin).
 - **Feedback:** Rejections must include reviewer notes so the team knows what went wrong.
+- **Whose drop / who posted:** A Submission belongs to the Player who got the drop (`submittedBy`: credited on the board, in the stats and in the mod queue). When someone else uploaded it, that Player is recorded as the poster (`postedBy`, shown as "posted by"), and the audit entry has them acting on behalf of the Player. This is the usual case of a teammate at a PC posting a drop from mobile.
+- **Who may post for whom:** A Player posts to their own Team, for themselves or any teammate. A Moderator (or Admin) may also submit to any Team of the Bingo while viewing it, and must say which of its Players the drop belongs to. The Bingo must be live either way.
+- **Changing the credit:** A Moderator can move a Submission's credit to another Player of its Team ("Change player" in the mod queue), in any state, when the poster forgot to pick who it was for. The credit moves; the review, the points and the Team don't. The original uploader stays as the poster, and the change is recorded in the audit log.
 
 ### Screenshot
 An image attached to a Submission proving in-game completion.
@@ -161,6 +168,14 @@ How multi-part Tiles handle identical or overlapping item lists between Parts:
     - For distinct items ("unique drops"): Part A is `COUNT(1)` and Part B is `COUNT(2)` over the shared leaves. Completing Part B strictly requires obtaining a *distinct* item that was not used for Part A.
     - For cumulative item counts: Part A is `SUM(1)` and Part B is `SUM(2)` over the shared leaves, requiring additional drops beyond Part A.
 - **Rule:** A single physical drop (`Claim`) cannot be reused to fulfill two distinct items in a `COUNT` condition.
+
+### Exclusive Item
+An Item a Team may use in **one place only**: a Claim on it locks the same Item everywhere else for that Team, but still counts only where it was submitted.
+- **Example:** A pet counts on its boss's Tile *or* on the Pets Tile, not both. Several of the same pet on one Tile all count. On Slayer Bosses, a unique used for Page 1 is spent for Page 2.
+- **Scope:** Each rule limits the Item to one **Tile** (any of its Parts) or one **Part**.
+- **Set up:** Per Bingo, in the settings, as a list of item names plus a scope, started from a Tile or Part of the board, an Item Group (a snapshot) or nothing, and editable item by item; matched by item name. Each place keeps its own copy of the Item.
+- **Rules:** A pending or approved Claim locks the Item; a rejection frees it. The server refuses the Claim and the board shows "Used on ...". If a rule is added after Claims exist, the earliest Claim's place is the one that scores.
+- **Not:** A Shared Item Pool. Sharing one Item between Parts makes a Claim count toward *each*; an Exclusive Item is the opposite: one place, chosen by where the Claim is submitted.
 
 ### Point Adjustment
 A manual grant or deduction of points applied to a Team by a Moderator or Admin, with a required written reason, outside regular Tile completions.

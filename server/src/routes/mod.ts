@@ -1,3 +1,4 @@
+import { isDevModeActive } from "../devMode";
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middleware/requireAuth";
@@ -9,6 +10,7 @@ import { db } from "../db";
 import * as schema from "../db/schema";
 import * as bingoService from "../services/bingoService";
 import * as submissionService from "../services/submissionService";
+import { changeSubmissionAttribution } from "../services/submissionTarget";
 import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
 import { fetchProfiles } from "../services/tectonicProfileService";
@@ -88,6 +90,19 @@ router.patch(
   }),
 );
 
+// Changes which player a submission is credited to (someone forgot to pick the player they posted for).
+router.patch(
+  "/submissions/:id/attribution",
+  asyncHandler(async (req, res) => {
+    const { userId } = req.body as { userId?: string };
+    if (!userId) throw new ServiceError(400, "userId is required");
+    const submission = changeSubmissionAttribution(db, req.bingo!, { submissionId: req.params.id as string, userId, changedByUserId: req.user!.id });
+    // The same refresh a review triggers: drawers, the mod queue and the board all show who it is credited to.
+    broadcast({ type: "submission_reviewed", bingoId: req.bingo!.id, payload: { teamId: submission.teamId, nodeIds: [] } });
+    res.json({ submission });
+  }),
+);
+
 router.post(
   "/teams/:teamId/adjustments",
   asyncHandler(async (req, res) => {
@@ -106,8 +121,10 @@ router.post(
   }),
 );
 
+// Moving a bingo between stages is for site admins only: a per-bingo mod reviews and manages, but doesn't run the event's timeline.
 router.post(
   "/stage",
+  requireAdmin,
   asyncHandler(async (req, res) => {
     const { toStage } = req.body as { toStage?: bingoService.Stage };
     if (!toStage || !bingoService.STAGE_ORDER.includes(toStage)) {
@@ -281,7 +298,7 @@ router.delete(
 // Dev-only test data helper — route only exists at all when explicitly
 // enabled, same gate as /auth/dev-login, so it's not reachable in production
 // even by a mod who knows the URL.
-if (process.env.NODE_ENV !== "production" && process.env.DEV_LOGIN_ENABLED === "true") {
+if (isDevModeActive()) {
   router.post(
     "/dev/seed-signups",
     asyncHandler(async (req, res) => {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { RosterEntry, User } from "@bingo/shared";
+import { formatSignupAnswer, type RosterEntry, type SignupQuestionType, type User } from "@bingo/shared";
 import {
   useBingo,
   useBingoMods,
@@ -15,7 +15,7 @@ import {
   type SeedTestSignupsResponse,
 } from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
-import { displayName } from "../ui/user";
+import { discordName, displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { Button, IconButton } from "../ui/Button";
 import { Badge, EmptyState, FilterChip, Notice } from "../ui/Card";
@@ -40,7 +40,7 @@ function partnerRsn(entry: RosterEntry, roster: RosterEntry[]): string | null {
   return roster.find((r) => r.pairing?.id === entry.pairing!.id && r.signup.id !== entry.signup.id)?.signup.rsn ?? "Not signed up yet";
 }
 
-function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: string }[], isDuo: boolean): string {
+function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: string; type: SignupQuestionType }[], isDuo: boolean): string {
   const headers = [
     "#",
     "RSN",
@@ -62,7 +62,7 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
     return [
       String(i + 1),
       entry.signup.rsn,
-      displayName(entry.user),
+      discordName(entry.user),
       entry.tectonicProfile?.tier ? formatTierName(entry.tectonicProfile.tier.name) : "",
       entry.tectonicProfile ? String(entry.tectonicProfile.points) : "",
       entry.signup.status,
@@ -73,7 +73,7 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
       entry.signup.buyinReceivedAt ? "received" : "not received",
       entry.collectedByUser ? displayName(entry.collectedByUser) : "",
       ...(isDuo ? [partnerRsn(entry, roster) ?? ""] : []),
-      ...questionPrompts.map((q) => answerByQ.get(q.id) ?? ""),
+      ...questionPrompts.map((q) => formatSignupAnswer(q.type, answerByQ.get(q.id))),
     ];
   });
   return [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
@@ -330,7 +330,7 @@ interface NumberedEntry {
 function rosterSortValue({ order, entry }: NumberedEntry, key: SortKey, roster: RosterEntry[]): string | number {
   if (key === "order") return order;
   if (key === "rsn") return entry.signup.rsn.toLowerCase();
-  if (key === "discord") return displayName(entry.user).toLowerCase();
+  if (key === "discord") return discordName(entry.user).toLowerCase();
   if (key === "tier") return entry.tectonicProfile?.points ?? -1;
   if (key === "status") return entry.signup.status;
   if (key === "caCurrent") return entry.caCurrent?.points ?? -1;
@@ -491,7 +491,7 @@ export function SignupRoster({ slug }: { slug: string }) {
                             <RefreshStatsButton slug={slug} signupId={entry.signup.id} rsn={entry.signup.rsn} refreshing={statsLoading} />
                           </span>
                         </td>
-                        {shown("discord") && <td className="py-2 pr-4 text-on-surface-muted">{displayName(entry.user)}</td>}
+                        {shown("discord") && <td className="py-2 pr-4 text-on-surface-muted">{discordName(entry.user)}</td>}
                         {showTier && shown("tier") && (
                           <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">
                             {entry.tectonicProfile ? <TierBadge profile={entry.tectonicProfile} /> : "—"}
@@ -546,7 +546,7 @@ export function SignupRoster({ slug }: { slug: string }) {
                         )}
                         {questions.filter((q) => shown(q.id)).map((q) => (
                           <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
-                            {answerByQ.get(q.id) ?? "—"}
+                            {formatSignupAnswer(q.type, answerByQ.get(q.id)) || "—"}
                           </td>
                         ))}
                       </tr>

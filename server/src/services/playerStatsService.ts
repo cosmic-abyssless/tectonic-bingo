@@ -6,6 +6,7 @@
 // Called fire-and-forget from the signup routes and the mod Refresh-stats
 // route (never awaited in the response path). Dev seed-signups fabricates
 // stats locally and does not call this. Never throws.
+import { now as clockNow } from "../clock";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { and, eq } from "drizzle-orm";
 import type { AccountType, CombatAchievementStats, SignupAnswer, WomPlayerStats } from "@bingo/shared";
@@ -156,7 +157,7 @@ export async function fetchAndPersistPlayerStats(db: Db, signupId: string, rsn: 
         runeProfileDataJson: runeProfileData ? JSON.stringify(runeProfileData) : null,
         caCurrentJson: caCurrent ? JSON.stringify(caCurrent) : null,
         caPeakJson: caPeak ? JSON.stringify(caPeak) : null,
-        statsFetchedAt: new Date(),
+        statsFetchedAt: clockNow(),
       })
       .where(eq(signups.id, signupId))
       .run();

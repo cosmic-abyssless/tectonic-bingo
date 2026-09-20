@@ -99,6 +99,27 @@
       "when": 1789840000000,
       "tag": "0013_draft_order_ceremony",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1789916873729,
+      "tag": "0014_exclusivity_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1789927132233,
+      "tag": "0015_submission_posted_by",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1789929819668,
+      "tag": "0016_signup_question_helper_text",
+      "breakpoints": true
     }
   ]
 }

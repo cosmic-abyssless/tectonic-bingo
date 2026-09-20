@@ -6,6 +6,7 @@ import { summarizeTileProgress, getFreezeUnlockAt, groupSubmissionsByTile, type 
 import { buildLeafClaimMaps, itemLeafValue, leafComplete, type LeafClaimMaps } from "../core/board/taskClaims";
 import { collectLeaves, conditionHeading } from "../core/board/requirementTree";
 import { leafLabel } from "../core/board/labels";
+import { NO_LOCKS, lockTag, type ExclusiveLocks } from "../core/board/exclusivity";
 import { wikiIconUrl } from "../api/wikiIcons";
 import { claimsSummary } from "../core/submissions/claimsSummary";
 import { timeAgo } from "../core/ui/time";
@@ -48,7 +49,12 @@ export function buildRequirementTree(
   maps: LeafClaimMaps,
   statusByNodeId: Map<string, NodeStatus>,
   ancestorSatisfied = false,
+  locks: ExclusiveLocks = NO_LOCKS,
 ): RequirementNodeModel | null {
+  const lockOf = (nodeId: string) => {
+    const conflict = locks.get(nodeId);
+    return conflict ? lockTag(conflict) : null;
+  };
   if (node.kind === "MANUAL") return null;
 
   if (node.kind === "ITEM") {
@@ -59,6 +65,7 @@ export function buildRequirementTree(
       label: leafLabel(node),
       items: [],
       iconUrl: wikiIconUrl(node.itemName) ?? null,
+      lockedBy: lockOf(node.id),
       isLeaf: true,
       status: statusByNodeId.get(node.id) ?? "not_started",
       complete,
@@ -81,8 +88,9 @@ export function buildRequirementTree(
       label: leafLabel(node),
       items: node.children
         .filter((child) => !!child.itemName)
-        .map((child) => ({ name: child.itemName!, iconUrl: wikiIconUrl(child.itemName!) ?? null, count: itemLeafValue(child.id, maps) })),
+        .map((child) => ({ name: child.itemName!, iconUrl: wikiIconUrl(child.itemName!) ?? null, count: itemLeafValue(child.id, maps), lockedBy: lockOf(child.id) })),
       iconUrl: null,
+      lockedBy: null,
       isLeaf: true,
       status: statusByNodeId.get(node.id) ?? "not_started",
       complete,
@@ -99,7 +107,7 @@ export function buildRequirementTree(
   const nodeComplete = statusByNodeId.get(node.id) === "completed";
   const childAncestorSatisfied = ancestorSatisfied || nodeComplete;
   const children = node.children
-    .map((child) => buildRequirementTree(child, maps, statusByNodeId, childAncestorSatisfied))
+    .map((child) => buildRequirementTree(child, maps, statusByNodeId, childAncestorSatisfied, locks))
     .filter((c): c is RequirementNodeModel => c !== null);
 
   return {
@@ -108,6 +116,7 @@ export function buildRequirementTree(
     label: conditionHeading(node),
     items: [],
     iconUrl: null,
+    lockedBy: null,
     isLeaf: false,
     status: statusByNodeId.get(node.id) ?? "not_started",
     complete: nodeComplete,
@@ -125,7 +134,7 @@ export function buildRequirementTree(
 // without `canToggle` (that depends on the viewer's team/stage, patched in by
 // finalizeTileModels) so the static half stays viewer-agnostic apart from
 // `mine`.
-export function buildTaskModels(tile: Tile, summary: TileProgressSummary, maps: LeafClaimMaps, interestsByTask: ReadonlyMap<string, TileInterest[]>, viewerUserId: string): StaticTaskModel[] {
+export function buildTaskModels(tile: Tile, summary: TileProgressSummary, maps: LeafClaimMaps, interestsByTask: ReadonlyMap<string, TileInterest[]>, viewerUserId: string, locks: ExclusiveLocks = NO_LOCKS): StaticTaskModel[] {
   const tasks = tile.node.children;
   return tasks.map((task) => {
     const gate = task.submitGateNodeId ? tasks.find((t) => t.id === task.submitGateNodeId) : undefined;
@@ -148,7 +157,7 @@ export function buildTaskModels(tile: Tile, summary: TileProgressSummary, maps: 
       locked,
       lockedReason: locked && gate ? `${task.label} cannot be submitted until ${gate.label} is completed.` : null,
       available: !complete && !locked,
-      tree: isManual ? null : buildRequirementTree(task, maps, summary.statusByNodeId),
+      tree: isManual ? null : buildRequirementTree(task, maps, summary.statusByNodeId, false, locks),
       interest: {
         people: taskInterests.map((i) => ({ id: i.user.id, displayName: displayName(i.user) })),
         mine: taskInterests.some((i) => i.user.id === viewerUserId),
@@ -234,8 +243,9 @@ export function buildTileModelsStatic(args: {
   bingoStartsAt: string | null;
   interests: TileInterest[];
   viewerUserId: string;
+  locks?: ExclusiveLocks;
 }): StaticTileModel[] {
-  const { tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId } = args;
+  const { tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId, locks = NO_LOCKS } = args;
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const claimMaps = buildLeafClaimMaps(teamSubmissions);
 
@@ -254,7 +264,7 @@ export function buildTileModelsStatic(args: {
     const summary = summarizeTileProgress(tile, nodeStates, teamSubmissions);
     const freezeUnlocksAt = getFreezeUnlockAt(bingoStartsAt, tile);
     const submissionIds = submissionIdsByTile.get(tile.id);
-    const tasks = buildTaskModels(tile, summary, claimMaps, interestsByTask, viewerUserId);
+    const tasks = buildTaskModels(tile, summary, claimMaps, interestsByTask, viewerUserId, locks);
     const people = new Map<string, { id: string; displayName: string }>();
     for (const task of tasks) for (const p of task.interest.people) if (!people.has(p.id)) people.set(p.id, p);
 
@@ -355,11 +365,12 @@ export function buildBoard(args: {
   viewerUserId: string;
   totalPoints: number | null;
   adjustments: PointAdjustment[];
+  locks?: ExclusiveLocks;
   prev: ReadonlyMap<string, TileModel>;
 }): BoardModel {
-  const { tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, totalPoints, adjustments, prev } = args;
+  const { tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, totalPoints, adjustments, locks, prev } = args;
 
-  const staticTiles = buildTileModelsStatic({ tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId });
+  const staticTiles = buildTileModelsStatic({ tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId, locks });
   const finalized = finalizeTileModels(staticTiles, now, matchIds, canSubmit, canToggleInterest, prev);
 
   const grid: (TileModel | null)[][] = Array.from({ length: bingoRows }, () => Array.from({ length: bingoCols }, () => null));

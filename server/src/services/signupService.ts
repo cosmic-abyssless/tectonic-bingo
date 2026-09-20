@@ -1,4 +1,6 @@
+import { now as clockNow } from "../clock";
 import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { isBlankAnswer, MAX_CHOICE_LENGTH, MAX_MULTISELECT_CHOICES, MAX_QUESTION_HELPER_TEXT, type SignupQuestionType } from "@bingo/shared";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
@@ -6,6 +8,7 @@ import { ServiceError } from "./errors";
 import { dissolveForUser, getAcceptedPairs } from "./pairingService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
+import { rsnsInBingo } from "./playerNames";
 import { parseStoredCaStats } from "./combatAchievements";
 import { parseWomSummary } from "./womService";
 
@@ -46,17 +49,29 @@ export function getQuestions(db: Db, bingoId: string) {
 export interface CreateQuestionParams {
   bingoId: string;
   prompt: string;
-  type: "text" | "textarea" | "select" | "boolean";
+  /** Plain text shown under the question on the signup form. Blank means none. */
+  helperText?: string | null;
+  type: SignupQuestionType;
   optionsJson?: string | null;
   required?: boolean;
   sortOrder?: number;
 }
+/** Trims the helper text; blank (or absent) is none. */
+function normalizeHelperText(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") throw new ServiceError(400, "helperText must be text");
+  const trimmed = value.trim();
+  if (trimmed.length > MAX_QUESTION_HELPER_TEXT) throw new ServiceError(400, `Helper text can be at most ${MAX_QUESTION_HELPER_TEXT} characters`);
+  return trimmed || null;
+}
+
 export function createQuestion(db: Db, params: CreateQuestionParams) {
-  if (params.type === "select" && !params.optionsJson) {
-    throw new ServiceError(400, "optionsJson is required for a select question");
+  if ((params.type === "select" || params.type === "multiselect") && !params.optionsJson) {
+    throw new ServiceError(400, "optionsJson is required for a choice question");
   }
+  const values = { ...params, helperText: normalizeHelperText(params.helperText) };
   return db.transaction((tx) => {
-    const question = tx.insert(signupQuestions).values(params).returning().get();
+    const question = tx.insert(signupQuestions).values(values).returning().get();
     audit(tx, {
       action: "question.created",
       bingoId: params.bingoId,
@@ -71,9 +86,10 @@ export function updateQuestion(db: Db, id: string, params: Partial<Omit<CreateQu
   return db.transaction((tx) => {
     const existing = tx.select().from(signupQuestions).where(eq(signupQuestions.id, id)).get();
     if (!existing) throw new ServiceError(404, "Question not found");
-    const updated = tx.update(signupQuestions).set(params).where(eq(signupQuestions.id, id)).returning().get();
+    const set = "helperText" in params ? { ...params, helperText: normalizeHelperText(params.helperText) } : params;
+    const updated = tx.update(signupQuestions).set(set).where(eq(signupQuestions.id, id)).returning().get();
 
-    const changes = diffFields(existing, updated, { only: Object.keys(params) as (keyof typeof existing)[] });
+    const changes = diffFields(existing, updated, { only: Object.keys(set) as (keyof typeof existing)[] });
     if (changes) {
       audit(tx, {
         action: "question.updated",
@@ -162,6 +178,29 @@ export interface CreateSignupParams {
   rsnVerified?: boolean;
 }
 
+/**
+ * Checks each answer against its question. A multiple-choice answer has to be a list of choices; it is stored as a
+ * cleaned JSON list (trimmed, no blanks or repeats). Answers to other questions are stored as given.
+ */
+function normalizeAnswers<T extends { questionId: string; value: string }>(questions: { id: string; type: SignupQuestionType }[], answers: T[]): T[] {
+  const typeById = new Map(questions.map((q) => [q.id, q.type]));
+  return answers.map((a) => {
+    if (typeById.get(a.questionId) !== "multiselect") return a;
+    let choices: unknown = [];
+    if (typeof a.value === "string" && a.value.trim() !== "") {
+      try {
+        choices = JSON.parse(a.value);
+      } catch {
+        choices = null;
+      }
+    }
+    if (!Array.isArray(choices) || choices.some((c) => typeof c !== "string")) throw new ServiceError(400, "A multiple-choice answer must be a list of choices");
+    const cleaned = [...new Set((choices as string[]).map((c) => c.trim()).filter(Boolean))];
+    if (cleaned.length > MAX_MULTISELECT_CHOICES || cleaned.some((c) => c.length > MAX_CHOICE_LENGTH)) throw new ServiceError(400, "Too many choices, or a choice is too long");
+    return { ...a, value: JSON.stringify(cleaned) };
+  });
+}
+
 export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
   assertSignupOpen(bingo);
   if (!params.rsn.trim()) throw new ServiceError(400, "RSN is required");
@@ -171,8 +210,9 @@ export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
     if (existing?.status === "active") throw new ServiceError(409, "You've already signed up for this bingo");
 
     const questions = tx.select().from(signupQuestions).where(eq(signupQuestions.bingoId, params.bingoId)).all();
-    const answeredIds = new Set(params.answers.map((a) => a.questionId));
-    const missingRequired = questions.some((q) => q.required && !answeredIds.has(q.id));
+    const answers = normalizeAnswers(questions, params.answers);
+    const answerById = new Map(answers.map((a) => [a.questionId, a.value]));
+    const missingRequired = questions.some((q) => q.required && isBlankAnswer(q.type, answerById.get(q.id)));
     if (missingRequired) throw new ServiceError(400, "Please answer every required question");
 
     const values = {
@@ -186,14 +226,14 @@ export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
     if (existing) {
       tx.delete(signupAnswers).where(eq(signupAnswers.signupId, existing.id)).run();
       tx.update(signups)
-        .set({ ...values, status: "active", buyinReceivedAt: null, buyinCollectedByUserId: null, buyinRecordedByUserId: null, createdAt: new Date() })
+        .set({ ...values, status: "active", buyinReceivedAt: null, buyinCollectedByUserId: null, buyinRecordedByUserId: null, createdAt: clockNow() })
         .where(eq(signups.id, existing.id))
         .run();
     }
     const signup = existing
       ? tx.select(PUBLIC_SIGNUP_COLS).from(signups).where(eq(signups.id, existing.id)).get()!
-      : tx.insert(signups).values({ bingoId: params.bingoId, userId: params.userId, ...values }).returning(PUBLIC_SIGNUP_COLS).get();
-    for (const a of params.answers) {
+      : tx.insert(signups).values({ bingoId: params.bingoId, userId: params.userId, ...values, createdAt: clockNow() }).returning(PUBLIC_SIGNUP_COLS).get();
+    for (const a of answers) {
       tx.insert(signupAnswers).values({ signupId: signup.id, questionId: a.questionId, value: a.value }).run();
     }
     audit(tx, {
@@ -235,7 +275,8 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
         .run();
     }
     const answersChanged: string[] = [];
-    for (const a of params.answers ?? []) {
+    const questions = tx.select().from(signupQuestions).where(eq(signupQuestions.bingoId, bingo.id)).all();
+    for (const a of normalizeAnswers(questions, params.answers ?? [])) {
       const existingAnswer = tx
         .select()
         .from(signupAnswers)
@@ -317,7 +358,8 @@ export function getAllSignups(db: Db, bingoId: string) {
 
   const collectorIds = [...new Set(rows.map((r) => r.signup.buyinCollectedByUserId).filter((id): id is string => !!id))];
   const collectors = collectorIds.length ? db.select().from(users).where(inArray(users.id, collectorIds)).all() : [];
-  const collectorById = new Map(collectors.map((u) => [u.id, u]));
+  const collectorRsns = rsnsInBingo(db, bingoId, collectorIds);
+  const collectorById = new Map(collectors.map((u) => [u.id, { ...u, rsn: collectorRsns.get(u.id) ?? null }]));
 
   const pairingByUserId = new Map<string, (typeof schema.signupPairings.$inferSelect)>();
   for (const { pairing, userIds } of getAcceptedPairs(db, bingoId)) {
@@ -328,7 +370,7 @@ export function getAllSignups(db: Db, bingoId: string) {
     const womSummary = parseWomSummary(r.womDataJson ? JSON.parse(r.womDataJson) : null);
     return {
       signup: r.signup,
-      user: r.user,
+      user: { ...r.user, rsn: r.signup.rsn },
       answers: answers.filter((a) => a.signupId === r.signup.id),
       collectedByUser: r.signup.buyinCollectedByUserId ? (collectorById.get(r.signup.buyinCollectedByUserId) ?? null) : null,
       pairing: pairingByUserId.get(r.signup.userId) ?? null,
@@ -374,7 +416,7 @@ export function markBuyin(db: Db, bingo: Bingo, signupId: string, params: MarkBu
     const updated = tx
       .update(signups)
       .set({
-        buyinReceivedAt: params.received ? new Date() : null,
+        buyinReceivedAt: params.received ? clockNow() : null,
         buyinCollectedByUserId: collectedByUserId,
         buyinRecordedByUserId: params.received ? params.recordedByUserId : null,
       })
@@ -388,7 +430,7 @@ export function markBuyin(db: Db, bingo: Bingo, signupId: string, params: MarkBu
       details: {
         received: params.received,
         collectedByUserId,
-        collectedByName: collectedByUserId ? (userLabelById(tx, collectedByUserId) ?? null) : null,
+        collectedByName: collectedByUserId ? (userLabelById(tx, collectedByUserId, bingo.id) ?? null) : null,
         before: { receivedAt: existing.buyinReceivedAt ? existing.buyinReceivedAt.toISOString() : null },
       },
       actor: { userId: params.recordedByUserId },

@@ -22,6 +22,15 @@ function Box({ done, dim, colors }: { done: boolean; dim: boolean; colors: Comic
 // without making the row taller; faded with the row once it's done or not needed.
 const ICON_CLASS = "mr-1.5 inline-block -my-1 align-middle";
 
+/** "USED ON DT2 ISSUE 1": the team already used this item elsewhere, so it is unavailable here (not done). */
+function LockedTag({ text, colors }: { text: string; colors: ComicColors }) {
+  return (
+    <span className="ml-1.5 text-[10px] uppercase tracking-wider" style={{ color: colors.RED }}>
+      {text}
+    </span>
+  );
+}
+
 function LeafRow({ node, colors }: { node: RequirementNodeModel; colors: ComicColors }) {
   const iconUrl = node.iconUrl ?? (node.items.length === 1 ? node.items[0]!.iconUrl : null);
   const color = node.dim ? colors.INK_SUBTLE : node.submitted && !node.complete ? colors.WARN : colors.INK_BODY;
@@ -34,22 +43,24 @@ function LeafRow({ node, colors }: { node: RequirementNodeModel; colors: ComicCo
         {node.items.length > 1 ? (
           <ul className="mr-3 space-y-0.5">
             {node.items.map((item) => (
-              <li key={item.name}>
-                <ItemIcon url={item.iconUrl} className={`${ICON_CLASS} ${node.dim ? "opacity-60" : ""}`} />
+              <li key={item.name} style={item.lockedBy ? { color: colors.INK_SUBTLE } : undefined}>
+                <ItemIcon url={item.iconUrl} className={`${ICON_CLASS} ${node.dim || item.lockedBy ? "opacity-60" : ""}`} />
                 {item.name}
                 {item.count > 0 && (
                   <span className="num ml-1.5 text-base leading-snug" style={{ fontFamily: COMIC_FONT, color: colors.OK }}>
                     ×{item.count}
                   </span>
                 )}
+                {item.lockedBy && <LockedTag text={item.lockedBy} colors={colors} />}
               </li>
             ))}
           </ul>
         ) : (
-          <>
-            <ItemIcon url={iconUrl} className={`${ICON_CLASS} ${node.dim ? "opacity-60" : ""}`} />
+          <span style={node.lockedBy ? { color: colors.INK_SUBTLE } : undefined}>
+            <ItemIcon url={iconUrl} className={`${ICON_CLASS} ${node.dim || node.lockedBy ? "opacity-60" : ""}`} />
             {node.label}
-          </>
+            {node.lockedBy && <LockedTag text={node.lockedBy} colors={colors} />}
+          </span>
         )}
         {node.submitted && !node.complete && !node.dim && (
           <span className="ml-1.5 text-[10px] uppercase tracking-wider" style={{ color: colors.WARN }}>

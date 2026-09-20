@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNodeInput } from "@bingo/shared";
@@ -8,6 +9,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createTile, createTask, deleteLine, deleteTask, deleteTile, generateLines, updateLinePoints, updateNode, updateTileBonusPoints } from "./boardService";
 import { approveSubmission, rejectSubmission, rescoreBingo, undoSubmissionReview } from "./scoringService";
 import { ServiceError } from "./errors";
+import { updateBingoSettings } from "./bingoService";
 
 // Pure engine evaluation (evaluateGraph/awardedPoints) is covered by
 // engine.test.ts. These are integration tests against a real migrated
@@ -737,5 +739,94 @@ describe("points audit entries", () => {
 
     rescoreBingo(db, bingoId); // nothing changed this time
     expect(auditRows().filter((r) => r.action === "points.rescored")).toHaveLength(1);
+  });
+});
+
+// PETS and SLAYER BOSSES: two pages over the SAME items. A drop counts once toward each page, and Page 2's target
+// includes what Page 1 already has ("obtain X more" is cumulative), so the same pet can't be counted twice.
+describe("pages that share their items", () => {
+  function sharedTile(kinds: { page1: GraphNodeInput; page2: GraphNodeInput }) {
+    const fx = seedBaseFixture();
+    const page1 = addTask(fx.tileId, { label: "Page 1", points: 40, children: [{ kind: "ITEM", itemName: "A" }, { kind: "ITEM", itemName: "B" }, { kind: "ITEM", itemName: "C" }], ...kinds.page1 });
+    const page2 = addTask(fx.tileId, { label: "Page 2", points: 60, children: [], ...kinds.page2 });
+    page1.children.forEach((leaf, i) => db.insert(schema.nodeEdges).values({ parentId: page2.id, childId: leaf.id, sortOrder: i }).run());
+    const [a, b, c] = page1.children;
+    const approve = (claimRows: { nodeId: string; itemName: string; quantity?: number }[]) =>
+      approveSubmission(db, { submissionId: submitAndReturn(fx.teamId, fx.memberUserId, claimRows).id, reviewedByUserId: fx.modUserId });
+    return { fx, page1, page2, a: a!, b: b!, c: c!, approve };
+  }
+
+  it("COUNT: one item finishes Page 1 and counts toward Page 2, which needs a second different one", () => {
+    const { fx, page1, page2, a, b, approve } = sharedTile({ page1: { kind: "COUNT", minCount: 1 }, page2: { kind: "COUNT", minCount: 2 } });
+
+    approve([{ nodeId: a.id, itemName: "A" }]);
+    expect(findState(fx.teamId, page1.id)?.pointsAwarded).toBe(40);
+    expect(findState(fx.teamId, page2.id)).toBeUndefined();
+
+    approve([{ nodeId: b.id, itemName: "B" }]);
+    expect(findState(fx.teamId, page2.id)?.pointsAwarded).toBe(60);
+  });
+
+  it("COUNT: the same item again is not a second one", () => {
+    const { fx, page2, a, b, approve } = sharedTile({ page1: { kind: "COUNT", minCount: 1 }, page2: { kind: "COUNT", minCount: 2 } });
+
+    approve([{ nodeId: a.id, itemName: "A" }]);
+    approve([{ nodeId: a.id, itemName: "A" }]);
+    expect(findState(fx.teamId, page2.id)).toBeUndefined();
+
+    approve([{ nodeId: b.id, itemName: "B" }]);
+    expect(findState(fx.teamId, page2.id)).toBeDefined();
+  });
+
+  it("SUM: drops count toward both pages, so Page 2's higher target includes Page 1's", () => {
+    const { fx, page1, page2, a, b, approve } = sharedTile({ page1: { kind: "SUM", quantity: 2 }, page2: { kind: "SUM", quantity: 3 } });
+
+    approve([{ nodeId: a.id, itemName: "A", quantity: 2 }]);
+    expect(findState(fx.teamId, page1.id)?.pointsAwarded).toBe(40);
+    expect(findState(fx.teamId, page2.id)).toBeUndefined(); // 2 of 3
+
+    approve([{ nodeId: b.id, itemName: "B" }]);
+    expect(findState(fx.teamId, page2.id)?.pointsAwarded).toBe(60); // 3 of 3, with no extra work for Page 1's
+  });
+});
+
+// Refusing at submission keeps an item to one place, but the board can be edited while live: a rule added after
+// claims exist must not leave one name scoring in two places.
+describe("exclusive items when scoring", () => {
+  it("counts only the earliest claim's tile once a rule covers an item used on two tiles", () => {
+    const fx = seedBaseFixture();
+    const bingoId = db.select().from(schema.bingos).get()!.id;
+    const other = createTile(db, { bingoId, name: "PETS", boardRow: 0, boardCol: 1 });
+    const bossPart = itemTask(fx.tileId, { points: 20 }, "Baron");
+    const petsPart = itemTask(other.id, { points: 30 }, "Baron");
+
+    const onBoss = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: bossPart.id, itemName: "Baron" }]);
+    const onPets = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: petsPart.id, itemName: "Baron" }]);
+    approveSubmission(db, { submissionId: onBoss.id, reviewedByUserId: fx.modUserId });
+    approveSubmission(db, { submissionId: onPets.id, reviewedByUserId: fx.modUserId });
+    // Reviewed within one second of each other, so pin the order: the boss tile's claim came first.
+    db.update(schema.submissions).set({ reviewedAt: new Date("2026-03-01T10:00:00Z") }).where(eq(schema.submissions.id, onBoss.id)).run();
+    db.update(schema.submissions).set({ reviewedAt: new Date("2026-03-02T10:00:00Z") }).where(eq(schema.submissions.id, onPets.id)).run();
+
+    rescoreBingo(db, bingoId);
+    expect(findState(fx.teamId, bossPart.id)).toBeDefined();
+    expect(findState(fx.teamId, petsPart.id)).toBeDefined(); // no rule yet: it counts in both places
+
+    updateBingoSettings(db, bingoId, { exclusivityRules: [{ id: "pets", label: "Pets", itemNames: ["Baron"], scope: "tile" }] });
+    rescoreBingo(db, bingoId);
+    expect(findState(fx.teamId, bossPart.id)?.pointsAwarded).toBe(20);
+    expect(findState(fx.teamId, petsPart.id)).toBeUndefined(); // the later claim on the other tile is ignored
+  });
+
+  it("still counts every claim under the tile that came first", () => {
+    const fx = seedBaseFixture();
+    const bingoId = db.select().from(schema.bingos).get()!.id;
+    updateBingoSettings(db, bingoId, { exclusivityRules: [{ id: "pets", label: "Pets", itemNames: ["Baron"], scope: "tile" }] });
+    const part = sumTask(fx.tileId, { points: 20 }, "Baron", 2);
+    const leaf = part.children[0]!.id;
+    for (const id of [submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: leaf, itemName: "Baron" }]).id, submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: leaf, itemName: "Baron" }]).id]) {
+      approveSubmission(db, { submissionId: id, reviewedByUserId: fx.modUserId });
+    }
+    expect(findState(fx.teamId, part.id)?.pointsAwarded).toBe(20); // SUM(2): both Barons counted
   });
 });

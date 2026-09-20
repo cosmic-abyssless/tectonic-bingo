@@ -7,7 +7,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createTeam } from "./teamService";
 import { createSignup } from "./signupService";
 import { adminPair } from "./pairingService";
-import { canViewDraftRoom, draftRoomForbiddenMessage, getDraftState, getLeftoverUserIds, getTeamRatings, makePick, pickOrderTeamIndex, setDraftOrder, setPickRating, shuffleDraftOrder, startDraft } from "./draftService";
+import { canViewDraftRoom, draftRoomForbiddenMessage, getDraftState, getLeftoverUserIds, getTeamRatings, makePick, pickOrderTeamIndex, setDraftOrder, setPickRating, shuffleDraftOrder, startDraft, undoLastPick } from "./draftService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -268,11 +268,21 @@ describe("makePick", () => {
     expect(() => makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false })).toThrow(/still being revealed/i);
   });
 
-  it("locks shuffle and start after the first pick", () => {
+  it("fixes the pick order as soon as the draft is started, before any pick", () => {
+    const { bingo, first, second } = setup(); // setup sets the order and presses Start draft
+    expect(() => shuffleDraftOrder(db, bingo)).toThrow(/draft has started/i);
+    expect(() => setDraftOrder(db, bingo, [second.id, first.id])).toThrow(/draft has started/i);
+    expect(() => startDraft(db, bingo)).toThrow(/already started/i);
+  });
+
+  it("keeps it fixed after picks are made too, and leaves the order as it was", () => {
     const { bingo, first, second, p1 } = setup();
+    const orderBefore = db.select({ id: schema.teams.id, order: schema.teams.draftOrder }).from(schema.teams).all().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((t) => t.id);
     makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
-    expect(() => shuffleDraftOrder(db, bingo)).toThrow(/locked after the first pick/i);
-    expect(() => setDraftOrder(db, bingo, [first.id, second.id])).toThrow(/locked after the first pick/i);
+    expect(() => shuffleDraftOrder(db, bingo)).toThrow(/draft has started/i);
+    expect(() => setDraftOrder(db, bingo, [second.id, first.id])).toThrow(/draft has started/i);
+    const orderAfter = db.select({ id: schema.teams.id, order: schema.teams.draftOrder }).from(schema.teams).all().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((t) => t.id);
+    expect(orderAfter).toEqual(orderBefore);
     expect(() => startDraft(db, bingo)).toThrow(/already started/i);
   });
 
@@ -312,6 +322,89 @@ describe("makePick", () => {
     const { bingo, first, second, p1 } = setup();
     makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
     expect(() => makePick(db, { bingo, pickedUserId: p1.id, actingUserId: second.captainUserId, actingIsAdmin: false })).toThrow(/already been drafted/i);
+  });
+});
+
+describe("undoLastPick", () => {
+  function setup() {
+    const bingo = seedBingo();
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
+    createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, name: "A" });
+    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
+    const p1 = seedUser("p1");
+    const p2 = seedUser("p2");
+    for (const p of [p1, p2]) createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p.id, rsn: p.discordUsername, answers: [] });
+    beginDraft(bingo);
+    const teams = db.select().from(schema.teams).where(eq(schema.teams.bingoId, bingo.id)).all();
+    const admin = seedUser("site-admin");
+    return { bingo, first: teams.find((t) => t.draftOrder === 1)!, second: teams.find((t) => t.draftOrder === 2)!, p1, p2, admin };
+  }
+  const membersOf = (teamId: string) => db.select().from(schema.teamMembers).where(eq(schema.teamMembers.teamId, teamId)).all();
+
+  it("takes back the latest pick: the player leaves the team, returns to the pool and the team is on the clock again", () => {
+    const { bingo, first, second, p1, p2, admin } = setup();
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    makePick(db, { bingo, pickedUserId: p2.id, actingUserId: second.captainUserId, actingIsAdmin: false });
+
+    const undone = undoLastPick(db, { bingo, actingUserId: admin.id, actingIsAdmin: true });
+    expect(undone).toEqual({ pickNumber: 2, teamId: second.id, userIds: [p2.id] });
+
+    const state = getDraftState(db, bingo, { includeAnswers: false });
+    expect(state.picks.map((p) => p.userId)).toEqual([p1.id]);
+    expect(state.pool.flatMap((u) => u.entries.map((e) => e.user.id))).toEqual([p2.id]);
+    expect(state.currentPick).toMatchObject({ pickNumber: 2, teamId: second.id });
+    expect(membersOf(second.id).map((m) => m.userId)).toEqual([second.captainUserId]);
+    expect(membersOf(first.id).map((m) => m.userId)).toContain(p1.id);
+  });
+
+  it("lets the same or another team pick the player again", () => {
+    const { bingo, first, second, p1, admin } = setup();
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    undoLastPick(db, { bingo, actingUserId: admin.id, actingIsAdmin: true });
+    const again = makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    expect(again).toMatchObject([{ pickNumber: 1, teamId: first.id, userId: p1.id }]);
+    expect(second.id).not.toBe(first.id);
+  });
+
+  it("can undo several picks in a row, newest first", () => {
+    const { bingo, first, second, p1, p2, admin } = setup();
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    makePick(db, { bingo, pickedUserId: p2.id, actingUserId: second.captainUserId, actingIsAdmin: false });
+    expect(undoLastPick(db, { bingo, actingUserId: admin.id, actingIsAdmin: true }).pickNumber).toBe(2);
+    expect(undoLastPick(db, { bingo, actingUserId: admin.id, actingIsAdmin: true }).pickNumber).toBe(1);
+    expect(() => undoLastPick(db, { bingo, actingUserId: admin.id, actingIsAdmin: true })).toThrow(/no picks to undo/i);
+    expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick).toMatchObject({ pickNumber: 1, teamId: first.id });
+  });
+
+  it("is for site admins only, even the team's own captain", () => {
+    const { bingo, first, p1 } = setup();
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    let error: unknown;
+    try {
+      undoLastPick(db, { bingo, actingUserId: first.captainUserId, actingIsAdmin: false });
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(ServiceError);
+    expect((error as ServiceError).status).toBe(403);
+    expect(getDraftState(db, bingo, { includeAnswers: false }).picks).toHaveLength(1);
+  });
+
+  it("only works during the draft stage", () => {
+    const { bingo, first, p1, admin } = setup();
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    expect(() => undoLastPick(db, { bingo: { ...bingo, stage: "reveal" }, actingUserId: admin.id, actingIsAdmin: true })).toThrow(/draft stage/i);
+    expect(getDraftState(db, bingo, { includeAnswers: false }).picks).toHaveLength(1);
+  });
+
+  it("writes an audit entry naming who was taken back", () => {
+    const { bingo, first, p1, admin } = setup();
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    undoLastPick(db, { bingo, actingUserId: admin.id, actingIsAdmin: true });
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.pick_undone")).get()!;
+    expect(row.teamId).toBe(first.id);
+    expect(JSON.parse(row.details)).toMatchObject({ pickNumber: 1, userIds: [p1.id], displayNames: ["p1"], pair: false });
   });
 });
 
@@ -446,6 +539,24 @@ describe("duo mode", () => {
     expect(state.pool).toHaveLength(1);
   });
 
+  it("undoes a whole pair at once", () => {
+    const { bingo, first, p1, p2 } = setupDuo();
+    const admin = seedUser("site-admin");
+    makePick(db, { bingo, pickedUserId: p2.id, actingUserId: admin.id, actingIsAdmin: true });
+    const undone = undoLastPick(db, { bingo, actingUserId: admin.id, actingIsAdmin: true });
+    expect(undone.userIds.sort()).toEqual([p1.id, p2.id].sort());
+
+    const state = getDraftState(db, bingo, { includeAnswers: false });
+    expect(state.picks).toHaveLength(0);
+    expect(state.currentPick).toMatchObject({ pickNumber: 1, teamId: first.id });
+    expect(state.pool.find((u) => u.entries.length === 2)?.entries.map((e) => e.user.id).sort()).toEqual([p1.id, p2.id].sort());
+    const members = db.select({ userId: schema.teamMembers.userId }).from(schema.teamMembers).where(eq(schema.teamMembers.teamId, first.id)).all().map((m) => m.userId);
+    expect(members).not.toContain(p1.id);
+    expect(members).not.toContain(p2.id);
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.pick_undone")).get()!;
+    expect(JSON.parse(row.details)).toMatchObject({ pair: true, displayNames: expect.arrayContaining(["p1", "p2"]) });
+  });
+
   it("lets the co-captain pick for the team", () => {
     const { bingo, teamA, co1, solo } = setupDuo();
     // Make sure team A is on the clock regardless of the shuffle.
@@ -507,6 +618,68 @@ describe("leftovers", () => {
     const state = getDraftState(db, bingo, { includeAnswers: false });
     expect(state.currentPick).toBeNull();
     expect(state.pool.map((u) => u.entries[0]!.user.id)).toEqual([newest.id]);
+  });
+
+  describe("hiding cut players from the draft room", () => {
+    const poolIds = (state: ReturnType<typeof getDraftState>) => state.pool.flatMap((u) => u.entries.map((e) => e.user.id));
+
+    it("leaves them out of the pool and counts them once signups are closed", () => {
+      const { bingo, p1, p2, newest } = setupLeftover("cut");
+      const shown = getDraftState(db, bingo, { includeAnswers: false, hideCut: true });
+      expect(poolIds(shown).sort()).toEqual([p1.id, p2.id].sort());
+      expect(shown.cutCount).toBe(1);
+      // The full view (used by the at-risk warnings) still sees them.
+      const full = getDraftState(db, bingo, { includeAnswers: false });
+      expect(poolIds(full)).toContain(newest.id);
+      expect(full.cutCount).toBe(0);
+      expect(getLeftoverUserIds(db, bingo)).toEqual(new Set([newest.id]));
+    });
+
+    it("still reports whose turn it is, and keeps counting them after the main pool runs out", () => {
+      const { bingo, first, second, p1, p2 } = setupLeftover("cut");
+      expect(getDraftState(db, bingo, { includeAnswers: false, hideCut: true }).currentPick).toMatchObject({ pickNumber: 1, teamId: first.id });
+      makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+      makePick(db, { bingo, pickedUserId: p2.id, actingUserId: second.captainUserId, actingIsAdmin: false });
+      const state = getDraftState(db, bingo, { includeAnswers: false, hideCut: true });
+      expect(state.pool).toHaveLength(0);
+      expect(state.cutCount).toBe(1);
+      expect(state.currentPick).toBeNull();
+    });
+
+    it("hides a cut duo pair as one unit", () => {
+      const bingo = seedBingo({ leftoverMode: "cut", signupMode: "duo" });
+      const signupStage = { ...bingo, stage: "signup" as const };
+      const c1 = seedCaptain(bingo.id, "c1");
+      const c2 = seedCaptain(bingo.id, "c2");
+      createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
+      createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
+      // Signed up oldest to newest, so the pair (a, b) is the newest of three units and 3 mod 2 teams cuts it.
+      const [solo1, solo2, a, b] = ["solo1", "solo2", "a", "b"].map((d, i) => {
+        const user = seedUser(d);
+        db.insert(schema.signups).values({ bingoId: bingo.id, userId: user.id, rsn: d, createdAt: new Date(1_700_000_000_000 + i * 60_000) }).run();
+        return user;
+      });
+      adminPair(db, signupStage, { userIdA: a!.id, userIdB: b!.id, createdByUserId: c1.id });
+      beginDraft(bingo);
+      const state = getDraftState(db, bingo, { includeAnswers: false, hideCut: true });
+      expect(poolIds(state).sort()).toEqual([solo1!.id, solo2!.id].sort());
+      expect(state.cutCount).toBe(2);
+    });
+
+    it("keeps them listed while signups are still open, since who is cut changes with every signup", () => {
+      const { bingo, newest } = setupLeftover("cut");
+      db.update(schema.bingos).set({ stage: "signup" }).where(eq(schema.bingos.id, bingo.id)).run();
+      const open = getDraftState(db, bingo, { includeAnswers: false, hideCut: true });
+      expect(poolIds(open)).toContain(newest.id);
+      expect(open.cutCount).toBe(0);
+    });
+
+    it("does nothing in singles mode, where those players are drafted last", () => {
+      const { bingo, newest } = setupLeftover("singles");
+      const state = getDraftState(db, bingo, { includeAnswers: false, hideCut: true });
+      expect(poolIds(state)).toContain(newest.id);
+      expect(state.cutCount).toBe(0);
+    });
   });
 
   it("singles: drafts leftovers after the main pool, continuing the snake", () => {

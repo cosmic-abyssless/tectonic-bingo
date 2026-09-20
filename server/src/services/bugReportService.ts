@@ -1,3 +1,4 @@
+import { now as clockNow } from "../clock";
 import { desc, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { MinimalUser } from "@bingo/shared";
@@ -88,7 +89,7 @@ export function resolveBugReport(db: Db, id: string, params: ResolveBugReportPar
       .set({
         status: params.resolved ? "resolved" : "open",
         resolvedByUserId: params.resolved ? params.resolvedByUserId : null,
-        resolvedAt: params.resolved ? new Date() : null,
+        resolvedAt: params.resolved ? clockNow() : null,
       })
       .where(eq(bugReports.id, id))
       .returning()
