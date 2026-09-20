@@ -46,6 +46,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       queryClient.invalidateQueries({ queryKey: ["draftState"] });
       break;
     case "draft_started":
+    case "draft_order_shuffled":
+    case "draft_order_set":
     case "draft_pick":
       queryClient.invalidateQueries({ queryKey: ["draftState"] });
       // A drafted player now has a team, so their bingo shell's myTeam changes.

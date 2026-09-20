@@ -1,11 +1,12 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { draftPicks, pickRatings, signupAnswers, signups, teamMembers, teams, users } from "../db/schema";
+import { bingos, draftPicks, pickRatings, signupAnswers, signups, teamMembers, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
 import { isTeamLead } from "./teamService";
 import { audit, markAuditedNoop } from "../audit/record";
+import { log } from "../log";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -67,11 +68,43 @@ export interface DraftUnit {
   leftover: boolean; // doesn't fit a full round — see markLeftovers
 }
 
+export const DRAFT_ORDER_REVEAL_MS = 2000;
+
+export function isDraftOrderReady(teamRows: { draftOrder: number | null }[]): boolean {
+  if (teamRows.length < 2) return false;
+  const orders = teamRows.map((t) => t.draftOrder);
+  if (orders.some((o) => o == null)) return false;
+  const sorted = [...(orders as number[])].sort((a, b) => a - b);
+  return sorted.every((n, i) => n === i + 1);
+}
+
+function draftPickCount(db: Db, bingoId: string): number {
+  return db.select({ id: draftPicks.id }).from(draftPicks).where(eq(draftPicks.bingoId, bingoId)).all().length;
+}
+
+function assertDraftStage(bingo: Bingo): void {
+  if (bingo.stage !== "draft") {
+    throw new ServiceError(400, `The draft can only be started during the draft stage (current stage: ${bingo.stage})`);
+  }
+}
+
+function assertNoPicks(db: Db, bingoId: string): void {
+  if (draftPickCount(db, bingoId) > 0) {
+    throw new ServiceError(400, "Pick order is locked after the first pick");
+  }
+}
+
+function orderPayload(ordered: { id: string; name: string }[]) {
+  return ordered.map((t, i) => ({ teamId: t.id, name: t.name, draftOrder: i + 1 }));
+}
+
 export interface DraftState {
-  teams: ((typeof teams.$inferSelect) & { captainRsn: string; coCaptain: { userId: string; rsn: string } | null })[]; // sorted by draftOrder once the draft has started
+  teams: ((typeof teams.$inferSelect) & { captainRsn: string; coCaptain: { userId: string; rsn: string } | null })[]; // sorted by draftOrder once pick order is set
   picks: ((typeof draftPicks.$inferSelect) & { user: MinimalUser; rsn: string })[];
   pool: DraftUnit[];
   draftStarted: boolean;
+  orderReady: boolean;
+  orderLockedUntil: string | null;
   // singlesRound: the main pool is empty and leftovers are being drafted
   // (leftoverMode "singles" only).
   currentPick: { pickNumber: number; round: number; teamId: string; singlesRound: boolean } | null;
@@ -112,9 +145,13 @@ function signedUpAt(unit: DraftUnit): number {
 // should see what a prospective draftee wrote on the signup form.
 export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: boolean }): DraftState {
   const bingoId = bingo.id;
+  const fresh = db.select().from(bingos).where(eq(bingos.id, bingoId)).get() ?? bingo;
   const teamRows = db.select().from(teams).where(eq(teams.bingoId, bingoId)).all();
-  const draftStarted = teamRows.length > 0 && teamRows.every((t) => t.draftOrder != null);
-  const sortedTeamRows = draftStarted ? [...teamRows].sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0)) : teamRows;
+  const orderReady = isDraftOrderReady(teamRows);
+  const draftStarted = fresh.draftStarted;
+  const sortedTeamRows = orderReady ? [...teamRows].sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0)) : teamRows;
+  const orderLockedUntil = fresh.draftOrderLockedUntil?.toISOString() ?? null;
+  const lockExpired = !fresh.draftOrderLockedUntil || fresh.draftOrderLockedUntil.getTime() <= Date.now();
   const teamIds = teamRows.map((t) => t.id);
 
   // Captains and co-captains never go through draftPicks (they're assigned
@@ -169,14 +206,14 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
 
   let currentPick: DraftState["currentPick"] = null;
   const pickable = draftablePool(pool, bingo);
-  if (draftStarted && pickable.length > 0) {
+  if (draftStarted && orderReady && lockExpired && pickable.length > 0) {
     const pickNumber = nextPickNumber(db, bingoId);
     const round = Math.ceil(pickNumber / orderedTeams.length);
     const teamIndex = pickOrderTeamIndex(orderedTeams.length, pickNumber);
     currentPick = { pickNumber, round, teamId: orderedTeams[teamIndex]!.id, singlesRound: pickable.every((u) => u.leftover) };
   }
 
-  return { teams: orderedTeams, picks, pool, draftStarted, currentPick };
+  return { teams: orderedTeams, picks, pool, draftStarted, orderReady, orderLockedUntil, currentPick };
 }
 
 // Which units may be drafted next: the main pool while it lasts, then (in
@@ -204,30 +241,83 @@ function shuffled<T>(arr: T[]): T[] {
   return copy;
 }
 
-// Randomizes team draft order. Requires at least 2 teams (already created
-// via the admin team manager, each with a captain) and no picks/order yet —
-// re-running after picks exist would desync the pool from what's displayed.
-export function startDraft(db: Db, bingo: Bingo) {
-  if (bingo.stage !== "draft") {
-    throw new ServiceError(400, `The draft can only be started during the draft stage (current stage: ${bingo.stage})`);
-  }
-  return db.transaction((tx) => {
+export function shuffleDraftOrder(db: Db, bingo: Bingo) {
+  assertDraftStage(bingo);
+  const result = db.transaction((tx) => {
+    assertNoPicks(tx, bingo.id);
     const teamRows = tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
-    if (teamRows.length < 2) throw new ServiceError(400, "At least 2 teams are required to start the draft");
-    if (teamRows.some((t) => t.draftOrder != null)) throw new ServiceError(400, "The draft has already started");
-
+    if (teamRows.length < 2) throw new ServiceError(400, "At least 2 teams are required to set pick order");
     const ordered = shuffled(teamRows);
     ordered.forEach((team, i) => {
       tx.update(teams).set({ draftOrder: i + 1 }).where(eq(teams.id, team.id)).run();
     });
+    const lockedUntil = new Date(Date.now() + DRAFT_ORDER_REVEAL_MS);
+    tx.update(bingos).set({ draftOrderLockedUntil: lockedUntil }).where(eq(bingos.id, bingo.id)).run();
+    audit(tx, {
+      action: "draft.order_shuffled",
+      bingoId: bingo.id,
+      entity: { type: "bingo", id: bingo.id, label: bingo.name },
+      details: { order: orderPayload(ordered) },
+    });
+    return { teams: tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all(), lockedUntil };
+  });
+  log.info("draft order shuffled", { bingoId: bingo.id, teamCount: result.teams.length, lockedUntil: result.lockedUntil.toISOString() });
+  return result;
+}
+
+export function setDraftOrder(db: Db, bingo: Bingo, teamIds: string[]) {
+  assertDraftStage(bingo);
+  const teamsOut = db.transaction((tx) => {
+    assertNoPicks(tx, bingo.id);
+    const teamRows = tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
+    if (teamRows.length < 2) throw new ServiceError(400, "At least 2 teams are required to set pick order");
+    if (!Array.isArray(teamIds) || teamIds.length !== teamRows.length) {
+      throw new ServiceError(400, "teamIds must list every team exactly once");
+    }
+    const currentIds = new Set(teamRows.map((t) => t.id));
+    if (new Set(teamIds).size !== teamIds.length || teamIds.some((id) => !currentIds.has(id))) {
+      throw new ServiceError(400, "teamIds must list every team exactly once");
+    }
+    const byId = new Map(teamRows.map((t) => [t.id, t]));
+    const ordered = teamIds.map((id) => byId.get(id)!);
+    ordered.forEach((team, i) => {
+      tx.update(teams).set({ draftOrder: i + 1 }).where(eq(teams.id, team.id)).run();
+    });
+    tx.update(bingos).set({ draftOrderLockedUntil: null }).where(eq(bingos.id, bingo.id)).run();
+    audit(tx, {
+      action: "draft.order_set",
+      bingoId: bingo.id,
+      entity: { type: "bingo", id: bingo.id, label: bingo.name },
+      details: { order: orderPayload(ordered) },
+    });
+    return tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
+  });
+  log.info("draft order set", { bingoId: bingo.id, teamCount: teamsOut.length });
+  return teamsOut;
+}
+
+export function startDraft(db: Db, bingo: Bingo) {
+  assertDraftStage(bingo);
+  const teamsOut = db.transaction((tx) => {
+    const fresh = tx.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!;
+    if (fresh.draftStarted) throw new ServiceError(400, "The draft has already started");
+    const teamRows = tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
+    if (!isDraftOrderReady(teamRows)) {
+      throw new ServiceError(400, "Set pick order before starting the draft");
+    }
+    assertNoPicks(tx, bingo.id);
+    const ordered = [...teamRows].sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0));
+    tx.update(bingos).set({ draftStarted: true }).where(eq(bingos.id, bingo.id)).run();
     audit(tx, {
       action: "draft.started",
       bingoId: bingo.id,
       entity: { type: "bingo", id: bingo.id, label: bingo.name },
-      details: { order: ordered.map((t, i) => ({ teamId: t.id, name: t.name, draftOrder: i + 1 })) },
+      details: { order: orderPayload(ordered) },
     });
     return tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
   });
+  log.info("draft started", { bingoId: bingo.id, teamCount: teamsOut.length });
+  return teamsOut;
 }
 
 export interface MakePickParams {
@@ -250,9 +340,16 @@ export function makePick(db: Db, params: MakePickParams) {
   }
 
   return db.transaction((tx) => {
-    const teamRows = tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
-    if (teamRows.length === 0 || teamRows.some((t) => t.draftOrder == null)) {
+    const fresh = tx.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!;
+    if (!fresh.draftStarted) {
       throw new ServiceError(400, "The draft hasn't started yet");
+    }
+    const teamRows = tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
+    if (!isDraftOrderReady(teamRows)) {
+      throw new ServiceError(400, "The draft hasn't started yet");
+    }
+    if (fresh.draftOrderLockedUntil && fresh.draftOrderLockedUntil.getTime() > Date.now()) {
+      throw new ServiceError(400, "Pick order is still being revealed");
     }
     const orderedTeams = [...teamRows].sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0));
 

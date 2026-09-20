@@ -381,11 +381,30 @@ export function useDraftState(slug: string | undefined) {
   });
 }
 
+export function useShuffleDraftOrder(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ teams: Team[]; lockedUntil: string }>(`/api/bingos/${slug}/mod/draft/shuffle`, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) }),
+  });
+}
+
+export function useSetDraftOrder(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (teamIds: string[]) => api.put<{ teams: Team[] }>(`/api/bingos/${slug}/mod/draft/order`, { teamIds }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) }),
+  });
+}
+
 export function useStartDraft(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => api.post<{ teams: Team[] }>(`/api/bingos/${slug}/mod/draft/start`, {}),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
+    },
   });
 }
 
