@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Bingo, LeftoverMode, SignupMode } from "@bingo/shared";
+import type { Bingo, ExclusivityRule, LeftoverMode, SignupMode } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
 import { Markdown } from "../ui/Markdown";
@@ -11,6 +11,7 @@ import { Field, Input, Select, Textarea } from "../ui/Field";
 import { Switch } from "../ui/Switch";
 import { ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { THEME_KEYS } from "../../themes/keys";
+import { ExclusiveItemsSection } from "./ExclusiveItemsSection";
 
 function toLocalInput(iso: string | null): string {
   if (!iso) return "";
@@ -54,6 +55,7 @@ export function BingoSettingsForm({
     buyinAmount: bingo.buyinAmount?.toString() ?? "",
     bonusPotAmount: bingo.bonusPotAmount.toString(),
     rulesMarkdown: bingo.rulesMarkdown ?? "",
+    exclusivityRules: bingo.exclusivityRules as ExclusivityRule[],
     signupOpensAt: toLocalInput(bingo.signupOpensAt),
     draftScheduledAt: toLocalInput(bingo.draftScheduledAt),
     revealScheduledAt: toLocalInput(bingo.revealScheduledAt),
@@ -108,6 +110,7 @@ export function BingoSettingsForm({
         buyinAmount: form.buyinAmount ? Number(form.buyinAmount) : null,
         bonusPotAmount: Number(form.bonusPotAmount) || 0,
         rulesMarkdown: form.rulesMarkdown || null,
+        exclusivityRules: form.exclusivityRules,
         signupOpensAt: fromLocalInput(form.signupOpensAt) as never,
         draftScheduledAt: fromLocalInput(form.draftScheduledAt) as never,
         revealScheduledAt: fromLocalInput(form.revealScheduledAt) as never,
@@ -249,6 +252,10 @@ export function BingoSettingsForm({
             <Textarea aria-label="Rules (Markdown)" value={form.rulesMarkdown} onChange={(e) => setForm({ ...form, rulesMarkdown: e.target.value })} rows={6} className="font-mono" />
           )}
         </Field>
+      </Section>
+
+      <Section title="Exclusive items">
+        <ExclusiveItemsSection rules={form.exclusivityRules} onChange={(exclusivityRules) => setForm({ ...form, exclusivityRules })} />
       </Section>
 
       <Section title="Export">
