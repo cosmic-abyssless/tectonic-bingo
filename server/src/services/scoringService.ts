@@ -6,6 +6,7 @@ import { bingoLines, claims, nodes, submissions, teamNodeState, teams, tiles } f
 import { ServiceError } from "./errors";
 import { awardedPoints, evaluateGraph } from "./engine";
 import { getApprovedClaims, getFullGraph } from "./graphService";
+import { applyExclusivity } from "./exclusivityService";
 import { tileForLeaf } from "./submissionService";
 import { audit } from "../audit/record";
 
@@ -91,7 +92,7 @@ export function rebuildTeamState(tx: Tx, teamId: string): Map<string, { complete
   if (!team) throw new ServiceError(404, "Team not found");
 
   const { engineNodes, childrenOf, nodesById } = getFullGraph(tx, team.bingoId);
-  const approvedClaims = getApprovedClaims(tx, teamId, team.bingoId);
+  const approvedClaims = applyExclusivity(tx, team.bingoId, getApprovedClaims(tx, teamId, team.bingoId));
   const results = evaluateGraph(engineNodes, childrenOf, approvedClaims);
 
   const newState = new Map<string, { completedAt: Date; pointsAwarded: number }>();

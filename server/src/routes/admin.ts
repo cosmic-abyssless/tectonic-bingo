@@ -79,6 +79,8 @@ router.patch(
       if (code) params.womGroupVerificationCode = code;
     }
     const bingo = bingoService.updateBingoSettings(db, req.bingo!.id, params);
+    // Rules decide which claims count, so a change re-scores every team (a rule added mid-event takes effect now).
+    if (params.exclusivityRules !== undefined) rescoreBingo(db, req.bingo!.id);
     res.json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );

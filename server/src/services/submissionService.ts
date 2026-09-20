@@ -6,6 +6,7 @@ import * as schema from "../db/schema";
 import { claims, nodes, submissions, submissionScreenshots, teamNodeState, teams, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { findAncestorIds, submitGateBlock } from "./graphService";
+import { conflictMessage, conflictsForClaims } from "./exclusivityService";
 import { effectiveStartsAt } from "./bingoStart";
 import { audit } from "../audit/record";
 
@@ -85,6 +86,10 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
       const blockedBy = submitGateBlock(tx, leafId, completedNodeIds);
       if (blockedBy !== null) throw new ServiceError(400, `${blockedBy}: the previous requirement must be completed first`);
     }
+
+    // Exclusive items: an item the team already has claimed (pending or approved) in another place.
+    const [exclusive] = conflictsForClaims(tx, bingo, params.teamId, nodeIds);
+    if (exclusive) throw new ServiceError(400, conflictMessage(exclusive));
 
     for (const claim of params.claims) {
       const leaf = leafById.get(claim.nodeId)!;

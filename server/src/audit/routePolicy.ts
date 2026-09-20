@@ -32,7 +32,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "DELETE /api/bingos/:slug/mod/dev/signups": ["dev.signups_wiped"],
 
   // routes/admin.ts, mounted at /api/bingos/:slug/admin
-  "PATCH /api/bingos/:slug/admin/settings": ["settings.updated"],
+  "PATCH /api/bingos/:slug/admin/settings": ["settings.updated", "points.rescored"],
   "POST /api/bingos/:slug/admin/mods": ["moderator.added"],
   "DELETE /api/bingos/:slug/admin/mods/:userId": ["moderator.removed"],
   "POST /api/bingos/:slug/admin/categories": ["category.created"],

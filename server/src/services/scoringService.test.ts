@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNodeInput } from "@bingo/shared";
@@ -8,6 +9,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createTile, createTask, deleteLine, deleteTask, deleteTile, generateLines, updateLinePoints, updateNode, updateTileBonusPoints } from "./boardService";
 import { approveSubmission, rejectSubmission, rescoreBingo, undoSubmissionReview } from "./scoringService";
 import { ServiceError } from "./errors";
+import { updateBingoSettings } from "./bingoService";
 
 // Pure engine evaluation (evaluateGraph/awardedPoints) is covered by
 // engine.test.ts. These are integration tests against a real migrated
@@ -785,5 +787,46 @@ describe("pages that share their items", () => {
 
     approve([{ nodeId: b.id, itemName: "B" }]);
     expect(findState(fx.teamId, page2.id)?.pointsAwarded).toBe(60); // 3 of 3, with no extra work for Page 1's
+  });
+});
+
+// Refusing at submission keeps an item to one place, but the board can be edited while live: a rule added after
+// claims exist must not leave one name scoring in two places.
+describe("exclusive items when scoring", () => {
+  it("counts only the earliest claim's tile once a rule covers an item used on two tiles", () => {
+    const fx = seedBaseFixture();
+    const bingoId = db.select().from(schema.bingos).get()!.id;
+    const other = createTile(db, { bingoId, name: "PETS", boardRow: 0, boardCol: 1 });
+    const bossPart = itemTask(fx.tileId, { points: 20 }, "Baron");
+    const petsPart = itemTask(other.id, { points: 30 }, "Baron");
+
+    const onBoss = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: bossPart.id, itemName: "Baron" }]);
+    const onPets = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: petsPart.id, itemName: "Baron" }]);
+    approveSubmission(db, { submissionId: onBoss.id, reviewedByUserId: fx.modUserId });
+    approveSubmission(db, { submissionId: onPets.id, reviewedByUserId: fx.modUserId });
+    // Reviewed within one second of each other, so pin the order: the boss tile's claim came first.
+    db.update(schema.submissions).set({ reviewedAt: new Date("2026-03-01T10:00:00Z") }).where(eq(schema.submissions.id, onBoss.id)).run();
+    db.update(schema.submissions).set({ reviewedAt: new Date("2026-03-02T10:00:00Z") }).where(eq(schema.submissions.id, onPets.id)).run();
+
+    rescoreBingo(db, bingoId);
+    expect(findState(fx.teamId, bossPart.id)).toBeDefined();
+    expect(findState(fx.teamId, petsPart.id)).toBeDefined(); // no rule yet: it counts in both places
+
+    updateBingoSettings(db, bingoId, { exclusivityRules: [{ id: "pets", label: "Pets", itemNames: ["Baron"], scope: "tile" }] });
+    rescoreBingo(db, bingoId);
+    expect(findState(fx.teamId, bossPart.id)?.pointsAwarded).toBe(20);
+    expect(findState(fx.teamId, petsPart.id)).toBeUndefined(); // the later claim on the other tile is ignored
+  });
+
+  it("still counts every claim under the tile that came first", () => {
+    const fx = seedBaseFixture();
+    const bingoId = db.select().from(schema.bingos).get()!.id;
+    updateBingoSettings(db, bingoId, { exclusivityRules: [{ id: "pets", label: "Pets", itemNames: ["Baron"], scope: "tile" }] });
+    const part = sumTask(fx.tileId, { points: 20 }, "Baron", 2);
+    const leaf = part.children[0]!.id;
+    for (const id of [submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: leaf, itemName: "Baron" }]).id, submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: leaf, itemName: "Baron" }]).id]) {
+      approveSubmission(db, { submissionId: id, reviewedByUserId: fx.modUserId });
+    }
+    expect(findState(fx.teamId, part.id)?.pointsAwarded).toBe(20); // SUM(2): both Barons counted
   });
 });
