@@ -66,6 +66,41 @@ describe("createSignup", () => {
   });
 });
 
+describe("question helper text", () => {
+  const helper = (id: string) => db.select().from(schema.signupQuestions).where(eq(schema.signupQuestions.id, id)).get()!.helperText;
+
+  it("stores the helper text trimmed, and treats blank or absent as none", () => {
+    const { bingo } = seedBingo();
+    const q = (helperText?: string | null) => createQuestion(db, { bingoId: bingo.id, prompt: "Timezone", type: "text", helperText });
+    expect(q("  Which UTC offset do you play in?  ").helperText).toBe("Which UTC offset do you play in?");
+    expect(q("   ").helperText).toBeNull();
+    expect(q(null).helperText).toBeNull();
+    expect(q().helperText).toBeNull();
+  });
+
+  it("refuses helper text that is too long or not text", () => {
+    const { bingo } = seedBingo();
+    const create = (helperText: unknown) => () => createQuestion(db, { bingoId: bingo.id, prompt: "Q", type: "text", helperText: helperText as string });
+    expect(create("x".repeat(500))).not.toThrow();
+    expect(create("x".repeat(501))).toThrow(ServiceError);
+    expect(create(42)).toThrow(ServiceError);
+  });
+
+  it("can be set, changed and cleared on an existing question, without touching the rest", () => {
+    const { bingo } = seedBingo();
+    const q = createQuestion(db, { bingoId: bingo.id, prompt: "Gear tier", type: "select", optionsJson: JSON.stringify(["low", "high"]), required: true });
+    updateQuestion(db, q.id, { helperText: " Pick the closest one. " });
+    expect(helper(q.id)).toBe("Pick the closest one.");
+    updateQuestion(db, q.id, { prompt: "Gear tier?" }); // an unrelated edit leaves it alone
+    expect(helper(q.id)).toBe("Pick the closest one.");
+    updateQuestion(db, q.id, { helperText: "" });
+    expect(helper(q.id)).toBeNull();
+    const after = db.select().from(schema.signupQuestions).where(eq(schema.signupQuestions.id, q.id)).get()!;
+    expect(after).toMatchObject({ prompt: "Gear tier?", required: true, type: "select" });
+    expect(() => updateQuestion(db, q.id, { helperText: "x".repeat(501) })).toThrow(ServiceError);
+  });
+});
+
 describe("updateSignup / withdrawSignup", () => {
   it("updates rsn and answers during the signup stage", () => {
     const { bingo, memberId } = seedBingo();

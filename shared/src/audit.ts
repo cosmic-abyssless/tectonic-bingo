@@ -96,7 +96,7 @@ export interface AuditDetailsMap {
   "line.deleted": { lineType: string; lineIndex: number; points: number };
 
   "question.created": { prompt: string; type: string; required: boolean };
-  "question.updated": { changes: FieldChanges<{ prompt: string; type: string; optionsJson: string | null; required: boolean; sortOrder: number }> };
+  "question.updated": { changes: FieldChanges<{ prompt: string; helperText: string | null; type: string; optionsJson: string | null; required: boolean; sortOrder: number }> };
   "question.deleted": { prompt: string; type: string; required: boolean };
   "question.reordered": { order: string[] };
 

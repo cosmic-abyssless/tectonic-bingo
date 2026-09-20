@@ -31,24 +31,29 @@ function QuestionField({ question, value, onChange }: { question: SignupQuestion
     </>
   );
 
+  const hint = question.helperText || undefined;
+
   if (question.type === "boolean") {
     return (
-      <label className="flex cursor-pointer select-none items-center gap-2.5">
-        <input type="checkbox" checked={value === "true"} onChange={(e) => onChange(e.target.checked ? "true" : "false")} className="size-4 cursor-pointer accent-accent" />
-        <span className="text-sm text-on-surface-muted">{label}</span>
-      </label>
+      <div>
+        <label className="flex cursor-pointer select-none items-center gap-2.5">
+          <input type="checkbox" checked={value === "true"} onChange={(e) => onChange(e.target.checked ? "true" : "false")} className="size-4 cursor-pointer accent-accent" />
+          <span className="text-sm text-on-surface-muted">{label}</span>
+        </label>
+        {hint && <p className="mt-1 pl-[1.625rem] text-xs text-on-surface-subtle">{hint}</p>}
+      </div>
     );
   }
   if (question.type === "textarea") {
     return (
-      <Field label={label}>
+      <Field label={label} hint={hint}>
         <Textarea value={value} onChange={(e) => onChange(e.target.value)} rows={3} className="resize-none" />
       </Field>
     );
   }
   if (question.type === "select") {
     return (
-      <Field label={label}>
+      <Field label={label} hint={hint}>
         <Select value={value} onChange={(e) => onChange(e.target.value)}>
           <option value="">Select…</option>
           {parseOptions(question).map((opt) => (
@@ -61,7 +66,7 @@ function QuestionField({ question, value, onChange }: { question: SignupQuestion
     );
   }
   return (
-    <Field label={label}>
+    <Field label={label} hint={hint}>
       <Input value={value} onChange={(e) => onChange(e.target.value)} />
     </Field>
   );

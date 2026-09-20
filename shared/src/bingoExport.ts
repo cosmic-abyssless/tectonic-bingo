@@ -96,6 +96,8 @@ export interface ExportLine {
 
 export interface ExportSignupQuestion {
   prompt: string;
+  /** Absent in files exported before questions had helper text. */
+  helperText?: string | null;
   type: SignupQuestionType;
   optionsJson: string | null;
   required: boolean;

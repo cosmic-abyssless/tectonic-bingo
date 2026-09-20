@@ -68,6 +68,7 @@ Any clan member participating in a Bingo as a competitor.
 A player's registration for a specific Bingo, submitted during the `signup` stage.
 - **Status:** Active or Withdrawn.
 - **Rules:** Includes answers to custom signup questions set by the Admin (e.g. timezone, gear tier, OSRS RSN).
+- **Question helper text:** Each signup question can carry optional plain-text helper text (up to 500 characters), shown under it on the signup form. It is exported and imported with the Bingo.
 
 ### Duo
 Two players who register to enter the Bingo together and must be drafted onto the same team as a single unit.

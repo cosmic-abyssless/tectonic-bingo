@@ -125,6 +125,7 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
 
   const signupQuestions = signupService.getQuestions(db, bingoId).map((q) => ({
     prompt: q.prompt,
+    helperText: q.helperText,
     type: q.type,
     optionsJson: q.optionsJson,
     required: q.required,
@@ -355,7 +356,7 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
     }
 
     for (const q of doc.signupQuestions) {
-      signupService.createQuestion(tx, { bingoId: bingo.id, prompt: q.prompt, type: q.type, optionsJson: q.optionsJson, required: q.required, sortOrder: q.sortOrder });
+      signupService.createQuestion(tx, { bingoId: bingo.id, prompt: q.prompt, helperText: q.helperText ?? null, type: q.type, optionsJson: q.optionsJson, required: q.required, sortOrder: q.sortOrder });
     }
 
     return bingo;

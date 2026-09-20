@@ -471,11 +471,16 @@ export interface SignupQuestion {
   id: string;
   bingoId: string;
   prompt: string;
+  /** Plain text shown under the question on the signup form, when set. */
+  helperText: string | null;
   type: SignupQuestionType;
   optionsJson: string | null;
   required: boolean;
   sortOrder: number;
 }
+
+/** The longest helper text a question may carry. */
+export const MAX_QUESTION_HELPER_TEXT = 500;
 
 export type SignupStatus = "active" | "withdrawn";
 

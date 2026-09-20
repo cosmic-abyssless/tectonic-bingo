@@ -1,5 +1,6 @@
 import { now as clockNow } from "../clock";
 import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { MAX_QUESTION_HELPER_TEXT } from "@bingo/shared";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
@@ -48,17 +49,29 @@ export function getQuestions(db: Db, bingoId: string) {
 export interface CreateQuestionParams {
   bingoId: string;
   prompt: string;
+  /** Plain text shown under the question on the signup form. Blank means none. */
+  helperText?: string | null;
   type: "text" | "textarea" | "select" | "boolean";
   optionsJson?: string | null;
   required?: boolean;
   sortOrder?: number;
 }
+/** Trims the helper text; blank (or absent) is none. */
+function normalizeHelperText(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") throw new ServiceError(400, "helperText must be text");
+  const trimmed = value.trim();
+  if (trimmed.length > MAX_QUESTION_HELPER_TEXT) throw new ServiceError(400, `Helper text can be at most ${MAX_QUESTION_HELPER_TEXT} characters`);
+  return trimmed || null;
+}
+
 export function createQuestion(db: Db, params: CreateQuestionParams) {
   if (params.type === "select" && !params.optionsJson) {
     throw new ServiceError(400, "optionsJson is required for a select question");
   }
+  const values = { ...params, helperText: normalizeHelperText(params.helperText) };
   return db.transaction((tx) => {
-    const question = tx.insert(signupQuestions).values(params).returning().get();
+    const question = tx.insert(signupQuestions).values(values).returning().get();
     audit(tx, {
       action: "question.created",
       bingoId: params.bingoId,
@@ -73,9 +86,10 @@ export function updateQuestion(db: Db, id: string, params: Partial<Omit<CreateQu
   return db.transaction((tx) => {
     const existing = tx.select().from(signupQuestions).where(eq(signupQuestions.id, id)).get();
     if (!existing) throw new ServiceError(404, "Question not found");
-    const updated = tx.update(signupQuestions).set(params).where(eq(signupQuestions.id, id)).returning().get();
+    const set = "helperText" in params ? { ...params, helperText: normalizeHelperText(params.helperText) } : params;
+    const updated = tx.update(signupQuestions).set(set).where(eq(signupQuestions.id, id)).returning().get();
 
-    const changes = diffFields(existing, updated, { only: Object.keys(params) as (keyof typeof existing)[] });
+    const changes = diffFields(existing, updated, { only: Object.keys(set) as (keyof typeof existing)[] });
     if (changes) {
       audit(tx, {
         action: "question.updated",

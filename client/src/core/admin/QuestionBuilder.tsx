@@ -7,6 +7,7 @@ import { adminQueryKeys, useQuestions } from "../../api/adminQueries";
 import { Button, IconButton } from "../ui/Button";
 import { Card, EmptyState, Notice } from "../ui/Card";
 import { Input, Select } from "../ui/Field";
+import { MAX_QUESTION_HELPER_TEXT } from "@bingo/shared";
 import { ChevronDownIcon, ChevronUpIcon, ListIcon, XIcon } from "../ui/icons";
 
 const TYPES: { value: SignupQuestionType; label: string }[] = [
@@ -43,6 +44,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
   const [newPrompt, setNewPrompt] = useState("");
   const [newType, setNewType] = useState<SignupQuestionType>("text");
   const [newOptions, setNewOptions] = useState("");
+  const [newHelper, setNewHelper] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.questions(slug) });
@@ -58,12 +60,14 @@ export function QuestionBuilder({ slug }: { slug: string }) {
     try {
       await adminApi.createQuestion(slug, {
         prompt: newPrompt.trim(),
+        helperText: newHelper.trim() || undefined,
         type: newType,
         sortOrder: questions.length,
         optionsJson: newType === "select" ? JSON.stringify(options) : undefined,
       });
       setNewPrompt("");
       setNewOptions("");
+      setNewHelper("");
       invalidate();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to add question");
@@ -122,6 +126,14 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                   <XIcon size={12} />
                 </IconButton>
               </div>
+              <Input
+                aria-label="Helper text"
+                defaultValue={q.helperText ?? ""}
+                onBlur={(e) => e.target.value.trim() !== (q.helperText ?? "") && patch(q.id, { helperText: e.target.value })}
+                maxLength={MAX_QUESTION_HELPER_TEXT}
+                placeholder="Helper text shown under the question (optional)"
+                size="sm"
+              />
               {q.type === "select" && (
                 <Input
                   aria-label="Dropdown options"
@@ -151,6 +163,14 @@ export function QuestionBuilder({ slug }: { slug: string }) {
             Add
           </Button>
         </div>
+        <Input
+          aria-label="New question helper text"
+          value={newHelper}
+          onChange={(e) => setNewHelper(e.target.value)}
+          maxLength={MAX_QUESTION_HELPER_TEXT}
+          placeholder="Helper text shown under the question (optional)"
+          size="sm"
+        />
         {newType === "select" && (
           <Input
             aria-label="Dropdown options"

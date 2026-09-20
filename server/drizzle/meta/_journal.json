@@ -113,6 +113,13 @@
       "when": 1789927132233,
       "tag": "0015_submission_posted_by",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1789929819668,
+      "tag": "0016_signup_question_helper_text",
+      "breakpoints": true
     }
   ]
 }

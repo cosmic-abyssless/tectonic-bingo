@@ -152,6 +152,8 @@ export const signupQuestions = sqliteTable('signup_questions', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
   prompt: text('prompt').notNull(),
+  // Optional plain-text note shown under the question on the signup form.
+  helperText: text('helper_text'),
   type: text('type', { enum: ['text', 'textarea', 'select', 'boolean'] }).notNull(),
   optionsJson: text('options_json'), // JSON string array; only for type = 'select'
   required: integer('required', { mode: 'boolean' }).notNull().default(false),
