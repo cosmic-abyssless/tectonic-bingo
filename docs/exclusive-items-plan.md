@@ -4,7 +4,10 @@ Status: **implemented** (phases 1-6; phase 7 is a data change, see the end). Whe
 this text: refusals read "Baron is already used on DT2 ISSUE 1: Pets can only be used on one tile"; a locked
 item is muted with a "Used on ..." tag rather than `dim` (which draws the strike-through of a done item);
 changing the rules from the settings re-scores every team; and the requirement editor shows an "exclusive"
-badge on covered items. Original status: **approved plan, ready to implement.** Written to be executed without
+badge on covered items; and a rule is not limited to an item group: the settings can start one from a tile or
+part of the board, an item group or nothing, and each rule's items are edited one by one (a tile's items rarely
+match a group: the "Slayer" item group covers only 6 of SLAYER BOSSES's 40 items, so the Slayer rule is built from
+the tile). Original status: **approved plan, ready to implement.** Written to be executed without
 conversation context. Read `CONTEXT.md` (vocabulary: tile, part/task,
 requirement, item, claim) and `docs/item-quantity-model.md` §5 and §10 (how
 one item node can be shared by two parts, and why) before starting.
@@ -34,7 +37,7 @@ An **exclusivity rule** on a bingo is a set of item names plus a scope:
 export interface ExclusivityRule {
   id: string;          // uuid, minted when the rule is created
   label: string;       // e.g. "Pets"
-  itemNames: string[]; // snapshot of the item group it was made from; matched case-insensitively
+  itemNames: string[]; // snapshot of the items it was started with (a group, a tile or part, or typed); matched case-insensitively
   scope: "part" | "tile";
 }
 ```

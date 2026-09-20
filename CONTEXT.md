@@ -166,7 +166,7 @@ How multi-part Tiles handle identical or overlapping item lists between Parts:
 An Item a Team may use in **one place only**: a Claim on it locks the same Item everywhere else for that Team, but still counts only where it was submitted.
 - **Example:** A pet counts on its boss's Tile *or* on the Pets Tile, not both. Several of the same pet on one Tile all count. On Slayer Bosses, a unique used for Page 1 is spent for Page 2.
 - **Scope:** Each rule limits the Item to one **Tile** (any of its Parts) or one **Part**.
-- **Set up:** Per Bingo, in the settings, from an Item Group (a snapshot of its names) plus a scope; matched by item name. Each place keeps its own copy of the Item.
+- **Set up:** Per Bingo, in the settings, as a list of item names plus a scope, started from a Tile or Part of the board, an Item Group (a snapshot) or nothing, and editable item by item; matched by item name. Each place keeps its own copy of the Item.
 - **Rules:** A pending or approved Claim locks the Item; a rejection frees it. The server refuses the Claim and the board shows "Used on ...". If a rule is added after Claims exist, the earliest Claim's place is the one that scores.
 - **Not:** A Shared Item Pool. Sharing one Item between Parts makes a Claim count toward *each*; an Exclusive Item is the opposite: one place, chosen by where the Claim is submitted.
 

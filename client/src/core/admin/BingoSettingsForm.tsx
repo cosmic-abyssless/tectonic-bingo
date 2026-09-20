@@ -255,7 +255,7 @@ export function BingoSettingsForm({
       </Section>
 
       <Section title="Exclusive items">
-        <ExclusiveItemsSection rules={form.exclusivityRules} onChange={(exclusivityRules) => setForm({ ...form, exclusivityRules })} />
+        <ExclusiveItemsSection slug={slug} rules={form.exclusivityRules} onChange={(exclusivityRules) => setForm({ ...form, exclusivityRules })} />
       </Section>
 
       <Section title="Export">

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ExclusivityRule, GraphNode, SubmissionDetails, Tile } from "@bingo/shared";
-import { NO_LOCKS, lockReason, lockTag, lockedLeaves, placeLeaves } from "./exclusivity";
+import { NO_LOCKS, boardItemSources, lockReason, lockTag, lockedLeaves, placeLeaves } from "./exclusivity";
 
 const node = (over: Partial<GraphNode> & Pick<GraphNode, "id" | "kind">): GraphNode =>
   ({ bingoId: "b", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName: null, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, children: [], ...over }) as GraphNode;
@@ -66,5 +66,25 @@ describe("lockedLeaves", () => {
     const locks = lockedLeaves([rule], slayerTiles, [sub("s1", "pending", ["t1"])]);
     expect([...locks.keys()]).toEqual(["t2"]);
     expect(lockTag(locks.get("t2")!)).toBe("Used on SLAYER BOSSES · Page 1");
+  });
+});
+
+describe("boardItemSources", () => {
+  const sources = boardItemSources(TILES);
+  const byLabel = (label: string) => sources.find((s) => s.label === label);
+
+  it("lists a tile once when it has a single part", () => {
+    expect(byLabel("DT2 ISSUE 1")?.itemNames).toEqual(["Baron"]);
+    expect(sources.some((s) => s.label.startsWith("DT2 ISSUE 1 ·"))).toBe(false);
+  });
+
+  it("lists a tile's parts and the tile as a whole, without repeating a shared item", () => {
+    expect(byLabel("PETS (all parts)")?.itemNames).toEqual(["Baron", "Nid"]);
+    expect(byLabel("PETS · Page 1")?.itemNames).toEqual(["Baron", "Nid"]);
+    expect(byLabel("PETS · Page 2")?.itemNames).toEqual(["Baron", "Nid"]);
+  });
+
+  it("takes a bare item task as a source of its own item", () => {
+    expect(byLabel("SLAYER BOSSES")?.itemNames).toEqual(["Kraken tentacle"]);
   });
 });
