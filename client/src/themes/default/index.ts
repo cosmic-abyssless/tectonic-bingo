@@ -3,6 +3,7 @@ import { defaultTokens } from "../tokens";
 import { BoardPageLayout } from "./page/BoardPageLayout";
 import { DraftPageLayout } from "./page/DraftPageLayout";
 import { StatsPageLayout } from "./page/StatsPageLayout";
+import { DraftPickBurst } from "./draft/DraftPickBurst";
 import { PageLoading, PageError } from "./page/PageStates";
 import { PageHeader } from "./page/PageHeader";
 import { TeamSelector } from "./page/TeamSelector";
@@ -46,6 +47,7 @@ export const defaultTheme: ThemeDefinition = {
     BoardPage: BoardPageLayout,
     DraftPage: DraftPageLayout,
     StatsPage: StatsPageLayout,
+    DraftPickBurst,
     PageLoading,
     PageError,
     PageHeader,

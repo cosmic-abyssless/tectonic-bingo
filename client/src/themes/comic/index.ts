@@ -4,6 +4,7 @@ import { DARK_PALETTE } from "./darkPalettes";
 import { BoardPageLayout } from "./page/BoardPageLayout";
 import { DraftPageLayout } from "./page/DraftPageLayout";
 import { StatsPageLayout } from "./page/StatsPageLayout";
+import { DraftPickBurst } from "./draft/DraftPickBurst";
 import { BoardGrid } from "./board/BoardGrid";
 import { TileSearch } from "./page/TileSearch";
 import { TileCell } from "./board/TileCell";
@@ -112,6 +113,7 @@ const comicTheme: ThemeDefinition = {
     BoardPage: BoardPageLayout,
     DraftPage: DraftPageLayout,
     StatsPage: StatsPageLayout,
+    DraftPickBurst,
     BoardGrid,
     TaskPanel,
     RequirementTree,

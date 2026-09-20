@@ -22,7 +22,22 @@ function ordinal(n: number): string {
   }
 }
 
-export function TeamRoster({ team, picks, isCurrent, highlight, showOrder }: { team: DraftTeam; picks: DraftPick[]; isCurrent?: boolean; highlight?: boolean; showOrder?: boolean }) {
+export function TeamRoster({
+  team,
+  picks,
+  isCurrent,
+  highlight,
+  showOrder,
+  hiddenPickNumbers,
+}: {
+  team: DraftTeam;
+  picks: DraftPick[];
+  isCurrent?: boolean;
+  highlight?: boolean;
+  showOrder?: boolean;
+  /** Picks to keep invisible (their slot is still held) while a reveal is on its way to them. */
+  hiddenPickNumbers?: ReadonlySet<number>;
+}) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <div className="h-4 text-[11px] font-medium uppercase tracking-wide text-on-surface">
@@ -53,7 +68,12 @@ export function TeamRoster({ team, picks, isCurrent, highlight, showOrder }: { t
       </div>
       <ul className="w-full space-y-1">
         {groupByPick(picks).map((group) => (
-          <li key={group[0].pickNumber} className="rounded-sm bg-surface px-2.5 py-1 text-sm text-on-surface-muted">
+          <li
+            key={group[0].pickNumber}
+            data-team-id={team.id}
+            data-pick-number={group[0].pickNumber}
+            className={`rounded-sm bg-surface px-2.5 py-1 text-sm text-on-surface-muted ${hiddenPickNumbers?.has(group[0].pickNumber) ? "invisible" : ""}`}
+          >
             {group.map((p) => (
               <div key={p.id} className="truncate">
                 <PlayerName userId={p.userId}>{p.rsn || displayName(p.user)}</PlayerName>

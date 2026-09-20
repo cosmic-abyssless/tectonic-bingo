@@ -23,6 +23,10 @@ export interface ThemeSlots {
   // calls as ordinary core/ components, so there's no headless model here.
   DraftPage: ComponentType<{ slug: string; bingoName: string }>;
   StatsPage: ComponentType<{ slug: string; bingoName: string }>;
+  // The shape that pops up for everyone watching when a player is drafted (core/draft/DraftPickReveal). The theme
+  // draws only the shape — a fixed-size card or burst, no positioning; core handles the pop, the hold and the flight
+  // to the roster. One name per drafted player (two for a duo pair). teamColor is null for a team with none.
+  DraftPickBurst: ComponentType<{ names: string[]; teamName: string; teamColor: string | null }>;
 
   // Page chrome — props-only.
   PageLoading: ComponentType<Record<string, never>>;

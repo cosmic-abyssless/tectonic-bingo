@@ -16,6 +16,9 @@ import { ChevronDownIcon, ChevronUpIcon, LinkIcon } from "../ui/icons";
 import { SortHeader, compareSortValues, useTableSort, type TableSort } from "../ui/tableSort";
 import { RatingCell } from "./RatingCell";
 import { TeamRoster } from "./TeamRoster";
+import { DraftPickReveal } from "./DraftPickReveal";
+import { namesForPick } from "./revealMath";
+import { useDraftReveals } from "./useDraftReveals";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { AchievementIcons, PlaceBreakdown, TierBadge } from "../tectonic/ProfileBadges";
 import { PlayerName } from "../tectonic/PlayerName";
@@ -365,6 +368,7 @@ export function DraftRoom({ slug }: { slug: string }) {
   const [pickError, setPickError] = useState<string | null>(null);
   const [rateError, setRateError] = useState<string | null>(null);
   const [orderOpen, setOrderOpen] = useState(false);
+  const reveals = useDraftReveals(shell?.bingo.id, state);
 
   useEffect(() => {
     if (!state?.orderLockedUntil) return;
@@ -404,6 +408,7 @@ export function DraftRoom({ slug }: { slug: string }) {
   const questions = questionsData?.questions ?? [];
   const lockMs = state.orderLockedUntil ? Math.max(0, new Date(state.orderLockedUntil).getTime() - Date.now()) : 0;
   const revealing = lockMs > 0;
+  const revealedTeam = reveals.active ? (state.teams.find((t) => t.id === reveals.active!.teamId) ?? null) : null;
   const canControlOrder = isAdmin && !scouting && state.picks.length === 0;
   const busy = shuffleOrder.isPending || setOrder.isPending || startDraft.isPending;
 
@@ -551,6 +556,7 @@ export function DraftRoom({ slug }: { slug: string }) {
                   picks={state.picks.filter((p) => p.teamId === team.id)}
                   isCurrent={currentTeam?.id === team.id}
                   showOrder={state.orderReady}
+                  hiddenPickNumbers={reveals.hiddenPickNumbers}
                 />
               </motion.div>
             ))}
@@ -558,6 +564,19 @@ export function DraftRoom({ slug }: { slug: string }) {
         </div>
         {state.teams.length === 0 && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
       </section>
+
+      {revealedTeam && reveals.active && (
+        <DraftPickReveal
+          key={reveals.active.pickNumber}
+          pick={reveals.active}
+          names={namesForPick(state.picks, reveals.active.pickNumber)}
+          teamName={revealedTeam.name}
+          teamColor={revealedTeam.color}
+          hurry={reveals.waiting > 0}
+          onArrive={reveals.arrive}
+          onDone={reveals.finish}
+        />
+      )}
 
       <PickOrderDialog
         isOpen={orderOpen}
