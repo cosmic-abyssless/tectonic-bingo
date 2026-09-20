@@ -17,6 +17,7 @@ import * as boardService from "./boardService";
 import * as signupService from "./signupService";
 import { setNodeGates } from "./graphService";
 import { decodeExportImage, readTileImage, removeFiles, storeTileImage, type DecodedImage } from "./exportImages";
+import { log } from "../log";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -32,7 +33,7 @@ function resolveGateLocal(realId: string | null, localIdByRealNodeId: Map<string
     // same-bingo sibling task — but a gate can technically reference any
     // node, including one outside the exported set (e.g. a line). Dropping
     // it is safer than exporting a reference nothing can resolve.
-    console.warn(`[bingoExport] gate reference ${realId} points outside the exported node set — dropping it`);
+    log.warn("bingo export dropped gate", { realId });
     return null;
   }
   return local;

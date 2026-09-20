@@ -5,6 +5,7 @@ import * as schema from "./db/schema";
 import { tiles } from "./db/schema";
 import { getFullGraph, leafDescendants } from "./services/graphService";
 import { findBestMatch, fuzzyIncludes, type DetectedItemMatch, type MatchableItem } from "./services/textMatchService";
+import { log } from "./log";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -85,6 +86,15 @@ function toArrayBuffer(buf: Buffer): ArrayBuffer {
 // function is I/O only: OCR the image, load the board's items, hand both to
 // the pure matcher.
 export async function analyzeSubmissionScreenshot(db: Db, bingo: Bingo, team: Team, file: ScreenshotFile): Promise<AnalyzeResult> {
+  try {
+    return await runAnalyze(db, bingo, team, file);
+  } catch (err) {
+    log.error("ocr analysis failed", { err, bingoId: bingo.id, teamId: team.id });
+    throw err;
+  }
+}
+
+async function runAnalyze(db: Db, bingo: Bingo, team: Team, file: ScreenshotFile): Promise<AnalyzeResult> {
   const service = await getOcrService();
   const result = await service.recognize(toArrayBuffer(file.buffer), { noCache: true });
   const extractedText = result.text

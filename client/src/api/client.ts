@@ -1,3 +1,5 @@
+import { reportClientError } from "../core/logging/reportClientError";
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -8,7 +10,14 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { credentials: "include", ...init });
+  let res: Response;
+  try {
+    res = await fetch(path, { credentials: "include", ...init });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "network error";
+    reportClientError(`${path} ${message}`, "api.network");
+    throw err;
+  }
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try {
@@ -17,6 +26,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // response body wasn't JSON — keep the generic message
     }
+    if (res.status >= 500) reportClientError(`${path} ${message}`, "api.5xx");
     throw new ApiError(res.status, message);
   }
   if (res.status === 204) return undefined as T;

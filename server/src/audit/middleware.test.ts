@@ -7,6 +7,7 @@ import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { audit } from "./record";
 import { auditContext, auditSkip } from "./middleware";
+import { log } from "../log";
 import { asyncHandler } from "../middleware/errorHandler";
 
 // auditContext's fallback writes through the module-level `db` singleton
@@ -65,7 +66,7 @@ let warnSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   ({ sqlite, db } = createTestDb());
-  warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  warnSpy = vi.spyOn(log, "warn").mockImplementation(() => {});
 });
 afterEach(() => {
   sqlite.close();

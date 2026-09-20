@@ -12,6 +12,7 @@
 // raises the cap from 20 to 100 req/min (https://docs.wiseoldman.net/api).
 import type { AccountType } from "@bingo/shared";
 import { USER_AGENT } from "../config";
+import { log } from "../log";
 
 const WOM_BASE_URL = "https://api.wiseoldman.net/v2";
 const WOM_USER_AGENT = `${USER_AGENT} player stats`;
@@ -40,12 +41,12 @@ export class WomClient {
       if (res.status === 429) {
         const retryAfterSec = Number(res.headers.get("retry-after"));
         this.rateLimitedUntil = Date.now() + (Number.isFinite(retryAfterSec) ? retryAfterSec * 1000 : 60_000);
-        console.warn(`[wom] rate limited, backing off until ${new Date(this.rateLimitedUntil).toISOString()}`);
+        log.warn("wom rate limited", { until: new Date(this.rateLimitedUntil).toISOString() });
       } else if (res.status !== 404) {
-        console.warn(`[wom] ${res.status} from GET /players/${rsn}`);
+        log.warn("wom request failed", { status: res.status, rsn });
       }
     } catch (err) {
-      console.warn(`[wom] request failed: GET /players/${rsn}`, err instanceof Error ? err.message : err);
+      log.warn("wom request failed", { rsn, err });
     }
     return null;
   }

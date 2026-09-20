@@ -17,6 +17,7 @@ import { getTectonicClient, TectonicUnavailableError, type TectonicClient } from
 import { deriveCombatAchievements, parseStoredCaStats, peakCombatAchievements } from "./combatAchievements";
 import { audit } from "../audit/record";
 import { broadcast } from "../ws";
+import { log } from "../log";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -171,7 +172,7 @@ export async function fetchAndPersistPlayerStats(db: Db, signupId: string, rsn: 
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`[player-stats] failed to fetch/persist for signup ${signupId} (${rsn})`, message);
+    log.warn("player stats fetch failed", { signupId, rsn, err: message });
     audit(db, {
       action: "signup.stats_fetch_failed",
       bingoId: signup?.bingoId ?? null,

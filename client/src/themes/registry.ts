@@ -1,6 +1,7 @@
 import { defaultTheme } from "./default";
 import { defaultTokens, type ThemeTokens } from "./tokens";
 import type { ThemeSlots } from "./slots";
+import { reportClientError } from "../core/logging/reportClientError";
 
 export interface ThemeDefinition {
   key: string;
@@ -107,6 +108,8 @@ export function resolveTheme(key: string): ResolvedTheme | Promise<ResolvedTheme
       })
       .catch((err) => {
         console.warn(`[themes] failed to load theme "${key}", falling back to default`, err);
+        const message = err instanceof Error ? err.message : String(err);
+        reportClientError(`theme ${key}: ${message}`, "theme");
         return DEFAULT_RESOLVED;
       });
     cache.set(key, cached);
