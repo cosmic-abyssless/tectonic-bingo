@@ -79,6 +79,11 @@ export const bingos = sqliteTable('bingos', {
   // Last WOM sync failure (create or edit), surfaced in the admin settings
   // panel. Cleared on the next successful sync.
   womSyncError: text('wom_sync_error'),
+  // Set by Site Admin Start draft. Writing draftOrder is not starting —
+  // captains cannot pick until this is true and the shuffle reveal lock
+  // (draftOrderLockedUntil) has expired.
+  draftStarted: integer('draft_started', { mode: 'boolean' }).notNull().default(false),
+  draftOrderLockedUntil: integer('draft_order_locked_until', { mode: 'timestamp' }),
   createdByUserId: text('created_by_user_id').notNull().references(() => users.id),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
@@ -163,15 +168,22 @@ export const signups = sqliteTable('signups', {
   womId: text('wom_id'),
   rsnVerified: integer('rsn_verified', { mode: 'boolean' }).notNull().default(false),
   // Raw WOM (/players/{rsn}) and RuneProfile (/accounts/{rsn}/full) API
-  // responses, fetched once at signup time and reused as-is at draft time —
-  // no live external calls in the draft room's hot path. May go stale
-  // between signup and draft day; that's an accepted tradeoff for a
-  // reference-only display. Internal only — never exposed on the shared
-  // Signup type / getAllSignups roster; only the draft route parses these
-  // into the small summary shape the client actually renders.
+  // responses, fetched at signup (and on mod refresh) and reused as-is at
+  // draft time — no live external calls in the draft room's hot path. May
+  // go stale between signup and draft day; that's an accepted tradeoff for
+  // a reference-only display. Internal only — never exposed on the shared
+  // Signup type / getAllSignups roster; only the draft route parses the
+  // blobs. Derived CA snapshots (caCurrentJson/caPeakJson) are small and
+  // are selected onto the roster and signup form.
   womDataJson: text('wom_data_json'),
   runeProfileDataJson: text('rune_profile_data_json'),
   statsFetchedAt: integer('stats_fetched_at', { mode: 'timestamp' }),
+  // Derived OSRS Combat Achievement reward-tier snapshots. Current is the
+  // signed-up RSN; peak is the max across currently Tectonic-linked RSNs.
+  // Small JSON ({tier, points}) so roster/draft reads never pull the raw
+  // RuneProfile blob. Alt RP responses are not persisted.
+  caCurrentJson: text('ca_current_json'),
+  caPeakJson: text('ca_peak_json'),
   status: text('status', { enum: ['active', 'withdrawn'] }).notNull().default('active'),
   buyinReceivedAt: integer('buyin_received_at', { mode: 'timestamp' }),
   buyinCollectedByUserId: text('buyin_collected_by_user_id').references(() => users.id), // who physically collected the GP
@@ -217,7 +229,7 @@ export const teams = sqliteTable('teams', {
   // used to assist mod verification of submission screenshots.
   codeword: text('codeword').notNull(),
   color: text('color'), // hex code for UI display, e.g. "#e74c3c" — mod-assigned
-  draftOrder: integer('draft_order'), // nullable until the draft starts
+  draftOrder: integer('draft_order'), // nullable until pick order is set
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 }, (t) => [

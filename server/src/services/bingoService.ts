@@ -53,10 +53,10 @@ export function getBingoBySlug(db: Db, slug: string) {
 // sends a bingo (or a list of them) to a client goes through this first;
 // routes that only need the row server-side (requireBingo, stage/board
 // checks, the WOM sync itself) use the raw row from getBingoBySlug instead.
-export function toPublicBingo<T extends { womGroupVerificationCode: string | null; exclusivityRulesJson: string }>(
+export function toPublicBingo<T extends { womGroupVerificationCode: string | null; exclusivityRulesJson: string; draftOrderLockedUntil?: Date | null }>(
   bingo: T,
-): Omit<T, "womGroupVerificationCode" | "exclusivityRulesJson"> & { exclusivityRules: ExclusivityRule[] } {
-  const { womGroupVerificationCode: _womGroupVerificationCode, exclusivityRulesJson, ...rest } = bingo;
+): Omit<T, "womGroupVerificationCode" | "exclusivityRulesJson" | "draftOrderLockedUntil"> & { exclusivityRules: ExclusivityRule[] } {
+  const { womGroupVerificationCode: _womGroupVerificationCode, draftOrderLockedUntil: _draftOrderLockedUntil, exclusivityRulesJson, ...rest } = bingo;
   return { ...rest, exclusivityRules: parseExclusivityRules(exclusivityRulesJson) };
 }
 

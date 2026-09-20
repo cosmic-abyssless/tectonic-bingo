@@ -33,6 +33,8 @@ import { getKnownItemNames } from "./services/itemNames";
 import { isOsrsItemSearchEnabled } from "./routes/osrsItems";
 import { INDEX_HTML_CACHE_CONTROL, clientDistStaticOptions, uploadsStaticOptions } from "./middleware/staticCaching";
 import { getTectonicConfig } from "./services/tectonicService";
+import { installProcessLogHandlers, log, requestLog } from "./log";
+import clientErrorsRouter from "./routes/clientErrors";
 
 const REQUIRED_ENV = [
   "DISCORD_CLIENT_ID",
@@ -45,17 +47,15 @@ const REQUIRED_ENV = [
 
 const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
 if (missing.length > 0) {
-  console.error(
-    `\n[ERROR] Missing required environment variables:\n  ${missing.join("\n  ")}\n\nCopy .env.example to .env and fill in the values.\n`
-  );
+  log.error("missing required env", { keys: missing });
   process.exit(1);
 }
 
 if (getAdminDiscordIds().length === 0) {
-  console.warn(
-    "[WARN] ADMIN_DISCORD_IDS is not set — no user will bootstrap as a site admin."
-  );
+  log.warn("ADMIN_DISCORD_IDS is not set — no user will bootstrap as a site admin");
 }
+
+installProcessLogHandlers();
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
@@ -141,6 +141,7 @@ app.use(passport.session());
 // Opens the per-request audit actor/requestId context — must run after
 // passport.session() (needs req.user) and before the routers.
 app.use(auditContext);
+app.use(requestLog);
 
 // Uploads — serve screenshots and tile images stored locally.
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -164,6 +165,7 @@ app.use("/api/osrs-items", osrsItemsRouter);
 // Dev-only tooling (test data generator): only exists while dev mode is on.
 if (isDevModeActive()) app.use("/api/dev", devRouter);
 app.use("/api/bug-reports", bugReportsRouter);
+app.use("/api/client-errors", clientErrorsRouter);
 
 // Serve the built client (client/dist) so the whole site — API, WS, and
 // frontend — comes from one origin in production: no CORS, no cookie-domain
@@ -191,12 +193,15 @@ const server = http.createServer(app);
 initWebSocketServer(server);
 
 server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  const devModeActive = isDevModeActive();
-  console.log(`Dev mode (dev-login, seed-signups): ${devModeActive ? "ENABLED" : "disabled"} (NODE_ENV=${process.env.NODE_ENV ?? "<unset>"}, DEV_LOGIN_ENABLED=${process.env.DEV_LOGIN_ENABLED ?? "<unset>"})`);
-  console.log(
-    `Tectonic API integration: ${getTectonicConfig() ? "ENABLED" : "disabled"} (requires TECTONIC_API_URL, TECTONIC_API_KEY, TECTONIC_GUILD_ID)`,
-  );
+  const dbPath = process.env.DB_PATH ?? "data/bingo.db";
+  log.info("server listening", {
+    port: Number(PORT),
+    nodeEnv: process.env.NODE_ENV ?? "<unset>",
+    tectonic: Boolean(getTectonicConfig()),
+    ocr: process.env.SCREENSHOT_OCR_DISABLED !== "true",
+    dbDir: path.dirname(dbPath),
+    devMode: isDevModeActive(),
+  });
 });
 
 // SQLite cannot be shared by overlapping replicas. On SIGTERM (Railway
@@ -206,7 +211,7 @@ let shuttingDown = false;
 function shutdown(signal: string): void {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log(`[shutdown] ${signal}`);
+  log.info("shutdown", { signal });
   closeWebSocketServer();
   if (sessionStore._sessionCleanup) clearInterval(sessionStore._sessionCleanup);
   server.close(() => {

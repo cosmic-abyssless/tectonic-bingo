@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b4662e56-ae03-41a8-bd07-84e6927775e0",
-  "prevId": "108554b1-4135-4791-beb2-6691dac266b9",
+  "id": "1f2130e0-9954-417f-a4b9-6643ac5ee165",
+  "prevId": "b4662e56-ae03-41a8-bd07-84e6927775e0",
   "tables": {
     "audit_log": {
       "name": "audit_log",
@@ -528,6 +528,21 @@
         "wom_sync_error": {
           "name": "wom_sync_error",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "draft_started": {
+          "name": "draft_started",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "draft_order_locked_until": {
+          "name": "draft_order_locked_until",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

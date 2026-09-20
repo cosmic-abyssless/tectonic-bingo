@@ -1,11 +1,18 @@
-import { useState, type CSSProperties } from "react";
-import type { DraftPoolEntry, DraftUnit, LeftoverMode, PickRating, SignupQuestion, TectonicProfile } from "@bingo/shared";
+import { useEffect, useState, type CSSProperties } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { useQueryClient } from "@tanstack/react-query";
+import type { DraftPoolEntry, DraftTeam, DraftUnit, LeftoverMode, PickRating, SignupQuestion, TectonicProfile } from "@bingo/shared";
+import { CaCell, WomCell } from "../signup/caStats";
+import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { useAuth } from "../../context/AuthContext";
-import { useBingo, useDraftState, useMakePick, useSetPickRating, useSignupQuestions, useStartDraft } from "../../api/queries";
+import { queryKeys, useBingo, useDraftState, useMakePick, useSetDraftOrder, useSetPickRating, useShuffleDraftOrder, useSignupQuestions, useStartDraft } from "../../api/queries";
 import { displayName } from "../ui/user";
-import { Button } from "../ui/Button";
+import { Button, IconButton } from "../ui/Button";
 import { Badge, Card, Notice } from "../ui/Card";
-import { LinkIcon } from "../ui/icons";
+import { Dialog, DialogHeader } from "../ui/Dialog";
+import { ColumnPicker } from "../ui/ColumnPicker";
+import { useHiddenColumns } from "../ui/hiddenColumns";
+import { ChevronDownIcon, ChevronUpIcon, LinkIcon } from "../ui/icons";
 import { SortHeader, compareSortValues, useTableSort, type TableSort } from "../ui/tableSort";
 import { RatingCell } from "./RatingCell";
 import { TeamRoster } from "./TeamRoster";
@@ -38,6 +45,8 @@ function poolSortValue(entry: DraftPoolEntry, key: SortKey, ratings: Ratings): s
   if (key === "podiums") return entry.tectonicProfile ? placeScore(podiumSummary(entry.tectonicProfile)) : -1;
   if (key === "ehb") return entry.womStats?.ehb ?? -1;
   if (key === "ehp") return entry.womStats?.ehp ?? -1;
+  if (key === "caCurrent") return entry.caCurrent?.points ?? -1;
+  if (key === "caPeak") return entry.caPeak?.points ?? -1;
   return (entry.answers?.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
 }
 
@@ -50,33 +59,42 @@ function sortUnit(unit: DraftUnit, sort: TableSort<SortKey>, ratings: Ratings): 
 
 // Tier · Records · Podiums · Achievements — the at-a-glance clan signals;
 // the full lists live in PlayerProfileDialog.
-function ProfileCells({ profile }: { profile: TectonicProfile | null }) {
+function ProfileCells({ profile, shown }: { profile: TectonicProfile | null; shown: (id: string) => boolean }) {
+  const empty = <td className="whitespace-nowrap py-2 pr-4 text-on-surface-subtle">—</td>;
   if (!profile) {
     return (
       <>
-        <td className="py-2 pr-4 text-on-surface-subtle">—</td>
-        <td className="py-2 pr-4" />
-        <td className="py-2 pr-4" />
-        <td className="py-2 pr-4" />
+        {shown("tier") && empty}
+        {shown("records") && <td className="py-2 pr-4" />}
+        {shown("podiums") && <td className="py-2 pr-4" />}
+        {shown("achievements") && <td className="py-2 pr-4" />}
       </>
     );
   }
   const podiums = podiumSummary(profile);
   return (
     <>
-      <td className="py-2 pr-4">
-        <TierBadge profile={profile} />
-      </td>
-      <td className="num py-2 pr-4 text-on-surface-muted" title={recordTitle(profile)}>
-        <PlaceBreakdown {...recordSummary(profile)} />
-      </td>
-      <td className="num py-2 pr-4 text-on-surface-muted" title={podiumTitle(profile)}>
-        <PlaceBreakdown {...podiums} />
-        {podiums.bingoWins > 0 && <span className="ml-1 text-xs text-on-surface-subtle">({podiums.bingoWins} bingo)</span>}
-      </td>
-      <td className="py-2 pr-4">
-        <AchievementIcons profile={profile} />
-      </td>
+      {shown("tier") && (
+        <td className="whitespace-nowrap py-2 pr-4">
+          <TierBadge profile={profile} />
+        </td>
+      )}
+      {shown("records") && (
+        <td className="num py-2 pr-4 text-on-surface-muted" title={recordTitle(profile)}>
+          <PlaceBreakdown {...recordSummary(profile)} />
+        </td>
+      )}
+      {shown("podiums") && (
+        <td className="num py-2 pr-4 text-on-surface-muted" title={podiumTitle(profile)}>
+          <PlaceBreakdown {...podiums} />
+          {podiums.bingoWins > 0 && <span className="ml-1 text-xs text-on-surface-subtle">({podiums.bingoWins} bingo)</span>}
+        </td>
+      )}
+      {shown("achievements") && (
+        <td className="py-2 pr-4">
+          <AchievementIcons profile={profile} />
+        </td>
+      )}
     </>
   );
 }
@@ -104,6 +122,9 @@ function PoolTable({
   // Leads land on their favourites first; the toggle flips to ascending.
   const sort = useTableSort<SortKey>(ratings ? "rating" : "rsn", ratings ? "desc" : "asc");
   const ratingOf = ratings ?? {};
+  const [hiddenColumns, setHiddenColumns] = useHiddenColumns("draftPool");
+  const shown = (id: string) => !hiddenColumns.has(id);
+  const statsRefreshing = useStatsRefreshingSignupIds();
   const entries = pool.flatMap((u) => u.entries);
   // Answers are only sent to mods/captains (see draftService.getDraftState) —
   // everyone else's pool entries have answers: null, so skip those columns
@@ -111,7 +132,8 @@ function PoolTable({
   const showAnswers = entries.some((e) => e.answers !== null);
   // Skip the WOM columns entirely if nobody in the pool has stats (WOM
   // integration effectively unused for this bingo), same reasoning.
-  const showWomStats = entries.some((e) => e.womStats !== null);
+  const showWomStats = entries.some((e) => e.womStats !== null || statsRefreshing.has(e.signup.id));
+  const showCa = entries.some((e) => e.caCurrent !== null || e.caPeak !== null || statsRefreshing.has(e.signup.id));
   // Clan standing columns only when tectonic-api knows at least one player.
   const showProfiles = entries.some((e) => e.tectonicProfile !== null);
   const hasPairs = pool.some((u) => u.entries.length > 1);
@@ -120,6 +142,30 @@ function PoolTable({
   const hasLeftovers = pool.some((u) => u.leftover);
   const mainPoolEmpty = pool.every((u) => u.leftover);
   const leftoverTag = leftoverMode === "singles" ? "Singles round" : "Cut";
+  const columnOptions = [
+    { id: "discord", label: "Discord" },
+    ...(showProfiles
+      ? [
+          { id: "tier", label: "Tier" },
+          { id: "records", label: "Records" },
+          { id: "podiums", label: "Podiums" },
+          { id: "achievements", label: "Achievements" },
+        ]
+      : []),
+    ...(showWomStats
+      ? [
+          { id: "ehb", label: "EHB" },
+          { id: "ehp", label: "EHP" },
+        ]
+      : []),
+    ...(showCa
+      ? [
+          { id: "caCurrent", label: "Current CA" },
+          { id: "caPeak", label: "Peak CA" },
+        ]
+      : []),
+    ...(showAnswers ? questions.map((q) => ({ id: q.id, label: q.prompt })) : []),
+  ];
 
   const sorted = pool
     .map((u) => sortUnit(u, sort, ratingOf))
@@ -128,30 +174,28 @@ function PoolTable({
   if (pool.length === 0) return <p className="text-sm text-on-surface-subtle">No one left to draft.</p>;
 
   return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={setHiddenColumns} />
+      </div>
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-max min-w-full text-sm [&_td]:align-middle [&_th]:align-middle">
         <thead>
           <tr className="border-b border-outline">
             {hasPairs && <th className="pb-2 pr-2" />}
             {ratings && <SortHeader label="Rating" sortKey="rating" sort={sort} />}
             <SortHeader label="RSN" sortKey="rsn" sort={sort} />
-            <SortHeader label="Discord" sortKey="discord" sort={sort} />
+            {shown("discord") && <SortHeader label="Discord" sortKey="discord" sort={sort} />}
             {hasLeftovers && <th className="pb-2 pr-4" />}
-            {showProfiles && (
-              <>
-                <SortHeader label="Tier" sortKey="tier" sort={sort} />
-                <SortHeader label="Records" sortKey="records" sort={sort} />
-                <SortHeader label="Podiums" sortKey="podiums" sort={sort} />
-                <th className="pb-2 pr-4" />
-              </>
-            )}
-            {showWomStats && (
-              <>
-                <SortHeader label="EHB" sortKey="ehb" sort={sort} />
-                <SortHeader label="EHP" sortKey="ehp" sort={sort} />
-              </>
-            )}
-            {showAnswers && questions.map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />)}
+            {showProfiles && shown("tier") && <SortHeader label="Tier" sortKey="tier" sort={sort} />}
+            {showProfiles && shown("records") && <SortHeader label="Records" sortKey="records" sort={sort} />}
+            {showProfiles && shown("podiums") && <SortHeader label="Podiums" sortKey="podiums" sort={sort} />}
+            {showProfiles && shown("achievements") && <th className="pb-2 pr-4" />}
+            {showWomStats && shown("ehb") && <SortHeader label="EHB" sortKey="ehb" sort={sort} />}
+            {showWomStats && shown("ehp") && <SortHeader label="EHP" sortKey="ehp" sort={sort} />}
+            {showCa && shown("caCurrent") && <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} />}
+            {showCa && shown("caPeak") && <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} />}
+            {showAnswers && questions.filter((q) => shown(q.id)).map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />)}
             {canPick && <th className="pb-2" />}
           </tr>
         </thead>
@@ -178,19 +222,36 @@ function PoolTable({
                       </td>
                     )}
                     <td className={`whitespace-nowrap py-2 pr-4 font-medium ${unit.leftover ? "" : "text-on-surface"}`}>
-                      <AccountTypeIcon accountType={entry.accountType} /> <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
+                      <span className="inline-flex items-center gap-1">
+                        <AccountTypeIcon accountType={entry.accountType} />
+                        <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
+                      </span>
                     </td>
-                    <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">{displayName(entry.user)}</td>
+                    {shown("discord") && <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">{displayName(entry.user)}</td>}
                     {hasLeftovers && <td className="py-2 pr-4 align-middle">{unit.leftover && i === 0 && <Badge tone="warn">{leftoverTag}</Badge>}</td>}
-                    {showProfiles && <ProfileCells profile={entry.tectonicProfile} />}
-                    {showWomStats && (
-                      <>
-                        <td className="num whitespace-nowrap py-2 pr-4 text-on-surface-muted">{entry.womStats ? Math.round(entry.womStats.ehb).toLocaleString() : "—"}</td>
-                        <td className="num whitespace-nowrap py-2 pr-4 text-on-surface-muted">{entry.womStats ? Math.round(entry.womStats.ehp).toLocaleString() : "—"}</td>
-                      </>
+                    {showProfiles && <ProfileCells profile={entry.tectonicProfile} shown={shown} />}
+                    {showWomStats && shown("ehb") && (
+                      <td className="num whitespace-nowrap py-2 pr-4 text-on-surface-muted">
+                        <WomCell stats={entry.womStats} field="ehb" loading={statsRefreshing.has(entry.signup.id)} />
+                      </td>
+                    )}
+                    {showWomStats && shown("ehp") && (
+                      <td className="num whitespace-nowrap py-2 pr-4 text-on-surface-muted">
+                        <WomCell stats={entry.womStats} field="ehp" loading={statsRefreshing.has(entry.signup.id)} />
+                      </td>
+                    )}
+                    {showCa && shown("caCurrent") && (
+                      <td className="py-2 pr-4 text-on-surface-muted">
+                        <CaCell stats={entry.caCurrent} loading={statsRefreshing.has(entry.signup.id)} />
+                      </td>
+                    )}
+                    {showCa && shown("caPeak") && (
+                      <td className="py-2 pr-4 text-on-surface-muted">
+                        <CaCell stats={entry.caPeak} loading={statsRefreshing.has(entry.signup.id)} />
+                      </td>
                     )}
                     {showAnswers &&
-                      questions.map((q) => (
+                      questions.filter((q) => shown(q.id)).map((q) => (
                         <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
                           {answerByQ.get(q.id) ?? "—"}
                         </td>
@@ -210,22 +271,103 @@ function PoolTable({
         })}
       </table>
     </div>
+    </div>
+  );
+}
+
+function PickOrderDialog({
+  isOpen,
+  onClose,
+  teams,
+  onSave,
+  saving,
+  error,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  teams: DraftTeam[];
+  onSave: (teamIds: string[]) => Promise<void>;
+  saving: boolean;
+  error: string | null;
+}) {
+  const [ids, setIds] = useState<string[]>([]);
+  useEffect(() => {
+    if (isOpen) setIds(teams.map((t) => t.id));
+  }, [isOpen, teams]);
+  const byId = new Map(teams.map((t) => [t.id, t]));
+
+  function move(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (j < 0 || j >= ids.length) return;
+    const next = [...ids];
+    const a = next[i]!;
+    next[i] = next[j]!;
+    next[j] = a;
+    setIds(next);
+  }
+
+  return (
+    <Dialog isOpen={isOpen} onClose={onClose}>
+      <DialogHeader title="Pick order" subtitle="First in the list picks first." onClose={onClose} />
+      <div className="space-y-4 p-5">
+        <ol className="space-y-1">
+          {ids.map((id, i) => {
+            const team = byId.get(id);
+            if (!team) return null;
+            return (
+              <li key={id} className="flex items-center gap-2 rounded-md border border-outline bg-surface px-2 py-1.5">
+                <span className="num w-6 shrink-0 text-xs text-on-surface-subtle">{i + 1}</span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-on-surface">{team.name}</span>
+                <IconButton label="Move up" size="sm" onPress={() => move(i, -1)} isDisabled={i === 0}>
+                  <ChevronUpIcon />
+                </IconButton>
+                <IconButton label="Move down" size="sm" onPress={() => move(i, 1)} isDisabled={i === ids.length - 1}>
+                  <ChevronDownIcon />
+                </IconButton>
+              </li>
+            );
+          })}
+        </ol>
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onPress={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onPress={() => onSave(ids)} isDisabled={saving || ids.length < 2}>
+            {saving ? "Saving…" : "Save order"}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
   );
 }
 
 export function DraftRoom({ slug }: { slug: string }) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const reducedMotion = useReducedMotion();
   const { data: shell } = useBingo(slug);
   const { data: state, error: stateError } = useDraftState(slug);
   const { data: questionsData } = useSignupQuestions(slug);
+  const shuffleOrder = useShuffleDraftOrder(slug);
+  const setOrder = useSetDraftOrder(slug);
   const startDraft = useStartDraft(slug);
   const makePick = useMakePick(slug);
   const setRating = useSetPickRating(slug);
-  const [startError, setStartError] = useState<string | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
   const [pickError, setPickError] = useState<string | null>(null);
   const [rateError, setRateError] = useState<string | null>(null);
-  // Which pool entry's profile dialog is open. Tracked by signup id so the
-  // dialog follows live refetches instead of showing a stale snapshot.
+  const [orderOpen, setOrderOpen] = useState(false);
+
+  useEffect(() => {
+    if (!state?.orderLockedUntil) return;
+    const remaining = new Date(state.orderLockedUntil).getTime() - Date.now();
+    if (remaining <= 0) return;
+    const t = window.setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) });
+    }, remaining + 50);
+    return () => window.clearTimeout(t);
+  }, [state?.orderLockedUntil, queryClient, slug]);
 
   if (stateError) {
     return (
@@ -253,13 +395,36 @@ export function DraftRoom({ slug }: { slug: string }) {
   const scouting = shell.bingo.stage !== "draft";
   const poolCount = state.pool.reduce((n, u) => n + u.entries.length, 0);
   const questions = questionsData?.questions ?? [];
+  const lockMs = state.orderLockedUntil ? Math.max(0, new Date(state.orderLockedUntil).getTime() - Date.now()) : 0;
+  const revealing = lockMs > 0;
+  const canControlOrder = isAdmin && !scouting && state.picks.length === 0;
+  const busy = shuffleOrder.isPending || setOrder.isPending || startDraft.isPending;
+
+  async function handleShuffle() {
+    setOrderError(null);
+    try {
+      await shuffleOrder.mutateAsync();
+    } catch (e: unknown) {
+      setOrderError(e instanceof Error ? e.message : "Failed to shuffle pick order");
+    }
+  }
+
+  async function handleSaveOrder(teamIds: string[]) {
+    setOrderError(null);
+    try {
+      await setOrder.mutateAsync(teamIds);
+      setOrderOpen(false);
+    } catch (e: unknown) {
+      setOrderError(e instanceof Error ? e.message : "Failed to set pick order");
+    }
+  }
 
   async function handleStart() {
-    setStartError(null);
+    setOrderError(null);
     try {
       await startDraft.mutateAsync();
     } catch (e: unknown) {
-      setStartError(e instanceof Error ? e.message : "Failed to start the draft");
+      setOrderError(e instanceof Error ? e.message : "Failed to start the draft");
     }
   }
 
@@ -293,16 +458,53 @@ export function DraftRoom({ slug }: { slug: string }) {
           <div>
             <p className="font-semibold text-on-surface">The draft hasn't started</p>
             <p className="text-sm text-on-surface-muted">
-              {state.teams.length} team{state.teams.length === 1 ? "" : "s"} ready.{" "}
-              {state.teams.length < 2 ? "Create at least 2 teams from the mod panel first." : "Starting randomizes the pick order."}
+              {state.teams.length} team{state.teams.length === 1 ? "" : "s"}.{" "}
+              {state.teams.length < 2
+                ? "Create at least 2 teams from the mod panel first."
+                : state.orderReady
+                  ? revealing
+                    ? "Revealing pick order."
+                    : "Pick order is set."
+                  : "Shuffle or set pick order, then start."}
             </p>
-            {startError && <p className="mt-1 text-sm text-danger">{startError}</p>}
+            {orderError && <p className="mt-1 text-sm text-danger">{orderError}</p>}
           </div>
-          {isMod && (
-            <Button variant="primary" onPress={handleStart} isDisabled={state.teams.length < 2 || startDraft.isPending}>
-              {startDraft.isPending ? "Starting…" : "Start draft"}
-            </Button>
+          {canControlOrder && (
+            <div className="flex flex-wrap gap-2">
+              <Button onPress={handleShuffle} isDisabled={state.teams.length < 2 || busy}>
+                {shuffleOrder.isPending ? "Shuffling…" : "Shuffle pick order"}
+              </Button>
+              <Button onPress={() => { setOrderError(null); setOrderOpen(true); }} isDisabled={state.teams.length < 2 || busy}>
+                Pick order
+              </Button>
+              <Button variant="primary" onPress={handleStart} isDisabled={!state.orderReady || busy}>
+                {startDraft.isPending ? "Starting…" : "Start draft"}
+              </Button>
+            </div>
           )}
+        </Card>
+      ) : canControlOrder ? (
+        <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div>
+            <p className="font-semibold text-on-surface">{revealing ? "Revealing pick order" : state.currentPick ? `${currentTeam?.name ?? "…"} is on the clock` : "Draft started"}</p>
+            {state.currentPick && (
+              <p className="num text-xs uppercase tracking-wide text-on-surface-subtle">
+                {state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick {state.currentPick.pickNumber}
+              </p>
+            )}
+            {orderError && <p className="mt-1 text-sm text-danger">{orderError}</p>}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button onPress={handleShuffle} isDisabled={busy}>
+              {shuffleOrder.isPending ? "Shuffling…" : "Shuffle pick order"}
+            </Button>
+            <Button onPress={() => { setOrderError(null); setOrderOpen(true); }} isDisabled={busy}>
+              Pick order
+            </Button>
+            <Button variant="primary" isDisabled>
+              Start draft
+            </Button>
+          </div>
         </Card>
       ) : state.currentPick ? (
         <Card className="p-4">
@@ -311,6 +513,8 @@ export function DraftRoom({ slug }: { slug: string }) {
           </p>
           <p className="text-lg font-semibold text-on-surface">{currentTeam?.name ?? "…"} is on the clock</p>
         </Card>
+      ) : revealing ? (
+        <Notice tone="info">Revealing pick order.</Notice>
       ) : (
         <Notice tone="ok">
           Draft complete. {isMod ? "Advance to the reveal stage from the mod panel when you're ready." : "The board is revealed next."}
@@ -335,12 +539,36 @@ export function DraftRoom({ slug }: { slug: string }) {
         <div className="overflow-x-auto">
           <div className="grid auto-cols-[minmax(140px,1fr)] grid-flow-col gap-3">
             {state.teams.map((team) => (
-              <TeamRoster key={team.id} team={team} picks={state.picks.filter((p) => p.teamId === team.id)} isCurrent={currentTeam?.id === team.id} />
+              <motion.div
+                key={team.id}
+                layout
+                transition={
+                  reducedMotion || !revealing
+                    ? { duration: 0 }
+                    : { type: "tween", duration: Math.min(2, Math.max(0.4, lockMs / 1000)), ease: [0.22, 1, 0.36, 1] }
+                }
+              >
+                <TeamRoster
+                  team={team}
+                  picks={state.picks.filter((p) => p.teamId === team.id)}
+                  isCurrent={currentTeam?.id === team.id}
+                  showOrder={state.orderReady}
+                />
+              </motion.div>
             ))}
           </div>
         </div>
         {state.teams.length === 0 && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
       </section>
+
+      <PickOrderDialog
+        isOpen={orderOpen}
+        onClose={() => setOrderOpen(false)}
+        teams={state.teams}
+        onSave={handleSaveOrder}
+        saving={setOrder.isPending}
+        error={orderError}
+      />
 
       <section>
         <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>

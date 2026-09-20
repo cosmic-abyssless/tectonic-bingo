@@ -1,10 +1,13 @@
 import { isDevModeActive } from "../devMode";
 import { Router } from "express";
+import { eq } from "drizzle-orm";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireBingo } from "../middleware/requireBingo";
 import { requireBingoMod } from "../middleware/requireBingoMod";
+import { requireAdmin } from "../middleware/requireAdmin";
 import { asyncHandler } from "../middleware/errorHandler";
 import { db } from "../db";
+import * as schema from "../db/schema";
 import * as bingoService from "../services/bingoService";
 import * as submissionService from "../services/submissionService";
 import * as signupService from "../services/signupService";
@@ -15,9 +18,11 @@ import * as devSeedService from "../services/devSeedService";
 import * as teamService from "../services/teamService";
 import { syncWomCompetitionAfterDraft } from "../services/womCompetitionService";
 import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
+import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
 import { approveSubmission, rejectSubmission, undoSubmissionReview } from "../services/scoringService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
+import { markAuditedNoop } from "../audit/record";
 import { queryAuditLog } from "../audit/query";
 import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility } from "@bingo/shared";
 
@@ -121,7 +126,38 @@ router.post(
 );
 
 router.post(
+  "/draft/shuffle",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { teams, lockedUntil } = draftService.shuffleDraftOrder(db, req.bingo!);
+    const order = teams
+      .filter((t) => t.draftOrder != null)
+      .sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0))
+      .map((t) => ({ teamId: t.id, draftOrder: t.draftOrder! }));
+    broadcast({ type: "draft_order_shuffled", bingoId: req.bingo!.id, payload: { lockedUntil: lockedUntil.toISOString(), order } });
+    res.json({ teams, lockedUntil: lockedUntil.toISOString() });
+  }),
+);
+
+router.put(
+  "/draft/order",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { teamIds } = req.body as { teamIds?: string[] };
+    if (!Array.isArray(teamIds)) throw new ServiceError(400, "teamIds is required");
+    const teams = draftService.setDraftOrder(db, req.bingo!, teamIds);
+    const order = teams
+      .filter((t) => t.draftOrder != null)
+      .sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0))
+      .map((t) => ({ teamId: t.id, draftOrder: t.draftOrder! }));
+    broadcast({ type: "draft_order_set", bingoId: req.bingo!.id, payload: { order } });
+    res.json({ teams });
+  }),
+);
+
+router.post(
   "/draft/start",
+  requireAdmin,
   asyncHandler(async (req, res) => {
     const teams = draftService.startDraft(db, req.bingo!);
     broadcast({ type: "draft_started", bingoId: req.bingo!.id, payload: {} });
@@ -191,6 +227,28 @@ router.delete(
   asyncHandler(async (req, res) => {
     pairingService.unpair(db, req.bingo!, req.params.id as string);
     broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    res.status(204).end();
+  }),
+);
+
+router.post(
+  "/signups/:signupId/refresh-stats",
+  asyncHandler(async (req, res) => {
+    const signupId = req.params.signupId as string;
+    const row = db
+      .select({ id: schema.signups.id, rsn: schema.signups.rsn, bingoId: schema.signups.bingoId, userId: schema.signups.userId })
+      .from(schema.signups)
+      .where(eq(schema.signups.id, signupId))
+      .get();
+    if (!row || row.bingoId !== req.bingo!.id) throw new ServiceError(404, "Signup not found");
+    markAuditedNoop();
+    // Tell clients to spin before the fire-and-forget fetch starts, so the
+    // button doesn't sit idle between 204 and the first lookup. Skip when
+    // the E2E hook disables the fetch — otherwise the spinner would stick.
+    if (process.env.PLAYER_STATS_FETCH_DISABLED !== "true") {
+      broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: { signupId: row.id, userId: row.userId, statsRefreshing: true } });
+    }
+    void fetchAndPersistPlayerStats(db, row.id, row.rsn);
     res.status(204).end();
   }),
 );

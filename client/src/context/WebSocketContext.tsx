@@ -1,10 +1,15 @@
-import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { BroadcastEvent } from "@bingo/shared";
 
 type Listener = (event: BroadcastEvent) => void;
 
-const WebSocketContext = createContext<{ subscribe: (fn: Listener) => () => void } | null>(null);
+const WebSocketContext = createContext<{
+  subscribe: (fn: Listener) => () => void;
+  statsRefreshingSignupIds: ReadonlySet<string>;
+  statsRefreshingUserIds: ReadonlySet<string>;
+  markStatsRefreshing: (signupId: string, refreshing: boolean) => void;
+} | null>(null);
 
 function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
   switch (event.type) {
@@ -41,6 +46,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       queryClient.invalidateQueries({ queryKey: ["draftState"] });
       break;
     case "draft_started":
+    case "draft_order_shuffled":
+    case "draft_order_set":
     case "draft_pick":
       queryClient.invalidateQueries({ queryKey: ["draftState"] });
       // A drafted player now has a team, so their bingo shell's myTeam changes.
@@ -61,6 +68,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       queryClient.invalidateQueries({ queryKey: ["adminCaptainCandidates"] });
       // Leads scouting the pool see new/withdrawn signups and pairs live.
       queryClient.invalidateQueries({ queryKey: ["draftState"] });
+      // CA / WOM snapshots land after the fire-and-forget fetch.
+      queryClient.invalidateQueries({ queryKey: ["playerProfile"] });
       break;
     case "audit_appended":
       queryClient.invalidateQueries({ queryKey: ["auditLog"] });
@@ -78,6 +87,39 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const listenersRef = useRef<Set<Listener>>(new Set());
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [statsRefreshingSignupIds, setStatsRefreshingSignupIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [statsRefreshingUserIds, setStatsRefreshingUserIds] = useState<ReadonlySet<string>>(() => new Set());
+
+  const markStatsRefreshing = useCallback((signupId: string, refreshing: boolean) => {
+    setStatsRefreshingSignupIds((prev) => {
+      const next = new Set(prev);
+      if (refreshing) next.add(signupId);
+      else next.delete(signupId);
+      return next;
+    });
+  }, []);
+
+  const applyStatsRefreshing = useCallback((event: BroadcastEvent) => {
+    if (event.type !== "signup_changed") return;
+    const { signupId, userId, statsRefreshing } = event.payload;
+    if (statsRefreshing === undefined) return;
+    if (signupId) {
+      setStatsRefreshingSignupIds((prev) => {
+        const next = new Set(prev);
+        if (statsRefreshing) next.add(signupId);
+        else next.delete(signupId);
+        return next;
+      });
+    }
+    if (userId) {
+      setStatsRefreshingUserIds((prev) => {
+        const next = new Set(prev);
+        if (statsRefreshing) next.add(userId);
+        else next.delete(userId);
+        return next;
+      });
+    }
+  }, []);
 
   useEffect(() => {
     let closed = false;
@@ -98,6 +140,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data) as BroadcastEvent;
+          applyStatsRefreshing(msg);
           invalidateForEvent(queryClient, msg);
           for (const listener of listenersRef.current) listener(msg);
         } catch {
@@ -117,14 +160,16 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       wsRef.current?.close();
     };
-  }, [queryClient]);
+  }, [queryClient, applyStatsRefreshing]);
 
   const subscribe = (fn: Listener) => {
     listenersRef.current.add(fn);
     return () => listenersRef.current.delete(fn);
   };
 
-  return <WebSocketContext.Provider value={{ subscribe }}>{children}</WebSocketContext.Provider>;
+  return (
+    <WebSocketContext.Provider value={{ subscribe, statsRefreshingSignupIds, statsRefreshingUserIds, markStatsRefreshing }}>{children}</WebSocketContext.Provider>
+  );
 }
 
 export function useWebSocketEvent(listener: Listener): void {
@@ -133,4 +178,22 @@ export function useWebSocketEvent(listener: Listener): void {
   const listenerRef = useRef(listener);
   listenerRef.current = listener;
   useEffect(() => ctx.subscribe((e) => listenerRef.current(e)), [ctx]);
+}
+
+export function useStatsRefreshingSignupIds(): ReadonlySet<string> {
+  const ctx = useContext(WebSocketContext);
+  if (!ctx) throw new Error("useStatsRefreshingSignupIds must be used within WebSocketProvider");
+  return ctx.statsRefreshingSignupIds;
+}
+
+export function useStatsRefreshingUserIds(): ReadonlySet<string> {
+  const ctx = useContext(WebSocketContext);
+  if (!ctx) throw new Error("useStatsRefreshingUserIds must be used within WebSocketProvider");
+  return ctx.statsRefreshingUserIds;
+}
+
+export function useMarkStatsRefreshing(): (signupId: string, refreshing: boolean) => void {
+  const ctx = useContext(WebSocketContext);
+  if (!ctx) throw new Error("useMarkStatsRefreshing must be used within WebSocketProvider");
+  return ctx.markStatsRefreshing;
 }

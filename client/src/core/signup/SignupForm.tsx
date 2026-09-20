@@ -3,6 +3,8 @@ import type { SignupAnswerInput, SignupQuestion } from "@bingo/shared";
 import { useBingo, useCreateSignup, useMySignup, useMyTectonicRsns, useSignupQuestions, useUpdateSignup, useWithdrawSignup } from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
 import { PartnerPanel } from "./PartnerPanel";
+import { caTitle, formatCaTier } from "./caStats";
+import { useStatsRefreshingUserIds } from "../../context/WebSocketContext";
 import { Button } from "../ui/Button";
 import { Card, CardHeader, EmptyState, Notice } from "../ui/Card";
 import { Field, Input, Select, Textarea } from "../ui/Field";
@@ -67,6 +69,7 @@ function QuestionField({ question, value, onChange }: { question: SignupQuestion
 
 export function SignupForm({ slug }: { slug: string }) {
   const { user } = useAuth();
+  const statsRefreshing = useStatsRefreshingUserIds();
   const { data: shell } = useBingo(slug);
   const { data: questionsData } = useSignupQuestions(slug);
   const { data: mySignup, isLoading } = useMySignup(slug);
@@ -91,15 +94,18 @@ export function SignupForm({ slug }: { slug: string }) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  // One linked RSN (or a saved signup) should already be chosen — don't wait
+  // on the effect, or the select paints as "Select…" for a frame.
+  const rsnValue = rsn || existing?.rsn || (rsnOptions.length === 1 ? rsnOptions[0]!.rsn : "");
+
   useEffect(() => {
     if (existing) setRsn(existing.rsn);
-    else if (tectonicRsns.length === 1) setRsn(tectonicRsns[0].rsn);
     if (mySignup?.answers) {
       const map: Record<string, string> = {};
       for (const a of mySignup.answers) map[a.questionId] = a.value;
       setAnswers(map);
     }
-  }, [existing, mySignup, tectonicRsns]);
+  }, [existing, mySignup]);
 
   // Only gate NEW signups — someone who signed up before the integration
   // was turned on (or before they were registered) keeps their spot, so
@@ -134,16 +140,16 @@ export function SignupForm({ slug }: { slug: string }) {
 
   const answerList: SignupAnswerInput[] = questions.map((q) => ({ questionId: q.id, value: answers[q.id] ?? "" }));
   const missingRequired = questions.some((q) => q.required && !(answers[q.id] ?? "").trim());
-  const isValid = !!rsn.trim() && !missingRequired;
+  const isValid = !!rsnValue.trim() && !missingRequired;
 
   async function submit() {
     setError(null);
     setSaved(false);
     try {
       if (existing) {
-        await updateSignup.mutateAsync({ rsn, answers: answerList });
+        await updateSignup.mutateAsync({ rsn: rsnValue, answers: answerList });
       } else {
-        await createSignup.mutateAsync({ rsn, answers: answerList });
+        await createSignup.mutateAsync({ rsn: rsnValue, answers: answerList });
       }
       setSaved(true);
     } catch (e: unknown) {
@@ -162,6 +168,7 @@ export function SignupForm({ slug }: { slug: string }) {
   }
 
   const pending = createSignup.isPending || updateSignup.isPending;
+  const caLoading = !!existing && (!mySignup?.statsFetchedAt || (!!user && statsRefreshing.has(user.id)));
   const rsnLabel = (
     <>
       RuneScape name
@@ -189,7 +196,7 @@ export function SignupForm({ slug }: { slug: string }) {
             <Field
               label={rsnLabel}
               hint={
-                tectonicRsns.some((r) => r.rsn === rsn) ? (
+                tectonicRsns.some((r) => r.rsn === rsnValue) ? (
                   <span className="inline-flex items-center gap-1 text-ok">
                     <CheckIcon size={12} /> Verified against your linked clan account
                   </span>
@@ -198,8 +205,8 @@ export function SignupForm({ slug }: { slug: string }) {
                 )
               }
             >
-              <Select value={rsn} onChange={(e) => setRsn(e.target.value)}>
-                <option value="">Select…</option>
+              <Select value={rsnValue} onChange={(e) => setRsn(e.target.value)}>
+                {rsnOptions.length > 1 && <option value="">Select…</option>}
                 {rsnOptions.map((r) => (
                   <option key={r.rsn} value={r.rsn}>
                     {r.rsn}
@@ -209,13 +216,35 @@ export function SignupForm({ slug }: { slug: string }) {
             </Field>
           ) : (
             <Field label={rsnLabel}>
-              <Input value={rsn} onChange={(e) => setRsn(e.target.value)} maxLength={12} />
+              <Input value={rsnValue} onChange={(e) => setRsn(e.target.value)} maxLength={12} />
             </Field>
           )}
 
           {questions.map((q) => (
             <QuestionField key={q.id} question={q} value={answers[q.id] ?? ""} onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))} />
           ))}
+
+          {existing && (
+            <div className={tectonicRsns.length > 1 ? "grid grid-cols-2 gap-4" : undefined}>
+              <Field
+                label="Current CA"
+                hint={
+                  caLoading
+                    ? "Looking up RuneProfile…"
+                    : mySignup?.caCurrent
+                      ? caTitle(mySignup.caCurrent)
+                      : "No RuneProfile for this RSN — sync it there, then save again."
+                }
+              >
+                <Input value={caLoading ? "Looking up…" : formatCaTier(mySignup?.caCurrent)} readOnly disabled />
+              </Field>
+              {tectonicRsns.length > 1 && (
+                <Field label="Peak CA" hint={!caLoading && mySignup?.caPeak ? caTitle(mySignup.caPeak) : undefined}>
+                  <Input value={caLoading ? "Looking up…" : formatCaTier(mySignup?.caPeak)} readOnly disabled />
+                </Field>
+              )}
+            </div>
+          )}
 
           {error && <Notice tone="danger">{error}</Notice>}
           {saved && <Notice tone="ok">Saved.</Notice>}

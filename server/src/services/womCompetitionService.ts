@@ -22,6 +22,7 @@ import * as schema from "../db/schema";
 import { bingos, signups, teamMembers, teams } from "../db/schema";
 import { audit } from "../audit/record";
 import { USER_AGENT } from "../config";
+import { log } from "../log";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type FetchLike = typeof fetch;
@@ -59,7 +60,10 @@ export class WomCompetitionError extends Error {
 }
 
 export class WomCompetitionClient {
-  constructor(private fetchImpl: FetchLike = fetch) {}
+  constructor(
+    private fetchImpl: FetchLike = fetch,
+    private apiKey: string | null = process.env.WOM_API_KEY || null,
+  ) {}
 
   async createCompetition(params: CreateCompetitionParams): Promise<{ id: number }> {
     const res = await this.request("/competitions", "POST", {
@@ -94,7 +98,11 @@ export class WomCompetitionClient {
     try {
       res = await this.fetchImpl(`${WOM_BASE_URL}${path}`, {
         method,
-        headers: { "Content-Type": "application/json", "User-Agent": WOM_USER_AGENT },
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": WOM_USER_AGENT,
+          ...(this.apiKey ? { "x-api-key": this.apiKey } : {}),
+        },
         body: JSON.stringify(body),
       });
     } catch (err) {
@@ -190,7 +198,7 @@ export async function syncWomCompetitionAfterDraft(db: Db, bingoId: string, clie
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`[wom-competition] failed to create competition for bingo ${bingoId}`, message);
+    log.warn("wom competition create failed", { bingoId, err: message });
     db.update(bingos).set({ womSyncError: message }).where(eq(bingos.id, bingoId)).run();
     audit(db, {
       action: "wom.sync_failed",
@@ -226,7 +234,7 @@ export async function syncWomTeamRename(db: Db, bingoId: string, client: WomComp
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`[wom-competition] failed to sync team rename for bingo ${bingoId}`, message);
+    log.warn("wom competition rename failed", { bingoId, err: message });
     db.update(bingos).set({ womSyncError: message }).where(eq(bingos.id, bingoId)).run();
     audit(db, {
       action: "wom.sync_failed",

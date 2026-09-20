@@ -5,9 +5,11 @@ import "./index.css";
 import App from "./App";
 import { preloadTheme } from "./themes/registry";
 import { rememberedThemeForPath } from "./themes/rememberedTheme";
+import { installClientErrorListeners } from "./core/logging/reportClientError";
 
 // Start fetching this bingo's theme now rather than after its shell request returns.
 preloadTheme(rememberedThemeForPath(window.location.pathname));
+installClientErrorListeners();
 
 const queryClient = new QueryClient({
   defaultOptions: {

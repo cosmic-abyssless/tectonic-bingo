@@ -6,6 +6,7 @@ import { db } from "../db";
 import { isDevModeActive } from "../devMode";
 import { runWithAuditContext, type AuditContext } from "./context";
 import { audit, redactBody } from "./record";
+import { log } from "../log";
 
 // Mount after passport.session() (so req.user is populated) and before the
 // routers, in server/src/index.ts.
@@ -54,7 +55,7 @@ export function auditContext(req: Request, res: Response, next: NextFunction): v
       },
     });
     if (process.env.NODE_ENV !== "production") {
-      console.warn(`[audit] unaudited mutation: ${req.method} ${req.originalUrl} — add it to AUDITED_ROUTES or mark it auditSkip()`);
+      log.warn("unaudited mutation", { method: req.method, path: req.originalUrl });
     }
   });
 

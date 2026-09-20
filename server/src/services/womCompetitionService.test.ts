@@ -75,6 +75,22 @@ describe("WomCompetitionClient", () => {
     expect(body.groupId).toBe(123);
     expect(body.groupVerificationCode).toBe("secret");
     expect(body.teams).toEqual([{ name: "Team One", participants: ["Rsn"] }]);
+    expect((call[1].headers as Record<string, string>)["x-api-key"]).toBeUndefined();
+  });
+
+  it("sends the x-api-key header when an api key is configured", async () => {
+    const fetchImpl = mockFetch([{ body: { competition: { id: 1 } } }]);
+    const client = new WomCompetitionClient(fetchImpl, "wom-secret");
+    await client.createCompetition({
+      title: "Test",
+      startsAt: new Date("2026-01-01"),
+      endsAt: new Date("2026-01-15"),
+      groupId: "123",
+      groupVerificationCode: "secret",
+      teams: [],
+    });
+    const call = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect((call[1].headers as Record<string, string>)["x-api-key"]).toBe("wom-secret");
   });
 
   it("throws WomCompetitionError when WOM doesn't return a competition id", async () => {

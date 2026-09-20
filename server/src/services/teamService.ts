@@ -3,7 +3,7 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { FieldChanges } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { draftPicks, nodeEdges, nodes, pickRatings, signupAnswers, signups, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tileInterests, tiles, users } from "../db/schema";
+import { bingos, draftPicks, nodeEdges, nodes, pickRatings, signupAnswers, signups, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tileInterests, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
 import { PUBLIC_SIGNUP_COLS } from "./signupService";
@@ -195,8 +195,14 @@ export interface CreateTeamParams {
   coCaptainUserId?: string | null;
   name?: string;
 }
+function assertDraftNotStarted(tx: Db, bingoId: string): void {
+  const bingo = tx.select({ draftStarted: bingos.draftStarted }).from(bingos).where(eq(bingos.id, bingoId)).get();
+  if (bingo?.draftStarted) throw new ServiceError(400, "Teams can't be added or removed after the draft has started");
+}
+
 export function createTeam(db: Db, params: CreateTeamParams) {
   return db.transaction((tx) => {
+    assertDraftNotStarted(tx, params.bingoId);
     const requireActiveSignup = (userId: string, role: string) => {
       const signup = tx
         .select({ id: signups.id })
@@ -360,6 +366,7 @@ export function deleteTeam(db: Db, teamId: string): void {
   db.transaction((tx) => {
     const team = tx.select().from(teams).where(eq(teams.id, teamId)).get();
     if (!team) throw new ServiceError(404, "Team not found");
+    assertDraftNotStarted(tx, team.bingoId);
     const hasHistory = [draftPicks, submissions, teamPointAdjustments].some((table) => tx.select({ id: table.id }).from(table).where(eq(table.teamId, teamId)).get());
     if (hasHistory) throw new ServiceError(409, "This team has draft picks or submissions and can't be deleted");
     const memberCount = tx.select({ id: teamMembers.id }).from(teamMembers).where(eq(teamMembers.teamId, teamId)).all().length;

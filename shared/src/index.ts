@@ -121,6 +121,7 @@ export interface Bingo {
   womGroupId: string | null;
   womCompetitionId: number | null;
   womSyncError: string | null;
+  draftStarted: boolean;
   createdByUserId: string;
   createdAt: string;
 }
@@ -498,6 +499,11 @@ export interface MySignupResponse {
   answers: SignupAnswer[];
   // The bingo warns leftovers and this signup is currently one of them.
   atRisk: boolean;
+  caCurrent: CombatAchievementStats | null;
+  caPeak: CombatAchievementStats | null;
+  // Null until the fire-and-forget WOM/RuneProfile fetch stamps the row —
+  // the signup form uses this to tell Looking up apart from Unknown.
+  statsFetchedAt: string | null;
 }
 
 // A tectonic-api-linked RSN.
@@ -532,6 +538,9 @@ export interface RosterEntry {
   // Mod roster only: clan standing from tectonic-api; null when the player
   // isn't registered there or the lookup was unavailable.
   tectonicProfile?: TectonicProfile | null;
+  caCurrent?: CombatAchievementStats | null;
+  caPeak?: CombatAchievementStats | null;
+  womStats?: WomPlayerStats | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -664,6 +673,27 @@ export interface WomPlayerStats {
   ehp: number; // efficient hours played
 }
 
+// Official OSRS Combat Achievement reward tier, derived from RuneProfile
+// task completions (points + the Grandmaster all-tasks exception). Null on
+// the wire means Unknown — no RuneProfile data — not the same as None (0 points).
+export const COMBAT_ACHIEVEMENT_TIERS = ["none", "easy", "medium", "hard", "elite", "master", "grandmaster"] as const;
+export type CombatAchievementTier = (typeof COMBAT_ACHIEVEMENT_TIERS)[number];
+
+export const COMBAT_ACHIEVEMENT_TIER_LABEL: Record<CombatAchievementTier, string> = {
+  none: "None",
+  easy: "Easy",
+  medium: "Medium",
+  hard: "Hard",
+  elite: "Elite",
+  master: "Master",
+  grandmaster: "Grandmaster",
+};
+
+export interface CombatAchievementStats {
+  tier: CombatAchievementTier;
+  points: number;
+}
+
 // Unified account type — sourced from RuneProfile when it has the player
 // set up there (it distinguishes group ironman variants; WOM just reports
 // "ironman" for a GIM member), falling back to WOM's coarser type when
@@ -682,6 +712,11 @@ export interface DraftPoolEntry {
   womStats: WomPlayerStats | null;
   // RuneProfile (by RSN) ?? WOM (by womId) ?? null. See AccountType.
   accountType: AccountType | null;
+  // Official CA reward tier for the signed-up RSN. Null = Unknown (no RuneProfile).
+  caCurrent: CombatAchievementStats | null;
+  // Max CA reward tier across currently Tectonic-linked RSNs. Null = none of
+  // those accounts have RuneProfile data. Never names the peak alt.
+  caPeak: CombatAchievementStats | null;
   // Live clan standing; null when unregistered with the clan bot or when
   // tectonic-api was unavailable (see DraftState.tectonicUnavailable).
   tectonicProfile: TectonicProfile | null;
@@ -694,6 +729,8 @@ export interface PlayerProfile {
   rsn: string | null; // their signup RSN for this bingo; null when they never signed up
   accountType: AccountType | null;
   womStats: WomPlayerStats | null;
+  caCurrent: CombatAchievementStats | null;
+  caPeak: CombatAchievementStats | null;
   profile: TectonicProfile | null;
   answers: SignupAnswer[] | null; // null unless the viewer is a mod or team lead
   tectonicUnavailable: boolean;
@@ -720,10 +757,13 @@ export interface PickRating {
 export const MAX_RATING_STARS = 3;
 
 export interface DraftState {
-  teams: DraftTeam[]; // sorted by draftOrder once the draft has started
+  teams: DraftTeam[]; // sorted by draftOrder once pick order is set
   picks: DraftPick[]; // a pair shares one pickNumber across two rows
   pool: DraftUnit[];
   draftStarted: boolean;
+  orderReady: boolean; // ≥2 teams with a dense draftOrder 1..N
+  // ISO timestamp until which picks are blocked after a shuffle. Null if unlocked.
+  orderLockedUntil: string | null;
   // singlesRound: the main pool is empty and leftovers are being drafted.
   currentPick: { pickNumber: number; round: number; teamId: string; singlesRound: boolean } | null;
   ratings: Record<string, PickRating>; // by signupId; empty unless the viewer leads a team
@@ -792,6 +832,8 @@ export type BroadcastEvent =
   | { type: "submission_reviewed"; bingoId: string; payload: { teamId: string; nodeIds: string[] } }
   | { type: "stage_changed"; bingoId: string; payload: { stage: Stage } }
   | { type: "draft_started"; bingoId: string; payload: Record<string, never> }
+  | { type: "draft_order_shuffled"; bingoId: string; payload: { lockedUntil: string; order: { teamId: string; draftOrder: number }[] } }
+  | { type: "draft_order_set"; bingoId: string; payload: { order: { teamId: string; draftOrder: number }[] } }
   | { type: "draft_pick"; bingoId: string; payload: { pickNumber: number; teamId: string; userIds: string[] } }
   // A team lead starred/noted a signup. Other leads of the same team refetch
   // draft state; the rating itself stays behind GET /draft's auth.
@@ -802,8 +844,9 @@ export type BroadcastEvent =
   | { type: "team_updated"; bingoId: string; payload: { teamId: string } }
   // A duo pairing request was created, answered, cancelled, or dissolved, or a
   // signup changed. Clients refetch their own signup/pairing state and the mod
-  // roster.
-  | { type: "signup_changed"; bingoId: string; payload: Record<string, never> }
+  // roster. statsRefreshing is a boolean flag only (no CA values) — the
+  // unauthenticated socket may carry IDs, not snapshots.
+  | { type: "signup_changed"; bingoId: string; payload: { signupId?: string; userId?: string; statsRefreshing?: boolean } }
   // Any successful admin mutation (settings, board, lines, questions, teams,
   // mods). Coarse on purpose: clients refetch the bingo shell + board.
   | { type: "bingo_changed"; bingoId: string; payload: Record<string, never> }

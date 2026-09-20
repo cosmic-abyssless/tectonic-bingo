@@ -8,6 +8,8 @@ import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { displayName } from "../ui/user";
 import { AchievementIcons, Medal, PlaceBreakdown, TierBadge } from "./ProfileBadges";
 import { formatRecordValue, isBingoEvent, podiumSummary, recordSummary } from "./profile";
+import { CaCell, WomCell } from "../signup/caStats";
+import { useStatsRefreshingUserIds } from "../../context/WebSocketContext";
 
 /**
  * One player's card: clan standing (tier, records, event placements), account
@@ -62,6 +64,8 @@ function Stat({ label, children }: { label: string; children: ReactNode }) {
 
 function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; questions: SignupQuestion[]; onClose: () => void }) {
   const { DialogHeader } = useDialogParts();
+  const statsRefreshing = useStatsRefreshingUserIds();
+  const caLoading = statsRefreshing.has(player.user.id);
   const { profile } = player;
   const name = displayName(player.user);
   const podiums = profile ? podiumSummary(profile) : null;
@@ -85,6 +89,16 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
         action={profile && <AchievementIcons profile={profile} large />}
       />
       <div className="space-y-6 p-5">
+        {(player.caCurrent || player.caPeak || player.rsn || caLoading) && (
+          <div className="grid grid-cols-2 gap-4">
+            <Stat label="Current CA">
+              <CaCell stats={player.caCurrent} loading={caLoading} />
+            </Stat>
+            <Stat label="Peak CA">
+              <CaCell stats={player.caPeak} loading={caLoading} />
+            </Stat>
+          </div>
+        )}
         {!profile ? (
           <p className="text-sm text-on-surface-muted">
             {player.tectonicUnavailable ? "The clan API is unavailable right now, so clan standing can't be shown." : "No clan profile — this player isn't registered with the clan bot."}
@@ -104,9 +118,9 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
               </Stat>
               <Stat label="Bingo wins">{podiums!.bingoWins}</Stat>
             </div>
-            {player.womStats && (
+            {(player.womStats || caLoading) && (
               <p className="text-xs text-on-surface-subtle">
-                <span className="num">{Math.round(player.womStats.ehb).toLocaleString()}</span> EHB · <span className="num">{Math.round(player.womStats.ehp).toLocaleString()}</span> EHP on Wise Old Man.
+                <WomCell stats={player.womStats} field="ehb" loading={caLoading} /> EHB · <WomCell stats={player.womStats} field="ehp" loading={caLoading} /> EHP on Wise Old Man.
               </p>
             )}
 

@@ -9,6 +9,7 @@
 // throwing, so consumers degrade to current behavior when tectonic-api is
 // down or unconfigured.
 import { USER_AGENT } from "../config";
+import { log } from "../log";
 
 export interface TectonicConfig {
   baseUrl: string;
@@ -141,11 +142,11 @@ export class TectonicClient {
       res = await this.fetchImpl(url, { headers: { Authorization: this.cfg.apiKey, "User-Agent": `${USER_AGENT} clan roster` } });
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      console.warn(`[tectonic] request failed: GET ${path}`, reason);
+      log.warn("tectonic request failed", { path, err: reason });
       throw new TectonicUnavailableError(`GET ${path}: ${reason}`);
     }
     if (!res.ok) {
-      console.warn(`[tectonic] ${res.status} from GET ${path}`);
+      log.warn("tectonic request failed", { path, status: res.status });
       throw new TectonicUnavailableError(`GET ${path}: HTTP ${res.status}`);
     }
     const value = (await res.json()) as T;

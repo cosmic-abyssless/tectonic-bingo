@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b4662e56-ae03-41a8-bd07-84e6927775e0",
-  "prevId": "108554b1-4135-4791-beb2-6691dac266b9",
+  "id": "9c38062d-bbc1-4f62-b8e8-d8bfac2b7100",
+  "prevId": "1f2130e0-9954-417f-a4b9-6643ac5ee165",
   "tables": {
     "audit_log": {
       "name": "audit_log",
@@ -532,6 +532,21 @@
           "notNull": false,
           "autoincrement": false
         },
+        "draft_started": {
+          "name": "draft_started",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "draft_order_locked_until": {
+          "name": "draft_order_locked_until",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_by_user_id": {
           "name": "created_by_user_id",
           "type": "text",
@@ -546,6 +561,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(unixepoch())"
+        },
+        "exclusivity_rules_json": {
+          "name": "exclusivity_rules_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
         }
       },
       "indexes": {

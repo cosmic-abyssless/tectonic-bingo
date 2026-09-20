@@ -17,6 +17,7 @@
 // rather than this service verifying each icon before returning.
 import type { OsrsItemSearchResult } from "@bingo/shared";
 import { USER_AGENT } from "../config";
+import { log } from "../log";
 
 const WIKI_BASE_URL = "https://oldschool.runescape.wiki";
 const WIKI_USER_AGENT = `${USER_AGENT} item search`;
@@ -55,7 +56,7 @@ export class OsrsWikiClient {
         headers: { "User-Agent": WIKI_USER_AGENT },
       });
       if (!res.ok) {
-        console.warn(`[osrs-wiki] ${res.status} from GET /api.php (search)`);
+        log.warn("osrs-wiki search failed", { status: res.status });
         return [];
       }
       const body = (await res.json()) as WikiSearchResponse;
@@ -65,7 +66,7 @@ export class OsrsWikiClient {
         wikiUrl: wikiUrlFor(r.title),
       }));
     } catch (err) {
-      console.warn(`[osrs-wiki] search request failed`, err instanceof Error ? err.message : err);
+      log.warn("osrs-wiki search failed", { err });
       return [];
     }
   }

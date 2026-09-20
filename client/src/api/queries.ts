@@ -6,6 +6,7 @@ import type {
   PickRating, PlayerProfile, StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
+import { useMarkStatsRefreshing } from "../context/WebSocketContext";
 import { api } from "./client";
 import { readBoardCache, writeBoardCache } from "./boardCache";
 import { optimisticUpdate } from "./optimistic";
@@ -207,6 +208,15 @@ export function useBingoMods(slug: string) {
   });
 }
 
+export function useRefreshSignupStats(slug: string) {
+  const markStatsRefreshing = useMarkStatsRefreshing();
+  return useMutation({
+    mutationFn: (signupId: string) => api.post<void>(`/api/bingos/${slug}/mod/signups/${signupId}/refresh-stats`),
+    onMutate: (signupId) => markStatsRefreshing(signupId, true),
+    onError: (_err, signupId) => markStatsRefreshing(signupId, false),
+  });
+}
+
 export function useMarkBuyin(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -371,11 +381,30 @@ export function useDraftState(slug: string | undefined) {
   });
 }
 
+export function useShuffleDraftOrder(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ teams: Team[]; lockedUntil: string }>(`/api/bingos/${slug}/mod/draft/shuffle`, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) }),
+  });
+}
+
+export function useSetDraftOrder(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (teamIds: string[]) => api.put<{ teams: Team[] }>(`/api/bingos/${slug}/mod/draft/order`, { teamIds }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) }),
+  });
+}
+
 export function useStartDraft(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => api.post<{ teams: Team[] }>(`/api/bingos/${slug}/mod/draft/start`, {}),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
+    },
   });
 }
 

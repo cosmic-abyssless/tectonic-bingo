@@ -7,17 +7,18 @@ import { ServiceError } from "./errors";
 import { dissolveForUser, getAcceptedPairs } from "./pairingService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
+import { parseStoredCaStats } from "./combatAchievements";
+import { parseWomSummary } from "./womService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
 
 // Every signup query whose result reaches a client response uses this
-// column list — excludes womDataJson/runeProfileDataJson/statsFetchedAt,
-// the raw external-API blobs playerStatsService.ts persists (the
-// RuneProfile one alone can be 100KB+ per signup). Those are read directly
-// by draftService's own query (see routes/bingos.ts's /:slug/draft, the one
-// place that actually needs them) and written directly by
-// playerStatsService.ts — signupService never touches them.
+// column list — excludes womDataJson/runeProfileDataJson, the raw
+// external-API blobs playerStatsService.ts persists (the RuneProfile one
+// alone can be 100KB+ per signup). Derived CA snapshots are small and
+// selected separately where a roster/form needs them. Raw blobs are read
+// by the draft route and written by playerStatsService.ts.
 export const PUBLIC_SIGNUP_COLS = {
   id: signups.id,
   bingoId: signups.bingoId,
@@ -30,6 +31,13 @@ export const PUBLIC_SIGNUP_COLS = {
   buyinCollectedByUserId: signups.buyinCollectedByUserId,
   buyinRecordedByUserId: signups.buyinRecordedByUserId,
   createdAt: signups.createdAt,
+};
+
+const SIGNUP_CA_COLS = {
+  caCurrentJson: signups.caCurrentJson,
+  caPeakJson: signups.caPeakJson,
+  statsFetchedAt: signups.statsFetchedAt,
+  womDataJson: signups.womDataJson,
 };
 
 export function getQuestions(db: Db, bingoId: string) {
@@ -132,10 +140,16 @@ export interface SignupAnswerInput {
 }
 
 export function getSignupForUser(db: Db, bingoId: string, userId: string) {
-  const signup = db.select(PUBLIC_SIGNUP_COLS).from(signups).where(and(eq(signups.bingoId, bingoId), eq(signups.userId, userId))).get();
-  if (!signup) return null;
+  const row = db
+    .select({ ...PUBLIC_SIGNUP_COLS, ...SIGNUP_CA_COLS })
+    .from(signups)
+    .where(and(eq(signups.bingoId, bingoId), eq(signups.userId, userId)))
+    .get();
+  if (!row) return null;
+  const { caCurrentJson, caPeakJson, statsFetchedAt, womDataJson, ...signup } = row;
+  void womDataJson;
   const answers = db.select().from(signupAnswers).where(eq(signupAnswers.signupId, signup.id)).all();
-  return { signup, answers };
+  return { signup, answers, caCurrentJson, caPeakJson, statsFetchedAt };
 }
 
 export interface CreateSignupParams {
@@ -293,7 +307,7 @@ export function withdrawSignup(db: Db, bingo: Bingo, signupId: string, { byMod =
 
 export function getAllSignups(db: Db, bingoId: string) {
   const rows = db
-    .select({ signup: PUBLIC_SIGNUP_COLS, user: users })
+    .select({ signup: PUBLIC_SIGNUP_COLS, user: users, ...SIGNUP_CA_COLS })
     .from(signups)
     .innerJoin(users, eq(signups.userId, users.id))
     .where(eq(signups.bingoId, bingoId))
@@ -311,12 +325,19 @@ export function getAllSignups(db: Db, bingoId: string) {
     for (const userId of userIds) pairingByUserId.set(userId, pairing);
   }
 
-  return rows.map((r) => ({
-    ...r,
-    answers: answers.filter((a) => a.signupId === r.signup.id),
-    collectedByUser: r.signup.buyinCollectedByUserId ? (collectorById.get(r.signup.buyinCollectedByUserId) ?? null) : null,
-    pairing: pairingByUserId.get(r.signup.userId) ?? null,
-  }));
+  return rows.map((r) => {
+    const womSummary = parseWomSummary(r.womDataJson ? JSON.parse(r.womDataJson) : null);
+    return {
+      signup: r.signup,
+      user: r.user,
+      answers: answers.filter((a) => a.signupId === r.signup.id),
+      collectedByUser: r.signup.buyinCollectedByUserId ? (collectorById.get(r.signup.buyinCollectedByUserId) ?? null) : null,
+      pairing: pairingByUserId.get(r.signup.userId) ?? null,
+      caCurrent: parseStoredCaStats(r.caCurrentJson),
+      caPeak: parseStoredCaStats(r.caPeakJson),
+      womStats: womSummary ? { ehb: womSummary.ehb, ehp: womSummary.ehp } : null,
+    };
+  });
 }
 
 // Active (non-withdrawn) signups with buy-in marked received — the basis

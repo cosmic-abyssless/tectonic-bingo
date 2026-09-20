@@ -258,16 +258,16 @@ test("full bingo lifecycle", async ({ page, browser }) => {
 
   // The two captains are always Trainer1 (e2e-p1) and Trainer2 (e2e-p2) —
   // fixed from the signup step above — but which of them goes first is
-  // randomized by startDraft's team-order shuffle, so the test reads the
-  // "on the clock" indicator rather than assuming an order.
+  // randomized by Shuffle pick order, so the test reads the "on the clock"
+  // indicator rather than assuming an order.
   const RSN_TO_DISCORD_ID: Record<string, string> = { Trainer1: "e2e-p1", Trainer2: "e2e-p2" };
 
   function onClockColumn(page: Page) {
-    return page.locator(".flex.flex-col.items-center.text-center.gap-1.min-w-0", { hasText: "On the clock" });
+    return page.locator("div.flex.min-w-0.flex-col.gap-1", { hasText: "On the clock" });
   }
 
   async function onClockCaptainRsn(page: Page): Promise<string> {
-    return (await onClockColumn(page).locator("span.text-white.font-semibold.text-sm.truncate").innerText()).trim();
+    return (await onClockColumn(page).locator("button").first().innerText()).trim();
   }
 
   function poolRowDraftButton(page: Page, rsn: string) {
@@ -279,8 +279,9 @@ test("full bingo lifecycle", async ({ page, browser }) => {
 
   await test.step("admin starts the draft", async () => {
     await page.goto(`/b/${SLUG}/draft`);
-    await page.getByRole("button", { name: "Start Draft" }).click();
-    await expect(page.getByText("Round 1 — Pick 1")).toBeVisible();
+    await page.getByRole("button", { name: "Shuffle pick order" }).click();
+    await page.getByRole("button", { name: "Start draft" }).click();
+    await expect(page.getByText("Round 1 · Pick 1")).toBeVisible({ timeout: 8_000 });
 
     captain1Rsn = await onClockCaptainRsn(page);
     captain2Rsn = captain1Rsn === "Trainer1" ? "Trainer2" : "Trainer1";
@@ -289,12 +290,12 @@ test("full bingo lifecycle", async ({ page, browser }) => {
   await test.step("on-the-clock captain drafts a player, then loses pick access", async () => {
     await loginAs(page, RSN_TO_DISCORD_ID[captain1Rsn]!);
     await page.goto(`/b/${SLUG}/draft`);
-    await expect(page.getByText("It's your turn to pick!")).toBeVisible();
+    await expect(page.getByText("It's your turn to pick.")).toBeVisible();
 
     await poolRowDraftButton(page, "Trainer3").click();
     // Snake order (2 teams, 3 total picks): round = ceil(pickNumber / 2), so
     // pick 2 is still round 1 — only pick 3 rolls over to round 2.
-    await expect(page.getByText("Round 1 — Pick 2")).toBeVisible();
+    await expect(page.getByText("Round 1 · Pick 2")).toBeVisible();
 
     // Snake order with 2 teams and an odd pool: the other team picks both
     // remaining picks in a row, so captain1 is immediately out of turn —
@@ -305,20 +306,20 @@ test("full bingo lifecycle", async ({ page, browser }) => {
   await test.step("the other captain drafts a player", async () => {
     await loginAs(page, RSN_TO_DISCORD_ID[captain2Rsn]!);
     await page.goto(`/b/${SLUG}/draft`);
-    await expect(page.getByText("It's your turn to pick!")).toBeVisible();
+    await expect(page.getByText("It's your turn to pick.")).toBeVisible();
     await expect(onClockColumn(page).getByText(captain2Rsn, { exact: true })).toBeVisible();
 
     await poolRowDraftButton(page, "Trainer4").click();
-    await expect(page.getByText("Round 2 — Pick 3")).toBeVisible();
+    await expect(page.getByText("Round 2 · Pick 3")).toBeVisible();
   });
 
   await test.step("admin drafts the final player on behalf of the team on the clock", async () => {
     await loginAs(page, E2E_USERS.admin);
     await page.goto(`/b/${SLUG}/draft`);
-    // Admin isn't a captain, so no "It's your turn to pick!" banner — but
+    // Admin isn't a captain, so no "It's your turn to pick." banner — but
     // the site-admin pick-on-behalf-of override still shows the button.
     await poolRowDraftButton(page, "Trainer5").click();
-    await expect(page.getByText("Draft complete!")).toBeVisible();
+    await expect(page.getByText("Draft complete.")).toBeVisible();
   });
 
   await test.step("admin advances draft to reveal, then to live", async () => {

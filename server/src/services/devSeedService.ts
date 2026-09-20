@@ -6,6 +6,7 @@ import { users, signups, signupAnswers, signupPairings } from "../db/schema";
 import * as signupService from "./signupService";
 import type { TectonicRosterUser } from "./tectonicService";
 import { audit, markAuditedNoop } from "../audit/record";
+import { deriveCombatAchievements } from "./combatAchievements";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -65,14 +66,94 @@ const FAKE_WOM_TYPE_WEIGHTS: Array<[string, number]> = [
   ["ultimate", 4],
 ];
 
-function fakePlayerStats(rsn: string): { womDataJson: string; runeProfileDataJson: string } {
+const FAKE_CA_TIER_WEIGHTS: Array<[string, number]> = [
+  ["none", 8],
+  ["easy", 18],
+  ["medium", 22],
+  ["hard", 22],
+  ["elite", 16],
+  ["master", 10],
+  ["grandmaster", 4],
+];
+
+// Totals are fictional; only completed × point-value matters for deriveCombatAchievements.
+const FAKE_CA_COMPLETIONS: Record<string, Array<{ name: string; completed: number; total: number }>> = {
+  none: [
+    { name: "Easy", completed: 0, total: 50 },
+    { name: "Medium", completed: 0, total: 80 },
+    { name: "Hard", completed: 0, total: 90 },
+    { name: "Elite", completed: 0, total: 150 },
+    { name: "Master", completed: 0, total: 180 },
+    { name: "Grandmaster", completed: 0, total: 130 },
+  ],
+  easy: [
+    { name: "Easy", completed: 41, total: 50 },
+    { name: "Medium", completed: 0, total: 80 },
+    { name: "Hard", completed: 0, total: 90 },
+    { name: "Elite", completed: 0, total: 150 },
+    { name: "Master", completed: 0, total: 180 },
+    { name: "Grandmaster", completed: 0, total: 130 },
+  ],
+  medium: [
+    { name: "Easy", completed: 50, total: 50 },
+    { name: "Medium", completed: 60, total: 80 },
+    { name: "Hard", completed: 0, total: 90 },
+    { name: "Elite", completed: 0, total: 150 },
+    { name: "Master", completed: 0, total: 180 },
+    { name: "Grandmaster", completed: 0, total: 130 },
+  ],
+  hard: [
+    { name: "Easy", completed: 50, total: 50 },
+    { name: "Medium", completed: 80, total: 80 },
+    { name: "Hard", completed: 76, total: 90 },
+    { name: "Elite", completed: 0, total: 150 },
+    { name: "Master", completed: 0, total: 180 },
+    { name: "Grandmaster", completed: 0, total: 130 },
+  ],
+  elite: [
+    { name: "Easy", completed: 50, total: 50 },
+    { name: "Medium", completed: 80, total: 80 },
+    { name: "Hard", completed: 90, total: 90 },
+    { name: "Elite", completed: 155, total: 180 },
+    { name: "Master", completed: 0, total: 180 },
+    { name: "Grandmaster", completed: 0, total: 130 },
+  ],
+  master: [
+    { name: "Easy", completed: 50, total: 50 },
+    { name: "Medium", completed: 80, total: 80 },
+    { name: "Hard", completed: 90, total: 90 },
+    { name: "Elite", completed: 150, total: 180 },
+    { name: "Master", completed: 177, total: 180 },
+    { name: "Grandmaster", completed: 0, total: 130 },
+  ],
+  grandmaster: [
+    { name: "Easy", completed: 50, total: 50 },
+    { name: "Medium", completed: 80, total: 80 },
+    { name: "Hard", completed: 90, total: 90 },
+    { name: "Elite", completed: 150, total: 150 },
+    { name: "Master", completed: 180, total: 180 },
+    { name: "Grandmaster", completed: 130, total: 130 },
+  ],
+};
+
+function fakeCombatAchievementsBlob(): unknown {
+  return FAKE_CA_COMPLETIONS[weightedPick(FAKE_CA_TIER_WEIGHTS)];
+}
+
+function fakePlayerStats(rsn: string): { womDataJson: string; runeProfileDataJson: string; caCurrentJson: string | null; caPeakJson: string | null } {
   const ehb = Math.round(Math.random() * 2000 * 100) / 100;
   const ehp = Math.round(Math.random() * 3000 * 100) / 100;
   const womType = weightedPick(FAKE_WOM_TYPE_WEIGHTS);
   const runeProfileType = weightedPick(FAKE_RUNEPROFILE_TYPE_WEIGHTS);
+  const combatAchievements = fakeCombatAchievementsBlob();
+  const blob = { username: rsn, accountType: { id: 0, key: runeProfileType, name: runeProfileType }, combatAchievements };
+  const ca = deriveCombatAchievements(blob);
+  const caJson = ca ? JSON.stringify(ca) : null;
   return {
     womDataJson: JSON.stringify({ ehb, ehp, type: womType }),
-    runeProfileDataJson: JSON.stringify({ username: rsn, accountType: { id: 0, key: runeProfileType, name: runeProfileType } }),
+    runeProfileDataJson: JSON.stringify(blob),
+    caCurrentJson: caJson,
+    caPeakJson: caJson,
   };
 }
 
@@ -142,8 +223,8 @@ export function seedTestSignups(db: Db, bingo: Bingo, count: number, tectonicRos
       signup = signupService.createSignup(db, bingo, { bingoId: bingo.id, userId: user.id, rsn: rsnForStats, answers });
     }
 
-    const { womDataJson, runeProfileDataJson } = fakePlayerStats(rsnForStats);
-    db.update(signups).set({ womDataJson, runeProfileDataJson, statsFetchedAt: clockNow() }).where(eq(signups.id, signup.id)).run();
+    const { womDataJson, runeProfileDataJson, caCurrentJson, caPeakJson } = fakePlayerStats(rsnForStats);
+    db.update(signups).set({ womDataJson, runeProfileDataJson, caCurrentJson, caPeakJson, statsFetchedAt: clockNow() }).where(eq(signups.id, signup.id)).run();
     created.push(signup);
   }
   const source: SeedSource = realCount === created.length ? "tectonic" : realCount === 0 ? "synthetic" : "mixed";
