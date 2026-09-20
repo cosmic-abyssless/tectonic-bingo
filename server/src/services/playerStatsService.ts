@@ -17,6 +17,7 @@ import { getTectonicClient, TectonicUnavailableError, type TectonicClient } from
 import { deriveCombatAchievements, parseStoredCaStats, peakCombatAchievements } from "./combatAchievements";
 import { audit } from "../audit/record";
 import { broadcast } from "../ws";
+import { log } from "../log";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -108,11 +109,20 @@ export function getSignupStats(db: Db, bingoId: string, userId: string): (Stored
 }
 
 export async function fetchAndPersistPlayerStats(db: Db, signupId: string, rsn: string, opts: FetchPlayerStatsOpts = {}): Promise<void> {
+  const signup = db.select({ bingoId: signups.bingoId, userId: signups.userId }).from(signups).where(eq(signups.id, signupId)).get();
   // Test hook — skips WOM/RuneProfile/Tectonic network calls entirely. Used
   // by the E2E suite so a real signup during tests never hits those live APIs.
-  if (process.env.PLAYER_STATS_FETCH_DISABLED === "true") return;
+  // Drop any in-flight spinner the refresh button already raised.
+  if (process.env.PLAYER_STATS_FETCH_DISABLED === "true") {
+    if (signup?.bingoId) {
+      broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: { signupId, userId: signup.userId, statsRefreshing: false } });
+    }
+    return;
+  }
 
-  const signup = db.select({ bingoId: signups.bingoId, userId: signups.userId }).from(signups).where(eq(signups.id, signupId)).get();
+  if (signup?.bingoId) {
+    broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: { signupId, userId: signup.userId, statsRefreshing: true } });
+  }
   const discordId =
     opts.discordId !== undefined
       ? opts.discordId
@@ -157,10 +167,12 @@ export async function fetchAndPersistPlayerStats(db: Db, signupId: string, rsn: 
       details: { womFound: !!womData, runeProfileFound: !!runeProfileData },
       actor: "system",
     });
-    if (signup?.bingoId) broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: {} });
+    if (signup?.bingoId) {
+      broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: { signupId, userId: signup.userId, statsRefreshing: false } });
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`[player-stats] failed to fetch/persist for signup ${signupId} (${rsn})`, message);
+    log.warn("player stats fetch failed", { signupId, rsn, err: message });
     audit(db, {
       action: "signup.stats_fetch_failed",
       bingoId: signup?.bingoId ?? null,
@@ -168,5 +180,8 @@ export async function fetchAndPersistPlayerStats(db: Db, signupId: string, rsn: 
       details: { message },
       actor: "system",
     });
+    if (signup?.bingoId) {
+      broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: { signupId, userId: signup.userId, statsRefreshing: false } });
+    }
   }
 }

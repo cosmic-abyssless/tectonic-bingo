@@ -11,6 +11,7 @@ import { isAdminDiscordId } from "../config";
 import type { SessionUser } from "../types";
 import { audit } from "../audit/record";
 import { userLabel } from "../audit/describe";
+import { log } from "../log";
 
 interface LoginProfile {
   id: string;
@@ -76,7 +77,7 @@ async function fetchGuildMembership(accessToken: string): Promise<GuildMembershi
     return { inGuild: true, nick: member.nick ?? null };
   } catch (err) {
     if (err instanceof DiscordAPIError && err.status === 404) return { inGuild: false };
-    console.warn("[auth] guild membership lookup failed:", err instanceof Error ? err.message : err);
+    log.warn("guild membership lookup failed", { err });
     return null;
   }
 }

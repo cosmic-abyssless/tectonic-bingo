@@ -103,9 +103,7 @@ describe("fetchProfiles", () => {
     const [alice] = db.insert(schema.users).values({ discordId: "discord-1", discordUsername: "alice" }).returning().all();
     const { client } = clientReturning(503, { error: "down" });
 
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const result = await fetchProfiles(db, [alice!.id], client);
-    warn.mockRestore();
 
     expect(result).toEqual({ profiles: {}, unavailable: true });
   });

@@ -25,6 +25,16 @@ describe("WomClient.getPlayerByUsername", () => {
     const call = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(String(call[0])).toBe("https://api.wiseoldman.net/v2/players/Zezima");
     expect((call[1].headers as Record<string, string>)["User-Agent"]).toBeTruthy();
+    expect((call[1].headers as Record<string, string>)["x-api-key"]).toBeUndefined();
+  });
+
+  it("sends the x-api-key header when an api key is configured", async () => {
+    const fetchImpl = mockFetch({ "/players/Zezima": { body: playerBody(1, "regular") } });
+    const client = new WomClient(fetchImpl, "wom-secret");
+    await client.getPlayerByUsername("Zezima");
+
+    const call = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect((call[1].headers as Record<string, string>)["x-api-key"]).toBe("wom-secret");
   });
 
   it("URL-encodes RSNs with spaces", async () => {

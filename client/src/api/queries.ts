@@ -6,6 +6,7 @@ import type {
   PickRating, PlayerProfile, StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
+import { useMarkStatsRefreshing } from "../context/WebSocketContext";
 import { api } from "./client";
 import { readBoardCache, writeBoardCache } from "./boardCache";
 import { optimisticUpdate } from "./optimistic";
@@ -208,13 +209,11 @@ export function useBingoMods(slug: string) {
 }
 
 export function useRefreshSignupStats(slug: string) {
-  const queryClient = useQueryClient();
+  const markStatsRefreshing = useMarkStatsRefreshing();
   return useMutation({
     mutationFn: (signupId: string) => api.post<void>(`/api/bingos/${slug}/mod/signups/${signupId}/refresh-stats`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) });
-    },
+    onMutate: (signupId) => markStatsRefreshing(signupId, true),
+    onError: (_err, signupId) => markStatsRefreshing(signupId, false),
   });
 }
 

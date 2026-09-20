@@ -19,9 +19,12 @@ import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { Button, IconButton } from "../ui/Button";
 import { Badge, EmptyState, FilterChip, Notice } from "../ui/Card";
+import { ColumnPicker } from "../ui/ColumnPicker";
 import { Input, Select } from "../ui/Field";
+import { useHiddenColumns } from "../ui/hiddenColumns";
 import { AlertIcon, CheckIcon, RefreshIcon, UsersIcon, XIcon } from "../ui/icons";
-import { CaCell, formatCaTier } from "../signup/caStats";
+import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
+import { CaCell, WomCell, formatCaTier, formatWomStat } from "../signup/caStats";
 import { SortHeader, compareSortValues, useTableSort } from "../ui/tableSort";
 import { timeAgo } from "../ui/time";
 import { TierBadge } from "../tectonic/ProfileBadges";
@@ -47,6 +50,8 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
     "Status",
     "Current CA",
     "Peak CA",
+    "EHB",
+    "EHP",
     "Buy-in",
     "Collected by",
     ...(isDuo ? ["Partner"] : []),
@@ -63,6 +68,8 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
       entry.signup.status,
       formatCaTier(entry.caCurrent),
       formatCaTier(entry.caPeak),
+      formatWomStat(entry.womStats?.ehb),
+      formatWomStat(entry.womStats?.ehp),
       entry.signup.buyinReceivedAt ? "received" : "not received",
       entry.collectedByUser ? displayName(entry.collectedByUser) : "",
       ...(isDuo ? [partnerRsn(entry, roster) ?? ""] : []),
@@ -72,11 +79,12 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
   return [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
 }
 
-function RefreshStatsButton({ slug, signupId, rsn }: { slug: string; signupId: string; rsn: string }) {
+function RefreshStatsButton({ slug, signupId, rsn, refreshing }: { slug: string; signupId: string; rsn: string; refreshing: boolean }) {
   const refresh = useRefreshSignupStats(slug);
+  const busy = refresh.isPending || refreshing;
   return (
-    <IconButton label={`Refresh stats for ${rsn}`} size="sm" onPress={() => refresh.mutate(signupId)} isDisabled={refresh.isPending}>
-      <RefreshIcon size={12} />
+    <IconButton label={busy ? `Looking up stats for ${rsn}` : `Refresh stats for ${rsn}`} size="sm" onPress={() => refresh.mutate(signupId)} isDisabled={busy}>
+      <RefreshIcon size={12} className={busy ? "animate-spin" : undefined} />
     </IconButton>
   );
 }
@@ -327,6 +335,8 @@ function rosterSortValue({ order, entry }: NumberedEntry, key: SortKey, roster: 
   if (key === "status") return entry.signup.status;
   if (key === "caCurrent") return entry.caCurrent?.points ?? -1;
   if (key === "caPeak") return entry.caPeak?.points ?? -1;
+  if (key === "ehb") return entry.womStats?.ehb ?? -1;
+  if (key === "ehp") return entry.womStats?.ehp ?? -1;
   if (key === "buyin") return isPaid(entry) ? 1 : 0;
   if (key === "collectedBy") return entry.collectedByUser ? displayName(entry.collectedByUser).toLowerCase() : "";
   // Paired rows first (sorted by partner), unpaired rows after — so the
@@ -340,6 +350,7 @@ export function SignupRoster({ slug }: { slug: string }) {
   const { data: questionsData } = useSignupQuestions(slug);
   const { data: bingoData } = useBingo(slug);
   const { devMode } = useAuth();
+  const statsRefreshing = useStatsRefreshingSignupIds();
   const roster = data?.signups ?? [];
   const questions = questionsData?.questions ?? [];
   const isDuo = bingoData?.bingo.signupMode === "duo";
@@ -348,7 +359,9 @@ export function SignupRoster({ slug }: { slug: string }) {
   const [copied, setCopied] = useState(false);
   const [buyinFilter, setBuyinFilter] = useState<BuyinFilter>("all");
   const [pairFilter, setPairFilter] = useState<PairFilter>("all");
+  const [hiddenColumns, setHiddenColumns] = useHiddenColumns("signupRoster");
   const sort = useTableSort<SortKey>("order");
+  const shown = (id: string) => !hiddenColumns.has(id);
 
   const activeCount = roster.filter((r) => r.signup.status === "active").length;
   const withdrawnCount = roster.length - activeCount;
@@ -357,6 +370,21 @@ export function SignupRoster({ slug }: { slug: string }) {
   const leftoverMode = bingoData?.bingo.leftoverMode;
   // Clan standing column only when tectonic-api knows at least one player.
   const showTier = roster.some((r) => r.tectonicProfile);
+  const columnOptions = [
+    { id: "order", label: "#" },
+    { id: "discord", label: "Discord" },
+    ...(showTier ? [{ id: "tier", label: "Tier" }] : []),
+    { id: "signedUp", label: "Signed up" },
+    { id: "status", label: "Status" },
+    { id: "caCurrent", label: "Current CA" },
+    { id: "caPeak", label: "Peak CA" },
+    { id: "ehb", label: "EHB" },
+    { id: "ehp", label: "EHP" },
+    { id: "buyin", label: "Buy-in" },
+    { id: "collectedBy", label: "Collected by" },
+    ...(isDuo ? [{ id: "partner", label: "Partner" }] : []),
+    ...questions.map((q) => ({ id: q.id, label: q.prompt })),
+  ];
   // Each chip's count reflects the other filter so the numbers show what
   // clicking it would leave on screen.
   const buyinCount = (f: BuyinFilter) => roster.filter((r) => matchesBuyin(r, f) && matchesPair(r, pairFilter)).length;
@@ -392,9 +420,12 @@ export function SignupRoster({ slug }: { slug: string }) {
             </>
           )}
         </p>
-        <Button size="sm" onPress={copyCsv} isDisabled={roster.length === 0}>
-          {copied ? "Copied" : "Copy as CSV"}
-        </Button>
+        <div className="flex items-center gap-2">
+          {roster.length > 0 && <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={setHiddenColumns} />}
+          <Button size="sm" onPress={copyCsv} isDisabled={roster.length === 0}>
+            {copied ? "Copied" : "Copy as CSV"}
+          </Button>
+        </div>
       </div>
 
       {roster.length === 0 ? (
@@ -425,21 +456,23 @@ export function SignupRoster({ slug }: { slug: string }) {
             <p className="text-sm text-on-surface-muted">No signups match these filters.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-max min-w-full text-sm [&_td]:align-middle [&_th]:align-middle">
                 <thead>
                   <tr className="border-b border-outline">
-                    <SortHeader label="#" sortKey="order" sort={sort} />
+                    {shown("order") && <SortHeader label="#" sortKey="order" sort={sort} />}
                     <SortHeader label="RSN" sortKey="rsn" sort={sort} />
-                    <SortHeader label="Discord" sortKey="discord" sort={sort} />
-                    {showTier && <SortHeader label="Tier" sortKey="tier" sort={sort} />}
-                    <SortHeader label="Signed up" sortKey="order" sort={sort} />
-                    <SortHeader label="Status" sortKey="status" sort={sort} />
-                    <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} />
-                    <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} />
-                    <SortHeader label="Buy-in" sortKey="buyin" sort={sort} />
-                    <SortHeader label="Collected by" sortKey="collectedBy" sort={sort} />
-                    {isDuo && <SortHeader label="Partner" sortKey="partner" sort={sort} />}
-                    {questions.map((q) => (
+                    {shown("discord") && <SortHeader label="Discord" sortKey="discord" sort={sort} />}
+                    {showTier && shown("tier") && <SortHeader label="Tier" sortKey="tier" sort={sort} />}
+                    {shown("signedUp") && <SortHeader label="Signed up" sortKey="order" sort={sort} />}
+                    {shown("status") && <SortHeader label="Status" sortKey="status" sort={sort} />}
+                    {shown("caCurrent") && <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} />}
+                    {shown("caPeak") && <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} />}
+                    {shown("ehb") && <SortHeader label="EHB" sortKey="ehb" sort={sort} />}
+                    {shown("ehp") && <SortHeader label="EHP" sortKey="ehp" sort={sort} />}
+                    {shown("buyin") && <SortHeader label="Buy-in" sortKey="buyin" sort={sort} />}
+                    {shown("collectedBy") && <SortHeader label="Collected by" sortKey="collectedBy" sort={sort} />}
+                    {isDuo && shown("partner") && <SortHeader label="Partner" sortKey="partner" sort={sort} />}
+                    {questions.filter((q) => shown(q.id)).map((q) => (
                       <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />
                     ))}
                   </tr>
@@ -447,46 +480,71 @@ export function SignupRoster({ slug }: { slug: string }) {
                 <tbody className="divide-y divide-outline">
                   {sorted.map(({ order, entry }) => {
                     const answerByQ = new Map(entry.answers.map((a) => [a.questionId, a.value]));
+                    const statsLoading = statsRefreshing.has(entry.signup.id);
                     return (
                       <tr key={entry.signup.id}>
-                        <td className="num py-2 pr-4 text-on-surface-subtle">{order}</td>
+                        {shown("order") && <td className="num py-2 pr-4 text-on-surface-subtle">{order}</td>}
                         <td className="py-2 pr-4 font-medium text-on-surface">
                           <span className="inline-flex items-center gap-1.5">
                             <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
                             {entry.signup.rsnVerified && <CheckIcon size={14} className="text-ok" aria-label="Verified against the linked clan account" />}
+                            <RefreshStatsButton slug={slug} signupId={entry.signup.id} rsn={entry.signup.rsn} refreshing={statsLoading} />
                           </span>
                         </td>
-                        <td className="py-2 pr-4 text-on-surface-muted">{displayName(entry.user)}</td>
-                        {showTier && <td className="py-2 pr-4 text-on-surface-muted">{entry.tectonicProfile ? <TierBadge profile={entry.tectonicProfile} /> : "—"}</td>}
-                        <td className="py-2 pr-4 text-on-surface-muted">
-                          <time dateTime={entry.signup.createdAt} title={new Date(entry.signup.createdAt).toLocaleString()} className="num whitespace-nowrap">
-                            {timeAgo(entry.signup.createdAt)}
-                          </time>
-                        </td>
-                        <td className="py-2 pr-4">
-                          <StatusCell slug={slug} entry={entry} canWithdraw={canWithdraw} />
-                        </td>
-                        <td className="py-2 pr-4 text-on-surface-muted">
-                          <CaCell stats={entry.caCurrent} />
-                        </td>
-                        <td className="py-2 pr-4 text-on-surface-muted">
-                          <span className="inline-flex items-center gap-1">
-                            <CaCell stats={entry.caPeak} />
-                            <RefreshStatsButton slug={slug} signupId={entry.signup.id} rsn={entry.signup.rsn} />
-                          </span>
-                        </td>
-                        <td className="py-2 pr-4">
-                          <BuyinCell slug={slug} entry={entry} />
-                        </td>
-                        <td className="py-2 pr-4">
-                          <CollectedByCell slug={slug} entry={entry} />
-                        </td>
-                        {isDuo && (
+                        {shown("discord") && <td className="py-2 pr-4 text-on-surface-muted">{displayName(entry.user)}</td>}
+                        {showTier && shown("tier") && (
+                          <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">
+                            {entry.tectonicProfile ? <TierBadge profile={entry.tectonicProfile} /> : "—"}
+                          </td>
+                        )}
+                        {shown("signedUp") && (
+                          <td className="py-2 pr-4 text-on-surface-muted">
+                            <time dateTime={entry.signup.createdAt} title={new Date(entry.signup.createdAt).toLocaleString()} className="num whitespace-nowrap">
+                              {timeAgo(entry.signup.createdAt)}
+                            </time>
+                          </td>
+                        )}
+                        {shown("status") && (
+                          <td className="py-2 pr-4">
+                            <StatusCell slug={slug} entry={entry} canWithdraw={canWithdraw} />
+                          </td>
+                        )}
+                        {shown("caCurrent") && (
+                          <td className="py-2 pr-4 text-on-surface-muted">
+                            <CaCell stats={entry.caCurrent} loading={statsLoading} />
+                          </td>
+                        )}
+                        {shown("caPeak") && (
+                          <td className="py-2 pr-4 text-on-surface-muted">
+                            <CaCell stats={entry.caPeak} loading={statsLoading} />
+                          </td>
+                        )}
+                        {shown("ehb") && (
+                          <td className="num py-2 pr-4 text-on-surface-muted">
+                            <WomCell stats={entry.womStats} field="ehb" loading={statsLoading} />
+                          </td>
+                        )}
+                        {shown("ehp") && (
+                          <td className="num py-2 pr-4 text-on-surface-muted">
+                            <WomCell stats={entry.womStats} field="ehp" loading={statsLoading} />
+                          </td>
+                        )}
+                        {shown("buyin") && (
+                          <td className="py-2 pr-4">
+                            <BuyinCell slug={slug} entry={entry} />
+                          </td>
+                        )}
+                        {shown("collectedBy") && (
+                          <td className="py-2 pr-4">
+                            <CollectedByCell slug={slug} entry={entry} />
+                          </td>
+                        )}
+                        {isDuo && shown("partner") && (
                           <td className="py-2 pr-4">
                             <PartnerCell slug={slug} entry={entry} roster={roster} />
                           </td>
                         )}
-                        {questions.map((q) => (
+                        {questions.filter((q) => shown(q.id)).map((q) => (
                           <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
                             {answerByQ.get(q.id) ?? "—"}
                           </td>

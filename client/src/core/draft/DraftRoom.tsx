@@ -2,13 +2,16 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { DraftPoolEntry, DraftTeam, DraftUnit, LeftoverMode, PickRating, SignupQuestion, TectonicProfile } from "@bingo/shared";
-import { CaCell } from "../signup/caStats";
+import { CaCell, WomCell } from "../signup/caStats";
+import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { useAuth } from "../../context/AuthContext";
 import { queryKeys, useBingo, useDraftState, useMakePick, useSetDraftOrder, useSetPickRating, useShuffleDraftOrder, useSignupQuestions, useStartDraft } from "../../api/queries";
 import { displayName } from "../ui/user";
 import { Button, IconButton } from "../ui/Button";
 import { Badge, Card, Notice } from "../ui/Card";
 import { Dialog, DialogHeader } from "../ui/Dialog";
+import { ColumnPicker } from "../ui/ColumnPicker";
+import { useHiddenColumns } from "../ui/hiddenColumns";
 import { ChevronDownIcon, ChevronUpIcon, LinkIcon } from "../ui/icons";
 import { SortHeader, compareSortValues, useTableSort, type TableSort } from "../ui/tableSort";
 import { RatingCell } from "./RatingCell";
@@ -56,33 +59,42 @@ function sortUnit(unit: DraftUnit, sort: TableSort<SortKey>, ratings: Ratings): 
 
 // Tier · Records · Podiums · Achievements — the at-a-glance clan signals;
 // the full lists live in PlayerProfileDialog.
-function ProfileCells({ profile }: { profile: TectonicProfile | null }) {
+function ProfileCells({ profile, shown }: { profile: TectonicProfile | null; shown: (id: string) => boolean }) {
+  const empty = <td className="whitespace-nowrap py-2 pr-4 text-on-surface-subtle">—</td>;
   if (!profile) {
     return (
       <>
-        <td className="py-2 pr-4 text-on-surface-subtle">—</td>
-        <td className="py-2 pr-4" />
-        <td className="py-2 pr-4" />
-        <td className="py-2 pr-4" />
+        {shown("tier") && empty}
+        {shown("records") && <td className="py-2 pr-4" />}
+        {shown("podiums") && <td className="py-2 pr-4" />}
+        {shown("achievements") && <td className="py-2 pr-4" />}
       </>
     );
   }
   const podiums = podiumSummary(profile);
   return (
     <>
-      <td className="py-2 pr-4">
-        <TierBadge profile={profile} />
-      </td>
-      <td className="num py-2 pr-4 text-on-surface-muted" title={recordTitle(profile)}>
-        <PlaceBreakdown {...recordSummary(profile)} />
-      </td>
-      <td className="num py-2 pr-4 text-on-surface-muted" title={podiumTitle(profile)}>
-        <PlaceBreakdown {...podiums} />
-        {podiums.bingoWins > 0 && <span className="ml-1 text-xs text-on-surface-subtle">({podiums.bingoWins} bingo)</span>}
-      </td>
-      <td className="py-2 pr-4">
-        <AchievementIcons profile={profile} />
-      </td>
+      {shown("tier") && (
+        <td className="whitespace-nowrap py-2 pr-4">
+          <TierBadge profile={profile} />
+        </td>
+      )}
+      {shown("records") && (
+        <td className="num py-2 pr-4 text-on-surface-muted" title={recordTitle(profile)}>
+          <PlaceBreakdown {...recordSummary(profile)} />
+        </td>
+      )}
+      {shown("podiums") && (
+        <td className="num py-2 pr-4 text-on-surface-muted" title={podiumTitle(profile)}>
+          <PlaceBreakdown {...podiums} />
+          {podiums.bingoWins > 0 && <span className="ml-1 text-xs text-on-surface-subtle">({podiums.bingoWins} bingo)</span>}
+        </td>
+      )}
+      {shown("achievements") && (
+        <td className="py-2 pr-4">
+          <AchievementIcons profile={profile} />
+        </td>
+      )}
     </>
   );
 }
@@ -110,6 +122,9 @@ function PoolTable({
   // Leads land on their favourites first; the toggle flips to ascending.
   const sort = useTableSort<SortKey>(ratings ? "rating" : "rsn", ratings ? "desc" : "asc");
   const ratingOf = ratings ?? {};
+  const [hiddenColumns, setHiddenColumns] = useHiddenColumns("draftPool");
+  const shown = (id: string) => !hiddenColumns.has(id);
+  const statsRefreshing = useStatsRefreshingSignupIds();
   const entries = pool.flatMap((u) => u.entries);
   // Answers are only sent to mods/captains (see draftService.getDraftState) —
   // everyone else's pool entries have answers: null, so skip those columns
@@ -117,8 +132,8 @@ function PoolTable({
   const showAnswers = entries.some((e) => e.answers !== null);
   // Skip the WOM columns entirely if nobody in the pool has stats (WOM
   // integration effectively unused for this bingo), same reasoning.
-  const showWomStats = entries.some((e) => e.womStats !== null);
-  const showCa = entries.some((e) => e.caCurrent !== null || e.caPeak !== null);
+  const showWomStats = entries.some((e) => e.womStats !== null || statsRefreshing.has(e.signup.id));
+  const showCa = entries.some((e) => e.caCurrent !== null || e.caPeak !== null || statsRefreshing.has(e.signup.id));
   // Clan standing columns only when tectonic-api knows at least one player.
   const showProfiles = entries.some((e) => e.tectonicProfile !== null);
   const hasPairs = pool.some((u) => u.entries.length > 1);
@@ -127,6 +142,30 @@ function PoolTable({
   const hasLeftovers = pool.some((u) => u.leftover);
   const mainPoolEmpty = pool.every((u) => u.leftover);
   const leftoverTag = leftoverMode === "singles" ? "Singles round" : "Cut";
+  const columnOptions = [
+    { id: "discord", label: "Discord" },
+    ...(showProfiles
+      ? [
+          { id: "tier", label: "Tier" },
+          { id: "records", label: "Records" },
+          { id: "podiums", label: "Podiums" },
+          { id: "achievements", label: "Achievements" },
+        ]
+      : []),
+    ...(showWomStats
+      ? [
+          { id: "ehb", label: "EHB" },
+          { id: "ehp", label: "EHP" },
+        ]
+      : []),
+    ...(showCa
+      ? [
+          { id: "caCurrent", label: "Current CA" },
+          { id: "caPeak", label: "Peak CA" },
+        ]
+      : []),
+    ...(showAnswers ? questions.map((q) => ({ id: q.id, label: q.prompt })) : []),
+  ];
 
   const sorted = pool
     .map((u) => sortUnit(u, sort, ratingOf))
@@ -135,36 +174,28 @@ function PoolTable({
   if (pool.length === 0) return <p className="text-sm text-on-surface-subtle">No one left to draft.</p>;
 
   return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={setHiddenColumns} />
+      </div>
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-max min-w-full text-sm [&_td]:align-middle [&_th]:align-middle">
         <thead>
           <tr className="border-b border-outline">
             {hasPairs && <th className="pb-2 pr-2" />}
             {ratings && <SortHeader label="Rating" sortKey="rating" sort={sort} />}
             <SortHeader label="RSN" sortKey="rsn" sort={sort} />
-            <SortHeader label="Discord" sortKey="discord" sort={sort} />
+            {shown("discord") && <SortHeader label="Discord" sortKey="discord" sort={sort} />}
             {hasLeftovers && <th className="pb-2 pr-4" />}
-            {showProfiles && (
-              <>
-                <SortHeader label="Tier" sortKey="tier" sort={sort} />
-                <SortHeader label="Records" sortKey="records" sort={sort} />
-                <SortHeader label="Podiums" sortKey="podiums" sort={sort} />
-                <th className="pb-2 pr-4" />
-              </>
-            )}
-            {showWomStats && (
-              <>
-                <SortHeader label="EHB" sortKey="ehb" sort={sort} />
-                <SortHeader label="EHP" sortKey="ehp" sort={sort} />
-              </>
-            )}
-            {showCa && (
-              <>
-                <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} />
-                <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} />
-              </>
-            )}
-            {showAnswers && questions.map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />)}
+            {showProfiles && shown("tier") && <SortHeader label="Tier" sortKey="tier" sort={sort} />}
+            {showProfiles && shown("records") && <SortHeader label="Records" sortKey="records" sort={sort} />}
+            {showProfiles && shown("podiums") && <SortHeader label="Podiums" sortKey="podiums" sort={sort} />}
+            {showProfiles && shown("achievements") && <th className="pb-2 pr-4" />}
+            {showWomStats && shown("ehb") && <SortHeader label="EHB" sortKey="ehb" sort={sort} />}
+            {showWomStats && shown("ehp") && <SortHeader label="EHP" sortKey="ehp" sort={sort} />}
+            {showCa && shown("caCurrent") && <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} />}
+            {showCa && shown("caPeak") && <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} />}
+            {showAnswers && questions.filter((q) => shown(q.id)).map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />)}
             {canPick && <th className="pb-2" />}
           </tr>
         </thead>
@@ -191,29 +222,36 @@ function PoolTable({
                       </td>
                     )}
                     <td className={`whitespace-nowrap py-2 pr-4 font-medium ${unit.leftover ? "" : "text-on-surface"}`}>
-                      <AccountTypeIcon accountType={entry.accountType} /> <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
+                      <span className="inline-flex items-center gap-1">
+                        <AccountTypeIcon accountType={entry.accountType} />
+                        <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
+                      </span>
                     </td>
-                    <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">{displayName(entry.user)}</td>
+                    {shown("discord") && <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">{displayName(entry.user)}</td>}
                     {hasLeftovers && <td className="py-2 pr-4 align-middle">{unit.leftover && i === 0 && <Badge tone="warn">{leftoverTag}</Badge>}</td>}
-                    {showProfiles && <ProfileCells profile={entry.tectonicProfile} />}
-                    {showWomStats && (
-                      <>
-                        <td className="num whitespace-nowrap py-2 pr-4 text-on-surface-muted">{entry.womStats ? Math.round(entry.womStats.ehb).toLocaleString() : "—"}</td>
-                        <td className="num whitespace-nowrap py-2 pr-4 text-on-surface-muted">{entry.womStats ? Math.round(entry.womStats.ehp).toLocaleString() : "—"}</td>
-                      </>
+                    {showProfiles && <ProfileCells profile={entry.tectonicProfile} shown={shown} />}
+                    {showWomStats && shown("ehb") && (
+                      <td className="num whitespace-nowrap py-2 pr-4 text-on-surface-muted">
+                        <WomCell stats={entry.womStats} field="ehb" loading={statsRefreshing.has(entry.signup.id)} />
+                      </td>
                     )}
-                    {showCa && (
-                      <>
-                        <td className="py-2 pr-4 text-on-surface-muted">
-                          <CaCell stats={entry.caCurrent} />
-                        </td>
-                        <td className="py-2 pr-4 text-on-surface-muted">
-                          <CaCell stats={entry.caPeak} />
-                        </td>
-                      </>
+                    {showWomStats && shown("ehp") && (
+                      <td className="num whitespace-nowrap py-2 pr-4 text-on-surface-muted">
+                        <WomCell stats={entry.womStats} field="ehp" loading={statsRefreshing.has(entry.signup.id)} />
+                      </td>
+                    )}
+                    {showCa && shown("caCurrent") && (
+                      <td className="py-2 pr-4 text-on-surface-muted">
+                        <CaCell stats={entry.caCurrent} loading={statsRefreshing.has(entry.signup.id)} />
+                      </td>
+                    )}
+                    {showCa && shown("caPeak") && (
+                      <td className="py-2 pr-4 text-on-surface-muted">
+                        <CaCell stats={entry.caPeak} loading={statsRefreshing.has(entry.signup.id)} />
+                      </td>
                     )}
                     {showAnswers &&
-                      questions.map((q) => (
+                      questions.filter((q) => shown(q.id)).map((q) => (
                         <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
                           {answerByQ.get(q.id) ?? "—"}
                         </td>
@@ -232,6 +270,7 @@ function PoolTable({
           );
         })}
       </table>
+    </div>
     </div>
   );
 }

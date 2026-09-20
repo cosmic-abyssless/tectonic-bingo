@@ -7,6 +7,7 @@ import { runWithAuditContext } from "../audit/context";
 // Catches ServiceError thrown by services (via express-async-errors-free
 // try/catch in routes, or a rejected async handler) and shapes the response.
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
+  res.locals.error = err;
   if (err instanceof ServiceError) {
     res.status(err.status).json({ error: err.message });
     return;
@@ -15,7 +16,6 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     res.status(413).json({ error: `That image is too large — the limit is ${MAX_UPLOAD_MB} MB` });
     return;
   }
-  console.error(err);
   res.status(500).json({ error: "Internal server error" });
 }
 

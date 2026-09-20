@@ -6,6 +6,7 @@ import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
 import { isTeamLead } from "./teamService";
 import { audit, markAuditedNoop } from "../audit/record";
+import { log } from "../log";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -242,7 +243,7 @@ function shuffled<T>(arr: T[]): T[] {
 
 export function shuffleDraftOrder(db: Db, bingo: Bingo) {
   assertDraftStage(bingo);
-  return db.transaction((tx) => {
+  const result = db.transaction((tx) => {
     assertNoPicks(tx, bingo.id);
     const teamRows = tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
     if (teamRows.length < 2) throw new ServiceError(400, "At least 2 teams are required to set pick order");
@@ -260,11 +261,13 @@ export function shuffleDraftOrder(db: Db, bingo: Bingo) {
     });
     return { teams: tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all(), lockedUntil };
   });
+  log.info("draft order shuffled", { bingoId: bingo.id, teamCount: result.teams.length, lockedUntil: result.lockedUntil.toISOString() });
+  return result;
 }
 
 export function setDraftOrder(db: Db, bingo: Bingo, teamIds: string[]) {
   assertDraftStage(bingo);
-  return db.transaction((tx) => {
+  const teamsOut = db.transaction((tx) => {
     assertNoPicks(tx, bingo.id);
     const teamRows = tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
     if (teamRows.length < 2) throw new ServiceError(400, "At least 2 teams are required to set pick order");
@@ -289,11 +292,13 @@ export function setDraftOrder(db: Db, bingo: Bingo, teamIds: string[]) {
     });
     return tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
   });
+  log.info("draft order set", { bingoId: bingo.id, teamCount: teamsOut.length });
+  return teamsOut;
 }
 
 export function startDraft(db: Db, bingo: Bingo) {
   assertDraftStage(bingo);
-  return db.transaction((tx) => {
+  const teamsOut = db.transaction((tx) => {
     const fresh = tx.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!;
     if (fresh.draftStarted) throw new ServiceError(400, "The draft has already started");
     const teamRows = tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
@@ -311,6 +316,8 @@ export function startDraft(db: Db, bingo: Bingo) {
     });
     return tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
   });
+  log.info("draft started", { bingoId: bingo.id, teamCount: teamsOut.length });
+  return teamsOut;
 }
 
 export interface MakePickParams {

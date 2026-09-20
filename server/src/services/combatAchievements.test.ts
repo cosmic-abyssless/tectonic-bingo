@@ -79,6 +79,64 @@ describe("deriveCombatAchievements", () => {
     expect(deriveCombatAchievements(allTasks)).toEqual({ tier: "grandmaster", points: 2760 });
   });
 
+  it("treats a GIM missing only Tomb Speed Runner III as Grandmaster", () => {
+    const oneShort = [
+      ...FULL_BELOW_GM.slice(0, 5),
+      { name: "Grandmaster", completed: 129, total: 130 },
+    ];
+    expect(deriveCombatAchievements({ accountType: { key: "group_ironman" }, combatAchievements: oneShort })).toEqual({
+      tier: "grandmaster",
+      points: 2754,
+    });
+    expect(deriveCombatAchievements({ accountType: { key: "hardcore_group_ironman" }, combatAchievements: oneShort })).toEqual({
+      tier: "grandmaster",
+      points: 2754,
+    });
+    expect(deriveCombatAchievements({ accountType: { key: "unranked_group_ironman" }, combatAchievements: oneShort })).toEqual({
+      tier: "grandmaster",
+      points: 2754,
+    });
+  });
+
+  it("treats a GIM as Grandmaster when RuneProfile already dropped Tomb Speed Runner III from the GM total", () => {
+    const lowered = [
+      { name: "Easy", completed: 41, total: 41 },
+      { name: "Medium", completed: 64, total: 64 },
+      { name: "Hard", completed: 89, total: 89 },
+      { name: "Elite", completed: 166, total: 166 },
+      { name: "Master", completed: 173, total: 173 },
+      { name: "Grandmaster", completed: 121, total: 121 },
+    ];
+    expect(deriveCombatAchievements({ accountType: { key: "group_ironman" }, combatAchievements: lowered })).toEqual({
+      tier: "grandmaster",
+      points: 2691,
+    });
+    expect(deriveCombatAchievements(blob(lowered))).toEqual({ tier: "master", points: 2691 });
+  });
+
+  it("does not waive Tomb Speed Runner III for non-GIM or extra missing tasks", () => {
+    const oneShort = blob([
+      ...FULL_BELOW_GM.slice(0, 5),
+      { name: "Grandmaster", completed: 129, total: 130 },
+    ]);
+    expect(deriveCombatAchievements(oneShort)).toEqual({ tier: "master", points: 2754 });
+    expect(
+      deriveCombatAchievements({
+        accountType: { key: "ironman" },
+        combatAchievements: oneShort.combatAchievements,
+      }),
+    ).toEqual({ tier: "master", points: 2754 });
+    expect(
+      deriveCombatAchievements({
+        accountType: { key: "group_ironman" },
+        combatAchievements: [
+          ...FULL_BELOW_GM.slice(0, 5),
+          { name: "Grandmaster", completed: 128, total: 130 },
+        ],
+      }),
+    ).toEqual({ tier: "master", points: 2748 });
+  });
+
   it("normalises spaced/cased RuneProfile tier names", () => {
     expect(deriveCombatAchievements(blob([{ name: "  EASY ", completed: 41, total: 50 }]))).toEqual({ tier: "easy", points: 41 });
   });

@@ -234,9 +234,19 @@ router.post(
   "/signups/:signupId/refresh-stats",
   asyncHandler(async (req, res) => {
     const signupId = req.params.signupId as string;
-    const row = db.select({ id: schema.signups.id, rsn: schema.signups.rsn, bingoId: schema.signups.bingoId }).from(schema.signups).where(eq(schema.signups.id, signupId)).get();
+    const row = db
+      .select({ id: schema.signups.id, rsn: schema.signups.rsn, bingoId: schema.signups.bingoId, userId: schema.signups.userId })
+      .from(schema.signups)
+      .where(eq(schema.signups.id, signupId))
+      .get();
     if (!row || row.bingoId !== req.bingo!.id) throw new ServiceError(404, "Signup not found");
     markAuditedNoop();
+    // Tell clients to spin before the fire-and-forget fetch starts, so the
+    // button doesn't sit idle between 204 and the first lookup. Skip when
+    // the E2E hook disables the fetch — otherwise the spinner would stick.
+    if (process.env.PLAYER_STATS_FETCH_DISABLED !== "true") {
+      broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: { signupId: row.id, userId: row.userId, statsRefreshing: true } });
+    }
     void fetchAndPersistPlayerStats(db, row.id, row.rsn);
     res.status(204).end();
   }),
