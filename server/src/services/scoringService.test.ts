@@ -652,3 +652,90 @@ describe("editing the board after teams have progress", () => {
   });
 });
 
+// Scoring is recorded apart from the approval itself: one points.earned / points.lost row per node
+// whose awarded points changed, naming what kind of points it was.
+describe("points audit entries", () => {
+  const auditRows = () => db.select().from(schema.auditLog).all().sort((a, b) => a.id - b.id);
+  const pointRows = (action: "points.earned" | "points.lost") =>
+    auditRows().filter((r) => r.action === action).map((r) => ({ id: r.id, teamId: r.teamId, ...JSON.parse(r.details) }));
+  const bingoOf = () => db.select().from(schema.bingos).get()!;
+
+  it("approving records each kind of points as its own entry, after the approval row", () => {
+    const fx = seedBaseFixture();
+    updateTileBonusPoints(db, fx.tileId, 50);
+    generateLines(db, bingoOf(), 15); // on this 3x3 board a lone tile completes row 0, column 0 and one diagonal
+    const task = itemTask(fx.tileId, { points: 20 }, "Bruma torch");
+    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Bruma torch" }]);
+
+    approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId });
+
+    const earned = pointRows("points.earned");
+    expect(earned.map((e) => [e.source, e.nodeLabel, e.points])).toEqual([
+      ["task", "Task", 20],
+      ["tile_bonus", "Test Tile", 50],
+      ["line", "Row 1", 15],
+      ["line", "Column 1", 15],
+      ["line", "Diagonal 1", 15],
+    ]);
+    expect(earned[0]).toMatchObject({ tileName: "Test Tile", submissionId: sub.id, teamId: fx.teamId });
+    expect(earned[2]!.tileName).toBeNull();
+    const approvedId = auditRows().find((r) => r.action === "submission.approved")!.id;
+    expect(earned.every((e) => e.id > approvedId)).toBe(true);
+    expect(pointRows("points.lost")).toHaveLength(0);
+    expect(JSON.parse(auditRows().find((r) => r.action === "submission.approved")!.details).pointsDelta).toBe(20 + 50 + 45);
+  });
+
+  it("writes nothing while points are withheld, then a row for both the gate's points and the released ones", () => {
+    const fx = seedBaseFixture();
+    const gate = itemTask(fx.tileId, { points: 25 }, "Vorki");
+    const gated = itemTask(fx.tileId, { points: 35, pointsGateNodeId: gate.id }, "Draconic visage");
+
+    approveSubmission(db, { submissionId: submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: gated.id, itemName: "Draconic visage" }]).id, reviewedByUserId: fx.modUserId });
+    expect(pointRows("points.earned")).toHaveLength(0); // completed, but its points are withheld
+
+    approveSubmission(db, { submissionId: submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: gate.id, itemName: "Vorki" }]).id, reviewedByUserId: fx.modUserId });
+    // Only the gate newly completed, yet two nodes gained points.
+    expect(pointRows("points.earned").map((e) => [e.nodeId, e.points]).sort()).toEqual([[gate.id, 25], [gated.id, 35]].sort());
+  });
+
+  it("undoing an approval records what was lost, as positive numbers", () => {
+    const fx = seedBaseFixture();
+    updateTileBonusPoints(db, fx.tileId, 50);
+    const task = itemTask(fx.tileId, { points: 20 }, "Bruma torch");
+    const sub = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Bruma torch" }]);
+    approveSubmission(db, { submissionId: sub.id, reviewedByUserId: fx.modUserId });
+
+    undoSubmissionReview(db, { submissionId: sub.id, undoneByUserId: fx.modUserId });
+
+    expect(pointRows("points.lost").map((e) => [e.source, e.points])).toEqual([["task", 20], ["tile_bonus", 50]]);
+    const undoId = auditRows().find((r) => r.action === "submission.review_undone")!.id;
+    expect(pointRows("points.lost").every((e) => e.id > undoId)).toBe(true);
+  });
+
+  it("rejecting writes no points rows", () => {
+    const fx = seedBaseFixture();
+    const task = itemTask(fx.tileId, { points: 20 }, "Bruma torch");
+    rejectSubmission(db, { submissionId: submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Bruma torch" }]).id, reviewedByUserId: fx.modUserId });
+    expect(auditRows().filter((r) => r.action.startsWith("points."))).toHaveLength(0);
+  });
+
+  it("a board edit records a net points.rescored only for teams whose total changed", () => {
+    const fx = seedBaseFixture();
+    const bingoId = bingoOf().id;
+    const [other] = db.insert(schema.teams).values({ bingoId, captainUserId: fx.memberUserId, name: "Team B", codeword: "b-word" }).returning().all();
+    const task = itemTask(fx.tileId, { points: 20 }, "Bruma torch");
+    approveSubmission(db, { submissionId: submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: task.id, itemName: "Bruma torch" }]).id, reviewedByUserId: fx.modUserId });
+
+    updateTileBonusPoints(db, fx.tileId, 50);
+    rescoreBingo(db, bingoId);
+
+    const rows = auditRows().filter((r) => r.action === "points.rescored");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.teamId).toBe(fx.teamId);
+    expect(JSON.parse(rows[0]!.details)).toEqual({ delta: 50 });
+    expect(rows.some((r) => r.teamId === other.id)).toBe(false);
+
+    rescoreBingo(db, bingoId); // nothing changed this time
+    expect(auditRows().filter((r) => r.action === "points.rescored")).toHaveLength(1);
+  });
+});

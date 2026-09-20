@@ -180,7 +180,8 @@ router.get(
 
     const cursor = req.query.cursor ? Number(req.query.cursor) : undefined;
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
-    res.json(queryTeamActivity(db, bingo.id, teamId, { isMod, cursor, limit }));
+    const condensed = req.query.condensed === "1" || req.query.condensed === "true";
+    res.json(queryTeamActivity(db, bingo.id, teamId, { isMod, cursor, limit, condensed }));
   }),
 );
 

@@ -172,7 +172,7 @@ router.get(
       until: q.until,
       q: q.q,
     };
-    const page = { cursor: q.cursor ? Number(q.cursor) : undefined, limit: q.limit ? Number(q.limit) : undefined };
+    const page = { cursor: q.cursor ? Number(q.cursor) : undefined, limit: q.limit ? Number(q.limit) : undefined, condensed: q.condensed === "1" || q.condensed === "true" };
     res.json(queryAuditLog(db, { bingoId: req.bingo!.id }, filters, page));
   }),
 );

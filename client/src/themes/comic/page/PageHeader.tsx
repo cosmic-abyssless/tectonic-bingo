@@ -12,7 +12,7 @@ import { SubmitButton } from "./SubmitButton";
 
 /** Masthead: the issue title in Bangers, stage in a caption box, actions as ink buttons with burst counters. */
 export function PageHeader({ page }: { page: BingoPageModel }) {
-  const { user } = useAuth();
+  const { user, devMode } = useAuth();
   const { colors } = useComic();
 
   // The same entries the inline buttons show, for the narrow-screen hamburger.
@@ -50,7 +50,7 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
 
   return (
     <AppHeader
-      back={user?.isAdmin ? { to: "/", label: "All bingos" } : undefined}
+      back={user?.isAdmin || devMode ? { to: "/", label: "All bingos" } : undefined}
       title={page.bingo.name}
       subtitle={
         <span className="inline-flex items-center border-2 px-1.5 py-px text-xs uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.06em", borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK }}>

@@ -30,7 +30,7 @@ export const queryKeys = {
   playerProfile: (slug: string, userId: string) => ["playerProfile", slug, userId] as const,
   stats: (slug: string) => ["stats", slug] as const,
   auditLog: (slug: string, filters: AuditLogFilters) => ["auditLog", slug, filters] as const,
-  teamActivity: (slug: string, teamId: string) => ["teamActivity", slug, teamId] as const,
+  teamActivity: (slug: string, teamId: string) => ["teamActivity", slug, teamId, "condensed"] as const,
 };
 
 export function useBingos() {
@@ -465,7 +465,7 @@ export function useAuditLog(slug: string | undefined, filters: AuditLogFilters =
 export function useTeamActivity(slug: string | undefined, teamId: string | undefined) {
   return useQuery({
     queryKey: queryKeys.teamActivity(slug ?? "", teamId ?? ""),
-    queryFn: () => api.get<AuditLogResponse>(`/api/bingos/${slug}/teams/${teamId}/activity`),
+    queryFn: () => api.get<AuditLogResponse>(`/api/bingos/${slug}/teams/${teamId}/activity?condensed=1`),
     enabled: !!slug && !!teamId,
   });
 }

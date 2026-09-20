@@ -846,4 +846,5 @@ export type BroadcastEvent =
   | { type: "audit_appended"; bingoId: string; payload: { teamId: string | null; visibility: AuditVisibility } };
 
 export * from "./audit.ts";
+export * from "./auditCondense.ts";
 export * from "./bingoExport.ts";

@@ -21,6 +21,7 @@ export function BoardPageLayout() {
   const BoardGrid = useSlot("BoardGrid");
   const RulesDialog = useSlot("RulesDialog");
   const TeamInfoDialog = useSlot("TeamInfoDialog");
+  const PointBreakdownDialog = useSlot("PointBreakdownDialog");
   const SubmissionsDrawer = useSlot("SubmissionsDrawer");
   const TileModal = useSlot("TileModal");
   const SubmissionModal = useSlot("SubmissionModal");
@@ -43,7 +44,7 @@ export function BoardPageLayout() {
           <>
             <div className="mb-4 flex flex-wrap justify-between gap-4">
               <TileSearch search={page.search} />
-              {page.viewing.team && <TeamBanner team={page.viewing.team} isOtherTeam={page.viewing.isOtherTeam} totalPoints={board.totalPoints} />}
+              {page.viewing.team && <TeamBanner team={page.viewing.team} isOtherTeam={page.viewing.isOtherTeam} totalPoints={board.totalPoints} onOpenPoints={page.pointBreakdown.show} />}
             </div>
 
             <BoardGrid board={board} onOpenTile={page.openTile.open} />
@@ -62,6 +63,8 @@ export function BoardPageLayout() {
       <RulesDialog isOpen={page.rules.open} markdown={page.bingo.rulesMarkdown ?? ""} onClose={page.rules.hide} />
 
       <TeamInfoDialog slug={page.slug} team={page.teamInfo.open ? page.viewing.team : null} onClose={page.teamInfo.hide} />
+
+      <PointBreakdownDialog team={page.pointBreakdown.open ? page.viewing.team : null} onClose={page.pointBreakdown.hide} />
 
       <SubmissionsDrawer isOpen={page.drawer.open} submissions={page.submissions} onClose={page.drawer.hide} onSubmit={page.canSubmit ? () => page.submit.show() : undefined} />
 
