@@ -27,6 +27,8 @@ import { auditContext } from "./audit/middleware";
 import { closeWebSocketServer, initWebSocketServer } from "./ws";
 import { sqlite } from "./db";
 import { UPLOADS_DIR, WIKI_ICONS_DIR, getAdminDiscordIds } from "./config";
+import { warmOcr } from "./ocr";
+import { shouldWarmOcr } from "./ocrConfig";
 import { serveImageVariants } from "./middleware/imageVariants";
 import { serveWikiIcons } from "./middleware/wikiIcons";
 import { getKnownItemNames } from "./services/itemNames";
@@ -202,6 +204,8 @@ server.listen(PORT, () => {
     dbDir: path.dirname(dbPath),
     devMode: isDevModeActive(),
   });
+  // After the server is up and taking requests, so a slow model download never delays a deploy going healthy.
+  if (shouldWarmOcr()) void warmOcr();
 });
 
 // SQLite cannot be shared by overlapping replicas. On SIGTERM (Railway

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { PaddleOcrService, V6_SMALL_MODEL } from "ppu-paddle-ocr";
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -6,6 +7,8 @@ import { tiles } from "./db/schema";
 import { getFullGraph, leafDescendants } from "./services/graphService";
 import { findBestMatch, fuzzyIncludes, type DetectedItemMatch, type MatchableItem } from "./services/textMatchService";
 import { log } from "./log";
+import { ocrConcurrency } from "./ocrConfig";
+import { createLimiter, createResultCache, type OcrPriority } from "./ocrScheduler";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -30,10 +33,23 @@ export function isOcrEnabled(): boolean {
 }
 
 // Lazy singleton: initialize() is ~1.6s warm (longer on the very first call,
-// which also downloads and caches the model), so this must happen once, on
-// first use — never at server boot (a tsx-watch restart loop shouldn't pay
-// that cost or hit the network) and never per-request.
+// which also downloads and caches the model), so this must happen once and
+// never per-request. In production warmOcr() does it in the background right
+// after the server starts; elsewhere (a tsx-watch restart loop shouldn't pay
+// that cost or hit the network) it waits for the first screenshot.
 let _service: Promise<PaddleOcrService> | null = null;
+
+// Recognition is CPU-bound and runs in this same process as the API, so an unbounded burst of submissions would
+// make every one of them (and every other request) slow. Cap how many run at once and queue the rest.
+// The limit is OCR_CONCURRENCY (default 5, see ocrConfig).
+const limiter = createLimiter(ocrConcurrency(), ({ waitedMs, priority, running, queued }) => {
+  log.info("ocr waited for a free slot", { waitedMs, priority, running, queued });
+});
+
+// What was read from an image, keyed by its bytes. A screenshot is analysed when it is picked in the submission
+// modal and again, in the background, once it is submitted; the second time it is served from here instead of
+// being read again. Only the text is kept: matching it against the codeword and board is cheap.
+const textCache = createResultCache<string[]>({ ttlMs: 15 * 60_000, maxEntries: 200 });
 
 // Exported so scripts/ocr-smoke.ts uses the exact same tuned options as
 // production rather than the library's defaults, which drift silently
@@ -69,10 +85,30 @@ export function getOcrService(): Promise<PaddleOcrService> {
       });
       await service.initialize();
       return service;
-    })();
+    })().catch((err) => {
+      // A failed load (the model download timing out, say) must not be remembered: the next call tries again
+      // instead of every screenshot failing until the server restarts.
+      _service = null;
+      throw err;
+    });
   }
   return _service;
 }
+
+/**
+ * Loads the model ahead of the first screenshot so nobody's submission pays for it (or for downloading it, which
+ * happens again after every deploy). Fire and forget: a failure is logged and the first real request retries.
+ */
+export async function warmOcr(): Promise<void> {
+  const started = Date.now();
+  try {
+    await getOcrService();
+    log.info("ocr model ready", { ms: Date.now() - started, concurrency: ocrConcurrency() });
+  } catch (err) {
+    log.error("ocr warm-up failed", { err });
+  }
+}
+
 
 // A Buffer is a view into a shared, larger ArrayBuffer pool — `buf.buffer`
 // alone hands the OCR library unrelated memory. Slice to the view's own range.
@@ -85,22 +121,35 @@ function toArrayBuffer(buf: Buffer): ArrayBuffer {
 // (including fuzzy tolerance for OCR slips) lives in textMatchService — this
 // function is I/O only: OCR the image, load the board's items, hand both to
 // the pure matcher.
-export async function analyzeSubmissionScreenshot(db: Db, bingo: Bingo, team: Team, file: ScreenshotFile): Promise<AnalyzeResult> {
+//
+// `priority` decides who goes first when the queue is full: a person waiting on the submission modal ("interactive",
+// the default) is served before the after-the-fact analysis of a submission that has already been saved ("background").
+export async function analyzeSubmissionScreenshot(db: Db, bingo: Bingo, team: Team, file: ScreenshotFile, opts: { priority?: OcrPriority } = {}): Promise<AnalyzeResult> {
   try {
-    return await runAnalyze(db, bingo, team, file);
+    return await runAnalyze(db, bingo, team, file, opts.priority ?? "interactive");
   } catch (err) {
     log.error("ocr analysis failed", { err, bingoId: bingo.id, teamId: team.id });
     throw err;
   }
 }
 
-async function runAnalyze(db: Db, bingo: Bingo, team: Team, file: ScreenshotFile): Promise<AnalyzeResult> {
-  const service = await getOcrService();
-  const result = await service.recognize(toArrayBuffer(file.buffer), { noCache: true });
-  const extractedText = result.text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+function recognizeText(buffer: Buffer, priority: OcrPriority): Promise<string[]> {
+  const key = createHash("sha256").update(buffer).digest("hex");
+  return textCache.getOrCompute(key, () =>
+    limiter.run(async () => {
+      const service = await getOcrService();
+      // noCache: the library's own cache is tiny and keyed differently; ours (above) is what dedupes.
+      const result = await service.recognize(toArrayBuffer(buffer), { noCache: true });
+      return result.text
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+    }, priority),
+  );
+}
+
+async function runAnalyze(db: Db, bingo: Bingo, team: Team, file: ScreenshotFile, priority: OcrPriority): Promise<AnalyzeResult> {
+  const extractedText = [...(await recognizeText(file.buffer, priority))];
 
   // Fixed at 1 edit regardless of the codeword's length — a false positive
   // here wrongly suppresses the "codeword not found" warning mods rely on,
