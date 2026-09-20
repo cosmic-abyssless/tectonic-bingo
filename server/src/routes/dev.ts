@@ -30,6 +30,15 @@ router.get(
   }),
 );
 
+// Fills a generated bingo's signups with made-up player stats. Not audited: test data, like the users above.
+router.post(
+  "/bingos/:slug/fake-stats",
+  auditSkip("dev test data"),
+  asyncHandler(async (req, res) => {
+    res.json(devTestDataService.fillFakeStats(db, req.params.slug as string));
+  }),
+);
+
 // Removes a generated bingo, its audit rows, its uploaded files and its now-unused test users. The bingo's own
 // audit trail goes with it, so nothing is recorded.
 router.delete(

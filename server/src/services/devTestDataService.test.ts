@@ -10,7 +10,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createBingo } from "./bingoService";
 import { createTile, createTask } from "./boardService";
 import { ServiceError } from "./errors";
-import { createTestUser, listTestDataBingos, removeUploads, teardownTestBingo, uploadFilePaths } from "./devTestDataService";
+import { createTestUser, fillFakeStats, listTestDataBingos, removeUploads, teardownTestBingo, uploadFilePaths } from "./devTestDataService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -97,6 +97,22 @@ describe("teardownTestBingo", () => {
     expect(db.select().from(schema.bingos).all().map((b) => b.slug)).toEqual(["testdata-two"]);
     expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.bingoId, two.id)).all().length).toBeGreaterThan(0);
     expect(db.select().from(schema.tiles).all()).toHaveLength(1);
+  });
+});
+
+describe("fillFakeStats", () => {
+  it("fills every signup of a testdata- bingo with stats, and refuses any other bingo", () => {
+    const admin = user("testdata-admin");
+    const bingo = seedBingo("testdata-stats", admin, [user("testdata-a"), user("testdata-b")]);
+    expect(fillFakeStats(db, "testdata-stats")).toEqual({ signups: 2 });
+    for (const s of db.select().from(schema.signups).where(eq(schema.signups.bingoId, bingo.id)).all()) {
+      expect(JSON.parse(s.womDataJson!)).toHaveProperty("ehb");
+      expect(JSON.parse(s.runeProfileDataJson!)).toHaveProperty("username", s.rsn);
+      expect(s.statsFetchedAt).toBeInstanceOf(Date);
+    }
+    createBingo(db, { slug: "real-bingo", name: "Real", boardRows: 2, boardCols: 2, createdByUserId: admin.id });
+    expect(() => fillFakeStats(db, "real-bingo")).toThrow(ServiceError);
+    expect(() => fillFakeStats(db, "testdata-missing")).toThrow(ServiceError);
   });
 });
 

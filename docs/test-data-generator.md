@@ -61,10 +61,15 @@ target (say `signup`), the later dates are simply scheduled in the future.
 
 1. Imports the board and sets the dates (signups open, draft, reveal, start, end).
 2. **Signups** (through the real endpoint), front-loaded over the signup window, with
-   about 60% of players pairing up as duos (request, then accept).
+   about 60% of players pairing up as duos (request, then accept). Then every signup is
+   given made-up WOM, RuneProfile and combat achievement stats (the ones the signup seed
+   tool uses, random, not seeded), because signing up with the integrations off leaves
+   them empty and the roster's stats columns would be blank.
 3. **Captains** (the best players; a duo captain brings their partner as co-captain)
-   create the teams, then the **real draft** runs: captains pick in turn a minute or so
-   apart, favouring better players, with the admin stepping in for a few picks.
+   create the teams, then the **real draft** runs: the admin sets the pick order, starts
+   the draft, and captains pick in turn a minute or so apart, favouring better players,
+   with the admin stepping in for a few picks. (To try the pick-order ceremony yourself,
+   leave the bingo at `--stage captains` and move it to the draft stage in the mod panel.)
 4. **Reveal**: teams get names and members raise hands on the parts they mean to do.
 5. **Live**: an hourly simulation (see below), then, for `complete`, the mods clear the
    queue and an admin completes the bingo.
@@ -120,6 +125,13 @@ admin and a "me" user), then start the server with the env above plus `PORT=3055
 it in a browser, start Vite with `VITE_PORT=<free port> VITE_API_TARGET=http://localhost:3055`
 (as `playwright.config.ts` does).
 
+Pointing a second server at your *normal* dev database also works, so the generated bingo
+shows up in your usual dev site. Start it on another port with the env above (a blank
+`TECTONIC_API_URL` in the environment beats the one in `.env`) and leave your own server
+running. Two servers writing one SQLite file can occasionally fail a request with
+"database is locked" (a few submissions out of hundreds), which the generator lists as
+refused; a private database avoids it.
+
 ## What was added to the server for this
 
 Only reachable in dev mode (`isDevModeActive()` in `server/src/devMode.ts`, the one
@@ -129,10 +141,11 @@ check for it):
   services call `now()` instead of `new Date()`). A malformed value is a 400. Ignored
   outside dev mode.
 - `X-Dev-Skip-Ocr: 1` skips the background screenshot analysis on a submission.
-- `POST /api/dev/users`, `GET /api/dev/bingos`, `DELETE /api/dev/bingos/:slug`
-  (`server/src/routes/dev.ts`, site admin only, `testdata-` prefix enforced): make a
-  throwaway user, list generated bingos, and tear one down completely (bingo, audit rows,
-  uploaded files and their variants, and users nothing else uses).
+- `POST /api/dev/users`, `GET /api/dev/bingos`, `DELETE /api/dev/bingos/:slug`,
+  `POST /api/dev/bingos/:slug/fake-stats` (`server/src/routes/dev.ts`, site admin only,
+  `testdata-` prefix enforced): make a throwaway user, list generated bingos, tear one down
+  completely (bingo, audit rows, uploaded files and their variants, and users nothing else
+  uses), and give a bingo's signups made-up player stats.
 
 ## Tuning
 

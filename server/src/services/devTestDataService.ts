@@ -12,6 +12,7 @@ import { ServiceError } from "./errors";
 import { deleteBingo } from "./bingoService";
 import { removeFiles } from "./exportImages";
 import { FULL_SUFFIX, THUMB_SUFFIX, VARIANT_EXT } from "./imageService";
+import { fakePlayerStats } from "./devSeedService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -51,6 +52,24 @@ export function listTestDataBingos(db: Db) {
     .from(bingos)
     .where(like(bingos.slug, `${TESTDATA_PREFIX}%`))
     .all();
+}
+
+/**
+ * Gives every signup of a generated bingo made-up WOM, RuneProfile and combat achievement stats (the ones the signup
+ * seed tool uses), so the roster's stats columns have something to show. Signups made through the real endpoint with
+ * the integrations off have none. Random, not seeded.
+ */
+export function fillFakeStats(db: Db, slug: string): { signups: number } {
+  if (!slug.startsWith(TESTDATA_PREFIX)) throw new ServiceError(400, `Only "${TESTDATA_PREFIX}" bingos can be filled with fake stats`);
+  const bingo = db.select({ id: bingos.id }).from(bingos).where(eq(bingos.slug, slug)).get();
+  if (!bingo) throw new ServiceError(404, "Bingo not found");
+  const rows = db.select({ id: signups.id, rsn: signups.rsn }).from(signups).where(eq(signups.bingoId, bingo.id)).all();
+  const at = clockNow();
+  for (const row of rows) {
+    const { womDataJson, runeProfileDataJson, caCurrentJson, caPeakJson } = fakePlayerStats(row.rsn);
+    db.update(signups).set({ womDataJson, runeProfileDataJson, caCurrentJson, caPeakJson, statsFetchedAt: at }).where(eq(signups.id, row.id)).run();
+  }
+  return { signups: rows.length };
 }
 
 export interface TeardownResult {

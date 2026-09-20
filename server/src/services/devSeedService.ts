@@ -140,7 +140,7 @@ function fakeCombatAchievementsBlob(): unknown {
   return FAKE_CA_COMPLETIONS[weightedPick(FAKE_CA_TIER_WEIGHTS)];
 }
 
-function fakePlayerStats(rsn: string): { womDataJson: string; runeProfileDataJson: string; caCurrentJson: string | null; caPeakJson: string | null } {
+export function fakePlayerStats(rsn: string): { womDataJson: string; runeProfileDataJson: string; caCurrentJson: string | null; caPeakJson: string | null } {
   const ehb = Math.round(Math.random() * 2000 * 100) / 100;
   const ehp = Math.round(Math.random() * 3000 * 100) / 100;
   const womType = weightedPick(FAKE_WOM_TYPE_WEIGHTS);

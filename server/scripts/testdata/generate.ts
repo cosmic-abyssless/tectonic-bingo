@@ -77,6 +77,8 @@ async function main(): Promise<void> {
   await importBingo(ctx, exportPath, `Test data ${args.slug.slice("testdata-".length)}`);
   await setStage(ctx, "signup", tl.signupOpensAt);
   await runSignups(ctx, players, pairs);
+  const { signups: filled } = await api.as(admin.discordId).post<{ signups: number }>(`/api/dev/bingos/${args.slug}/fake-stats`, undefined, { at: tl.captainsAt });
+  log(`made-up WOM, RuneProfile and combat achievement stats on ${filled} signups`);
   if (args.stage === "signup") return done(args.slug);
 
   await setStage(ctx, "captains", tl.captainsAt);

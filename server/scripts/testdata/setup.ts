@@ -177,6 +177,9 @@ export async function runDraft(ctx: Ctx, players: Player[], seeds: TeamSeed[], o
   const { tl, rng } = ctx;
   const byUserId = new Map(players.filter((p) => p.userId).map((p) => [p.userId!, p]));
   const admin = ctx.api.as(ctx.admin);
+  // The draft can't start until the admin has set a pick order. Set it explicitly (a shuffle would lock picks for
+  // two seconds of real time, which the spoofed clock can't skip) from a forked stream, so the rest is unchanged.
+  await admin.put(path(ctx, "/mod/draft/order"), { teamIds: rng.fork("pick-order").shuffle(seeds.map((s) => s.teamId)) }, { at: plus(tl.draftAt, 20 * MINUTE) });
   let at = plus(tl.draftAt, 30 * MINUTE);
   await admin.post(path(ctx, "/mod/draft/start"), undefined, { at });
 
