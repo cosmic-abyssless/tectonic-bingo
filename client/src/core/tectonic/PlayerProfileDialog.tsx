@@ -8,7 +8,7 @@ import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { displayName } from "../ui/user";
 import { AchievementIcons, Medal, PlaceBreakdown, TierBadge } from "./ProfileBadges";
 import { formatRecordValue, isBingoEvent, podiumSummary, recordSummary } from "./profile";
-import { CaCell } from "../signup/caStats";
+import { CaCell, WomCell } from "../signup/caStats";
 import { useStatsRefreshingUserIds } from "../../context/WebSocketContext";
 
 /**
@@ -118,9 +118,9 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
               </Stat>
               <Stat label="Bingo wins">{podiums!.bingoWins}</Stat>
             </div>
-            {player.womStats && (
+            {(player.womStats || caLoading) && (
               <p className="text-xs text-on-surface-subtle">
-                <span className="num">{Math.round(player.womStats.ehb).toLocaleString()}</span> EHB · <span className="num">{Math.round(player.womStats.ehp).toLocaleString()}</span> EHP on Wise Old Man.
+                <WomCell stats={player.womStats} field="ehb" loading={caLoading} /> EHB · <WomCell stats={player.womStats} field="ehp" loading={caLoading} /> EHP on Wise Old Man.
               </p>
             )}
 

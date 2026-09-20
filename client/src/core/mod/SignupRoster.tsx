@@ -22,9 +22,9 @@ import { Badge, EmptyState, FilterChip, Notice } from "../ui/Card";
 import { ColumnPicker } from "../ui/ColumnPicker";
 import { Input, Select } from "../ui/Field";
 import { useHiddenColumns } from "../ui/hiddenColumns";
-import { AlertIcon, CheckIcon, RefreshIcon, SpinnerIcon, UsersIcon, XIcon } from "../ui/icons";
+import { AlertIcon, CheckIcon, RefreshIcon, UsersIcon, XIcon } from "../ui/icons";
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
-import { CaCell, formatCaTier } from "../signup/caStats";
+import { CaCell, WomCell, formatCaTier, formatWomStat } from "../signup/caStats";
 import { SortHeader, compareSortValues, useTableSort } from "../ui/tableSort";
 import { timeAgo } from "../ui/time";
 import { TierBadge } from "../tectonic/ProfileBadges";
@@ -50,6 +50,8 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
     "Status",
     "Current CA",
     "Peak CA",
+    "EHB",
+    "EHP",
     "Buy-in",
     "Collected by",
     ...(isDuo ? ["Partner"] : []),
@@ -66,6 +68,8 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
       entry.signup.status,
       formatCaTier(entry.caCurrent),
       formatCaTier(entry.caPeak),
+      formatWomStat(entry.womStats?.ehb),
+      formatWomStat(entry.womStats?.ehp),
       entry.signup.buyinReceivedAt ? "received" : "not received",
       entry.collectedByUser ? displayName(entry.collectedByUser) : "",
       ...(isDuo ? [partnerRsn(entry, roster) ?? ""] : []),
@@ -80,7 +84,7 @@ function RefreshStatsButton({ slug, signupId, rsn, refreshing }: { slug: string;
   const busy = refresh.isPending || refreshing;
   return (
     <IconButton label={busy ? `Looking up stats for ${rsn}` : `Refresh stats for ${rsn}`} size="sm" onPress={() => refresh.mutate(signupId)} isDisabled={busy}>
-      {busy ? <SpinnerIcon size={12} /> : <RefreshIcon size={12} />}
+      <RefreshIcon size={12} className={busy ? "animate-spin" : undefined} />
     </IconButton>
   );
 }
@@ -331,6 +335,8 @@ function rosterSortValue({ order, entry }: NumberedEntry, key: SortKey, roster: 
   if (key === "status") return entry.signup.status;
   if (key === "caCurrent") return entry.caCurrent?.points ?? -1;
   if (key === "caPeak") return entry.caPeak?.points ?? -1;
+  if (key === "ehb") return entry.womStats?.ehb ?? -1;
+  if (key === "ehp") return entry.womStats?.ehp ?? -1;
   if (key === "buyin") return isPaid(entry) ? 1 : 0;
   if (key === "collectedBy") return entry.collectedByUser ? displayName(entry.collectedByUser).toLowerCase() : "";
   // Paired rows first (sorted by partner), unpaired rows after — so the
@@ -372,6 +378,8 @@ export function SignupRoster({ slug }: { slug: string }) {
     { id: "status", label: "Status" },
     { id: "caCurrent", label: "Current CA" },
     { id: "caPeak", label: "Peak CA" },
+    { id: "ehb", label: "EHB" },
+    { id: "ehp", label: "EHP" },
     { id: "buyin", label: "Buy-in" },
     { id: "collectedBy", label: "Collected by" },
     ...(isDuo ? [{ id: "partner", label: "Partner" }] : []),
@@ -459,6 +467,8 @@ export function SignupRoster({ slug }: { slug: string }) {
                     {shown("status") && <SortHeader label="Status" sortKey="status" sort={sort} />}
                     {shown("caCurrent") && <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} />}
                     {shown("caPeak") && <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} />}
+                    {shown("ehb") && <SortHeader label="EHB" sortKey="ehb" sort={sort} />}
+                    {shown("ehp") && <SortHeader label="EHP" sortKey="ehp" sort={sort} />}
                     {shown("buyin") && <SortHeader label="Buy-in" sortKey="buyin" sort={sort} />}
                     {shown("collectedBy") && <SortHeader label="Collected by" sortKey="collectedBy" sort={sort} />}
                     {isDuo && shown("partner") && <SortHeader label="Partner" sortKey="partner" sort={sort} />}
@@ -470,7 +480,7 @@ export function SignupRoster({ slug }: { slug: string }) {
                 <tbody className="divide-y divide-outline">
                   {sorted.map(({ order, entry }) => {
                     const answerByQ = new Map(entry.answers.map((a) => [a.questionId, a.value]));
-                    const caLoading = statsRefreshing.has(entry.signup.id);
+                    const statsLoading = statsRefreshing.has(entry.signup.id);
                     return (
                       <tr key={entry.signup.id}>
                         {shown("order") && <td className="num py-2 pr-4 text-on-surface-subtle">{order}</td>}
@@ -478,7 +488,7 @@ export function SignupRoster({ slug }: { slug: string }) {
                           <span className="inline-flex items-center gap-1.5">
                             <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
                             {entry.signup.rsnVerified && <CheckIcon size={14} className="text-ok" aria-label="Verified against the linked clan account" />}
-                            <RefreshStatsButton slug={slug} signupId={entry.signup.id} rsn={entry.signup.rsn} refreshing={caLoading} />
+                            <RefreshStatsButton slug={slug} signupId={entry.signup.id} rsn={entry.signup.rsn} refreshing={statsLoading} />
                           </span>
                         </td>
                         {shown("discord") && <td className="py-2 pr-4 text-on-surface-muted">{displayName(entry.user)}</td>}
@@ -497,12 +507,22 @@ export function SignupRoster({ slug }: { slug: string }) {
                         )}
                         {shown("caCurrent") && (
                           <td className="py-2 pr-4 text-on-surface-muted">
-                            <CaCell stats={entry.caCurrent} loading={caLoading} />
+                            <CaCell stats={entry.caCurrent} loading={statsLoading} />
                           </td>
                         )}
                         {shown("caPeak") && (
                           <td className="py-2 pr-4 text-on-surface-muted">
-                            <CaCell stats={entry.caPeak} loading={caLoading} />
+                            <CaCell stats={entry.caPeak} loading={statsLoading} />
+                          </td>
+                        )}
+                        {shown("ehb") && (
+                          <td className="num py-2 pr-4 text-on-surface-muted">
+                            <WomCell stats={entry.womStats} field="ehb" loading={statsLoading} />
+                          </td>
+                        )}
+                        {shown("ehp") && (
+                          <td className="num py-2 pr-4 text-on-surface-muted">
+                            <WomCell stats={entry.womStats} field="ehp" loading={statsLoading} />
                           </td>
                         )}
                         {shown("buyin") && (

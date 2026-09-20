@@ -1,6 +1,6 @@
 import { useState, type CSSProperties } from "react";
 import type { DraftPoolEntry, DraftUnit, LeftoverMode, PickRating, SignupQuestion, TectonicProfile } from "@bingo/shared";
-import { CaCell } from "../signup/caStats";
+import { CaCell, WomCell } from "../signup/caStats";
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { useAuth } from "../../context/AuthContext";
 import { useBingo, useDraftState, useMakePick, useSetPickRating, useSignupQuestions, useStartDraft } from "../../api/queries";
@@ -129,7 +129,7 @@ function PoolTable({
   const showAnswers = entries.some((e) => e.answers !== null);
   // Skip the WOM columns entirely if nobody in the pool has stats (WOM
   // integration effectively unused for this bingo), same reasoning.
-  const showWomStats = entries.some((e) => e.womStats !== null);
+  const showWomStats = entries.some((e) => e.womStats !== null || statsRefreshing.has(e.signup.id));
   const showCa = entries.some((e) => e.caCurrent !== null || e.caPeak !== null || statsRefreshing.has(e.signup.id));
   // Clan standing columns only when tectonic-api knows at least one player.
   const showProfiles = entries.some((e) => e.tectonicProfile !== null);
@@ -225,10 +225,14 @@ function PoolTable({
                     {hasLeftovers && <td className="py-2 pr-4 align-middle">{unit.leftover && i === 0 && <Badge tone="warn">{leftoverTag}</Badge>}</td>}
                     {showProfiles && <ProfileCells profile={entry.tectonicProfile} shown={shown} />}
                     {showWomStats && shown("ehb") && (
-                      <td className="num whitespace-nowrap py-2 pr-4 text-on-surface-muted">{entry.womStats ? Math.round(entry.womStats.ehb).toLocaleString() : "—"}</td>
+                      <td className="num whitespace-nowrap py-2 pr-4 text-on-surface-muted">
+                        <WomCell stats={entry.womStats} field="ehb" loading={statsRefreshing.has(entry.signup.id)} />
+                      </td>
                     )}
                     {showWomStats && shown("ehp") && (
-                      <td className="num whitespace-nowrap py-2 pr-4 text-on-surface-muted">{entry.womStats ? Math.round(entry.womStats.ehp).toLocaleString() : "—"}</td>
+                      <td className="num whitespace-nowrap py-2 pr-4 text-on-surface-muted">
+                        <WomCell stats={entry.womStats} field="ehp" loading={statsRefreshing.has(entry.signup.id)} />
+                      </td>
                     )}
                     {showCa && shown("caCurrent") && (
                       <td className="py-2 pr-4 text-on-surface-muted">

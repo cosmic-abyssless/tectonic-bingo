@@ -1,14 +1,15 @@
-// Client for the Wise Old Man public API — no auth required. Cloudflare
-// blocks requests without a real User-Agent header (confirmed: a bare curl
-// gets a JS challenge page instead of JSON), so that header is mandatory,
-// not just polite.
+// Client for the Wise Old Man public API. Cloudflare blocks requests
+// without a real User-Agent header (confirmed: a bare curl gets a JS
+// challenge page instead of JSON), so that header is mandatory, not just
+// polite.
 //
 // Fetches one player at a time, by RSN, at signup time (see
 // routes/bingos.ts / playerStatsService.ts) — not a live bulk group fetch
 // at draft time anymore. That earlier approach needed WOM_GROUP_ID and had
 // to work around WOM's 20 req/min unauthenticated limit for large pools;
 // persisting each signup's data once, spread naturally over the signup
-// period, sidesteps both. No env var needed — this is unconditionally on.
+// period, sidesteps both. Optional WOM_API_KEY is sent as `x-api-key` and
+// raises the cap from 20 to 100 req/min (https://docs.wiseoldman.net/api).
 import type { AccountType } from "@bingo/shared";
 import { USER_AGENT } from "../config";
 
@@ -22,16 +23,19 @@ export class WomClient {
   // short-circuit locally instead of hitting WOM.
   private rateLimitedUntil = 0;
 
-  constructor(private fetchImpl: FetchLike = fetch) {}
+  constructor(
+    private fetchImpl: FetchLike = fetch,
+    private apiKey: string | null = process.env.WOM_API_KEY || null,
+  ) {}
 
   /** Raw WOM player object for the given RSN, or null if unranked/unreachable/rate-limited. Caller persists it verbatim. */
   async getPlayerByUsername(rsn: string): Promise<unknown | null> {
     if (Date.now() < this.rateLimitedUntil) return null;
 
     try {
-      const res = await this.fetchImpl(`${WOM_BASE_URL}/players/${encodeURIComponent(rsn)}`, {
-        headers: { "User-Agent": WOM_USER_AGENT },
-      });
+      const headers: Record<string, string> = { "User-Agent": WOM_USER_AGENT };
+      if (this.apiKey) headers["x-api-key"] = this.apiKey;
+      const res = await this.fetchImpl(`${WOM_BASE_URL}/players/${encodeURIComponent(rsn)}`, { headers });
       if (res.ok) return await res.json();
       if (res.status === 429) {
         const retryAfterSec = Number(res.headers.get("retry-after"));

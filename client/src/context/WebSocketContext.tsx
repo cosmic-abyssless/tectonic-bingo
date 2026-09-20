@@ -8,6 +8,7 @@ const WebSocketContext = createContext<{
   subscribe: (fn: Listener) => () => void;
   statsRefreshingSignupIds: ReadonlySet<string>;
   statsRefreshingUserIds: ReadonlySet<string>;
+  markStatsRefreshing: (signupId: string, refreshing: boolean) => void;
 } | null>(null);
 
 function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
@@ -87,6 +88,15 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const [statsRefreshingSignupIds, setStatsRefreshingSignupIds] = useState<ReadonlySet<string>>(() => new Set());
   const [statsRefreshingUserIds, setStatsRefreshingUserIds] = useState<ReadonlySet<string>>(() => new Set());
 
+  const markStatsRefreshing = useCallback((signupId: string, refreshing: boolean) => {
+    setStatsRefreshingSignupIds((prev) => {
+      const next = new Set(prev);
+      if (refreshing) next.add(signupId);
+      else next.delete(signupId);
+      return next;
+    });
+  }, []);
+
   const applyStatsRefreshing = useCallback((event: BroadcastEvent) => {
     if (event.type !== "signup_changed") return;
     const { signupId, userId, statsRefreshing } = event.payload;
@@ -156,7 +166,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <WebSocketContext.Provider value={{ subscribe, statsRefreshingSignupIds, statsRefreshingUserIds }}>{children}</WebSocketContext.Provider>
+    <WebSocketContext.Provider value={{ subscribe, statsRefreshingSignupIds, statsRefreshingUserIds, markStatsRefreshing }}>{children}</WebSocketContext.Provider>
   );
 }
 
@@ -178,4 +188,10 @@ export function useStatsRefreshingUserIds(): ReadonlySet<string> {
   const ctx = useContext(WebSocketContext);
   if (!ctx) throw new Error("useStatsRefreshingUserIds must be used within WebSocketProvider");
   return ctx.statsRefreshingUserIds;
+}
+
+export function useMarkStatsRefreshing(): (signupId: string, refreshing: boolean) => void {
+  const ctx = useContext(WebSocketContext);
+  if (!ctx) throw new Error("useMarkStatsRefreshing must be used within WebSocketProvider");
+  return ctx.markStatsRefreshing;
 }

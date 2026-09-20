@@ -7,6 +7,7 @@ import { dissolveForUser, getAcceptedPairs } from "./pairingService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 import { parseStoredCaStats } from "./combatAchievements";
+import { parseWomSummary } from "./womService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -35,6 +36,7 @@ const SIGNUP_CA_COLS = {
   caCurrentJson: signups.caCurrentJson,
   caPeakJson: signups.caPeakJson,
   statsFetchedAt: signups.statsFetchedAt,
+  womDataJson: signups.womDataJson,
 };
 
 export function getQuestions(db: Db, bingoId: string) {
@@ -143,7 +145,8 @@ export function getSignupForUser(db: Db, bingoId: string, userId: string) {
     .where(and(eq(signups.bingoId, bingoId), eq(signups.userId, userId)))
     .get();
   if (!row) return null;
-  const { caCurrentJson, caPeakJson, statsFetchedAt, ...signup } = row;
+  const { caCurrentJson, caPeakJson, statsFetchedAt, womDataJson, ...signup } = row;
+  void womDataJson;
   const answers = db.select().from(signupAnswers).where(eq(signupAnswers.signupId, signup.id)).all();
   return { signup, answers, caCurrentJson, caPeakJson, statsFetchedAt };
 }
@@ -321,15 +324,19 @@ export function getAllSignups(db: Db, bingoId: string) {
     for (const userId of userIds) pairingByUserId.set(userId, pairing);
   }
 
-  return rows.map((r) => ({
-    signup: r.signup,
-    user: r.user,
-    answers: answers.filter((a) => a.signupId === r.signup.id),
-    collectedByUser: r.signup.buyinCollectedByUserId ? (collectorById.get(r.signup.buyinCollectedByUserId) ?? null) : null,
-    pairing: pairingByUserId.get(r.signup.userId) ?? null,
-    caCurrent: parseStoredCaStats(r.caCurrentJson),
-    caPeak: parseStoredCaStats(r.caPeakJson),
-  }));
+  return rows.map((r) => {
+    const womSummary = parseWomSummary(r.womDataJson ? JSON.parse(r.womDataJson) : null);
+    return {
+      signup: r.signup,
+      user: r.user,
+      answers: answers.filter((a) => a.signupId === r.signup.id),
+      collectedByUser: r.signup.buyinCollectedByUserId ? (collectorById.get(r.signup.buyinCollectedByUserId) ?? null) : null,
+      pairing: pairingByUserId.get(r.signup.userId) ?? null,
+      caCurrent: parseStoredCaStats(r.caCurrentJson),
+      caPeak: parseStoredCaStats(r.caPeakJson),
+      womStats: womSummary ? { ehb: womSummary.ehb, ehp: womSummary.ehp } : null,
+    };
+  });
 }
 
 // Active (non-withdrawn) signups with buy-in marked received — the basis

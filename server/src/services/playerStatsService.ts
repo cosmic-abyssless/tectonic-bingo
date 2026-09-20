@@ -108,11 +108,17 @@ export function getSignupStats(db: Db, bingoId: string, userId: string): (Stored
 }
 
 export async function fetchAndPersistPlayerStats(db: Db, signupId: string, rsn: string, opts: FetchPlayerStatsOpts = {}): Promise<void> {
+  const signup = db.select({ bingoId: signups.bingoId, userId: signups.userId }).from(signups).where(eq(signups.id, signupId)).get();
   // Test hook — skips WOM/RuneProfile/Tectonic network calls entirely. Used
   // by the E2E suite so a real signup during tests never hits those live APIs.
-  if (process.env.PLAYER_STATS_FETCH_DISABLED === "true") return;
+  // Drop any in-flight spinner the refresh button already raised.
+  if (process.env.PLAYER_STATS_FETCH_DISABLED === "true") {
+    if (signup?.bingoId) {
+      broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: { signupId, userId: signup.userId, statsRefreshing: false } });
+    }
+    return;
+  }
 
-  const signup = db.select({ bingoId: signups.bingoId, userId: signups.userId }).from(signups).where(eq(signups.id, signupId)).get();
   if (signup?.bingoId) {
     broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: { signupId, userId: signup.userId, statsRefreshing: true } });
   }
