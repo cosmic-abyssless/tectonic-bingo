@@ -15,6 +15,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "DELETE /api/bingos/:slug/signup/pairing/:pairingId": ["pairing.cancelled"],
   "POST /api/bingos/:slug/signup/pairing/:pairingId/respond": ["pairing.declined", "pairing.accepted"],
   "POST /api/bingos/:slug/draft/pick": ["draft.pick"],
+  "POST /api/bingos/:slug/draft/undo": ["draft.pick_undone"],
   "PUT /api/bingos/:slug/draft/ratings/:signupId": ["draft.rating_set"],
   "PUT /api/bingos/:slug/tiles/:tileId/tasks/:taskId/interest": ["team.tile_interest_set"],
   "PATCH /api/bingos/:slug/teams/:teamId": ["team.updated"],

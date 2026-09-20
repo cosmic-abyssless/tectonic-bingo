@@ -5,7 +5,7 @@ import { formatSignupAnswer, type DraftPoolEntry, type DraftTeam, type DraftUnit
 import { CaCell, WomCell } from "../signup/caStats";
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { useAuth } from "../../context/AuthContext";
-import { queryKeys, useBingo, useDraftState, useMakePick, useSetDraftOrder, useSetPickRating, useShuffleDraftOrder, useSignupQuestions, useStartDraft } from "../../api/queries";
+import { queryKeys, useBingo, useDraftState, useMakePick, useSetDraftOrder, useSetPickRating, useShuffleDraftOrder, useSignupQuestions, useStartDraft, useUndoPick } from "../../api/queries";
 import { discordName } from "../ui/user";
 import { Button, IconButton } from "../ui/Button";
 import { Badge, Card, Notice } from "../ui/Card";
@@ -20,6 +20,7 @@ import { DraftPickReveal } from "./DraftPickReveal";
 import { namesForPick } from "./revealMath";
 import { useDraftReveals } from "./useDraftReveals";
 import { useElementHeight } from "./useElementHeight";
+import { UndoPick } from "./UndoPick";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { AchievementIcons, PlaceBreakdown, TierBadge } from "../tectonic/ProfileBadges";
 import { PlayerName } from "../tectonic/PlayerName";
@@ -369,6 +370,8 @@ export function DraftRoom({ slug }: { slug: string }) {
   const setOrder = useSetDraftOrder(slug);
   const startDraft = useStartDraft(slug);
   const makePick = useMakePick(slug);
+  const undoPick = useUndoPick(slug);
+  const [undoError, setUndoError] = useState<string | null>(null);
   const setRating = useSetPickRating(slug);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [pickError, setPickError] = useState<string | null>(null);
@@ -422,6 +425,11 @@ export function DraftRoom({ slug }: { slug: string }) {
   const revealing = lockMs > 0;
   const revealedTeam = reveals.active ? (state.teams.find((t) => t.id === reveals.active!.teamId) ?? null) : null;
   const canControlOrder = isAdmin && !scouting && state.picks.length === 0;
+  // Only the latest pick can be taken back (an admin's fix for a misclick).
+  const latestPickNumber = state.picks.reduce((max, p) => Math.max(max, p.pickNumber), 0);
+  const latestPick = state.picks.find((p) => p.pickNumber === latestPickNumber);
+  const latestPickTeam = latestPick ? (state.teams.find((t) => t.id === latestPick.teamId) ?? null) : null;
+  const canUndo = isAdmin && !scouting && state.draftStarted && !!latestPick && !!latestPickTeam;
   const busy = shuffleOrder.isPending || setOrder.isPending || startDraft.isPending;
 
   async function handleShuffle() {
@@ -458,6 +466,17 @@ export function DraftRoom({ slug }: { slug: string }) {
       await makePick.mutateAsync(pickedUserId);
     } catch (e: unknown) {
       setPickError(e instanceof Error ? e.message : "Failed to make that pick");
+    }
+  }
+
+  async function handleUndo(): Promise<boolean> {
+    setUndoError(null);
+    try {
+      await undoPick.mutateAsync();
+      return true;
+    } catch (e: unknown) {
+      setUndoError(e instanceof Error ? e.message : "Failed to undo that pick");
+      return false;
     }
   }
 
@@ -540,6 +559,19 @@ export function DraftRoom({ slug }: { slug: string }) {
             </>
           )}
         </Notice>
+      )}
+
+      {canUndo && (
+        <UndoPick
+          // Reset the confirmation whenever the latest pick changes underneath it.
+          key={latestPickNumber}
+          pickNumber={latestPickNumber}
+          names={namesForPick(state.picks, latestPickNumber)}
+          teamName={latestPickTeam!.name}
+          busy={undoPick.isPending}
+          error={undoError}
+          onUndo={handleUndo}
+        />
       )}
 
       {isMyTurn && <Notice tone="ok">It's your turn to pick.</Notice>}

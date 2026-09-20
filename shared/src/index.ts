@@ -855,6 +855,8 @@ export type BroadcastEvent =
   | { type: "draft_order_shuffled"; bingoId: string; payload: { lockedUntil: string; order: { teamId: string; draftOrder: number }[] } }
   | { type: "draft_order_set"; bingoId: string; payload: { order: { teamId: string; draftOrder: number }[] } }
   | { type: "draft_pick"; bingoId: string; payload: { pickNumber: number; teamId: string; userIds: string[] } }
+  // An admin took back the latest pick; its players are back in the pool.
+  | { type: "draft_pick_undone"; bingoId: string; payload: { pickNumber: number; teamId: string; userIds: string[] } }
   // A team lead starred/noted a signup. Other leads of the same team refetch
   // draft state; the rating itself stays behind GET /draft's auth.
   | { type: "draft_rating_changed"; bingoId: string; payload: { teamId: string } }

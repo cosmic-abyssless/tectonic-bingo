@@ -7,7 +7,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createTeam } from "./teamService";
 import { createSignup } from "./signupService";
 import { adminPair } from "./pairingService";
-import { canViewDraftRoom, draftRoomForbiddenMessage, getDraftState, getLeftoverUserIds, getTeamRatings, makePick, pickOrderTeamIndex, setDraftOrder, setPickRating, shuffleDraftOrder, startDraft } from "./draftService";
+import { canViewDraftRoom, draftRoomForbiddenMessage, getDraftState, getLeftoverUserIds, getTeamRatings, makePick, pickOrderTeamIndex, setDraftOrder, setPickRating, shuffleDraftOrder, startDraft, undoLastPick } from "./draftService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -325,6 +325,89 @@ describe("makePick", () => {
   });
 });
 
+describe("undoLastPick", () => {
+  function setup() {
+    const bingo = seedBingo();
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
+    createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, name: "A" });
+    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
+    const p1 = seedUser("p1");
+    const p2 = seedUser("p2");
+    for (const p of [p1, p2]) createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p.id, rsn: p.discordUsername, answers: [] });
+    beginDraft(bingo);
+    const teams = db.select().from(schema.teams).where(eq(schema.teams.bingoId, bingo.id)).all();
+    const admin = seedUser("site-admin");
+    return { bingo, first: teams.find((t) => t.draftOrder === 1)!, second: teams.find((t) => t.draftOrder === 2)!, p1, p2, admin };
+  }
+  const membersOf = (teamId: string) => db.select().from(schema.teamMembers).where(eq(schema.teamMembers.teamId, teamId)).all();
+
+  it("takes back the latest pick: the player leaves the team, returns to the pool and the team is on the clock again", () => {
+    const { bingo, first, second, p1, p2, admin } = setup();
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    makePick(db, { bingo, pickedUserId: p2.id, actingUserId: second.captainUserId, actingIsAdmin: false });
+
+    const undone = undoLastPick(db, { bingo, actingUserId: admin.id, actingIsAdmin: true });
+    expect(undone).toEqual({ pickNumber: 2, teamId: second.id, userIds: [p2.id] });
+
+    const state = getDraftState(db, bingo, { includeAnswers: false });
+    expect(state.picks.map((p) => p.userId)).toEqual([p1.id]);
+    expect(state.pool.flatMap((u) => u.entries.map((e) => e.user.id))).toEqual([p2.id]);
+    expect(state.currentPick).toMatchObject({ pickNumber: 2, teamId: second.id });
+    expect(membersOf(second.id).map((m) => m.userId)).toEqual([second.captainUserId]);
+    expect(membersOf(first.id).map((m) => m.userId)).toContain(p1.id);
+  });
+
+  it("lets the same or another team pick the player again", () => {
+    const { bingo, first, second, p1, admin } = setup();
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    undoLastPick(db, { bingo, actingUserId: admin.id, actingIsAdmin: true });
+    const again = makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    expect(again).toMatchObject([{ pickNumber: 1, teamId: first.id, userId: p1.id }]);
+    expect(second.id).not.toBe(first.id);
+  });
+
+  it("can undo several picks in a row, newest first", () => {
+    const { bingo, first, second, p1, p2, admin } = setup();
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    makePick(db, { bingo, pickedUserId: p2.id, actingUserId: second.captainUserId, actingIsAdmin: false });
+    expect(undoLastPick(db, { bingo, actingUserId: admin.id, actingIsAdmin: true }).pickNumber).toBe(2);
+    expect(undoLastPick(db, { bingo, actingUserId: admin.id, actingIsAdmin: true }).pickNumber).toBe(1);
+    expect(() => undoLastPick(db, { bingo, actingUserId: admin.id, actingIsAdmin: true })).toThrow(/no picks to undo/i);
+    expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick).toMatchObject({ pickNumber: 1, teamId: first.id });
+  });
+
+  it("is for site admins only, even the team's own captain", () => {
+    const { bingo, first, p1 } = setup();
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    let error: unknown;
+    try {
+      undoLastPick(db, { bingo, actingUserId: first.captainUserId, actingIsAdmin: false });
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(ServiceError);
+    expect((error as ServiceError).status).toBe(403);
+    expect(getDraftState(db, bingo, { includeAnswers: false }).picks).toHaveLength(1);
+  });
+
+  it("only works during the draft stage", () => {
+    const { bingo, first, p1, admin } = setup();
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    expect(() => undoLastPick(db, { bingo: { ...bingo, stage: "reveal" }, actingUserId: admin.id, actingIsAdmin: true })).toThrow(/draft stage/i);
+    expect(getDraftState(db, bingo, { includeAnswers: false }).picks).toHaveLength(1);
+  });
+
+  it("writes an audit entry naming who was taken back", () => {
+    const { bingo, first, p1, admin } = setup();
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    undoLastPick(db, { bingo, actingUserId: admin.id, actingIsAdmin: true });
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.pick_undone")).get()!;
+    expect(row.teamId).toBe(first.id);
+    expect(JSON.parse(row.details)).toMatchObject({ pickNumber: 1, userIds: [p1.id], displayNames: ["p1"], pair: false });
+  });
+});
+
 describe("getDraftState", () => {
   it("excludes drafted players from the pool and reports the current pick", () => {
     const bingo = seedBingo();
@@ -454,6 +537,24 @@ describe("duo mode", () => {
     const state = getDraftState(db, bingo, { includeAnswers: false });
     expect(state.currentPick).toMatchObject({ pickNumber: 2, teamId: second.id });
     expect(state.pool).toHaveLength(1);
+  });
+
+  it("undoes a whole pair at once", () => {
+    const { bingo, first, p1, p2 } = setupDuo();
+    const admin = seedUser("site-admin");
+    makePick(db, { bingo, pickedUserId: p2.id, actingUserId: admin.id, actingIsAdmin: true });
+    const undone = undoLastPick(db, { bingo, actingUserId: admin.id, actingIsAdmin: true });
+    expect(undone.userIds.sort()).toEqual([p1.id, p2.id].sort());
+
+    const state = getDraftState(db, bingo, { includeAnswers: false });
+    expect(state.picks).toHaveLength(0);
+    expect(state.currentPick).toMatchObject({ pickNumber: 1, teamId: first.id });
+    expect(state.pool.find((u) => u.entries.length === 2)?.entries.map((e) => e.user.id).sort()).toEqual([p1.id, p2.id].sort());
+    const members = db.select({ userId: schema.teamMembers.userId }).from(schema.teamMembers).where(eq(schema.teamMembers.teamId, first.id)).all().map((m) => m.userId);
+    expect(members).not.toContain(p1.id);
+    expect(members).not.toContain(p2.id);
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.pick_undone")).get()!;
+    expect(JSON.parse(row.details)).toMatchObject({ pair: true, displayNames: expect.arrayContaining(["p1", "p2"]) });
   });
 
   it("lets the co-captain pick for the team", () => {

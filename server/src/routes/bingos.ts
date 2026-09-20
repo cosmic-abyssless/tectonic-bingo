@@ -623,6 +623,19 @@ router.post(
   }),
 );
 
+// A site admin takes back the latest pick (a misclick). Its players go back into the pool.
+router.post(
+  "/:slug/draft/undo",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const bingo = req.bingo!;
+    const undone = draftService.undoLastPick(db, { bingo, actingUserId: req.user!.id, actingIsAdmin: req.user!.isAdmin });
+    broadcast({ type: "draft_pick_undone", bingoId: bingo.id, payload: undone });
+    res.json({ undone });
+  }),
+);
+
 // Captain/co-captain self-service rename — mods can already rename any team
 // from the admin panel; this is the player-facing equivalent, name-only.
 router.patch(

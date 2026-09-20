@@ -3,7 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { playerName } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { bingos, draftPicks, pickRatings, signupAnswers, signups, teamMembers, teams, users } from "../db/schema";
+import { bingos, draftPicks, pickRatings, signupAnswers, signups, teamMembers, teams, tileInterests, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
 import { rsnsInBingo } from "./playerNames";
@@ -331,6 +331,14 @@ export function startDraft(db: Db, bingo: Bingo) {
   return teamsOut;
 }
 
+// Players are named by their RSN within a bingo, falling back to their Discord name.
+function displayNamesFor(db: Db, bingoId: string, userIds: string[]): string[] {
+  const userRows = db.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, userIds)).all();
+  const rsns = rsnsInBingo(db, bingoId, userIds);
+  const displayNameById = new Map(userRows.map((u) => [u.id, playerName({ ...u, rsn: rsns.get(u.id) })]));
+  return userIds.map((id) => displayNameById.get(id) ?? "Unknown");
+}
+
 export interface MakePickParams {
   bingo: Bingo;
   pickedUserId: string;
@@ -401,10 +409,7 @@ export function makePick(db: Db, params: MakePickParams) {
     );
     for (const userId of userIds) tx.insert(teamMembers).values({ teamId: currentTeam.id, userId, isCaptain: false, joinedAt: clockNow() }).run();
 
-    const userRows = tx.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, userIds)).all();
-    const rsns = rsnsInBingo(tx, bingo.id, userIds);
-    const displayNameById = new Map(userRows.map((u) => [u.id, playerName({ ...u, rsn: rsns.get(u.id) })]));
-    const displayNames = userIds.map((id) => displayNameById.get(id) ?? "Unknown");
+    const displayNames = displayNamesFor(tx, bingo.id, userIds);
     audit(tx, {
       action: "draft.pick",
       bingoId: bingo.id,
@@ -414,6 +419,50 @@ export function makePick(db: Db, params: MakePickParams) {
       onBehalfOfUserId: actingIsAdmin && !isLead ? currentTeam.captainUserId : null,
     });
     return picks;
+  });
+}
+
+export interface UndoPickParams {
+  bingo: Bingo;
+  actingUserId: string;
+  actingIsAdmin: boolean;
+}
+
+// Takes back the most recent pick (both players of a duo pair): they leave the team and go back into the pool, and
+// that team is on the clock again. Only the latest pick can be undone, so the snake order for everyone else never shifts.
+// Site admins only, and only while the bingo is still in the draft stage.
+export function undoLastPick(db: Db, params: UndoPickParams) {
+  const { bingo, actingUserId, actingIsAdmin } = params;
+  if (!actingIsAdmin) throw new ServiceError(403, "Only site admins can undo a pick");
+  if (bingo.stage !== "draft") {
+    throw new ServiceError(400, `Picks can only be undone during the draft stage (current stage: ${bingo.stage})`);
+  }
+
+  return db.transaction((tx) => {
+    const rows = tx.select().from(draftPicks).where(eq(draftPicks.bingoId, bingo.id)).all();
+    if (rows.length === 0) throw new ServiceError(400, "There are no picks to undo");
+    const pickNumber = rows.reduce((max, r) => Math.max(max, r.pickNumber), 0);
+    const undone = rows.filter((r) => r.pickNumber === pickNumber);
+    const teamId = undone[0]!.teamId;
+    const userIds = undone.map((r) => r.userId);
+
+    const displayNames = displayNamesFor(tx, bingo.id, userIds);
+    for (const userId of userIds) {
+      tx.delete(tileInterests).where(and(eq(tileInterests.teamId, teamId), eq(tileInterests.userId, userId))).run();
+      tx.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).run();
+    }
+    tx.delete(draftPicks).where(inArray(draftPicks.id, undone.map((r) => r.id))).run();
+
+    audit(tx, {
+      action: "draft.pick_undone",
+      bingoId: bingo.id,
+      entity: { type: "user", id: userIds[0]!, label: displayNames.join(" & ") },
+      teamId,
+      details: { pickNumber, userIds, displayNames, pair: userIds.length > 1 },
+      onBehalfOfUserId: null,
+    });
+    log.info("draft pick undone", { bingoId: bingo.id, pickNumber, teamId, actingUserId });
+    return { pickNumber, teamId, userIds };
   });
 }
 

@@ -142,6 +142,7 @@ export interface AuditDetailsMap {
   "draft.order_shuffled": { order: { teamId: string; name: string; draftOrder: number }[] };
   "draft.order_set": { order: { teamId: string; name: string; draftOrder: number }[] };
   "draft.pick": { pickNumber: number; userIds: string[]; displayNames: string[]; pair: boolean };
+  "draft.pick_undone": { pickNumber: number; userIds: string[]; displayNames: string[]; pair: boolean };
   "draft.rating_set": { rsn: string; stars: number; hasNote: boolean; cleared: boolean };
 
   "pairing.requested": { requesterUserId: string; targetDiscordId: string };
@@ -484,6 +485,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "team",
     title: "Draft pick",
     label: (i) => `${actor(i)} drafted ${i.details.displayNames.join(" & ")}${onBehalf(i)}`,
+  },
+  "draft.pick_undone": {
+    category: "draft",
+    tone: "warn",
+    visibility: "team",
+    title: "Draft pick undone",
+    label: (i) => `${actor(i)} undid the pick of ${i.details.displayNames.join(" & ")}`,
   },
   "draft.rating_set": {
     category: "draft",

@@ -20,11 +20,23 @@ export function useDraftReveals(bingoId: string | undefined, state: DraftState |
   const [arrived, setArrived] = useState(false);
 
   useWebSocketEvent((event) => {
-    if (event.type !== "draft_pick" || event.bingoId !== bingoId) return;
+    if (event.bingoId !== bingoId) return;
+    if (event.type === "draft_pick_undone") {
+      // The pick was taken back: forget its reveal, whether it is waiting or already on screen.
+      const { pickNumber } = event.payload;
+      setQueue((q) => q.filter((p) => p.pickNumber !== pickNumber));
+      setActive((a) => (a?.pickNumber === pickNumber ? null : a));
+      return;
+    }
+    if (event.type !== "draft_pick") return;
     if (reducedMotion || document.visibilityState !== "visible") return;
     const { pickNumber, teamId } = event.payload;
     setQueue((q) => (q.length >= MAX_QUEUED_REVEALS || q.some((p) => p.pickNumber === pickNumber) ? q : [...q, { pickNumber, teamId, queuedAt: Date.now() }]));
   });
+
+  useEffect(() => {
+    if (!active) setArrived(false);
+  }, [active]);
 
   // Start the next reveal once nothing is playing and the pick's players have loaded into the draft state.
   useEffect(() => {

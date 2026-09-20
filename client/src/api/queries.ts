@@ -422,6 +422,18 @@ export function useStartDraft(slug: string) {
   });
 }
 
+// Site admins only: takes back the latest pick.
+export function useUndoPick(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ undone: { pickNumber: number; teamId: string; userIds: string[] } }>(`/api/bingos/${slug}/draft/undo`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
+    },
+  });
+}
+
 export function useMakePick(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
