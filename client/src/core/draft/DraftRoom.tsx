@@ -107,10 +107,10 @@ function ProfileCells({ profile, shown }: { profile: TectonicProfile | null; sho
 // background so the columns scrolling under it are hidden, and it draws the row divider itself (a sticky cell paints
 // over the table's collapsed borders) plus a soft edge on its left.
 // (Whole class strings, not built up: Tailwind only generates classes it can find written out in the source.)
-const STICKY_HEADER = "sticky right-0 top-0 z-20 bg-surface shadow-[inset_0_-1px_0_0_var(--color-outline),-8px_0_8px_-8px_rgb(0_0_0/0.25)]";
+const STICKY_HEADER = "sticky right-0 top-0 z-20 bg-surface shadow-[inset_0_-1px_0_0_var(--color-outline),-8px_0_8px_-8px_var(--color-shade)]";
 // The column headings stay at the top of the table's own scroll area, again drawing their divider themselves.
 const STICKY_TOP = "sticky top-0 z-10 bg-surface shadow-[inset_0_-1px_0_0_var(--color-outline)]";
-const STICKY_CELL = "sticky right-0 bg-surface shadow-[inset_0_1px_0_0_var(--color-outline),-8px_0_8px_-8px_rgb(0_0_0/0.25)]";
+const STICKY_CELL = "sticky right-0 bg-surface shadow-[inset_0_1px_0_0_var(--color-outline),-8px_0_8px_-8px_var(--color-shade)]";
 
 function PoolTable({
   pool,
@@ -544,7 +544,7 @@ export function DraftRoom({ slug }: { slug: string }) {
 
       {isMyTurn && <Notice tone="ok">It's your turn to pick.</Notice>}
 
-      <section ref={setTeamsPanel} className="sticky z-10 -mx-6 bg-background px-6 pb-3 pt-2 shadow-[0_6px_8px_-6px_rgb(0_0_0/0.3)]" style={{ top: headerHeight }}>
+      <section ref={setTeamsPanel} className="sticky z-10 -mx-6 bg-background px-6 pb-3 pt-2 shadow-[0_6px_8px_-6px_var(--color-shade)]" style={{ top: headerHeight }}>
         <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
           Teams
         </h3>

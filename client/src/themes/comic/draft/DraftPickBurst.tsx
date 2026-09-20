@@ -8,8 +8,8 @@ export function DraftPickBurst({ names, teamName, teamColor }: { names: string[]
   const size = burstLetteringSize(names);
   return (
     <div className="flex flex-col items-center">
-      {/* The fill is always yellow, so the lettering is always black: the palette's ink turns light in the dark schemes. */}
-      <Burst className="w-[min(86vw,26rem)]" fill={colors.YELLOW} color="#000" rotate={0} spikes={16}>
+      {/* Lettering for the yellow fill (the palette's ink turns light in the dark schemes, which is unreadable on it). */}
+      <Burst className="w-[min(86vw,26rem)]" fill={colors.YELLOW} color={colors.ON_YELLOW} rotate={0} spikes={16}>
         <div className="flex max-w-[62%] flex-col items-center gap-[2cqw]">
           <div style={{ fontSize: "9cqw" }}>Drafted!</div>
           {names.map((name) => (

@@ -44,6 +44,7 @@
   --color-info: #2563eb;
 
   --color-scrim: #000000; /* modal backdrop — same in both schemes, not overridden below */
+  --color-shade: rgb(0 0 0 / 0.28); /* soft edge shadow under sticky rows and columns — same in both schemes, not overridden below */
 
   /* Placement medals (clan records, event podiums) — same in both schemes, not overridden below. */
   --color-gold: #fbbf24;
