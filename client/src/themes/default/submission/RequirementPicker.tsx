@@ -24,6 +24,16 @@ export function RequirementPicker({
         />
       </Field>
 
+      {requirement.locked.length > 0 && (
+        <ul className="-mt-1 space-y-0.5 text-xs text-on-surface-subtle">
+          {requirement.locked.map((item) => (
+            <li key={item.label}>
+              {item.label}: {item.reason}
+            </li>
+          ))}
+        </ul>
+      )}
+
       {quantity.visible && (
         <Field label="How many are you submitting?" hint={`${quantity.needed} needed in total`}>
           <Input

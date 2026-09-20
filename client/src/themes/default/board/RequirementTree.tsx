@@ -29,17 +29,19 @@ function LeafOrSumRow({ node }: { node: RequirementNodeModel }) {
       {node.items.length > 1 ? (
         <ul className="space-y-0.5">
           {node.items.map((item) => (
-            <li key={item.name}>
+            <li key={item.name} className={item.lockedBy ? "text-on-surface-subtle" : undefined}>
               <ItemIcon url={item.iconUrl} className={iconClass} />
               {item.name}
               {item.count > 0 && <span className="num ml-1.5 text-xs font-medium text-ok">×{item.count}</span>}
+              {item.lockedBy && <span className="ml-1.5 text-xs text-warn">{item.lockedBy}</span>}
             </li>
           ))}
         </ul>
       ) : (
-        <span>
+        <span className={node.lockedBy ? "text-on-surface-subtle" : undefined}>
           <ItemIcon url={iconUrl} className={iconClass} />
           {node.label}
+          {node.lockedBy && <span className="ml-1.5 text-xs text-warn">{node.lockedBy}</span>}
         </span>
       )}
       {node.complete && <Check />}

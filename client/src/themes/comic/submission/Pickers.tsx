@@ -1,6 +1,7 @@
 import type { SubmissionFlowModel } from "../../../headless/types";
 import { Input } from "../../../core/ui/Field";
 import { SearchableSelect } from "../../../core/ui/SearchableSelect";
+import { useComic } from "../ui/useComic";
 import { ComicField } from "./ComicField";
 
 export function TilePicker({ tile }: { tile: SubmissionFlowModel["tile"] }) {
@@ -12,6 +13,7 @@ export function TilePicker({ tile }: { tile: SubmissionFlowModel["tile"] }) {
 }
 
 export function RequirementPicker({ requirement, quantity }: { requirement: SubmissionFlowModel["requirement"]; quantity: SubmissionFlowModel["quantity"] }) {
+  const { colors } = useComic();
   if (!requirement.visible) return null;
   return (
     <>
@@ -25,6 +27,16 @@ export function RequirementPicker({ requirement, quantity }: { requirement: Subm
           onChange={requirement.select}
         />
       </ComicField>
+
+      {requirement.locked.length > 0 && (
+        <ul className="-mt-1 space-y-0.5 text-xs italic" style={{ color: colors.INK_SUBTLE }}>
+          {requirement.locked.map((item) => (
+            <li key={item.label}>
+              {item.label}: {item.reason}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {quantity.visible && (
         <ComicField label="Quantity" hint={`${quantity.needed} needed in total`}>

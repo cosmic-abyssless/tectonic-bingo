@@ -57,10 +57,12 @@ export interface RequirementNodeModel {
   kind: NodeKind;
   /** leafLabel() for leaves, conditionHeading() for composites. */
   label: string;
-  /** SUM only: the items that count toward it, for themes that list them instead of showing the joined label — each with how many the team has had approved (duplicates count). */
-  items: { name: string; iconUrl: string | null; count: number }[];
+  /** SUM only: the items that count toward it, for themes that list them instead of showing the joined label — each with how many the team has had approved (duplicates count), and whether the team has used the item elsewhere (`lockedBy`, e.g. "Used on DT2 ISSUE 1"; see exclusive items). */
+  items: { name: string; iconUrl: string | null; count: number; lockedBy: string | null }[];
   /** ITEM leaves only: the item's wiki icon (via our cache), when it has a name to look up. */
   iconUrl: string | null;
+  /** ITEM leaves only: set when the team has used this item somewhere else and a rule says it counts in one place only, e.g. "Used on DT2 ISSUE 1". Not `dim`: it isn't done, it is unavailable. */
+  lockedBy: string | null;
   isLeaf: boolean;
   status: NodeStatus;
   complete: boolean;
@@ -348,6 +350,8 @@ export interface SubmissionFlowModel {
     visible: boolean;
     selectedId: string;
     options: { id: string; label: string }[];
+    /** Items of the chosen part left out of `options` because the team already used them elsewhere, with why. */
+    locked: { label: string; reason: string }[];
     readOnly: boolean;
     select(id: string): void;
     /** `${tileId}-${taskId}` — the SearchableSelect remount key. */

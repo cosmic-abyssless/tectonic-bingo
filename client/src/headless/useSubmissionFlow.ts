@@ -4,6 +4,7 @@ import { useAnalyzeScreenshot, useCreateSubmission } from "../api/queries";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete } from "../core/board/taskClaims";
 import { collectLeaves, collectLeavesWithAncestors } from "../core/board/requirementTree";
 import { leafLabel } from "../core/board/labels";
+import { lockReason } from "../core/board/exclusivity";
 import { deriveBoardNodeStatuses, getFreezeUnlockAt } from "../core/board/tileProgress";
 import { getAvailableTasks } from "./submissionFlowLogic";
 import { useBingoPageRaw } from "./BingoPageProvider";
@@ -34,7 +35,7 @@ export function useSubmissionFlow({
   onClose: () => void;
   onSuccess: () => void;
 }): SubmissionFlowModel {
-  const { slug, bingo, tiles, categories, nodeStates, teamSubmissions } = useBingoPageRaw();
+  const { slug, bingo, tiles, categories, nodeStates, teamSubmissions, locks } = useBingoPageRaw();
 
   const [selectedTileId, setSelectedTileId] = useState(initialTileId ?? "");
   const [selectedTaskId, setSelectedTaskId] = useState(initialTileId ? (initialTaskId ?? "") : "");
@@ -82,8 +83,11 @@ export function useSubmissionFlow({
   // sibling claim doesn't hide the rest, since a mod could yet reject it.
   const ancestorAlreadySatisfied = (ancestors: GraphNode[]) => ancestors.some((a) => statusByNodeId.get(a.id) === "completed");
 
+  // Items the team already used somewhere else (exclusive items) can't be claimed here: they are left out of the
+  // options and listed under the picker with why.
   const openLeaves: GraphNode[] = taskLeaves
     .filter(({ leaf }) => leaf.kind === "ITEM")
+    .filter(({ leaf }) => !locks.has(leaf.id))
     .filter(({ leaf, ancestors }) => {
       // A submission may not claim the same node twice — a leaf already
       // staged in this screenshot can't be offered again (adjust its
@@ -95,6 +99,9 @@ export function useSubmissionFlow({
       return !leafComplete(leaf.id, claimMaps);
     })
     .map(({ leaf }) => leaf);
+  const lockedLeaves: { label: string; reason: string }[] = taskLeaves
+    .filter(({ leaf }) => leaf.kind === "ITEM" && locks.has(leaf.id))
+    .map(({ leaf }) => ({ label: leafLabel(leaf), reason: lockReason(locks.get(leaf.id)!) }));
   const selectedLeaf = openLeaves.find((leaf) => leaf.id === selectedNodeId);
   const selectedLeafAncestors = selectedLeaf ? taskLeaves.find((tl) => tl.leaf.id === selectedLeaf.id)?.ancestors : undefined;
   const selectedLeafParent = selectedLeafAncestors?.[selectedLeafAncestors.length - 1];
@@ -130,6 +137,7 @@ export function useSubmissionFlow({
     // — find the task (direct tile child) that owns it.
     const matchedTask = matchedTile.node.children.find((t) => collectLeaves(t).some((l) => l.id === match.nodeId));
     if (!matchedTask) return;
+    if (locks.has(match.nodeId)) return; // already used elsewhere: don't preselect something the server would refuse
     const available = getAvailableTasks(matchedTile, statusByNodeId);
     if (!available.some((t) => t.id === matchedTask.id)) return;
 
@@ -340,6 +348,7 @@ export function useSubmissionFlow({
       visible: !!selectedTile && !!currentTask && !isManualTask,
       selectedId: selectedNodeId,
       options: openLeaves.map((leaf) => ({ id: leaf.id, label: leafLabel(leaf) })),
+      locked: lockedLeaves,
       readOnly: openLeaves.length === 1,
       select: (id) => {
         setSelectedNodeId(id);
