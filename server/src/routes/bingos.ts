@@ -64,8 +64,11 @@ const analyzeUpload = imageUpload();
 
 const router = Router();
 
+// Every route here needs a login: the shell carries each team's roster (players' Discord accounts and RSNs), so
+// nothing about a bingo is served to an anonymous request (see requireLogin.test.ts).
 router.get(
   "/",
+  requireAuth,
   asyncHandler(async (_req, res) => {
     res.json({ bingos: bingoService.listBingos(db) });
   }),
@@ -73,6 +76,7 @@ router.get(
 
 router.get(
   "/:slug",
+  requireAuth,
   requireBingo,
   privateRevalidate,
   asyncHandler(async (req, res) => {
@@ -97,6 +101,7 @@ router.get(
 
 router.get(
   "/:slug/board",
+  requireAuth,
   requireBingo,
   privateRevalidate,
   asyncHandler(async (req, res) => {
@@ -278,6 +283,7 @@ router.post(
 
 router.get(
   "/:slug/signup/questions",
+  requireAuth,
   requireBingo,
   asyncHandler(async (req, res) => {
     res.json({ questions: signupService.getQuestions(db, req.bingo!.id) });
