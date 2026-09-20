@@ -189,7 +189,7 @@ key; a shared node (two `partIds`) has a combined part key.
 ### Schema and settings
 
 - `server/src/db/schema.ts`, `bingos`: `exclusivityRulesJson: text('exclusivity_rules_json').notNull().default('[]')`.
-  Generate `server/drizzle/0012_exclusivity_rules.sql`, run it on the dev DB.
+  Generate `server/drizzle/0014_exclusivity_rules.sql`, run it on the dev DB.
 - `bingoService.ts`: `parseExclusivityRules(json: string): ExclusivityRule[]`
   (tolerant: bad JSON → `[]`), `UpdateBingoSettingsParams.exclusivityRules?: ExclusivityRule[]`
   (serialize into the column; validate: `label` non-empty, `scope` in the
