@@ -19,7 +19,7 @@ This plan turns the single-event Pokémon bingo tracker into a generic, multi-bi
 | Historical Pokémon data | **Fresh start.** New schema starts empty. Archive the old SQLite file (rename to `server/bingo-v1.sqlite.bak`); do not write migration scripts for old data. |
 | Tile model | **N ordered tasks per tile.** A/B becomes the common case (2 tasks), not the schema. |
 | Signup questions | **Admin-defined per bingo** (question builder in admin panel). |
-| Stage advancement | **Manual.** Each stage has a scheduled date shown to users (countdowns), but a mod explicitly advances the stage. No auto-transitions. |
+| Stage advancement | **Manual.** Each stage has a scheduled date shown to users (countdowns), but a site admin explicitly advances the stage (a per-bingo mod cannot). No auto-transitions. |
 | Discord team roles/channels | De-scoped to the final phase (bot integration sketch only). |
 
 ## Stack (unchanged unless listed)
@@ -123,7 +123,7 @@ server/src/
 
 ### Stage machine (`bingoService`)
 
-Allowed forward transitions: `planning → signup → captains → draft → reveal → live → complete`. Mods may also step **backward one stage** (confirmation required in UI). Every transition writes a `stage_transitions` row and broadcasts `stage_changed`. Stage gates enforced **server-side** in services:
+Allowed forward transitions: `planning → signup → captains → draft → reveal → live → complete`. Site admins may also step **backward one stage** (confirmation required in UI). Per-bingo mods cannot change the stage. Every transition writes a `stage_transitions` row and broadcasts `stage_changed`. Stage gates enforced **server-side** in services:
 
 `captains` sits between `signup` and `draft`: signups close (the `signup`-only gate on create/withdraw means they're automatically closed the moment a mod advances past it) and mods assign team captains from the pool of active signups (`teamService.getCaptainCandidates`) before the snake draft starts. A captain must have an active signup for the bingo — enforced in `teamService.createTeam`, not just this stage's UI. Admins typically add a boolean signup question ("willing to captain?") to help pick, but that's just an ordinary admin-authored question — there's no structured flag for it.
 

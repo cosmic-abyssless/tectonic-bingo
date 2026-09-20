@@ -107,8 +107,10 @@ router.post(
   }),
 );
 
+// Moving a bingo between stages is for site admins only: a per-bingo mod reviews and manages, but doesn't run the event's timeline.
 router.post(
   "/stage",
+  requireAdmin,
   asyncHandler(async (req, res) => {
     const { toStage } = req.body as { toStage?: bingoService.Stage };
     if (!toStage || !bingoService.STAGE_ORDER.includes(toStage)) {

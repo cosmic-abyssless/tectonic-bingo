@@ -46,6 +46,7 @@ A site-wide administrator with permission to create, configure, and manage Bingo
 ### Moderator
 A trusted clan member whose elevated permissions are scoped to a single specific Bingo, granted by an Admin (or inherited by Site Admins).
 - **Capabilities:** Review submissions (approve / reject), view all team boards, inspect audit logs, adjust team points manually.
+- **Not:** Change the Bingo's stage or run the draft's pick order; those are for Admins. The stage read-out shows, without the buttons.
 - **Rules:** A Moderator **can** also be a Player in the same Bingo, and **is permitted** to approve their own team's submissions, as they are trusted clan members.
 
 ### Captain
