@@ -1,7 +1,7 @@
 import type { Key, Selection } from "react-aria-components";
 import { Button } from "./Button";
 import { applyColumnVisibility } from "./hiddenColumns";
-import { ChevronDownIcon } from "./icons";
+import { CheckIcon, ChevronDownIcon } from "./icons";
 import { Menu, MenuItem, MenuTrigger } from "./Menu";
 
 export interface ColumnOption {
@@ -38,6 +38,9 @@ export function ColumnPicker({
       <Menu selectionMode="multiple" shouldCloseOnSelect={false} selectedKeys={selected} onSelectionChange={handleSelectionChange} items={columns.map((c) => ({ key: c.id, label: c.label }))}>
         {(option) => (
           <MenuItem id={option.key} textValue={option.label}>
+            <span className="flex size-3.5 shrink-0 items-center justify-center">
+              {selected.has(option.key) && <CheckIcon size={14} />}
+            </span>
             <span className="min-w-0 flex-1 truncate">{option.label}</span>
           </MenuItem>
         )}
