@@ -1,6 +1,7 @@
 import { useState, type CSSProperties } from "react";
 import type { DraftPoolEntry, DraftUnit, LeftoverMode, PickRating, SignupQuestion, TectonicProfile } from "@bingo/shared";
 import { CaCell } from "../signup/caStats";
+import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { useAuth } from "../../context/AuthContext";
 import { useBingo, useDraftState, useMakePick, useSetPickRating, useSignupQuestions, useStartDraft } from "../../api/queries";
 import { displayName } from "../ui/user";
@@ -107,6 +108,7 @@ function PoolTable({
   // Leads land on their favourites first; the toggle flips to ascending.
   const sort = useTableSort<SortKey>(ratings ? "rating" : "rsn", ratings ? "desc" : "asc");
   const ratingOf = ratings ?? {};
+  const statsRefreshing = useStatsRefreshingSignupIds();
   const entries = pool.flatMap((u) => u.entries);
   // Answers are only sent to mods/captains (see draftService.getDraftState) —
   // everyone else's pool entries have answers: null, so skip those columns
@@ -115,7 +117,7 @@ function PoolTable({
   // Skip the WOM columns entirely if nobody in the pool has stats (WOM
   // integration effectively unused for this bingo), same reasoning.
   const showWomStats = entries.some((e) => e.womStats !== null);
-  const showCa = entries.some((e) => e.caCurrent !== null || e.caPeak !== null);
+  const showCa = entries.some((e) => e.caCurrent !== null || e.caPeak !== null || statsRefreshing.has(e.signup.id));
   // Clan standing columns only when tectonic-api knows at least one player.
   const showProfiles = entries.some((e) => e.tectonicProfile !== null);
   const hasPairs = pool.some((u) => u.entries.length > 1);
@@ -202,10 +204,10 @@ function PoolTable({
                     {showCa && (
                       <>
                         <td className="py-2 pr-4 text-on-surface-muted">
-                          <CaCell stats={entry.caCurrent} />
+                          <CaCell stats={entry.caCurrent} loading={statsRefreshing.has(entry.signup.id)} />
                         </td>
                         <td className="py-2 pr-4 text-on-surface-muted">
-                          <CaCell stats={entry.caPeak} />
+                          <CaCell stats={entry.caPeak} loading={statsRefreshing.has(entry.signup.id)} />
                         </td>
                       </>
                     )}

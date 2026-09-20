@@ -4,6 +4,7 @@ import { useBingo, useCreateSignup, useMySignup, useMyTectonicRsns, useSignupQue
 import { useAuth } from "../../context/AuthContext";
 import { PartnerPanel } from "./PartnerPanel";
 import { caTitle, formatCaTier } from "./caStats";
+import { useStatsRefreshingUserIds } from "../../context/WebSocketContext";
 import { Button } from "../ui/Button";
 import { Card, CardHeader, EmptyState, Notice } from "../ui/Card";
 import { Field, Input, Select, Textarea } from "../ui/Field";
@@ -68,6 +69,7 @@ function QuestionField({ question, value, onChange }: { question: SignupQuestion
 
 export function SignupForm({ slug }: { slug: string }) {
   const { user } = useAuth();
+  const statsRefreshing = useStatsRefreshingUserIds();
   const { data: shell } = useBingo(slug);
   const { data: questionsData } = useSignupQuestions(slug);
   const { data: mySignup, isLoading } = useMySignup(slug);
@@ -163,6 +165,7 @@ export function SignupForm({ slug }: { slug: string }) {
   }
 
   const pending = createSignup.isPending || updateSignup.isPending;
+  const caLoading = !!existing && (!mySignup?.statsFetchedAt || (!!user && statsRefreshing.has(user.id)));
   const rsnLabel = (
     <>
       RuneScape name
@@ -223,18 +226,18 @@ export function SignupForm({ slug }: { slug: string }) {
               <Field
                 label="Current CA"
                 hint={
-                  mySignup?.statsFetchedAt
-                    ? mySignup.caCurrent
+                  caLoading
+                    ? "Looking up RuneProfile…"
+                    : mySignup?.caCurrent
                       ? caTitle(mySignup.caCurrent)
                       : "No RuneProfile for this RSN — sync it there, then save again."
-                    : "Looking up RuneProfile…"
                 }
               >
-                <Input value={mySignup?.statsFetchedAt ? formatCaTier(mySignup.caCurrent) : "Looking up…"} readOnly disabled />
+                <Input value={caLoading ? "Looking up…" : formatCaTier(mySignup?.caCurrent)} readOnly disabled />
               </Field>
               {tectonicRsns.length > 1 && (
-                <Field label="Peak CA" hint={mySignup?.statsFetchedAt && mySignup.caPeak ? caTitle(mySignup.caPeak) : undefined}>
-                  <Input value={mySignup?.statsFetchedAt ? formatCaTier(mySignup.caPeak) : "Looking up…"} readOnly disabled />
+                <Field label="Peak CA" hint={!caLoading && mySignup?.caPeak ? caTitle(mySignup.caPeak) : undefined}>
+                  <Input value={caLoading ? "Looking up…" : formatCaTier(mySignup?.caPeak)} readOnly disabled />
                 </Field>
               )}
             </div>

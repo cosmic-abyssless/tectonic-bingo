@@ -208,13 +208,8 @@ export function useBingoMods(slug: string) {
 }
 
 export function useRefreshSignupStats(slug: string) {
-  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (signupId: string) => api.post<void>(`/api/bingos/${slug}/mod/signups/${signupId}/refresh-stats`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) });
-    },
   });
 }
 

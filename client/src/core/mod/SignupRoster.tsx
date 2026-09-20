@@ -20,7 +20,8 @@ import { PlayerName } from "../tectonic/PlayerName";
 import { Button, IconButton } from "../ui/Button";
 import { Badge, EmptyState, FilterChip, Notice } from "../ui/Card";
 import { Input, Select } from "../ui/Field";
-import { AlertIcon, CheckIcon, RefreshIcon, UsersIcon, XIcon } from "../ui/icons";
+import { AlertIcon, CheckIcon, RefreshIcon, SpinnerIcon, UsersIcon, XIcon } from "../ui/icons";
+import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { CaCell, formatCaTier } from "../signup/caStats";
 import { SortHeader, compareSortValues, useTableSort } from "../ui/tableSort";
 import { timeAgo } from "../ui/time";
@@ -72,11 +73,12 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
   return [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
 }
 
-function RefreshStatsButton({ slug, signupId, rsn }: { slug: string; signupId: string; rsn: string }) {
+function RefreshStatsButton({ slug, signupId, rsn, refreshing }: { slug: string; signupId: string; rsn: string; refreshing: boolean }) {
   const refresh = useRefreshSignupStats(slug);
+  const busy = refresh.isPending || refreshing;
   return (
-    <IconButton label={`Refresh stats for ${rsn}`} size="sm" onPress={() => refresh.mutate(signupId)} isDisabled={refresh.isPending}>
-      <RefreshIcon size={12} />
+    <IconButton label={busy ? `Looking up stats for ${rsn}` : `Refresh stats for ${rsn}`} size="sm" onPress={() => refresh.mutate(signupId)} isDisabled={busy}>
+      {busy ? <SpinnerIcon size={12} /> : <RefreshIcon size={12} />}
     </IconButton>
   );
 }
@@ -340,6 +342,7 @@ export function SignupRoster({ slug }: { slug: string }) {
   const { data: questionsData } = useSignupQuestions(slug);
   const { data: bingoData } = useBingo(slug);
   const { devMode } = useAuth();
+  const statsRefreshing = useStatsRefreshingSignupIds();
   const roster = data?.signups ?? [];
   const questions = questionsData?.questions ?? [];
   const isDuo = bingoData?.bingo.signupMode === "duo";
@@ -447,6 +450,7 @@ export function SignupRoster({ slug }: { slug: string }) {
                 <tbody className="divide-y divide-outline">
                   {sorted.map(({ order, entry }) => {
                     const answerByQ = new Map(entry.answers.map((a) => [a.questionId, a.value]));
+                    const caLoading = statsRefreshing.has(entry.signup.id);
                     return (
                       <tr key={entry.signup.id}>
                         <td className="num py-2 pr-4 text-on-surface-subtle">{order}</td>
@@ -467,12 +471,12 @@ export function SignupRoster({ slug }: { slug: string }) {
                           <StatusCell slug={slug} entry={entry} canWithdraw={canWithdraw} />
                         </td>
                         <td className="py-2 pr-4 text-on-surface-muted">
-                          <CaCell stats={entry.caCurrent} />
+                          <CaCell stats={entry.caCurrent} loading={caLoading} />
                         </td>
                         <td className="py-2 pr-4 text-on-surface-muted">
                           <span className="inline-flex items-center gap-1">
-                            <CaCell stats={entry.caPeak} />
-                            <RefreshStatsButton slug={slug} signupId={entry.signup.id} rsn={entry.signup.rsn} />
+                            <CaCell stats={entry.caPeak} loading={caLoading} />
+                            <RefreshStatsButton slug={slug} signupId={entry.signup.id} rsn={entry.signup.rsn} refreshing={caLoading} />
                           </span>
                         </td>
                         <td className="py-2 pr-4">
