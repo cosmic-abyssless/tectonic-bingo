@@ -66,6 +66,59 @@ describe("createSignup", () => {
   });
 });
 
+describe("multiple-choice questions", () => {
+  const seedQuestion = (required = false) => {
+    const { bingo, memberId } = seedBingo();
+    const question = createQuestion(db, { bingoId: bingo.id, prompt: "Which bosses?", type: "multiselect", optionsJson: JSON.stringify(["Vorkath", "Zulrah", "Hydra"]), required });
+    return { bingo, memberId, question };
+  };
+  const stored = (signupId: string) => db.select().from(schema.signupAnswers).where(eq(schema.signupAnswers.signupId, signupId)).get()!.value;
+
+  it("needs options, like a single-choice question", () => {
+    const { bingo } = seedBingo();
+    expect(() => createQuestion(db, { bingoId: bingo.id, prompt: "Which?", type: "multiselect" })).toThrow(ServiceError);
+  });
+
+  it("stores the chosen options as a cleaned list, and none as an empty list", () => {
+    const { bingo, memberId, question } = seedQuestion();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Player", answers: [{ questionId: question.id, value: JSON.stringify([" Zulrah ", "Vorkath", "Zulrah", ""]) }] });
+    expect(JSON.parse(stored(signup.id))).toEqual(["Zulrah", "Vorkath"]);
+    const other = db.insert(schema.users).values({ discordId: "other", discordUsername: "other" }).returning().get();
+    const none = createSignup(db, bingo, { bingoId: bingo.id, userId: other.id, rsn: "Other", answers: [{ questionId: question.id, value: "" }] });
+    expect(JSON.parse(stored(none.id))).toEqual([]);
+  });
+
+  it("refuses an answer that isn't a list of choices", () => {
+    const { bingo, memberId, question } = seedQuestion();
+    for (const value of ["Zulrah", "{\"a\":1}", "[1,2]", "not json"]) {
+      expect(() => createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Player", answers: [{ questionId: question.id, value }] }), value).toThrow(ServiceError);
+    }
+    expect(() => createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Player", answers: [{ questionId: question.id, value: JSON.stringify(Array.from({ length: 101 }, (_, i) => `c${i}`)) }] })).toThrow(/Too many/);
+  });
+
+  it("counts an empty list as unanswered when the question is required", () => {
+    const { bingo, memberId, question } = seedQuestion(true);
+    const attempt = (value: string) => () => createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Player", answers: [{ questionId: question.id, value }] });
+    expect(attempt("[]")).toThrow(/every required question/);
+    expect(attempt("")).toThrow(/every required question/);
+    expect(attempt(JSON.stringify(["Hydra"]))).not.toThrow();
+  });
+
+  it("is cleaned the same way when a signup is edited", () => {
+    const { bingo, memberId, question } = seedQuestion();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Player", answers: [{ questionId: question.id, value: JSON.stringify(["Hydra"]) }] });
+    updateSignup(db, bingo, signup.id, { answers: [{ questionId: question.id, value: JSON.stringify(["Zulrah ", "Zulrah"]) }] });
+    expect(JSON.parse(stored(signup.id))).toEqual(["Zulrah"]);
+    expect(() => updateSignup(db, bingo, signup.id, { answers: [{ questionId: question.id, value: "Zulrah" }] })).toThrow(ServiceError);
+  });
+
+  it("still refuses a blank answer to a required question of any other type", () => {
+    const { bingo, memberId } = seedBingo();
+    const q = createQuestion(db, { bingoId: bingo.id, prompt: "Timezone", type: "text", required: true });
+    expect(() => createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Player", answers: [{ questionId: q.id, value: "   " }] })).toThrow(/every required question/);
+  });
+});
+
 describe("question helper text", () => {
   const helper = (id: string) => db.select().from(schema.signupQuestions).where(eq(schema.signupQuestions.id, id)).get()!.helperText;
 

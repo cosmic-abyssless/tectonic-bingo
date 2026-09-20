@@ -154,8 +154,8 @@ export const signupQuestions = sqliteTable('signup_questions', {
   prompt: text('prompt').notNull(),
   // Optional plain-text note shown under the question on the signup form.
   helperText: text('helper_text'),
-  type: text('type', { enum: ['text', 'textarea', 'select', 'boolean'] }).notNull(),
-  optionsJson: text('options_json'), // JSON string array; only for type = 'select'
+  type: text('type', { enum: ['text', 'textarea', 'select', 'multiselect', 'boolean'] }).notNull(), // select = one choice, multiselect = several
+  optionsJson: text('options_json'), // JSON string array; only for type = 'select' or 'multiselect'
   required: integer('required', { mode: 'boolean' }).notNull().default(false),
   sortOrder: integer('sort_order').notNull().default(0),
 });

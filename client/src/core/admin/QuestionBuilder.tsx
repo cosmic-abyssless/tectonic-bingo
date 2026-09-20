@@ -10,10 +10,13 @@ import { Input, Select } from "../ui/Field";
 import { MAX_QUESTION_HELPER_TEXT } from "@bingo/shared";
 import { ChevronDownIcon, ChevronUpIcon, ListIcon, XIcon } from "../ui/icons";
 
+const isChoice = (type: SignupQuestionType) => type === "select" || type === "multiselect";
+
 const TYPES: { value: SignupQuestionType; label: string }[] = [
   { value: "text", label: "Short text" },
   { value: "textarea", label: "Long text" },
-  { value: "select", label: "Dropdown" },
+  { value: "select", label: "Single choice" },
+  { value: "multiselect", label: "Multiple choice" },
   { value: "boolean", label: "Yes / No" },
 ];
 
@@ -53,8 +56,8 @@ export function QuestionBuilder({ slug }: { slug: string }) {
     if (!newPrompt.trim()) return;
     setError(null);
     const options = newOptions.split(",").map((s) => s.trim()).filter(Boolean);
-    if (newType === "select" && options.length === 0) {
-      setError("Add at least one option for a dropdown question");
+    if (isChoice(newType) && options.length === 0) {
+      setError("Add at least one option for a choice question");
       return;
     }
     try {
@@ -63,7 +66,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
         helperText: newHelper.trim() || undefined,
         type: newType,
         sortOrder: questions.length,
-        optionsJson: newType === "select" ? JSON.stringify(options) : undefined,
+        optionsJson: isChoice(newType) ? JSON.stringify(options) : undefined,
       });
       setNewPrompt("");
       setNewOptions("");
@@ -134,9 +137,9 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                 placeholder="Helper text shown under the question (optional)"
                 size="sm"
               />
-              {q.type === "select" && (
+              {isChoice(q.type) && (
                 <Input
-                  aria-label="Dropdown options"
+                  aria-label="Choice options"
                   defaultValue={parseOptions(q.optionsJson)}
                   onBlur={(e) => patch(q.id, { optionsJson: JSON.stringify(e.target.value.split(",").map((s) => s.trim()).filter(Boolean)) })}
                   placeholder="Comma-separated options"
@@ -154,7 +157,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
             aria-label="New question"
             value={newPrompt}
             onChange={(e) => setNewPrompt(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && newType !== "select" && add()}
+            onKeyDown={(e) => e.key === "Enter" && !isChoice(newType) && add()}
             placeholder="New question…"
             className="min-w-0 flex-1"
           />
@@ -171,9 +174,9 @@ export function QuestionBuilder({ slug }: { slug: string }) {
           placeholder="Helper text shown under the question (optional)"
           size="sm"
         />
-        {newType === "select" && (
+        {isChoice(newType) && (
           <Input
-            aria-label="Dropdown options"
+            aria-label="Choice options"
             value={newOptions}
             onChange={(e) => setNewOptions(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && add()}

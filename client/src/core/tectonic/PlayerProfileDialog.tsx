@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { PlayerProfile, SignupQuestion } from "@bingo/shared";
+import { formatSignupAnswer, type PlayerProfile, type SignupQuestion } from "@bingo/shared";
 import { usePlayerProfile, useSignupQuestions } from "../../api/queries";
 import { useDialogParts } from "../ui/useDialogParts";
 import { Badge, Notice } from "../ui/Card";
@@ -179,7 +179,7 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
               {questions.map((q) => (
                 <div key={q.id}>
                   <dt className="text-xs text-on-surface-subtle">{q.prompt}</dt>
-                  <dd className="text-on-surface">{answerFor(q.id) || <span className="text-on-surface-subtle">—</span>}</dd>
+                  <dd className="text-on-surface">{formatSignupAnswer(q.type, answerFor(q.id)) || <span className="text-on-surface-subtle">—</span>}</dd>
                 </div>
               ))}
             </dl>

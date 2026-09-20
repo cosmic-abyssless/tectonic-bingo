@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { RosterEntry, User } from "@bingo/shared";
+import { formatSignupAnswer, type RosterEntry, type SignupQuestionType, type User } from "@bingo/shared";
 import {
   useBingo,
   useBingoMods,
@@ -40,7 +40,7 @@ function partnerRsn(entry: RosterEntry, roster: RosterEntry[]): string | null {
   return roster.find((r) => r.pairing?.id === entry.pairing!.id && r.signup.id !== entry.signup.id)?.signup.rsn ?? "Not signed up yet";
 }
 
-function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: string }[], isDuo: boolean): string {
+function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: string; type: SignupQuestionType }[], isDuo: boolean): string {
   const headers = [
     "#",
     "RSN",
@@ -73,7 +73,7 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
       entry.signup.buyinReceivedAt ? "received" : "not received",
       entry.collectedByUser ? displayName(entry.collectedByUser) : "",
       ...(isDuo ? [partnerRsn(entry, roster) ?? ""] : []),
-      ...questionPrompts.map((q) => answerByQ.get(q.id) ?? ""),
+      ...questionPrompts.map((q) => formatSignupAnswer(q.type, answerByQ.get(q.id))),
     ];
   });
   return [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
@@ -546,7 +546,7 @@ export function SignupRoster({ slug }: { slug: string }) {
                         )}
                         {questions.filter((q) => shown(q.id)).map((q) => (
                           <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
-                            {answerByQ.get(q.id) ?? "—"}
+                            {formatSignupAnswer(q.type, answerByQ.get(q.id)) || "—"}
                           </td>
                         ))}
                       </tr>

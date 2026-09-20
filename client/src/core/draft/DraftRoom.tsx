@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { DraftPoolEntry, DraftTeam, DraftUnit, LeftoverMode, PickRating, SignupQuestion, TectonicProfile } from "@bingo/shared";
+import { formatSignupAnswer, type DraftPoolEntry, type DraftTeam, type DraftUnit, type LeftoverMode, type PickRating, type SignupQuestion, type TectonicProfile } from "@bingo/shared";
 import { CaCell, WomCell } from "../signup/caStats";
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { useAuth } from "../../context/AuthContext";
@@ -253,7 +253,7 @@ function PoolTable({
                     {showAnswers &&
                       questions.filter((q) => shown(q.id)).map((q) => (
                         <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
-                          {answerByQ.get(q.id) ?? "—"}
+                          {formatSignupAnswer(q.type, answerByQ.get(q.id)) || "—"}
                         </td>
                       ))}
                     {canPick && i === 0 && (

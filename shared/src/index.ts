@@ -465,7 +465,11 @@ export interface ReviewSubmissionResponse {
   pointsDelta?: number;
 }
 
-export type SignupQuestionType = "text" | "textarea" | "select" | "boolean";
+/**
+ * "select" is a single choice (shown as radio buttons) and "multiselect" is any number of choices (checkboxes), both
+ * from `optionsJson`. A multiselect answer is stored as a JSON list (see signupAnswers.ts).
+ */
+export type SignupQuestionType = "text" | "textarea" | "select" | "multiselect" | "boolean";
 
 export interface SignupQuestion {
   id: string;
@@ -876,3 +880,4 @@ export * from "./auditCondense.ts";
 export * from "./bingoExport.ts";
 export * from "./exclusivity.ts";
 export * from "./names.ts";
+export * from "./signupAnswers.ts";

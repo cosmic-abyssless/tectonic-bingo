@@ -201,7 +201,7 @@ export function seedTestSignups(db: Db, bingo: Bingo, count: number, tectonicRos
   for (let i = 1; i <= count; i++) {
     const answers: signupService.SignupAnswerInput[] = questions.map((q) => ({
       questionId: q.id,
-      value: q.type === "boolean" ? String(Math.random() < 0.5) : q.type === "select" ? firstOption(q.optionsJson) : "Test answer",
+      value: q.type === "boolean" ? String(Math.random() < 0.5) : q.type === "select" ? firstOption(q.optionsJson) : q.type === "multiselect" ? JSON.stringify([firstOption(q.optionsJson)]) : "Test answer",
     }));
 
     const real = realCandidates[i - 1];
