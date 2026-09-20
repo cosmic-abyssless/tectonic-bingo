@@ -462,7 +462,11 @@ export const teamNodeState = sqliteTable('team_node_state', {
 export const submissions = sqliteTable('submissions', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   teamId: text('team_id').notNull().references(() => teams.id),
+  // The player the drop belongs to: credited for it in the stats and on the board.
   submittedByUserId: text('submitted_by_user_id').notNull().references(() => users.id),
+  // Set only when someone else uploaded the screenshot for that player (a teammate at a PC for a drop on mobile, or a
+  // mod). Null means the player posted it themselves. The audit log's actor is whoever posted.
+  postedByUserId: text('posted_by_user_id').references(() => users.id),
   status: text('status', {
     enum: ['pending', 'approved', 'rejected'],
   }).notNull().default('pending'),

@@ -28,7 +28,10 @@ export function tileForLeaf(db: Db | Tx, leafId: string, tileByNodeId: Map<strin
 
 export interface CreateSubmissionParams {
   teamId: string;
+  /** The player the drop belongs to: credited for it. */
   submittedByUserId: string;
+  /** Who uploaded it, when that isn't the same player (see submissionTarget.ts). */
+  postedByUserId?: string | null;
   claims: ClaimInput[];
   screenshotUrl: string;
   now?: Date; // injectable for tests
@@ -100,9 +103,10 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
       }
     }
 
+    const postedByUserId = params.postedByUserId && params.postedByUserId !== params.submittedByUserId ? params.postedByUserId : null;
     const submission = tx
       .insert(submissions)
-      .values({ teamId: params.teamId, submittedByUserId: params.submittedByUserId, submittedAt: now, createdAt: now, updatedAt: now })
+      .values({ teamId: params.teamId, submittedByUserId: params.submittedByUserId, postedByUserId, submittedAt: now, createdAt: now, updatedAt: now })
       .returning()
       .get();
 
@@ -132,7 +136,9 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
         claims: params.claims.map((c) => ({ nodeId: c.nodeId, itemName: c.itemName ?? null, quantity: c.quantity ?? 1 })),
         screenshotUrl: params.screenshotUrl,
       },
-      actor: { userId: params.submittedByUserId },
+      // Whoever actually posted it is the actor; the player it belongs to is who they acted on behalf of.
+      actor: { userId: postedByUserId ?? params.submittedByUserId },
+      onBehalfOfUserId: postedByUserId ? params.submittedByUserId : null,
     });
 
     return submission;
@@ -208,6 +214,7 @@ export interface SubmissionDetails {
   screenshots: (typeof submissionScreenshots.$inferSelect)[];
   claims: ClaimRow[];
   submittedByUser: MinimalUser | null;
+  postedByUser: MinimalUser | null;
 }
 
 // Attaches screenshots, claims, and the submitter's (minimal) user row to a
@@ -218,7 +225,7 @@ function attachDetails(db: Db, subs: (typeof submissions.$inferSelect)[]): Submi
   const submissionIds = subs.map((s) => s.id);
   const screenshots = db.select().from(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, submissionIds)).all();
   const claimRows = db.select().from(claims).where(inArray(claims.submissionId, submissionIds)).all();
-  const userIds = [...new Set(subs.map((s) => s.submittedByUserId))];
+  const userIds = [...new Set(subs.flatMap((s) => (s.postedByUserId ? [s.submittedByUserId, s.postedByUserId] : [s.submittedByUserId])))];
   const userRows = db
     .select({ id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick })
     .from(users)
@@ -231,6 +238,7 @@ function attachDetails(db: Db, subs: (typeof submissions.$inferSelect)[]): Submi
     screenshots: screenshots.filter((sc) => sc.submissionId === s.id),
     claims: claimRows.filter((c) => c.submissionId === s.id),
     submittedByUser: userById.get(s.submittedByUserId) ?? null,
+    postedByUser: s.postedByUserId ? (userById.get(s.postedByUserId) ?? null) : null,
   }));
 }
 

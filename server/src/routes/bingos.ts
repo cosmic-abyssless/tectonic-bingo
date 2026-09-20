@@ -14,6 +14,7 @@ import { effectiveStartsAt } from "../services/bingoStart";
 import * as boardService from "../services/boardService";
 import * as teamService from "../services/teamService";
 import * as submissionService from "../services/submissionService";
+import { resolveSubmissionTarget, resolveSubmissionTeam } from "../services/submissionTarget";
 import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
 import * as pairingService from "../services/pairingService";
@@ -193,14 +194,18 @@ router.post(
   upload.single("screenshot"),
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
-    const team = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
-    if (!team) {
+    const { claims: claimsRaw, teamId, forUserId } = req.body as { claims?: string; teamId?: string; forUserId?: string };
+    // Your own team, for yourself or a teammate; a mod may name another team, and then the player it is for.
+    let target;
+    try {
+      target = resolveSubmissionTarget(db, bingo, req.user!, { teamId, forUserId });
+    } catch (err) {
       if (req.file) fs.unlinkSync(req.file.path);
-      throw new ServiceError(403, "You are not on a team for this bingo");
+      throw err;
     }
+    const team = target.team;
     if (!req.file) throw new ServiceError(400, "Screenshot is required");
 
-    const { claims: claimsRaw } = req.body as { claims?: string };
     let claims: ClaimInput[];
     try {
       claims = claimsRaw ? JSON.parse(claimsRaw) : [];
@@ -213,7 +218,8 @@ router.post(
     try {
       submission = submissionService.createSubmission(db, bingo, {
         teamId: team.id,
-        submittedByUserId: req.user!.id,
+        submittedByUserId: target.submittedByUserId,
+        postedByUserId: target.postedByUserId,
         claims,
         screenshotUrl: `/uploads/${req.file.filename}`,
       });
@@ -251,8 +257,8 @@ router.post(
   auditSkip("read-only OCR analysis — no state changes"),
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
-    const team = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
-    if (!team) throw new ServiceError(403, "You are not on a team for this bingo");
+    // The codeword to look for is the team the screenshot is being submitted to (a mod may name another team).
+    const team = resolveSubmissionTeam(db, bingo, req.user!, (req.body as { teamId?: string }).teamId);
     if (!req.file) throw new ServiceError(400, "Screenshot is required");
 
     if (!isOcrEnabled()) throw new ServiceError(503, "Screenshot analysis is disabled on this server");

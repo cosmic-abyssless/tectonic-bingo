@@ -391,9 +391,12 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     tone: "info",
     visibility: "team",
     title: "Submission created",
-    label: (i) => `${actor(i)} submitted ${describeClaims(i.details)} for "${i.details.tileName}"`,
-    condense: (inputs) =>
-      `${actor(inputs[0]!)} submitted ${describeClaims({ claims: inputs.flatMap((i) => i.details.claims), taskLabels: inputs.flatMap((i) => i.details.taskLabels) })} for ${describeTiles(inputs)}`,
+    // The audit entry's own "on behalf of" is the player the drop belongs to, when someone else posted it.
+    label: (i) => `${actor(i)} submitted ${describeClaims(i.details)} for "${i.details.tileName}"${onBehalf(i)}`,
+    condense: (inputs) => {
+      const sameOwner = new Set(inputs.map((i) => i.onBehalfOfName ?? "")).size === 1; // only when they were all for the same player
+      return `${actor(inputs[0]!)} submitted ${describeClaims({ claims: inputs.flatMap((i) => i.details.claims), taskLabels: inputs.flatMap((i) => i.details.taskLabels) })} for ${describeTiles(inputs)}${sameOwner ? onBehalf(inputs[0]!) : ""}`;
+    },
   },
   "submission.approved": {
     category: "submission",

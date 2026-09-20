@@ -243,7 +243,10 @@ export interface Tile extends TileBase {
 export interface Submission {
   id: string;
   teamId: string;
+  /** The player the drop belongs to (credited for it). */
   submittedByUserId: string;
+  /** Who uploaded it, when that isn't the same player: a teammate at a PC, or a mod. */
+  postedByUserId: string | null;
   status: SubmissionStatus;
   submittedAt: string;
   reviewedAt: string | null;
@@ -282,6 +285,8 @@ export interface SubmissionDetails {
   screenshots: SubmissionScreenshot[];
   claims: Claim[];
   submittedByUser: MinimalUser | null;
+  /** Set only when someone else posted it for `submittedByUser`. */
+  postedByUser: MinimalUser | null;
 }
 
 export type BugReportStatus = "open" | "resolved";
