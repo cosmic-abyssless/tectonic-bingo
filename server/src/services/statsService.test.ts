@@ -3,7 +3,7 @@ import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { and, eq } from "drizzle-orm";
 import * as schema from "../db/schema";
-import { claims, draftPicks, stageTransitions, submissions, teamNodeState, teamPointAdjustments } from "../db/schema";
+import { claims, stageTransitions, submissions, teamNodeState, teamPointAdjustments } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createTile, createTask, generateLines } from "./boardService";
 import { approveSubmission } from "./scoringService";
@@ -92,7 +92,7 @@ describe("getPointsOverTime", () => {
 });
 
 describe("getTimeline", () => {
-  it("includes stage changes, draft picks, line completions, and first-completions, sorted chronologically", () => {
+  it("is the scoring history: points earned, line bonuses, adjustments, going live and ending, sorted chronologically", () => {
     const fx = seedFixture();
     const bingo = db.select().from(schema.bingos).where(eq(schema.bingos.id, fx.bingoId)).get()!;
     const tile2 = createTile(db, { bingoId: fx.bingoId, name: "Tile 2", boardRow: 0, boardCol: 1 });
@@ -100,18 +100,29 @@ describe("getTimeline", () => {
     const task2 = addTask(tile2.id, { points: 10 });
     generateLines(db, bingo, 15);
 
-    db.insert(stageTransitions).values({ bingoId: fx.bingoId, fromStage: "signup", toStage: "draft", changedByUserId: fx.modUserId }).run();
-    db.insert(draftPicks).values({ bingoId: fx.bingoId, pickNumber: 1, teamId: fx.teamAId, userId: fx.memberUserId, pickedByUserId: fx.modUserId }).run();
+    for (const [fromStage, toStage] of [["signup", "draft"], ["reveal", "live"], ["live", "complete"]] as const) {
+      db.insert(stageTransitions).values({ bingoId: fx.bingoId, fromStage, toStage, changedByUserId: fx.modUserId }).run();
+    }
 
     submitAndApprove(fx.teamAId, task1.id, fx.memberUserId, fx.modUserId);
     submitAndApprove(fx.teamAId, task2.id, fx.memberUserId, fx.modUserId); // completes the row line too
+    db.insert(teamPointAdjustments).values({ teamId: fx.teamAId, bingoId: fx.bingoId, amount: 15, reason: "well played", createdByUserId: fx.modUserId }).run();
 
     const timeline = getTimeline(db, fx.bingoId);
     const types = timeline.map((e) => e.type);
-    expect(types).toContain("stage_changed");
-    expect(types).toContain("draft_pick");
+    expect(types).toContain("points_earned");
     expect(types).toContain("line_completed");
+    expect(types).toContain("point_adjustment");
     expect(types).toContain("first_completion");
+    expect(types).not.toContain("draft_pick");
+    // Only the bingo going live and ending are milestones; other stage changes aren't in the timeline.
+    expect(timeline.filter((e) => e.type === "stage_changed").map((e) => e.label)).toEqual(expect.arrayContaining(["The bingo went live", "The bingo ended"]));
+    expect(timeline.filter((e) => e.type === "stage_changed")).toHaveLength(2);
+
+    const labels = timeline.map((e) => e.label);
+    expect(labels).toContain("Team A completed Test Tile — Task (+20)");
+    expect(labels.some((l) => /^Team A earned the row 1 line bonus \(\+15\)$/.test(l))).toBe(true);
+    expect(labels).toContain("Team A got +15 from a moderator: well played");
 
     const times = timeline.map((e) => e.at.getTime());
     expect(times).toEqual([...times].sort((a, b) => a - b));
@@ -175,14 +186,6 @@ describe("filterStatsForTeam", () => {
     submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId);
     submitAndApprove(fx.teamBId, task.id, fx.memberUserId, fx.modUserId);
     db.insert(stageTransitions).values({ bingoId: fx.bingoId, fromStage: "reveal", toStage: "live", changedByUserId: fx.modUserId }).run();
-    // A pick for each team so team A's timeline never depends on who was
-    // first to complete (both approvals can land in the same millisecond).
-    db.insert(draftPicks)
-      .values([
-        { bingoId: fx.bingoId, pickNumber: 1, teamId: fx.teamAId, userId: fx.modUserId, pickedByUserId: fx.modUserId },
-        { bingoId: fx.bingoId, pickNumber: 2, teamId: fx.teamBId, userId: fx.memberUserId, pickedByUserId: fx.modUserId },
-      ])
-      .run();
 
     const own = filterStatsForTeam(getStats(db, fx.bingoId), fx.teamAId);
     for (const rows of [own.pointsOverTime, own.timeline, own.contributions, own.heatmap]) {
@@ -193,7 +196,7 @@ describe("filterStatsForTeam", () => {
 });
 
 describe("getStatsForViewer", () => {
-  // Team A completes the task a minute before team B, plus a stage change and a draft pick for each team.
+  // Team A completes the task a minute before team B, and the bingo went live.
   function seedRace() {
     const fx = seedFixture();
     const task = addTask(fx.tileId, { points: 20 });
@@ -201,12 +204,6 @@ describe("getStatsForViewer", () => {
     db.update(teamNodeState).set({ completedAt: new Date(Date.now() - 60_000) }).where(and(eq(teamNodeState.teamId, fx.teamAId), eq(teamNodeState.nodeId, task.id))).run();
     submitAndApprove(fx.teamBId, task.id, fx.memberUserId, fx.modUserId);
     db.insert(stageTransitions).values({ bingoId: fx.bingoId, fromStage: "reveal", toStage: "live", changedByUserId: fx.modUserId }).run();
-    db.insert(draftPicks)
-      .values([
-        { bingoId: fx.bingoId, pickNumber: 1, teamId: fx.teamAId, userId: fx.modUserId, pickedByUserId: fx.modUserId },
-        { bingoId: fx.bingoId, pickNumber: 2, teamId: fx.teamBId, userId: fx.memberUserId, pickedByUserId: fx.modUserId },
-      ])
-      .run();
     return fx;
   }
   const types = (timeline: { type: string }[]) => new Set(timeline.map((e) => e.type));
@@ -223,7 +220,7 @@ describe("getStatsForViewer", () => {
     for (const teamId of [fx.teamAId, fx.teamBId]) {
       const timeline = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId }).timeline;
       expect(types(timeline)).not.toContain("first_completion");
-      expect(timeline.length).toBeGreaterThan(0); // their own picks are still there
+      expect(timeline.length).toBeGreaterThan(0); // their own points are still there
       expect(timeline.every((e) => e.teamId === teamId)).toBe(true);
     }
   });
@@ -232,7 +229,7 @@ describe("getStatsForViewer", () => {
     const fx = seedRace();
     const stats = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: null });
     expect(types(stats.timeline)).not.toContain("first_completion");
-    expect(types(stats.timeline)).toContain("draft_pick");
+    expect(types(stats.timeline)).toContain("points_earned");
     expect(stats.pointsOverTime.length).toBeGreaterThan(0);
   });
 });

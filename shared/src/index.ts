@@ -783,7 +783,7 @@ export interface PointsOverTimePoint {
   cumulativePoints: number;
 }
 
-export type TimelineEventType = "stage_changed" | "draft_pick" | "line_completed" | "first_completion";
+export type TimelineEventType = "points_earned" | "line_completed" | "point_adjustment" | "first_completion" | "stage_changed";
 
 export interface TimelineEvent {
   at: string;

@@ -1,18 +1,13 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { bingoLines, draftPicks, nodeEdges, nodes, stageTransitions, submissions, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
+import { bingoLines, nodeEdges, nodes, stageTransitions, submissions, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
 import { findAncestorIds } from "./graphService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
 type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick">;
 const MINIMAL_USER_COLS = { id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick };
-
-/** guild nick → global display name → username, mirroring client/src/core/ui/user.ts */
-function displayName(user: MinimalUser): string {
-  return user.discordGuildNick ?? user.discordGlobalName ?? user.discordUsername;
-}
 
 export interface PointsOverTimePoint {
   at: Date;
@@ -21,6 +16,37 @@ export interface PointsOverTimePoint {
   label: string;
   delta: number;
   cumulativePoints: number;
+}
+
+type NodeLabel = { kind: "line" | "tile" | "task"; label: string };
+
+// A human name for each scoring node: a line bonus ("row 2 line bonus"), a tile's own bonus (the tile's name), or a
+// task under a tile ("ZULRAH — Page 1"). Shared by the points chart and the timeline so they read the same.
+function labelNodes(db: Db, bingoId: string, nodeIds: string[]): Map<string, NodeLabel> {
+  const nodeRows = nodeIds.length ? db.select().from(nodes).where(inArray(nodes.id, nodeIds)).all() : [];
+  const nodeById = new Map(nodeRows.map((n) => [n.id, n]));
+  const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
+  const tileByNodeId = new Map(tileRows.map((t) => [t.nodeId, t]));
+  const lineRows = db.select().from(bingoLines).where(eq(bingoLines.bingoId, bingoId)).all();
+  const lineByNodeId = new Map(lineRows.map((l) => [l.nodeId, l]));
+
+  const labels = new Map<string, NodeLabel>();
+  for (const nodeId of nodeIds) {
+    const line = lineByNodeId.get(nodeId);
+    if (line) {
+      labels.set(nodeId, { kind: "line", label: `${line.lineType} ${line.lineIndex + 1} line bonus` });
+      continue;
+    }
+    const directTile = tileByNodeId.get(nodeId);
+    if (directTile) {
+      labels.set(nodeId, { kind: "tile", label: directTile.name });
+      continue;
+    }
+    const node = nodeById.get(nodeId);
+    const ancestorTile = [...findAncestorIds(db, nodeId)].map((id) => tileByNodeId.get(id)).find((t): t is NonNullable<typeof t> => !!t);
+    labels.set(nodeId, { kind: "task", label: ancestorTile ? `${ancestorTile.name} — ${node?.label ?? "Task"}` : node?.label ?? "Bonus" });
+  }
+  return labels;
 }
 
 // Chronological, per-team-running-total reconstruction of every point-scoring
@@ -33,26 +59,9 @@ export function getPointsOverTime(db: Db, bingoId: string): PointsOverTimePoint[
   if (teamIds.length === 0) return [];
 
   const stateRows = db.select().from(teamNodeState).where(inArray(teamNodeState.teamId, teamIds)).all();
-  const nodeIds = [...new Set(stateRows.map((r) => r.nodeId))];
-  const nodeRows = nodeIds.length ? db.select().from(nodes).where(inArray(nodes.id, nodeIds)).all() : [];
-  const nodeById = new Map(nodeRows.map((n) => [n.id, n]));
+  const labels = labelNodes(db, bingoId, [...new Set(stateRows.map((r) => r.nodeId))]);
 
-  const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
-  const tileByNodeId = new Map(tileRows.map((t) => [t.nodeId, t]));
-  const lineRows = db.select().from(bingoLines).where(eq(bingoLines.bingoId, bingoId)).all();
-  const lineByNodeId = new Map(lineRows.map((l) => [l.nodeId, l]));
-
-  function labelFor(nodeId: string): string {
-    const line = lineByNodeId.get(nodeId);
-    if (line) return `${line.lineType} ${line.lineIndex + 1} line bonus`;
-    const directTile = tileByNodeId.get(nodeId);
-    const node = nodeById.get(nodeId);
-    if (directTile) return directTile.name;
-    const ancestorTile = [...findAncestorIds(db, nodeId)].map((id) => tileByNodeId.get(id)).find((t): t is NonNullable<typeof t> => !!t);
-    return ancestorTile ? `${ancestorTile.name} — ${node?.label ?? "Task"}` : node?.label ?? "Bonus";
-  }
-
-  const nodeEvents = stateRows.map((r) => ({ at: r.completedAt, teamId: r.teamId, source: "node" as const, label: labelFor(r.nodeId), delta: r.pointsAwarded }));
+  const nodeEvents = stateRows.map((r) => ({ at: r.completedAt, teamId: r.teamId, source: "node" as const, label: labels.get(r.nodeId)!.label, delta: r.pointsAwarded }));
 
   const adjustmentRows = db.select().from(teamPointAdjustments).where(eq(teamPointAdjustments.bingoId, bingoId)).all();
   const adjustmentEvents = adjustmentRows.map((a) => ({ at: a.createdAt, teamId: a.teamId, source: "adjustment" as const, label: a.reason, delta: a.amount }));
@@ -69,56 +78,55 @@ export function getPointsOverTime(db: Db, bingoId: string): PointsOverTimePoint[
 
 export interface TimelineEvent {
   at: Date;
-  type: "stage_changed" | "draft_pick" | "line_completed" | "first_completion";
+  type: "points_earned" | "line_completed" | "point_adjustment" | "first_completion" | "stage_changed";
   label: string;
   teamId: string | null;
 }
 
+// What happened, in a stats context: every award of points (a task or tile completed, a line bonus, a mod's
+// adjustment) plus the bingo starting and ending. `first_completion` is a mod-only extra (see getStatsForViewer).
+// Draft picks are not here: they belong to the draft room and the audit log.
 export function getTimeline(db: Db, bingoId: string): TimelineEvent[] {
   const stageEvents: TimelineEvent[] = db
     .select()
     .from(stageTransitions)
     .where(eq(stageTransitions.bingoId, bingoId))
     .all()
-    .map((s) => ({ at: s.createdAt, type: "stage_changed", label: `Advanced from ${s.fromStage} to ${s.toStage}`, teamId: null }));
+    .filter((s) => s.toStage === "live" || s.toStage === "complete")
+    .map((s) => ({ at: s.createdAt, type: "stage_changed", label: s.toStage === "live" ? "The bingo went live" : "The bingo ended", teamId: null }));
 
   const teamRows = db.select().from(teams).where(eq(teams.bingoId, bingoId)).all();
   const teamById = new Map(teamRows.map((t) => [t.id, t]));
   const teamIds = teamRows.map((t) => t.id);
   if (teamIds.length === 0) return stageEvents.sort((a, b) => a.at.getTime() - b.at.getTime());
-
-  const pickRows = db
-    .select({ teamId: draftPicks.teamId, createdAt: draftPicks.createdAt, user: MINIMAL_USER_COLS })
-    .from(draftPicks)
-    .innerJoin(users, eq(draftPicks.userId, users.id))
-    .where(inArray(draftPicks.teamId, teamIds))
-    .all();
-  const pickEvents: TimelineEvent[] = pickRows.map((r) => ({
-    at: r.createdAt,
-    type: "draft_pick",
-    teamId: r.teamId,
-    label: `${teamById.get(r.teamId)?.name ?? "A team"} drafted ${displayName(r.user)}`,
-  }));
+  const teamName = (teamId: string) => teamById.get(teamId)?.name ?? "A team";
 
   const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
   const tileByNodeId = new Map(tileRows.map((t) => [t.nodeId, t]));
   const tileNodeIds = tileRows.map((t) => t.nodeId);
 
-  const lineRows = db.select().from(bingoLines).where(eq(bingoLines.bingoId, bingoId)).all();
-  const lineByNodeId = new Map(lineRows.map((l) => [l.nodeId, l]));
-  const lineNodeIds = lineRows.map((l) => l.nodeId);
-  const lineStateRows = lineNodeIds.length
-    ? db.select().from(teamNodeState).where(and(inArray(teamNodeState.teamId, teamIds), inArray(teamNodeState.nodeId, lineNodeIds))).all()
-    : [];
-  const lineEvents: TimelineEvent[] = lineStateRows.map((r) => {
-    const line = lineByNodeId.get(r.nodeId)!;
-    return {
-      at: r.completedAt,
-      type: "line_completed",
-      teamId: r.teamId,
-      label: `${teamById.get(r.teamId)?.name ?? "A team"} completed a ${line.lineType} line (+${r.pointsAwarded})`,
-    };
+  // Everything that earned points. A node completed with nothing awarded (a gated part, a container) isn't an award.
+  const awards = db.select().from(teamNodeState).where(inArray(teamNodeState.teamId, teamIds)).all().filter((r) => r.pointsAwarded > 0);
+  const labels = labelNodes(db, bingoId, [...new Set(awards.map((r) => r.nodeId))]);
+  const awardEvents: TimelineEvent[] = awards.map((r) => {
+    const { kind, label } = labels.get(r.nodeId)!;
+    const team = teamName(r.teamId);
+    if (kind === "line") return { at: r.completedAt, type: "line_completed", teamId: r.teamId, label: `${team} earned the ${label} (+${r.pointsAwarded})` };
+    const what = kind === "tile" ? `the ${label} tile bonus` : label;
+    return { at: r.completedAt, type: "points_earned", teamId: r.teamId, label: `${team} ${kind === "tile" ? "earned" : "completed"} ${what} (+${r.pointsAwarded})` };
   });
+
+  const adjustmentEvents: TimelineEvent[] = db
+    .select()
+    .from(teamPointAdjustments)
+    .where(eq(teamPointAdjustments.bingoId, bingoId))
+    .all()
+    .map((a) => ({
+      at: a.createdAt,
+      type: "point_adjustment",
+      teamId: a.teamId,
+      label: `${teamName(a.teamId)} got ${a.amount > 0 ? "+" : ""}${a.amount} from a moderator: ${a.reason}`,
+    }));
 
   // "Task" here means any node that's a direct child of a tile's node.
   const taskEdges = tileNodeIds.length ? db.select({ parentId: nodeEdges.parentId, childId: nodeEdges.childId }).from(nodeEdges).where(inArray(nodeEdges.parentId, tileNodeIds)).all() : [];
@@ -142,11 +150,11 @@ export function getTimeline(db: Db, bingoId: string): TimelineEvent[] {
       at: r.completedAt,
       type: "first_completion",
       teamId: r.teamId,
-      label: `${teamById.get(r.teamId)?.name ?? "A team"} was first to complete ${tile?.name ?? ""} — ${node?.label ?? "Task"}`,
+      label: `${teamName(r.teamId)} was first to complete ${tile?.name ?? ""} — ${node?.label ?? "Task"}`,
     };
   });
 
-  return [...stageEvents, ...pickEvents, ...lineEvents, ...firstEvents].sort((a, b) => a.at.getTime() - b.at.getTime());
+  return [...stageEvents, ...awardEvents, ...adjustmentEvents, ...firstEvents].sort((a, b) => a.at.getTime() - b.at.getTime());
 }
 
 export interface ContributionCount {
