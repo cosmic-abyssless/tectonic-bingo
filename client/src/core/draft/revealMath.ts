@@ -56,8 +56,12 @@ export function isOnScreen(box: Box, viewport: { width: number; height: number }
   return box.width > 0 && box.height > 0 && box.left < viewport.width && box.left + box.width > 0 && box.top < viewport.height && box.top + box.height > 0;
 }
 
-/** The lettering size (in container-width percent) that fits the longest name inside a burst, within sensible limits. */
-export function burstLetteringSize(names: readonly string[]): number {
-  const longest = Math.max(6, ...names.map((n) => n.length));
-  return Math.min(16, Math.max(7, 130 / longest));
+/**
+ * The font size at which the longest of `texts` just fits `availableWidth` (both in the same unit, e.g. rem or cqw),
+ * given roughly how wide one character is as a fraction of the font size. Never bigger than `max`; `min` is the floor
+ * below which a name is left to wrap onto more lines instead of shrinking further.
+ */
+export function fitFontSize(texts: readonly string[], { availableWidth, charWidth, max, min }: { availableWidth: number; charWidth: number; max: number; min: number }): number {
+  const longest = Math.max(1, ...texts.map((t) => t.length));
+  return Math.min(max, Math.max(min, availableWidth / (charWidth * longest)));
 }

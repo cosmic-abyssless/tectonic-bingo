@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DraftPick } from "@bingo/shared";
-import { GIVE_UP_AFTER_MS, burstLetteringSize, expiredPicks, flightTo, isOnScreen, namesForPick, readyPick } from "./revealMath";
+import { GIVE_UP_AFTER_MS, expiredPicks, fitFontSize, flightTo, isOnScreen, namesForPick, readyPick } from "./revealMath";
 
 const pick = (pickNumber: number, teamId: string, rsn: string): DraftPick =>
   ({ id: `${pickNumber}-${rsn}`, bingoId: "b", pickNumber, teamId, userId: rsn, pickedByUserId: "x", createdAt: "", rsn, user: { id: rsn, discordUsername: `${rsn}_dc`, discordGlobalName: null, discordGuildNick: null, rsn } }) as DraftPick;
@@ -69,11 +69,21 @@ describe("isOnScreen", () => {
   });
 });
 
-describe("burstLetteringSize", () => {
-  it("shrinks for long names, within limits", () => {
-    expect(burstLetteringSize(["Al"])).toBe(16);
-    expect(burstLetteringSize(["GoldenGuardian"])).toBeLessThan(burstLetteringSize(["Zezima"]));
-    expect(burstLetteringSize(["x".repeat(40)])).toBe(7);
-    expect(burstLetteringSize(["Bob", "MightyIronman"])).toBe(burstLetteringSize(["MightyIronman"]));
+describe("fitFontSize", () => {
+  const box = { availableWidth: 60, charWidth: 0.5, max: 16, min: 5 };
+
+  it("is the biggest size at which the longest name still fits", () => {
+    expect(fitFontSize(["x".repeat(12)], box)).toBe(10); // 12 chars * 0.5 * 10 = 60
+    expect(fitFontSize(["Bob", "MightyIronman"], box)).toBe(fitFontSize(["MightyIronman"], box));
+  });
+
+  it("never grows past the maximum for a short name", () => {
+    expect(fitFontSize(["Al"], box)).toBe(16);
+    expect(fitFontSize([], box)).toBe(16);
+  });
+
+  it("shrinks as the name gets longer, down to the floor", () => {
+    expect(fitFontSize(["x".repeat(20)], box)).toBeLessThan(fitFontSize(["x".repeat(12)], box));
+    expect(fitFontSize(["x".repeat(200)], box)).toBe(5);
   });
 });
