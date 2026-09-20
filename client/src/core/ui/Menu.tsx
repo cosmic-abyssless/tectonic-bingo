@@ -9,6 +9,8 @@ export function Menu<T extends object>({ instant, ...props }: MenuProps<T> & { i
     <Popover
       placement="bottom end"
       offset={6}
+      isNonModal={instant}
+      shouldSkipAnimation={instant}
       className={`${instant ? "" : "overlay-panel"} min-w-44 rounded-md border border-outline bg-surface-raised p-1 shadow-pop outline-none`}
     >
       <AriaMenu {...props} className="outline-none" />
@@ -20,7 +22,7 @@ export function MenuItem({ children, className, ...props }: MenuItemProps & { ch
   return (
     <AriaMenuItem
       {...props}
-      className={`flex cursor-default items-center gap-2 rounded-sm px-2.5 py-1.5 text-sm text-on-surface-muted outline-none hovered:bg-surface-hover hovered:text-on-surface focus:bg-surface-hover focus:text-on-surface selected:text-on-surface disabled:opacity-40 ${className ?? ""}`}
+      className={`flex cursor-default items-center gap-2 rounded-sm px-2.5 py-1.5 text-sm text-on-surface-muted outline-none hover:bg-surface-hover hover:text-on-surface focus:bg-surface-hover focus:text-on-surface selected:text-on-surface disabled:opacity-40 ${className ?? ""}`}
     >
       {children}
     </AriaMenuItem>

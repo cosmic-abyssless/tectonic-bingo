@@ -456,7 +456,7 @@ export function SignupRoster({ slug }: { slug: string }) {
             <p className="text-sm text-on-surface-muted">No signups match these filters.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm [&_td]:align-middle [&_th]:align-middle">
                 <thead>
                   <tr className="border-b border-outline">
                     {shown("order") && <SortHeader label="#" sortKey="order" sort={sort} />}

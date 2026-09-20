@@ -176,7 +176,7 @@ function PoolTable({
         <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={setHiddenColumns} />
       </div>
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm [&_td]:align-middle [&_th]:align-middle">
         <thead>
           <tr className="border-b border-outline">
             {hasPairs && <th className="pb-2 pr-2" />}
@@ -219,7 +219,10 @@ function PoolTable({
                       </td>
                     )}
                     <td className={`whitespace-nowrap py-2 pr-4 font-medium ${unit.leftover ? "" : "text-on-surface"}`}>
-                      <AccountTypeIcon accountType={entry.accountType} /> <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
+                      <span className="inline-flex items-center gap-1">
+                        <AccountTypeIcon accountType={entry.accountType} />
+                        <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
+                      </span>
                     </td>
                     {shown("discord") && <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">{displayName(entry.user)}</td>}
                     {hasLeftovers && <td className="py-2 pr-4 align-middle">{unit.leftover && i === 0 && <Badge tone="warn">{leftoverTag}</Badge>}</td>}
