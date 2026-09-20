@@ -97,6 +97,14 @@ function assertNoPicks(db: Db, bingoId: string): void {
   }
 }
 
+// The pick order can be shuffled or set until the draft is started; from "Start draft" on it is fixed (teams
+// have seen it and are waiting their turn), whether or not anyone has picked yet.
+function assertOrderEditable(db: Db, bingoId: string): void {
+  const fresh = db.select({ draftStarted: bingos.draftStarted }).from(bingos).where(eq(bingos.id, bingoId)).get();
+  if (fresh?.draftStarted) throw new ServiceError(400, "The draft has started, so the pick order can't be changed");
+  assertNoPicks(db, bingoId);
+}
+
 function orderPayload(ordered: { id: string; name: string }[]) {
   return ordered.map((t, i) => ({ teamId: t.id, name: t.name, draftOrder: i + 1 }));
 }
@@ -247,7 +255,7 @@ function shuffled<T>(arr: T[]): T[] {
 export function shuffleDraftOrder(db: Db, bingo: Bingo) {
   assertDraftStage(bingo);
   const result = db.transaction((tx) => {
-    assertNoPicks(tx, bingo.id);
+    assertOrderEditable(tx, bingo.id);
     const teamRows = tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
     if (teamRows.length < 2) throw new ServiceError(400, "At least 2 teams are required to set pick order");
     const ordered = shuffled(teamRows);
@@ -271,7 +279,7 @@ export function shuffleDraftOrder(db: Db, bingo: Bingo) {
 export function setDraftOrder(db: Db, bingo: Bingo, teamIds: string[]) {
   assertDraftStage(bingo);
   const teamsOut = db.transaction((tx) => {
-    assertNoPicks(tx, bingo.id);
+    assertOrderEditable(tx, bingo.id);
     const teamRows = tx.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
     if (teamRows.length < 2) throw new ServiceError(400, "At least 2 teams are required to set pick order");
     if (!Array.isArray(teamIds) || teamIds.length !== teamRows.length) {

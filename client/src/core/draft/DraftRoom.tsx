@@ -501,17 +501,8 @@ export function DraftRoom({ slug }: { slug: string }) {
             )}
             {orderError && <p className="mt-1 text-sm text-danger">{orderError}</p>}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button onPress={handleShuffle} isDisabled={busy}>
-              {shuffleOrder.isPending ? "Shuffling…" : "Shuffle pick order"}
-            </Button>
-            <Button onPress={() => { setOrderError(null); setOrderOpen(true); }} isDisabled={busy}>
-              Pick order
-            </Button>
-            <Button variant="primary" isDisabled>
-              Start draft
-            </Button>
-          </div>
+          {/* No shuffle or pick-order controls here: the order is fixed once the draft has started. */}
+          <p className="text-sm text-on-surface-subtle">Pick order is locked.</p>
         </Card>
       ) : state.currentPick ? (
         <Card className="p-4">

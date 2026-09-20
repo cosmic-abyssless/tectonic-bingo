@@ -268,11 +268,21 @@ describe("makePick", () => {
     expect(() => makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false })).toThrow(/still being revealed/i);
   });
 
-  it("locks shuffle and start after the first pick", () => {
+  it("fixes the pick order as soon as the draft is started, before any pick", () => {
+    const { bingo, first, second } = setup(); // setup sets the order and presses Start draft
+    expect(() => shuffleDraftOrder(db, bingo)).toThrow(/draft has started/i);
+    expect(() => setDraftOrder(db, bingo, [second.id, first.id])).toThrow(/draft has started/i);
+    expect(() => startDraft(db, bingo)).toThrow(/already started/i);
+  });
+
+  it("keeps it fixed after picks are made too, and leaves the order as it was", () => {
     const { bingo, first, second, p1 } = setup();
+    const orderBefore = db.select({ id: schema.teams.id, order: schema.teams.draftOrder }).from(schema.teams).all().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((t) => t.id);
     makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
-    expect(() => shuffleDraftOrder(db, bingo)).toThrow(/locked after the first pick/i);
-    expect(() => setDraftOrder(db, bingo, [first.id, second.id])).toThrow(/locked after the first pick/i);
+    expect(() => shuffleDraftOrder(db, bingo)).toThrow(/draft has started/i);
+    expect(() => setDraftOrder(db, bingo, [second.id, first.id])).toThrow(/draft has started/i);
+    const orderAfter = db.select({ id: schema.teams.id, order: schema.teams.draftOrder }).from(schema.teams).all().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((t) => t.id);
+    expect(orderAfter).toEqual(orderBefore);
     expect(() => startDraft(db, bingo)).toThrow(/already started/i);
   });
 
