@@ -40,8 +40,10 @@ export type Stage = (typeof STAGE_ORDER)[number];
 // Newest first — the bingo list page redirects non-admins straight to
 // bingos[0] as the "default" bingo (issue #3: simpler than an env var,
 // since there's realistically only ever one active bingo at a time).
+// The list is for picking a bingo, so it never carries the rules text or the exclusive item lists (which need
+// the board revealed; see toViewerBingo).
 export function listBingos(db: Db) {
-  return db.select().from(bingos).orderBy(desc(bingos.createdAt)).all().map(toPublicBingo);
+  return db.select().from(bingos).orderBy(desc(bingos.createdAt)).all().map((b) => toViewerBingo(b, false));
 }
 
 export function getBingoBySlug(db: Db, slug: string) {
@@ -58,6 +60,17 @@ export function toPublicBingo<T extends { womGroupVerificationCode: string | nul
 ): Omit<T, "womGroupVerificationCode" | "exclusivityRulesJson" | "draftOrderLockedUntil"> & { exclusivityRules: ExclusivityRule[] } {
   const { womGroupVerificationCode: _womGroupVerificationCode, draftOrderLockedUntil: _draftOrderLockedUntil, exclusivityRulesJson, ...rest } = bingo;
   return { ...rest, exclusivityRules: parseExclusivityRules(exclusivityRulesJson) };
+}
+
+/**
+ * A bingo as one viewer may see it. The rules text and the exclusive item lists describe the board (which items
+ * are on it), so a player gets neither until the board is revealed, the same point tiles become visible. Mods
+ * always see them.
+ */
+export function toViewerBingo<T extends typeof bingos.$inferSelect>(bingo: T, isMod: boolean) {
+  const publicBingo = toPublicBingo(bingo);
+  if (isMod || isBoardRevealed(bingo)) return publicBingo;
+  return { ...publicBingo, rulesMarkdown: null, exclusivityRules: [] as ExclusivityRule[] };
 }
 
 const MAX_EXCLUSIVITY_RULES = 50;

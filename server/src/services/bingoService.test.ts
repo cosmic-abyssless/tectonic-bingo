@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingos } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { addModerator, advanceStage, assertBoardEditable, assertQuestionsEditable, createBingo, deleteBingo, normalizeExclusivityRules, parseExclusivityRules, removeModerator, toPublicBingo, updateBingoSettings } from "./bingoService";
+import { addModerator, advanceStage, assertBoardEditable, assertQuestionsEditable, createBingo, deleteBingo, normalizeExclusivityRules, parseExclusivityRules, listBingos, removeModerator, toPublicBingo, toViewerBingo, updateBingoSettings } from "./bingoService";
 import { effectiveStartsAt } from "./bingoStart";
 import { createTask, createTile } from "./boardService";
 import { createTeam } from "./teamService";
@@ -126,6 +126,49 @@ describe("toPublicBingo", () => {
     expect(publicBingo.womGroupId).toBe("123");
     expect(publicBingo.womEnabled).toBe(true);
     expect(publicBingo.name).toBe(bingo.name);
+  });
+});
+
+describe("toViewerBingo", () => {
+  const rules = [{ id: "r1", label: "Pets", itemNames: ["Baron", "Nid"], scope: "tile" as const }];
+  // One bingo with rules text and an exclusive item list, moved to the stage under test.
+  const withRules = (stage: (typeof schema.bingos.$inferSelect)["stage"]) => {
+    const existing = db.select().from(bingos).get();
+    if (!existing) return seedBingo({ stage, rulesMarkdown: "Bring a Baron.", exclusivityRulesJson: JSON.stringify(rules) });
+    return db.update(bingos).set({ stage }).where(eq(bingos.id, existing.id)).returning().get();
+  };
+
+  it("holds back the rules text and the exclusive item lists from a player until the board is revealed", () => {
+    for (const stage of ["planning", "signup", "captains", "draft"] as const) {
+      const seen = toViewerBingo(withRules(stage), false);
+      expect(seen.rulesMarkdown, stage).toBeNull();
+      expect(seen.exclusivityRules, stage).toEqual([]);
+    }
+  });
+
+  it("shows them from the reveal on", () => {
+    for (const stage of ["reveal", "live", "complete"] as const) {
+      const seen = toViewerBingo(withRules(stage), false);
+      expect(seen.rulesMarkdown, stage).toBe("Bring a Baron.");
+      expect(seen.exclusivityRules, stage).toEqual(rules);
+    }
+  });
+
+  it("always shows them to a mod, and keeps everything else in either case", () => {
+    const bingo = withRules("signup");
+    expect(toViewerBingo(bingo, true).rulesMarkdown).toBe("Bring a Baron.");
+    expect(toViewerBingo(bingo, true).exclusivityRules).toEqual(rules);
+    const hidden = toViewerBingo(bingo, false);
+    expect(hidden.name).toBe(bingo.name);
+    expect(hidden).not.toHaveProperty("womGroupVerificationCode");
+    expect(hidden).not.toHaveProperty("exclusivityRulesJson");
+  });
+
+  it("keeps them out of the bingo list before the reveal", () => {
+    withRules("signup");
+    const [listed] = listBingos(db);
+    expect(listed!.rulesMarkdown).toBeNull();
+    expect(listed!.exclusivityRules).toEqual([]);
   });
 });
 

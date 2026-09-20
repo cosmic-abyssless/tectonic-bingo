@@ -82,7 +82,7 @@ router.get(
     res.json({
       // effectiveStartsAt: when the bingo counts as started (see bingoStart.ts) — the settings' start date, or else
       // when it was last put live. The client runs tile freezes and "has it started" from this, not from startsAt.
-      bingo: { ...bingoService.toPublicBingo(bingo), effectiveStartsAt: effectiveStartsAt(db, bingo) },
+      bingo: { ...bingoService.toViewerBingo(bingo, isMod), effectiveStartsAt: effectiveStartsAt(db, bingo) },
       categories: boardService.getCategories(db, bingo.id),
       teams: teamService.getTeamsWithMembers(db, bingo.id),
       isMod,
