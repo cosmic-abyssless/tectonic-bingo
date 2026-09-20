@@ -264,7 +264,7 @@ test("full bingo lifecycle", async ({ page, browser }) => {
   const RSN_TO_DISCORD_ID: Record<string, string> = { Trainer1: "e2e-p1", Trainer2: "e2e-p2" };
 
   function onClockColumn(page: Page) {
-    return page.locator("div.flex.min-w-0.flex-col.gap-1", { hasText: "On the clock" });
+    return page.locator("div.flex.min-w-0.flex-col.gap-1", { hasText: "Currently picking" });
   }
 
   async function onClockCaptainRsn(page: Page): Promise<string> {

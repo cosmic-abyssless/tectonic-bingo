@@ -74,6 +74,8 @@ export function DraftPickReveal({
       // Fly to the roster slot and settle: as it lands the entry appears and the shape fades away over it.
       setFlying(true);
       const slot = document.querySelector<HTMLElement>(`[data-team-id="${pick.teamId}"][data-pick-number="${pick.pickNumber}"]`);
+      // The rosters scroll once they are long; bring the new entry into view before measuring where to land.
+      slot?.scrollIntoView({ block: "nearest", inline: "nearest" });
       const slotBox = slot ? boxOf(slot.getBoundingClientRect()) : null;
       if (slotBox && isOnScreen(slotBox, { width: window.innerWidth, height: window.innerHeight })) {
         const flight = flightTo(boxOf(shape.getBoundingClientRect()), slotBox);
@@ -103,7 +105,7 @@ export function DraftPickReveal({
 
   return createPortal(
     <div data-testid="draft-reveal" className="pointer-events-none fixed inset-0 z-[70] flex items-start justify-center pt-[16vh]" role="status" aria-live="polite">
-      <motion.div className="absolute inset-0 bg-black/30" initial={{ opacity: 0 }} animate={{ opacity: flying ? 0 : 1 }} transition={{ duration: flying ? FLIGHT_S * 0.6 : 0.2 }} />
+      <motion.div className="absolute inset-0 bg-black/55" initial={{ opacity: 0 }} animate={{ opacity: flying ? 0 : 1 }} transition={{ duration: flying ? FLIGHT_S * 0.6 : 0.2 }} />
       <div ref={scope} className="relative" style={{ opacity: 0 }}>
         <Burst names={names} teamName={teamName} teamColor={teamColor} />
       </div>

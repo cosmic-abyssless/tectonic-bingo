@@ -10,7 +10,7 @@ export function DraftPickBurst({ names, teamName, teamColor }: { names: string[]
     <div className="flex flex-col items-center">
       <Burst className="w-[min(86vw,26rem)]" fill={colors.YELLOW} rotate={0} spikes={16}>
         <div className="flex max-w-[62%] flex-col items-center gap-[2cqw]">
-          <div style={{ fontSize: "9cqw", color: colors.RED }}>Drafted!</div>
+          <div style={{ fontSize: "9cqw", color: colors.INK }}>Drafted!</div>
           {names.map((name) => (
             <div key={name} className="max-w-full truncate" style={{ fontSize: `${size}cqw`, lineHeight: 1 }}>
               {name}
@@ -18,11 +18,12 @@ export function DraftPickBurst({ names, teamName, teamColor }: { names: string[]
           ))}
         </div>
       </Burst>
+      {/* Positioned so it paints over the burst (a positioned, transformed sibling would otherwise cover it). */}
       <div
-        className="-mt-4 flex max-w-[86vw] items-center gap-2 rounded-sm border-2 px-3 py-1 text-xl"
-        style={{ fontFamily: COMIC_FONT, background: colors.PAPER, color: colors.INK, borderColor: colors.LINE, boxShadow: `3px 3px 0 ${colors.INK}` }}
+        className="relative z-10 -mt-6 flex max-w-[86vw] items-center gap-2 rounded-sm border-[3px] px-4 py-1.5 text-2xl"
+        style={{ fontFamily: COMIC_FONT, background: colors.PAPER, color: colors.INK, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.INK}` }}
       >
-        {teamColor && <span className="size-3 shrink-0 rounded-full border-2" style={{ backgroundColor: teamColor, borderColor: colors.LINE }} />}
+        {teamColor && <span className="size-4 shrink-0 rounded-full border-2" style={{ backgroundColor: teamColor, borderColor: colors.LINE }} />}
         <span className="truncate">{teamName}</span>
       </div>
     </div>

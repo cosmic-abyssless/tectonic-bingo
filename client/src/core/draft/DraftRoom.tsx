@@ -19,6 +19,7 @@ import { TeamRoster } from "./TeamRoster";
 import { DraftPickReveal } from "./DraftPickReveal";
 import { namesForPick } from "./revealMath";
 import { useDraftReveals } from "./useDraftReveals";
+import { useElementHeight } from "./useElementHeight";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { AchievementIcons, PlaceBreakdown, TierBadge } from "../tectonic/ProfileBadges";
 import { PlayerName } from "../tectonic/PlayerName";
@@ -106,7 +107,9 @@ function ProfileCells({ profile, shown }: { profile: TectonicProfile | null; sho
 // background so the columns scrolling under it are hidden, and it draws the row divider itself (a sticky cell paints
 // over the table's collapsed borders) plus a soft edge on its left.
 // (Whole class strings, not built up: Tailwind only generates classes it can find written out in the source.)
-const STICKY_HEADER = "sticky right-0 bg-surface shadow-[inset_0_-1px_0_0_var(--color-outline),-8px_0_8px_-8px_rgb(0_0_0/0.25)]";
+const STICKY_HEADER = "sticky right-0 top-0 z-20 bg-surface shadow-[inset_0_-1px_0_0_var(--color-outline),-8px_0_8px_-8px_rgb(0_0_0/0.25)]";
+// The column headings stay at the top of the table's own scroll area, again drawing their divider themselves.
+const STICKY_TOP = "sticky top-0 z-10 bg-surface shadow-[inset_0_-1px_0_0_var(--color-outline)]";
 const STICKY_CELL = "sticky right-0 bg-surface shadow-[inset_0_1px_0_0_var(--color-outline),-8px_0_8px_-8px_rgb(0_0_0/0.25)]";
 
 function PoolTable({
@@ -118,6 +121,7 @@ function PoolTable({
   onPick,
   picking,
   leftoverMode,
+  maxHeight,
 }: {
   pool: DraftUnit[];
   questions: SignupQuestion[];
@@ -128,6 +132,8 @@ function PoolTable({
   onPick: (userId: string) => void;
   picking: boolean;
   leftoverMode: LeftoverMode;
+  /** The table scrolls inside this height so the teams above it can stay in view. */
+  maxHeight: string;
 }) {
   // Leads land on their favourites first; the toggle flips to ascending.
   const sort = useTableSort<SortKey>(ratings ? "rating" : "rsn", ratings ? "desc" : "asc");
@@ -188,24 +194,24 @@ function PoolTable({
       <div className="flex justify-end">
         <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={setHiddenColumns} />
       </div>
-    <div className="overflow-x-auto">
+    <div className="overflow-auto" style={{ maxHeight }}>
       <table className="w-max min-w-full text-sm [&_td]:align-middle [&_th]:align-middle">
         <thead>
-          <tr className="border-b border-outline">
-            {hasPairs && <th className="pb-2 pr-2" />}
-            {ratings && <SortHeader label="Rating" sortKey="rating" sort={sort} />}
-            <SortHeader label="RSN" sortKey="rsn" sort={sort} />
-            {shown("discord") && <SortHeader label="Discord" sortKey="discord" sort={sort} />}
-            {hasLeftovers && <th className="pb-2 pr-4" />}
-            {showProfiles && shown("tier") && <SortHeader label="Tier" sortKey="tier" sort={sort} />}
-            {showProfiles && shown("records") && <SortHeader label="Records" sortKey="records" sort={sort} />}
-            {showProfiles && shown("podiums") && <SortHeader label="Podiums" sortKey="podiums" sort={sort} />}
-            {showProfiles && shown("achievements") && <th className="pb-2 pr-4" />}
-            {showWomStats && shown("ehb") && <SortHeader label="EHB" sortKey="ehb" sort={sort} />}
-            {showWomStats && shown("ehp") && <SortHeader label="EHP" sortKey="ehp" sort={sort} />}
-            {showCa && shown("caCurrent") && <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} />}
-            {showCa && shown("caPeak") && <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} />}
-            {showAnswers && questions.filter((q) => shown(q.id)).map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />)}
+          <tr>
+            {hasPairs && <th className={`${STICKY_TOP} pb-2 pr-2`} />}
+            {ratings && <SortHeader label="Rating" sortKey="rating" sort={sort} className={STICKY_TOP} />}
+            <SortHeader label="RSN" sortKey="rsn" sort={sort} className={STICKY_TOP} />
+            {shown("discord") && <SortHeader label="Discord" sortKey="discord" sort={sort} className={STICKY_TOP} />}
+            {hasLeftovers && <th className={`${STICKY_TOP} pb-2 pr-4`} />}
+            {showProfiles && shown("tier") && <SortHeader label="Tier" sortKey="tier" sort={sort} className={STICKY_TOP} />}
+            {showProfiles && shown("records") && <SortHeader label="Records" sortKey="records" sort={sort} className={STICKY_TOP} />}
+            {showProfiles && shown("podiums") && <SortHeader label="Podiums" sortKey="podiums" sort={sort} className={STICKY_TOP} />}
+            {showProfiles && shown("achievements") && <th className={`${STICKY_TOP} pb-2 pr-4`} />}
+            {showWomStats && shown("ehb") && <SortHeader label="EHB" sortKey="ehb" sort={sort} className={STICKY_TOP} />}
+            {showWomStats && shown("ehp") && <SortHeader label="EHP" sortKey="ehp" sort={sort} className={STICKY_TOP} />}
+            {showCa && shown("caCurrent") && <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} className={STICKY_TOP} />}
+            {showCa && shown("caPeak") && <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} className={STICKY_TOP} />}
+            {showAnswers && questions.filter((q) => shown(q.id)).map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} className={STICKY_TOP} />)}
             {canPick && <th className={`${STICKY_HEADER} pb-2`} />}
           </tr>
         </thead>
@@ -369,6 +375,12 @@ export function DraftRoom({ slug }: { slug: string }) {
   const [rateError, setRateError] = useState<string | null>(null);
   const [orderOpen, setOrderOpen] = useState(false);
   const reveals = useDraftReveals(shell?.bingo.id, state);
+  // The teams stay pinned under the page header while the player table scrolls, so both heights decide how tall the table may be.
+  const [pageHeader, setPageHeader] = useState<Element | null>(null);
+  const [teamsPanel, setTeamsPanel] = useState<HTMLElement | null>(null);
+  useEffect(() => setPageHeader(document.querySelector("header")), []);
+  const headerHeight = useElementHeight(pageHeader);
+  const teamsHeight = useElementHeight(teamsPanel);
 
   useEffect(() => {
     if (!state?.orderLockedUntil) return;
@@ -498,7 +510,7 @@ export function DraftRoom({ slug }: { slug: string }) {
       ) : canControlOrder ? (
         <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
-            <p className="font-semibold text-on-surface">{revealing ? "Revealing pick order" : state.currentPick ? `${currentTeam?.name ?? "…"} is on the clock` : "Draft started"}</p>
+            <p className="font-semibold text-on-surface">{revealing ? "Revealing pick order" : state.currentPick ? `${currentTeam?.name ?? "…"} is currently picking` : "Draft started"}</p>
             {state.currentPick && (
               <p className="num text-xs uppercase tracking-wide text-on-surface-subtle">
                 {state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick {state.currentPick.pickNumber}
@@ -514,7 +526,7 @@ export function DraftRoom({ slug }: { slug: string }) {
           <p className="num text-xs uppercase tracking-wide text-on-surface-subtle">
             {state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick {state.currentPick.pickNumber}
           </p>
-          <p className="text-lg font-semibold text-on-surface">{currentTeam?.name ?? "…"} is on the clock</p>
+          <p className="text-lg font-semibold text-on-surface">{currentTeam?.name ?? "…"} is currently picking</p>
         </Card>
       ) : revealing ? (
         <Notice tone="info">Revealing pick order.</Notice>
@@ -532,14 +544,14 @@ export function DraftRoom({ slug }: { slug: string }) {
 
       {isMyTurn && <Notice tone="ok">It's your turn to pick.</Notice>}
 
-      <section>
-        <h3 className="mb-3 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+      <section ref={setTeamsPanel} className="sticky z-10 -mx-6 bg-background px-6 pb-3 pt-2 shadow-[0_6px_8px_-6px_rgb(0_0_0/0.3)]" style={{ top: headerHeight }}>
+        <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
           Teams
         </h3>
         {/* grid-flow-col + a minimum column width, in a scrollable row —
             handles a handful of teams (spread to fill width) and a large
             number of teams (scrolls instead of squeezing RSNs unreadable). */}
-        <div className="overflow-x-auto">
+        <div className="max-h-[36vh] overflow-auto">
           <div className="grid auto-cols-[minmax(140px,1fr)] grid-flow-col gap-3">
             {state.teams.map((team) => (
               <motion.div
@@ -611,6 +623,7 @@ export function DraftRoom({ slug }: { slug: string }) {
             onPick={handlePick}
             picking={makePick.isPending}
             leftoverMode={shell.bingo.leftoverMode}
+            maxHeight={`max(14rem, calc(100dvh - ${headerHeight + teamsHeight}px - 11rem))`}
           />
         </Card>
       </section>
