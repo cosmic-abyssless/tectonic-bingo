@@ -99,6 +99,13 @@ function ProfileCells({ profile, shown }: { profile: TectonicProfile | null; sho
   );
 }
 
+// The Draft button stays pinned to the right edge while the table scrolls sideways. It needs the card's own
+// background so the columns scrolling under it are hidden, and it draws the row divider itself (a sticky cell paints
+// over the table's collapsed borders) plus a soft edge on its left.
+// (Whole class strings, not built up: Tailwind only generates classes it can find written out in the source.)
+const STICKY_HEADER = "sticky right-0 bg-surface shadow-[inset_0_-1px_0_0_var(--color-outline),-8px_0_8px_-8px_rgb(0_0_0/0.25)]";
+const STICKY_CELL = "sticky right-0 bg-surface shadow-[inset_0_1px_0_0_var(--color-outline),-8px_0_8px_-8px_rgb(0_0_0/0.25)]";
+
 function PoolTable({
   pool,
   questions,
@@ -196,7 +203,7 @@ function PoolTable({
             {showCa && shown("caCurrent") && <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} />}
             {showCa && shown("caPeak") && <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} />}
             {showAnswers && questions.filter((q) => shown(q.id)).map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />)}
-            {canPick && <th className="pb-2" />}
+            {canPick && <th className={`${STICKY_HEADER} pb-2`} />}
           </tr>
         </thead>
         {/* One tbody per unit: a pair's two rows share the group's Draft
@@ -257,7 +264,7 @@ function PoolTable({
                         </td>
                       ))}
                     {canPick && i === 0 && (
-                      <td className="py-1 text-right align-middle" rowSpan={unit.entries.length}>
+                      <td className={`${STICKY_CELL} py-1 pl-3 text-right align-middle`} rowSpan={unit.entries.length}>
                         <Button size="sm" variant="primary" onPress={() => onPick(entry.user.id)} isDisabled={picking || !draftable}>
                           {isPair ? "Draft pair" : "Draft"}
                         </Button>
