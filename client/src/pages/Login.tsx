@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { User } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
 import { displayName } from "../core/ui/user";
@@ -95,6 +95,17 @@ export function Login() {
           <DiscordIcon />
           Continue with Discord
         </a>
+        <p className="text-center text-xs text-on-surface-subtle">
+          By continuing you agree to the{" "}
+          <Link to="/terms" className="underline underline-offset-2 hover:text-on-surface">
+            Terms of Service
+          </Link>{" "}
+          and have read the{" "}
+          <Link to="/privacy" className="underline underline-offset-2 hover:text-on-surface">
+            Privacy Policy
+          </Link>
+          .
+        </p>
         <DevLoginPanel />
       </div>
     </div>

@@ -12,6 +12,7 @@ import { DraftPage } from "./pages/DraftPage";
 import { StatsPage } from "./pages/StatsPage";
 import { SiteAdminPage } from "./pages/SiteAdminPage";
 import { ErrorBoundary } from "./core/ui/ErrorBoundary";
+import { PrivacyPage, TermsPage } from "./pages/legal/LegalPage";
 
 // Admin was folded into the Mod Panel — redirect any old /b/:slug/admin
 // links there. Builds an absolute path explicitly since relative Navigate
@@ -31,6 +32,9 @@ export default function App() {
         <WebSocketProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            {/* Public: linked from the Discord application settings and the login page. */}
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
             <Route
               path="/"
               element={
