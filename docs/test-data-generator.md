@@ -91,6 +91,10 @@ target (say `signup`), the later dates are simply scheduled in the future.
 - **Mods are few**: each has a few times of day they sit down and clear everything
   pending in one batch (most of the time), so submissions pile up while they're asleep
   (median wait about 3 hours, the longest about half a day).
+- **Some drops are posted by a teammate**: about one submission in eight is uploaded by another
+  player on the team for the one who got the drop (a drop on mobile, posted from a PC), so the
+  "posted by" wording, the audit "on behalf of" and the credit in the stats all have examples.
+  It is drawn from its own random stream, so it never shifts anything else in a seeded run.
 - **Rejections are rare**: on the first day some players' first submission is rejected
   ("Codeword not visible...") and re-submitted 10-60 minutes later; after that about 1%.
   One approval is undone and re-approved a few minutes later. Occasionally a mod adjusts

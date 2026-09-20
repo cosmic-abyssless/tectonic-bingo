@@ -92,6 +92,8 @@ export class Simulation {
   private undoDone = false;
   private readonly summary: SimSummary = { submitted: 0, approved: 0, rejected: 0, pendingAtEnd: 0, errors: new Map(), teams: [], earliest: null, latest: null };
   private readonly rng: Rng;
+  /** Its own stream, so choosing who posts a drop never shifts anything else in a seeded run. */
+  private readonly postRng: Rng;
   private readonly reachable: PartModel[];
 
   constructor(
@@ -101,6 +103,7 @@ export class Simulation {
     private readonly mods: Player[],
   ) {
     this.rng = ctx.rng.fork("simulate");
+    this.postRng = ctx.rng.fork("posted-for");
     this.reachable = board.parts.filter((p) => !board.deadlocked.has(p.id));
   }
 
@@ -267,8 +270,14 @@ export class Simulation {
       this.note(new Error("an item was used elsewhere in the meantime"), "skipped");
       return;
     }
+    // About one drop in eight is posted by a teammate: the player got it on mobile and someone at a PC sent it in.
+    // `by` stays the player the drop belongs to; the poster is the session that uploads it.
+    const others = team.members.filter((m) => m !== by && m.userId);
+    const poster = by.userId && others.length > 0 && this.postRng.chance(0.12) ? this.postRng.pick(others) : null;
     try {
-      const { submission } = await this.ctx.api.as(by.discordId).submit<{ submission: { id: string } }>(`/api/bingos/${this.ctx.slug}/submissions`, claims, { at });
+      const { submission } = await this.ctx.api
+        .as((poster ?? by).discordId)
+        .submit<{ submission: { id: string } }>(`/api/bingos/${this.ctx.slug}/submissions`, claims, { at }, poster ? by.userId! : undefined);
       this.stamp(at);
       const first = !this.rejectedOnce.has(by.index) && at.getTime() < this.ctx.tl.startsAt.getTime() + DAY && this.rng.chance(0.2);
       if (first) this.rejectedOnce.add(by.index);

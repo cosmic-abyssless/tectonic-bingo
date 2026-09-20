@@ -108,9 +108,10 @@ export class Session {
   }
 
   /** A submission: the placeholder screenshot plus its claims, as multipart. */
-  submit<T>(urlPath: string, claims: unknown[], opts: CallOptions = {}): Promise<T> {
+  submit<T>(urlPath: string, claims: unknown[], opts: CallOptions = {}, forUserId?: string): Promise<T> {
     const form = new FormData();
     form.append("claims", JSON.stringify(claims));
+    if (forUserId) form.append("forUserId", forUserId); // posted by this session for a teammate
     form.append("screenshot", new Blob([new Uint8Array(screenshot())], { type: "image/png" }), "screenshot.png");
     return this.send<T>("POST", urlPath, form, {}, opts);
   }

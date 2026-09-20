@@ -143,6 +143,8 @@ A single proof package submitted by a player on behalf of their Team to claim co
 - **Status:** `pending` → `approved` | `rejected`.
 - **Reviewer:** Must be reviewed by a Moderator (or Admin/Site Admin).
 - **Feedback:** Rejections must include reviewer notes so the team knows what went wrong.
+- **Whose drop / who posted:** A Submission belongs to the Player who got the drop (`submittedBy`: credited on the board, in the stats and in the mod queue). When someone else uploaded it, that Player is recorded as the poster (`postedBy`, shown as "posted by"), and the audit entry has them acting on behalf of the Player. This is the usual case of a teammate at a PC posting a drop from mobile.
+- **Who may post for whom:** A Player posts to their own Team, for themselves or any teammate. A Moderator (or Admin) may also submit to any Team of the Bingo while viewing it, and must say which of its Players the drop belongs to. The Bingo must be live either way.
 
 ### Screenshot
 An image attached to a Submission proving in-game completion.
