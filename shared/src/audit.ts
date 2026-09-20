@@ -135,6 +135,8 @@ export interface AuditDetailsMap {
   "stage.changed": { from: Stage; to: Stage; startsAtBackfilled?: boolean };
 
   "draft.started": { order: { teamId: string; name: string; draftOrder: number }[] };
+  "draft.order_shuffled": { order: { teamId: string; name: string; draftOrder: number }[] };
+  "draft.order_set": { order: { teamId: string; name: string; draftOrder: number }[] };
   "draft.pick": { pickNumber: number; userIds: string[]; displayNames: string[]; pair: boolean };
   "draft.rating_set": { rsn: string; stars: number; hasNote: boolean; cleared: boolean };
 
@@ -459,6 +461,8 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     label: (i) => `${actor(i)} advanced the bingo from ${i.details.from} to ${i.details.to}`,
   },
   "draft.started": { category: "draft", tone: "info", visibility: "public", title: "Draft started", label: (i) => `${actor(i)} started the draft` },
+  "draft.order_shuffled": { category: "draft", tone: "info", visibility: "public", title: "Pick order shuffled", label: (i) => `${actor(i)} shuffled the pick order` },
+  "draft.order_set": { category: "draft", tone: "info", visibility: "public", title: "Pick order set", label: (i) => `${actor(i)} set the pick order` },
   "draft.pick": {
     category: "draft",
     tone: "neutral",

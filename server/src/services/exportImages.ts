@@ -8,6 +8,7 @@ import type { ExportImage } from "@bingo/shared";
 import { ServiceError } from "./errors";
 import { generateVariants } from "./imageService";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "../middleware/upload";
+import { log } from "../log";
 
 const TILES_DIR = "tiles";
 
@@ -31,13 +32,13 @@ export function readTileImage(uploadsDir: string, imageUrl: string): ExportImage
   const name = UPLOADED_TILE_URL.exec(imageUrl)?.[1];
   const contentType = name ? CONTENT_TYPE_BY_EXT[path.extname(name).toLowerCase()] : undefined;
   if (!name || !contentType) {
-    console.warn(`[bingoExport] not exporting the image ${JSON.stringify(imageUrl)}: not an uploaded tile image`);
+    log.warn("bingo export skipped image", { imageUrl, reason: "not an uploaded tile image" });
     return null;
   }
   try {
     return { contentType, data: fs.readFileSync(path.join(uploadsDir, TILES_DIR, name)).toString("base64") };
   } catch {
-    console.warn(`[bingoExport] not exporting the image ${imageUrl}: the file can't be read`);
+    log.warn("bingo export skipped image", { imageUrl, reason: "file unreadable" });
     return null;
   }
 }

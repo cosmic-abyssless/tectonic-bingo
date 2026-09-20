@@ -184,6 +184,14 @@ describe("deleteTeam", () => {
     expect(() => deleteTeam(db, team.id)).toThrow(ServiceError);
     expect(getTeamsWithMembers(db, bingo.id)).toHaveLength(1);
   });
+
+  it("refuses create and delete after the draft has started", () => {
+    const { bingo, captain, captain2 } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });
+    db.update(schema.bingos).set({ draftStarted: true }).where(eq(schema.bingos.id, bingo.id)).run();
+    expect(() => createTeam(db, { bingoId: bingo.id, captainUserId: captain2.id })).toThrow(/after the draft has started/i);
+    expect(() => deleteTeam(db, team.id)).toThrow(/after the draft has started/i);
+  });
 });
 
 describe("audit trail", () => {

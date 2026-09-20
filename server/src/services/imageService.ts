@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import fs from "fs";
 import path from "path";
+import { log } from "../log";
 
 // Display variants generated alongside every uploaded image (issue #61). The
 // original file is always kept untouched — it's the OCR source and the "open
@@ -65,7 +66,7 @@ export async function generateVariants(originalPath: string): Promise<GeneratedV
   } catch (err) {
     // Best-effort: never fail the upload over a display variant. The original
     // remains the fallback for every client.
-    console.warn("[image] variant generation failed", err instanceof Error ? err.message : err);
+    log.warn("image variant generation failed", { err });
     return null;
   }
 }

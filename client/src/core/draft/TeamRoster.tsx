@@ -11,10 +11,23 @@ function groupByPick(picks: DraftPick[]): DraftPick[][] {
   return [...byNumber.entries()].sort(([a], [b]) => a - b).map(([, group]) => group);
 }
 
-export function TeamRoster({ team, picks, isCurrent, highlight }: { team: DraftTeam; picks: DraftPick[]; isCurrent?: boolean; highlight?: boolean }) {
+function ordinal(n: number): string {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1: return `${n}st`;
+    case 2: return `${n}nd`;
+    case 3: return `${n}rd`;
+    default: return `${n}th`;
+  }
+}
+
+export function TeamRoster({ team, picks, isCurrent, highlight, showOrder }: { team: DraftTeam; picks: DraftPick[]; isCurrent?: boolean; highlight?: boolean; showOrder?: boolean }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <div className="h-4 text-[11px] font-medium uppercase tracking-wide text-on-surface">{isCurrent && "On the clock"}</div>
+      <div className="h-4 text-[11px] font-medium uppercase tracking-wide text-on-surface">
+        {isCurrent ? "On the clock" : showOrder && team.draftOrder != null ? ordinal(team.draftOrder) : null}
+      </div>
       <div
         className={`w-full rounded-md border px-2.5 py-2 transition-colors ${isCurrent ? "border-on-surface bg-surface-raised" : highlight ? "border-outline-strong bg-surface-raised" : "border-outline bg-surface"}`}
         style={team.color && !isCurrent ? { borderColor: `${team.color}99` } : undefined}

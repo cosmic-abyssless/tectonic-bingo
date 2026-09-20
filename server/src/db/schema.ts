@@ -76,6 +76,11 @@ export const bingos = sqliteTable('bingos', {
   // Last WOM sync failure (create or edit), surfaced in the admin settings
   // panel. Cleared on the next successful sync.
   womSyncError: text('wom_sync_error'),
+  // Set by Site Admin Start draft. Writing draftOrder is not starting —
+  // captains cannot pick until this is true and the shuffle reveal lock
+  // (draftOrderLockedUntil) has expired.
+  draftStarted: integer('draft_started', { mode: 'boolean' }).notNull().default(false),
+  draftOrderLockedUntil: integer('draft_order_locked_until', { mode: 'timestamp' }),
   createdByUserId: text('created_by_user_id').notNull().references(() => users.id),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
@@ -221,7 +226,7 @@ export const teams = sqliteTable('teams', {
   // used to assist mod verification of submission screenshots.
   codeword: text('codeword').notNull(),
   color: text('color'), // hex code for UI display, e.g. "#e74c3c" — mod-assigned
-  draftOrder: integer('draft_order'), // nullable until the draft starts
+  draftOrder: integer('draft_order'), // nullable until pick order is set
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 }, (t) => [

@@ -92,6 +92,13 @@
       "when": 1789786669718,
       "tag": "0012_signup_ca_stats",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1789840000000,
+      "tag": "0013_draft_order_ceremony",
+      "breakpoints": true
     }
   ]
 }

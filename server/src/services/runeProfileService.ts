@@ -13,6 +13,7 @@
 // 120/min. See https://api.runeprofile.com/v1/docs.
 import type { AccountType } from "@bingo/shared";
 import { USER_AGENT } from "../config";
+import { log } from "../log";
 
 const RUNEPROFILE_BASE_URL = "https://api.runeprofile.com/v1";
 const RUNEPROFILE_USER_AGENT = `${USER_AGENT} player stats`;
@@ -39,12 +40,12 @@ export class RuneProfileClient {
       if (res.status === 429) {
         const retryAfterSec = Number(res.headers.get("retry-after"));
         this.rateLimitedUntil = Date.now() + (Number.isFinite(retryAfterSec) ? retryAfterSec * 1000 : 60_000);
-        console.warn(`[runeprofile] rate limited, backing off until ${new Date(this.rateLimitedUntil).toISOString()}`);
+        log.warn("runeprofile rate limited", { until: new Date(this.rateLimitedUntil).toISOString() });
       } else if (res.status !== 404) {
-        console.warn(`[runeprofile] ${res.status} from GET /accounts/${rsn}/full`);
+        log.warn("runeprofile request failed", { status: res.status, rsn });
       }
     } catch (err) {
-      console.warn(`[runeprofile] request failed: GET /accounts/${rsn}/full`, err instanceof Error ? err.message : err);
+      log.warn("runeprofile request failed", { rsn, err });
     }
     return null;
   }

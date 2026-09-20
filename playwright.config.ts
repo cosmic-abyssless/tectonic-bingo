@@ -54,6 +54,7 @@ export default defineConfig({
         TECTONIC_API_URL: "",
         TECTONIC_API_KEY: "",
         TECTONIC_GUILD_ID: "",
+        WOM_API_KEY: "",
         RUNEPROFILE_API_KEY: "",
         PLAYER_STATS_FETCH_DISABLED: "true",
         SCREENSHOT_OCR_DISABLED: "true",
