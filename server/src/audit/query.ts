@@ -6,6 +6,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { actionsInCategory, AUDIT_ACTIONS, condenseAuditEntries, renderAuditLabel, type AuditAction, type AuditCategory, type AuditEntry, type AuditLogFilters, type AuditLogResponse, type AuditVisibility } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { auditLog, teams, users } from "../db/schema";
+import { ServiceError } from "../services/errors";
 import { rsnsAcrossBingos } from "../services/playerNames";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -68,6 +69,13 @@ function toAuditEntries(db: Db, rows: AuditLogRow[]): AuditEntry[] {
   });
 }
 
+// A malformed timestamp would become an Invalid Date inside the query, so refuse it up front.
+function parseWhen(value: string, name: "since" | "until"): Date {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new ServiceError(400, `${name} must be a valid date and time`);
+  return date;
+}
+
 function applyFilters(conditions: (ReturnType<typeof eq> | undefined)[], filters: AuditLogFilters) {
   if (filters.action?.length) conditions.push(inArray(auditLog.action, filters.action));
   if (filters.category?.length) conditions.push(inArray(auditLog.action, filters.category.flatMap(actionsInCategory)));
@@ -76,8 +84,8 @@ function applyFilters(conditions: (ReturnType<typeof eq> | undefined)[], filters
   if (filters.entityType) conditions.push(eq(auditLog.entityType, filters.entityType));
   if (filters.entityId) conditions.push(eq(auditLog.entityId, filters.entityId));
   if (filters.visibility) conditions.push(eq(auditLog.visibility, filters.visibility));
-  if (filters.since) conditions.push(gte(auditLog.createdAt, new Date(filters.since)));
-  if (filters.until) conditions.push(lte(auditLog.createdAt, new Date(filters.until)));
+  if (filters.since) conditions.push(gte(auditLog.createdAt, parseWhen(filters.since, "since")));
+  if (filters.until) conditions.push(lte(auditLog.createdAt, parseWhen(filters.until, "until")));
   if (filters.q) conditions.push(or(like(auditLog.entityLabel, `%${filters.q}%`), like(auditLog.action, `%${filters.q}%`)));
 }
 

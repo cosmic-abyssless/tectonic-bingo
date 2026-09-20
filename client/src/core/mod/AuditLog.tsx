@@ -9,6 +9,8 @@ import { Button } from "../ui/Button";
 import { Card, EmptyState, Notice } from "../ui/Card";
 import { ChevronDownIcon, ChevronRightIcon, ListIcon } from "../ui/icons";
 import { MultiSelect } from "../ui/MultiSelect";
+import { DateTimeRangeFilter } from "../ui/DateTimeRangeFilter";
+import { isRangeSet, type TimeRange } from "../ui/timeRange";
 
 // Shared with SiteAuditLog.tsx — bug_report entries are bingo-scoped when
 // reported from a bingo's own pages, so this filter is meaningful in both.
@@ -79,6 +81,7 @@ export function AuditLog({ slug }: { slug: string }) {
   const [categories, setCategories] = useState<string[]>([]);
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [actorUserIds, setActorUserIds] = useState<string[]>([]);
+  const [range, setRange] = useState<TimeRange>({});
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -87,7 +90,10 @@ export function AuditLog({ slug }: { slug: string }) {
     category: categories.length ? (categories as AuditCategory[]) : undefined,
     teamId: teamIds.length ? teamIds : undefined,
     actorUserId: actorUserIds.length ? actorUserIds : undefined,
+    since: range.since,
+    until: range.until,
   });
+  const filtered = categories.length > 0 || teamIds.length > 0 || actorUserIds.length > 0 || isRangeSet(range);
 
   const entries = useMemo(() => data?.pages.flatMap((p) => p.entries) ?? [], [data]);
   const teamOptions = useMemo(() => (shell?.teams ?? []).map((t) => ({ key: t.id, label: t.name })), [shell]);
@@ -118,6 +124,7 @@ export function AuditLog({ slug }: { slug: string }) {
         <MultiSelect label="Category" options={CATEGORIES} selected={categories} onChange={setCategories} />
         {teamOptions.length > 0 && <MultiSelect label="Team" options={teamOptions} selected={teamIds} onChange={setTeamIds} />}
         {actorOptions.length > 0 && <MultiSelect label="User" options={actorOptions} selected={actorUserIds} onChange={setActorUserIds} />}
+        <DateTimeRangeFilter value={range} onChange={setRange} />
         <div className="ml-auto">
           <Button size="sm" onPress={copyCsv} isDisabled={entries.length === 0}>
             {copied ? "Copied" : "Copy as CSV"}
@@ -130,8 +137,8 @@ export function AuditLog({ slug }: { slug: string }) {
       ) : isLoading ? (
         <p className="py-20 text-center text-sm text-on-surface-muted">Loading…</p>
       ) : entries.length === 0 ? (
-        <EmptyState icon={<ListIcon />} title="No activity yet">
-          Actions taken on this bingo will show up here as they happen.
+        <EmptyState icon={<ListIcon />} title={filtered ? "No matching activity" : "No activity yet"}>
+          {filtered ? "Nothing in the log matches these filters. Try widening them." : "Actions taken on this bingo will show up here as they happen."}
         </EmptyState>
       ) : (
         <div className="space-y-2">
