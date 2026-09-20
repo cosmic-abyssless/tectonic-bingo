@@ -57,7 +57,7 @@ function sortUnit(unit: DraftUnit, sort: TableSort<SortKey>, ratings: Ratings): 
 // Tier · Records · Podiums · Achievements — the at-a-glance clan signals;
 // the full lists live in PlayerProfileDialog.
 function ProfileCells({ profile, shown }: { profile: TectonicProfile | null; shown: (id: string) => boolean }) {
-  const empty = <td className="py-2 pr-4 text-on-surface-subtle">—</td>;
+  const empty = <td className="whitespace-nowrap py-2 pr-4 text-on-surface-subtle">—</td>;
   if (!profile) {
     return (
       <>
@@ -72,7 +72,7 @@ function ProfileCells({ profile, shown }: { profile: TectonicProfile | null; sho
   return (
     <>
       {shown("tier") && (
-        <td className="py-2 pr-4">
+        <td className="whitespace-nowrap py-2 pr-4">
           <TierBadge profile={profile} />
         </td>
       )}
@@ -176,7 +176,7 @@ function PoolTable({
         <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={setHiddenColumns} />
       </div>
     <div className="overflow-x-auto">
-      <table className="w-full text-sm [&_td]:align-middle [&_th]:align-middle">
+      <table className="w-max min-w-full text-sm [&_td]:align-middle [&_th]:align-middle">
         <thead>
           <tr className="border-b border-outline">
             {hasPairs && <th className="pb-2 pr-2" />}

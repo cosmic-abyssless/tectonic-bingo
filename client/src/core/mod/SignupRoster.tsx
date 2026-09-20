@@ -456,7 +456,7 @@ export function SignupRoster({ slug }: { slug: string }) {
             <p className="text-sm text-on-surface-muted">No signups match these filters.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm [&_td]:align-middle [&_th]:align-middle">
+              <table className="w-max min-w-full text-sm [&_td]:align-middle [&_th]:align-middle">
                 <thead>
                   <tr className="border-b border-outline">
                     {shown("order") && <SortHeader label="#" sortKey="order" sort={sort} />}
@@ -492,7 +492,11 @@ export function SignupRoster({ slug }: { slug: string }) {
                           </span>
                         </td>
                         {shown("discord") && <td className="py-2 pr-4 text-on-surface-muted">{displayName(entry.user)}</td>}
-                        {showTier && shown("tier") && <td className="py-2 pr-4 text-on-surface-muted">{entry.tectonicProfile ? <TierBadge profile={entry.tectonicProfile} /> : "—"}</td>}
+                        {showTier && shown("tier") && (
+                          <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">
+                            {entry.tectonicProfile ? <TierBadge profile={entry.tectonicProfile} /> : "—"}
+                          </td>
+                        )}
                         {shown("signedUp") && (
                           <td className="py-2 pr-4 text-on-surface-muted">
                             <time dateTime={entry.signup.createdAt} title={new Date(entry.signup.createdAt).toLocaleString()} className="num whitespace-nowrap">
