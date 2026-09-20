@@ -239,14 +239,16 @@ without a bypass there is no reason for the engine to look at `claim.itemName` a
 
 ## 8. Submission path (from the review — the largest under-scoped area)
 
-**Gates vs. shared leaves.** `createSubmission` rejects a claim if *any* ancestor of the
-leaf — `findAncestorIds` follows every parent edge — has an unmet `submitGateNodeId`
-(`submissionService.ts:76-84`). A leaf shared by Part A (no gate) and Part B (gated on A)
-is therefore unsubmittable until A completes, which can never happen. Rule: **a task whose
-leaves are shared with a sibling may use `pointsGateNodeId` (evaluation-only, harmless) but
-not `submitGateNodeId`.** With one shared pool there is no such thing as "submitting *for*
-Part B" anyway. The tile-level shared-pool mode (§9) disables the "Requires previous task"
-checkbox; the ancestor-walk rule itself stays as is for ordinary tiles.
+**Gates vs. shared leaves.** *(Revised: the original rule below was a dead end and is superseded.)*
+`createSubmission` first rejected a claim if *any* ancestor of the leaf had an unmet
+`submitGateNodeId`, so a leaf shared by Part A (no gate) and Part B (gated on A) was
+unsubmittable until A completed, which could never happen; this advice was to keep
+`submitGateNodeId` off any part that shares leaves. That is now handled in code instead
+(`graphService.submitGateBlock`): a claim is refused only when **every** route from its
+item up to the tile passes through a gate the team hasn't completed. A shared item counts
+toward the ungated part, so it can be submitted while the gated part is still locked; an
+item that sits only under the gated part waits for the gate, as before. So PETS and SLAYER
+BOSSES can gate Page 2 behind Page 1 while sharing (or not sharing) their items.
 
 **Duplicate claims on one leaf in one submission.** The server dedupes `nodeIds` only for
 validation and inserts every claim; the modal keeps staged claims across task switches.
@@ -412,3 +414,14 @@ Then, fresh migration again (established convention — delete `server/drizzle/*
   wildcard scenarios rewritten as pool-member/`ANY` shapes (deferred to the pre-merge pass
   per the branch's convention).
 - `node-graph-model.md` gets a pointer to this doc once (if) it's adopted.
+
+## 14. Exclusive items (added later)
+
+Sharing a node (§10.5, Barrows) makes one claim count toward every part above it. The
+opposite need, an item usable in **one place only** (a pet on its boss's tile *or* the pets
+tile; a slayer unique on Page 1 *or* Page 2), can't be said with edges: a claim points at one
+node and can't be "used up". It is a separate layer over claims, not part of the node graph:
+per-bingo exclusivity rules (item names plus a `part` or `tile` scope) enforced at
+submission and applied when scoring. Design and rationale: `docs/exclusive-items-plan.md`;
+term: `CONTEXT.md` "Exclusive Item". Each place keeps its own item node (nothing is shared),
+so the claim's node id already says where it was submitted.
