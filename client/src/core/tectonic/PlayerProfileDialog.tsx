@@ -5,7 +5,7 @@ import { useDialogParts } from "../ui/useDialogParts";
 import { Badge, Notice } from "../ui/Card";
 import { SpinnerIcon } from "../ui/icons";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
-import { displayName } from "../ui/user";
+import { discordName } from "../ui/user";
 import { AchievementIcons, Medal, PlaceBreakdown, TierBadge } from "./ProfileBadges";
 import { formatRecordValue, isBingoEvent, podiumSummary, recordSummary } from "./profile";
 import { CaCell, WomCell } from "../signup/caStats";
@@ -67,7 +67,7 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
   const statsRefreshing = useStatsRefreshingUserIds();
   const caLoading = statsRefreshing.has(player.user.id);
   const { profile } = player;
-  const name = displayName(player.user);
+  const name = discordName(player.user);
   const podiums = profile ? podiumSummary(profile) : null;
   const recordPlaces = profile ? recordSummary(profile) : null;
   const records = profile ? [...profile.records].sort((a, b) => a.position - b.position || b.date.localeCompare(a.date)) : [];
@@ -84,7 +84,7 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
             <span className="truncate">{player.rsn ?? name}</span>
           </>
         }
-        subtitle={player.rsn ? name : "Not signed up for this bingo"}
+        subtitle={player.rsn ? `Discord: ${name}` : "Not signed up for this bingo"}
         onClose={onClose}
         action={profile && <AchievementIcons profile={profile} large />}
       />

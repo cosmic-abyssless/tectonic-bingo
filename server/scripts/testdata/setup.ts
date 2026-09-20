@@ -90,7 +90,7 @@ export async function runSignups(ctx: Ctx, players: Player[], pairs: [Player, Pl
       at: p.signupAt!,
       run: async () => {
         if (!p.isMe) {
-          const { user } = await ctx.api.as(ctx.admin).post<{ user: { id: string } }>("/api/dev/users", { discordId: p.discordId, discordUsername: p.name }, { at: plus(p.signupAt!, -1 * MINUTE) });
+          const { user } = await ctx.api.as(ctx.admin).post<{ user: { id: string } }>("/api/dev/users", { discordId: p.discordId, discordUsername: p.discordName }, { at: plus(p.signupAt!, -1 * MINUTE) });
           p.userId = user.id;
         }
         await ctx.api.as(p.discordId).post(path(ctx, "/signup"), { rsn: p.name, answers: [] }, { at: p.signupAt! });

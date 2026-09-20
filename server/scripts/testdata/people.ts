@@ -5,8 +5,10 @@ import { HOUR } from "./timeline";
 export interface Player {
   index: number;
   discordId: string;
-  /** Discord username and RSN both. */
+  /** The RSN they sign up with. */
   name: string;
+  /** Their Discord username: a different name from the RSN, like a real player's, so a screen that shows the wrong one is easy to spot. */
+  discordName: string;
   /** Filled in once the user exists on the server. */
   userId: string | null;
   /** 0..1: how much a hour of their play is worth, and how much content they can do. */
@@ -40,6 +42,7 @@ export function makePlayers(rng: Rng, count: number, idPrefix: string): Player[]
     index,
     discordId: `${idPrefix}-${index}`,
     name: `${pool[index % pool.length]}${index >= pool.length ? index : ""}`,
+    discordName: `${pool[index % pool.length]!.toLowerCase()}_dc${index}`,
     userId: null,
     skill: clamp(rng.normal(0.5, 0.2), 0.1, 0.95),
     activity: clamp(rng.normal(3, 1.2), 0.5, 8),

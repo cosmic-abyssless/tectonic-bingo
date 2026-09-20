@@ -76,6 +76,9 @@ target (say `signup`), the later dates are simply scheduled in the future.
 
 ### How the play is made realistic
 
+- Every player has an **RSN** (what they sign up with) and a different **Discord username**
+  (`<rsn>_dc<n>`), like a real player, so a screen that shows the Discord name where it should
+  show the RSN is easy to spot: search the page for `_dc`.
 - Players have a **skill**, hours a day they play, and a timezone: quiet overnight,
   busiest in the evening. Whether a player can do a given part at all is decided once, so
   only a subset of a team can do the hard content (TOB ISSUE 2 Page 2 needs a Scythe or

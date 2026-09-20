@@ -149,7 +149,7 @@ export function BingoPageProvider({
       boardCols: bingo.boardCols,
     },
     milestone: nextMilestone(bingo),
-    user: { displayName: displayName(user), avatarUrl: avatarUrl(user) },
+    user: { displayName: myTeamModel?.members.find((m) => m.id === user.id)?.displayName ?? displayName(user), avatarUrl: avatarUrl(user) },
     isMod,
     myTeam: myTeamModel,
     teams: teamModels,

@@ -8,21 +8,18 @@ import { SearchableSelect } from "../ui/SearchableSelect";
 import { CheckIcon, ClockIcon, UsersIcon } from "../ui/icons";
 import { displayName } from "../ui/user";
 
-// Roster entries only carry RSNs; once someone has logged in we can show their
-// Discord name and lead with that.
+// Named by RSN: the clan roster's first RSN, else (for someone who has logged in but has none) their Discord name.
 function candidateLabel(c: PartnerCandidate): string {
-  if (!c.user) return c.rsns.join(", ") || c.discordId;
-  return c.rsns.length ? `${displayName(c.user)} (${c.rsns[0]})` : displayName(c.user);
+  if (c.rsns.length) return c.rsns[0]!;
+  return c.user ? displayName(c.user) : c.discordId;
 }
 
-// Best name we have for the other half of a pairing: Discord name plus the RSN
-// they signed up with, else the roster's RSNs, else a placeholder.
+// Best name we have for the other half of a pairing: the RSN they signed up with, else the roster's RSNs, else
+// their Discord name, else a placeholder.
 function partyName(party: PairingParty, rosterRsns?: string[]): string {
-  if (party.user) {
-    const name = displayName(party.user);
-    return party.rsn ? `${name} (${party.rsn})` : name;
-  }
-  return rosterRsns?.join(", ") || "That player";
+  if (party.rsn) return party.rsn;
+  if (rosterRsns?.length) return rosterRsns.join(", ");
+  return party.user ? displayName(party.user) : "That player";
 }
 
 /** Duo-mode partner picker shown under an active signup during the signup stage. */

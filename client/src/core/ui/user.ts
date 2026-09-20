@@ -1,9 +1,14 @@
-import type { MinimalUser } from "@bingo/shared";
+import { discordName, playerName, type MinimalUser } from "@bingo/shared";
 
-/** guild nick → global display name → username */
-export function displayName(user: MinimalUser): string {
-  return user.discordGuildNick ?? user.discordGlobalName ?? user.discordUsername;
+/**
+ * How a player is shown: their RSN when the server sent one (inside a bingo, for anyone who signed up), otherwise
+ * their Discord name. Where the Discord name is wanted on purpose, use `discordName` and label it.
+ */
+export function displayName(user: Pick<MinimalUser, "discordUsername" | "discordGlobalName" | "discordGuildNick"> & { rsn?: string | null }): string {
+  return playerName(user);
 }
+
+export { discordName };
 
 // Discord's CDN keys avatars by the Discord snowflake ID (discordId), not
 // our internal UUID primary key (id) — mixing those up throws inside

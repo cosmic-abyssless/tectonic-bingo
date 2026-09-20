@@ -58,6 +58,7 @@ A designated player who leads a Team during a Bingo.
 Any clan member participating in a Bingo as a competitor.
 - **Capabilities:** Sign up, view the board, make Submissions for their team, view team progress.
 - **Rules:** Belongs to exactly one Team per Bingo once drafted.
+- **Name:** Inside a Bingo a Player is named by the RSN they signed up with, not their Discord name (rosters, submissions, stats, the audit log, the draft, the header). The server puts it on `rsn` for every user it sends within a Bingo, and `playerName` prefers it. An account with no Signup in that Bingo, like a Moderator who isn't playing, falls back to the Discord name, as do site-level lists. A Discord name is only shown where it is labelled as one (the "Discord" columns of the roster and draft room, the profile subtitle). Audit entries written before this keep the names they were stored with.
 
 ---
 

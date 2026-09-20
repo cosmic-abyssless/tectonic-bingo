@@ -51,7 +51,7 @@ async function main(): Promise<void> {
     const me = users.find((u) => u.discordId === args.me);
     if (!me) throw new UsageError(`--me ${args.me} isn't a dev user (they need to have logged in to this server once)`);
     players.push({
-      index: players.length, discordId: me.discordId, name: me.discordUsername, userId: me.id, skill: 0.6, activity: 3, offset: -5,
+      index: players.length, discordId: me.discordId, name: `Dev ${me.discordUsername.slice(0, 8)}`, discordName: me.discordUsername, userId: me.id, skill: 0.6, activity: 3, offset: -5,
       isMe: true, isMod: false, reviewWindows: [], partnerIndex: null, signupAt: null,
     });
   }

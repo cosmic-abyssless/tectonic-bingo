@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useMatch } from "react-router-dom";
+import { useBingo } from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
 import { useColorSchemePreference } from "./colorScheme";
 import { BugReportDialog } from "./BugReportDialog";
@@ -49,6 +50,11 @@ export function AppHeader({
   style?: CSSProperties;
 }) {
   const { user, logout } = useAuth();
+  // Inside a bingo the viewer is named by the RSN they signed up with (their team's roster carries it); anywhere
+  // else, and for an account that isn't playing, by their Discord name.
+  const bingoSlug = useMatch("/b/:slug/*")?.params.slug;
+  const { data: shell } = useBingo(bingoSlug);
+  const myRsn = user ? shell?.teams.flatMap((t) => t.members).find((m) => m.user.id === user.id)?.user.rsn : null;
   const [bugReportOpen, setBugReportOpen] = useState(false);
   const [colorScheme, setColorScheme] = useColorSchemePreference();
   const compact = !!mobileMenu;
@@ -68,7 +74,7 @@ export function AppHeader({
         <MenuTrigger>
           <Button variant="ghost" size="sm" aria-label="Account menu" className="pl-1.5">
             <img src={avatarUrl(user)} alt="" className="size-6 rounded-full" />
-            <span className="hidden sm:inline">{displayName(user)}</span>
+            <span className="hidden sm:inline">{myRsn || displayName(user)}</span>
           </Button>
           <Menu>
             {user.isAdmin && (

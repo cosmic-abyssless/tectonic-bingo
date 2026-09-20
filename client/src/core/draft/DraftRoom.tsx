@@ -6,7 +6,7 @@ import { CaCell, WomCell } from "../signup/caStats";
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { useAuth } from "../../context/AuthContext";
 import { queryKeys, useBingo, useDraftState, useMakePick, useSetDraftOrder, useSetPickRating, useShuffleDraftOrder, useSignupQuestions, useStartDraft } from "../../api/queries";
-import { displayName } from "../ui/user";
+import { discordName } from "../ui/user";
 import { Button, IconButton } from "../ui/Button";
 import { Badge, Card, Notice } from "../ui/Card";
 import { Dialog, DialogHeader } from "../ui/Dialog";
@@ -39,7 +39,7 @@ const placeScore = (p: { first: number; second: number; third: number }) => p.fi
 function poolSortValue(entry: DraftPoolEntry, key: SortKey, ratings: Ratings): string | number {
   if (key === "rating") return ratings[entry.signup.id]?.stars ?? 0;
   if (key === "rsn") return entry.signup.rsn.toLowerCase();
-  if (key === "discord") return displayName(entry.user).toLowerCase();
+  if (key === "discord") return discordName(entry.user).toLowerCase();
   if (key === "tier") return entry.tectonicProfile?.points ?? -1;
   if (key === "records") return entry.tectonicProfile ? placeScore(recordSummary(entry.tectonicProfile)) : -1;
   if (key === "podiums") return entry.tectonicProfile ? placeScore(podiumSummary(entry.tectonicProfile)) : -1;
@@ -227,7 +227,7 @@ function PoolTable({
                         <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
                       </span>
                     </td>
-                    {shown("discord") && <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">{displayName(entry.user)}</td>}
+                    {shown("discord") && <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">{discordName(entry.user)}</td>}
                     {hasLeftovers && <td className="py-2 pr-4 align-middle">{unit.leftover && i === 0 && <Badge tone="warn">{leftoverTag}</Badge>}</td>}
                     {showProfiles && <ProfileCells profile={entry.tectonicProfile} shown={shown} />}
                     {showWomStats && shown("ehb") && (
