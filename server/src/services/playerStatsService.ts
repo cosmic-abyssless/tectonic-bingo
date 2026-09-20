@@ -113,6 +113,9 @@ export async function fetchAndPersistPlayerStats(db: Db, signupId: string, rsn: 
   if (process.env.PLAYER_STATS_FETCH_DISABLED === "true") return;
 
   const signup = db.select({ bingoId: signups.bingoId, userId: signups.userId }).from(signups).where(eq(signups.id, signupId)).get();
+  if (signup?.bingoId) {
+    broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: { signupId, userId: signup.userId, statsRefreshing: true } });
+  }
   const discordId =
     opts.discordId !== undefined
       ? opts.discordId
@@ -157,7 +160,9 @@ export async function fetchAndPersistPlayerStats(db: Db, signupId: string, rsn: 
       details: { womFound: !!womData, runeProfileFound: !!runeProfileData },
       actor: "system",
     });
-    if (signup?.bingoId) broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: {} });
+    if (signup?.bingoId) {
+      broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: { signupId, userId: signup.userId, statsRefreshing: false } });
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`[player-stats] failed to fetch/persist for signup ${signupId} (${rsn})`, message);
@@ -168,5 +173,8 @@ export async function fetchAndPersistPlayerStats(db: Db, signupId: string, rsn: 
       details: { message },
       actor: "system",
     });
+    if (signup?.bingoId) {
+      broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: { signupId, userId: signup.userId, statsRefreshing: false } });
+    }
   }
 }

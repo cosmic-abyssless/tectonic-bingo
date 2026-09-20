@@ -8,6 +8,9 @@ import { WomClient } from "./womService";
 import { RuneProfileClient } from "./runeProfileService";
 import { fetchAndPersistPlayerStats, getSignupStats } from "./playerStatsService";
 import { parseStoredCaStats } from "./combatAchievements";
+import { broadcast } from "../ws";
+
+vi.mock("../ws", () => ({ broadcast: vi.fn() }));
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -57,6 +60,7 @@ const GM_RP = {
 
 beforeEach(() => {
   ({ sqlite, db } = createTestDb());
+  vi.mocked(broadcast).mockClear();
 });
 afterEach(() => {
   sqlite.close();
@@ -80,6 +84,11 @@ describe("fetchAndPersistPlayerStats", () => {
     expect(parseStoredCaStats(updated.caCurrentJson)).toEqual({ tier: "easy", points: 41 });
     expect(parseStoredCaStats(updated.caPeakJson)).toEqual({ tier: "easy", points: 41 });
     expect(updated.statsFetchedAt).not.toBeNull();
+    const signupChanged = vi.mocked(broadcast).mock.calls.map(([event]) => event).filter((event) => event.type === "signup_changed");
+    expect(signupChanged).toEqual([
+      { type: "signup_changed", bingoId: signup.bingoId, payload: { signupId: signup.id, userId: signup.userId, statsRefreshing: true } },
+      { type: "signup_changed", bingoId: signup.bingoId, payload: { signupId: signup.id, userId: signup.userId, statsRefreshing: false } },
+    ]);
   });
 
   it("persists whichever source succeeded when the other returns nothing", async () => {
@@ -105,6 +114,16 @@ describe("fetchAndPersistPlayerStats", () => {
     await expect(
       fetchAndPersistPlayerStats(db, signup.id, "C osmic", { womClient: throwingClient, runeProfileClient: throwingRpClient, tectonicClient: null }),
     ).resolves.toBeUndefined();
+    expect(broadcast).toHaveBeenCalledWith({
+      type: "signup_changed",
+      bingoId: signup.bingoId,
+      payload: { signupId: signup.id, userId: signup.userId, statsRefreshing: true },
+    });
+    expect(broadcast).toHaveBeenCalledWith({
+      type: "signup_changed",
+      bingoId: signup.bingoId,
+      payload: { signupId: signup.id, userId: signup.userId, statsRefreshing: false },
+    });
   });
 
   it("does not clobber a previous snapshot when the fetch throws", async () => {
@@ -203,6 +222,7 @@ describe("fetchAndPersistPlayerStats", () => {
     expect(updated.womDataJson).toBeNull();
     expect(updated.runeProfileDataJson).toBeNull();
     expect(updated.statsFetchedAt).toBeNull();
+    expect(broadcast).not.toHaveBeenCalled();
   });
 });
 

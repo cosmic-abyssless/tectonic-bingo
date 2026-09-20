@@ -834,8 +834,9 @@ export type BroadcastEvent =
   | { type: "team_updated"; bingoId: string; payload: { teamId: string } }
   // A duo pairing request was created, answered, cancelled, or dissolved, or a
   // signup changed. Clients refetch their own signup/pairing state and the mod
-  // roster.
-  | { type: "signup_changed"; bingoId: string; payload: Record<string, never> }
+  // roster. statsRefreshing is a boolean flag only (no CA values) — the
+  // unauthenticated socket may carry IDs, not snapshots.
+  | { type: "signup_changed"; bingoId: string; payload: { signupId?: string; userId?: string; statsRefreshing?: boolean } }
   // Any successful admin mutation (settings, board, lines, questions, teams,
   // mods). Coarse on purpose: clients refetch the bingo shell + board.
   | { type: "bingo_changed"; bingoId: string; payload: Record<string, never> }
