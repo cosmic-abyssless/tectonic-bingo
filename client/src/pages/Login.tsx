@@ -46,11 +46,14 @@ function DevLoginPanel() {
 
   if (!users || users.length === 0) return null;
 
+  // Admins first, then everyone else; each group keeps the server's name order (the sort is stable).
+  const ordered = [...users].sort((a, b) => Number(b.isAdmin) - Number(a.isAdmin));
+
   return (
     <div className="w-full border-t border-outline pt-5">
       <p className="mb-3 text-center text-[11px] font-medium uppercase tracking-widest text-warn">Dev — log in as</p>
       <div className="flex flex-wrap justify-center gap-1.5">
-        {users.map((u) => (
+        {ordered.map((u) => (
           <Button key={u.id} size="sm" onPress={() => loginAs(u.discordId)} isDisabled={pending === u.discordId}>
             {displayName(u)}
             {u.isAdmin && <span className="text-on-surface-subtle">admin</span>}
