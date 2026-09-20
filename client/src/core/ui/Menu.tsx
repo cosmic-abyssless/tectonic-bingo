@@ -9,7 +9,6 @@ export function Menu<T extends object>({ instant, ...props }: MenuProps<T> & { i
     <Popover
       placement="bottom end"
       offset={6}
-      isNonModal={instant}
       shouldSkipAnimation={instant}
       className={`${instant ? "" : "overlay-panel"} min-w-44 rounded-md border border-outline bg-surface-raised p-1 shadow-pop outline-none`}
     >
