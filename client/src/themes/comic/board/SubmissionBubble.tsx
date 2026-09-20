@@ -5,6 +5,7 @@ import { PlayerName } from "../../../core/tectonic/PlayerName";
 import { InkTag } from "../ui/CaptionBox";
 import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
+import { displayName } from "../../../core/ui/user";
 
 /**
  * A submission rendered as a postcard-ish paper card
@@ -55,6 +56,7 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
           <p className="mt-1 text-xs italic" style={{ color: colors.INK_SUBTLE }}>
             {"— "}
             {who ? <PlayerName userId={who.id}>{submission.submittedBy ?? "someone"}</PlayerName> : submission.submittedBy ?? "someone"}
+            {submission.detail.postedByUser && <> (posted by {displayName(submission.detail.postedByUser)})</>}
             {", "}
             {submission.timeAgo}
           </p>

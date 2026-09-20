@@ -91,6 +91,7 @@ export interface ThemeSlots {
   SubmissionModal: ComponentType<{ flow: SubmissionFlowModel }>;
   ScreenshotDropzone: ComponentType<{ screenshot: SubmissionFlowModel["screenshot"] }>;
   AnalysisPanel: ComponentType<{ analysis: SubmissionFlowModel["analysis"] }>;
+  SubmitterPicker: ComponentType<{ submitter: SubmissionFlowModel["submitter"] }>;
   TilePicker: ComponentType<{ tile: SubmissionFlowModel["tile"] }>;
   TaskPicker: ComponentType<{ task: SubmissionFlowModel["task"] }>;
   RequirementPicker: ComponentType<{ requirement: SubmissionFlowModel["requirement"]; quantity: SubmissionFlowModel["quantity"] }>;

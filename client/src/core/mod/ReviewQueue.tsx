@@ -260,7 +260,8 @@ export function ReviewQueue({ slug }: { slug: string }) {
                       {isManual && <Badge tone="info">manual</Badge>}
                     </div>
                     <p className="truncate text-sm text-on-surface-muted">{claimsSummary(row.claims)}</p>
-                    <p className="mt-0.5 text-xs text-on-surface-subtle">by {row.submittedByUser ? <PlayerName userId={row.submittedByUser.id}>{displayName(row.submittedByUser)}</PlayerName> : "unknown"}</p>
+                    <p className="mt-0.5 text-xs text-on-surface-subtle">by {row.submittedByUser ? <PlayerName userId={row.submittedByUser.id}>{displayName(row.submittedByUser)}</PlayerName> : "unknown"}
+                      {row.postedByUser && <> (posted by <PlayerName userId={row.postedByUser.id}>{displayName(row.postedByUser)}</PlayerName>)</>}</p>
                     {row.screenshots[0] && (
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <ScreenshotAnalysisBadges screenshot={row.screenshots[0]} />

@@ -7,7 +7,7 @@ import { claimsSummary } from "./claimsSummary";
 import { ScreenshotThumb } from "./ScreenshotThumb";
 
 export function SubmissionRow({ detail }: { detail: SubmissionDetails }) {
-  const { submission, screenshots, claims, submittedByUser } = detail;
+  const { submission, screenshots, claims, submittedByUser, postedByUser } = detail;
 
   return (
     <div className="flex items-start gap-3 border-b border-outline py-2.5 last:border-0">
@@ -21,6 +21,7 @@ export function SubmissionRow({ detail }: { detail: SubmissionDetails }) {
         {submittedByUser && (
           <p className="mt-0.5 text-xs text-on-surface-subtle">
             by <PlayerName userId={submittedByUser.id}>{displayName(submittedByUser)}</PlayerName>
+            {postedByUser && <> (posted by <PlayerName userId={postedByUser.id}>{displayName(postedByUser)}</PlayerName>)</>}
           </p>
         )}
         {submission.reviewerNotes && <p className="mt-0.5 truncate text-xs text-warn">{submission.reviewerNotes}</p>}

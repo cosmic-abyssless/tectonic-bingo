@@ -22,7 +22,7 @@ import { ComicDialog, ComicDialogHeader } from "./ui/ComicDialog";
 import { SubmissionModal } from "./submission/SubmissionModal";
 import { ScreenshotDropzone } from "./submission/ScreenshotDropzone";
 import { AnalysisPanel } from "./submission/AnalysisPanel";
-import { TilePicker, RequirementPicker } from "./submission/Pickers";
+import { TilePicker, RequirementPicker, SubmitterPicker } from "./submission/Pickers";
 import { TaskPicker } from "./submission/TaskPicker";
 import { StagedClaimsList } from "./submission/StagedClaimsList";
 // The theme's shared classes (comic-press, comic-rays, comic-halftone, the
@@ -132,6 +132,7 @@ const comicTheme: ThemeDefinition = {
     SubmissionModal,
     ScreenshotDropzone,
     AnalysisPanel,
+    SubmitterPicker,
     TilePicker,
     TaskPicker,
     RequirementPicker,

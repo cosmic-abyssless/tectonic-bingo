@@ -11,7 +11,7 @@ import { useViewingTeam } from "./useViewingTeam";
 import { useTileSearch } from "./useTileSearch";
 import { usePageEvents } from "./usePageEvents";
 import { BoardProvider } from "./BoardProvider";
-import type { BingoPageModel, StageView } from "./types";
+import type { BingoPageModel, StageView, TeamModel } from "./types";
 
 // Internal escape hatch: only useSubmissionFlow.ts (which needs raw
 // tiles/categories/nodeStates/teamSubmissions/bingo for the submission
@@ -24,6 +24,9 @@ interface BingoPageRaw {
   categories: TileCategory[];
   nodeStates: TeamNodeState[];
   teamSubmissions: SubmissionDetails[];
+  /** The team being viewed (a mod's picked team, otherwise your own) and who you are on it, for who a submission is for. */
+  viewingTeam: TeamModel | null;
+  viewerId: string;
   /** Item nodes the viewed team can't claim because it used them elsewhere (exclusive items). */
   locks: ExclusiveLocks;
 }
@@ -95,7 +98,8 @@ export function BingoPageProvider({
   const teamSubmissions = submissionsData?.submissions ?? EMPTY_SUBMISSIONS;
 
   const isViewingOtherTeam = isMod && !!viewingTeamId && viewingTeamId !== myTeam?.id;
-  const canSubmit = bingo.stage === "live" && hasStarted && !isViewingOtherTeam && !!viewingTeamId;
+  // Mods can submit for the team they are viewing too (naming the player it is for), so this doesn't depend on whose team it is.
+  const canSubmit = bingo.stage === "live" && hasStarted && !!viewingTeamId;
   // Hands go up on your own team's board only, from reveal onwards (the
   // board isn't visible to players before that) until the bingo is over.
   const canToggleInterest = !!myTeam && viewingTeamId === myTeam.id && (bingo.stage === "reveal" || bingo.stage === "live");
@@ -198,7 +202,7 @@ export function BingoPageProvider({
     },
   };
 
-  const raw: BingoPageRaw = { slug, bingo, tiles, categories: categoriesRaw, nodeStates, teamSubmissions, locks };
+  const raw: BingoPageRaw = { slug, bingo, tiles, categories: categoriesRaw, nodeStates, teamSubmissions, viewingTeam: viewingTeamModel, viewerId: user.id, locks };
 
   return (
     <BingoPageRawContext.Provider value={raw}>

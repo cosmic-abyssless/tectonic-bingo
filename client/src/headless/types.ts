@@ -314,6 +314,21 @@ export interface BingoPageModel {
 }
 
 export interface SubmissionFlowModel {
+  /**
+   * Who the drop belongs to. A player can post for a teammate (a drop on mobile, posted from a PC); a mod posting
+   * to a team they aren't on must pick one of its players. The player picked is credited, the poster is recorded.
+   */
+  submitter: {
+    /** Hidden when there's nobody to choose: a one-player team and you're on it. */
+    visible: boolean;
+    /** A mod on another team has to choose; on your own team you default to yourself. */
+    required: boolean;
+    teamName: string;
+    selectedId: string;
+    /** The poster sorts first, labelled "(me)". */
+    options: { id: string; label: string; isMe: boolean }[];
+    select(id: string): void;
+  };
   screenshot: {
     file: File | null;
     previewUrl: string | null;

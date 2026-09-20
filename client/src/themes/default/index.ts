@@ -32,6 +32,7 @@ import { SubmissionModal } from "./submission/SubmissionModal";
 import { ScreenshotDropzone } from "./submission/ScreenshotDropzone";
 import { AnalysisPanel } from "./submission/AnalysisPanel";
 import { TilePicker } from "./submission/TilePicker";
+import { SubmitterPicker } from "./submission/SubmitterPicker";
 import { TaskPicker } from "./submission/TaskPicker";
 import { RequirementPicker } from "./submission/RequirementPicker";
 import { StagedClaimsList } from "./submission/StagedClaimsList";
@@ -75,6 +76,7 @@ export const defaultTheme: ThemeDefinition = {
     SubmissionModal,
     ScreenshotDropzone,
     AnalysisPanel,
+    SubmitterPicker,
     TilePicker,
     TaskPicker,
     RequirementPicker,

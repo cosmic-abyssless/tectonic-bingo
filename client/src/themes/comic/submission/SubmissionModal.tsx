@@ -11,6 +11,7 @@ import { CaptionBox } from "../ui/CaptionBox";
 export function SubmissionModal({ flow }: { flow: SubmissionFlowModel }) {
   const ScreenshotDropzone = useSlot("ScreenshotDropzone");
   const AnalysisPanel = useSlot("AnalysisPanel");
+  const SubmitterPicker = useSlot("SubmitterPicker");
   const TilePicker = useSlot("TilePicker");
   const TaskPicker = useSlot("TaskPicker");
   const RequirementPicker = useSlot("RequirementPicker");
@@ -27,6 +28,7 @@ export function SubmissionModal({ flow }: { flow: SubmissionFlowModel }) {
         <ScreenshotDropzone screenshot={flow.screenshot} />
         <AnalysisPanel analysis={flow.analysis} />
 
+        <SubmitterPicker submitter={flow.submitter} />
         <TilePicker tile={flow.tile} />
         <TaskPicker task={flow.task} />
         <RequirementPicker requirement={flow.requirement} quantity={flow.quantity} />

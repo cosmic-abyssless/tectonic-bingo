@@ -2,7 +2,17 @@ import type { SubmissionFlowModel } from "../../../headless/types";
 import { Input } from "../../../core/ui/Field";
 import { SearchableSelect } from "../../../core/ui/SearchableSelect";
 import { useComic } from "../ui/useComic";
+import { submitterHint } from "../../../headless/submitterHint";
 import { ComicField } from "./ComicField";
+
+export function SubmitterPicker({ submitter }: { submitter: SubmissionFlowModel["submitter"] }) {
+  if (!submitter.visible) return null;
+  return (
+    <ComicField label="Submitting for" hint={submitterHint(submitter)}>
+      <SearchableSelect value={submitter.selectedId} options={submitter.options} placeholder={submitter.required ? `Pick a player on ${submitter.teamName}…` : "Search teammates…"} onChange={submitter.select} />
+    </ComicField>
+  );
+}
 
 export function TilePicker({ tile }: { tile: SubmissionFlowModel["tile"] }) {
   return (
