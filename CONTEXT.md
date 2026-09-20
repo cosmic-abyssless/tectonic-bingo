@@ -145,6 +145,7 @@ A single proof package submitted by a player on behalf of their Team to claim co
 - **Feedback:** Rejections must include reviewer notes so the team knows what went wrong.
 - **Whose drop / who posted:** A Submission belongs to the Player who got the drop (`submittedBy`: credited on the board, in the stats and in the mod queue). When someone else uploaded it, that Player is recorded as the poster (`postedBy`, shown as "posted by"), and the audit entry has them acting on behalf of the Player. This is the usual case of a teammate at a PC posting a drop from mobile.
 - **Who may post for whom:** A Player posts to their own Team, for themselves or any teammate. A Moderator (or Admin) may also submit to any Team of the Bingo while viewing it, and must say which of its Players the drop belongs to. The Bingo must be live either way.
+- **Changing the credit:** A Moderator can move a Submission's credit to another Player of its Team ("Change player" in the mod queue), in any state, when the poster forgot to pick who it was for. The credit moves; the review, the points and the Team don't. The original uploader stays as the poster, and the change is recorded in the audit log.
 
 ### Screenshot
 An image attached to a Submission proving in-game completion.
