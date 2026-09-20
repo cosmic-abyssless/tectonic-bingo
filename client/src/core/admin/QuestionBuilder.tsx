@@ -48,6 +48,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
   const [newType, setNewType] = useState<SignupQuestionType>("text");
   const [newOptions, setNewOptions] = useState("");
   const [newHelper, setNewHelper] = useState("");
+  const [newRequired, setNewRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.questions(slug) });
@@ -64,6 +65,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
       await adminApi.createQuestion(slug, {
         prompt: newPrompt.trim(),
         helperText: newHelper.trim() || undefined,
+        required: newRequired,
         type: newType,
         sortOrder: questions.length,
         optionsJson: isChoice(newType) ? JSON.stringify(options) : undefined,
@@ -71,6 +73,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
       setNewPrompt("");
       setNewOptions("");
       setNewHelper("");
+      setNewRequired(false);
       invalidate();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to add question");
@@ -162,6 +165,10 @@ export function QuestionBuilder({ slug }: { slug: string }) {
             className="min-w-0 flex-1"
           />
           <TypeSelect aria-label="New question type" value={newType} onChange={setNewType} />
+          <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-on-surface-muted">
+            <input type="checkbox" aria-label="New question required" checked={newRequired} onChange={(e) => setNewRequired(e.target.checked)} className="size-4 accent-accent" />
+            Required
+          </label>
           <Button onPress={add} isDisabled={!newPrompt.trim()} className="shrink-0">
             Add
           </Button>
