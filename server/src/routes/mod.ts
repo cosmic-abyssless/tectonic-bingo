@@ -10,6 +10,7 @@ import { db } from "../db";
 import * as schema from "../db/schema";
 import * as bingoService from "../services/bingoService";
 import * as submissionService from "../services/submissionService";
+import { changeSubmissionAttribution } from "../services/submissionTarget";
 import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
 import { fetchProfiles } from "../services/tectonicProfileService";
@@ -86,6 +87,19 @@ router.patch(
     }
 
     throw new ServiceError(400, 'action must be "approve", "reject" or "undo"');
+  }),
+);
+
+// Changes which player a submission is credited to (someone forgot to pick the player they posted for).
+router.patch(
+  "/submissions/:id/attribution",
+  asyncHandler(async (req, res) => {
+    const { userId } = req.body as { userId?: string };
+    if (!userId) throw new ServiceError(400, "userId is required");
+    const submission = changeSubmissionAttribution(db, req.bingo!, { submissionId: req.params.id as string, userId, changedByUserId: req.user!.id });
+    // The same refresh a review triggers: drawers, the mod queue and the board all show who it is credited to.
+    broadcast({ type: "submission_reviewed", bingoId: req.bingo!.id, payload: { teamId: submission.teamId, nodeIds: [] } });
+    res.json({ submission });
   }),
 );
 

@@ -16,7 +16,7 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 // Denormalized labels for a submission.approved/rejected audit entry — the
 // tile a submission targeted and the labels of the specific leaves claimed,
 // resolved fresh since the graph can change after the fact.
-function describeSubmissionTarget(tx: Tx, bingoId: string, nodeIds: string[]): { tileName: string | null; taskLabels: string[] } {
+export function describeSubmissionTarget(tx: Tx, bingoId: string, nodeIds: string[]): { tileName: string | null; taskLabels: string[] } {
   const tileRows = tx.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
   const tileByNodeId = new Map(tileRows.map((t) => [t.nodeId, t]));
   const tileName = nodeIds.length ? (tileForLeaf(tx, nodeIds[0]!, tileByNodeId)?.name ?? null) : null;

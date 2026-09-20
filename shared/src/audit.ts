@@ -122,6 +122,8 @@ export interface AuditDetailsMap {
     pointsDelta: number;
     submittedByUserId: string;
   };
+  /** A mod changed which player a submission is credited to (someone forgot to pick the player they posted for). */
+  "submission.attribution_changed": { tileName: string | null; taskLabels: string[]; fromUserId: string; fromName: string; toUserId: string; toName: string };
   "submission.screenshot_analyzed": { codewordVerified: boolean; detectedItemName: string | null; textLength: number };
   "submission.screenshot_analysis_failed": Record<string, never>;
 
@@ -421,6 +423,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     title: "Review undone",
     label: (i) =>
       `${actor(i)} sent a${i.details.previousStatus === "approved" ? "n approved" : " rejected"} submission for "${i.details.tileName ?? "a tile"}" back to pending`,
+  },
+  "submission.attribution_changed": {
+    category: "submission",
+    tone: "warn",
+    visibility: "team",
+    title: "Submission credit changed",
+    label: (i) => `${actor(i)} changed who a submission for "${i.details.tileName ?? "a tile"}" is credited to, from ${i.details.fromName} to ${i.details.toName}`,
   },
   "submission.screenshot_analyzed": {
     category: "submission",

@@ -39,11 +39,14 @@ describe("site-admin-only mod routes", () => {
     expect(handlersFor(modRouter, method, path)).toContain(requireAdmin);
   });
 
-  it("leaves reviewing submissions to any mod", async () => {
+  it.each([
+    ["the review route", "/submissions/:id"],
+    ["the route that changes who a submission is credited to", "/submissions/:id/attribution"],
+  ])("leaves %s to any mod", async (_name, path) => {
     const { default: modRouter } = await import("./mod");
     const { requireAdmin } = await import("../middleware/requireAdmin");
-    const layer = (modRouter.stack as unknown as Layer[]).find((l) => l.route?.path === "/submissions/:id" && !l.route.methods.get);
-    expect(layer, "the review route").toBeDefined();
+    const layer = (modRouter.stack as unknown as Layer[]).find((l) => l.route?.path === path && !l.route.methods.get);
+    expect(layer, path).toBeDefined();
     expect(layer!.route!.stack.map((l) => l.handle)).not.toContain(requireAdmin);
   });
 });

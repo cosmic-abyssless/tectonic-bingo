@@ -6,7 +6,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { addModerator } from "./bingoService";
 import { createTile, createTask } from "./boardService";
 import { createSubmission, getAllSubmissionsForBingo, getTeamSubmissions } from "./submissionService";
-import { resolveSubmissionTarget, resolveSubmissionTeam } from "./submissionTarget";
+import { changeSubmissionAttribution, resolveSubmissionTarget, resolveSubmissionTeam } from "./submissionTarget";
 import { ServiceError } from "./errors";
 import { queryAuditLog } from "../audit/query";
 
@@ -163,5 +163,79 @@ describe("createSubmission on someone's behalf", () => {
     const entry = queryAuditLog(db, { bingoId: bingo.id }, { action: ["submission.created"] }).entries[0]!;
     expect(entry.onBehalfOf).toBeNull();
     expect(entry.label).toBe('bob submitted 1 x for "Tile"');
+  });
+});
+
+describe("changeSubmissionAttribution", () => {
+  // A submission on team A that bob posted for himself: the case where he forgot to pick alice.
+  function bobsSubmission(postedBy: "alice" | "bob" | null = null) {
+    const { bingo, teamA, teamB, alice, bob, cara, dan, sam } = seed();
+    const tile = createTile(db, { bingoId: bingo.id, name: "Tile", boardRow: 0, boardCol: 0 });
+    const task = createTask(db, tile.id, { kind: "ITEM", itemName: "x", label: "Task", description: "d", points: 10 });
+    const submission = createSubmission(db, bingo, {
+      teamId: teamA.id,
+      submittedByUserId: postedBy === "bob" ? alice.id : bob.id,
+      postedByUserId: postedBy === "bob" ? bob.id : postedBy === "alice" ? alice.id : null,
+      claims: [{ nodeId: task.id, itemName: "x" }],
+      screenshotUrl: "/x.png",
+      now: NOW,
+    });
+    return { bingo, teamA, teamB, alice, bob, cara, dan, sam, submission };
+  }
+  const change = (bingo: typeof schema.bingos.$inferSelect, submissionId: string, userId: string, changedByUserId: string) =>
+    changeSubmissionAttribution(db, bingo, { submissionId, userId, changedByUserId });
+
+  it("credits another player, and keeps the original uploader as the poster", () => {
+    const { bingo, submission, alice, bob, dan } = bobsSubmission();
+    const updated = change(bingo, submission.id, alice.id, dan.id);
+    expect(updated).toMatchObject({ submittedByUserId: alice.id, postedByUserId: bob.id });
+  });
+
+  it("keeps the same poster when the credit moves again, and clears it when it moves back to the poster", () => {
+    const { bingo, submission, alice, bob, cara, dan } = bobsSubmission("bob"); // credited to alice, posted by bob
+    expect(change(bingo, submission.id, bob.id, dan.id)).toMatchObject({ submittedByUserId: bob.id, postedByUserId: null }); // bob posted it for himself
+    expect(cara.id).not.toBe(bob.id);
+  });
+
+  it("only moves the credit: the review, the team and the points are untouched", () => {
+    const { bingo, submission, teamA, alice, dan } = bobsSubmission();
+    const updated = change(bingo, submission.id, alice.id, dan.id);
+    expect(updated).toMatchObject({ teamId: teamA.id, status: submission.status, reviewedAt: submission.reviewedAt, reviewerNotes: submission.reviewerNotes });
+  });
+
+  it("only allows a player of that submission's team, and not the player it is already credited to", () => {
+    const { bingo, submission, bob, cara, dan } = bobsSubmission();
+    expect(fail(() => change(bingo, submission.id, cara.id, dan.id)).status).toBe(400); // cara is on team B
+    expect(fail(() => change(bingo, submission.id, "nobody", dan.id)).status).toBe(400);
+    const same = fail(() => change(bingo, submission.id, bob.id, dan.id));
+    expect(same.status).toBe(400);
+    expect(same.message).toMatch(/already credited/);
+  });
+
+  it("doesn't find a submission of another bingo, or one that doesn't exist", () => {
+    const { bingo, submission, alice, sam, dan } = bobsSubmission();
+    const other = db.insert(schema.bingos).values({ slug: "other", name: "Other", boardRows: 2, boardCols: 2, createdByUserId: sam.id }).returning().get();
+    expect(fail(() => change(other, submission.id, alice.id, dan.id)).status).toBe(404);
+    expect(fail(() => change(bingo, "missing", alice.id, dan.id)).status).toBe(404);
+  });
+
+  it("is written to the audit log: who changed it, from whom to whom, on what", () => {
+    const { bingo, submission, alice, bob, dan } = bobsSubmission();
+    change(bingo, submission.id, alice.id, dan.id);
+    const entry = queryAuditLog(db, { bingoId: bingo.id }, { action: ["submission.attribution_changed"] }).entries[0]!;
+    expect(entry.actor?.id).toBe(dan.id);
+    expect(entry.team?.name).toBe("Team A");
+    expect(entry.entityId).toBe(submission.id);
+    expect(entry.details).toMatchObject({ tileName: "Tile", fromUserId: bob.id, fromName: "bob", toUserId: alice.id, toName: "alice" });
+    expect(entry.label).toBe('dan changed who a submission for "Tile" is credited to, from bob to alice');
+  });
+
+  it("shows up in the lists the client reads", () => {
+    const { bingo, teamA, submission, alice, bob, dan } = bobsSubmission();
+    change(bingo, submission.id, alice.id, dan.id);
+    const [detail] = getTeamSubmissions(db, teamA.id);
+    expect(detail!.submittedByUser?.id).toBe(alice.id);
+    expect(detail!.postedByUser?.id).toBe(bob.id);
+    expect(getAllSubmissionsForBingo(db, bingo.id)[0]!.submittedByUser?.id).toBe(alice.id);
   });
 });
