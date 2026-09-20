@@ -58,7 +58,10 @@ export class WomCompetitionError extends Error {
 }
 
 export class WomCompetitionClient {
-  constructor(private fetchImpl: FetchLike = fetch) {}
+  constructor(
+    private fetchImpl: FetchLike = fetch,
+    private apiKey: string | null = process.env.WOM_API_KEY || null,
+  ) {}
 
   async createCompetition(params: CreateCompetitionParams): Promise<{ id: number }> {
     const res = await this.request("/competitions", "POST", {
@@ -93,7 +96,11 @@ export class WomCompetitionClient {
     try {
       res = await this.fetchImpl(`${WOM_BASE_URL}${path}`, {
         method,
-        headers: { "Content-Type": "application/json", "User-Agent": WOM_USER_AGENT },
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": WOM_USER_AGENT,
+          ...(this.apiKey ? { "x-api-key": this.apiKey } : {}),
+        },
         body: JSON.stringify(body),
       });
     } catch (err) {

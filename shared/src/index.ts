@@ -536,6 +536,7 @@ export interface RosterEntry {
   tectonicProfile?: TectonicProfile | null;
   caCurrent?: CombatAchievementStats | null;
   caPeak?: CombatAchievementStats | null;
+  womStats?: WomPlayerStats | null;
 }
 
 // ---------------------------------------------------------------------------

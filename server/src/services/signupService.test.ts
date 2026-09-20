@@ -154,6 +154,20 @@ describe("getAllSignups / markBuyin", () => {
     expect(roster[0].signup).not.toHaveProperty("runeProfileDataJson");
   });
 
+  it("exposes persisted EHB/EHP without the raw WOM blob", () => {
+    const { bingo, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "MyRsn", answers: [] });
+    db.update(schema.signups)
+      .set({ womDataJson: JSON.stringify({ ehb: 42.4, ehp: 110, type: "ironman", displayName: "secret-wom" }) })
+      .where(eq(schema.signups.id, signup.id))
+      .run();
+
+    const roster = getAllSignups(db, bingo.id);
+    expect(roster[0].womStats).toEqual({ ehb: 42.4, ehp: 110 });
+    expect(JSON.stringify(roster[0])).not.toContain("secret-wom");
+    expect(roster[0].signup).not.toHaveProperty("womDataJson");
+  });
+
   it("records who collected and who recorded the buy-in, and can unmark it", () => {
     const { bingo, memberId, adminId } = seedBingo();
     const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "MyRsn", answers: [] });

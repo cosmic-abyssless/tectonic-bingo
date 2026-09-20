@@ -222,7 +222,11 @@ describe("fetchAndPersistPlayerStats", () => {
     expect(updated.womDataJson).toBeNull();
     expect(updated.runeProfileDataJson).toBeNull();
     expect(updated.statsFetchedAt).toBeNull();
-    expect(broadcast).not.toHaveBeenCalled();
+    expect(broadcast).toHaveBeenCalledWith({
+      type: "signup_changed",
+      bingoId: signup.bingoId,
+      payload: { signupId: signup.id, userId: signup.userId, statsRefreshing: false },
+    });
   });
 });
 
