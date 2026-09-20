@@ -786,6 +786,8 @@ export interface DraftState {
   orderLockedUntil: string | null;
   // singlesRound: the main pool is empty and leftovers are being drafted.
   currentPick: { pickNumber: number; round: number; teamId: string; singlesRound: boolean } | null;
+  // Signups cut from the draft (leftover mode "cut", once signups have closed). They are not in `pool`.
+  cutCount: number;
   ratings: Record<string, PickRating>; // by signupId; empty unless the viewer leads a team
   tectonicUnavailable: boolean; // the clan API lookup failed, so every tectonicProfile is null
 }

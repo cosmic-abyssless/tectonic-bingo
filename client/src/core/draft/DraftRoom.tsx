@@ -558,6 +558,12 @@ export function DraftRoom({ slug }: { slug: string }) {
               <span className="num">{poolCount}</span> leftover signup{poolCount === 1 ? " was" : "s were"} not drafted.
             </>
           )}
+          {state.cutCount > 0 && (
+            <>
+              {" "}
+              <span className="num">{state.cutCount}</span> signup{state.cutCount === 1 ? " was" : "s were"} cut.
+            </>
+          )}
         </Notice>
       )}
 

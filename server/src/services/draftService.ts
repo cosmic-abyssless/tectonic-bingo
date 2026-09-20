@@ -119,6 +119,8 @@ export interface DraftState {
   // singlesRound: the main pool is empty and leftovers are being drafted
   // (leftoverMode "singles" only).
   currentPick: { pickNumber: number; round: number; teamId: string; singlesRound: boolean } | null;
+  // Signups left out of `pool` because they were cut (see hideCut in getDraftState); 0 when they are shown or none were.
+  cutCount: number;
 }
 
 // Groups undrafted signups into units. Pairs whose other half is missing
@@ -154,7 +156,12 @@ function signedUpAt(unit: DraftUnit): number {
 
 // includeAnswers gates signup-answer visibility — only mods and team leads
 // should see what a prospective draftee wrote on the signup form.
-export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: boolean }): DraftState {
+//
+// hideCut is for the draft room: signups that don't fit a full round in "cut" mode will never be drafted, so once
+// signups have closed they are left out of the pool (and counted in cutCount) instead of sitting there greyed out.
+// While signups are still open the newest ones are only at risk, and who is cut changes with every new signup, so
+// they stay listed. Everything else (the at-risk warnings, pick validation) works on the full pool.
+export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: boolean; hideCut?: boolean }): DraftState {
   const bingoId = bingo.id;
   const fresh = db.select().from(bingos).where(eq(bingos.id, bingoId)).get() ?? bingo;
   const teamRows = db.select().from(teams).where(eq(teams.bingoId, bingoId)).all();
@@ -211,12 +218,15 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
     user: { ...poolUserById.get(s.userId)!, rsn: s.rsn },
     answers: opts.includeAnswers ? poolAnswers.filter((a) => a.signupId === s.id) : null,
   }));
-  const pool = groupIntoUnits(db, bingoId, poolEntries);
+  const fullPool = groupIntoUnits(db, bingoId, poolEntries);
   const draftedUnitCount = new Set(pickRows.map((p) => p.pickNumber)).size;
-  markLeftovers(pool, orderedTeams.length, draftedUnitCount);
+  markLeftovers(fullPool, orderedTeams.length, draftedUnitCount);
+  const hideCut = !!opts.hideCut && fresh.leftoverMode === "cut" && fresh.stage !== "signup";
+  const pool = hideCut ? fullPool.filter((u) => !u.leftover) : fullPool;
+  const cutCount = hideCut ? fullPool.filter((u) => u.leftover).reduce((n, u) => n + u.entries.length, 0) : 0;
 
   let currentPick: DraftState["currentPick"] = null;
-  const pickable = draftablePool(pool, bingo);
+  const pickable = draftablePool(fullPool, bingo);
   if (draftStarted && orderReady && lockExpired && pickable.length > 0) {
     const pickNumber = nextPickNumber(db, bingoId);
     const round = Math.ceil(pickNumber / orderedTeams.length);
@@ -224,7 +234,7 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
     currentPick = { pickNumber, round, teamId: orderedTeams[teamIndex]!.id, singlesRound: pickable.every((u) => u.leftover) };
   }
 
-  return { teams: orderedTeams, picks, pool, draftStarted, orderReady, orderLockedUntil, currentPick };
+  return { teams: orderedTeams, picks, pool, draftStarted, orderReady, orderLockedUntil, currentPick, cutCount };
 }
 
 // Which units may be drafted next: the main pool while it lasts, then (in

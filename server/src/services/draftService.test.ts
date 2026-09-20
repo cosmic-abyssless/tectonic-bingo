@@ -620,6 +620,68 @@ describe("leftovers", () => {
     expect(state.pool.map((u) => u.entries[0]!.user.id)).toEqual([newest.id]);
   });
 
+  describe("hiding cut players from the draft room", () => {
+    const poolIds = (state: ReturnType<typeof getDraftState>) => state.pool.flatMap((u) => u.entries.map((e) => e.user.id));
+
+    it("leaves them out of the pool and counts them once signups are closed", () => {
+      const { bingo, p1, p2, newest } = setupLeftover("cut");
+      const shown = getDraftState(db, bingo, { includeAnswers: false, hideCut: true });
+      expect(poolIds(shown).sort()).toEqual([p1.id, p2.id].sort());
+      expect(shown.cutCount).toBe(1);
+      // The full view (used by the at-risk warnings) still sees them.
+      const full = getDraftState(db, bingo, { includeAnswers: false });
+      expect(poolIds(full)).toContain(newest.id);
+      expect(full.cutCount).toBe(0);
+      expect(getLeftoverUserIds(db, bingo)).toEqual(new Set([newest.id]));
+    });
+
+    it("still reports whose turn it is, and keeps counting them after the main pool runs out", () => {
+      const { bingo, first, second, p1, p2 } = setupLeftover("cut");
+      expect(getDraftState(db, bingo, { includeAnswers: false, hideCut: true }).currentPick).toMatchObject({ pickNumber: 1, teamId: first.id });
+      makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+      makePick(db, { bingo, pickedUserId: p2.id, actingUserId: second.captainUserId, actingIsAdmin: false });
+      const state = getDraftState(db, bingo, { includeAnswers: false, hideCut: true });
+      expect(state.pool).toHaveLength(0);
+      expect(state.cutCount).toBe(1);
+      expect(state.currentPick).toBeNull();
+    });
+
+    it("hides a cut duo pair as one unit", () => {
+      const bingo = seedBingo({ leftoverMode: "cut", signupMode: "duo" });
+      const signupStage = { ...bingo, stage: "signup" as const };
+      const c1 = seedCaptain(bingo.id, "c1");
+      const c2 = seedCaptain(bingo.id, "c2");
+      createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
+      createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
+      // Signed up oldest to newest, so the pair (a, b) is the newest of three units and 3 mod 2 teams cuts it.
+      const [solo1, solo2, a, b] = ["solo1", "solo2", "a", "b"].map((d, i) => {
+        const user = seedUser(d);
+        db.insert(schema.signups).values({ bingoId: bingo.id, userId: user.id, rsn: d, createdAt: new Date(1_700_000_000_000 + i * 60_000) }).run();
+        return user;
+      });
+      adminPair(db, signupStage, { userIdA: a!.id, userIdB: b!.id, createdByUserId: c1.id });
+      beginDraft(bingo);
+      const state = getDraftState(db, bingo, { includeAnswers: false, hideCut: true });
+      expect(poolIds(state).sort()).toEqual([solo1!.id, solo2!.id].sort());
+      expect(state.cutCount).toBe(2);
+    });
+
+    it("keeps them listed while signups are still open, since who is cut changes with every signup", () => {
+      const { bingo, newest } = setupLeftover("cut");
+      db.update(schema.bingos).set({ stage: "signup" }).where(eq(schema.bingos.id, bingo.id)).run();
+      const open = getDraftState(db, bingo, { includeAnswers: false, hideCut: true });
+      expect(poolIds(open)).toContain(newest.id);
+      expect(open.cutCount).toBe(0);
+    });
+
+    it("does nothing in singles mode, where those players are drafted last", () => {
+      const { bingo, newest } = setupLeftover("singles");
+      const state = getDraftState(db, bingo, { includeAnswers: false, hideCut: true });
+      expect(poolIds(state)).toContain(newest.id);
+      expect(state.cutCount).toBe(0);
+    });
+  });
+
   it("singles: drafts leftovers after the main pool, continuing the snake", () => {
     const { bingo, first, second, p1, p2, newest } = setupLeftover("singles");
     expect(() => makePick(db, { bingo, pickedUserId: newest.id, actingUserId: first.captainUserId, actingIsAdmin: false })).toThrow(/singles round/i);

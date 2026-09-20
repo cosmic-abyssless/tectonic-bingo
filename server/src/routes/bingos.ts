@@ -498,7 +498,7 @@ router.get(
     }
 
     const ledTeamId = isLead && myTeam ? myTeam.id : null;
-    const state = draftService.getDraftState(db, bingo, { includeAnswers: isMod || !!ledTeamId });
+    const state = draftService.getDraftState(db, bingo, { includeAnswers: isMod || !!ledTeamId, hideCut: true });
     // Scouting notes are private to the lead's own team.
     const ratings = ledTeamId ? draftService.getTeamRatings(db, ledTeamId) : {};
 
