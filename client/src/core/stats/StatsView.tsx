@@ -1,73 +1,14 @@
 import { useState, type ReactNode } from "react";
-import type { ContributionCount, PointsOverTimePoint, Team, Tile, TileHeatmapCell, TimelineEvent } from "@bingo/shared";
+import type { ContributionCount, Team, Tile, TileHeatmapCell, TimelineEvent } from "@bingo/shared";
 import { useBingo, useBoard, useStats } from "../../api/queries";
 import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { Card, CardHeader } from "../ui/Card";
 import { Select } from "../ui/Field";
-
-// Tracks the current theme's muted-text color rather than a hardcoded hex —
-// a fixed mid-gray reads fine on the default theme's near-black background
-// but washes out against a bright/light theme's (e.g. comic's yellow) bg.
-const FALLBACK_TEAM_COLOR = "var(--color-on-surface-muted)";
+import { FALLBACK_TEAM_COLOR, PointsChart } from "./PointsChart";
 
 function Empty({ children }: { children: string }) {
   return <p className="text-sm text-on-surface-subtle">{children}</p>;
-}
-
-function PointsChart({ points, teams }: { points: PointsOverTimePoint[]; teams: Team[] }) {
-  if (points.length === 0) return <Empty>No scoring activity yet.</Empty>;
-
-  const width = 640;
-  const height = 220;
-  const pad = 28;
-  const times = points.map((p) => new Date(p.at).getTime());
-  const minT = Math.min(...times);
-  const maxT = Math.max(...times);
-  const values = points.map((p) => p.cumulativePoints);
-  const minY = Math.min(0, ...values);
-  const maxY = Math.max(1, ...values);
-  const x = (t: number) => pad + ((t - minT) / (maxT - minT || 1)) * (width - pad * 2);
-  const y = (v: number) => height - pad - ((v - minY) / (maxY - minY || 1)) * (height - pad * 2);
-
-  const byTeam = new Map<string, PointsOverTimePoint[]>();
-  for (const p of points) {
-    const arr = byTeam.get(p.teamId) ?? [];
-    arr.push(p);
-    byTeam.set(p.teamId, arr);
-  }
-
-  return (
-    <div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full rounded-md border border-outline bg-background">
-        <line x1={pad} y1={y(0)} x2={width - pad} y2={y(0)} stroke="var(--color-outline-strong)" strokeWidth={1} />
-        {[...byTeam.entries()].map(([teamId, series]) => {
-          const team = teams.find((t) => t.id === teamId);
-          const color = team?.color ?? FALLBACK_TEAM_COLOR;
-          const coords = series.map((p) => ({ x: x(new Date(p.at).getTime()), y: y(p.cumulativePoints) }));
-          return (
-            <g key={teamId}>
-              {coords.length > 1 && <polyline points={coords.map((c) => `${c.x},${c.y}`).join(" ")} fill="none" stroke={color} strokeWidth={2} />}
-              {coords.map((c, i) => (
-                <circle key={i} cx={c.x} cy={c.y} r={3} fill={color} />
-              ))}
-            </g>
-          );
-        })}
-      </svg>
-      <div className="mt-2 flex flex-wrap gap-3">
-        {[...byTeam.keys()].map((teamId) => {
-          const team = teams.find((t) => t.id === teamId);
-          return (
-            <span key={teamId} className="flex items-center gap-1.5 text-xs text-on-surface-muted">
-              <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: team?.color ?? FALLBACK_TEAM_COLOR }} />
-              {team?.name ?? "Unknown team"}
-            </span>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 function TimelineList({ events }: { events: TimelineEvent[] }) {

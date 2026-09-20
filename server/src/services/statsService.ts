@@ -52,7 +52,9 @@ function labelNodes(db: Db, bingoId: string, nodeIds: string[]): Map<string, Nod
 // Chronological, per-team-running-total reconstruction of every point-scoring
 // event — the exact same rows teamService.getTeamProgress sums for its
 // totalPoints, just timestamped and ordered, so a team's final
-// cumulativePoints here always reconciles with its scoreboard total.
+// cumulativePoints here always reconciles with its scoreboard total. Only
+// events that moved the total are included: a node completed for no points
+// (an item, a gated part) isn't a scoring event.
 export function getPointsOverTime(db: Db, bingoId: string): PointsOverTimePoint[] {
   const teamRows = db.select().from(teams).where(eq(teams.bingoId, bingoId)).all();
   const teamIds = teamRows.map((t) => t.id);
@@ -66,7 +68,7 @@ export function getPointsOverTime(db: Db, bingoId: string): PointsOverTimePoint[
   const adjustmentRows = db.select().from(teamPointAdjustments).where(eq(teamPointAdjustments.bingoId, bingoId)).all();
   const adjustmentEvents = adjustmentRows.map((a) => ({ at: a.createdAt, teamId: a.teamId, source: "adjustment" as const, label: a.reason, delta: a.amount }));
 
-  const all = [...nodeEvents, ...adjustmentEvents].sort((a, b) => a.at.getTime() - b.at.getTime());
+  const all = [...nodeEvents, ...adjustmentEvents].filter((e) => e.delta !== 0).sort((a, b) => a.at.getTime() - b.at.getTime());
 
   const running = new Map<string, number>();
   return all.map((e) => {

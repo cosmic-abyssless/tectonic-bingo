@@ -84,6 +84,18 @@ describe("getPointsOverTime", () => {
     expect(series.filter((e) => e.teamId === fx.teamBId).at(-1)!.cumulativePoints).toBe(20);
   });
 
+  it("leaves out nodes completed for no points, so every event moved the total", () => {
+    const fx = seedFixture();
+    const task = addTask(fx.tileId, { points: 20 });
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId);
+    // The completed item leaf earns nothing itself; only the task above it does.
+    const rows = db.select().from(teamNodeState).where(eq(teamNodeState.teamId, fx.teamAId)).all();
+    const series = getPointsOverTime(db, fx.bingoId);
+    expect(series.length).toBeGreaterThan(0);
+    expect(series.every((e) => e.delta !== 0)).toBe(true);
+    expect(series.length).toBeLessThanOrEqual(rows.length);
+  });
+
   it("returns an empty series for a bingo with no teams", () => {
     const [admin] = db.insert(schema.users).values({ discordId: "solo", discordUsername: "solo" }).returning().all();
     const [bingo] = db.insert(schema.bingos).values({ slug: "empty", name: "Empty", boardRows: 2, boardCols: 2, createdByUserId: admin.id }).returning().all();
