@@ -7,12 +7,8 @@ export function TierBadge({ profile, showRank = true }: { profile: TectonicProfi
   const tierName = profile.tier ? formatTierName(profile.tier.name) : "Unranked";
   const title = `${tierName} · ${profile.points.toLocaleString()} pts${showRank ? ` · #${profile.rank} in clan` : ""}`;
   return (
-    <span className="whitespace-nowrap" title={title}>
-      {icon ? (
-        <img src={icon} alt={tierName} className="mr-1.5 inline-block size-4 object-contain align-[-2px]" />
-      ) : (
-        <span className="mr-1.5 text-on-surface-subtle">{tierName}</span>
-      )}
+    <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap" title={title}>
+      {icon ? <img src={icon} alt={tierName} className="size-4 shrink-0 self-center object-contain" /> : <span className="text-on-surface-subtle">{tierName}</span>}
       <span className="num">{profile.points.toLocaleString()}</span>
     </span>
   );
