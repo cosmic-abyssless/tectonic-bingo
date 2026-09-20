@@ -18,6 +18,7 @@
 // document whose formatVersion is newer than this build understands, but
 // must keep reading every older version forever.
 import type { LeftoverMode, NodeKind, SignupMode, SignupQuestionType } from "./index.ts";
+import type { ExclusivityRule } from "./exclusivity.ts";
 
 export const BINGO_EXPORT_FORMAT_VERSION = 1;
 
@@ -117,6 +118,8 @@ export interface BingoExportDocument {
     buyinAmount: number | null;
     bonusPotAmount: number;
     rulesMarkdown: string | null;
+    /** Absent in older files: no exclusivity rules. */
+    exclusivityRules?: ExclusivityRule[];
   };
   categories: ExportCategory[];
   tiles: ExportTile[];

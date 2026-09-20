@@ -1,3 +1,4 @@
+import type { ExclusivityRule } from "@bingo/shared";
 import { now as clockNow } from "../clock";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -52,9 +53,51 @@ export function getBingoBySlug(db: Db, slug: string) {
 // sends a bingo (or a list of them) to a client goes through this first;
 // routes that only need the row server-side (requireBingo, stage/board
 // checks, the WOM sync itself) use the raw row from getBingoBySlug instead.
-export function toPublicBingo<T extends { womGroupVerificationCode: string | null }>(bingo: T): Omit<T, "womGroupVerificationCode"> {
-  const { womGroupVerificationCode: _womGroupVerificationCode, ...rest } = bingo;
-  return rest;
+export function toPublicBingo<T extends { womGroupVerificationCode: string | null; exclusivityRulesJson: string }>(
+  bingo: T,
+): Omit<T, "womGroupVerificationCode" | "exclusivityRulesJson"> & { exclusivityRules: ExclusivityRule[] } {
+  const { womGroupVerificationCode: _womGroupVerificationCode, exclusivityRulesJson, ...rest } = bingo;
+  return { ...rest, exclusivityRules: parseExclusivityRules(exclusivityRulesJson) };
+}
+
+const MAX_EXCLUSIVITY_RULES = 50;
+const MAX_ITEM_NAMES_PER_RULE = 1000;
+
+/** The rules a bingo row holds. Tolerant on purpose (a bad column reads as no rules): what is stored was validated on the way in. */
+export function parseExclusivityRules(json: string | null | undefined): ExclusivityRule[] {
+  if (!json) return [];
+  try {
+    const value: unknown = JSON.parse(json);
+    return Array.isArray(value) ? (value as ExclusivityRule[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Validates and cleans rules coming from a client or an import: trims, de-duplicates names, mints missing ids. */
+export function normalizeExclusivityRules(input: unknown): ExclusivityRule[] {
+  if (!Array.isArray(input)) throw new ServiceError(400, "exclusivityRules must be an array");
+  if (input.length > MAX_EXCLUSIVITY_RULES) throw new ServiceError(400, `At most ${MAX_EXCLUSIVITY_RULES} exclusivity rules`);
+  return input.map((raw: unknown, i) => {
+    const rule = (raw ?? {}) as Partial<ExclusivityRule>;
+    const label = typeof rule.label === "string" ? rule.label.trim() : "";
+    if (!label) throw new ServiceError(400, `Exclusivity rule ${i + 1} needs a label`);
+    if (rule.scope !== "part" && rule.scope !== "tile") throw new ServiceError(400, `Exclusivity rule "${label}": scope must be "part" or "tile"`);
+    if (!Array.isArray(rule.itemNames)) throw new ServiceError(400, `Exclusivity rule "${label}": itemNames must be an array`);
+    const seen = new Set<string>();
+    const itemNames: string[] = [];
+    for (const name of rule.itemNames) {
+      const trimmed = typeof name === "string" ? name.trim() : "";
+      if (trimmed && !seen.has(trimmed.toLowerCase())) {
+        seen.add(trimmed.toLowerCase());
+        itemNames.push(trimmed);
+      }
+    }
+    if (itemNames.length === 0) throw new ServiceError(400, `Exclusivity rule "${label}" has no items`);
+    if (itemNames.length > MAX_ITEM_NAMES_PER_RULE) throw new ServiceError(400, `Exclusivity rule "${label}" has too many items`);
+    const id = typeof rule.id === "string" && rule.id.trim() ? rule.id.trim() : crypto.randomUUID();
+    return { id, label, itemNames, scope: rule.scope };
+  });
 }
 
 // "Play has started": what team names and player ratings lock on. Mirrors isBoardLocked
@@ -290,6 +333,7 @@ export interface UpdateBingoSettingsParams {
   buyinAmount?: number | null;
   bonusPotAmount?: number;
   rulesMarkdown?: string | null;
+  exclusivityRules?: ExclusivityRule[];
   signupOpensAt?: Date | null;
   draftScheduledAt?: Date | null;
   revealScheduledAt?: Date | null;
@@ -313,9 +357,12 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
     if (params.womGroupId != null && !/^\d+$/.test(params.womGroupId)) {
       throw new ServiceError(400, "WOM group ID must be a number");
     }
-    const updated = tx.update(bingos).set(params).where(eq(bingos.id, bingoId)).returning().get();
+    const { exclusivityRules, ...columns } = params;
+    const set: Partial<typeof bingos.$inferInsert> = { ...columns };
+    if (exclusivityRules !== undefined) set.exclusivityRulesJson = JSON.stringify(normalizeExclusivityRules(exclusivityRules));
+    const updated = tx.update(bingos).set(set).where(eq(bingos.id, bingoId)).returning().get();
 
-    const changes = diffFields(existing, updated, { only: Object.keys(params) as (keyof typeof existing)[], redact: ["womGroupVerificationCode"] });
+    const changes = diffFields(existing, updated, { only: Object.keys(set) as (keyof typeof existing)[], redact: ["womGroupVerificationCode"] });
     if (changes) {
       audit(tx, {
         action: "settings.updated",

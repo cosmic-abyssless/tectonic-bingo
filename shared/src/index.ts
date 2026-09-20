@@ -9,6 +9,7 @@
 // node; a line is a node referenced by a BingoLine row. NodeStatus is
 // derived at read time, never stored (see TeamNodeState).
 
+import type { ExclusivityRule } from "./exclusivity.ts";
 import type { AuditVisibility } from "./audit.ts";
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
@@ -105,6 +106,8 @@ export interface Bingo {
   buyinAmount: number | null;
   bonusPotAmount: number;
   rulesMarkdown: string | null;
+  /** Items a team may use in one place only (see exclusivity.ts). */
+  exclusivityRules: ExclusivityRule[];
   signupOpensAt: string | null;
   draftScheduledAt: string | null;
   revealScheduledAt: string | null;
@@ -812,3 +815,4 @@ export type BroadcastEvent =
 export * from "./audit.ts";
 export * from "./auditCondense.ts";
 export * from "./bingoExport.ts";
+export * from "./exclusivity.ts";

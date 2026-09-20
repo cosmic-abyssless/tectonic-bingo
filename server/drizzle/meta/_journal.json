@@ -85,6 +85,13 @@
       "when": 1789786669717,
       "tag": "0011_bug_report_palette",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1789916873729,
+      "tag": "0012_exclusivity_rules",
+      "breakpoints": true
     }
   ]
 }

@@ -62,6 +62,7 @@ export interface AuditDetailsMap {
       buyinAmount: number | null;
       bonusPotAmount: number;
       rulesMarkdown: string | null;
+      exclusivityRulesJson: string;
       signupOpensAt: string | null;
       draftScheduledAt: string | null;
       revealScheduledAt: string | null;
@@ -312,7 +313,8 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     tone: "neutral",
     visibility: "mods",
     title: "Settings updated",
-    label: (i) => `${actor(i)} updated bingo settings (${Object.keys(i.details.changes.after).join(", ") || "no changes"})`,
+    label: (i) =>
+      `${actor(i)} updated bingo settings (${Object.keys(i.details.changes.after).map((k) => (k === "exclusivityRulesJson" ? "exclusive items" : k)).join(", ") || "no changes"})`,
   },
   "moderator.added": {
     category: "moderation",

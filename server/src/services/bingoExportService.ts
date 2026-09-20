@@ -145,6 +145,7 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
       buyinAmount: bingo.buyinAmount,
       bonusPotAmount: bingo.bonusPotAmount,
       rulesMarkdown: bingo.rulesMarkdown,
+      exclusivityRules: bingoService.parseExclusivityRules(bingo.exclusivityRulesJson),
     },
     categories: categoryRows.map((c) => ({ localId: categoryLocalByReal.get(c.id)!, label: c.label, colorHex: c.colorHex, sortOrder: c.sortOrder })),
     tiles,
@@ -170,6 +171,7 @@ function assertValidDocument(doc: BingoExportDocument): void {
   if (doc.bingo.leftoverMode !== undefined && doc.bingo.leftoverMode !== "cut" && doc.bingo.leftoverMode !== "singles") {
     throw new ServiceError(400, "Malformed import file: unknown leftover mode");
   }
+  if (doc.bingo.exclusivityRules !== undefined) bingoService.normalizeExclusivityRules(doc.bingo.exclusivityRules);
   for (const t of doc.tiles) {
     if (t.bonusPoints !== undefined && (!Number.isInteger(t.bonusPoints) || t.bonusPoints < 0)) {
       throw new ServiceError(400, `Malformed import file: tile "${t.name}" has an invalid bonus`);
@@ -263,6 +265,7 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
       buyinAmount: doc.bingo.buyinAmount,
       bonusPotAmount: doc.bingo.bonusPotAmount,
       rulesMarkdown: doc.bingo.rulesMarkdown,
+      ...(doc.bingo.exclusivityRules !== undefined ? { exclusivityRules: doc.bingo.exclusivityRules } : {}),
     });
 
     const categoryIdByLocal = new Map<number, string>();

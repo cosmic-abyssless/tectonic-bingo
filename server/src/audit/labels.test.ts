@@ -6,6 +6,12 @@ function label<A extends AuditAction>(action: A, details: AuditDetailsMap[A], te
   return def.label({ details, entityLabel: null, actorName: "Mod", teamName, onBehalfOfName: null });
 }
 
+describe("settings audit label", () => {
+  it("names the exclusive items setting plainly", () => {
+    expect(label("settings.updated", { changes: { before: {}, after: { name: "New", exclusivityRulesJson: "[]" } } })).toBe("Mod updated bingo settings (name, exclusive items)");
+  });
+});
+
 describe("point audit labels", () => {
   const base = { nodeId: "n", submissionId: "s", points: 20 };
 

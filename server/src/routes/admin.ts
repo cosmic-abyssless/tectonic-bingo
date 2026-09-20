@@ -59,6 +59,8 @@ router.patch(
       params.leftoverMode = body.leftoverMode;
     }
     if ("warnLeftovers" in body) params.warnLeftovers = !!body.warnLeftovers;
+    // Validated and cleaned by the service (label, scope, names).
+    if ("exclusivityRules" in body) params.exclusivityRules = body.exclusivityRules as never;
     for (const key of dateFields) {
       if (key in body) (params as Record<string, unknown>)[key] = body[key] ? new Date(body[key] as string) : null;
     }
