@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ModSubmissionRow, SubmissionScreenshot, SubmissionStatus } from "@bingo/shared";
 import { useCreatePointAdjustment, useModSubmissions, useReviewSubmission } from "../../api/queries";
 import { SubmissionStatusBadge } from "../ui/StatusBadge";
@@ -54,6 +54,26 @@ function ScreenshotAnalysisBadges({ screenshot }: { screenshot: SubmissionScreen
   return null;
 }
 
+const REVEAL_MARGIN = 12;
+
+/**
+ * Scrolls just far enough that a submission's first screenshot and its Approve / Reject buttons are on screen
+ * together, below the sticky header. If they can't both fit, the screenshot's top wins.
+ */
+function revealReview(submissionId: string) {
+  const first = document.getElementById(`review-shots-${submissionId}`);
+  const actions = document.getElementById(`review-actions-${submissionId}`);
+  if (!first || !actions) return;
+  const top = (document.querySelector("header")?.getBoundingClientRect().height ?? 0) + REVEAL_MARGIN;
+  const bottom = window.innerHeight - REVEAL_MARGIN;
+  const start = first.getBoundingClientRect().top;
+  const end = actions.getBoundingClientRect().bottom;
+  let delta = 0;
+  if (end - start > bottom - top || start < top) delta = start - top;
+  else if (end > bottom) delta = end - bottom;
+  if (Math.abs(delta) >= 1) window.scrollBy({ top: delta, behavior: "smooth" });
+}
+
 export function ReviewQueue({ slug }: { slug: string }) {
   const { data, isLoading } = useModSubmissions(slug);
   const review = useReviewSubmission(slug);
@@ -68,6 +88,15 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const [adjustOpenFor, setAdjustOpenFor] = useState<string | null>(null);
   const [adjustAmount, setAdjustAmount] = useState("");
   const [adjustReason, setAdjustReason] = useState("");
+  // A screenshot's height isn't known until it loads, so a load shortly after opening a submission reveals again.
+  const revealUntil = useRef(0);
+
+  useEffect(() => {
+    if (!expandedId) return;
+    revealUntil.current = Date.now() + 2000;
+    const frame = requestAnimationFrame(() => revealReview(expandedId));
+    return () => cancelAnimationFrame(frame);
+  }, [expandedId]);
 
   const allTeams = [...new Set(submissions.map((s) => s.team.name))].sort();
   const byStatus = filter === "all" ? submissions : submissions.filter((s) => s.submission.status === filter);
@@ -254,13 +283,16 @@ export function ReviewQueue({ slug }: { slug: string }) {
 
                 {isExpanded && canReview && (
                   <div className="space-y-3 border-t border-outline bg-background px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                    {row.screenshots.map((ss) => (
-                      <div key={ss.id}>
+                    {row.screenshots.map((ss, i) => (
+                      <div key={ss.id} id={i === 0 ? `review-shots-${row.submission.id}` : undefined}>
                         <a href={ss.storageUrl} target="_blank" rel="noreferrer" title="Open full size in new tab" className="block">
                           <img
                             src={fullUrl(ss.storageUrl)}
                             alt={ss.screenshotType}
-                            className="max-h-[60vh] w-full rounded-md border border-outline bg-black object-contain transition-colors hover:border-outline-strong"
+                            // Leaves room for the header, the notes and the buttons (and shares it between screenshots), so they fit together.
+                            style={{ maxHeight: `max(12rem, calc((100dvh - 19rem) / ${row.screenshots.length}))` }}
+                            onLoad={() => Date.now() < revealUntil.current && revealReview(row.submission.id)}
+                            className="w-full rounded-md border border-outline bg-black object-contain transition-colors hover:border-outline-strong"
                           />
                         </a>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -286,7 +318,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
 
                     {error && <Notice tone="danger">{error}</Notice>}
 
-                    <div className="flex gap-2">
+                    <div id={`review-actions-${row.submission.id}`} className="flex gap-2">
                       <Button variant="primary" className="flex-1" onPress={() => submitReview(row, "approve")} isDisabled={review.isPending}>
                         <span className="flex items-center justify-center gap-1.5">
                           {review.isPending ? "…" : "Approve"}
