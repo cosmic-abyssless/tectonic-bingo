@@ -92,15 +92,18 @@ export function SignupForm({ slug }: { slug: string }) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  // One linked RSN (or a saved signup) should already be chosen — don't wait
+  // on the effect, or the select paints as "Select…" for a frame.
+  const rsnValue = rsn || existing?.rsn || (rsnOptions.length === 1 ? rsnOptions[0]!.rsn : "");
+
   useEffect(() => {
     if (existing) setRsn(existing.rsn);
-    else if (tectonicRsns.length === 1) setRsn(tectonicRsns[0].rsn);
     if (mySignup?.answers) {
       const map: Record<string, string> = {};
       for (const a of mySignup.answers) map[a.questionId] = a.value;
       setAnswers(map);
     }
-  }, [existing, mySignup, tectonicRsns]);
+  }, [existing, mySignup]);
 
   // Only gate NEW signups — someone who signed up before the integration
   // was turned on (or before they were registered) keeps their spot, so
@@ -135,16 +138,16 @@ export function SignupForm({ slug }: { slug: string }) {
 
   const answerList: SignupAnswerInput[] = questions.map((q) => ({ questionId: q.id, value: answers[q.id] ?? "" }));
   const missingRequired = questions.some((q) => q.required && !(answers[q.id] ?? "").trim());
-  const isValid = !!rsn.trim() && !missingRequired;
+  const isValid = !!rsnValue.trim() && !missingRequired;
 
   async function submit() {
     setError(null);
     setSaved(false);
     try {
       if (existing) {
-        await updateSignup.mutateAsync({ rsn, answers: answerList });
+        await updateSignup.mutateAsync({ rsn: rsnValue, answers: answerList });
       } else {
-        await createSignup.mutateAsync({ rsn, answers: answerList });
+        await createSignup.mutateAsync({ rsn: rsnValue, answers: answerList });
       }
       setSaved(true);
     } catch (e: unknown) {
@@ -190,7 +193,7 @@ export function SignupForm({ slug }: { slug: string }) {
             <Field
               label={rsnLabel}
               hint={
-                tectonicRsns.some((r) => r.rsn === rsn) ? (
+                tectonicRsns.some((r) => r.rsn === rsnValue) ? (
                   <span className="inline-flex items-center gap-1 text-ok">
                     <CheckIcon size={12} /> Verified against your linked clan account
                   </span>
@@ -199,8 +202,8 @@ export function SignupForm({ slug }: { slug: string }) {
                 )
               }
             >
-              <Select value={rsn} onChange={(e) => setRsn(e.target.value)}>
-                <option value="">Select…</option>
+              <Select value={rsnValue} onChange={(e) => setRsn(e.target.value)}>
+                {rsnOptions.length > 1 && <option value="">Select…</option>}
                 {rsnOptions.map((r) => (
                   <option key={r.rsn} value={r.rsn}>
                     {r.rsn}
@@ -210,7 +213,7 @@ export function SignupForm({ slug }: { slug: string }) {
             </Field>
           ) : (
             <Field label={rsnLabel}>
-              <Input value={rsn} onChange={(e) => setRsn(e.target.value)} maxLength={12} />
+              <Input value={rsnValue} onChange={(e) => setRsn(e.target.value)} maxLength={12} />
             </Field>
           )}
 
