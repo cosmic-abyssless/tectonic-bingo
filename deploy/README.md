@@ -53,7 +53,9 @@ is in `server/src/ocrProtocol.ts`; the service is `server/src/ocrServer.ts`.
   to tune) with `docker compose logs ocr | grep recognized`, which logs the milliseconds for every screenshot.
 - Locally, running the api outside Docker (`npm run dev`) leaves `OCR_URL` unset and reads screenshots in-process as before.
 - Sentry: the service reports under the environment `ocr`, using the server's DSN (`SENTRY_DSN`). Compose passes it only
-  that one setting rather than the whole env file, since it needs no secrets.
+  that one setting rather than the whole env file, since it needs no secrets. That setting is interpolated by Compose
+  (from the shell or from `--env-file`), not read from the service's own env file, so start the stack with
+  `--env-file .env.docker` when Sentry should be on.
 
 ## Running the whole stack locally
 
