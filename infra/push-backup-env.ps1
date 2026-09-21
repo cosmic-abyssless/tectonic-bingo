@@ -88,9 +88,11 @@ cd /srv/tectonic/env && for e in staging production; do
   if docker run --rm --env-file "$e.backup.env" -v /srv/tectonic/deploy:/deploy:ro --entrypoint sh rclone/rclone:1.75.1 -c '. /deploy/rclone-env.sh && t=backup:$BACKUP_BUCKET/$BACKUP_PREFIX/_connection-test.txt && printf hello | rclone rcat $t 2>/dev/null && [ "$(rclone cat $t 2>/dev/null)" = hello ] && rclone deletefile $t 2>/dev/null' >/dev/null 2>&1; then echo "  $e: ok"; else echo "  $e: FAILED"; fi
 done
 '@
-        $c = Invoke-Box "bash -s" (($test -replace "`r`n", "`n"))
+        # The script arrives on stdin, so it gets the same byte-order mark as the secrets did: strip it, or bash fails on the first line.
+        $c = Invoke-Box "sed 's/\xEF\xBB\xBF//g' | tr -d '\015' | bash -s" $test
         Write-Host $c.Output
-        if ($c.Output -match "FAILED") { throw "the box cannot write to the bucket with these credentials" }
+        # Silence is not success: both environments must say ok, or something (a stripped line, a missing image) went wrong.
+        if ($c.Output -notmatch "staging: ok" -or $c.Output -notmatch "production: ok") { throw "the box could not confirm it can write to the bucket. $($c.Error)" }
     }
     Write-Host "done"
 } finally {
