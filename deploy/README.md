@@ -206,7 +206,8 @@ steps; the rest is secrets and DNS, which only a person can do. Everything here 
 person can rebuild the box, and so can you in a year.
 
 1. **Create the server** in the Hetzner Cloud console: **CPX31** (4 vCPU, 8 GB), location **Ashburn (US)**, image
-   **Ubuntu 24.04**, add your SSH key, and **switch on Backups** (a daily snapshot: the second layer under R2). Note the
+   **Ubuntu 24.04**, add your SSH key. Hetzner's own **Backups** (a daily snapshot of the whole machine, about 20% of the price) are optional and can
+   be switched on later: the data is protected by R2, and the machine is rebuilt from this runbook. Note the
    IPv4 address.
 2. **Generate the CI key**, anywhere: `ssh-keygen -t ed25519 -f deploy_key -C github-actions -N ''`. Keep `deploy_key`
    private (it becomes a GitHub secret); `deploy_key.pub` goes to the server.
@@ -274,7 +275,7 @@ What is backed up, where, and how fresh:
 | --- | --- | --- | --- |
 | The database (`bingo.db`) | Litestream (`litestream` container) ships every change | Cloudflare R2, `<prefix>/db` | about a second |
 | Uploads (screenshots, tile images, wiki icons) | `rclone copy` (`backup` container), on start and daily at 03:15 UTC | R2, `<prefix>/uploads` | up to a day. Uploads never change once written, and the copy never deletes; a file modified in the last 2 minutes waits for the next run (it might still be being written), and the `wiki-icons/*.miss` cache markers are not backed up |
-| Everything on the box | Hetzner's own snapshot backups (switch them on when the server is ordered) | Hetzner | up to a day; a second layer, not the plan |
+| Everything on the box | Hetzner's own snapshot backups. **Optional, and off by default here** (about 20% of the server price) | Hetzner | up to a day; a second layer, not the plan |
 
 Litestream keeps a full snapshot every day and every change for 30 days, so the database can be restored to **any moment
 in the last 30 days**, not just to "latest". The bucket is a different provider from the server on purpose.
@@ -361,8 +362,11 @@ A backup nobody has restored is a hope, not a backup. There are two drills, and 
 ### What this does not protect against
 
 - **A compromised server.** The box holds a token that can write to (and, because Litestream enforces retention,
-  delete from) the bucket. Whoever owns the box can destroy the backups. Hetzner's snapshots are the second layer for
-  that reason; turning on R2's bucket lock or versioning is worth considering later.
+  delete from) the bucket. Whoever owns the box can destroy the backups. Hetzner's snapshots would be a second layer
+  for that reason, but they are optional and off here, so **R2 is the only copy**: turn on R2's bucket lock or versioning
+  (worth doing before real players arrive), and repeat the real-bucket restore drill every few months.
+- **The env files.** `/srv/tectonic/env/*` exist only on the server (they hold the secrets, so they are not in R2 or git).
+  Their master copies belong in the team's password manager; without them a rebuild means re-collecting every key.
 - **Uploads newer than the last nightly copy** (see above).
 - **One bucket, one provider.** Cloudflare being unreachable at the moment of a disaster is a delay, not a loss, but it
   is a delay.
