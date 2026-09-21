@@ -28,6 +28,8 @@ export const INDEX_HTML_CACHE_CONTROL = "no-cache";
 export function clientDistStaticOptions(distDir: string): StaticOptions {
   const assetsDir = path.join(distDir, "assets") + path.sep;
   return {
+    // The page itself is served by mountClientApp (with the runtime config injected), never straight off disk.
+    index: false,
     setHeaders(res, filePath) {
       if (filePath.startsWith(assetsDir)) res.setHeader("Cache-Control", IMMUTABLE_CACHE_CONTROL);
       else if (path.basename(filePath) === "index.html") res.setHeader("Cache-Control", INDEX_HTML_CACHE_CONTROL);

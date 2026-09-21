@@ -1,0 +1,12 @@
+# Front door: TLS and reverse proxy. SITE_ADDRESS is the site's own address:
+#   http://localhost   local development (plain HTTP, no certificate)
+#   tectonic.bingo     production (Caddy fetches and renews the certificate itself)
+# The backend is named `api` on the Compose network. The app trusts exactly one proxy hop (`trust proxy 1`), which is
+# this one, so it sees the visitor's real address and knows the connection was HTTPS.
+{$SITE_ADDRESS:http://localhost} {
+	reverse_proxy api:8080 {
+		# A failing backend is taken out of rotation instead of returning errors to visitors.
+		health_uri /health
+		health_interval 5s
+	}
+}

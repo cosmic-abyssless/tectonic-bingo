@@ -68,3 +68,20 @@ jobs:
       - name: Apply all migrations to a fresh database
         working-directory: server
         run: DB_PATH=./data/ci-check.db npx drizzle-kit migrate
+
+  # Builds the deployable image and starts it on an empty database, so a change that breaks the Dockerfile, the
+  # entrypoint, the runtime dependencies or startup is caught on the pull request rather than on a deploy.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: tectonic-bingo:ci
+          build-args: SENTRY_RELEASE=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - run: bash deploy/smoke-test.sh tectonic-bingo:ci

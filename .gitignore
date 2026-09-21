@@ -16,3 +16,7 @@ playwright-report/
 
 # Pinned Railway plan artifacts (see .railway/README.md)
 railway-plan.json
+
+# Local container stack (docker-compose.yml): its data and settings
+.docker-data/
+.env.docker
