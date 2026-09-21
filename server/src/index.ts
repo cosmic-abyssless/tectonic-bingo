@@ -27,15 +27,17 @@ import { errorHandler } from "./middleware/errorHandler";
 import { requireGuildMember } from "./middleware/requireGuildMember";
 import { auditContext } from "./audit/middleware";
 import { closeWebSocketServer, initWebSocketServer } from "./ws";
-import { sqlite } from "./db";
-import { UPLOADS_DIR, WIKI_ICONS_DIR, getAdminDiscordIds } from "./config";
+import { DB_PATH, sqlite } from "./db";
+import { UPLOADS_DIR, WIKI_ICONS_DIR, getAdminDiscordIds, sessionCookieSecure } from "./config";
 import { warmOcr } from "./ocr";
 import { shouldWarmOcr } from "./ocrConfig";
 import { serveImageVariants } from "./middleware/imageVariants";
 import { serveWikiIcons } from "./middleware/wikiIcons";
 import { getKnownItemNames } from "./services/itemNames";
 import { isOsrsItemSearchEnabled } from "./routes/osrsItems";
-import { INDEX_HTML_CACHE_CONTROL, clientDistStaticOptions, uploadsStaticOptions } from "./middleware/staticCaching";
+import { uploadsStaticOptions } from "./middleware/staticCaching";
+import { mountClientApp } from "./middleware/clientApp";
+import { readRuntimeConfig } from "./runtimeConfig";
 import { getTectonicConfig } from "./services/tectonicService";
 import { installProcessLogHandlers, log, requestLog } from "./log";
 import clientErrorsRouter from "./routes/clientErrors";
@@ -131,7 +133,7 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production",
+      secure: sessionCookieSecure(),
       httpOnly: true,
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     },
@@ -181,21 +183,8 @@ app.use("/api/client-errors", clientErrorsRouter);
 // frontend — comes from one origin in production: no CORS, no cookie-domain
 // mismatch, and the client's already-relative fetch/WS URLs (see
 // WebSocketContext.tsx's `window.location.host`) just work unmodified.
-// Keyed off the build actually existing rather than NODE_ENV, so it can't be
-// silently skipped by a misconfigured env var — in dev this directory simply
-// doesn't exist (the client is served by Vite's own dev server instead, see
-// vite.config.ts's proxy setup), so this block never engages there.
-const CLIENT_DIST = path.join(__dirname, "../../client/dist");
-if (fs.existsSync(CLIENT_DIST)) {
-  app.use(express.static(CLIENT_DIST, clientDistStaticOptions(CLIENT_DIST)));
-  // SPA fallback: any GET that isn't one of the routes above (API, auth,
-  // uploads, ws) falls through to index.html, so client-side routing
-  // (react-router) still resolves a direct navigation or refresh on a deep
-  // link like /bingos/some-slug.
-  app.get(/^\/(?!api|auth|uploads|wiki-icons|ws|health).*/, (_req, res) => {
-    res.sendFile(path.join(CLIENT_DIST, "index.html"), { headers: { "Cache-Control": INDEX_HTML_CACHE_CONTROL } });
-  });
-}
+// The built client, when there is one (see mountClientApp; in dev the client is served by Vite instead).
+mountClientApp(app, path.join(__dirname, "../../client/dist"), readRuntimeConfig());
 
 // After every route, before our own handler: reports unexpected errors (not deliberate 4xx refusals) to Sentry.
 Sentry.setupExpressErrorHandler(app, { shouldHandleError: shouldReportError });
@@ -205,13 +194,12 @@ const server = http.createServer(app);
 initWebSocketServer(server);
 
 server.listen(PORT, () => {
-  const dbPath = process.env.DB_PATH ?? "data/bingo.db";
   log.info("server listening", {
     port: Number(PORT),
     nodeEnv: process.env.NODE_ENV ?? "<unset>",
     tectonic: Boolean(getTectonicConfig()),
     ocr: process.env.SCREENSHOT_OCR_DISABLED !== "true",
-    dbDir: path.dirname(dbPath),
+    dbDir: path.dirname(DB_PATH),
     devMode: isDevModeActive(),
   });
   // After the server is up and taking requests, so a slow model download never delays a deploy going healthy.

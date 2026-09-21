@@ -1,4 +1,5 @@
 import { MulterError } from "multer";
+import { OcrUnavailableError } from "./ocrErrors";
 import { ServiceError } from "./services/errors";
 
 /**
@@ -6,8 +7,11 @@ import { ServiceError } from "./services/errors";
  * simply being refused: a ServiceError below 500 is the app saying no on purpose, an upload that is too large is the
  * user's doing, and anything Express or a body parser raises with a 4xx status (malformed JSON, payload too large)
  * is a bad request. Everything else is unexpected, and so is a ServiceError that is itself a 500.
+ * The OCR service being unreachable is a 503 that is expected now and then (it restarts on a deploy), so it is not a bug
+ * in this request; a real fault inside the service is reported by the service itself.
  */
 export function shouldReportError(err: unknown): boolean {
+  if (err instanceof OcrUnavailableError) return false;
   if (err instanceof ServiceError) return err.status >= 500;
   if (err instanceof MulterError) return false;
   const { status, statusCode } = (err ?? {}) as { status?: unknown; statusCode?: unknown };

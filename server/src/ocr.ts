@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-import { PaddleOcrService, V6_SMALL_MODEL } from "ppu-paddle-ocr";
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "./db/schema";
@@ -7,8 +5,11 @@ import { tiles } from "./db/schema";
 import { getFullGraph, leafDescendants } from "./services/graphService";
 import { findBestMatch, fuzzyIncludes, type DetectedItemMatch, type MatchableItem } from "./services/textMatchService";
 import { log } from "./log";
-import { ocrConcurrency } from "./ocrConfig";
-import { createLimiter, createResultCache, type OcrPriority } from "./ocrScheduler";
+import { createRemoteRecognizer } from "./ocrClient";
+import { OcrImageError, OcrUnavailableError } from "./ocrErrors";
+import { ocrRequestTimeoutMs, ocrServiceUrl } from "./ocrConfig";
+import type { OcrPriority } from "./ocrScheduler";
+import { createTextReader, type TextRecognizer } from "./ocrText";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -32,88 +33,32 @@ export function isOcrEnabled(): boolean {
   return process.env.SCREENSHOT_OCR_DISABLED !== "true";
 }
 
-// Lazy singleton: initialize() is ~1.6s warm (longer on the very first call,
-// which also downloads and caches the model), so this must happen once and
-// never per-request. In production warmOcr() does it in the background right
-// after the server starts; elsewhere (a tsx-watch restart loop shouldn't pay
-// that cost or hit the network) it waits for the first screenshot.
-let _service: Promise<PaddleOcrService> | null = null;
+// Where the reading happens depends on OCR_URL. Set (production and staging), every screenshot goes to the separate
+// `ocr` service, which has its own CPU and its own limit on concurrent readings, so a burst of submissions can't slow
+// the site. Unset (local development, tests), it is read inside this process by the same engine, loaded on first use so
+// an API that only talks to the service never pays for the model runtime.
+// The API never falls back to reading in-process when the service is set but down: that would load the model into the
+// process that serves the site, which is exactly what the split avoids. The analysis fails cleanly (503) and the
+// submission itself is unaffected: see OcrUnavailableError.
+async function recognizeInProcess(buffer: Buffer, priority: OcrPriority): Promise<string[]> {
+  const { recognizeLocally } = await import("./ocrEngine");
+  return recognizeLocally(buffer, priority);
+}
 
-// Recognition is CPU-bound and runs in this same process as the API, so an unbounded burst of submissions would
-// make every one of them (and every other request) slow. Cap how many run at once and queue the rest.
-// The limit is OCR_CONCURRENCY (default 5, see ocrConfig).
-const limiter = createLimiter(ocrConcurrency(), ({ waitedMs, priority, running, queued }) => {
-  log.info("ocr waited for a free slot", { waitedMs, priority, running, queued });
+const recognizeText: TextRecognizer = createTextReader((buffer, priority) => {
+  const url = ocrServiceUrl();
+  return url ? createRemoteRecognizer({ url, timeoutMs: ocrRequestTimeoutMs() })(buffer, priority) : recognizeInProcess(buffer, priority);
 });
 
-// What was read from an image, keyed by its bytes. A screenshot is analysed when it is picked in the submission
-// modal and again, in the background, once it is submitted; the second time it is served from here instead of
-// being read again. Only the text is kept: matching it against the codeword and board is cheap.
-const textCache = createResultCache<string[]>({ ttlMs: 15 * 60_000, maxEntries: 200 });
-
-// Exported so scripts/ocr-smoke.ts uses the exact same tuned options as
-// production rather than the library's defaults, which drift silently
-// otherwise (that drift is how the maxSideLength bug above went unnoticed).
-export function getOcrService(): Promise<PaddleOcrService> {
-  if (!_service) {
-    _service = (async () => {
-      const service = new PaddleOcrService({
-        model: V6_SMALL_MODEL,
-        // The library's default "auto" cap (clamp(0.75 * longestSide, 960,
-        // 1920)) shrinks a real full-client RuneLite screenshot enough to
-        // drop entire chatbox lines outright — confirmed against a real
-        // 1500px-wide screenshot where "auto" silently dropped 4 of 9 chat
-        // lines and a fixed higher cap recovered all of them. Real
-        // screenshots aren't the tightly-cropped benchmark images this
-        // model was tuned against, so don't downscale them.
-        detection: { maxSideLength: 4000 },
-        // charactersDictionary is typed as required here, but the library
-        // always overwrites it with the loaded dict during initialize() —
-        // confirmed by reading paddle-ocr.service.js. `[]` matches the
-        // library's own DEFAULT_RECOGNITION_OPTIONS placeholder.
-        //
-        // strategy: "per-box" overrides the library default ("per-line",
-        // which merges same-line boxes before recognizing). On a real
-        // screenshot that merge corrupted adjacent text — e.g. a UI label
-        // "frost-wyvern 03/09/2026 21:08 UTC" came out as "rost-uyer
-        // 03/09/20e26 2" / "1.08 UT" under per-line, but recognized exactly
-        // right (0.94-0.99 confidence per box) under per-box. A/B against
-        // the same real screenshot showed per-box was more accurate on
-        // nearly every line (not just this one), with no measurable
-        // latency cost for a screenshot-sized image.
-        recognition: { maxCropSourceSideLength: 4000, charactersDictionary: [], strategy: "per-box" },
-      });
-      await service.initialize();
-      return service;
-    })().catch((err) => {
-      // A failed load (the model download timing out, say) must not be remembered: the next call tries again
-      // instead of every screenshot failing until the server restarts.
-      _service = null;
-      throw err;
-    });
-  }
-  return _service;
-}
-
 /**
- * Loads the model ahead of the first screenshot so nobody's submission pays for it (or for downloading it, which
- * happens again after every deploy). Fire and forget: a failure is logged and the first real request retries.
+ * Loads the model ahead of the first screenshot so nobody's submission pays for it. Only meaningful when reading
+ * in-process: with a separate OCR service, that service warms itself. Fire and forget: a failure is logged and the
+ * first real request retries.
  */
 export async function warmOcr(): Promise<void> {
-  const started = Date.now();
-  try {
-    await getOcrService();
-    log.info("ocr model ready", { ms: Date.now() - started, concurrency: ocrConcurrency() });
-  } catch (err) {
-    log.error("ocr warm-up failed", { err });
-  }
-}
-
-
-// A Buffer is a view into a shared, larger ArrayBuffer pool — `buf.buffer`
-// alone hands the OCR library unrelated memory. Slice to the view's own range.
-function toArrayBuffer(buf: Buffer): ArrayBuffer {
-  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+  if (ocrServiceUrl()) return;
+  const { warmOcrEngine } = await import("./ocrEngine");
+  await warmOcrEngine();
 }
 
 // Runs local OCR on the screenshot, then matches the extracted text against
@@ -128,24 +73,12 @@ export async function analyzeSubmissionScreenshot(db: Db, bingo: Bingo, team: Te
   try {
     return await runAnalyze(db, bingo, team, file, opts.priority ?? "interactive");
   } catch (err) {
-    log.error("ocr analysis failed", { err, bingoId: bingo.id, teamId: team.id });
+    // An outage (ocrClient has already logged it) and a bad image are expected, so they are warnings; anything else is a
+    // surprise and, as an error, reaches Sentry.
+    const expected = err instanceof OcrUnavailableError || err instanceof OcrImageError;
+    log[expected ? "warn" : "error"]("ocr analysis failed", { err, bingoId: bingo.id, teamId: team.id });
     throw err;
   }
-}
-
-function recognizeText(buffer: Buffer, priority: OcrPriority): Promise<string[]> {
-  const key = createHash("sha256").update(buffer).digest("hex");
-  return textCache.getOrCompute(key, () =>
-    limiter.run(async () => {
-      const service = await getOcrService();
-      // noCache: the library's own cache is tiny and keyed differently; ours (above) is what dedupes.
-      const result = await service.recognize(toArrayBuffer(buffer), { noCache: true });
-      return result.text
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean);
-    }, priority),
-  );
 }
 
 async function runAnalyze(db: Db, bingo: Bingo, team: Team, file: ScreenshotFile, priority: OcrPriority): Promise<AnalyzeResult> {

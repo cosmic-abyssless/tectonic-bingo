@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MulterError } from "multer";
+import { OcrImageError, OcrUnavailableError } from "./ocrErrors";
 import { ServiceError } from "./services/errors";
 import { shouldReportError } from "./errorReporting";
 
@@ -14,6 +15,11 @@ describe("shouldReportError", () => {
   it("reports a ServiceError that is a server failure", () => {
     expect(shouldReportError(new ServiceError(500, "boom"))).toBe(true);
     expect(shouldReportError(new ServiceError(503, "Screenshot analysis is disabled"))).toBe(true);
+  });
+
+  it("ignores the OCR service being unreachable, which is expected when it restarts, and an unreadable image", () => {
+    expect(shouldReportError(new OcrUnavailableError("the OCR service could not be reached"))).toBe(false);
+    expect(shouldReportError(new OcrImageError(new Error("truncated png")))).toBe(false);
   });
 
   it("ignores an oversized or otherwise rejected upload", () => {

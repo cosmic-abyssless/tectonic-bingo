@@ -1,0 +1,12 @@
+# Files that run inside Linux containers or on the server must keep LF line endings even when checked out on Windows:
+# a CRLF turns "#!/bin/sh" into a missing interpreter.
+*.sh text eol=lf
+Dockerfile text eol=lf
+Caddyfile text eol=lf
+*.yml text eol=lf
+# The deploy directory's settings and templates are read by shell scripts and copied to the server: a CR at the end of a value
+# ends up inside it (a copied env template arrived with 49 of them on the first real server).
+*.conf text eol=lf
+*.example text eol=lf
+*.env text eol=lf
+deploy/**/*.js text eol=lf

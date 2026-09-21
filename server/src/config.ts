@@ -17,6 +17,18 @@ export const WIKI_ICONS_DIR = path.join(UPLOADS_DIR, "wiki-icons");
 // Discord handle or email for your deploy. Callers append their purpose.
 export const USER_AGENT = `tectonic-bingo/1.0 (+${process.env.USER_AGENT_CONTACT || "https://github.com/cosmic-abyssless/tectonic-bingo"})`;
 
+/**
+ * Whether the session cookie is marked Secure (sent only over HTTPS). On in production. COOKIE_SECURE overrides it, which
+ * staging needs: it runs with NODE_ENV=staging (so dev-login works there, see devMode.ts) but is served over HTTPS, and its
+ * cookie must still be Secure.
+ */
+export function sessionCookieSecure(env: Record<string, string | undefined> = process.env): boolean {
+  const override = env.COOKIE_SECURE?.trim().toLowerCase();
+  if (override === "true") return true;
+  if (override === "false") return false;
+  return env.NODE_ENV === "production";
+}
+
 // Comma-separated Discord user IDs that bootstrap as site admins on login.
 // Granted admins (users.isAdmin) get every site-admin power except granting
 // site admin itself — that stays with the IDs listed here.

@@ -1,0 +1,31 @@
+# Continuous replication of the SQLite database to object storage (Cloudflare R2 in production). Every change is
+# shipped within about a second, so a restore is at most seconds behind, at any point in the retention window.
+#
+# Litestream expands ${VARIABLES} from its environment. They come from the backup env file (deploy/backup.env.example):
+#   BACKUP_ENDPOINT           the S3 API address, e.g. https://<account id>.r2.cloudflarestorage.com
+#   BACKUP_BUCKET             the bucket
+#   BACKUP_PREFIX             a folder per environment inside it, e.g. production or staging (never share one)
+#   BACKUP_ACCESS_KEY_ID / BACKUP_SECRET_ACCESS_KEY   a token limited to that bucket
+#
+# The path below is where the database is inside the container. It is also how `litestream restore` finds the replica,
+# so deploy/restore.sh and the Compose service must agree with it.
+
+# A full snapshot every day, and every snapshot and change kept for 30 days. Restoring to any moment in that window is
+# one command; the whole history of an event this size is a few tens of megabytes.
+snapshot:
+  interval: 24h
+  retention: 720h
+
+dbs:
+  - path: /data/sqlite/bingo.db
+    replica:
+      type: s3
+      endpoint: ${BACKUP_ENDPOINT}
+      bucket: ${BACKUP_BUCKET}
+      path: ${BACKUP_PREFIX}/db
+      # R2 ignores the region but the client insists on one; "auto" is R2's own value.
+      region: auto
+      # Works with R2, and is what the local test server (deploy/restore-drill.sh) needs.
+      force-path-style: true
+      access-key-id: ${BACKUP_ACCESS_KEY_ID}
+      secret-access-key: ${BACKUP_SECRET_ACCESS_KEY}

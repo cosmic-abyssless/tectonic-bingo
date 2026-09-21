@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { db } from "../src/db";
 import { bingos, tiles } from "../src/db/schema";
-import { getOcrService } from "../src/ocr";
+import { getOcrService } from "../src/ocrEngine";
 import { getFullGraph, leafDescendants } from "../src/services/graphService";
 import { findBestMatch, type MatchableItem } from "../src/services/textMatchService";
 
