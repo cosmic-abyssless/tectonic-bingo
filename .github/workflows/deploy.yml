@@ -1,0 +1,188 @@
+name: Deploy
+
+# staging     Every commit that passes CI on main is built, shipped to the box and deployed to staging automatically, so
+#             staging is always the next production.
+# production  "Run workflow" (Actions tab, environment: production). It deploys the image staging is already running:
+#             nothing is built or shipped, so production gets exactly the bytes that were tested. Rolling back is the same
+#             button with action: rollback.
+#
+# How a deploy reaches the box (see deploy/README.md, "Deploying"): the image is streamed over SSH (`docker save | docker
+# load`, so there is no registry to pay for or leak), the commit's deploy/ directory is synced next to it, and
+# deploy/deploy.sh does the blue/green switch. The SSH key can only run what deploy/ssh-entry.sh allows.
+#
+# APPROVAL. The plan asks for a required reviewer on production. GitHub only enforces environment reviewers on private
+# repositories on paid plans, and this repository is private on the free plan, so the gate today is (1) production is never
+# triggered automatically, only by a person with write access clicking Run workflow, and (2) the box refuses to deploy to
+# production an image staging is not running. On a plan that supports it, add required reviewers to the `production`
+# environment in Settings > Environments: this workflow already targets that environment, so nothing else changes.
+#
+# Secrets (repository secrets, or per-environment ones once environments are enforced):
+#   DEPLOY_HOST         the box's address
+#   DEPLOY_USER         the deploy user on the box (deploy/bootstrap-box.sh creates it)
+#   DEPLOY_SSH_KEY      the private half of the CI key (its public half is in the deploy user's authorized_keys, pinned to ssh-entry.sh)
+#   DEPLOY_KNOWN_HOSTS  the box's host key line(s), from `ssh-keyscan -t ed25519 <host>` run once, from a trusted network
+#   SENTRY_AUTH_TOKEN   uploads the client's source maps for this release (optional)
+# Variables (optional): STAGING_URL, PRODUCTION_URL, e.g. https://staging.tectonic.bingo, for a check from outside after a deploy.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Where to deploy
+        type: choice
+        options: [staging, production]
+        default: staging
+      action:
+        description: What to do
+        type: choice
+        options: [deploy, rollback, edge]
+        default: deploy
+      sha:
+        description: Commit to deploy (default, the head of main). Production only accepts the commit staging is running.
+        type: string
+        required: false
+      skip_staging_check:
+        description: "EMERGENCY: let production deploy a commit staging has not run (a hotfix). It is logged on the box."
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    # A CI run on main that passed (and was a push to this repository, not a pull request), or a manual run.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.r.outputs.environment }}
+      action: ${{ steps.r.outputs.action }}
+      sha: ${{ steps.r.outputs.sha }}
+      skip_staging_check: ${{ steps.r.outputs.skip_staging_check }}
+    steps:
+      - id: r
+        env:
+          EVENT: ${{ github.event_name }}
+          IN_ENVIRONMENT: ${{ inputs.environment }}
+          IN_ACTION: ${{ inputs.action }}
+          IN_SHA: ${{ inputs.sha }}
+          IN_SKIP: ${{ inputs.skip_staging_check }}
+          CI_SHA: ${{ github.event.workflow_run.head_sha }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = workflow_run ]; then
+            environment=staging; action=deploy; sha="$CI_SHA"; skip=false
+          else
+            environment="$IN_ENVIRONMENT"; action="$IN_ACTION"; skip="$IN_SKIP"
+            sha="${IN_SHA:-$DISPATCH_SHA}"
+          fi
+          # Inputs are untrusted text: check each is exactly what it should be before anything uses it.
+          [[ "$environment" =~ ^(staging|production)$ ]] || { echo "bad environment"; exit 1; }
+          [[ "$action" =~ ^(deploy|rollback|edge)$ ]] || { echo "bad action"; exit 1; }
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "the commit must be a full 40-character sha"; exit 1; }
+          [[ "$skip" =~ ^(true|false)$ ]] || { echo "bad skip flag"; exit 1; }
+          { echo "environment=$environment"; echo "action=$action"; echo "sha=$sha"; echo "skip_staging_check=$skip"; } >>"$GITHUB_OUTPUT"
+          echo "### $action $environment @ ${sha:0:12}" >>"$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: resolve
+    runs-on: ubuntu-latest
+    environment: ${{ needs.resolve.outputs.environment }}
+    # One deploy per environment at a time, and never cancel one in progress: a half-finished deploy is worse than a queue.
+    concurrency:
+      group: deploy-${{ needs.resolve.outputs.environment }}
+      cancel-in-progress: false
+    env:
+      TARGET: ${{ needs.resolve.outputs.environment }}
+      ACTION: ${{ needs.resolve.outputs.action }}
+      SHA: ${{ needs.resolve.outputs.sha }}
+      SKIP_STAGING_CHECK: ${{ needs.resolve.outputs.skip_staging_check }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          fetch-depth: 0
+
+      - name: Refuse a commit that is not on main
+        run: |
+          git fetch --quiet origin main
+          git merge-base --is-ancestor "$SHA" origin/main || { echo "::error::$SHA is not on main. Only commits on main are deployed."; exit 1; }
+
+      - name: Set up SSH to the box
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS; do
+            [ -n "${!name}" ] || { echo "::error::the $name secret is not set (see the header of this workflow)"; exit 1; }
+          done
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" >~/.ssh/deploy_key; chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" >~/.ssh/known_hosts
+          # The host key is pinned: a changed key fails the deploy instead of being trusted.
+          printf 'Host box\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/deploy_key\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n  ServerAliveInterval 30\n  ServerAliveCountMax 10\n' "$DEPLOY_HOST" "$DEPLOY_USER" >~/.ssh/config
+
+      # Only staging builds. Production deploys the image staging already loaded onto the box.
+      - name: Set up Docker Buildx
+        if: env.ACTION == 'deploy' && env.TARGET == 'staging'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build the image
+        if: env.ACTION == 'deploy' && env.TARGET == 'staging'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: tectonic-bingo:${{ needs.resolve.outputs.sha }}
+          build-args: SENTRY_RELEASE=${{ needs.resolve.outputs.sha }}
+          secrets: |
+            sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Ship the image to the box
+        if: env.ACTION == 'deploy' && env.TARGET == 'staging'
+        run: |
+          set -euo pipefail
+          docker save "tectonic-bingo:$SHA" | gzip -1 | ssh box load-image
+
+      - name: Sync the deploy scripts for this commit
+        run: tar -cz deploy | ssh box sync-deploy
+
+      - name: Deploy
+        run: |
+          set -euo pipefail
+          case "$ACTION" in
+            deploy)
+              flags=""
+              [ "$SKIP_STAGING_CHECK" != true ] || flags="--skip-staging-check"
+              ssh box "deploy $TARGET tectonic-bingo:$SHA $flags"
+              ;;
+            rollback) ssh box "rollback $TARGET" ;;
+            edge) ssh box "edge" ;;
+          esac
+
+      - name: Check the site from outside
+        if: env.ACTION != 'edge'
+        env:
+          URL: ${{ env.TARGET == 'production' && vars.PRODUCTION_URL || vars.STAGING_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "$URL" ]; then echo "(no ${TARGET^^}_URL variable set; skipping the outside check)"; exit 0; fi
+          for i in $(seq 1 12); do
+            if curl -fsS --max-time 10 "$URL/health" | grep -q '"ok":true'; then echo "$URL/health is up"; exit 0; fi
+            sleep 5
+          done
+          echo "::error::$URL/health did not answer"; exit 1

@@ -28,7 +28,7 @@ import { requireGuildMember } from "./middleware/requireGuildMember";
 import { auditContext } from "./audit/middleware";
 import { closeWebSocketServer, initWebSocketServer } from "./ws";
 import { DB_PATH, sqlite } from "./db";
-import { UPLOADS_DIR, WIKI_ICONS_DIR, getAdminDiscordIds } from "./config";
+import { UPLOADS_DIR, WIKI_ICONS_DIR, getAdminDiscordIds, sessionCookieSecure } from "./config";
 import { warmOcr } from "./ocr";
 import { shouldWarmOcr } from "./ocrConfig";
 import { serveImageVariants } from "./middleware/imageVariants";
@@ -133,7 +133,7 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production",
+      secure: sessionCookieSecure(),
       httpOnly: true,
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     },

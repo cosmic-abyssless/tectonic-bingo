@@ -1,0 +1,116 @@
+# One environment (production or staging) as containers on the box. Used only through deploy/deploy.sh, which sets every
+# TB_* variable below; do not `docker compose up` this by hand (see "Deploying" in deploy/README.md).
+#
+# Blue/green: two identical api services, api-blue and api-green. One of them serves; a deploy starts the other with the
+# new image, waits for it to be healthy, and only then points Caddy at it. Both share the same database file and uploads
+# directory, which is safe because SQLite in WAL mode supports several processes on one machine (see the plan).
+#
+# The shared front door (Caddy) is a separate project, deploy/edge.yml. The api services join its network under the
+# alias <environment>-<colour> (e.g. production-blue), which is what the Caddy site snippet proxies to.
+
+x-api: &api
+  init: true
+  restart: unless-stopped
+  env_file:
+    - ${TB_ENV_FILE:?TB_ENV_FILE is set by deploy.sh}
+  environment:
+    # This environment's own OCR service, on this project's private network.
+    OCR_URL: http://ocr:8080
+  volumes:
+    - ${TB_DATA_DIR:?TB_DATA_DIR is set by deploy.sh}/sqlite:/data/sqlite
+    - ${TB_DATA_DIR}/uploads:/data/uploads
+  healthcheck:
+    test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+    interval: 5s
+    timeout: 3s
+    retries: 12
+    start_period: 20s
+  # Long enough for in-flight requests and the WebSocket close, matching the server's own 10 s forced-exit timer.
+  stop_grace_period: 20s
+
+services:
+  api-blue:
+    <<: *api
+    image: ${TB_IMAGE_BLUE:-tectonic-bingo:unset}
+    command: ["api"]
+    networks:
+      default: {}
+      edge:
+        aliases: ["${TB_ENV}-blue"]
+
+  api-green:
+    <<: *api
+    image: ${TB_IMAGE_GREEN:-tectonic-bingo:unset}
+    command: ["api"]
+    networks:
+      default: {}
+      edge:
+        aliases: ["${TB_ENV}-green"]
+
+  # Applies pending migrations and exits. deploy.sh runs it against the live database BEFORE starting the new colour,
+  # while the old colour is still serving, so a migration that fails stops the deploy with nothing changed. Migrations
+  # must therefore be additive (see "Migrations" in deploy/README.md).
+  migrate:
+    profiles: ["tools"]
+    image: ${TB_IMAGE_NEW:-tectonic-bingo:unset}
+    command: ["migrate"]
+    env_file:
+      - ${TB_ENV_FILE}
+    volumes:
+      - ${TB_DATA_DIR}/sqlite:/data/sqlite
+      - ${TB_DATA_DIR}/uploads:/data/uploads
+
+  # Reads screenshots for this environment only. One per environment (rather than one shared) so a deploy of staging can
+  # never change the service that production is talking to, and the two can be on different builds of the protocol.
+  ocr:
+    image: ${TB_IMAGE_OCR:-tectonic-bingo:unset}
+    init: true
+    restart: unless-stopped
+    command: ["ocr"]
+    environment:
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ocr-${TB_ENV}
+      OCR_CONCURRENCY: ${TB_OCR_CONCURRENCY:-1}
+    cpus: ${TB_OCR_CPUS:-2}
+    mem_limit: ${TB_OCR_MEMORY:-2g}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
+    stop_grace_period: 15s
+
+  # Backups (see "Backups and restoring" in deploy/README.md). The same services as deploy/compose.backup.yml, keyed to
+  # this environment's data and to its own backup settings, in their own profile so an environment without a bucket yet
+  # (or the local test) can run without them. Production must not.
+  litestream:
+    profiles: ["backup"]
+    image: litestream/litestream:0.5.17
+    user: "1000:1000"
+    restart: unless-stopped
+    command: ["replicate", "-config", "/etc/litestream.yml"]
+    env_file:
+      - ${TB_BACKUP_ENV_FILE:-/dev/null}
+    volumes:
+      - ${TB_DATA_DIR}/sqlite:/data/sqlite
+      - ./litestream.yml:/etc/litestream.yml:ro
+    stop_grace_period: 30s
+
+  backup:
+    profiles: ["backup"]
+    image: rclone/rclone:1.75.1
+    restart: unless-stopped
+    entrypoint: ["sh", "/deploy/backup-loop.sh"]
+    env_file:
+      - ${TB_BACKUP_ENV_FILE:-/dev/null}
+    volumes:
+      - ${TB_DATA_DIR}/uploads:/data/uploads:ro
+      - ./:/deploy:ro
+    stop_grace_period: 30s
+
+networks:
+  # Created by deploy/edge.yml.
+  edge:
+    external: true
+    name: tectonic-edge

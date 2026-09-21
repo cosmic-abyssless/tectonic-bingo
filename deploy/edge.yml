@@ -1,0 +1,35 @@
+# The front door for every environment on the box: Caddy terminates TLS and proxies each site to whichever colour of that
+# environment is live. It is deployed on its own (`deploy/deploy.sh edge`) and is not touched by an application deploy,
+# except for a graceful config reload when a colour switches. It creates the `tectonic-edge` network the application
+# stacks join.
+#
+# The base config is deploy/Caddyfile; each environment's site block is a generated snippet in ${TB_ROOT}/caddy/sites,
+# written by deploy.sh (never edit those by hand).
+
+name: tectonic-edge
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "${TB_HTTP_PORT:-80}:80"
+      - "${TB_HTTPS_PORT:-443}:443"
+      # HTTP/3.
+      - "${TB_HTTPS_PORT:-443}:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${TB_ROOT:?TB_ROOT is set by deploy.sh}/caddy/sites:/etc/caddy/sites
+      # Certificates live here: losing this volume means re-issuing them, which is rate limited, so it is not disposable.
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+
+networks:
+  edge:
+    name: tectonic-edge
+
+volumes:
+  caddy_data:
+  caddy_config:
