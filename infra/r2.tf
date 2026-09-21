@@ -30,9 +30,10 @@ resource "cloudflare_api_token" "backups" {
       { id = local.r2_permission_ids["Workers R2 Storage Bucket Item Read"] },
       { id = local.r2_permission_ids["Workers R2 Storage Bucket Item Write"] },
     ]
-    resources = {
+    # A JSON string in this provider version, not an object.
+    resources = jsonencode({
       "com.cloudflare.edge.r2.bucket.${var.cloudflare_account_id}_default_${cloudflare_r2_bucket.backups.name}" = "*"
-    }
+    })
   }]
 
   lifecycle {
