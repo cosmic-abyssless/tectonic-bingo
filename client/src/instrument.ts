@@ -4,7 +4,8 @@ import * as Sentry from "@sentry/react";
 
 Sentry.init({
   dsn: import.meta.env.VITE_SENTRY_DSN || undefined,
-  environment: import.meta.env.VITE_SENTRY_ENVIRONMENT || import.meta.env.MODE,
+  // Railway's environment name first, so a dev-site error never shows up as "production"; Vite's mode is the fallback.
+  environment: import.meta.env.VITE_SENTRY_ENVIRONMENT || __SENTRY_ENVIRONMENT__ || import.meta.env.MODE,
   // The commit this build was made from (see vite.config.ts), so an error names the deploy that shipped it.
   release: __SENTRY_RELEASE__ || undefined,
   // No IP addresses, cookies or request headers.
