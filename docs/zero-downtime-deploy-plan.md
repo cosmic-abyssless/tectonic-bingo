@@ -44,7 +44,7 @@ One VPS running Docker Compose with five containers:
 
 ```
                     ┌──────────────────────────────────── VPS (Hetzner, Ashburn) ────────────────────────────────┐
-  tectonic.cc ───►  │  caddy (TLS, reverse proxy) ──► api-blue  ─┐   shared bind mounts:                        │
+tectonic.bingo ───►  │  caddy (TLS, reverse proxy) ──► api-blue  ─┐   shared bind mounts:                        │
                     │                        (or) ──► api-green ─┤   /data/sqlite/bingo.db  (WAL)  /data/uploads │
                     │                                            └──► ocr  (POST /recognize, internal only)     │
                     │  litestream ── continuous replication of bingo.db ──► Cloudflare R2                        │
