@@ -17,7 +17,7 @@ resource "hcloud_primary_ip" "box" {
 # The first admin key, registered with Hetzner so root can log in before the bootstrap has run. The others are installed by
 # the bootstrap (for the deploy user) from the file cloud-init writes.
 resource "hcloud_ssh_key" "admin" {
-  name       = "${var.server_name}-admin"
+  name = "${var.server_name}-admin"
   # Hetzner stores the key without its trailing comment, so pass only "type key": otherwise the comment makes every plan think
   # the key changed and want to replace it.
   public_key = join(" ", slice(split(" ", trimspace(var.admin_public_keys[0])), 0, 2))
