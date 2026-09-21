@@ -194,7 +194,6 @@ const server = http.createServer(app);
 initWebSocketServer(server);
 
 server.listen(PORT, () => {
-  const dbPath = process.env.DB_PATH ?? "data/bingo.db";
   log.info("server listening", {
     port: Number(PORT),
     nodeEnv: process.env.NODE_ENV ?? "<unset>",

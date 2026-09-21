@@ -14,6 +14,7 @@ The entrypoint picks a role from the first argument:
 | --- | --- |
 | `api` (default) | Applies pending migrations, then serves the site on port 8080. |
 | `migrate` | Applies pending migrations and exits. |
+| `ocr` | Serves the screenshot reader over HTTP (see below). Needs no database and no secrets. |
 
 Settings and secrets arrive as environment variables (`.env.docker.example` lists them). The browser gets its own Sentry
 settings from the server when it loads the page (`window.__APP_CONFIG__`, see `server/src/runtimeConfig.ts`), which is
@@ -28,6 +29,41 @@ Build arguments and secrets:
 docker build --build-arg SENTRY_RELEASE=$(git rev-parse HEAD) \
   --secret id=sentry_auth_token,env=SENTRY_AUTH_TOKEN -t tectonic-bingo:$(git rev-parse --short HEAD) .
 ```
+
+## Screenshot analysis (the `ocr` service)
+
+Reading the text in a screenshot is CPU-heavy, so it runs in its own container instead of inside the site's process.
+The api sends each image to it (`OCR_URL=http://ocr:8080`) and the service answers with the lines it read. The contract
+is in `server/src/ocrProtocol.ts`; the service is `server/src/ocrServer.ts`.
+
+- It uses the same image as the api (one build, so the two can never disagree about the protocol). The models (~30 MB)
+  are downloaded into the image at build time, so the container needs no network and is ready about a second after it
+  starts.
+- Only the Compose network can reach it: no port is published, and it has no authentication.
+- **Failure behaviour.** If the service is down, slow (`OCR_TIMEOUT_MS`, default 20 s) or erroring, screenshot analysis
+  answers `503` and the submission form carries on without it; submissions, mod review and everything else are
+  unaffected. The api never falls back to reading in its own process, which would put the load back on the site. When
+  the service comes back the next screenshot works, with no restart. (Docker's DNS takes several seconds to give up on
+  a stopped container's name, so during an outage the analysis fails after about 8 s rather than instantly.) An outage
+  is logged as a warning and not reported to Sentry as a bug: it is expected whenever the service restarts, and it is
+  watched through the container's health instead. An image the engine cannot read (truncated, not an image) is a `422`
+  for that one upload, not an outage.
+- **Backlog.** When the api gives up on a screenshot (its timeout) it hangs up, and the service drops the reading if it
+  was still waiting in the queue, so abandoned work never piles up behind live work. A reading that has already
+  started runs to the end.
+- **Startup.** If the model cannot be loaded the `ocr` process exits, so Docker restarts it (a container that merely
+  reports unhealthy is not restarted).
+- **Sizing.** `OCR_CPUS` (default 2) caps how much of the machine it can use, so a burst of screenshots slows analysis and
+  never the site. `OCR_MEMORY` (default 2g; it uses about 1 GB). `OCR_CONCURRENCY` (default 1) is how many screenshots are
+  read at once, each using all of the allotted CPUs. The engine sizes its threads to the container's CPU limit
+  (`OCR_THREADS` overrides): left to count the host's CPUs it ran 6x slower under a 2-CPU limit, so do not remove that.
+  A 1500x1000 screenshot takes about 2-3 s at 2 CPUs on a fast laptop; re-measure on the real server (it is the number
+  to tune) with `docker compose logs ocr | grep recognized`, which logs the milliseconds for every screenshot.
+- Locally, running the api outside Docker (`npm run dev`) leaves `OCR_URL` unset and reads screenshots in-process as before.
+- Sentry: the service reports under the environment `ocr`, using the server's DSN (`SENTRY_DSN`). Compose passes it only
+  that one setting rather than the whole env file, since it needs no secrets. That setting is interpolated by Compose
+  (from the shell or from `--env-file`), not read from the service's own env file, so start the stack with
+  `--env-file .env.docker` when Sentry should be on.
 
 ## Running the whole stack locally
 

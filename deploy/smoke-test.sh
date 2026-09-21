@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Proves an image really starts and serves, not just that it built: runs it on an empty database, waits for /health,
-# and checks the page, the runtime config and the API's error handling.
+# and checks the page, the runtime config and the API's error handling. Then starts the same image as the OCR service
+# (with no network, so the models must be baked in) and has it read an image.
 #
 #   deploy/smoke-test.sh IMAGE          e.g. deploy/smoke-test.sh tectonic-bingo:local
 #
@@ -9,10 +10,11 @@ set -euo pipefail
 
 image="${1:?usage: smoke-test.sh IMAGE}"
 name="tb-smoke-$$"
+ocr_name="tb-smoke-ocr-$$"
 volume="tb-smoke-$$"
 
 cleanup() {
-  docker rm -f "$name" >/dev/null 2>&1 || true
+  docker rm -f "$name" "$ocr_name" >/dev/null 2>&1 || true
   docker volume rm "$volume" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -21,6 +23,10 @@ fail() {
   echo "SMOKE TEST FAILED: $*" >&2
   echo "--- container log:" >&2
   docker logs "$name" 2>&1 | tail -30 >&2 || true
+  if docker inspect "$ocr_name" >/dev/null 2>&1; then
+    echo "--- ocr container log:" >&2
+    docker logs "$ocr_name" 2>&1 | tail -30 >&2 || true
+  fi
   exit 1
 }
 
@@ -75,5 +81,24 @@ docker exec "$name" node -e "
   const n = db.prepare(\"select count(*) n from sqlite_master where type = 'table'\").get().n;
   process.exit(n > 10 ? 0 : 1);
 " || fail "the database was not migrated"
+
+# The OCR service: the same image, its own role. No network, so this fails unless the models were baked into the image.
+docker run -d --name "$ocr_name" --network none "$image" ocr >/dev/null
+for _ in $(seq 1 60); do
+  if docker exec "$ocr_name" node -e "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))" >/dev/null 2>&1; then break; fi
+  if [ "$(docker inspect -f '{{.State.Running}}' "$ocr_name")" != "true" ]; then fail "the OCR container exited during startup"; fi
+  sleep 1
+done
+docker exec "$ocr_name" node -e "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))" >/dev/null 2>&1 || fail "the OCR service never became ready"
+# A blank image has no text, which is a valid answer: what matters is that the model ran and the service replied.
+docker exec "$ocr_name" node -e "
+  const sharp = require('sharp');
+  (async () => {
+    const png = await sharp({ create: { width: 320, height: 120, channels: 3, background: '#ffffff' } }).png().toBuffer();
+    const res = await fetch('http://127.0.0.1:8080/recognize', { method: 'POST', body: png, headers: { 'x-ocr-priority': 'background' } });
+    const body = await res.json();
+    process.exit(res.ok && Array.isArray(body.lines) ? 0 : 1);
+  })().catch(() => process.exit(1));
+" || fail "the OCR service did not read an image"
 
 echo "smoke test passed: $image"

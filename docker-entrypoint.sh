@@ -11,6 +11,9 @@ case "$1" in
   migrate)
     exec node server/dist/migrate.js
     ;;
+  ocr)
+    exec node --enable-source-maps server/dist/ocrServer.js
+    ;;
   *)
     exec "$@"
     ;;

@@ -3,6 +3,7 @@
 # One image, several roles. The entrypoint (docker-entrypoint.sh) picks what a container does from its first argument:
 #   api      apply pending migrations, then serve the site
 #   migrate  apply pending migrations and exit (what a zero-downtime deploy runs before switching over)
+#   ocr      the screenshot-reading service the api calls over HTTP (OCR_URL), with its own CPU reservation
 # Built once per commit and run unchanged in staging and production: everything that differs (the Sentry environment,
 # DSNs, secrets, data directories) arrives at runtime, never at build time.
 
@@ -40,6 +41,14 @@ COPY server/package.json server/
 COPY client/package.json client/
 RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --workspace=server --workspace=shared
 
+# ---- the OCR models, downloaded once at build time --------------------------------------------------------------------
+# The engine fetches ~30 MB of models on first use and caches them under the user's home. Fetching them here means a
+# container never depends on the network to become ready, and a deploy never re-downloads them. This stage depends only
+# on the production dependencies, so it is rebuilt when those change, not on every commit.
+FROM prod-deps AS ocr-models
+RUN node -e "import('ppu-paddle-ocr').then(async ({ PaddleOcrService, V6_SMALL_MODEL }) => { await new PaddleOcrService({ model: V6_SMALL_MODEL }).initialize(); })" \
+    && test -n "$(find /root/.cache/ppu-paddle-ocr -type f)"
+
 # ---- runtime ----------------------------------------------------------------------------------------------------------
 FROM base AS runtime
 ENV NODE_ENV=production
@@ -52,6 +61,7 @@ COPY server/package.json server/
 COPY --from=build /app/server/dist server/dist
 COPY --from=build /app/server/drizzle server/drizzle
 COPY --from=build /app/client/dist client/dist
+COPY --from=ocr-models --chown=node:node /root/.cache/ppu-paddle-ocr /home/node/.cache/ppu-paddle-ocr
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 # The data directories are bind-mounted from the host; created here so an unmounted container still starts.
