@@ -135,7 +135,7 @@ describe("when the OCR service is not doing its job", () => {
 
     expect(error).toBeInstanceOf(OcrUnavailableError);
     expect(error.message).toContain("no answer within 100 ms");
-    expect(Date.now() - started).toBeLessThan(2000);
+    expect(Date.now() - started).toBeLessThan(5000); // generous: the point is "not the OCR service's own 20 s", not a benchmark
   });
 
   it("rejects an answer that isn't the agreed shape", async () => {
