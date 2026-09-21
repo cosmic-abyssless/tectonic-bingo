@@ -215,7 +215,7 @@ The credentials, the state bucket and the commands are in [`infra/README.md`](..
    and the R2 bucket with its token. First boot runs `deploy/bootstrap-box.sh`, `deploy/init-env.sh` and `deploy/deploy.sh edge`
    by itself (progress: `/var/log/cloud-init-output.log`, which also holds the **staging password, printed once**: move it to the
    password manager and clear that line).
-2. `bash infra/push-backup-env.sh` writes the two backup env files (the R2 credentials tofu derived) onto the box and checks it
+2. `infra/push-backup-env.ps1` (Windows PowerShell; `infra/push-backup-env.sh` elsewhere) writes the two backup env files (the R2 credentials tofu derived) onto the box and checks it
    can write to the bucket.
 3. `ssh deploy@<address>`, then `deploy/fill-secrets.sh`: asks for the Discord values (once, for both environments), the
    production clan-API keys and an optional backup alert URL, hiding what you type. `--list` shows what is still blank.

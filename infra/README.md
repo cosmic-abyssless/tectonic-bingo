@@ -18,7 +18,7 @@ enter OpenTofu** (they are entered on the box with `deploy/fill-secrets.sh`).
 | `r2.tf` | the backup bucket, a token that can reach only it, the derived S3 credentials |
 | `outputs.tf` | the address, the host key, the DNS records to ask for |
 | `env.ps1` | asks for the credentials below with hidden input and sets them for one PowerShell window |
-| `push-backup-env.sh` | writes the two `*.backup.env` files onto the box from tofu's outputs |
+| `push-backup-env.ps1`, `push-backup-env.sh` | write the two `*.backup.env` files onto the box from tofu's outputs (PowerShell for Windows; bash + `jq` elsewhere) |
 
 ## What you need once
 
@@ -85,7 +85,7 @@ This is the acceptance test for all of the above: a server no human configured, 
    /var/log/cloud-init-output.log`). If a step failed, the log says which; fix it and re-run that command (all are idempotent).
 5. On your PC: `ssh-keygen -R 5.161.101.213` (the machine is new, but tofu gave it the same host key as before, so this
    normally prints nothing; run it anyway if ssh complains).
-6. `bash infra/push-backup-env.sh` (needs `jq`), then `ssh deploy@5.161.101.213` and `deploy/fill-secrets.sh` (staging needs only
+6. `.\infra\push-backup-env.ps1` (Windows; `bash infra/push-backup-env.sh` with `jq` elsewhere), then `ssh deploy@5.161.101.213` and `deploy/fill-secrets.sh` (staging needs only
    the Discord values; production everything).
 7. **Actions > Deploy > Run workflow** for staging. Then check: `https://staging.tectonic.bingo` asks for the password and loads,
    `docker ps` on the box shows the app, `ocr`, Litestream and the backup service, and the backup service's first run says
