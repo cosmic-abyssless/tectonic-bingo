@@ -189,7 +189,7 @@ Not done, in order. Each is small; the last is the acceptance test.
       Storage: Edit" and "API Tokens: Edit"; a GitHub fine-grained token for the repository with Administration and Secrets
       read & write; the state bucket `tectonic-tofu-state` made by hand with its own bucket-scoped token
       (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`); a passphrase. `terraform.tfvars` from the example with their
-      `~/.ssh/tectonic_box.pub`. Then `tofu init -backend-config=backend.hcl`.
+      `~/.ssh/tectonic_box.pub`. Then `tofu init "-backend-config=backend.hcl"`.
 - [ ] **Adopt what exists** rather than duplicating it: `tofu import cloudflare_r2_bucket.backups
       <account_id>/tectonic-backups` (the bucket already holds staging's replica); `tofu import hcloud_primary_ip.box <id>`
       for the current address `5.161.101.213` (find the id with the Hetzner API: `GET /v1/primary_ips`; it is the auto-created

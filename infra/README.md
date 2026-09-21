@@ -43,7 +43,7 @@ Then, in PowerShell from the repository root:
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass   # Windows blocks scripts by default; this window only
 . .\infra\env.ps1                     # asks for the six secrets above, hidden; this window only
 cd infra
-tofu init -backend-config=backend.hcl # connects to the encrypted state
+tofu init "-backend-config=backend.hcl" # connects to the encrypted state
 tofu plan                             # what would change: read it
 ```
 

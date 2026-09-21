@@ -26,4 +26,4 @@ $env:TF_VAR_state_passphrase = Read-Secret "TF_VAR_state_passphrase" "the state 
 if (-not (Get-Command tofu -ErrorAction SilentlyContinue)) {
     $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
 }
-Write-Host "Credentials are set for this window only. Next: cd infra; tofu init -backend-config=backend.hcl"
+Write-Host 'Credentials are set for this window only. Next: cd infra; tofu init "-backend-config=backend.hcl"'

@@ -210,7 +210,7 @@ available. Everything is written down so that a second person can rebuild the bo
 
 The credentials, the state bucket and the commands are in [`infra/README.md`](../infra/README.md). In outline:
 
-1. `. .\infra\env.ps1`, then `tofu init -backend-config=backend.hcl` and `tofu apply` (from `infra/`). This creates the server on
+1. `. .\infra\env.ps1`, then `tofu init "-backend-config=backend.hcl"` and `tofu apply` (from `infra/`). This creates the server on
    a stable address, the firewall, the CI, repository and host keys, the deploy key and the four `DEPLOY_*` secrets on GitHub,
    and the R2 bucket with its token. First boot runs `deploy/bootstrap-box.sh`, `deploy/init-env.sh` and `deploy/deploy.sh edge`
    by itself (progress: `/var/log/cloud-init-output.log`, which also holds the **staging password, printed once**: move it to the

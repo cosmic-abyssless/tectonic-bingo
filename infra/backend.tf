@@ -7,7 +7,7 @@
 # The bucket and its credentials are the one piece of infrastructure made by hand (state cannot store itself):
 #   bucket  tectonic-tofu-state   in the same Cloudflare account
 #   token   Object Read & Write, scoped to that bucket only  -> AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for tofu runs
-# The endpoint (which carries the account id, not a secret) is in backend.hcl: `tofu init -backend-config=backend.hcl`.
+# The endpoint (which carries the account id, not a secret) is in backend.hcl: `tofu init "-backend-config=backend.hcl"`.
 
 terraform {
   backend "s3" {
