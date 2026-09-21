@@ -20,3 +20,6 @@ railway-plan.json
 # Local container stack (docker-compose.yml): its data and settings
 .docker-data/
 .env.docker
+
+# Backup credentials (see deploy/backup.env.example)
+deploy/backup.env

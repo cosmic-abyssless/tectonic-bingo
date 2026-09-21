@@ -15,6 +15,7 @@ The entrypoint picks a role from the first argument:
 | `api` (default) | Applies pending migrations, then serves the site on port 8080. |
 | `migrate` | Applies pending migrations and exits. |
 | `ocr` | Serves the screenshot reader over HTTP (see below). Needs no database and no secrets. |
+| `verify-db [path]` | Prints a read-only health report for a database file and exits non-zero if it isn't fit to start on (see Backups and restoring). |
 
 Settings and secrets arrive as environment variables (`.env.docker.example` lists them). The browser gets its own Sentry
 settings from the server when it loads the page (`window.__APP_CONFIG__`, see `server/src/runtimeConfig.ts`), which is
@@ -85,6 +86,97 @@ docker compose up --build               # then open http://localhost:8080
 - Caddy is the front door (`Caddyfile`), the same one production uses. Locally it serves plain HTTP; in production
   `SITE_ADDRESS` is the domain and Caddy handles the certificate.
 - Stop with `docker compose down`; add `-v` to also forget Caddy's certificates. The data directory is never removed.
+
+## Backups and restoring
+
+What is backed up, where, and how fresh:
+
+| Data | How | Where | How far behind, at worst |
+| --- | --- | --- | --- |
+| The database (`bingo.db`) | Litestream (`litestream` container) ships every change | Cloudflare R2, `<prefix>/db` | about a second |
+| Uploads (screenshots, tile images, wiki icons) | `rclone copy` (`backup` container), on start and daily at 03:15 UTC | R2, `<prefix>/uploads` | up to a day (uploads never change once written, and the copy never deletes) |
+| Everything on the box | Hetzner's own snapshot backups (switch them on when the server is ordered) | Hetzner | up to a day; a second layer, not the plan |
+
+Litestream keeps a full snapshot every day and every change for 30 days, so the database can be restored to **any moment
+in the last 30 days**, not just to "latest". The bucket is a different provider from the server on purpose.
+
+### One-time setup (for each environment)
+
+1. In the Cloudflare dashboard create an R2 bucket (one bucket serves every environment). Create an **R2 API token
+   limited to that bucket** with Object Read & Write: never a token for the whole account.
+2. `cp deploy/backup.env.example deploy/backup.env` (on the server it lives outside the repo, next to the app's env
+   file) and fill it in: the endpoint is `https://<account id>.r2.cloudflarestorage.com`, and `BACKUP_PREFIX` is
+   `production` or `staging`. **Never let two environments share a prefix**: they would overwrite each other's history.
+   Keep the master copy in the team's password manager; a rebuild needs it before anything else can be restored.
+3. Make a check at healthchecks.io (or similar), put its URL in `BACKUP_PING_URL`, and have it alert by email if it
+   isn't pinged for 36 hours. That is what turns "the backup stopped" from a surprise into an alert.
+4. Start the stack with the overlay:
+   `docker compose -f docker-compose.yml -f deploy/compose.backup.yml up -d`. It refuses to start without the backup
+   env file, so a stack can't run unprotected without anyone noticing. (Phase 4's production stack includes it.)
+
+### Checking that it is working
+
+- `docker compose logs litestream` shows `snapshot complete` / `compaction complete` lines; `ERROR` lines are not normal.
+  Litestream only writes when the database changes, so a quiet database legitimately has no new files.
+- `docker compose logs backup` ends each run with `uploads backup: complete`, and says when the next one is.
+- The dead-man's-switch check from step 3 is the one that tells you when nobody is looking.
+- To see what is in the bucket:
+  `docker run --rm --env-file deploy/backup.env -v "$PWD/deploy:/deploy:ro" --entrypoint sh rclone/rclone:1.75.1 -c '. /deploy/rclone-env.sh && rclone size backup:$BACKUP_BUCKET/$BACKUP_PREFIX'`
+
+### Restoring
+
+`deploy/restore.sh` needs only Docker and the backup env file, so it is the same command on a scratch machine, on a
+rebuilt server and in the drill. It restores the database, restores the uploads, and then runs the image's `verify-db`
+role on the result (SQLite's integrity and foreign-key checks, that the migration history is one this build can
+continue, and a row count per table). It exits non-zero unless the database passes.
+
+```bash
+# The latest state, into a scratch directory (safe to try at any time; it touches nothing else):
+deploy/restore.sh --into /tmp/restore-check --env-file deploy/backup.env --image tectonic-bingo:local
+
+# The database as it was at a moment (an accident, a bad migration): RFC 3339, in UTC.
+deploy/restore.sh --into /tmp/restore-check --env-file deploy/backup.env --at 2026-09-21T14:30:00Z --no-uploads
+```
+
+`--into` takes a directory or a Docker volume name, and ends up with `sqlite/bingo.db` and `uploads/`, the layout the
+stack mounts (point `DATA_DIR` at it). The script refuses to overwrite a database that is already there unless given
+`--force`, and it hands the files to uid 1000, the user the app runs as.
+
+**Disaster recovery (the server is gone).** On a new machine: install Docker, clone the repo, put the env files back
+from the password manager, then
+
+```bash
+deploy/restore.sh --into /srv/tectonic/production --env-file deploy/backup.env --image <image tag>
+# then start the stack with DATA_DIR=/srv/tectonic/production
+```
+
+The site is back with data as of about a second before the failure (uploads as of the last night's copy: any file newer
+than that is gone, and the submissions that referenced it show a missing image).
+
+### The restore drill
+
+A backup nobody has restored is a hope, not a backup. There are two drills, and both matter:
+
+1. **The automated drill**, `deploy/restore-drill.sh [IMAGE]`, needs only Docker and takes under a minute. It runs the
+   real containers and config against a local S3-compatible server standing in for R2: it seeds a database with the real
+   schema, writes rows while Litestream replicates them, backs up some files, **destroys the data**, restores it with
+   `deploy/restore.sh`, and checks that every row and every file came back identically. It also restores to a moment in
+   the middle of the writes and checks it holds exactly what existed then, and that `restore.sh` refuses to overwrite
+   existing data. CI runs it on every pull request, so a change that breaks the backup tooling can't merge.
+2. **The real-bucket drill**, by hand, **every few months and after any change to the credentials or the bucket**: run
+   the first `restore.sh` command above against the real bucket on a scratch machine (or your laptop), then compare
+   with production: `docker compose exec api node server/dist/verifyDb.js` prints the live database's row counts, and the
+   restored one should match to within the last few seconds of writes. This is the one that proves the bucket, the token
+   and the endpoint are still right. Note the date you last did it in the release notes or the team channel.
+
+### What this does not protect against
+
+- **A compromised server.** The box holds a token that can write to (and, because Litestream enforces retention,
+  delete from) the bucket. Whoever owns the box can destroy the backups. Hetzner's snapshots are the second layer for
+  that reason; turning on R2's bucket lock or versioning is worth considering later.
+- **Uploads newer than the last nightly copy** (see above).
+- **One bucket, one provider.** Cloudflare being unreachable at the moment of a disaster is a delay, not a loss, but it
+  is a delay.
 
 ## Windows checkouts
 

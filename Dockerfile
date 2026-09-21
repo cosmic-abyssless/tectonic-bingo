@@ -4,6 +4,7 @@
 #   api      apply pending migrations, then serve the site
 #   migrate  apply pending migrations and exit (what a zero-downtime deploy runs before switching over)
 #   ocr      the screenshot-reading service the api calls over HTTP (OCR_URL), with its own CPU reservation
+#   verify-db  read-only health report on a database file (used to prove a restored backup is real)
 # Built once per commit and run unchanged in staging and production: everything that differs (the Sentry environment,
 # DSNs, secrets, data directories) arrives at runtime, never at build time.
 
