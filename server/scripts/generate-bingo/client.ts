@@ -1,6 +1,6 @@
 // A tiny HTTP client for the dev server: one session cookie per user (logged in through the dev-only
 // /auth/dev-login), and the dev-only headers that make the run realistic (X-Dev-Now spoofs the request's clock,
-// X-Dev-Skip-Ocr skips the background screenshot analysis). See docs/test-data-generator-plan.md.
+// X-Dev-Skip-Ocr skips the background screenshot analysis). See docs/generate-bingo-plan.md.
 import fs from "node:fs";
 import path from "node:path";
 

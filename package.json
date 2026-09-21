@@ -12,8 +12,8 @@
     "build": "npm run build --workspace=server && npm run build --workspace=client",
     "start": "npm run start --workspace=server",
     "test": "npm run test --workspace=server",
-    "testdata": "npm run testdata --workspace=server --",
-    "testdata:teardown": "npm run testdata:teardown --workspace=server --",
+    "generate-bingo": "npm run generate-bingo --workspace=server --",
+    "generate-bingo:teardown": "npm run generate-bingo:teardown --workspace=server --",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed"
   },

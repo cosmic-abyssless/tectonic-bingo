@@ -1,7 +1,7 @@
 // Generates a realistic test bingo on a running dev server, through the real endpoints, with spoofed
-// timestamps. See docs/test-data-generator.md (and docs/test-data-generator-plan.md for the design).
+// timestamps. See docs/generate-bingo.md (and docs/generate-bingo-plan.md for the design).
 //
-//   npm run testdata -- --stage live --progress 0.5 --seed 7
+//   npm run generate-bingo -- --stage live --progress 0.5 --seed 7
 import path from "node:path";
 import { buildBoard } from "./board";
 import { DEV_SERVER_HINT, UsageError, connect, parseArgs } from "./common";
@@ -12,7 +12,7 @@ import { Simulation, describe, newPartState, type SimTeam } from "./simulate";
 import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, handEvents, importBingo, nameTeamEvents, runDraft, runInOrder, runSignups, setStage, type Ctx } from "./setup";
 
 function printTimeline(tl: Timeline): void {
-  console.log(`[testdata] target stage: ${tl.stage}   now: ${fmt(tl.now)}`);
+  console.log(`[generate-bingo] target stage: ${tl.stage}   now: ${fmt(tl.now)}`);
   for (const [label, at] of [
     ["created", tl.createdAt],
     ["signups open", tl.signupOpensAt],
@@ -22,7 +22,7 @@ function printTimeline(tl: Timeline): void {
     ["starts", tl.startsAt],
     ["ends", tl.endsAt],
   ] as const) {
-    console.log(`[testdata]   ${label.padEnd(13)} ${fmt(at)}${at > tl.now ? "  (scheduled)" : ""}`);
+    console.log(`[generate-bingo]   ${label.padEnd(13)} ${fmt(at)}${at > tl.now ? "  (scheduled)" : ""}`);
   }
 }
 
@@ -31,7 +31,7 @@ async function main(): Promise<void> {
   const now = new Date();
   const tl = buildTimeline(args.stage, { now, progress: args.progress, days: args.days });
   const rng = new Rng(args.seed);
-  const log = (message: string) => console.log(`[testdata] ${message}`);
+  const log = (message: string) => console.log(`[generate-bingo] ${message}`);
   const playerCount = args.teams * args.teamSize + 4;
 
   log(`slug ${args.slug}, seed ${args.seed}, ${playerCount} players, ${args.teams} teams of ~${args.teamSize}${args.stage === "live" ? `, ${Math.round(args.progress * 100)}% through` : ""}`);
@@ -40,7 +40,7 @@ async function main(): Promise<void> {
     log("--dry-run: nothing was sent");
     return;
   }
-  console.log(`[testdata] ${DEV_SERVER_HINT}`);
+  console.log(`[generate-bingo] ${DEV_SERVER_HINT}`);
 
   const { api, admin, users } = await connect(args.base, args.admin);
   const exportPath = args.exportPath ?? path.resolve(__dirname, "../../../tectonic-comics-bingo-export.json");
@@ -163,15 +163,15 @@ async function main(): Promise<void> {
   if (summary.latest && summary.latest > ctx.limit) problems.push(`an action was stamped after the run's limit (${fmt(summary.latest)})`);
   for (const t of summary.teams) if (t.partsDone / t.partsTotal > t.target + 0.1) problems.push(`${t.name} finished ${Math.round((t.partsDone / t.partsTotal) * 100)}%, well past its ${Math.round(t.target * 100)}% target`);
   if (problems.length > 0) {
-    for (const p of problems) console.error(`[testdata] SANITY CHECK FAILED: ${p}`);
+    for (const p of problems) console.error(`[generate-bingo] SANITY CHECK FAILED: ${p}`);
     process.exitCode = 1;
   }
   done(args.slug);
 }
 
 function done(slug: string): void {
-  console.log(`[testdata] done: /b/${slug}`);
-  console.log(`[testdata] tear it down with: npm run testdata:teardown -- --slug ${slug}`);
+  console.log(`[generate-bingo] done: /b/${slug}`);
+  console.log(`[generate-bingo] tear it down with: npm run generate-bingo:teardown -- --slug ${slug}`);
 }
 
 main().catch((err) => {

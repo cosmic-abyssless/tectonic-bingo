@@ -1,6 +1,6 @@
 // Dev-only helpers behind /api/dev (routes/dev.ts): make the throwaway users the test data generator
 // signs up, list the bingos it made, and tear one down. Everything here is fenced to the "testdata-"
-// prefix so it can never touch a real bingo or user. See docs/test-data-generator-plan.md.
+// prefix so it can never touch a real bingo or user. See docs/generate-bingo-plan.md.
 import fs from "node:fs";
 import path from "node:path";
 import { and, eq, inArray, like, or } from "drizzle-orm";
