@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars (ignored by git) and fill in. Nothing in this file is a secret; the passphrase is not here on
+# purpose (TF_VAR_state_passphrase from the password manager, see README.md).
+
+cloudflare_account_id = "662dfb31085e7c9fe04493046d990c20"
+
+# The public keys of the people who administer the box (the contents of each .pub file). The first is registered with
+# Hetzner for root; all of them get a shell as the deploy user.
+admin_public_keys = [
+  "ssh-ed25519 AAAA... tectonic-box-admin",
+]
+
+# The defaults (cpx31 in Ashburn, Ubuntu 24.04, bucket tectonic-backups) are in variables.tf; override here if needed.

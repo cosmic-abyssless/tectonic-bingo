@@ -23,3 +23,10 @@ railway-plan.json
 
 # Backup credentials (see deploy/backup.env.example)
 deploy/backup.env
+
+# OpenTofu (infra/): providers, state (encrypted, but never here) and the variables file
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/*.tfvars
+infra/*.tfplan

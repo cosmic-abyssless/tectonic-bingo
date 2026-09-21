@@ -1,0 +1,68 @@
+#cloud-config
+# First boot of the box (rendered by infra/hetzner.tf). It carries no application secret: those are entered afterwards
+# with deploy/fill-secrets.sh, because cloud-init's data stays readable from the machine's metadata service.
+#
+# What it does, in order: give the machine the host key GitHub was told about; let root clone the repository with the
+# box's read-only key; run deploy/bootstrap-box.sh from that clone; create the env files and the staging password; start
+# the front door. Progress is in /var/log/cloud-init-output.log; success leaves /srv/tectonic/state/.bootstrapped.
+
+hostname: ${hostname}
+manage_etc_hosts: true
+
+# The server's own identity, decided by tofu (keys.tf) so DEPLOY_KNOWN_HOSTS is right before the first connection.
+ssh_deletekeys: true
+ssh_keys:
+  ed25519_private: |
+    ${indent(4, host_private_key)}
+  ed25519_public: ${host_public_key}
+
+write_files:
+  # The box's read-only repository key, for root's first clone. bootstrap-box.sh then installs the same key for the deploy user.
+  - path: /root/.ssh/repo_deploy_key
+    permissions: "0600"
+    owner: root:root
+    content: |
+      ${indent(6, repo_private_key)}
+  # GitHub's host key, pinned (https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints).
+  - path: /root/.ssh/known_hosts
+    permissions: "0600"
+    owner: root:root
+    content: |
+      github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+  - path: /root/.ssh/config
+    permissions: "0600"
+    owner: root:root
+    content: |
+      Host github.com
+        IdentityFile /root/.ssh/repo_deploy_key
+        IdentitiesOnly yes
+        StrictHostKeyChecking yes
+  - path: /root/deploy_key.pub
+    permissions: "0644"
+    content: |
+      ${ci_public_key}
+  - path: /root/admins.pub
+    permissions: "0644"
+    content: |
+      ${indent(6, admin_keys)}
+
+runcmd:
+  - chmod 700 /root/.ssh
+  - apt-get update -qq
+  - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git
+  - git clone --quiet --branch main ${repo_ssh_url} /root/tectonic-bingo
+  - >
+    bash /root/tectonic-bingo/deploy/bootstrap-box.sh
+    --ci-public-key /root/deploy_key.pub
+    --admin-key-file /root/admins.pub
+    --repo-url ${repo_ssh_url}
+    --repo-key /root/.ssh/repo_deploy_key
+    --ssh-port ${ssh_port}
+  # The env files, the session secrets and the staging password (printed once, into this log; see the runbook).
+  - runuser -u deploy -- bash /srv/tectonic/deploy/init-env.sh
+  - runuser -u deploy -- /srv/tectonic/deploy/deploy.sh edge
+  # Root's copy of the repository key is no longer needed: the deploy user has its own installed copy.
+  - rm -f /root/.ssh/repo_deploy_key /root/.ssh/config
+  - touch /srv/tectonic/state/.bootstrapped
+
+final_message: "tectonic box bootstrapped after $UPTIME seconds"
