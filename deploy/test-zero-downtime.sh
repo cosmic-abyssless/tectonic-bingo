@@ -42,6 +42,8 @@ cleanup() {
   docker rm -f "$s3" >/dev/null 2>&1 || true
   docker volume rm -f "$s3vol" >/dev/null 2>&1 || true
   docker rmi tectonic-bingo:zd-a tectonic-bingo:zd-b tectonic-bingo:zd-unhealthy tectonic-bingo:zd-badmigration >/dev/null 2>&1 || true
+  # The containers created files here as uid 1000, which this script's user may not be allowed to delete.
+  docker run --rm -v "$root:/r" alpine:3 rm -rf /r/data >/dev/null 2>&1 || true
   rm -rf "$root"
 }
 trap cleanup EXIT
@@ -55,7 +57,9 @@ expect_live() { # image colour
 }
 
 step "Setting up a staging environment under $root"
-mkdir -p "$root/env" "$root/data/staging/sqlite" "$root/data/staging/uploads"
+# Both environments' directories are made up front: once the app's uid owns them, this script's own user cannot add more
+# (which is how it runs on a Linux CI runner; on Docker Desktop the difference is invisible).
+mkdir -p "$root/env" "$root/data/staging/sqlite" "$root/data/staging/uploads" "$root/data/production/sqlite" "$root/data/production/uploads"
 cat >"$root/env/staging.env" <<EOF
 NODE_ENV=development
 DEV_LOGIN_ENABLED=true
@@ -133,9 +137,7 @@ console.log(`\n${r.requests} requests, 0 failed (${r.retried} retried once after
 # ---- guards that protect production, checked here because a real production deploy can't be rehearsed on a laptop ----
 
 step "Production only accepts the image staging is running"
-mkdir -p "$root/data/production/sqlite" "$root/data/production/uploads"
 cp "$root/env/staging.env" "$root/env/production.env"
-docker run --rm -v "$root/data:/d" alpine:3 chown -R 1000:1000 /d
 # Staging is running zd-a (after the rollback), so zd-b must be refused, before anything is started.
 refusal="$(deploy production tectonic-bingo:zd-b 2>&1)" && fail "production accepted an image staging is not running"
 grep -q "staging is running 'tectonic-bingo:zd-a'" <<<"$refusal" || fail "production refused, but not for the right reason: $refusal"
