@@ -2,6 +2,8 @@
 // positioned before these other imports does not actually run first.
 import { isDevModeActive } from "./devMode";
 import "./env";
+import "./instrument";
+import * as Sentry from "@sentry/node";
 import path from "path";
 import fs from "fs";
 import http from "http";
@@ -27,6 +29,8 @@ import { auditContext } from "./audit/middleware";
 import { closeWebSocketServer, initWebSocketServer } from "./ws";
 import { sqlite } from "./db";
 import { UPLOADS_DIR, WIKI_ICONS_DIR, getAdminDiscordIds } from "./config";
+import { warmOcr } from "./ocr";
+import { shouldWarmOcr } from "./ocrConfig";
 import { serveImageVariants } from "./middleware/imageVariants";
 import { serveWikiIcons } from "./middleware/wikiIcons";
 import { getKnownItemNames } from "./services/itemNames";
@@ -35,6 +39,7 @@ import { INDEX_HTML_CACHE_CONTROL, clientDistStaticOptions, uploadsStaticOptions
 import { getTectonicConfig } from "./services/tectonicService";
 import { installProcessLogHandlers, log, requestLog } from "./log";
 import clientErrorsRouter from "./routes/clientErrors";
+import { shouldReportError } from "./errorReporting";
 
 const REQUIRED_ENV = [
   "DISCORD_CLIENT_ID",
@@ -137,6 +142,11 @@ app.use(
 configurePassport();
 app.use(passport.initialize());
 app.use(passport.session());
+// Which account hit an error, by internal id only (no name or Discord details).
+app.use((req, _res, next) => {
+  if (req.user) Sentry.setUser({ id: req.user.id });
+  next();
+});
 
 // Opens the per-request audit actor/requestId context — must run after
 // passport.session() (needs req.user) and before the routers.
@@ -187,6 +197,8 @@ if (fs.existsSync(CLIENT_DIST)) {
   });
 }
 
+// After every route, before our own handler: reports unexpected errors (not deliberate 4xx refusals) to Sentry.
+Sentry.setupExpressErrorHandler(app, { shouldHandleError: shouldReportError });
 app.use(errorHandler);
 
 const server = http.createServer(app);
@@ -202,6 +214,8 @@ server.listen(PORT, () => {
     dbDir: path.dirname(dbPath),
     devMode: isDevModeActive(),
   });
+  // After the server is up and taking requests, so a slow model download never delays a deploy going healthy.
+  if (shouldWarmOcr()) void warmOcr();
 });
 
 // SQLite cannot be shared by overlapping replicas. On SIGTERM (Railway
@@ -215,8 +229,11 @@ function shutdown(signal: string): void {
   closeWebSocketServer();
   if (sessionStore._sessionCleanup) clearInterval(sessionStore._sessionCleanup);
   server.close(() => {
-    sqlite.close();
-    process.exit(0);
+    // Give Sentry a moment to send anything still buffered (a no-op when it is switched off).
+    void Sentry.close(2000).finally(() => {
+      sqlite.close();
+      process.exit(0);
+    });
   });
   setTimeout(() => process.exit(1), 10_000).unref();
 }

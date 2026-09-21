@@ -1,0 +1,39 @@
+name: Railway plan
+
+# Shows what a change to .railway/ would do to the Railway project, as a comment on the pull request. It only PLANS: nothing
+# is applied from CI. Someone reviews the plan and runs `railway config apply` themselves (see .railway/README.md).
+#
+# Needs a Railway project token for the production environment saved as the RAILWAY_TOKEN repository secret. Until that
+# secret exists this job just says so and passes, so it never blocks a pull request.
+
+on:
+  pull_request:
+    paths:
+      - ".railway/**"
+      - ".github/workflows/railway-plan.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan:
+    # A fork's pull request never gets repository secrets, and this token can reach production.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+    steps:
+      - name: No token yet
+        if: env.RAILWAY_TOKEN == ''
+        run: echo "::notice::RAILWAY_TOKEN is not set, so no Railway plan was made. Run 'railway config plan' locally to preview this change."
+
+      - uses: actions/checkout@v7
+        if: env.RAILWAY_TOKEN != ''
+      # The action installs Node 24, the Railway CLI, and runs `npm ci` itself (railway.ts imports the railway SDK
+      # from the repo's dependencies), so nothing else is needed before it.
+      - uses: railwayapp/config@v1
+        if: env.RAILWAY_TOKEN != ''
+        with:
+          command: plan
+          railway-token: ${{ secrets.RAILWAY_TOKEN }}

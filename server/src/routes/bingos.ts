@@ -243,7 +243,8 @@ router.post(
       const submissionId = submission.id;
       (async () => {
         const buffer = fs.readFileSync(filePath);
-        const result = await analyzeSubmissionScreenshot(db, bingo, team, { buffer, mimetype: req.file!.mimetype });
+        // Background: the person already has their submission, so anyone waiting on the modal goes first.
+        const result = await analyzeSubmissionScreenshot(db, bingo, team, { buffer, mimetype: req.file!.mimetype }, { priority: "background" });
         submissionService.recordScreenshotAnalysis(db, submissionId, {
           extractedText: result.extractedText,
           codewordFound: result.codewordFound,

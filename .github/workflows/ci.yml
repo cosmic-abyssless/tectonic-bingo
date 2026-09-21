@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# A newer push to a pull request makes the older run pointless. Runs on main are never cancelled, so every commit on
+# main keeps a finished result.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -33,6 +39,8 @@ jobs:
       # Server unit tests (vitest). No .env needed — every env-dependent code
       # path in src/ falls back to a safe default or is exercised via mocks.
       - run: npm test
+      # The client's unit tests (vitest) aren't part of the root `npm test`, which only runs the server's.
+      - run: npm test --workspace=client
 
   migrations:
     runs-on: ubuntu-latest

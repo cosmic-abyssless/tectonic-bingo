@@ -13,6 +13,11 @@ describe("privacy policy", () => {
     for (const s of ["Discord", "Wise Old Man", "RuneProfile", "clan member service", "OSRS Wiki", "hosting provider", "Google Fonts"]) expect(PRIVACY_MD).toContain(s);
   });
 
+  it("discloses the error monitoring service and what it is (and isn't) sent", () => {
+    for (const s of ["Sentry", "error monitoring service", "internal account ID but not your name", "never your screenshots, cookies"]) expect(PRIVACY_MD).toContain(s);
+    expect(PRIVACY_MD).not.toMatch(/no analytics or tracking tools\./);
+  });
+
   it("says how to ask for deletion, and covers cookies, retention, breaches and children", () => {
     for (const s of ["delete", "## Cookies and browser storage", "## How long we keep it", "without authorisation", "## Children", LEGAL_CONTACT]) expect(PRIVACY_MD).toContain(s);
   });
