@@ -8,8 +8,8 @@ on:
 permissions:
   contents: read
 
-# A newer push to a pull request makes the older run pointless. Runs on main are never cancelled: the promote workflow
-# needs a finished, green run on the exact commit it deploys.
+# A newer push to a pull request makes the older run pointless. Runs on main are never cancelled, so every commit on
+# main keeps a finished result.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

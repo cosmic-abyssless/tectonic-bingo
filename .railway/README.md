@@ -42,25 +42,19 @@ secret exists (below). It only plans; applying is done by hand.
 
 ## How code reaches production
 
-1. Work goes through a pull request. `ci.yml` builds, runs the server and client tests, and checks the migrations.
-2. Merging to `main` runs CI again on the merge commit.
-3. To deploy, run **Actions > Promote to production** (choose a commit, default `main`). It refuses unless CI passed on
-   that exact commit, and only fast-forwards the `production` branch.
-4. Railway deploys `production`. Migrations run on start. Each deploy takes the site down for a few seconds because
-   SQLite lives on one volume (issue #75), so promote deliberately, not during a signup rush.
+Railway builds the service from the `production` branch of `Miconen/tectonic-bingo`.
 
-## One-time setup still needed
+1. Work goes through a pull request into that repo's `develop` branch. `ci.yml` builds, runs the server and client
+   tests, and checks the migrations.
+2. A pull request from `develop` into `production` is the deploy. Railway deploys the merge as soon as it lands.
+3. Migrations run on start. Each deploy takes the site down for a few seconds because SQLite lives on one volume
+   (issue #75), so merge to `production` deliberately, not during a signup rush.
+
+## Optional setup
 
 - **`RAILWAY_TOKEN`**: a Railway project token for the production environment (Railway > project > Settings > Tokens),
   saved as a repository secret. Needed only for the plan comment on pull requests. It can change the production project,
   so it needs the project owner's OK.
-- **Deploying from this repo:** production still builds from `Miconen/tectonic-bingo` (branch `production`). To switch to
-  `cosmic-abyssless/tectonic-bingo` (and make Railway wait for CI):
-  1. Install the Railway GitHub app on this repo and let the Railway account see it.
-  2. Run the promote workflow once so a `production` branch exists here.
-  3. Change the `source` line in `railway.ts` to `github("cosmic-abyssless/tectonic-bingo", { branch: "production", checkSuites: true })`,
-     read `railway config plan` (it should show only `source.repo` and `source.checkSuites`), then apply.
-  This is prepared on the `railway/deploy-from-this-repo` branch. Do it only once the project owner agrees.
 
 ## Not managed here
 
