@@ -1,6 +1,6 @@
 # Infrastructure as code with OpenTofu: the plan
 
-**Status: decided; implementation in progress on branch `infra/opentofu`, see the handoff checklist at the end.** Written 2026-09-21, the day the first server was built by hand.
+**Status: code, scripts, docs and CI done on branch `infra/opentofu`; what remains needs the owner's tokens (phase 0), the imports and the rebuild drill: see the checklist at the end.** Written 2026-09-21, the day the first server was built by hand.
 
 ## Why
 
@@ -168,21 +168,21 @@ Done, on branch `infra/opentofu` (draft PR):
 
 Not done, in order. Each is small; the last is the acceptance test.
 
-- [ ] **`deploy/bootstrap-box.sh --repo-key FILE`**: install the given private key as `/home/deploy/.ssh/repo_deploy_key`
+- [x] **`deploy/bootstrap-box.sh --repo-key FILE`**: install the given private key as `/home/deploy/.ssh/repo_deploy_key`
       (derive the `.pub` with `ssh-keygen -y`) instead of generating one. cloud-init passes it (see the template). Keep the
       generate-if-absent behaviour for the by-hand path. Test in the Ubuntu container the way the script's other steps were
       (see the git log for `bootstrap-box.sh`).
-- [ ] **`deploy/init-env.sh`** (new, idempotent, run as `deploy`): copy the four templates into `/srv/tectonic/env/` with
+- [x] **`deploy/init-env.sh`** (new, idempotent, run as `deploy`): copy the four templates into `/srv/tectonic/env/` with
       mode 640 (skip any that exist), set `BACKUP_PREFIX` per file, generate `SESSION_SECRET` with `openssl rand -hex 32`
       where blank, and create `staging.basic-auth` (`team` + `caddy hash-password`) with a generated password printed once.
       This is what was run ad hoc on the first server; see the runbook section "Setting up the server" for the values.
-- [ ] **`deploy/fill-secrets.sh`** (new): the interactive helper that exists on the first server as `~/fill-secrets.sh`
+- [x] **`deploy/fill-secrets.sh`** (new): the interactive helper that exists on the first server as `~/fill-secrets.sh`
       (copy it from there: `ssh deploy@5.161.101.213 cat fill-secrets.sh`). Add an optional `BACKUP_PING_URL` question.
-- [ ] **Docs**: `infra/README.md` (tokens and where they come from, the state bucket made by hand, `tofu init
+- [x] **Docs**: `infra/README.md` (tokens and where they come from, the state bucket made by hand, `tofu init
       -backend-config=backend.hcl`, the passphrase as `TF_VAR_state_passphrase`, everyday commands, the rebuild drill below);
       `deploy/README.md` "Setting up the server" becomes "with OpenTofu" (the short path) with the by-hand steps kept
       underneath. `push-backup-env.sh` needs `jq`; say so.
-- [ ] **CI**: a job in `.github/workflows/ci.yml` using `opentofu/setup-opentofu`, running `tofu fmt -check -recursive`
+- [x] **CI**: a job in `.github/workflows/ci.yml` using `opentofu/setup-opentofu`, running `tofu fmt -check -recursive`
       and `tofu init -backend=false && tofu validate` in `infra/`.
 - [ ] **Phase 0 with the owner** (they run every `tofu` command themselves, in their own shell, with the tokens set from the
       password manager; tokens never pass through chat): Hetzner API token; a Cloudflare *user* token with "Workers R2
@@ -207,3 +207,11 @@ Not done, in order. Each is small; the last is the acceptance test.
 
 Known limits, decided: DNS stays with Mico (the `dns_records_to_ask_for` output lists the records); Discord redirect
 URIs stay manual; the app's secrets never enter tofu.
+
+Session 2 (same day) completed the first five boxes: `--repo-key` (tested in an Ubuntu container: refuses a public key or a
+missing file, installs the supplied key with the right owner and mode, derives the matching public half, idempotent, and the
+generate-if-absent path still works); `deploy/init-env.sh` and `deploy/fill-secrets.sh` (tested in containers, the latter
+through a pseudo-terminal: awkward characters in secrets survive, Discord values reach both files, staging's clan keys stay
+blank, modes 640, a second run changes nothing); `infra/README.md` and `infra/env.ps1`; the runbook rewrite; and a CI job
+(`tofu fmt -check`, `tofu init -backend=false`, `tofu validate`, shellcheck on `infra/*.sh`). The cloud-init template was
+rendered with realistic multi-line keys and the result parsed as YAML. Nothing has been applied to any account yet.

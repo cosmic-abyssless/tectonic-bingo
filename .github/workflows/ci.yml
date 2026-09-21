@@ -71,6 +71,23 @@ jobs:
 
   # Builds the deployable image and starts it on an empty database, so a change that breaks the Dockerfile, the
   # entrypoint, the runtime dependencies or startup is caught on the pull request rather than on a deploy.
+  # The server's infrastructure code (infra/). Needs no credentials: it only checks that the configuration is formatted and valid,
+  # so a broken edit is caught on the pull request rather than on the day the box has to be rebuilt.
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.12.6
+      - run: tofu fmt -check -recursive
+        working-directory: infra
+      - run: tofu init -backend=false -input=false
+        working-directory: infra
+      - run: tofu validate
+        working-directory: infra
+      - run: shellcheck -x --severity=warning infra/*.sh
+
   image:
     runs-on: ubuntu-latest
     steps:
@@ -89,7 +106,7 @@ jobs:
       # restore tooling (Litestream, rclone, deploy/restore.sh) still works with this build, not just that it once did.
       - run: bash deploy/restore-drill.sh tectonic-bingo:ci
       # The deploy scripts are what decide whether a release drops requests, so they are tested like code.
-      - run: shellcheck -x --severity=warning deploy/*.sh
+      - run: shellcheck -x --severity=warning deploy/*.sh infra/*.sh
       - run: bash deploy/test-ssh-entry.sh
       - uses: actions/setup-node@v7
         with:

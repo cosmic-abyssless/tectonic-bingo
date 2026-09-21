@@ -2,7 +2,7 @@
 # One-time setup of a fresh Ubuntu 24.04 LTS server so it can host the site. Run as root, from a checkout of this
 # repository's deploy/ directory, on the new machine. Safe to run again: every step checks before it changes anything.
 #
-#   sudo ./bootstrap-box.sh --ci-public-key FILE --repo-url URL [--admin-key-file FILE] [--ssh-port N] [--skip STEPS]
+#   sudo ./bootstrap-box.sh --ci-public-key FILE --repo-url URL [--repo-key FILE] [--admin-key-file FILE] [--ssh-port N] [--skip STEPS]
 #
 #   --ci-public-key FILE   the PUBLIC half of the key GitHub Actions deploys with. It is pinned to deploy/ssh-entry.sh, so it
 #                          can load an image and run a deploy and nothing else. Generate it with
@@ -12,6 +12,9 @@
 #                          keeps its own clone and takes the deploy scripts from it (only commits on main), so the CI key
 #                          cannot make the box run scripts of its own. The script makes a read-only key for this and prints
 #                          its public half: add it under the repository's Settings > Deploy keys (WITHOUT write access).
+#   --repo-key FILE        the PRIVATE half of a read-only deploy key that is already registered with the repository, to install
+#                          instead of generating one (OpenTofu does this: infra/ makes the key and registers it before the
+#                          server exists). Without it the script makes a key and prints the public half to add by hand.
 #   --admin-key-file FILE  public key(s) of the people who administer the box. They get an ordinary shell as the deploy user.
 #   --ssh-port N           the SSH port to keep open in the firewall (default 22)
 #   --skip STEPS           comma-separated steps to leave out: packages, docker, docker-logs, user, dirs, keys, ssh, firewall,
@@ -29,7 +32,7 @@
 set -euo pipefail
 
 root="/srv/tectonic"
-ci_key_file=""; admin_key_file=""; repo_url=""; ssh_port=22; skip=","
+ci_key_file=""; admin_key_file=""; repo_url=""; repo_key_file=""; ssh_port=22; skip=","
 here="$(cd "$(dirname "$0")" && pwd)"
 
 say() { printf '\n==> %s\n' "$*"; }
@@ -42,6 +45,7 @@ while [ $# -gt 0 ]; do
     --ci-public-key) ci_key_file="${2:?--ci-public-key needs a file}"; shift 2 ;;
     --admin-key-file) admin_key_file="${2:?--admin-key-file needs a file}"; shift 2 ;;
     --repo-url) repo_url="${2:?--repo-url needs an address}"; shift 2 ;;
+    --repo-key) repo_key_file="${2:?--repo-key needs a file}"; shift 2 ;;
     --ssh-port) ssh_port="${2:?--ssh-port needs a number}"; shift 2 ;;
     --skip) skip=",${2:?--skip needs a list},"; shift 2 ;;
     -h|--help) usage 0 ;;
@@ -59,6 +63,10 @@ if ! skipped keys >/dev/null; then
   [ -z "$admin_key_file" ] || [ -f "$admin_key_file" ] || die "no such file: $admin_key_file"
 fi
 if ! skipped repo >/dev/null; then
+  if [ -n "$repo_key_file" ]; then
+    [ -f "$repo_key_file" ] || die "no such file: $repo_key_file"
+    grep -q "PRIVATE KEY" "$repo_key_file" || die "--repo-key must be the PRIVATE key file (it is what the box authenticates to GitHub with)"
+  fi
   [[ "$repo_url" =~ ^git@github\.com:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\.git$ ]] || die "--repo-url must be the repository's SSH address, like git@github.com:owner/name.git"
 fi
 
@@ -152,7 +160,13 @@ if ! skipped repo; then
   printf '%s\n' "$repo_url" >"$root/repo.url"; chown deploy:deploy "$root/repo.url"; chmod 644 "$root/repo.url"
   install -d -o deploy -g deploy -m 700 /home/deploy/.ssh
   repo_key=/home/deploy/.ssh/repo_deploy_key
-  if [ ! -f "$repo_key" ]; then
+  if [ -n "$repo_key_file" ]; then
+    # A key registered with the repository beforehand: install it as the box's own (replacing any earlier one, so a rebuilt
+    # or re-keyed box always uses the key it was given), and derive the public half from it.
+    install -o deploy -g deploy -m 600 "$repo_key_file" "$repo_key"
+    runuser -u deploy -- ssh-keygen -y -f "$repo_key" >"$repo_key.pub"
+    chown deploy:deploy "$repo_key.pub"; chmod 644 "$repo_key.pub"
+  elif [ ! -f "$repo_key" ]; then
     runuser -u deploy -- ssh-keygen -q -t ed25519 -N '' -C "tectonic-box-read-only" -f "$repo_key"
   fi
   # GitHub's host key, pinned to the fingerprint GitHub publishes (https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints),
@@ -174,9 +188,13 @@ EOF
   fi
   chown -R deploy:deploy /home/deploy/.ssh; chmod 600 /home/deploy/.ssh/config /home/deploy/.ssh/known_hosts
   echo
-  echo "Add this key to the repository as a READ-ONLY deploy key (Settings > Deploy keys > Add, leave 'Allow write access' OFF):"
-  echo
-  cat "$repo_key.pub"
+  if [ -n "$repo_key_file" ]; then
+    echo "Installed the supplied repository key (it must already be registered with the repository as a READ-ONLY deploy key)."
+  else
+    echo "Add this key to the repository as a READ-ONLY deploy key (Settings > Deploy keys > Add, leave 'Allow write access' OFF):"
+    echo
+    cat "$repo_key.pub"
+  fi
 fi
 
 # ---- ssh hardening -----------------------------------------------------------------------------------------------
