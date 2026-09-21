@@ -89,6 +89,7 @@ for _ in $(seq 1 60); do
   if [ "$(docker inspect -f '{{.State.Running}}' "$ocr_name")" != "true" ]; then fail "the OCR container exited during startup"; fi
   sleep 1
 done
+docker exec "$ocr_name" node -e "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))" >/dev/null 2>&1 || fail "the OCR service never became ready"
 # A blank image has no text, which is a valid answer: what matters is that the model ran and the service replied.
 docker exec "$ocr_name" node -e "
   const sharp = require('sharp');

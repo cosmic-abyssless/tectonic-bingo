@@ -12,9 +12,11 @@
 #   OCR_CPUS      CPUs the screenshot reader may use, so it can't take the site's       2
 #   OCR_MEMORY    memory limit for the screenshot reader                                2g
 #   OCR_CONCURRENCY  screenshots read at once (each uses all of OCR_CPUS)                   1
+#   OCR_THREADS   threads per reading (default: the CPUs the container may use)
 #
-# Sentry's environment and release are not set here: the environment comes from the env file (SENTRY_ENVIRONMENT, a
-# service's `environment:` would override it) and the release is baked into the image at build time.
+# The api's Sentry environment and release are not set here: the environment comes from the env file (SENTRY_ENVIRONMENT;
+# a service's `environment:` would override it) and the release is baked into the image at build time. The one exception
+# is the `ocr` service, which is shared by staging and production and so always reports as "ocr".
 
 services:
   # Hands the data directories to the user the app runs as. On Linux the Docker daemon creates a missing bind-mount
@@ -75,6 +77,9 @@ services:
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ocr
       OCR_CONCURRENCY: ${OCR_CONCURRENCY:-1}
+      # Empty means "use the default": as many threads as CPUs the container may use, and the usual log level.
+      OCR_THREADS: ${OCR_THREADS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-}
     cpus: ${OCR_CPUS:-2}
     mem_limit: ${OCR_MEMORY:-2g}
     healthcheck:

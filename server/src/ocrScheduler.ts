@@ -13,6 +13,10 @@ export interface LimiterStats {
  * Runs at most `concurrency` tasks at once and queues the rest. Interactive work (someone is waiting on the screen for
  * the result) always goes ahead of background work, and each queue is first come, first served.
  * `onWait` is told how long a task sat in the queue before it started, but only for tasks that had to wait.
+ *
+ * A task's `signal` lets its caller withdraw it: work still waiting in the queue is dropped (and rejects with the
+ * signal's reason) without ever taking a slot, so an answer nobody is waiting for is never computed. Work that has
+ * already started can't be stopped and simply finishes.
  */
 export function createLimiter(concurrency: number, onWait?: (info: { waitedMs: number; priority: OcrPriority } & LimiterStats) => void) {
   const limit = Math.max(1, Math.floor(concurrency));
@@ -29,11 +33,16 @@ export function createLimiter(concurrency: number, onWait?: (info: { waitedMs: n
     }
   }
 
-  function run<T>(task: () => Promise<T>, priority: OcrPriority = "interactive"): Promise<T> {
+  function run<T>(task: () => Promise<T>, priority: OcrPriority = "interactive", signal?: AbortSignal): Promise<T> {
     return new Promise<T>((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(signal.reason);
+        return;
+      }
       const queuedAt = Date.now();
       let waited = false;
-      queues[priority].push(() => {
+      const start = () => {
+        signal?.removeEventListener("abort", withdraw);
         running++;
         if (waited) onWait?.({ waitedMs: Date.now() - queuedAt, priority, ...stats() });
         // task() may throw synchronously; either way the slot must be released.
@@ -44,7 +53,17 @@ export function createLimiter(concurrency: number, onWait?: (info: { waitedMs: n
             running--;
             pump();
           });
-      });
+      };
+      // Only reachable while still queued: `start` removes this listener the moment the task begins.
+      const withdraw = () => {
+        const queue = queues[priority];
+        const at = queue.indexOf(start);
+        if (at === -1) return;
+        queue.splice(at, 1);
+        reject(signal!.reason);
+      };
+      signal?.addEventListener("abort", withdraw, { once: true });
+      queues[priority].push(start);
       waited = running >= limit;
       pump();
     });

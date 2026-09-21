@@ -98,6 +98,20 @@ describe("analysing a screenshot", () => {
     expect(engine.recognizeLocally).not.toHaveBeenCalled();
   });
 
+  it("logs an outage as a warning, not an error, so it isn't reported to Sentry on top of the route's own response", async () => {
+    const url = await serve();
+    await stopService();
+    vi.stubEnv("OCR_URL", url);
+    const { db } = createTestDb();
+    const written = () => (process.stdout.write as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((call) => String(call[0]));
+
+    await analyzeSubmissionScreenshot(db, bingo, team, shot("quiet outage")).catch(() => undefined);
+
+    const levels = written().map((line) => (JSON.parse(line) as { level: string }).level);
+    expect(levels).toContain("warn");
+    expect(levels).not.toContain("error");
+  });
+
   it("recovers by itself once the service is back", async () => {
     const url = await serve();
     await stopService();

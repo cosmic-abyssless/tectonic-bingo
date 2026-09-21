@@ -44,7 +44,15 @@ is in `server/src/ocrProtocol.ts`; the service is `server/src/ocrServer.ts`.
   answers `503` and the submission form carries on without it; submissions, mod review and everything else are
   unaffected. The api never falls back to reading in its own process, which would put the load back on the site. When
   the service comes back the next screenshot works, with no restart. (Docker's DNS takes several seconds to give up on
-  a stopped container's name, so during an outage the analysis fails after about 8 s rather than instantly.)
+  a stopped container's name, so during an outage the analysis fails after about 8 s rather than instantly.) An outage
+  is logged as a warning and not reported to Sentry as a bug: it is expected whenever the service restarts, and it is
+  watched through the container's health instead. An image the engine cannot read (truncated, not an image) is a `422`
+  for that one upload, not an outage.
+- **Backlog.** When the api gives up on a screenshot (its timeout) it hangs up, and the service drops the reading if it
+  was still waiting in the queue, so abandoned work never piles up behind live work. A reading that has already
+  started runs to the end.
+- **Startup.** If the model cannot be loaded the `ocr` process exits, so Docker restarts it (a container that merely
+  reports unhealthy is not restarted).
 - **Sizing.** `OCR_CPUS` (default 2) caps how much of the machine it can use, so a burst of screenshots slows analysis and
   never the site. `OCR_MEMORY` (default 2g; it uses about 1 GB). `OCR_CONCURRENCY` (default 1) is how many screenshots are
   read at once, each using all of the allotted CPUs. The engine sizes its threads to the container's CPU limit

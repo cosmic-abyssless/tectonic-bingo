@@ -6,6 +6,7 @@ import { getFullGraph, leafDescendants } from "./services/graphService";
 import { findBestMatch, fuzzyIncludes, type DetectedItemMatch, type MatchableItem } from "./services/textMatchService";
 import { log } from "./log";
 import { createRemoteRecognizer } from "./ocrClient";
+import { OcrImageError, OcrUnavailableError } from "./ocrErrors";
 import { ocrRequestTimeoutMs, ocrServiceUrl } from "./ocrConfig";
 import type { OcrPriority } from "./ocrScheduler";
 import { createTextReader, type TextRecognizer } from "./ocrText";
@@ -72,7 +73,10 @@ export async function analyzeSubmissionScreenshot(db: Db, bingo: Bingo, team: Te
   try {
     return await runAnalyze(db, bingo, team, file, opts.priority ?? "interactive");
   } catch (err) {
-    log.error("ocr analysis failed", { err, bingoId: bingo.id, teamId: team.id });
+    // An outage (ocrClient has already logged it) and a bad image are expected, so they are warnings; anything else is a
+    // surprise and, as an error, reaches Sentry.
+    const expected = err instanceof OcrUnavailableError || err instanceof OcrImageError;
+    log[expected ? "warn" : "error"]("ocr analysis failed", { err, bingoId: bingo.id, teamId: team.id });
     throw err;
   }
 }

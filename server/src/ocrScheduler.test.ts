@@ -90,6 +90,59 @@ describe("createLimiter", () => {
   });
 });
 
+describe("createLimiter cancellation", () => {
+  it("drops queued work whose signal aborts, without it ever taking a slot", async () => {
+    const limiter = createLimiter(1);
+    const blocker = gate();
+    const ran: string[] = [];
+    const first = limiter.run(async () => {
+      ran.push("first");
+      await blocker.opened;
+    });
+    const controller = new AbortController();
+    const withdrawn = limiter.run(async () => void ran.push("withdrawn"), "interactive", controller.signal).catch((e) => e);
+    const last = limiter.run(async () => void ran.push("last"));
+    await tick();
+    expect(limiter.stats()).toEqual({ running: 1, queued: 2 });
+
+    controller.abort(new Error("caller hung up"));
+
+    expect(((await withdrawn) as Error).message).toBe("caller hung up");
+    expect(limiter.stats()).toEqual({ running: 1, queued: 1 });
+    blocker.release();
+    await Promise.all([first, last]);
+    expect(ran).toEqual(["first", "last"]);
+  });
+
+  it("rejects at once, without queueing, when the signal is already aborted", async () => {
+    const limiter = createLimiter(1);
+    const controller = new AbortController();
+    controller.abort(new Error("already gone"));
+    let ran = false;
+
+    await expect(limiter.run(async () => void (ran = true), "background", controller.signal)).rejects.toThrow("already gone");
+
+    expect(ran).toBe(false);
+    expect(limiter.stats()).toEqual({ running: 0, queued: 0 });
+  });
+
+  it("lets work that has already started finish when its signal aborts later", async () => {
+    const limiter = createLimiter(1);
+    const controller = new AbortController();
+    const running = gate();
+    const result = limiter.run(async () => {
+      await running.opened;
+      return "finished";
+    }, "interactive", controller.signal);
+    await tick();
+
+    controller.abort();
+    running.release();
+
+    expect(await result).toBe("finished");
+  });
+});
+
 describe("createResultCache", () => {
   it("computes a key once and serves it from the cache afterwards", async () => {
     const cache = createResultCache<string>({ ttlMs: 1000, maxEntries: 10 });

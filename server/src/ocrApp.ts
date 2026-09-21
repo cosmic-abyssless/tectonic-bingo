@@ -3,11 +3,13 @@
 
 import express from "express";
 import { log } from "./log";
+import { OcrImageError } from "./ocrErrors";
 import { OCR_HEALTH_PATH, OCR_PRIORITY_HEADER, OCR_RECOGNIZE_PATH, parseOcrPriority } from "./ocrProtocol";
 import type { OcrPriority } from "./ocrScheduler";
 
 export interface OcrAppOptions {
-  recognize: (image: Buffer, priority: OcrPriority) => Promise<string[]>;
+  /** `signal` aborts when the caller hangs up: a reading still waiting its turn should then be dropped, not run. */
+  recognize: (image: Buffer, priority: OcrPriority, signal: AbortSignal) => Promise<string[]>;
   /** Whether the model is loaded. /health answers 503 until it is. */
   isReady: () => boolean;
   /** The largest image accepted, in bytes. */
@@ -29,15 +31,29 @@ export function createOcrApp({ recognize, isReady, maxBytes }: OcrAppOptions) {
       res.status(400).json({ error: "An image is required in the request body" });
       return;
     }
+    // The API gives up after its timeout and closes the connection. Without this, its abandoned request would still be
+    // dequeued and read to the end, and under a burst the queue would never drain.
+    const hungUp = new AbortController();
+    res.on("close", () => {
+      if (!res.writableFinished) hungUp.abort();
+    });
     try {
       const priority = parseOcrPriority(req.header(OCR_PRIORITY_HEADER));
       const started = Date.now();
-      const lines = await recognize(image, priority);
+      const lines = await recognize(image, priority, hungUp.signal);
       log.info("ocr recognized", { ms: Date.now() - started, bytes: image.length, lines: lines.length, priority });
       res.json({ lines });
     } catch (err) {
-      log.error("ocr recognition failed", { err, bytes: image.length });
-      res.status(500).json({ error: "Recognition failed" });
+      if (hungUp.signal.aborted) {
+        log.info("ocr request withdrawn before it was read", { bytes: image.length });
+      } else if (err instanceof OcrImageError) {
+        // One bad image, not a broken service: say so, so the caller doesn't treat it as an outage and retry.
+        log.warn("ocr could not read an image", { err, bytes: image.length });
+        res.status(422).json({ error: "The image could not be read" });
+      } else {
+        log.error("ocr recognition failed", { err, bytes: image.length });
+        res.status(500).json({ error: "Recognition failed" });
+      }
     }
   });
 

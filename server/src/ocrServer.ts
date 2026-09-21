@@ -4,6 +4,7 @@
 // Must stay the first two imports, for the same reasons as in index.ts.
 import "./env";
 import "./instrument";
+import * as Sentry from "@sentry/node";
 import { installProcessLogHandlers, log } from "./log";
 import { createOcrApp } from "./ocrApp";
 import { OCR_MAX_IMAGE_BYTES } from "./ocrConfig";
@@ -17,8 +18,13 @@ const app = createOcrApp({ recognize: recognizeLocally, isReady: isOcrReady, max
 const server = app.listen(port, () => {
   log.info("ocr service listening", { port });
   // Always warm here (unlike the in-process engine): this container exists to read screenshots, so a person's first
-  // submission after a deploy should never wait for the model.
-  void warmOcrEngine();
+  // submission after a deploy should never wait for the model. If the model can't be loaded this container can do
+  // nothing useful, and an unhealthy container is not restarted by Docker, so exit and let it be.
+  void warmOcrEngine().then((ready) => {
+    if (ready) return;
+    log.error("ocr model could not be loaded; exiting so the container is restarted");
+    void Sentry.close(2000).finally(() => process.exit(1));
+  });
 });
 
 function shutdown(signal: string) {

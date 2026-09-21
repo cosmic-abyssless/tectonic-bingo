@@ -5,13 +5,14 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createOcrApp } from "./ocrApp";
-import { createRemoteRecognizer, OcrUnavailableError } from "./ocrClient";
-import type { OcrPriority } from "./ocrScheduler";
+import { createRemoteRecognizer } from "./ocrClient";
+import { OcrImageError, OcrUnavailableError } from "./ocrErrors";
+import { createLimiter, type OcrPriority } from "./ocrScheduler";
 import { ServiceError } from "./services/errors";
 
 let server: Server | undefined;
 let ready = true;
-const recognize = vi.fn<(image: Buffer, priority: OcrPriority) => Promise<string[]>>();
+const recognize = vi.fn<(image: Buffer, priority: OcrPriority, signal: AbortSignal) => Promise<string[]>>();
 
 async function startService(maxBytes = 1024): Promise<string> {
   const app = createOcrApp({ recognize, isReady: () => ready, maxBytes });
@@ -92,6 +93,17 @@ describe("recognising over HTTP", () => {
     expect(error.status).toBe(413);
   });
 
+  it("answers 422 for an image the engine can't read, and the client reports that image, not an outage", async () => {
+    recognize.mockRejectedValue(new OcrImageError(new Error("truncated png")));
+    const url = await startService();
+
+    const error = await createRemoteRecognizer({ url, timeoutMs: 2000 })(Buffer.from("x"), "interactive").catch((e) => e);
+
+    expect(error).toBeInstanceOf(OcrImageError);
+    expect(error).not.toBeInstanceOf(OcrUnavailableError);
+    expect(error.status).toBe(422);
+  });
+
   it("answers 500 when the engine fails, and the client reports the service as unavailable", async () => {
     recognize.mockRejectedValue(new Error("onnx exploded"));
     const url = await startService();
@@ -100,6 +112,40 @@ describe("recognising over HTTP", () => {
 
     expect(error).toBeInstanceOf(OcrUnavailableError);
     expect(error.status).toBe(503);
+  });
+});
+
+describe("a caller that gives up", () => {
+  it("has its reading dropped if it was still waiting, so abandoned work can't pile up", async () => {
+    const limiter = createLimiter(1);
+    const started: string[] = [];
+    let releaseFirst!: () => void;
+    const firstDone = new Promise<void>((resolve) => (releaseFirst = resolve));
+    recognize.mockImplementation((image, priority, signal) =>
+      limiter.run(
+        async () => {
+          started.push(image.toString());
+          if (image.toString() === "first") await firstDone;
+          return [image.toString()];
+        },
+        priority,
+        signal,
+      ),
+    );
+    const url = await startService();
+
+    const first = createRemoteRecognizer({ url, timeoutMs: 5000 })(Buffer.from("first"), "interactive");
+    await vi.waitFor(() => expect(started).toEqual(["first"]));
+    // Queued behind the first, and gives up after 100 ms: what the API does at its timeout.
+    const second = await createRemoteRecognizer({ url, timeoutMs: 100 })(Buffer.from("second"), "interactive").catch((e) => e);
+    expect(second).toBeInstanceOf(OcrUnavailableError);
+    // The service notices the hang-up and takes the request out of the queue.
+    await vi.waitFor(() => expect(limiter.stats().queued).toBe(0));
+
+    releaseFirst();
+    await first;
+    expect(await createRemoteRecognizer({ url, timeoutMs: 5000 })(Buffer.from("third"), "interactive")).toEqual(["third"]);
+    expect(started).toEqual(["first", "third"]);
   });
 });
 

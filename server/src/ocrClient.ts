@@ -2,16 +2,9 @@
 
 import { ServiceError } from "./services/errors";
 import { log } from "./log";
+import { OcrImageError, OcrUnavailableError } from "./ocrErrors";
 import { OCR_PRIORITY_HEADER, OCR_RECOGNIZE_PATH } from "./ocrProtocol";
 import type { OcrPriority } from "./ocrScheduler";
-
-/** The OCR service could not be reached, took too long, or failed. Surfaces as a 503: the site works, analysis doesn't. */
-export class OcrUnavailableError extends ServiceError {
-  constructor(reason: string) {
-    super(503, `Screenshot analysis is temporarily unavailable (${reason})`);
-    this.name = "OcrUnavailableError";
-  }
-}
 
 export interface RemoteRecognizerOptions {
   url: string;
@@ -39,7 +32,8 @@ export function createRemoteRecognizer({ url, timeoutMs, fetchImpl = fetch }: Re
 
     if (!response.ok) {
       log.warn("ocr service returned an error", { status: response.status, url });
-      // The image itself was refused (empty, too large): retrying or waiting won't help, so it is not "unavailable".
+      // The image itself was refused or unreadable: retrying won't help, and the service is fine, so it is not "unavailable".
+      if (response.status === 422) throw new OcrImageError();
       if (response.status === 400 || response.status === 413) throw new ServiceError(response.status, "The screenshot could not be analysed");
       throw new OcrUnavailableError(`the OCR service answered ${response.status}`);
     }
