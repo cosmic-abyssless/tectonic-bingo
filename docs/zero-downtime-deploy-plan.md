@@ -1,7 +1,23 @@
 # Zero-downtime deploys, a separate OCR service, and a new home: the plan
 
-Status: proposed, 2026-09-21. Not started. Deploys today go from `Miconen/tectonic-bingo` (`production` branch) to
-Railway; this plan replaces that with a pipeline owned by `cosmic-abyssless/tectonic-bingo`.
+Status: decided 2026-09-21, ready to implement. Deploys today go from `Miconen/tectonic-bingo` (`production` branch)
+to Railway; this plan replaces that with a pipeline owned by `cosmic-abyssless/tectonic-bingo`.
+
+## Decisions made (2026-09-21)
+
+| Question | Decision |
+| --- | --- |
+| Hetzner account, bill | cosmic-abyssless owns it and pays; Mico added as a member. |
+| Backups | Cloudflare R2 (a different provider from the box, on purpose). |
+| Domain | **The site moves to `tectonic.bingo`** (Mico controls DNS). `tectonic.cc` becomes a permanent redirect. |
+| VPS | CPX31 (4 vCPU, 8 GB) in Ashburn. |
+| GitHub plan | Free, so GHCR's private-image quota is real: the deploy script builds on the box as its fallback from day one. |
+| Deploy approvers | cosmic-abyssless and Mico, as required reviewers on the `production` environment. |
+| Staging | **Yes, now**: a second Compose stack on the same box at `staging.tectonic.bingo`, deployed on every merge to `main`. |
+| Clan API IP allow-list | None. |
+| Discord application | Nothing Railway-specific. It needs the new callback URLs added (production and staging). |
+| Secrets master copy | Shared password manager entry. |
+| Cutover | Before signups open (their date is flexible); see "Timeline". |
 
 ## What we're solving
 
@@ -47,6 +63,17 @@ One VPS running Docker Compose with five containers:
   backup story SQLite otherwise lacks.
 - **backup** copies new uploads to R2 nightly (rclone). Uploads are write-once, so nightly is enough.
 
+### Staging
+
+The same image, a second Compose project on the same box (`staging` profile), with its own database file, uploads
+directory and Sentry environment tag (`staging`), served by the same Caddy at `staging.tectonic.bingo`. It deploys
+automatically on every merge to `main` (no approval), so it is always the next production. Two guards, because it is
+publicly reachable: Caddy basic auth on the whole host (one shared password for the team), and dev-login **on** behind
+it, so the test-data generator and "log in as" work there without Discord. It is a copy of production's data only when
+someone restores one (a `deploy/refresh-staging.sh` that restores the latest Litestream snapshot into staging's data
+directory), never automatically. Memory on a CPX31 is fine for two API containers plus one shared OCR container; staging
+and production share the OCR service, which is stateless.
+
 Why this works without downtime: SQLite in WAL mode is safe for **multiple processes on the same machine** (it is only
 unsafe across a network filesystem). During a deploy, old and new api containers share the same database file and the
 same uploads directory for a few seconds, both fully working. That is exactly what Railway's volume model forbids and a
@@ -67,6 +94,15 @@ plain Docker host allows.
    process; they catch up on reconnect.
 6. Keep the previous image tagged `rollback`. Rolling back is the same script with that tag: under a minute, no build.
 
+### The new domain
+
+Production answers on `tectonic.bingo` (and `www`). The Discord application needs two more redirect URIs
+(`https://tectonic.bingo/auth/discord/callback`, `https://staging.tectonic.bingo/auth/discord/callback`); Discord
+applications accept several, so the old `tectonic.cc` one stays until Railway is gone. `CLIENT_URL` and
+`DISCORD_CALLBACK_URL` change per stack. The `/terms` and `/privacy` URLs registered in the Discord developer portal
+change to the new domain. `tectonic.cc` keeps pointing at Railway until decommission, after which it becomes a 301 to
+`tectonic.bingo` (a two-line Caddy site block on the box; Mico points the old name at the box).
+
 ### Sentry, environments, releases
 
 Railway currently supplies `RAILWAY_ENVIRONMENT_NAME` and `RAILWAY_GIT_COMMIT_SHA`, which the SDKs use for the
@@ -86,7 +122,7 @@ fallbacks). Source-map upload keeps working from the CI build. A Sentry **uptime
 | Data safety | **Litestream → R2** for the database (continuous), **rclone → R2** nightly for uploads, plus Hetzner's snapshot backups. | Relying on Hetzner backups alone: daily granularity loses up to a day of picks and submissions. |
 | Object storage | **Cloudflare R2** (no egress fees, free tier well above our size). | S3: egress fees for a restore. |
 | Front door | Optionally **Cloudflare proxy** (free) in front of Caddy for DDoS absorption. Not required; WebSockets work through it. | — |
-| Deploy trigger | **GitHub Environment "production" with a required reviewer.** Merging to `main` builds the image and stages a deploy; a person approves it; the deploy job SSHes to the box and runs `deploy.sh`. Deliberate, but one click. | Deploy on every merge: with zero-downtime it's now *possible*, and can be switched on later by removing the reviewer; start deliberate. A `production` branch: no longer needed. |
+| Deploy trigger | **Merge to `main` → build → deploy to staging automatically → wait for approval (cosmic-abyssless or Mico, GitHub Environment "production") → deploy to production.** One workflow, two environments. | A `production` branch: no longer needed. Auto-deploying production on every merge: possible later by removing the reviewer. |
 
 Prices aren't quoted here because Hetzner renders them dynamically; check https://www.hetzner.com/cloud/ when
 ordering. Expect the whole setup to land in the low tens of euros a month: the VPS is the only real line item, R2 and
@@ -121,26 +157,41 @@ Small. Everything below is additive; the app keeps running on Railway until cuto
 | 2 | OCR service split, with tests for the HTTP boundary and the fallback path. | Local Compose: analysis works via the `ocr` container; killing `ocr` degrades gracefully. | ~1 day |
 | 3 | Data safety: Litestream, uploads backup, and a **restore drill** (rebuild from R2 onto a scratch box). | Restore drill passes; the doc says how. | ~half a day |
 | 4 | CI/CD: build/push, approval-gated deploy, `deploy.sh` with blue/green and rollback, migration-safety check. | Deploying `main` to the VPS is one approval click; rolling back is one command. | ~1 day |
-| 5 | Rehearsal: run the real image on the VPS with a **copy** of production data (dev-login off, real Discord app but a test callback URL), deploy twice in a row while clicking around, watch for dropped WebSocket updates. | Two consecutive deploys with no user-visible interruption. | ~half a day |
-| 6 | Cutover (below). | `tectonic.cc` served from the VPS; Railway still running as fallback. | ~2 h, quiet window |
-| 7 | Decommission: after 48 h clean, stop the Railway service, remove `.railway/` and `railway-plan.yml`, update docs and the privacy policy's "hosting provider" line. | — | ~1 h |
+| 5 | Rehearsal on **staging** (which now exists permanently): restore a copy of production data into it, deploy twice in a row while clicking around, watch for dropped WebSocket updates. | Two consecutive deploys with no user-visible interruption. | ~half a day |
+| 6 | Cutover (below). | `tectonic.bingo` served from the VPS; Railway still running under `tectonic.cc`. | ~2 h |
+| 7 | Decommission: after 48 h clean, stop the Railway service, redirect `tectonic.cc`, remove `.railway/` and `railway-plan.yml`, update docs and the privacy policy's "hosting provider" line, and remove the Railway development environment (which has dev-login on at a public URL). | — | ~1 h |
 
 About five working days end to end, plus waiting on decisions. Phases 1–5 can all happen while the event runs on
 Railway; only phase 6 touches players, and it goes in a quiet window.
 
 ## Cutover
 
-1. Days before: lower the DNS TTL for `tectonic.cc` to 60 s.
-2. Announce a short freeze (submissions during the window are the only thing that could be lost; picks and reviews
-   too, so pick a dead hour).
-3. On Railway: nothing to change. On the VPS: `litestream restore` from a fresh copy of the Railway database
-   (download via `railway ssh`/volume export), `rsync` the uploads, start the stack, check `/health`, log in with
-   Discord, open a board, submit a screenshot on a test team.
-4. Switch DNS. Traffic moves within a minute.
-5. Watch Sentry (release tag shows the new box), Caddy logs, and the uptime monitor for an hour.
-6. Rollback if needed: switch DNS back; Railway is untouched. Anything written to the VPS in between is lost, which is
-   why the window is a quiet one.
-7. Keep Railway up for 48 hours, then phase 7.
+Simpler than a same-name migration, because the new domain lets both sites exist at once.
+
+1. Mico creates DNS records: `tectonic.bingo`, `www`, `staging` → the box. Caddy gets certificates on first request.
+2. Copy production data once: export the Railway volume (database via `railway ssh` + `sqlite3 .backup`, uploads via
+   `rsync`) into the box's production data directory. Only admins have used the site so far, so the copy is small and
+   nothing is lost if it is redone.
+3. Start the production stack, check `/health`, log in with Discord on the new domain, open a board, submit a
+   screenshot on a test team, watch it appear in Sentry under the new release.
+4. Create the Sentry uptime monitor for `https://tectonic.bingo/health`.
+5. **Open signups on `tectonic.bingo`.** Railway keeps serving `tectonic.cc` but nobody is sent there.
+6. After 48 clean hours: stop the Railway service, point `tectonic.cc` at the box, enable the redirect, phase 7.
+
+Rollback before step 5 is "keep using Railway"; nothing on Railway is touched by any of this.
+
+## Timeline
+
+Phases 1–4 are real work (about four days) and none of it should be rushed onto a box players will use. Two ways to
+sequence it against opening signups:
+
+- **Migrate first, then open** (recommended if signups can wait ~4 days): players only ever see `tectonic.bingo`, the
+  Railway setup is never in the picture, and the cutover has no users to disturb. This is what the decisions above
+  assume.
+- **Open first on Railway, migrate later**: add `tectonic.bingo` as a Railway custom domain today (30 minutes: DNS
+  record, Discord callback, `CLIENT_URL`/`DISCORD_CALLBACK_URL`, one redeploy), open signups on the final URL, and move
+  hosting later behind that same name with a DNS switch. Nothing players see changes when hosting moves. Choose this
+  if signups can't wait.
 
 ## What you take on that Railway did for you
 
@@ -156,11 +207,16 @@ Be clear-eyed about this: it's the price of the control.
 - **Secrets live in Compose's env file on the box**, not a dashboard. Keep the file out of git (it is already ignored)
   and back it up somewhere sane (a password manager), or a rebuild means re-collecting every key.
 
-## Open questions
+## Still open
 
-- Who owns the Hetzner account and the R2 bucket (you, Mico, a shared clan account)? Whoever it is also owns the bill.
-- Who controls DNS for `tectonic.cc`, and is Cloudflare already in front of it?
-- Is the Discord application's OAuth callback tied to anything Railway-specific? (It shouldn't be; the domain doesn't
-  change.)
-- Does the clan API (`TECTONIC_API_URL`) allow-list callers by IP? If so, the VPS's IP needs adding before cutover.
-- GitHub plan: Free or Pro? Decides whether GHCR's private-image quota is a concern.
+- Is `tectonic.bingo` registered yet, and are its nameservers on Cloudflare? (If they are, Cloudflare Access could
+  replace basic auth on staging later; not needed to start.)
+
+## Handoff notes for implementation
+
+- Work on a branch, one pull request per phase, into `main`. Phases 1–4 never touch Railway, production, or DNS.
+- Stop at the end of phase 4 and report; phases 5–7 need a person at the keyboard (Hetzner console, Discord portal,
+  Mico's DNS).
+- Everything the box needs to be rebuilt from scratch goes in `deploy/README.md` as it is written, not afterwards.
+- Keep the migration-safety CI check and the restore drill; they are the two things that make "zero-downtime" and
+  "backed up" true rather than claimed.
