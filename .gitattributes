@@ -4,3 +4,9 @@
 Dockerfile text eol=lf
 Caddyfile text eol=lf
 *.yml text eol=lf
+# The deploy directory's settings and templates are read by shell scripts and copied to the server: a CR at the end of a value
+# ends up inside it (a copied env template arrived with 49 of them on the first real server).
+*.conf text eol=lf
+*.example text eol=lf
+*.env text eol=lf
+deploy/**/*.js text eol=lf

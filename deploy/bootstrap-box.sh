@@ -189,6 +189,9 @@ PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin prohibit-password
 EOF
+    # sshd -t refuses to run without its privilege-separation directory, which on Ubuntu 24.04 only exists once the SSH service has
+    # started (it is socket-activated), so a fresh machine would fail here.
+    install -d -m 0755 /run/sshd
     sshd -t || { rm -f /etc/ssh/sshd_config.d/10-tectonic.conf; die "sshd rejected the hardening file; it was removed and nothing changed"; }
     if command -v systemctl >/dev/null; then systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true; fi
     echo "Make sure you can log in with your key in a SECOND terminal before closing this one."
