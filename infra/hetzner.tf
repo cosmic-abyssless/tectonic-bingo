@@ -18,7 +18,9 @@ resource "hcloud_primary_ip" "box" {
 # the bootstrap (for the deploy user) from the file cloud-init writes.
 resource "hcloud_ssh_key" "admin" {
   name       = "${var.server_name}-admin"
-  public_key = var.admin_public_keys[0]
+  # Hetzner stores the key without its trailing comment, so pass only "type key": otherwise the comment makes every plan think
+  # the key changed and want to replace it.
+  public_key = join(" ", slice(split(" ", trimspace(var.admin_public_keys[0])), 0, 2))
 }
 
 # Outside the machine, in addition to ufw inside it (deploy/bootstrap-box.sh): Docker bypasses the machine's own firewall
