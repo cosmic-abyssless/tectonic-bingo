@@ -19,5 +19,6 @@ export RCLONE_CONFIG_BACKUP_SECRET_ACCESS_KEY="$BACKUP_SECRET_ACCESS_KEY"
 export RCLONE_CONFIG_BACKUP_REGION=auto
 export RCLONE_CONFIG_BACKUP_NO_CHECK_BUCKET=true
 
-# Where this environment's uploads live in the bucket.
+# Where this environment's uploads and database replica live in the bucket.
 export BACKUP_UPLOADS_REMOTE="backup:${BACKUP_BUCKET}/${BACKUP_PREFIX}/uploads"
+export BACKUP_DB_REMOTE="backup:${BACKUP_BUCKET}/${BACKUP_PREFIX}/db"

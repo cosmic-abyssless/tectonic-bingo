@@ -5,6 +5,12 @@ set -u
 
 at="${BACKUP_AT:-03:15}"
 
+# A malformed time would make every `date -d` below fail and the loop spin without ever sleeping: refuse to start instead.
+if ! date -u -d "$(date -u +%Y-%m-%d) $at:00" >/dev/null 2>&1; then
+  echo "BACKUP_AT must be a time of day as HH:MM (UTC), not '$at'" >&2
+  exit 1
+fi
+
 /deploy/backup-uploads.sh || echo "uploads backup failed (see above); will try again at $at UTC"
 
 while true; do

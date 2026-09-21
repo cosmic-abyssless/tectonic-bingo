@@ -94,7 +94,7 @@ What is backed up, where, and how fresh:
 | Data | How | Where | How far behind, at worst |
 | --- | --- | --- | --- |
 | The database (`bingo.db`) | Litestream (`litestream` container) ships every change | Cloudflare R2, `<prefix>/db` | about a second |
-| Uploads (screenshots, tile images, wiki icons) | `rclone copy` (`backup` container), on start and daily at 03:15 UTC | R2, `<prefix>/uploads` | up to a day (uploads never change once written, and the copy never deletes) |
+| Uploads (screenshots, tile images, wiki icons) | `rclone copy` (`backup` container), on start and daily at 03:15 UTC | R2, `<prefix>/uploads` | up to a day. Uploads never change once written, and the copy never deletes; a file modified in the last 2 minutes waits for the next run (it might still be being written), and the `wiki-icons/*.miss` cache markers are not backed up |
 | Everything on the box | Hetzner's own snapshot backups (switch them on when the server is ordered) | Hetzner | up to a day; a second layer, not the plan |
 
 Litestream keeps a full snapshot every day and every change for 30 days, so the database can be restored to **any moment
@@ -104,22 +104,31 @@ in the last 30 days**, not just to "latest". The bucket is a different provider 
 
 1. In the Cloudflare dashboard create an R2 bucket (one bucket serves every environment). Create an **R2 API token
    limited to that bucket** with Object Read & Write: never a token for the whole account.
-2. `cp deploy/backup.env.example deploy/backup.env` (on the server it lives outside the repo, next to the app's env
-   file) and fill it in: the endpoint is `https://<account id>.r2.cloudflarestorage.com`, and `BACKUP_PREFIX` is
-   `production` or `staging`. **Never let two environments share a prefix**: they would overwrite each other's history.
-   Keep the master copy in the team's password manager; a rebuild needs it before anything else can be restored.
+2. Copy `deploy/backup.env.example` and fill it in: the endpoint is `https://<account id>.r2.cloudflarestorage.com`, and
+   `BACKUP_PREFIX` is `production` or `staging`. **Never let two environments share a prefix**: they would overwrite each
+   other's history. Keep the master copy in the team's password manager; a rebuild needs it before anything else can be
+   restored. Where the copy lives depends on what is using it: for the local overlay below (and the restore scripts) it is
+   `deploy/backup.env`, which git ignores, or any path you name in `BACKUP_ENV_FILE`; on the server each environment has its
+   own, outside the repository (`/srv/tectonic/env/<environment>.backup.env`, see "Setting up the server").
 3. Make a check at healthchecks.io (or similar), put its URL in `BACKUP_PING_URL`, and have it alert by email if it
-   isn't pinged for 36 hours. That is what turns "the backup stopped" from a surprise into an alert.
-4. Start the stack with the overlay:
-   `docker compose -f docker-compose.yml -f deploy/compose.backup.yml up -d`. It refuses to start without the backup
-   env file, so a stack can't run unprotected without anyone noticing. (Phase 4's production stack includes it.)
+   isn't pinged for 36 hours. That is what turns "the backup stopped" from a surprise into an alert. The nightly run pings
+   only if **both** halves are healthy: the uploads are copied and verified, **and** the database is still being replicated
+   (the newest object Litestream put in the bucket is not older than the database's last change by more than
+   `BACKUP_DB_MAX_LAG`, 10 minutes by default). A revoked token or a crashed `litestream` therefore stops the pings within a
+   day, instead of leaving the database unprotected for weeks behind a green check.
+4. Start the stack with the overlay, naming the backup settings you made in step 2:
+   `BACKUP_ENV_FILE=./deploy/backup.env docker compose -f docker-compose.yml -f deploy/compose.backup.yml up -d`
+   (the variable can be left out when the file is at that default path). It refuses to start without the backup env file,
+   so a stack can't run unprotected without anyone noticing.
 
 ### Checking that it is working
 
 - `docker compose logs litestream` shows `snapshot complete` / `compaction complete` lines; `ERROR` lines are not normal.
   Litestream only writes when the database changes, so a quiet database legitimately has no new files.
-- `docker compose logs backup` ends each run with `uploads backup: complete`, and says when the next one is.
-- The dead-man's-switch check from step 3 is the one that tells you when nobody is looking.
+- `docker compose logs backup` ends each run with `backup: complete` (and a line for the uploads and one for the database
+  replica), and says when the next one is. A stopped replica shows as `database replication: FAILED`.
+- The dead-man's-switch check from step 3 is the one that tells you when nobody is looking, for the uploads **and** the
+  database.
 - To see what is in the bucket:
   `docker run --rm --env-file deploy/backup.env -v "$PWD/deploy:/deploy:ro" --entrypoint sh rclone/rclone:1.75.1 -c '. /deploy/rclone-env.sh && rclone size backup:$BACKUP_BUCKET/$BACKUP_PREFIX'`
 

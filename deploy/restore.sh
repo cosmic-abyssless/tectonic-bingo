@@ -46,7 +46,9 @@ command -v docker >/dev/null || { echo "docker is required" >&2; exit 1; }
 
 # A path (contains a slash or starts with a dot) is a host directory; anything else is a Docker volume name.
 case "$target" in
-  */*|.*) mkdir -p "$target"; target="$(cd "$target" && pwd)" ;;
+  # `pwd -W` gives Git Bash the Windows form of the path, which docker.exe needs (otherwise Docker Desktop quietly mounts a
+  # directory inside its own VM and the host directory stays empty); elsewhere it fails and plain pwd is used.
+  */*|.*) mkdir -p "$target"; target="$(cd "$target" && { pwd -W 2>/dev/null || pwd; })" ;;
 esac
 
 net_args=(); [ -z "$network" ] || net_args=(--network "$network")

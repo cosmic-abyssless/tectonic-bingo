@@ -103,12 +103,11 @@ describe("verifyDatabase", () => {
 
   it("fails a database that is ahead of this build, and only notes one that is behind", () => {
     const sqlite = migratedDatabase();
-    const known = knownMigrationCount(migrationsFolder);
     sqlite.prepare("insert into __drizzle_migrations (hash, created_at) values ('future', 9999999999999)").run();
     sqlite.close();
     const ahead = verifyDatabase(dbPath, migrationsFolder);
     expect(ahead.ok).toBe(false);
-    expect(ahead.problems.join(" ")).toContain(`${known + 1} migrations`);
+    expect(ahead.problems.join(" ")).toContain("not in this build");
 
     const reopened = new Database(dbPath);
     reopened.prepare("delete from __drizzle_migrations where hash = 'future'").run();
@@ -118,5 +117,40 @@ describe("verifyDatabase", () => {
     const behind = verifyDatabase(dbPath, migrationsFolder);
     expect(behind.ok).toBe(true);
     expect(behind.notes.join(" ")).toContain("1 migration(s) will be applied");
+  });
+
+  it("fails a database with the same NUMBER of migrations but different ones, e.g. from another branch", () => {
+    const sqlite = migratedDatabase();
+    // Same count as this build, but one of the applied migrations is not one it knows.
+    sqlite.prepare("update __drizzle_migrations set created_at = 12345 where rowid = (select min(rowid) from __drizzle_migrations)").run();
+    sqlite.close();
+
+    const report = verifyDatabase(dbPath, migrationsFolder);
+
+    expect(report.migrations.applied).toBe(report.migrations.known);
+    expect(report.ok).toBe(false);
+    expect(report.problems.join(" ")).toContain("not in this build");
+    expect(report.problems.join(" ")).toContain("would skip it forever");
+  });
+
+  it("fails a database missing a migration older than one it has, which drizzle would never apply", () => {
+    const sqlite = migratedDatabase();
+    sqlite.prepare("delete from __drizzle_migrations where rowid = (select min(rowid) from __drizzle_migrations)").run();
+    sqlite.close();
+
+    const report = verifyDatabase(dbPath, migrationsFolder);
+
+    expect(report.ok).toBe(false);
+    expect(report.problems.join(" ")).toContain("would skip it forever");
+  });
+
+  it("blames the image, not the database, when the migration journal cannot be read", () => {
+    migratedDatabase().close();
+
+    const report = verifyDatabase(dbPath, path.join(dir, "no-such-migrations"));
+
+    expect(report.ok).toBe(false);
+    expect(report.problems.join(" ")).toContain("the image is at fault, not the database");
+    expect(report.problems.join(" ")).not.toContain("could not be read:");
   });
 });
