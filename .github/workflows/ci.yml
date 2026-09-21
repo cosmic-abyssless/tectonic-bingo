@@ -88,3 +88,12 @@ jobs:
       # Destroys a database and its uploads and gets them back from a local stand-in for the bucket: proves the backup and
       # restore tooling (Litestream, rclone, deploy/restore.sh) still works with this build, not just that it once did.
       - run: bash deploy/restore-drill.sh tectonic-bingo:ci
+      # The deploy scripts are what decide whether a release drops requests, so they are tested like code.
+      - run: shellcheck -x --severity=warning deploy/*.sh
+      - run: bash deploy/test-ssh-entry.sh
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Real deploy.sh, Caddy and containers: deploys, deploys again, tries two broken builds, and rolls back, while a probe
+      # requests the site continuously. Passes only if not one request failed and the live version was right every time.
+      - run: bash deploy/test-zero-downtime.sh tectonic-bingo:ci

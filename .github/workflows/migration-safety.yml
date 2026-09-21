@@ -1,0 +1,45 @@
+name: Migration safety
+
+# A deploy applies the new version's migrations to the LIVE database while the previous version is still serving, so a
+# migration must not break code that still runs against the old shape. This fails a pull request whose new migrations drop
+# or rename a table or column, edit a migration that is already on main, or are dated before an existing one (which drizzle
+# would silently skip). See server/scripts/migrationSafety.ts for the rules and deploy/README.md, "Migrations".
+#
+# Its own workflow, so adding or removing the label re-runs only this check and not the whole CI.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths:
+      - "server/drizzle/**"
+      - "server/scripts/migrationSafety.ts"
+      - "server/scripts/checkMigrationSafety.ts"
+      - ".github/workflows/migration-safety.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migration-safety-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migration-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The check compares against the base branch, so it needs the history.
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check the new migrations are safe to run against the live database
+        working-directory: server
+        env:
+          # A pull request with a reason to break a rule carries this label: the violations are printed but the check
+          # passes, and the reviewer is asked how the change runs against the live database.
+          ALLOW_UNSAFE_MIGRATION: ${{ contains(github.event.pull_request.labels.*.name, 'allow-unsafe-migration') && '1' || '0' }}
+          BASE_REF: origin/${{ github.base_ref }}
+        run: npx tsx scripts/checkMigrationSafety.ts --base "$BASE_REF"

@@ -1,5 +1,5 @@
 #!/bin/sh
-# The `backup` container's main process: runs the uploads backup once at start and then every day at BACKUP_AT (UTC,
+# The `backup` container's main process: runs the backup shortly after it starts and then every day at BACKUP_AT (UTC,
 # default 03:15). A failed run is logged and retried the next day; the container itself stays up.
 set -u
 
@@ -11,6 +11,10 @@ if ! date -u -d "$(date -u +%Y-%m-%d) $at:00" >/dev/null 2>&1; then
   exit 1
 fi
 
+# The first run comes a little after the container starts, not at once: this container and Litestream start together, and
+# the run checks that the database is being replicated, which cannot be true before Litestream has written its first
+# snapshot. Checking too early would report a failure that isn't one.
+sleep "${BACKUP_START_DELAY:-90}"
 /deploy/backup-uploads.sh || echo "uploads backup failed (see above); will try again at $at UTC"
 
 while true; do

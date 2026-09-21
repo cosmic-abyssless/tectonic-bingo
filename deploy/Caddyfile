@@ -1,0 +1,12 @@
+# The shared front door on the box (deploy/edge.yml). Everything site-specific is in the generated snippets that deploy.sh
+# writes, one per environment, each pointing at that environment's live colour:
+#
+#   /etc/caddy/sites/production.caddy   tectonic.bingo, www.tectonic.bingo
+#   /etc/caddy/sites/staging.caddy      staging.tectonic.bingo (behind a shared password)
+#
+# Switching colour is rewriting one snippet and a graceful reload (`caddy reload`): new requests go to the new colour at
+# once, requests already in flight finish on the old one, and open WebSockets stay on the old one until it stops, when
+# their clients reconnect to the new one.
+#
+# Certificates are obtained and renewed automatically the first time a name in a snippet resolves to this box.
+import /etc/caddy/sites/*.caddy
