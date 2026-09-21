@@ -212,9 +212,10 @@ person can rebuild the box, and so can you in a year.
 2. **Generate the CI key**, anywhere: `ssh-keygen -t ed25519 -f deploy_key -C github-actions -N ''`. Keep `deploy_key`
    private (it becomes a GitHub secret); `deploy_key.pub` goes to the server.
 3. **Bootstrap the machine.** The repository is private, so the server cannot fetch it yet: send it the `deploy/` directory
-   (and the two public keys) from your machine. Use `git archive`, not a copy of your working folder: it sends exactly what is
-   committed, with Unix line endings. (Copying a Windows checkout with `scp -r` sends CRLF copies of the templates, and a value
-   that ends in a hidden carriage return breaks quietly.) From a clone on `main`:
+   (and the two public keys) from your machine. Use `git archive`, not a copy of your working folder: it sends what is
+   committed, and every file a script or the stack reads (scripts, templates, `.conf`, `.yml`, `.env`) is pinned to Unix line
+   endings in `.gitattributes`. (Copying a Windows checkout with `scp -r` sends CRLF copies of the templates, and a value that
+   ends in a hidden carriage return breaks quietly.) From a clone on `main`:
    `git archive HEAD deploy | ssh root@<address> tar -x -C /root` and `scp deploy_key.pub admins.pub root@<address>:/root/`.
    Then, on the server as root:
    `bash /root/deploy/bootstrap-box.sh --ci-public-key deploy_key.pub --repo-url git@github.com:cosmic-abyssless/tectonic-bingo.git --admin-key-file admins.pub`
