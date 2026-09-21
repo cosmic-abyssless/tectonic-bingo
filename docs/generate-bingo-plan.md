@@ -1,9 +1,9 @@
 # Test data generator: implementation plan
 
-Status: **implemented** (see `docs/test-data-generator.md` for how to use it; the differences
+Status: **implemented** (see `docs/generate-bingo.md` for how to use it; the differences
 from this plan are listed at the end of this file). Written to be executed without
 conversation context. The requirements are in
-`docs/test-data-generator-requirements.md`; this is how they get built.
+`docs/generate-bingo-requirements.md`; this is how they get built.
 `docs/audit-log.md` explains the audit log the generator has to feed, and
 `CONTEXT.md` the vocabulary (tile, part/task, requirement, claim, line).
 
@@ -17,10 +17,10 @@ reviews, stage changes), with every action stamped at a realistic
 spoofed time. Plus a teardown that removes everything it made.
 
 ```
-npm run testdata -- --stage live --progress 0.5            # half way through a live bingo
-npm run testdata -- --stage draft --seed 7                 # mid-draft, reproducible
-npm run testdata -- --stage complete --me 123456789012345678
-npm run testdata:teardown -- --slug testdata-20260919-1432 # or --all
+npm run generate-bingo -- --stage live --progress 0.5            # half way through a live bingo
+npm run generate-bingo -- --stage draft --seed 7                 # mid-draft, reproducible
+npm run generate-bingo -- --stage complete --me 123456789012345678
+npm run generate-bingo:teardown -- --slug testdata-20260919-1432 # or --all
 ```
 
 ## Decisions already made (do not re-open)
@@ -264,16 +264,16 @@ Commit: `Dev-only routes for the test data generator`.
 
 ## Phase 3 — the CLI: through the stages
 
-Location: `server/scripts/testdata/` (TypeScript, run with `tsx`).
+Location: `server/scripts/generate-bingo/` (TypeScript, run with `tsx`).
 Add to `server/package.json`:
 
 ```json
-"testdata": "tsx scripts/testdata/generate.ts",
-"testdata:teardown": "tsx scripts/testdata/teardown.ts"
+"generate-bingo": "tsx scripts/generate-bingo/generate.ts",
+"generate-bingo:teardown": "tsx scripts/generate-bingo/teardown.ts"
 ```
 
-and to the root `package.json`: `"testdata": "npm run testdata --workspace=server --"`,
-`"testdata:teardown": "npm run testdata:teardown --workspace=server --"`.
+and to the root `package.json`: `"generate-bingo": "npm run generate-bingo --workspace=server --"`,
+`"generate-bingo:teardown": "npm run generate-bingo:teardown --workspace=server --"`.
 
 ### Files
 
@@ -509,7 +509,7 @@ Commit: `Test data generator: play the live bingo`.
 
 ## Phase 5 — docs and scripts
 
-- `docs/test-data-generator.md`: how to run it (the env line, the
+- `docs/generate-bingo.md`: how to run it (the env line, the
   commands, options table, what `--me` does, how to tear down), what is
   and isn't realistic, and how to tune the difficulty table.
 - `README.md`: one line under development pointing at that doc.
@@ -542,11 +542,11 @@ Then, with the dev server running (`npm run dev` at the root, server env
 as printed by the script):
 
 ```
-npm run testdata -- --stage live --progress 0.5 --seed 1
-npm run testdata -- --stage live --progress 0.5 --seed 1   # second run: a different slug, same numbers
-npm run testdata -- --stage draft --seed 2
-npm run testdata -- --stage complete --seed 3
-npm run testdata:teardown -- --all
+npm run generate-bingo -- --stage live --progress 0.5 --seed 1
+npm run generate-bingo -- --stage live --progress 0.5 --seed 1   # second run: a different slug, same numbers
+npm run generate-bingo -- --stage draft --seed 2
+npm run generate-bingo -- --stage complete --seed 3
+npm run generate-bingo:teardown -- --all
 ```
 
 Check by hand: open the live bingo as `--me` (dev login) and as a mod —
@@ -563,7 +563,7 @@ bingo is untouched.
   `signup`..`reveal` (it would put the draft in the future for `--stage draft`). As built,
   the moments are fixed offsets from `startsAt` (signups open -21d, captains -5d, draft -3d,
   reveal -2d, created -23d) and `startsAt` is chosen so `now` lands inside the target stage
-  (`server/scripts/testdata/timeline.ts`). A stage still ahead of the target just has
+  (`server/scripts/generate-bingo/timeline.ts`). A stage still ahead of the target just has
   scheduled future dates.
 - **A server bug found on the way:** PETS and SLAYER BOSSES share their items across two
   pages with Page 2 submit-gated behind Page 1, and the server refused every first claim

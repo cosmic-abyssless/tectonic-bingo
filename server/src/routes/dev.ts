@@ -1,5 +1,5 @@
 // Dev-only tooling for the test data generator. Mounted at /api/dev by index.ts only while dev mode is on
-// (devMode.ts), and every route needs a site admin. See docs/test-data-generator-plan.md.
+// (devMode.ts), and every route needs a site admin. See docs/generate-bingo-plan.md.
 import { Router } from "express";
 import { db } from "../db";
 import { UPLOADS_DIR } from "../config";

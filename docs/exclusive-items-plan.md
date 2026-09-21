@@ -123,7 +123,7 @@ later claims under a different key are ignored.
 - Export: `BingoExportDocument.bingo` (`shared/src/bingoExport.ts:104`),
   written at `server/src/services/bingoExportService.ts:134`, read at `:259`.
   `BINGO_EXPORT_FORMAT_VERSION = 1`; additive fields don't bump it.
-- The generator (`server/scripts/testdata/board.ts`) mirrors the server's
+- The generator (`server/scripts/generate-bingo/board.ts`) mirrors the server's
   submit rules in `claimable`; it must learn this rule too (Phase 6).
 - The E2E suite is deferred: don't run or fix it.
 
@@ -352,14 +352,14 @@ Commit: `Document exclusive items`.
 
 ## Phase 6 — the test data generator
 
-`server/scripts/testdata/board.ts` `buildBoard` takes the rules (from the
+`server/scripts/generate-bingo/board.ts` `buildBoard` takes the rules (from the
 shell's `bingo.exclusivityRules`, fetched in `generate.ts`) and places
 leaves; `simulate.ts` keeps, per team, the node ids of its non-rejected
 submissions and passes them as `existing` when scoring parts: a part whose
 next submission has a conflict is skipped for that team (it is "used
 elsewhere" for them). Add a test in `generator.test.ts` on a small board.
 Run a full `--stage complete` against a private server (see
-`docs/test-data-generator.md`) and check the summary lists no refused
+`docs/generate-bingo.md`) and check the summary lists no refused
 submissions.
 
 Commit: `Test data generator: respect exclusive items`.

@@ -1,5 +1,5 @@
 {
   "extends": "../tsconfig.json",
-  "compilerOptions": { "rootDir": "./testdata", "noEmit": true },
-  "include": ["./testdata/**/*.ts"]
+    "compilerOptions": { "rootDir": "./generate-bingo", "noEmit": true },
+    "include": ["./generate-bingo/**/*.ts"]
 }

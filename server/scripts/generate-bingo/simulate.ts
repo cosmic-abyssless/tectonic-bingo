@@ -4,7 +4,7 @@
 // have been written: an hourly "tick" in which every team's players put effort into parts and a submission is
 // posted whenever a part's next chunk of effort is done; mod review sessions that clear whatever is pending in
 // a batch (submissions pile up while the mods sleep); and the follow-ups of those (re-submissions after a
-// rejection, an undo, a point adjustment, a hand coming down). See docs/test-data-generator-plan.md, Phase 4.
+// rejection, an undo, a point adjustment, a hand coming down). See docs/generate-bingo-plan.md, Phase 4.
 import type { TeamProgressSummary } from "@bingo/shared";
 import { ApiError } from "./client";
 import { planSubmissions, type BoardInfo, type Claim, type PartModel } from "./board";

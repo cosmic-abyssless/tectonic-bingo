@@ -1,11 +1,11 @@
-# Test data generator
+# Generate bingo
 
 Creates a realistic, prod-like bingo on a **running dev server** so changes can be
 QA'd against something true to life instead of hand-inputting every action. It goes
 through the real HTTP endpoints (so audit rows and every side effect are real) with
 **spoofed timestamps**, so the actions are spread over days the way real play is.
-Requirements: `docs/test-data-generator-requirements.md`. Design:
-`docs/test-data-generator-plan.md`.
+Requirements: `docs/generate-bingo-requirements.md`. Design:
+`docs/generate-bingo-plan.md`.
 
 ## Quick start
 
@@ -25,12 +25,12 @@ Requirements: `docs/test-data-generator-requirements.md`. Design:
 3. Run it:
 
    ```
-   npm run testdata -- --stage live --progress 0.5 --me <your discordId>
+   npm run generate-bingo -- --stage live --progress 0.5 --me <your discordId>
    ```
 
    It prints what it does and ends with the bingo's URL (`/b/testdata-...`) and the
    teardown command. A full run takes about 20-30 seconds.
-4. When you're done: `npm run testdata:teardown -- --slug testdata-...` (or `--all`).
+4. When you're done: `npm run generate-bingo:teardown -- --slug testdata-...` (or `--all`).
    **Do tear down.** A full run leaves 1,500-2,500 uploaded files (screenshots and
    their resized variants) and ~90 users behind otherwise.
 
@@ -88,7 +88,7 @@ target (say `signup`), the later dates are simply scheduled in the future.
   only a subset of a team can do the hard content (TOB ISSUE 2 Page 2 needs a Scythe or
   hard mode drops: about 1 in 8 players can) while nearly everyone can do slayer bosses
   and the wildy tiles. The per-tile numbers are the `DIFFICULTY` table in
-  `server/scripts/testdata/board.ts`; a test fails if a tile is missing from it.
+  `server/scripts/generate-bingo/board.ts`; a test fails if a tile is missing from it.
 - Each team has a **target** for how much of the board it will have done by the end
   (50-95%, better teams a little higher), so most teams don't finish, and its own liking
   for each tile, so teams push different ones. Progress is paced along the schedule that
@@ -132,7 +132,7 @@ server on another port with its own DB and point the generator at it (this is ho
 was tested): create a migrated database the way `e2e/prepare-db.cjs` does (with an
 admin and a "me" user), then start the server with the env above plus `PORT=3055`,
 `DB_PATH=<file>` and `UPLOADS_DIR=<dir>`, and run
-`npm run testdata -- --base http://localhost:3055 --admin <admin discordId> ...`. To see
+`npm run generate-bingo -- --base http://localhost:3055 --admin <admin discordId> ...`. To see
 it in a browser, start Vite with `VITE_PORT=<free port> VITE_API_TARGET=http://localhost:3055`
 (as `playwright.config.ts` does).
 
