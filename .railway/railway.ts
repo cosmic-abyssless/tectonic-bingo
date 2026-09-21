@@ -3,10 +3,10 @@ import { defineRailway, github, preserve, project, service, volume } from "railw
 // Railway infrastructure for THIS repo's service only. The Railway project ("Tectonic") also runs other services from
 // other repositories (bot, API, Postgres, sync, website); they are deliberately not described here.
 //
-// `partial` is what keeps it that way: it names this file's slice of the project, so Railway leaves everything not
-// listed below alone. Without it (or with a different name) `railway config apply` treats this file as the WHOLE project
-// and would delete every other service. Never remove it, and always read `railway config plan` before applying.
-// See README.md in this folder.
+// `partial` is what keeps it that way: it names this file's slice of the project, so Railway leaves every service not
+// listed below alone. It must stay a non-empty string: with it missing, or set to `true`, `railway config apply` treats
+// this file as the WHOLE project and plans to delete every other service, Postgres included (seen in a plan). Always
+// read `railway config plan` before applying. See README.md in this folder.
 export const partial = "bingo-website";
 
 export default defineRailway(() => {
@@ -28,9 +28,11 @@ export default defineRailway(() => {
     networking: { privateNetworkEndpoint: "vigilant-gentleness" },
     // SQLite and uploads live on this volume, which is why there can only be one replica (see issue #75).
     volumeMounts: { "/data": BingoData },
-    // preserve() keeps whatever is already set in Railway, so those entries only document which variables the service
-    // uses; secrets are set in the Railway dashboard, never here. The two Sentry DSNs are the exception: a DSN is not a
-    // secret (it is compiled into the client for anyone to read), so they are set from code.
+    // preserve() keeps whatever is set in Railway (and does nothing for a variable that isn't set), so those entries only
+    // say which variables the service may use; secrets are set in the Railway dashboard, never here. A variable that IS
+    // set in Railway but NOT listed here is deleted by the next apply, so every variable anyone might set by hand must be
+    // listed. The two Sentry DSNs are the exception to "no values": a DSN is not a secret (it is compiled into the client
+    // for anyone to read), so they are set from code.
     env: {
       // Error monitoring (Sentry, org tectonic-l9). The server reads its own project's DSN when it starts; the client's is
       // baked into the browser bundle when Railway builds it, so it has to be set here before the build.
@@ -53,6 +55,14 @@ export default defineRailway(() => {
       UPLOADS_DIR: preserve(),
       USER_AGENT_CONTACT: preserve(),
       WOM_API_KEY: preserve(),
+      // Optional, set by hand when wanted (see .env.example): all preserve()d so an apply never removes them.
+      SENTRY_AUTH_TOKEN: preserve(),
+      SENTRY_ENVIRONMENT: preserve(),
+      SENTRY_TRACES_SAMPLE_RATE: preserve(),
+      OCR_CONCURRENCY: preserve(),
+      OCR_WARMUP: preserve(),
+      SCREENSHOT_OCR_DISABLED: preserve(),
+      LOG_LEVEL: preserve(),
     },
   });
 

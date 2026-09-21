@@ -30,14 +30,8 @@ jobs:
 
       - uses: actions/checkout@v7
         if: env.RAILWAY_TOKEN != ''
-      - uses: actions/setup-node@v7
-        if: env.RAILWAY_TOKEN != ''
-        with:
-          node-version: 22
-          cache: npm
-      # .railway/railway.ts imports the railway SDK, which lives in the repo's dependencies.
-      - run: npm ci
-        if: env.RAILWAY_TOKEN != ''
+      # The action installs Node 24, the Railway CLI, and runs `npm ci` itself (railway.ts imports the railway SDK
+      # from the repo's dependencies), so nothing else is needed before it.
       - uses: railwayapp/config@v1
         if: env.RAILWAY_TOKEN != ''
         with:

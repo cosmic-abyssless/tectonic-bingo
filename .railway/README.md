@@ -6,13 +6,18 @@ project (Mico's workspace), whose other services (bot, API, Postgres, sync, webs
 
 ## The rule that matters: keep `partial`
 
-`export const partial = "bingo-website"` scopes the file to its own slice of the project. Without it, `railway config
-apply` treats the file as the whole project and **plans to delete every other service, Postgres included**. That was
-seen in a plan while building this. So:
+`export const partial = "bingo-website"` scopes the file to its own slice of the project. Without it, or with
+`partial = true` instead of a name, `railway config apply` treats the file as the whole project and **plans to delete
+every other service, Postgres included**. Both were seen in plans while building this. So:
 
-- Never remove or rename `partial`.
+- `partial` must stay a non-empty string. (The name itself doesn't matter; the string form does.)
 - Always read the plan before applying. If it says anything is destroyed, stop.
 - Don't use `--confirm-destructive`.
+
+**Variables:** inside the service, a variable that is set in Railway but not listed in `railway.ts` is **deleted** by the
+next apply (a plan shows it as `Delete variable`). `preserve()` on a name keeps its value and is a no-op if it isn't
+set. So whenever a variable is added in the Railway dashboard, add `NAME: preserve()` here too, and read the plan for
+`Delete variable` lines before applying.
 
 ## Preview and apply
 
