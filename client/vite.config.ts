@@ -23,6 +23,9 @@ export default defineConfig({
     __BUILD_ID__: JSON.stringify(process.env.GITHUB_SHA ?? String(Date.now())),
     // Railway sets the commit being built; it is what Sentry calls the release (the server reports the same value).
     __SENTRY_RELEASE__: JSON.stringify(process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA ?? ""),
+    // Railway also names the environment being built ("production", "development"); Vite's own mode is "production" for
+    // every built bundle, so it can't tell the two apart.
+    __SENTRY_ENVIRONMENT__: JSON.stringify(process.env.RAILWAY_ENVIRONMENT_NAME ?? ""),
   },
   plugins: [
     react(),
