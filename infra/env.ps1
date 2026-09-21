@@ -1,6 +1,9 @@
 # Sets the credentials a `tofu` run needs, for THIS PowerShell window only. Dot-source it (note the leading dot):
 #
+#     Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass     # once per window: Windows blocks scripts by default
 #     . .\infra\env.ps1
+#
+# (`-Scope Process` lasts only until the window is closed; nothing about the machine's settings changes.)
 #
 # It asks for each value with hidden input, so nothing is echoed, saved in history, or written to a file. Get the values from
 # the team's password manager; infra/README.md says where each one is created. Close the window afterwards.
