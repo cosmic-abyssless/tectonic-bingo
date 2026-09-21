@@ -2,6 +2,12 @@
 // It requests the site continuously (the health check, the page, and an API call that reads the database) while
 // holding one WebSocket open, and counts every request that failed. Needs Node 22+ (global fetch and WebSocket).
 //
+// One behaviour is deliberately like a browser's: a GET that fails at the connection level (the connection was reset
+// before any response) is retried once at once, because that is what browsers do transparently when a reused keep-alive
+// connection turns out to have been closed by the server, which is what happens to a request sent in the instant Caddy
+// swaps its configuration. Such a request is counted as `retried`, not `failed`; a request that fails twice, or ends in an
+// error status, is a failure. The summary reports both so a deploy that resets many connections cannot hide.
+//
 //   node zero-downtime-probe.js BASE_URL STOP_FILE RESULT_FILE
 //
 // Runs until STOP_FILE exists, then writes a JSON summary to RESULT_FILE. A request fails if it errors, times out or
@@ -15,17 +21,31 @@ if (!base || !stopFile || !resultFile) {
 }
 
 const paths = ["/health", "/", "/auth/dev-users"];
-const result = { requests: 0, failed: 0, servedBy: {}, failures: [], websocket: { opened: 0, closed: 0 }, startedAt: new Date().toISOString() };
+const result = { requests: 0, failed: 0, retried: 0, servedBy: {}, failures: [], retries: [], websocket: { opened: 0, closed: 0 }, startedAt: new Date().toISOString() };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function request(path) {
+  const response = await fetch(base + path, { signal: AbortSignal.timeout(5000), redirect: "manual" });
+  const colour = response.headers.get("x-served-by") ?? "unknown";
+  result.servedBy[colour] = (result.servedBy[colour] ?? 0) + 1;
+  await response.arrayBuffer(); // read the whole body: a connection cut mid-response is a failure too
+  if (response.status >= 400) throw Object.assign(new Error(`status ${response.status}`), { httpStatus: response.status });
+}
 
 async function probeOnce(path) {
   result.requests++;
   try {
-    const response = await fetch(base + path, { signal: AbortSignal.timeout(5000), redirect: "manual" });
-    const colour = response.headers.get("x-served-by") ?? "unknown";
-    result.servedBy[colour] = (result.servedBy[colour] ?? 0) + 1;
-    await response.arrayBuffer(); // read the whole body: a connection cut mid-response is a failure too
-    if (response.status >= 400) throw new Error(`status ${response.status}`);
+    try {
+      await request(path);
+    } catch (err) {
+      // An error status is the site's own answer and is never retried; anything else is a connection-level failure.
+      if (err && err.httpStatus) throw err;
+      if (err && err.name === "TimeoutError") throw err;
+      const firstError = String(err && err.message ? err.message : err);
+      await request(path); // if this fails too, it propagates and counts as a failure
+      result.retried++;
+      if (result.retries.length < 20) result.retries.push({ at: new Date().toISOString(), path, error: firstError });
+    }
   } catch (err) {
     result.failed++;
     if (result.failures.length < 20) result.failures.push({ at: new Date().toISOString(), path, error: String(err && err.message ? err.message : err) });

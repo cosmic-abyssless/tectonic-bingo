@@ -100,12 +100,17 @@ services:
   backup:
     profiles: ["backup"]
     image: rclone/rclone:1.75.1
+    # A shell script as PID 1 ignores SIGTERM: without an init process a stop would wait out the grace period and then kill
+    # it, possibly in the middle of a copy.
+    init: true
     restart: unless-stopped
     entrypoint: ["sh", "/deploy/backup-loop.sh"]
     env_file:
       - ${TB_BACKUP_ENV_FILE:-/dev/null}
     volumes:
       - ${TB_DATA_DIR}/uploads:/data/uploads:ro
+      # Only to look at: the nightly run checks that the database is still being replicated (deploy/backup-uploads.sh).
+      - ${TB_DATA_DIR}/sqlite:/data/sqlite:ro
       - ./:/deploy:ro
     stop_grace_period: 30s
 

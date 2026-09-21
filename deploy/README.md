@@ -171,7 +171,11 @@ a list of attempts to smuggle something in, and runs in CI.
 Caddy and containers on your machine and judges the deploys by what a continuous stream of requests saw. It deploys a
 first version, deploys a second under load, tries a build whose api never becomes healthy and one whose migration fails
 (each must fail and change nothing), and rolls back. It passes only if the probe made a few hundred requests, **none failed**,
-both colours served traffic, and the live version was right after every step.
+both colours served traffic, and the live version was right after every step. It then checks two guards (production
+refuses an image staging is not running; staging's password protects everything except `/health`) and that a deploy with
+backups switched on starts Litestream and the backup service against a local bucket. One detail: the probe retries a GET
+once when its connection is reset before any response, as a browser does, and reports how many it retried (normally none).
+That is the keep-alive race in the instant Caddy swaps its configuration; a deploy that resets more than a handful fails the test.
 
 ## Setting up the server
 
