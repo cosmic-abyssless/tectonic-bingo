@@ -30,6 +30,17 @@ variable "github_repository" {
   default     = "tectonic-bingo"
 }
 
+variable "repository_ref" {
+  description = "The branch or tag the server's first boot clones to run deploy/bootstrap-box.sh. `main` normally; set it to a branch only while that branch holds bootstrap changes main does not have yet (the first rebuild drill). Afterwards every deploy takes its scripts from main regardless (deploy/ssh-entry.sh)."
+  type        = string
+  default     = "main"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._/-]{1,100}$", var.repository_ref))
+    error_message = "Use a plain branch or tag name."
+  }
+}
+
 variable "server_name" {
   description = "The server's name in Hetzner and its hostname."
   type        = string

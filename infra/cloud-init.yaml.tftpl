@@ -50,7 +50,7 @@ runcmd:
   - chmod 700 /root/.ssh
   - apt-get update -qq
   - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git
-  - git clone --quiet --branch main ${repo_ssh_url} /root/tectonic-bingo
+  - git clone --quiet --branch ${repository_ref} ${repo_ssh_url} /root/tectonic-bingo
   - >
     bash /root/tectonic-bingo/deploy/bootstrap-box.sh
     --ci-public-key /root/deploy_key.pub

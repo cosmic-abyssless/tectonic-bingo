@@ -90,6 +90,7 @@ resource "hcloud_server" "box" {
     ci_public_key    = local.ci_public_key
     admin_keys       = join("\n", var.admin_public_keys)
     repo_ssh_url     = local.repo_ssh_url
+    repository_ref   = var.repository_ref
     ssh_port         = var.ssh_port
     hostname         = var.server_name
   })

@@ -9,4 +9,7 @@ admin_public_keys = [
   "ssh-ed25519 AAAA... tectonic-box-admin",
 ]
 
+# Only while a branch holds bootstrap changes main lacks (the first rebuild drill); otherwise leave it out (default: main).
+# repository_ref = "infra/opentofu"
+
 # The defaults (cpx31 in Ashburn, Ubuntu 24.04, bucket tectonic-backups) are in variables.tf; override here if needed.
