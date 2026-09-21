@@ -3,13 +3,13 @@
 // must stay safe to run against a live database: see docs/zero-downtime-deploy-plan.md on additive migrations.
 import "./env";
 import path from "path";
-import { db, sqlite } from "./db";
+import { DB_PATH, db, sqlite } from "./db";
 import { runMigrations } from "./db/migrate";
 import { log } from "./log";
 
 try {
   runMigrations(db, path.resolve(__dirname, "../drizzle"));
-  log.info("migrations applied", { db: process.env.DB_PATH ?? "data/bingo.db" });
+  log.info("migrations applied", { db: DB_PATH });
 } catch (err) {
   log.error("migration failed", { err });
   process.exitCode = 1;

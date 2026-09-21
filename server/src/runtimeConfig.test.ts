@@ -2,14 +2,18 @@ import { describe, expect, it } from "vitest";
 import { injectRuntimeConfig, readRuntimeConfig } from "./runtimeConfig";
 
 describe("readRuntimeConfig", () => {
-  it("prefers the explicit variables and falls back to Railway's, then NODE_ENV", () => {
+  it("prefers the explicit variables and falls back to Railway's", () => {
     expect(readRuntimeConfig({ CLIENT_SENTRY_DSN: "https://a@x/1", VITE_SENTRY_DSN: "https://b@x/2", SENTRY_ENVIRONMENT: "staging", RAILWAY_ENVIRONMENT_NAME: "production", SENTRY_RELEASE: "abc", RAILWAY_GIT_COMMIT_SHA: "def" })).toEqual({
       sentryDsn: "https://a@x/1",
       environment: "staging",
       release: "abc",
     });
     expect(readRuntimeConfig({ VITE_SENTRY_DSN: "https://b@x/2", RAILWAY_ENVIRONMENT_NAME: "development", RAILWAY_GIT_COMMIT_SHA: "def" })).toEqual({ sentryDsn: "https://b@x/2", environment: "development", release: "def" });
-    expect(readRuntimeConfig({ NODE_ENV: "production" })).toEqual({ sentryDsn: undefined, environment: "production", release: undefined });
+  });
+
+  it("never takes the environment from NODE_ENV, which the image sets to production everywhere", () => {
+    // Left undefined, the browser falls back to its own build-time environment instead of reporting a false "production".
+    expect(readRuntimeConfig({ NODE_ENV: "production" })).toEqual({ sentryDsn: undefined, environment: undefined, release: undefined });
   });
 
   it("treats blank values as unset", () => {

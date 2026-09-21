@@ -60,7 +60,10 @@ USER node
 ENV PORT=8080 DB_PATH=/data/sqlite/bingo.db UPLOADS_DIR=/data/uploads
 EXPOSE 8080
 
+# The release is a property of the build, not of where it runs: the server reports it as its Sentry release and injects
+# it into the page, matching the release the client's source maps were uploaded under.
 ARG SENTRY_RELEASE=""
+ENV SENTRY_RELEASE=${SENTRY_RELEASE}
 LABEL org.opencontainers.image.revision=${SENTRY_RELEASE}
 
 # `init: true` in Compose reaps zombies and forwards signals; the entrypoint then execs node, so node is what receives

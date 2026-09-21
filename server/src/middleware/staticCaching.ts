@@ -17,13 +17,14 @@ export const uploadsStaticOptions: StaticOptions = {
 
 export const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 
-// index.html names the current hashed bundles, so it must always revalidate.
+// index.html names the current hashed bundles, so it must always revalidate (mountClientApp sets this on the page).
 export const INDEX_HTML_CACHE_CONTROL = "no-cache";
 
 /**
  * Static options for the built client. Vite content-hashes everything under
- * `/assets/`, so those are immutable; `index.html` revalidates; anything else
- * (favicon, etc.) keeps express.static's default.
+ * `/assets/`, so those are immutable; anything else (favicon, etc.) keeps
+ * express.static's default. The page itself (`index.html`, which names the current
+ * hashed bundles and so must always revalidate) is served by mountClientApp.
  */
 export function clientDistStaticOptions(distDir: string): StaticOptions {
   const assetsDir = path.join(distDir, "assets") + path.sep;
@@ -32,7 +33,6 @@ export function clientDistStaticOptions(distDir: string): StaticOptions {
     index: false,
     setHeaders(res, filePath) {
       if (filePath.startsWith(assetsDir)) res.setHeader("Cache-Control", IMMUTABLE_CACHE_CONTROL);
-      else if (path.basename(filePath) === "index.html") res.setHeader("Cache-Control", INDEX_HTML_CACHE_CONTROL);
     },
   };
 }

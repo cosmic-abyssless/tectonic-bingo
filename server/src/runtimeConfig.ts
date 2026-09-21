@@ -16,7 +16,9 @@ export function readRuntimeConfig(env: Record<string, string | undefined> = proc
   return {
     // VITE_SENTRY_DSN is what Railway already has set; it is a runtime variable there too.
     sentryDsn: pick(env.CLIENT_SENTRY_DSN, env.VITE_SENTRY_DSN),
-    environment: pick(env.SENTRY_ENVIRONMENT, env.RAILWAY_ENVIRONMENT_NAME, env.NODE_ENV),
+    // Deliberately not NODE_ENV: the image sets that to "production" everywhere, so it would label a container that was
+    // never told its environment as production. Left undefined, the client falls back to its own build-time values.
+    environment: pick(env.SENTRY_ENVIRONMENT, env.RAILWAY_ENVIRONMENT_NAME),
     release: pick(env.SENTRY_RELEASE, env.RAILWAY_GIT_COMMIT_SHA),
   };
 }

@@ -20,7 +20,9 @@ export default defineConfig({
   // A new build id discards every persisted board (api/boardCache.ts), so a
   // changed response shape can never be hydrated into new code.
   define: {
-    __BUILD_ID__: JSON.stringify(process.env.GITHUB_SHA ?? String(Date.now())),
+    // The same commit chain as the Sentry release below: a Docker build has SENTRY_RELEASE but never GITHUB_SHA, and two
+    // builds of one commit must share an id or every swap would discard the boards people have cached.
+    __BUILD_ID__: JSON.stringify(process.env.SENTRY_RELEASE ?? process.env.GITHUB_SHA ?? String(Date.now())),
     // Railway sets the commit being built; it is what Sentry calls the release (the server reports the same value).
     __SENTRY_RELEASE__: JSON.stringify(process.env.SENTRY_RELEASE ?? process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA ?? ""),
     // Railway also names the environment being built ("production", "development"); Vite's own mode is "production" for

@@ -36,7 +36,12 @@ cp .env.docker.example .env.docker      # once; the defaults work for a local ru
 docker compose up --build               # then open http://localhost:8080
 ```
 
-- The database and uploads live in `.docker-data/` (created on first run, ignored by git). To try the stack against
+- This Compose file is the **local stack only** (plain HTTP on port 8080, no certificate). Production and staging use the
+  same image but their own definitions (with ports 80 and 443, the backup services and blue/green switching), which
+  arrive in a later phase.
+- The database and uploads live in `.docker-data/` (created on first run, ignored by git). A one-shot `init-data`
+  container makes them writable by the app's user, which matters on Linux (the daemon creates missing bind-mount
+  directories as root); on Docker Desktop it changes nothing. To try the stack against
   realistic data, put a copy of a database at `.docker-data/sqlite/bingo.db` (use SQLite's `.backup`, not a file copy,
   if the source is being written to) and uploads in `.docker-data/uploads/`.
 - With `NODE_ENV=development` and `DEV_LOGIN_ENABLED=true` (the example's defaults) the login page lists accounts to
@@ -44,6 +49,13 @@ docker compose up --build               # then open http://localhost:8080
 - Caddy is the front door (`Caddyfile`), the same one production uses. Locally it serves plain HTTP; in production
   `SITE_ADDRESS` is the domain and Caddy handles the certificate.
 - Stop with `docker compose down`; add `-v` to also forget Caddy's certificates. The data directory is never removed.
+
+## Windows checkouts
+
+`.gitattributes` keeps shell scripts and container files as LF so they run inside Linux containers. A checkout that
+existed before that file landed keeps CRLF copies until it is normalised, and a CRLF `docker-entrypoint.sh` or
+`smoke-test.sh` fails with `no such file or directory` or `$'\r': command not found`. Fix an existing clone once with
+`git add --renormalize . && git checkout -- .` (commit or stash your work first); a fresh clone is fine.
 
 ## Migrations and zero-downtime deploys
 

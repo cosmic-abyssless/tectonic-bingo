@@ -27,7 +27,7 @@ import { errorHandler } from "./middleware/errorHandler";
 import { requireGuildMember } from "./middleware/requireGuildMember";
 import { auditContext } from "./audit/middleware";
 import { closeWebSocketServer, initWebSocketServer } from "./ws";
-import { sqlite } from "./db";
+import { DB_PATH, sqlite } from "./db";
 import { UPLOADS_DIR, WIKI_ICONS_DIR, getAdminDiscordIds } from "./config";
 import { warmOcr } from "./ocr";
 import { shouldWarmOcr } from "./ocrConfig";
@@ -200,7 +200,7 @@ server.listen(PORT, () => {
     nodeEnv: process.env.NODE_ENV ?? "<unset>",
     tectonic: Boolean(getTectonicConfig()),
     ocr: process.env.SCREENSHOT_OCR_DISABLED !== "true",
-    dbDir: path.dirname(dbPath),
+    dbDir: path.dirname(DB_PATH),
     devMode: isDevModeActive(),
   });
   // After the server is up and taking requests, so a slow model download never delays a deploy going healthy.
