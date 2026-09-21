@@ -28,9 +28,14 @@ export default defineRailway(() => {
     networking: { privateNetworkEndpoint: "vigilant-gentleness" },
     // SQLite and uploads live on this volume, which is why there can only be one replica (see issue #75).
     volumeMounts: { "/data": BingoData },
-    // Values are never written here: preserve() keeps whatever is already set in Railway, so this only documents which
-    // variables the service uses. Secrets are set in the Railway dashboard.
+    // preserve() keeps whatever is already set in Railway, so those entries only document which variables the service
+    // uses; secrets are set in the Railway dashboard, never here. The two Sentry DSNs are the exception: a DSN is not a
+    // secret (it is compiled into the client for anyone to read), so they are set from code.
     env: {
+      // Error monitoring (Sentry, org tectonic-l9). The server reads its own project's DSN when it starts; the client's is
+      // baked into the browser bundle when Railway builds it, so it has to be set here before the build.
+      SENTRY_DSN: "https://3b7db6f6e1855ee5751af4ef3b5bf8f1@o4512121532973056.ingest.us.sentry.io/4512121567379456",
+      VITE_SENTRY_DSN: "https://f6af116b972e4041efc5e85e720306e6@o4512121532973056.ingest.us.sentry.io/4512121567510528",
       ADMIN_DISCORD_IDS: preserve(),
       CLIENT_URL: preserve(),
       DB_PATH: preserve(),

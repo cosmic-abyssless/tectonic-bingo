@@ -59,5 +59,9 @@ secret exists (below). It only plans; applying is done by hand.
 
 ## Not managed here
 
-Variable values (secrets stay in Railway; `preserve()` only lists the names), the `development` environment, and every
+Secret variable values (they stay in Railway; `preserve()` only lists the names), the `development` environment, and every
 other service in the project.
+
+The one thing set from code is the two Sentry DSNs (`SENTRY_DSN` for the server, `VITE_SENTRY_DSN` for the client), because a DSN is not
+a secret. `SENTRY_AUTH_TOKEN` is a secret: set it by hand in Railway so the client build can upload source maps (see the Sentry
+notes in `.env.example`).
