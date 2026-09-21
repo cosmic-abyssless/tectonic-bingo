@@ -1,6 +1,6 @@
 # Infrastructure as code with OpenTofu: the plan
 
-**Status: decided, implementation in progress** (branch `infra/opentofu`). Written 2026-09-21, the day the first server was built by hand.
+**Status: done and proven. The rebuild drill passed on 2026-09-21 (results at the end). Merge `infra/opentofu`, then delete the leftovers listed there.** Written 2026-09-21, the day the first server was built by hand.
 
 ## Why
 
@@ -50,7 +50,6 @@ infra/
   keys.tf              the three generated key pairs
   github.tf            deploy key, Actions secrets
   r2.tf                bucket, token, derived S3 credentials
-  dns.tf               the records, behind `var.manage_dns` (off until Mico's token exists)
   outputs.tf           the address, the backup env contents (sensitive), the host key fingerprint
   cloud-init.yaml.tftpl  first-boot script template
   push-backup-env.sh   writes the *.backup.env files onto the box from `tofu output`
@@ -156,3 +155,92 @@ Do this before production data exists on the box: after cutover, a rebuild also 
 - Never commit a token, a `.tfvars` with secrets, or state. `.gitignore` gets `infra/.terraform/`, `*.tfstate*`,
   `*.tfvars`.
 - The rebuild drill (phase 5) is the acceptance test, the same way the restore drill was for backups.
+
+## Handoff checklist (state on 2026-09-21, end of the first session)
+
+Done, on branch `infra/opentofu` (draft PR):
+
+- [x] `infra/` module written: `versions.tf`, `backend.tf` + `backend.hcl`, `variables.tf`, `keys.tf`, `hetzner.tf`,
+      `github.tf`, `r2.tf`, `outputs.tf`, `cloud-init.yaml.tftpl`, `terraform.tfvars.example`, `push-backup-env.sh`.
+- [x] `tofu init -backend=false` and `tofu validate` pass (OpenTofu 1.12.6; providers pinned in `.terraform.lock.hcl`:
+      hcloud 1.69, cloudflare 5.25, github 6.13, tls 4.4). Nothing has been applied against any account.
+- [x] `.gitignore` covers `infra/.terraform/`, state, `*.tfvars`, plans.
+
+Not done, in order. Each is small; the last is the acceptance test.
+
+- [x] **`deploy/bootstrap-box.sh --repo-key FILE`**: install the given private key as `/home/deploy/.ssh/repo_deploy_key`
+      (derive the `.pub` with `ssh-keygen -y`) instead of generating one. cloud-init passes it (see the template). Keep the
+      generate-if-absent behaviour for the by-hand path. Test in the Ubuntu container the way the script's other steps were
+      (see the git log for `bootstrap-box.sh`).
+- [x] **`deploy/init-env.sh`** (new, idempotent, run as `deploy`): copy the four templates into `/srv/tectonic/env/` with
+      mode 640 (skip any that exist), set `BACKUP_PREFIX` per file, generate `SESSION_SECRET` with `openssl rand -hex 32`
+      where blank, and create `staging.basic-auth` (`team` + `caddy hash-password`) with a generated password printed once.
+      This is what was run ad hoc on the first server; see the runbook section "Setting up the server" for the values.
+- [x] **`deploy/fill-secrets.sh`** (new): the interactive helper that exists on the first server as `~/fill-secrets.sh`
+      (copy it from there: `ssh deploy@5.161.101.213 cat fill-secrets.sh`). Add an optional `BACKUP_PING_URL` question.
+- [x] **Docs**: `infra/README.md` (tokens and where they come from, the state bucket made by hand, `tofu init
+      -backend-config=backend.hcl`, the passphrase as `TF_VAR_state_passphrase`, everyday commands, the rebuild drill below);
+      `deploy/README.md` "Setting up the server" becomes "with OpenTofu" (the short path) with the by-hand steps kept
+      underneath. `push-backup-env.sh` needs `jq`; say so.
+- [x] **CI**: a job in `.github/workflows/ci.yml` using `opentofu/setup-opentofu`, running `tofu fmt -check -recursive`
+      and `tofu init -backend=false && tofu validate` in `infra/`.
+- [x] **Phase 0 with the owner** (they run every `tofu` command themselves, in their own shell, with the tokens set from the
+      password manager; tokens never pass through chat): Hetzner API token; a Cloudflare *user* token with "Workers R2
+      Storage: Edit" and "API Tokens: Edit"; a GitHub fine-grained token for the repository with Administration and Secrets
+      read & write; the state bucket `tectonic-tofu-state` made by hand with its own bucket-scoped token
+      (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`); a passphrase. `terraform.tfvars` from the example with their
+      `~/.ssh/tectonic_box.pub`. Then `tofu init "-backend-config=backend.hcl"`.
+- [x] **Adopt what exists** rather than duplicating it: `tofu import cloudflare_r2_bucket.backups
+      <account_id>/tectonic-backups` (the bucket already holds staging's replica); `tofu import hcloud_primary_ip.box <id>`
+      for the current address `5.161.101.213` (find the id with the Hetzner API: `GET /v1/primary_ips`; it is the auto-created
+      primary IP of the hand-built server). The old by-hand deploy key on GitHub and the old R2 token can be deleted by hand
+      after the new ones work.
+- [x] **The rebuild drill** (phase 5): `tofu apply -target=hcloud_primary_ip.box` first (so `auto_delete=false` is set,
+      or deleting the old server deletes the address with it), then delete the hand-built server in the Hetzner console,
+      then `tofu apply`. Watch `/var/log/cloud-init-output.log` on the new box (as root, with the admin key); the staging
+      password is printed there once and must go to the password manager. Run `infra/push-backup-env.sh`, then
+      `deploy/fill-secrets.sh` over SSH (staging needs only the Discord values; production everything), then the Deploy
+      workflow for staging. Expected: HTTPS works on the same address with no DNS change, `/` asks for the password,
+      backups replicate. On the owner's PC: `ssh-keygen -R 5.161.101.213` first, because the host key changes.
+- [x] Two things the by-hand server has that the rebuilt one must too, worth checking after the drill: Docker log rotation
+      (`/etc/docker/daemon.json`) and `ufw status` (both from bootstrap).
+
+Known limits, decided: DNS stays with Mico (the `dns_records_to_ask_for` output lists the records); Discord redirect
+URIs stay manual; the app's secrets never enter tofu.
+
+Session 2 (same day) completed the first five boxes: `--repo-key` (tested in an Ubuntu container: refuses a public key or a
+missing file, installs the supplied key with the right owner and mode, derives the matching public half, idempotent, and the
+generate-if-absent path still works); `deploy/init-env.sh` and `deploy/fill-secrets.sh` (tested in containers, the latter
+through a pseudo-terminal: awkward characters in secrets survive, Discord values reach both files, staging's clan keys stay
+blank, modes 640, a second run changes nothing); `infra/README.md` and `infra/env.ps1`; the runbook rewrite; and a CI job
+(`tofu fmt -check`, `tofu init -backend=false`, `tofu validate`, shellcheck on `infra/*.sh`). The cloud-init template was
+rendered with realistic multi-line keys and the result parsed as YAML. Nothing has been applied to any account yet.
+
+## Rebuild drill results (2026-09-21)
+
+The hand-built staging server was deleted and tofu built its replacement on the same address. Timeline: the server was created 18
+seconds after `tofu apply` started and finished its first boot about three minutes later; staging was serving HTTPS with the
+password prompt shortly after the first Deploy run, which took two minutes. Nothing about the machine was configured by hand.
+
+Verified: the box was reached with `StrictHostKeyChecking=yes` against the host key tofu generated (fingerprint matched before the
+server existed); every bootstrap step completed; Docker log rotation, ufw (22/80/443), SSH keys-only and the restricted CI key were in
+place; the box's own repository key worked and root's copy was removed; the four `DEPLOY_*` secrets tofu overwrote were the ones the
+Deploy workflow then used successfully; the R2 credentials tofu derived (access key id = the token's id, secret = SHA-256 of its value)
+passed write, read and delete for both prefixes; Caddy obtained a certificate; Litestream took a clean snapshot into the emptied
+`staging/` prefix and the backup service reported `database replication: current`.
+
+What the first real run found (all fixed on the branch): the Cloudflare token policy's `resources` is a JSON string, not an object;
+Hetzner stores the SSH key without its comment, which made every plan want to replace it; first boot cloned `main`, which lacked the
+new bootstrap options (now the `repository_ref` variable); Windows PowerShell splits `-backend-config=backend.hcl` at the dot (quote
+it), blocks scripts by default (`Set-ExecutionPolicy -Scope Process`), and both it and .NET prepend a byte-order mark to a process's
+stdin, which broke the first version of the push script twice (now stripped on the receiving side, and a silent failure is an error);
+the hand-built firewall had never been attached to the server, so the old box was protected by ufw alone.
+
+## Leftovers to delete by hand (after merging)
+
+- The old hand-added deploy key on GitHub (Settings > Deploy keys, titled like "tectonic box (read-only)"): the one titled "managed by
+  infra/" is the live one.
+- The old R2 API token for the backup bucket (Cloudflare > R2 > Manage API tokens): tofu made a new bucket-scoped one.
+- `~\tectonic-ci\deploy_key` and `.pub` on the owner's PC: the CI key now lives only in tofu state and the GitHub secret.
+- The temporary `terraform.tfvars` line `repository_ref = "infra/opentofu"` (harmless: it only affects first boot, and `user_data`
+  is ignored after creation), once the branch is merged and the default `main` has the bootstrap changes.

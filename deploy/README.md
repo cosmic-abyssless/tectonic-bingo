@@ -201,9 +201,32 @@ HTTPS they use HTTP/2, which has no such race; a deploy that resets more than te
 
 ## Setting up the server
 
+There are two ways, and they end in the same place. **With OpenTofu** (below) the machine, its keys, the GitHub secrets and the
+R2 bucket are created by code (`infra/`), so a rebuild is one command and the only manual steps are the ones a person must do.
+**By hand** (the numbered list after it) is what the first server was built with, and remains the fallback if OpenTofu is not
+available. Everything is written down so that a second person can rebuild the box, and so can you in a year.
+
+### With OpenTofu
+
+The credentials, the state bucket and the commands are in [`infra/README.md`](../infra/README.md). In outline:
+
+1. `. .\infra\env.ps1`, then `tofu init "-backend-config=backend.hcl"` and `tofu apply` (from `infra/`). This creates the server on
+   a stable address, the firewall, the CI, repository and host keys, the deploy key and the four `DEPLOY_*` secrets on GitHub,
+   and the R2 bucket with its token. First boot runs `deploy/bootstrap-box.sh`, `deploy/init-env.sh` and `deploy/deploy.sh edge`
+   by itself (progress: `/var/log/cloud-init-output.log`, which also holds the **staging password, printed once**: move it to the
+   password manager and clear that line).
+2. `infra/push-backup-env.ps1` (Windows PowerShell; `infra/push-backup-env.sh` elsewhere) writes the two backup env files (the R2 credentials tofu derived) onto the box and checks it
+   can write to the bucket.
+3. `ssh deploy@<address>`, then `deploy/fill-secrets.sh`: asks for the Discord values (once, for both environments), the
+   production clan-API keys and an optional backup alert URL, hiding what you type. `--list` shows what is still blank.
+4. DNS (Mico, by hand): `tofu output dns_records_to_ask_for` lists the records, all **DNS only** (grey cloud).
+5. Discord: add the two redirect URIs and change the `/terms` and `/privacy` URLs (step 8 below); optional monitoring (step 10).
+6. **Actions > Deploy > Run workflow** for staging, check it, then production. Steps 9 and 10 below apply as written.
+
+### By hand
+
 Once, when the server is created (about an hour, most of it waiting). `deploy/bootstrap-box.sh` does the machine-level
-steps; the rest is secrets and DNS, which only a person can do. Everything here is written down so that a second
-person can rebuild the box, and so can you in a year.
+steps; the rest is secrets and DNS, which only a person can do.
 
 1. **Create the server** in the Hetzner Cloud console: **CPX31** (4 vCPU, 8 GB), location **Ashburn (US)**, image
    **Ubuntu 24.04**, add your SSH key. Hetzner's own **Backups** (a daily snapshot of the whole machine, about 20% of the price) are optional and can
@@ -227,7 +250,10 @@ person can rebuild the box, and so can you in a year.
    **add it under the repository's Settings > Deploy keys, with "Allow write access" left OFF.** Until you do, `sync-deploy`
    (and so every deploy from CI) cannot fetch the scripts.
 4. **Put the secrets on the server**, as the deploy user, in `/srv/tectonic/env/` (mode 640, never in git; master copies
-   in the team's password manager):
+   in the team's password manager). Two scripts do the typing: `deploy/init-env.sh` creates the files from the templates,
+   generates the two different session secrets and the staging password (printed once: save it), and never overwrites a file;
+   `deploy/fill-secrets.sh` then asks for the values only you have, hidden as you type. What they produce, if you would
+   rather do it by hand:
    - `production.env`, `staging.env`: from `deploy/env/*.env.example`. Use different `SESSION_SECRET`s.
    - `production.backup.env`, `staging.backup.env`: from `deploy/backup.env.example`, with **different `BACKUP_PREFIX`es**
      (`production`, `staging`). The R2 bucket and token are set up as described under "Backups and restoring".
