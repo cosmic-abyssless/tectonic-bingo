@@ -1,0 +1,72 @@
+# The site as containers: the app behind Caddy. THIS FILE IS THE LOCAL STACK ONLY (`docker compose up --build`, then
+# http://localhost:8080): plain HTTP on one port, no certificate, data under ./.docker-data. The production and staging
+# stacks run the same image but are defined separately (see deploy/), because they need HTTPS (ports 80 and 443 for
+# Caddy), the backup services and blue/green switching.
+#
+# Everything that varies is a variable, with a local default:
+#   DATA_DIR      where the database and uploads live on the host       ./.docker-data
+#   SITE_ADDRESS  the address Caddy serves                              http://localhost
+#   HTTP_PORT     host port for plain HTTP (local only)                 8080
+#   IMAGE_TAG     which build of the image to run                       local
+#   ENV_FILE      file of app settings and secrets (see .env.docker.example)
+#
+# Sentry's environment and release are not set here: the environment comes from the env file (SENTRY_ENVIRONMENT, a
+# service's `environment:` would override it) and the release is baked into the image at build time.
+
+services:
+  # Hands the data directories to the user the app runs as. On Linux the Docker daemon creates a missing bind-mount
+  # directory owned by root, which the app (uid 1000) then can't write to: it would restart-loop on "unable to open
+  # database file". Docker Desktop doesn't care, so this only changes anything on Linux. Idempotent and quick.
+  init-data:
+    image: tectonic-bingo:${IMAGE_TAG:-local}
+    pull_policy: never
+    user: root
+    command: ["sh", "-c", "find /data ! -user node -exec chown node:node {} + || echo 'could not change ownership (harmless on Docker Desktop)'"]
+    volumes:
+      - ${DATA_DIR:-./.docker-data}/sqlite:/data/sqlite
+      - ${DATA_DIR:-./.docker-data}/uploads:/data/uploads
+
+  api:
+    build:
+      context: .
+      args:
+        SENTRY_RELEASE: ${SENTRY_RELEASE:-local}
+    image: tectonic-bingo:${IMAGE_TAG:-local}
+    init: true
+    restart: unless-stopped
+    env_file:
+      - path: ${ENV_FILE:-.env.docker}
+        required: false
+    volumes:
+      - ${DATA_DIR:-./.docker-data}/sqlite:/data/sqlite
+      - ${DATA_DIR:-./.docker-data}/uploads:/data/uploads
+    command: ["api"]
+    depends_on:
+      init-data:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 15s
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-http://localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -7,7 +7,8 @@ import type { AddressInfo } from "net";
 import type { Server } from "http";
 import sharp from "sharp";
 import { serveImageVariants } from "./imageVariants";
-import { INDEX_HTML_CACHE_CONTROL, clientDistStaticOptions, uploadsStaticOptions } from "./staticCaching";
+import { mountClientApp } from "./clientApp";
+import { uploadsStaticOptions } from "./staticCaching";
 
 sharp.cache(false);
 
@@ -29,10 +30,8 @@ beforeAll(async () => {
 
   const app = express();
   app.use("/uploads", serveImageVariants(uploads), express.static(uploads, uploadsStaticOptions));
-  app.use(express.static(dist, clientDistStaticOptions(dist)));
-  app.get(/^\/(?!uploads).*/, (_req, res) => {
-    res.sendFile(path.join(dist, "index.html"), { headers: { "Cache-Control": INDEX_HTML_CACHE_CONTROL } });
-  });
+  // The real wiring (static assets, the page with its runtime config, the SPA fallback), not a copy of it.
+  mountClientApp(app, dist, {});
   await new Promise<void>((resolve) => {
     server = app.listen(0, () => resolve());
   });
