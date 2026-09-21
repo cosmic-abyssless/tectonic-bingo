@@ -37,10 +37,19 @@ fail() { echo "ZERO-DOWNTIME TEST FAILED: $*" >&2; exit 1; }
 
 cleanup() {
   [ -z "$probe_pid" ] || { touch "$stop_file"; kill "$probe_pid" 2>/dev/null || true; }
-  docker compose -p tectonic-staging --project-directory "$here_n" -f "$here_n/stack.yml" --profile tools down -v --remove-orphans >/dev/null 2>&1 || true
-  TB_ROOT="$root" docker compose -p tectonic-edge --project-directory "$here_n" -f "$here_n/edge.yml" down -v >/dev/null 2>&1 || true
+  # Removed by label rather than with `compose down`: down needs every variable the stack file requires, and a cleanup that
+  # quietly does nothing leaves containers, networks and volumes behind.
+  local project ids
+  for project in tectonic-staging tectonic-production tectonic-edge; do
+    ids="$(docker ps -aq --filter "label=com.docker.compose.project=$project")"
+    if [ -n "$ids" ]; then docker rm -f $ids >/dev/null 2>&1 || true; fi
+  done
   docker rm -f "$s3" >/dev/null 2>&1 || true
-  docker volume rm -f "$s3vol" >/dev/null 2>&1 || true
+  for project in tectonic-staging tectonic-production tectonic-edge; do
+    docker network rm "${project}_default" >/dev/null 2>&1 || true
+  done
+  docker network rm tectonic-edge >/dev/null 2>&1 || true
+  docker volume rm -f "$s3vol" tectonic-edge_caddy_data tectonic-edge_caddy_config >/dev/null 2>&1 || true
   docker rmi tectonic-bingo:zd-a tectonic-bingo:zd-b tectonic-bingo:zd-unhealthy tectonic-bingo:zd-badmigration >/dev/null 2>&1 || true
   # The containers created files here as uid 1000, which this script's user may not be allowed to delete.
   docker run --rm -v "$root:/r" alpine:3 rm -rf /r/data >/dev/null 2>&1 || true

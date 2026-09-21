@@ -174,8 +174,10 @@ first version, deploys a second under load, tries a build whose api never become
 both colours served traffic, and the live version was right after every step. It then checks two guards (production
 refuses an image staging is not running; staging's password protects everything except `/health`) and that a deploy with
 backups switched on starts Litestream and the backup service against a local bucket. One detail: the probe retries a GET
-once when its connection is reset before any response, as a browser does, and reports how many it retried (normally none).
-That is the keep-alive race in the instant Caddy swaps its configuration; a deploy that resets more than a handful fails the test.
+once when its connection is reset before any response, as a browser does, and reports how many it retried (none to a
+handful of several thousand requests between runs). That is the keep-alive race in the instant Caddy swaps its
+configuration: a request sent on a connection Caddy closes at that moment. Browsers retry it transparently, and over
+HTTPS they use HTTP/2, which has no such race; a deploy that resets more than ten fails the test.
 
 ## Setting up the server
 
