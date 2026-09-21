@@ -14,6 +14,11 @@ case "$1" in
   ocr)
     exec node --enable-source-maps server/dist/ocrServer.js
     ;;
+  verify-db)
+    # Read-only health report for a database file (a restored backup, say); exits non-zero if it isn't fit to start on.
+    shift
+    exec node server/dist/verifyDb.js "$@"
+    ;;
   *)
     exec "$@"
     ;;

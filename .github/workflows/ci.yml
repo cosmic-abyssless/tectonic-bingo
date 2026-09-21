@@ -85,3 +85,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - run: bash deploy/smoke-test.sh tectonic-bingo:ci
+      # Destroys a database and its uploads and gets them back from a local stand-in for the bucket: proves the backup and
+      # restore tooling (Litestream, rclone, deploy/restore.sh) still works with this build, not just that it once did.
+      - run: bash deploy/restore-drill.sh tectonic-bingo:ci

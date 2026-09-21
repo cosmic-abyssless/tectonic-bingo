@@ -1,7 +1,8 @@
 # The site as containers: the app behind Caddy. THIS FILE IS THE LOCAL STACK ONLY (`docker compose up --build`, then
 # http://localhost:8080): plain HTTP on one port, no certificate, data under ./.docker-data. The production and staging
 # stacks run the same image but are defined separately (see deploy/), because they need HTTPS (ports 80 and 443 for
-# Caddy), the backup services and blue/green switching.
+# Caddy), the backup services and blue/green switching. Backups are an overlay on this file, deploy/compose.backup.yml
+# (see "Backups and restoring" in deploy/README.md).
 #
 # Everything that varies is a variable, with a local default:
 #   DATA_DIR      where the database and uploads live on the host       ./.docker-data

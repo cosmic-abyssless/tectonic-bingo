@@ -134,13 +134,14 @@ describe("a caller that gives up", () => {
     );
     const url = await startService();
 
-    const first = createRemoteRecognizer({ url, timeoutMs: 5000 })(Buffer.from("first"), "interactive");
-    await vi.waitFor(() => expect(started).toEqual(["first"]));
+    const first = createRemoteRecognizer({ url, timeoutMs: 15_000 })(Buffer.from("first"), "interactive");
+    // Generous timeouts: the point is the order of events, and a loaded machine can be slow to accept the first connection.
+    await vi.waitFor(() => expect(started).toEqual(["first"]), { timeout: 10_000 });
     // Queued behind the first, and gives up after 100 ms: what the API does at its timeout.
     const second = await createRemoteRecognizer({ url, timeoutMs: 100 })(Buffer.from("second"), "interactive").catch((e) => e);
     expect(second).toBeInstanceOf(OcrUnavailableError);
     // The service notices the hang-up and takes the request out of the queue.
-    await vi.waitFor(() => expect(limiter.stats().queued).toBe(0));
+    await vi.waitFor(() => expect(limiter.stats().queued).toBe(0), { timeout: 10_000 });
 
     releaseFirst();
     await first;
