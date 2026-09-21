@@ -7,6 +7,7 @@ import { actionsInCategory, AUDIT_ACTIONS, condenseAuditEntries, renderAuditLabe
 import * as schema from "../db/schema";
 import { auditLog, teams, users } from "../db/schema";
 import { ServiceError } from "../services/errors";
+import { log } from "../log";
 import { rsnsAcrossBingos } from "../services/playerNames";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -22,6 +23,16 @@ const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 
 type AuditLogRow = typeof auditLog.$inferSelect;
+
+// A row written by an older version of the app (or with an action this build no longer knows) must not take the whole
+// log down with it: an unreadable one is shown as a plain entry instead of failing the request for every other row.
+function parseDetails(row: AuditLogRow): unknown {
+  try {
+    return JSON.parse(row.details) as unknown;
+  } catch {
+    return {};
+  }
+}
 
 function toAuditEntries(db: Db, rows: AuditLogRow[]): AuditEntry[] {
   const userIds = [...new Set(rows.flatMap((r) => [r.actorUserId, r.onBehalfOfUserId]).filter((id): id is string => !!id))];
@@ -45,7 +56,7 @@ function toAuditEntries(db: Db, rows: AuditLogRow[]): AuditEntry[] {
     const onBehalfOf = userFor(row, row.onBehalfOfUserId);
     const team = row.teamId ? (teamById.get(row.teamId) ?? null) : null;
     const action = row.action as AuditAction;
-    const details = JSON.parse(row.details) as unknown;
+    const details = parseDetails(row);
 
     const base = {
       id: row.id,
@@ -64,8 +75,17 @@ function toAuditEntries(db: Db, rows: AuditLogRow[]): AuditEntry[] {
       requestId: row.requestId,
       details,
     };
-    const { category, tone } = AUDIT_ACTIONS[action];
-    return { ...base, category, tone, label: renderAuditLabel(base) };
+    const def = AUDIT_ACTIONS[action] as (typeof AUDIT_ACTIONS)[AuditAction] | undefined;
+    let label = row.action;
+    if (def) {
+      try {
+        label = renderAuditLabel(base);
+      } catch (err) {
+        log.warn("audit entry could not be rendered", { auditId: row.id, action: row.action, err });
+        label = def.title;
+      }
+    }
+    return { ...base, category: def?.category ?? "system", tone: def?.tone ?? "neutral", label };
   });
 }
 

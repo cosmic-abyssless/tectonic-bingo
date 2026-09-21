@@ -54,6 +54,40 @@ describe("queryAuditLog", () => {
     expect(queryAuditLog(db, { bingoId: "all" }, {}, {}).entries).toHaveLength(3);
   });
 
+  describe("rows the current build can't read", () => {
+    it("shows a settings.updated row that has no `changes` (older data) instead of failing the whole log", () => {
+      // The label for this action reads details.changes.after, which such a row doesn't have.
+      row({ action: "settings.updated" as AuditAction, details: "{}" });
+      row({ action: "team.created" as AuditAction, details: JSON.stringify({ name: "Blue", captainUserId: "u", captainName: "Cap", coCaptainUserId: null, coCaptainName: null, color: null }) });
+      const result = queryAuditLog(db, { bingoId: "b1" }, {}, {});
+      expect(result.entries).toHaveLength(2);
+      const broken = result.entries.find((e) => e.action === "settings.updated")!;
+      expect(broken.label).toBe("Settings updated");
+      expect(broken.category).toBe("settings");
+      // The healthy row next to it still renders its full label.
+      expect(result.entries.find((e) => e.action === "team.created")!.label).toContain("Blue");
+    });
+
+    it("keeps the same protection on the condensed and team-activity paths", () => {
+      row({ action: "settings.updated" as AuditAction, details: "{}" });
+      expect(queryAuditLog(db, { bingoId: "b1" }, {}, { condensed: true }).entries).toHaveLength(1);
+      row({ action: "team.updated" as AuditAction, teamId: "t1", visibility: "team" as AuditVisibility, details: "{}" });
+      expect(queryTeamActivity(db, "b1", "t1", { isMod: true }).entries).toHaveLength(1);
+    });
+
+    it("shows a row whose action this build doesn't know as a plain entry", () => {
+      row({ action: "feature.long_gone" as AuditAction });
+      const [entry] = queryAuditLog(db, { bingoId: "b1" }, {}, {}).entries;
+      expect(entry).toMatchObject({ action: "feature.long_gone", label: "feature.long_gone", category: "system", tone: "neutral" });
+    });
+
+    it("shows a row whose details aren't valid JSON, with empty details", () => {
+      row({ details: "{not json" });
+      const [entry] = queryAuditLog(db, { bingoId: "b1" }, {}, {}).entries;
+      expect(entry!.details).toEqual({});
+    });
+  });
+
   it("filters by action", () => {
     row({ action: "team.created" as AuditAction });
     row({ action: "team.deleted" as AuditAction });
