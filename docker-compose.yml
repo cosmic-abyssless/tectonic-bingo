@@ -9,6 +9,9 @@
 #   HTTP_PORT     host port for plain HTTP (local only)                 8080
 #   IMAGE_TAG     which build of the image to run                       local
 #   ENV_FILE      file of app settings and secrets (see .env.docker.example)
+#   OCR_CPUS      CPUs the screenshot reader may use, so it can't take the site's       2
+#   OCR_MEMORY    memory limit for the screenshot reader                                2g
+#   OCR_CONCURRENCY  screenshots read at once (each uses all of OCR_CPUS)                   1
 #
 # Sentry's environment and release are not set here: the environment comes from the env file (SENTRY_ENVIRONMENT, a
 # service's `environment:` would override it) and the release is baked into the image at build time.
@@ -37,6 +40,10 @@ services:
     env_file:
       - path: ${ENV_FILE:-.env.docker}
         required: false
+    environment:
+      # Screenshots are read by the `ocr` service, not inside this process. The site does not wait for it to be up:
+      # analysis answers 503 while it is down and the rest of the site is unaffected.
+      OCR_URL: http://ocr:8080
     volumes:
       - ${DATA_DIR:-./.docker-data}/sqlite:/data/sqlite
       - ${DATA_DIR:-./.docker-data}/uploads:/data/uploads
@@ -50,6 +57,32 @@ services:
       timeout: 3s
       retries: 12
       start_period: 20s
+    stop_grace_period: 15s
+
+  # Reads the text in screenshots. The same image as the api, so a deploy can never leave the two speaking different
+  # versions of the protocol. Reachable only from this network (no ports are published), so it has no authentication.
+  # Capped in CPU and memory: a burst of screenshots slows analysis, never the site.
+  ocr:
+    image: tectonic-bingo:${IMAGE_TAG:-local}
+    pull_policy: never
+    init: true
+    restart: unless-stopped
+    command: ["ocr"]
+    environment:
+      # Only the one setting it needs, not the whole env file of secrets. Compose interpolates it from the shell or
+      # from `--env-file`, so start the stack with `--env-file <the env file>` when Sentry should be on. The release is
+      # baked into the image; the environment is fixed because this service is shared by staging and production.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ocr
+      OCR_CONCURRENCY: ${OCR_CONCURRENCY:-1}
+    cpus: ${OCR_CPUS:-2}
+    mem_limit: ${OCR_MEMORY:-2g}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 30s
     stop_grace_period: 15s
 
   caddy:
