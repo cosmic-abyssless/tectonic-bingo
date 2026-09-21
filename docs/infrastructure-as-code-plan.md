@@ -1,6 +1,6 @@
 # Infrastructure as code with OpenTofu: the plan
 
-**Status: proposed, not implemented.** Written 2026-09-21, the day the first server was built by hand.
+**Status: decided, implementation in progress** (branch `infra/opentofu`). Written 2026-09-21, the day the first server was built by hand.
 
 ## Why
 
@@ -107,7 +107,7 @@ today; the "log in from a second terminal" advice becomes a runbook line).
 | 1 | Hetzner: primary IP, firewall, SSH key, server with cloud-init; `bootstrap-box.sh --repo-key`; `init-env.sh` committed. | `tofu apply` on a throwaway name produces a bootstrapped server; `deploy.sh edge` runs on it. |
 | 2 | Keys and GitHub: three key pairs, deploy key, host key injection, the four Actions secrets. | The Deploy workflow reaches the new server over SSH with no manual key handling. |
 | 3 | R2: bucket, token, derived credentials, `push-backup-env.sh`. | The backup connection test (write, read, delete) passes on the new server for both prefixes. |
-| 4 | DNS (optional): `staging` record now; production records behind `var.production_dns` for the cutover. | `tofu plan` shows the staging record as no-op against Mico's existing one. |
+| 4 | (DNS: decided against, see Decisions.) | |
 | 5 | **The rebuild drill**: apply for real, deploy staging to the new server, check HTTPS, the password, a screenshot, the backups; then delete the hand-built server. | Staging is served by a machine no human configured. |
 | 6 | Docs: `infra/README.md`; "Setting up the server" in `deploy/README.md` becomes "run tofu, then these five manual steps"; CI runs `tofu fmt -check` and `tofu validate`. | A second person could rebuild from the docs. |
 
@@ -143,11 +143,11 @@ Do this before production data exists on the box: after cutover, a rebuild also 
 - **Not covered:** Discord, the app's own secrets, Mico's zone unless he delegates a token. All three are two-minute,
   documented steps.
 
-## Decisions to make before starting
+## Decisions (made 2026-09-21)
 
-1. DNS in tofu (needs a zone-scoped token from Mico) or left with Mico?
-2. Keep the current IP (import, brief downtime) or a fresh one (overlap, DNS change)? Recommendation: keep it.
-3. Who holds the tofu tokens and the state passphrase? Recommendation: both of you, in the shared password manager.
+1. **DNS stays with Mico**, by hand. `dns.tf` is not written; the runbook lists the records to ask for.
+2. **Keep the current address** `5.161.101.213`: import its primary IP, rebuild onto it.
+3. **Tokens and the state passphrase live in the shared password manager**, held by both admins.
 
 ## Handoff notes for implementation
 
