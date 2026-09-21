@@ -13,3 +13,6 @@ playwright-report/
 .claude/settings.local.json
 # Sentry CLI auth token, if a login ever saves it in this folder instead of globally
 .sentryclirc
+
+# Pinned Railway plan artifacts (see .railway/README.md)
+railway-plan.json

@@ -1,0 +1,78 @@
+name: Promote to production
+
+# Production deploys from the `production` branch, so promoting is moving that branch to a commit that has passed CI.
+# Run this by hand (Actions tab > Promote to production > Run workflow) when you actually want a deploy: every deploy takes
+# the site down for a few seconds while the old instance releases the volume (issue #75), so it is a deliberate step, not
+# something that happens on every merge.
+#
+# It only ever fast-forwards: it refuses to run if CI has not passed on that exact commit, and refuses if `production` has
+# commits the chosen one does not contain, so it can never rewrite or lose history.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit to promote (its CI must have passed)"
+        required: true
+        default: main
+
+# Two promotes at once could race; queue them rather than cancel one halfway.
+concurrency:
+  group: promote-production
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  checks: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve the commit
+        id: commit
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          sha=$(git rev-parse --verify "origin/${REF}^{commit}" 2>/dev/null || git rev-parse --verify "${REF}^{commit}")
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Promoting $sha ($(git log -1 --format=%s "$sha"))"
+
+      - name: Check that CI passed on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.commit.outputs.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          # The job names in ci.yml. Add a name here when a new required CI job is added.
+          runs=$(gh api "repos/${REPO}/commits/${SHA}/check-runs?per_page=100" \
+            --jq '.check_runs[] | select(.app.slug == "github-actions") | "\(.name)=\(.conclusion)"')
+          for job in build test migrations; do
+            if ! grep -qx "${job}=success" <<<"$runs"; then
+              echo "::error::CI job '${job}' has not passed on ${SHA}. Wait for CI, or fix it, then run this again."
+              echo "$runs"
+              exit 1
+            fi
+          done
+
+      - name: Fast-forward production
+        env:
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          if git ls-remote --exit-code --heads origin production >/dev/null 2>&1; then
+            git fetch origin production
+            if [ "$(git rev-parse origin/production)" = "$SHA" ]; then
+              echo "::notice::production is already at $SHA; nothing to deploy."
+              exit 0
+            fi
+            if ! git merge-base --is-ancestor origin/production "$SHA"; then
+              echo "::error::production has commits that $SHA does not contain, so this would not be a fast-forward. Not touching it."
+              exit 1
+            fi
+          fi
+          git push origin "${SHA}:refs/heads/production"
+          echo "::notice::production is now at $SHA. Railway deploys it once its checks are green."
