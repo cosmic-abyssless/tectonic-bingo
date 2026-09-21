@@ -2,16 +2,20 @@
 # One-time setup of a fresh Ubuntu 24.04 LTS server so it can host the site. Run as root, from a checkout of this
 # repository's deploy/ directory, on the new machine. Safe to run again: every step checks before it changes anything.
 #
-#   sudo ./bootstrap-box.sh --ci-public-key FILE [--admin-key-file FILE] [--ssh-port N] [--skip STEPS]
+#   sudo ./bootstrap-box.sh --ci-public-key FILE --repo-url URL [--admin-key-file FILE] [--ssh-port N] [--skip STEPS]
 #
 #   --ci-public-key FILE   the PUBLIC half of the key GitHub Actions deploys with. It is pinned to deploy/ssh-entry.sh, so it
 #                          can load an image and run a deploy and nothing else. Generate it with
 #                          `ssh-keygen -t ed25519 -f deploy_key -C github-actions -N ''`; the private half becomes the
 #                          DEPLOY_SSH_KEY secret.
+#   --repo-url URL         the repository's SSH address, e.g. git@github.com:cosmic-abyssless/tectonic-bingo.git. The box
+#                          keeps its own clone and takes the deploy scripts from it (only commits on main), so the CI key
+#                          cannot make the box run scripts of its own. The script makes a read-only key for this and prints
+#                          its public half: add it under the repository's Settings > Deploy keys (WITHOUT write access).
 #   --admin-key-file FILE  public key(s) of the people who administer the box. They get an ordinary shell as the deploy user.
 #   --ssh-port N           the SSH port to keep open in the firewall (default 22)
 #   --skip STEPS           comma-separated steps to leave out: packages, docker, docker-logs, user, dirs, keys, ssh, firewall,
-#                          upgrades (mainly so the script can be tested in a container)
+#                          repo, upgrades (mainly so the script can be tested in a container)
 #
 # What it sets up (docs/zero-downtime-deploy-plan.md, "Ops on the box"):
 #   - Docker Engine and the Compose plugin from Docker's own apt repository, with log rotation so container logs can never
@@ -25,7 +29,7 @@
 set -euo pipefail
 
 root="/srv/tectonic"
-ci_key_file=""; admin_key_file=""; ssh_port=22; skip=","
+ci_key_file=""; admin_key_file=""; repo_url=""; ssh_port=22; skip=","
 here="$(cd "$(dirname "$0")" && pwd)"
 
 say() { printf '\n==> %s\n' "$*"; }
@@ -37,6 +41,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --ci-public-key) ci_key_file="${2:?--ci-public-key needs a file}"; shift 2 ;;
     --admin-key-file) admin_key_file="${2:?--admin-key-file needs a file}"; shift 2 ;;
+    --repo-url) repo_url="${2:?--repo-url needs an address}"; shift 2 ;;
     --ssh-port) ssh_port="${2:?--ssh-port needs a number}"; shift 2 ;;
     --skip) skip=",${2:?--skip needs a list},"; shift 2 ;;
     -h|--help) usage 0 ;;
@@ -53,13 +58,16 @@ if ! skipped keys >/dev/null; then
   ! grep -q "PRIVATE KEY" "$ci_key_file" || die "$ci_key_file contains a PRIVATE key. Give this script only the public half."
   [ -z "$admin_key_file" ] || [ -f "$admin_key_file" ] || die "no such file: $admin_key_file"
 fi
+if ! skipped repo >/dev/null; then
+  [[ "$repo_url" =~ ^git@github\.com:[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\.git$ ]] || die "--repo-url must be the repository's SSH address, like git@github.com:owner/name.git"
+fi
 
 # ---- packages ----------------------------------------------------------------------------------------------------
 if ! skipped packages; then
   say "Installing base packages"
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -qq
-  apt-get install -y -qq ca-certificates curl gnupg ufw unattended-upgrades >/dev/null
+  apt-get install -y -qq ca-certificates curl gnupg git openssh-client ufw unattended-upgrades >/dev/null
 fi
 
 # ---- docker ------------------------------------------------------------------------------------------------------
@@ -138,6 +146,39 @@ if ! skipped keys; then
   chown deploy:deploy "$authorized"; chmod 600 "$authorized"
 fi
 
+# ---- the repository ----------------------------------------------------------------------------------------------
+if ! skipped repo; then
+  say "Setting up the box's own read-only access to the repository"
+  printf '%s\n' "$repo_url" >"$root/repo.url"; chown deploy:deploy "$root/repo.url"; chmod 644 "$root/repo.url"
+  install -d -o deploy -g deploy -m 700 /home/deploy/.ssh
+  repo_key=/home/deploy/.ssh/repo_deploy_key
+  if [ ! -f "$repo_key" ]; then
+    runuser -u deploy -- ssh-keygen -q -t ed25519 -N '' -C "tectonic-box-read-only" -f "$repo_key"
+  fi
+  # GitHub's host key, pinned to the fingerprint GitHub publishes (https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints),
+  # so the very first connection cannot be tricked into trusting someone else.
+  github_fingerprint="SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU"
+  if ! grep -q '^github.com ' /home/deploy/.ssh/known_hosts 2>/dev/null; then
+    scanned="$(ssh-keyscan -t ed25519 github.com 2>/dev/null)"
+    [ "$(printf '%s\n' "$scanned" | ssh-keygen -lf - | awk '{print $2}')" = "$github_fingerprint" ] \
+      || die "github.com's host key is not the one GitHub publishes ($github_fingerprint). Either this network is interfering, or GitHub rotated its key: compare with GitHub's documentation before continuing."
+    printf '%s\n' "$scanned" >>/home/deploy/.ssh/known_hosts
+  fi
+  if ! grep -q 'repo_deploy_key' /home/deploy/.ssh/config 2>/dev/null; then
+    cat >>/home/deploy/.ssh/config <<EOF
+Host github.com
+  IdentityFile $repo_key
+  IdentitiesOnly yes
+  StrictHostKeyChecking yes
+EOF
+  fi
+  chown -R deploy:deploy /home/deploy/.ssh; chmod 600 /home/deploy/.ssh/config /home/deploy/.ssh/known_hosts
+  echo
+  echo "Add this key to the repository as a READ-ONLY deploy key (Settings > Deploy keys > Add, leave 'Allow write access' OFF):"
+  echo
+  cat "$repo_key.pub"
+fi
+
 # ---- ssh hardening -----------------------------------------------------------------------------------------------
 if ! skipped ssh; then
   say "Turning off password logins over SSH"
@@ -189,6 +230,7 @@ say "Done"
 cat <<EOF
 
 Next (see "Setting up the server" in deploy/README.md):
+  0. Add the read-only deploy key printed above to the repository (Settings > Deploy keys), so the box can fetch the scripts.
   1. As the deploy user, put the secrets in $root/env/:
        production.env, staging.env             the app's settings (deploy/env/*.env.example)
        production.backup.env, staging.backup.env   where backups go (deploy/backup.env.example; a different BACKUP_PREFIX each)

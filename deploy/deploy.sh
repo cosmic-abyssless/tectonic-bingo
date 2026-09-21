@@ -95,6 +95,18 @@ LIVE_COLOR=""; LIVE_IMAGE=""; PREVIOUS_IMAGE=""; BLUE_IMAGE=""; GREEN_IMAGE=""; 
 # shellcheck source=/dev/null
 [ ! -f "$state_file" ] || . "$state_file"
 
+# Caddy's snippet is what actually routes traffic, so it outranks the state file if the two ever disagree (a deploy killed at the
+# wrong moment): otherwise the next deploy could pick the colour that is live as its target and recreate it under traffic.
+site_file="$sites_dir/$env.caddy"
+if [ -f "$site_file" ]; then
+  routed="$(sed -n "s/^.*X-Served-By ${env}-\(blue\|green\).*$/\1/p" "$site_file" | head -1)"
+  if [ -n "$routed" ] && [ "$routed" != "$LIVE_COLOR" ]; then
+    echo "note: the state file says ${LIVE_COLOR:-nothing} is live but Caddy routes to $routed; trusting Caddy" >&2
+    LIVE_COLOR="$routed"
+    if [ "$routed" = blue ]; then LIVE_IMAGE="$BLUE_IMAGE"; else LIVE_IMAGE="$GREEN_IMAGE"; fi
+  fi
+fi
+
 other_color() { if [ "$1" = blue ]; then echo green; else echo blue; fi; }
 
 save_state() {
@@ -130,6 +142,9 @@ if ! mkdir "$lock" 2>/dev/null; then
 fi
 echo $$ >"$lock/pid"
 trap 'rm -rf "$lock"' EXIT
+# A dropped SSH session (the CI runner hiccups) sends SIGHUP; a deploy killed between switching Caddy and finishing is the one
+# thing worth avoiding, so it carries on without its terminal.
+trap '' HUP
 
 # ---- compose plumbing --------------------------------------------------------------------------------------------
 export TB_ENV="$env" TB_ROOT="$root" TB_DATA_DIR="$data_dir" TB_ENV_FILE="$env_file" TB_BACKUP_ENV_FILE="$backup_env_file"
@@ -137,7 +152,9 @@ export TB_OCR_CPUS TB_OCR_MEMORY TB_OCR_CONCURRENCY
 export TB_IMAGE_BLUE="${BLUE_IMAGE:-tectonic-bingo:unset}" TB_IMAGE_GREEN="${GREEN_IMAGE:-tectonic-bingo:unset}"
 
 profiles=(); [ "$TB_BACKUP" != 1 ] || profiles+=(--profile backup)
-compose() { docker compose -p "tectonic-$env" --project-directory "$here_n" -f "$here_n/stack.yml" ${profiles[@]+"${profiles[@]}"} "$@"; }
+# --env-file makes the environment's settings available for interpolation in stack.yml (SENTRY_DSN, OCR_THREADS, LOG_LEVEL
+# for the screenshot service); the TB_* values exported above still win.
+compose() { docker compose --env-file "$env_file" -p "tectonic-$env" --project-directory "$here_n" -f "$here_n/stack.yml" ${profiles[@]+"${profiles[@]}"} "$@"; }
 caddy_exec() { edge_compose exec -T caddy "$@"; }
 
 # Waits for a service to report healthy. Returns 1 if it exits, is caught in a restart loop (Docker keeps restarting a
@@ -236,6 +253,17 @@ if [ "$LIVE_IMAGE" = "$image" ] && [ "$force" != 1 ]; then
   exit 0
 fi
 
+# Staging is deployed in the order CI finishes, not the order commits landed, so an older commit's deploy can arrive after a
+# newer one's and would put staging (and so the next production release) on the older code. Images are named after their
+# commit, so with the repository on the box the order is checkable: an ancestor of what staging runs is skipped.
+if [ "$env" = staging ] && [ "$force" != 1 ] && [ -n "$LIVE_IMAGE" ] && [ -d "$root/repo/.git" ]; then
+  new_sha="${image#tectonic-bingo:}"; live_sha="${LIVE_IMAGE#tectonic-bingo:}"
+  if [[ "$new_sha" =~ ^[0-9a-f]{40}$ && "$live_sha" =~ ^[0-9a-f]{40}$ ]] && git -C "$root/repo" merge-base --is-ancestor "$new_sha" "$live_sha" 2>/dev/null; then
+    say "staging already runs $live_sha, which is newer than $new_sha: not going back to an older commit (--force to override)"
+    exit 0
+  fi
+fi
+
 if [ "$env" = production ] && [ "$skip_staging_check" != 1 ]; then
   # Read in a subshell so staging's state doesn't overwrite this environment's.
   staging_image="$( [ ! -f "$state_dir/staging.state" ] || { . "$state_dir/staging.state"; echo "$LIVE_IMAGE"; } )"
@@ -249,13 +277,29 @@ say "deploying $image to $env: ${old_color:-nothing live} -> $target"
 if [ "$skip_smoke" != 1 ]; then
   say "1/6 booting $image on an empty database to check it serves"
   if ! smoke_output="$(bash "$here/smoke-test.sh" "$image" 2>&1)"; then
-    printf '%s
-' "$smoke_output" >&2
+    printf '%s\n' "$smoke_output" >&2
     die "the smoke test failed; $env is unchanged"
   fi
 fi
 
 export TB_IMAGE_NEW="$image" TB_IMAGE_OCR="$image"
+
+# The screenshot service is replaced before traffic moves (so the new colour finds a matching one), which means a deploy that
+# fails after that point must put the old one back, or "unchanged" would not be true and analysis could stay broken until
+# the next good deploy.
+ocr_replaced=0
+restore_ocr() {
+  [ "$ocr_replaced" = 1 ] && [ -n "$LIVE_IMAGE" ] || return 0
+  say "putting the previous screenshot service ($LIVE_IMAGE) back"
+  TB_IMAGE_OCR="$LIVE_IMAGE" compose up -d --no-deps ocr >/dev/null 2>&1 || true
+  wait_healthy ocr 90 || say "WARNING: the previous screenshot service did not come back healthy; check 'docker compose -p tectonic-$env logs ocr'"
+}
+# Gives up on the new colour and leaves everything as it was.
+abort_deploy() {
+  compose stop -t 5 "api-$target" >/dev/null 2>&1 || true
+  restore_ocr
+  die "$1"
+}
 
 say "2/6 applying migrations to the live database (the old colour keeps serving)"
 compose --profile tools run --rm --no-deps -T migrate || die "the migration failed; $env is unchanged (the old colour is still serving)"
@@ -265,30 +309,39 @@ if [ "$target" = blue ]; then export TB_IMAGE_BLUE="$image"; else export TB_IMAG
 compose up -d --no-deps --force-recreate "api-$target" >/dev/null
 if ! wait_healthy "api-$target" 120; then
   show_logs "api-$target"
-  compose stop -t 5 "api-$target" >/dev/null 2>&1 || true
-  die "$target never became healthy; $env is unchanged (${old_color:-nothing} is still serving)"
+  abort_deploy "$target never became healthy; $env is unchanged (${old_color:-nothing} is still serving)"
 fi
+# Recorded as soon as it is running, so the state always says what each colour holds.
+if [ "$target" = blue ]; then BLUE_IMAGE="$image"; else GREEN_IMAGE="$image"; fi
+save_state
 
 if [ "$TB_BACKUP" = 1 ]; then say "4/6 updating the screenshot service and the backup services"; else say "4/6 updating the screenshot service"; fi
+ocr_replaced=1
 compose up -d --no-deps ocr >/dev/null
-wait_healthy ocr 90 || { show_logs ocr; compose stop -t 5 "api-$target" >/dev/null 2>&1 || true; die "the screenshot service did not become healthy; $env is unchanged"; }
+wait_healthy ocr 90 || { show_logs ocr; abort_deploy "the new screenshot service did not become healthy; $env is unchanged"; }
 if [ "$TB_BACKUP" = 1 ]; then compose up -d --no-deps litestream backup >/dev/null; fi
 
 say "5/6 pointing Caddy at $target"
 if ! point_caddy_at "$target"; then
-  compose stop -t 5 "api-$target" >/dev/null 2>&1 || true
-  die "Caddy rejected the new configuration and was left as it was; $env is unchanged"
+  abort_deploy "Caddy rejected the new configuration and was left as it was; $env is unchanged"
 fi
 if ! public_serves "$target"; then
   if [ -n "$old_color" ]; then
     say "the public address is not answering from $target: switching back to $old_color"
     point_caddy_at "$old_color" || say "WARNING: could not switch Caddy back; check it by hand"
-    compose stop -t 5 "api-$target" >/dev/null 2>&1 || true
     show_logs "api-$target"
-    die "$target did not serve through Caddy; switched back to $old_color"
+    abort_deploy "$target did not serve through Caddy; switched back to $old_color"
   fi
   say "WARNING: the public address is not answering yet. That is expected before DNS points here (Caddy cannot get its certificate yet); check https://${TB_HOSTS%% *}/health once it does."
 fi
+
+# From here the new colour is live. State says so at once, before the drain: if this script is killed during it, the worst
+# case is an old colour left running (the next deploy stops it), never state that disagrees with where Caddy routes.
+PREVIOUS_IMAGE="$LIVE_IMAGE"
+LIVE_IMAGE="$image"; LIVE_COLOR="$target"; DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+save_state
+note=""; if [ "$action" = deploy ] && [ "$skip_staging_check" = 1 ]; then note="  (staging check skipped)"; fi
+printf '%s  %s  %s  %s -> %s%s\n' "$DEPLOYED_AT" "$action" "$image" "${old_color:-none}" "$target" "$note" >>"$state_dir/$env.log"
 
 if [ -n "$old_color" ]; then
   say "6/6 draining $old_color for ${drain}s, then stopping it (kept, stopped, for a quick rollback)"
@@ -297,14 +350,6 @@ if [ -n "$old_color" ]; then
 else
   say "6/6 first deploy: there is no old colour to stop"
 fi
-
-PREVIOUS_IMAGE="$LIVE_IMAGE"
-LIVE_IMAGE="$image"; LIVE_COLOR="$target"; DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-if [ "$target" = blue ]; then BLUE_IMAGE="$image"; else GREEN_IMAGE="$image"; fi
-save_state
-note=""; if [ "$action" = deploy ] && [ "$skip_staging_check" = 1 ]; then note="  (staging check skipped)"; fi
-printf '%s  %s  %s  %s -> %s%s
-' "$DEPLOYED_AT" "$action" "$image" "${old_color:-none}" "$target" "$note" >>"$state_dir/$env.log"
 
 # Keep the disk from filling with old builds: everything a state file still refers to, plus the newest few, stays.
 keep="$(cat "$state_dir"/*.state 2>/dev/null | sed -n "s/^\(LIVE_IMAGE\|PREVIOUS_IMAGE\|BLUE_IMAGE\|GREEN_IMAGE\)='\(.*\)'$/\2/p" | sort -u)"

@@ -68,9 +68,13 @@ services:
     restart: unless-stopped
     command: ["ocr"]
     environment:
+      # Interpolated by Compose, from this environment's env file (deploy.sh passes it with --env-file): the service is given
+      # only these settings, not the whole file of secrets. Empty means the default.
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ocr-${TB_ENV}
       OCR_CONCURRENCY: ${TB_OCR_CONCURRENCY:-1}
+      OCR_THREADS: ${OCR_THREADS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-}
     cpus: ${TB_OCR_CPUS:-2}
     mem_limit: ${TB_OCR_MEMORY:-2g}
     healthcheck:

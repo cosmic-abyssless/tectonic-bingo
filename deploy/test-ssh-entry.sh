@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Tests deploy/ssh-entry.sh, the wrapper that is the only thing the CI deploy key can do. It stands in for deploy.sh and
 # docker, so it needs neither: what it checks is that every allowed request reaches the right command with the right
-# arguments, and that everything else, including every attempt to smuggle something in, is refused.
+# arguments, that everything else, including every attempt to smuggle something in, is refused, and that the deploy scripts
+# can only ever come from a commit on main (it uses a real git repository, on this machine).
 #
 #   deploy/test-ssh-entry.sh
 set -euo pipefail
@@ -83,7 +84,6 @@ expect_denied "rollback staging extra"
 expect_denied "rollback ../production"
 expect_denied "status"
 expect_denied "load-image extra"
-expect_denied "sync-deploy extra"
 expect_denied "edge extra"
 expect_denied "docker run --privileged alpine"
 expect_denied "rm -rf /"
@@ -93,37 +93,64 @@ printf 'image bytes' >"$work/image.tar"
 run "load-image" "$work/image.tar"
 if [ "$status" -eq 0 ] && [ "$(cat "$root/called")" = "docker load" ] && [ "$(cat "$root/loaded")" = "image bytes" ]; then echo "ok:   load-image"; else echo "FAIL: load-image (status $status)"; failures=$((failures + 1)); fi
 
-echo "-- sync-deploy"
-mkdir -p "$work/src/deploy"
-printf '#!/usr/bin/env bash\necho new deploy.sh\n' >"$work/src/deploy/deploy.sh"
-cp "$here/ssh-entry.sh" "$work/src/deploy/ssh-entry.sh"
-printf 'services: {}\n' >"$work/src/deploy/stack.yml"
-tar -czf "$work/good.tgz" -C "$work/src" deploy
-run "sync-deploy" "$work/good.tgz"
-if [ "$status" -eq 0 ] && grep -q "new deploy.sh" "$root/deploy/deploy.sh" && [ -x "$root/deploy/deploy.sh" ] && [ -d "$root/deploy.old" ]; then echo "ok:   a good archive replaces the deploy directory (the old one is kept)"; else echo "FAIL: sync-deploy of a good archive (status $status): $(cat "$work/out")"; failures=$((failures + 1)); fi
+echo "-- sync-deploy: the scripts come from main on the box, never from the client"
+command -v git >/dev/null || { echo "FAIL: git is required for this test"; exit 1; }
+origin="$work/origin.git"; src="$work/src"
+git init -q --bare "$origin"; git -C "$origin" symbolic-ref HEAD refs/heads/main
+git init -q "$src"; git -C "$src" symbolic-ref HEAD refs/heads/main
+g() { git -C "$src" -c user.name=test -c user.email=test@example.invalid -c commit.gpgsign=false "$@"; }
+mkdir -p "$src/deploy"
+commit_deploy() { # message deploy.sh-body -> prints the new commit's sha
+  printf '%s\n' "$2" >"$src/deploy/deploy.sh"
+  cp "$here/ssh-entry.sh" "$src/deploy/ssh-entry.sh"
+  printf 'services: {}\n' >"$src/deploy/stack.yml"
+  g add -A >/dev/null; g commit -q -m "$1"; g rev-parse HEAD
+}
+printf '%s\n' "$origin" >"$root/repo.url"
 
-# Restore the fake deploy.sh for the remaining checks.
-printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >"$TB_ROOT/called"\n' >"$root/deploy/deploy.sh"; chmod +x "$root/deploy/deploy.sh"
+sha1="$(commit_deploy one '#!/usr/bin/env bash
+echo version one')"
+g remote add origin "$origin"; g push -q origin main
+run "sync-deploy $sha1"
+if [ "$status" -eq 0 ] && grep -q "version one" "$root/deploy/deploy.sh" && [ -x "$root/deploy/deploy.sh" ] && [ -d "$root/deploy.old" ]; then echo "ok:   a commit on main is cloned, installed and made executable (the old scripts are kept)"; else echo "FAIL: sync-deploy of a commit on main (status $status): $(cat "$work/out")"; failures=$((failures + 1)); fi
 
-before="$(cat "$root/deploy/deploy.sh")"
-if ln -s /etc/passwd "$work/src/deploy/sneaky" 2>/dev/null && [ -L "$work/src/deploy/sneaky" ]; then
-  tar -czf "$work/symlink.tgz" -C "$work/src" deploy
-  rm "$work/src/deploy/sneaky"
-  run "sync-deploy" "$work/symlink.tgz"
-  if [ "$status" -ne 0 ] && [ "$(cat "$root/deploy/deploy.sh")" = "$before" ]; then echo "ok:   an archive containing a symlink is refused and nothing is replaced"; else echo "FAIL: sync-deploy accepted a symlink (status $status)"; failures=$((failures + 1)); fi
-else
-  echo "skip: this platform can't create symlinks (the CI run does this check)"
-fi
+sha2="$(commit_deploy two '#!/usr/bin/env bash
+echo version two')"
+g push -q origin main
+run "sync-deploy $sha2"
+if [ "$status" -eq 0 ] && grep -q "version two" "$root/deploy/deploy.sh"; then echo "ok:   a later commit on main replaces it"; else echo "FAIL: second sync-deploy (status $status): $(cat "$work/out")"; failures=$((failures + 1)); fi
 
-mkdir -p "$work/junk/notdeploy"; echo hi >"$work/junk/notdeploy/readme"
-tar -czf "$work/junk.tgz" -C "$work/junk" notdeploy
-run "sync-deploy" "$work/junk.tgz"
-if [ "$status" -ne 0 ] && [ "$(cat "$root/deploy/deploy.sh")" = "$before" ]; then echo "ok:   an archive that is not a deploy/ directory is refused"; else echo "FAIL: sync-deploy accepted a wrong archive (status $status)"; failures=$((failures + 1)); fi
+expect_sync_refused() { # description sha expected-message
+  before="$(cat "$root/deploy/deploy.sh")"
+  run "sync-deploy $2"
+  if [ "$status" -ne 0 ] && [ "$(cat "$root/deploy/deploy.sh")" = "$before" ] && grep -q -E "$3" "$work/out"; then echo "ok:   refused, nothing replaced: $1"; else echo "FAIL: sync-deploy accepted: $1 (status $status)"; failures=$((failures + 1)); fi
+}
 
-printf 'if then fi (\n' >"$work/src/deploy/deploy.sh"
-tar -czf "$work/broken.tgz" -C "$work/src" deploy
-run "sync-deploy" "$work/broken.tgz"
-if [ "$status" -ne 0 ] && [ "$(cat "$root/deploy/deploy.sh")" = "$before" ]; then echo "ok:   a deploy.sh that does not parse is refused"; else echo "FAIL: sync-deploy accepted a broken deploy.sh (status $status)"; failures=$((failures + 1)); fi
+# A commit that exists but is on another branch, even though its objects are present in the box's clone.
+g checkout -q -b feature
+sha_feature="$(commit_deploy evil '#!/usr/bin/env bash
+echo the attacker was here')"
+g push -q origin feature
+git -C "$root/repo" fetch -q origin feature
+g checkout -q main
+expect_sync_refused "a commit that is not on main (its objects are on the box)" "$sha_feature" "is not on main"
+expect_sync_refused "a commit the repository has never seen" "0000000000000000000000000000000000000000" "is not in the repository"
+run "sync-deploy"; if [ "$status" -ne 0 ]; then echo "ok:   refused: sync-deploy with no commit"; else echo "FAIL: sync-deploy needs a commit"; failures=$((failures + 1)); fi
+expect_denied "sync-deploy main"
+expect_denied "sync-deploy $sha1;id"
+expect_denied "sync-deploy $sha1 extra"
+
+# A symlink in deploy/ (made without needing symlink support on this platform).
+blob="$(printf '/etc/passwd' | g hash-object -w --stdin)"
+g update-index --add --cacheinfo "120000,$blob,deploy/sneaky"
+sha_link="$(g commit -q -m "a symlink" && g rev-parse HEAD)"
+g push -q origin main
+expect_sync_refused "a commit whose deploy/ contains a symlink" "$sha_link" "something other than files|ymlink|Cannot"
+
+g rm -q -f --cached deploy/sneaky
+sha_broken="$(commit_deploy broken 'if then fi (')"
+g push -q origin main
+expect_sync_refused "a commit whose deploy.sh does not parse" "$sha_broken" "does not parse"
 
 echo
 if [ "$failures" -gt 0 ]; then echo "$failures check(s) FAILED"; exit 1; fi

@@ -111,7 +111,8 @@ talking to, and the two can run different builds of the protocol.
    and runs `deploy.sh staging`. Staging is always the next production.
 3. To release: **Actions > Deploy > Run workflow**, environment `production`. It deploys the image staging is already
    running. Nothing is rebuilt, so production gets exactly the bytes that were tested, and the server refuses to deploy
-   anything else to production (an emergency hotfix can tick "skip_staging_check", which is logged on the server).
+   anything else to production. An emergency hotfix ticks "skip_staging_check": that run builds the commit, ships it (it has
+   not been through staging, so it is not on the box), and deploys it; the box logs that the check was skipped.
 4. To undo a release: the same button with action `rollback`. It takes under a minute and needs no build.
 
 **Approval.** The plan wanted a required reviewer on production. GitHub only enforces environment reviewers on private
@@ -143,8 +144,12 @@ other.
 Anything that fails before step 5 leaves the old colour serving, untouched; a failed check after the switch switches back.
 The script says which step failed and shows the new container's log. Only one deploy per environment runs at a time.
 
-State is in `/srv/tectonic/state/<env>.state` (live colour and image, previous image) and `<env>.log` (history). The
-last few images stay on disk for rollbacks; older ones are pruned.
+State is in `/srv/tectonic/state/<env>.state` (live colour and image, previous image) and `<env>.log` (history). It is
+saved the moment the new colour is live, before the drain, and if it ever disagrees with where Caddy actually routes (a deploy
+killed at the wrong moment), Caddy wins. A deploy ignores SIGHUP, so a dropped SSH session does not kill it mid-switch. If it
+fails after the screenshot service was replaced, the previous one is put back, so "unchanged" is true. Staging is deployed in
+the order CI finishes, which can differ from commit order, so a deploy of a commit that is an ancestor of what staging runs is
+skipped (`--force` to override). The last few images stay on disk for rollbacks; older ones are pruned.
 
 **On a bad release**, roll back first and investigate afterwards. A rollback deploys the previous image through the same
 path, so it is as safe as any deploy. It works because migrations are additive: the old code runs happily against the
@@ -159,11 +164,26 @@ production at a busy moment.
 ### What the CI key can do (`deploy/ssh-entry.sh`)
 
 The deploy user is in the `docker` group, which is root-equivalent, so the GitHub key is pinned in `authorized_keys` to a
-wrapper: `restrict,command="/srv/tectonic/deploy/ssh-entry.sh" ssh-ed25519 ...`. It can load an image, replace the deploy
-scripts with an archive of this repository's `deploy/` directory, and run `deploy`, `rollback`, `status` and `edge`
-with validated arguments (an image must be named `tectonic-bingo:<tag>`, an environment must be `production` or
-`staging`). Everything else, including a shell, is refused. `deploy/test-ssh-entry.sh` tests every allowed shape and
-a list of attempts to smuggle something in, and runs in CI.
+wrapper: `restrict,command="/srv/tectonic/deploy/ssh-entry.sh" ssh-ed25519 ...`. It allows `load-image`, `sync-deploy <sha>`,
+`deploy`, `rollback`, `status` and `edge`, with validated arguments (an image must be named `tectonic-bingo:<tag>`, an
+environment must be `production` or `staging`), and refuses everything else, including a shell.
+
+**The deploy scripts are not under the key's control.** `sync-deploy` takes only a commit sha. The box keeps its own clone of
+the repository (read-only deploy key that only the box holds), fetches `main`, refuses any commit that is not on `main`, and
+installs that commit's `deploy/` directory. The key cannot make the box run a script of its own.
+
+**What a leaked `DEPLOY_SSH_KEY` can still do, plainly.** It can load an image of its own and deploy it. A deployed image
+runs unprivileged, but with that environment's secrets and data mounted. So whoever holds the key can read and change the
+database and the secrets of the environment they deploy to (production included: `--skip-staging-check` is a flag the key may
+pass). Treat the key as access to production data. It is **not** root on the machine, and it cannot reach the backups token
+or other environments' data except by deploying to them. Closing the rest would need images the box can verify came from
+`main` (building on the box, which spends the site's CPU on every merge, or signed images); that is a known limit, not an
+oversight. If the key leaks: delete it from the deploy user's `authorized_keys`, rotate it in GitHub, and rotate
+production's secrets (`SESSION_SECRET`, the Discord and API keys) and treat the data as read.
+
+`deploy/test-ssh-entry.sh` tests every allowed shape, 24 requests that must be refused, and `sync-deploy` against a real git
+repository (a commit that is not on `main`, a made-up commit, a symlink in `deploy/`, a script that does not parse). It runs
+in CI.
 
 ### Testing the deploy
 
@@ -191,11 +211,14 @@ person can rebuild the box, and so can you in a year.
 2. **Generate the CI key**, anywhere: `ssh-keygen -t ed25519 -f deploy_key -C github-actions -N ''`. Keep `deploy_key`
    private (it becomes a GitHub secret); `deploy_key.pub` goes to the server.
 3. **Bootstrap the machine.** On the server as root, with a checkout of this repository:
-   `sudo deploy/bootstrap-box.sh --ci-public-key deploy_key.pub --admin-key-file admins.pub`
+   `sudo deploy/bootstrap-box.sh --ci-public-key deploy_key.pub --repo-url git@github.com:cosmic-abyssless/tectonic-bingo.git --admin-key-file admins.pub`
    (`admins.pub`: the public keys of the people who administer it, one per line). It installs Docker with log rotation,
    creates the `deploy` user and `/srv/tectonic`, pins the CI key to `ssh-entry.sh`, turns off SSH passwords, enables a
-   firewall (SSH, HTTP, HTTPS only) and automatic security updates that never reboot on their own. It is safe to run
-   again. **Log in with your key in a second terminal before closing the first.**
+   firewall (SSH, HTTP, HTTPS only) and automatic security updates that never reboot on their own, and makes the box's own
+   read-only key for the repository (GitHub's host key is pinned to the fingerprint GitHub publishes). It is safe to run
+   again. **Log in with your key in a second terminal before closing the first.** It ends by printing the repository key:
+   **add it under the repository's Settings > Deploy keys, with "Allow write access" left OFF.** Until you do, `sync-deploy`
+   (and so every deploy from CI) cannot fetch the scripts.
 4. **Put the secrets on the server**, as the deploy user, in `/srv/tectonic/env/` (mode 640, never in git; master copies
    in the team's password manager):
    - `production.env`, `staging.env`: from `deploy/env/*.env.example`. Use different `SESSION_SECRET`s.
@@ -218,7 +241,17 @@ person can rebuild the box, and so can you in a year.
 10. **Monitoring**: a Sentry uptime monitor on `https://tectonic.bingo/health` (one minute), and the dead-man's-switch
     check for the backups (see "Backups and restoring").
 
-To restore staging with a copy of production's data (the rehearsal): `deploy/refresh-staging.sh`. Production is only read.
+To restore staging with a copy of production's data (the rehearsal): `deploy/refresh-staging.sh`. Production is only read,
+and it takes the same lock a deploy does, so it waits for one that is running (and a deploy waits for it).
+
+**Things that cannot be checked before the box exists; look at them in the rehearsal:**
+
+- Staging's password covers `/ws` too. Browsers reuse cached Basic credentials for a same-origin WebSocket upgrade, but confirm
+  that live updates work on staging before assuming they do.
+- After `refresh-staging.sh`, staging's Litestream resumes against a replica path holding the previous database's history. It
+  should start a new generation; the drill exercises restore, not restore-then-resume, so watch `docker compose logs litestream`.
+- The first deploy before DNS points at the box (Caddy has no certificate yet), and the first certificate itself.
+- Screenshot analysis speed on the real CPUs (`docker compose -p tectonic-production logs ocr | grep recognized`).
 
 ### Looking after it
 

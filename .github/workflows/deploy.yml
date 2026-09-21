@@ -7,8 +7,9 @@ name: Deploy
 #             button with action: rollback.
 #
 # How a deploy reaches the box (see deploy/README.md, "Deploying"): the image is streamed over SSH (`docker save | docker
-# load`, so there is no registry to pay for or leak), the commit's deploy/ directory is synced next to it, and
-# deploy/deploy.sh does the blue/green switch. The SSH key can only run what deploy/ssh-entry.sh allows.
+# load`, so there is no registry to pay for or leak), the box fetches the commit's deploy/ directory from the repository
+# itself (only commits on main), and deploy/deploy.sh does the blue/green switch. The SSH key can only run what
+# deploy/ssh-entry.sh allows, which is not "anything": see the header of that file for what a leaked key can still do.
 #
 # APPROVAL. The plan asks for a required reviewer on production. GitHub only enforces environment reviewers on private
 # repositories on paid plans, and this repository is private on the free plan, so the gate today is (1) production is never
@@ -134,13 +135,14 @@ jobs:
           # The host key is pinned: a changed key fails the deploy instead of being trusted.
           printf 'Host box\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/deploy_key\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n  ServerAliveInterval 30\n  ServerAliveCountMax 10\n' "$DEPLOY_HOST" "$DEPLOY_USER" >~/.ssh/config
 
-      # Only staging builds. Production deploys the image staging already loaded onto the box.
+      # Staging builds. Production normally deploys the image staging already loaded onto the box, so nothing is built; the one
+      # exception is an emergency (skip_staging_check), where the commit has not been through staging and so is not on the box.
       - name: Set up Docker Buildx
-        if: env.ACTION == 'deploy' && env.TARGET == 'staging'
+        if: env.ACTION == 'deploy' && (env.TARGET == 'staging' || env.SKIP_STAGING_CHECK == 'true')
         uses: docker/setup-buildx-action@v3
 
       - name: Build the image
-        if: env.ACTION == 'deploy' && env.TARGET == 'staging'
+        if: env.ACTION == 'deploy' && (env.TARGET == 'staging' || env.SKIP_STAGING_CHECK == 'true')
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -153,13 +155,15 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Ship the image to the box
-        if: env.ACTION == 'deploy' && env.TARGET == 'staging'
+        if: env.ACTION == 'deploy' && (env.TARGET == 'staging' || env.SKIP_STAGING_CHECK == 'true')
         run: |
           set -euo pipefail
           docker save "tectonic-bingo:$SHA" | gzip -1 | ssh box load-image
 
+      # The box takes the scripts from its own clone of the repository, and only if this commit is on main: the key can name a
+      # commit but cannot send scripts of its own.
       - name: Sync the deploy scripts for this commit
-        run: tar -cz deploy | ssh box sync-deploy
+        run: ssh box "sync-deploy $SHA"
 
       - name: Deploy
         run: |
@@ -177,9 +181,16 @@ jobs:
       - name: Check the site from outside
         if: env.ACTION != 'edge'
         env:
-          URL: ${{ env.TARGET == 'production' && vars.PRODUCTION_URL || vars.STAGING_URL }}
+          STAGING_URL: ${{ vars.STAGING_URL }}
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
         run: |
           set -euo pipefail
+          # Chosen here, not with `a && b || c` in an expression: that falls through to the staging URL when the production
+          # one is unset, and a production deploy would report staging's health as its own.
+          case "$TARGET" in
+            production) URL="$PRODUCTION_URL" ;;
+            staging) URL="$STAGING_URL" ;;
+          esac
           if [ -z "$URL" ]; then echo "(no ${TARGET^^}_URL variable set; skipping the outside check)"; exit 0; fi
           for i in $(seq 1 12); do
             if curl -fsS --max-time 10 "$URL/health" | grep -q '"ok":true'; then echo "$URL/health is up"; exit 0; fi

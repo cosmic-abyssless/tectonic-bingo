@@ -11,7 +11,11 @@
 #   3. checks two guards that protect production: it refuses an image staging is not running, and staging's password
 #      protects everything except /health;
 #   4. deploys with backups switched on, against a local S3 stand-in, and checks the deploy starts Litestream and the
-#      backup service and that the backup's first run confirms the database is being replicated.
+#      backup service and that the backup's first run confirms the database is being replicated;
+#   5. checks the behaviours that keep a deploy honest: the screenshot service gets its settings from the environment's
+#      env file, a deploy whose new screenshot service will not start puts the previous one back, Caddy (not the state
+#      file) decides which colour is live, the emergency path deploys an image staging has not run, and staging refuses to
+#      go back to an older commit.
 # It passes only if the probe saw zero failed requests throughout, both colours served traffic, and the live version
 # after every step was the one expected. Also run in CI (.github/workflows/ci.yml).
 set -euo pipefail
@@ -25,7 +29,7 @@ here_n="$(native "$here")"
 root="$(native "$(mktemp -d)")"
 stop_file="$root/probe.stop"; result_file="$root/probe.json"
 probe_pid=""
-s3="tb-zd-s3-$$"; s3vol="tb-zd-s3-$$"
+s3="tb-zd-s3-$$"; s3vol="tb-zd-s3-$$"; extra_tags=""
 
 # The overrides a real deploy never sets: serve plain HTTP on a local port, no password, no backups (there is no bucket).
 export TB_ROOT="$root" TB_HOSTS_OVERRIDE="http://localhost" TB_BASIC_AUTH_OVERRIDE=0 TB_BACKUP_OVERRIDE=0
@@ -50,13 +54,14 @@ cleanup() {
   done
   docker network rm tectonic-edge >/dev/null 2>&1 || true
   docker volume rm -f "$s3vol" tectonic-edge_caddy_data tectonic-edge_caddy_config >/dev/null 2>&1 || true
-  docker rmi tectonic-bingo:zd-a tectonic-bingo:zd-b tectonic-bingo:zd-unhealthy tectonic-bingo:zd-badmigration >/dev/null 2>&1 || true
+  docker rmi tectonic-bingo:zd-a tectonic-bingo:zd-b tectonic-bingo:zd-unhealthy tectonic-bingo:zd-badmigration tectonic-bingo:zd-badocr $extra_tags >/dev/null 2>&1 || true
   # The containers created files here as uid 1000, which this script's user may not be allowed to delete.
   docker run --rm -v "$root:/r" alpine:3 rm -rf /r/data >/dev/null 2>&1 || true
   rm -rf "$root"
 }
 trap cleanup EXIT
 
+service_id() { docker ps -q --filter "label=com.docker.compose.project=tectonic-staging" --filter "label=com.docker.compose.service=$1" | head -1; }
 live_image() { deploy staging --status | sed -n 's/^live image: *//p'; }
 live_colour() { deploy staging --status | sed -n 's/^live colour: *//p'; }
 expect_live() { # image colour
@@ -81,6 +86,9 @@ DISCORD_CALLBACK_URL=http://localhost:$port/auth/discord/callback
 SENTRY_ENVIRONMENT=zero-downtime-test
 PLAYER_STATS_FETCH_DISABLED=true
 WOM_COMPETITION_SYNC_DISABLED=true
+SENTRY_DSN=https://key@example.invalid/1
+OCR_THREADS=1
+LOG_LEVEL=info
 EOF
 # The app runs as uid 1000 and must own its data directories (deploy/bootstrap-box.sh does this on the real box).
 docker run --rm -v "$root/data:/d" alpine:3 chown -R 1000:1000 /d
@@ -91,11 +99,18 @@ docker tag "$image" tectonic-bingo:zd-b
 printf 'FROM %s\nENTRYPOINT ["sh","-c","if [ \\"$1\\" = migrate ]; then exit 0; fi; exit 1","--"]\n' "$image" | docker build -q -t tectonic-bingo:zd-unhealthy - >/dev/null
 printf 'FROM %s\nENTRYPOINT ["sh","-c","if [ \\"$1\\" = migrate ]; then echo migration exploded >&2; exit 1; fi; exec docker-entrypoint.sh \\"$@\\"","--"]\n' "$image" | docker build -q -t tectonic-bingo:zd-badmigration - >/dev/null
 
+# An image whose api is fine but whose screenshot service exits at once.
+printf 'FROM %s\nENTRYPOINT ["sh","-c","if [ \\"$1\\" = ocr ]; then exit 1; fi; exec docker-entrypoint.sh \\"$@\\"","--"]\n' "$image" | docker build -q -t tectonic-bingo:zd-badocr - >/dev/null
+
 step "Starting the front door and deploying the first version"
 deploy edge
 deploy staging tectonic-bingo:zd-a --skip-smoke
 expect_live tectonic-bingo:zd-a blue
 curl -fsS "http://localhost:$port/health" >/dev/null || fail "the site does not answer after the first deploy"
+ocr_env="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$(service_id ocr)")"
+grep -q '^SENTRY_DSN=https://key@example.invalid/1$' <<<"$ocr_env" || fail "the screenshot service did not receive SENTRY_DSN from the environment's env file"
+grep -q '^OCR_THREADS=1$' <<<"$ocr_env" || fail "the screenshot service did not receive OCR_THREADS"
+echo "the screenshot service received SENTRY_DSN and OCR_THREADS from the env file"
 
 step "Starting the probe (a stand-in for users) and deploying under load"
 node "$here_n/zero-downtime-probe.js" "http://localhost:$port" "$stop_file" "$result_file" &
@@ -117,9 +132,24 @@ if deploy staging tectonic-bingo:zd-badmigration --skip-smoke; then fail "a depl
 expect_live tectonic-bingo:zd-b green
 sleep 3
 
+step "A version whose screenshot service will not start must fail, and the previous service must be put back"
+if deploy staging tectonic-bingo:zd-badocr --skip-smoke; then fail "a deploy whose screenshot service cannot start succeeded"; fi
+expect_live tectonic-bingo:zd-b green
+ocr_id="$(service_id ocr)"
+[ -n "$ocr_id" ] || fail "there is no screenshot service running after the failed deploy"
+[ "$(docker inspect -f '{{.Config.Image}}' "$ocr_id")" = tectonic-bingo:zd-b ] || fail "the screenshot service is on $(docker inspect -f '{{.Config.Image}}' "$ocr_id"), not the live version's image"
+[ "$(docker inspect -f '{{.State.Health.Status}}' "$ocr_id")" = healthy ] || fail "the restored screenshot service is not healthy"
+echo "the previous screenshot service is back and healthy"
+
 step "Rolling back: green -> blue, to the previous version"
 deploy staging --rollback --drain 6
 expect_live tectonic-bingo:zd-a blue
+
+step "Caddy, not the state file, decides which colour is live"
+# Simulate a deploy killed at the wrong moment: the state file names the wrong colour.
+sed -i "s/^LIVE_COLOR=.*/LIVE_COLOR='green'/" "$root/state/staging.state"
+[ "$(live_colour)" = blue ] || fail "the state file said green and deploy.sh believed it, although Caddy routes to blue"
+echo "state said green, Caddy routes to blue: deploy.sh trusts Caddy"
 sleep 3
 
 step "Stopping the probe and judging what the users saw"
@@ -178,7 +208,6 @@ BACKUP_S3_PROVIDER=Other
 BACKUP_START_DELAY=8
 EOF
 TB_BACKUP_OVERRIDE=1 deploy staging tectonic-bingo:zd-a --skip-smoke --drain 2 >/dev/null
-service_id() { docker ps -q --filter "label=com.docker.compose.project=tectonic-staging" --filter "label=com.docker.compose.service=$1" | head -1; }
 [ -n "$(service_id litestream)" ] || fail "the deploy did not start Litestream"
 [ -n "$(service_id backup)" ] || fail "the deploy did not start the backup service"
 backup_log=""
@@ -193,5 +222,29 @@ grep -q "database replication: current" <<<"$backup_log" || fail "the backup ser
 replica="$(docker run --rm --network tectonic-staging_default --env-file "$root/env/staging.backup.env" -v "$here_n:/deploy:ro" --entrypoint sh rclone/rclone:1.75.1 -c '. /deploy/rclone-env.sh && rclone lsf -R --files-only "$BACKUP_DB_REMOTE"')"
 grep -q '\.ltx' <<<"$replica" || fail "Litestream has put nothing in the bucket"
 echo "Litestream is replicating to the bucket and the backup service's first run confirmed it"
+
+step "An emergency deploy to production of an image staging has not run"
+# Staging runs zd-a now, so zd-b would normally be refused. The emergency flag lets it through, and the log says so. (A
+# different address for this site, so it doesn't collide with staging's in the same Caddy.)
+TB_HOSTS_OVERRIDE="http://127.0.0.1" TB_VERIFY_URL="http://127.0.0.1:$port" deploy production tectonic-bingo:zd-b --skip-staging-check --skip-smoke --drain 2 >/dev/null
+[ "$(deploy production --status | sed -n 's/^live image: *//p')" = tectonic-bingo:zd-b ] || fail "the emergency deploy did not make zd-b live on production"
+curl -sI "http://127.0.0.1:$port/health" | grep -qi '^x-served-by: production-blue' || fail "production is not being served by its own colour"
+grep -q "staging check skipped" "$root/state/production.log" || fail "the emergency deploy was not marked in production's log"
+echo "production runs an image staging had not run, and the log records that the check was skipped"
+
+step "Staging does not go back to an older commit"
+# Images are named after their commit; with the repository on the box, an ancestor of what staging runs is skipped.
+git init -q "$root/repo"
+commit() { git -C "$root/repo" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false commit -q --allow-empty -m "$1" && git -C "$root/repo" rev-parse HEAD; }
+sha_a="$(commit older)"; sha_b="$(commit newer)"
+extra_tags="tectonic-bingo:$sha_a tectonic-bingo:$sha_b"
+docker tag tectonic-bingo:zd-a "tectonic-bingo:$sha_a"
+docker tag tectonic-bingo:zd-a "tectonic-bingo:$sha_b"
+deploy staging "tectonic-bingo:$sha_b" --skip-smoke --drain 2 >/dev/null
+[ "$(live_image)" = "tectonic-bingo:$sha_b" ] || fail "the newer commit did not deploy"
+skipped="$(deploy staging "tectonic-bingo:$sha_a" --skip-smoke 2>&1)" || fail "deploying an older commit should be a quiet skip, not a failure: $skipped"
+grep -q "not going back to an older commit" <<<"$skipped" || fail "the older commit was not skipped: $skipped"
+[ "$(live_image)" = "tectonic-bingo:$sha_b" ] || fail "staging went back to the older commit"
+echo "the older commit's deploy was skipped and staging still runs the newer one"
 
 printf '\nZERO-DOWNTIME TEST PASSED\n'

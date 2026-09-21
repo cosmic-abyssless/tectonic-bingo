@@ -47,6 +47,17 @@ if [ "$yes" != 1 ]; then
   [ "$answer" = y ] || [ "$answer" = Y ] || { echo "cancelled"; exit 1; }
 fi
 
+# The same per-environment lock deploy.sh takes. Staging deploys itself on every merge to main, and a deploy landing in the
+# middle of a refresh would run migrations against a half-restored database and recreate the container being refreshed.
+lock="$root/state/staging.lock"
+mkdir -p "$root/state"
+if ! mkdir "$lock" 2>/dev/null; then
+  holder="$(cat "$lock/pid" 2>/dev/null || true)"
+  if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then die "a staging deploy is running (pid $holder): wait for it to finish, then refresh"; fi
+  rm -rf "$lock"; mkdir "$lock"
+fi
+echo $$ >"$lock/pid"
+
 # The staging containers that are running now, so exactly those are started again at the end (the idle colour stays idle).
 services=(api-blue api-green litestream backup)
 running=()
@@ -58,11 +69,12 @@ done
 say "Stopping staging's application and backup services"
 [ "${#running[@]}" -eq 0 ] || docker stop -t 30 "${running[@]}" >/dev/null
 
-# Whatever happens next, staging must not be left stopped.
-restart() {
-  if [ "${#running[@]}" -gt 0 ]; then say "Starting staging again"; docker start "${running[@]}" >/dev/null; fi
+# Whatever happens next, staging must not be left stopped, and the lock must not be left held.
+finish() {
+  if [ "${#running[@]}" -gt 0 ]; then say "Starting staging again"; docker start "${running[@]}" >/dev/null || true; fi
+  rm -rf "$lock"
 }
-trap restart EXIT
+trap finish EXIT
 
 restore_args=(--into "$root/data/staging" --env-file "$production_backup" --image "$LIVE_IMAGE" --force)
 [ -z "$at" ] || restore_args+=(--at "$at")
