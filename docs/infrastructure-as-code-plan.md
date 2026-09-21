@@ -241,6 +241,6 @@ the hand-built firewall had never been attached to the server, so the old box wa
 - The old hand-added deploy key on GitHub (Settings > Deploy keys, titled like "tectonic box (read-only)"): the one titled "managed by
   infra/" is the live one.
 - The old R2 API token for the backup bucket (Cloudflare > R2 > Manage API tokens): tofu made a new bucket-scoped one.
-- `~	ectonic-ci\deploy_key` and `.pub` on the owner's PC: the CI key now lives only in tofu state and the GitHub secret.
+- `~\tectonic-ci\deploy_key` and `.pub` on the owner's PC: the CI key now lives only in tofu state and the GitHub secret.
 - The temporary `terraform.tfvars` line `repository_ref = "infra/opentofu"` (harmless: it only affects first boot, and `user_data`
   is ignored after creation), once the branch is merged and the default `main` has the bootstrap changes.
