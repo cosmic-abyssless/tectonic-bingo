@@ -40,7 +40,21 @@ export function log(level: LogLevel, msg: string, fields: LogFields = {}): void 
 log.debug = (msg: string, fields?: LogFields) => log("debug", msg, fields);
 log.info = (msg: string, fields?: LogFields) => log("info", msg, fields);
 log.warn = (msg: string, fields?: LogFields) => log("warn", msg, fields);
-log.error = (msg: string, fields?: LogFields) => log("error", msg, fields);
+log.error = (msg: string, fields?: LogFields) => {
+  log("error", msg, fields);
+  reportLoggedError(msg, fields ?? {});
+};
+
+// A logged error that was handled (and so never reaches Express's error handler or the process handlers) is still a
+// bug, so it goes to Sentry too. Loaded on demand: most code, and every test, never needs the SDK.
+function reportLoggedError(msg: string, fields: LogFields): void {
+  const err = fields.err;
+  if (!(err instanceof Error)) return;
+  const { err: _logged, ...context } = sanitize(fields);
+  void import("@sentry/node")
+    .then((Sentry) => Sentry.captureException(err, { tags: { source: "log.error" }, extra: { logMessage: msg, ...context } }))
+    .catch(() => undefined);
+}
 
 export function shouldSkipHttpLog(urlPath: string): boolean {
   return urlPath === "/health" || urlPath === "/api/health";

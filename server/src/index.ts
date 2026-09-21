@@ -2,6 +2,8 @@
 // positioned before these other imports does not actually run first.
 import { isDevModeActive } from "./devMode";
 import "./env";
+import "./instrument";
+import * as Sentry from "@sentry/node";
 import path from "path";
 import fs from "fs";
 import http from "http";
@@ -37,6 +39,7 @@ import { INDEX_HTML_CACHE_CONTROL, clientDistStaticOptions, uploadsStaticOptions
 import { getTectonicConfig } from "./services/tectonicService";
 import { installProcessLogHandlers, log, requestLog } from "./log";
 import clientErrorsRouter from "./routes/clientErrors";
+import { shouldReportError } from "./errorReporting";
 
 const REQUIRED_ENV = [
   "DISCORD_CLIENT_ID",
@@ -139,6 +142,11 @@ app.use(
 configurePassport();
 app.use(passport.initialize());
 app.use(passport.session());
+// Which account hit an error, by internal id only (no name or Discord details).
+app.use((req, _res, next) => {
+  if (req.user) Sentry.setUser({ id: req.user.id });
+  next();
+});
 
 // Opens the per-request audit actor/requestId context — must run after
 // passport.session() (needs req.user) and before the routers.
@@ -189,6 +197,8 @@ if (fs.existsSync(CLIENT_DIST)) {
   });
 }
 
+// After every route, before our own handler: reports unexpected errors (not deliberate 4xx refusals) to Sentry.
+Sentry.setupExpressErrorHandler(app, { shouldHandleError: shouldReportError });
 app.use(errorHandler);
 
 const server = http.createServer(app);
@@ -219,8 +229,11 @@ function shutdown(signal: string): void {
   closeWebSocketServer();
   if (sessionStore._sessionCleanup) clearInterval(sessionStore._sessionCleanup);
   server.close(() => {
-    sqlite.close();
-    process.exit(0);
+    // Give Sentry a moment to send anything still buffered (a no-op when it is switched off).
+    void Sentry.close(2000).finally(() => {
+      sqlite.close();
+      process.exit(0);
+    });
   });
   setTimeout(() => process.exit(1), 10_000).unref();
 }

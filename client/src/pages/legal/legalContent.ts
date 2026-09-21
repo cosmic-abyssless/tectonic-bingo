@@ -76,7 +76,7 @@ export const PRIVACY_MD = `
 
 Last updated: ${LEGAL_UPDATED}
 
-This explains what information Tectonic Bingo ("the site") collects, why, who can see it, and what your choices are. The site is run by volunteers from the Tectonic Old School RuneScape clan, who are responsible for the information described here. It has no advertising and no analytics or tracking tools, and we don't sell or rent your information, and we don't use it to contact you outside Discord.
+This explains what information Tectonic Bingo ("the site") collects, why, who can see it, and what your choices are. The site is run by volunteers from the Tectonic Old School RuneScape clan, who are responsible for the information described here. It has no advertising and no analytics or tracking tools (the only monitoring is an error reporter, described below), and we don't sell or rent your information, and we don't use it to contact you outside Discord.
 
 ## What we collect
 
@@ -90,7 +90,7 @@ This explains what information Tectonic Bingo ("the site") collects, why, who ca
 
 **Clan information.** The site checks your Discord ID against the clan's own member service to see whether you are a registered clan member, which RSNs are linked to you, and your clan profile (such as your tier and points).
 
-**Automatically.** Your session cookie (see below); server logs of each request (the address requested, the result, how long it took, and your account ID or a request ID); error reports sent from your browser if something breaks (the error message, the page, and technical details); and an audit log of actions taken on the site (who did what, and when), which is tied to your account.
+**Automatically.** Your session cookie (see below); server logs of each request (the address requested, the result, how long it took, and your account ID or a request ID); error reports when something breaks, sent from your browser and from the server to our error monitoring service (the error message, the technical trace of where it failed, the page or address involved, your browser and device type, your internal account ID but not your name, and, for a small sample of visits, how long pages and requests took, but never your screenshots, cookies, or the contents of your requests); and an audit log of actions taken on the site (who did what, and when), which is tied to your account.
 
 **If you send a bug report.** What you write, the page you were on, your browser's user agent, and the theme and colour setting in use.
 
@@ -114,6 +114,7 @@ We don't sell or rent your information. The site sends limited information to th
 - **Wise Old Man** and **RuneProfile**, which receive your RSN so the site can fetch public stats.
 - **The Tectonic clan member service** (the clan's own system for its member list), which receives Discord IDs so the site can check clan membership and profile information. It acts for the clan, and the site uses what it returns only for that purpose.
 - **The OSRS Wiki**, which receives item searches typed by moderators when building a board, and which your browser loads item icons from.
+- **Sentry**, our error monitoring service, which receives the error reports and timing samples described above. We have asked it not to store IP addresses.
 - **Our hosting provider**, which stores the site's data and logs on our behalf.
 
 Your browser also loads avatars and emoji from Discord's content network, and fonts from Google Fonts, which means those companies can see your IP address as they would on any website.

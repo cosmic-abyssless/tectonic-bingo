@@ -1,4 +1,6 @@
+import "./instrument";
 import { StrictMode } from "react";
+import { reactErrorHandler } from "@sentry/react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./index.css";
@@ -20,7 +22,13 @@ const queryClient = new QueryClient({
   },
 });
 
-createRoot(document.getElementById("root")!).render(
+// React reports render errors through these instead of the window, so they are sent to Sentry here (with the component
+// stack). The ErrorBoundary still shows its fallback and the existing server-side error log still gets them.
+createRoot(document.getElementById("root")!, {
+  onUncaughtError: reactErrorHandler(),
+  onCaughtError: reactErrorHandler(),
+  onRecoverableError: reactErrorHandler(),
+}).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <App />
