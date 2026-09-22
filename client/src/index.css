@@ -185,3 +185,10 @@
     font-size: 16px;
   }
 }
+
+/* AG Grid's own .ag-cell-wrapper (not ours — it's the element AG puts around a custom cellRenderer's output)
+   sizes to its content and sits at the top of the cell; its own align-items:center only centers its children
+   against *that* short height, not the row's. SignupRosterGrid.tsx opts a column in with cellClass. */
+.ag-cell.roster-cell-vcenter .ag-cell-wrapper {
+  height: 100%;
+}

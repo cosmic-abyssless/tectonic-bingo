@@ -62,4 +62,11 @@ export const gridTheme = themeQuartz.withParams({
   headerHeight: 40,
   borderRadius: 6,
   wrapperBorder: false,
+  // A checked checkbox (the roster's "Buy-in received" column) reads as --color-ok green rather than the
+  // theme's default accent-coloured check, so it stands out from the rest of the grid's UI at a glance.
+  // --color-on-ok doesn't exist; --color-on-accent flips light/dark the same way --color-ok does, so it stays
+  // readable against it in both themes.
+  checkboxCheckedBackgroundColor: "var(--color-ok)",
+  checkboxCheckedBorderColor: "var(--color-ok)",
+  checkboxCheckedShapeColor: "var(--color-on-accent)",
 });

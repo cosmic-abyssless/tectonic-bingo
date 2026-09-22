@@ -34,6 +34,12 @@ function csvEscape(value: string): string {
   return value;
 }
 
+// GP totals here are buy-in multiples, always in the millions for this event — "30M GP" reads faster than
+// "30,000,000 GP". Decimals only show up if the amount isn't a clean multiple of a million.
+function formatGp(amount: number): string {
+  return `${(amount / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })}M GP`;
+}
+
 // signup.id -> the other half's RSN, or "Not signed up yet" if a pairing
 // exists but nothing else in the roster shares its id. Built once per roster
 // (O(n): a pairing links exactly two people, so each group is tiny,
@@ -260,6 +266,26 @@ export function SignupRoster({ slug }: { slug: string }) {
     return [...byId.entries()].map(([id, label]) => ({ id, label }));
   }, [mods, me, roster]);
 
+  // Who's physically holding collected GP right now — a paid signup's buy-in isn't "safe" until a mod has both
+  // marked it received *and* recorded themselves as the collector; received-but-uncollected is still just as
+  // much a place the GP could go missing from, so it gets its own bucket rather than being silently excluded.
+  const buyinAmount = bingoData?.bingo.buyinAmount ?? null;
+  const collectorBreakdown = useMemo(() => {
+    const byId = new Map<string, { label: string; count: number }>();
+    let uncollected = 0;
+    for (const r of roster) {
+      if (!r.signup.buyinReceivedAt) continue;
+      if (r.collectedByUser) {
+        const existing = byId.get(r.collectedByUser.id);
+        if (existing) existing.count++;
+        else byId.set(r.collectedByUser.id, { label: displayName(r.collectedByUser), count: 1 });
+      } else {
+        uncollected++;
+      }
+    }
+    return { byMod: [...byId.entries()].map(([id, v]) => ({ id, ...v })).sort((a, b) => b.count - a.count), uncollected };
+  }, [roster]);
+
   // Interactive grid cells (docs/ag-grid-tables-plan.md phase 3) call these mutations through context rather than
   // each calling its own hook — that alone removes ~380 hook instances from a full 63-row mount.
   const markBuyin = useMarkBuyin(slug);
@@ -272,13 +298,12 @@ export function SignupRoster({ slug }: { slug: string }) {
     [search, partnerRsnMap, canWithdraw, statsRefreshing, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats],
   );
 
-  // ColumnPicker's own option list — every colId the grid can show except RSN, which isn't optional (it's the
-  // only thing identifying a row). Community has no column-chooser menu of its own (docs/ag-grid-tables-plan.md),
-  // so this stays the UI; what it drives changed from a plain localStorage set to the grid's column-visibility
-  // state.
+  // ColumnPicker's own option list — every colId the grid can show except # and RSN, neither of which is
+  // optional (both are pinned left in the grid itself, and RSN is the only thing identifying a row). Community
+  // has no column-chooser menu of its own (docs/ag-grid-tables-plan.md), so this stays the UI; what it drives
+  // changed from a plain localStorage set to the grid's column-visibility state.
   const columnOptions = useMemo(
     () => [
-      { id: "order", label: "#" },
       { id: "discord", label: "Discord" },
       ...(showTier ? [{ id: "tier", label: "Tier" }] : []),
       { id: "signedUp", label: "Signed up" },
@@ -287,7 +312,7 @@ export function SignupRoster({ slug }: { slug: string }) {
       { id: "caPeak", label: "Peak CA" },
       { id: "ehb", label: "EHB" },
       { id: "ehp", label: "EHP" },
-      { id: "buyin", label: "Buy-in" },
+      { id: "buyin", label: "Buy-in received" },
       { id: "collectedBy", label: "Collected by" },
       ...(isDuo ? [{ id: "partner", label: "Partner" }] : []),
       ...questions.map((q) => ({ id: q.id, label: q.prompt })),
@@ -312,6 +337,35 @@ export function SignupRoster({ slug }: { slug: string }) {
   return (
     <div className="space-y-4">
       {devMode && bingoData?.bingo.stage === "signup" && <DevSeedPanel slug={slug} />}
+      {(collectorBreakdown.byMod.length > 0 || collectorBreakdown.uncollected > 0) && (
+        <div className="rounded-lg border border-outline p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-on-surface-muted">Buy-ins held</p>
+          <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-sm text-on-surface-muted">
+            {collectorBreakdown.byMod.map((m) => (
+              <span key={m.id}>
+                {m.label} <span className="num text-on-surface">{m.count}</span>
+                {buyinAmount != null && (
+                  <>
+                    {" "}
+                    · <span className="num text-on-surface">{formatGp(m.count * buyinAmount)}</span>
+                  </>
+                )}
+              </span>
+            ))}
+            {collectorBreakdown.uncollected > 0 && (
+              <span className="text-warn">
+                Not yet collected <span className="num">{collectorBreakdown.uncollected}</span>
+                {buyinAmount != null && (
+                  <>
+                    {" "}
+                    · <span className="num">{formatGp(collectorBreakdown.uncollected * buyinAmount)}</span>
+                  </>
+                )}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
       {leftoverCount > 0 && (
         <Notice tone="warn" icon={<AlertIcon />}>
           <span className="num">{leftoverCount}</span> newest signup{leftoverCount !== 1 ? "s" : ""} {leftoverCount !== 1 ? "don't" : "doesn't"} fit a full round of{" "}
@@ -352,13 +406,16 @@ export function SignupRoster({ slug }: { slug: string }) {
               ))}
             </div>
             {isDuo && (
-              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by pairing">
-                {PAIR_FILTERS.map(({ key, label }) => (
-                  <FilterChip key={key} active={pairFilter === key} count={pairCount(key)} onPress={() => setPairFilter(key)}>
-                    {label}
-                  </FilterChip>
-                ))}
-              </div>
+              <>
+                <div className="h-4 w-px shrink-0 bg-outline" aria-hidden="true" />
+                <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by pairing">
+                  {PAIR_FILTERS.map(({ key, label }) => (
+                    <FilterChip key={key} active={pairFilter === key} count={pairCount(key)} onPress={() => setPairFilter(key)}>
+                      {label}
+                    </FilterChip>
+                  ))}
+                </div>
+              </>
             )}
           </div>
           <div ref={setTableWrapper} className="overflow-hidden" style={{ height: tableHeight, minHeight: MIN_TABLE_HEIGHT }}>

@@ -35,7 +35,7 @@ import { discordName, displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { Badge } from "../ui/Card";
 import { CheckIcon, RefreshIcon, XIcon } from "../ui/icons";
-import { CaCell, WomCell, formatCaTier, formatWomStat } from "../signup/caStats";
+import { CaCell, WomCell, caTitle, formatCaTier, formatWomStat } from "../signup/caStats";
 import { TierBadge } from "../tectonic/ProfileBadges";
 import { timeAgo } from "../ui/time";
 
@@ -155,11 +155,11 @@ const TierCell = memo(function TierCell({ data }: CustomCellRendererProps<Roster
 
 const CaCurrentCell = memo(function CaCurrentCell({ data, context }: CustomCellRendererProps<RosterRow, number, GridContext>) {
   if (!data) return null;
-  return <CaCell stats={data.caCurrent} loading={context.statsRefreshing.has(data.signup.id)} />;
+  return <CaCell stats={data.caCurrent} loading={context.statsRefreshing.has(data.signup.id)} nativeTitle={false} />;
 });
 const CaPeakCell = memo(function CaPeakCell({ data, context }: CustomCellRendererProps<RosterRow, number, GridContext>) {
   if (!data) return null;
-  return <CaCell stats={data.caPeak} loading={context.statsRefreshing.has(data.signup.id)} />;
+  return <CaCell stats={data.caPeak} loading={context.statsRefreshing.has(data.signup.id)} nativeTitle={false} />;
 });
 const EhbCell = memo(function EhbCell({ data, context }: CustomCellRendererProps<RosterRow, number, GridContext>) {
   if (!data) return null;
@@ -323,8 +323,23 @@ export function SignupRosterGrid({
   const collectedByValues = useMemo(() => ["", ...collectedByOptions.map((o) => o.id)], [collectedByOptions]);
 
   const columnDefs = useMemo<ColDef<RosterRow>[]>(() => {
+    // Each `width` below is a starting size sized to its typical content (an RSN, a tier name, a checkbox), not
+    // a cap — `resizable: true` (defaultColDef) plus Phase 4's column-state persistence mean a mod can still
+    // drag any of them wider and it'll stick.
     const cols: (ColDef<RosterRow> | false)[] = [
-      { colId: "order", headerName: "#", valueGetter: (p) => p.data?.order, cellClass: "num", width: 70, sort: "asc", lockPosition: "left", suppressMovable: true },
+      {
+        colId: "order",
+        headerName: "#",
+        valueGetter: (p) => p.data?.order,
+        cellClass: "num",
+        width: 56,
+        // Below defaultColDef's minWidth: 80 floor — needs its own, smaller one, or AG clamps width back up to 80.
+        minWidth: 56,
+        sort: "asc",
+        lockPosition: "left",
+        suppressMovable: true,
+        pinned: "left",
+      },
       {
         colId: "rsn",
         headerName: "RSN",
@@ -332,38 +347,63 @@ export function SignupRosterGrid({
         cellRenderer: RsnCell,
         lockPosition: "left",
         suppressMovable: true,
+        width: 150,
+        pinned: "left",
       },
-      { colId: "discord", headerName: "Discord", valueGetter: (p) => (p.data ? discordName(p.data.user) : "") },
+      { colId: "discord", headerName: "Discord", valueGetter: (p) => (p.data ? discordName(p.data.user) : ""), width: 150 },
       showTier && {
         colId: "tier",
         headerName: "Tier",
         valueGetter: (p) => p.data?.tectonicProfile?.points ?? -1,
         cellRenderer: TierCell,
         tooltip: false,
+        width: 120,
       },
       {
         colId: "signedUp",
         headerName: "Signed up",
         valueGetter: (p) => p.data?.signup.createdAt,
         valueFormatter: (p) => (p.value ? timeAgo(p.value) : ""),
-        tooltip: (p: TooltipCallbackParams<RosterRow, string>) => (p.value ? new Date(p.value).toLocaleString() : ""),
+        // Reads p.data rather than p.value: the CA columns' tooltips (below) do the same and work, this one
+        // read from the resolved cell value and didn't fire — data is also just more direct here regardless.
+        tooltip: (p: TooltipCallbackParams<RosterRow, string>) => (p.data?.signup.createdAt ? new Date(p.data.signup.createdAt).toLocaleString() : ""),
+        width: 110,
       },
       {
         colId: "status",
         headerName: "Status",
         valueGetter: (p) => p.data?.signup.status,
         cellRenderer: StatusCell,
+        // AG's own .ag-cell-wrapper sizes to content and sits at the cell's top — see the matching rule in
+        // index.css — so the badge/at-risk-badge/withdraw-button row centers against the full row height.
+        cellClass: "roster-cell-vcenter",
+        width: 150,
       },
-      { colId: "caCurrent", headerName: "Current CA", valueGetter: (p) => p.data?.caCurrent?.points ?? -1, cellRenderer: CaCurrentCell, tooltip: false },
-      { colId: "caPeak", headerName: "Peak CA", valueGetter: (p) => p.data?.caPeak?.points ?? -1, cellRenderer: CaPeakCell, tooltip: false },
-      { colId: "ehb", headerName: "EHB", valueGetter: (p) => p.data?.womStats?.ehb ?? -1, cellRenderer: EhbCell, cellClass: "num", tooltip: false },
-      { colId: "ehp", headerName: "EHP", valueGetter: (p) => p.data?.womStats?.ehp ?? -1, cellRenderer: EhpCell, cellClass: "num", tooltip: false },
+      {
+        colId: "caCurrent",
+        headerName: "Current CA",
+        valueGetter: (p) => p.data?.caCurrent?.points ?? -1,
+        cellRenderer: CaCurrentCell,
+        tooltip: (p: TooltipCallbackParams<RosterRow, number>) => caTitle(p.data?.caCurrent),
+        width: 120,
+      },
+      {
+        colId: "caPeak",
+        headerName: "Peak CA",
+        valueGetter: (p) => p.data?.caPeak?.points ?? -1,
+        cellRenderer: CaPeakCell,
+        tooltip: (p: TooltipCallbackParams<RosterRow, number>) => caTitle(p.data?.caPeak),
+        width: 120,
+      },
+      { colId: "ehb", headerName: "EHB", valueGetter: (p) => p.data?.womStats?.ehb ?? -1, cellRenderer: EhbCell, cellClass: "num", tooltip: false, width: 90 },
+      { colId: "ehp", headerName: "EHP", valueGetter: (p) => p.data?.womStats?.ehp ?? -1, cellRenderer: EhpCell, cellClass: "num", tooltip: false, width: 90 },
       {
         colId: "buyin",
-        headerName: "Buy-in",
+        headerName: "Buy-in received",
         cellDataType: "boolean",
         editable: true,
         valueGetter: (p) => !!p.data?.signup.buyinReceivedAt,
+        width: 130,
       },
       {
         colId: "collectedBy",
@@ -373,6 +413,7 @@ export function SignupRosterGrid({
         editable: (p) => !!p.data?.signup.buyinReceivedAt,
         cellEditor: "agSelectCellEditor",
         cellEditorParams: { values: collectedByValues },
+        width: 150,
       },
       isDuo && {
         colId: "partner",
@@ -385,6 +426,7 @@ export function SignupRosterGrid({
           values: ["", ...unpairedActive.filter((r) => r.signup.id !== p.data?.signup.id).map((r) => r.user.id)],
         }),
         refData: unpairedRefData,
+        width: 180,
       },
     ];
     const questionCols: ColDef<RosterRow>[] = questions.map((q) => ({
@@ -399,10 +441,11 @@ export function SignupRosterGrid({
     return [...cols.filter((c): c is ColDef<RosterRow> => c !== false), ...questionCols];
   }, [questions, isDuo, showTier, collectedByRefData, collectedByValues, unpairedActive, unpairedRefData]);
 
-  // tooltip/headerTooltip: true shows the cell's own formatted value / the header's own name — tooltipShowMode
-  // "whenTruncated" (set on the grid below) means this only actually appears once that text is clipped, so it's
-  // safe to turn on for every column rather than picking out "the wide ones". Columns with their own renderer
-  // that already carries a native `title` (tier, the CA/WOM stats) opt out with `tooltip: false` above.
+  // tooltip/headerTooltip: true shows the cell's own formatted value / the header's own name. tooltipShowMode
+  // ("whenTruncated") is grid-wide only, not per column (no way to opt individual columns in/out), and several
+  // columns carry supplementary info that isn't just "the same text, cut off" — the exact signup timestamp, the
+  // CA point total behind a tier name — so it stays at AG's default "standard" (always on hover), not truncated-
+  // only. `tier` opts out with `tooltip: false` since TierBadge already has its own native `title`.
   const defaultColDef = useMemo<ColDef<RosterRow>>(() => ({ sortable: true, resizable: true, minWidth: 80, tooltip: true, headerTooltip: true }), []);
 
   const onGridReady = useCallback(
@@ -483,7 +526,6 @@ export function SignupRosterGrid({
         includeHiddenColumnsInQuickFilter
         isExternalFilterPresent={isExternalFilterPresent}
         doesExternalFilterPass={doesExternalFilterPass}
-        tooltipShowMode="whenTruncated"
         tooltipShowDelay={200}
         tooltipHideDelay={4000}
         overlayNoRowsTemplate={context.search ? "No signups match this search." : "No signups match these filters."}
