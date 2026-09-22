@@ -4,6 +4,7 @@
 // the scouting page and the admin panel).
 import { useEffect, useState, type ReactNode } from "react";
 import { useElementHeight } from "./useElementHeight";
+import { TextTooltip } from "./Tooltip";
 
 // The column headings stay at the top of the table's own scroll area (or, for
 // a table with no independent scroll container, at the top of the page's
@@ -30,14 +31,19 @@ export function useStickyTop(): number {
 
 /**
  * A wide cell's content (an RSN, a free-text answer, ...), clipped with an
- * ellipsis and a native tooltip on hover rather than stretching the column
- * to fit its longest value. `title` is plain text for the tooltip; children
- * can be the same text or something built on top of it (Highlight's <mark>s).
+ * ellipsis and a real tooltip on hover/focus — not a native `title`, which
+ * renders small and takes ~1.5s to appear — rather than stretching the
+ * column to fit its longest value. `title` is plain text for the tooltip;
+ * children can be the same text or something built on top of it
+ * (Highlight's <mark>s).
  */
 export function Truncate({ children, title, maxWidth = "16rem", className = "" }: { children: ReactNode; title: string; maxWidth?: string; className?: string }) {
   return (
-    <span className={`block truncate ${className}`} style={{ maxWidth }} title={title}>
-      {children}
-    </span>
+    <TextTooltip text={title}>
+      {/* tabIndex so a keyboard user can focus-trigger it too, not just hover. */}
+      <span tabIndex={0} className={`block truncate outline-none ${className}`} style={{ maxWidth }}>
+        {children}
+      </span>
+    </TextTooltip>
   );
 }

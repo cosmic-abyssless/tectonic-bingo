@@ -51,7 +51,7 @@ export function SortHeader<K extends string>({
     <th
       aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
       {...thProps}
-      className={`pb-2 pr-4 whitespace-nowrap text-left text-xs font-medium uppercase tracking-wide ${className} ${thProps?.className ?? ""}`}
+      className={`py-2.5 pr-4 whitespace-nowrap text-left text-xs font-medium uppercase tracking-wide ${className} ${thProps?.className ?? ""}`}
     >
       <button type="button" onClick={() => sort.toggle(sortKey)} className={`select-none transition-colors hover:text-on-surface ${active ? "text-on-surface" : "text-on-surface-subtle"}`}>
         {label} {active && (sort.dir === "asc" ? "↑" : "↓")}

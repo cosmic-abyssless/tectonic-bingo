@@ -218,21 +218,21 @@ function PoolTable({
       <table className="w-max min-w-full text-sm [&_td]:align-middle [&_th]:align-middle">
         <thead>
           <tr>
-            {hasPairs && <th className={`${STICKY_TOP} pb-2 pr-2`} />}
+            {hasPairs && <th className={`${STICKY_TOP} py-2.5 pr-2`} />}
             {ratings && <SortHeader label="Rating" sortKey="rating" sort={sort} className={STICKY_TOP} />}
             <SortHeader label="RSN" sortKey="rsn" sort={sort} className={STICKY_TOP} />
             {shown("discord") && <SortHeader label="Discord" sortKey="discord" sort={sort} className={STICKY_TOP} />}
-            {hasLeftovers && <th className={`${STICKY_TOP} pb-2 pr-4`} />}
+            {hasLeftovers && <th className={`${STICKY_TOP} py-2.5 pr-4`} />}
             {showProfiles && shown("tier") && <SortHeader label="Tier" sortKey="tier" sort={sort} className={STICKY_TOP} />}
             {showProfiles && shown("records") && <SortHeader label="Records" sortKey="records" sort={sort} className={STICKY_TOP} />}
             {showProfiles && shown("podiums") && <SortHeader label="Podiums" sortKey="podiums" sort={sort} className={STICKY_TOP} />}
-            {showProfiles && shown("achievements") && <th className={`${STICKY_TOP} pb-2 pr-4`} />}
+            {showProfiles && shown("achievements") && <th className={`${STICKY_TOP} py-2.5 pr-4`} />}
             {showWomStats && shown("ehb") && <SortHeader label="EHB" sortKey="ehb" sort={sort} className={STICKY_TOP} />}
             {showWomStats && shown("ehp") && <SortHeader label="EHP" sortKey="ehp" sort={sort} className={STICKY_TOP} />}
             {showCa && shown("caCurrent") && <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} className={STICKY_TOP} />}
             {showCa && shown("caPeak") && <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} className={STICKY_TOP} />}
             {showAnswers && questions.filter((q) => shown(q.id)).map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} className={STICKY_TOP} />)}
-            {canPick && <th className={`${STICKY_HEADER} pb-2`} />}
+            {canPick && <th className={`${STICKY_HEADER} py-2.5`} />}
           </tr>
         </thead>
         {/* One tbody per unit: a pair's two rows share the group's Draft
