@@ -2,7 +2,7 @@
 // used by the draft pool table and the signup roster so both stick and
 // stripe the same way (issue #112: make table behaviour consistent between
 // the scouting page and the admin panel).
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useElementHeight } from "./useElementHeight";
 
 // The column headings stay at the top of the table's own scroll area (or, for
@@ -26,4 +26,18 @@ export function useStickyTop(): number {
   const [header, setHeader] = useState<Element | null>(null);
   useEffect(() => setHeader(document.querySelector("header")), []);
   return useElementHeight(header);
+}
+
+/**
+ * A wide cell's content (an RSN, a free-text answer, ...), clipped with an
+ * ellipsis and a native tooltip on hover rather than stretching the column
+ * to fit its longest value. `title` is plain text for the tooltip; children
+ * can be the same text or something built on top of it (Highlight's <mark>s).
+ */
+export function Truncate({ children, title, maxWidth = "16rem", className = "" }: { children: ReactNode; title: string; maxWidth?: string; className?: string }) {
+  return (
+    <span className={`block truncate ${className}`} style={{ maxWidth }} title={title}>
+      {children}
+    </span>
+  );
 }

@@ -14,7 +14,7 @@ import { ColumnPicker } from "../ui/ColumnPicker";
 import { useHiddenColumns } from "../ui/hiddenColumns";
 import { ChevronDownIcon, ChevronUpIcon, LinkIcon } from "../ui/icons";
 import { SortHeader, compareSortValues, useTableSort, type TableSort } from "../ui/tableSort";
-import { STICKY_CELL, STICKY_HEADER, STICKY_TOP, STRIPE_ODD } from "../ui/tableChrome";
+import { STICKY_CELL, STICKY_HEADER, STICKY_TOP, STRIPE_ODD, Truncate } from "../ui/tableChrome";
 import { Highlight, TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
 import { useElementHeight } from "../ui/useElementHeight";
 import { RatingCell } from "./RatingCell";
@@ -260,17 +260,21 @@ function PoolTable({
                         <RatingCell rating={ratings[entry.signup.id]} onChange={(r) => onRate(entry.signup.id, r)} />
                       </td>
                     )}
-                    <td className={`whitespace-nowrap py-2 pr-4 font-medium ${unit.leftover ? "" : "text-on-surface"}`}>
-                      <span className="inline-flex items-center gap-1">
+                    <td className={`py-2 pr-4 font-medium ${unit.leftover ? "" : "text-on-surface"}`}>
+                      <span className="inline-flex min-w-0 items-center gap-1">
                         <AccountTypeIcon accountType={entry.accountType} />
-                        <PlayerName userId={entry.user.id}>
-                          <Highlight text={entry.signup.rsn} query={search} />
+                        <PlayerName userId={entry.user.id} className="min-w-0">
+                          <Truncate title={entry.signup.rsn} maxWidth="12rem">
+                            <Highlight text={entry.signup.rsn} query={search} />
+                          </Truncate>
                         </PlayerName>
                       </span>
                     </td>
                     {shown("discord") && (
-                      <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">
-                        <Highlight text={discordName(entry.user)} query={search} />
+                      <td className="py-2 pr-4 text-on-surface-muted">
+                        <Truncate title={discordName(entry.user)}>
+                          <Highlight text={discordName(entry.user)} query={search} />
+                        </Truncate>
                       </td>
                     )}
                     {hasLeftovers && <td className="py-2 pr-4 align-middle">{unit.leftover && i === 0 && <Badge tone="warn">{leftoverTag}</Badge>}</td>}
@@ -300,7 +304,13 @@ function PoolTable({
                         const answer = formatSignupAnswer(q.type, answerByQ.get(q.id));
                         return (
                           <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
-                            {answer ? <Highlight text={answer} query={search} /> : "—"}
+                            {answer ? (
+                              <Truncate title={answer}>
+                                <Highlight text={answer} query={search} />
+                              </Truncate>
+                            ) : (
+                              "—"
+                            )}
                           </td>
                         );
                       })}

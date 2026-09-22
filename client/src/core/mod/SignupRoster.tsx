@@ -26,7 +26,7 @@ import { AlertIcon, CheckIcon, RefreshIcon, UsersIcon, XIcon } from "../ui/icons
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { CaCell, WomCell, formatCaTier, formatWomStat } from "../signup/caStats";
 import { SortHeader, compareSortValues, useTableSort } from "../ui/tableSort";
-import { STICKY_TOP, STRIPE_ODD, useStickyTop } from "../ui/tableChrome";
+import { STICKY_TOP, STRIPE_ODD, Truncate, useStickyTop } from "../ui/tableChrome";
 import { Highlight, TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
 import { timeAgo } from "../ui/time";
 import { TierBadge } from "../tectonic/ProfileBadges";
@@ -218,11 +218,12 @@ function PartnerCell({ slug, entry, roster, search }: { slug: string; entry: Ros
   }
 
   if (entry.pairing) {
+    const partner = partnerRsn(entry, roster) ?? "";
     return (
       <div className="flex items-center gap-1">
-        <span className="text-on-surface">
-          <Highlight text={partnerRsn(entry, roster) ?? ""} query={search} />
-        </span>
+        <Truncate title={partner} className="text-on-surface">
+          <Highlight text={partner} query={search} />
+        </Truncate>
         <IconButton label="Unpair" size="sm" onPress={() => run(() => unpair.mutateAsync(entry.pairing!.id))} isDisabled={unpair.isPending}>
           <XIcon size={12} />
         </IconButton>
@@ -383,11 +384,16 @@ export function SignupRoster({ slug }: { slug: string }) {
   const [hiddenColumns, setHiddenColumns] = useHiddenColumns("signupRoster");
   const sort = useTableSort<SortKey>("order");
   const shown = (id: string) => !hiddenColumns.has(id);
-  // The page (not the table) scrolls, so the header row sticks under the
-  // site's own sticky header rather than inside its own scroll container
-  // (contrast the draft pool table, which scrolls in its own box).
+  // A sticky <th> only sticks within a genuinely-scrolling ancestor — inside
+  // a div that's merely overflow-x-auto (auto-x forces auto-y too, but
+  // nothing actually overflows there, so it's not a real scrollport) it's a
+  // no-op, since it just tracks the page scroll 1:1 instead of pinning. So,
+  // same as the draft pool table: a bounded max-height turns the wrapper
+  // into a real scroll box the header can stick inside. Not pixel-precise —
+  // it only needs to be shorter than the full table once there are many
+  // rows, not exactly the remaining viewport.
   const stickyTop = useStickyTop();
-  const stickyThProps = { style: { top: stickyTop } };
+  const tableMaxHeight = `calc(100dvh - ${stickyTop}px - 14rem)`;
 
   const activeCount = roster.filter((r) => r.signup.status === "active").length;
   const withdrawnCount = roster.length - activeCount;
@@ -484,25 +490,25 @@ export function SignupRoster({ slug }: { slug: string }) {
           {sorted.length === 0 ? (
             <p className="text-sm text-on-surface-muted">No signups match {search ? "this search" : "these filters"}.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-auto" style={{ maxHeight: tableMaxHeight }}>
               <table className="w-max min-w-full text-sm [&_td]:align-middle [&_th]:align-middle">
                 <thead>
                   <tr>
-                    {shown("order") && <SortHeader label="#" sortKey="order" sort={sort} className={STICKY_TOP} thProps={stickyThProps} />}
-                    <SortHeader label="RSN" sortKey="rsn" sort={sort} className={STICKY_TOP} thProps={stickyThProps} />
-                    {shown("discord") && <SortHeader label="Discord" sortKey="discord" sort={sort} className={STICKY_TOP} thProps={stickyThProps} />}
-                    {showTier && shown("tier") && <SortHeader label="Tier" sortKey="tier" sort={sort} className={STICKY_TOP} thProps={stickyThProps} />}
-                    {shown("signedUp") && <SortHeader label="Signed up" sortKey="order" sort={sort} className={STICKY_TOP} thProps={stickyThProps} />}
-                    {shown("status") && <SortHeader label="Status" sortKey="status" sort={sort} className={STICKY_TOP} thProps={stickyThProps} />}
-                    {shown("caCurrent") && <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} className={STICKY_TOP} thProps={stickyThProps} />}
-                    {shown("caPeak") && <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} className={STICKY_TOP} thProps={stickyThProps} />}
-                    {shown("ehb") && <SortHeader label="EHB" sortKey="ehb" sort={sort} className={STICKY_TOP} thProps={stickyThProps} />}
-                    {shown("ehp") && <SortHeader label="EHP" sortKey="ehp" sort={sort} className={STICKY_TOP} thProps={stickyThProps} />}
-                    {shown("buyin") && <SortHeader label="Buy-in" sortKey="buyin" sort={sort} className={STICKY_TOP} thProps={stickyThProps} />}
-                    {shown("collectedBy") && <SortHeader label="Collected by" sortKey="collectedBy" sort={sort} className={STICKY_TOP} thProps={stickyThProps} />}
-                    {isDuo && shown("partner") && <SortHeader label="Partner" sortKey="partner" sort={sort} className={STICKY_TOP} thProps={stickyThProps} />}
+                    {shown("order") && <SortHeader label="#" sortKey="order" sort={sort} className={STICKY_TOP} />}
+                    <SortHeader label="RSN" sortKey="rsn" sort={sort} className={STICKY_TOP} />
+                    {shown("discord") && <SortHeader label="Discord" sortKey="discord" sort={sort} className={STICKY_TOP} />}
+                    {showTier && shown("tier") && <SortHeader label="Tier" sortKey="tier" sort={sort} className={STICKY_TOP} />}
+                    {shown("signedUp") && <SortHeader label="Signed up" sortKey="order" sort={sort} className={STICKY_TOP} />}
+                    {shown("status") && <SortHeader label="Status" sortKey="status" sort={sort} className={STICKY_TOP} />}
+                    {shown("caCurrent") && <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} className={STICKY_TOP} />}
+                    {shown("caPeak") && <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} className={STICKY_TOP} />}
+                    {shown("ehb") && <SortHeader label="EHB" sortKey="ehb" sort={sort} className={STICKY_TOP} />}
+                    {shown("ehp") && <SortHeader label="EHP" sortKey="ehp" sort={sort} className={STICKY_TOP} />}
+                    {shown("buyin") && <SortHeader label="Buy-in" sortKey="buyin" sort={sort} className={STICKY_TOP} />}
+                    {shown("collectedBy") && <SortHeader label="Collected by" sortKey="collectedBy" sort={sort} className={STICKY_TOP} />}
+                    {isDuo && shown("partner") && <SortHeader label="Partner" sortKey="partner" sort={sort} className={STICKY_TOP} />}
                     {questions.filter((q) => shown(q.id)).map((q) => (
-                      <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} className={STICKY_TOP} thProps={stickyThProps} />
+                      <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} className={STICKY_TOP} />
                     ))}
                   </tr>
                 </thead>
@@ -514,17 +520,21 @@ export function SignupRoster({ slug }: { slug: string }) {
                       <tr key={entry.signup.id} className={STRIPE_ODD}>
                         {shown("order") && <td className="num py-2 pr-4 text-on-surface-subtle">{order}</td>}
                         <td className="py-2 pr-4 font-medium text-on-surface">
-                          <span className="inline-flex items-center gap-1.5">
-                            <PlayerName userId={entry.user.id}>
-                              <Highlight text={entry.signup.rsn} query={search} />
+                          <span className="inline-flex min-w-0 items-center gap-1.5">
+                            <PlayerName userId={entry.user.id} className="min-w-0">
+                              <Truncate title={entry.signup.rsn} maxWidth="12rem">
+                                <Highlight text={entry.signup.rsn} query={search} />
+                              </Truncate>
                             </PlayerName>
-                            {entry.signup.rsnVerified && <CheckIcon size={14} className="text-ok" aria-label="Verified against the linked clan account" />}
+                            {entry.signup.rsnVerified && <CheckIcon size={14} className="shrink-0 text-ok" aria-label="Verified against the linked clan account" />}
                             <RefreshStatsButton slug={slug} signupId={entry.signup.id} rsn={entry.signup.rsn} refreshing={statsLoading} />
                           </span>
                         </td>
                         {shown("discord") && (
                           <td className="py-2 pr-4 text-on-surface-muted">
-                            <Highlight text={discordName(entry.user)} query={search} />
+                            <Truncate title={discordName(entry.user)}>
+                              <Highlight text={discordName(entry.user)} query={search} />
+                            </Truncate>
                           </td>
                         )}
                         {showTier && shown("tier") && (
@@ -583,7 +593,13 @@ export function SignupRoster({ slug }: { slug: string }) {
                           const answer = formatSignupAnswer(q.type, answerByQ.get(q.id));
                           return (
                             <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
-                              {answer ? <Highlight text={answer} query={search} /> : "—"}
+                              {answer ? (
+                                <Truncate title={answer}>
+                                  <Highlight text={answer} query={search} />
+                                </Truncate>
+                              ) : (
+                                "—"
+                              )}
                             </td>
                           );
                         })}
