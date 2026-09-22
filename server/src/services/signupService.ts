@@ -221,12 +221,16 @@ export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
       rsnVerified: params.rsnVerified ?? false,
     };
     // A withdrawn signup is reused rather than duplicated: (bingo, user) is
-    // unique, and the buy-in columns are reset since the old row's payment
-    // state no longer applies.
+    // unique. The buy-in columns are left alone on purpose — someone who
+    // withdraws and re-signs up (the common case: a mistake, a change of
+    // mind) already paid, and that shouldn't have to be re-collected or
+    // re-recorded. calculatePotTotal only counts active signups, so a
+    // withdrawn row's buy-in never counts towards the pot until it is active
+    // again, and a mod can still unmark it by hand if the GP was refunded.
     if (existing) {
       tx.delete(signupAnswers).where(eq(signupAnswers.signupId, existing.id)).run();
       tx.update(signups)
-        .set({ ...values, status: "active", buyinReceivedAt: null, buyinCollectedByUserId: null, buyinRecordedByUserId: null, createdAt: clockNow() })
+        .set({ ...values, status: "active", createdAt: clockNow() })
         .where(eq(signups.id, existing.id))
         .run();
     }
