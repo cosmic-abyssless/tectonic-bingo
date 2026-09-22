@@ -193,7 +193,7 @@ const StatusCell = memo(function StatusCell({ data, context }: CustomCellRendere
 
   if (confirming) {
     return (
-      <div className="flex items-center gap-1 whitespace-nowrap">
+      <div className="flex h-full items-center gap-1 whitespace-nowrap">
         <CellButton variant="danger" onClick={withdraw} disabled={busy}>
           Withdraw {data.signup.rsn}
         </CellButton>
@@ -204,7 +204,7 @@ const StatusCell = memo(function StatusCell({ data, context }: CustomCellRendere
     );
   }
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex h-full items-center gap-1">
       <Badge tone={active ? "ok" : "neutral"}>{data.signup.status}</Badge>
       {data.leftover && <Badge tone="warn">at risk</Badge>}
       {active && context.canWithdraw && (
