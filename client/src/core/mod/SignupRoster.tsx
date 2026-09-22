@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { formatSignupAnswer, type RosterEntry, type SignupQuestionType } from "@bingo/shared";
 import { useBingo, useDeleteAllSignups, useSeedTestSignups, useSignupRoster, useSignupQuestions, type SeedTestSignupsResponse } from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
@@ -8,9 +8,8 @@ import { EmptyState, Notice, FilterChip } from "../ui/Card";
 import { Input } from "../ui/Field";
 import { AlertIcon, UsersIcon } from "../ui/icons";
 import { formatCaTier, formatWomStat } from "../signup/caStats";
-import { compareSortValues, useTableSort } from "../ui/tableSort";
 import { useDocumentTop } from "../ui/tableChrome";
-import { TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
+import { TableSearchInput, useTableSearch } from "../ui/tableSearch";
 import { formatTierName } from "../tectonic/profile";
 import { SignupRosterGrid, type RosterRow } from "./SignupRosterGrid";
 
@@ -144,9 +143,6 @@ function DevSeedPanel({ slug }: { slug: string }) {
   );
 }
 
-// "order" | "rsn" | "discord" | "status" | "buyin" | "collectedBy" | "partner" | a signup question's id.
-type SortKey = string;
-
 type BuyinFilter = "all" | "paid" | "unpaid";
 type PairFilter = "all" | "paired" | "unpaired";
 
@@ -175,48 +171,6 @@ function matchesPair(entry: RosterEntry, filter: PairFilter): boolean {
   return filter === "all" || isPaired(entry) === (filter === "paired");
 }
 
-// `order` is the 1-based signup position (the server returns the roster in
-// createdAt order), kept alongside the entry so sorting by another column
-// doesn't lose it.
-interface NumberedEntry {
-  order: number;
-  entry: RosterEntry;
-}
-
-function rosterSortValue({ order, entry }: NumberedEntry, key: SortKey, partnerRsnMap: Map<string, string>): string | number {
-  if (key === "order") return order;
-  if (key === "rsn") return entry.signup.rsn.toLowerCase();
-  if (key === "discord") return discordName(entry.user).toLowerCase();
-  if (key === "tier") return entry.tectonicProfile?.points ?? -1;
-  if (key === "status") return entry.signup.status;
-  if (key === "caCurrent") return entry.caCurrent?.points ?? -1;
-  if (key === "caPeak") return entry.caPeak?.points ?? -1;
-  if (key === "ehb") return entry.womStats?.ehb ?? -1;
-  if (key === "ehp") return entry.womStats?.ehp ?? -1;
-  if (key === "buyin") return isPaid(entry) ? 1 : 0;
-  if (key === "collectedBy") return entry.collectedByUser ? displayName(entry.collectedByUser).toLowerCase() : "";
-  // Paired rows first (sorted by partner), unpaired rows after — so the
-  // column doubles as a paired/unpaired grouping.
-  if (key === "partner") return isPaired(entry) ? `0 ${(partnerRsn(entry, partnerRsnMap) ?? "").toLowerCase()}` : "1";
-  return (entry.answers.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
-}
-
-// Every column's text, whether or not it's currently shown — search covers
-// all of them (issue #112), not just what's visible.
-function rosterSearchValues(entry: RosterEntry, partnerRsnMap: Map<string, string>, questions: { id: string; type: SignupQuestionType }[]): string[] {
-  return [
-    entry.signup.rsn,
-    discordName(entry.user),
-    entry.tectonicProfile?.tier ? formatTierName(entry.tectonicProfile.tier.name) : "",
-    entry.signup.status,
-    formatCaTier(entry.caCurrent),
-    formatCaTier(entry.caPeak),
-    entry.collectedByUser ? displayName(entry.collectedByUser) : "",
-    partnerRsn(entry, partnerRsnMap) ?? "",
-    ...entry.answers.map((a) => formatSignupAnswer(questions.find((q) => q.id === a.questionId)?.type ?? "text", a.value)),
-  ];
-}
-
 export function SignupRoster({ slug }: { slug: string }) {
   const { data } = useSignupRoster(slug);
   const { data: questionsData } = useSignupQuestions(slug);
@@ -229,7 +183,6 @@ export function SignupRoster({ slug }: { slug: string }) {
   const [buyinFilter, setBuyinFilter] = useState<BuyinFilter>("all");
   const [pairFilter, setPairFilter] = useState<PairFilter>("all");
   const [search, setSearch] = useTableSearch();
-  const sort = useTableSort<SortKey>("order");
   // AG Grid (docs/ag-grid-tables-plan.md) replaces the hand-rolled <table> —
   // sticky header, striping, virtualisation and column sort/resize/reorder
   // are the grid's own. This wrapper still owns the table's on-page height:
@@ -242,6 +195,9 @@ export function SignupRoster({ slug }: { slug: string }) {
   const [tableWrapper, setTableWrapper] = useState<HTMLDivElement | null>(null);
   const tableTop = useDocumentTop(tableWrapper);
   const tableHeight = `calc(100dvh - ${tableTop}px - 1.5rem)`;
+  // Set by the grid itself (onGridReady/onModelUpdated) — how many rows its search + filters currently leave
+  // visible. Starts null (grid not mounted yet) so the search box shows totalCount rather than flashing "0 of N".
+  const [displayedCount, setDisplayedCount] = useState<number | null>(null);
 
   const activeCount = roster.filter((r) => r.signup.status === "active").length;
   const withdrawnCount = roster.length - activeCount;
@@ -252,26 +208,13 @@ export function SignupRoster({ slug }: { slug: string }) {
   // clicking it would leave on screen.
   const buyinCount = (f: BuyinFilter) => roster.filter((r) => matchesBuyin(r, f) && matchesPair(r, pairFilter)).length;
   const pairCount = (f: PairFilter) => roster.filter((r) => matchesPair(r, f) && matchesBuyin(r, buyinFilter)).length;
-  // O(n), built once per roster rather than once per row — see
-  // buildPartnerRsnMap's own comment.
-  const partnerRsnMap = useMemo(() => buildPartnerRsnMap(roster), [roster]);
-  const searchable = useMemo(
-    () => roster.map((entry, i) => ({ order: i + 1, entry })).filter(({ entry }) => matchesBuyin(entry, buyinFilter) && matchesPair(entry, pairFilter)),
-    [roster, buyinFilter, pairFilter],
-  );
-  // sort.order/sort.toggle are fresh closures every render (useTableSort
-  // doesn't memoize them) — depend on the primitives (sort.key, sort.dir)
-  // that actually decide the output, not the unstable sort object itself.
-  // TODO(phase 2 of the AG Grid plan): quickFilterText/external filter move
-  // this filtering into the grid itself; this whole computation goes away.
-  const sorted = useMemo(
-    () =>
-      searchable
-        .filter(({ entry }) => matchesSearch(rosterSearchValues(entry, partnerRsnMap, questions), search))
-        .sort((a, b) => sort.order(compareSortValues(rosterSortValue(a, sort.key, partnerRsnMap), rosterSortValue(b, sort.key, partnerRsnMap)))),
-    [searchable, search, partnerRsnMap, questions, sort.key, sort.dir],
-  );
-  const rows = useMemo<RosterRow[]>(() => sorted.map(({ order, entry }) => ({ ...entry, order })), [sorted]);
+  // The buy-in/pair chips, as the grid's external filter (docs/ag-grid-tables-plan.md phase 2) — search itself is
+  // the grid's own quickFilterText, bound directly to `search` below.
+  const doesRowPassFilters = useCallback((row: RosterRow) => matchesBuyin(row, buyinFilter) && matchesPair(row, pairFilter), [buyinFilter, pairFilter]);
+  // Independent of the grid (for the search box's "of N" total) — cheap, and avoids a render round-trip through
+  // the grid just to know how many rows the chips alone leave.
+  const totalCount = roster.filter((r) => matchesBuyin(r, buyinFilter) && matchesPair(r, pairFilter)).length;
+  const rows = useMemo<RosterRow[]>(() => roster.map((entry, i) => ({ ...entry, order: i + 1 })), [roster]);
 
   async function copyCsv() {
     const csv = buildCsv(roster, questions, isDuo);
@@ -300,7 +243,7 @@ export function SignupRoster({ slug }: { slug: string }) {
           )}
         </p>
         <div className="flex items-center gap-2">
-          {roster.length > 0 && <TableSearchInput value={search} onChange={setSearch} matchCount={sorted.length} totalCount={searchable.length} />}
+          {roster.length > 0 && <TableSearchInput value={search} onChange={setSearch} matchCount={displayedCount ?? totalCount} totalCount={totalCount} />}
           <Button size="sm" onPress={copyCsv} isDisabled={roster.length === 0}>
             {copied ? "Copied" : "Copy as CSV"}
           </Button>
@@ -331,13 +274,9 @@ export function SignupRoster({ slug }: { slug: string }) {
               </div>
             )}
           </div>
-          {sorted.length === 0 ? (
-            <p className="text-sm text-on-surface-muted">No signups match {search ? "this search" : "these filters"}.</p>
-          ) : (
-            <div ref={setTableWrapper} className="overflow-hidden" style={{ height: tableHeight, minHeight: MIN_TABLE_HEIGHT }}>
-              <SignupRosterGrid rows={rows} />
-            </div>
-          )}
+          <div ref={setTableWrapper} className="overflow-hidden" style={{ height: tableHeight, minHeight: MIN_TABLE_HEIGHT }}>
+            <SignupRosterGrid rows={rows} questions={questions} search={search} doesRowPassFilters={doesRowPassFilters} onDisplayedCountChange={setDisplayedCount} />
+          </div>
         </>
       )}
     </div>
