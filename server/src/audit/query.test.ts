@@ -172,6 +172,35 @@ describe("queryAuditLog", () => {
     expect(result.entries).toHaveLength(1);
   });
 
+  // signups.bingoId is a real FK (unlike audit_log's, which is a plain string so cross-bingo rows can share a
+  // fixture without a real bingos row) — an RSN-search test needs an actual bingo for the signup to belong to.
+  function seedRealBingo(id: string) {
+    const [admin] = db.insert(schema.users).values({ discordId: `admin-${id}`, discordUsername: `admin-${id}` }).returning().all();
+    return db.insert(schema.bingos).values({ id, slug: id, name: id, boardRows: 3, boardCols: 3, createdByUserId: admin.id }).returning().get();
+  }
+
+  it("filters by q, also matching the actor's Discord name or (bingo-scoped) RSN — not just entityLabel/action", () => {
+    seedRealBingo("b1");
+    const [withRsn] = db.insert(schema.users).values({ discordId: "u1", discordUsername: "comfy_hug_dc1" }).returning().all();
+    const [noRsn] = db.insert(schema.users).values({ discordId: "u2", discordUsername: "dev_admin" }).returning().all();
+    db.insert(schema.signups).values({ bingoId: "b1", userId: withRsn.id, rsn: "comfy hug" }).run();
+    row({ actorUserId: withRsn.id });
+    row({ actorUserId: noRsn.id });
+
+    expect(queryAuditLog(db, { bingoId: "b1" }, { q: "comfy hug" }, {}).entries.map((e) => e.actor?.id)).toEqual([withRsn.id]);
+    expect(queryAuditLog(db, { bingoId: "b1" }, { q: "dev_admin" }, {}).entries.map((e) => e.actor?.id)).toEqual([noRsn.id]);
+  });
+
+  it("q's RSN match on the actor stays scoped to the row's own bingo", () => {
+    seedRealBingo("b1");
+    seedRealBingo("b2");
+    const [user] = db.insert(schema.users).values({ discordId: "u1", discordUsername: "u1" }).returning().all();
+    db.insert(schema.signups).values({ bingoId: "b2", userId: user.id, rsn: "comfy hug" }).run();
+    row({ bingoId: "b1", actorUserId: user.id });
+
+    expect(queryAuditLog(db, { bingoId: "b1" }, { q: "comfy hug" }, {}).entries).toHaveLength(0);
+  });
+
   it("paginates with a keyset cursor, newest first", () => {
     const rows = [row(), row(), row(), row(), row()];
     const page1 = queryAuditLog(db, { bingoId: "b1" }, {}, { limit: 2 });

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { AuditCategory } from "@bingo/shared";
 import { useSiteAuditLog } from "../../api/adminQueries";
 import { useBingos } from "../../api/queries";
+import { useDebouncedValue } from "../../headless/useDebouncedValue";
 import { CATEGORIES, DetailsView, actorOptionsFrom, buildCsv, inclusionFilter, useActorCatalog } from "../mod/AuditLog";
 import { displayName } from "../ui/user";
 import { timeAgo } from "../ui/time";
@@ -14,6 +15,7 @@ import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { SingleSelect } from "../ui/SingleSelect";
 import { DateTimeRangeFilter } from "../ui/DateTimeRangeFilter";
 import { isRangeSet, type TimeRange } from "../ui/timeRange";
+import { TableSearchInput } from "../ui/tableSearch";
 
 type BingoScope = string | null | "all";
 
@@ -24,6 +26,8 @@ export function SiteAuditLog() {
   const [excludedActors, setExcludedActors] = useState<Set<string>>(() => new Set());
   const [bingoScope, setBingoScope] = useState<BingoScope>("all");
   const [range, setRange] = useState<TimeRange>({});
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 300).trim();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -40,8 +44,9 @@ export function SiteAuditLog() {
     actorUserId: actors.query,
     since: range.since,
     until: range.until,
+    q: debouncedSearch || undefined,
   });
-  const filtered = categories.narrowed || actors.narrowed || bingoScope !== "all" || isRangeSet(range);
+  const filtered = categories.narrowed || actors.narrowed || bingoScope !== "all" || isRangeSet(range) || debouncedSearch !== "";
   const blocked = categories.none || actors.none;
 
   const entries = useMemo(() => data?.pages.flatMap((p) => p.entries) ?? [], [data]);
@@ -80,6 +85,7 @@ export function SiteAuditLog() {
           onChange={(key) => setBingoScope(key === "all" ? "all" : key === "null" ? null : key)}
         />
         <DateTimeRangeFilter value={range} onChange={setRange} />
+        <TableSearchInput value={search} onChange={setSearch} placeholder="Search…" />
         <div className="ml-auto">
           <Button size="sm" onPress={copyCsv} isDisabled={blocked || entries.length === 0}>
             {copied ? "Copied" : "Copy as CSV"}

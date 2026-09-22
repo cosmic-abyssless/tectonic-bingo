@@ -1,11 +1,11 @@
 // Read-side of the audit log: turns raw audit_log rows into the shared
 // AuditEntry shape (label rendered, actor/team resolved) with keyset
 // pagination. See docs/audit-log-plan.md §"Read API" / "Visibility model".
-import { and, desc, eq, gte, inArray, isNull, like, lt, lte, or } from "drizzle-orm";
+import { and, desc, eq, exists, gte, inArray, isNull, like, lt, lte, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { actionsInCategory, AUDIT_ACTIONS, condenseAuditEntries, renderAuditLabel, type AuditAction, type AuditCategory, type AuditEntry, type AuditLogFilters, type AuditLogResponse, type AuditVisibility } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { auditLog, teams, users } from "../db/schema";
+import { auditLog, signups, teams, users } from "../db/schema";
 import { ServiceError } from "../services/errors";
 import { log } from "../log";
 import { rsnsAcrossBingos } from "../services/playerNames";
@@ -96,7 +96,19 @@ function parseWhen(value: string, name: "since" | "until"): Date {
   return date;
 }
 
-function applyFilters(conditions: (ReturnType<typeof eq> | undefined)[], filters: AuditLogFilters) {
+// q matches what a mod actually sees on the row: the rendered label's subject text (entity_label), the action
+// itself, and — since most labels lead with "<actor> did X" — the actor's name. The actor isn't a plain column
+// (it's resolved from users, plus a per-bingo RSN from signups, at read time — see toAuditEntries), so those two
+// are correlated EXISTS subqueries rather than a join, to leave the row shape and pagination untouched.
+function actorMatches(db: Db, q: string) {
+  const like_ = `%${q}%`;
+  return or(
+    exists(db.select({ id: users.id }).from(users).where(and(eq(users.id, auditLog.actorUserId), or(like(users.discordUsername, like_), like(users.discordGlobalName, like_), like(users.discordGuildNick, like_))))),
+    exists(db.select({ id: signups.id }).from(signups).where(and(eq(signups.userId, auditLog.actorUserId), eq(signups.bingoId, auditLog.bingoId), like(signups.rsn, like_)))),
+  );
+}
+
+function applyFilters(db: Db, conditions: (ReturnType<typeof eq> | undefined)[], filters: AuditLogFilters) {
   if (filters.action?.length) conditions.push(inArray(auditLog.action, filters.action));
   if (filters.category?.length) conditions.push(inArray(auditLog.action, filters.category.flatMap(actionsInCategory)));
   if (filters.actorUserId?.length) conditions.push(inArray(auditLog.actorUserId, filters.actorUserId));
@@ -106,7 +118,7 @@ function applyFilters(conditions: (ReturnType<typeof eq> | undefined)[], filters
   if (filters.visibility) conditions.push(eq(auditLog.visibility, filters.visibility));
   if (filters.since) conditions.push(gte(auditLog.createdAt, parseWhen(filters.since, "since")));
   if (filters.until) conditions.push(lte(auditLog.createdAt, parseWhen(filters.until, "until")));
-  if (filters.q) conditions.push(or(like(auditLog.entityLabel, `%${filters.q}%`), like(auditLog.action, `%${filters.q}%`)));
+  if (filters.q) conditions.push(or(like(auditLog.entityLabel, `%${filters.q}%`), like(auditLog.action, `%${filters.q}%`), actorMatches(db, filters.q)));
 }
 
 // `condensed` collapses runs of alike entries within this page (see condenseAuditEntries); the cursor
@@ -128,7 +140,7 @@ export function queryAuditLog(
   const conditions: (ReturnType<typeof eq> | undefined)[] = [];
   if (scope.bingoId === null) conditions.push(isNull(auditLog.bingoId));
   else if (scope.bingoId !== "all") conditions.push(eq(auditLog.bingoId, scope.bingoId));
-  applyFilters(conditions, filters);
+  applyFilters(db, conditions, filters);
   if (page.cursor !== undefined) conditions.push(lt(auditLog.id, page.cursor));
 
   return paginate(db, and(...conditions.filter((c): c is NonNullable<typeof c> => !!c)), limit, page.condensed);
