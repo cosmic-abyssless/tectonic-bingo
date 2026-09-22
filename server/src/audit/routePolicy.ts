@@ -33,8 +33,6 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "POST /api/bingos/:slug/mod/signups/:signupId/refresh-stats": ["signup.stats_fetched", "signup.stats_fetch_failed"],
   "PATCH /api/bingos/:slug/mod/signups/:id/buyin": ["signup.buyin_marked"],
   "DELETE /api/bingos/:slug/mod/signups/:id": ["signup.withdrawn", "pairing.dissolved"],
-  "POST /api/bingos/:slug/mod/dev/seed-signups": ["dev.signups_seeded"],
-  "DELETE /api/bingos/:slug/mod/dev/signups": ["dev.signups_wiped"],
 
   // routes/admin.ts, mounted at /api/bingos/:slug/admin
   "PATCH /api/bingos/:slug/admin/settings": ["settings.updated", "points.rescored"],

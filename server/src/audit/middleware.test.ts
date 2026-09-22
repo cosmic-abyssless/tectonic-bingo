@@ -36,7 +36,7 @@ function buildApp() {
   app.post(
     "/api/audited",
     asyncHandler(async (_req, res) => {
-      audit(db, { action: "dev.signups_wiped", bingoId: null, entity: { type: "bingo", id: null }, details: { deleted: 1 } });
+      audit(db, { action: "wom.roster_synced", bingoId: null, entity: { type: "bingo", id: null }, details: {} });
       res.status(200).json({ ok: true });
     }),
   );
@@ -95,7 +95,7 @@ describe("audit fallback middleware", () => {
       await post(server, "/api/audited");
       const rows = db.select().from(schema.auditLog).all();
       expect(rows).toHaveLength(1);
-      expect(rows[0]!.action).toBe("dev.signups_wiped");
+      expect(rows[0]!.action).toBe("wom.roster_synced");
     } finally {
       server.close();
     }

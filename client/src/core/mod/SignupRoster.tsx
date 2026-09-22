@@ -4,16 +4,13 @@ import { formatSignupAnswer, type RosterEntry, type SignupQuestionType } from "@
 import {
   useBingo,
   useBingoMods,
-  useDeleteAllSignups,
   useMarkBuyin,
   useModPair,
   useModUnpair,
   useModWithdrawSignup,
   useRefreshSignupStats,
-  useSeedTestSignups,
   useSignupRoster,
   useSignupQuestions,
-  type SeedTestSignupsResponse,
 } from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
@@ -21,7 +18,6 @@ import { discordName, displayName } from "../ui/user";
 import { Button } from "../ui/Button";
 import { EmptyState, Notice, FilterChip } from "../ui/Card";
 import { ColumnPicker } from "../ui/ColumnPicker";
-import { Input } from "../ui/Field";
 import { AlertIcon, UsersIcon } from "../ui/icons";
 import { formatCaTier, formatWomStat } from "../signup/caStats";
 import { useDocumentTop } from "../ui/tableChrome";
@@ -110,61 +106,6 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
   return [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
 }
 
-// Dev-only — hidden unless AuthContext.devMode is true (the server route
-// this calls doesn't even exist outside that same dev gate). Lets a mod
-// populate a bunch of fake signups to exercise the draft without manually
-// signing up a dozen browser tabs.
-function DevSeedPanel({ slug }: { slug: string }) {
-  const seedTestSignups = useSeedTestSignups(slug);
-  const deleteAllSignups = useDeleteAllSignups(slug);
-  const [count, setCount] = useState(8);
-  const [error, setError] = useState<string | null>(null);
-  const [lastSeed, setLastSeed] = useState<SeedTestSignupsResponse | null>(null);
-
-  async function run(action: () => Promise<void>, fallback: string) {
-    setError(null);
-    try {
-      await action();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : fallback);
-    }
-  }
-
-  const seed = () => run(async () => setLastSeed(await seedTestSignups.mutateAsync(count)), "Failed to seed test signups");
-  const wipe = () =>
-    run(async () => {
-      if (!confirm("Delete every signup for this bingo?")) return;
-      await deleteAllSignups.mutateAsync();
-      setLastSeed(null);
-    }, "Failed to delete signups");
-
-  const busy = seedTestSignups.isPending || deleteAllSignups.isPending;
-
-  return (
-    <Notice tone="warn">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="shrink-0 text-xs font-semibold uppercase tracking-wide">Dev tools</span>
-        <Input type="number" min={1} max={50} value={count} onChange={(e) => setCount(Number(e.target.value) || 1)} className="num h-8 w-16" />
-        <Button size="sm" onPress={seed} isDisabled={busy}>
-          {seedTestSignups.isPending ? "Seeding…" : "Seed test signups"}
-        </Button>
-        <Button size="sm" variant="danger" onPress={wipe} isDisabled={busy}>
-          {deleteAllSignups.isPending ? "Deleting…" : "Delete all signups"}
-        </Button>
-        {error && <p className="text-xs text-danger">{error}</p>}
-      </div>
-      {lastSeed && lastSeed.source !== "tectonic" && (
-        <p className="mt-2 text-xs text-on-surface-muted">
-          {lastSeed.source === "mixed" ? "Some" : "All"} of the {lastSeed.signups.length} seeded signups are synthetic TestBot users.{" "}
-          {lastSeed.tectonicConfigured
-            ? "The clan roster ran out of unused members."
-            : "Set TECTONIC_API_URL, TECTONIC_API_KEY and TECTONIC_GUILD_ID in server/.env to draw real clan members instead."}
-        </p>
-      )}
-    </Notice>
-  );
-}
-
 type BuyinFilter = "all" | "paid" | "unpaid";
 type PairFilter = "all" | "paired" | "unpaired";
 
@@ -200,7 +141,7 @@ export function SignupRoster({ slug }: { slug: string }) {
   // One subscription for the whole table, not one per row — every CollectedByCell used to call this itself, so
   // 63 rows meant 63 separate subscriptions to (and re-renders off) the very same query.
   const { data: modsData } = useBingoMods(slug);
-  const { user: me, devMode } = useAuth();
+  const { user: me } = useAuth();
   const statsRefreshing = useStatsRefreshingSignupIds();
   const roster = data?.signups ?? [];
   const questions = questionsData?.questions ?? [];
@@ -335,61 +276,64 @@ export function SignupRoster({ slug }: { slug: string }) {
   }
 
   return (
-    <div className="space-y-4">
-      {devMode && bingoData?.bingo.stage === "signup" && <DevSeedPanel slug={slug} />}
-      {(collectorBreakdown.byMod.length > 0 || collectorBreakdown.uncollected > 0) && (
-        <div className="rounded-lg border border-outline p-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-on-surface-muted">Buy-ins held</p>
-          <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-sm text-on-surface-muted">
-            {collectorBreakdown.byMod.map((m) => (
-              <span key={m.id}>
-                {m.label} <span className="num text-on-surface">{m.count}</span>
-                {buyinAmount != null && (
-                  <>
-                    {" "}
-                    · <span className="num text-on-surface">{formatGp(m.count * buyinAmount)}</span>
-                  </>
-                )}
-              </span>
-            ))}
-            {collectorBreakdown.uncollected > 0 && (
-              <span className="text-warn">
-                Not yet collected <span className="num">{collectorBreakdown.uncollected}</span>
-                {buyinAmount != null && (
-                  <>
-                    {" "}
-                    · <span className="num">{formatGp(collectorBreakdown.uncollected * buyinAmount)}</span>
-                  </>
-                )}
-              </span>
-            )}
+    // Only the grid itself goes full width (ModPage's <main> is unconstrained for this one tab, see ModPage.tsx's
+    // own NARROW comment) — everything above it here (buy-ins held, the filter/search/Columns row) stays at the
+    // same reading width every other mod tab uses. A Fragment root, not one div, so the grid can sit as a
+    // full-width sibling instead of being capped by the narrow block's own max-width.
+    <>
+      <div className="mx-auto w-full max-w-6xl space-y-4">
+        {(collectorBreakdown.byMod.length > 0 || collectorBreakdown.uncollected > 0) && (
+          <div className="rounded-lg border border-outline p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-on-surface-muted">Buy-ins held</p>
+            <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-sm text-on-surface-muted">
+              {collectorBreakdown.byMod.map((m) => (
+                <span key={m.id}>
+                  {m.label} <span className="num text-on-surface">{m.count}</span>
+                  {buyinAmount != null && (
+                    <>
+                      {" "}
+                      · <span className="num text-on-surface">{formatGp(m.count * buyinAmount)}</span>
+                    </>
+                  )}
+                </span>
+              ))}
+              {collectorBreakdown.uncollected > 0 && (
+                <span className="text-warn">
+                  Not yet collected <span className="num">{collectorBreakdown.uncollected}</span>
+                  {buyinAmount != null && (
+                    <>
+                      {" "}
+                      · <span className="num">{formatGp(collectorBreakdown.uncollected * buyinAmount)}</span>
+                    </>
+                  )}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-      {leftoverCount > 0 && (
-        <Notice tone="warn" icon={<AlertIcon />}>
-          <span className="num">{leftoverCount}</span> newest signup{leftoverCount !== 1 ? "s" : ""} {leftoverCount !== 1 ? "don't" : "doesn't"} fit a full round of{" "}
-          <span className="num">{teamCount}</span> teams and will be {leftoverMode === "singles" ? "drafted in a singles round" : "cut from the draft"} unless more players sign up or a
-          team is added.{bingoData?.bingo.warnLeftovers ? " They can see this warning on their signup page." : " Turn on the warning in Settings to tell them."}
-        </Notice>
-      )}
-      <p className="text-sm text-on-surface-muted">
-        <span className="num text-on-surface">{activeCount}</span> active signup{activeCount !== 1 ? "s" : ""}
-        {withdrawnCount > 0 && (
-          <>
-            , <span className="num">{withdrawnCount}</span> withdrawn
-          </>
         )}
-      </p>
+        {leftoverCount > 0 && (
+          <Notice tone="warn" icon={<AlertIcon />}>
+            <span className="num">{leftoverCount}</span> newest signup{leftoverCount !== 1 ? "s" : ""} {leftoverCount !== 1 ? "don't" : "doesn't"} fit a full round of{" "}
+            <span className="num">{teamCount}</span> teams and will be {leftoverMode === "singles" ? "drafted in a singles round" : "cut from the draft"} unless more players sign up or a
+            team is added.{bingoData?.bingo.warnLeftovers ? " They can see this warning on their signup page." : " Turn on the warning in Settings to tell them."}
+          </Notice>
+        )}
+        <p className="text-sm text-on-surface-muted">
+          <span className="num text-on-surface">{activeCount}</span> active signup{activeCount !== 1 ? "s" : ""}
+          {withdrawnCount > 0 && (
+            <>
+              , <span className="num">{withdrawnCount}</span> withdrawn
+            </>
+          )}
+        </p>
 
-      {roster.length === 0 ? (
-        <EmptyState icon={<UsersIcon />} title="No signups yet">
-          Players who sign up will appear here with their answers and buy-in status.
-        </EmptyState>
-      ) : (
-        <>
-          {/* Issue #121: the buy-in/pair chips (quick, commonly-used filters) stay buttons, aligned opposite the
-              page's dropdown-style controls (search, Columns) on the same row rather than a row of their own. */}
+        {roster.length === 0 ? (
+          <EmptyState icon={<UsersIcon />} title="No signups yet">
+            Players who sign up will appear here with their answers and buy-in status.
+          </EmptyState>
+        ) : (
+          // Issue #121: the buy-in/pair chips (quick, commonly-used filters) stay buttons, aligned opposite the
+          // page's dropdown-style controls (search, Columns) on the same row rather than a row of their own.
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by buy-in">
@@ -420,22 +364,25 @@ export function SignupRoster({ slug }: { slug: string }) {
               </Button>
             </div>
           </div>
-          <div ref={setTableWrapper} className="overflow-hidden" style={{ height: tableHeight, minHeight: MIN_TABLE_HEIGHT }}>
-            <SignupRosterGrid
-              rows={rows}
-              questions={questions}
-              isDuo={isDuo}
-              showTier={showTier}
-              collectedByOptions={collectedByOptions}
-              doesRowPassFilters={doesRowPassFilters}
-              onDisplayedCountChange={setDisplayedCount}
-              onApiReady={setGridApi}
-              onHiddenColumnsChange={setHiddenColumnIds}
-              context={gridContext}
-            />
-          </div>
-        </>
+        )}
+      </div>
+
+      {roster.length > 0 && (
+        <div ref={setTableWrapper} className="mt-4 w-full overflow-hidden" style={{ height: tableHeight, minHeight: MIN_TABLE_HEIGHT }}>
+          <SignupRosterGrid
+            rows={rows}
+            questions={questions}
+            isDuo={isDuo}
+            showTier={showTier}
+            collectedByOptions={collectedByOptions}
+            doesRowPassFilters={doesRowPassFilters}
+            onDisplayedCountChange={setDisplayedCount}
+            onApiReady={setGridApi}
+            onHiddenColumnsChange={setHiddenColumnIds}
+            context={gridContext}
+          />
+        </div>
       )}
-    </div>
+    </>
   );
 }

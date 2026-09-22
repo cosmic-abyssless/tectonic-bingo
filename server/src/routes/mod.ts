@@ -1,4 +1,3 @@
-import { isDevModeActive } from "../devMode";
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middleware/requireAuth";
@@ -15,10 +14,8 @@ import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
 import { fetchProfiles } from "../services/tectonicProfileService";
 import * as pairingService from "../services/pairingService";
-import * as devSeedService from "../services/devSeedService";
 import * as teamService from "../services/teamService";
 import { syncWomCompetitionAfterDraft } from "../services/womCompetitionService";
-import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
 import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
 import { approveSubmission, rejectSubmission, undoSubmissionReview } from "../services/scoringService";
 import { ServiceError } from "../services/errors";
@@ -294,44 +291,5 @@ router.delete(
     res.json({ signup });
   }),
 );
-
-// Dev-only test data helper — route only exists at all when explicitly
-// enabled, same gate as /auth/dev-login, so it's not reachable in production
-// even by a mod who knows the URL.
-if (isDevModeActive()) {
-  router.post(
-    "/dev/seed-signups",
-    asyncHandler(async (req, res) => {
-      const { count } = req.body as { count?: number };
-      const n = Math.min(Math.max(Math.trunc(count ?? 8), 1), 50);
-      const tectonic = getTectonicClient();
-      // Throwaway test data: an unreachable tectonic-api just means seeded
-      // signups aren't drawn from the real roster.
-      const roster = tectonic
-        ? await tectonic.getRoster(1000).catch((err: unknown) => {
-            if (err instanceof TectonicUnavailableError) return [];
-            throw err;
-          })
-        : [];
-      // devSeedService fabricates WOM/RuneProfile stats locally (no network
-      // calls) for every seeded signup — up to 50 real API round trips per
-      // click would be slow and pointless rate-limit exposure for
-      // throwaway test data. Real signups still fetch real data.
-      const result = devSeedService.seedTestSignups(db, req.bingo!, n, roster);
-      broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
-      res.status(201).json({ ...result, tectonicConfigured: tectonic !== null });
-    }),
-  );
-
-  router.delete(
-    "/dev/signups",
-    asyncHandler(async (req, res) => {
-      if (req.bingo!.stage !== "signup") throw new ServiceError(400, "Signups can only be wiped during the signup stage");
-      const deleted = devSeedService.deleteAllSignups(db, req.bingo!.id);
-      broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
-      res.json({ deleted });
-    }),
-  );
-}
 
 export default router;

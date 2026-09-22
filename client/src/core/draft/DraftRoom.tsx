@@ -220,167 +220,178 @@ export function DraftRoom({ slug }: { slug: string }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6 px-6 py-6">
-      {scouting ? (
-        <Notice tone="info">
-          Scouting. Signups are {shell.bingo.stage === "signup" ? "still open" : "closed"} — the draft starts once the mods move the bingo to the draft stage.
-          {isLead && " Star and note players now; your team's ratings carry over into the draft."}
-        </Notice>
-      ) : !state.draftStarted ? (
-        <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-          <div>
-            <p className="font-semibold text-on-surface">The draft hasn't started</p>
-            <p className="text-sm text-on-surface-muted">
-              {state.teams.length} team{state.teams.length === 1 ? "" : "s"}.{" "}
-              {state.teams.length < 2
-                ? "Create at least 2 teams from the mod panel first."
-                : state.orderReady
-                  ? revealing
-                    ? "Revealing pick order."
-                    : "Pick order is set."
-                  : "Shuffle or set pick order, then start."}
-            </p>
-            {orderError && <p className="mt-1 text-sm text-danger">{orderError}</p>}
-          </div>
-          {canControlOrder && (
-            <div className="flex flex-wrap gap-2">
-              <Button onPress={handleShuffle} isDisabled={state.teams.length < 2 || busy}>
-                {shuffleOrder.isPending ? "Shuffling…" : "Shuffle pick order"}
-              </Button>
-              <Button onPress={() => { setOrderError(null); setOrderOpen(true); }} isDisabled={state.teams.length < 2 || busy}>
-                Pick order
-              </Button>
-              <Button variant="primary" onPress={handleStart} isDisabled={!state.orderReady || busy}>
-                {startDraft.isPending ? "Starting…" : "Start draft"}
-              </Button>
-            </div>
-          )}
-        </Card>
-      ) : canControlOrder ? (
-        <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-          <div>
-            <p className="font-semibold text-on-surface">{revealing ? "Revealing pick order" : state.currentPick ? `${currentTeam?.name ?? "…"} is currently picking` : "Draft started"}</p>
-            {state.currentPick && (
-              <p className="num text-xs uppercase tracking-wide text-on-surface-subtle">
-                {state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick {state.currentPick.pickNumber}
+    // Only the pool table itself goes full width — everything above it (status/notices, the teams row, "Available
+    // players" heading) stays at the original reading width (max-w-5xl). A Fragment root, not one div, so the
+    // table can sit as a sibling unconstrained by the narrow block's own max-width rather than needing a
+    // negative-margin breakout trick.
+    <>
+      <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-6">
+        {scouting ? (
+          <Notice tone="info">
+            Scouting. Signups are {shell.bingo.stage === "signup" ? "still open" : "closed"} — the draft starts once the mods move the bingo to the draft stage.
+            {isLead && " Star and note players now; your team's ratings carry over into the draft."}
+          </Notice>
+        ) : !state.draftStarted ? (
+          <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div>
+              <p className="font-semibold text-on-surface">The draft hasn't started</p>
+              <p className="text-sm text-on-surface-muted">
+                {state.teams.length} team{state.teams.length === 1 ? "" : "s"}.{" "}
+                {state.teams.length < 2
+                  ? "Create at least 2 teams from the mod panel first."
+                  : state.orderReady
+                    ? revealing
+                      ? "Revealing pick order."
+                      : "Pick order is set."
+                    : "Shuffle or set pick order, then start."}
               </p>
+              {orderError && <p className="mt-1 text-sm text-danger">{orderError}</p>}
+            </div>
+            {canControlOrder && (
+              <div className="flex flex-wrap gap-2">
+                <Button onPress={handleShuffle} isDisabled={state.teams.length < 2 || busy}>
+                  {shuffleOrder.isPending ? "Shuffling…" : "Shuffle pick order"}
+                </Button>
+                <Button onPress={() => { setOrderError(null); setOrderOpen(true); }} isDisabled={state.teams.length < 2 || busy}>
+                  Pick order
+                </Button>
+                <Button variant="primary" onPress={handleStart} isDisabled={!state.orderReady || busy}>
+                  {startDraft.isPending ? "Starting…" : "Start draft"}
+                </Button>
+              </div>
             )}
-            {orderError && <p className="mt-1 text-sm text-danger">{orderError}</p>}
-          </div>
-          {/* No shuffle or pick-order controls here: the order is fixed once the draft has started. */}
-          <p className="text-sm text-on-surface-subtle">Pick order is locked.</p>
-        </Card>
-      ) : state.currentPick ? (
-        <Card className="p-4">
-          <p className="num text-xs uppercase tracking-wide text-on-surface-subtle">
-            {state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick {state.currentPick.pickNumber}
-          </p>
-          <p className="text-lg font-semibold text-on-surface">{currentTeam?.name ?? "…"} is currently picking</p>
-        </Card>
-      ) : revealing ? (
-        <Notice tone="info">Revealing pick order.</Notice>
-      ) : (
-        <Notice tone="ok">
-          Draft complete. {isMod ? "Advance to the reveal stage from the mod panel when you're ready." : "The board is revealed next."}
-          {poolCount > 0 && (
-            <>
-              {" "}
-              <span className="num">{poolCount}</span> leftover signup{poolCount === 1 ? " was" : "s were"} not drafted.
-            </>
-          )}
-          {state.cutCount > 0 && (
-            <>
-              {" "}
-              <span className="num">{state.cutCount}</span> signup{state.cutCount === 1 ? " was" : "s were"} cut.
-            </>
-          )}
-        </Notice>
-      )}
-
-      {canUndo && (
-        <UndoPick
-          // Reset the confirmation whenever the latest pick changes underneath it.
-          key={latestPickNumber}
-          pickNumber={latestPickNumber}
-          names={namesForPick(state.picks, latestPickNumber)}
-          teamName={latestPickTeam!.name}
-          busy={undoPick.isPending}
-          error={undoError}
-          onUndo={handleUndo}
-        />
-      )}
-
-      {isMyTurn && <Notice tone="ok">It's your turn to pick.</Notice>}
-
-      <section className="sticky z-10 -mx-6 bg-background px-6 pb-3 pt-2 shadow-[0_6px_8px_-6px_var(--color-shade)]" style={{ top: headerHeight }}>
-        <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
-          Teams
-        </h3>
-        {/* grid-flow-col + a minimum column width, in a scrollable row —
-            handles a handful of teams (spread to fill width) and a large
-            number of teams (scrolls instead of squeezing RSNs unreadable). */}
-        <div className="max-h-[36vh] overflow-auto">
-          <div className="grid auto-cols-[minmax(140px,1fr)] grid-flow-col gap-3">
-            {state.teams.map((team) => (
-              <motion.div
-                key={team.id}
-                layout
-                transition={
-                  reducedMotion || !revealing
-                    ? { duration: 0 }
-                    : { type: "tween", duration: Math.min(2, Math.max(0.4, lockMs / 1000)), ease: [0.22, 1, 0.36, 1] }
-                }
-              >
-                <TeamRoster
-                  team={team}
-                  picks={state.picks.filter((p) => p.teamId === team.id)}
-                  isCurrent={currentTeam?.id === team.id}
-                  showOrder={state.orderReady}
-                  hiddenPickNumbers={reveals.hiddenPickNumbers}
-                />
-              </motion.div>
-            ))}
-          </div>
-        </div>
-        {state.teams.length === 0 && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
-      </section>
-
-      {revealedTeam && reveals.active && (
-        <DraftPickReveal
-          key={reveals.active.pickNumber}
-          pick={reveals.active}
-          names={namesForPick(state.picks, reveals.active.pickNumber)}
-          teamName={revealedTeam.name}
-          teamColor={revealedTeam.color}
-          hurry={reveals.waiting > 0}
-          onArrive={reveals.arrive}
-          onDone={reveals.finish}
-        />
-      )}
-
-      <PickOrderDialog
-        isOpen={orderOpen}
-        onClose={() => setOrderOpen(false)}
-        teams={state.teams}
-        onSave={handleSaveOrder}
-        saving={setOrder.isPending}
-        error={orderError}
-      />
-
-      <section>
-        <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
-          Available players <span className="num font-normal text-on-surface-subtle">({poolCount})</span>
-        </h3>
-        {(pickError || rateError) && (
-          <Notice tone="danger" className="mb-2">
-            {pickError ?? rateError}
+          </Card>
+        ) : canControlOrder ? (
+          <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div>
+              <p className="font-semibold text-on-surface">{revealing ? "Revealing pick order" : state.currentPick ? `${currentTeam?.name ?? "…"} is currently picking` : "Draft started"}</p>
+              {state.currentPick && (
+                <p className="num text-xs uppercase tracking-wide text-on-surface-subtle">
+                  {state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick {state.currentPick.pickNumber}
+                </p>
+              )}
+              {orderError && <p className="mt-1 text-sm text-danger">{orderError}</p>}
+            </div>
+            {/* No shuffle or pick-order controls here: the order is fixed once the draft has started. */}
+            <p className="text-sm text-on-surface-subtle">Pick order is locked.</p>
+          </Card>
+        ) : state.currentPick ? (
+          <Card className="p-4">
+            <p className="num text-xs uppercase tracking-wide text-on-surface-subtle">
+              {state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick {state.currentPick.pickNumber}
+            </p>
+            <p className="text-lg font-semibold text-on-surface">{currentTeam?.name ?? "…"} is currently picking</p>
+          </Card>
+        ) : revealing ? (
+          <Notice tone="info">Revealing pick order.</Notice>
+        ) : (
+          <Notice tone="ok">
+            Draft complete. {isMod ? "Advance to the reveal stage from the mod panel when you're ready." : "The board is revealed next."}
+            {poolCount > 0 && (
+              <>
+                {" "}
+                <span className="num">{poolCount}</span> leftover signup{poolCount === 1 ? " was" : "s were"} not drafted.
+              </>
+            )}
+            {state.cutCount > 0 && (
+              <>
+                {" "}
+                <span className="num">{state.cutCount}</span> signup{state.cutCount === 1 ? " was" : "s were"} cut.
+              </>
+            )}
           </Notice>
         )}
-        {state.tectonicUnavailable && (
-          <Notice tone="warn" className="mb-2">
-            The clan API is unavailable right now, so tiers, records and event placements are hidden.
-          </Notice>
+
+        {canUndo && (
+          <UndoPick
+            // Reset the confirmation whenever the latest pick changes underneath it.
+            key={latestPickNumber}
+            pickNumber={latestPickNumber}
+            names={namesForPick(state.picks, latestPickNumber)}
+            teamName={latestPickTeam!.name}
+            busy={undoPick.isPending}
+            error={undoError}
+            onUndo={handleUndo}
+          />
         )}
+
+        {isMyTurn && <Notice tone="ok">It's your turn to pick.</Notice>}
+
+        <section className="sticky z-10 -mx-6 bg-background px-6 pb-3 pt-2 shadow-[0_6px_8px_-6px_var(--color-shade)]" style={{ top: headerHeight }}>
+          <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+            Teams
+          </h3>
+          {/* grid-flow-col + a minimum column width, in a scrollable row —
+              handles a handful of teams (spread to fill width) and a large
+              number of teams (scrolls instead of squeezing RSNs unreadable). */}
+          <div className="max-h-[36vh] overflow-auto">
+            <div className="grid auto-cols-[minmax(140px,1fr)] grid-flow-col gap-3">
+              {state.teams.map((team) => (
+                <motion.div
+                  key={team.id}
+                  layout
+                  transition={
+                    reducedMotion || !revealing
+                      ? { duration: 0 }
+                      : { type: "tween", duration: Math.min(2, Math.max(0.4, lockMs / 1000)), ease: [0.22, 1, 0.36, 1] }
+                  }
+                >
+                  <TeamRoster
+                    team={team}
+                    picks={state.picks.filter((p) => p.teamId === team.id)}
+                    isCurrent={currentTeam?.id === team.id}
+                    showOrder={state.orderReady}
+                    hiddenPickNumbers={reveals.hiddenPickNumbers}
+                  />
+                </motion.div>
+              ))}
+            </div>
+          </div>
+          {state.teams.length === 0 && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
+        </section>
+
+        {revealedTeam && reveals.active && (
+          <DraftPickReveal
+            key={reveals.active.pickNumber}
+            pick={reveals.active}
+            names={namesForPick(state.picks, reveals.active.pickNumber)}
+            teamName={revealedTeam.name}
+            teamColor={revealedTeam.color}
+            hurry={reveals.waiting > 0}
+            onArrive={reveals.arrive}
+            onDone={reveals.finish}
+          />
+        )}
+
+        <PickOrderDialog
+          isOpen={orderOpen}
+          onClose={() => setOrderOpen(false)}
+          teams={state.teams}
+          onSave={handleSaveOrder}
+          saving={setOrder.isPending}
+          error={orderError}
+        />
+
+        <section>
+          <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+            Available players <span className="num font-normal text-on-surface-subtle">({poolCount})</span>
+          </h3>
+          {(pickError || rateError) && (
+            <Notice tone="danger" className="mb-2">
+              {pickError ?? rateError}
+            </Notice>
+          )}
+          {state.tectonicUnavailable && (
+            <Notice tone="warn" className="mb-2">
+              The clan API is unavailable right now, so tiers, records and event placements are hidden.
+            </Notice>
+          )}
+        </section>
+      </div>
+
+      {/* The one thing that actually breaks out of max-w-5xl above — everything else in this component (the
+          status cards, the teams row, this section's own heading/notices) stays reading-width. */}
+      <div className="mt-6 w-full px-6 pb-6">
         <Card className="p-4">
           <DraftPoolGrid
             pool={state.pool}
@@ -393,7 +404,7 @@ export function DraftRoom({ slug }: { slug: string }) {
             leftoverMode={shell.bingo.leftoverMode}
           />
         </Card>
-      </section>
-    </div>
+      </div>
+    </>
   );
 }

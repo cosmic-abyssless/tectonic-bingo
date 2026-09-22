@@ -119,4 +119,38 @@ describe("condenseAuditEntries", () => {
   it("returns an empty page as an empty page", () => {
     expect(condenseAuditEntries([])).toEqual([]);
   });
+
+  it("passes through a historical entry whose action isn't in the current registry, instead of crashing", () => {
+    // A real scenario, not just a defensive hypothetical: an action can be renamed or removed (as dev.signups_*
+    // was) while old rows recorded under it stay in the DB forever. AUDIT_ACTIONS[action] is undefined for it —
+    // condenseRun's own `.condense` lookup has to survive that.
+    const removedAction = "some.removed_action" as unknown as AuditAction;
+    const unknown: AuditEntry = {
+      action: removedAction,
+      details: {} as never,
+      entityLabel: null,
+      // A different actor/team than the approvals around it, on purpose — same as any of the other "doesn't
+      // merge across a different actor" cases above, so it starts its own run and this test isn't also
+      // exercising (or accidentally depending on) merge behaviour, just "doesn't crash, passes through as-is".
+      actor: { id: "mod2", discordUsername: "mod2", discordGlobalName: null, discordGuildNick: null },
+      team: { id: "teamB", name: "Awkward", color: null },
+      onBehalfOf: null,
+      id: 500,
+      bingoId: "b1",
+      at: new Date(2026, 0, 1).toISOString(),
+      category: "system",
+      label: "mod1 did something no longer in the registry",
+      tone: "warn",
+      visibility: "mods",
+      actorType: "user",
+      actorRole: "mod",
+      entityType: "bingo",
+      entityId: null,
+      requestId: null,
+    };
+
+    const out = condenseAuditEntries([approved("A"), unknown, approved("B")]);
+    expect(out.map((e) => e.action)).toEqual(["submission.approved", removedAction, "submission.approved"]);
+    expect(out[1]).toBe(unknown);
+  });
 });

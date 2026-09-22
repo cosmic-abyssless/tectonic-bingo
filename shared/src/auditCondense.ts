@@ -7,8 +7,11 @@ const runKey = (e: AuditEntry) => `${e.actor?.id ?? e.actorType}|${e.team?.id ??
 function merge(members: AuditEntry[]): AuditEntry {
   const newest = members[0]!;
   if (members.length === 1) return newest;
-  const def = AUDIT_ACTIONS[newest.action] as AuditActionDef<AuditAction>;
-  const label = def.condense!(members.map(toAuditLabelInput));
+  // condenseRun only ever buckets an action whose def.condense it already confirmed truthy, so def is always
+  // defined and def.condense always set here — but typed `| undefined` regardless, matching every other
+  // AUDIT_ACTIONS lookup that has to survive a historical entry whose action was later renamed or removed.
+  const def = AUDIT_ACTIONS[newest.action] as AuditActionDef<AuditAction> | undefined;
+  const label = def?.condense ? def.condense(members.map(toAuditLabelInput)) : newest.label;
   return { ...newest, label, condensed: { count: members.length, ids: members.map((m) => m.id), oldestAt: members[members.length - 1]!.at } };
 }
 
@@ -18,7 +21,9 @@ function condenseRun(run: AuditEntry[]): AuditEntry[] {
   // Walking oldest to newest, then flipping back, keeps a batch's points together above the one line that summarises it.
   const slots: (AuditEntry | AuditAction)[] = [];
   for (const entry of [...run].reverse()) {
-    if (!AUDIT_ACTIONS[entry.action].condense) {
+    // ?. — a historical entry's action can outlive its AUDIT_ACTIONS registry entry (renamed or removed since);
+    // treat "unknown" the same as "doesn't define condense" rather than crashing on the lookup.
+    if (!AUDIT_ACTIONS[entry.action]?.condense) {
       slots.push(entry);
       continue;
     }

@@ -251,32 +251,6 @@ export function useModWithdrawSignup(slug: string) {
   });
 }
 
-// Dev-only — the server route only exists at all outside production with
-// DEV_LOGIN_ENABLED set, matching AuthContext's devMode flag.
-export interface SeedTestSignupsResponse {
-  signups: Signup[];
-  // Whether the seeded rows were drawn from the real clan roster, made up,
-  // or both (roster ran out part-way).
-  source: "tectonic" | "synthetic" | "mixed";
-  tectonicConfigured: boolean;
-}
-
-export function useSeedTestSignups(slug: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (count: number) => api.post<SeedTestSignupsResponse>(`/api/bingos/${slug}/mod/dev/seed-signups`, { count }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
-  });
-}
-
-export function useDeleteAllSignups(slug: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.delete<{ deleted: number }>(`/api/bingos/${slug}/mod/dev/signups`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
-  });
-}
-
 export function useSignupQuestions(slug: string | undefined) {
   return useQuery({
     queryKey: queryKeys.signupQuestions(slug ?? ""),
