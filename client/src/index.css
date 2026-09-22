@@ -51,6 +51,10 @@
   --color-silver: #cbd5e1;
   --color-bronze: #d97706;
 
+  /* Backdrop for an OSRS wiki item sprite (drawn for the game's own light inventory background, not this site's
+     theme) — same in both schemes, not overridden below. */
+  --color-icon-backdrop: #e4e4e7;
+
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 10px;
