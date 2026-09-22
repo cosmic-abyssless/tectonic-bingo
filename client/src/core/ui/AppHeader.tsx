@@ -70,7 +70,7 @@ export function AppHeader({
   // The bug-report button and the signed-in user's menu.
   const utility = (
     <>
-      {user && (
+      {user?.inGuild && (
         <>
           <TextTooltip text="Report a bug">
             <IconButton label="Report a bug" size="sm" onPress={() => setBugReportOpen(true)}>

@@ -1,5 +1,4 @@
 import { Menu as AriaMenu, MenuItem as AriaMenuItem, MenuTrigger, Popover, type MenuItemProps, type MenuProps } from "react-aria-components";
-import type { ReactNode } from "react";
 
 export { MenuTrigger };
 
@@ -17,7 +16,7 @@ export function Menu<T extends object>({ instant, popoverClassName = "", ...prop
   );
 }
 
-export function MenuItem({ children, className, ...props }: MenuItemProps & { children: ReactNode }) {
+export function MenuItem({ children, className, ...props }: MenuItemProps) {
   return (
     <AriaMenuItem
       {...props}

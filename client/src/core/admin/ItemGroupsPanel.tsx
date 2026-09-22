@@ -5,7 +5,7 @@ import * as adminApi from "../../api/adminApi";
 import { optimisticUpdate } from "../../api/optimistic";
 import { adminQueryKeys, useItemGroups } from "../../api/adminQueries";
 import { Button } from "../ui/Button";
-import { Card, CardHeader, Notice } from "../ui/Card";
+import { Notice } from "../ui/Card";
 import { Input, Textarea } from "../ui/Field";
 
 function parseNames(raw: string): string[] {
@@ -126,25 +126,25 @@ export function ItemGroupsPanel() {
   const groups = data?.itemGroups ?? [];
 
   return (
-    <Card className="w-full max-w-2xl">
-      <CardHeader title="Item groups" description="Named sets of item names reusable in any bingo's tile requirements." />
-      <div className="p-5">
-        <GroupForm
-          onSave={async (payload) => {
-            await adminApi.createItemGroup(payload);
-            await queryClient.invalidateQueries({ queryKey: adminQueryKeys.itemGroups });
-          }}
-        />
-      </div>
+    <div className="space-y-4">
+      <p className="text-sm text-on-surface-muted">Named sets of item names reusable in any bingo's tile requirements.</p>
+      <GroupForm
+        onSave={async (payload) => {
+          await adminApi.createItemGroup(payload);
+          await queryClient.invalidateQueries({ queryKey: adminQueryKeys.itemGroups });
+        }}
+      />
       {isLoading ? (
-        <p className="px-5 pb-5 text-sm text-on-surface-muted">Loading…</p>
+        <p className="text-sm text-on-surface-muted">Loading…</p>
       ) : groups.length === 0 ? (
-        <p className="px-5 pb-5 text-sm text-on-surface-subtle">No item groups yet.</p>
+        <p className="text-sm text-on-surface-subtle">No item groups yet.</p>
       ) : (
-        <ul className="divide-y divide-outline border-t border-outline">
-          {groups.map((g) => <GroupRow key={g.id} group={g} />)}
+        <ul className="divide-y divide-outline rounded-md border border-outline">
+          {groups.map((g) => (
+            <GroupRow key={g.id} group={g} />
+          ))}
         </ul>
       )}
-    </Card>
+    </div>
   );
 }
