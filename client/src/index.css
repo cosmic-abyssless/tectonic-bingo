@@ -185,3 +185,13 @@
     font-size: 16px;
   }
 }
+
+/* AG Grid's own .ag-cell-wrapper (not ours — it's the element AG puts around a custom cellRenderer's output)
+   sizes to its content and sits at the top of the cell; its own align-items:center only centers its children
+   against *that* short height, not the row's. Applies grid-wide (both SignupRosterGrid and DraftPoolGrid use
+   custom cellRenderers on nearly every column) rather than opting columns in one at a time — a cellRenderer's
+   own content still decides its own height/layout (e.g. DraftPoolGrid's StackedCell stacking two lines for a
+   duo pair), this only re-centers that content against the *row's* height instead of leaving it pinned to top. */
+.ag-cell .ag-cell-wrapper {
+  height: 100%;
+}

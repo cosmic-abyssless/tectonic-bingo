@@ -24,8 +24,14 @@ function LoadingValue({ loading, title, children }: { loading?: boolean; title?:
   );
 }
 
-export function CaCell({ stats, loading }: { stats: CombatAchievementStats | null | undefined; loading?: boolean }) {
-  return <LoadingValue loading={loading} title={caTitle(stats)}>{formatCaTier(stats)}</LoadingValue>;
+// nativeTitle: false when the caller already shows this same text some other way (AG Grid's own tooltip, in
+// SignupRosterGrid) — otherwise the two would render stacked/overlapping on hover.
+export function CaCell({ stats, loading, nativeTitle = true }: { stats: CombatAchievementStats | null | undefined; loading?: boolean; nativeTitle?: boolean }) {
+  return (
+    <LoadingValue loading={loading} title={nativeTitle ? caTitle(stats) : undefined}>
+      {formatCaTier(stats)}
+    </LoadingValue>
+  );
 }
 
 export function formatWomStat(value: number | undefined): string {
