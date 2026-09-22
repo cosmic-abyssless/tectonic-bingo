@@ -335,61 +335,65 @@ export function SignupRoster({ slug }: { slug: string }) {
   }
 
   return (
-    <div className="space-y-4">
-      {devMode && bingoData?.bingo.stage === "signup" && <DevSeedPanel slug={slug} />}
-      {(collectorBreakdown.byMod.length > 0 || collectorBreakdown.uncollected > 0) && (
-        <div className="rounded-lg border border-outline p-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-on-surface-muted">Buy-ins held</p>
-          <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-sm text-on-surface-muted">
-            {collectorBreakdown.byMod.map((m) => (
-              <span key={m.id}>
-                {m.label} <span className="num text-on-surface">{m.count}</span>
-                {buyinAmount != null && (
-                  <>
-                    {" "}
-                    · <span className="num text-on-surface">{formatGp(m.count * buyinAmount)}</span>
-                  </>
-                )}
-              </span>
-            ))}
-            {collectorBreakdown.uncollected > 0 && (
-              <span className="text-warn">
-                Not yet collected <span className="num">{collectorBreakdown.uncollected}</span>
-                {buyinAmount != null && (
-                  <>
-                    {" "}
-                    · <span className="num">{formatGp(collectorBreakdown.uncollected * buyinAmount)}</span>
-                  </>
-                )}
-              </span>
-            )}
+    // Only the grid itself goes full width (ModPage's <main> is unconstrained for this one tab, see ModPage.tsx's
+    // own NARROW comment) — everything above it here (dev tools, buy-ins held, the filter/search/Columns row)
+    // stays at the same reading width every other mod tab uses. A Fragment root, not one div, so the grid can sit
+    // as a full-width sibling instead of being capped by the narrow block's own max-width.
+    <>
+      <div className="mx-auto w-full max-w-6xl space-y-4">
+        {devMode && bingoData?.bingo.stage === "signup" && <DevSeedPanel slug={slug} />}
+        {(collectorBreakdown.byMod.length > 0 || collectorBreakdown.uncollected > 0) && (
+          <div className="rounded-lg border border-outline p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-on-surface-muted">Buy-ins held</p>
+            <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-sm text-on-surface-muted">
+              {collectorBreakdown.byMod.map((m) => (
+                <span key={m.id}>
+                  {m.label} <span className="num text-on-surface">{m.count}</span>
+                  {buyinAmount != null && (
+                    <>
+                      {" "}
+                      · <span className="num text-on-surface">{formatGp(m.count * buyinAmount)}</span>
+                    </>
+                  )}
+                </span>
+              ))}
+              {collectorBreakdown.uncollected > 0 && (
+                <span className="text-warn">
+                  Not yet collected <span className="num">{collectorBreakdown.uncollected}</span>
+                  {buyinAmount != null && (
+                    <>
+                      {" "}
+                      · <span className="num">{formatGp(collectorBreakdown.uncollected * buyinAmount)}</span>
+                    </>
+                  )}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-      {leftoverCount > 0 && (
-        <Notice tone="warn" icon={<AlertIcon />}>
-          <span className="num">{leftoverCount}</span> newest signup{leftoverCount !== 1 ? "s" : ""} {leftoverCount !== 1 ? "don't" : "doesn't"} fit a full round of{" "}
-          <span className="num">{teamCount}</span> teams and will be {leftoverMode === "singles" ? "drafted in a singles round" : "cut from the draft"} unless more players sign up or a
-          team is added.{bingoData?.bingo.warnLeftovers ? " They can see this warning on their signup page." : " Turn on the warning in Settings to tell them."}
-        </Notice>
-      )}
-      <p className="text-sm text-on-surface-muted">
-        <span className="num text-on-surface">{activeCount}</span> active signup{activeCount !== 1 ? "s" : ""}
-        {withdrawnCount > 0 && (
-          <>
-            , <span className="num">{withdrawnCount}</span> withdrawn
-          </>
         )}
-      </p>
+        {leftoverCount > 0 && (
+          <Notice tone="warn" icon={<AlertIcon />}>
+            <span className="num">{leftoverCount}</span> newest signup{leftoverCount !== 1 ? "s" : ""} {leftoverCount !== 1 ? "don't" : "doesn't"} fit a full round of{" "}
+            <span className="num">{teamCount}</span> teams and will be {leftoverMode === "singles" ? "drafted in a singles round" : "cut from the draft"} unless more players sign up or a
+            team is added.{bingoData?.bingo.warnLeftovers ? " They can see this warning on their signup page." : " Turn on the warning in Settings to tell them."}
+          </Notice>
+        )}
+        <p className="text-sm text-on-surface-muted">
+          <span className="num text-on-surface">{activeCount}</span> active signup{activeCount !== 1 ? "s" : ""}
+          {withdrawnCount > 0 && (
+            <>
+              , <span className="num">{withdrawnCount}</span> withdrawn
+            </>
+          )}
+        </p>
 
-      {roster.length === 0 ? (
-        <EmptyState icon={<UsersIcon />} title="No signups yet">
-          Players who sign up will appear here with their answers and buy-in status.
-        </EmptyState>
-      ) : (
-        <>
-          {/* Issue #121: the buy-in/pair chips (quick, commonly-used filters) stay buttons, aligned opposite the
-              page's dropdown-style controls (search, Columns) on the same row rather than a row of their own. */}
+        {roster.length === 0 ? (
+          <EmptyState icon={<UsersIcon />} title="No signups yet">
+            Players who sign up will appear here with their answers and buy-in status.
+          </EmptyState>
+        ) : (
+          // Issue #121: the buy-in/pair chips (quick, commonly-used filters) stay buttons, aligned opposite the
+          // page's dropdown-style controls (search, Columns) on the same row rather than a row of their own.
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by buy-in">
@@ -420,22 +424,25 @@ export function SignupRoster({ slug }: { slug: string }) {
               </Button>
             </div>
           </div>
-          <div ref={setTableWrapper} className="overflow-hidden" style={{ height: tableHeight, minHeight: MIN_TABLE_HEIGHT }}>
-            <SignupRosterGrid
-              rows={rows}
-              questions={questions}
-              isDuo={isDuo}
-              showTier={showTier}
-              collectedByOptions={collectedByOptions}
-              doesRowPassFilters={doesRowPassFilters}
-              onDisplayedCountChange={setDisplayedCount}
-              onApiReady={setGridApi}
-              onHiddenColumnsChange={setHiddenColumnIds}
-              context={gridContext}
-            />
-          </div>
-        </>
+        )}
+      </div>
+
+      {roster.length > 0 && (
+        <div ref={setTableWrapper} className="mt-4 w-full overflow-hidden" style={{ height: tableHeight, minHeight: MIN_TABLE_HEIGHT }}>
+          <SignupRosterGrid
+            rows={rows}
+            questions={questions}
+            isDuo={isDuo}
+            showTier={showTier}
+            collectedByOptions={collectedByOptions}
+            doesRowPassFilters={doesRowPassFilters}
+            onDisplayedCountChange={setDisplayedCount}
+            onApiReady={setGridApi}
+            onHiddenColumnsChange={setHiddenColumnIds}
+            context={gridContext}
+          />
+        </div>
       )}
-    </div>
+    </>
   );
 }

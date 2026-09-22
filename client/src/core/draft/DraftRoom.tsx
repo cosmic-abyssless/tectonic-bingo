@@ -220,12 +220,12 @@ export function DraftRoom({ slug }: { slug: string }) {
   }
 
   return (
-    // Only the status/notice cluster above the tables stays reading-width (max-w-5xl) — a notice or a "shuffle
-    // pick order" card spanning the full page would be awkward to read. The teams row and the pool table itself
-    // go full width below it: more width directly means fewer teams/columns pushed into their own horizontal
-    // scroll, which is the whole point of letting them stretch.
-    <div className="w-full space-y-6 px-6 py-6">
-      <div className="mx-auto w-full max-w-5xl space-y-6">
+    // Only the pool table itself goes full width — everything above it (status/notices, the teams row, "Available
+    // players" heading) stays at the original reading width (max-w-5xl). A Fragment root, not one div, so the
+    // table can sit as a sibling unconstrained by the narrow block's own max-width rather than needing a
+    // negative-margin breakout trick.
+    <>
+      <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-6">
         {scouting ? (
           <Notice tone="info">
             Scouting. Signups are {shell.bingo.stage === "signup" ? "still open" : "closed"} — the draft starts once the mods move the bingo to the draft stage.
@@ -316,77 +316,82 @@ export function DraftRoom({ slug }: { slug: string }) {
         )}
 
         {isMyTurn && <Notice tone="ok">It's your turn to pick.</Notice>}
+
+        <section className="sticky z-10 -mx-6 bg-background px-6 pb-3 pt-2 shadow-[0_6px_8px_-6px_var(--color-shade)]" style={{ top: headerHeight }}>
+          <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+            Teams
+          </h3>
+          {/* grid-flow-col + a minimum column width, in a scrollable row —
+              handles a handful of teams (spread to fill width) and a large
+              number of teams (scrolls instead of squeezing RSNs unreadable). */}
+          <div className="max-h-[36vh] overflow-auto">
+            <div className="grid auto-cols-[minmax(140px,1fr)] grid-flow-col gap-3">
+              {state.teams.map((team) => (
+                <motion.div
+                  key={team.id}
+                  layout
+                  transition={
+                    reducedMotion || !revealing
+                      ? { duration: 0 }
+                      : { type: "tween", duration: Math.min(2, Math.max(0.4, lockMs / 1000)), ease: [0.22, 1, 0.36, 1] }
+                  }
+                >
+                  <TeamRoster
+                    team={team}
+                    picks={state.picks.filter((p) => p.teamId === team.id)}
+                    isCurrent={currentTeam?.id === team.id}
+                    showOrder={state.orderReady}
+                    hiddenPickNumbers={reveals.hiddenPickNumbers}
+                  />
+                </motion.div>
+              ))}
+            </div>
+          </div>
+          {state.teams.length === 0 && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
+        </section>
+
+        {revealedTeam && reveals.active && (
+          <DraftPickReveal
+            key={reveals.active.pickNumber}
+            pick={reveals.active}
+            names={namesForPick(state.picks, reveals.active.pickNumber)}
+            teamName={revealedTeam.name}
+            teamColor={revealedTeam.color}
+            hurry={reveals.waiting > 0}
+            onArrive={reveals.arrive}
+            onDone={reveals.finish}
+          />
+        )}
+
+        <PickOrderDialog
+          isOpen={orderOpen}
+          onClose={() => setOrderOpen(false)}
+          teams={state.teams}
+          onSave={handleSaveOrder}
+          saving={setOrder.isPending}
+          error={orderError}
+        />
+
+        <section>
+          <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+            Available players <span className="num font-normal text-on-surface-subtle">({poolCount})</span>
+          </h3>
+          {(pickError || rateError) && (
+            <Notice tone="danger" className="mb-2">
+              {pickError ?? rateError}
+            </Notice>
+          )}
+          {state.tectonicUnavailable && (
+            <Notice tone="warn" className="mb-2">
+              The clan API is unavailable right now, so tiers, records and event placements are hidden.
+            </Notice>
+          )}
+        </section>
       </div>
 
-      <section className="sticky z-10 -mx-6 bg-background px-6 pb-3 pt-2 shadow-[0_6px_8px_-6px_var(--color-shade)]" style={{ top: headerHeight }}>
-        <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
-          Teams
-        </h3>
-        {/* grid-flow-col + a minimum column width, in a scrollable row —
-            handles a handful of teams (spread to fill width) and a large
-            number of teams (scrolls instead of squeezing RSNs unreadable). */}
-        <div className="max-h-[36vh] overflow-auto">
-          <div className="grid auto-cols-[minmax(140px,1fr)] grid-flow-col gap-3">
-            {state.teams.map((team) => (
-              <motion.div
-                key={team.id}
-                layout
-                transition={
-                  reducedMotion || !revealing
-                    ? { duration: 0 }
-                    : { type: "tween", duration: Math.min(2, Math.max(0.4, lockMs / 1000)), ease: [0.22, 1, 0.36, 1] }
-                }
-              >
-                <TeamRoster
-                  team={team}
-                  picks={state.picks.filter((p) => p.teamId === team.id)}
-                  isCurrent={currentTeam?.id === team.id}
-                  showOrder={state.orderReady}
-                  hiddenPickNumbers={reveals.hiddenPickNumbers}
-                />
-              </motion.div>
-            ))}
-          </div>
-        </div>
-        {state.teams.length === 0 && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
-      </section>
-
-      {revealedTeam && reveals.active && (
-        <DraftPickReveal
-          key={reveals.active.pickNumber}
-          pick={reveals.active}
-          names={namesForPick(state.picks, reveals.active.pickNumber)}
-          teamName={revealedTeam.name}
-          teamColor={revealedTeam.color}
-          hurry={reveals.waiting > 0}
-          onArrive={reveals.arrive}
-          onDone={reveals.finish}
-        />
-      )}
-
-      <PickOrderDialog
-        isOpen={orderOpen}
-        onClose={() => setOrderOpen(false)}
-        teams={state.teams}
-        onSave={handleSaveOrder}
-        saving={setOrder.isPending}
-        error={orderError}
-      />
-
-      <section>
-        <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
-          Available players <span className="num font-normal text-on-surface-subtle">({poolCount})</span>
-        </h3>
-        {(pickError || rateError) && (
-          <Notice tone="danger" className="mb-2">
-            {pickError ?? rateError}
-          </Notice>
-        )}
-        {state.tectonicUnavailable && (
-          <Notice tone="warn" className="mb-2">
-            The clan API is unavailable right now, so tiers, records and event placements are hidden.
-          </Notice>
-        )}
+      {/* The one thing that actually breaks out of max-w-5xl above — everything else in this component (the
+          status cards, the teams row, this section's own heading/notices) stays reading-width. */}
+      <div className="mt-6 w-full px-6 pb-6">
         <Card className="p-4">
           <DraftPoolGrid
             pool={state.pool}
@@ -399,7 +404,7 @@ export function DraftRoom({ slug }: { slug: string }) {
             leftoverMode={shell.bingo.leftoverMode}
           />
         </Card>
-      </section>
-    </div>
+      </div>
+    </>
   );
 }
