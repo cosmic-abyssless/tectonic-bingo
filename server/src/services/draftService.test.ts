@@ -595,6 +595,26 @@ describe("leftovers", () => {
     expect(getLeftoverUserIds(db, bingo)).toEqual(new Set([newest.id]));
   });
 
+  // createdAt only has 1-second resolution, so same-second signups (bulk seeding, a rush right as signups open)
+  // tie there. Without a tiebreaker, "newest" falls back to whatever order the DB scan happens to return — not
+  // actually newest. This pins that the true (insertion) order wins the tie instead.
+  it("breaks a createdAt tie by insertion order, not DB scan order", () => {
+    const bingo = seedBingo({ leftoverMode: "cut" });
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
+    createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
+    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
+    const tiedAt = new Date(1_700_000_000_000);
+    const players = ["p1", "p2", "p3"].map((d) => {
+      const user = seedUser(d);
+      db.insert(schema.signups).values({ bingoId: bingo.id, userId: user.id, rsn: d, createdAt: tiedAt }).run();
+      return user;
+    });
+    beginDraft(bingo);
+    // p3 was inserted last — the true newest despite the tied timestamp.
+    expect(getLeftoverUserIds(db, bingo)).toEqual(new Set([players[2]!.id]));
+  });
+
   it("marks nothing until there are two teams", () => {
     const bingo = seedBingo({ stage: "signup" });
     const c1 = seedCaptain(bingo.id, "c1");
