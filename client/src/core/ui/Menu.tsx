@@ -14,8 +14,14 @@ export function Menu<T extends object>({ instant, popoverClassName = "", ...prop
       {/* max-h/overflow here, not just left to the Popover's own viewport-fit sizing — that constrains the panel
           height (so it stays on-screen) but doesn't add a scrollbar; without this, an option list too long for
           the popover's max-height was simply clipped, not scrollable — the options past that point were there,
-          just invisible and unreachable. */}
-      <AriaMenu {...props} className="max-h-120 overflow-y-auto outline-none" />
+          just invisible and unreachable.
+          autoFocus="first": react-aria's own default (unset) focuses the current *selection*'s anchor key on
+          open, not the top of the list — with most/all of a multiselect's options checked (this app's own
+          "everything checked = All" convention), that's some arbitrary key partway through, and focusing it
+          auto-scrolls the still-just-opened menu straight to it. Forced to the actual first item instead, same
+          as a menu with nothing selected would already do. `props` is spread after, so a caller can still
+          override it. */}
+      <AriaMenu autoFocus="first" {...props} className="max-h-120 overflow-y-auto outline-none" />
     </Popover>
   );
 }
