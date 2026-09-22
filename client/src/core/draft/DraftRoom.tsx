@@ -14,12 +14,13 @@ import { ColumnPicker } from "../ui/ColumnPicker";
 import { useHiddenColumns } from "../ui/hiddenColumns";
 import { ChevronDownIcon, ChevronUpIcon, LinkIcon } from "../ui/icons";
 import { SortHeader, compareSortValues, useTableSort, type TableSort } from "../ui/tableSort";
+import { STICKY_CELL, STICKY_HEADER, STICKY_TOP, STRIPE_ODD } from "../ui/tableChrome";
+import { useElementHeight } from "../ui/useElementHeight";
 import { RatingCell } from "./RatingCell";
 import { TeamRoster } from "./TeamRoster";
 import { DraftPickReveal } from "./DraftPickReveal";
 import { namesForPick } from "./revealMath";
 import { useDraftReveals } from "./useDraftReveals";
-import { useElementHeight } from "./useElementHeight";
 import { UndoPick } from "./UndoPick";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { AchievementIcons, PlaceBreakdown, TierBadge } from "../tectonic/ProfileBadges";
@@ -103,15 +104,6 @@ function ProfileCells({ profile, shown }: { profile: TectonicProfile | null; sho
     </>
   );
 }
-
-// The Draft button stays pinned to the right edge while the table scrolls sideways. It needs the card's own
-// background so the columns scrolling under it are hidden, and it draws the row divider itself (a sticky cell paints
-// over the table's collapsed borders) plus a soft edge on its left.
-// (Whole class strings, not built up: Tailwind only generates classes it can find written out in the source.)
-const STICKY_HEADER = "sticky right-0 top-0 z-20 bg-surface shadow-[inset_0_-1px_0_0_var(--color-outline),-8px_0_8px_-8px_var(--color-shade)]";
-// The column headings stay at the top of the table's own scroll area, again drawing their divider themselves.
-const STICKY_TOP = "sticky top-0 z-10 bg-surface shadow-[inset_0_-1px_0_0_var(--color-outline)]";
-const STICKY_CELL = "sticky right-0 bg-surface shadow-[inset_0_1px_0_0_var(--color-outline),-8px_0_8px_-8px_var(--color-shade)]";
 
 function PoolTable({
   pool,
@@ -222,7 +214,7 @@ function PoolTable({
           const isPair = unit.entries.length > 1;
           const draftable = !unit.leftover || (mainPoolEmpty && leftoverMode === "singles");
           return (
-            <tbody key={unit.pairingId ?? unit.entries[0].signup.id} className={`border-t border-outline ${unit.leftover ? "text-on-surface-subtle" : ""}`}>
+            <tbody key={unit.pairingId ?? unit.entries[0].signup.id} className={`border-t border-outline ${STRIPE_ODD} ${unit.leftover ? "text-on-surface-subtle" : ""}`}>
               {unit.entries.map((entry, i) => {
                 const answerByQ = new Map((entry.answers ?? []).map((a) => [a.questionId, a.value]));
                 return (

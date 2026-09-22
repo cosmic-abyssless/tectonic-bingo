@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ThHTMLAttributes } from "react";
 
 export type SortDir = "asc" | "desc";
 
@@ -32,10 +32,27 @@ export function compareSortValues(va: string | number, vb: string | number): num
   return typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
 }
 
-export function SortHeader<K extends string>({ label, sortKey, sort, className = "" }: { label: string; sortKey: K; sort: TableSort<K>; className?: string }) {
+export function SortHeader<K extends string>({
+  label,
+  sortKey,
+  sort,
+  className = "",
+  thProps,
+}: {
+  label: string;
+  sortKey: K;
+  sort: TableSort<K>;
+  className?: string;
+  /** Extra props spread onto the <th> — a sticky offset style, drag-and-drop handlers, etc. Optional, additive. */
+  thProps?: ThHTMLAttributes<HTMLTableCellElement>;
+}) {
   const active = sort.key === sortKey;
   return (
-    <th aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined} className={`pb-2 pr-4 whitespace-nowrap text-left text-xs font-medium uppercase tracking-wide ${className}`}>
+    <th
+      aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
+      {...thProps}
+      className={`pb-2 pr-4 whitespace-nowrap text-left text-xs font-medium uppercase tracking-wide ${className} ${thProps?.className ?? ""}`}
+    >
       <button type="button" onClick={() => sort.toggle(sortKey)} className={`select-none transition-colors hover:text-on-surface ${active ? "text-on-surface" : "text-on-surface-subtle"}`}>
         {label} {active && (sort.dir === "asc" ? "↑" : "↓")}
       </button>
