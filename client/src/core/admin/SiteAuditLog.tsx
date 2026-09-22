@@ -1,53 +1,27 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AuditCategory } from "@bingo/shared";
 import { useSiteAuditLog } from "../../api/adminQueries";
 import { useBingos } from "../../api/queries";
-import { CATEGORIES, DetailsView, buildCsv } from "../mod/AuditLog";
+import { CATEGORIES, DetailsView, actorOptionsFrom, buildCsv, inclusionFilter, useActorCatalog } from "../mod/AuditLog";
 import { displayName } from "../ui/user";
 import { timeAgo } from "../ui/time";
 import { AuditActionBadge } from "../ui/AuditActionBadge";
 import { Button } from "../ui/Button";
 import { Card, EmptyState, Notice } from "../ui/Card";
 import { ChevronDownIcon, ChevronRightIcon, ListIcon } from "../ui/icons";
-import { Menu, MenuItem, MenuTrigger } from "../ui/Menu";
 import { MultiSelect } from "../ui/MultiSelect";
+import { applyColumnVisibility } from "../ui/hiddenColumns";
+import { SingleSelect } from "../ui/SingleSelect";
 import { DateTimeRangeFilter } from "../ui/DateTimeRangeFilter";
 import { isRangeSet, type TimeRange } from "../ui/timeRange";
 
 type BingoScope = string | null | "all";
 
-// Single-select sibling of MultiSelect — "All bingos" / "Site-wide only" /
-// one specific bingo. A checklist doesn't fit here since these are mutually
-// exclusive scopes, not independent filters.
-function BingoScopeFilter({ options, value, onChange }: { options: { key: string; label: string }[]; value: BingoScope; onChange: (v: BingoScope) => void }) {
-  const selectedKey = value === "all" ? "all" : (value ?? "null");
-  const summary = options.find((o) => o.key === selectedKey)?.label ?? "All bingos";
-  return (
-    <MenuTrigger>
-      <Button variant="secondary" size="sm" className={value !== "all" ? "border-on-surface" : ""}>
-        <span className="text-on-surface-subtle">Bingo:</span> {summary}
-        <ChevronDownIcon size={14} />
-      </Button>
-      <Menu
-        selectionMode="single"
-        selectedKeys={new Set([selectedKey])}
-        onSelectionChange={(keys) => {
-          const k = [...keys][0] as string | undefined;
-          onChange(k === undefined || k === "all" ? "all" : k === "null" ? null : k);
-        }}
-        items={options}
-      >
-        {(option) => <MenuItem id={option.key} textValue={option.label}>{option.label}</MenuItem>}
-      </Menu>
-    </MenuTrigger>
-  );
-}
-
 // Site admin's counterpart to core/mod/AuditLog.tsx — every bingo (or just
 // site-level entries, or one bingo), not one bingo's own log.
 export function SiteAuditLog() {
-  const [categories, setCategories] = useState<string[]>([]);
-  const [actorUserIds, setActorUserIds] = useState<string[]>([]);
+  const [excludedCategories, setExcludedCategories] = useState<Set<string>>(() => new Set());
+  const [excludedActors, setExcludedActors] = useState<Set<string>>(() => new Set());
   const [bingoScope, setBingoScope] = useState<BingoScope>("all");
   const [range, setRange] = useState<TimeRange>({});
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -57,27 +31,24 @@ export function SiteAuditLog() {
   const bingos = bingosData?.bingos ?? [];
   const bingoById = useMemo(() => new Map(bingos.map((b) => [b.id, b])), [bingos]);
   const bingoScopeOptions = useMemo(() => [{ key: "all", label: "All bingos" }, { key: "null", label: "Site-wide only" }, ...bingos.map((b) => ({ key: b.id, label: b.name }))], [bingos]);
+  const [actorNames, rememberActors] = useActorCatalog("site");
+  const categories = inclusionFilter(excludedCategories, CATEGORIES);
+  const actors = inclusionFilter(excludedActors, [...actorNames.keys()].map((key) => ({ key })));
 
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useSiteAuditLog(bingoScope, {
-    category: categories.length ? (categories as AuditCategory[]) : undefined,
-    actorUserId: actorUserIds.length ? actorUserIds : undefined,
+    category: categories.query as AuditCategory[] | undefined,
+    actorUserId: actors.query,
     since: range.since,
     until: range.until,
   });
-  const filtered = categories.length > 0 || actorUserIds.length > 0 || bingoScope !== "all" || isRangeSet(range);
+  const filtered = categories.narrowed || actors.narrowed || bingoScope !== "all" || isRangeSet(range);
+  const blocked = categories.none || actors.none;
 
   const entries = useMemo(() => data?.pages.flatMap((p) => p.entries) ?? [], [data]);
-
-  const actorOptions = useMemo(() => {
-    const byId = new Map<string, { key: string; label: string; count: number }>();
-    for (const e of entries) {
-      if (!e.actor) continue;
-      const existing = byId.get(e.actor.id);
-      if (existing) existing.count++;
-      else byId.set(e.actor.id, { key: e.actor.id, label: displayName(e.actor), count: 1 });
-    }
-    return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label));
-  }, [entries]);
+  useEffect(() => {
+    rememberActors(entries);
+  }, [entries, rememberActors]);
+  const actorOptions = useMemo(() => actorOptionsFrom(actorNames, entries), [actorNames, entries]);
 
   async function copyCsv() {
     await navigator.clipboard.writeText(buildCsv(entries));
@@ -88,12 +59,29 @@ export function SiteAuditLog() {
   return (
     <div className="w-full space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <MultiSelect label="Category" options={CATEGORIES} selected={categories} onChange={setCategories} />
-        {actorOptions.length > 0 && <MultiSelect label="User" options={actorOptions} selected={actorUserIds} onChange={setActorUserIds} />}
-        <BingoScopeFilter options={bingoScopeOptions} value={bingoScope} onChange={setBingoScope} />
+        <MultiSelect
+          label="Category"
+          options={CATEGORIES}
+          selected={categories.checked}
+          onChange={(visible) => setExcludedCategories(applyColumnVisibility(excludedCategories, CATEGORIES.map((c) => c.key), visible))}
+        />
+        {actorOptions.length > 0 && (
+          <MultiSelect
+            label="User"
+            options={actorOptions}
+            selected={actors.checked}
+            onChange={(visible) => setExcludedActors(applyColumnVisibility(excludedActors, actorOptions.map((a) => a.key), visible))}
+          />
+        )}
+        <SingleSelect
+          label="Bingo"
+          options={bingoScopeOptions}
+          selected={bingoScope === "all" ? "all" : (bingoScope ?? "null")}
+          onChange={(key) => setBingoScope(key === "all" ? "all" : key === "null" ? null : key)}
+        />
         <DateTimeRangeFilter value={range} onChange={setRange} />
         <div className="ml-auto">
-          <Button size="sm" onPress={copyCsv} isDisabled={entries.length === 0}>
+          <Button size="sm" onPress={copyCsv} isDisabled={blocked || entries.length === 0}>
             {copied ? "Copied" : "Copy as CSV"}
           </Button>
         </div>
@@ -101,9 +89,9 @@ export function SiteAuditLog() {
 
       {isError ? (
         <Notice tone="danger">{error instanceof Error ? error.message : "Failed to load the audit log"}</Notice>
-      ) : isLoading ? (
+      ) : isLoading && !blocked ? (
         <p className="py-20 text-center text-sm text-on-surface-muted">Loading…</p>
-      ) : entries.length === 0 ? (
+      ) : blocked || entries.length === 0 ? (
         <EmptyState icon={<ListIcon />} title={filtered ? "No matching activity" : "No activity yet"}>
           {filtered ? "Nothing in the log matches these filters. Try widening them." : "Actions taken across the site will show up here as they happen."}
         </EmptyState>

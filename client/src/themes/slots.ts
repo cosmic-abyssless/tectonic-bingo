@@ -62,6 +62,19 @@ export interface ThemeSlots {
   DialogFrame: ComponentType<{ isOpen: boolean; onClose: () => void; size?: "md" | "lg"; isDismissable?: boolean; children: ReactNode }>;
   DialogHeader: ComponentType<{ title: ReactNode; subtitle?: string; onClose: () => void; action?: ReactNode }>;
 
+  // Menu chrome for ColumnPicker / MultiSelect / SingleSelect. Props are
+  // inlined so this file does not import Picker (that would cycle through
+  // themes/context). Read with useOptionalSlot: mod and admin have no
+  // ThemeProvider and fall back to the core Picker.
+  PickerFrame: ComponentType<{
+    options: { key: string; label: string; count?: number }[];
+    selectedKeys: Set<string>;
+    onSelectionChange: (keys: string[]) => void;
+    selectionMode: "multiple" | "single";
+    active?: boolean;
+    children: ReactNode;
+  }>;
+
   // Board.
   // highlightedTileId is optional and only meaningful to a theme whose
   // TileCell has some "spotlighted" visual state to drive from it (the

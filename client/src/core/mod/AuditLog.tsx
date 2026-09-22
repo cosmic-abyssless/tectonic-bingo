@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AuditCategory, AuditEntry } from "@bingo/shared";
 import { useAuditLog, useBingo } from "../../api/queries";
 import { displayName } from "../ui/user";
@@ -9,6 +9,7 @@ import { Button } from "../ui/Button";
 import { Card, EmptyState, Notice } from "../ui/Card";
 import { ChevronDownIcon, ChevronRightIcon, ListIcon } from "../ui/icons";
 import { MultiSelect } from "../ui/MultiSelect";
+import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { DateTimeRangeFilter } from "../ui/DateTimeRangeFilter";
 import { isRangeSet, type TimeRange } from "../ui/timeRange";
 
@@ -28,6 +29,48 @@ export const CATEGORIES: { key: AuditCategory; label: string }[] = [
   { key: "bug_report", label: "Bug reports" },
   { key: "http", label: "Unaudited" },
 ];
+
+export function inclusionFilter(excluded: Set<string>, options: { key: string }[]) {
+  const checked = options.map((o) => o.key).filter((key) => !excluded.has(key));
+  const narrowed = checked.length < options.length;
+  return {
+    checked,
+    query: narrowed && checked.length > 0 ? checked : undefined,
+    none: options.length > 0 && checked.length === 0,
+    narrowed,
+  };
+}
+
+export function useActorCatalog(scope: string): [Map<string, string>, (entries: AuditEntry[]) => void] {
+  const [catalog, setCatalog] = useState<{ scope: string; names: Map<string, string> }>({ scope, names: new Map() });
+  const names = catalog.scope === scope ? catalog.names : new Map<string, string>();
+  const remember = useCallback((entries: AuditEntry[]) => {
+    setCatalog((prev) => {
+      const base = prev.scope === scope ? prev.names : new Map<string, string>();
+      let next = base;
+      for (const entry of entries) {
+        if (!entry.actor) continue;
+        const label = displayName(entry.actor);
+        if (next.get(entry.actor.id) === label) continue;
+        if (next === base) next = new Map(base);
+        next.set(entry.actor.id, label);
+      }
+      return next === base && prev.scope === scope ? prev : { scope, names: next };
+    });
+  }, [scope]);
+  return [names, remember];
+}
+
+export function actorOptionsFrom(names: Map<string, string>, entries: AuditEntry[]) {
+  const counts = new Map<string, number>();
+  for (const entry of entries) {
+    if (!entry.actor) continue;
+    counts.set(entry.actor.id, (counts.get(entry.actor.id) ?? 0) + 1);
+  }
+  return [...names.entries()]
+    .map(([key, label]) => ({ key, label, count: counts.get(key) ?? 0 }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
 
 export function csvEscape(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
@@ -78,39 +121,34 @@ export function DetailsView({ details }: { details: unknown }) {
 }
 
 export function AuditLog({ slug }: { slug: string }) {
-  const [categories, setCategories] = useState<string[]>([]);
-  const [teamIds, setTeamIds] = useState<string[]>([]);
-  const [actorUserIds, setActorUserIds] = useState<string[]>([]);
+  const [excludedCategories, setExcludedCategories] = useState<Set<string>>(() => new Set());
+  const [excludedTeams, setExcludedTeams] = useState<Set<string>>(() => new Set());
+  const [excludedActors, setExcludedActors] = useState<Set<string>>(() => new Set());
   const [range, setRange] = useState<TimeRange>({});
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
   const { data: shell } = useBingo(slug);
+  const [actorNames, rememberActors] = useActorCatalog(slug);
+  const teamOptions = useMemo(() => (shell?.teams ?? []).map((t) => ({ key: t.id, label: t.name })), [shell]);
+  const categories = inclusionFilter(excludedCategories, CATEGORIES);
+  const teams = inclusionFilter(excludedTeams, teamOptions);
+  const actors = inclusionFilter(excludedActors, [...actorNames.keys()].map((key) => ({ key })));
+
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useAuditLog(slug, {
-    category: categories.length ? (categories as AuditCategory[]) : undefined,
-    teamId: teamIds.length ? teamIds : undefined,
-    actorUserId: actorUserIds.length ? actorUserIds : undefined,
+    category: categories.query as AuditCategory[] | undefined,
+    teamId: teams.query,
+    actorUserId: actors.query,
     since: range.since,
     until: range.until,
   });
-  const filtered = categories.length > 0 || teamIds.length > 0 || actorUserIds.length > 0 || isRangeSet(range);
-
   const entries = useMemo(() => data?.pages.flatMap((p) => p.entries) ?? [], [data]);
-  const teamOptions = useMemo(() => (shell?.teams ?? []).map((t) => ({ key: t.id, label: t.name })), [shell]);
-
-  // Every distinct actor seen across loaded pages — there's no dedicated
-  // "everyone who could ever act on this bingo" endpoint, so the picker
-  // grows as more history loads rather than listing every mod/player upfront.
-  const actorOptions = useMemo(() => {
-    const byId = new Map<string, { key: string; label: string; count: number }>();
-    for (const e of entries) {
-      if (!e.actor) continue;
-      const existing = byId.get(e.actor.id);
-      if (existing) existing.count++;
-      else byId.set(e.actor.id, { key: e.actor.id, label: displayName(e.actor), count: 1 });
-    }
-    return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label));
-  }, [entries]);
+  useEffect(() => {
+    rememberActors(entries);
+  }, [entries, rememberActors]);
+  const actorOptions = useMemo(() => actorOptionsFrom(actorNames, entries), [actorNames, entries]);
+  const filtered = categories.narrowed || teams.narrowed || actors.narrowed || isRangeSet(range);
+  const blocked = categories.none || teams.none || actors.none;
 
   async function copyCsv() {
     await navigator.clipboard.writeText(buildCsv(entries));
@@ -121,12 +159,31 @@ export function AuditLog({ slug }: { slug: string }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <MultiSelect label="Category" options={CATEGORIES} selected={categories} onChange={setCategories} />
-        {teamOptions.length > 0 && <MultiSelect label="Team" options={teamOptions} selected={teamIds} onChange={setTeamIds} />}
-        {actorOptions.length > 0 && <MultiSelect label="User" options={actorOptions} selected={actorUserIds} onChange={setActorUserIds} />}
+        <MultiSelect
+          label="Category"
+          options={CATEGORIES}
+          selected={categories.checked}
+          onChange={(visible) => setExcludedCategories(applyColumnVisibility(excludedCategories, CATEGORIES.map((c) => c.key), visible))}
+        />
+        {teamOptions.length > 0 && (
+          <MultiSelect
+            label="Team"
+            options={teamOptions}
+            selected={teams.checked}
+            onChange={(visible) => setExcludedTeams(applyColumnVisibility(excludedTeams, teamOptions.map((t) => t.key), visible))}
+          />
+        )}
+        {actorOptions.length > 0 && (
+          <MultiSelect
+            label="User"
+            options={actorOptions}
+            selected={actors.checked}
+            onChange={(visible) => setExcludedActors(applyColumnVisibility(excludedActors, actorOptions.map((a) => a.key), visible))}
+          />
+        )}
         <DateTimeRangeFilter value={range} onChange={setRange} />
         <div className="ml-auto">
-          <Button size="sm" onPress={copyCsv} isDisabled={entries.length === 0}>
+          <Button size="sm" onPress={copyCsv} isDisabled={blocked || entries.length === 0}>
             {copied ? "Copied" : "Copy as CSV"}
           </Button>
         </div>
@@ -134,9 +191,9 @@ export function AuditLog({ slug }: { slug: string }) {
 
       {isError ? (
         <Notice tone="danger">{error instanceof Error ? error.message : "Failed to load the audit log"}</Notice>
-      ) : isLoading ? (
+      ) : isLoading && !blocked ? (
         <p className="py-20 text-center text-sm text-on-surface-muted">Loading…</p>
-      ) : entries.length === 0 ? (
+      ) : blocked || entries.length === 0 ? (
         <EmptyState icon={<ListIcon />} title={filtered ? "No matching activity" : "No activity yet"}>
           {filtered ? "Nothing in the log matches these filters. Try widening them." : "Actions taken on this bingo will show up here as they happen."}
         </EmptyState>

@@ -1,5 +1,6 @@
 import { Dialog as AriaDialog, DialogTrigger, Popover } from "react-aria-components";
 import { Button } from "./Button";
+import { pickerTriggerClass } from "./Picker";
 import { Field, Input } from "./Field";
 import { ChevronDownIcon } from "./icons";
 import { RANGE_PRESETS, fromLocalInput, isInverted, isRangeSet, presetRange, rangeSummary, toLocalInput, type TimeRange } from "./timeRange";
@@ -16,11 +17,11 @@ export function DateTimeRangeFilter({ label = "Time", value, onChange }: { label
 
   return (
     <DialogTrigger>
-      <Button variant="secondary" size="sm" className={active ? "border-on-surface" : ""}>
-        <span className="text-on-surface-subtle">{label}:</span> {rangeSummary(value)}
+      <Button variant="secondary" size="sm" className={pickerTriggerClass}>
+        {label}: <span className="text-on-surface-subtle">{rangeSummary(value)}</span>
         <ChevronDownIcon size={14} />
       </Button>
-      <Popover placement="bottom start" offset={6} className="overlay-panel w-96 max-w-[calc(100vw-2rem)] rounded-md border border-outline bg-surface-raised p-3 shadow-pop outline-none">
+      <Popover placement="bottom start" offset={6} shouldSkipAnimation className="w-96 max-w-[calc(100vw-2rem)] rounded-md border border-outline bg-surface-raised p-3 shadow-pop outline-none">
         <AriaDialog aria-label={`${label} range`} className="space-y-3 outline-none">
           {({ close }) => (
             <>
