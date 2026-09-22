@@ -20,6 +20,12 @@ export const STICKY_CELL = "sticky right-0 bg-surface shadow-[inset_0_1px_0_0_va
 // against each other.
 export const STRIPE_ODD = "odd:bg-surface-muted/40";
 
+// A custom signup question's prompt (the header) and its answers (the cells)
+// are free text a mod writes/players fill in — either can run far longer
+// than any other column. Same width for both, so the column doesn't end up
+// wider than its own header or its own longest answer alone would make it.
+export const QUESTION_COLUMN_MAX_WIDTH = "12rem";
+
 /**
  * How far down the whole document `element`'s top edge sits — not
  * `getBoundingClientRect().top` alone, which is relative to the current

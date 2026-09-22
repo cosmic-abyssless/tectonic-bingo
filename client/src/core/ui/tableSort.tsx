@@ -1,4 +1,5 @@
 import { useState, type ThHTMLAttributes } from "react";
+import { Truncate } from "./tableChrome";
 
 export type SortDir = "asc" | "desc";
 
@@ -38,6 +39,7 @@ export function SortHeader<K extends string>({
   sort,
   className = "",
   thProps,
+  labelMaxWidth,
 }: {
   label: string;
   sortKey: K;
@@ -45,6 +47,8 @@ export function SortHeader<K extends string>({
   className?: string;
   /** Extra props spread onto the <th> — a sticky offset style, drag-and-drop handlers, etc. Optional, additive. */
   thProps?: ThHTMLAttributes<HTMLTableCellElement>;
+  /** Caps the label's own width, truncating it with a tooltip for the full text — a custom signup question's prompt can run much longer than any other column's header. */
+  labelMaxWidth?: string;
 }) {
   const active = sort.key === sortKey;
   return (
@@ -53,8 +57,19 @@ export function SortHeader<K extends string>({
       {...thProps}
       className={`py-2.5 pr-4 whitespace-nowrap text-left text-xs font-medium uppercase tracking-wide ${className} ${thProps?.className ?? ""}`}
     >
-      <button type="button" onClick={() => sort.toggle(sortKey)} className={`select-none transition-colors hover:text-on-surface ${active ? "text-on-surface" : "text-on-surface-subtle"}`}>
-        {label} {active && (sort.dir === "asc" ? "↑" : "↓")}
+      <button
+        type="button"
+        onClick={() => sort.toggle(sortKey)}
+        className={`inline-flex items-center gap-1 select-none transition-colors hover:text-on-surface ${active ? "text-on-surface" : "text-on-surface-subtle"}`}
+      >
+        {labelMaxWidth ? (
+          <Truncate title={label} maxWidth={labelMaxWidth}>
+            {label}
+          </Truncate>
+        ) : (
+          label
+        )}
+        {active && <span>{sort.dir === "asc" ? "↑" : "↓"}</span>}
       </button>
     </th>
   );

@@ -14,7 +14,7 @@ import { ColumnPicker } from "../ui/ColumnPicker";
 import { useHiddenColumns } from "../ui/hiddenColumns";
 import { ChevronDownIcon, ChevronUpIcon, LinkIcon } from "../ui/icons";
 import { SortHeader, compareSortValues, useTableSort, type TableSort } from "../ui/tableSort";
-import { STICKY_CELL, STICKY_HEADER, STICKY_TOP, STRIPE_ODD, Truncate } from "../ui/tableChrome";
+import { QUESTION_COLUMN_MAX_WIDTH, STICKY_CELL, STICKY_HEADER, STICKY_TOP, STRIPE_ODD, Truncate } from "../ui/tableChrome";
 import { Highlight, TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
 import { useElementHeight } from "../ui/useElementHeight";
 import { RatingCell } from "./RatingCell";
@@ -231,7 +231,8 @@ function PoolTable({
             {showWomStats && shown("ehp") && <SortHeader label="EHP" sortKey="ehp" sort={sort} className={STICKY_TOP} />}
             {showCa && shown("caCurrent") && <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} className={STICKY_TOP} />}
             {showCa && shown("caPeak") && <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} className={STICKY_TOP} />}
-            {showAnswers && questions.filter((q) => shown(q.id)).map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} className={STICKY_TOP} />)}
+            {showAnswers &&
+              questions.filter((q) => shown(q.id)).map((q) => <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} className={STICKY_TOP} labelMaxWidth={QUESTION_COLUMN_MAX_WIDTH} />)}
             {canPick && <th className={`${STICKY_HEADER} py-2.5`} />}
           </tr>
         </thead>
@@ -305,7 +306,7 @@ function PoolTable({
                         return (
                           <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
                             {answer ? (
-                              <Truncate title={answer}>
+                              <Truncate title={answer} maxWidth={QUESTION_COLUMN_MAX_WIDTH}>
                                 <Highlight text={answer} query={search} />
                               </Truncate>
                             ) : (

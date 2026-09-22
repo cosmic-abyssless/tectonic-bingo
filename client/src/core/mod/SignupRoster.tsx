@@ -26,7 +26,7 @@ import { AlertIcon, CheckIcon, RefreshIcon, UsersIcon, XIcon } from "../ui/icons
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { CaCell, WomCell, formatCaTier, formatWomStat } from "../signup/caStats";
 import { SortHeader, compareSortValues, useTableSort } from "../ui/tableSort";
-import { STICKY_TOP, STRIPE_ODD, Truncate, useDocumentTop } from "../ui/tableChrome";
+import { QUESTION_COLUMN_MAX_WIDTH, STICKY_TOP, STRIPE_ODD, Truncate, useDocumentTop } from "../ui/tableChrome";
 import { Highlight, TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
 import { timeAgo } from "../ui/time";
 import { TierBadge } from "../tectonic/ProfileBadges";
@@ -518,7 +518,7 @@ export function SignupRoster({ slug }: { slug: string }) {
                     {shown("collectedBy") && <SortHeader label="Collected by" sortKey="collectedBy" sort={sort} className={STICKY_TOP} />}
                     {isDuo && shown("partner") && <SortHeader label="Partner" sortKey="partner" sort={sort} className={STICKY_TOP} />}
                     {questions.filter((q) => shown(q.id)).map((q) => (
-                      <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} className={STICKY_TOP} />
+                      <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} className={STICKY_TOP} labelMaxWidth={QUESTION_COLUMN_MAX_WIDTH} />
                     ))}
                   </tr>
                 </thead>
@@ -604,7 +604,7 @@ export function SignupRoster({ slug }: { slug: string }) {
                           return (
                             <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
                               {answer ? (
-                                <Truncate title={answer}>
+                                <Truncate title={answer} maxWidth={QUESTION_COLUMN_MAX_WIDTH}>
                                   <Highlight text={answer} query={search} />
                                 </Truncate>
                               ) : (
