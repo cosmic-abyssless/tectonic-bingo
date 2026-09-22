@@ -230,7 +230,7 @@ export function queryTeamActivity(db: Db, bingoId: string, teamId: string, opts:
 //   players: (team_id = :teamId AND visibility IN ('team','public')) OR (team_id IS NULL AND visibility = 'public')
 //   mods:    team_id = :teamId OR team_id IS NULL, no visibility filter
 ```
-`toAuditEntry` batch-resolves `actor`/`onBehalfOf` (pattern: `MINIMAL_USER_COLS` in `statsService.ts`) and `team` via one `inArray(teams.id, ...)`; deleted teams resolve to `null` (labels fall back to denormalized names in `details`). `q` is a `LIKE` over `entity_label` and `action`.
+`toAuditEntry` batch-resolves `actor`/`onBehalfOf` (pattern: `MINIMAL_USER_COLS` in `statsService.ts`) and `team` via one `inArray(teams.id, ...)`; deleted teams resolve to `null` (labels fall back to denormalized names in `details`). `q` is a `LIKE` over `entity_label` and `action`, plus a correlated `EXISTS` against the actor's Discord names and (bingo-scoped) RSN — the actor isn't a plain column, so it can't join into the same `LIKE`.
 
 ## 5. Visibility model
 
