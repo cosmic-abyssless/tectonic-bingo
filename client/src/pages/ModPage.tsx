@@ -46,6 +46,11 @@ const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; unti
 ];
 type TabDef = (typeof TABS)[number];
 
+// <main> itself is full width now — only the Signups tab (its table benefits from the room, same as the draft
+// pool's) actually wants that. Every other tab's content, plus the stage stepper and tab list above them, opts
+// back into the old reading width with this.
+const NARROW = "mx-auto w-full max-w-6xl";
+
 function isOutOfStage(tab: TabDef, stage: Stage): boolean {
   const idx = STAGE_ORDER.indexOf(stage);
   return (tab.until !== undefined && idx > STAGE_ORDER.indexOf(tab.until)) || (tab.from !== undefined && idx < STAGE_ORDER.indexOf(tab.from));
@@ -132,46 +137,70 @@ export function ModPage() {
         }
       />
 
-      <main className="mx-auto w-full max-w-6xl space-y-6 px-6 py-6">
-        <StageControls slug={slug} bingo={shell.bingo} canChange={isAdmin} />
+      {/* Full width now (was max-w-6xl on the whole <main>) — but only the Signups tab actually wants that (its
+          table benefits from the extra room the same way the draft pool's does). Everything else — the stage
+          stepper, the tab list itself, and every other tab's content — keeps the old reading width via NARROW,
+          since a settings form or a stage stepper spanning the full page would be awkward, not useful. */}
+      <main className="w-full space-y-6 px-6 py-6">
+        <div className={NARROW}>
+          <StageControls slug={slug} bingo={shell.bingo} canChange={isAdmin} />
+        </div>
 
         <PlayerProfileProvider slug={slug}>
           <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key))}>
-            <TabList>
-              {visibleTabs.map((t) => (
-                <Tab key={t.key} id={t.key} dimmed={t.dimmed}>
-                  {t.label}
-                </Tab>
-              ))}
-            </TabList>
+            <div className={NARROW}>
+              <TabList>
+                {visibleTabs.map((t) => (
+                  <Tab key={t.key} id={t.key} dimmed={t.dimmed}>
+                    {t.label}
+                  </Tab>
+                ))}
+              </TabList>
+            </div>
             <TabPanel id="submissions">
-              <ReviewQueue slug={slug} />
+              <div className={NARROW}>
+                <ReviewQueue slug={slug} />
+              </div>
             </TabPanel>
             <TabPanel id="signups">
               <SignupRoster slug={slug} />
             </TabPanel>
             <TabPanel id="audit">
-              <AuditLog slug={slug} />
+              <div className={NARROW}>
+                <AuditLog slug={slug} />
+              </div>
             </TabPanel>
             {isAdmin && (
               <>
                 <TabPanel id="settings">
-                  <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} hasSignups={shell.hasSignups} />
+                  <div className={NARROW}>
+                    <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} hasSignups={shell.hasSignups} />
+                  </div>
                 </TabPanel>
                 <TabPanel id="board">
-                  <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />
+                  <div className={NARROW}>
+                    <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />
+                  </div>
                 </TabPanel>
                 <TabPanel id="lines">
-                  <LineEditor slug={slug} />
+                  <div className={NARROW}>
+                    <LineEditor slug={slug} />
+                  </div>
                 </TabPanel>
                 <TabPanel id="questions">
-                  <QuestionBuilder slug={slug} />
+                  <div className={NARROW}>
+                    <QuestionBuilder slug={slug} />
+                  </div>
                 </TabPanel>
                 <TabPanel id="teams">
-                  <TeamManager slug={slug} />
+                  <div className={NARROW}>
+                    <TeamManager slug={slug} />
+                  </div>
                 </TabPanel>
                 <TabPanel id="mods">
-                  <ModsManager slug={slug} />
+                  <div className={NARROW}>
+                    <ModsManager slug={slug} />
+                  </div>
                 </TabPanel>
               </>
             )}
