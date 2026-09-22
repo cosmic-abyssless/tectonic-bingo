@@ -4,8 +4,9 @@
 // stored JSON only — no live external calls in those hot paths.
 //
 // Called fire-and-forget from the signup routes and the mod Refresh-stats
-// route (never awaited in the response path). Dev seed-signups fabricates
-// stats locally and does not call this. Never throws.
+// route (never awaited in the response path). generate-bingo's synthetic
+// signups fabricate stats locally instead (see fakePlayerStats.ts) and never
+// call this. Never throws.
 import { now as clockNow } from "../clock";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { and, eq } from "drizzle-orm";

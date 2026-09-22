@@ -65,9 +65,6 @@ describe("route coverage", () => {
       ...routesFor(clientErrorsRouter, "/api/client-errors"),
     ];
 
-    // Sanity check the dev-gated routes actually registered under our env vars.
-    expect(routes.some((r) => r.key === "POST /api/bingos/:slug/mod/dev/seed-signups")).toBe(true);
-
     const unmapped = routes.filter((r) => !r.skipped && !(r.key in AUDITED_ROUTES)).map((r) => r.key);
     expect(unmapped).toEqual([]);
 

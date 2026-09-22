@@ -11,7 +11,7 @@ import type { MinimalUser, Stage } from "./index.ts";
 import { playerName } from "./names.ts";
 
 export type AuditVisibility = "mods" | "team" | "public";
-export type AuditActorType = "user" | "system" | "dev";
+export type AuditActorType = "user" | "system";
 export type AuditActorRole = "admin" | "mod" | "player" | "system";
 // Matches client/src/core/ui/Card.tsx's Badge TONE keys.
 export type AuditTone = "neutral" | "info" | "ok" | "warn" | "danger";
@@ -164,9 +164,6 @@ export interface AuditDetailsMap {
   "wom.competition_created": { competitionId: number };
   "wom.roster_synced": Record<string, never>;
   "wom.sync_failed": { operation: "create" | "rename"; message: string };
-
-  "dev.signups_seeded": { count: number; source: string };
-  "dev.signups_wiped": { deleted: number };
 
   // Fallback-only: written by the server's finish-middleware for any
   // successful non-GET /api/* mutation that recorded nothing itself.
@@ -538,8 +535,6 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
   "wom.competition_created": { category: "system", tone: "ok", visibility: "mods", title: "WOM competition created", label: () => "Created the Wise Old Man competition" },
   "wom.roster_synced": { category: "system", tone: "neutral", visibility: "mods", title: "WOM roster synced", label: () => "Synced the Wise Old Man competition roster" },
   "wom.sync_failed": { category: "system", tone: "warn", visibility: "mods", title: "WOM sync failed", label: (i) => `Wise Old Man ${i.details.operation} failed: ${i.details.message}` },
-  "dev.signups_seeded": { category: "system", tone: "neutral", visibility: "mods", title: "Dev signups seeded", label: (i) => `${actor(i)} seeded ${i.details.count} test signups` },
-  "dev.signups_wiped": { category: "system", tone: "warn", visibility: "mods", title: "Dev signups wiped", label: (i) => `${actor(i)} wiped ${i.details.deleted} signups` },
   "http.mutation": {
     category: "http",
     tone: "warn",

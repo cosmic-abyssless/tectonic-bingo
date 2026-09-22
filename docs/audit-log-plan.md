@@ -274,7 +274,6 @@ export function queryTeamActivity(db: Db, bingoId: string, teamId: string, opts:
 | `submission.screenshot_analyzed` / `.screenshot_analysis_failed` | `submissionService.recordScreenshotAnalysis` / `markScreenshotAnalysisFailed`; `actor: "system"` | submission | via submission row | mods | `{codewordVerified, detectedItemName, textLength}` / `{}` |
 | `signup.stats_fetched` / `.stats_fetch_failed` | `playerStatsService.fetchAndPersistPlayerStats`; `actor: "system"`; bingoId via signup row | signup / rsn | — | mods | `{womFound, runeProfileFound}` / `{message}` (never the blobs) |
 | `wom.competition_created` / `.roster_synced` / `.sync_failed` | `womCompetitionService.syncWomCompetitionAfterDraft` / `syncWomTeamRename`; `actor: "system"` | bingo / name | — | mods | `{competitionId}` / `{}` / `{operation: "create" \| "rename", message}` |
-| `dev.signups_seeded` / `.signups_wiped` | `devSeedService.seedTestSignups` / `deleteAllSignups`; `actor: {type: "dev"}` | bingo / name | — | mods | `{count, source}` / `{deleted}`. The seed loop's `createSignup` calls also emit `signup.created` — acceptable dev-only noise |
 | `http.mutation` | fallback middleware only | http / `METHOD url` | — | mods | see §4 |
 
 Deliberately not audited: `POST /auth/logout`, `POST /auth/dev-login` (session, outside `/api/`); `POST /:slug/submissions/analyze` (`auditSkip`, read-only); `boardService.reorderChildren` (no route caller); `server/src/db/seed-dev.ts` (offline script — `broadcast` is a no-op there). Logins are not logged in v1 beyond the admin-bootstrap side effect.

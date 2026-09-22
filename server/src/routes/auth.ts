@@ -36,9 +36,10 @@ router.post("/logout", (req: Request, res: Response) => {
 // unless explicitly enabled.
 if (isDevModeActive()) {
   // Unauthenticated on purpose — it's how you log in — but only exists at
-  // all under the same dev gate as the login endpoint below. Excludes the
-  // dev/seed-signups tool's throwaway test bots so the list stays focused
-  // on real accounts worth switching into.
+  // all under the same dev gate as the login endpoint below. Excludes
+  // "dev-seed-*" throwaway test bots (a since-removed seed tool's leftovers,
+  // if a dev DB still has any) so the list stays focused on real accounts
+  // worth switching into.
   router.get("/dev-users", async (_req: Request, res: Response) => {
     const rows = await db.select().from(users).where(notLike(users.discordId, "dev-seed-%")).orderBy(users.discordUsername);
     res.json({ users: rows });

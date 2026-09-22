@@ -64,7 +64,7 @@ describe("audit()", () => {
   });
 
   it("falls back to system with no ambient context and no explicit actor", () => {
-    const id = audit(db, { action: "dev.signups_wiped", bingoId: null, entity: { type: "bingo", id: null }, details: { deleted: 3 } });
+    const id = audit(db, { action: "wom.roster_synced", bingoId: null, entity: { type: "bingo", id: null }, details: {} });
     const row = db.select().from(schema.auditLog).all().find((r) => r.id === id)!;
     expect(row.actorType).toBe("system");
     expect(row.requestId).toBeNull();
@@ -79,7 +79,7 @@ describe("audit()", () => {
   it("bumps the ambient context's recorded counter", () => {
     const ctx = makeCtx();
     runWithAuditContext(ctx, () => {
-      audit(db, { action: "dev.signups_wiped", bingoId: null, entity: { type: "bingo", id: null }, details: { deleted: 1 } });
+      audit(db, { action: "wom.roster_synced", bingoId: null, entity: { type: "bingo", id: null }, details: {} });
     });
     expect(ctx.recorded).toBe(1);
   });

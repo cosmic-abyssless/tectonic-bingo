@@ -12,8 +12,8 @@ import * as devTestDataService from "../services/devTestDataService";
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
-// A throwaway "testdata-" user for the generator to sign up. Not audited: like the signup seed tool, it makes
-// site-level accounts that belong to no bingo.
+// A throwaway "testdata-" user for the generator to sign up. Not audited: it makes site-level accounts that
+// belong to no bingo.
 router.post(
   "/users",
   auditSkip("dev test data"),

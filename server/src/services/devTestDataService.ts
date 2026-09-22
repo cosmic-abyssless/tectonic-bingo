@@ -12,7 +12,7 @@ import { ServiceError } from "./errors";
 import { deleteBingo } from "./bingoService";
 import { removeFiles } from "./exportImages";
 import { FULL_SUFFIX, THUMB_SUFFIX, VARIANT_EXT } from "./imageService";
-import { fakePlayerStats } from "./devSeedService";
+import { fakePlayerStats } from "./fakePlayerStats";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
