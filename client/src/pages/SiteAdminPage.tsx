@@ -1,4 +1,5 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState } from "react";
+import type { Key } from "react-aria-components";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { STAGE_LABEL, type Bingo, type BingoExportDocument, type BingoListResponse, type User } from "@bingo/shared";
@@ -17,7 +18,7 @@ import { Button, IconButton } from "../core/ui/Button";
 import { Badge, Notice } from "../core/ui/Card";
 import { Field, Input } from "../core/ui/Field";
 import { CheckIcon, TrashIcon } from "../core/ui/icons";
-import { Disclosure } from "../core/ui/Disclosure";
+import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 
 function slugify(s: string): string {
   return s
@@ -189,7 +190,7 @@ function DeleteBingoConfirm({ bingo, onConfirm, onCancel }: { bingo: Bingo; onCo
   );
 }
 
-function BingosPanel() {
+function BingosList() {
   const queryClient = useQueryClient();
   const { data } = useBingos();
   const [confirming, setConfirming] = useState<Bingo | null>(null);
@@ -239,6 +240,31 @@ function BingosPanel() {
   );
 }
 
+// Bingos (the list) plus the two ways to add a new one — Create and Import
+// both land on the same list, so they live as sub-tabs here rather than
+// their own top-level sections.
+function BingosPanel() {
+  const [tab, setTab] = useState<"bingos" | "create" | "import">("bingos");
+  return (
+    <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key) as "bingos" | "create" | "import")}>
+      <TabList>
+        <Tab id="bingos">Bingos</Tab>
+        <Tab id="create">Create</Tab>
+        <Tab id="import">Import</Tab>
+      </TabList>
+      <TabPanel id="bingos">
+        <BingosList />
+      </TabPanel>
+      <TabPanel id="create">
+        <CreateBingoForm />
+      </TabPanel>
+      <TabPanel id="import">
+        <ImportBingoPanel />
+      </TabPanel>
+    </Tabs>
+  );
+}
+
 function GrantAdminPanel() {
   const [granted, setGranted] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -272,16 +298,11 @@ function GrantAdminPanel() {
   );
 }
 
-function Section({ title, defaultExpanded = false, children }: { title: string; defaultExpanded?: boolean; children: ReactNode }) {
-  return (
-    <Disclosure defaultExpanded={defaultExpanded} title={<span className="flex-1 text-sm font-semibold text-on-surface">{title}</span>}>
-      {children}
-    </Disclosure>
-  );
-}
+const NARROW = "mx-auto w-full max-w-6xl px-6";
 
 export function SiteAdminPage() {
   const { user, canGrantAdmin } = useAuth();
+  const [tab, setTab] = useState("bugs");
   if (!user?.isAdmin) {
     return (
       <div className="flex min-h-dvh items-center justify-center gap-1 bg-background text-sm text-on-surface-muted">
@@ -296,34 +317,52 @@ export function SiteAdminPage() {
   return (
     <div className="min-h-dvh bg-background text-on-surface">
       <AppHeader back={{ to: "/", label: "All bingos" }} title="Site admin" />
-      <main className="mx-auto w-full max-w-6xl space-y-3 px-6 py-6">
-        <Section title="Bug reports" defaultExpanded>
-          <BugReportsPanel />
-        </Section>
-        <Section title="Bingos" defaultExpanded>
-          <BingosPanel />
-        </Section>
-        <Section title="Site-wide audit log" defaultExpanded>
-          <p className="mb-4 text-sm text-on-surface-muted">Every site-level action, across every bingo.</p>
-          <SiteAuditLog />
-        </Section>
-        <Section title="Create a bingo">
-          <CreateBingoForm />
-        </Section>
-        <Section title="Import a bingo">
-          <ImportBingoPanel />
-        </Section>
-        <Section title="Item groups">
-          <ItemGroupsPanel />
-        </Section>
-        <Section title="Past WOM competitions">
-          <PastWomCompetitionsPanel />
-        </Section>
-        {canGrantAdmin && (
-          <Section title="Grant site admin">
-            <GrantAdminPanel />
-          </Section>
-        )}
+      <main className="py-6">
+        <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key))}>
+          <div className={NARROW}>
+            <TabList>
+              <Tab id="bugs">Bug reports</Tab>
+              <Tab id="bingos">Bingos</Tab>
+              <Tab id="audit">Site-wide audit log</Tab>
+              <Tab id="item-groups">Item groups</Tab>
+              <Tab id="past-wom">Past WOM competitions</Tab>
+              {canGrantAdmin && <Tab id="grant-admin">Grant site admin</Tab>}
+            </TabList>
+          </div>
+          <TabPanel id="bugs">
+            <div className={NARROW}>
+              <BugReportsPanel />
+            </div>
+          </TabPanel>
+          <TabPanel id="bingos">
+            <div className={NARROW}>
+              <BingosPanel />
+            </div>
+          </TabPanel>
+          <TabPanel id="audit">
+            <div className={NARROW}>
+              <p className="mb-4 text-sm text-on-surface-muted">Every site-level action, across every bingo.</p>
+              <SiteAuditLog />
+            </div>
+          </TabPanel>
+          <TabPanel id="item-groups">
+            <div className={NARROW}>
+              <ItemGroupsPanel />
+            </div>
+          </TabPanel>
+          <TabPanel id="past-wom">
+            <div className={NARROW}>
+              <PastWomCompetitionsPanel />
+            </div>
+          </TabPanel>
+          {canGrantAdmin && (
+            <TabPanel id="grant-admin">
+              <div className={NARROW}>
+                <GrantAdminPanel />
+              </div>
+            </TabPanel>
+          )}
+        </Tabs>
       </main>
     </div>
   );
