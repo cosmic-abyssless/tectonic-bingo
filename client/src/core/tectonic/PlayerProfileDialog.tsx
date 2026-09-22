@@ -8,7 +8,7 @@ import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { discordName } from "../ui/user";
 import { AchievementIcons, Medal, PlaceBreakdown, TierBadge } from "./ProfileBadges";
 import { formatRecordValue, isBingoEvent, podiumSummary, recordSummary } from "./profile";
-import { CaCell, WomCell } from "../signup/caStats";
+import { CaCell, WomCell, formatWomStat } from "../signup/caStats";
 import { useStatsRefreshingUserIds } from "../../context/WebSocketContext";
 
 /**
@@ -171,6 +171,31 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
               )}
             </Section>
           </>
+        )}
+
+        {player.pastBingoStats.length > 0 && (
+          <Section title={`Past bingos (${player.pastBingoStats.length})`}>
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-on-surface-subtle">
+                <tr>
+                  <th className="py-1 pr-3 font-medium">Bingo</th>
+                  <th className="py-1 pr-3 font-medium">Gained</th>
+                  <th className="py-1 font-medium">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-outline">
+                {player.pastBingoStats.map((p) => (
+                  <tr key={p.competitionId}>
+                    <td className="py-1.5 pr-3 text-on-surface">{p.title}</td>
+                    <td className="num py-1.5 pr-3 whitespace-nowrap">
+                      {formatWomStat(p.gained)} <span className="text-on-surface-subtle uppercase">{p.metric}</span>
+                    </td>
+                    <td className="num py-1.5 whitespace-nowrap text-on-surface-muted">{new Date(p.startsAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Section>
         )}
 
         {player.answers && questions.length > 0 && (

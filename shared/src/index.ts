@@ -186,6 +186,18 @@ export interface WomPastCompetition {
   addedByUserId: string | null;
 }
 
+/** One stored past competition's result for a single player, matched by RSN (issue #128). */
+export interface PastBingoParticipation {
+  competitionId: string;
+  womId: number;
+  bingoId: string | null;
+  title: string;
+  metric: string;
+  startsAt: string;
+  endsAt: string;
+  gained: number;
+}
+
 export type NodeKind = "ALL" | "ANY" | "COUNT" | "SUM" | "ITEM" | "MANUAL";
 
 // One node in a bingo's DAG. Composite kinds (ALL/ANY/COUNT/SUM) fold their
@@ -774,6 +786,10 @@ export interface PlayerProfile {
   profile: TectonicProfile | null;
   answers: SignupAnswer[] | null; // null unless the viewer is a mod or team lead
   tectonicUnavailable: boolean;
+  // Matched by RSN against every stored past WOM competition (issue #128),
+  // newest first. Best-effort: only covers competitions where one of this
+  // user's signup RSNs (any bingo, past or present) appears in the roster.
+  pastBingoStats: PastBingoParticipation[];
 }
 
 export interface DraftTeam extends Team {

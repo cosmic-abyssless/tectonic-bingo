@@ -5,13 +5,14 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { WomCompetitionClient } from "./womCompetitionService";
-import { addPastCompetition, archiveBingoCompetition, deletePastCompetition, listPastCompetitions } from "./pastWomCompetitionService";
+import { addPastCompetition, archiveBingoCompetition, deletePastCompetition, getPastParticipationsForUser, listPastCompetitions } from "./pastWomCompetitionService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
 
 function seedUser() {
-  return db.insert(schema.users).values({ discordId: "admin", discordUsername: "admin" }).returning().get();
+  const id = crypto.randomUUID();
+  return db.insert(schema.users).values({ discordId: id, discordUsername: `admin-${id.slice(0, 8)}` }).returning().get();
 }
 
 function seedBingo(overrides: Partial<typeof schema.bingos.$inferInsert> = {}) {
@@ -144,5 +145,56 @@ describe("archiveBingoCompetition", () => {
     const client = new WomCompetitionClient(mockFetch([{ status: 500 }]));
     await expect(archiveBingoCompetition(db, bingo.id, client)).resolves.toBeUndefined();
     expect(db.select().from(schema.womPastCompetitions).all()).toHaveLength(0);
+  });
+});
+
+describe("getPastParticipationsForUser", () => {
+  const competitionWithGains = {
+    title: "Winter Bingo",
+    metric: "ehp",
+    startsAt: "2026-01-01T00:00:00.000Z",
+    endsAt: "2026-01-15T00:00:00.000Z",
+    participations: [
+      { player: { username: "cosmic_abyss" }, progress: { gained: 12.5 } },
+      { player: { username: "someone_else" }, progress: { gained: 4 } },
+    ],
+  };
+
+  function seedPlayerWithRsn(rsn: string) {
+    const player = db.insert(schema.users).values({ discordId: `p-${rsn}`, discordUsername: rsn }).returning().get();
+    const bingo = seedBingo({ slug: `bingo-${rsn}` });
+    db.insert(schema.signups).values({ bingoId: bingo.id, userId: player.id, rsn }).run();
+    return player;
+  }
+
+  it("matches a stored competition by normalized RSN", async () => {
+    const player = seedPlayerWithRsn("Cosmic Abyss");
+    const admin = seedUser();
+    await addPastCompetition(db, { womId: 42, addedByUserId: admin.id }, new WomCompetitionClient(mockFetch([{ body: competitionWithGains }])));
+
+    const results = getPastParticipationsForUser(db, player.id);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ womId: 42, title: "Winter Bingo", metric: "ehp", gained: 12.5 });
+  });
+
+  it("returns nothing for a user with no signups", () => {
+    const player = db.insert(schema.users).values({ discordId: "no-signups", discordUsername: "NoSignups" }).returning().get();
+    expect(getPastParticipationsForUser(db, player.id)).toEqual([]);
+  });
+
+  it("returns nothing when the RSN doesn't appear in any stored competition", async () => {
+    const player = seedPlayerWithRsn("Nobody Here");
+    const admin = seedUser();
+    await addPastCompetition(db, { womId: 42, addedByUserId: admin.id }, new WomCompetitionClient(mockFetch([{ body: competitionWithGains }])));
+    expect(getPastParticipationsForUser(db, player.id)).toEqual([]);
+  });
+
+  it("only matches competitions for the current guild", async () => {
+    const player = seedPlayerWithRsn("Cosmic Abyss");
+    const admin = seedUser();
+    await addPastCompetition(db, { womId: 42, addedByUserId: admin.id }, new WomCompetitionClient(mockFetch([{ body: competitionWithGains }])));
+    vi.stubEnv("DISCORD_GUILD_ID", "other-guild");
+    expect(getPastParticipationsForUser(db, player.id)).toEqual([]);
   });
 });

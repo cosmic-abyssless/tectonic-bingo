@@ -10,9 +10,9 @@
 //    change that triggered it.
 import { and, desc, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { WomPastCompetition } from "@bingo/shared";
+import type { PastBingoParticipation, WomPastCompetition } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { bingos, womPastCompetitions } from "../db/schema";
+import { bingos, signups, womPastCompetitions } from "../db/schema";
 import { ServiceError } from "./errors";
 import { audit } from "../audit/record";
 import { log } from "../log";
@@ -65,6 +65,57 @@ function parseCompetitionSummary(raw: unknown): { title: string; metric: string;
 
 export function listPastCompetitions(db: Db): WomPastCompetition[] {
   return db.select().from(womPastCompetitions).where(eq(womPastCompetitions.guildId, currentGuildId())).orderBy(desc(womPastCompetitions.startsAt)).all().map(toPublic);
+}
+
+// WOM normalizes usernames to lowercase with runs of whitespace/underscores
+// collapsed to a single underscore — match RSNs the same way so "Cosmic
+// Abyss" (a signup RSN) lines up with WOM's "cosmic_abyss".
+function normalizeRsn(rsn: string): string {
+  return rsn.trim().toLowerCase().replace(/[\s_]+/g, "_");
+}
+
+interface RawParticipation {
+  player?: { username?: unknown };
+  progress?: { gained?: unknown };
+}
+
+/**
+ * Every stored past competition where one of this user's signup RSNs (any
+ * bingo, past or present — a player's RSN can differ bingo to bingo) turns
+ * up in the roster. Best-effort, RSN-matched only: there's no other shared
+ * key between a platform user and an arbitrary WOM competition.
+ */
+export function getPastParticipationsForUser(db: Db, userId: string): PastBingoParticipation[] {
+  const rsnRows = db.select({ rsn: signups.rsn }).from(signups).where(eq(signups.userId, userId)).all();
+  const rsns = new Set(rsnRows.map((r) => normalizeRsn(r.rsn)));
+  if (rsns.size === 0) return [];
+
+  const rows = db.select().from(womPastCompetitions).where(eq(womPastCompetitions.guildId, currentGuildId())).orderBy(desc(womPastCompetitions.startsAt)).all();
+
+  const results: PastBingoParticipation[] = [];
+  for (const row of rows) {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(row.dataJson);
+    } catch {
+      continue;
+    }
+    const participations = (raw as { participations?: unknown[] } | null)?.participations;
+    if (!Array.isArray(participations)) continue;
+    const match = (participations as RawParticipation[]).find((p) => typeof p.player?.username === "string" && rsns.has(normalizeRsn(p.player.username)));
+    if (!match) continue;
+    results.push({
+      competitionId: row.id,
+      womId: row.womId,
+      bingoId: row.bingoId,
+      title: row.title,
+      metric: row.metric,
+      startsAt: row.startsAt.toISOString(),
+      endsAt: row.endsAt.toISOString(),
+      gained: typeof match.progress?.gained === "number" ? match.progress.gained : 0,
+    });
+  }
+  return results;
 }
 
 /** Admin-triggered: fetch one WOM competition by id and store it. Throws ServiceError on a bad id, a duplicate, or a WOM API failure — the admin panel surfaces it directly. */

@@ -26,6 +26,7 @@ import { fetchProfiles } from "../services/tectonicProfileService";
 import { fetchAndPersistPlayerStats, getSignupStats, parseStoredPlayerStats } from "../services/playerStatsService";
 import { parseStoredCaStats } from "../services/combatAchievements";
 import { syncWomTeamRename } from "../services/womCompetitionService";
+import { getPastParticipationsForUser } from "../services/pastWomCompetitionService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
 import { auditSkip } from "../audit/middleware";
@@ -568,6 +569,7 @@ router.get(
       profile: tectonic.profiles[userId] ?? null,
       answers: signup && seesAnswers ? signup.answers : null,
       tectonicUnavailable: tectonic.unavailable,
+      pastBingoStats: getPastParticipationsForUser(db, userId),
     };
     res.json({ player });
   }),
