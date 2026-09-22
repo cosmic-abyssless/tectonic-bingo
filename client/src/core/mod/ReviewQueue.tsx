@@ -10,6 +10,7 @@ import { Badge, Card, EmptyState, FilterChip, Notice } from "../ui/Card";
 import { Field, Input, Textarea } from "../ui/Field";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { SearchableSelect } from "../ui/SearchableSelect";
+import { SingleSelect } from "../ui/SingleSelect";
 import { ScreenshotThumb } from "../submissions/ScreenshotThumb";
 import { claimsSummary } from "../submissions/claimsSummary";
 import { fullUrl } from "../../api/imageVariants";
@@ -29,6 +30,11 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "rejected", label: "Rejected" },
   { key: "all", label: "All" },
 ];
+
+// The status filter above stays buttons — a small fixed set, and the one view switched constantly while
+// reviewing. Team used to be the same row of buttons, but that grows one per team (issue #121) — a dropdown
+// (SingleSelect, since only one team is picked at a time) instead. "all" stands in for teamFilter's own null.
+const ALL_TEAMS = "all";
 
 // A MANUAL leaf has no separate completion decision — approving its claim IS
 // the decision (rejecting is "not done yet"). See docs/node-graph-model.md §5.
@@ -106,6 +112,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
   }, [expandedId]);
 
   const allTeams = [...new Set(submissions.map((s) => s.team.name))].sort();
+  const teamOptions = [{ key: ALL_TEAMS, label: "All teams" }, ...allTeams.map((t) => ({ key: t, label: t }))];
   const byStatus = filter === "all" ? submissions : submissions.filter((s) => s.submission.status === filter);
   const counts: Record<Filter, number> = {
     pending: submissions.filter((s) => s.submission.status === "pending").length,
@@ -231,16 +238,12 @@ export function ReviewQueue({ slug }: { slug: string }) {
       </div>
 
       {allTeams.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          <FilterChip active={teamFilter === null} onPress={() => setTeamFilter(null)}>
-            All teams
-          </FilterChip>
-          {allTeams.map((team) => (
-            <FilterChip key={team} active={teamFilter === team} onPress={() => setTeamFilter(teamFilter === team ? null : team)}>
-              {team}
-            </FilterChip>
-          ))}
-        </div>
+        <SingleSelect
+          label="Team"
+          options={teamOptions}
+          selected={teamFilter ?? ALL_TEAMS}
+          onChange={(key) => setTeamFilter(key === ALL_TEAMS ? null : key)}
+        />
       )}
 
       {error && expandedId === null && <Notice tone="danger">{error}</Notice>}
