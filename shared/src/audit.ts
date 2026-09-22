@@ -22,6 +22,7 @@ export type AuditEntityType =
   | "bingo"
   | "user"
   | "item_group"
+  | "wom_past_competition"
   | "category"
   | "tile"
   | "node"
@@ -51,6 +52,9 @@ export interface AuditDetailsMap {
   "item_group.created": { name: string; itemCount: number };
   "item_group.updated": { changes: FieldChanges<{ name: string; description: string | null }>; items: { added: string[]; removed: string[] } };
   "item_group.deleted": { name: string; itemNames: string[] };
+
+  "wom_past_competition.added": { womId: number; title: string; participantCount: number; source: "manual" | "auto" };
+  "wom_past_competition.deleted": { womId: number; title: string };
 
   "settings.updated": {
     changes: FieldChanges<{
@@ -311,6 +315,20 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Item group deleted",
     label: (i) => `${actor(i)} deleted the item group "${i.details.name}"`,
+  },
+  "wom_past_competition.added": {
+    category: "system",
+    tone: "ok",
+    visibility: "mods",
+    title: "Past WOM competition added",
+    label: (i) => (i.details.source === "auto" ? `Archived the Wise Old Man competition "${i.details.title}"` : `${actor(i)} added the past Wise Old Man competition "${i.details.title}"`),
+  },
+  "wom_past_competition.deleted": {
+    category: "system",
+    tone: "danger",
+    visibility: "mods",
+    title: "Past WOM competition deleted",
+    label: (i) => `${actor(i)} deleted the past Wise Old Man competition "${i.details.title}"`,
   },
   "settings.updated": {
     category: "settings",

@@ -93,17 +93,23 @@ export class WomCompetitionClient {
     });
   }
 
-  private async request(path: string, method: string, body: unknown): Promise<Response> {
+  /** Full competition details (title, dates, and every participant's progress) — a public read, no verification code needed. */
+  async getCompetition(competitionId: number): Promise<unknown> {
+    const res = await this.request(`/competitions/${competitionId}`, "GET");
+    return res.json();
+  }
+
+  private async request(path: string, method: string, body?: unknown): Promise<Response> {
     let res: Response;
     try {
       res = await this.fetchImpl(`${WOM_BASE_URL}${path}`, {
         method,
         headers: {
-          "Content-Type": "application/json",
+          ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
           "User-Agent": WOM_USER_AGENT,
           ...(this.apiKey ? { "x-api-key": this.apiKey } : {}),
         },
-        body: JSON.stringify(body),
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       });
     } catch (err) {
       throw new WomCompetitionError(`${method} ${path} failed: ${err instanceof Error ? err.message : String(err)}`);

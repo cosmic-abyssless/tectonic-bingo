@@ -171,6 +171,21 @@ export interface ItemGroup {
   itemNames: string[];
 }
 
+/** A stored snapshot of one Wise Old Man competition's final results (issue #128). Never carries the raw participation data — this is a listing shape. */
+export interface WomPastCompetition {
+  id: string;
+  guildId: string;
+  womId: number;
+  bingoId: string | null;
+  title: string;
+  metric: string;
+  startsAt: string;
+  endsAt: string;
+  participantCount: number;
+  fetchedAt: string;
+  addedByUserId: string | null;
+}
+
 export type NodeKind = "ALL" | "ANY" | "COUNT" | "SUM" | "ITEM" | "MANUAL";
 
 // One node in a bingo's DAG. Composite kinds (ALL/ANY/COUNT/SUM) fold their

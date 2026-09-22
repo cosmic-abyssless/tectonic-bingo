@@ -8,6 +8,7 @@ import * as adminApi from "../api/adminApi";
 import { optimisticUpdate } from "../api/optimistic";
 import { UserSearchInput } from "../core/admin/UserSearchInput";
 import { ItemGroupsPanel } from "../core/admin/ItemGroupsPanel";
+import { PastWomCompetitionsPanel } from "../core/admin/PastWomCompetitionsPanel";
 import { BugReportsPanel } from "../core/admin/BugReportsPanel";
 import { SiteAuditLog } from "../core/admin/SiteAuditLog";
 import { displayName } from "../core/ui/user";
@@ -314,6 +315,9 @@ export function SiteAdminPage() {
         </Section>
         <Section title="Item groups">
           <ItemGroupsPanel />
+        </Section>
+        <Section title="Past WOM competitions">
+          <PastWomCompetitionsPanel />
         </Section>
         {canGrantAdmin && (
           <Section title="Grant site admin">

@@ -11,6 +11,7 @@ export const adminQueryKeys = {
   userSearch: (scope: string, q: string) => ["adminUserSearch", scope, q] as const,
   captainCandidates: (slug: string) => ["adminCaptainCandidates", slug] as const,
   itemGroups: ["adminItemGroups"] as const,
+  pastWomCompetitions: ["adminPastWomCompetitions"] as const,
   bugReports: ["adminBugReports"] as const,
   siteAuditLog: (bingoScope: string | null | "all", filters: AuditLogFilters) => ["siteAuditLog", bingoScope, filters] as const,
 };
@@ -33,6 +34,10 @@ export function useSiteAuditLog(bingoScope: string | null | "all", filters: Audi
 
 export function useItemGroups() {
   return useQuery({ queryKey: adminQueryKeys.itemGroups, queryFn: () => adminApi.getItemGroups() });
+}
+
+export function usePastWomCompetitions() {
+  return useQuery({ queryKey: adminQueryKeys.pastWomCompetitions, queryFn: () => adminApi.getPastWomCompetitions() });
 }
 
 export function useBugReports() {
