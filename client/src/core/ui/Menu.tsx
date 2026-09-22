@@ -11,7 +11,11 @@ export function Menu<T extends object>({ instant, popoverClassName = "", ...prop
       shouldSkipAnimation={instant}
       className={`${instant ? "" : "overlay-panel"} min-w-44 rounded-md border border-outline bg-surface-raised p-1 shadow-pop outline-none ${popoverClassName}`}
     >
-      <AriaMenu {...props} className="outline-none" />
+      {/* max-h/overflow here, not just left to the Popover's own viewport-fit sizing — that constrains the panel
+          height (so it stays on-screen) but doesn't add a scrollbar; without this, an option list too long for
+          the popover's max-height was simply clipped, not scrollable — the options past that point were there,
+          just invisible and unreachable. */}
+      <AriaMenu {...props} className="max-h-120 overflow-y-auto outline-none" />
     </Popover>
   );
 }
