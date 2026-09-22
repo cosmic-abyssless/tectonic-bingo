@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AuditCategory, AuditEntry } from "@bingo/shared";
 import { useAuditLog, useBingo } from "../../api/queries";
+import { useDebouncedValue } from "../../headless/useDebouncedValue";
 import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { timeAgo } from "../ui/time";
@@ -12,6 +13,7 @@ import { MultiSelect } from "../ui/MultiSelect";
 import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { DateTimeRangeFilter } from "../ui/DateTimeRangeFilter";
 import { isRangeSet, type TimeRange } from "../ui/timeRange";
+import { TableSearchInput } from "../ui/tableSearch";
 
 // Shared with SiteAuditLog.tsx — bug_report entries are bingo-scoped when
 // reported from a bingo's own pages, so this filter is meaningful in both.
@@ -125,6 +127,8 @@ export function AuditLog({ slug }: { slug: string }) {
   const [excludedTeams, setExcludedTeams] = useState<Set<string>>(() => new Set());
   const [excludedActors, setExcludedActors] = useState<Set<string>>(() => new Set());
   const [range, setRange] = useState<TimeRange>({});
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 300).trim();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -141,13 +145,14 @@ export function AuditLog({ slug }: { slug: string }) {
     actorUserId: actors.query,
     since: range.since,
     until: range.until,
+    q: debouncedSearch || undefined,
   });
   const entries = useMemo(() => data?.pages.flatMap((p) => p.entries) ?? [], [data]);
   useEffect(() => {
     rememberActors(entries);
   }, [entries, rememberActors]);
   const actorOptions = useMemo(() => actorOptionsFrom(actorNames, entries), [actorNames, entries]);
-  const filtered = categories.narrowed || teams.narrowed || actors.narrowed || isRangeSet(range);
+  const filtered = categories.narrowed || teams.narrowed || actors.narrowed || isRangeSet(range) || debouncedSearch !== "";
   const blocked = categories.none || teams.none || actors.none;
 
   async function copyCsv() {
@@ -182,6 +187,7 @@ export function AuditLog({ slug }: { slug: string }) {
           />
         )}
         <DateTimeRangeFilter value={range} onChange={setRange} />
+        <TableSearchInput value={search} onChange={setSearch} placeholder="Search…" />
         <div className="ml-auto">
           <Button size="sm" onPress={copyCsv} isDisabled={blocked || entries.length === 0}>
             {copied ? "Copied" : "Copy as CSV"}
