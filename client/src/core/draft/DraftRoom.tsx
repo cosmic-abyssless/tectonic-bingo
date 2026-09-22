@@ -2,7 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatSignupAnswer, type DraftPoolEntry, type DraftTeam, type DraftUnit, type LeftoverMode, type PickRating, type SignupQuestion, type TectonicProfile } from "@bingo/shared";
-import { CaCell, WomCell } from "../signup/caStats";
+import { CaCell, WomCell, formatCaTier, formatWomStat } from "../signup/caStats";
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { useAuth } from "../../context/AuthContext";
 import { queryKeys, useBingo, useDraftState, useMakePick, useSetDraftOrder, useSetPickRating, useShuffleDraftOrder, useSignupQuestions, useStartDraft, useUndoPick } from "../../api/queries";
@@ -15,6 +15,7 @@ import { useHiddenColumns } from "../ui/hiddenColumns";
 import { ChevronDownIcon, ChevronUpIcon, LinkIcon } from "../ui/icons";
 import { SortHeader, compareSortValues, useTableSort, type TableSort } from "../ui/tableSort";
 import { STICKY_CELL, STICKY_HEADER, STICKY_TOP, STRIPE_ODD } from "../ui/tableChrome";
+import { Highlight, TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
 import { useElementHeight } from "../ui/useElementHeight";
 import { RatingCell } from "./RatingCell";
 import { TeamRoster } from "./TeamRoster";
@@ -54,6 +55,21 @@ function poolSortValue(entry: DraftPoolEntry, key: SortKey, ratings: Ratings): s
   if (key === "caCurrent") return entry.caCurrent?.points ?? -1;
   if (key === "caPeak") return entry.caPeak?.points ?? -1;
   return (entry.answers?.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
+}
+
+// Every column's text, whether or not it's currently shown — search covers
+// all of them (issue #112), not just what's visible.
+function poolSearchValues(entry: DraftPoolEntry, questions: SignupQuestion[]): string[] {
+  return [
+    entry.signup.rsn,
+    discordName(entry.user),
+    entry.tectonicProfile?.tier?.name ?? "",
+    formatWomStat(entry.womStats?.ehb),
+    formatWomStat(entry.womStats?.ehp),
+    formatCaTier(entry.caCurrent),
+    formatCaTier(entry.caPeak),
+    ...(entry.answers ?? []).map((a) => formatSignupAnswer(questions.find((q) => q.id === a.questionId)?.type ?? "text", a.value)),
+  ];
 }
 
 // A duo pair sorts by whichever half ranks first, so the pair sits where its
@@ -133,8 +149,11 @@ function PoolTable({
   const ratingOf = ratings ?? {};
   const [hiddenColumns, setHiddenColumns] = useHiddenColumns("draftPool");
   const shown = (id: string) => !hiddenColumns.has(id);
+  const [search, setSearch] = useTableSearch();
   const statsRefreshing = useStatsRefreshingSignupIds();
   const entries = pool.flatMap((u) => u.entries);
+  const entryMatches = (e: DraftPoolEntry) => matchesSearch(poolSearchValues(e, questions), search);
+  const matchingEntries = entries.filter(entryMatches);
   // Answers are only sent to mods/captains (see draftService.getDraftState) —
   // everyone else's pool entries have answers: null, so skip those columns
   // entirely rather than render a table full of "—".
@@ -176,7 +195,11 @@ function PoolTable({
     ...(showAnswers ? questions.map((q) => ({ id: q.id, label: q.prompt })) : []),
   ];
 
+  // A duo pair stays on screen if either half matches, so a lead can still
+  // see who they'd be drafting alongside — the half that didn't match is
+  // dimmed rather than hidden (below).
   const sorted = pool
+    .filter((u) => u.entries.some(entryMatches))
     .map((u) => sortUnit(u, sort, ratingOf))
     .sort((a, b) => sort.order(compareSortValues(poolSortValue(a.entries[0], sort.key, ratingOf), poolSortValue(b.entries[0], sort.key, ratingOf))));
 
@@ -184,9 +207,13 @@ function PoolTable({
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-2">
+        <TableSearchInput value={search} onChange={setSearch} matchCount={matchingEntries.length} totalCount={entries.length} />
         <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={setHiddenColumns} />
       </div>
+      {sorted.length === 0 ? (
+        <p className="text-sm text-on-surface-subtle">No one matches this search.</p>
+      ) : (
     <div className="overflow-auto" style={{ maxHeight }}>
       <table className="w-max min-w-full text-sm [&_td]:align-middle [&_th]:align-middle">
         <thead>
@@ -217,8 +244,11 @@ function PoolTable({
             <tbody key={unit.pairingId ?? unit.entries[0].signup.id} className={`border-t border-outline ${STRIPE_ODD} ${unit.leftover ? "text-on-surface-subtle" : ""}`}>
               {unit.entries.map((entry, i) => {
                 const answerByQ = new Map((entry.answers ?? []).map((a) => [a.questionId, a.value]));
+                // A duo unit stays on screen if either half matches (above);
+                // the half that didn't is dimmed rather than hidden.
+                const dim = !!search && !entryMatches(entry);
                 return (
-                  <tr key={entry.signup.id}>
+                  <tr key={entry.signup.id} className={dim ? "opacity-50" : undefined}>
                     {hasPairs && (
                       <td className="w-6 pr-2 align-middle text-on-surface-subtle">
                         {isPair && i === 0 && <LinkIcon size={14} aria-label="Duo pair" className="mt-1" />}
@@ -233,10 +263,16 @@ function PoolTable({
                     <td className={`whitespace-nowrap py-2 pr-4 font-medium ${unit.leftover ? "" : "text-on-surface"}`}>
                       <span className="inline-flex items-center gap-1">
                         <AccountTypeIcon accountType={entry.accountType} />
-                        <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
+                        <PlayerName userId={entry.user.id}>
+                          <Highlight text={entry.signup.rsn} query={search} />
+                        </PlayerName>
                       </span>
                     </td>
-                    {shown("discord") && <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">{discordName(entry.user)}</td>}
+                    {shown("discord") && (
+                      <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">
+                        <Highlight text={discordName(entry.user)} query={search} />
+                      </td>
+                    )}
                     {hasLeftovers && <td className="py-2 pr-4 align-middle">{unit.leftover && i === 0 && <Badge tone="warn">{leftoverTag}</Badge>}</td>}
                     {showProfiles && <ProfileCells profile={entry.tectonicProfile} shown={shown} />}
                     {showWomStats && shown("ehb") && (
@@ -260,11 +296,14 @@ function PoolTable({
                       </td>
                     )}
                     {showAnswers &&
-                      questions.filter((q) => shown(q.id)).map((q) => (
-                        <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
-                          {formatSignupAnswer(q.type, answerByQ.get(q.id)) || "—"}
-                        </td>
-                      ))}
+                      questions.filter((q) => shown(q.id)).map((q) => {
+                        const answer = formatSignupAnswer(q.type, answerByQ.get(q.id));
+                        return (
+                          <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
+                            {answer ? <Highlight text={answer} query={search} /> : "—"}
+                          </td>
+                        );
+                      })}
                     {canPick && i === 0 && (
                       <td className={`${STICKY_CELL} py-1 pl-3 text-right align-middle`} rowSpan={unit.entries.length}>
                         <Button size="sm" variant="primary" onPress={() => onPick(entry.user.id)} isDisabled={picking || !draftable}>
@@ -280,6 +319,7 @@ function PoolTable({
         })}
       </table>
     </div>
+      )}
     </div>
   );
 }

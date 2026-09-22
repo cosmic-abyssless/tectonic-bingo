@@ -27,6 +27,7 @@ import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { CaCell, WomCell, formatCaTier, formatWomStat } from "../signup/caStats";
 import { SortHeader, compareSortValues, useTableSort } from "../ui/tableSort";
 import { STICKY_TOP, STRIPE_ODD, useStickyTop } from "../ui/tableChrome";
+import { Highlight, TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
 import { timeAgo } from "../ui/time";
 import { TierBadge } from "../tectonic/ProfileBadges";
 import { formatTierName } from "../tectonic/profile";
@@ -201,7 +202,7 @@ function DevSeedPanel({ slug }: { slug: string }) {
 // row sharing the same pairing) with an unpair button; unpaired active
 // players get a picker of other unpaired active players so a mod can pair
 // them by hand.
-function PartnerCell({ slug, entry, roster }: { slug: string; entry: RosterEntry; roster: RosterEntry[] }) {
+function PartnerCell({ slug, entry, roster, search }: { slug: string; entry: RosterEntry; roster: RosterEntry[]; search: string }) {
   const pair = useModPair(slug);
   const unpair = useModUnpair(slug);
   const [target, setTarget] = useState("");
@@ -219,7 +220,9 @@ function PartnerCell({ slug, entry, roster }: { slug: string; entry: RosterEntry
   if (entry.pairing) {
     return (
       <div className="flex items-center gap-1">
-        <span className="text-on-surface">{partnerRsn(entry, roster)}</span>
+        <span className="text-on-surface">
+          <Highlight text={partnerRsn(entry, roster) ?? ""} query={search} />
+        </span>
         <IconButton label="Unpair" size="sm" onPress={() => run(() => unpair.mutateAsync(entry.pairing!.id))} isDisabled={unpair.isPending}>
           <XIcon size={12} />
         </IconButton>
@@ -346,6 +349,22 @@ function rosterSortValue({ order, entry }: NumberedEntry, key: SortKey, roster: 
   return (entry.answers.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
 }
 
+// Every column's text, whether or not it's currently shown — search covers
+// all of them (issue #112), not just what's visible.
+function rosterSearchValues(entry: RosterEntry, roster: RosterEntry[], questions: { id: string; type: SignupQuestionType }[]): string[] {
+  return [
+    entry.signup.rsn,
+    discordName(entry.user),
+    entry.tectonicProfile?.tier ? formatTierName(entry.tectonicProfile.tier.name) : "",
+    entry.signup.status,
+    formatCaTier(entry.caCurrent),
+    formatCaTier(entry.caPeak),
+    entry.collectedByUser ? displayName(entry.collectedByUser) : "",
+    partnerRsn(entry, roster) ?? "",
+    ...entry.answers.map((a) => formatSignupAnswer(questions.find((q) => q.id === a.questionId)?.type ?? "text", a.value)),
+  ];
+}
+
 export function SignupRoster({ slug }: { slug: string }) {
   const { data } = useSignupRoster(slug);
   const { data: questionsData } = useSignupQuestions(slug);
@@ -360,6 +379,7 @@ export function SignupRoster({ slug }: { slug: string }) {
   const [copied, setCopied] = useState(false);
   const [buyinFilter, setBuyinFilter] = useState<BuyinFilter>("all");
   const [pairFilter, setPairFilter] = useState<PairFilter>("all");
+  const [search, setSearch] = useTableSearch();
   const [hiddenColumns, setHiddenColumns] = useHiddenColumns("signupRoster");
   const sort = useTableSort<SortKey>("order");
   const shown = (id: string) => !hiddenColumns.has(id);
@@ -395,9 +415,11 @@ export function SignupRoster({ slug }: { slug: string }) {
   // clicking it would leave on screen.
   const buyinCount = (f: BuyinFilter) => roster.filter((r) => matchesBuyin(r, f) && matchesPair(r, pairFilter)).length;
   const pairCount = (f: PairFilter) => roster.filter((r) => matchesPair(r, f) && matchesBuyin(r, buyinFilter)).length;
-  const sorted = roster
+  const searchable = roster
     .map((entry, i) => ({ order: i + 1, entry }))
-    .filter(({ entry }) => matchesBuyin(entry, buyinFilter) && matchesPair(entry, pairFilter))
+    .filter(({ entry }) => matchesBuyin(entry, buyinFilter) && matchesPair(entry, pairFilter));
+  const sorted = searchable
+    .filter(({ entry }) => matchesSearch(rosterSearchValues(entry, roster, questions), search))
     .sort((a, b) => sort.order(compareSortValues(rosterSortValue(a, sort.key, roster), rosterSortValue(b, sort.key, roster))));
 
   async function copyCsv() {
@@ -427,6 +449,7 @@ export function SignupRoster({ slug }: { slug: string }) {
           )}
         </p>
         <div className="flex items-center gap-2">
+          {roster.length > 0 && <TableSearchInput value={search} onChange={setSearch} matchCount={sorted.length} totalCount={searchable.length} />}
           {roster.length > 0 && <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={setHiddenColumns} />}
           <Button size="sm" onPress={copyCsv} isDisabled={roster.length === 0}>
             {copied ? "Copied" : "Copy as CSV"}
@@ -459,7 +482,7 @@ export function SignupRoster({ slug }: { slug: string }) {
             )}
           </div>
           {sorted.length === 0 ? (
-            <p className="text-sm text-on-surface-muted">No signups match these filters.</p>
+            <p className="text-sm text-on-surface-muted">No signups match {search ? "this search" : "these filters"}.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-max min-w-full text-sm [&_td]:align-middle [&_th]:align-middle">
@@ -492,12 +515,18 @@ export function SignupRoster({ slug }: { slug: string }) {
                         {shown("order") && <td className="num py-2 pr-4 text-on-surface-subtle">{order}</td>}
                         <td className="py-2 pr-4 font-medium text-on-surface">
                           <span className="inline-flex items-center gap-1.5">
-                            <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
+                            <PlayerName userId={entry.user.id}>
+                              <Highlight text={entry.signup.rsn} query={search} />
+                            </PlayerName>
                             {entry.signup.rsnVerified && <CheckIcon size={14} className="text-ok" aria-label="Verified against the linked clan account" />}
                             <RefreshStatsButton slug={slug} signupId={entry.signup.id} rsn={entry.signup.rsn} refreshing={statsLoading} />
                           </span>
                         </td>
-                        {shown("discord") && <td className="py-2 pr-4 text-on-surface-muted">{discordName(entry.user)}</td>}
+                        {shown("discord") && (
+                          <td className="py-2 pr-4 text-on-surface-muted">
+                            <Highlight text={discordName(entry.user)} query={search} />
+                          </td>
+                        )}
                         {showTier && shown("tier") && (
                           <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">
                             {entry.tectonicProfile ? <TierBadge profile={entry.tectonicProfile} /> : "—"}
@@ -547,14 +576,17 @@ export function SignupRoster({ slug }: { slug: string }) {
                         )}
                         {isDuo && shown("partner") && (
                           <td className="py-2 pr-4">
-                            <PartnerCell slug={slug} entry={entry} roster={roster} />
+                            <PartnerCell slug={slug} entry={entry} roster={roster} search={search} />
                           </td>
                         )}
-                        {questions.filter((q) => shown(q.id)).map((q) => (
-                          <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
-                            {formatSignupAnswer(q.type, answerByQ.get(q.id)) || "—"}
-                          </td>
-                        ))}
+                        {questions.filter((q) => shown(q.id)).map((q) => {
+                          const answer = formatSignupAnswer(q.type, answerByQ.get(q.id));
+                          return (
+                            <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
+                              {answer ? <Highlight text={answer} query={search} /> : "—"}
+                            </td>
+                          );
+                        })}
                       </tr>
                     );
                   })}
