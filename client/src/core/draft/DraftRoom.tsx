@@ -108,12 +108,12 @@ export function DraftRoom({ slug }: { slug: string }) {
   const [rateError, setRateError] = useState<string | null>(null);
   const [orderOpen, setOrderOpen] = useState(false);
   const reveals = useDraftReveals(shell?.bingo.id, state);
-  // The teams stay pinned under the page header while the player table scrolls, so both heights decide how tall the table may be.
+  // The teams stay pinned under the page header while the pool scrolls — headerHeight is its own sticky `top`
+  // offset. The pool table's height is no longer derived from this (DraftPoolGrid measures its own position via
+  // useDocumentTop now, matching the signup roster), so there's no teamsHeight to measure alongside it any more.
   const [pageHeader, setPageHeader] = useState<Element | null>(null);
-  const [teamsPanel, setTeamsPanel] = useState<HTMLElement | null>(null);
   useEffect(() => setPageHeader(document.querySelector("header")), []);
   const headerHeight = useElementHeight(pageHeader);
-  const teamsHeight = useElementHeight(teamsPanel);
 
   useEffect(() => {
     if (!state?.orderLockedUntil) return;
@@ -312,7 +312,7 @@ export function DraftRoom({ slug }: { slug: string }) {
 
       {isMyTurn && <Notice tone="ok">It's your turn to pick.</Notice>}
 
-      <section ref={setTeamsPanel} className="sticky z-10 -mx-6 bg-background px-6 pb-3 pt-2 shadow-[0_6px_8px_-6px_var(--color-shade)]" style={{ top: headerHeight }}>
+      <section className="sticky z-10 -mx-6 bg-background px-6 pb-3 pt-2 shadow-[0_6px_8px_-6px_var(--color-shade)]" style={{ top: headerHeight }}>
         <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
           Teams
         </h3>
@@ -391,7 +391,6 @@ export function DraftRoom({ slug }: { slug: string }) {
             onPick={handlePick}
             picking={makePick.isPending}
             leftoverMode={shell.bingo.leftoverMode}
-            maxHeight={`max(14rem, calc(100dvh - ${headerHeight + teamsHeight}px - 11rem))`}
           />
         </Card>
       </section>

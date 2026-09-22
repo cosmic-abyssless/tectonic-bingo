@@ -48,6 +48,7 @@ import { useHiddenColumns } from "../ui/hiddenColumns";
 import { LinkIcon } from "../ui/icons";
 import { compareSortValues } from "../ui/tableSort";
 import { TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
+import { useDocumentTop } from "../ui/tableChrome";
 import { PlayerName } from "../tectonic/PlayerName";
 import { AchievementIcons, PlaceBreakdown, TierBadge } from "../tectonic/ProfileBadges";
 import { podiumSummary, podiumTitle, recordSummary, recordTitle } from "../tectonic/profile";
@@ -286,6 +287,11 @@ const LeftoverBadgeRenderer = ({ data, context }: CustomCellRendererProps<DraftU
 const GRID_STATE_KEY = "pref:gridState:draftPool";
 const FIXED_COL_IDS = ["pairIcon", "rating", "rsn", "draft"];
 
+// Same floor as SignupRosterGrid's own MIN_TABLE_HEIGHT (core/mod/SignupRoster.tsx), tuned to this grid's own
+// fixed row heights rather than shared outright: ~40px header + 10 solo rows (getRowHeight's 44px) lands at the
+// same ~30rem.
+const MIN_TABLE_HEIGHT = "30rem";
+
 function readDraftColumnState(): Pick<GridState, "columnOrder" | "columnSizing" | "sort"> {
   try {
     const raw = localStorage.getItem(GRID_STATE_KEY);
@@ -312,7 +318,6 @@ export function DraftPoolGrid({
   onPick,
   picking,
   leftoverMode,
-  maxHeight,
 }: {
   pool: DraftUnit[];
   questions: SignupQuestion[];
@@ -323,8 +328,6 @@ export function DraftPoolGrid({
   onPick: (userId: string) => void;
   picking: boolean;
   leftoverMode: LeftoverMode;
-  /** The grid's own natural content height is capped at this — see the height/getRowHeight comment below. */
-  maxHeight: string;
 }) {
   // hiddenColumns is still the persisted store (pref:hiddenColumns:draftPool in localStorage), but it's no longer
   // the only way a column's visibility changes — AG's own header-drag lets a mod drag a column out of the grid
@@ -563,12 +566,18 @@ export function DraftPoolGrid({
   // leftover row keeps standing out despite the striping (see below) either way.
   const getRowClass = useCallback((params: RowClassParams<DraftUnit>) => (params.data?.leftover ? "text-on-surface-subtle" : ""), []);
 
-  // No domLayout="autoHeight" (it ignores a height cap entirely) and no fixed height sized to maxHeight (the
-  // pool shrinks as the draft goes — a tall empty grid looks broken for the last few picks). Setting both height
-  // (the content's own natural size) and maxHeight lets CSS take min(height, maxHeight): the grid sizes itself
-  // to its rows normally, but still gets capped and scrolls internally once the pool is bigger than the
-  // available space, matching the old table's overflow-auto + max-height behaviour.
-  const naturalHeight = 40 + rows.reduce((h, u) => h + (u.entries.length > 1 ? 84 : 44), 0);
+  // Same fixed-height-fills-the-viewport behaviour as SignupRosterGrid, not the pool's own previous
+  // shrinks-with-content one (a comment here used to explain deliberately NOT doing this, so the pool wouldn't
+  // look like a tall broken grid once most players were drafted — that trade-off was reconsidered in favour of
+  // matching the signup roster's table exactly: a stable height, empty space below the last row late in the
+  // draft rather than the grid itself resizing under the mod's cursor). domLayout="normal" (unset, AG's own
+  // default) needs a real height on its container — useDocumentTop's measured remaining-viewport value becomes
+  // that directly, same as the signup roster. minHeight: MIN_TABLE_HEIGHT is the same floor for the same reason.
+  const [tableWrapper, setTableWrapper] = useState<HTMLDivElement | null>(null);
+  const tableTop = useDocumentTop(tableWrapper);
+  // 2rem, not SignupRosterGrid's own 1.5rem — this grid sits inside a Card (DraftRoom's own p-4), so there's an
+  // extra half-rem of padding below it before the page's own edge that SignupRoster's bare wrapper doesn't have.
+  const tableHeight = `calc(100dvh - ${tableTop}px - 2rem)`;
 
   const onGridReady = useCallback((e: GridReadyEvent<DraftUnit>) => {
     gridApiRef.current = e.api;
@@ -638,7 +647,7 @@ export function DraftPoolGrid({
       {rows.length === 0 ? (
         <p className="text-sm text-on-surface-subtle">No one matches this search.</p>
       ) : (
-        <div className="overflow-hidden" style={{ height: naturalHeight, maxHeight }}>
+        <div ref={setTableWrapper} className="overflow-hidden" style={{ height: tableHeight, minHeight: MIN_TABLE_HEIGHT }}>
           <AgGridReact<DraftUnit>
             theme={gridTheme}
             rowData={rows}
