@@ -269,6 +269,28 @@ const PairIconRenderer = ({ data }: CustomCellRendererProps<DraftUnit>) => (data
 
 const LeftoverBadgeRenderer = ({ data, context }: CustomCellRendererProps<DraftUnit, unknown, PoolGridContext>) => (data?.leftover ? <Badge tone="warn">{context.leftoverTag}</Badge> : null);
 
+// Movable column order, sizing and sort. Visibility stays in pref:hiddenColumns:draftPool (useHiddenColumns) so
+// ColumnPicker keeps working. Fixed columns are left out of the saved order — their place comes from lockPosition.
+const GRID_STATE_KEY = "pref:gridState:draftPool";
+const FIXED_COL_IDS = ["pairIcon", "rating", "rsn", "draft"];
+
+function readDraftColumnState(): Pick<GridState, "columnOrder" | "columnSizing" | "sort"> {
+  try {
+    const raw = localStorage.getItem(GRID_STATE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as GridState;
+    if (!parsed || typeof parsed !== "object") return {};
+    const orderedColIds = parsed.columnOrder?.orderedColIds?.filter((id) => typeof id === "string" && !FIXED_COL_IDS.includes(id));
+    return {
+      ...(orderedColIds?.length ? { columnOrder: { orderedColIds } } : {}),
+      ...(parsed.columnSizing ? { columnSizing: parsed.columnSizing } : {}),
+      ...(parsed.sort ? { sort: parsed.sort } : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
 export function DraftPoolGrid({
   pool,
   questions,
@@ -298,7 +320,20 @@ export function DraftPoolGrid({
   // same way SignupRosterGrid's Phase 4 does: read once at grid creation, then follow the grid's own state.
   const [hiddenColumns, setHiddenColumns] = useHiddenColumns("draftPool");
   const gridApiRef = useRef<GridApi<DraftUnit> | null>(null);
-  const [initialState] = useState<GridState>(() => ({ columnVisibility: { hiddenColIds: [...hiddenColumns] } }));
+  const [initialState] = useState<GridState>(() => {
+    const persisted = readDraftColumnState();
+    return {
+      // Best-rated-first is the meaningful *default* view for a captain, but it has to come from us rather than
+      // a static `sort` on the rating colDef: a restored sort on some other column is a state *restore*, not a
+      // live header click, so it doesn't clear a colDef-level default the way clicking a header does — it just
+      // lingers as a hidden secondary sort. Falling back to it here, only when nothing was ever persisted, means
+      // a persisted sort on another column (or explicitly clearing the sort entirely) is respected as-is.
+      sort: { sortModel: [{ colId: "rating", sort: "desc" }] },
+      ...persisted,
+      columnVisibility: { hiddenColIds: [...hiddenColumns] },
+      partialColumnState: true,
+    };
+  });
   const [search, setSearch] = useTableSearch();
   const statsRefreshing = useStatsRefreshingSignupIds();
 
@@ -347,6 +382,7 @@ export function DraftPoolGrid({
         // Below defaultColDef's minWidth: 70 floor — needs its own, smaller one, or AG clamps width back up.
         minWidth: 36,
         pinned: "left",
+        lockPosition: "left",
         sortable: false,
         resizable: false,
         suppressMovable: true,
@@ -358,8 +394,10 @@ export function DraftPoolGrid({
         comparator: makeUnitComparator("rating", ratings),
         cellRenderer: RatingRenderer,
         width: 140,
-        sort: "desc",
+        // No static `sort: "desc"` here — the initialState fallback above sets it instead (see the comment
+        // there for why a colDef-level default doesn't play well with a restored sort on another column).
         pinned: "left",
+        lockPosition: "left",
         suppressMovable: true,
       },
       {
@@ -371,6 +409,7 @@ export function DraftPoolGrid({
         cellRendererParams: { render: rsnLine },
         tooltip: stackedTooltip((e) => e.signup.rsn),
         pinned: "left",
+        lockPosition: "left",
         width: 170,
         sort: ratings ? undefined : "asc",
         suppressMovable: true,
@@ -466,6 +505,8 @@ export function DraftPoolGrid({
         headerName: "",
         cellRenderer: DraftButtonRenderer,
         pinned: "right",
+        lockPosition: "right",
+        suppressMovable: true,
         width: 130,
         sortable: false,
         resizable: false,
@@ -535,6 +576,19 @@ export function DraftPoolGrid({
   // hiddenColumns (and the persisted store behind it) can't drift from what the grid is actually showing.
   const onStateUpdated = useCallback((e: StateUpdatedEvent<DraftUnit>) => {
     setHiddenColumns(new Set(e.state.columnVisibility?.hiddenColIds ?? []));
+    const orderedColIds = e.state.columnOrder?.orderedColIds.filter((id) => !FIXED_COL_IDS.includes(id));
+    try {
+      localStorage.setItem(
+        GRID_STATE_KEY,
+        JSON.stringify({
+          columnOrder: orderedColIds?.length ? { orderedColIds } : undefined,
+          columnSizing: e.state.columnSizing,
+          sort: e.state.sort,
+        }),
+      );
+    } catch {
+      // Private browsing / storage quota — persistence is a nicety, not required.
+    }
   }, [setHiddenColumns]);
   const handleHiddenChange = useCallback(
     (next: Set<string>) => {
@@ -569,6 +623,7 @@ export function DraftPoolGrid({
             columnDefs={columnDefs}
             defaultColDef={defaultColDef}
             initialState={initialState}
+            maintainColumnOrder
             onGridReady={onGridReady}
             onStateUpdated={onStateUpdated}
             context={context}

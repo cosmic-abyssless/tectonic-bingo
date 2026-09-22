@@ -6,8 +6,8 @@ import * as bugReportService from "../services/bugReportService";
 import * as bingoService from "../services/bingoService";
 import { ServiceError } from "../services/errors";
 
-// Site-wide — deliberately not gated on requireGuildMember, since the bug
-// report button is visible to every logged-in user, not just clan members.
+// Clan Discord members only — the same gate as signing up. Someone who cannot
+// join a bingo has no reason to file a report, and the header hides the button.
 const router = Router();
 router.use(requireAuth);
 
@@ -24,6 +24,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const { description, pageUrl, userAgent, palette } = req.body as { description?: string; pageUrl?: string; userAgent?: string; palette?: string };
     if (!description) throw new ServiceError(400, "description is required");
+    if (!req.user!.inGuild) throw new ServiceError(403, "Only members of the clan's Discord can report bugs");
     const bugReport = bugReportService.createBugReport(db, {
       reporterUserId: req.user!.id,
       description,

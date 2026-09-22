@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { STAGE_LABEL, type Bingo, type BingoExportDocument, type BingoListResponse, type User } from "@bingo/shared";
@@ -13,9 +13,10 @@ import { SiteAuditLog } from "../core/admin/SiteAuditLog";
 import { displayName } from "../core/ui/user";
 import { AppHeader } from "../core/ui/AppHeader";
 import { Button, IconButton } from "../core/ui/Button";
-import { Badge, Card, CardHeader, Notice } from "../core/ui/Card";
+import { Badge, Notice } from "../core/ui/Card";
 import { Field, Input } from "../core/ui/Field";
 import { CheckIcon, TrashIcon } from "../core/ui/icons";
+import { Disclosure } from "../core/ui/Disclosure";
 
 function slugify(s: string): string {
   return s
@@ -51,9 +52,7 @@ function CreateBingoForm() {
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader title="Create a bingo" />
-      <div className="space-y-4 p-5">
+    <div className="max-w-md space-y-4">
         <Field label="Name">
           <Input
             value={name}
@@ -81,7 +80,6 @@ function CreateBingoForm() {
           {creating ? "Creating…" : "Create bingo"}
         </Button>
       </div>
-    </Card>
   );
 }
 
@@ -129,10 +127,9 @@ function ImportBingoPanel() {
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader title="Import a bingo" description="Create a new bingo from a previously exported board & settings file." />
-      <div className="space-y-4 p-5">
-        <button
+    <div className="max-w-md space-y-4">
+      <p className="text-sm text-on-surface-muted">Create a new bingo from a previously exported board and settings file.</p>
+      <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
           className="w-full rounded-md border border-dashed border-outline-strong px-3 py-4 text-center text-sm text-on-surface-muted transition-colors hover:border-on-surface/60 hover:text-on-surface"
@@ -164,7 +161,6 @@ function ImportBingoPanel() {
           {importing ? "Importing…" : "Import as new bingo"}
         </Button>
       </div>
-    </Card>
   );
 }
 
@@ -215,9 +211,8 @@ function BingosPanel() {
 
   const bingos = data?.bingos ?? [];
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader title="Bingos" description="Every bingo on this site. Deleting one removes its board, signups, teams and submissions." />
-      <div className="space-y-3 p-5">
+    <div className="space-y-3">
+      <p className="text-sm text-on-surface-muted">Every bingo on this site. Deleting one removes its board, signups, teams and submissions.</p>
         {error && <Notice tone="danger">{error}</Notice>}
         {bingos.length === 0 ? (
           <p className="text-sm text-on-surface-subtle">No bingos yet.</p>
@@ -239,8 +234,7 @@ function BingosPanel() {
             ))}
           </ul>
         )}
-      </div>
-    </Card>
+    </div>
   );
 }
 
@@ -259,9 +253,8 @@ function GrantAdminPanel() {
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader title="Grant site admin" description="Site admins can create bingos and edit any board." />
-      <div className="space-y-3 p-5">
+    <div className="max-w-md space-y-3">
+      <p className="text-sm text-on-surface-muted">Site admins can create bingos and edit any board.</p>
         <UserSearchInput scope="site" onSelect={grant} />
         {error && <Notice tone="danger">{error}</Notice>}
         {granted.length > 0 && (
@@ -274,8 +267,15 @@ function GrantAdminPanel() {
             ))}
           </ul>
         )}
-      </div>
-    </Card>
+    </div>
+  );
+}
+
+function Section({ title, defaultExpanded = false, children }: { title: string; defaultExpanded?: boolean; children: ReactNode }) {
+  return (
+    <Disclosure defaultExpanded={defaultExpanded} title={<span className="flex-1 text-sm font-semibold text-on-surface">{title}</span>}>
+      {children}
+    </Disclosure>
   );
 }
 
@@ -295,21 +295,31 @@ export function SiteAdminPage() {
   return (
     <div className="min-h-dvh bg-background text-on-surface">
       <AppHeader back={{ to: "/", label: "All bingos" }} title="Site admin" />
-      <main className="mx-auto w-full max-w-6xl space-y-6 px-6 py-6">
-        <div className="flex flex-wrap items-start gap-6">
-          <CreateBingoForm />
-          <ImportBingoPanel />
-          <BingosPanel />
-          {canGrantAdmin && <GrantAdminPanel />}
-          <ItemGroupsPanel />
+      <main className="mx-auto w-full max-w-6xl space-y-3 px-6 py-6">
+        <Section title="Bug reports" defaultExpanded>
           <BugReportsPanel />
-        </div>
-        <Card className="w-full">
-          <CardHeader title="Site-wide audit log" description="Every site-level action, across every bingo." />
-          <div className="p-5">
-            <SiteAuditLog />
-          </div>
-        </Card>
+        </Section>
+        <Section title="Bingos" defaultExpanded>
+          <BingosPanel />
+        </Section>
+        <Section title="Site-wide audit log" defaultExpanded>
+          <p className="mb-4 text-sm text-on-surface-muted">Every site-level action, across every bingo.</p>
+          <SiteAuditLog />
+        </Section>
+        <Section title="Create a bingo">
+          <CreateBingoForm />
+        </Section>
+        <Section title="Import a bingo">
+          <ImportBingoPanel />
+        </Section>
+        <Section title="Item groups">
+          <ItemGroupsPanel />
+        </Section>
+        {canGrantAdmin && (
+          <Section title="Grant site admin">
+            <GrantAdminPanel />
+          </Section>
+        )}
       </main>
     </div>
   );
