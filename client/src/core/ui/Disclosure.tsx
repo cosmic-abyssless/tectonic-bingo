@@ -15,17 +15,22 @@ export function Disclosure({
   title,
   description,
   defaultExpanded = false,
+  isExpanded,
+  onExpandedChange,
   children,
   className,
 }: {
   title: ReactNode;
   description?: ReactNode;
   defaultExpanded?: boolean;
+  // Controlled mode (e.g. persisting to localStorage) — pass both, or neither for the plain uncontrolled default above.
+  isExpanded?: boolean;
+  onExpandedChange?: (isExpanded: boolean) => void;
   children: ReactNode;
   className?: string;
 }) {
   return (
-    <AriaDisclosure defaultExpanded={defaultExpanded} className={`group rounded-lg border border-outline bg-surface ${className ?? ""}`}>
+    <AriaDisclosure defaultExpanded={defaultExpanded} isExpanded={isExpanded} onExpandedChange={onExpandedChange} className={`group rounded-lg border border-outline bg-surface ${className ?? ""}`}>
       <Heading className="m-0">
         <AriaButton
           slot="trigger"
