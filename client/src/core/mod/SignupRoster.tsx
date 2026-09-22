@@ -26,7 +26,7 @@ import { AlertIcon, CheckIcon, RefreshIcon, UsersIcon, XIcon } from "../ui/icons
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { CaCell, WomCell, formatCaTier, formatWomStat } from "../signup/caStats";
 import { SortHeader, compareSortValues, useTableSort } from "../ui/tableSort";
-import { STICKY_TOP, STRIPE_ODD, Truncate, useStickyTop } from "../ui/tableChrome";
+import { STICKY_TOP, STRIPE_ODD, Truncate, useDocumentTop } from "../ui/tableChrome";
 import { Highlight, TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
 import { timeAgo } from "../ui/time";
 import { TierBadge } from "../tectonic/ProfileBadges";
@@ -389,11 +389,17 @@ export function SignupRoster({ slug }: { slug: string }) {
   // nothing actually overflows there, so it's not a real scrollport) it's a
   // no-op, since it just tracks the page scroll 1:1 instead of pinning. So,
   // same as the draft pool table: a bounded max-height turns the wrapper
-  // into a real scroll box the header can stick inside. Not pixel-precise —
-  // it only needs to be shorter than the full table once there are many
-  // rows, not exactly the remaining viewport.
-  const stickyTop = useStickyTop();
-  const tableMaxHeight = `calc(100dvh - ${stickyTop}px - 14rem)`;
+  // into a real scroll box the header can stick inside. useDocumentTop
+  // measures exactly where the table sits (site header + mod panel's own
+  // chrome + this page's toolbar, whatever they add up to, no guessing at a
+  // constant) so the table fills the rest of the viewport and nothing more —
+  // one scrollbar, not the page's and the table's both. min-height keeps it
+  // from being squeezed to uselessness if that leaves very little room (a
+  // short window, a lot of chrome above it): it's then the smaller of the
+  // two that loses, and a touch of page scroll is the trade-off.
+  const [tableWrapper, setTableWrapper] = useState<HTMLDivElement | null>(null);
+  const tableTop = useDocumentTop(tableWrapper);
+  const tableMaxHeight = `calc(100dvh - ${tableTop}px - 1.5rem)`;
 
   const activeCount = roster.filter((r) => r.signup.status === "active").length;
   const withdrawnCount = roster.length - activeCount;
@@ -490,7 +496,7 @@ export function SignupRoster({ slug }: { slug: string }) {
           {sorted.length === 0 ? (
             <p className="text-sm text-on-surface-muted">No signups match {search ? "this search" : "these filters"}.</p>
           ) : (
-            <div className="overflow-auto" style={{ maxHeight: tableMaxHeight }}>
+            <div ref={setTableWrapper} className="overflow-auto" style={{ maxHeight: tableMaxHeight, minHeight: "16rem" }}>
               <table className="w-max min-w-full text-sm [&_td]:align-middle [&_th]:align-middle">
                 <thead>
                   <tr>

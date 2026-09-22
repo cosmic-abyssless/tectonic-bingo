@@ -3,13 +3,11 @@
 // stripe the same way (issue #112: make table behaviour consistent between
 // the scouting page and the admin panel).
 import { useEffect, useState, type ReactNode } from "react";
-import { useElementHeight } from "./useElementHeight";
 import { TextTooltip } from "./Tooltip";
 
-// The column headings stay at the top of the table's own scroll area (or, for
-// a table with no independent scroll container, at the top of the page's
-// scroll under the fixed site header — see useStickyTop). Draws its own
-// bottom divider: a sticky cell paints over the table's collapsed borders.
+// The column headings stay at the top of the table's own scroll area — draws
+// its own bottom divider: a sticky cell paints over the table's collapsed
+// borders.
 export const STICKY_TOP = "sticky top-0 z-10 bg-surface shadow-[inset_0_-1px_0_0_var(--color-outline)]";
 // A trailing column (e.g. a Draft button) pinned to the right edge while the
 // table scrolls sideways, with a soft shadow over the columns scrolling
@@ -22,11 +20,35 @@ export const STICKY_CELL = "sticky right-0 bg-surface shadow-[inset_0_1px_0_0_va
 // against each other.
 export const STRIPE_ODD = "odd:bg-surface-muted/40";
 
-/** The fixed site header's current height, so a table with its own vertical scroll (or a sticky <thead>) can sit right below it. */
-export function useStickyTop(): number {
-  const [header, setHeader] = useState<Element | null>(null);
-  useEffect(() => setHeader(document.querySelector("header")), []);
-  return useElementHeight(header);
+/**
+ * How far down the whole document `element`'s top edge sits — not
+ * `getBoundingClientRect().top` alone, which is relative to the current
+ * scroll position and shrinks as the page scrolls; adding `scrollY` back
+ * recovers a stable, scroll-independent value. For sizing a table's own
+ * scroll box to exactly what's left of the viewport: everything above the
+ * element (the site header, whatever chrome the page itself has, this
+ * table's own toolbar) is already baked into one number, no need to
+ * separately measure or guess at each piece.
+ *
+ * Re-measures on any resize of the page, since anything above the element
+ * changing height (a notice appearing, filter chips wrapping to a second
+ * line, the window itself resizing) moves it.
+ */
+export function useDocumentTop(element: Element | null): number {
+  const [top, setTop] = useState(0);
+  useEffect(() => {
+    if (!element) return;
+    const measure = () => setTop(element.getBoundingClientRect().top + window.scrollY);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(document.body);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [element]);
+  return top;
 }
 
 /**
