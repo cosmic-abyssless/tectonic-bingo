@@ -362,16 +362,30 @@ describe("audit trail", () => {
 });
 
 describe("re-signing up after withdrawing", () => {
-  it("reactivates the withdrawn row with the new details and cleared buy-in", () => {
+  it("reactivates the withdrawn row with the new details, keeping the buy-in", () => {
     const { bingo, memberId, adminId } = seedBingo();
     const q = createQuestion(db, { bingoId: bingo.id, prompt: "Style?", type: "text" });
     const first = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "OldRsn", answers: [{ questionId: q.id, value: "Melee" }] });
-    markBuyin(db, bingo, first.id, { received: true, recordedByUserId: adminId });
+    markBuyin(db, bingo, first.id, { received: true, collectedByUserId: adminId, recordedByUserId: adminId });
     withdrawSignup(db, bingo, first.id);
 
     const again = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "NewRsn", answers: [{ questionId: q.id, value: "Range" }] });
-    expect(again).toMatchObject({ id: first.id, rsn: "NewRsn", status: "active", buyinReceivedAt: null });
+    expect(again).toMatchObject({ id: first.id, rsn: "NewRsn", status: "active" });
+    expect(again.buyinReceivedAt).not.toBeNull();
+    expect(again.buyinCollectedByUserId).toBe(adminId);
+    expect(again.buyinRecordedByUserId).toBe(adminId);
     expect(getSignupForUser(db, bingo.id, memberId)!.answers.map((a) => a.value)).toEqual(["Range"]);
     expect(getAllSignups(db, bingo.id)).toHaveLength(1);
+  });
+
+  it("still lets a mod clear the buy-in after a re-signup, e.g. if the GP was refunded", () => {
+    const { bingo, memberId, adminId } = seedBingo();
+    const first = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "OldRsn", answers: [] });
+    markBuyin(db, bingo, first.id, { received: true, recordedByUserId: adminId });
+    withdrawSignup(db, bingo, first.id);
+    createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "NewRsn", answers: [] });
+
+    const cleared = markBuyin(db, bingo, first.id, { received: false, recordedByUserId: adminId });
+    expect(cleared.buyinReceivedAt).toBeNull();
   });
 });
