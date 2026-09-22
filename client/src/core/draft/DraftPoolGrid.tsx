@@ -12,10 +12,22 @@
 // popover) because the reason that rule exists — many heavy interactive components × many rows made the signup
 // roster's mount slow — doesn't apply here (one rating widget per row, a pool that's typically a few dozen units
 // at most, not 60+).
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type { CustomCellRendererProps } from "ag-grid-react";
-import type { ColDef, GetRowIdParams, IRowNode, RowClassParams, RowHeightParams } from "ag-grid-community";
+import type {
+  ColDef,
+  GetRowIdParams,
+  GridApi,
+  GridReadyEvent,
+  GridState,
+  IRowNode,
+  ITooltipParams,
+  RowClassParams,
+  RowHeightParams,
+  StateUpdatedEvent,
+  TooltipCallbackParams,
+} from "ag-grid-community";
 import {
   formatSignupAnswer,
   type DraftPoolEntry,
@@ -25,7 +37,7 @@ import {
   type SignupQuestion,
 } from "@bingo/shared";
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
-import { CaCell, WomCell, formatCaTier, formatWomStat } from "../signup/caStats";
+import { CaCell, WomCell, caTitle, formatCaTier, formatWomStat } from "../signup/caStats";
 import { discordName } from "../ui/user";
 import { gridTheme } from "../ui/agGrid";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
@@ -112,11 +124,16 @@ type LineRender = (entry: DraftPoolEntry, opts: { dim: boolean; search: string }
 // One AG row is a unit (a solo player or a duo pair) — a per-player column's cell shows one line for a solo
 // unit, or both entries' lines stacked for a pair. `render` (from cellRendererParams, merged into props) is the
 // per-column, per-entry renderer; dim/search come from context so `render` itself doesn't need to close over them.
+// leading-tight resets line-height for everything rendered here: AG's theme sets a line-height on .ag-cell-value
+// sized for the *row* height (its own single-line-centering trick), and PlayerName's button (like most text
+// here) inherits it via [line-height:inherit] — 39px for what should be a ~17px line. Padding/row-height changes
+// are invisible against that until this is reset; the real fix is here, once, rather than a leading-* on every
+// LineRender's own markup.
 const StackedCell = ({ data, context, render }: CustomCellRendererProps<DraftUnit, unknown, PoolGridContext> & { render: LineRender }) => {
   if (!data) return null;
-  if (data.entries.length === 1) return <>{render(data.entries[0]!, { dim: false, search: context.search })}</>;
+  if (data.entries.length === 1) return <div className="leading-tight">{render(data.entries[0]!, { dim: false, search: context.search })}</div>;
   return (
-    <div className="flex flex-col justify-center gap-1 py-1">
+    <div className="flex flex-col justify-center gap-5 py-2 leading-tight">
       {data.entries.map((e) => (
         <div key={e.signup.id}>{render(e, { dim: !!context.search && !context.entryMatches(e), search: context.search })}</div>
       ))}
@@ -128,8 +145,12 @@ function dimClass(dim: boolean): string | undefined {
   return dim ? "opacity-50" : undefined;
 }
 
+// No native title on these two — the column's own AG tooltip (stackedTooltip, below) covers it, same as the
+// signup roster. Tier/Records/Podiums keep their native title instead: TierBadge/PlaceBreakdown always set their
+// own (no way to suppress it short of forking those components), so those columns opt out of the AG tooltip
+// (tooltip: false) rather than show both at once.
 const rsnLine: LineRender = (entry, { dim, search }) => (
-  <span className={`inline-flex min-w-0 items-center gap-1 ${dimClass(dim) ?? ""}`} title={entry.signup.rsn}>
+  <span className={`inline-flex min-w-0 items-center gap-1 ${dimClass(dim) ?? ""}`}>
     <AccountTypeIcon accountType={entry.accountType} />
     <PlayerName userId={entry.user.id} className="min-w-0 truncate">
       <Mark text={entry.signup.rsn} query={search} />
@@ -140,7 +161,7 @@ const rsnLine: LineRender = (entry, { dim, search }) => (
 const discordLine: LineRender = (entry, { dim, search }) => {
   const text = discordName(entry.user);
   return (
-    <span className={`block truncate text-on-surface-muted ${dimClass(dim) ?? ""}`} title={text}>
+    <span className={`block truncate text-on-surface-muted ${dimClass(dim) ?? ""}`}>
       <Mark text={text} query={search} />
     </span>
   );
@@ -182,7 +203,7 @@ function womLine(field: "ehb" | "ehp", statsRefreshing: ReadonlySet<string>): Li
 function caLine(field: "caCurrent" | "caPeak", statsRefreshing: ReadonlySet<string>): LineRender {
   return (entry, { dim }) => (
     <span className={`text-on-surface-muted ${dimClass(dim) ?? ""}`}>
-      <CaCell stats={entry[field]} loading={statsRefreshing.has(entry.signup.id)} />
+      <CaCell stats={entry[field]} loading={statsRefreshing.has(entry.signup.id)} nativeTitle={false} />
     </span>
   );
 }
@@ -191,13 +212,36 @@ function answerLine(question: SignupQuestion): LineRender {
   return (entry, { dim, search }) => {
     const answer = formatSignupAnswer(question.type, entry.answers?.find((a) => a.questionId === question.id)?.value);
     return answer ? (
-      <span className={`block truncate text-on-surface-muted ${dimClass(dim) ?? ""}`} title={answer}>
+      <span className={`block truncate text-on-surface-muted ${dimClass(dim) ?? ""}`}>
         <Mark text={answer} query={search} />
       </span>
     ) : (
       <span className="text-on-surface-subtle">—</span>
     );
   };
+}
+
+// One AG tooltip per cell, not per stacked line (AG has no concept of "which line is hovered" within a custom
+// renderer) — for a pair this lists both halves rather than picking one, one per line. AG's default tooltip is
+// white-space: normal (a literal "\n" would just collapse to a space), so this pairs with StackedTooltip below,
+// a tiny custom tooltipComponent that splits on "\n" and renders each half as its own line.
+function stackedTooltip(getText: (entry: DraftPoolEntry) => string) {
+  return (p: TooltipCallbackParams<DraftUnit>): string => {
+    if (!p.data) return "";
+    if (p.data.entries.length === 1) return getText(p.data.entries[0]!);
+    return p.data.entries.map((e) => `${e.signup.rsn}: ${getText(e)}`).join("\n");
+  };
+}
+
+function StackedTooltip({ value }: ITooltipParams<DraftUnit, string, PoolGridContext>) {
+  const lines = String(value ?? "").split("\n");
+  return (
+    <div className="max-w-xs rounded-md border border-outline bg-surface-raised px-2.5 py-1.5 text-xs text-on-surface shadow-pop">
+      {lines.map((line, i) => (
+        <div key={i}>{line}</div>
+      ))}
+    </div>
+  );
 }
 
 // Pairs are drafted together and rated together — one rating covers the whole unit, stored under its first
@@ -248,8 +292,13 @@ export function DraftPoolGrid({
   /** The grid's own natural content height is capped at this — see the height/getRowHeight comment below. */
   maxHeight: string;
 }) {
+  // hiddenColumns is still the persisted store (pref:hiddenColumns:draftPool in localStorage), but it's no longer
+  // the only way a column's visibility changes — AG's own header-drag lets a mod drag a column out of the grid
+  // to hide it, bypassing ColumnPicker entirely. initialState/onStateUpdated (below) keep the two in sync the
+  // same way SignupRosterGrid's Phase 4 does: read once at grid creation, then follow the grid's own state.
   const [hiddenColumns, setHiddenColumns] = useHiddenColumns("draftPool");
-  const shown = useCallback((id: string) => !hiddenColumns.has(id), [hiddenColumns]);
+  const gridApiRef = useRef<GridApi<DraftUnit> | null>(null);
+  const [initialState] = useState<GridState>(() => ({ columnVisibility: { hiddenColIds: [...hiddenColumns] } }));
   const [search, setSearch] = useTableSearch();
   const statsRefreshing = useStatsRefreshingSignupIds();
 
@@ -290,7 +339,18 @@ export function DraftPoolGrid({
 
   const columnDefs = useMemo<ColDef<DraftUnit>[]>(() => {
     const cols: (ColDef<DraftUnit> | false)[] = [
-      hasPairs && { colId: "pairIcon", headerName: "", cellRenderer: PairIconRenderer, width: 36, pinned: "left", sortable: false, resizable: false, suppressMovable: true },
+      hasPairs && {
+        colId: "pairIcon",
+        headerName: "",
+        cellRenderer: PairIconRenderer,
+        width: 36,
+        // Below defaultColDef's minWidth: 70 floor — needs its own, smaller one, or AG clamps width back up.
+        minWidth: 36,
+        pinned: "left",
+        sortable: false,
+        resizable: false,
+        suppressMovable: true,
+      },
       !!ratings && {
         colId: "rating",
         headerName: "Rating",
@@ -299,6 +359,8 @@ export function DraftPoolGrid({
         cellRenderer: RatingRenderer,
         width: 140,
         sort: "desc",
+        pinned: "left",
+        suppressMovable: true,
       },
       {
         colId: "rsn",
@@ -307,95 +369,98 @@ export function DraftPoolGrid({
         comparator: makeUnitComparator("rsn", ratings ?? {}),
         cellRenderer: StackedCell,
         cellRendererParams: { render: rsnLine },
+        tooltip: stackedTooltip((e) => e.signup.rsn),
         pinned: "left",
         width: 170,
         sort: ratings ? undefined : "asc",
+        suppressMovable: true,
       },
-      shown("discord") && {
+      {
         colId: "discord",
         headerName: "Discord",
         valueGetter: (p) => (p.data ? discordName(p.data.entries[0]!.user) : ""),
         comparator: makeUnitComparator("discord", ratings ?? {}),
         cellRenderer: StackedCell,
         cellRendererParams: { render: discordLine },
+        tooltip: stackedTooltip((e) => discordName(e.user)),
         width: 150,
       },
       hasLeftovers && { colId: "leftover", headerName: "", cellRenderer: LeftoverBadgeRenderer, width: 130, sortable: false, resizable: false },
-      showProfiles &&
-        shown("tier") && {
-          colId: "tier",
-          headerName: "Tier",
-          valueGetter: (p) => p.data?.entries[0]?.tectonicProfile?.points ?? -1,
-          comparator: makeUnitComparator("tier", ratings ?? {}),
-          cellRenderer: StackedCell,
-          cellRendererParams: { render: tierLine },
-          width: 120,
-        },
-      showProfiles &&
-        shown("records") && {
-          colId: "records",
-          headerName: "Records",
-          valueGetter: (p) => (p.data?.entries[0]?.tectonicProfile ? placeScore(recordSummary(p.data.entries[0].tectonicProfile)) : -1),
-          comparator: makeUnitComparator("records", ratings ?? {}),
-          cellRenderer: StackedCell,
-          cellRendererParams: { render: recordsLine },
-          cellClass: "num",
-          width: 100,
-        },
-      showProfiles &&
-        shown("podiums") && {
-          colId: "podiums",
-          headerName: "Podiums",
-          valueGetter: (p) => (p.data?.entries[0]?.tectonicProfile ? placeScore(podiumSummary(p.data.entries[0].tectonicProfile)) : -1),
-          comparator: makeUnitComparator("podiums", ratings ?? {}),
-          cellRenderer: StackedCell,
-          cellRendererParams: { render: podiumsLine },
-          cellClass: "num",
-          width: 110,
-        },
-      showProfiles && shown("achievements") && { colId: "achievements", headerName: "Achievements", cellRenderer: StackedCell, cellRendererParams: { render: achievementsLine }, sortable: false, width: 120 },
-      showWomStats &&
-        shown("ehb") && {
-          colId: "ehb",
-          headerName: "EHB",
-          valueGetter: (p) => p.data?.entries[0]?.womStats?.ehb ?? -1,
-          comparator: makeUnitComparator("ehb", ratings ?? {}),
-          cellRenderer: StackedCell,
-          cellRendererParams: { render: womLine("ehb", statsRefreshing) },
-          cellClass: "num",
-          width: 90,
-        },
-      showWomStats &&
-        shown("ehp") && {
-          colId: "ehp",
-          headerName: "EHP",
-          valueGetter: (p) => p.data?.entries[0]?.womStats?.ehp ?? -1,
-          comparator: makeUnitComparator("ehp", ratings ?? {}),
-          cellRenderer: StackedCell,
-          cellRendererParams: { render: womLine("ehp", statsRefreshing) },
-          cellClass: "num",
-          width: 90,
-        },
-      showCa &&
-        shown("caCurrent") && {
-          colId: "caCurrent",
-          headerName: "Current CA",
-          valueGetter: (p) => p.data?.entries[0]?.caCurrent?.points ?? -1,
-          comparator: makeUnitComparator("caCurrent", ratings ?? {}),
-          cellRenderer: StackedCell,
-          cellRendererParams: { render: caLine("caCurrent", statsRefreshing) },
-          width: 120,
-        },
-      showCa &&
-        shown("caPeak") && {
-          colId: "caPeak",
-          headerName: "Peak CA",
-          valueGetter: (p) => p.data?.entries[0]?.caPeak?.points ?? -1,
-          comparator: makeUnitComparator("caPeak", ratings ?? {}),
-          cellRenderer: StackedCell,
-          cellRendererParams: { render: caLine("caPeak", statsRefreshing) },
-          width: 120,
-        },
+      showProfiles && {
+        colId: "tier",
+        headerName: "Tier",
+        valueGetter: (p) => p.data?.entries[0]?.tectonicProfile?.points ?? -1,
+        comparator: makeUnitComparator("tier", ratings ?? {}),
+        cellRenderer: StackedCell,
+        cellRendererParams: { render: tierLine },
+        tooltip: false,
+        width: 120,
+      },
+      showProfiles && {
+        colId: "records",
+        headerName: "Records",
+        valueGetter: (p) => (p.data?.entries[0]?.tectonicProfile ? placeScore(recordSummary(p.data.entries[0].tectonicProfile)) : -1),
+        comparator: makeUnitComparator("records", ratings ?? {}),
+        cellRenderer: StackedCell,
+        cellRendererParams: { render: recordsLine },
+        tooltip: false,
+        cellClass: "num",
+        width: 100,
+      },
+      showProfiles && {
+        colId: "podiums",
+        headerName: "Podiums",
+        valueGetter: (p) => (p.data?.entries[0]?.tectonicProfile ? placeScore(podiumSummary(p.data.entries[0].tectonicProfile)) : -1),
+        comparator: makeUnitComparator("podiums", ratings ?? {}),
+        cellRenderer: StackedCell,
+        cellRendererParams: { render: podiumsLine },
+        tooltip: false,
+        cellClass: "num",
+        width: 110,
+      },
+      showProfiles && { colId: "achievements", headerName: "Achievements", cellRenderer: StackedCell, cellRendererParams: { render: achievementsLine }, sortable: false, width: 120 },
+      showWomStats && {
+        colId: "ehb",
+        headerName: "EHB",
+        valueGetter: (p) => p.data?.entries[0]?.womStats?.ehb ?? -1,
+        comparator: makeUnitComparator("ehb", ratings ?? {}),
+        cellRenderer: StackedCell,
+        cellRendererParams: { render: womLine("ehb", statsRefreshing) },
+        tooltip: false,
+        cellClass: "num",
+        width: 90,
+      },
+      showWomStats && {
+        colId: "ehp",
+        headerName: "EHP",
+        valueGetter: (p) => p.data?.entries[0]?.womStats?.ehp ?? -1,
+        comparator: makeUnitComparator("ehp", ratings ?? {}),
+        cellRenderer: StackedCell,
+        cellRendererParams: { render: womLine("ehp", statsRefreshing) },
+        tooltip: false,
+        cellClass: "num",
+        width: 90,
+      },
+      showCa && {
+        colId: "caCurrent",
+        headerName: "Current CA",
+        valueGetter: (p) => p.data?.entries[0]?.caCurrent?.points ?? -1,
+        comparator: makeUnitComparator("caCurrent", ratings ?? {}),
+        cellRenderer: StackedCell,
+        cellRendererParams: { render: caLine("caCurrent", statsRefreshing) },
+        tooltip: stackedTooltip((e) => caTitle(e.caCurrent)),
+        width: 120,
+      },
+      showCa && {
+        colId: "caPeak",
+        headerName: "Peak CA",
+        valueGetter: (p) => p.data?.entries[0]?.caPeak?.points ?? -1,
+        comparator: makeUnitComparator("caPeak", ratings ?? {}),
+        cellRenderer: StackedCell,
+        cellRendererParams: { render: caLine("caPeak", statsRefreshing) },
+        tooltip: stackedTooltip((e) => caTitle(e.caPeak)),
+        width: 120,
+      },
       canPick && {
         colId: "draft",
         headerName: "",
@@ -407,15 +472,14 @@ export function DraftPoolGrid({
       },
     ];
     const questionCols: ColDef<DraftUnit>[] = showAnswers
-      ? questions
-          .filter((q) => shown(q.id))
-          .map((q) => ({
+      ? questions.map((q) => ({
             colId: q.id,
             headerName: q.prompt,
             valueGetter: (p) => formatSignupAnswer(q.type, p.data?.entries[0]?.answers?.find((a) => a.questionId === q.id)?.value),
             comparator: makeUnitComparator(q.id, ratings ?? {}),
             cellRenderer: StackedCell,
             cellRendererParams: { render: answerLine(q) },
+            tooltip: stackedTooltip((e) => formatSignupAnswer(q.type, e.answers?.find((a) => a.questionId === q.id)?.value)),
             width: 192,
           }))
       : [];
@@ -424,13 +488,21 @@ export function DraftPoolGrid({
     const draftCol = cols.find((c): c is ColDef<DraftUnit> => c !== false && c.colId === "draft");
     const rest = cols.filter((c): c is ColDef<DraftUnit> => c !== false && c.colId !== "draft");
     return [...rest, ...questionCols, ...(draftCol ? [draftCol] : [])];
-  }, [ratings, hasPairs, hasLeftovers, showProfiles, showWomStats, showCa, showAnswers, questions, canPick, shown, statsRefreshing]);
+    // Visibility is grid state now (initialState/onStateUpdated below), not something columnDefs re-imposes —
+    // hiddenColumns/shown aren't dependencies here on purpose; a column that structurally exists always does,
+    // and only starts hidden via initialState.
+  }, [ratings, hasPairs, hasLeftovers, showProfiles, showWomStats, showCa, showAnswers, questions, canPick, statsRefreshing]);
 
-  const defaultColDef = useMemo<ColDef<DraftUnit>>(() => ({ sortable: true, resizable: true, minWidth: 70, headerTooltip: true }), []);
+  // lockPinned: a column's pinned state (left/unpinned) is set by the colDef, not by the user — without this, an
+  // unpinned column can be dragged past the pinned pairIcon/rating/RSN block into it, which looked like a bug.
+  const defaultColDef = useMemo<ColDef<DraftUnit>>(
+    () => ({ sortable: true, resizable: true, minWidth: 70, headerTooltip: true, tooltipComponent: StackedTooltip, lockPinned: true }),
+    [],
+  );
 
   // A pair's row needs room for two stacked lines; a solo unit needs one. AG Grid Community supports per-row
   // height via this callback (not an Enterprise feature) — the theme's own rowHeight (44) is the solo/fallback.
-  const getRowHeight = useCallback((params: RowHeightParams<DraftUnit>) => (params.data && params.data.entries.length > 1 ? 72 : 44), []);
+  const getRowHeight = useCallback((params: RowHeightParams<DraftUnit>) => (params.data && params.data.entries.length > 1 ? 84 : 44), []);
   const getRowId = useCallback((params: GetRowIdParams<DraftUnit>) => params.data.pairingId ?? params.data.entries[0]!.signup.id, []);
   // Waiting for the singles round (or cut, once one is decided) — same muted treatment the old table gave the
   // whole tbody. AG's own row border (the theme's default) is the only cue for where one unit ends and the next
@@ -443,7 +515,38 @@ export function DraftPoolGrid({
   // (the content's own natural size) and maxHeight lets CSS take min(height, maxHeight): the grid sizes itself
   // to its rows normally, but still gets capped and scrolls internally once the pool is bigger than the
   // available space, matching the old table's overflow-auto + max-height behaviour.
-  const naturalHeight = 40 + rows.reduce((h, u) => h + (u.entries.length > 1 ? 72 : 44), 0);
+  const naturalHeight = 40 + rows.reduce((h, u) => h + (u.entries.length > 1 ? 84 : 44), 0);
+
+  const onGridReady = useCallback((e: GridReadyEvent<DraftUnit>) => {
+    gridApiRef.current = e.api;
+    // Belt-and-suspenders reassertion of the fixed pinned columns, matching the same fix on SignupRosterGrid —
+    // whichever of these don't exist in this render (no pairs, not a lead, can't pick) are just ignored.
+    e.api.applyColumnState({
+      state: [
+        { colId: "pairIcon", pinned: "left" },
+        { colId: "rating", pinned: "left" },
+        { colId: "rsn", pinned: "left" },
+        { colId: "draft", pinned: "right" },
+      ],
+    });
+  }, []);
+  // The single source of truth for "which columns are hidden" is the grid's own state from here on — this fires
+  // for a ColumnPicker toggle (via setColumnsVisible below) and for AG's own header-drag-to-hide alike, so
+  // hiddenColumns (and the persisted store behind it) can't drift from what the grid is actually showing.
+  const onStateUpdated = useCallback((e: StateUpdatedEvent<DraftUnit>) => {
+    setHiddenColumns(new Set(e.state.columnVisibility?.hiddenColIds ?? []));
+  }, [setHiddenColumns]);
+  const handleHiddenChange = useCallback(
+    (next: Set<string>) => {
+      const api = gridApiRef.current;
+      if (!api) return;
+      const toHide = [...next].filter((id) => !hiddenColumns.has(id));
+      const toShow = [...hiddenColumns].filter((id) => !next.has(id));
+      if (toHide.length > 0) api.setColumnsVisible(toHide, false);
+      if (toShow.length > 0) api.setColumnsVisible(toShow, true);
+    },
+    [hiddenColumns],
+  );
 
   if (pool.length === 0) return <p className="text-sm text-on-surface-subtle">No one left to draft.</p>;
 
@@ -451,7 +554,7 @@ export function DraftPoolGrid({
     <div className="space-y-3">
       <div className="flex items-center justify-end gap-2">
         <TableSearchInput value={search} onChange={setSearch} matchCount={matchingEntries.length} totalCount={entries.length} />
-        <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={setHiddenColumns} />
+        <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={handleHiddenChange} />
       </div>
       {rows.length === 0 ? (
         <p className="text-sm text-on-surface-subtle">No one matches this search.</p>
@@ -465,8 +568,13 @@ export function DraftPoolGrid({
             getRowClass={getRowClass}
             columnDefs={columnDefs}
             defaultColDef={defaultColDef}
+            initialState={initialState}
+            onGridReady={onGridReady}
+            onStateUpdated={onStateUpdated}
             context={context}
             animateRows={false}
+            tooltipShowDelay={200}
+            tooltipHideDelay={4000}
             enableCellTextSelection
           />
         </div>

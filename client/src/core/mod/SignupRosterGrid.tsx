@@ -208,12 +208,25 @@ const QUESTION_COLUMN_WIDTH = 192;
 // table's pref:hiddenColumns:signupRoster is a different key and is left alone) just means no initial state.
 const GRID_STATE_KEY = "pref:gridState:signupRoster";
 
+// order/rsn are always pinned left (colDef, not user-configurable — both have suppressMovable too). Their
+// position in a persisted columnOrder.orderedColIds — a single flat list covering every column, pinned or not —
+// is never meaningful, and a stale entry there (from before either column existed or was pinned, or from before
+// some other column was added/removed) can conflict with the pinned declaration on load and break the pinned
+// section entirely. Stripping them out of what's read and written means their position always comes from
+// columnDefs alone, which is the only thing that should ever decide it.
+const PINNED_COL_IDS = ["order", "rsn"];
+
+function stripPinnedFromOrder(state: GridState | undefined): GridState | undefined {
+  if (!state?.columnOrder) return state;
+  return { ...state, columnOrder: { orderedColIds: state.columnOrder.orderedColIds.filter((id) => !PINNED_COL_IDS.includes(id)) } };
+}
+
 function readInitialGridState(): GridState | undefined {
   try {
     const raw = localStorage.getItem(GRID_STATE_KEY);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === "object" ? (parsed as GridState) : undefined;
+    return stripPinnedFromOrder(parsed && typeof parsed === "object" ? (parsed as GridState) : undefined);
   } catch {
     return undefined;
   }
@@ -382,11 +395,20 @@ export function SignupRosterGrid({
   // columns carry supplementary info that isn't just "the same text, cut off" — the exact signup timestamp, the
   // CA point total behind a tier name — so it stays at AG's default "standard" (always on hover), not truncated-
   // only. `tier` opts out with `tooltip: false` since TierBadge already has its own native `title`.
-  const defaultColDef = useMemo<ColDef<RosterRow>>(() => ({ sortable: true, resizable: true, minWidth: 80, tooltip: true, headerTooltip: true }), []);
+  // lockPinned: a column's pinned state (left/unpinned) is set by the colDef, not by the user — without this, an
+  // unpinned column can be dragged past the pinned #/RSN block into it.
+  const defaultColDef = useMemo<ColDef<RosterRow>>(
+    () => ({ sortable: true, resizable: true, minWidth: 80, tooltip: true, headerTooltip: true, lockPinned: true }),
+    [],
+  );
 
   const onGridReady = useCallback(
     (e: GridReadyEvent<RosterRow>) => {
       gridApiRef.current = e.api;
+      // Belt-and-suspenders alongside stripPinnedFromOrder: reassert #/RSN's pin explicitly once, in case
+      // anything else (a still-stale localStorage entry from before this fix shipped, some other state source)
+      // put them somewhere columnDefs' own pinned: "left" didn't win outright.
+      e.api.applyColumnState({ state: PINNED_COL_IDS.map((colId) => ({ colId, pinned: "left" })) });
       onDisplayedCountChange(e.api.getDisplayedRowCount());
       onApiReady(e.api);
     },
@@ -401,7 +423,8 @@ export function SignupRosterGrid({
   // header-drag hide/show and a ColumnPicker toggle stay in sync with each other.
   const onStateUpdated = useCallback(
     (e: StateUpdatedEvent<RosterRow>) => {
-      const { columnOrder, columnVisibility, columnSizing } = e.state;
+      const { columnVisibility, columnSizing } = e.state;
+      const { columnOrder } = stripPinnedFromOrder(e.state) ?? {};
       try {
         localStorage.setItem(GRID_STATE_KEY, JSON.stringify({ columnOrder, columnVisibility, columnSizing }));
       } catch {
