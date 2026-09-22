@@ -1,5 +1,5 @@
 import { now as clockNow } from "../clock";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { playerName } from "@bingo/shared";
 import * as schema from "../db/schema";
@@ -143,15 +143,23 @@ function groupIntoUnits(db: Db, bingoId: string, entries: DraftPoolEntry[]): Dra
 // count towards the total so the answer is stable mid-draft. A pair is as
 // new as its later signup. Nothing is marked until there are 2 teams, since
 // the team count is what decides it.
-export function markLeftovers(units: DraftUnit[], teamCount: number, draftedUnitCount: number): void {
+//
+// createdAt only has 1-second resolution, so signups landing in the same second (bulk test seeding, a rush right
+// as signups open) tie there. insertionOrder (true row insertion order — see its caller) breaks the tie, so the
+// newest-first sort stays deterministic instead of falling back to whatever order the DB scan happened to return.
+export function markLeftovers(units: DraftUnit[], teamCount: number, draftedUnitCount: number, insertionOrder: Map<string, number>): void {
   if (teamCount < 2) return;
   const leftoverCount = (draftedUnitCount + units.length) % teamCount;
-  const newestFirst = [...units].sort((a, b) => signedUpAt(b) - signedUpAt(a));
+  const newestFirst = [...units].sort((a, b) => signedUpAt(b) - signedUpAt(a) || insertionRank(b, insertionOrder) - insertionRank(a, insertionOrder));
   for (const unit of newestFirst.slice(0, leftoverCount)) unit.leftover = true;
 }
 
 function signedUpAt(unit: DraftUnit): number {
   return Math.max(...unit.entries.map((e) => e.signup.createdAt.getTime()));
+}
+
+function insertionRank(unit: DraftUnit, insertionOrder: Map<string, number>): number {
+  return Math.max(...unit.entries.map((e) => insertionOrder.get(e.signup.id) ?? -1));
 }
 
 // includeAnswers gates signup-answer visibility — only mods and team leads
@@ -203,7 +211,9 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
   const picks = pickRows.map((p) => ({ ...p, user: { ...pickedUserById.get(p.userId)!, rsn: pickedRsnByUserId.get(p.userId) ?? null }, rsn: pickedRsnByUserId.get(p.userId) ?? "" }));
 
   const draftedUserIds = getDraftedUserIds(db, bingoId);
-  const activeSignups = db.select().from(signups).where(and(eq(signups.bingoId, bingoId), eq(signups.status, "active"))).all();
+  // rowid order is true insertion order — see markLeftovers, which uses it to break createdAt ties.
+  const activeSignups = db.select().from(signups).where(and(eq(signups.bingoId, bingoId), eq(signups.status, "active"))).orderBy(sql`rowid`).all();
+  const insertionOrder = new Map(activeSignups.map((s, i) => [s.id, i]));
   const poolSignups = activeSignups.filter((s) => !draftedUserIds.has(s.userId));
   const poolUserIds = poolSignups.map((s) => s.userId);
   const poolUserRows = poolUserIds.length ? db.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, poolUserIds)).all() : [];
@@ -220,7 +230,7 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
   }));
   const fullPool = groupIntoUnits(db, bingoId, poolEntries);
   const draftedUnitCount = new Set(pickRows.map((p) => p.pickNumber)).size;
-  markLeftovers(fullPool, orderedTeams.length, draftedUnitCount);
+  markLeftovers(fullPool, orderedTeams.length, draftedUnitCount, insertionOrder);
   const hideCut = !!opts.hideCut && fresh.leftoverMode === "cut" && fresh.stage !== "signup";
   const pool = hideCut ? fullPool.filter((u) => !u.leftover) : fullPool;
   const cutCount = hideCut ? fullPool.filter((u) => u.leftover).reduce((n, u) => n + u.entries.length, 0) : 0;
