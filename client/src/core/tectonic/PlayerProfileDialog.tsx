@@ -6,6 +6,8 @@ import { Badge, Notice } from "../ui/Card";
 import { SpinnerIcon } from "../ui/icons";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { discordName } from "../ui/user";
+import { Disclosure } from "../ui/Disclosure";
+import { useCollapsedSections } from "../ui/collapsedSections";
 import { AchievementIcons, Medal, PlaceBreakdown, TierBadge } from "./ProfileBadges";
 import { formatRecordValue, isBingoEvent, podiumSummary, recordSummary } from "./profile";
 import { CaCell, WomCell, formatWomStat } from "../signup/caStats";
@@ -66,6 +68,7 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
   const { DialogHeader } = useDialogParts();
   const statsRefreshing = useStatsRefreshingUserIds();
   const caLoading = statsRefreshing.has(player.user.id);
+  const [collapsedSections, setSectionCollapsed] = useCollapsedSections();
   const { profile } = player;
   const name = discordName(player.user);
   const podiums = profile ? podiumSummary(profile) : null;
@@ -124,7 +127,13 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
               </p>
             )}
 
-            <Section title={`Records held (${records.length})`} empty="No current clan records.">
+            <CollapsibleSection
+              id="player-profile-records"
+              title={`Records held (${records.length})`}
+              empty="No current clan records."
+              collapsed={collapsedSections.has("player-profile-records")}
+              onCollapsedChange={(collapsed) => setSectionCollapsed("player-profile-records", collapsed)}
+            >
               {records.length > 0 && (
                 <table className="w-full text-sm">
                   <thead className="text-left text-xs text-on-surface-subtle">
@@ -154,9 +163,15 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
                   </tbody>
                 </table>
               )}
-            </Section>
+            </CollapsibleSection>
 
-            <Section title={`Event placements (${events.length})`} empty="No scored event placements yet.">
+            <CollapsibleSection
+              id="player-profile-events"
+              title={`Event placements (${events.length})`}
+              empty="No scored event placements yet."
+              collapsed={collapsedSections.has("player-profile-events")}
+              onCollapsedChange={(collapsed) => setSectionCollapsed("player-profile-events", collapsed)}
+            >
               {events.length > 0 && (
                 <ul className="divide-y divide-outline text-sm">
                   {events.map((e, i) => (
@@ -169,12 +184,17 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
                   ))}
                 </ul>
               )}
-            </Section>
+            </CollapsibleSection>
           </>
         )}
 
         {player.pastBingoStats.length > 0 && (
-          <Section title={`Past bingos (${player.pastBingoStats.length})`}>
+          <CollapsibleSection
+            id="player-profile-past-bingos"
+            title={`Past bingos (${player.pastBingoStats.length})`}
+            collapsed={collapsedSections.has("player-profile-past-bingos")}
+            onCollapsedChange={(collapsed) => setSectionCollapsed("player-profile-past-bingos", collapsed)}
+          >
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-on-surface-subtle">
                 <tr>
@@ -195,7 +215,7 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
                 ))}
               </tbody>
             </table>
-          </Section>
+          </CollapsibleSection>
         )}
 
         {player.answers && questions.length > 0 && (
@@ -221,5 +241,33 @@ function Section({ title, empty, children }: { title: string; empty?: string; ch
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-on-surface-subtle">{title}</h3>
       {children || <p className="text-sm text-on-surface-subtle">{empty}</p>}
     </section>
+  );
+}
+
+// Same shape as Section, but collapsible — expand state is handed in from
+// useCollapsedSections so it survives across every profile the viewer opens
+// (a client-local preference, not tied to their account or to this one player).
+function CollapsibleSection({
+  title,
+  empty,
+  collapsed,
+  onCollapsedChange,
+  children,
+}: {
+  id: string;
+  title: string;
+  empty?: string;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
+  children: ReactNode;
+}) {
+  return (
+    <Disclosure
+      title={<span className="text-xs font-semibold uppercase tracking-wide text-on-surface-subtle">{title}</span>}
+      isExpanded={!collapsed}
+      onExpandedChange={(expanded) => onCollapsedChange(!expanded)}
+    >
+      {children || <p className="text-sm text-on-surface-subtle">{empty}</p>}
+    </Disclosure>
   );
 }
