@@ -36,7 +36,7 @@ function AddCompetitionForm() {
   return (
     <div className="space-y-2">
       <div className="flex gap-2">
-        <Input aria-label="WOM competition id" placeholder="WOM competition id" value={womId} onChange={(e) => setWomId(e.target.value)} className="max-w-xs" />
+        <Input aria-label="WOM competition id" placeholder="WOM competition id" value={womId} onChange={(e) => setWomId(e.target.value)} size="sm" className="max-w-xs" />
         <Button variant="primary" size="sm" onPress={add} isDisabled={!womId.trim() || saving}>
           {saving ? "Fetching…" : "Fetch & store"}
         </Button>
