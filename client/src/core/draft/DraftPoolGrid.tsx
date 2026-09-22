@@ -575,9 +575,14 @@ export function DraftPoolGrid({
   // that directly, same as the signup roster. minHeight: MIN_TABLE_HEIGHT is the same floor for the same reason.
   const [tableWrapper, setTableWrapper] = useState<HTMLDivElement | null>(null);
   const tableTop = useDocumentTop(tableWrapper);
-  // 2rem, not SignupRosterGrid's own 1.5rem — this grid sits inside a Card (DraftRoom's own p-4), so there's an
-  // extra half-rem of padding below it before the page's own edge that SignupRoster's bare wrapper doesn't have.
-  const tableHeight = `calc(100dvh - ${tableTop}px - 2rem)`;
+  // 2.5rem, not SignupRosterGrid's own 1.5rem: 1.5rem is that same page-bottom padding (DraftRoom's page wrapper
+  // has it too, confirmed via getComputedStyle — this grid's own useDocumentTop measurement already covers
+  // everything ABOVE the wrapper, but not what's below it before the page's actual edge). +1rem on top of that
+  // for this grid's own Card (DraftRoom's own p-4), whose bottom padding sits between the wrapper and that page
+  // edge — SignupRoster's bare wrapper has no such Card, so it never needed the extra rem. Getting this short
+  // by even a few px is exactly what caused a double scrollbar (confirmed live: docScrollHeight 9px taller than
+  // the viewport at 2rem) — the page itself scrolling a hair as well as the grid's own internal one.
+  const tableHeight = `calc(100dvh - ${tableTop}px - 2.5rem)`;
 
   const onGridReady = useCallback((e: GridReadyEvent<DraftUnit>) => {
     gridApiRef.current = e.api;
