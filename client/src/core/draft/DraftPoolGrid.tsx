@@ -39,7 +39,7 @@ import {
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { CaCell, WomCell, caTitle, formatCaTier, formatWomStat } from "../signup/caStats";
 import { discordName } from "../ui/user";
-import { gridTheme } from "../ui/agGrid";
+import { useGridTheme } from "../ui/agGrid";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { Badge } from "../ui/Card";
 import { ColumnPicker } from "../ui/ColumnPicker";
@@ -334,6 +334,7 @@ export function DraftPoolGrid({
   // to hide it, bypassing ColumnPicker entirely. initialState/onStateUpdated (below) keep the two in sync the
   // same way SignupRosterGrid's Phase 4 does: read once at grid creation, then follow the grid's own state.
   const [hiddenColumns, setHiddenColumns] = useHiddenColumns("draftPool");
+  const gridTheme = useGridTheme();
   const gridApiRef = useRef<GridApi<DraftUnit> | null>(null);
   const [initialState] = useState<GridState>(() => {
     const persisted = readDraftColumnState();

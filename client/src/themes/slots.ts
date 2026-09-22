@@ -21,7 +21,7 @@ export interface ThemeSlots {
   // Bingo pages outside the board — whole-page layout like BoardPage, but
   // props-only: DraftRoom/StatsView already encapsulate their own api/*
   // calls as ordinary core/ components, so there's no headless model here.
-  DraftPage: ComponentType<{ slug: string; bingoName: string }>;
+  DraftPage: ComponentType<{ slug: string; bingoName: string; isMod: boolean }>;
   StatsPage: ComponentType<{ slug: string; bingoName: string }>;
   // The shape that pops up for everyone watching when a player is drafted (core/draft/DraftPickReveal). The theme
   // draws only the shape — a fixed-size card or burst, no positioning; core handles the pop, the hold and the flight

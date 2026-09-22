@@ -27,13 +27,13 @@ export function DraftPage() {
   return (
     <ThemeProvider themeKey={shell.bingo.theme} fallback={<PageLoading />}>
       <PlayerProfileProvider slug={slug!}>
-        <DraftPageSlot slug={slug!} bingoName={shell.bingo.name} />
+        <DraftPageSlot slug={slug!} bingoName={shell.bingo.name} isMod={shell.isMod} />
       </PlayerProfileProvider>
     </ThemeProvider>
   );
 }
 
-function DraftPageSlot({ slug, bingoName }: { slug: string; bingoName: string }) {
+function DraftPageSlot({ slug, bingoName, isMod }: { slug: string; bingoName: string; isMod: boolean }) {
   const DraftPage = useSlot("DraftPage");
-  return <DraftPage slug={slug} bingoName={bingoName} />;
+  return <DraftPage slug={slug} bingoName={bingoName} isMod={isMod} />;
 }

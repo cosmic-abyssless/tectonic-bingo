@@ -30,7 +30,7 @@ import type {
 } from "ag-grid-community";
 import { formatSignupAnswer, type PairingParty, type RosterEntry, type SignupQuestion } from "@bingo/shared";
 import type { useMarkBuyin, useModPair, useModUnpair, useModWithdrawSignup, useRefreshSignupStats } from "../../api/queries";
-import { gridTheme } from "../ui/agGrid";
+import { useGridTheme } from "../ui/agGrid";
 import { discordName, displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { Badge } from "../ui/Card";
@@ -283,6 +283,7 @@ export function SignupRosterGrid({
   onHiddenColumnsChange: (hidden: Set<string>) => void;
   context: GridContext;
 }) {
+  const gridTheme = useGridTheme();
   const gridApiRef = useRef<GridApi<RosterRow> | null>(null);
   const [initialState] = useState(readInitialGridState);
 
