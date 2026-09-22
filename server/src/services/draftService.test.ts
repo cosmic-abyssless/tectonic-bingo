@@ -717,9 +717,9 @@ describe("pick ratings", () => {
 
     const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.rating_set")).all();
     expect(rows.map((r) => [r.teamId, JSON.parse(r.details)])).toEqual([
-      [teamA.id, { rsn: "p1", stars: 2, hasNote: true, cleared: false }],
-      [teamA.id, { rsn: "p1", stars: 3, hasNote: false, cleared: false }],
-      [teamA.id, { rsn: "p1", stars: 0, hasNote: false, cleared: true }],
+      [teamA.id, { rsn: "p1", hasRating: true, hasNote: true, cleared: false }],
+      [teamA.id, { rsn: "p1", hasRating: true, hasNote: false, cleared: false }],
+      [teamA.id, { rsn: "p1", hasRating: false, hasNote: false, cleared: true }],
     ]);
   });
 

@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { formatSignupAnswer, type RosterEntry, type SignupQuestionType, type User } from "@bingo/shared";
+import { useCallback, useMemo, useState } from "react";
+import type { GridApi } from "ag-grid-community";
+import { formatSignupAnswer, type RosterEntry, type SignupQuestionType } from "@bingo/shared";
 import {
   useBingo,
   useBingoMods,
@@ -15,32 +16,62 @@ import {
   type SeedTestSignupsResponse,
 } from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
-import { discordName, displayName } from "../ui/user";
-import { PlayerName } from "../tectonic/PlayerName";
-import { Button, IconButton } from "../ui/Button";
-import { Badge, EmptyState, FilterChip, Notice } from "../ui/Card";
-import { ColumnPicker } from "../ui/ColumnPicker";
-import { Input, Select } from "../ui/Field";
-import { useHiddenColumns } from "../ui/hiddenColumns";
-import { AlertIcon, CheckIcon, RefreshIcon, UsersIcon, XIcon } from "../ui/icons";
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
-import { CaCell, WomCell, formatCaTier, formatWomStat } from "../signup/caStats";
-import { SortHeader, compareSortValues, useTableSort } from "../ui/tableSort";
-import { timeAgo } from "../ui/time";
-import { TierBadge } from "../tectonic/ProfileBadges";
+import { discordName, displayName } from "../ui/user";
+import { Button } from "../ui/Button";
+import { EmptyState, Notice, FilterChip } from "../ui/Card";
+import { ColumnPicker } from "../ui/ColumnPicker";
+import { Input } from "../ui/Field";
+import { AlertIcon, UsersIcon } from "../ui/icons";
+import { formatCaTier, formatWomStat } from "../signup/caStats";
+import { useDocumentTop } from "../ui/tableChrome";
+import { TableSearchInput, useTableSearch } from "../ui/tableSearch";
 import { formatTierName } from "../tectonic/profile";
+import { SignupRosterGrid, type GridContext, type RosterRow } from "./SignupRosterGrid";
 
 function csvEscape(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
   return value;
 }
 
-function partnerRsn(entry: RosterEntry, roster: RosterEntry[]): string | null {
+// GP totals here are buy-in multiples, always in the millions for this event — "30M GP" reads faster than
+// "30,000,000 GP". Decimals only show up if the amount isn't a clean multiple of a million.
+function formatGp(amount: number): string {
+  return `${(amount / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })}M GP`;
+}
+
+// signup.id -> the other half's RSN, or "Not signed up yet" if a pairing
+// exists but nothing else in the roster shares its id. Built once per roster
+// (O(n): a pairing links exactly two people, so each group is tiny,
+// regardless of how large the roster is) rather than the O(n) scan a naive
+// "find the other row with this pairing.id" does — which, called once per
+// row (as it was, from both search and sort), made the whole table O(n²) on
+// every keystroke.
+export function buildPartnerRsnMap(roster: RosterEntry[]): Map<string, string> {
+  const byPairing = new Map<string, RosterEntry[]>();
+  for (const r of roster) {
+    if (!r.pairing) continue;
+    const group = byPairing.get(r.pairing.id);
+    if (group) group.push(r);
+    else byPairing.set(r.pairing.id, [r]);
+  }
+  const result = new Map<string, string>();
+  for (const group of byPairing.values()) {
+    for (const entry of group) {
+      const partner = group.find((o) => o.signup.id !== entry.signup.id);
+      result.set(entry.signup.id, partner ? partner.signup.rsn : "Not signed up yet");
+    }
+  }
+  return result;
+}
+
+function partnerRsn(entry: RosterEntry, partnerRsnMap: Map<string, string>): string | null {
   if (!entry.pairing) return null;
-  return roster.find((r) => r.pairing?.id === entry.pairing!.id && r.signup.id !== entry.signup.id)?.signup.rsn ?? "Not signed up yet";
+  return partnerRsnMap.get(entry.signup.id) ?? "Not signed up yet";
 }
 
 function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: string; type: SignupQuestionType }[], isDuo: boolean): string {
+  const partnerRsnMap = buildPartnerRsnMap(roster);
   const headers = [
     "#",
     "RSN",
@@ -72,73 +103,11 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
       formatWomStat(entry.womStats?.ehp),
       entry.signup.buyinReceivedAt ? "received" : "not received",
       entry.collectedByUser ? displayName(entry.collectedByUser) : "",
-      ...(isDuo ? [partnerRsn(entry, roster) ?? ""] : []),
+      ...(isDuo ? [partnerRsn(entry, partnerRsnMap) ?? ""] : []),
       ...questionPrompts.map((q) => formatSignupAnswer(q.type, answerByQ.get(q.id))),
     ];
   });
   return [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
-}
-
-function RefreshStatsButton({ slug, signupId, rsn, refreshing }: { slug: string; signupId: string; rsn: string; refreshing: boolean }) {
-  const refresh = useRefreshSignupStats(slug);
-  const busy = refresh.isPending || refreshing;
-  return (
-    <IconButton label={busy ? `Looking up stats for ${rsn}` : `Refresh stats for ${rsn}`} size="sm" onPress={() => refresh.mutate(signupId)} isDisabled={busy}>
-      <RefreshIcon size={12} className={busy ? "animate-spin" : undefined} />
-    </IconButton>
-  );
-}
-
-function BuyinCell({ slug, entry }: { slug: string; entry: RosterEntry }) {
-  const markBuyin = useMarkBuyin(slug);
-  const received = !!entry.signup.buyinReceivedAt;
-
-  function toggle() {
-    markBuyin.mutate({ signupId: entry.signup.id, received: !received });
-  }
-
-  return (
-    <label className="flex cursor-pointer select-none items-center gap-2">
-      <input type="checkbox" checked={received} onChange={toggle} disabled={markBuyin.isPending} className="size-4 cursor-pointer accent-accent" />
-      <span className={`text-xs ${received ? "text-ok" : "text-on-surface-subtle"}`}>{received ? "Received" : "Not received"}</span>
-    </label>
-  );
-}
-
-// Independent of the buy-in checkbox — a mod can set/change the collector at
-// any time while received is true. Disabled once buy-in is unmarked, since
-// markBuyin always clears the collector when received goes false.
-function CollectedByCell({ slug, entry }: { slug: string; entry: RosterEntry }) {
-  const markBuyin = useMarkBuyin(slug);
-  const { user: me } = useAuth();
-  const { data } = useBingoMods(slug);
-  const received = !!entry.signup.buyinReceivedAt;
-
-  // Mods of this bingo, plus the viewer (a site admin need not be listed as a
-  // mod) and whoever is already recorded, so the current value always has an
-  // option to display.
-  const options = new Map<string, User>();
-  for (const mod of data?.mods ?? []) options.set(mod.userId, mod.user);
-  if (me) options.set(me.id, me);
-  if (entry.collectedByUser) options.set(entry.collectedByUser.id, entry.collectedByUser);
-
-  return (
-    <Select
-      size="sm"
-      value={entry.collectedByUser?.id ?? ""}
-      onChange={(e) => markBuyin.mutate({ signupId: entry.signup.id, received: true, collectedByUserId: e.target.value || null })}
-      disabled={!received || markBuyin.isPending}
-      aria-label={`Collected by for ${entry.signup.rsn}`}
-      className="w-auto!"
-    >
-      <option value="">Nobody yet</option>
-      {[...options.values()].map((u) => (
-        <option key={u.id} value={u.id}>
-          {displayName(u)}
-        </option>
-      ))}
-    </Select>
-  );
 }
 
 // Dev-only — hidden unless AuthContext.devMode is true (the server route
@@ -196,107 +165,12 @@ function DevSeedPanel({ slug }: { slug: string }) {
   );
 }
 
-// Duo mode only. Paired players show their partner (resolved from the roster
-// row sharing the same pairing) with an unpair button; unpaired active
-// players get a picker of other unpaired active players so a mod can pair
-// them by hand.
-function PartnerCell({ slug, entry, roster }: { slug: string; entry: RosterEntry; roster: RosterEntry[] }) {
-  const pair = useModPair(slug);
-  const unpair = useModUnpair(slug);
-  const [target, setTarget] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  async function run(action: () => Promise<unknown>) {
-    setError(null);
-    try {
-      await action();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to update pairing");
-    }
-  }
-
-  if (entry.pairing) {
-    return (
-      <div className="flex items-center gap-1">
-        <span className="text-on-surface">{partnerRsn(entry, roster)}</span>
-        <IconButton label="Unpair" size="sm" onPress={() => run(() => unpair.mutateAsync(entry.pairing!.id))} isDisabled={unpair.isPending}>
-          <XIcon size={12} />
-        </IconButton>
-        {error && <span className="text-xs text-danger">{error}</span>}
-      </div>
-    );
-  }
-
-  if (entry.signup.status !== "active") return <span className="text-on-surface-subtle">—</span>;
-
-  const candidates = roster.filter((r) => r.signup.status === "active" && !r.pairing && r.signup.id !== entry.signup.id);
-  return (
-    <div className="flex items-center gap-2">
-      <Select size="sm" value={target} onChange={(e) => setTarget(e.target.value)} aria-label={`Partner for ${entry.signup.rsn}`} className="w-auto!">
-        <option value="">Unpaired</option>
-        {candidates.map((c) => (
-          <option key={c.user.id} value={c.user.id}>
-            {c.signup.rsn}
-          </option>
-        ))}
-      </Select>
-      <Button size="sm" isDisabled={!target || pair.isPending} onPress={() => run(() => pair.mutateAsync({ userIdA: entry.user.id, userIdB: target }))}>
-        Pair
-      </Button>
-      {error && <span className="text-xs text-danger">{error}</span>}
-    </div>
-  );
-}
-
-// "order" | "rsn" | "discord" | "status" | "buyin" | "collectedBy" | "partner" | a signup question's id.
-type SortKey = string;
-
-// Status badge plus, while the roster can still change, a two-step withdraw
-// button for removing no-shows on a player's behalf.
-function StatusCell({ slug, entry, canWithdraw }: { slug: string; entry: RosterEntry; canWithdraw: boolean }) {
-  const withdraw = useModWithdrawSignup(slug);
-  const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const active = entry.signup.status === "active";
-
-  async function run() {
-    setError(null);
-    try {
-      await withdraw.mutateAsync(entry.signup.id);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to withdraw signup");
-      setConfirming(false);
-    }
-  }
-
-  if (confirming) {
-    return (
-      <div className="flex items-center gap-1 whitespace-nowrap">
-        <Button size="sm" variant="danger" onPress={run} isDisabled={withdraw.isPending}>
-          Withdraw {entry.signup.rsn}
-        </Button>
-        <Button size="sm" variant="ghost" onPress={() => setConfirming(false)}>
-          Cancel
-        </Button>
-      </div>
-    );
-  }
-  return (
-    <div className="flex items-center gap-1">
-      <Badge tone={active ? "ok" : "neutral"}>{entry.signup.status}</Badge>
-      {entry.leftover && <Badge tone="warn">at risk</Badge>}
-      {active && canWithdraw && (
-        <IconButton label={`Withdraw ${entry.signup.rsn}'s signup`} size="sm" onPress={() => setConfirming(true)}>
-          <XIcon size={12} />
-        </IconButton>
-      )}
-      {error && <span className="text-xs text-danger">{error}</span>}
-    </div>
-  );
-}
-
 type BuyinFilter = "all" | "paid" | "unpaid";
 type PairFilter = "all" | "paired" | "unpaired";
+
+// ~10 rows plus the header before the min-height floor kicks in. A row runs ~2.25rem (py-2 + text-sm) up to ~3rem
+// where a cell holds a size="sm" Select (Collected by, Partner) — 2.75rem/row is the rough middle.
+const MIN_TABLE_HEIGHT = "30rem";
 
 const BUYIN_FILTERS: { key: BuyinFilter; label: string }[] = [
   { key: "all", label: "All" },
@@ -319,80 +193,139 @@ function matchesPair(entry: RosterEntry, filter: PairFilter): boolean {
   return filter === "all" || isPaired(entry) === (filter === "paired");
 }
 
-// `order` is the 1-based signup position (the server returns the roster in
-// createdAt order), kept alongside the entry so sorting by another column
-// doesn't lose it.
-interface NumberedEntry {
-  order: number;
-  entry: RosterEntry;
-}
-
-function rosterSortValue({ order, entry }: NumberedEntry, key: SortKey, roster: RosterEntry[]): string | number {
-  if (key === "order") return order;
-  if (key === "rsn") return entry.signup.rsn.toLowerCase();
-  if (key === "discord") return discordName(entry.user).toLowerCase();
-  if (key === "tier") return entry.tectonicProfile?.points ?? -1;
-  if (key === "status") return entry.signup.status;
-  if (key === "caCurrent") return entry.caCurrent?.points ?? -1;
-  if (key === "caPeak") return entry.caPeak?.points ?? -1;
-  if (key === "ehb") return entry.womStats?.ehb ?? -1;
-  if (key === "ehp") return entry.womStats?.ehp ?? -1;
-  if (key === "buyin") return isPaid(entry) ? 1 : 0;
-  if (key === "collectedBy") return entry.collectedByUser ? displayName(entry.collectedByUser).toLowerCase() : "";
-  // Paired rows first (sorted by partner), unpaired rows after — so the
-  // column doubles as a paired/unpaired grouping.
-  if (key === "partner") return isPaired(entry) ? `0 ${(partnerRsn(entry, roster) ?? "").toLowerCase()}` : "1";
-  return (entry.answers.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
-}
-
 export function SignupRoster({ slug }: { slug: string }) {
   const { data } = useSignupRoster(slug);
   const { data: questionsData } = useSignupQuestions(slug);
   const { data: bingoData } = useBingo(slug);
-  const { devMode } = useAuth();
+  // One subscription for the whole table, not one per row — every CollectedByCell used to call this itself, so
+  // 63 rows meant 63 separate subscriptions to (and re-renders off) the very same query.
+  const { data: modsData } = useBingoMods(slug);
+  const { user: me, devMode } = useAuth();
   const statsRefreshing = useStatsRefreshingSignupIds();
   const roster = data?.signups ?? [];
   const questions = questionsData?.questions ?? [];
+  const mods = useMemo(() => modsData?.mods ?? [], [modsData]);
   const isDuo = bingoData?.bingo.signupMode === "duo";
   const stage = bingoData?.bingo.stage;
   const canWithdraw = stage === "signup" || stage === "captains";
+  // Clan standing column only when tectonic-api knows at least one player.
+  const showTier = roster.some((r) => r.tectonicProfile);
   const [copied, setCopied] = useState(false);
   const [buyinFilter, setBuyinFilter] = useState<BuyinFilter>("all");
   const [pairFilter, setPairFilter] = useState<PairFilter>("all");
-  const [hiddenColumns, setHiddenColumns] = useHiddenColumns("signupRoster");
-  const sort = useTableSort<SortKey>("order");
-  const shown = (id: string) => !hiddenColumns.has(id);
+  const [search, setSearch] = useTableSearch();
+  // AG Grid (docs/ag-grid-tables-plan.md) replaces the hand-rolled <table> —
+  // sticky header, striping, virtualisation and column sort/resize/reorder
+  // are the grid's own. This wrapper still owns the table's on-page height:
+  // domLayout="normal" needs a real height (not a max-height the way a plain
+  // scrollable <table> could get away with), so useDocumentTop's measured
+  // remaining-viewport value becomes that height directly. min-height keeps
+  // it from being squeezed to uselessness if that leaves very little room (a
+  // short window, a lot of chrome above it): it's then the smaller of the
+  // two that loses, and a touch of page scroll is the trade-off.
+  const [tableWrapper, setTableWrapper] = useState<HTMLDivElement | null>(null);
+  const tableTop = useDocumentTop(tableWrapper);
+  const tableHeight = `calc(100dvh - ${tableTop}px - 1.5rem)`;
+  // Set by the grid itself (onGridReady/onModelUpdated) — how many rows its search + filters currently leave
+  // visible. Starts null (grid not mounted yet) so the search box shows totalCount rather than flashing "0 of N".
+  const [displayedCount, setDisplayedCount] = useState<number | null>(null);
+  // The live GridApi (docs/ag-grid-tables-plan.md phase 4) — handed up by SignupRosterGrid via onApiReady so
+  // ColumnPicker, rendered here in the toolbar rather than inside the grid, can call setColumnsVisible. hidden
+  // mirrors the grid's own column-visibility state (updated from the same onStateUpdated that persists it), so a
+  // header-drag hide and a ColumnPicker toggle never disagree with each other.
+  const [gridApi, setGridApi] = useState<GridApi<RosterRow> | null>(null);
+  const [hiddenColumnIds, setHiddenColumnIds] = useState<Set<string>>(new Set());
 
   const activeCount = roster.filter((r) => r.signup.status === "active").length;
   const withdrawnCount = roster.length - activeCount;
   const leftoverCount = roster.filter((r) => r.leftover).length;
   const teamCount = bingoData?.teams.length ?? 0;
   const leftoverMode = bingoData?.bingo.leftoverMode;
-  // Clan standing column only when tectonic-api knows at least one player.
-  const showTier = roster.some((r) => r.tectonicProfile);
-  const columnOptions = [
-    { id: "order", label: "#" },
-    { id: "discord", label: "Discord" },
-    ...(showTier ? [{ id: "tier", label: "Tier" }] : []),
-    { id: "signedUp", label: "Signed up" },
-    { id: "status", label: "Status" },
-    { id: "caCurrent", label: "Current CA" },
-    { id: "caPeak", label: "Peak CA" },
-    { id: "ehb", label: "EHB" },
-    { id: "ehp", label: "EHP" },
-    { id: "buyin", label: "Buy-in" },
-    { id: "collectedBy", label: "Collected by" },
-    ...(isDuo ? [{ id: "partner", label: "Partner" }] : []),
-    ...questions.map((q) => ({ id: q.id, label: q.prompt })),
-  ];
   // Each chip's count reflects the other filter so the numbers show what
   // clicking it would leave on screen.
   const buyinCount = (f: BuyinFilter) => roster.filter((r) => matchesBuyin(r, f) && matchesPair(r, pairFilter)).length;
   const pairCount = (f: PairFilter) => roster.filter((r) => matchesPair(r, f) && matchesBuyin(r, buyinFilter)).length;
-  const sorted = roster
-    .map((entry, i) => ({ order: i + 1, entry }))
-    .filter(({ entry }) => matchesBuyin(entry, buyinFilter) && matchesPair(entry, pairFilter))
-    .sort((a, b) => sort.order(compareSortValues(rosterSortValue(a, sort.key, roster), rosterSortValue(b, sort.key, roster))));
+  // The buy-in/pair chips, as the grid's external filter (docs/ag-grid-tables-plan.md phase 2) — search itself is
+  // the grid's own quickFilterText, bound directly to `search` below.
+  const doesRowPassFilters = useCallback((row: RosterRow) => matchesBuyin(row, buyinFilter) && matchesPair(row, pairFilter), [buyinFilter, pairFilter]);
+  // Independent of the grid (for the search box's "of N" total) — cheap, and avoids a render round-trip through
+  // the grid just to know how many rows the chips alone leave.
+  const totalCount = roster.filter((r) => matchesBuyin(r, buyinFilter) && matchesPair(r, pairFilter)).length;
+  const rows = useMemo<RosterRow[]>(() => roster.map((entry, i) => ({ ...entry, order: i + 1 })), [roster]);
+
+  // O(n), built once per roster rather than once per row — see buildPartnerRsnMap's own comment.
+  const partnerRsnMap = useMemo(() => buildPartnerRsnMap(roster), [roster]);
+
+  // Mods of this bingo, plus the viewer (a site admin need not be listed as a mod) and whoever is already
+  // recorded as a collector — so a row whose collector isn't a *current* mod still has an option to display.
+  const collectedByOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const mod of mods) byId.set(mod.userId, displayName(mod.user));
+    if (me) byId.set(me.id, displayName(me));
+    for (const r of roster) if (r.collectedByUser) byId.set(r.collectedByUser.id, displayName(r.collectedByUser));
+    return [...byId.entries()].map(([id, label]) => ({ id, label }));
+  }, [mods, me, roster]);
+
+  // Who's physically holding collected GP right now — a paid signup's buy-in isn't "safe" until a mod has both
+  // marked it received *and* recorded themselves as the collector; received-but-uncollected is still just as
+  // much a place the GP could go missing from, so it gets its own bucket rather than being silently excluded.
+  const buyinAmount = bingoData?.bingo.buyinAmount ?? null;
+  const collectorBreakdown = useMemo(() => {
+    const byId = new Map<string, { label: string; count: number }>();
+    let uncollected = 0;
+    for (const r of roster) {
+      if (!r.signup.buyinReceivedAt) continue;
+      if (r.collectedByUser) {
+        const existing = byId.get(r.collectedByUser.id);
+        if (existing) existing.count++;
+        else byId.set(r.collectedByUser.id, { label: displayName(r.collectedByUser), count: 1 });
+      } else {
+        uncollected++;
+      }
+    }
+    return { byMod: [...byId.entries()].map(([id, v]) => ({ id, ...v })).sort((a, b) => b.count - a.count), uncollected };
+  }, [roster]);
+
+  // Interactive grid cells (docs/ag-grid-tables-plan.md phase 3) call these mutations through context rather than
+  // each calling its own hook — that alone removes ~380 hook instances from a full 63-row mount.
+  const markBuyin = useMarkBuyin(slug);
+  const modPair = useModPair(slug);
+  const modUnpair = useModUnpair(slug);
+  const withdrawSignup = useModWithdrawSignup(slug);
+  const refreshStats = useRefreshSignupStats(slug);
+  const gridContext = useMemo<GridContext>(
+    () => ({ search, partnerRsnMap, canWithdraw, statsRefreshing, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats }),
+    [search, partnerRsnMap, canWithdraw, statsRefreshing, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats],
+  );
+
+  // ColumnPicker's own option list — every colId the grid can show except # and RSN, neither of which is
+  // optional (both are pinned left in the grid itself, and RSN is the only thing identifying a row). Community
+  // has no column-chooser menu of its own (docs/ag-grid-tables-plan.md), so this stays the UI; what it drives
+  // changed from a plain localStorage set to the grid's column-visibility state.
+  const columnOptions = useMemo(
+    () => [
+      { id: "discord", label: "Discord" },
+      ...(showTier ? [{ id: "tier", label: "Tier" }] : []),
+      { id: "signedUp", label: "Signed up" },
+      { id: "status", label: "Status" },
+      { id: "caCurrent", label: "Current CA" },
+      { id: "caPeak", label: "Peak CA" },
+      { id: "ehb", label: "EHB" },
+      { id: "ehp", label: "EHP" },
+      { id: "buyin", label: "Buy-in received" },
+      { id: "collectedBy", label: "Collected by" },
+      ...(isDuo ? [{ id: "partner", label: "Partner" }] : []),
+      ...questions.map((q) => ({ id: q.id, label: q.prompt })),
+    ],
+    [showTier, isDuo, questions],
+  );
+  function handleHiddenChange(next: Set<string>) {
+    if (!gridApi) return;
+    const toHide = [...next].filter((id) => !hiddenColumnIds.has(id));
+    const toShow = [...hiddenColumnIds].filter((id) => !next.has(id));
+    if (toHide.length > 0) gridApi.setColumnsVisible(toHide, false);
+    if (toShow.length > 0) gridApi.setColumnsVisible(toShow, true);
+  }
 
   async function copyCsv() {
     const csv = buildCsv(roster, questions, isDuo);
@@ -404,6 +337,35 @@ export function SignupRoster({ slug }: { slug: string }) {
   return (
     <div className="space-y-4">
       {devMode && bingoData?.bingo.stage === "signup" && <DevSeedPanel slug={slug} />}
+      {(collectorBreakdown.byMod.length > 0 || collectorBreakdown.uncollected > 0) && (
+        <div className="rounded-lg border border-outline p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-on-surface-muted">Buy-ins held</p>
+          <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-sm text-on-surface-muted">
+            {collectorBreakdown.byMod.map((m) => (
+              <span key={m.id}>
+                {m.label} <span className="num text-on-surface">{m.count}</span>
+                {buyinAmount != null && (
+                  <>
+                    {" "}
+                    · <span className="num text-on-surface">{formatGp(m.count * buyinAmount)}</span>
+                  </>
+                )}
+              </span>
+            ))}
+            {collectorBreakdown.uncollected > 0 && (
+              <span className="text-warn">
+                Not yet collected <span className="num">{collectorBreakdown.uncollected}</span>
+                {buyinAmount != null && (
+                  <>
+                    {" "}
+                    · <span className="num">{formatGp(collectorBreakdown.uncollected * buyinAmount)}</span>
+                  </>
+                )}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
       {leftoverCount > 0 && (
         <Notice tone="warn" icon={<AlertIcon />}>
           <span className="num">{leftoverCount}</span> newest signup{leftoverCount !== 1 ? "s" : ""} {leftoverCount !== 1 ? "don't" : "doesn't"} fit a full round of{" "}
@@ -421,7 +383,8 @@ export function SignupRoster({ slug }: { slug: string }) {
           )}
         </p>
         <div className="flex items-center gap-2">
-          {roster.length > 0 && <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={setHiddenColumns} />}
+          {roster.length > 0 && <TableSearchInput value={search} onChange={setSearch} matchCount={displayedCount ?? totalCount} totalCount={totalCount} />}
+          {roster.length > 0 && <ColumnPicker columns={columnOptions} hidden={hiddenColumnIds} onHiddenChange={handleHiddenChange} />}
           <Button size="sm" onPress={copyCsv} isDisabled={roster.length === 0}>
             {copied ? "Copied" : "Copy as CSV"}
           </Button>
@@ -443,119 +406,32 @@ export function SignupRoster({ slug }: { slug: string }) {
               ))}
             </div>
             {isDuo && (
-              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by pairing">
-                {PAIR_FILTERS.map(({ key, label }) => (
-                  <FilterChip key={key} active={pairFilter === key} count={pairCount(key)} onPress={() => setPairFilter(key)}>
-                    {label}
-                  </FilterChip>
-                ))}
-              </div>
+              <>
+                <div className="h-4 w-px shrink-0 bg-outline" aria-hidden="true" />
+                <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by pairing">
+                  {PAIR_FILTERS.map(({ key, label }) => (
+                    <FilterChip key={key} active={pairFilter === key} count={pairCount(key)} onPress={() => setPairFilter(key)}>
+                      {label}
+                    </FilterChip>
+                  ))}
+                </div>
+              </>
             )}
           </div>
-          {sorted.length === 0 ? (
-            <p className="text-sm text-on-surface-muted">No signups match these filters.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-max min-w-full text-sm [&_td]:align-middle [&_th]:align-middle">
-                <thead>
-                  <tr className="border-b border-outline">
-                    {shown("order") && <SortHeader label="#" sortKey="order" sort={sort} />}
-                    <SortHeader label="RSN" sortKey="rsn" sort={sort} />
-                    {shown("discord") && <SortHeader label="Discord" sortKey="discord" sort={sort} />}
-                    {showTier && shown("tier") && <SortHeader label="Tier" sortKey="tier" sort={sort} />}
-                    {shown("signedUp") && <SortHeader label="Signed up" sortKey="order" sort={sort} />}
-                    {shown("status") && <SortHeader label="Status" sortKey="status" sort={sort} />}
-                    {shown("caCurrent") && <SortHeader label="Current CA" sortKey="caCurrent" sort={sort} />}
-                    {shown("caPeak") && <SortHeader label="Peak CA" sortKey="caPeak" sort={sort} />}
-                    {shown("ehb") && <SortHeader label="EHB" sortKey="ehb" sort={sort} />}
-                    {shown("ehp") && <SortHeader label="EHP" sortKey="ehp" sort={sort} />}
-                    {shown("buyin") && <SortHeader label="Buy-in" sortKey="buyin" sort={sort} />}
-                    {shown("collectedBy") && <SortHeader label="Collected by" sortKey="collectedBy" sort={sort} />}
-                    {isDuo && shown("partner") && <SortHeader label="Partner" sortKey="partner" sort={sort} />}
-                    {questions.filter((q) => shown(q.id)).map((q) => (
-                      <SortHeader key={q.id} label={q.prompt} sortKey={q.id} sort={sort} />
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-outline">
-                  {sorted.map(({ order, entry }) => {
-                    const answerByQ = new Map(entry.answers.map((a) => [a.questionId, a.value]));
-                    const statsLoading = statsRefreshing.has(entry.signup.id);
-                    return (
-                      <tr key={entry.signup.id}>
-                        {shown("order") && <td className="num py-2 pr-4 text-on-surface-subtle">{order}</td>}
-                        <td className="py-2 pr-4 font-medium text-on-surface">
-                          <span className="inline-flex items-center gap-1.5">
-                            <PlayerName userId={entry.user.id}>{entry.signup.rsn}</PlayerName>
-                            {entry.signup.rsnVerified && <CheckIcon size={14} className="text-ok" aria-label="Verified against the linked clan account" />}
-                            <RefreshStatsButton slug={slug} signupId={entry.signup.id} rsn={entry.signup.rsn} refreshing={statsLoading} />
-                          </span>
-                        </td>
-                        {shown("discord") && <td className="py-2 pr-4 text-on-surface-muted">{discordName(entry.user)}</td>}
-                        {showTier && shown("tier") && (
-                          <td className="whitespace-nowrap py-2 pr-4 text-on-surface-muted">
-                            {entry.tectonicProfile ? <TierBadge profile={entry.tectonicProfile} /> : "—"}
-                          </td>
-                        )}
-                        {shown("signedUp") && (
-                          <td className="py-2 pr-4 text-on-surface-muted">
-                            <time dateTime={entry.signup.createdAt} title={new Date(entry.signup.createdAt).toLocaleString()} className="num whitespace-nowrap">
-                              {timeAgo(entry.signup.createdAt)}
-                            </time>
-                          </td>
-                        )}
-                        {shown("status") && (
-                          <td className="py-2 pr-4">
-                            <StatusCell slug={slug} entry={entry} canWithdraw={canWithdraw} />
-                          </td>
-                        )}
-                        {shown("caCurrent") && (
-                          <td className="py-2 pr-4 text-on-surface-muted">
-                            <CaCell stats={entry.caCurrent} loading={statsLoading} />
-                          </td>
-                        )}
-                        {shown("caPeak") && (
-                          <td className="py-2 pr-4 text-on-surface-muted">
-                            <CaCell stats={entry.caPeak} loading={statsLoading} />
-                          </td>
-                        )}
-                        {shown("ehb") && (
-                          <td className="num py-2 pr-4 text-on-surface-muted">
-                            <WomCell stats={entry.womStats} field="ehb" loading={statsLoading} />
-                          </td>
-                        )}
-                        {shown("ehp") && (
-                          <td className="num py-2 pr-4 text-on-surface-muted">
-                            <WomCell stats={entry.womStats} field="ehp" loading={statsLoading} />
-                          </td>
-                        )}
-                        {shown("buyin") && (
-                          <td className="py-2 pr-4">
-                            <BuyinCell slug={slug} entry={entry} />
-                          </td>
-                        )}
-                        {shown("collectedBy") && (
-                          <td className="py-2 pr-4">
-                            <CollectedByCell slug={slug} entry={entry} />
-                          </td>
-                        )}
-                        {isDuo && shown("partner") && (
-                          <td className="py-2 pr-4">
-                            <PartnerCell slug={slug} entry={entry} roster={roster} />
-                          </td>
-                        )}
-                        {questions.filter((q) => shown(q.id)).map((q) => (
-                          <td key={q.id} className="py-2 pr-4 text-on-surface-muted">
-                            {formatSignupAnswer(q.type, answerByQ.get(q.id)) || "—"}
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <div ref={setTableWrapper} className="overflow-hidden" style={{ height: tableHeight, minHeight: MIN_TABLE_HEIGHT }}>
+            <SignupRosterGrid
+              rows={rows}
+              questions={questions}
+              isDuo={isDuo}
+              showTier={showTier}
+              collectedByOptions={collectedByOptions}
+              doesRowPassFilters={doesRowPassFilters}
+              onDisplayedCountChange={setDisplayedCount}
+              onApiReady={setGridApi}
+              onHiddenColumnsChange={setHiddenColumnIds}
+              context={gridContext}
+            />
+          </div>
         </>
       )}
     </div>

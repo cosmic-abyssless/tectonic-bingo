@@ -1,4 +1,5 @@
 import "./instrument";
+import "./core/ui/agGrid"; // registers AG Grid's modules once for the whole app
 import { StrictMode } from "react";
 import { reactErrorHandler } from "@sentry/react";
 import { createRoot } from "react-dom/client";

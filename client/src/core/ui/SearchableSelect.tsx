@@ -184,7 +184,13 @@ export function SearchableSelect({
           ref={dropdownRef}
           style={{
             position: "fixed",
-            top: dropdownRect.bottom + 4,
+            // max-h-60 below is 240px — if that much (or the space actually available) doesn't fit under the
+            // input but there's more room above it, anchor from the bottom edge instead: it grows upward from a
+            // fixed point regardless of how tall the (variable, filtered-result-dependent) list ends up, so
+            // there's no need to know its height up front the way flipping a `top` position would.
+            ...(window.innerHeight - dropdownRect.bottom < 240 && dropdownRect.top > window.innerHeight - dropdownRect.bottom
+              ? { bottom: window.innerHeight - dropdownRect.top + 4 }
+              : { top: dropdownRect.bottom + 4 }),
             left: dropdownRect.left,
             width: dropdownRect.width,
             zIndex: 9999,

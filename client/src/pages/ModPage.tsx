@@ -51,6 +51,16 @@ function isOutOfStage(tab: TabDef, stage: Stage): boolean {
   return (tab.until !== undefined && idx > STAGE_ORDER.indexOf(tab.until)) || (tab.from !== undefined && idx < STAGE_ORDER.indexOf(tab.from));
 }
 
+// The tab a mod most likely wants on landing (or lands back on once their current tab goes out of stage) —
+// Signups while signups are open, Settings for a still-being-set-up bingo (admin only — a non-admin mod has no
+// Settings tab to land on), Submissions otherwise. Signups is `adminOnly: false`, so this applies to every mod,
+// not just admins.
+function defaultTabFor(stage: Stage | undefined, isAdmin: boolean): string {
+  if (stage === "signup") return "signups";
+  if (stage === "planning" && isAdmin) return "settings";
+  return "submissions";
+}
+
 // Mod surfaces never theme — always core/, regardless of bingo.theme.
 export function ModPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -59,14 +69,7 @@ export function ModPage() {
   const { user } = useAuth();
   const isAdmin = !!user?.isAdmin;
   const stage = shell?.bingo.stage;
-  const [tab, setTab] = useState(() => (stage === "planning" && isAdmin ? "settings" : "submissions"));
-
-  // When a newly created or planning-stage bingo loads, default admin to settings instead of submissions
-  useEffect(() => {
-    if (stage === "planning" && isAdmin && tab === "submissions") {
-      setTab("settings");
-    }
-  }, [stage, isAdmin, tab]);
+  const [tab, setTab] = useState(() => defaultTabFor(stage, isAdmin));
   const [outOfStageTabs, setOutOfStageTabs] = usePreference("outOfStageTabs");
 
   const visibleTabs = useMemo(() => {
@@ -99,14 +102,14 @@ export function ModPage() {
     if (shell && !shell.isMod) navigate(`/b/${slug}`, { replace: true });
   }, [shell, navigate, slug]);
 
-  // A tab the user can no longer see (isAdmin resolved to false after mount,
-  // or the stage moved past the tab) shouldn't leave stale content selected.
-  // Settings is always in-stage, so it's the safe landing spot when visible.
+  // A tab the user can no longer see (isAdmin resolved to false after mount, the stage moved past it, or it's
+  // just the pre-shell-load placeholder from the initial useState) shouldn't leave stale content selected.
+  // Prefer the stage's natural landing tab; Settings is the fallback since it's always in-stage for an admin.
   useEffect(() => {
-    if (visibleTabs.length > 0 && !visibleTabs.some((t) => t.key === tab)) {
-      setTab(visibleTabs.some((t) => t.key === "settings") ? "settings" : visibleTabs[0].key);
-    }
-  }, [visibleTabs, tab]);
+    if (visibleTabs.length === 0 || visibleTabs.some((t) => t.key === tab)) return;
+    const preferred = defaultTabFor(stage, isAdmin);
+    setTab(visibleTabs.some((t) => t.key === preferred) ? preferred : visibleTabs.some((t) => t.key === "settings") ? "settings" : visibleTabs[0].key);
+  }, [visibleTabs, tab, stage, isAdmin]);
 
   if (!shell || !shell.isMod || !slug) return null;
 

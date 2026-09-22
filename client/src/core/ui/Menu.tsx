@@ -4,13 +4,13 @@ import type { ReactNode } from "react";
 export { MenuTrigger };
 
 /** Popover menu; pair with a `<Button>` inside `<MenuTrigger>`. */
-export function Menu<T extends object>({ instant, ...props }: MenuProps<T> & { instant?: boolean }) {
+export function Menu<T extends object>({ instant, popoverClassName = "", ...props }: MenuProps<T> & { instant?: boolean; popoverClassName?: string }) {
   return (
     <Popover
       placement="bottom end"
       offset={6}
       shouldSkipAnimation={instant}
-      className={`${instant ? "" : "overlay-panel"} min-w-44 rounded-md border border-outline bg-surface-raised p-1 shadow-pop outline-none`}
+      className={`${instant ? "" : "overlay-panel"} min-w-44 rounded-md border border-outline bg-surface-raised p-1 shadow-pop outline-none ${popoverClassName}`}
     >
       <AriaMenu {...props} className="outline-none" />
     </Popover>
