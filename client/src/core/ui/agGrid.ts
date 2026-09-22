@@ -17,6 +17,7 @@ import {
   EventApiModule,
   RenderApiModule,
   RowApiModule,
+  GridStateModule,
 } from "ag-grid-community";
 
 // Individually, not AllCommunityModule, to keep the bundle down (the client chunk is already ~1.2 MB).
@@ -34,6 +35,7 @@ ModuleRegistry.registerModules([
   EventApiModule,
   RenderApiModule,
   RowApiModule,
+  GridStateModule,
 ]);
 
 // Fails loudly (console + an on-grid overlay) on a missing module or misconfigured column, instead of the grid

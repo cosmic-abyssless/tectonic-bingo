@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import type { GridApi } from "ag-grid-community";
 import { formatSignupAnswer, type RosterEntry, type SignupQuestionType } from "@bingo/shared";
 import {
   useBingo,
@@ -19,6 +20,7 @@ import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { discordName, displayName } from "../ui/user";
 import { Button } from "../ui/Button";
 import { EmptyState, Notice, FilterChip } from "../ui/Card";
+import { ColumnPicker } from "../ui/ColumnPicker";
 import { Input } from "../ui/Field";
 import { AlertIcon, UsersIcon } from "../ui/icons";
 import { formatCaTier, formatWomStat } from "../signup/caStats";
@@ -221,6 +223,12 @@ export function SignupRoster({ slug }: { slug: string }) {
   // Set by the grid itself (onGridReady/onModelUpdated) — how many rows its search + filters currently leave
   // visible. Starts null (grid not mounted yet) so the search box shows totalCount rather than flashing "0 of N".
   const [displayedCount, setDisplayedCount] = useState<number | null>(null);
+  // The live GridApi (docs/ag-grid-tables-plan.md phase 4) — handed up by SignupRosterGrid via onApiReady so
+  // ColumnPicker, rendered here in the toolbar rather than inside the grid, can call setColumnsVisible. hidden
+  // mirrors the grid's own column-visibility state (updated from the same onStateUpdated that persists it), so a
+  // header-drag hide and a ColumnPicker toggle never disagree with each other.
+  const [gridApi, setGridApi] = useState<GridApi<RosterRow> | null>(null);
+  const [hiddenColumnIds, setHiddenColumnIds] = useState<Set<string>>(new Set());
 
   const activeCount = roster.filter((r) => r.signup.status === "active").length;
   const withdrawnCount = roster.length - activeCount;
@@ -264,6 +272,36 @@ export function SignupRoster({ slug }: { slug: string }) {
     [search, partnerRsnMap, canWithdraw, statsRefreshing, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats],
   );
 
+  // ColumnPicker's own option list — every colId the grid can show except RSN, which isn't optional (it's the
+  // only thing identifying a row). Community has no column-chooser menu of its own (docs/ag-grid-tables-plan.md),
+  // so this stays the UI; what it drives changed from a plain localStorage set to the grid's column-visibility
+  // state.
+  const columnOptions = useMemo(
+    () => [
+      { id: "order", label: "#" },
+      { id: "discord", label: "Discord" },
+      ...(showTier ? [{ id: "tier", label: "Tier" }] : []),
+      { id: "signedUp", label: "Signed up" },
+      { id: "status", label: "Status" },
+      { id: "caCurrent", label: "Current CA" },
+      { id: "caPeak", label: "Peak CA" },
+      { id: "ehb", label: "EHB" },
+      { id: "ehp", label: "EHP" },
+      { id: "buyin", label: "Buy-in" },
+      { id: "collectedBy", label: "Collected by" },
+      ...(isDuo ? [{ id: "partner", label: "Partner" }] : []),
+      ...questions.map((q) => ({ id: q.id, label: q.prompt })),
+    ],
+    [showTier, isDuo, questions],
+  );
+  function handleHiddenChange(next: Set<string>) {
+    if (!gridApi) return;
+    const toHide = [...next].filter((id) => !hiddenColumnIds.has(id));
+    const toShow = [...hiddenColumnIds].filter((id) => !next.has(id));
+    if (toHide.length > 0) gridApi.setColumnsVisible(toHide, false);
+    if (toShow.length > 0) gridApi.setColumnsVisible(toShow, true);
+  }
+
   async function copyCsv() {
     const csv = buildCsv(roster, questions, isDuo);
     await navigator.clipboard.writeText(csv);
@@ -292,6 +330,7 @@ export function SignupRoster({ slug }: { slug: string }) {
         </p>
         <div className="flex items-center gap-2">
           {roster.length > 0 && <TableSearchInput value={search} onChange={setSearch} matchCount={displayedCount ?? totalCount} totalCount={totalCount} />}
+          {roster.length > 0 && <ColumnPicker columns={columnOptions} hidden={hiddenColumnIds} onHiddenChange={handleHiddenChange} />}
           <Button size="sm" onPress={copyCsv} isDisabled={roster.length === 0}>
             {copied ? "Copied" : "Copy as CSV"}
           </Button>
@@ -331,6 +370,8 @@ export function SignupRoster({ slug }: { slug: string }) {
               collectedByOptions={collectedByOptions}
               doesRowPassFilters={doesRowPassFilters}
               onDisplayedCountChange={setDisplayedCount}
+              onApiReady={setGridApi}
+              onHiddenColumnsChange={setHiddenColumnIds}
               context={gridContext}
             />
           </div>

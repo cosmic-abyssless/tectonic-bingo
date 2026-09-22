@@ -10,10 +10,24 @@
 // each to a mutation, and the refetched query data flows back in as `rowData`. No react-aria Button/IconButton/
 // Select, no Truncate/Tooltip/Highlight from core/ui in here — AG does its own truncation and tooltips, and
 // Highlight's *logic* (not the component) is inlined below as `Mark`.
+//
+// Phase 4: column order/visibility/sizing are grid state (initialState/onStateUpdated), persisted to
+// localStorage, instead of the old useHiddenColumns. ColumnPicker stays the UI (Community has no column chooser
+// of its own) but now drives api.setColumnsVisible; the grid's own header drag handles reorder.
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type { CustomCellRendererProps } from "ag-grid-react";
-import type { CellEditRequestEvent, ColDef, GetRowIdParams, GridApi, GridReadyEvent, ModelUpdatedEvent, TooltipCallbackParams } from "ag-grid-community";
+import type {
+  CellEditRequestEvent,
+  ColDef,
+  GetRowIdParams,
+  GridApi,
+  GridReadyEvent,
+  GridState,
+  ModelUpdatedEvent,
+  StateUpdatedEvent,
+  TooltipCallbackParams,
+} from "ag-grid-community";
 import { formatSignupAnswer, type RosterEntry, type SignupQuestion } from "@bingo/shared";
 import type { useMarkBuyin, useModPair, useModUnpair, useModWithdrawSignup, useRefreshSignupStats } from "../../api/queries";
 import { gridTheme } from "../ui/agGrid";
@@ -250,6 +264,22 @@ const PartnerCell = memo(function PartnerCell({ data, context }: CustomCellRende
 // `width` rather than `maxWidth` — a maxWidth here blocked exactly that resize).
 const QUESTION_COLUMN_WIDTH = 192;
 
+// Column order/visibility/sizing only — not the rest of GridState (filter model, scroll position, …), which this
+// table doesn't want remembered across visits. Parsed defensively: a corrupt or pre-migration value (the old
+// table's pref:hiddenColumns:signupRoster is a different key and is left alone) just means no initial state.
+const GRID_STATE_KEY = "pref:gridState:signupRoster";
+
+function readInitialGridState(): GridState | undefined {
+  try {
+    const raw = localStorage.getItem(GRID_STATE_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as GridState) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function SignupRosterGrid({
   rows,
   questions,
@@ -258,6 +288,8 @@ export function SignupRosterGrid({
   collectedByOptions,
   doesRowPassFilters,
   onDisplayedCountChange,
+  onApiReady,
+  onHiddenColumnsChange,
   context,
 }: {
   rows: RosterRow[];
@@ -268,9 +300,14 @@ export function SignupRosterGrid({
   /** The buy-in/pair filter chips, as one predicate — see SignupRoster's matchesBuyin/matchesPair. */
   doesRowPassFilters: (row: RosterRow) => boolean;
   onDisplayedCountChange: (count: number) => void;
+  /** Hands the live GridApi up to SignupRoster so ColumnPicker (rendered in its toolbar, not in here) can call
+   * `setColumnsVisible` — null on unmount. */
+  onApiReady: (api: GridApi<RosterRow> | null) => void;
+  onHiddenColumnsChange: (hidden: Set<string>) => void;
   context: GridContext;
 }) {
   const gridApiRef = useRef<GridApi<RosterRow> | null>(null);
+  const [initialState] = useState(readInitialGridState);
 
   const unpairedActive = useMemo(() => rows.filter((r) => r.signup.status === "active" && !r.pairing), [rows]);
   const unpairedRefData = useMemo(() => {
@@ -372,10 +409,29 @@ export function SignupRosterGrid({
     (e: GridReadyEvent<RosterRow>) => {
       gridApiRef.current = e.api;
       onDisplayedCountChange(e.api.getDisplayedRowCount());
+      onApiReady(e.api);
     },
-    [onDisplayedCountChange],
+    [onDisplayedCountChange, onApiReady],
   );
+  // ColumnPicker (SignupRoster's toolbar) needs the api for setColumnsVisible, and needs to know it's gone once
+  // this unmounts (a bingo switch, a tab change) so it doesn't call a stale one.
+  useEffect(() => () => onApiReady(null), [onApiReady]);
   const onModelUpdated = useCallback((e: ModelUpdatedEvent<RosterRow>) => onDisplayedCountChange(e.api.getDisplayedRowCount()), [onDisplayedCountChange]);
+
+  // Column order/visibility/sizing survive a reload; ColumnPicker's `hidden` set comes from the same event so a
+  // header-drag hide/show and a ColumnPicker toggle stay in sync with each other.
+  const onStateUpdated = useCallback(
+    (e: StateUpdatedEvent<RosterRow>) => {
+      const { columnOrder, columnVisibility, columnSizing } = e.state;
+      try {
+        localStorage.setItem(GRID_STATE_KEY, JSON.stringify({ columnOrder, columnVisibility, columnSizing }));
+      } catch {
+        // Private browsing / storage quota — persistence is a nicety, not required.
+      }
+      onHiddenColumnsChange(new Set(columnVisibility?.hiddenColIds ?? []));
+    },
+    [onHiddenColumnsChange],
+  );
 
   // The buy-in/pair chips: always "present" — doesRowPassFilters is a no-op (returns true for everyone) when both
   // are "all", so there's no need to toggle isExternalFilterPresent on and off. Re-run explicitly: changing which
@@ -419,6 +475,8 @@ export function SignupRosterGrid({
         defaultColDef={defaultColDef}
         context={context}
         animateRows={false}
+        initialState={initialState}
+        onStateUpdated={onStateUpdated}
         onGridReady={onGridReady}
         onModelUpdated={onModelUpdated}
         quickFilterText={context.search}
