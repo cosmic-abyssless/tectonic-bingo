@@ -126,12 +126,13 @@ export function getPairingState(db: Db, bingoId: string, me: Participant) {
     return { user: user ? { ...user, rsn } : null, rsn };
   };
 
-  // Only worth mentioning while the player is unpaired, and only for endings
-  // they didn't choose themselves.
-  let lastOutcome: { status: "declined" | "dissolved"; other: ReturnType<typeof party> } | null = null;
+  // Only worth mentioning while the player is unpaired. "declined" is only shown to whoever got declined, not
+  // the decliner (who already knows) — "left" doesn't have that asymmetry (either half of the pairing could
+  // have been the one to leave, and the row itself doesn't record which), so it's shown to both regardless.
+  let lastOutcome: { status: "declined" | "dissolved" | "left"; other: ReturnType<typeof party> } | null = null;
   if (!accepted) {
     const last = rows.at(-1);
-    if (last && ((last.status === "declined" && last.requesterUserId === me.id) || last.status === "dissolved")) {
+    if (last && ((last.status === "declined" && last.requesterUserId === me.id) || last.status === "dissolved" || last.status === "left")) {
       lastOutcome = { status: last.status, other: party(otherParty(db, last, me)) };
     }
   }
@@ -239,6 +240,41 @@ export function cancelRequest(db: Db, bingo: Bingo, requester: Participant, pair
       details: { requesterUserId: requester.id, targetDiscordId: pairing.targetDiscordId },
     });
   });
+}
+
+// A player breaks up their own accepted pairing — either half can, unlike cancelRequest (requester-only, and
+// only while still pending). A distinct status ("left") from "dissolved", not a cause flag on it — dissolved
+// specifically means a *signup* went away (dissolveForUser, on withdrawal); here both signups stay active, only
+// the pairing between them ends, and getPairingState's lastOutcome needs to tell the two apart to say something
+// true ("no longer paired" vs. "they withdrew"). Not pairing.unpaired either — that one's mod-only ("split by a
+// mod"), which this isn't.
+export function leavePairing(db: Db, bingo: Bingo, participant: Participant, pairingId: string): void {
+  assertDuoSignupOpen(bingo);
+  db.transaction((tx) => {
+    const pairing = tx.select().from(signupPairings).where(eq(signupPairings.id, pairingId)).get();
+    if (!pairing || pairing.bingoId !== bingo.id) throw new ServiceError(404, "Pairing not found");
+    if (pairing.status !== "accepted") throw new ServiceError(400, "You're not paired");
+    if (pairing.requesterUserId !== participant.id && pairing.targetDiscordId !== participant.discordId) {
+      throw new ServiceError(403, "That isn't your pairing");
+    }
+    tx.update(signupPairings).set({ status: "left", respondedAt: clockNow() }).where(eq(signupPairings.id, pairingId)).run();
+    audit(tx, {
+      action: "pairing.left",
+      bingoId: bingo.id,
+      entity: { type: "pairing", id: pairingId },
+      details: { requesterUserId: pairing.requesterUserId, targetDiscordId: pairing.targetDiscordId },
+    });
+  });
+}
+
+// The signup form's one "remove this pairing" action — dispatches to whichever of cancelRequest (still pending,
+// requester only) or leavePairing (accepted, either half) actually applies, so the client needs only one
+// mutation/button regardless of which state the pairing happens to be in.
+export function removePairing(db: Db, bingo: Bingo, participant: Participant, pairingId: string): void {
+  const pairing = db.select({ status: signupPairings.status }).from(signupPairings).where(eq(signupPairings.id, pairingId)).get();
+  if (!pairing) throw new ServiceError(404, "Pairing not found");
+  if (pairing.status === "accepted") return leavePairing(db, bingo, participant, pairingId);
+  return cancelRequest(db, bingo, participant, pairingId);
 }
 
 export function respondToRequest(db: Db, bingo: Bingo, target: Participant, pairingId: string, accepted: boolean): Pairing {
