@@ -303,6 +303,10 @@ function StatusCell({ slug, entry, canWithdraw }: { slug: string; entry: RosterE
 type BuyinFilter = "all" | "paid" | "unpaid";
 type PairFilter = "all" | "paired" | "unpaired";
 
+// ~10 rows plus the header before the min-height floor kicks in. A row runs ~2.25rem (py-2 + text-sm) up to ~3rem
+// where a cell holds a size="sm" Select (Collected by, Partner) — 2.75rem/row is the rough middle.
+const MIN_TABLE_HEIGHT = "30rem";
+
 const BUYIN_FILTERS: { key: BuyinFilter; label: string }[] = [
   { key: "all", label: "All" },
   { key: "paid", label: "Paid" },
@@ -496,7 +500,7 @@ export function SignupRoster({ slug }: { slug: string }) {
           {sorted.length === 0 ? (
             <p className="text-sm text-on-surface-muted">No signups match {search ? "this search" : "these filters"}.</p>
           ) : (
-            <div ref={setTableWrapper} className="overflow-auto" style={{ maxHeight: tableMaxHeight, minHeight: "16rem" }}>
+            <div ref={setTableWrapper} className="overflow-auto" style={{ maxHeight: tableMaxHeight, minHeight: MIN_TABLE_HEIGHT }}>
               <table className="w-max min-w-full text-sm [&_td]:align-middle [&_th]:align-middle">
                 <thead>
                   <tr>
