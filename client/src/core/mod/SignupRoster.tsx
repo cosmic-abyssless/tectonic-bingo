@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { formatSignupAnswer, type RosterEntry, type SignupQuestionType, type User } from "@bingo/shared";
+import { memo, useMemo, useState } from "react";
+import { formatSignupAnswer, type BingoModerator, type RosterEntry, type SignupQuestionType, type User } from "@bingo/shared";
 import {
   useBingo,
   useBingoMods,
@@ -37,12 +37,38 @@ function csvEscape(value: string): string {
   return value;
 }
 
-function partnerRsn(entry: RosterEntry, roster: RosterEntry[]): string | null {
+// signup.id -> the other half's RSN, or "Not signed up yet" if a pairing
+// exists but nothing else in the roster shares its id. Built once per roster
+// (O(n): a pairing links exactly two people, so each group is tiny,
+// regardless of how large the roster is) rather than the O(n) scan a naive
+// "find the other row with this pairing.id" does — which, called once per
+// row (as it was, from both search and sort), made the whole table O(n²) on
+// every keystroke.
+export function buildPartnerRsnMap(roster: RosterEntry[]): Map<string, string> {
+  const byPairing = new Map<string, RosterEntry[]>();
+  for (const r of roster) {
+    if (!r.pairing) continue;
+    const group = byPairing.get(r.pairing.id);
+    if (group) group.push(r);
+    else byPairing.set(r.pairing.id, [r]);
+  }
+  const result = new Map<string, string>();
+  for (const group of byPairing.values()) {
+    for (const entry of group) {
+      const partner = group.find((o) => o.signup.id !== entry.signup.id);
+      result.set(entry.signup.id, partner ? partner.signup.rsn : "Not signed up yet");
+    }
+  }
+  return result;
+}
+
+function partnerRsn(entry: RosterEntry, partnerRsnMap: Map<string, string>): string | null {
   if (!entry.pairing) return null;
-  return roster.find((r) => r.pairing?.id === entry.pairing!.id && r.signup.id !== entry.signup.id)?.signup.rsn ?? "Not signed up yet";
+  return partnerRsnMap.get(entry.signup.id) ?? "Not signed up yet";
 }
 
 function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: string; type: SignupQuestionType }[], isDuo: boolean): string {
+  const partnerRsnMap = buildPartnerRsnMap(roster);
   const headers = [
     "#",
     "RSN",
@@ -74,14 +100,19 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
       formatWomStat(entry.womStats?.ehp),
       entry.signup.buyinReceivedAt ? "received" : "not received",
       entry.collectedByUser ? displayName(entry.collectedByUser) : "",
-      ...(isDuo ? [partnerRsn(entry, roster) ?? ""] : []),
+      ...(isDuo ? [partnerRsn(entry, partnerRsnMap) ?? ""] : []),
       ...questionPrompts.map((q) => formatSignupAnswer(q.type, answerByQ.get(q.id))),
     ];
   });
   return [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
 }
 
-function RefreshStatsButton({ slug, signupId, rsn, refreshing }: { slug: string; signupId: string; rsn: string; refreshing: boolean }) {
+// Each of these four is memo'd: none of them depend on the search box or the
+// buy-in/pair filters, but every keystroke re-renders SignupRoster — without
+// memo, all ~60+ instances of each would re-render (and CollectedByCell
+// would rebuild its mods list) on every character typed, for no reason tied
+// to their own props.
+const RefreshStatsButton = memo(function RefreshStatsButton({ slug, signupId, rsn, refreshing }: { slug: string; signupId: string; rsn: string; refreshing: boolean }) {
   const refresh = useRefreshSignupStats(slug);
   const busy = refresh.isPending || refreshing;
   return (
@@ -89,9 +120,9 @@ function RefreshStatsButton({ slug, signupId, rsn, refreshing }: { slug: string;
       <RefreshIcon size={12} className={busy ? "animate-spin" : undefined} />
     </IconButton>
   );
-}
+});
 
-function BuyinCell({ slug, entry }: { slug: string; entry: RosterEntry }) {
+const BuyinCell = memo(function BuyinCell({ slug, entry }: { slug: string; entry: RosterEntry }) {
   const markBuyin = useMarkBuyin(slug);
   const received = !!entry.signup.buyinReceivedAt;
 
@@ -105,22 +136,24 @@ function BuyinCell({ slug, entry }: { slug: string; entry: RosterEntry }) {
       <span className={`text-xs ${received ? "text-ok" : "text-on-surface-subtle"}`}>{received ? "Received" : "Not received"}</span>
     </label>
   );
-}
+});
 
 // Independent of the buy-in checkbox — a mod can set/change the collector at
 // any time while received is true. Disabled once buy-in is unmarked, since
 // markBuyin always clears the collector when received goes false.
-function CollectedByCell({ slug, entry }: { slug: string; entry: RosterEntry }) {
+// `mods` comes from the parent (one useBingoMods call, not one per row —
+// every row calling the hook independently meant every row separately
+// subscribed to, and re-rendered off, the same query).
+const CollectedByCell = memo(function CollectedByCell({ slug, entry, mods }: { slug: string; entry: RosterEntry; mods: BingoModerator[] }) {
   const markBuyin = useMarkBuyin(slug);
   const { user: me } = useAuth();
-  const { data } = useBingoMods(slug);
   const received = !!entry.signup.buyinReceivedAt;
 
   // Mods of this bingo, plus the viewer (a site admin need not be listed as a
   // mod) and whoever is already recorded, so the current value always has an
   // option to display.
   const options = new Map<string, User>();
-  for (const mod of data?.mods ?? []) options.set(mod.userId, mod.user);
+  for (const mod of mods) options.set(mod.userId, mod.user);
   if (me) options.set(me.id, me);
   if (entry.collectedByUser) options.set(entry.collectedByUser.id, entry.collectedByUser);
 
@@ -141,7 +174,7 @@ function CollectedByCell({ slug, entry }: { slug: string; entry: RosterEntry }) 
       ))}
     </Select>
   );
-}
+});
 
 // Dev-only — hidden unless AuthContext.devMode is true (the server route
 // this calls doesn't even exist outside that same dev gate). Lets a mod
@@ -202,7 +235,23 @@ function DevSeedPanel({ slug }: { slug: string }) {
 // row sharing the same pairing) with an unpair button; unpaired active
 // players get a picker of other unpaired active players so a mod can pair
 // them by hand.
-function PartnerCell({ slug, entry, roster, search }: { slug: string; entry: RosterEntry; roster: RosterEntry[]; search: string }) {
+// memo: doesn't depend on most of what makes SignupRoster re-render (a
+// buy-in filter click, the search box's own state) — only its own entry,
+// the shared lookups (stable references unless the roster itself changes)
+// and search (for highlighting the partner's name).
+const PartnerCell = memo(function PartnerCell({
+  slug,
+  entry,
+  partnerRsnMap,
+  unpairedActive,
+  search,
+}: {
+  slug: string;
+  entry: RosterEntry;
+  partnerRsnMap: Map<string, string>;
+  unpairedActive: RosterEntry[];
+  search: string;
+}) {
   const pair = useModPair(slug);
   const unpair = useModUnpair(slug);
   const [target, setTarget] = useState("");
@@ -218,7 +267,7 @@ function PartnerCell({ slug, entry, roster, search }: { slug: string; entry: Ros
   }
 
   if (entry.pairing) {
-    const partner = partnerRsn(entry, roster) ?? "";
+    const partner = partnerRsn(entry, partnerRsnMap) ?? "";
     return (
       <div className="flex items-center gap-1">
         <Truncate title={partner} className="text-on-surface">
@@ -234,7 +283,7 @@ function PartnerCell({ slug, entry, roster, search }: { slug: string; entry: Ros
 
   if (entry.signup.status !== "active") return <span className="text-on-surface-subtle">—</span>;
 
-  const candidates = roster.filter((r) => r.signup.status === "active" && !r.pairing && r.signup.id !== entry.signup.id);
+  const candidates = unpairedActive.filter((r) => r.signup.id !== entry.signup.id);
   return (
     <div className="flex items-center gap-2">
       <Select size="sm" value={target} onChange={(e) => setTarget(e.target.value)} aria-label={`Partner for ${entry.signup.rsn}`} className="w-auto!">
@@ -251,14 +300,14 @@ function PartnerCell({ slug, entry, roster, search }: { slug: string; entry: Ros
       {error && <span className="text-xs text-danger">{error}</span>}
     </div>
   );
-}
+});
 
 // "order" | "rsn" | "discord" | "status" | "buyin" | "collectedBy" | "partner" | a signup question's id.
 type SortKey = string;
 
 // Status badge plus, while the roster can still change, a two-step withdraw
 // button for removing no-shows on a player's behalf.
-function StatusCell({ slug, entry, canWithdraw }: { slug: string; entry: RosterEntry; canWithdraw: boolean }) {
+const StatusCell = memo(function StatusCell({ slug, entry, canWithdraw }: { slug: string; entry: RosterEntry; canWithdraw: boolean }) {
   const withdraw = useModWithdrawSignup(slug);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -298,7 +347,7 @@ function StatusCell({ slug, entry, canWithdraw }: { slug: string; entry: RosterE
       {error && <span className="text-xs text-danger">{error}</span>}
     </div>
   );
-}
+});
 
 type BuyinFilter = "all" | "paid" | "unpaid";
 type PairFilter = "all" | "paired" | "unpaired";
@@ -336,7 +385,7 @@ interface NumberedEntry {
   entry: RosterEntry;
 }
 
-function rosterSortValue({ order, entry }: NumberedEntry, key: SortKey, roster: RosterEntry[]): string | number {
+function rosterSortValue({ order, entry }: NumberedEntry, key: SortKey, partnerRsnMap: Map<string, string>): string | number {
   if (key === "order") return order;
   if (key === "rsn") return entry.signup.rsn.toLowerCase();
   if (key === "discord") return discordName(entry.user).toLowerCase();
@@ -350,13 +399,13 @@ function rosterSortValue({ order, entry }: NumberedEntry, key: SortKey, roster: 
   if (key === "collectedBy") return entry.collectedByUser ? displayName(entry.collectedByUser).toLowerCase() : "";
   // Paired rows first (sorted by partner), unpaired rows after — so the
   // column doubles as a paired/unpaired grouping.
-  if (key === "partner") return isPaired(entry) ? `0 ${(partnerRsn(entry, roster) ?? "").toLowerCase()}` : "1";
+  if (key === "partner") return isPaired(entry) ? `0 ${(partnerRsn(entry, partnerRsnMap) ?? "").toLowerCase()}` : "1";
   return (entry.answers.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
 }
 
 // Every column's text, whether or not it's currently shown — search covers
 // all of them (issue #112), not just what's visible.
-function rosterSearchValues(entry: RosterEntry, roster: RosterEntry[], questions: { id: string; type: SignupQuestionType }[]): string[] {
+function rosterSearchValues(entry: RosterEntry, partnerRsnMap: Map<string, string>, questions: { id: string; type: SignupQuestionType }[]): string[] {
   return [
     entry.signup.rsn,
     discordName(entry.user),
@@ -365,7 +414,7 @@ function rosterSearchValues(entry: RosterEntry, roster: RosterEntry[], questions
     formatCaTier(entry.caCurrent),
     formatCaTier(entry.caPeak),
     entry.collectedByUser ? displayName(entry.collectedByUser) : "",
-    partnerRsn(entry, roster) ?? "",
+    partnerRsn(entry, partnerRsnMap) ?? "",
     ...entry.answers.map((a) => formatSignupAnswer(questions.find((q) => q.id === a.questionId)?.type ?? "text", a.value)),
   ];
 }
@@ -374,10 +423,15 @@ export function SignupRoster({ slug }: { slug: string }) {
   const { data } = useSignupRoster(slug);
   const { data: questionsData } = useSignupQuestions(slug);
   const { data: bingoData } = useBingo(slug);
+  // One subscription for the whole table, not one per row — every
+  // CollectedByCell used to call this itself, so 63 rows meant 63 separate
+  // subscriptions to (and re-renders off) the very same query.
+  const { data: modsData } = useBingoMods(slug);
   const { devMode } = useAuth();
   const statsRefreshing = useStatsRefreshingSignupIds();
   const roster = data?.signups ?? [];
   const questions = questionsData?.questions ?? [];
+  const mods = useMemo(() => modsData?.mods ?? [], [modsData]);
   const isDuo = bingoData?.bingo.signupMode === "duo";
   const stage = bingoData?.bingo.stage;
   const canWithdraw = stage === "signup" || stage === "captains";
@@ -412,31 +466,48 @@ export function SignupRoster({ slug }: { slug: string }) {
   const leftoverMode = bingoData?.bingo.leftoverMode;
   // Clan standing column only when tectonic-api knows at least one player.
   const showTier = roster.some((r) => r.tectonicProfile);
-  const columnOptions = [
-    { id: "order", label: "#" },
-    { id: "discord", label: "Discord" },
-    ...(showTier ? [{ id: "tier", label: "Tier" }] : []),
-    { id: "signedUp", label: "Signed up" },
-    { id: "status", label: "Status" },
-    { id: "caCurrent", label: "Current CA" },
-    { id: "caPeak", label: "Peak CA" },
-    { id: "ehb", label: "EHB" },
-    { id: "ehp", label: "EHP" },
-    { id: "buyin", label: "Buy-in" },
-    { id: "collectedBy", label: "Collected by" },
-    ...(isDuo ? [{ id: "partner", label: "Partner" }] : []),
-    ...questions.map((q) => ({ id: q.id, label: q.prompt })),
-  ];
+  const columnOptions = useMemo(
+    () => [
+      { id: "order", label: "#" },
+      { id: "discord", label: "Discord" },
+      ...(showTier ? [{ id: "tier", label: "Tier" }] : []),
+      { id: "signedUp", label: "Signed up" },
+      { id: "status", label: "Status" },
+      { id: "caCurrent", label: "Current CA" },
+      { id: "caPeak", label: "Peak CA" },
+      { id: "ehb", label: "EHB" },
+      { id: "ehp", label: "EHP" },
+      { id: "buyin", label: "Buy-in" },
+      { id: "collectedBy", label: "Collected by" },
+      ...(isDuo ? [{ id: "partner", label: "Partner" }] : []),
+      ...questions.map((q) => ({ id: q.id, label: q.prompt })),
+    ],
+    [showTier, isDuo, questions],
+  );
   // Each chip's count reflects the other filter so the numbers show what
   // clicking it would leave on screen.
   const buyinCount = (f: BuyinFilter) => roster.filter((r) => matchesBuyin(r, f) && matchesPair(r, pairFilter)).length;
   const pairCount = (f: PairFilter) => roster.filter((r) => matchesPair(r, f) && matchesBuyin(r, buyinFilter)).length;
-  const searchable = roster
-    .map((entry, i) => ({ order: i + 1, entry }))
-    .filter(({ entry }) => matchesBuyin(entry, buyinFilter) && matchesPair(entry, pairFilter));
-  const sorted = searchable
-    .filter(({ entry }) => matchesSearch(rosterSearchValues(entry, roster, questions), search))
-    .sort((a, b) => sort.order(compareSortValues(rosterSortValue(a, sort.key, roster), rosterSortValue(b, sort.key, roster))));
+  // Both O(n), built once per roster rather than once per row (see
+  // buildPartnerRsnMap and the PartnerCell candidates list above) — with
+  // this table's search/sort recomputing on every keystroke, an O(n) scan
+  // per row made the whole thing O(n²) per keystroke.
+  const partnerRsnMap = useMemo(() => buildPartnerRsnMap(roster), [roster]);
+  const unpairedActive = useMemo(() => roster.filter((r) => r.signup.status === "active" && !r.pairing), [roster]);
+  const searchable = useMemo(
+    () => roster.map((entry, i) => ({ order: i + 1, entry })).filter(({ entry }) => matchesBuyin(entry, buyinFilter) && matchesPair(entry, pairFilter)),
+    [roster, buyinFilter, pairFilter],
+  );
+  // sort.order/sort.toggle are fresh closures every render (useTableSort
+  // doesn't memoize them) — depend on the primitives (sort.key, sort.dir)
+  // that actually decide the output, not the unstable sort object itself.
+  const sorted = useMemo(
+    () =>
+      searchable
+        .filter(({ entry }) => matchesSearch(rosterSearchValues(entry, partnerRsnMap, questions), search))
+        .sort((a, b) => sort.order(compareSortValues(rosterSortValue(a, sort.key, partnerRsnMap), rosterSortValue(b, sort.key, partnerRsnMap)))),
+    [searchable, search, partnerRsnMap, questions, sort.key, sort.dir],
+  );
 
   async function copyCsv() {
     const csv = buildCsv(roster, questions, isDuo);
@@ -591,12 +662,12 @@ export function SignupRoster({ slug }: { slug: string }) {
                         )}
                         {shown("collectedBy") && (
                           <td className="py-2 pr-4">
-                            <CollectedByCell slug={slug} entry={entry} />
+                            <CollectedByCell slug={slug} entry={entry} mods={mods} />
                           </td>
                         )}
                         {isDuo && shown("partner") && (
                           <td className="py-2 pr-4">
-                            <PartnerCell slug={slug} entry={entry} roster={roster} search={search} />
+                            <PartnerCell slug={slug} entry={entry} partnerRsnMap={partnerRsnMap} unpairedActive={unpairedActive} search={search} />
                           </td>
                         )}
                         {questions.filter((q) => shown(q.id)).map((q) => {
