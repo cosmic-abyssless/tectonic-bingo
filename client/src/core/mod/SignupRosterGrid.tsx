@@ -226,7 +226,8 @@ function readInitialGridState(): GridState | undefined {
     const raw = localStorage.getItem(GRID_STATE_KEY);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as unknown;
-    return stripPinnedFromOrder(parsed && typeof parsed === "object" ? (parsed as GridState) : undefined);
+    const state = stripPinnedFromOrder(parsed && typeof parsed === "object" ? (parsed as GridState) : undefined);
+    return state ? { ...state, partialColumnState: true } : undefined;
   } catch {
     return undefined;
   }
@@ -478,6 +479,7 @@ export function SignupRosterGrid({
         context={context}
         animateRows={false}
         initialState={initialState}
+        maintainColumnOrder
         onStateUpdated={onStateUpdated}
         onGridReady={onGridReady}
         onModelUpdated={onModelUpdated}
