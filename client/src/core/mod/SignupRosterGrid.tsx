@@ -58,6 +58,9 @@ export interface GridContext {
   partnerRsnMap: Map<string, string>;
   canWithdraw: boolean;
   statsRefreshing: ReadonlySet<string>;
+  /** Whoever's checking the buy-in box — defaults "Collected by" to them (below) rather than leaving it "Nobody
+   * yet" until a second, separate edit. Null only if somehow rendered before auth resolves. */
+  currentUserId: string | null;
   markBuyin: ReturnType<typeof useMarkBuyin>;
   modPair: ReturnType<typeof useModPair>;
   modUnpair: ReturnType<typeof useModUnpair>;
@@ -90,6 +93,11 @@ const RsnCell = memo(function RsnCell({ data, context }: CustomCellRendererProps
 const TierCell = memo(function TierCell({ data }: CustomCellRendererProps<RosterRow>) {
   if (!data?.tectonicProfile) return <span className="text-on-surface-subtle">—</span>;
   return <TierBadge profile={data.tectonicProfile} />;
+});
+
+const CollectedByCell = memo(function CollectedByCell({ data }: CustomCellRendererProps<RosterRow>) {
+  if (!data?.collectedByUser) return <span className="text-on-surface-subtle">Nobody yet</span>;
+  return <span>{displayName(data.collectedByUser)}</span>;
 });
 
 const CaCurrentCell = memo(function CaCurrentCell({ data, context }: CustomCellRendererProps<RosterRow, number, GridContext>) {
@@ -363,6 +371,7 @@ export function SignupRosterGrid({
         colId: "collectedBy",
         headerName: "Collected by",
         valueGetter: (p) => p.data?.collectedByUser?.id ?? "",
+        cellRenderer: CollectedByCell,
         refData: collectedByRefData,
         editable: (p) => !!p.data?.signup.buyinReceivedAt,
         cellEditor: "agSelectCellEditor",
@@ -461,7 +470,11 @@ export function SignupRosterGrid({
     const { colDef, data, newValue } = e;
     switch (colDef.colId) {
       case "buyin":
-        context.markBuyin.mutate({ signupId: data.signup.id, received: !!newValue });
+        // Checking the box defaults the collector to whoever's checking it — a mod who collected the GP and
+        // marked it received in one motion shouldn't then have to make a second edit just to say it was them.
+        // Still freely overridable via the "Collected by" cell itself (e.g. logging it for someone else).
+        // Unchecking clears it either way (markBuyin service forces collectedByUserId null when !received).
+        context.markBuyin.mutate({ signupId: data.signup.id, received: !!newValue, collectedByUserId: newValue ? context.currentUserId : undefined });
         break;
       case "collectedBy":
         context.markBuyin.mutate({ signupId: data.signup.id, received: true, collectedByUserId: (newValue as string) || null });
@@ -470,7 +483,7 @@ export function SignupRosterGrid({
         if (newValue) context.modPair.mutate({ userIdA: data.user.id, userIdB: newValue as string });
         break;
     }
-  }, [context.markBuyin, context.modPair]);
+  }, [context.markBuyin, context.modPair, context.currentUserId]);
 
   return (
     <div className="h-full min-h-0">

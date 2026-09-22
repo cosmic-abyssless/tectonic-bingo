@@ -294,8 +294,8 @@ export function SignupRoster({ slug }: { slug: string }) {
   const withdrawSignup = useModWithdrawSignup(slug);
   const refreshStats = useRefreshSignupStats(slug);
   const gridContext = useMemo<GridContext>(
-    () => ({ search, partnerRsnMap, canWithdraw, statsRefreshing, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats }),
-    [search, partnerRsnMap, canWithdraw, statsRefreshing, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats],
+    () => ({ search, partnerRsnMap, canWithdraw, statsRefreshing, currentUserId: me?.id ?? null, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats }),
+    [search, partnerRsnMap, canWithdraw, statsRefreshing, me, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats],
   );
 
   // ColumnPicker's own option list — every colId the grid can show except # and RSN, neither of which is
