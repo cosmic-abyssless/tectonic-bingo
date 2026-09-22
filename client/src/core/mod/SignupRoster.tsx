@@ -1,7 +1,21 @@
 import { useCallback, useMemo, useState } from "react";
 import { formatSignupAnswer, type RosterEntry, type SignupQuestionType } from "@bingo/shared";
-import { useBingo, useDeleteAllSignups, useSeedTestSignups, useSignupRoster, useSignupQuestions, type SeedTestSignupsResponse } from "../../api/queries";
+import {
+  useBingo,
+  useBingoMods,
+  useDeleteAllSignups,
+  useMarkBuyin,
+  useModPair,
+  useModUnpair,
+  useModWithdrawSignup,
+  useRefreshSignupStats,
+  useSeedTestSignups,
+  useSignupRoster,
+  useSignupQuestions,
+  type SeedTestSignupsResponse,
+} from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
+import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { discordName, displayName } from "../ui/user";
 import { Button } from "../ui/Button";
 import { EmptyState, Notice, FilterChip } from "../ui/Card";
@@ -11,7 +25,7 @@ import { formatCaTier, formatWomStat } from "../signup/caStats";
 import { useDocumentTop } from "../ui/tableChrome";
 import { TableSearchInput, useTableSearch } from "../ui/tableSearch";
 import { formatTierName } from "../tectonic/profile";
-import { SignupRosterGrid, type RosterRow } from "./SignupRosterGrid";
+import { SignupRosterGrid, type GridContext, type RosterRow } from "./SignupRosterGrid";
 
 function csvEscape(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
@@ -175,10 +189,19 @@ export function SignupRoster({ slug }: { slug: string }) {
   const { data } = useSignupRoster(slug);
   const { data: questionsData } = useSignupQuestions(slug);
   const { data: bingoData } = useBingo(slug);
-  const { devMode } = useAuth();
+  // One subscription for the whole table, not one per row — every CollectedByCell used to call this itself, so
+  // 63 rows meant 63 separate subscriptions to (and re-renders off) the very same query.
+  const { data: modsData } = useBingoMods(slug);
+  const { user: me, devMode } = useAuth();
+  const statsRefreshing = useStatsRefreshingSignupIds();
   const roster = data?.signups ?? [];
   const questions = questionsData?.questions ?? [];
+  const mods = useMemo(() => modsData?.mods ?? [], [modsData]);
   const isDuo = bingoData?.bingo.signupMode === "duo";
+  const stage = bingoData?.bingo.stage;
+  const canWithdraw = stage === "signup" || stage === "captains";
+  // Clan standing column only when tectonic-api knows at least one player.
+  const showTier = roster.some((r) => r.tectonicProfile);
   const [copied, setCopied] = useState(false);
   const [buyinFilter, setBuyinFilter] = useState<BuyinFilter>("all");
   const [pairFilter, setPairFilter] = useState<PairFilter>("all");
@@ -215,6 +238,31 @@ export function SignupRoster({ slug }: { slug: string }) {
   // the grid just to know how many rows the chips alone leave.
   const totalCount = roster.filter((r) => matchesBuyin(r, buyinFilter) && matchesPair(r, pairFilter)).length;
   const rows = useMemo<RosterRow[]>(() => roster.map((entry, i) => ({ ...entry, order: i + 1 })), [roster]);
+
+  // O(n), built once per roster rather than once per row — see buildPartnerRsnMap's own comment.
+  const partnerRsnMap = useMemo(() => buildPartnerRsnMap(roster), [roster]);
+
+  // Mods of this bingo, plus the viewer (a site admin need not be listed as a mod) and whoever is already
+  // recorded as a collector — so a row whose collector isn't a *current* mod still has an option to display.
+  const collectedByOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const mod of mods) byId.set(mod.userId, displayName(mod.user));
+    if (me) byId.set(me.id, displayName(me));
+    for (const r of roster) if (r.collectedByUser) byId.set(r.collectedByUser.id, displayName(r.collectedByUser));
+    return [...byId.entries()].map(([id, label]) => ({ id, label }));
+  }, [mods, me, roster]);
+
+  // Interactive grid cells (docs/ag-grid-tables-plan.md phase 3) call these mutations through context rather than
+  // each calling its own hook — that alone removes ~380 hook instances from a full 63-row mount.
+  const markBuyin = useMarkBuyin(slug);
+  const modPair = useModPair(slug);
+  const modUnpair = useModUnpair(slug);
+  const withdrawSignup = useModWithdrawSignup(slug);
+  const refreshStats = useRefreshSignupStats(slug);
+  const gridContext = useMemo<GridContext>(
+    () => ({ search, partnerRsnMap, canWithdraw, statsRefreshing, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats }),
+    [search, partnerRsnMap, canWithdraw, statsRefreshing, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats],
+  );
 
   async function copyCsv() {
     const csv = buildCsv(roster, questions, isDuo);
@@ -275,7 +323,16 @@ export function SignupRoster({ slug }: { slug: string }) {
             )}
           </div>
           <div ref={setTableWrapper} className="overflow-hidden" style={{ height: tableHeight, minHeight: MIN_TABLE_HEIGHT }}>
-            <SignupRosterGrid rows={rows} questions={questions} search={search} doesRowPassFilters={doesRowPassFilters} onDisplayedCountChange={setDisplayedCount} />
+            <SignupRosterGrid
+              rows={rows}
+              questions={questions}
+              isDuo={isDuo}
+              showTier={showTier}
+              collectedByOptions={collectedByOptions}
+              doesRowPassFilters={doesRowPassFilters}
+              onDisplayedCountChange={setDisplayedCount}
+              context={gridContext}
+            />
           </div>
         </>
       )}
