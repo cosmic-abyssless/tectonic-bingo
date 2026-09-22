@@ -137,7 +137,14 @@ export function AuditLog({ slug }: { slug: string }) {
   const teamOptions = useMemo(() => (shell?.teams ?? []).map((t) => ({ key: t.id, label: t.name })), [shell]);
   const categories = inclusionFilter(excludedCategories, CATEGORIES);
   const teams = inclusionFilter(excludedTeams, teamOptions);
-  const actors = inclusionFilter(excludedActors, [...actorNames.keys()].map((key) => ({ key })));
+  // Alphabetical, not `actorNames`' own insertion order (which is recency — whichever actor's entry was scanned
+  // first) — this has to match actorOptionsFrom's sort below, since it's what `selected` derives its key order
+  // from. A mismatch there doesn't affect filtering (a Set), but it does confuse the picker's dropdown: react-aria
+  // anchors keyboard/initial focus off the *selected* keys' own order, not the rendered list's, so a differently-
+  // ordered `selected` had the dropdown opening focused (and auto-scrolled) to some arbitrary actor instead of the
+  // alphabetically-first one actually shown at the top.
+  const actorKeys = useMemo(() => [...actorNames.keys()].sort((a, b) => (actorNames.get(a) ?? "").localeCompare(actorNames.get(b) ?? "")), [actorNames]);
+  const actors = inclusionFilter(excludedActors, actorKeys.map((key) => ({ key })));
 
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useAuditLog(slug, {
     category: categories.query as AuditCategory[] | undefined,

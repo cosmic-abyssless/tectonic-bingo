@@ -1,9 +1,23 @@
+import { useLayoutEffect, useRef } from "react";
 import { Menu as AriaMenu, MenuItem as AriaMenuItem, MenuTrigger, Popover, type MenuItemProps, type MenuProps } from "react-aria-components";
 
 export { MenuTrigger };
 
 /** Popover menu; pair with a `<Button>` inside `<MenuTrigger>`. */
 export function Menu<T extends object>({ instant, popoverClassName = "", ...props }: MenuProps<T> & { instant?: boolean; popoverClassName?: string }) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Belt-and-suspenders on top of autoFocus="first" below: that alone turned out not to be reliable here — react-
+  // aria's own focus-strategy resolution can still land the menu's real focused key on some arbitrary item (e.g.
+  // whatever was last hovered/focused the previous time this menu was open), and focusing that off-screen item
+  // auto-scrolls the just-opened menu straight to it, same bug as before just from a different cause. The menu
+  // fully unmounts on close (no leftover DOM between opens), so this mount-only effect reruns on every open, and
+  // — because child effects flush before the parent's own — it runs after react-aria's internal focus/scroll
+  // effects inside <AriaMenu>, so it wins and reliably lands the menu scrolled to the top.
+  useLayoutEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = 0;
+  }, []);
+
   return (
     <Popover
       placement="bottom end"
@@ -14,14 +28,8 @@ export function Menu<T extends object>({ instant, popoverClassName = "", ...prop
       {/* max-h/overflow here, not just left to the Popover's own viewport-fit sizing — that constrains the panel
           height (so it stays on-screen) but doesn't add a scrollbar; without this, an option list too long for
           the popover's max-height was simply clipped, not scrollable — the options past that point were there,
-          just invisible and unreachable.
-          autoFocus="first": react-aria's own default (unset) focuses the current *selection*'s anchor key on
-          open, not the top of the list — with most/all of a multiselect's options checked (this app's own
-          "everything checked = All" convention), that's some arbitrary key partway through, and focusing it
-          auto-scrolls the still-just-opened menu straight to it. Forced to the actual first item instead, same
-          as a menu with nothing selected would already do. `props` is spread after, so a caller can still
-          override it. */}
-      <AriaMenu autoFocus="first" {...props} className="max-h-120 overflow-y-auto outline-none" />
+          just invisible and unreachable. `props` is spread after, so a caller can still override autoFocus. */}
+      <AriaMenu ref={listRef} autoFocus="first" {...props} className="max-h-120 overflow-y-auto outline-none" />
     </Popover>
   );
 }
