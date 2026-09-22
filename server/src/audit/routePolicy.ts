@@ -70,6 +70,8 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "POST /api/admin/item-groups": ["item_group.created"],
   "PATCH /api/admin/item-groups/:id": ["item_group.updated"],
   "DELETE /api/admin/item-groups/:id": ["item_group.deleted"],
+  "POST /api/admin/wom-competitions": ["wom_past_competition.added"],
+  "DELETE /api/admin/wom-competitions/:id": ["wom_past_competition.deleted"],
   "PATCH /api/admin/bug-reports/:id": ["bug_report.resolved"],
 
   // routes/bugReports.ts, mounted at /api/bug-reports

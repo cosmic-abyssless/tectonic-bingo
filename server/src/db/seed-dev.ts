@@ -8,7 +8,7 @@ import type { GraphNode, GraphNodeInput } from '@bingo/shared';
 import { db } from './index';
 import {
   users, bingos, bingoModerators, tileCategories,
-  teams, teamMembers,
+  teams, teamMembers, signups,
   signupQuestions, itemGroups, itemGroupItems,
 } from './schema';
 import { createTile, createTask, generateLines } from '../services/boardService';
@@ -231,6 +231,17 @@ async function main() {
   await db.insert(teamMembers).values([
     { teamId: teamBeta.id, userId: captainB.id, isCaptain: true },
     { teamId: teamBeta.id, userId: memberB.id, isCaptain: false },
+  ]);
+
+  // RSN a player is named by inside a bingo (CONTEXT.md) — team members get
+  // one straight onto the team above, but a real draft always goes through a
+  // signup first. Without this row there's nothing for RSN-based tooling
+  // (mock-wom-competition, issue #133) to match against.
+  await db.insert(signups).values([
+    { bingoId: bingo.id, userId: captainA.id, rsn: 'CaptainAlpha' },
+    { bingoId: bingo.id, userId: memberA.id, rsn: 'MemberAlpha' },
+    { bingoId: bingo.id, userId: captainB.id, rsn: 'CaptainBeta' },
+    { bingoId: bingo.id, userId: memberB.id, rsn: 'MemberBeta' },
   ]);
 
   await db.insert(signupQuestions).values([

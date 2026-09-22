@@ -320,6 +320,43 @@ export const itemGroupItems = sqliteTable('item_group_items', {
   uniqueIndex('item_group_items_group_name_unq').on(t.groupId, t.itemName),
 ]);
 
+// ---------------------------------------------------------------------------
+// WOM PAST COMPETITIONS (issue #128)
+// ---------------------------------------------------------------------------
+
+// A snapshot of one Wise Old Man competition's final results, persisted so
+// per-player EHP/EHB gains from a bingo survive after WOM's own record of it
+// (which the platform doesn't control) changes or disappears. Not scoped to
+// a bingo row: guildId + womId is the natural key, so a pre-platform bingo's
+// competition (added by hand from the admin panel) can be stored the same
+// way as one this platform ran itself.
+export const womPastCompetitions = sqliteTable('wom_past_competitions', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  // DISCORD_GUILD_ID at fetch time — forward-looking scoping column for a
+  // still-hypothetical multi-guild deployment; every row today shares one value.
+  guildId: text('guild_id').notNull(),
+  womId: integer('wom_id').notNull(),
+  // Set only when this competition was auto-archived from a platform bingo
+  // reaching `complete` (bingoService/routes/mod.ts). Null for one an admin
+  // added by hand for a bingo that predates (or never used) this platform.
+  bingoId: text('bingo_id').references(() => bingos.id),
+  title: text('title').notNull(),
+  metric: text('metric').notNull(),
+  startsAt: integer('starts_at', { mode: 'timestamp' }).notNull(),
+  endsAt: integer('ends_at', { mode: 'timestamp' }).notNull(),
+  participantCount: integer('participant_count').notNull().default(0),
+  // Verbatim GET /competitions/{id} response (participations with each
+  // player's gained EHP/EHB) — parsed by whatever future feature displays
+  // it, same convention as signups.womDataJson.
+  dataJson: text('data_json').notNull(),
+  fetchedAt: integer('fetched_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  // Who triggered a manual add; null for an automatic archive (actor "system").
+  addedByUserId: text('added_by_user_id').references(() => users.id),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => [
+  uniqueIndex('wom_past_competitions_guild_wom_unq').on(t.guildId, t.womId),
+]);
+
 // Site-wide bug reports, submitted from the header button on any page. Not
 // scoped to a bingo — a bug can happen anywhere in the app.
 export const bugReports = sqliteTable('bug_reports', {

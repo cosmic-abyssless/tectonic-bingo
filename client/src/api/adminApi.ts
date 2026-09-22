@@ -1,6 +1,6 @@
 import type {
   Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, SignupQuestion, Team,
-  TeamMember, Tile, TileCategory, User,
+  TeamMember, Tile, TileCategory, User, WomPastCompetition,
 } from "@bingo/shared";
 import { api } from "./client";
 
@@ -38,6 +38,16 @@ export function updateItemGroup(id: string, payload: Partial<{ name: string; des
 }
 export function deleteItemGroup(id: string) {
   return api.delete(`/api/admin/item-groups/${id}`);
+}
+
+export function getPastWomCompetitions() {
+  return api.get<{ competitions: WomPastCompetition[] }>("/api/admin/wom-competitions");
+}
+export function addPastWomCompetition(womId: number) {
+  return api.post<{ competition: WomPastCompetition }>("/api/admin/wom-competitions", { womId });
+}
+export function deletePastWomCompetition(id: string) {
+  return api.delete(`/api/admin/wom-competitions/${id}`);
 }
 
 export function getBugReports() {

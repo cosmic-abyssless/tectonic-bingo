@@ -308,6 +308,21 @@ describe("deleteBingo", () => {
   it("404s for an unknown bingo", () => {
     expect(() => deleteBingo(db, "nope")).toThrow(ServiceError);
   });
+
+  it("detaches (not deletes) a past WOM competition row instead of leaving a dangling FK", () => {
+    const bingo = seedBingo({ stage: "complete" });
+    const competition = db
+      .insert(schema.womPastCompetitions)
+      .values({ guildId: "g", womId: 1, bingoId: bingo.id, title: "T", metric: "ehp", startsAt: new Date(), endsAt: new Date(), dataJson: "{}" })
+      .returning()
+      .get();
+
+    deleteBingo(db, bingo.id);
+
+    const row = db.select().from(schema.womPastCompetitions).where(eq(schema.womPastCompetitions.id, competition.id)).get();
+    expect(row).toBeDefined();
+    expect(row?.bingoId).toBeNull();
+  });
 });
 
 describe("audit trail", () => {

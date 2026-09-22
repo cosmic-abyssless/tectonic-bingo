@@ -15,6 +15,7 @@
     "db:reset": "npm run db:wipe && npm run db:generate && npm run db:migrate && npm run db:seed:dev",
     "generate-bingo": "tsx scripts/generate-bingo/generate.ts",
     "generate-bingo:teardown": "tsx scripts/generate-bingo/teardown.ts",
+    "mock-wom-competition": "tsx scripts/mock-wom-competition.ts",
     "typecheck:scripts": "tsc --noEmit -p scripts/tsconfig.json",
     "test": "vitest run"
   },

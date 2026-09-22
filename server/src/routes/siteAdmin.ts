@@ -8,6 +8,7 @@ import * as bingoService from "../services/bingoService";
 import * as bingoExportService from "../services/bingoExportService";
 import * as itemGroupService from "../services/itemGroupService";
 import * as bugReportService from "../services/bugReportService";
+import * as pastWomCompetitionService from "../services/pastWomCompetitionService";
 import * as userService from "../services/userService";
 import { ServiceError } from "../services/errors";
 import { queryAuditLog } from "../audit/query";
@@ -143,6 +144,34 @@ router.delete(
   "/item-groups/:id",
   asyncHandler(async (req, res) => {
     itemGroupService.deleteItemGroup(db, req.params.id as string);
+    res.status(204).end();
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Past WOM competitions — global, one snapshot per (guild, WOM competition)
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/wom-competitions",
+  asyncHandler(async (_req, res) => {
+    res.json({ competitions: pastWomCompetitionService.listPastCompetitions(db) });
+  }),
+);
+router.post(
+  "/wom-competitions",
+  asyncHandler(async (req, res) => {
+    const { womId } = req.body as { womId?: number | string };
+    const parsedWomId = Number(womId);
+    if (!womId || !Number.isInteger(parsedWomId) || parsedWomId <= 0) throw new ServiceError(400, "womId must be a positive integer");
+    const competition = await pastWomCompetitionService.addPastCompetition(db, { womId: parsedWomId, addedByUserId: req.user!.id });
+    res.status(201).json({ competition });
+  }),
+);
+router.delete(
+  "/wom-competitions/:id",
+  asyncHandler(async (req, res) => {
+    pastWomCompetitionService.deletePastCompetition(db, req.params.id as string);
     res.status(204).end();
   }),
 );
