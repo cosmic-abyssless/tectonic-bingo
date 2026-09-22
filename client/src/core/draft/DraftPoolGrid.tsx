@@ -12,7 +12,7 @@
 // popover) because the reason that rule exists — many heavy interactive components × many rows made the signup
 // roster's mount slow — doesn't apply here (one rating widget per row, a pool that's typically a few dozen units
 // at most, not 60+).
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type { CustomCellRendererProps } from "ag-grid-react";
 import type {
@@ -601,6 +601,19 @@ export function DraftPoolGrid({
     },
     [hiddenColumns],
   );
+
+  // Every column whose LineRender uses Mark (search-match highlighting) — matches SignupRosterGrid's own
+  // refreshCells-on-search effect, for the same reason: `rows` (rowData) filters to the same DraftUnit *objects*
+  // as the search narrows, so a unit that already matched keeps the exact same object reference across
+  // keystrokes. AG's diffing sees "this row's data didn't change" and skips re-rendering its cells — a custom
+  // renderer reading a *prop* like context.search never learns the query grew from "co" to "cosmic" unless told
+  // to. Without this, a row picks up whatever the query happened to be the moment it first matched (often just
+  // the first character or two) and never updates again, which is exactly the "only highlights the first couple
+  // characters" bug this fixes.
+  const markColumnIds = useMemo(() => ["rsn", "discord", ...questions.map((q) => q.id)], [questions]);
+  useEffect(() => {
+    gridApiRef.current?.refreshCells({ force: true, columns: markColumnIds });
+  }, [search, markColumnIds]);
 
   if (pool.length === 0) return <p className="text-sm text-on-surface-subtle">No one left to draft.</p>;
 
