@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
-import { dissolveForUser, getAcceptedPairs } from "./pairingService";
+import { dissolveForUser, getAcceptedPairs, getPendingOutgoingPairs } from "./pairingService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 import { rsnsInBingo } from "./playerNames";
@@ -369,6 +369,7 @@ export function getAllSignups(db: Db, bingoId: string) {
   for (const { pairing, userIds } of getAcceptedPairs(db, bingoId)) {
     for (const userId of userIds) pairingByUserId.set(userId, pairing);
   }
+  const outgoingRequestByUserId = new Map(getPendingOutgoingPairs(db, bingoId).map((r) => [r.requesterUserId, { pairing: r.pairing, target: r.target }]));
 
   return rows.map((r) => {
     const womSummary = parseWomSummary(r.womDataJson ? JSON.parse(r.womDataJson) : null);
@@ -378,6 +379,7 @@ export function getAllSignups(db: Db, bingoId: string) {
       answers: answers.filter((a) => a.signupId === r.signup.id),
       collectedByUser: r.signup.buyinCollectedByUserId ? (collectorById.get(r.signup.buyinCollectedByUserId) ?? null) : null,
       pairing: pairingByUserId.get(r.signup.userId) ?? null,
+      outgoingPairingRequest: outgoingRequestByUserId.get(r.signup.userId) ?? null,
       caCurrent: parseStoredCaStats(r.caCurrentJson),
       caPeak: parseStoredCaStats(r.caPeakJson),
       womStats: womSummary ? { ehb: womSummary.ehb, ehp: womSummary.ehp } : null,

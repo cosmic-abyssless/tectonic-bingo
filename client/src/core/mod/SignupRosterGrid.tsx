@@ -28,7 +28,7 @@ import type {
   StateUpdatedEvent,
   TooltipCallbackParams,
 } from "ag-grid-community";
-import { formatSignupAnswer, type RosterEntry, type SignupQuestion } from "@bingo/shared";
+import { formatSignupAnswer, type PairingParty, type RosterEntry, type SignupQuestion } from "@bingo/shared";
 import type { useMarkBuyin, useModPair, useModUnpair, useModWithdrawSignup, useRefreshSignupStats } from "../../api/queries";
 import { gridTheme } from "../ui/agGrid";
 import { discordName, displayName } from "../ui/user";
@@ -164,9 +164,17 @@ const StatusCell = memo(function StatusCell({ data, context }: CustomCellRendere
   );
 });
 
+// Best name we have for a pending pairing request's target — same resolution as the requester's own signup page
+// (getPairingState's `outgoing.target`), except a mod may be looking at someone who hasn't signed up, or even
+// logged in, yet, so there's no RSN/Discord info to fall back on either.
+function requestTargetName(target: PairingParty): string {
+  return target.rsn ?? (target.user ? displayName(target.user) : "someone");
+}
+
 // Duo mode only. Paired rows show the partner's name (highlighted) + an unpair button. Unpaired active rows show
-// a hint; picking a partner happens through AG's own edit gesture (double-click → agSelectCellEditor), which is
-// why there is no "Pair" button here the way the old table had one.
+// a hint — who they've asked, if anyone, else that they can be paired; picking a partner happens through AG's own
+// edit gesture (double-click → agSelectCellEditor), which is why there is no "Pair" button here the way the old
+// table had one.
 const PartnerCell = memo(function PartnerCell({ data, context }: CustomCellRendererProps<RosterRow, string, GridContext>) {
   const [error, setError] = useState<string | null>(null);
   if (!data) return null;
@@ -200,6 +208,14 @@ const PartnerCell = memo(function PartnerCell({ data, context }: CustomCellRende
   }
 
   if (data.signup.status !== "active") return <span className="text-on-surface-subtle">—</span>;
+  if (data.outgoingPairingRequest) {
+    const targetName = requestTargetName(data.outgoingPairingRequest.target);
+    return (
+      <span className="min-w-0 truncate text-on-surface-subtle" title={`Waiting for ${targetName} to accept`}>
+        Requested {targetName}
+      </span>
+    );
+  }
   return <span className="text-on-surface-subtle">Double-click to pair</span>;
 });
 

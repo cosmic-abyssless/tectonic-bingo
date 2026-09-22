@@ -553,6 +553,10 @@ export interface RosterEntry {
   collectedByUser?: User | null;
   // Duo mode, mod roster only: the accepted pairing this player is in.
   pairing?: SignupPairing | null;
+  // Duo mode, mod roster only: this player's own outstanding request to pair with someone, before it's been
+  // accepted/declined. `target` is resolved the same as MyPairingResponse's own `outgoing.target` — RSN once
+  // they've signed up, else their Discord name, else null if they haven't even logged in yet.
+  outgoingPairingRequest?: { pairing: SignupPairing; target: PairingParty } | null;
   // Mod roster only: undrafted and not fitting a full draft round (see LeftoverMode).
   leftover?: boolean;
   // Mod roster only: clan standing from tectonic-api; null when the player

@@ -92,6 +92,13 @@ function otherParty(db: Db, pairing: Pairing, me: Participant): MinimalUser | nu
   return pairing.requesterUserId === me.id ? userByDiscordId(db, pairing.targetDiscordId) : userById(db, pairing.requesterUserId);
 }
 
+// A pairing party as the client should see them — RSN once they've signed up (the roster's own naming
+// convention, see playerNames.ts), else whatever Discord info we have, else null if they haven't logged in.
+function party(db: Db, bingoId: string, user: MinimalUser | null) {
+  const rsn = signupRsn(db, bingoId, user);
+  return { user: user ? { ...user, rsn } : null, rsn };
+}
+
 export function getAcceptedPairing(db: Db, bingoId: string, p: Participant): Pairing | null {
   return (
     db
@@ -114,17 +121,25 @@ export function getAcceptedPairs(db: Db, bingoId: string): { pairing: Pairing; u
   return rows.map((r) => ({ pairing: r.pairing, userIds: [r.pairing.requesterUserId, r.targetUserId] }));
 }
 
+// Every still-pending request in the bingo, each with its requester's userId and the resolved target — the mod
+// roster's "who's waiting on whom" hint. Unlike getAcceptedPairs, the target is resolved even when they haven't
+// signed up (or ever logged in) — a mod still benefits from seeing who was asked, same as `party` already lets a
+// requester see it on their own signup page via getPairingState's `outgoing`.
+export function getPendingOutgoingPairs(db: Db, bingoId: string): { pairing: Pairing; requesterUserId: string; target: ReturnType<typeof party> }[] {
+  const rows = db
+    .select()
+    .from(signupPairings)
+    .where(and(eq(signupPairings.bingoId, bingoId), eq(signupPairings.status, "pending")))
+    .all();
+  return rows.map((pairing) => ({ pairing, requesterUserId: pairing.requesterUserId, target: party(db, bingoId, userByDiscordId(db, pairing.targetDiscordId)) }));
+}
+
 // Everything the signup page needs to render the player's pairing situation.
 export function getPairingState(db: Db, bingoId: string, me: Participant) {
   const rows = pairingsFor(db, bingoId, me);
   const accepted = rows.find((p) => p.status === "accepted") ?? null;
   const outgoing = rows.find((p) => p.status === "pending" && p.requesterUserId === me.id) ?? null;
   const incoming = rows.filter((p) => p.status === "pending" && p.targetDiscordId === me.discordId);
-
-  const party = (user: MinimalUser | null) => {
-    const rsn = signupRsn(db, bingoId, user);
-    return { user: user ? { ...user, rsn } : null, rsn };
-  };
 
   // Only worth mentioning while the player is unpaired. "declined" is only shown to whoever got declined, not
   // the decliner (who already knows) — "left" doesn't have that asymmetry (either half of the pairing could
@@ -133,14 +148,14 @@ export function getPairingState(db: Db, bingoId: string, me: Participant) {
   if (!accepted) {
     const last = rows.at(-1);
     if (last && ((last.status === "declined" && last.requesterUserId === me.id) || last.status === "dissolved" || last.status === "left")) {
-      lastOutcome = { status: last.status, other: party(otherParty(db, last, me)) };
+      lastOutcome = { status: last.status, other: party(db, bingoId, otherParty(db, last, me)) };
     }
   }
 
   return {
-    partner: accepted ? { pairing: accepted, ...party(otherParty(db, accepted, me)) } : null,
-    outgoing: outgoing ? { pairing: outgoing, target: party(userByDiscordId(db, outgoing.targetDiscordId)) } : null,
-    incoming: incoming.map((pairing) => ({ pairing, requester: party(userById(db, pairing.requesterUserId)) })),
+    partner: accepted ? { pairing: accepted, ...party(db, bingoId, otherParty(db, accepted, me)) } : null,
+    outgoing: outgoing ? { pairing: outgoing, target: party(db, bingoId, userByDiscordId(db, outgoing.targetDiscordId)) } : null,
+    incoming: incoming.map((pairing) => ({ pairing, requester: party(db, bingoId, userById(db, pairing.requesterUserId)) })),
     lastOutcome,
   };
 }
