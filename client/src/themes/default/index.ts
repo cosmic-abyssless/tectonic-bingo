@@ -20,6 +20,7 @@ import { SubmissionsDrawer } from "./page/SubmissionsDrawer";
 import { TeamInfoDialog } from "../../core/teams/TeamInfoDialog";
 import { PointBreakdownDialog } from "../../core/teams/PointBreakdownDialog";
 import { Dialog, DialogHeader } from "../../core/ui/Dialog";
+import { Picker } from "../../core/ui/Picker";
 import { BoardGrid } from "./board/BoardGrid";
 import { RowLabel } from "./board/RowLabel";
 import { EmptyCell } from "./board/EmptyCell";
@@ -66,6 +67,7 @@ export const defaultTheme: ThemeDefinition = {
     PointBreakdownDialog,
     DialogFrame: Dialog,
     DialogHeader,
+    PickerFrame: Picker,
     BoardGrid,
     RowLabel,
     EmptyCell,

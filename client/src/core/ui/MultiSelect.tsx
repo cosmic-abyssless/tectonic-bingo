@@ -1,7 +1,4 @@
-import type { Key, Selection } from "react-aria-components";
-import { Button } from "./Button";
-import { ChevronDownIcon } from "./icons";
-import { Menu, MenuItem, MenuTrigger } from "./Menu";
+import { usePickerParts } from "./usePickerParts";
 
 export interface MultiSelectOption {
   key: string;
@@ -21,32 +18,19 @@ export function MultiSelect({
   selected: string[];
   onChange: (keys: string[]) => void;
 }) {
-  const selectedSet = new Set(selected);
+  const { Picker } = usePickerParts();
   const summary =
-    selected.length === 0
+    selected.length === options.length
       ? "All"
-      : selected.length === 1
-        ? (options.find((o) => o.key === selected[0])?.label ?? selected[0])
-        : `${selected.length} selected`;
-
-  function handleSelectionChange(keys: Selection) {
-    onChange(keys === "all" ? options.map((o) => o.key) : [...keys].map((k: Key) => String(k)));
-  }
+      : selected.length === 0
+        ? "None"
+        : selected.length === 1
+          ? (options.find((o) => o.key === selected[0])?.label ?? selected[0])
+          : `${selected.length} selected`;
 
   return (
-    <MenuTrigger>
-      <Button variant="secondary" size="sm" className={selected.length > 0 ? "border-on-surface" : ""}>
-        <span className="text-on-surface-subtle">{label}:</span> {summary}
-        <ChevronDownIcon size={14} />
-      </Button>
-      <Menu selectionMode="multiple" shouldCloseOnSelect={false} selectedKeys={selectedSet} onSelectionChange={handleSelectionChange} items={options}>
-        {(option) => (
-          <MenuItem id={option.key} textValue={option.label}>
-            <span className="min-w-0 flex-1 truncate">{option.label}</span>
-            {option.count !== undefined && option.count > 0 && <span className="num text-on-surface-subtle">{option.count}</span>}
-          </MenuItem>
-        )}
-      </Menu>
-    </MenuTrigger>
+    <Picker options={options} selectedKeys={new Set(selected)} selectionMode="multiple" onSelectionChange={onChange}>
+      {label}: <span className="text-on-surface-subtle">{summary}</span>
+    </Picker>
   );
 }

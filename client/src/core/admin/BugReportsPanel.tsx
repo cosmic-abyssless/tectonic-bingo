@@ -5,7 +5,7 @@ import type { Bingo, BugReportWithReporter } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { adminQueryKeys, useBugReports } from "../../api/adminQueries";
 import { useBingos } from "../../api/queries";
-import { Badge, Card, CardHeader, Notice } from "../ui/Card";
+import { Badge, Notice } from "../ui/Card";
 import { Button } from "../ui/Button";
 import { timeAgo } from "../ui/time";
 import { displayName } from "../ui/user";
@@ -60,18 +60,15 @@ export function BugReportsPanel() {
   const reports = data?.bugReports ?? [];
   const bingoById = useMemo(() => new Map((bingosData?.bingos ?? []).map((b) => [b.id, b])), [bingosData]);
 
-  return (
-    <Card className="w-full max-w-2xl">
-      <CardHeader title="Bug reports" description="Submitted from the header button on any page." />
-      {isLoading ? (
-        <p className="px-5 pb-5 text-sm text-on-surface-muted">Loading…</p>
-      ) : reports.length === 0 ? (
-        <p className="px-5 pb-5 text-sm text-on-surface-subtle">No bug reports yet.</p>
-      ) : (
-        <ul className="divide-y divide-outline border-t border-outline">
-          {reports.map((r) => <BugReportRow key={r.id} report={r} bingo={r.bingoId ? (bingoById.get(r.bingoId) ?? null) : null} />)}
-        </ul>
-      )}
-    </Card>
+  return isLoading ? (
+    <p className="text-sm text-on-surface-muted">Loading…</p>
+  ) : reports.length === 0 ? (
+    <p className="text-sm text-on-surface-subtle">No bug reports yet.</p>
+  ) : (
+    <ul className="-mx-4 -mb-4 divide-y divide-outline border-t border-outline">
+      {reports.map((r) => (
+        <BugReportRow key={r.id} report={r} bingo={r.bingoId ? (bingoById.get(r.bingoId) ?? null) : null} />
+      ))}
+    </ul>
   );
 }
