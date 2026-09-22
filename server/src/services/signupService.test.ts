@@ -6,6 +6,7 @@ import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createQuestion, deleteQuestion, reorderQuestions, updateQuestion } from "./signupService";
 import { createSignup, getAllSignups, getSignupForUser, markBuyin, updateSignup, withdrawSignup } from "./signupService";
+import { cancelRequest, requestPairing } from "./pairingService";
 import { ServiceError } from "./errors";
 import { createTeam } from "./teamService";
 
@@ -287,6 +288,41 @@ describe("getAllSignups / markBuyin", () => {
     markBuyin(db, bingo, signup.id, { received: false, recordedByUserId: adminId });
     const withoutCollector = getAllSignups(db, bingo.id);
     expect(withoutCollector[0].collectedByUser).toBeNull();
+  });
+
+  it("exposes a player's outstanding pairing request, resolved to the target's RSN", () => {
+    const { bingo, memberId } = seedBingo({ signupMode: "duo" });
+    createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "MyRsn", answers: [] });
+    const [target] = db.insert(schema.users).values({ discordId: "target", discordUsername: "target" }).returning().all();
+    createSignup(db, bingo, { bingoId: bingo.id, userId: target.id, rsn: "TargetRsn", answers: [] });
+
+    const pairing = requestPairing(db, bingo, { requester: { id: memberId, discordId: "member" }, targetDiscordId: "target" });
+
+    const roster = getAllSignups(db, bingo.id);
+    const me = roster.find((r) => r.user.id === memberId)!;
+    expect(me.outgoingPairingRequest?.pairing.id).toBe(pairing.id);
+    expect(me.outgoingPairingRequest?.target.rsn).toBe("TargetRsn");
+    // Not `pairing` — that stays null until the target accepts; a pending request is its own, separate thing.
+    expect(me.pairing).toBeNull();
+  });
+
+  it("still resolves the request target when they haven't signed up, or even logged in, yet", () => {
+    const { bingo, memberId } = seedBingo({ signupMode: "duo" });
+    createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "MyRsn", answers: [] });
+    db.insert(schema.users).values({ discordId: "loggedInOnly", discordUsername: "LoggedInOnly" }).run();
+    requestPairing(db, bingo, { requester: { id: memberId, discordId: "member" }, targetDiscordId: "loggedInOnly" });
+
+    const loggedInOnly = getAllSignups(db, bingo.id).find((r) => r.user.id === memberId)!;
+    expect(loggedInOnly.outgoingPairingRequest?.target.rsn).toBeNull();
+    expect(loggedInOnly.outgoingPairingRequest?.target.user?.discordUsername).toBe("LoggedInOnly");
+
+    // Cancel that one, then request someone with no user row at all — the fully unresolved case.
+    cancelRequest(db, bingo, { id: memberId, discordId: "member" }, loggedInOnly.outgoingPairingRequest!.pairing.id);
+    requestPairing(db, bingo, { requester: { id: memberId, discordId: "member" }, targetDiscordId: "neverLoggedIn" });
+
+    const neverLoggedIn = getAllSignups(db, bingo.id).find((r) => r.user.id === memberId)!;
+    expect(neverLoggedIn.outgoingPairingRequest?.target.user).toBeNull();
+    expect(neverLoggedIn.outgoingPairingRequest?.target.rsn).toBeNull();
   });
 });
 

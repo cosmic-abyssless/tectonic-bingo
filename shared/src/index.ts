@@ -553,6 +553,10 @@ export interface RosterEntry {
   collectedByUser?: User | null;
   // Duo mode, mod roster only: the accepted pairing this player is in.
   pairing?: SignupPairing | null;
+  // Duo mode, mod roster only: this player's own outstanding request to pair with someone, before it's been
+  // accepted/declined. `target` is resolved the same as MyPairingResponse's own `outgoing.target` — RSN once
+  // they've signed up, else their Discord name, else null if they haven't even logged in yet.
+  outgoingPairingRequest?: { pairing: SignupPairing; target: PairingParty } | null;
   // Mod roster only: undrafted and not fitting a full draft round (see LeftoverMode).
   leftover?: boolean;
   // Mod roster only: clan standing from tectonic-api; null when the player
@@ -594,7 +598,7 @@ export interface TectonicProfileRecord {
 // Duo signups
 // ---------------------------------------------------------------------------
 
-export type PairingStatus = "pending" | "accepted" | "declined" | "cancelled" | "dissolved";
+export type PairingStatus = "pending" | "accepted" | "declined" | "cancelled" | "dissolved" | "left";
 
 export interface SignupPairing {
   id: string;
@@ -634,9 +638,10 @@ export interface MyPairingResponse {
   outgoing: { pairing: SignupPairing; target: PairingParty } | null;
   // Pending requests made to the player.
   incoming: { pairing: SignupPairing; requester: PairingParty }[];
-  // Why the player is currently unpaired, when their last pairing ended
-  // without them choosing to: a partner declined, or a partner withdrew.
-  lastOutcome: { status: "declined" | "dissolved"; other: PairingParty } | null;
+  // Why the player is currently unpaired: a partner declined (shown only to whoever was declined), a partner
+  // withdrew their signup ("dissolved"), or either half ended the pairing directly while staying signed up
+  // ("left" — shown to both, since the row doesn't record which of them it was).
+  lastOutcome: { status: "declined" | "dissolved" | "left"; other: PairingParty } | null;
 }
 
 export interface RosterResponse {

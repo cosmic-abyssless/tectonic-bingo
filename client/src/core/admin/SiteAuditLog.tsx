@@ -37,7 +37,10 @@ export function SiteAuditLog() {
   const bingoScopeOptions = useMemo(() => [{ key: "all", label: "All bingos" }, { key: "null", label: "Site-wide only" }, ...bingos.map((b) => ({ key: b.id, label: b.name }))], [bingos]);
   const [actorNames, rememberActors] = useActorCatalog("site");
   const categories = inclusionFilter(excludedCategories, CATEGORIES);
-  const actors = inclusionFilter(excludedActors, [...actorNames.keys()].map((key) => ({ key })));
+  // Alphabetical, matching actorOptionsFrom's sort below — see the same line in core/mod/AuditLog.tsx for why an
+  // order mismatch between `selected` and the rendered options confuses the picker dropdown's initial focus/scroll.
+  const actorKeys = useMemo(() => [...actorNames.keys()].sort((a, b) => (actorNames.get(a) ?? "").localeCompare(actorNames.get(b) ?? "")), [actorNames]);
+  const actors = inclusionFilter(excludedActors, actorKeys.map((key) => ({ key })));
 
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useSiteAuditLog(bingoScope, {
     category: categories.query as AuditCategory[] | undefined,

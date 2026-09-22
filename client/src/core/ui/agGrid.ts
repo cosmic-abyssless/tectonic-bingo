@@ -1,5 +1,6 @@
 // One-time AG Grid setup (docs/ag-grid-tables-plan.md): module registration and the shared theme. Imported once
-// from main.tsx — a table component only needs to import gridTheme, never registers a module itself.
+// from main.tsx — a table component only needs to call useGridTheme(), never registers a module itself.
+import { useMemo } from "react";
 import {
   ModuleRegistry,
   enableDevValidations,
@@ -19,6 +20,7 @@ import {
   RowApiModule,
   GridStateModule,
 } from "ag-grid-community";
+import { useResolvedColorScheme } from "./colorScheme";
 
 // Individually, not AllCommunityModule, to keep the bundle down (the client chunk is already ~1.2 MB).
 ModuleRegistry.registerModules([
@@ -45,7 +47,7 @@ if (import.meta.env.DEV) enableDevValidations();
 // Every value is one of the app's tokens (client/src/index.css) — never a literal colour, per the design-tokens
 // rule. --color-surface-muted does not exist (tableChrome.tsx's STRIPE_ODD references it, which is a pre-existing
 // bug — see the AG Grid plan doc); oddRowBackgroundColor here uses the real --color-surface-hover token instead.
-export const gridTheme = themeQuartz.withParams({
+const baseGridTheme = themeQuartz.withParams({
   backgroundColor: "var(--color-surface)",
   foregroundColor: "var(--color-on-surface)",
   headerBackgroundColor: "var(--color-surface)",
@@ -70,3 +72,17 @@ export const gridTheme = themeQuartz.withParams({
   checkboxCheckedBorderColor: "var(--color-ok)",
   checkboxCheckedShapeColor: "var(--color-on-accent)",
 });
+
+/**
+ * The grid theme, with AG's own `browserColorScheme` param kept in sync with the app's live light/dark
+ * preference. Every other param above is a CSS variable, so it already repaints correctly on its own when the
+ * app's theme changes — this one doesn't, because it isn't a colour: it sets the actual CSS `color-scheme`
+ * property on AG's own internal DOM, which is what tells the *browser* whether to render that DOM's native
+ * controls (checkboxes, and critically the internal scrollbar AG relies on the browser for — see
+ * core/mod/SignupRosterGrid.tsx's own scrollbar investigation) in light or dark chrome. Unset, AG defaults it to
+ * light regardless of the app's own theme — that's why the grid's scrollbar didn't match the page's.
+ */
+export function useGridTheme() {
+  const scheme = useResolvedColorScheme();
+  return useMemo(() => baseGridTheme.withParams({ browserColorScheme: scheme }), [scheme]);
+}

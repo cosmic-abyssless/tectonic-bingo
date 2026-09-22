@@ -150,6 +150,7 @@ export interface AuditDetailsMap {
   "pairing.declined": { requesterUserId: string; targetDiscordId: string };
   "pairing.cancelled": { requesterUserId: string; targetDiscordId: string };
   "pairing.dissolved": { requesterUserId: string; targetDiscordId: string; cause?: "withdrawal" };
+  "pairing.left": { requesterUserId: string; targetDiscordId: string };
   "pairing.admin_paired": { userIds: string[]; displayNames: string[] };
   "pairing.unpaired": { userIds: string[]; displayNames: string[] };
 
@@ -513,6 +514,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     title: "Duo pairing dissolved",
     label: (i) => `A duo pairing was dissolved${i.details.cause === "withdrawal" ? " (partner withdrew)" : ""}`,
   },
+  "pairing.left": { category: "signup", tone: "warn", visibility: "mods", title: "Duo pairing left", label: (i) => `${actor(i)} left a duo pairing` },
   "pairing.admin_paired": { category: "signup", tone: "ok", visibility: "mods", title: "Duo pairing created by a mod", label: (i) => `${actor(i)} paired ${i.details.displayNames.join(" & ")}` },
   "pairing.unpaired": { category: "signup", tone: "warn", visibility: "mods", title: "Duo pairing split by a mod", label: (i) => `${actor(i)} split up ${i.details.displayNames.join(" & ")}` },
   "signup.created": { category: "signup", tone: "ok", visibility: "mods", title: "Signup created", label: (i) => `${actor(i)} signed up as ${i.details.rsn}${i.details.reactivated ? " (re-signup)" : ""}` },

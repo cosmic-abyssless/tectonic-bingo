@@ -1,9 +1,23 @@
+import { useLayoutEffect, useRef } from "react";
 import { Menu as AriaMenu, MenuItem as AriaMenuItem, MenuTrigger, Popover, type MenuItemProps, type MenuProps } from "react-aria-components";
 
 export { MenuTrigger };
 
 /** Popover menu; pair with a `<Button>` inside `<MenuTrigger>`. */
 export function Menu<T extends object>({ instant, popoverClassName = "", ...props }: MenuProps<T> & { instant?: boolean; popoverClassName?: string }) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Belt-and-suspenders on top of autoFocus="first" below: that alone turned out not to be reliable here — react-
+  // aria's own focus-strategy resolution can still land the menu's real focused key on some arbitrary item (e.g.
+  // whatever was last hovered/focused the previous time this menu was open), and focusing that off-screen item
+  // auto-scrolls the just-opened menu straight to it, same bug as before just from a different cause. The menu
+  // fully unmounts on close (no leftover DOM between opens), so this mount-only effect reruns on every open, and
+  // — because child effects flush before the parent's own — it runs after react-aria's internal focus/scroll
+  // effects inside <AriaMenu>, so it wins and reliably lands the menu scrolled to the top.
+  useLayoutEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = 0;
+  }, []);
+
   return (
     <Popover
       placement="bottom end"
@@ -11,16 +25,28 @@ export function Menu<T extends object>({ instant, popoverClassName = "", ...prop
       shouldSkipAnimation={instant}
       className={`${instant ? "" : "overlay-panel"} min-w-44 rounded-md border border-outline bg-surface-raised p-1 shadow-pop outline-none ${popoverClassName}`}
     >
-      <AriaMenu {...props} className="outline-none" />
+      {/* max-h/overflow here, not just left to the Popover's own viewport-fit sizing — that constrains the panel
+          height (so it stays on-screen) but doesn't add a scrollbar; without this, an option list too long for
+          the popover's max-height was simply clipped, not scrollable — the options past that point were there,
+          just invisible and unreachable. `props` is spread after, so a caller can still override autoFocus. */}
+      <AriaMenu ref={listRef} autoFocus="first" {...props} className="max-h-120 overflow-y-auto outline-none" />
     </Popover>
   );
 }
 
-export function MenuItem({ children, className, ...props }: MenuItemProps) {
+const MENU_ITEM_VARIANT = {
+  // A regular, selectable/actionable row.
+  option: "text-sm text-on-surface-muted hover:text-on-surface focus:text-on-surface selected:text-on-surface",
+  // A row that acts on the *list* rather than being part of it — a picker's "Select all"/"Deselect all", say.
+  // Deliberately reads as a smaller, quieter control, not one more option to scan past — see Picker.tsx.
+  action: "text-xs font-medium text-on-surface-subtle hover:text-on-surface focus:text-on-surface",
+} as const;
+
+export function MenuItem({ children, className, variant = "option", ...props }: MenuItemProps & { variant?: keyof typeof MENU_ITEM_VARIANT }) {
   return (
     <AriaMenuItem
       {...props}
-      className={`flex cursor-default items-center gap-2 rounded-sm px-2.5 py-1.5 text-sm text-on-surface-muted outline-none hover:bg-surface-hover hover:text-on-surface focus:bg-surface-hover focus:text-on-surface selected:text-on-surface disabled:opacity-40 ${className ?? ""}`}
+      className={`flex cursor-default items-center gap-2 rounded-sm px-2.5 py-1.5 outline-none hover:bg-surface-hover focus:bg-surface-hover disabled:opacity-40 ${MENU_ITEM_VARIANT[variant]} ${className ?? ""}`}
     >
       {children}
     </AriaMenuItem>

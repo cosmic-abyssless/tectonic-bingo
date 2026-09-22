@@ -456,12 +456,14 @@ router.post(
   }),
 );
 
+// Removes a pairing regardless of its state: cancels it if still pending (requester only), leaves it if already
+// accepted (either half) — see pairingService.removePairing for the dispatch.
 router.delete(
   "/:slug/signup/pairing/:pairingId",
   requireAuth,
   requireBingo,
   asyncHandler(async (req, res) => {
-    pairingService.cancelRequest(db, req.bingo!, me(req), req.params.pairingId as string);
+    pairingService.removePairing(db, req.bingo!, me(req), req.params.pairingId as string);
     broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.status(204).end();
   }),

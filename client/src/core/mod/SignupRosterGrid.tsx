@@ -28,9 +28,9 @@ import type {
   StateUpdatedEvent,
   TooltipCallbackParams,
 } from "ag-grid-community";
-import { formatSignupAnswer, type RosterEntry, type SignupQuestion } from "@bingo/shared";
+import { formatSignupAnswer, type PairingParty, type RosterEntry, type SignupQuestion } from "@bingo/shared";
 import type { useMarkBuyin, useModPair, useModUnpair, useModWithdrawSignup, useRefreshSignupStats } from "../../api/queries";
-import { gridTheme } from "../ui/agGrid";
+import { useGridTheme } from "../ui/agGrid";
 import { discordName, displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { Badge } from "../ui/Card";
@@ -58,6 +58,9 @@ export interface GridContext {
   partnerRsnMap: Map<string, string>;
   canWithdraw: boolean;
   statsRefreshing: ReadonlySet<string>;
+  /** Whoever's checking the buy-in box — defaults "Collected by" to them (below) rather than leaving it "Nobody
+   * yet" until a second, separate edit. Null only if somehow rendered before auth resolves. */
+  currentUserId: string | null;
   markBuyin: ReturnType<typeof useMarkBuyin>;
   modPair: ReturnType<typeof useModPair>;
   modUnpair: ReturnType<typeof useModUnpair>;
@@ -90,6 +93,11 @@ const RsnCell = memo(function RsnCell({ data, context }: CustomCellRendererProps
 const TierCell = memo(function TierCell({ data }: CustomCellRendererProps<RosterRow>) {
   if (!data?.tectonicProfile) return <span className="text-on-surface-subtle">—</span>;
   return <TierBadge profile={data.tectonicProfile} />;
+});
+
+const CollectedByCell = memo(function CollectedByCell({ data }: CustomCellRendererProps<RosterRow>) {
+  if (!data?.collectedByUser) return <span className="text-on-surface-subtle">Nobody yet</span>;
+  return <span>{displayName(data.collectedByUser)}</span>;
 });
 
 const CaCurrentCell = memo(function CaCurrentCell({ data, context }: CustomCellRendererProps<RosterRow, number, GridContext>) {
@@ -156,9 +164,17 @@ const StatusCell = memo(function StatusCell({ data, context }: CustomCellRendere
   );
 });
 
+// Best name we have for a pending pairing request's target — same resolution as the requester's own signup page
+// (getPairingState's `outgoing.target`), except a mod may be looking at someone who hasn't signed up, or even
+// logged in, yet, so there's no RSN/Discord info to fall back on either.
+function requestTargetName(target: PairingParty): string {
+  return target.rsn ?? (target.user ? displayName(target.user) : "someone");
+}
+
 // Duo mode only. Paired rows show the partner's name (highlighted) + an unpair button. Unpaired active rows show
-// a hint; picking a partner happens through AG's own edit gesture (double-click → agSelectCellEditor), which is
-// why there is no "Pair" button here the way the old table had one.
+// a hint — who they've asked, if anyone, else that they can be paired; picking a partner happens through AG's own
+// edit gesture (double-click → agSelectCellEditor), which is why there is no "Pair" button here the way the old
+// table had one.
 const PartnerCell = memo(function PartnerCell({ data, context }: CustomCellRendererProps<RosterRow, string, GridContext>) {
   const [error, setError] = useState<string | null>(null);
   if (!data) return null;
@@ -192,6 +208,14 @@ const PartnerCell = memo(function PartnerCell({ data, context }: CustomCellRende
   }
 
   if (data.signup.status !== "active") return <span className="text-on-surface-subtle">—</span>;
+  if (data.outgoingPairingRequest) {
+    const targetName = requestTargetName(data.outgoingPairingRequest.target);
+    return (
+      <span className="min-w-0 truncate text-on-surface-subtle" title={`Waiting for ${targetName} to accept`}>
+        Requested {targetName}
+      </span>
+    );
+  }
   return <span className="text-on-surface-subtle">Double-click to pair</span>;
 });
 
@@ -259,6 +283,7 @@ export function SignupRosterGrid({
   onHiddenColumnsChange: (hidden: Set<string>) => void;
   context: GridContext;
 }) {
+  const gridTheme = useGridTheme();
   const gridApiRef = useRef<GridApi<RosterRow> | null>(null);
   const [initialState] = useState(readInitialGridState);
 
@@ -274,6 +299,23 @@ export function SignupRosterGrid({
     return refData;
   }, [collectedByOptions]);
   const collectedByValues = useMemo(() => ["", ...collectedByOptions.map((o) => o.id)], [collectedByOptions]);
+
+  // Read via these refs (kept current below, every render) rather than closed over directly in columnDefs — both
+  // change reference on every roster refetch (a signup gets paired, a buy-in gets marked, ...), which is most
+  // interactions here. Baking either straight into a colDef would force the whole columnDefs array to a new
+  // identity right along with them, and AG Grid treats *any* columnDefs identity change as "these columns are
+  // new", silently resetting every column's width back to its colDef default — including ones with no connection
+  // to whatever actually changed (EHP resetting because a different row's buy-in got checked, say). Since
+  // `cellEditorParams`/`valueFormatter` are read lazily (at edit-open / render time, not at colDef-build time), a
+  // stable ref lets them stay current without columnDefs ever needing to know these values changed at all.
+  const unpairedActiveRef = useRef(unpairedActive);
+  unpairedActiveRef.current = unpairedActive;
+  const unpairedRefDataRef = useRef(unpairedRefData);
+  unpairedRefDataRef.current = unpairedRefData;
+  const collectedByRefDataRef = useRef(collectedByRefData);
+  collectedByRefDataRef.current = collectedByRefData;
+  const collectedByValuesRef = useRef(collectedByValues);
+  collectedByValuesRef.current = collectedByValues;
 
   const columnDefs = useMemo<ColDef<RosterRow>[]>(() => {
     // Each `width` below is a starting size sized to its typical content (an RSN, a tier name, a checkbox), not
@@ -363,10 +405,14 @@ export function SignupRosterGrid({
         colId: "collectedBy",
         headerName: "Collected by",
         valueGetter: (p) => p.data?.collectedByUser?.id ?? "",
-        refData: collectedByRefData,
+        cellRenderer: CollectedByCell,
+        // Not `refData: collectedByRefData` (a static object baked at colDef-build time) — see the refs' own
+        // comment above. Only the agSelectCellEditor's dropdown labels need this now; the cell's own display
+        // reads data.collectedByUser directly via CollectedByCell, not through refData/valueFormatter.
+        valueFormatter: (p) => collectedByRefDataRef.current[p.value as string] ?? p.value,
         editable: (p) => !!p.data?.signup.buyinReceivedAt,
         cellEditor: "agSelectCellEditor",
-        cellEditorParams: { values: collectedByValues },
+        cellEditorParams: () => ({ values: collectedByValuesRef.current }),
         width: 150,
       },
       isDuo && {
@@ -377,9 +423,11 @@ export function SignupRosterGrid({
         editable: (p) => !p.data?.pairing && p.data?.signup.status === "active",
         cellEditor: "agSelectCellEditor",
         cellEditorParams: (p: { data?: RosterRow }) => ({
-          values: ["", ...unpairedActive.filter((r) => r.signup.id !== p.data?.signup.id).map((r) => r.user.id)],
+          values: ["", ...unpairedActiveRef.current.filter((r) => r.signup.id !== p.data?.signup.id).map((r) => r.user.id)],
         }),
-        refData: unpairedRefData,
+        // Not `refData: unpairedRefData` — same reasoning as "collectedBy" above. PartnerCell (the cellRenderer)
+        // already handles the cell's own display without this; only the editor's dropdown labels need it.
+        valueFormatter: (p) => unpairedRefDataRef.current[p.value as string] ?? p.value,
         width: 180,
       },
     ];
@@ -393,7 +441,10 @@ export function SignupRosterGrid({
       },
     }));
     return [...cols.filter((c): c is ColDef<RosterRow> => c !== false), ...questionCols];
-  }, [questions, isDuo, showTier, collectedByRefData, collectedByValues, unpairedActive, unpairedRefData]);
+    // collectedByRefData/collectedByValues/unpairedActive/unpairedRefData deliberately excluded — read via the
+    // refs above instead, precisely so their (frequent) changes don't force columnDefs to a new identity. See
+    // that comment for why a new columnDefs identity is the actual problem being avoided here.
+  }, [questions, isDuo, showTier]);
 
   // tooltip/headerTooltip: true shows the cell's own formatted value / the header's own name. tooltipShowMode
   // ("whenTruncated") is grid-wide only, not per column (no way to opt individual columns in/out), and several
@@ -461,7 +512,11 @@ export function SignupRosterGrid({
     const { colDef, data, newValue } = e;
     switch (colDef.colId) {
       case "buyin":
-        context.markBuyin.mutate({ signupId: data.signup.id, received: !!newValue });
+        // Checking the box defaults the collector to whoever's checking it — a mod who collected the GP and
+        // marked it received in one motion shouldn't then have to make a second edit just to say it was them.
+        // Still freely overridable via the "Collected by" cell itself (e.g. logging it for someone else).
+        // Unchecking clears it either way (markBuyin service forces collectedByUserId null when !received).
+        context.markBuyin.mutate({ signupId: data.signup.id, received: !!newValue, collectedByUserId: newValue ? context.currentUserId : undefined });
         break;
       case "collectedBy":
         context.markBuyin.mutate({ signupId: data.signup.id, received: true, collectedByUserId: (newValue as string) || null });
@@ -470,7 +525,7 @@ export function SignupRosterGrid({
         if (newValue) context.modPair.mutate({ userIdA: data.user.id, userIdB: newValue as string });
         break;
     }
-  }, [context.markBuyin, context.modPair]);
+  }, [context.markBuyin, context.modPair, context.currentUserId]);
 
   return (
     <div className="h-full min-h-0">

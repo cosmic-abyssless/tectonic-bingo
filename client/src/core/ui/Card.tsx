@@ -8,8 +8,9 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
 // Themeable via --font-heading/--font-heading-weight (set by ThemeProvider
 // from tokens.chrome.headingFont/headingWeight); both fall back to a no-op
 // (this element's own weight class) outside a themed page, or when a theme
-// sets a font but not a weight.
-const HEADING_FONT: CSSProperties = { fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" };
+// sets a font but not a weight. Exported so other headings (Disclosure's own
+// title, when it stands in for a CardHeader — see SignupForm) theme the same way.
+export const HEADING_FONT: CSSProperties = { fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" };
 
 export function CardHeader({ title, description, action }: { title: ReactNode; description?: ReactNode; action?: ReactNode }) {
   return (

@@ -294,8 +294,8 @@ export function SignupRoster({ slug }: { slug: string }) {
   const withdrawSignup = useModWithdrawSignup(slug);
   const refreshStats = useRefreshSignupStats(slug);
   const gridContext = useMemo<GridContext>(
-    () => ({ search, partnerRsnMap, canWithdraw, statsRefreshing, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats }),
-    [search, partnerRsnMap, canWithdraw, statsRefreshing, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats],
+    () => ({ search, partnerRsnMap, canWithdraw, statsRefreshing, currentUserId: me?.id ?? null, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats }),
+    [search, partnerRsnMap, canWithdraw, statsRefreshing, me, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats],
   );
 
   // ColumnPicker's own option list — every colId the grid can show except # and RSN, neither of which is
@@ -373,23 +373,14 @@ export function SignupRoster({ slug }: { slug: string }) {
           team is added.{bingoData?.bingo.warnLeftovers ? " They can see this warning on their signup page." : " Turn on the warning in Settings to tell them."}
         </Notice>
       )}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-on-surface-muted">
-          <span className="num text-on-surface">{activeCount}</span> active signup{activeCount !== 1 ? "s" : ""}
-          {withdrawnCount > 0 && (
-            <>
-              , <span className="num">{withdrawnCount}</span> withdrawn
-            </>
-          )}
-        </p>
-        <div className="flex items-center gap-2">
-          {roster.length > 0 && <TableSearchInput value={search} onChange={setSearch} matchCount={displayedCount ?? totalCount} totalCount={totalCount} />}
-          {roster.length > 0 && <ColumnPicker columns={columnOptions} hidden={hiddenColumnIds} onHiddenChange={handleHiddenChange} />}
-          <Button size="sm" onPress={copyCsv} isDisabled={roster.length === 0}>
-            {copied ? "Copied" : "Copy as CSV"}
-          </Button>
-        </div>
-      </div>
+      <p className="text-sm text-on-surface-muted">
+        <span className="num text-on-surface">{activeCount}</span> active signup{activeCount !== 1 ? "s" : ""}
+        {withdrawnCount > 0 && (
+          <>
+            , <span className="num">{withdrawnCount}</span> withdrawn
+          </>
+        )}
+      </p>
 
       {roster.length === 0 ? (
         <EmptyState icon={<UsersIcon />} title="No signups yet">
@@ -397,26 +388,37 @@ export function SignupRoster({ slug }: { slug: string }) {
         </EmptyState>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by buy-in">
-              {BUYIN_FILTERS.map(({ key, label }) => (
-                <FilterChip key={key} active={buyinFilter === key} count={buyinCount(key)} onPress={() => setBuyinFilter(key)}>
-                  {label}
-                </FilterChip>
-              ))}
+          {/* Issue #121: the buy-in/pair chips (quick, commonly-used filters) stay buttons, aligned opposite the
+              page's dropdown-style controls (search, Columns) on the same row rather than a row of their own. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by buy-in">
+                {BUYIN_FILTERS.map(({ key, label }) => (
+                  <FilterChip key={key} active={buyinFilter === key} count={buyinCount(key)} onPress={() => setBuyinFilter(key)}>
+                    {label}
+                  </FilterChip>
+                ))}
+              </div>
+              {isDuo && (
+                <>
+                  <div className="h-4 w-px shrink-0 bg-outline" aria-hidden="true" />
+                  <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by pairing">
+                    {PAIR_FILTERS.map(({ key, label }) => (
+                      <FilterChip key={key} active={pairFilter === key} count={pairCount(key)} onPress={() => setPairFilter(key)}>
+                        {label}
+                      </FilterChip>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
-            {isDuo && (
-              <>
-                <div className="h-4 w-px shrink-0 bg-outline" aria-hidden="true" />
-                <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by pairing">
-                  {PAIR_FILTERS.map(({ key, label }) => (
-                    <FilterChip key={key} active={pairFilter === key} count={pairCount(key)} onPress={() => setPairFilter(key)}>
-                      {label}
-                    </FilterChip>
-                  ))}
-                </div>
-              </>
-            )}
+            <div className="flex items-center gap-2">
+              <TableSearchInput value={search} onChange={setSearch} matchCount={displayedCount ?? totalCount} totalCount={totalCount} />
+              <ColumnPicker columns={columnOptions} hidden={hiddenColumnIds} onHiddenChange={handleHiddenChange} />
+              <Button size="sm" onPress={copyCsv}>
+                {copied ? "Copied" : "Copy as CSV"}
+              </Button>
+            </div>
           </div>
           <div ref={setTableWrapper} className="overflow-hidden" style={{ height: tableHeight, minHeight: MIN_TABLE_HEIGHT }}>
             <SignupRosterGrid

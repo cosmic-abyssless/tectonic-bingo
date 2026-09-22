@@ -6,10 +6,13 @@ import { timeAgo } from "../ui/time";
 import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { Button } from "../ui/Button";
-import { Badge, Card, EmptyState, FilterChip, Notice } from "../ui/Card";
+import { Badge, Card, EmptyState, Notice } from "../ui/Card";
 import { Field, Input, Textarea } from "../ui/Field";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { SearchableSelect } from "../ui/SearchableSelect";
+import { MultiSelect } from "../ui/MultiSelect";
+import { applyColumnVisibility } from "../ui/hiddenColumns";
+import { inclusionFilter } from "./AuditLog";
 import { ScreenshotThumb } from "../submissions/ScreenshotThumb";
 import { claimsSummary } from "../submissions/claimsSummary";
 import { fullUrl } from "../../api/imageVariants";
@@ -22,12 +25,15 @@ function KeyCap({ children }: { children: React.ReactNode }) {
   );
 }
 
-type Filter = SubmissionStatus | "all";
-const FILTERS: { key: Filter; label: string }[] = [
+// Both filters are checklists now (issue #121) — status used to be buttons, but "commonly-used-view" only really
+// meant Pending, which the default (excludedStatuses below) still lands on directly. Team was one button per
+// team, unbounded. inclusionFilter/applyColumnVisibility are AuditLog.tsx's own pattern for this same shape of
+// checklist filter (everything checked = "All", stored as what's excluded rather than what's checked so a newly
+// appearing team defaults to included) — reused here rather than reinvented.
+const STATUS_OPTIONS: { key: SubmissionStatus; label: string }[] = [
   { key: "pending", label: "Pending" },
   { key: "approved", label: "Approved" },
   { key: "rejected", label: "Rejected" },
-  { key: "all", label: "All" },
 ];
 
 // A MANUAL leaf has no separate completion decision — approving its claim IS
@@ -83,8 +89,11 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const { data: shell } = useBingo(slug);
   const submissions = data?.submissions ?? [];
 
-  const [filter, setFilter] = useState<Filter>("pending");
-  const [teamFilter, setTeamFilter] = useState<string | null>(null);
+  // Excluded, not checked — a newly-seen team (or, in principle, a new status) then defaults to included rather
+  // than needing to be explicitly opted into. Approved/rejected start excluded so the view still lands on
+  // "Pending only" by default, same as before.
+  const [excludedStatuses, setExcludedStatuses] = useState<Set<string>>(() => new Set(["approved", "rejected"]));
+  const [excludedTeams, setExcludedTeams] = useState<Set<string>>(() => new Set());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -106,15 +115,21 @@ export function ReviewQueue({ slug }: { slug: string }) {
   }, [expandedId]);
 
   const allTeams = [...new Set(submissions.map((s) => s.team.name))].sort();
-  const byStatus = filter === "all" ? submissions : submissions.filter((s) => s.submission.status === filter);
-  const counts: Record<Filter, number> = {
+  const teamOptions = allTeams.map((t) => ({ key: t, label: t }));
+  const statusCounts: Record<SubmissionStatus, number> = {
     pending: submissions.filter((s) => s.submission.status === "pending").length,
     approved: submissions.filter((s) => s.submission.status === "approved").length,
     rejected: submissions.filter((s) => s.submission.status === "rejected").length,
-    all: submissions.length,
   };
-  const byTeam = teamFilter ? byStatus.filter((s) => s.team.name === teamFilter) : byStatus;
-  const visible = filter === "pending" ? [...byTeam].reverse() : byTeam;
+  const statuses = inclusionFilter(excludedStatuses, STATUS_OPTIONS);
+  const teams = inclusionFilter(excludedTeams, teamOptions);
+  const blocked = statuses.none || teams.none;
+  const byStatus = statuses.query ? submissions.filter((s) => statuses.query!.includes(s.submission.status)) : submissions;
+  const byTeam = teams.query ? byStatus.filter((s) => teams.query!.includes(s.team.name)) : byStatus;
+  // "Pending only" (the default) reads newest-first; any other mix of statuses reads however the server ordered
+  // them, same as before.
+  const onlyPending = statuses.checked.length === 1 && statuses.checked[0] === "pending";
+  const visible = blocked ? [] : onlyPending ? [...byTeam].reverse() : byTeam;
 
   async function submitReview(row: ModSubmissionRow, action: "approve" | "reject") {
     setError(null);
@@ -210,12 +225,21 @@ export function ReviewQueue({ slug }: { slug: string }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1.5">
-          {FILTERS.map(({ key, label }) => (
-            <FilterChip key={key} active={filter === key} count={counts[key]} onPress={() => setFilter(key)}>
-              {label}
-            </FilterChip>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <MultiSelect
+            label="Status"
+            options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.key] }))}
+            selected={statuses.checked}
+            onChange={(visibleKeys) => setExcludedStatuses(applyColumnVisibility(excludedStatuses, STATUS_OPTIONS.map((o) => o.key), visibleKeys))}
+          />
+          {allTeams.length > 0 && (
+            <MultiSelect
+              label="Team"
+              options={teamOptions}
+              selected={teams.checked}
+              onChange={(visibleKeys) => setExcludedTeams(applyColumnVisibility(excludedTeams, teamOptions.map((t) => t.key), visibleKeys))}
+            />
+          )}
         </div>
         <div className="flex items-center gap-2 text-xs text-on-surface-subtle">
           <span className="flex items-center gap-1">
@@ -230,26 +254,13 @@ export function ReviewQueue({ slug }: { slug: string }) {
         </div>
       </div>
 
-      {allTeams.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          <FilterChip active={teamFilter === null} onPress={() => setTeamFilter(null)}>
-            All teams
-          </FilterChip>
-          {allTeams.map((team) => (
-            <FilterChip key={team} active={teamFilter === team} onPress={() => setTeamFilter(teamFilter === team ? null : team)}>
-              {team}
-            </FilterChip>
-          ))}
-        </div>
-      )}
-
       {error && expandedId === null && <Notice tone="danger">{error}</Notice>}
 
       {isLoading ? (
         <p className="py-20 text-center text-sm text-on-surface-muted">Loading…</p>
       ) : visible.length === 0 ? (
         <EmptyState icon={<CheckIcon />} title="Nothing to review">
-          {filter === "pending" ? "New submissions show up here as they come in." : "No submissions match this filter."}
+          {blocked ? "No statuses or teams are checked — nothing can match." : onlyPending ? "New submissions show up here as they come in." : "No submissions match this filter."}
         </EmptyState>
       ) : (
         <div className="space-y-2">

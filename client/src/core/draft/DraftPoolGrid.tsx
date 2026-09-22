@@ -12,7 +12,7 @@
 // popover) because the reason that rule exists — many heavy interactive components × many rows made the signup
 // roster's mount slow — doesn't apply here (one rating widget per row, a pool that's typically a few dozen units
 // at most, not 60+).
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type { CustomCellRendererProps } from "ag-grid-react";
 import type {
@@ -39,7 +39,7 @@ import {
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { CaCell, WomCell, caTitle, formatCaTier, formatWomStat } from "../signup/caStats";
 import { discordName } from "../ui/user";
-import { gridTheme } from "../ui/agGrid";
+import { useGridTheme } from "../ui/agGrid";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { Badge } from "../ui/Card";
 import { ColumnPicker } from "../ui/ColumnPicker";
@@ -48,6 +48,7 @@ import { useHiddenColumns } from "../ui/hiddenColumns";
 import { LinkIcon } from "../ui/icons";
 import { compareSortValues } from "../ui/tableSort";
 import { TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
+import { useDocumentTop } from "../ui/tableChrome";
 import { PlayerName } from "../tectonic/PlayerName";
 import { AchievementIcons, PlaceBreakdown, TierBadge } from "../tectonic/ProfileBadges";
 import { podiumSummary, podiumTitle, recordSummary, recordTitle } from "../tectonic/profile";
@@ -88,14 +89,26 @@ function poolSearchValues(entry: DraftPoolEntry, questions: SignupQuestion[]): s
   ];
 }
 
+// EHB/EHP/CA are additive (a duo's combined grind), unlike a rating or an RSN — a pair sorts on the *sum* of its
+// two halves for these rather than best-of. Everything else (rating, rsn, discord, tier, records, podiums, a
+// signup question) keeps best-of: there's no meaningful "sum" of two ratings or two names.
+const SUM_KEYS: ReadonlySet<SortKey> = new Set(["ehb", "ehp", "caCurrent", "caPeak"]);
+
 // A pair sorts by whichever half ranks first (under the *active* sort direction — "first" means smallest
 // ascending, largest descending), so the pair sits where its stronger/earlier member would on their own. AG's
 // comparator gets isDescending, so this is computed here rather than needing a resorted copy of unit.entries the
 // way the old table's sortUnit did — entries stay in their original order for the stack's own display order.
 function makeUnitComparator(key: SortKey, ratings: Ratings) {
+  const summable = SUM_KEYS.has(key);
   return (_a: unknown, _b: unknown, nodeA: IRowNode<DraftUnit>, nodeB: IRowNode<DraftUnit>, isDescending: boolean): number => {
-    const bestOf = (unit: DraftUnit | undefined): string | number => {
+    const valueOf = (unit: DraftUnit | undefined): string | number => {
       if (!unit) return "";
+      // A solo unit's "sum" is just its one value — poolSortValue as-is, -1 sentinel and all, so a solo row's
+      // sort is untouched either way. Only a pair takes this branch, and unlike bestOf, an unmeasured half (-1)
+      // contributes nothing to the pair's total rather than dragging it below a fully-measured pair's.
+      if (summable && unit.entries.length > 1) {
+        return unit.entries.reduce((total, e) => total + Math.max(poolSortValue(e, key, ratings) as number, 0), 0);
+      }
       let best = poolSortValue(unit.entries[0]!, key, ratings);
       for (const e of unit.entries.slice(1)) {
         const v = poolSortValue(e, key, ratings);
@@ -104,7 +117,7 @@ function makeUnitComparator(key: SortKey, ratings: Ratings) {
       }
       return best;
     };
-    return compareSortValues(bestOf(nodeA.data), bestOf(nodeB.data));
+    return compareSortValues(valueOf(nodeA.data), valueOf(nodeB.data));
   };
 }
 
@@ -274,6 +287,11 @@ const LeftoverBadgeRenderer = ({ data, context }: CustomCellRendererProps<DraftU
 const GRID_STATE_KEY = "pref:gridState:draftPool";
 const FIXED_COL_IDS = ["pairIcon", "rating", "rsn", "draft"];
 
+// Same floor as SignupRosterGrid's own MIN_TABLE_HEIGHT (core/mod/SignupRoster.tsx), tuned to this grid's own
+// fixed row heights rather than shared outright: ~40px header + 10 solo rows (getRowHeight's 44px) lands at the
+// same ~30rem.
+const MIN_TABLE_HEIGHT = "30rem";
+
 function readDraftColumnState(): Pick<GridState, "columnOrder" | "columnSizing" | "sort"> {
   try {
     const raw = localStorage.getItem(GRID_STATE_KEY);
@@ -300,7 +318,6 @@ export function DraftPoolGrid({
   onPick,
   picking,
   leftoverMode,
-  maxHeight,
 }: {
   pool: DraftUnit[];
   questions: SignupQuestion[];
@@ -311,14 +328,13 @@ export function DraftPoolGrid({
   onPick: (userId: string) => void;
   picking: boolean;
   leftoverMode: LeftoverMode;
-  /** The grid's own natural content height is capped at this — see the height/getRowHeight comment below. */
-  maxHeight: string;
 }) {
   // hiddenColumns is still the persisted store (pref:hiddenColumns:draftPool in localStorage), but it's no longer
   // the only way a column's visibility changes — AG's own header-drag lets a mod drag a column out of the grid
   // to hide it, bypassing ColumnPicker entirely. initialState/onStateUpdated (below) keep the two in sync the
   // same way SignupRosterGrid's Phase 4 does: read once at grid creation, then follow the grid's own state.
   const [hiddenColumns, setHiddenColumns] = useHiddenColumns("draftPool");
+  const gridTheme = useGridTheme();
   const gridApiRef = useRef<GridApi<DraftUnit> | null>(null);
   const [initialState] = useState<GridState>(() => {
     const persisted = readDraftColumnState();
@@ -551,12 +567,23 @@ export function DraftPoolGrid({
   // leftover row keeps standing out despite the striping (see below) either way.
   const getRowClass = useCallback((params: RowClassParams<DraftUnit>) => (params.data?.leftover ? "text-on-surface-subtle" : ""), []);
 
-  // No domLayout="autoHeight" (it ignores a height cap entirely) and no fixed height sized to maxHeight (the
-  // pool shrinks as the draft goes — a tall empty grid looks broken for the last few picks). Setting both height
-  // (the content's own natural size) and maxHeight lets CSS take min(height, maxHeight): the grid sizes itself
-  // to its rows normally, but still gets capped and scrolls internally once the pool is bigger than the
-  // available space, matching the old table's overflow-auto + max-height behaviour.
-  const naturalHeight = 40 + rows.reduce((h, u) => h + (u.entries.length > 1 ? 84 : 44), 0);
+  // Same fixed-height-fills-the-viewport behaviour as SignupRosterGrid, not the pool's own previous
+  // shrinks-with-content one (a comment here used to explain deliberately NOT doing this, so the pool wouldn't
+  // look like a tall broken grid once most players were drafted — that trade-off was reconsidered in favour of
+  // matching the signup roster's table exactly: a stable height, empty space below the last row late in the
+  // draft rather than the grid itself resizing under the mod's cursor). domLayout="normal" (unset, AG's own
+  // default) needs a real height on its container — useDocumentTop's measured remaining-viewport value becomes
+  // that directly, same as the signup roster. minHeight: MIN_TABLE_HEIGHT is the same floor for the same reason.
+  const [tableWrapper, setTableWrapper] = useState<HTMLDivElement | null>(null);
+  const tableTop = useDocumentTop(tableWrapper);
+  // 2.5rem, not SignupRosterGrid's own 1.5rem: 1.5rem is that same page-bottom padding (DraftRoom's page wrapper
+  // has it too, confirmed via getComputedStyle — this grid's own useDocumentTop measurement already covers
+  // everything ABOVE the wrapper, but not what's below it before the page's actual edge). +1rem on top of that
+  // for this grid's own Card (DraftRoom's own p-4), whose bottom padding sits between the wrapper and that page
+  // edge — SignupRoster's bare wrapper has no such Card, so it never needed the extra rem. Getting this short
+  // by even a few px is exactly what caused a double scrollbar (confirmed live: docScrollHeight 9px taller than
+  // the viewport at 2rem) — the page itself scrolling a hair as well as the grid's own internal one.
+  const tableHeight = `calc(100dvh - ${tableTop}px - 2.5rem)`;
 
   const onGridReady = useCallback((e: GridReadyEvent<DraftUnit>) => {
     gridApiRef.current = e.api;
@@ -602,6 +629,19 @@ export function DraftPoolGrid({
     [hiddenColumns],
   );
 
+  // Every column whose LineRender uses Mark (search-match highlighting) — matches SignupRosterGrid's own
+  // refreshCells-on-search effect, for the same reason: `rows` (rowData) filters to the same DraftUnit *objects*
+  // as the search narrows, so a unit that already matched keeps the exact same object reference across
+  // keystrokes. AG's diffing sees "this row's data didn't change" and skips re-rendering its cells — a custom
+  // renderer reading a *prop* like context.search never learns the query grew from "co" to "cosmic" unless told
+  // to. Without this, a row picks up whatever the query happened to be the moment it first matched (often just
+  // the first character or two) and never updates again, which is exactly the "only highlights the first couple
+  // characters" bug this fixes.
+  const markColumnIds = useMemo(() => ["rsn", "discord", ...questions.map((q) => q.id)], [questions]);
+  useEffect(() => {
+    gridApiRef.current?.refreshCells({ force: true, columns: markColumnIds });
+  }, [search, markColumnIds]);
+
   if (pool.length === 0) return <p className="text-sm text-on-surface-subtle">No one left to draft.</p>;
 
   return (
@@ -613,7 +653,7 @@ export function DraftPoolGrid({
       {rows.length === 0 ? (
         <p className="text-sm text-on-surface-subtle">No one matches this search.</p>
       ) : (
-        <div className="overflow-hidden" style={{ height: naturalHeight, maxHeight }}>
+        <div ref={setTableWrapper} className="overflow-hidden" style={{ height: tableHeight, minHeight: MIN_TABLE_HEIGHT }}>
           <AgGridReact<DraftUnit>
             theme={gridTheme}
             rowData={rows}

@@ -361,7 +361,10 @@ export function useRequestPairing(slug: string) {
   return usePairingMutation(slug, (targetDiscordId: string) => api.post<{ pairing: SignupPairing }>(`/api/bingos/${slug}/signup/pairing`, { targetDiscordId }));
 }
 
-export function useCancelPairingRequest(slug: string) {
+// One endpoint, two situations: cancels a still-pending outgoing request, or leaves an already-accepted pairing
+// (either half can) — see server pairingService.removePairing for the dispatch. Same mutation either way; the
+// pairing's current status is what decides which happens.
+export function useRemovePairing(slug: string) {
   return usePairingMutation(slug, (pairingId: string) => api.delete<void>(`/api/bingos/${slug}/signup/pairing/${pairingId}`));
 }
 

@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createSignup, withdrawSignup } from "./signupService";
-import { adminPair, cancelRequest, getAcceptedPairs, getPairingState, requestPairing, respondToRequest, unpair } from "./pairingService";
+import { adminPair, cancelRequest, getAcceptedPairs, getPairingState, leavePairing, removePairing, requestPairing, respondToRequest, unpair } from "./pairingService";
 import { ServiceError } from "./errors";
 import { runWithAuditContext } from "../audit/context";
 import { createTeam } from "./teamService";
@@ -136,6 +136,40 @@ describe("cancelRequest", () => {
   });
 });
 
+describe("leavePairing / removePairing", () => {
+  it("lets either half leave an accepted pairing", () => {
+    const { bingo, a, b } = seed();
+    const ab = requestPairing(db, bingo, { requester: a, targetDiscordId: b.discordId });
+    respondToRequest(db, bingo, b, ab.id, true);
+    leavePairing(db, bingo, b, ab.id); // the target, not the original requester
+    expect(getAcceptedPairs(db, bingo.id)).toEqual([]);
+    // Shown to both halves, unlike "declined" — the row doesn't record which of them chose to leave.
+    expect(getPairingState(db, bingo.id, a).lastOutcome).toMatchObject({ status: "left", other: { user: { id: b.id } } });
+    expect(getPairingState(db, bingo.id, b).lastOutcome).toMatchObject({ status: "left", other: { user: { id: a.id } } });
+  });
+
+  it("refuses a pairing that isn't yours, or isn't accepted yet", () => {
+    const { bingo, a, b, c } = seed();
+    const ab = requestPairing(db, bingo, { requester: a, targetDiscordId: b.discordId });
+    expect(() => leavePairing(db, bingo, c, ab.id)).toThrow(/not paired/i); // still pending
+    respondToRequest(db, bingo, b, ab.id, true);
+    expect(() => leavePairing(db, bingo, c, ab.id)).toThrow(/isn't your pairing/);
+  });
+
+  it("removePairing dispatches by status: cancels a pending request (requester only), leaves an accepted one (either half)", () => {
+    const { bingo, a, b, c } = seed();
+    const ab = requestPairing(db, bingo, { requester: a, targetDiscordId: b.discordId });
+    expect(() => removePairing(db, bingo, b, ab.id)).toThrow(/not found/i); // still pending; b isn't the requester
+    removePairing(db, bingo, a, ab.id);
+    expect(getPairingState(db, bingo.id, a).outgoing).toBeNull();
+
+    const ac = requestPairing(db, bingo, { requester: a, targetDiscordId: c.discordId });
+    respondToRequest(db, bingo, c, ac.id, true);
+    removePairing(db, bingo, c, ac.id); // accepted; c is the target, not the requester
+    expect(getAcceptedPairs(db, bingo.id)).toEqual([]);
+  });
+});
+
 describe("adminPair / unpair", () => {
   it("pairs two unpaired signups without consent and can split them again", () => {
     const { bingo, admin, a, b } = seed();
@@ -185,6 +219,15 @@ describe("audit trail", () => {
     unpair(db, bingo, pairing.id);
     const unpaired = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "pairing.unpaired")).get()!;
     expect(JSON.parse(unpaired.details).displayNames.sort()).toEqual(["a", "b"]);
+  });
+
+  it("leavePairing records pairing.left, not pairing.dissolved", () => {
+    const { bingo, a, b } = seed();
+    const ab = requestPairing(db, bingo, { requester: a, targetDiscordId: b.discordId });
+    respondToRequest(db, bingo, b, ab.id, true);
+    leavePairing(db, bingo, b, ab.id);
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "pairing.left")).all()).toHaveLength(1);
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "pairing.dissolved")).all()).toHaveLength(0);
   });
 
   it("withdrawing a paired signup records pairing.dissolved with cause 'withdrawal'", () => {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { PairingParty, PartnerCandidate } from "@bingo/shared";
-import { useCancelPairingRequest, useMyPairing, usePartnerCandidates, useRequestPairing, useRespondToPairing } from "../../api/queries";
+import { useMyPairing, usePartnerCandidates, useRemovePairing, useRequestPairing, useRespondToPairing } from "../../api/queries";
 import { Button } from "../ui/Button";
 import { Card, CardHeader, Notice } from "../ui/Card";
 import { Field } from "../ui/Field";
@@ -31,11 +31,12 @@ export function PartnerPanel({ slug }: { slug: string }) {
   const outgoingNeedsRoster = !!state?.outgoing && !state.outgoing.target.user;
   const { data: candidatesData, error: candidatesError } = usePartnerCandidates(slug, needsPicker || outgoingNeedsRoster);
   const request = useRequestPairing(slug);
-  const cancel = useCancelPairingRequest(slug);
+  const remove = useRemovePairing(slug);
   const respond = useRespondToPairing(slug);
 
   const [target, setTarget] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
 
   if (isLoading || !state) return null;
 
@@ -48,7 +49,7 @@ export function PartnerPanel({ slug }: { slug: string }) {
     }
   }
 
-  const busy = request.isPending || cancel.isPending || respond.isPending;
+  const busy = request.isPending || remove.isPending || respond.isPending;
 
   const outgoingName = state.outgoing
     ? partyName(state.outgoing.target, candidatesData?.candidates.find((c) => c.discordId === state.outgoing!.pairing.targetDiscordId)?.rsns)
@@ -58,9 +59,35 @@ export function PartnerPanel({ slug }: { slug: string }) {
     <Card className="mx-auto max-w-lg">
       <CardHeader title="Duo partner" description="This bingo is drafted in pairs. Pick who you want to play with — they need to accept before the draft." />
       <div className="space-y-4 p-5">
-        {state.partner && (
+        {state.partner && !confirmingLeave && (
           <Notice tone="ok" icon={<CheckIcon />}>
-            You're paired with <strong>{partyName(state.partner)}</strong>. You'll be drafted together.
+            <div className="flex items-center gap-3">
+              <span className="flex-1">
+                You're paired with <strong>{partyName(state.partner)}</strong>. You'll be drafted together.
+              </span>
+              <Button size="sm" variant="ghost" className="-my-1.5" isDisabled={busy} onPress={() => setConfirmingLeave(true)}>
+                Remove pairing
+              </Button>
+            </div>
+          </Notice>
+        )}
+
+        {state.partner && confirmingLeave && (
+          <Notice tone="danger">
+            <div className="flex items-center gap-3">
+              <span className="flex-1">Remove your pairing with {partyName(state.partner)}? You'll both need to find a new partner.</span>
+              <Button size="sm" variant="ghost" onPress={() => setConfirmingLeave(false)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                variant="danger"
+                isDisabled={busy}
+                onPress={() => run(() => remove.mutateAsync(state.partner!.pairing.id).then(() => setConfirmingLeave(false)))}
+              >
+                Confirm
+              </Button>
+            </div>
           </Notice>
         )}
 
@@ -68,7 +95,9 @@ export function PartnerPanel({ slug }: { slug: string }) {
           <Notice tone="warn">
             {state.lastOutcome.status === "declined"
               ? `${partyName(state.lastOutcome.other)} declined your request.`
-              : `${partyName(state.lastOutcome.other)} withdrew their signup.`}{" "}
+              : state.lastOutcome.status === "left"
+                ? `You and ${partyName(state.lastOutcome.other)} are no longer paired.`
+                : `${partyName(state.lastOutcome.other)} withdrew their signup.`}{" "}
             Pick a new partner below.
           </Notice>
         )}
@@ -99,7 +128,7 @@ export function PartnerPanel({ slug }: { slug: string }) {
               <span className="flex-1">
                 Waiting for <strong>{outgoingName}</strong> to accept.
               </span>
-              <Button size="sm" variant="ghost" className="-my-1.5" isDisabled={busy} onPress={() => run(() => cancel.mutateAsync(state.outgoing!.pairing.id))}>
+              <Button size="sm" variant="ghost" className="-my-1.5" isDisabled={busy} onPress={() => run(() => remove.mutateAsync(state.outgoing!.pairing.id))}>
                 Cancel request
               </Button>
             </div>

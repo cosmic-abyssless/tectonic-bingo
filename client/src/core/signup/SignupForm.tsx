@@ -6,7 +6,8 @@ import { PartnerPanel } from "./PartnerPanel";
 import { caTitle, formatCaTier } from "./caStats";
 import { useStatsRefreshingUserIds } from "../../context/WebSocketContext";
 import { Button } from "../ui/Button";
-import { Card, CardHeader, EmptyState, Notice } from "../ui/Card";
+import { EmptyState, HEADING_FONT, Notice } from "../ui/Card";
+import { Disclosure } from "../ui/Disclosure";
 import { Field, Input, Select, Textarea } from "../ui/Field";
 import { AlertIcon, CheckIcon, LockIcon } from "../ui/icons";
 
@@ -215,12 +216,21 @@ export function SignupForm({ slug }: { slug: string }) {
 
   return (
     <div className="space-y-6">
-      <Card className="mx-auto max-w-lg">
-        <CardHeader
-          title={existing ? "Edit your signup" : "Sign up"}
-          description={existing ? "You can update your answers or withdraw while signups are open." : "Fill this out to join the bingo."}
-        />
-        <div className="space-y-5 p-5">
+      {/* Collapsed by default once already signed up — the title/description alone (visible either way) already
+          says who's signed up as what; open by default beforehand, since there's nothing to collapse *to* yet.
+          Uncontrolled (defaultExpanded only sets the initial state): saving or withdrawing don't yank it open or
+          shut on someone mid-edit — see Disclosure's own doc comment for why that's the right call here. */}
+      <Disclosure
+        defaultExpanded={!existing}
+        className="mx-auto max-w-lg"
+        title={
+          <h2 className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+            {existing ? "Edit your signup" : "Sign up"}
+          </h2>
+        }
+        description={existing ? "You can update your answers or withdraw while signups are open." : "Fill this out to join the bingo."}
+      >
+        <div className="space-y-5">
           {existing && mySignup?.atRisk && (
             <Notice tone="warn" icon={<AlertIcon />}>
               Teams get an equal number of picks, and you're among the newest signups that don't fit a full round right now. You'll be{" "}
@@ -309,7 +319,7 @@ export function SignupForm({ slug }: { slug: string }) {
             </Notice>
           )}
         </div>
-      </Card>
+      </Disclosure>
 
       {isDuo && existing && <PartnerPanel slug={slug} />}
     </div>

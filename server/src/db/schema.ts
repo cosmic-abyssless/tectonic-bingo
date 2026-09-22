@@ -213,7 +213,10 @@ export const signupPairings = sqliteTable('signup_pairings', {
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
   requesterUserId: text('requester_user_id').notNull().references(() => users.id),
   targetDiscordId: text('target_discord_id').notNull(),
-  status: text('status', { enum: ['pending', 'accepted', 'declined', 'cancelled', 'dissolved'] })
+  // 'dissolved': a signup withdrew (dissolveForUser) or a mod split the pair (unpair). 'left': a player ended
+  // an accepted pairing themselves while both signups stay active (leavePairing) — a distinct status, not a
+  // cause flag on 'dissolved', so getPairingState's lastOutcome can tell players something true either way.
+  status: text('status', { enum: ['pending', 'accepted', 'declined', 'cancelled', 'dissolved', 'left'] })
     .notNull()
     .default('pending'),
   // Set when a mod paired the two players by hand instead of a player request.
