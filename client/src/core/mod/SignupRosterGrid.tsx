@@ -203,8 +203,8 @@ const PartnerCell = memo(function PartnerCell({ data, context }: CustomCellRende
 // `width` rather than `maxWidth` — a maxWidth here blocked exactly that resize).
 const QUESTION_COLUMN_WIDTH = 192;
 
-// Column order/visibility/sizing only — not the rest of GridState (filter model, scroll position, …), which this
-// table doesn't want remembered across visits. Parsed defensively: a corrupt or pre-migration value (the old
+// Column order/visibility/sizing/sort only — not the rest of GridState (filter model, scroll position, …), which
+// this table doesn't want remembered across visits. Parsed defensively: a corrupt or pre-migration value (the old
 // table's pref:hiddenColumns:signupRoster is a different key and is left alone) just means no initial state.
 const GRID_STATE_KEY = "pref:gridState:signupRoster";
 
@@ -288,7 +288,11 @@ export function SignupRosterGrid({
         width: 56,
         // Below defaultColDef's minWidth: 80 floor — needs its own, smaller one, or AG clamps width back up to 80.
         minWidth: 56,
-        sort: "asc",
+        // No static `sort: "asc"` here (there was one) — `rows` already arrives in ascending # order (`order` is
+        // literally the array index), so it's redundant for the *default* look, and it actively fights a
+        // restored sort: it's a colDef-level default, not a live user action, so restoring a persisted sort on
+        // another column doesn't clear it the way a real header click would — it lingers as a hidden secondary
+        // sort (visible as a small "2" priority badge on "#") every time the grid restores from localStorage.
         lockPosition: "left",
         suppressMovable: true,
         pinned: "left",
@@ -420,14 +424,14 @@ export function SignupRosterGrid({
   useEffect(() => () => onApiReady(null), [onApiReady]);
   const onModelUpdated = useCallback((e: ModelUpdatedEvent<RosterRow>) => onDisplayedCountChange(e.api.getDisplayedRowCount()), [onDisplayedCountChange]);
 
-  // Column order/visibility/sizing survive a reload; ColumnPicker's `hidden` set comes from the same event so a
-  // header-drag hide/show and a ColumnPicker toggle stay in sync with each other.
+  // Column order/visibility/sizing/sort survive a reload; ColumnPicker's `hidden` set comes from the same event so
+  // a header-drag hide/show and a ColumnPicker toggle stay in sync with each other.
   const onStateUpdated = useCallback(
     (e: StateUpdatedEvent<RosterRow>) => {
-      const { columnVisibility, columnSizing } = e.state;
+      const { columnVisibility, columnSizing, sort } = e.state;
       const { columnOrder } = stripPinnedFromOrder(e.state) ?? {};
       try {
-        localStorage.setItem(GRID_STATE_KEY, JSON.stringify({ columnOrder, columnVisibility, columnSizing }));
+        localStorage.setItem(GRID_STATE_KEY, JSON.stringify({ columnOrder, columnVisibility, columnSizing, sort }));
       } catch {
         // Private browsing / storage quota — persistence is a nicety, not required.
       }
