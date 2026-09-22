@@ -9,12 +9,12 @@
 // <button>. `readOnlyEdit` means editors never touch grid data — edits raise `cellEditRequest`, one handler maps
 // each to a mutation, and the refetched query data flows back in as `rowData`. No react-aria Button/IconButton/
 // Select, no Truncate/Tooltip/Highlight from core/ui in here — AG does its own truncation and tooltips, and
-// Highlight's *logic* (not the component) is inlined below as `Mark`.
+// Highlight's *logic* (not the component) lives in core/ui/gridCells.tsx as `Mark`, shared with DraftPoolGrid.
 //
 // Phase 4: column order/visibility/sizing are grid state (initialState/onStateUpdated), persisted to
 // localStorage, instead of the old useHiddenColumns. ColumnPicker stays the UI (Community has no column chooser
 // of its own) but now drives api.setColumnsVisible; the grid's own header drag handles reorder.
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type { CustomCellRendererProps } from "ag-grid-react";
 import type {
@@ -34,6 +34,7 @@ import { gridTheme } from "../ui/agGrid";
 import { discordName, displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { Badge } from "../ui/Card";
+import { CellButton, CellIconButton, Mark } from "../ui/gridCells";
 import { CheckIcon, RefreshIcon, XIcon } from "../ui/icons";
 import { CaCell, WomCell, caTitle, formatCaTier, formatWomStat } from "../signup/caStats";
 import { TierBadge } from "../tectonic/ProfileBadges";
@@ -62,68 +63,6 @@ export interface GridContext {
   modUnpair: ReturnType<typeof useModUnpair>;
   withdrawSignup: ReturnType<typeof useModWithdrawSignup>;
   refreshStats: ReturnType<typeof useRefreshSignupStats>;
-}
-
-// ---------------------------------------------------------------------------
-// Small native-button helpers — the plan's "no react-aria Button/IconButton" rule means grid cells cannot use
-// core/ui's Button/IconButton (both wrap react-aria-components). Same classes, plain <button>.
-
-const CELL_BUTTON_VARIANT = {
-  ghost: "border-transparent bg-transparent text-on-surface-muted hover:bg-surface-hover hover:text-on-surface",
-  danger: "border-danger/40 bg-transparent text-danger hover:bg-danger/10",
-} as const;
-
-function CellButton({ variant, onClick, disabled, children }: { variant: keyof typeof CELL_BUTTON_VARIANT; onClick: () => void; disabled?: boolean; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border px-2 text-xs font-medium transition-colors duration-100 disabled:cursor-not-allowed disabled:opacity-40 ${CELL_BUTTON_VARIANT[variant]}`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function CellIconButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      disabled={disabled}
-      className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-on-surface-muted transition-colors duration-100 hover:bg-surface-hover hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-40"
-    >
-      {children}
-    </button>
-  );
-}
-
-// Inlines core/ui/tableSearch.tsx's Highlight *logic* rather than importing the component (grid cells stay off
-// core/ui, per the plan).
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-function Mark({ text, query }: { text: string; query: string }) {
-  const q = query.trim();
-  if (!q) return <>{text}</>;
-  const parts = text.split(new RegExp(`(${escapeRegExp(q)})`, "gi"));
-  if (parts.length === 1) return <>{text}</>;
-  return (
-    <>
-      {parts.map((part, i) =>
-        part.toLowerCase() === q.toLowerCase() ? (
-          <mark key={i} className="rounded-xs bg-accent/30 text-inherit">
-            {part}
-          </mark>
-        ) : (
-          <span key={i}>{part}</span>
-        ),
-      )}
-    </>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -374,9 +313,6 @@ export function SignupRosterGrid({
         headerName: "Status",
         valueGetter: (p) => p.data?.signup.status,
         cellRenderer: StatusCell,
-        // AG's own .ag-cell-wrapper sizes to content and sits at the cell's top — see the matching rule in
-        // index.css — so the badge/at-risk-badge/withdraw-button row centers against the full row height.
-        cellClass: "roster-cell-vcenter",
         width: 150,
       },
       {
