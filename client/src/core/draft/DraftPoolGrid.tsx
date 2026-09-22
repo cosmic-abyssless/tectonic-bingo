@@ -88,14 +88,26 @@ function poolSearchValues(entry: DraftPoolEntry, questions: SignupQuestion[]): s
   ];
 }
 
+// EHB/EHP/CA are additive (a duo's combined grind), unlike a rating or an RSN — a pair sorts on the *sum* of its
+// two halves for these rather than best-of. Everything else (rating, rsn, discord, tier, records, podiums, a
+// signup question) keeps best-of: there's no meaningful "sum" of two ratings or two names.
+const SUM_KEYS: ReadonlySet<SortKey> = new Set(["ehb", "ehp", "caCurrent", "caPeak"]);
+
 // A pair sorts by whichever half ranks first (under the *active* sort direction — "first" means smallest
 // ascending, largest descending), so the pair sits where its stronger/earlier member would on their own. AG's
 // comparator gets isDescending, so this is computed here rather than needing a resorted copy of unit.entries the
 // way the old table's sortUnit did — entries stay in their original order for the stack's own display order.
 function makeUnitComparator(key: SortKey, ratings: Ratings) {
+  const summable = SUM_KEYS.has(key);
   return (_a: unknown, _b: unknown, nodeA: IRowNode<DraftUnit>, nodeB: IRowNode<DraftUnit>, isDescending: boolean): number => {
-    const bestOf = (unit: DraftUnit | undefined): string | number => {
+    const valueOf = (unit: DraftUnit | undefined): string | number => {
       if (!unit) return "";
+      // A solo unit's "sum" is just its one value — poolSortValue as-is, -1 sentinel and all, so a solo row's
+      // sort is untouched either way. Only a pair takes this branch, and unlike bestOf, an unmeasured half (-1)
+      // contributes nothing to the pair's total rather than dragging it below a fully-measured pair's.
+      if (summable && unit.entries.length > 1) {
+        return unit.entries.reduce((total, e) => total + Math.max(poolSortValue(e, key, ratings) as number, 0), 0);
+      }
       let best = poolSortValue(unit.entries[0]!, key, ratings);
       for (const e of unit.entries.slice(1)) {
         const v = poolSortValue(e, key, ratings);
@@ -104,7 +116,7 @@ function makeUnitComparator(key: SortKey, ratings: Ratings) {
       }
       return best;
     };
-    return compareSortValues(bestOf(nodeA.data), bestOf(nodeB.data));
+    return compareSortValues(valueOf(nodeA.data), valueOf(nodeB.data));
   };
 }
 
