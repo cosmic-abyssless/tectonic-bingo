@@ -143,7 +143,7 @@ export interface AuditDetailsMap {
   "draft.order_set": { order: { teamId: string; name: string; draftOrder: number }[] };
   "draft.pick": { pickNumber: number; userIds: string[]; displayNames: string[]; pair: boolean };
   "draft.pick_undone": { pickNumber: number; userIds: string[]; displayNames: string[]; pair: boolean };
-  "draft.rating_set": { rsn: string; stars: number; hasNote: boolean; cleared: boolean };
+  "draft.rating_set": { rsn: string; hasRating: boolean; hasNote: boolean; cleared: boolean };
 
   "pairing.requested": { requesterUserId: string; targetDiscordId: string };
   "pairing.accepted": { requesterUserId: string; targetDiscordId: string; partnerUserId: string | null };
@@ -498,7 +498,9 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     tone: "neutral",
     visibility: "team",
     title: "Pick rated",
-    label: (i) => (i.details.cleared ? `${actor(i)} cleared their rating of ${i.details.rsn}` : `${actor(i)} rated ${i.details.rsn} ${i.details.stars}/3${i.details.hasNote ? " with a note" : ""}`),
+    // Same reasoning as the note: the audit entry says a rating changed, not what it was — that's still a private
+    // opinion about a player, even at team visibility.
+    label: (i) => (i.details.cleared ? `${actor(i)} cleared their rating of ${i.details.rsn}` : `${actor(i)} updated their rating of ${i.details.rsn}${i.details.hasNote ? " with a note" : ""}`),
   },
   "pairing.requested": { category: "signup", tone: "neutral", visibility: "mods", title: "Duo pairing requested", label: (i) => `${actor(i)} requested a duo pairing` },
   "pairing.accepted": { category: "signup", tone: "ok", visibility: "mods", title: "Duo pairing accepted", label: (i) => `${actor(i)} accepted a duo pairing` },

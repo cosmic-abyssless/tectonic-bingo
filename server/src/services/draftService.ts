@@ -532,13 +532,15 @@ export function setPickRating(db: Db, teamId: string, signupId: string, rating: 
         .run();
     }
     // Ratings are a team's private scouting notes, so the entry stays
-    // team-scoped rather than joining the mod-visible signup history.
+    // team-scoped rather than joining the mod-visible signup history. Same
+    // treatment as the note: record that a rating was set/changed, not the
+    // stars value itself — that's still a private opinion about a player.
     audit(tx, {
       action: "draft.rating_set",
       bingoId: team.bingoId,
       teamId,
       entity: { type: "signup", id: signupId, label },
-      details: { rsn: label, stars: rating.stars, hasNote: note.length > 0, cleared },
+      details: { rsn: label, hasRating: rating.stars > 0, hasNote: note.length > 0, cleared },
     });
   });
 }
