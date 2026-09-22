@@ -283,6 +283,23 @@ export function SignupRosterGrid({
   }, [collectedByOptions]);
   const collectedByValues = useMemo(() => ["", ...collectedByOptions.map((o) => o.id)], [collectedByOptions]);
 
+  // Read via these refs (kept current below, every render) rather than closed over directly in columnDefs — both
+  // change reference on every roster refetch (a signup gets paired, a buy-in gets marked, ...), which is most
+  // interactions here. Baking either straight into a colDef would force the whole columnDefs array to a new
+  // identity right along with them, and AG Grid treats *any* columnDefs identity change as "these columns are
+  // new", silently resetting every column's width back to its colDef default — including ones with no connection
+  // to whatever actually changed (EHP resetting because a different row's buy-in got checked, say). Since
+  // `cellEditorParams`/`valueFormatter` are read lazily (at edit-open / render time, not at colDef-build time), a
+  // stable ref lets them stay current without columnDefs ever needing to know these values changed at all.
+  const unpairedActiveRef = useRef(unpairedActive);
+  unpairedActiveRef.current = unpairedActive;
+  const unpairedRefDataRef = useRef(unpairedRefData);
+  unpairedRefDataRef.current = unpairedRefData;
+  const collectedByRefDataRef = useRef(collectedByRefData);
+  collectedByRefDataRef.current = collectedByRefData;
+  const collectedByValuesRef = useRef(collectedByValues);
+  collectedByValuesRef.current = collectedByValues;
+
   const columnDefs = useMemo<ColDef<RosterRow>[]>(() => {
     // Each `width` below is a starting size sized to its typical content (an RSN, a tier name, a checkbox), not
     // a cap — `resizable: true` (defaultColDef) plus Phase 4's column-state persistence mean a mod can still
@@ -372,10 +389,13 @@ export function SignupRosterGrid({
         headerName: "Collected by",
         valueGetter: (p) => p.data?.collectedByUser?.id ?? "",
         cellRenderer: CollectedByCell,
-        refData: collectedByRefData,
+        // Not `refData: collectedByRefData` (a static object baked at colDef-build time) — see the refs' own
+        // comment above. Only the agSelectCellEditor's dropdown labels need this now; the cell's own display
+        // reads data.collectedByUser directly via CollectedByCell, not through refData/valueFormatter.
+        valueFormatter: (p) => collectedByRefDataRef.current[p.value as string] ?? p.value,
         editable: (p) => !!p.data?.signup.buyinReceivedAt,
         cellEditor: "agSelectCellEditor",
-        cellEditorParams: { values: collectedByValues },
+        cellEditorParams: () => ({ values: collectedByValuesRef.current }),
         width: 150,
       },
       isDuo && {
@@ -386,9 +406,11 @@ export function SignupRosterGrid({
         editable: (p) => !p.data?.pairing && p.data?.signup.status === "active",
         cellEditor: "agSelectCellEditor",
         cellEditorParams: (p: { data?: RosterRow }) => ({
-          values: ["", ...unpairedActive.filter((r) => r.signup.id !== p.data?.signup.id).map((r) => r.user.id)],
+          values: ["", ...unpairedActiveRef.current.filter((r) => r.signup.id !== p.data?.signup.id).map((r) => r.user.id)],
         }),
-        refData: unpairedRefData,
+        // Not `refData: unpairedRefData` — same reasoning as "collectedBy" above. PartnerCell (the cellRenderer)
+        // already handles the cell's own display without this; only the editor's dropdown labels need it.
+        valueFormatter: (p) => unpairedRefDataRef.current[p.value as string] ?? p.value,
         width: 180,
       },
     ];
@@ -402,7 +424,10 @@ export function SignupRosterGrid({
       },
     }));
     return [...cols.filter((c): c is ColDef<RosterRow> => c !== false), ...questionCols];
-  }, [questions, isDuo, showTier, collectedByRefData, collectedByValues, unpairedActive, unpairedRefData]);
+    // collectedByRefData/collectedByValues/unpairedActive/unpairedRefData deliberately excluded — read via the
+    // refs above instead, precisely so their (frequent) changes don't force columnDefs to a new identity. See
+    // that comment for why a new columnDefs identity is the actual problem being avoided here.
+  }, [questions, isDuo, showTier]);
 
   // tooltip/headerTooltip: true shows the cell's own formatted value / the header's own name. tooltipShowMode
   // ("whenTruncated") is grid-wide only, not per column (no way to opt individual columns in/out), and several
