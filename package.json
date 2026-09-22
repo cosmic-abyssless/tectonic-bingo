@@ -14,6 +14,7 @@
     "test": "npm run test --workspace=server",
     "generate-bingo": "npm run generate-bingo --workspace=server --",
     "generate-bingo:teardown": "npm run generate-bingo:teardown --workspace=server --",
+    "mock-wom-competition": "npm run mock-wom-competition --workspace=server --",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed"
   },

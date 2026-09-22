@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { WomCompetitionClient } from "./womCompetitionService";
-import { addPastCompetition, archiveBingoCompetition, deletePastCompetition, getPastParticipationsForUser, listPastCompetitions } from "./pastWomCompetitionService";
+import { addPastCompetition, archiveBingoCompetition, deletePastCompetition, getPastParticipationsForUser, listPastCompetitions, mockPastCompetition } from "./pastWomCompetitionService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -196,5 +196,61 @@ describe("getPastParticipationsForUser", () => {
     await addPastCompetition(db, { womId: 42, addedByUserId: admin.id }, new WomCompetitionClient(mockFetch([{ body: competitionWithGains }])));
     vi.stubEnv("DISCORD_GUILD_ID", "other-guild");
     expect(getPastParticipationsForUser(db, player.id)).toEqual([]);
+  });
+});
+
+describe("mockPastCompetition", () => {
+  it("fabricates one participation per signup RSN, no fetch involved", () => {
+    const bingo = seedBingo();
+    const alice = db.insert(schema.users).values({ discordId: "alice", discordUsername: "alice" }).returning().get();
+    const bob = db.insert(schema.users).values({ discordId: "bob", discordUsername: "bob" }).returning().get();
+    db.insert(schema.signups).values([
+      { bingoId: bingo.id, userId: alice.id, rsn: "Alice Rsn" },
+      { bingoId: bingo.id, userId: bob.id, rsn: "Bob Rsn" },
+    ]).run();
+
+    const result = mockPastCompetition(db, bingo.id);
+
+    expect(result.bingoId).toBe(bingo.id);
+    expect(result.womId).toBeLessThan(0);
+    expect(result.participantCount).toBe(2);
+    expect(result.addedByUserId).toBeNull();
+
+    // getPastParticipationsForUser is the real consumer — prove the fabricated row actually matches through it.
+    expect(getPastParticipationsForUser(db, alice.id)).toMatchObject([{ womId: result.womId }]);
+    expect(getPastParticipationsForUser(db, bob.id)).toMatchObject([{ womId: result.womId }]);
+  });
+
+  it("honors title/metric/gained overrides", () => {
+    const bingo = seedBingo();
+    const alice = db.insert(schema.users).values({ discordId: "alice2", discordUsername: "alice2" }).returning().get();
+    db.insert(schema.signups).values({ bingoId: bingo.id, userId: alice.id, rsn: "Alice2" }).run();
+
+    const result = mockPastCompetition(db, bingo.id, { title: "Custom Cup", metric: "ehb", gainedMin: 100, gainedMax: 100 });
+
+    expect(result.title).toBe("Custom Cup");
+    expect(result.metric).toBe("ehb");
+    const participations = getPastParticipationsForUser(db, alice.id);
+    expect(participations[0]).toMatchObject({ metric: "ehb", gained: 100 });
+  });
+
+  it("throws ServiceError 400 when the bingo has no signups", () => {
+    const bingo = seedBingo();
+    expect(() => mockPastCompetition(db, bingo.id)).toThrow(/no signups/i);
+  });
+
+  it("throws ServiceError 404 for an unknown bingo", () => {
+    expect(() => mockPastCompetition(db, "missing")).toThrow(/not found/i);
+  });
+
+  it("never collides with an existing womId in the same guild", () => {
+    const bingo = seedBingo();
+    const alice = db.insert(schema.users).values({ discordId: "alice3", discordUsername: "alice3" }).returning().get();
+    db.insert(schema.signups).values({ bingoId: bingo.id, userId: alice.id, rsn: "Alice3" }).run();
+    db.insert(schema.womPastCompetitions).values({ guildId: "guild-1", womId: -1, title: "Taken", metric: "ehp", startsAt: new Date(), endsAt: new Date(), dataJson: "{}" }).run();
+
+    const result = mockPastCompetition(db, bingo.id);
+
+    expect(result.womId).not.toBe(-1);
   });
 });

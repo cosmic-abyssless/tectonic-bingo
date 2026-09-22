@@ -6,7 +6,7 @@ import path from "node:path";
 import { and, eq, inArray, like, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { auditLog, bingoModerators, bingos, signups, submissionScreenshots, submissions, teamMembers, teams, tiles, users } from "../db/schema";
+import { auditLog, bingoModerators, bingos, signups, submissionScreenshots, submissions, teamMembers, teams, tiles, users, womPastCompetitions } from "../db/schema";
 import { now as clockNow } from "../clock";
 import { ServiceError } from "./errors";
 import { deleteBingo } from "./bingoService";
@@ -102,9 +102,13 @@ export function teardownTestBingo(db: Db, slug: string): TeardownResult {
   const candidateIds = new Set<string>();
   for (const s of db.select({ id: signups.userId }).from(signups).where(eq(signups.bingoId, bingo.id)).all()) candidateIds.add(s.id);
   if (teamIds.length > 0) for (const m of db.select({ id: teamMembers.userId }).from(teamMembers).where(inArray(teamMembers.teamId, teamIds)).all()) candidateIds.add(m.id);
+  // deleteBingo only detaches these (bingoService.ts — a real archived competition outlives its bingo on
+  // purpose), so a mocked one (issue #133) needs deleting here or it lingers as an orphan forever.
+  const pastCompetitionIds = db.select({ id: womPastCompetitions.id }).from(womPastCompetitions).where(eq(womPastCompetitions.bingoId, bingo.id)).all().map((c) => c.id);
 
   deleteBingo(db, bingo.id);
   db.delete(auditLog).where(eq(auditLog.bingoId, bingo.id)).run();
+  if (pastCompetitionIds.length > 0) db.delete(womPastCompetitions).where(inArray(womPastCompetitions.id, pastCompetitionIds)).run();
 
   const testUserIds = candidateIds.size
     ? db.select({ id: users.id }).from(users).where(and(inArray(users.id, [...candidateIds]), like(users.discordId, `${TESTDATA_PREFIX}%`))).all().map((u) => u.id)

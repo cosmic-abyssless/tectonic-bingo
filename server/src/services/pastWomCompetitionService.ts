@@ -1,6 +1,6 @@
 // Stores a snapshot of a Wise Old Man competition's final results (issue
 // #128), so a bingo's per-player EHP/EHB gains survive independently of
-// WOM's own record of the competition. Two entry points:
+// WOM's own record of the competition. Entry points:
 //  - addPastCompetition: an admin pastes a WOM competition id in the site
 //    admin panel (covers bingos that predate, or never used, this platform).
 //  - archiveBingoCompetition: fired fire-and-forget from routes/mod.ts when
@@ -8,6 +8,8 @@
 //    the `complete` stage, same convention as syncWomCompetitionAfterDraft —
 //    never throws, swallows and logs failures instead of blocking the stage
 //    change that triggered it.
+//  - mockPastCompetition: dev-only (issue #133), routes/dev.ts — fabricates
+//    one, no network call, for local testing.
 import { and, desc, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { PastBingoParticipation, WomPastCompetition } from "@bingo/shared";
@@ -116,6 +118,60 @@ export function getPastParticipationsForUser(db: Db, userId: string): PastBingoP
     });
   }
   return results;
+}
+
+export interface MockPastCompetitionParams {
+  title?: string;
+  metric?: string;
+  gainedMin?: number;
+  gainedMax?: number;
+}
+
+/**
+ * Dev-only (issue #133): fabricates a WOM-shaped competition for an existing
+ * bingo's current signups, no network call — one participation per RSN, each
+ * given a random `gained` value. `womId` is negative so a mock can never
+ * collide with, or be mistaken for, a real fetched competition.
+ *
+ * Unlike devTestDataService's helpers this isn't fenced to `testdata-`
+ * bingos: it only adds one row (never touches users/teams/submissions), so
+ * running it against the plain `db:seed:dev` bingo is fine — the dev-mode +
+ * site-admin gate on its route is enough. Same exception generate-bingo's
+ * "real HTTP only" rule already makes for fake signup WOM/CA stats: this
+ * isn't simulating a player action, it's faking third-party data.
+ */
+export function mockPastCompetition(db: Db, bingoId: string, params: MockPastCompetitionParams = {}): WomPastCompetition {
+  const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get();
+  if (!bingo) throw new ServiceError(404, "Bingo not found");
+  const rsnRows = db.select({ rsn: signups.rsn }).from(signups).where(eq(signups.bingoId, bingoId)).all();
+  if (rsnRows.length === 0) throw new ServiceError(400, "This bingo has no signups to mock a roster from");
+
+  const guildId = currentGuildId();
+  const metric = params.metric?.trim() || "ehp";
+  const title = params.title?.trim() || `${bingo.name} (mock)`;
+  const gainedMin = params.gainedMin ?? 5;
+  const gainedMax = params.gainedMax ?? 500;
+  const startsAt = bingo.startsAt ?? new Date();
+  const endsAt = bingo.endsAt && bingo.endsAt > startsAt ? bingo.endsAt : new Date(startsAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const participations = rsnRows.map((r) => ({
+    player: { username: normalizeRsn(r.rsn), displayName: r.rsn },
+    progress: { start: 0, end: 0, gained: Math.round((gainedMin + Math.random() * (gainedMax - gainedMin)) * 100) / 100 },
+  }));
+  const dataJson = JSON.stringify({ title, metric, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), participations });
+
+  // Negative, unique per guild — retry on the rare clash.
+  let womId = -Math.floor(Math.random() * 1_000_000) - 1;
+  while (db.select().from(womPastCompetitions).where(and(eq(womPastCompetitions.guildId, guildId), eq(womPastCompetitions.womId, womId))).get()) {
+    womId -= 1;
+  }
+
+  const row = db
+    .insert(womPastCompetitions)
+    .values({ guildId, womId, bingoId, title, metric, startsAt, endsAt, participantCount: participations.length, dataJson, addedByUserId: null })
+    .returning()
+    .get();
+  return toPublic(row);
 }
 
 /** Admin-triggered: fetch one WOM competition by id and store it. Throws ServiceError on a bad id, a duplicate, or a WOM API failure — the admin panel surfaces it directly. */

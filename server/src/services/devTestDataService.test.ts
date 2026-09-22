@@ -98,6 +98,21 @@ describe("teardownTestBingo", () => {
     expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.bingoId, two.id)).all().length).toBeGreaterThan(0);
     expect(db.select().from(schema.tiles).all()).toHaveLength(1);
   });
+
+  it("deletes a mocked past WOM competition tied to the bingo (a real one is only ever detached, never deleted here)", () => {
+    const admin = user("testdata-admin2");
+    const a = user("testdata-a-3");
+    const bingo = seedBingo("testdata-wom", admin, [a]);
+    const competition = db
+      .insert(schema.womPastCompetitions)
+      .values({ guildId: "g", womId: -1, bingoId: bingo.id, title: "Mock", metric: "ehp", startsAt: new Date(), endsAt: new Date(), dataJson: "{}" })
+      .returning()
+      .get();
+
+    teardownTestBingo(db, "testdata-wom");
+
+    expect(db.select().from(schema.womPastCompetitions).where(eq(schema.womPastCompetitions.id, competition.id)).get()).toBeUndefined();
+  });
 });
 
 describe("fillFakeStats", () => {
