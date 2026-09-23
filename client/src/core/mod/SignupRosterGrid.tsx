@@ -39,6 +39,7 @@ import { CheckIcon, RefreshIcon, XIcon } from "../ui/icons";
 import { CaCell, WomCell, caTitle, formatCaTier, formatWomStat } from "../signup/caStats";
 import { TierBadge } from "../tectonic/ProfileBadges";
 import { timeAgo } from "../ui/time";
+import { headerTooltip, usefulTooltip } from "../ui/gridTooltips";
 
 /** A roster entry plus its 1-based signup position — kept on the row (not derived from `rowIndex`) so sorting by
  * another column doesn't change what "#" shows. */
@@ -363,7 +364,7 @@ export function SignupRosterGrid({
         valueFormatter: (p) => (p.value ? timeAgo(p.value) : ""),
         // Reads p.data rather than p.value: the CA columns' tooltips (below) do the same and work, this one
         // read from the resolved cell value and didn't fire — data is also just more direct here regardless.
-        tooltip: (p: TooltipCallbackParams<RosterRow, string>) => (p.data?.signup.createdAt ? new Date(p.data.signup.createdAt).toLocaleString() : ""),
+        tooltip: (p: TooltipCallbackParams<RosterRow, string>) => usefulTooltip(p, p.data?.signup.createdAt ? new Date(p.data.signup.createdAt).toLocaleString() : ""),
         width: 110,
       },
       {
@@ -378,7 +379,7 @@ export function SignupRosterGrid({
         headerName: "Current CA",
         valueGetter: (p) => p.data?.caCurrent?.points ?? -1,
         cellRenderer: CaCurrentCell,
-        tooltip: (p: TooltipCallbackParams<RosterRow, number>) => caTitle(p.data?.caCurrent),
+        tooltip: (p: TooltipCallbackParams<RosterRow, number>) => usefulTooltip(p, caTitle(p.data?.caCurrent)),
         width: 120,
       },
       {
@@ -386,7 +387,7 @@ export function SignupRosterGrid({
         headerName: "Peak CA",
         valueGetter: (p) => p.data?.caPeak?.points ?? -1,
         cellRenderer: CaPeakCell,
-        tooltip: (p: TooltipCallbackParams<RosterRow, number>) => caTitle(p.data?.caPeak),
+        tooltip: (p: TooltipCallbackParams<RosterRow, number>) => usefulTooltip(p, caTitle(p.data?.caPeak)),
         width: 120,
       },
       { colId: "ehb", headerName: "EHB", valueGetter: (p) => p.data?.womStats?.ehb ?? -1, cellRenderer: EhbCell, cellClass: "num", tooltip: false, width: 90 },
@@ -448,15 +449,21 @@ export function SignupRosterGrid({
     // that comment for why a new columnDefs identity is the actual problem being avoided here.
   }, [questions, isDuo, showTier]);
 
-  // tooltip/headerTooltip: true shows the cell's own formatted value / the header's own name. tooltipShowMode
-  // ("whenTruncated") is grid-wide only, not per column (no way to opt individual columns in/out), and several
-  // columns carry supplementary info that isn't just "the same text, cut off" — the exact signup timestamp, the
-  // CA point total behind a tier name — so it stays at AG's default "standard" (always on hover), not truncated-
-  // only. `tier` opts out with `tooltip: false` since TierBadge already has its own native `title`.
+  // A cell's tooltip is its formatted value, a header's its name, but only when they'd tell you something: text cut
+  // off, or detail the cell doesn't show (the exact signup time, the CA points behind a tier). See gridTooltips.ts,
+  // which also says why AG's own tooltipShowMode="whenTruncated" can't do this. `tier` opts out with
+  // `tooltip: false` since TierBadge already has its own native `title`.
   // lockPinned: a column's pinned state (left/unpinned) is set by the colDef, not by the user — without this, an
   // unpinned column can be dragged past the pinned #/RSN block into it.
   const defaultColDef = useMemo<ColDef<RosterRow>>(
-    () => ({ sortable: true, resizable: true, minWidth: 80, tooltip: true, headerTooltip: true, lockPinned: true }),
+    () => ({
+      sortable: true,
+      resizable: true,
+      minWidth: 80,
+      tooltip: (p: TooltipCallbackParams<RosterRow>) => usefulTooltip(p, String(p.valueFormatted ?? p.value ?? "")),
+      headerTooltip,
+      lockPinned: true,
+    }),
     [],
   );
 
