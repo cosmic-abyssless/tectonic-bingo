@@ -13,14 +13,15 @@ A single OSRS clan bingo competition, run from start to finish across a set of l
 - **Not:** A tournament, a season.
 
 ### Stage
-The current lifecycle phase of a Bingo. Transitions move forward through a fixed sequence:
-1. `planning` — Admin configures board, tiles, rules, signup questions. Hidden from normal players.
-2. `signup` — Players submit signups (solo or duo). Admins review and approve.
-3. `captains` — Captains are assigned; signups are locked.
-4. `draft` — Captains take turns picking players/duos in structured rounds.
-5. `reveal` — Teams are set; the board is visible for prep, but submissions are not yet accepted.
-6. `live` — The Bingo is running. Submissions are accepted and reviewed; points accumulate.
-7. `complete` — The Bingo has ended. Final scores are locked, winners declared.
+The current lifecycle phase of a Bingo. Transitions move forward through a fixed sequence. The name in bold is the canonical one, used in UI copy, discussion and this glossary; the code value is engineering-only.
+1. **Planning** (`planning`) — Admin configures board, tiles, rules, signup questions. Hidden from normal players.
+2. **Signups open** (`signup`) — Players submit signups (solo or duo). Admins review and approve. Captains can already scout the signups.
+3. **Signups closed** (`captains`) — The roster is final and signups are locked. Captains keep scouting until the draft starts.
+4. **Draft** (`draft`) — Captains take turns picking players/duos in structured rounds. Every signed-up player and everyone already on a team can watch.
+5. **Board revealed** (`reveal`) — Teams are set; the board is visible for prep, but submissions are not yet accepted.
+6. **Live** (`live`) — The Bingo is running. Submissions are accepted and reviewed; points accumulate.
+7. **Finished** (`complete`) — The Bingo has ended. Final scores are locked, winners declared.
+- **Avoid:** "captains stage" in discussion or UI copy. It is the code value for Signups closed and reads as if it were about the Captain role.
 
 ### Codeword
 A unique, secret text phrase generated for a Bingo (or a stage of it) that players must show in their verification screenshots (e.g. spoken in public chat, or in a clan chat message) to prove the screenshot was taken during this specific Bingo.
@@ -52,7 +53,7 @@ A trusted clan member whose elevated permissions are scoped to a single specific
 ### Captain
 A designated player who leads a Team during a Bingo.
 - **Capabilities:** Participates in the Draft to pick players/duos for their team; represents the team in disputes.
-- **Rules:** Assigned by an Admin during the `captains` stage. Exactly one or two captains per team.
+- **Rules:** Assigned by an Admin, from the signups as they come in, while signups are open or closed. Exactly one or two captains per team.
 
 ### Player
 Any clan member participating in a Bingo as a competitor.
@@ -74,7 +75,7 @@ A player's registration for a specific Bingo, submitted during the `signup` stag
 ### Duo
 Two players who register to enter the Bingo together and must be drafted onto the same team as a single unit.
 - **Synonyms:** Pair (acceptable synonym), Pairing (internal record).
-- **Rules:** Both players must confirm the pairing. Consumes a single pick in a duo-draft round.
+- **Rules:** Both players must confirm the pairing. Consumes a single pick in a duo-draft round. A player signs up first and pairs afterwards: the pairing is a separate, deferrable step, not a precondition of signing up.
 
 ### Leftover
 A player or duo that remains when total signups do not divide evenly into teams.
@@ -88,6 +89,20 @@ The final phase of a draft when `leftoverMode` is set to `singles`, in which odd
 ### Draft
 The structured selection process during the `draft` stage where Captains take turns selecting Players (or Duos) onto their Teams.
 - **Mechanics:** Snake draft or linear, divided into rounds.
+
+- **Draft room:** The page where the Draft happens. Captains and Moderators enter it once signups are open; every signed-up Player and everyone already on a Team can watch once the Draft stage begins.
+- **On the clock:** The Team whose Captain is picking now. Shown to everyone as who is currently picking, with the round and pick number; the Captain on the clock also gets a stronger cue that it is their turn. There is no pick timer.
+
+### Scouting
+Captains (and Moderators) looking through the signups before the Draft, during Signups open and Signups closed.
+- **Rules:** Not visible to ordinary Players until the Draft stage.
+
+### Pick Rating
+A Team's private note on a signup while scouting: 1 to 3 stars and a short note.
+- **Rules:** Written by the Team's Captains only, shared between them, and carried into the Draft. Rating either half of a Duo rates both. Never shown to other Teams.
+
+### Team
+The group of Players a Captain leads, formed by the Draft. Has a name, a color, and one or two Captains.
 
 ---
 
