@@ -59,6 +59,18 @@ export class WomCompetitionError extends Error {
   }
 }
 
+const ERROR_DETAIL_MAX_CHARS = 300;
+
+// A non-2xx from WOM is usually its own small JSON {message}, but an
+// intermediary (Cloudflare, a proxy) can instead return a full HTML error
+// page — that's not useful detail for an admin, so drop it rather than
+// dumping the whole page into a ServiceError message and the UI's error box.
+function summarizeErrorBody(body: string): string {
+  const trimmed = body.trim();
+  if (!trimmed || /^<(!doctype|html)/i.test(trimmed)) return "";
+  return trimmed.length > ERROR_DETAIL_MAX_CHARS ? `${trimmed.slice(0, ERROR_DETAIL_MAX_CHARS)}…` : trimmed;
+}
+
 export class WomCompetitionClient {
   constructor(
     private fetchImpl: FetchLike = fetch,
@@ -115,7 +127,7 @@ export class WomCompetitionClient {
       throw new WomCompetitionError(`${method} ${path} failed: ${err instanceof Error ? err.message : String(err)}`);
     }
     if (!res.ok) {
-      const detail = await res.text().catch(() => "");
+      const detail = summarizeErrorBody(await res.text().catch(() => ""));
       throw new WomCompetitionError(`${method} ${path}: HTTP ${res.status}${detail ? ` — ${detail}` : ""}`);
     }
     return res;
