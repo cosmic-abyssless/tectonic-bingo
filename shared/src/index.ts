@@ -196,6 +196,12 @@ export interface PastBingoParticipation {
   startsAt: string;
   endsAt: string;
   gained: number;
+  /** 1-based place by gained among every participant in the competition. */
+  totalRank: number;
+  totalParticipants: number;
+  /** Place among the player's own team, by gained. Null when the competition isn't tied to a bingo or the player wasn't on a team in it. */
+  teamRank: number | null;
+  teamSize: number | null;
 }
 
 export type NodeKind = "ALL" | "ANY" | "COUNT" | "SUM" | "ITEM" | "MANUAL";
