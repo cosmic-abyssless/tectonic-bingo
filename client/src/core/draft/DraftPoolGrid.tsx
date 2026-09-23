@@ -166,8 +166,8 @@ function dimClass(dim: boolean): string | undefined {
 // own (no way to suppress it short of forking those components), so those columns opt out of the AG tooltip
 // (tooltip: false) rather than show both at once.
 const rsnLine: LineRender = (entry, { dim, search }) => (
-  <span className={`inline-flex min-w-0 items-center gap-1 ${dimClass(dim) ?? ""}`}>
-    <AccountTypeIcon accountType={entry.accountType} />
+  <span className={`inline-flex max-w-full min-w-0 items-center gap-2 ${dimClass(dim) ?? ""}`}>
+    <AccountTypeIcon accountType={entry.accountType} className="align-middle" reserveSpace />
     <PlayerName userId={entry.user.id} className="min-w-0 truncate">
       <Mark text={entry.signup.rsn} query={search} />
     </PlayerName>
@@ -275,8 +275,9 @@ const DraftButtonRenderer = ({ data, context }: CustomCellRendererProps<DraftUni
   const isPair = data.entries.length > 1;
   const draftable = !data.leftover || (context.mainPoolEmpty && context.leftoverMode === "singles");
   return (
-    <div className="flex h-full items-center justify-end">
-      <CellButton variant="primary" onClick={() => context.onPick(data.entries[0]!.user.id)} disabled={context.picking || !draftable}>
+    // pr-4: the grid's vertical scrollbar overlays the last ~16px of this pinned-right column and would clip the button.
+    <div className="flex h-full items-center justify-center pr-4">
+      <CellButton variant="primary" className="w-24" onClick={() => context.onPick(data.entries[0]!.user.id)} disabled={context.picking || !draftable}>
         {isPair ? "Draft pair" : "Draft"}
       </CellButton>
     </div>
@@ -444,7 +445,7 @@ export function DraftPoolGrid({
         tooltip: stackedTooltip((e) => e.signup.rsn),
         pinned: "left",
         lockPosition: "left",
-        width: 170,
+        width: 210,
         sort: ratings ? undefined : "asc",
         suppressMovable: true,
       },

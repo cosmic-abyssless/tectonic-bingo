@@ -34,10 +34,24 @@ const ACCOUNT_TYPE_BADGE: Partial<Record<AccountType, string>> = {
  * height in px; the default is native. Scaled copies use nearest-neighbour
  * so the pixels stay crisp instead of going blurry.
  */
-export function AccountTypeIcon({ accountType, size, className = "" }: { accountType: AccountType | null | undefined; size?: number; className?: string }) {
+export function AccountTypeIcon({
+  accountType,
+  size,
+  className = "",
+  reserveSpace,
+}: {
+  accountType: AccountType | null | undefined;
+  size?: number;
+  className?: string;
+  /** Leave the icon's width empty for an account with no badge, so names in a column line up with those that have one. */
+  reserveSpace?: boolean;
+}) {
   const badge = accountType && ACCOUNT_TYPE_BADGE[accountType];
-  if (!badge) return null;
+  if (!badge) return reserveSpace ? <span aria-hidden className="inline-block w-[13px] shrink-0" /> : null;
   const label = ACCOUNT_TYPE_LABEL[accountType];
   const style = size ? { height: size, width: "auto", imageRendering: "pixelated" as const } : undefined;
-  return <img src={badge} alt={label} title={label} className={`inline-block align-[-2px] ${className}`} style={style} />;
+  // shrink-0: in a flex row next to a truncating name the browser would otherwise squeeze the icon before the text.
+  const img = <img src={badge} alt={label} title={label} className={`inline-block shrink-0 align-[-2px] ${className}`} style={style} />;
+  // The badges are 10px wide (13 for UIM): centre them in the same 13px slot the spacer holds.
+  return reserveSpace ? <span className="inline-flex w-[13px] shrink-0 justify-center">{img}</span> : img;
 }
