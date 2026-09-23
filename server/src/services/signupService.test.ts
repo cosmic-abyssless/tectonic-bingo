@@ -301,7 +301,7 @@ describe("getAllSignups / markBuyin", () => {
     const roster = getAllSignups(db, bingo.id);
     const me = roster.find((r) => r.user.id === memberId)!;
     expect(me.outgoingPairingRequest?.pairing.id).toBe(pairing.id);
-    expect(me.outgoingPairingRequest?.target.rsn).toBe("TargetRsn");
+    expect(me.outgoingPairingRequest?.target).toMatchObject({ rsn: "TargetRsn", name: "TargetRsn" });
     // Not `pairing` — that stays null until the target accepts; a pending request is its own, separate thing.
     expect(me.pairing).toBeNull();
   });
@@ -315,6 +315,7 @@ describe("getAllSignups / markBuyin", () => {
     const loggedInOnly = getAllSignups(db, bingo.id).find((r) => r.user.id === memberId)!;
     expect(loggedInOnly.outgoingPairingRequest?.target.rsn).toBeNull();
     expect(loggedInOnly.outgoingPairingRequest?.target.user?.discordUsername).toBe("LoggedInOnly");
+    expect(loggedInOnly.outgoingPairingRequest?.target.name).toBe("LoggedInOnly");
 
     // Cancel that one, then request someone with no user row at all — the fully unresolved case.
     cancelRequest(db, bingo, { id: memberId, discordId: "member" }, loggedInOnly.outgoingPairingRequest!.pairing.id);
@@ -323,6 +324,7 @@ describe("getAllSignups / markBuyin", () => {
     const neverLoggedIn = getAllSignups(db, bingo.id).find((r) => r.user.id === memberId)!;
     expect(neverLoggedIn.outgoingPairingRequest?.target.user).toBeNull();
     expect(neverLoggedIn.outgoingPairingRequest?.target.rsn).toBeNull();
+    expect(neverLoggedIn.outgoingPairingRequest?.target.name).toBe("neverLoggedIn");
   });
 });
 

@@ -18,6 +18,8 @@ import { discordName, displayName } from "../ui/user";
 import { Button } from "../ui/Button";
 import { EmptyState, Notice, FilterChip } from "../ui/Card";
 import { ColumnPicker } from "../ui/ColumnPicker";
+import { usePreference } from "../ui/preferences";
+import { Switch } from "../ui/Switch";
 import { AlertIcon, UsersIcon } from "../ui/icons";
 import { formatCaTier, formatWomStat } from "../signup/caStats";
 import { useDocumentTop } from "../ui/tableChrome";
@@ -167,6 +169,7 @@ export function SignupRoster({ slug }: { slug: string }) {
   const [tableWrapper, setTableWrapper] = useState<HTMLDivElement | null>(null);
   const tableTop = useDocumentTop(tableWrapper);
   const tableHeight = `calc(100dvh - ${tableTop}px - 1.5rem)`;
+  const [rosterWidth, setRosterWidth] = usePreference("signupRosterWidth");
   // Set by the grid itself (onGridReady/onModelUpdated) — how many rows its search + filters currently leave
   // visible. Starts null (grid not mounted yet) so the search box shows totalCount rather than flashing "0 of N".
   const [displayedCount, setDisplayedCount] = useState<number | null>(null);
@@ -276,8 +279,9 @@ export function SignupRoster({ slug }: { slug: string }) {
   }
 
   return (
-    // Only the grid itself goes full width (ModPage's <main> is unconstrained for this one tab, see ModPage.tsx's
-    // own NARROW comment) — everything above it here (buy-ins held, the filter/search/Columns row) stays at the
+    // Only the grid itself goes full width, and only while the "Full width" switch is on (ModPage's <main> is
+    // unconstrained for this one tab, see ModPage.tsx's own NARROW comment) — everything above it here (buy-ins
+    // held, the filter/search/Columns row) stays at the
     // same reading width every other mod tab uses. A Fragment root, not one div, so the grid can sit as a
     // full-width sibling instead of being capped by the narrow block's own max-width.
     <>
@@ -362,13 +366,16 @@ export function SignupRoster({ slug }: { slug: string }) {
               <Button size="sm" onPress={copyCsv}>
                 {copied ? "Copied" : "Copy as CSV"}
               </Button>
+              <Switch isSelected={rosterWidth === "full"} onChange={(full) => setRosterWidth(full ? "full" : "narrow")}>
+                Full width
+              </Switch>
             </div>
           </div>
         )}
       </div>
 
       {roster.length > 0 && (
-        <div ref={setTableWrapper} className="mt-4 w-full overflow-hidden" style={{ height: tableHeight, minHeight: MIN_TABLE_HEIGHT }}>
+        <div ref={setTableWrapper} className={`mt-4 w-full overflow-hidden ${rosterWidth === "narrow" ? "mx-auto max-w-6xl" : ""}`} style={{ height: tableHeight, minHeight: MIN_TABLE_HEIGHT }}>
           <SignupRosterGrid
             rows={rows}
             questions={questions}

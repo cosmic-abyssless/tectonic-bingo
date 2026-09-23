@@ -23,6 +23,7 @@ import * as statsService from "../services/statsService";
 import { isOcrEnabled, analyzeSubmissionScreenshot } from "../ocr";
 import { getTectonicClient, TectonicUnavailableError, type TectonicDetailedUser } from "../services/tectonicService";
 import { fetchProfiles } from "../services/tectonicProfileService";
+import { applyRosterNames, partiesInPairingState } from "../services/pairingNames";
 import { fetchAndPersistPlayerStats, getSignupStats, parseStoredPlayerStats } from "../services/playerStatsService";
 import { parseStoredCaStats } from "../services/combatAchievements";
 import { syncWomTeamRename } from "../services/womCompetitionService";
@@ -440,7 +441,9 @@ router.get(
   requireAuth,
   requireBingo,
   asyncHandler(async (req, res) => {
-    res.json(pairingService.getPairingState(db, req.bingo!.id, me(req)));
+    const state = pairingService.getPairingState(db, req.bingo!.id, me(req));
+    await applyRosterNames(partiesInPairingState(state));
+    res.json(state);
   }),
 );
 

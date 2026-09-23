@@ -13,6 +13,7 @@ import { changeSubmissionAttribution } from "../services/submissionTarget";
 import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
 import { fetchProfiles } from "../services/tectonicProfileService";
+import { applyRosterNames } from "../services/pairingNames";
 import * as pairingService from "../services/pairingService";
 import * as teamService from "../services/teamService";
 import { syncWomCompetitionAfterDraft } from "../services/womCompetitionService";
@@ -189,7 +190,10 @@ router.get(
   asyncHandler(async (req, res) => {
     const leftovers = draftService.getLeftoverUserIds(db, req.bingo!);
     const roster = signupService.getAllSignups(db, req.bingo!.id);
-    const tectonic = await fetchProfiles(db, roster.map((entry) => entry.user.id));
+    const [tectonic] = await Promise.all([
+      fetchProfiles(db, roster.map((entry) => entry.user.id)),
+      applyRosterNames(roster.flatMap((entry) => (entry.outgoingPairingRequest ? [entry.outgoingPairingRequest.target] : []))),
+    ]);
     const signups = roster.map((entry) => ({
       ...entry,
       leftover: leftovers.has(entry.user.id),

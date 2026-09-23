@@ -12,7 +12,7 @@
 // popover) because the reason that rule exists — many heavy interactive components × many rows made the signup
 // roster's mount slow — doesn't apply here (one rating widget per row, a pool that's typically a few dozen units
 // at most, not 60+).
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type { CustomCellRendererProps } from "ag-grid-react";
 import type {
@@ -43,6 +43,8 @@ import { useGridTheme } from "../ui/agGrid";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { Badge } from "../ui/Card";
 import { ColumnPicker } from "../ui/ColumnPicker";
+import { usePreference } from "../ui/preferences";
+import { Switch } from "../ui/Switch";
 import { CellButton, Mark } from "../ui/gridCells";
 import { useHiddenColumns } from "../ui/hiddenColumns";
 import { LinkIcon } from "../ui/icons";
@@ -283,9 +285,17 @@ const PairIconRenderer = ({ data }: CustomCellRendererProps<DraftUnit>) => (data
 const LeftoverBadgeRenderer = ({ data, context }: CustomCellRendererProps<DraftUnit, unknown, PoolGridContext>) => (data?.leftover ? <Badge tone="warn">{context.leftoverTag}</Badge> : null);
 
 // Movable column order, sizing and sort. Visibility stays in pref:hiddenColumns:draftPool (useHiddenColumns) so
-// ColumnPicker keeps working. Fixed columns are left out of the saved order — their place comes from lockPosition.
+// ColumnPicker keeps working. Fixed columns are always forced to their pinned places in the saved order — not
+// left out of it: when initialState has a columnOrder, AG only restores sizing/sort for the columns *listed* in
+// it, so leaving them out silently dropped their width and sort on every reload (same fix as SignupRosterGrid).
 const GRID_STATE_KEY = "pref:gridState:draftPool";
-const FIXED_COL_IDS = ["pairIcon", "rating", "rsn", "draft"];
+const FIXED_LEFT_COL_IDS = ["pairIcon", "rating", "rsn"];
+const FIXED_RIGHT_COL_IDS = ["draft"];
+const FIXED_COL_IDS = [...FIXED_LEFT_COL_IDS, ...FIXED_RIGHT_COL_IDS];
+
+function fixedColsInPlace(orderedColIds: string[]): string[] {
+  return [...FIXED_LEFT_COL_IDS, ...orderedColIds.filter((id) => !FIXED_COL_IDS.includes(id)), ...FIXED_RIGHT_COL_IDS];
+}
 
 // Same floor as SignupRosterGrid's own MIN_TABLE_HEIGHT (core/mod/SignupRoster.tsx), tuned to this grid's own
 // fixed row heights rather than shared outright: ~40px header + 10 solo rows (getRowHeight's 44px) lands at the
@@ -298,9 +308,9 @@ function readDraftColumnState(): Pick<GridState, "columnOrder" | "columnSizing" 
     if (!raw) return {};
     const parsed = JSON.parse(raw) as GridState;
     if (!parsed || typeof parsed !== "object") return {};
-    const orderedColIds = parsed.columnOrder?.orderedColIds?.filter((id) => typeof id === "string" && !FIXED_COL_IDS.includes(id));
+    const orderedColIds = parsed.columnOrder?.orderedColIds?.filter((id) => typeof id === "string");
     return {
-      ...(orderedColIds?.length ? { columnOrder: { orderedColIds } } : {}),
+      ...(orderedColIds?.length ? { columnOrder: { orderedColIds: fixedColsInPlace(orderedColIds) } } : {}),
       ...(parsed.columnSizing ? { columnSizing: parsed.columnSizing } : {}),
       ...(parsed.sort ? { sort: parsed.sort } : {}),
     };
@@ -318,7 +328,10 @@ export function DraftPoolGrid({
   onPick,
   picking,
   leftoverMode,
+  heading,
 }: {
+  /** Shown at the left of the toolbar row (DraftRoom's "Available players (n)"). */
+  heading: ReactNode;
   pool: DraftUnit[];
   questions: SignupQuestion[];
   /** Present only for team leads — they see and edit their own team's ratings. */
@@ -351,6 +364,8 @@ export function DraftPoolGrid({
     };
   });
   const [search, setSearch] = useTableSearch();
+  // The wrapper that actually changes width is DraftRoom's — this just renders the switch for it in the toolbar.
+  const [poolWidth, setPoolWidth] = usePreference("draftPoolWidth");
   const statsRefreshing = useStatsRefreshingSignupIds();
 
   const entries = useMemo(() => pool.flatMap((u) => u.entries), [pool]);
@@ -603,12 +618,12 @@ export function DraftPoolGrid({
   // hiddenColumns (and the persisted store behind it) can't drift from what the grid is actually showing.
   const onStateUpdated = useCallback((e: StateUpdatedEvent<DraftUnit>) => {
     setHiddenColumns(new Set(e.state.columnVisibility?.hiddenColIds ?? []));
-    const orderedColIds = e.state.columnOrder?.orderedColIds.filter((id) => !FIXED_COL_IDS.includes(id));
+    const orderedColIds = e.state.columnOrder?.orderedColIds;
     try {
       localStorage.setItem(
         GRID_STATE_KEY,
         JSON.stringify({
-          columnOrder: orderedColIds?.length ? { orderedColIds } : undefined,
+          columnOrder: orderedColIds?.length ? { orderedColIds: fixedColsInPlace(orderedColIds) } : undefined,
           columnSizing: e.state.columnSizing,
           sort: e.state.sort,
         }),
@@ -642,13 +657,26 @@ export function DraftPoolGrid({
     gridApiRef.current?.refreshCells({ force: true, columns: markColumnIds });
   }, [search, markColumnIds]);
 
-  if (pool.length === 0) return <p className="text-sm text-on-surface-subtle">No one left to draft.</p>;
+  if (pool.length === 0) {
+    return (
+      <div className="space-y-3">
+        {heading}
+        <p className="text-sm text-on-surface-subtle">No one left to draft.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {heading}
+        <div className="flex items-center gap-2">
         <TableSearchInput value={search} onChange={setSearch} matchCount={matchingEntries.length} totalCount={entries.length} />
         <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={handleHiddenChange} />
+        <Switch isSelected={poolWidth === "full"} onChange={(full) => setPoolWidth(full ? "full" : "narrow")}>
+          Full width
+        </Switch>
+        </div>
       </div>
       {rows.length === 0 ? (
         <p className="text-sm text-on-surface-subtle">No one matches this search.</p>
