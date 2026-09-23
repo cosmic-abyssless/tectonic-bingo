@@ -371,9 +371,12 @@ export const bugReports = sqliteTable('bug_reports', {
   pageUrl: text('page_url'), // window.location.pathname at submit time — debugging context
   userAgent: text('user_agent'), // navigator.userAgent — same
   palette: text('palette'), // theme + palette + colour scheme in effect (e.g. "comic · Blackout (dark)") — for reproducing visual bugs
-  status: text('status', { enum: ['open', 'resolved'] }).notNull().default('open'),
+  // 'resolved' = fixed; 'closed' = deliberately not implemented (usually with a reason in resolutionMessage).
+  status: text('status', { enum: ['open', 'resolved', 'closed'] }).notNull().default('open'),
   resolvedByUserId: text('resolved_by_user_id').references(() => users.id),
   resolvedAt: integer('resolved_at', { mode: 'timestamp' }),
+  // Optional note from whoever resolved/closed it, shown to the reporter; cleared on reopen.
+  resolutionMessage: text('resolution_message'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
 

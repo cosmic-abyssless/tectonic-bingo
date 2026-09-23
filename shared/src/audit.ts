@@ -174,7 +174,7 @@ export interface AuditDetailsMap {
   "http.mutation": { method: string; originalUrl: string; routePath: string | null; params: Record<string, unknown>; body: unknown; file: string | null };
 
   "bug_report.created": { description: string; pageUrl: string | null; palette: string | null };
-  "bug_report.resolved": { resolved: boolean };
+  "bug_report.status_changed": { status: "open" | "resolved" | "closed"; resolutionMessage: string | null };
 }
 
 export interface PointChangeDetails {
@@ -567,12 +567,12 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     title: "Bug report submitted",
     label: (i) => `${actor(i)} reported a bug: "${i.details.description.length > 60 ? `${i.details.description.slice(0, 60)}…` : i.details.description}"`,
   },
-  "bug_report.resolved": {
+  "bug_report.status_changed": {
     category: "bug_report",
     tone: "ok",
     visibility: "mods",
-    title: "Bug report resolved",
-    label: (i) => `${actor(i)} marked a bug report ${i.details.resolved ? "resolved" : "reopened"}`,
+    title: "Bug report status changed",
+    label: (i) => `${actor(i)} marked a bug report ${i.details.status === "resolved" ? "fixed" : i.details.status === "closed" ? "closed" : "reopened"}`,
   },
 };
 

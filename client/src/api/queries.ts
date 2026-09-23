@@ -8,6 +8,7 @@ import type {
 import { useAuth } from "../context/AuthContext";
 import { useMarkStatsRefreshing } from "../context/WebSocketContext";
 import { api } from "./client";
+import * as bugReportsApi from "./bugReportsApi";
 import { readBoardCache, writeBoardCache } from "./boardCache";
 import { optimisticUpdate } from "./optimistic";
 
@@ -32,12 +33,22 @@ export const queryKeys = {
   stats: (slug: string) => ["stats", slug] as const,
   auditLog: (slug: string, filters: AuditLogFilters) => ["auditLog", slug, filters] as const,
   teamActivity: (slug: string, teamId: string) => ["teamActivity", slug, teamId, "condensed"] as const,
+  myBugReports: () => ["myBugReports"] as const,
 };
 
 export function useBingos() {
   return useQuery({
     queryKey: queryKeys.bingos(),
     queryFn: () => api.get<BingoListResponse>("/api/bingos"),
+  });
+}
+
+// Fetched lazily (only while the bug-report dialog is open) via `enabled`.
+export function useMyBugReports(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.myBugReports(),
+    queryFn: () => bugReportsApi.getMyBugReports(),
+    enabled,
   });
 }
 

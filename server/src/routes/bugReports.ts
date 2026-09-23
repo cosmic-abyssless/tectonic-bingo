@@ -19,6 +19,13 @@ function resolveBingoIdFromPageUrl(pageUrl: string | null): string | null {
   return bingoService.getBingoBySlug(db, slug)?.id ?? null;
 }
 
+router.get(
+  "/",
+  asyncHandler(async (req, res) => {
+    res.json({ bugReports: bugReportService.getBugReports(db, { reporterUserId: req.user!.id }) });
+  }),
+);
+
 router.post(
   "/",
   asyncHandler(async (req, res) => {
