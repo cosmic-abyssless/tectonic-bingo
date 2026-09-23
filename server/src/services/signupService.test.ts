@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createQuestion, deleteQuestion, reorderQuestions, updateQuestion } from "./signupService";
-import { createSignup, getAllSignups, getSignupForUser, markBuyin, setSignupTimezone, updateSignup, withdrawSignup } from "./signupService";
+import { createSignup, getAllSignups, getAnswerCounts, getSignupForUser, markBuyin, setSignupTimezone, updateSignup, withdrawSignup } from "./signupService";
 import { cancelRequest, requestPairing } from "./pairingService";
 import { ServiceError } from "./errors";
 import { createTeam } from "./teamService";
@@ -325,6 +325,24 @@ describe("getAllSignups / markBuyin", () => {
     expect(neverLoggedIn.outgoingPairingRequest?.target.user).toBeNull();
     expect(neverLoggedIn.outgoingPairingRequest?.target.rsn).toBeNull();
     expect(neverLoggedIn.outgoingPairingRequest?.target.name).toBe("neverLoggedIn");
+  });
+});
+
+describe("deleting a question with answers", () => {
+  it("deletes its answers with it (only its own), counts non-blank ones, and records how many went", () => {
+    const { bingo, adminId, memberId } = seedBingo();
+    const tz = createQuestion(db, { bingoId: bingo.id, prompt: "What time zone?", type: "text" });
+    const other = createQuestion(db, { bingoId: bingo.id, prompt: "Other", type: "text" });
+    createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "A", answers: [{ questionId: tz.id, value: "EST" }, { questionId: other.id, value: "x" }] });
+    createSignup(db, bingo, { bingoId: bingo.id, userId: adminId, rsn: "B", answers: [{ questionId: tz.id, value: "" }] });
+    expect(getAnswerCounts(db, bingo.id)).toEqual({ [tz.id]: 1, [other.id]: 1 });
+
+    deleteQuestion(db, tz.id);
+
+    expect(db.select().from(schema.signupQuestions).all().map((q) => q.id)).toEqual([other.id]);
+    expect(db.select().from(schema.signupAnswers).all().map((a) => a.questionId)).toEqual([other.id]);
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "question.deleted")).get()!;
+    expect(JSON.parse(row.details)).toMatchObject({ prompt: "What time zone?", answersDeleted: 1 });
   });
 });
 

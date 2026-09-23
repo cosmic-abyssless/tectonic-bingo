@@ -308,7 +308,7 @@ router.delete(
 router.get(
   "/questions",
   asyncHandler(async (req, res) => {
-    res.json({ questions: signupService.getQuestions(db, req.bingo!.id) });
+    res.json({ questions: signupService.getQuestions(db, req.bingo!.id), answerCounts: signupService.getAnswerCounts(db, req.bingo!.id) });
   }),
 );
 router.post(

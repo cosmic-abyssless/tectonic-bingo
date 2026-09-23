@@ -102,7 +102,8 @@ export interface AuditDetailsMap {
 
   "question.created": { prompt: string; type: string; required: boolean };
   "question.updated": { changes: FieldChanges<{ prompt: string; helperText: string | null; type: string; optionsJson: string | null; required: boolean; sortOrder: number }> };
-  "question.deleted": { prompt: string; type: string; required: boolean };
+  /** `answersDeleted`: how many players' (non-blank) answers went with it. Absent on entries from before answers could be deleted along with it. */
+  "question.deleted": { prompt: string; type: string; required: boolean; answersDeleted?: number };
   "question.reordered": { order: string[] };
 
   "team.created": { name: string; captainUserId: string; captainName: string; coCaptainUserId: string | null; coCaptainName: string | null; color: string | null };
@@ -398,7 +399,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
   "line.deleted": { category: "board", tone: "danger", visibility: "mods", title: "Line deleted", label: (i) => `${actor(i)} deleted ${i.details.lineType} ${i.details.lineIndex + 1}` },
   "question.created": { category: "signup", tone: "ok", visibility: "mods", title: "Signup question added", label: (i) => `${actor(i)} added the signup question "${i.details.prompt}"` },
   "question.updated": { category: "signup", tone: "neutral", visibility: "mods", title: "Signup question updated", label: (i) => `${actor(i)} updated the signup question "${i.entityLabel ?? ""}"` },
-  "question.deleted": { category: "signup", tone: "danger", visibility: "mods", title: "Signup question deleted", label: (i) => `${actor(i)} deleted the signup question "${i.details.prompt}"` },
+  "question.deleted": { category: "signup", tone: "danger", visibility: "mods", title: "Signup question deleted", label: (i) => `${actor(i)} deleted the signup question "${i.details.prompt}"${i.details.answersDeleted ? ` and ${i.details.answersDeleted} answer${i.details.answersDeleted === 1 ? "" : "s"} to it` : ""}` },
   "question.reordered": { category: "signup", tone: "neutral", visibility: "mods", title: "Signup questions reordered", label: (i) => `${actor(i)} reordered the signup questions` },
   "team.created": { category: "team", tone: "ok", visibility: "team", title: "Team created", label: (i) => `${actor(i)} created the team "${i.details.name}"` },
   "team.updated": {

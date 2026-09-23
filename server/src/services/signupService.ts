@@ -1,5 +1,5 @@
 import { now as clockNow } from "../clock";
-import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull, ne, or } from "drizzle-orm";
 import { formatSignupAnswer, isBlankAnswer, isValidTimeZone, MAX_CHOICE_LENGTH, MAX_MULTISELECT_CHOICES, MAX_QUESTION_HELPER_TEXT, type SignupQuestionType } from "@bingo/shared";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -105,16 +105,33 @@ export function updateQuestion(db: Db, id: string, params: Partial<Omit<CreateQu
   });
 }
 
+// How many (non-blank) answers each of a bingo's questions has — what deleting it would throw away, for the mod UI's
+// confirmation.
+export function getAnswerCounts(db: Db, bingoId: string): Record<string, number> {
+  const rows = db
+    .select({ questionId: signupAnswers.questionId, answers: count() })
+    .from(signupAnswers)
+    .innerJoin(signupQuestions, eq(signupAnswers.questionId, signupQuestions.id))
+    .where(and(eq(signupQuestions.bingoId, bingoId), ne(signupAnswers.value, "")))
+    .groupBy(signupAnswers.questionId)
+    .all();
+  return Object.fromEntries(rows.map((r) => [r.questionId, r.answers]));
+}
+
+// Deletes the question and every answer to it (they can't outlive it: signup_answers references the question). The
+// mod UI warns first when there are answers; the audit entry records how many went.
 export function deleteQuestion(db: Db, id: string): void {
   db.transaction((tx) => {
     const existing = tx.select().from(signupQuestions).where(eq(signupQuestions.id, id)).get();
+    const answersDeleted = existing ? (getAnswerCounts(tx, existing.bingoId)[id] ?? 0) : 0;
+    tx.delete(signupAnswers).where(eq(signupAnswers.questionId, id)).run();
     tx.delete(signupQuestions).where(eq(signupQuestions.id, id)).run();
     if (existing) {
       audit(tx, {
         action: "question.deleted",
         bingoId: existing.bingoId,
         entity: { type: "question", id, label: existing.prompt },
-        details: { prompt: existing.prompt, type: existing.type, required: existing.required },
+        details: { prompt: existing.prompt, type: existing.type, required: existing.required, answersDeleted },
       });
     } else {
       markAuditedNoop();
