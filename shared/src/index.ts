@@ -581,8 +581,7 @@ export interface RosterEntry {
   // Duo mode, mod roster only: the accepted pairing this player is in.
   pairing?: SignupPairing | null;
   // Duo mode, mod roster only: this player's own outstanding request to pair with someone, before it's been
-  // accepted/declined. `target` is resolved the same as MyPairingResponse's own `outgoing.target` — RSN once
-  // they've signed up, else their Discord name, else null if they haven't even logged in yet.
+  // accepted/declined. `target` is resolved the same as MyPairingResponse's own `outgoing.target`.
   outgoingPairingRequest?: { pairing: SignupPairing; target: PairingParty } | null;
   // Mod roster only: undrafted and not fitting a full draft round (see LeftoverMode).
   leftover?: boolean;
@@ -651,11 +650,14 @@ export interface PartnerCandidatesResponse {
 }
 
 // One side of a pairing as the other side should see them. `user` is null
-// until they've logged in (the client then falls back to the clan roster);
-// `rsn` is set once they've signed up for this bingo.
+// until they've logged in; `rsn` is set once they've signed up for this bingo.
+// `name` is what to show: signup RSN, else clan-roster RSN, else Discord name,
+// else the raw Discord id.
 export interface PairingParty {
+  discordId: string;
   user: MinimalUser | null;
   rsn: string | null;
+  name: string;
 }
 
 export interface MyPairingResponse {

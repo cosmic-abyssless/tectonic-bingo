@@ -49,14 +49,14 @@ describe("requestPairing", () => {
   it("works for a clan member who hasn't logged in yet", () => {
     const { bingo, a } = seed();
     const pairing = requestPairing(db, bingo, { requester: a, targetDiscordId: "stranger" });
-    expect(getPairingState(db, bingo.id, a).outgoing).toEqual({ pairing, target: { user: null, rsn: null } });
+    expect(getPairingState(db, bingo.id, a).outgoing).toEqual({ pairing, target: { discordId: "stranger", user: null, rsn: null, name: "stranger" } });
   });
 
   it("names a target who has logged in but not signed up, without an rsn", () => {
     const { bingo, a } = seed();
     const lurker = db.insert(schema.users).values({ discordId: "lurker", discordUsername: "lurker" }).returning().get();
     requestPairing(db, bingo, { requester: a, targetDiscordId: "lurker" });
-    expect(getPairingState(db, bingo.id, a).outgoing?.target).toMatchObject({ user: { id: lurker.id }, rsn: null });
+    expect(getPairingState(db, bingo.id, a).outgoing?.target).toMatchObject({ user: { id: lurker.id }, rsn: null, name: "lurker" });
   });
 
   it("allows one outgoing request at a time", () => {

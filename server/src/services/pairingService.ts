@@ -6,6 +6,7 @@ import { signupPairings, signups, teamMembers, teams, users } from "../db/schema
 import { ServiceError } from "./errors";
 import { audit, markAuditedNoop } from "../audit/record";
 import { userLabel, userLabelById } from "../audit/describe";
+import { discordName } from "@bingo/shared";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -88,15 +89,29 @@ function signupRsn(db: Db, bingoId: string, user: MinimalUser | null): string | 
 }
 
 // The other half of a pairing from `me`'s point of view.
-function otherParty(db: Db, pairing: Pairing, me: Participant): MinimalUser | null {
-  return pairing.requesterUserId === me.id ? userByDiscordId(db, pairing.targetDiscordId) : userById(db, pairing.requesterUserId);
+function otherParty(db: Db, pairing: Pairing, me: Participant): PairingParty {
+  if (pairing.requesterUserId === me.id) return targetParty(db, pairing);
+  const requester = userById(db, pairing.requesterUserId);
+  return party(db, pairing.bingoId, requester?.discordId ?? "", requester);
+}
+
+export interface PairingParty {
+  discordId: string;
+  user: MinimalUser | null;
+  rsn: string | null;
+  name: string;
 }
 
 // A pairing party as the client should see them — RSN once they've signed up (the roster's own naming
-// convention, see playerNames.ts), else whatever Discord info we have, else null if they haven't logged in.
-function party(db: Db, bingoId: string, user: MinimalUser | null) {
+// convention, see playerNames.ts), else their Discord name, else their Discord id. `name` is provisional when
+// there's no RSN: applyRosterNames (pairingNames.ts) puts a clan-roster RSN ahead of the Discord name.
+function party(db: Db, bingoId: string, discordId: string, user: MinimalUser | null): PairingParty {
   const rsn = signupRsn(db, bingoId, user);
-  return { user: user ? { ...user, rsn } : null, rsn };
+  return { discordId, user: user ? { ...user, rsn } : null, rsn, name: rsn ?? (user ? discordName(user) : discordId) };
+}
+
+function targetParty(db: Db, pairing: Pairing): PairingParty {
+  return party(db, pairing.bingoId, pairing.targetDiscordId, userByDiscordId(db, pairing.targetDiscordId));
 }
 
 export function getAcceptedPairing(db: Db, bingoId: string, p: Participant): Pairing | null {
@@ -125,13 +140,17 @@ export function getAcceptedPairs(db: Db, bingoId: string): { pairing: Pairing; u
 // roster's "who's waiting on whom" hint. Unlike getAcceptedPairs, the target is resolved even when they haven't
 // signed up (or ever logged in) — a mod still benefits from seeing who was asked, same as `party` already lets a
 // requester see it on their own signup page via getPairingState's `outgoing`.
-export function getPendingOutgoingPairs(db: Db, bingoId: string): { pairing: Pairing; requesterUserId: string; target: ReturnType<typeof party> }[] {
+export function getPendingOutgoingPairs(db: Db, bingoId: string): { pairing: Pairing; requesterUserId: string; target: PairingParty }[] {
   const rows = db
     .select()
     .from(signupPairings)
     .where(and(eq(signupPairings.bingoId, bingoId), eq(signupPairings.status, "pending")))
     .all();
-  return rows.map((pairing) => ({ pairing, requesterUserId: pairing.requesterUserId, target: party(db, bingoId, userByDiscordId(db, pairing.targetDiscordId)) }));
+  return rows.map((pairing) => ({
+    pairing,
+    requesterUserId: pairing.requesterUserId,
+    target: targetParty(db, pairing),
+  }));
 }
 
 // Everything the signup page needs to render the player's pairing situation.
@@ -144,18 +163,18 @@ export function getPairingState(db: Db, bingoId: string, me: Participant) {
   // Only worth mentioning while the player is unpaired. "declined" is only shown to whoever got declined, not
   // the decliner (who already knows) — "left" doesn't have that asymmetry (either half of the pairing could
   // have been the one to leave, and the row itself doesn't record which), so it's shown to both regardless.
-  let lastOutcome: { status: "declined" | "dissolved" | "left"; other: ReturnType<typeof party> } | null = null;
+  let lastOutcome: { status: "declined" | "dissolved" | "left"; other: PairingParty } | null = null;
   if (!accepted) {
     const last = rows.at(-1);
     if (last && ((last.status === "declined" && last.requesterUserId === me.id) || last.status === "dissolved" || last.status === "left")) {
-      lastOutcome = { status: last.status, other: party(db, bingoId, otherParty(db, last, me)) };
+      lastOutcome = { status: last.status, other: otherParty(db, last, me) };
     }
   }
 
   return {
-    partner: accepted ? { pairing: accepted, ...party(db, bingoId, otherParty(db, accepted, me)) } : null,
-    outgoing: outgoing ? { pairing: outgoing, target: party(db, bingoId, userByDiscordId(db, outgoing.targetDiscordId)) } : null,
-    incoming: incoming.map((pairing) => ({ pairing, requester: party(db, bingoId, userById(db, pairing.requesterUserId)) })),
+    partner: accepted ? { pairing: accepted, ...otherParty(db, accepted, me) } : null,
+    outgoing: outgoing ? { pairing: outgoing, target: otherParty(db, outgoing, me) } : null,
+    incoming: incoming.map((pairing) => ({ pairing, requester: otherParty(db, pairing, me) })),
     lastOutcome,
   };
 }
