@@ -9,6 +9,7 @@ import {
   useModUnpair,
   useModWithdrawSignup,
   useRefreshSignupStats,
+  useSetSignupTimezone,
   useSignupRoster,
   useSignupQuestions,
 } from "../../api/queries";
@@ -74,6 +75,7 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
     "#",
     "RSN",
     "Discord",
+    "Timezone",
     "Tier",
     "Points",
     "Status",
@@ -92,6 +94,7 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
       String(i + 1),
       entry.signup.rsn,
       discordName(entry.user),
+      entry.signup.timezone ?? "",
       entry.tectonicProfile?.tier ? formatTierName(entry.tectonicProfile.tier.name) : "",
       entry.tectonicProfile ? String(entry.tectonicProfile.points) : "",
       entry.signup.status,
@@ -237,9 +240,10 @@ export function SignupRoster({ slug }: { slug: string }) {
   const modUnpair = useModUnpair(slug);
   const withdrawSignup = useModWithdrawSignup(slug);
   const refreshStats = useRefreshSignupStats(slug);
+  const setTimezone = useSetSignupTimezone(slug);
   const gridContext = useMemo<GridContext>(
-    () => ({ search, partnerRsnMap, canWithdraw, statsRefreshing, currentUserId: me?.id ?? null, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats }),
-    [search, partnerRsnMap, canWithdraw, statsRefreshing, me, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats],
+    () => ({ search, partnerRsnMap, canWithdraw, statsRefreshing, currentUserId: me?.id ?? null, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone }),
+    [search, partnerRsnMap, canWithdraw, statsRefreshing, me, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone],
   );
 
   // ColumnPicker's own option list — every colId the grid can show except # and RSN, neither of which is
@@ -249,6 +253,7 @@ export function SignupRoster({ slug }: { slug: string }) {
   const columnOptions = useMemo(
     () => [
       { id: "discord", label: "Discord" },
+      { id: "timezone", label: "Timezone" },
       ...(showTier ? [{ id: "tier", label: "Tier" }] : []),
       { id: "signedUp", label: "Signed up" },
       { id: "status", label: "Status" },

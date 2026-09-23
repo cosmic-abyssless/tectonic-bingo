@@ -165,6 +165,9 @@ export const signups = sqliteTable('signups', {
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
   userId: text('user_id').notNull().references(() => users.id),
   rsn: text('rsn').notNull(), // RuneScape display name (max 12 chars)
+  // IANA zone name ("America/New_York"). Required on new signups (the form pre-fills it from the browser); null for
+  // signups from before it was asked, until the player confirms it or a mod sets it from the roster.
+  timezone: text('timezone'),
   // Populated when the submitted RSN matched one of the signer's tectonic-api
   // RSNs at signup time. Never set from a client-supplied claim.
   womId: text('wom_id'),

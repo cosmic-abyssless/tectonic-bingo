@@ -138,7 +138,8 @@ export function deleteLine(slug: string, id: string) {
 }
 
 export function getQuestions(slug: string) {
-  return api.get<{ questions: SignupQuestion[] }>(`${base(slug)}/questions`);
+  // answerCounts: non-blank answers per question id (absent = none), for the delete confirmation.
+  return api.get<{ questions: SignupQuestion[]; answerCounts: Record<string, number> }>(`${base(slug)}/questions`);
 }
 export function createQuestion(slug: string, payload: { prompt: string; helperText?: string; type: SignupQuestion["type"]; optionsJson?: string; required?: boolean; sortOrder?: number }) {
   return api.post<{ question: SignupQuestion }>(`${base(slug)}/questions`, payload);

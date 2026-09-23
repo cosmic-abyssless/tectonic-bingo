@@ -65,6 +65,21 @@ export async function importBingo(ctx: Ctx, document: BingoExportDocument, name:
   ctx.log(`imported ${ctx.slug} (created ${fmt(tl.createdAt)}, starts ${fmt(tl.startsAt)}, ends ${fmt(tl.endsAt)})`);
 }
 
+/**
+ * A player's signup timezone: a zone whose standard UTC offset is the one the simulation already gave them
+ * (people.ts's UTC_OFFSETS, which drives when they're online), so what they sign up with matches when they play.
+ */
+const TIMEZONE_BY_OFFSET: Record<number, string> = {
+  [-8]: "America/Los_Angeles",
+  [-6]: "America/Chicago",
+  [-5]: "America/New_York",
+  [-4]: "America/Halifax",
+  0: "Europe/London",
+  1: "Europe/Berlin",
+  2: "Europe/Helsinki",
+  10: "Australia/Brisbane",
+};
+
 /** The bingo's signup questions (from the imported board), which every player has to answer. */
 export async function fetchSignupQuestions(ctx: Ctx): Promise<SignupQuestion[]> {
   return (await ctx.api.as(ctx.admin).get<{ questions: SignupQuestion[] }>(path(ctx, "/signup/questions"))).questions;
@@ -99,7 +114,8 @@ export async function runSignups(ctx: Ctx, players: Player[], pairs: [Player, Pl
           const { user } = await ctx.api.as(ctx.admin).post<{ user: { id: string } }>("/api/dev/users", { discordId: p.discordId, discordUsername: p.discordName }, { at: plus(p.signupAt!, -1 * MINUTE) });
           p.userId = user.id;
         }
-        await ctx.api.as(p.discordId).post(path(ctx, "/signup"), { rsn: p.name, answers: answerQuestions(questions, p, rng.fork(`answers-${p.index}`)) }, { at: p.signupAt! });
+        const timezone = TIMEZONE_BY_OFFSET[p.offset] ?? "Etc/UTC";
+        await ctx.api.as(p.discordId).post(path(ctx, "/signup"), { rsn: p.name, timezone, answers: answerQuestions(questions, p, rng.fork(`answers-${p.index}`)) }, { at: p.signupAt! });
         signedUp.add(p.index);
       },
     });

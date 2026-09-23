@@ -333,8 +333,9 @@ router.post(
   requireAuth,
   requireBingo,
   asyncHandler(async (req, res) => {
-    const { rsn, answers } = req.body as { rsn?: string; answers?: signupService.SignupAnswerInput[] };
+    const { rsn, timezone, answers } = req.body as { rsn?: string; timezone?: string; answers?: signupService.SignupAnswerInput[] };
     if (!rsn) throw new ServiceError(400, "rsn is required");
+    if (typeof timezone !== "string" || !timezone.trim()) throw new ServiceError(400, "timezone is required");
     const { enabled, member } = await getTectonicMembership(req.user!.discordId);
     // Hard gate on new signups only — someone who already signed up before
     // the integration was turned on (or before they were registered) keeps
@@ -347,6 +348,7 @@ router.post(
       bingoId: req.bingo!.id,
       userId: req.user!.id,
       rsn,
+      timezone,
       answers: answers ?? [],
       womId,
       rsnVerified,
@@ -371,10 +373,11 @@ router.patch(
   asyncHandler(async (req, res) => {
     const existing = signupService.getSignupForUser(db, req.bingo!.id, req.user!.id);
     if (!existing) throw new ServiceError(404, "You haven't signed up for this bingo");
-    const { rsn, answers } = req.body as { rsn?: string; answers?: signupService.SignupAnswerInput[] };
+    const { rsn, timezone, answers } = req.body as { rsn?: string; timezone?: string; answers?: signupService.SignupAnswerInput[] };
+    if (timezone !== undefined && typeof timezone !== "string") throw new ServiceError(400, "timezone must be a string");
     const membership = await getTectonicMembership(req.user!.discordId);
     const verification = rsn !== undefined ? matchRsn(membership.member, rsn) : {};
-    const signup = signupService.updateSignup(db, req.bingo!, existing.signup.id, { rsn, answers, ...verification });
+    const signup = signupService.updateSignup(db, req.bingo!, existing.signup.id, { rsn, timezone, answers, ...verification });
     // Re-fetch on any update, not just an RSN change — cheap, and keeps the
     // stored snapshot from going stale if someone edits other fields.
     void fetchAndPersistPlayerStats(db, signup.id, signup.rsn, {

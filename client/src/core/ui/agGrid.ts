@@ -9,6 +9,7 @@ import {
   TextEditorModule,
   SelectEditorModule,
   CheckboxEditorModule,
+  CustomEditorModule,
   TooltipModule,
   QuickFilterModule,
   ExternalFilterModule,
@@ -28,6 +29,8 @@ ModuleRegistry.registerModules([
   TextEditorModule,
   SelectEditorModule,
   CheckboxEditorModule,
+  // The signup roster's timezone picker (a React popup editor, not one of AG's own).
+  CustomEditorModule,
   TooltipModule,
   QuickFilterModule,
   ExternalFilterModule,

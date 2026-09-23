@@ -526,6 +526,8 @@ export interface Signup {
   bingoId: string;
   userId: string;
   rsn: string;
+  /** IANA zone name. Null on signups from before it was asked (until confirmed/set), and in the draft pool for anyone who can't see answers. */
+  timezone: string | null;
   womId: string | null;
   rsnVerified: boolean;
   status: SignupStatus;
@@ -972,3 +974,4 @@ export * from "./exclusivity.ts";
 export * from "./names.ts";
 export * from "./signupAnswers.ts";
 export * from "./testData.ts";
+export * from "./timezone.ts";
