@@ -54,6 +54,7 @@ export interface AuditDetailsMap {
   "item_group.deleted": { name: string; itemNames: string[] };
 
   "wom_past_competition.added": { womId: number; title: string; participantCount: number; source: "manual" | "auto" };
+  "wom_past_competition.renamed": { womId: number; from: string; to: string };
   "wom_past_competition.deleted": { womId: number; title: string };
 
   "settings.updated": {
@@ -322,6 +323,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Past WOM competition added",
     label: (i) => (i.details.source === "auto" ? `Archived the Wise Old Man competition "${i.details.title}"` : `${actor(i)} added the past Wise Old Man competition "${i.details.title}"`),
+  },
+  "wom_past_competition.renamed": {
+    category: "system",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Past WOM competition renamed",
+    label: (i) => `${actor(i)} renamed the past Wise Old Man competition "${i.details.from}" to "${i.details.to}"`,
   },
   "wom_past_competition.deleted": {
     category: "system",
