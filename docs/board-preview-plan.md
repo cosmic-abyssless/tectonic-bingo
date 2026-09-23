@@ -1,6 +1,7 @@
 # Board preview: implementation plan
 
-Status: **approved plan, ready to implement.** Issue #27. Written to be executed without conversation context. Read
+Status: **approved plan, on hold (not scheduled).** Issue #27 is on the back burner: for now the board is shared as an image
+when signups open (see the issue). The decisions below were settled, so if it is picked up, implement from here. Written to be executed without conversation context. Read
 `CONTEXT.md` (stages, tile, part/task) first.
 
 ## The problem
