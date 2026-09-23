@@ -16,7 +16,7 @@ import { BugReportsPanel } from "../core/admin/BugReportsPanel";
 import { SiteAuditLog } from "../core/admin/SiteAuditLog";
 import { displayName } from "../core/ui/user";
 import { AppHeader } from "../core/ui/AppHeader";
-import { useBugReportsUnseen } from "../core/ui/bugReportsUnseen";
+import { ADMIN_BUG_REPORTS_SEEN_KEY, useBugReportsUnseen } from "../core/ui/bugReportsUnseen";
 import { Button, IconButton } from "../core/ui/Button";
 import { Badge, Notice, PulseDot } from "../core/ui/Card";
 import { Field, Input } from "../core/ui/Field";
@@ -309,7 +309,7 @@ export function SiteAdminPage() {
   // Fetched here (not just inside BugReportsPanel) so the tab shows a pulse dot for changes even while
   // another tab is active; both calls share the same cached query.
   const { data: bugReportsData } = useBugReports();
-  const { hasUnseen: hasUnseenBugReports, markSeen: markBugReportsSeen } = useBugReportsUnseen(bugReportsData?.bugReports, "bugReports:lastSeen:admin");
+  const { hasUnseen: hasUnseenBugReports, markSeen: markBugReportsSeen } = useBugReportsUnseen(bugReportsData?.bugReports, ADMIN_BUG_REPORTS_SEEN_KEY);
   useEffect(() => {
     if (tab === "bugs") markBugReportsSeen();
   }, [tab, bugReportsData, markBugReportsSeen]);

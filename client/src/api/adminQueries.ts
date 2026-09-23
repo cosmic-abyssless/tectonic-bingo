@@ -40,8 +40,9 @@ export function usePastWomCompetitions() {
   return useQuery({ queryKey: adminQueryKeys.pastWomCompetitions, queryFn: () => adminApi.getPastWomCompetitions() });
 }
 
-export function useBugReports() {
-  return useQuery({ queryKey: adminQueryKeys.bugReports, queryFn: () => adminApi.getBugReports() });
+/** Every bug report (site admins only: pass `enabled: false` for anyone else, or the request is refused). */
+export function useBugReports(enabled = true) {
+  return useQuery({ queryKey: adminQueryKeys.bugReports, queryFn: () => adminApi.getBugReports(), enabled });
 }
 
 export function useMods(slug: string) {
