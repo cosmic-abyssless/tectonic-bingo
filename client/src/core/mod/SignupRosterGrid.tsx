@@ -16,7 +16,7 @@
 // of its own) but now drives api.setColumnsVisible; the grid's own header drag handles reorder.
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
-import type { CustomCellRendererProps } from "ag-grid-react";
+import type { CustomCellEditorProps, CustomCellRendererProps } from "ag-grid-react";
 import type {
   CellEditRequestEvent,
   ColDef,
@@ -28,13 +28,14 @@ import type {
   StateUpdatedEvent,
   TooltipCallbackParams,
 } from "ag-grid-community";
-import { formatSignupAnswer, type RosterEntry, type SignupQuestion } from "@bingo/shared";
-import type { useMarkBuyin, useModPair, useModUnpair, useModWithdrawSignup, useRefreshSignupStats } from "../../api/queries";
+import { formatSignupAnswer, formatTimeZone, timeZoneOptions, type RosterEntry, type SignupQuestion } from "@bingo/shared";
+import type { useMarkBuyin, useModPair, useModUnpair, useModWithdrawSignup, useRefreshSignupStats, useSetSignupTimezone } from "../../api/queries";
 import { useGridTheme } from "../ui/agGrid";
 import { discordName, displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { Badge } from "../ui/Card";
 import { CellButton, CellIconButton, Mark } from "../ui/gridCells";
+import { SearchableSelect } from "../ui/SearchableSelect";
 import { CheckIcon, RefreshIcon, XIcon } from "../ui/icons";
 import { CaCell, WomCell, caTitle, formatCaTier, formatWomStat } from "../signup/caStats";
 import { TierBadge } from "../tectonic/ProfileBadges";
@@ -67,6 +68,7 @@ export interface GridContext {
   modUnpair: ReturnType<typeof useModUnpair>;
   withdrawSignup: ReturnType<typeof useModWithdrawSignup>;
   refreshStats: ReturnType<typeof useRefreshSignupStats>;
+  setTimezone: ReturnType<typeof useSetSignupTimezone>;
 }
 
 // ---------------------------------------------------------------------------
@@ -213,6 +215,42 @@ const PartnerCell = memo(function PartnerCell({ data, context }: CustomCellRende
   return <span className="text-on-surface-subtle">Double-click to pair</span>;
 });
 
+// Signups from before timezone was asked have none until the player confirms it or a mod sets it here — the gap is
+// the point of this column, so an empty cell says how to fill it rather than just showing a dash.
+const TimezoneCell = memo(function TimezoneCell({ data }: CustomCellRendererProps<RosterRow, string, GridContext>) {
+  if (!data) return null;
+  if (!data.signup.timezone) return <span className="text-on-surface-subtle">Double-click to set</span>;
+  return <span className="min-w-0 truncate text-on-surface">{formatTimeZone(data.signup.timezone)}</span>;
+});
+
+// A popup with the same searchable picker as the signup form — ~420 zones is too many for agSelectCellEditor's plain
+// list. Picking one ends the edit (readOnlyEdit → cellEditRequest → setTimezone). stopEditing waits a render so AG
+// reads the picked value, not the one it opened with.
+function TimezoneEditor({ value, onValueChange, stopEditing }: CustomCellEditorProps<RosterRow, string, GridContext>) {
+  const options = useMemo(() => timeZoneOptions([value]), [value]);
+  const [picked, setPicked] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.querySelector("input")?.focus();
+  }, []);
+  useEffect(() => {
+    if (picked) stopEditing();
+  }, [picked, stopEditing]);
+  return (
+    <div ref={ref} className="w-96 p-2">
+      <SearchableSelect
+        value={value ?? ""}
+        options={options}
+        placeholder="Search by city, region or UTC offset…"
+        onChange={(id) => {
+          onValueChange(id);
+          setPicked(true);
+        }}
+      />
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 
 // A custom signup question's prompt (the header) and its answers (the cells) are free text a mod writes/players
@@ -349,6 +387,21 @@ export function SignupRosterGrid({
         pinned: "left",
       },
       { colId: "discord", headerName: "Discord", valueGetter: (p) => (p.data ? discordName(p.data.user) : ""), width: 150 },
+      {
+        colId: "timezone",
+        headerName: "Timezone",
+        valueGetter: (p) => p.data?.signup.timezone ?? "",
+        cellRenderer: TimezoneCell,
+        // The raw zone name ("America/New_York") on hover — the cell itself shows the friendlier city + offset.
+        tooltip: (p: TooltipCallbackParams<RosterRow, string>) => usefulTooltip(p, p.data?.signup.timezone ?? ""),
+        editable: true,
+        cellEditor: TimezoneEditor,
+        cellEditorPopup: true,
+        cellEditorPopupPosition: "under",
+        // The picker's own list navigation — without this AG takes Enter/arrows as "finish editing"/"move cell".
+        suppressKeyboardEvent: (p) => p.editing && ["Enter", "ArrowUp", "ArrowDown"].includes(p.event.key),
+        width: 180,
+      },
       showTier && {
         colId: "tier",
         headerName: "Tier",
@@ -533,8 +586,11 @@ export function SignupRosterGrid({
       case "partner":
         if (newValue) context.modPair.mutate({ userIdA: data.user.id, userIdB: newValue as string });
         break;
+      case "timezone":
+        if (newValue && newValue !== data.signup.timezone) context.setTimezone.mutate({ signupId: data.signup.id, timezone: newValue as string });
+        break;
     }
-  }, [context.markBuyin, context.modPair, context.currentUserId]);
+  }, [context.markBuyin, context.modPair, context.setTimezone, context.currentUserId]);
 
   return (
     <div className="h-full min-h-0">

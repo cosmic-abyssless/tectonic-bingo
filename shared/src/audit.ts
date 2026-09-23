@@ -171,6 +171,8 @@ export interface AuditDetailsMap {
     answersChanged?: string[];
     changes?: { before: Record<string, string>; after: Record<string, string> };
   };
+  /** A mod set or cleared a player's timezone from the signup roster. (A player's own change is a signup.updated "Timezone" change.) */
+  "signup.timezone_set": { before: string | null; after: string | null };
   "signup.withdrawn": { rsn: string };
   "signup.buyin_marked": { received: boolean; collectedByUserId: string | null; collectedByName: string | null; before: { receivedAt: string | null } };
   "signup.stats_fetched": { womFound: boolean; runeProfileFound: boolean };
@@ -564,6 +566,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
       if (fields.length > 0) return `${actor(i)} updated their signup: ${fields.join(", ")}`;
       return `${actor(i)} updated their signup${i.details.rsn ? ` (RSN → ${i.details.rsn.after})` : ""}`;
     },
+  },
+  "signup.timezone_set": {
+    category: "signup",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Timezone set by a mod",
+    label: (i) => `${actor(i)} ${i.details.after ? `set ${i.onBehalfOfName ?? i.entityLabel ?? "a player"}'s timezone to ${i.details.after}` : `cleared ${i.onBehalfOfName ?? i.entityLabel ?? "a player"}'s timezone`}`,
   },
   "signup.withdrawn": {
     category: "signup",

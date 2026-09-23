@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { encodeChoices, isBlankAnswer, parseChoices, type SignupAnswerInput, type SignupQuestion } from "@bingo/shared";
+import { useEffect, useMemo, useState } from "react";
+import { detectTimeZone, encodeChoices, isBlankAnswer, parseChoices, timeZoneOptions, type SignupAnswerInput, type SignupQuestion } from "@bingo/shared";
 import { useBingo, useCreateSignup, useMySignup, useMyTectonicRsns, useSignupQuestions, useUpdateSignup, useWithdrawSignup } from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
 import { PartnerPanel } from "./PartnerPanel";
@@ -9,6 +9,7 @@ import { Button } from "../ui/Button";
 import { EmptyState, HEADING_FONT, Notice } from "../ui/Card";
 import { Disclosure } from "../ui/Disclosure";
 import { Field, Input, Select, Textarea } from "../ui/Field";
+import { SearchableSelect } from "../ui/SearchableSelect";
 import { AlertIcon, CheckIcon, LockIcon } from "../ui/icons";
 
 function parseOptions(question: SignupQuestion): string[] {
@@ -125,6 +126,7 @@ export function SignupForm({ slug }: { slug: string }) {
       : tectonicRsns;
 
   const [rsn, setRsn] = useState("");
+  const [timezone, setTimezone] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +139,12 @@ export function SignupForm({ slug }: { slug: string }) {
   // One linked RSN (or a saved signup) should already be chosen — don't wait
   // on the effect, or the select paints as "Select…" for a frame.
   const rsnValue = rsn || existing?.rsn || (rsnOptions.length === 1 ? rsnOptions[0]!.rsn : "");
+
+  // Pre-filled from the browser: a new signup starts on it, and so does an older signup that predates the question
+  // (no saved timezone yet) — the player only has to confirm it with a save.
+  const detectedTimezone = useMemo(() => detectTimeZone(), []);
+  const timezoneValue = timezone || existing?.timezone || detectedTimezone || "";
+  const timezoneChoices = useMemo(() => timeZoneOptions([existing?.timezone, detectedTimezone]), [existing?.timezone, detectedTimezone]);
 
   useEffect(() => {
     if (existing) setRsn(existing.rsn);
@@ -180,7 +188,7 @@ export function SignupForm({ slug }: { slug: string }) {
 
   const answerList: SignupAnswerInput[] = questions.map((q) => ({ questionId: q.id, value: answers[q.id] ?? "" }));
   const missingRequired = questions.some((q) => q.required && isBlankAnswer(q.type, answers[q.id]));
-  const isValid = !!rsnValue.trim() && !missingRequired;
+  const isValid = !!rsnValue.trim() && !!timezoneValue && !missingRequired;
 
   async function submit() {
     setError(null);
@@ -190,9 +198,9 @@ export function SignupForm({ slug }: { slug: string }) {
     setExpanded(false);
     try {
       if (existing) {
-        await updateSignup.mutateAsync({ rsn: rsnValue, answers: answerList });
+        await updateSignup.mutateAsync({ rsn: rsnValue, timezone: timezoneValue, answers: answerList });
       } else {
-        await createSignup.mutateAsync({ rsn: rsnValue, answers: answerList });
+        await createSignup.mutateAsync({ rsn: rsnValue, timezone: timezoneValue, answers: answerList });
       }
       setSaved(true);
     } catch (e: unknown) {
@@ -278,6 +286,22 @@ export function SignupForm({ slug }: { slug: string }) {
               <Input value={rsnValue} onChange={(e) => setRsn(e.target.value)} maxLength={12} />
             </Field>
           )}
+
+          <Field
+            label={
+              <>
+                Timezone
+                <Required />
+              </>
+            }
+            hint={
+              timezoneValue && timezoneValue === detectedTimezone && timezoneValue !== existing?.timezone
+                ? "Filled in from your browser. Change it if that's not where you'll be playing from."
+                : "Search by city, region or UTC offset."
+            }
+          >
+            <SearchableSelect value={timezoneValue} options={timezoneChoices} placeholder="Search for your timezone…" onChange={setTimezone} />
+          </Field>
 
           {questions.map((q) => (
             <QuestionField key={q.id} question={q} value={answers[q.id] ?? ""} onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))} />

@@ -224,7 +224,8 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
       : [];
 
   const poolEntries: DraftPoolEntry[] = poolSignups.map((s) => ({
-    signup: s,
+    // Timezone follows the answers' visibility rule (it replaced a custom question that did).
+    signup: opts.includeAnswers ? s : { ...s, timezone: null },
     user: { ...poolUserById.get(s.userId)!, rsn: s.rsn },
     answers: opts.includeAnswers ? poolAnswers.filter((a) => a.signupId === s.id) : null,
   }));

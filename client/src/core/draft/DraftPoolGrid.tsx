@@ -30,6 +30,8 @@ import type {
 } from "ag-grid-community";
 import {
   formatSignupAnswer,
+  formatTimeZone,
+  timeZoneOffsetMinutes,
   type DraftPoolEntry,
   type DraftUnit,
   type LeftoverMode,
@@ -68,6 +70,8 @@ function poolSortValue(entry: DraftPoolEntry, key: SortKey, ratings: Ratings): s
   if (key === "rating") return ratings[entry.signup.id]?.stars ?? 0;
   if (key === "rsn") return entry.signup.rsn.toLowerCase();
   if (key === "discord") return discordName(entry.user).toLowerCase();
+  // West to east by current UTC offset; not set sorts below every real offset (UTC−12 is −720), like the -1s below.
+  if (key === "timezone") return entry.signup.timezone ? timeZoneOffsetMinutes(entry.signup.timezone) : -10_000;
   if (key === "tier") return entry.tectonicProfile?.points ?? -1;
   if (key === "records") return entry.tectonicProfile ? placeScore(recordSummary(entry.tectonicProfile)) : -1;
   if (key === "podiums") return entry.tectonicProfile ? placeScore(podiumSummary(entry.tectonicProfile)) : -1;
@@ -83,6 +87,7 @@ function poolSearchValues(entry: DraftPoolEntry, questions: SignupQuestion[]): s
   return [
     entry.signup.rsn,
     discordName(entry.user),
+    ...(entry.signup.timezone ? [entry.signup.timezone, formatTimeZone(entry.signup.timezone)] : []),
     entry.tectonicProfile?.tier?.name ?? "",
     formatWomStat(entry.womStats?.ehb),
     formatWomStat(entry.womStats?.ehp),
@@ -182,6 +187,13 @@ const discordLine: LineRender = (entry, { dim, search }) => {
     </span>
   );
 };
+
+const timezoneLine: LineRender = (entry, { dim }) =>
+  entry.signup.timezone ? (
+    <span className={`block truncate text-on-surface-muted ${dimClass(dim) ?? ""}`}>{formatTimeZone(entry.signup.timezone)}</span>
+  ) : (
+    <span className="text-on-surface-subtle">—</span>
+  );
 
 const tierLine: LineRender = (entry, { dim }) =>
   entry.tectonicProfile ? <span className={dimClass(dim)}><TierBadge profile={entry.tectonicProfile} /></span> : <span className="text-on-surface-subtle">—</span>;
@@ -393,6 +405,7 @@ export function DraftPoolGrid({
   const columnOptions = useMemo(
     () => [
       { id: "discord", label: "Discord" },
+      ...(showAnswers ? [{ id: "timezone", label: "Timezone" }] : []),
       ...(showProfiles ? [{ id: "tier", label: "Tier" }, { id: "records", label: "Records" }, { id: "podiums", label: "Podiums" }, { id: "achievements", label: "Achievements" }] : []),
       ...(showWomStats ? [{ id: "ehb", label: "EHB" }, { id: "ehp", label: "EHP" }] : []),
       ...(showCa ? [{ id: "caCurrent", label: "Current CA" }, { id: "caPeak", label: "Peak CA" }] : []),
@@ -457,6 +470,17 @@ export function DraftPoolGrid({
         cellRendererParams: { render: discordLine },
         tooltip: stackedTooltip((e) => discordName(e.user)),
         width: 150,
+      },
+      // Same visibility as the answers (the server only sends it to mods and captains), which it replaced one of.
+      showAnswers && {
+        colId: "timezone",
+        headerName: "Timezone",
+        valueGetter: (p) => p.data?.entries[0]?.signup.timezone ?? "",
+        comparator: makeUnitComparator("timezone", ratings ?? {}),
+        cellRenderer: StackedCell,
+        cellRendererParams: { render: timezoneLine },
+        tooltip: stackedTooltip((e) => e.signup.timezone ?? ""),
+        width: 170,
       },
       hasLeftovers && { colId: "leftover", headerName: "", cellRenderer: LeftoverBadgeRenderer, width: 130, sortable: false, resizable: false },
       showProfiles && {

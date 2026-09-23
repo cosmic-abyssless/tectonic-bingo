@@ -1,6 +1,6 @@
 import { now as clockNow } from "../clock";
 import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
-import { formatSignupAnswer, isBlankAnswer, MAX_CHOICE_LENGTH, MAX_MULTISELECT_CHOICES, MAX_QUESTION_HELPER_TEXT, type SignupQuestionType } from "@bingo/shared";
+import { formatSignupAnswer, isBlankAnswer, isValidTimeZone, MAX_CHOICE_LENGTH, MAX_MULTISELECT_CHOICES, MAX_QUESTION_HELPER_TEXT, type SignupQuestionType } from "@bingo/shared";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
@@ -26,6 +26,7 @@ export const PUBLIC_SIGNUP_COLS = {
   bingoId: signups.bingoId,
   userId: signups.userId,
   rsn: signups.rsn,
+  timezone: signups.timezone,
   womId: signups.womId,
   rsnVerified: signups.rsnVerified,
   status: signups.status,
@@ -167,10 +168,19 @@ export function getSignupForUser(db: Db, bingoId: string, userId: string) {
   return { signup, answers, caCurrentJson, caPeakJson, statsFetchedAt };
 }
 
+// Trimmed, or a 400 for anything Intl doesn't recognise as a zone.
+function normalizeTimeZone(tz: string): string {
+  const trimmed = tz.trim();
+  if (!isValidTimeZone(trimmed)) throw new ServiceError(400, "Please pick a valid timezone");
+  return trimmed;
+}
+
 export interface CreateSignupParams {
   bingoId: string;
   userId: string;
   rsn: string;
+  // Required of players by the route; optional here so scripts/tests that don't care about it needn't pass one.
+  timezone?: string | null;
   answers: SignupAnswerInput[];
   // Set by the route handler after checking the submitted RSN against the
   // signer's tectonic-api RSNs. Never trust a client-sent verified claim.
@@ -217,6 +227,7 @@ export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
 
     const values = {
       rsn: params.rsn.trim(),
+      timezone: params.timezone ? normalizeTimeZone(params.timezone) : null,
       womId: params.womId ?? null,
       rsnVerified: params.rsnVerified ?? false,
     };
@@ -252,6 +263,7 @@ export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
 
 export interface UpdateSignupParams {
   rsn?: string;
+  timezone?: string;
   answers?: SignupAnswerInput[];
   // Same convention as CreateSignupParams: route-computed, never client-trusted.
   womId?: string | null;
@@ -285,6 +297,14 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
     if (rsnChange) {
       before.RSN = rsnChange.before;
       after.RSN = rsnChange.after;
+    }
+    if (params.timezone !== undefined) {
+      const timezone = normalizeTimeZone(params.timezone);
+      if (timezone !== existing.timezone) {
+        tx.update(signups).set({ timezone }).where(eq(signups.id, signupId)).run();
+        before.Timezone = existing.timezone ?? "—";
+        after.Timezone = timezone;
+      }
     }
     const questions = tx.select().from(signupQuestions).where(eq(signupQuestions.bingoId, bingo.id)).all();
     const questionById = new Map(questions.map((q) => [q.id, q]));
@@ -320,6 +340,32 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
     } else {
       markAuditedNoop();
     }
+    return updated;
+  });
+}
+
+// A mod setting (or clearing) a player's timezone from the roster — how signups from before timezone was asked get
+// one without the player having to come back, and how a wrong one gets fixed. Unlike the player's own edit, not tied
+// to the signup stage: it's reference info for the draft and the event, not something that changes the roster.
+export function setSignupTimezone(db: Db, bingo: Bingo, signupId: string, timezone: string | null, actorUserId: string) {
+  if (bingo.stage === "complete") throw new ServiceError(400, "This bingo is finished");
+  const next = timezone === null ? null : normalizeTimeZone(timezone);
+  return db.transaction((tx) => {
+    const existing = tx.select().from(signups).where(and(eq(signups.id, signupId), eq(signups.bingoId, bingo.id))).get();
+    if (!existing) throw new ServiceError(404, "Signup not found");
+    if (existing.timezone === next) {
+      markAuditedNoop();
+      return tx.select(PUBLIC_SIGNUP_COLS).from(signups).where(eq(signups.id, signupId)).get()!;
+    }
+    const updated = tx.update(signups).set({ timezone: next }).where(eq(signups.id, signupId)).returning(PUBLIC_SIGNUP_COLS).get()!;
+    audit(tx, {
+      action: "signup.timezone_set",
+      bingoId: bingo.id,
+      entity: { type: "signup", id: signupId, label: existing.rsn },
+      details: { before: existing.timezone, after: next },
+      actor: { userId: actorUserId },
+      onBehalfOfUserId: existing.userId,
+    });
     return updated;
   });
 }
