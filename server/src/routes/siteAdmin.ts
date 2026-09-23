@@ -168,6 +168,15 @@ router.post(
     res.status(201).json({ competition });
   }),
 );
+router.patch(
+  "/wom-competitions/:id",
+  asyncHandler(async (req, res) => {
+    const { title } = req.body as { title?: string };
+    if (typeof title !== "string") throw new ServiceError(400, "title must be a string");
+    const competition = pastWomCompetitionService.renamePastCompetition(db, req.params.id as string, title);
+    res.json({ competition });
+  }),
+);
 router.delete(
   "/wom-competitions/:id",
   asyncHandler(async (req, res) => {
@@ -186,12 +195,20 @@ router.get(
     res.json({ bugReports: bugReportService.getBugReports(db) });
   }),
 );
+const BUG_REPORT_STATUSES = ["open", "resolved", "closed"] as const;
+
 router.patch(
   "/bug-reports/:id",
   asyncHandler(async (req, res) => {
-    const { resolved } = req.body as { resolved?: boolean };
-    if (typeof resolved !== "boolean") throw new ServiceError(400, "resolved must be a boolean");
-    const bugReport = bugReportService.resolveBugReport(db, req.params.id as string, { resolved, resolvedByUserId: req.user!.id });
+    const { status, resolutionMessage } = req.body as { status?: string; resolutionMessage?: string };
+    if (!BUG_REPORT_STATUSES.includes(status as (typeof BUG_REPORT_STATUSES)[number])) {
+      throw new ServiceError(400, `status must be one of ${BUG_REPORT_STATUSES.join(", ")}`);
+    }
+    const bugReport = bugReportService.setBugReportStatus(db, req.params.id as string, {
+      status: status as (typeof BUG_REPORT_STATUSES)[number],
+      actorUserId: req.user!.id,
+      resolutionMessage: typeof resolutionMessage === "string" ? resolutionMessage : null,
+    });
     res.json({ bugReport });
   }),
 );

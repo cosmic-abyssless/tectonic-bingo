@@ -1,10 +1,12 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useMatch } from "react-router-dom";
-import { useBingo } from "../../api/queries";
+import { useBingo, useMyBugReports } from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
 import { useColorSchemePreference } from "./colorScheme";
+import { useBugReportsUnseen } from "./bugReportsUnseen";
 import { BugReportDialog } from "./BugReportDialog";
 import { Button, IconButton } from "./Button";
+import { PulseDot } from "./Card";
 import { iconUrlFor } from "./ItemSearchInput";
 import { Menu, MenuItem, MenuTrigger } from "./Menu";
 import { TextTooltip } from "./Tooltip";
@@ -66,6 +68,10 @@ export function AppHeader({
   const [bugIconFailed, setBugIconFailed] = useState(false);
   const [colorScheme, setColorScheme] = useColorSchemePreference();
   const compact = !!mobileMenu;
+  // Fetched here (not gated on the dialog being open) so the pulse dot can show without opening it —
+  // BugReportDialog's own useMyBugReports call shares this same cached query.
+  const { data: myReports } = useMyBugReports(!!user?.inGuild);
+  const { hasUnseen: hasUnseenBugReports, markSeen: markBugReportsSeen } = useBugReportsUnseen(myReports?.bugReports, `bugReports:lastSeen:mine:${user?.id ?? "anon"}`);
 
   // The bug-report button and the signed-in user's menu.
   const utility = (
@@ -73,7 +79,15 @@ export function AppHeader({
       {user?.inGuild && (
         <>
           <TextTooltip text="Report a bug">
-            <IconButton label="Report a bug" size="sm" onPress={() => setBugReportOpen(true)}>
+            <IconButton
+              label="Report a bug"
+              size="sm"
+              className="relative"
+              onPress={() => {
+                setBugReportOpen(true);
+                markBugReportsSeen();
+              }}
+            >
               {bugIconFailed ? (
                 <BugIcon />
               ) : (
@@ -81,6 +95,7 @@ export function AppHeader({
                   <img src={BUG_REPORT_ICON_URL} alt="" className="size-4 object-contain" onError={() => setBugIconFailed(true)} />
                 </span>
               )}
+              {hasUnseenBugReports && <PulseDot className="-right-0.5 -top-0.5" />}
             </IconButton>
           </TextTooltip>
           <BugReportDialog isOpen={bugReportOpen} onClose={() => setBugReportOpen(false)} />

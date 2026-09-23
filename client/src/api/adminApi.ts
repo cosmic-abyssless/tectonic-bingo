@@ -1,5 +1,5 @@
 import type {
-  Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, SignupQuestion, Team,
+  Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, SignupQuestion, Team,
   TeamMember, Tile, TileCategory, User, WomPastCompetition,
 } from "@bingo/shared";
 import { api } from "./client";
@@ -46,6 +46,9 @@ export function getPastWomCompetitions() {
 export function addPastWomCompetition(womId: number) {
   return api.post<{ competition: WomPastCompetition }>("/api/admin/wom-competitions", { womId });
 }
+export function renamePastWomCompetition(id: string, title: string) {
+  return api.patch<{ competition: WomPastCompetition }>(`/api/admin/wom-competitions/${id}`, { title });
+}
 export function deletePastWomCompetition(id: string) {
   return api.delete(`/api/admin/wom-competitions/${id}`);
 }
@@ -53,8 +56,8 @@ export function deletePastWomCompetition(id: string) {
 export function getBugReports() {
   return api.get<{ bugReports: BugReportWithReporter[] }>("/api/admin/bug-reports");
 }
-export function resolveBugReport(id: string, resolved: boolean) {
-  return api.patch<{ bugReport: BugReportWithReporter }>(`/api/admin/bug-reports/${id}`, { resolved });
+export function setBugReportStatus(id: string, status: BugReportStatus, resolutionMessage?: string) {
+  return api.patch<{ bugReport: BugReportWithReporter }>(`/api/admin/bug-reports/${id}`, { status, resolutionMessage });
 }
 
 const base = (slug: string) => `/api/bingos/${slug}/admin`;

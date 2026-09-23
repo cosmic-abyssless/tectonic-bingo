@@ -54,6 +54,7 @@ export interface AuditDetailsMap {
   "item_group.deleted": { name: string; itemNames: string[] };
 
   "wom_past_competition.added": { womId: number; title: string; participantCount: number; source: "manual" | "auto" };
+  "wom_past_competition.renamed": { womId: number; from: string; to: string };
   "wom_past_competition.deleted": { womId: number; title: string };
 
   "settings.updated": {
@@ -174,7 +175,7 @@ export interface AuditDetailsMap {
   "http.mutation": { method: string; originalUrl: string; routePath: string | null; params: Record<string, unknown>; body: unknown; file: string | null };
 
   "bug_report.created": { description: string; pageUrl: string | null; palette: string | null };
-  "bug_report.resolved": { resolved: boolean };
+  "bug_report.status_changed": { status: "open" | "resolved" | "closed"; resolutionMessage: string | null };
 }
 
 export interface PointChangeDetails {
@@ -322,6 +323,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Past WOM competition added",
     label: (i) => (i.details.source === "auto" ? `Archived the Wise Old Man competition "${i.details.title}"` : `${actor(i)} added the past Wise Old Man competition "${i.details.title}"`),
+  },
+  "wom_past_competition.renamed": {
+    category: "system",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Past WOM competition renamed",
+    label: (i) => `${actor(i)} renamed the past Wise Old Man competition "${i.details.from}" to "${i.details.to}"`,
   },
   "wom_past_competition.deleted": {
     category: "system",
@@ -567,12 +575,12 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     title: "Bug report submitted",
     label: (i) => `${actor(i)} reported a bug: "${i.details.description.length > 60 ? `${i.details.description.slice(0, 60)}…` : i.details.description}"`,
   },
-  "bug_report.resolved": {
+  "bug_report.status_changed": {
     category: "bug_report",
     tone: "ok",
     visibility: "mods",
-    title: "Bug report resolved",
-    label: (i) => `${actor(i)} marked a bug report ${i.details.resolved ? "resolved" : "reopened"}`,
+    title: "Bug report status changed",
+    label: (i) => `${actor(i)} marked a bug report ${i.details.status === "resolved" ? "fixed" : i.details.status === "closed" ? "closed" : "reopened"}`,
   },
 };
 

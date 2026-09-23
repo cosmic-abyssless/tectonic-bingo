@@ -107,6 +107,22 @@ describe("WomCompetitionClient", () => {
     await expect(client.editCompetition({ competitionId: 1, groupVerificationCode: "wrong", teams: [] })).rejects.toBeInstanceOf(WomCompetitionError);
   });
 
+  it("drops an HTML error body (e.g. a Cloudflare error page) instead of surfacing it", async () => {
+    const html = "<!DOCTYPE html><html><body>524: A timeout occurred</body></html>";
+    const fetchImpl = vi.fn(async () => new Response(html, { status: 524 })) as unknown as typeof fetch;
+    const client = new WomCompetitionClient(fetchImpl);
+    await expect(client.getCompetition(1)).rejects.toMatchObject({ message: "GET /competitions/1: HTTP 524" });
+  });
+
+  it("truncates an overly long (but non-HTML) error body", async () => {
+    const long = "x".repeat(500);
+    const fetchImpl = vi.fn(async () => new Response(long, { status: 500 })) as unknown as typeof fetch;
+    const client = new WomCompetitionClient(fetchImpl);
+    const err = (await client.getCompetition(1).catch((e: unknown) => e)) as WomCompetitionError;
+    expect(err.message.length).toBeLessThan(400);
+    expect(err.message).toMatch(/…$/);
+  });
+
   it("throws WomCompetitionError on a network failure", async () => {
     const fetchImpl = vi.fn(async () => {
       throw new Error("ECONNREFUSED");

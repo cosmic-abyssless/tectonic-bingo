@@ -322,7 +322,8 @@ export interface SubmissionDetails {
   postedByUser: MinimalUser | null;
 }
 
-export type BugReportStatus = "open" | "resolved";
+/** `resolved` = fixed; `closed` = deliberately not implemented (usually with a reason in `resolutionMessage`). */
+export type BugReportStatus = "open" | "resolved" | "closed";
 
 // Submitted from the header button on any page. bingoId is a best-effort tag
 // (resolved server-side from the reporter's page URL) — null when reported
@@ -337,13 +338,18 @@ export interface BugReport {
   /** The theme and palette the reporter was looking at, e.g. "comic · Blackout (dark, system)". Null on older reports. */
   palette: string | null;
   status: BugReportStatus;
+  /** Whoever last moved it away from `open` (to resolved or closed). Null while open. */
   resolvedByUserId: string | null;
   resolvedAt: string | null;
+  /** Optional note from whoever resolved/closed it, shown to the reporter. Null while open or if reopened. */
+  resolutionMessage: string | null;
   createdAt: string;
 }
 
 export interface BugReportWithReporter extends BugReport {
   reporter: MinimalUser | null;
+  /** Whoever last moved it away from `open`, for attributing the resolutionMessage. Null while open. */
+  resolvedByUser: MinimalUser | null;
 }
 
 // Minimal display info for a leaf a submission's claims touched — enough for
@@ -915,7 +921,11 @@ export type BroadcastEvent =
   // A new audit_log row was appended. Ids/visibility only, per the
   // unauthenticated-broadcast rule below — clients invalidate their audit
   // log / team activity queries and refetch under their own auth.
-  | { type: "audit_appended"; bingoId: string; payload: { teamId: string | null; visibility: AuditVisibility } };
+  | { type: "audit_appended"; bingoId: string; payload: { teamId: string | null; visibility: AuditVisibility } }
+  // A bug report was filed or its status changed. Site-wide, not bingo-scoped
+  // — id only, per the unauthenticated-broadcast rule above. Clients refetch
+  // the admin list and their own reports under their own auth.
+  | { type: "bug_report_changed"; payload: { id: string } };
 
 export * from "./audit.ts";
 export * from "./auditCondense.ts";

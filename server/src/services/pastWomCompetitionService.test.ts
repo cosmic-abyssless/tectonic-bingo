@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { WomCompetitionClient } from "./womCompetitionService";
-import { addPastCompetition, archiveBingoCompetition, deletePastCompetition, getPastParticipationsForUser, listPastCompetitions, mockPastCompetition } from "./pastWomCompetitionService";
+import { addPastCompetition, archiveBingoCompetition, deletePastCompetition, getPastParticipationsForUser, listPastCompetitions, mockPastCompetition, renamePastCompetition } from "./pastWomCompetitionService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -92,6 +92,31 @@ describe("listPastCompetitions", () => {
     vi.stubEnv("DISCORD_GUILD_ID", "other-guild");
     const results = listPastCompetitions(db);
     expect(results).toHaveLength(0);
+  });
+});
+
+describe("renamePastCompetition", () => {
+  it("updates the title and audits the change", async () => {
+    const admin = seedUser();
+    const added = await addPastCompetition(db, { womId: 42, addedByUserId: admin.id }, new WomCompetitionClient(mockFetch([{ body: competitionBody }])));
+
+    const renamed = renamePastCompetition(db, added.id, "  Renamed Bingo  ");
+
+    expect(renamed.title).toBe("Renamed Bingo");
+    const row = db.select().from(schema.womPastCompetitions).where(eq(schema.womPastCompetitions.id, added.id)).get()!;
+    expect(row.title).toBe("Renamed Bingo");
+    const entry = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "wom_past_competition.renamed")).get()!;
+    expect(JSON.parse(entry.details)).toMatchObject({ womId: 42, from: "Winter Bingo", to: "Renamed Bingo" });
+  });
+
+  it("rejects an empty title", async () => {
+    const admin = seedUser();
+    const added = await addPastCompetition(db, { womId: 42, addedByUserId: admin.id }, new WomCompetitionClient(mockFetch([{ body: competitionBody }])));
+    expect(() => renamePastCompetition(db, added.id, "   ")).toThrow(/must not be empty/i);
+  });
+
+  it("throws ServiceError 404 for an unknown id", () => {
+    expect(() => renamePastCompetition(db, "missing", "New title")).toThrow(/not found/i);
   });
 });
 

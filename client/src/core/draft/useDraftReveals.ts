@@ -20,7 +20,7 @@ export function useDraftReveals(bingoId: string | undefined, state: DraftState |
   const [arrived, setArrived] = useState(false);
 
   useWebSocketEvent((event) => {
-    if (event.bingoId !== bingoId) return;
+    if (!("bingoId" in event) || event.bingoId !== bingoId) return;
     if (event.type === "draft_pick_undone") {
       // The pick was taken back: forget its reveal, whether it is waiting or already on screen.
       const { pickNumber } = event.payload;
