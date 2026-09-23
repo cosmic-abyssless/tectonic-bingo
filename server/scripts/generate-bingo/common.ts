@@ -1,40 +1,33 @@
-// Shared by generate.ts and teardown.ts: reading the command line, and checking the server is one we may
-// run against.
-import { Api } from "./client";
-import { TARGET_STAGES, type TargetStage } from "./timeline";
+// Shared by generate.ts and teardown.ts: reading the command line, and connecting to a server we may run against. The
+// generator itself runs inside the server (src/devTools/generateBingo); these scripts only start it and follow it.
+import { Api } from "../../src/devTools/generateBingo/client";
+import { OptionsError, normalizeOptions, type GenerateOptions } from "../../src/devTools/generateBingo/options";
 
 export const DEV_SERVER_HINT =
-  "Start the server with DEV_LOGIN_ENABLED=true PLAYER_STATS_FETCH_DISABLED=true WOM_COMPETITION_SYNC_DISABLED=true and TECTONIC_API_URL left blank (see server/.env.example).";
+  "The server must be in dev mode: DEV_LOGIN_ENABLED=true and NODE_ENV not production (staging already is). Nothing else needs setting: the generator's requests skip OCR and the clan/stats integrations themselves.";
 
-export interface Args {
-  stage: TargetStage;
-  progress: number;
-  days: number;
-  teams: number;
-  teamSize: number;
-  mods: number;
-  me: string | null;
+export interface Args extends GenerateOptions {
   admin: string | null;
-  seed: number;
   base: string;
-  slug: string;
   dryRun: boolean;
+  /** A bingo on the server to copy the board from. */
+  from: string | null;
+  /** An export file to send instead (the default when --from isn't given). */
   exportPath: string | null;
+  /** "user:password" for a server behind a shared password (staging), from --basic-auth or GENERATE_BINGO_BASIC_AUTH. */
+  basicAuth: string | null;
   // teardown only
   all: boolean;
 }
 
 export class UsageError extends Error {}
 
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
+/** The flag each option is given as, for messages. */
+const FLAG_NAMES: Partial<Record<keyof GenerateOptions, string>> = {
+  stage: "--stage", progress: "--progress", days: "--days", teams: "--teams", teamSize: "--team-size", mods: "--mods", me: "--me", seed: "--seed", slug: "--slug",
+};
 
-export function defaultSlug(now: Date): string {
-  return `testdata-${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}-${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}`;
-}
-
-export function parseArgs(argv: string[], now = new Date()): Args {
+export function parseArgs(argv: string[], now = new Date(), env: NodeJS.ProcessEnv = process.env): Args {
   const raw = new Map<string, string | true>();
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -47,7 +40,7 @@ export function parseArgs(argv: string[], now = new Date()): Args {
       i++;
     }
   }
-  const known = new Set(["stage", "progress", "days", "teams", "team-size", "mods", "me", "admin", "seed", "base", "slug", "dry-run", "export", "all"]);
+  const known = new Set(["stage", "progress", "days", "teams", "team-size", "mods", "me", "admin", "seed", "base", "slug", "dry-run", "export", "from", "basic-auth", "all"]);
   for (const key of raw.keys()) if (!known.has(key)) throw new UsageError(`Unknown option --${key}`);
 
   const str = (key: string): string | null => {
@@ -56,33 +49,32 @@ export function parseArgs(argv: string[], now = new Date()): Args {
     if (v === true) throw new UsageError(`--${key} needs a value`);
     return v;
   };
-  const num = (key: string, fallback: number, min: number, max: number, whole = false): number => {
-    const v = str(key);
-    if (v === null) return fallback;
-    const n = Number(v);
-    if (!Number.isFinite(n) || n < min || n > max || (whole && !Number.isInteger(n))) throw new UsageError(`--${key} must be ${whole ? "a whole number" : "a number"} from ${min} to ${max}`);
-    return n;
-  };
 
-  const stage = (str("stage") ?? "live") as TargetStage;
-  if (!TARGET_STAGES.includes(stage)) throw new UsageError(`--stage must be one of ${TARGET_STAGES.join(", ")}`);
-  const slug = str("slug") ?? defaultSlug(now);
-  if (!/^testdata-[a-z0-9-]+$/.test(slug)) throw new UsageError('--slug must start with "testdata-" and use lowercase letters, numbers and hyphens');
+  let options: GenerateOptions;
+  try {
+    options = normalizeOptions(
+      { stage: str("stage"), progress: str("progress"), days: str("days"), teams: str("teams"), teamSize: str("team-size"), mods: str("mods"), me: str("me"), seed: str("seed"), slug: str("slug") },
+      now,
+      FLAG_NAMES,
+    );
+  } catch (err) {
+    if (err instanceof OptionsError) throw new UsageError(err.message);
+    throw err;
+  }
+  const from = str("from");
+  const exportPath = str("export");
+  if (from && exportPath) throw new UsageError("Pass --from or --export, not both");
+  const basicAuth = str("basic-auth") ?? (env.GENERATE_BINGO_BASIC_AUTH || null);
+  if (basicAuth && !basicAuth.includes(":")) throw new UsageError("--basic-auth must be user:password");
 
   return {
-    stage,
-    progress: num("progress", 0.5, 0.02, 1),
-    days: num("days", 9, 1, 60),
-    teams: num("teams", 6, 2, 12, true),
-    teamSize: num("team-size", 14, 2, 30, true),
-    mods: num("mods", 3, 1, 10, true),
-    me: str("me"),
+    ...options,
     admin: str("admin"),
-    seed: num("seed", Math.floor(Math.random() * 1_000_000), 0, 4_294_967_295, true),
-    base: str("base") ?? "http://localhost:3001",
-    slug,
+    base: (str("base") ?? "http://localhost:3001").replace(/\/+$/, ""),
     dryRun: raw.has("dry-run"),
-    exportPath: str("export"),
+    from,
+    exportPath,
+    basicAuth,
     all: raw.has("all"),
   };
 }
@@ -94,14 +86,21 @@ interface DevUser {
   isAdmin: boolean;
 }
 
+/** An API client for `base`, sending the shared password on every request when there is one. */
+export function apiFor(base: string, basicAuth: string | null): Api {
+  return new Api(base, basicAuth ? { Authorization: `Basic ${Buffer.from(basicAuth).toString("base64")}` } : {});
+}
+
 /** Logs in as the site admin (the one given, else the first there is) and checks the server is in dev mode. */
-export async function connect(base: string, adminOverride: string | null): Promise<{ api: Api; admin: DevUser; users: DevUser[] }> {
-  const api = new Api(base);
+export async function connect(base: string, adminOverride: string | null, basicAuth: string | null = null): Promise<{ api: Api; admin: DevUser; users: DevUser[] }> {
+  const api = apiFor(base, basicAuth);
   let users: DevUser[];
   try {
     users = (await api.as(null).get<{ users: DevUser[] }>("/auth/dev-users")).users;
   } catch (err) {
-    throw new UsageError(`Can't reach a dev server at ${base}: ${err instanceof Error ? err.message : err}\n${DEV_SERVER_HINT}`);
+    const status = (err as { status?: number }).status;
+    if (status === 401) throw new UsageError(`${base} asks for a password: pass --basic-auth user:password (or set GENERATE_BINGO_BASIC_AUTH)`);
+    throw new UsageError(`Can't reach a dev-mode server at ${base}: ${err instanceof Error ? err.message : err}\n${DEV_SERVER_HINT}`);
   }
   const admin = adminOverride ? users.find((u) => u.discordId === adminOverride) : users.find((u) => u.isAdmin);
   if (!admin) throw new UsageError(adminOverride ? `No dev user with discordId ${adminOverride}` : "No site admin among the dev users; pass one with --admin <discordId>");

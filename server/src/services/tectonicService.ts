@@ -10,6 +10,7 @@
 // down or unconfigured.
 import { USER_AGENT } from "../config";
 import { log } from "../log";
+import { skipsIntegrations } from "../audit/context";
 
 export interface TectonicConfig {
   baseUrl: string;
@@ -188,8 +189,13 @@ export class TectonicClient {
 
 let _client: TectonicClient | null | undefined;
 
-/** Returns the client, or null if TECTONIC_API_URL/KEY/GUILD_ID aren't all set. */
+/**
+ * Returns the client, or null if TECTONIC_API_URL/KEY/GUILD_ID aren't all set, or if this request asked to skip the
+ * outside services (the test data generator's, see audit/context.ts): then every caller behaves as it does when the
+ * integration isn't configured.
+ */
 export function getTectonicClient(): TectonicClient | null {
+  if (skipsIntegrations()) return null;
   if (_client === undefined) {
     const cfg = getTectonicConfig();
     _client = cfg ? new TectonicClient(cfg) : null;

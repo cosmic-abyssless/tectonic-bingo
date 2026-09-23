@@ -23,6 +23,7 @@ import { bingos, signups, teamMembers, teams } from "../db/schema";
 import { audit } from "../audit/record";
 import { USER_AGENT } from "../config";
 import { log } from "../log";
+import { TESTDATA_PREFIX } from "./devTestDataService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type FetchLike = typeof fetch;
@@ -166,6 +167,12 @@ function syncDisabled(): boolean {
   return process.env.WOM_COMPETITION_SYNC_DISABLED === "true";
 }
 
+// A test data bingo (the generator's, "testdata-" slug) is never synced: its made-up players and team names must not
+// become a real WOM competition, whatever the server's settings.
+function isTestData(bingo: { slug: string }): boolean {
+  return bingo.slug.startsWith(TESTDATA_PREFIX);
+}
+
 /**
  * Fired once, right after a mod advances a bingo out of the draft stage.
  * No-ops when the integration isn't configured or a competition already
@@ -174,7 +181,7 @@ function syncDisabled(): boolean {
 export async function syncWomCompetitionAfterDraft(db: Db, bingoId: string, client: WomCompetitionClient = getWomCompetitionClient()): Promise<void> {
   if (syncDisabled()) return;
   const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get();
-  if (!bingo || bingo.womCompetitionId) return;
+  if (!bingo || bingo.womCompetitionId || isTestData(bingo)) return;
   const config = getWomIntegrationConfig(bingo);
   if (!config) return;
 
@@ -223,7 +230,7 @@ export async function syncWomCompetitionAfterDraft(db: Db, bingoId: string, clie
 export async function syncWomTeamRename(db: Db, bingoId: string, client: WomCompetitionClient = getWomCompetitionClient()): Promise<void> {
   if (syncDisabled()) return;
   const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get();
-  if (!bingo || !bingo.womCompetitionId) return;
+  if (!bingo || !bingo.womCompetitionId || isTestData(bingo)) return;
   const config = getWomIntegrationConfig(bingo);
   if (!config) return;
 

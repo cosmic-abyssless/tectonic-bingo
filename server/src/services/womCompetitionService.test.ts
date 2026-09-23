@@ -135,6 +135,14 @@ describe("WomCompetitionClient", () => {
 });
 
 describe("syncWomCompetitionAfterDraft", () => {
+  it("never makes a competition for a test data bingo, however WOM is configured", async () => {
+    const { bingo } = seedBingoWithTeam({ slug: "testdata-20260923-0900" });
+    const fetchImpl = mockFetch([{ body: { competition: { id: 999 } } }]);
+    await syncWomCompetitionAfterDraft(db, bingo.id, new WomCompetitionClient(fetchImpl));
+    expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
+    expect(db.select().from(schema.bingos).where(eq(schema.bingos.id, bingo.id)).get()!.womCompetitionId).toBeNull();
+  });
+
   it("creates a competition and persists its id", async () => {
     const { bingo } = seedBingoWithTeam();
     const client = new WomCompetitionClient(mockFetch([{ body: { competition: { id: 999 } } }]));
@@ -235,6 +243,13 @@ describe("syncWomTeamRename", () => {
     expect(String(call[0])).toBe("https://api.wiseoldman.net/v2/competitions/42");
     const body = JSON.parse(call[1].body);
     expect(body.teams).toEqual([{ name: "Renamed Team", participants: ["CaptainRsn"] }]);
+  });
+
+  it("never touches WOM for a test data bingo", async () => {
+    const { bingo } = seedBingoWithTeam({ slug: "testdata-20260923-0900", womCompetitionId: 42 });
+    const fetchImpl = mockFetch([{ body: {} }]);
+    await syncWomTeamRename(db, bingo.id, new WomCompetitionClient(fetchImpl));
+    expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
   });
 
   it("does nothing when no competition has been created yet", async () => {

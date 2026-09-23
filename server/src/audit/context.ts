@@ -15,6 +15,17 @@ export interface AuditContext {
   skip: string | null;
   /** Dev only: the request's clock, from the X-Dev-Now header (see clock.ts). Absent outside dev mode. */
   now?: Date;
+  /**
+   * Dev only: the request asked (X-Dev-Skip-Integrations) to stay away from the outside services, so the clan API
+   * client reads as not configured (tectonicService) and no player stats are fetched (playerStatsService). How the
+   * test data generator's made-up players keep off the real APIs. Absent outside dev mode.
+   */
+  skipIntegrations?: boolean;
+}
+
+/** Whether this request asked to skip the outside services (see AuditContext.skipIntegrations). */
+export function skipsIntegrations(): boolean {
+  return getAuditContext()?.skipIntegrations === true;
 }
 
 const storage = new AsyncLocalStorage<AuditContext>();

@@ -1,7 +1,6 @@
 // Everything before the bingo goes live, driven through the real endpoints at spoofed times: the import, the
 // users and their signups, duo pairings, captains, the draft, team names and raised hands.
-import fs from "node:fs";
-import type { BoardResponse, DraftState, DraftUnit, ExclusivityRule, SignupQuestion, TeamWithMembers } from "@bingo/shared";
+import type { BingoExportDocument, BoardResponse, DraftState, DraftUnit, ExclusivityRule, SignupQuestion, TeamWithMembers } from "@bingo/shared";
 import { answerQuestions } from "./answers";
 import type { Api } from "./client";
 import type { BoardInfo, PartModel } from "./board";
@@ -48,8 +47,8 @@ export async function setStage(ctx: Ctx, toStage: string, at: Date): Promise<voi
   ctx.log(`stage -> ${toStage} at ${fmt(at)}`);
 }
 
-export async function importBingo(ctx: Ctx, exportPath: string, name: string): Promise<void> {
-  const document = JSON.parse(fs.readFileSync(exportPath, "utf-8")) as unknown;
+/** Creates the bingo from an exported board (see run.ts for where the document comes from) and sets its dates. */
+export async function importBingo(ctx: Ctx, document: BingoExportDocument, name: string): Promise<void> {
   await ctx.api.as(ctx.admin).post("/api/admin/bingos/import", { slug: ctx.slug, name, document }, { at: ctx.tl.createdAt });
   const { tl } = ctx;
   await ctx.api.as(ctx.admin).patch(

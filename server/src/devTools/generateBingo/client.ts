@@ -1,8 +1,7 @@
-// A tiny HTTP client for the dev server: one session cookie per user (logged in through the dev-only
+// A tiny HTTP client for a dev-mode server: one session cookie per user (logged in through the dev-only
 // /auth/dev-login), and the dev-only headers that make the run realistic (X-Dev-Now spoofs the request's clock,
-// X-Dev-Skip-Ocr skips the background screenshot analysis). See docs/generate-bingo-plan.md.
-import fs from "node:fs";
-import path from "node:path";
+// X-Dev-Skip-Ocr skips the background screenshot analysis, X-Dev-Skip-Integrations keeps fake players away from the
+// clan API and the player stats sites). See docs/generate-bingo-plan.md.
 
 export class ApiError extends Error {
   constructor(
@@ -20,25 +19,21 @@ export interface CallOptions {
   at?: Date;
 }
 
-const SCREENSHOT_PATHS = [
-  path.resolve(__dirname, "../../../e2e/fixtures/screenshot.png"),
-  path.resolve(process.cwd(), "../e2e/fixtures/screenshot.png"),
-  path.resolve(process.cwd(), "e2e/fixtures/screenshot.png"),
-];
-
-let screenshotBytes: Buffer | null = null;
-function screenshot(): Buffer {
-  if (screenshotBytes) return screenshotBytes;
-  const found = SCREENSHOT_PATHS.find((p) => fs.existsSync(p));
-  if (!found) throw new Error(`Can't find the placeholder screenshot (looked in ${SCREENSHOT_PATHS.join(", ")})`);
-  screenshotBytes = fs.readFileSync(found);
-  return screenshotBytes;
-}
+// The placeholder screenshot every submission uploads: a 1x1 PNG (the same bytes as e2e/fixtures/screenshot.png),
+// inlined so the generator needs no file from the repo and runs inside the built image too.
+const SCREENSHOT = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
 
 export class Api {
   private readonly cookies = new Map<string, string>();
 
-  constructor(readonly base: string) {}
+  /**
+   * `headers` go on every request: the in-server job sends X-Forwarded-Proto so its loopback requests count as HTTPS
+   * (the session cookie is Secure on staging), and the CLI sends a staging password (Authorization) when it has one.
+   */
+  constructor(
+    readonly base: string,
+    readonly headers: Record<string, string> = {},
+  ) {}
 
   /** Requests made as `discordId`, logging in the first time. Pass null for an anonymous request. */
   as(discordId: string | null): Session {
@@ -50,7 +45,7 @@ export class Api {
     if (known) return known;
     const res = await fetch(`${this.base}/auth/dev-login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { ...this.headers, "Content-Type": "application/json" },
       body: JSON.stringify({ discordId }),
     });
     if (!res.ok) throw new ApiError(res.status, "POST", "/auth/dev-login", await errorText(res));
@@ -78,7 +73,7 @@ export class Session {
   ) {}
 
   private async send<T>(method: string, urlPath: string, body: RequestInit["body"], headers: Record<string, string>, opts: CallOptions): Promise<T> {
-    const all: Record<string, string> = { "X-Dev-Skip-Ocr": "1", ...headers };
+    const all: Record<string, string> = { ...this.api.headers, "X-Dev-Skip-Ocr": "1", "X-Dev-Skip-Integrations": "1", ...headers };
     if (this.discordId) all.cookie = await this.api.cookieFor(this.discordId);
     if (opts.at) all["X-Dev-Now"] = opts.at.toISOString();
     const res = await fetch(`${this.api.base}${urlPath}`, { method, headers: all, body });
@@ -112,7 +107,7 @@ export class Session {
     const form = new FormData();
     form.append("claims", JSON.stringify(claims));
     if (forUserId) form.append("forUserId", forUserId); // posted by this session for a teammate
-    form.append("screenshot", new Blob([new Uint8Array(screenshot())], { type: "image/png" }), "screenshot.png");
+    form.append("screenshot", new Blob([new Uint8Array(SCREENSHOT)], { type: "image/png" }), "screenshot.png");
     return this.send<T>("POST", urlPath, form, {}, opts);
   }
 }

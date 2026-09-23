@@ -10,6 +10,7 @@ import { optimisticUpdate } from "../api/optimistic";
 import { UserSearchInput } from "../core/admin/UserSearchInput";
 import { ItemGroupsPanel } from "../core/admin/ItemGroupsPanel";
 import { PastWomCompetitionsPanel } from "../core/admin/PastWomCompetitionsPanel";
+import { TestDataPanel } from "../core/admin/TestDataPanel";
 import { BugReportsPanel } from "../core/admin/BugReportsPanel";
 import { SiteAuditLog } from "../core/admin/SiteAuditLog";
 import { displayName } from "../core/ui/user";
@@ -301,7 +302,7 @@ function GrantAdminPanel() {
 const NARROW = "mx-auto w-full max-w-6xl px-6";
 
 export function SiteAdminPage() {
-  const { user, canGrantAdmin } = useAuth();
+  const { user, canGrantAdmin, devMode } = useAuth();
   const [tab, setTab] = useState("bugs");
   if (!user?.isAdmin) {
     return (
@@ -327,6 +328,8 @@ export function SiteAdminPage() {
               <Tab id="item-groups">Item groups</Tab>
               <Tab id="past-wom">Past WOM competitions</Tab>
               {canGrantAdmin && <Tab id="grant-admin">Grant site admin</Tab>}
+              {/* Dev mode only (local servers and staging): the server has no test data routes otherwise. */}
+              {devMode && <Tab id="test-data">Test data</Tab>}
             </TabList>
           </div>
           <TabPanel id="bugs">
@@ -359,6 +362,13 @@ export function SiteAdminPage() {
             <TabPanel id="grant-admin">
               <div className={NARROW}>
                 <GrantAdminPanel />
+              </div>
+            </TabPanel>
+          )}
+          {devMode && (
+            <TabPanel id="test-data">
+              <div className={NARROW}>
+                <TestDataPanel />
               </div>
             </TabPanel>
           )}

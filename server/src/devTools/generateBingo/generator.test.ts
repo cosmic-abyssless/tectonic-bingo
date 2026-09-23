@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { isBlankAnswer, parseChoices, type GraphNode, type SignupQuestion, type Tile } from "@bingo/shared";
 import { answerQuestions } from "./answers";
 import { DIFFICULTY, buildBoard, deadlockedParts, difficultyOf, planSubmissions, type Claim, type PartModel } from "./board";
-import { UsageError, defaultSlug, parseArgs } from "./common";
+import { OptionsError, defaultSlug, normalizeOptions } from "./options";
 import { chooseMods, makePlayers, pairUp, playingProbability } from "./people";
 import { Rng } from "./rng";
 import { runInOrder } from "./setup";
@@ -119,29 +119,28 @@ describe("people", () => {
   });
 });
 
-describe("parseArgs", () => {
+describe("normalizeOptions", () => {
   const now = new Date("2026-09-19T14:32:00Z");
 
   it("has the defaults from the plan", () => {
-    const a = parseArgs([], now);
-    expect(a).toMatchObject({ stage: "live", progress: 0.5, days: 9, teams: 6, teamSize: 14, mods: 3, me: null, base: "http://localhost:3001", dryRun: false });
-    expect(a.slug).toBe("testdata-20260919-1432");
+    const o = normalizeOptions({}, now);
+    expect(o).toMatchObject({ stage: "live", progress: 0.5, days: 9, teams: 6, teamSize: 14, mods: 3, me: null });
+    expect(o.slug).toBe("testdata-20260919-1432");
     expect(defaultSlug(now)).toBe("testdata-20260919-1432");
   });
 
-  it("reads options and flags", () => {
-    const a = parseArgs(["--stage", "draft", "--seed", "7", "--me", "123", "--dry-run", "--teams", "4"], now);
-    expect(a).toMatchObject({ stage: "draft", seed: 7, me: "123", dryRun: true, teams: 4 });
+  it("takes numbers as numbers (a JSON body) or as text (the command line)", () => {
+    expect(normalizeOptions({ stage: "draft", seed: 7, me: "123", teams: 4 }, now)).toMatchObject({ stage: "draft", seed: 7, me: "123", teams: 4 });
+    expect(normalizeOptions({ seed: "7", teamSize: "10" }, now)).toMatchObject({ seed: 7, teamSize: 10 });
   });
 
-  it("refuses what it can't use", () => {
-    expect(() => parseArgs(["--stage", "nope"], now)).toThrow(UsageError);
-    expect(() => parseArgs(["--progress", "3"], now)).toThrow(/from 0.02 to 1/);
-    expect(() => parseArgs(["--teams", "2.5"], now)).toThrow(/whole number/);
-    expect(() => parseArgs(["--bogus", "1"], now)).toThrow(/Unknown option/);
-    expect(() => parseArgs(["--slug", "real-bingo"], now)).toThrow(/testdata-/);
-    expect(() => parseArgs(["--slug", "testdata-UPPER"], now)).toThrow(UsageError);
-    expect(() => parseArgs(["stray"], now)).toThrow(/Unexpected/);
+  it("refuses what it can't use, naming the option the way the caller does", () => {
+    expect(() => normalizeOptions({ stage: "nope" }, now)).toThrow(OptionsError);
+    expect(() => normalizeOptions({ progress: 3 }, now)).toThrow(/from 0.02 to 1/);
+    expect(() => normalizeOptions({ teams: 2.5 }, now)).toThrow(/whole number/);
+    expect(() => normalizeOptions({ slug: "real-bingo" }, now)).toThrow(/testdata-/);
+    expect(() => normalizeOptions({ slug: "testdata-UPPER" }, now)).toThrow(OptionsError);
+    expect(() => normalizeOptions({ teamSize: 99 }, now, { teamSize: "--team-size" })).toThrow(/^--team-size must/);
   });
 });
 
@@ -183,7 +182,7 @@ interface ExportDoc {
   tiles: { name: string; boardRow: number; boardCol: number; hasFreezePeriod: boolean; freezeDurationMinutes: number; bonusPoints: number; tasks: ExportTask[] }[];
 }
 
-const EXPORT_PATH = path.resolve(__dirname, "../../../tectonic-comics-bingo-export.json");
+const EXPORT_PATH = path.resolve(__dirname, "../../../../tectonic-comics-bingo-export.json");
 
 function toNode(t: ExportTask): GraphNode {
   return {
