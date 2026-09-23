@@ -43,7 +43,8 @@ export function PartnerPanel({ slug }: { slug: string }) {
 
   return (
     <Card className="mx-auto max-w-lg">
-      <CardHeader title="Duo partner" description="This bingo is drafted in pairs. Pick who you want to play with — they need to accept before the draft." />
+      {/* Step 2 of a duo signup; step 1 is the signup form above it (SignupForm). */}
+      <CardHeader title="2. Duo partner" description="This bingo is drafted in pairs. Pick who you want to play with — they need to accept before the draft." />
       <div className="space-y-4 p-5">
         {state.partner && !confirmingLeave && (
           <Notice tone="ok" icon={<CheckIcon />}>

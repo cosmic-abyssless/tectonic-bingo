@@ -233,6 +233,8 @@ export function SignupForm({ slug }: { slug: string }) {
         className="mx-auto max-w-lg"
         title={
           <h2 className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+            {/* A duo bingo's two steps are numbered: this, then picking a partner (PartnerPanel). */}
+            {isDuo && "1. "}
             {existing ? "Edit your signup" : "Sign up"}
           </h2>
         }
