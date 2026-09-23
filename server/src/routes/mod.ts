@@ -20,6 +20,7 @@ import { syncWomCompetitionAfterDraft } from "../services/womCompetitionService"
 import { archiveBingoCompetition } from "../services/pastWomCompetitionService";
 import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
 import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
+import { syncSignupRsn } from "../services/rsnSyncService";
 import { approveSubmission, rejectSubmission, undoSubmissionReview } from "../services/scoringService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
@@ -265,13 +266,16 @@ router.post(
       .get();
     if (!row || row.bingoId !== req.bingo!.id) throw new ServiceError(404, "Signup not found");
     markAuditedNoop();
+    // First catch an in-game rename: the signup's WOM id tells tectonic-api which name the account goes by now
+    // (rsnSyncService). Awaited, so the stats below are fetched under the current name. Never fails the refresh.
+    const { rsn } = await syncSignupRsn(db, row.id);
     // Tell clients to spin before the fire-and-forget fetch starts, so the
     // button doesn't sit idle between 204 and the first lookup. Skip when
     // the E2E hook disables the fetch — otherwise the spinner would stick.
     if (process.env.PLAYER_STATS_FETCH_DISABLED !== "true") {
       broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: { signupId: row.id, userId: row.userId, statsRefreshing: true } });
     }
-    void fetchAndPersistPlayerStats(db, row.id, row.rsn);
+    void fetchAndPersistPlayerStats(db, row.id, rsn);
     res.status(204).end();
   }),
 );

@@ -170,6 +170,27 @@ export class TectonicClient {
     return this.get<TectonicDetailedUser[]>(`/api/v1/guilds/${this.cfg.guildId}/users/${ids}`);
   }
 
+  /**
+   * Detailed users by the WOM ids of their RSNs. An account that has since been
+   * renamed comes back with its new name under the same wom_id, which is how a
+   * signup's RSN is kept current (rsnSyncService.ts). Unknown ids are simply
+   * absent from the result.
+   */
+  async getUsersByWomIds(womIds: string[]): Promise<TectonicDetailedUser[]> {
+    if (womIds.length === 0) return [];
+    const ids = womIds.map(encodeURIComponent).join(",");
+    return (await this.get<TectonicDetailedUser[] | null>(`/api/v1/guilds/${this.cfg.guildId}/users/wom/${ids}`)) ?? [];
+  }
+
+  /** The RSN the account with this WOM id goes by now, or null if tectonic doesn't know it. Throws TectonicUnavailableError on failure. */
+  async getRsnByWomId(womId: string): Promise<string | null> {
+    for (const user of await this.getUsersByWomIds([womId])) {
+      const match = user.rsns?.find((r) => r.wom_id === womId);
+      if (match) return match.rsn;
+    }
+    return null;
+  }
+
   /** Convenience: one user's detailed record, or null if tectonic doesn't know them. Throws TectonicUnavailableError on failure. */
   async getDetailedUser(discordId: string): Promise<TectonicDetailedUser | null> {
     const users = await this.getDetailedUsers([discordId]);

@@ -165,6 +165,8 @@ export interface AuditDetailsMap {
   "signup.buyin_marked": { received: boolean; collectedByUserId: string | null; collectedByName: string | null; before: { receivedAt: string | null } };
   "signup.stats_fetched": { womFound: boolean; runeProfileFound: boolean };
   "signup.stats_fetch_failed": { message: string };
+  /** The player's account was renamed in-game: found by its WOM id when a mod refreshed their stats. */
+  "signup.name_changed": { before: string; after: string; womId: string };
 
   "wom.competition_created": { competitionId: number };
   "wom.roster_synced": Record<string, never>;
@@ -558,6 +560,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
   },
   "signup.stats_fetched": { category: "system", tone: "neutral", visibility: "mods", title: "Player stats fetched", label: (i) => `Fetched WOM/RuneProfile stats for ${i.entityLabel ?? "a signup"}` },
   "signup.stats_fetch_failed": { category: "system", tone: "warn", visibility: "mods", title: "Player stats fetch failed", label: (i) => `Failed to fetch player stats for ${i.entityLabel ?? "a signup"}` },
+  "signup.name_changed": {
+    category: "signup",
+    tone: "info",
+    visibility: "mods",
+    title: "Name change",
+    label: (i) => `${i.details.before} changed their name to ${i.details.after}`,
+  },
   "wom.competition_created": { category: "system", tone: "ok", visibility: "mods", title: "WOM competition created", label: () => "Created the Wise Old Man competition" },
   "wom.roster_synced": { category: "system", tone: "neutral", visibility: "mods", title: "WOM roster synced", label: () => "Synced the Wise Old Man competition roster" },
   "wom.sync_failed": { category: "system", tone: "warn", visibility: "mods", title: "WOM sync failed", label: (i) => `Wise Old Man ${i.details.operation} failed: ${i.details.message}` },
