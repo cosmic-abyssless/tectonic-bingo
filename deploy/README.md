@@ -94,7 +94,7 @@ Two environments run on one server, each a Compose project of its own behind one
 | | Production | Staging |
 | --- | --- | --- |
 | Address | `tectonic.bingo`, `www.tectonic.bingo` | `staging.tectonic.bingo` |
-| Deployed | by a person, from the Actions tab | automatically, every time CI passes on `main` |
+| Deployed | by a person, from the Actions tab, once CI on `main` passed | automatically, on every merge to `main` |
 | Access | public | Caddy's shared password on everything except `/health` |
 | Dev-login | off | on (so the test-data generator and "log in as" work) |
 | Data | `/srv/tectonic/data/production` | `/srv/tectonic/data/staging` |
@@ -105,13 +105,15 @@ talking to, and the two can run different builds of the protocol.
 
 **The pipeline** (`.github/workflows/deploy.yml`):
 
-1. A pull request merges to `main`; CI runs (tests, the image build and smoke test, the restore drill, the deploy tests).
-2. When CI passes, the Deploy workflow builds the image (tagged with the commit), streams it to the server over SSH
-   (`docker save | ssh ... load-image`; there is no registry to pay for or leak), syncs that commit's `deploy/` directory,
-   and runs `deploy.sh staging`. Staging is always the next production.
-3. To release: **Actions > Deploy > Run workflow**, environment `production`. It deploys the image staging is already
-   running. Nothing is rebuilt, so production gets exactly the bytes that were tested, and the server refuses to deploy
-   anything else to production. An emergency hotfix ticks "skip_staging_check": that run builds the commit, ships it (it has
+1. A pull request passes CI (tests, the image build and smoke test, the restore drill, the deploy tests) and merges to `main`.
+2. Straight away, alongside CI on `main` rather than after it, the Deploy workflow builds the image (tagged with the commit),
+   streams it to the server over SSH (`docker save | ssh ... load-image`; there is no registry to pay for or leak), syncs
+   that commit's `deploy/` directory, and runs `deploy.sh staging`. A merge is on staging in about two minutes.
+3. To release: **Actions > Deploy > Run workflow**, environment `production`. It first requires CI on `main` to have
+   passed for that commit (waiting for a run still going), so code that reached staging without it (an admin push that
+   skipped the pull request rules, or two pull requests that pass alone but not together) never reaches production. It
+   deploys the image staging is already running. Nothing is rebuilt, so production gets exactly the bytes that were
+   tested, and the server refuses to deploy anything else to production. An emergency hotfix ticks "skip_staging_check": that run builds the commit, ships it (it has
    not been through staging, so it is not on the box), and deploys it; the box logs that the check was skipped.
 4. To undo a release: the same button with action `rollback`. It takes under a minute and needs no build.
 
@@ -147,8 +149,8 @@ The script says which step failed and shows the new container's log. Only one de
 State is in `/srv/tectonic/state/<env>.state` (live colour and image, previous image) and `<env>.log` (history). It is
 saved the moment the new colour is live, before the drain, and if it ever disagrees with where Caddy actually routes (a deploy
 killed at the wrong moment), Caddy wins. A deploy ignores SIGHUP, so a dropped SSH session does not kill it mid-switch. If it
-fails after the screenshot service was replaced, the previous one is put back, so "unchanged" is true. Staging is deployed in
-the order CI finishes, which can differ from commit order, so a deploy of a commit that is an ancestor of what staging runs is
+fails after the screenshot service was replaced, the previous one is put back, so "unchanged" is true. Staging deploys can finish
+out of commit order, so a deploy of a commit that is an ancestor of what staging runs is
 skipped (`--force` to override). The last few images stay on disk for rollbacks; older ones are pruned.
 
 **On a bad release**, roll back first and investigate afterwards. A rollback deploys the previous image through the same
