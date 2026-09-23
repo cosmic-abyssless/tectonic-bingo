@@ -11,6 +11,9 @@
 ARG NODE_VERSION=24
 FROM node:${NODE_VERSION}-bookworm-slim AS base
 WORKDIR /app
+# onnxruntime-node's install step would otherwise download its CUDA/TensorRT GPU providers from NuGet: large, unused
+# (the OCR runs on the CPU runtime the npm package already ships), and a network call that can fail the build.
+ENV ONNXRUNTIME_NODE_INSTALL=skip
 
 # ---- every dependency, for building -------------------------------------------------------------------------------
 FROM base AS deps

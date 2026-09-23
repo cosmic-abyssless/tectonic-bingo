@@ -23,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      # Skips onnxruntime-node's GPU download during the action's `npm ci` (see ci.yml).
+      ONNXRUNTIME_NODE_INSTALL: skip
     steps:
       - name: No token yet
         if: env.RAILWAY_TOKEN == ''

@@ -18,6 +18,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # Skips onnxruntime-node's GPU download during `npm ci` (see ci.yml).
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 concurrency:
   group: migration-safety-${{ github.ref }}
   cancel-in-progress: true
