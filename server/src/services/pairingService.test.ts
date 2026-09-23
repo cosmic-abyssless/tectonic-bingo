@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createSignup, withdrawSignup } from "./signupService";
-import { adminPair, cancelRequest, getAcceptedPairs, getPairingState, leavePairing, removePairing, requestPairing, respondToRequest, unpair } from "./pairingService";
+import { adminPair, cancelRequest, getAcceptedPairs, getPairingState, getUnpairedSignups, leavePairing, removePairing, requestPairing, respondToRequest, unpair } from "./pairingService";
 import { ServiceError } from "./errors";
 import { runWithAuditContext } from "../audit/context";
 import { createTeam } from "./teamService";
@@ -259,5 +259,33 @@ describe("withdrawing a signup", () => {
     expect(bState.partner).toBeNull();
     expect(bState.lastOutcome).toMatchObject({ status: "dissolved", other: { user: { id: a.id } } });
     expect(requestPairing(db, bingo, { requester: b, targetDiscordId: c.discordId }).status).toBe("pending");
+  });
+});
+
+describe("getUnpairedSignups", () => {
+  it("lists everyone signed up without a partner, except the viewer, flagging who's waiting on a reply", () => {
+    const { bingo, a, b, c } = seed();
+    const d = (() => {
+      const user = db.insert(schema.users).values({ discordId: "d", discordUsername: "d" }).returning().get();
+      createSignup(db, bingo, { bingoId: bingo.id, userId: user.id, rsn: "d", answers: [] });
+      return { id: user.id, discordId: "d" };
+    })();
+    // a and b pair up; c has asked d, who hasn't answered.
+    const ab = requestPairing(db, bingo, { requester: a, targetDiscordId: b.discordId });
+    respondToRequest(db, bingo, b, ab.id, true);
+    requestPairing(db, bingo, { requester: c, targetDiscordId: d.discordId });
+
+    expect(getUnpairedSignups(db, bingo.id, d.id)).toEqual([{ userId: c.id, discordId: "c", rsn: "c", waiting: true }]);
+    expect(getUnpairedSignups(db, bingo.id, a.id).map((p) => [p.rsn, p.waiting])).toEqual([
+      ["c", true],
+      ["d", false],
+    ]);
+  });
+
+  it("leaves out withdrawn signups", () => {
+    const { bingo, a, b } = seed();
+    const signupB = db.select().from(schema.signups).where(eq(schema.signups.userId, b.id)).get()!;
+    withdrawSignup(db, bingo, signupB.id);
+    expect(getUnpairedSignups(db, bingo.id, a.id).map((p) => p.rsn)).toEqual(["c"]);
   });
 });

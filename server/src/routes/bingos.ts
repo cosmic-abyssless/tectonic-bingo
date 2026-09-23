@@ -436,6 +436,17 @@ router.get(
   }),
 );
 
+// Who else is signed up without a partner, for a player choosing one (duo bingos only).
+router.get(
+  "/:slug/signup/unpaired",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const players = req.bingo!.signupMode === "duo" ? pairingService.getUnpairedSignups(db, req.bingo!.id, req.user!.id) : [];
+    res.json({ players });
+  }),
+);
+
 router.get(
   "/:slug/signup/pairing",
   requireAuth,

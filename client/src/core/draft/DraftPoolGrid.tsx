@@ -55,6 +55,7 @@ import { PlayerName } from "../tectonic/PlayerName";
 import { AchievementIcons, PlaceBreakdown, TierBadge } from "../tectonic/ProfileBadges";
 import { podiumSummary, podiumTitle, recordSummary, recordTitle } from "../tectonic/profile";
 import { RatingCell } from "./RatingCell";
+import { headerTooltip, usefulTooltip } from "../ui/gridTooltips";
 
 // "rating" | "rsn" | "discord" | "tier" | "records" | "podiums" | "ehb" | "ehp" | a signup question's id.
 type SortKey = string;
@@ -240,11 +241,13 @@ function answerLine(question: SignupQuestion): LineRender {
 // renderer) — for a pair this lists both halves rather than picking one, one per line. AG's default tooltip is
 // white-space: normal (a literal "\n" would just collapse to a space), so this pairs with StackedTooltip below,
 // a tiny custom tooltipComponent that splits on "\n" and renders each half as its own line.
+// Only shown when it'd tell you something (gridTooltips.ts): a half cut off, or detail the cell doesn't show.
 function stackedTooltip(getText: (entry: DraftPoolEntry) => string) {
   return (p: TooltipCallbackParams<DraftUnit>): string => {
     if (!p.data) return "";
-    if (p.data.entries.length === 1) return getText(p.data.entries[0]!);
-    return p.data.entries.map((e) => `${e.signup.rsn}: ${getText(e)}`).join("\n");
+    const texts = p.data.entries.map(getText);
+    const text = p.data.entries.length === 1 ? texts[0]! : p.data.entries.map((e, i) => `${e.signup.rsn}: ${texts[i]}`).join("\n");
+    return usefulTooltip(p, text, texts);
   };
 }
 
@@ -568,7 +571,7 @@ export function DraftPoolGrid({
   // lockPinned: a column's pinned state (left/unpinned) is set by the colDef, not by the user — without this, an
   // unpinned column can be dragged past the pinned pairIcon/rating/RSN block into it, which looked like a bug.
   const defaultColDef = useMemo<ColDef<DraftUnit>>(
-    () => ({ sortable: true, resizable: true, minWidth: 70, headerTooltip: true, tooltipComponent: StackedTooltip, lockPinned: true }),
+    () => ({ sortable: true, resizable: true, minWidth: 70, headerTooltip, tooltipComponent: StackedTooltip, lockPinned: true }),
     [],
   );
 

@@ -1,9 +1,10 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useMatch } from "react-router-dom";
 import { useBingo, useMyBugReports } from "../../api/queries";
+import { useBugReports } from "../../api/adminQueries";
 import { useAuth } from "../../context/AuthContext";
 import { useColorSchemePreference } from "./colorScheme";
-import { useBugReportsUnseen } from "./bugReportsUnseen";
+import { ADMIN_BUG_REPORTS_SEEN_KEY, useBugReportsUnseen } from "./bugReportsUnseen";
 import { BugReportDialog } from "./BugReportDialog";
 import { Button, IconButton } from "./Button";
 import { PulseDot } from "./Card";
@@ -72,6 +73,11 @@ export function AppHeader({
   // BugReportDialog's own useMyBugReports call shares this same cached query.
   const { data: myReports } = useMyBugReports(!!user?.inGuild);
   const { hasUnseen: hasUnseenBugReports, markSeen: markBugReportsSeen } = useBugReportsUnseen(myReports?.bugReports, `bugReports:lastSeen:mine:${user?.id ?? "anon"}`);
+  // Site admins: a dot on their name (and on "Site admin" in its menu) when anyone has filed a report since they last
+  // looked at the Bug reports tab, which shares this "last seen" and clears it. New reports only, not status changes:
+  // an admin resolving one shouldn't light it up.
+  const { data: allReports } = useBugReports(!!user?.isAdmin);
+  const { hasUnseen: hasNewReportsForAdmin } = useBugReportsUnseen(user?.isAdmin ? allReports?.bugReports : undefined, ADMIN_BUG_REPORTS_SEEN_KEY, { newOnly: true });
 
   // The bug-report button and the signed-in user's menu.
   const utility = (
@@ -103,14 +109,18 @@ export function AppHeader({
       )}
       {user && (
         <MenuTrigger>
-          <Button variant="ghost" size="sm" aria-label="Account menu" className="pl-1.5">
+          <Button variant="ghost" size="sm" aria-label={hasNewReportsForAdmin ? "Account menu (new bug reports)" : "Account menu"} className="relative pl-1.5">
             <img src={avatarUrl(user)} alt="" className="size-6 rounded-full" />
+            {hasNewReportsForAdmin && <PulseDot className="left-5 top-0.5" />}
             <span className="hidden sm:inline">{myRsn || displayName(user)}</span>
           </Button>
           <Menu>
             {user.isAdmin && (
               <MenuItem id="admin" href="/admin">
-                Site admin
+                <span className="relative pr-3">
+                  Site admin
+                  {hasNewReportsForAdmin && <PulseDot className="right-0 top-0.5" />}
+                </span>
               </MenuItem>
             )}
             {menuItems}

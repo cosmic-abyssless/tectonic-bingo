@@ -1,6 +1,6 @@
 import { now as clockNow } from "../clock";
 import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
-import { isBlankAnswer, MAX_CHOICE_LENGTH, MAX_MULTISELECT_CHOICES, MAX_QUESTION_HELPER_TEXT, type SignupQuestionType } from "@bingo/shared";
+import { formatSignupAnswer, isBlankAnswer, MAX_CHOICE_LENGTH, MAX_MULTISELECT_CHOICES, MAX_QUESTION_HELPER_TEXT, type SignupQuestionType } from "@bingo/shared";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
@@ -264,43 +264,58 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
     const existing = tx.select().from(signups).where(eq(signups.id, signupId)).get();
     if (!existing) throw new ServiceError(404, "Signup not found");
 
+    // Only what actually changed is written and recorded: saving the form untouched records nothing.
     let rsnChange: { before: string; after: string } | undefined;
     if (params.rsn !== undefined) {
       if (!params.rsn.trim()) throw new ServiceError(400, "RSN is required");
       const newRsn = params.rsn.trim();
       if (newRsn !== existing.rsn) rsnChange = { before: existing.rsn, after: newRsn };
-      tx.update(signups)
-        .set({
-          rsn: newRsn,
-          womId: params.womId ?? null,
-          rsnVerified: params.rsnVerified ?? false,
-        })
-        .where(eq(signups.id, signupId))
-        .run();
+      const womId = params.womId ?? null;
+      const rsnVerified = params.rsnVerified ?? false;
+      // The WOM id and verification are the server's, re-derived on every save: kept current, but not a change the
+      // player made, so not one to record on their own.
+      if (rsnChange || womId !== existing.womId || rsnVerified !== existing.rsnVerified) {
+        tx.update(signups).set({ rsn: newRsn, womId, rsnVerified }).where(eq(signups.id, signupId)).run();
+      }
     }
-    const answersChanged: string[] = [];
+
+    // Before/after per changed answer, keyed by the question's prompt, as the audit log's details view shows them.
+    const before: Record<string, string> = {};
+    const after: Record<string, string> = {};
+    if (rsnChange) {
+      before.RSN = rsnChange.before;
+      after.RSN = rsnChange.after;
+    }
     const questions = tx.select().from(signupQuestions).where(eq(signupQuestions.bingoId, bingo.id)).all();
+    const questionById = new Map(questions.map((q) => [q.id, q]));
+    const shown = (type: SignupQuestionType, value: string) => formatSignupAnswer(type, value) || "—";
     for (const a of normalizeAnswers(questions, params.answers ?? [])) {
       const existingAnswer = tx
         .select()
         .from(signupAnswers)
         .where(and(eq(signupAnswers.signupId, signupId), eq(signupAnswers.questionId, a.questionId)))
         .get();
+      // No answer and a blank one are the same thing to the player.
+      if ((existingAnswer?.value ?? "") === a.value) continue;
       if (existingAnswer) {
         tx.update(signupAnswers).set({ value: a.value }).where(eq(signupAnswers.id, existingAnswer.id)).run();
       } else {
         tx.insert(signupAnswers).values({ signupId, questionId: a.questionId, value: a.value }).run();
       }
-      answersChanged.push(a.questionId);
+      const question = questionById.get(a.questionId);
+      if (question) {
+        before[question.prompt] = shown(question.type, existingAnswer?.value ?? "");
+        after[question.prompt] = shown(question.type, a.value);
+      }
     }
 
     const updated = tx.select(PUBLIC_SIGNUP_COLS).from(signups).where(eq(signups.id, signupId)).get()!;
-    if (params.rsn !== undefined || answersChanged.length > 0) {
+    if (Object.keys(after).length > 0) {
       audit(tx, {
         action: "signup.updated",
         bingoId: bingo.id,
         entity: { type: "signup", id: signupId, label: updated.rsn },
-        details: { ...(rsnChange ? { rsn: rsnChange } : {}), ...(params.rsnVerified !== undefined ? { rsnVerified: params.rsnVerified } : {}), answersChanged },
+        details: { changes: { before, after } },
       });
     } else {
       markAuditedNoop();

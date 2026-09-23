@@ -129,6 +129,10 @@ export function SignupForm({ slug }: { slug: string }) {
   const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // Null until the viewer opens or closes the section (or submits): until then it follows whether they've signed up,
+  // which isn't known yet on the first render (the signup is still loading).
+  const [expandedChoice, setExpanded] = useState<boolean | null>(null);
+  const expanded = expandedChoice ?? !existing;
 
   // One linked RSN (or a saved signup) should already be chosen — don't wait
   // on the effect, or the select paints as "Select…" for a frame.
@@ -181,6 +185,9 @@ export function SignupForm({ slug }: { slug: string }) {
   async function submit() {
     setError(null);
     setSaved(false);
+    // Folds away the moment you submit: the header (now "Edit your signup", with "Saved." under it) says it worked.
+    // A failed save opens it again, so the error inside is seen.
+    setExpanded(false);
     try {
       if (existing) {
         await updateSignup.mutateAsync({ rsn: rsnValue, answers: answerList });
@@ -190,6 +197,7 @@ export function SignupForm({ slug }: { slug: string }) {
       setSaved(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save signup");
+      setExpanded(true);
     }
   }
 
@@ -218,17 +226,23 @@ export function SignupForm({ slug }: { slug: string }) {
     <div className="space-y-6">
       {/* Collapsed by default once already signed up — the title/description alone (visible either way) already
           says who's signed up as what; open by default beforehand, since there's nothing to collapse *to* yet.
-          Uncontrolled (defaultExpanded only sets the initial state): saving or withdrawing don't yank it open or
-          shut on someone mid-edit — see Disclosure's own doc comment for why that's the right call here. */}
+          Controlled only so submitting can fold it away (see submit); withdrawing leaves it as it is. */}
       <Disclosure
-        defaultExpanded={!existing}
+        isExpanded={expanded}
+        onExpandedChange={setExpanded}
         className="mx-auto max-w-lg"
         title={
           <h2 className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+            {/* A duo bingo's two steps are numbered: this, then picking a partner (PartnerPanel). */}
+            {isDuo && "1. "}
             {existing ? "Edit your signup" : "Sign up"}
           </h2>
         }
-        description={existing ? "You can update your answers or withdraw while signups are open." : "Fill this out to join the bingo."}
+        description={
+          existing
+            ? `${saved ? "Saved. " : ""}You can update your answers or withdraw while signups are open.`
+            : "Fill this out to join the bingo."
+        }
       >
         <div className="space-y-5">
           {existing && mySignup?.atRisk && (

@@ -66,6 +66,7 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       queryClient.invalidateQueries({ queryKey: ["mySignup"] });
       queryClient.invalidateQueries({ queryKey: ["myPairing"] });
       queryClient.invalidateQueries({ queryKey: ["partnerCandidates"] });
+      queryClient.invalidateQueries({ queryKey: ["unpairedSignups"] });
       queryClient.invalidateQueries({ queryKey: ["adminCaptainCandidates"] });
       // Leads scouting the pool see new/withdrawn signups and pairs live.
       queryClient.invalidateQueries({ queryKey: ["draftState"] });

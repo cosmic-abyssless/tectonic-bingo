@@ -160,7 +160,17 @@ export interface AuditDetailsMap {
   "pairing.unpaired": { userIds: string[]; displayNames: string[] };
 
   "signup.created": { rsn: string; rsnVerified: boolean; answerCount: number; reactivated: boolean };
-  "signup.updated": { rsn?: { before: string; after: string }; rsnVerified?: boolean; answersChanged: string[] };
+  /**
+   * `changes`: what changed, RSN and answers alike, keyed by "RSN" or the question's prompt, shown as before/after in
+   * the log. Entries from before it carry `rsn` and `answersChanged` (question ids) instead; an unchanged save records
+   * nothing.
+   */
+  "signup.updated": {
+    rsn?: { before: string; after: string };
+    rsnVerified?: boolean;
+    answersChanged?: string[];
+    changes?: { before: Record<string, string>; after: Record<string, string> };
+  };
   "signup.withdrawn": { rsn: string };
   "signup.buyin_marked": { received: boolean; collectedByUserId: string | null; collectedByName: string | null; before: { receivedAt: string | null } };
   "signup.stats_fetched": { womFound: boolean; runeProfileFound: boolean };
@@ -543,7 +553,18 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
   "pairing.admin_paired": { category: "signup", tone: "ok", visibility: "mods", title: "Duo pairing created by a mod", label: (i) => `${actor(i)} paired ${i.details.displayNames.join(" & ")}` },
   "pairing.unpaired": { category: "signup", tone: "warn", visibility: "mods", title: "Duo pairing split by a mod", label: (i) => `${actor(i)} split up ${i.details.displayNames.join(" & ")}` },
   "signup.created": { category: "signup", tone: "ok", visibility: "mods", title: "Signup created", label: (i) => `${actor(i)} signed up as ${i.details.rsn}${i.details.reactivated ? " (re-signup)" : ""}` },
-  "signup.updated": { category: "signup", tone: "neutral", visibility: "mods", title: "Signup updated", label: (i) => `${actor(i)} updated their signup${i.details.rsn ? ` (RSN → ${i.details.rsn.after})` : ""}` },
+  "signup.updated": {
+    category: "signup",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Signup updated",
+    label: (i) => {
+      // Newer entries name what changed (the details hold the before/after); older ones only knew the RSN.
+      const fields = Object.keys(i.details.changes?.after ?? {}).map((f) => (f === "RSN" ? `RSN → ${i.details.changes!.after.RSN}` : f));
+      if (fields.length > 0) return `${actor(i)} updated their signup: ${fields.join(", ")}`;
+      return `${actor(i)} updated their signup${i.details.rsn ? ` (RSN → ${i.details.rsn.after})` : ""}`;
+    },
+  },
   "signup.withdrawn": {
     category: "signup",
     tone: "warn",
