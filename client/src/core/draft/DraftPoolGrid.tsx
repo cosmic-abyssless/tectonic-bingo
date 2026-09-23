@@ -727,6 +727,8 @@ export function DraftPoolGrid({
             tooltipShowDelay={200}
             tooltipHideDelay={4000}
             enableCellTextSelection
+            // Same as the signup roster: any text column without its own comparator sorts case-insensitively.
+            accentedSort
           />
         </div>
       )}
