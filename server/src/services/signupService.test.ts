@@ -355,17 +355,40 @@ describe("audit trail", () => {
     expect(JSON.parse(created[1]!.details)).toMatchObject({ reactivated: true, rsn: "NewRsn" });
   });
 
-  it("updateSignup records rsn before/after and which answers changed", () => {
+  it("updateSignup records the RSN and each changed answer, before and after, by the question's prompt", () => {
     const { bingo, memberId } = seedBingo();
-    const q = createQuestion(db, { bingoId: bingo.id, prompt: "Q", type: "text" });
-    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Old", answers: [{ questionId: q.id, value: "A" }] });
+    const q = createQuestion(db, { bingoId: bingo.id, prompt: "Timezone", type: "text" });
+    const kept = createQuestion(db, { bingoId: bingo.id, prompt: "Hours", type: "text" });
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Old", answers: [{ questionId: q.id, value: "UTC" }, { questionId: kept.id, value: "4" }] });
 
-    updateSignup(db, bingo, signup.id, { rsn: "New", answers: [{ questionId: q.id, value: "B" }] });
+    updateSignup(db, bingo, signup.id, { rsn: "New", answers: [{ questionId: q.id, value: "UTC+1" }, { questionId: kept.id, value: "4" }] });
 
     const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.updated")).get()!;
-    const details = JSON.parse(row.details);
-    expect(details.rsn).toEqual({ before: "Old", after: "New" });
-    expect(details.answersChanged).toEqual([q.id]);
+    expect(JSON.parse(row.details)).toEqual({ changes: { before: { RSN: "Old", Timezone: "UTC" }, after: { RSN: "New", Timezone: "UTC+1" } } });
+  });
+
+  it("updateSignup records nothing when the form is saved unchanged", () => {
+    const { bingo, memberId } = seedBingo();
+    const q = createQuestion(db, { bingoId: bingo.id, prompt: "Timezone", type: "text" });
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Same", answers: [{ questionId: q.id, value: "UTC" }] });
+
+    updateSignup(db, bingo, signup.id, { rsn: "Same", answers: [{ questionId: q.id, value: "UTC" }] });
+    // A question left unanswered and then submitted blank isn't a change either.
+    const later = createQuestion(db, { bingoId: bingo.id, prompt: "Notes", type: "text" });
+    updateSignup(db, bingo, signup.id, { rsn: "Same", answers: [{ questionId: q.id, value: "UTC" }, { questionId: later.id, value: "" }] });
+
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.updated")).all()).toHaveLength(0);
+  });
+
+  it("updateSignup shows multiple-choice answers as their choices, and a blank as a dash", () => {
+    const { bingo, memberId } = seedBingo();
+    const bosses = createQuestion(db, { bingoId: bingo.id, prompt: "Bosses", type: "multiselect", optionsJson: JSON.stringify(["Zulrah", "Vorkath", "Cerberus"]) });
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Me", answers: [] });
+
+    updateSignup(db, bingo, signup.id, { rsn: "Me", answers: [{ questionId: bosses.id, value: JSON.stringify(["Zulrah", "Vorkath"]) }] });
+
+    const details = JSON.parse(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.updated")).get()!.details);
+    expect(details.changes).toEqual({ before: { Bosses: "—" }, after: { Bosses: "Zulrah, Vorkath" } });
   });
 
   it("withdrawSignup records signup.withdrawn", () => {
