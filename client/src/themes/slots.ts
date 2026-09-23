@@ -14,6 +14,14 @@ import type {
   TileSearchModel,
 } from "../headless/types";
 
+export interface OnTheClockProps {
+  teamName: string;
+  teamColor: string | null;
+  captains: string[]; // RSNs: the captain, then the co-captain in a duo bingo
+  pickLabel: string; // "Round 2 · Pick 7" / "Singles round · Pick 31"
+  isMyTurn: boolean; // the viewer leads this team
+}
+
 export interface ThemeSlots {
   // Whole-surface composition — may call headless hooks directly.
   BoardPage: ComponentType<Record<string, never>>;
@@ -27,6 +35,9 @@ export interface ThemeSlots {
   // draws only the shape — a fixed-size card or burst, no positioning; core handles the pop, the hold and the flight
   // to the roster. One name per drafted player (two for a duo pair). teamColor is null for a team with none.
   DraftPickBurst: ComponentType<{ names: string[]; teamName: string; teamColor: string | null }>;
+  // The banner pinned above the draft room while a pick is on the clock: whose turn, in the team's colour. Core
+  // remounts it on every pick, so its entrance animation plays on each turn change.
+  OnTheClockBanner: ComponentType<OnTheClockProps>;
 
   // Page chrome — props-only.
   PageLoading: ComponentType<Record<string, never>>;
@@ -60,7 +71,7 @@ export interface ThemeSlots {
   // outside any ThemeProvider (mod panel, site admin), where they fall back
   // to the core Dialog/DialogHeader.
   DialogFrame: ComponentType<{ isOpen: boolean; onClose: () => void; size?: "md" | "lg"; isDismissable?: boolean; children: ReactNode }>;
-  DialogHeader: ComponentType<{ title: ReactNode; subtitle?: string; onClose: () => void; action?: ReactNode }>;
+  DialogHeader: ComponentType<{ title: ReactNode; subtitle?: ReactNode; onClose: () => void; action?: ReactNode }>;
 
   // Menu chrome for ColumnPicker / MultiSelect / SingleSelect. Props are
   // inlined so this file does not import Picker (that would cycle through

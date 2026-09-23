@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
+import { useSlot } from "../../themes/context";
 import { motion, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { DraftTeam, PickRating } from "@bingo/shared";
@@ -16,6 +17,7 @@ import { DraftPickReveal } from "./DraftPickReveal";
 import { namesForPick } from "./revealMath";
 import { useDraftReveals } from "./useDraftReveals";
 import { UndoPick } from "./UndoPick";
+import { FinalTeams } from "./FinalTeams";
 
 // Themeable via --font-heading/--font-heading-weight (set by ThemeProvider
 // from tokens.chrome.headingFont/headingWeight); both fall back to a no-op
@@ -114,6 +116,7 @@ export function DraftRoom({ slug }: { slug: string }) {
   const [pickError, setPickError] = useState<string | null>(null);
   const [rateError, setRateError] = useState<string | null>(null);
   const [orderOpen, setOrderOpen] = useState(false);
+  const OnTheClockBanner = useSlot("OnTheClockBanner");
   const reveals = useDraftReveals(shell?.bingo.id, state);
   // The teams stay pinned under the page header while the pool scrolls — headerHeight is its own sticky `top`
   // offset. The pool table's height is no longer derived from this (DraftPoolGrid measures its own position via
@@ -121,6 +124,9 @@ export function DraftRoom({ slug }: { slug: string }) {
   const [pageHeader, setPageHeader] = useState<Element | null>(null);
   useEffect(() => setPageHeader(document.querySelector("header")), []);
   const headerHeight = useElementHeight(pageHeader);
+  // The on-the-clock banner pins under the page header; the teams row pins under the banner.
+  const [bannerEl, setBannerEl] = useState<HTMLDivElement | null>(null);
+  const bannerHeight = useElementHeight(bannerEl) * (bannerEl ? 1 : 0);
 
   useEffect(() => {
     if (!state?.orderLockedUntil) return;
@@ -162,6 +168,7 @@ export function DraftRoom({ slug }: { slug: string }) {
   const lockMs = state.orderLockedUntil ? Math.max(0, new Date(state.orderLockedUntil).getTime() - Date.now()) : 0;
   const revealing = lockMs > 0;
   const revealedTeam = reveals.active ? (state.teams.find((t) => t.id === reveals.active!.teamId) ?? null) : null;
+  const draftComplete = !scouting && state.draftStarted && !state.currentPick && !revealing && state.picks.length > 0;
   const canControlOrder = isAdmin && !scouting && state.picks.length === 0;
   // Only the latest pick can be taken back (an admin's fix for a misclick).
   const latestPickNumber = state.picks.reduce((max, p) => Math.max(max, p.pickNumber), 0);
@@ -232,7 +239,7 @@ export function DraftRoom({ slug }: { slug: string }) {
     // players" heading) stays at the original reading width (max-w-5xl). A Fragment root, not one div, so the
     // table can sit as a sibling unconstrained by the narrow block's own max-width rather than needing a
     // negative-margin breakout trick.
-    <>
+    <div>
       <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-6">
         {scouting ? (
           <Notice tone="info">
@@ -240,58 +247,70 @@ export function DraftRoom({ slug }: { slug: string }) {
             {isLead && " Star and note players now; your team's ratings carry over into the draft."}
           </Notice>
         ) : !state.draftStarted ? (
-          <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-            <div>
-              <p className="font-semibold text-on-surface">The draft hasn't started</p>
-              <p className="text-sm text-on-surface-muted">
-                {state.teams.length} team{state.teams.length === 1 ? "" : "s"}.{" "}
-                {state.teams.length < 2
-                  ? "Create at least 2 teams from the mod panel first."
-                  : state.orderReady
-                    ? revealing
-                      ? "Revealing pick order."
-                      : "Pick order is set."
-                    : "Shuffle or set pick order, then start."}
-              </p>
-              {orderError && <p className="mt-1 text-sm text-danger">{orderError}</p>}
-            </div>
-            {canControlOrder && (
-              <div className="flex flex-wrap gap-2">
-                <Button onPress={handleShuffle} isDisabled={state.teams.length < 2 || busy}>
-                  {shuffleOrder.isPending ? "Shuffling…" : "Shuffle pick order"}
-                </Button>
-                <Button onPress={() => { setOrderError(null); setOrderOpen(true); }} isDisabled={state.teams.length < 2 || busy}>
-                  Pick order
-                </Button>
-                <Button variant="primary" onPress={handleStart} isDisabled={!state.orderReady || busy}>
-                  {startDraft.isPending ? "Starting…" : "Start draft"}
-                </Button>
+          <Card className="space-y-3 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold text-on-surface">The draft hasn't started</p>
+                <p className="text-sm text-on-surface-muted">
+                  {state.teams.length} team{state.teams.length === 1 ? "" : "s"}.{" "}
+                  {state.teams.length < 2
+                    ? "Create at least 2 teams from the mod panel first."
+                    : state.orderReady
+                      ? revealing
+                        ? "Revealing pick order."
+                        : "Pick order is set."
+                      : "Shuffle or set pick order, then start."}
+                </p>
+                {orderError && <p className="mt-1 text-sm text-danger">{orderError}</p>}
               </div>
+              {canControlOrder && (
+                <div className="flex flex-wrap gap-2">
+                  <Button onPress={handleShuffle} isDisabled={state.teams.length < 2 || busy}>
+                    {shuffleOrder.isPending ? "Shuffling…" : "Shuffle pick order"}
+                  </Button>
+                  <Button onPress={() => { setOrderError(null); setOrderOpen(true); }} isDisabled={state.teams.length < 2 || busy}>
+                    Pick order
+                  </Button>
+                  <Button variant="primary" onPress={handleStart} isDisabled={!state.orderReady || busy}>
+                    {startDraft.isPending ? "Starting…" : "Start draft"}
+                  </Button>
+                </div>
+              )}
+            </div>
+            {state.teams.length > 0 && (
+              <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {/* The order stays hidden while it is being revealed below. */}
+                {state.teams.map((team) => (
+                  <li key={team.id} className="flex min-w-0 items-center gap-2.5 rounded-md border border-outline bg-surface px-3 py-2">
+                    {state.orderReady && !revealing && team.draftOrder != null && <span className="num w-5 shrink-0 text-sm font-semibold text-on-surface-subtle">{team.draftOrder}</span>}
+                    <span className="size-3 shrink-0 rounded-full border border-outline-strong" style={{ backgroundColor: team.color ?? "transparent" }} />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-on-surface">{team.name}</div>
+                      <div className="truncate text-xs text-on-surface-muted">
+                        {[team.captainRsn || "?", team.coCaptain?.rsn].filter(Boolean).join(" & ")}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
             )}
           </Card>
-        ) : canControlOrder ? (
-          <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-            <div>
-              <p className="font-semibold text-on-surface">{revealing ? "Revealing pick order" : state.currentPick ? `${currentTeam?.name ?? "…"} is currently picking` : "Draft started"}</p>
-              {state.currentPick && (
-                <p className="num text-xs uppercase tracking-wide text-on-surface-subtle">
-                  {state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick {state.currentPick.pickNumber}
-                </p>
-              )}
-              {orderError && <p className="mt-1 text-sm text-danger">{orderError}</p>}
-            </div>
-            {/* No shuffle or pick-order controls here: the order is fixed once the draft has started. */}
-            <p className="text-sm text-on-surface-subtle">Pick order is locked.</p>
-          </Card>
-        ) : state.currentPick ? (
-          <Card className="p-4">
-            <p className="num text-xs uppercase tracking-wide text-on-surface-subtle">
-              {state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick {state.currentPick.pickNumber}
-            </p>
-            <p className="text-lg font-semibold text-on-surface">{currentTeam?.name ?? "…"} is currently picking</p>
-          </Card>
+        ) : state.currentPick && currentTeam && !revealing ? (
+          // Pinned under the page header while the pool scrolls; the teams row below pins under it.
+          <div ref={setBannerEl} className="sticky z-20 -mx-2 px-2 pb-1 pt-1" style={{ top: headerHeight }}>
+            <OnTheClockBanner
+              key={state.currentPick.pickNumber}
+              teamName={currentTeam.name}
+              teamColor={currentTeam.color ?? null}
+              captains={[currentTeam.captainRsn || "?", ...(currentTeam.coCaptain ? [currentTeam.coCaptain.rsn || "?"] : [])]}
+              pickLabel={`${state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick ${state.currentPick.pickNumber}`}
+              isMyTurn={isMyTurn}
+            />
+          </div>
         ) : revealing ? (
           <Notice tone="info">Revealing pick order.</Notice>
+        ) : !state.currentPick && canControlOrder ? (
+          <Notice tone="info">Draft started.</Notice>
         ) : (
           <Notice tone="ok">
             Draft complete. {isMod ? "Advance to the reveal stage from the mod panel when you're ready." : "The board is revealed next."}
@@ -323,9 +342,10 @@ export function DraftRoom({ slug }: { slug: string }) {
           />
         )}
 
-        {isMyTurn && <Notice tone="ok">It's your turn to pick.</Notice>}
-
-        <section className={`sticky z-10 ${DRAFT_PANEL}`} style={{ top: headerHeight }}>
+        {draftComplete ? (
+          <FinalTeams teams={state.teams} picks={state.picks} myUserId={user.id} />
+        ) : (
+        <section className={`sticky z-10 ${DRAFT_PANEL}`} style={{ top: headerHeight + bannerHeight }}>
           <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
             Teams
           </h3>
@@ -359,6 +379,7 @@ export function DraftRoom({ slug }: { slug: string }) {
           </div>
           {state.teams.length === 0 && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
         </section>
+        )}
 
         {revealedTeam && reveals.active && (
           <DraftPickReveal
@@ -401,7 +422,11 @@ export function DraftRoom({ slug }: { slug: string }) {
       {/* The one thing that actually breaks out of max-w-5xl above (while "Full width" is on) — everything else in
           this component (the status cards, the teams row, the pick/clan-API notices) stays reading-width. */}
       <div className={`mt-6 w-full px-6 pb-6 ${poolWidth === "narrow" ? "mx-auto max-w-5xl" : ""}`}>
-        <div className={DRAFT_PANEL}>
+        {/* The Captain on the clock gets the pool framed in their team's colour, on top of the banner everyone sees. */}
+        <div
+          className={`${DRAFT_PANEL} transition-shadow`}
+          style={isMyTurn ? { borderColor: currentTeam?.color ?? "var(--color-accent)", boxShadow: `0 0 0 4px ${currentTeam?.color ?? "var(--color-accent)"}, 0 0 24px ${currentTeam?.color ?? "var(--color-accent)"}` } : undefined}
+        >
           <DraftPoolGrid
             pool={state.pool}
             questions={questions}
@@ -419,6 +444,6 @@ export function DraftRoom({ slug }: { slug: string }) {
           />
         </div>
       </div>
-    </>
+    </div>
   );
 }
