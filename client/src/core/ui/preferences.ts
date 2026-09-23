@@ -10,6 +10,10 @@ const PREFERENCES = {
   outOfStageTabs: ["hide", "dim"],
   // Light/dark appearance — "system" tracks the OS preference live.
   colorScheme: ["system", "light", "dark"],
+  // Whether the mod Signups table / the draft pool table spans the whole page or keeps the reading width the
+  // content above it uses.
+  signupRosterWidth: ["full", "narrow"],
+  draftPoolWidth: ["full", "narrow"],
 } as const satisfies Record<string, readonly string[]>;
 
 type PreferenceKey = keyof typeof PREFERENCES;

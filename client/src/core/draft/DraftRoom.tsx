@@ -10,6 +10,7 @@ import { Dialog, DialogHeader } from "../ui/Dialog";
 import { ChevronDownIcon, ChevronUpIcon } from "../ui/icons";
 import { useElementHeight } from "../ui/useElementHeight";
 import { DraftPoolGrid } from "./DraftPoolGrid";
+import { usePreference } from "../ui/preferences";
 import { TeamRoster } from "./TeamRoster";
 import { DraftPickReveal } from "./DraftPickReveal";
 import { namesForPick } from "./revealMath";
@@ -91,6 +92,8 @@ function PickOrderDialog({
 
 export function DraftRoom({ slug }: { slug: string }) {
   const { user } = useAuth();
+  // Whether the pool table breaks out of max-w-5xl (the switch for it lives in DraftPoolGrid's toolbar).
+  const [poolWidth] = usePreference("draftPoolWidth");
   const queryClient = useQueryClient();
   const reducedMotion = useReducedMotion();
   const { data: shell } = useBingo(slug);
@@ -372,26 +375,25 @@ export function DraftRoom({ slug }: { slug: string }) {
           error={orderError}
         />
 
-        <section>
-          <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
-            Available players <span className="num font-normal text-on-surface-subtle">({poolCount})</span>
-          </h3>
-          {(pickError || rateError) && (
-            <Notice tone="danger" className="mb-2">
-              {pickError ?? rateError}
-            </Notice>
-          )}
-          {state.tectonicUnavailable && (
-            <Notice tone="warn" className="mb-2">
-              The clan API is unavailable right now, so tiers, records and event placements are hidden.
-            </Notice>
-          )}
-        </section>
+        {(pickError || rateError || state.tectonicUnavailable) && (
+          <section>
+            {(pickError || rateError) && (
+              <Notice tone="danger" className="mb-2">
+                {pickError ?? rateError}
+              </Notice>
+            )}
+            {state.tectonicUnavailable && (
+              <Notice tone="warn" className="mb-2">
+                The clan API is unavailable right now, so tiers, records and event placements are hidden.
+              </Notice>
+            )}
+          </section>
+        )}
       </div>
 
-      {/* The one thing that actually breaks out of max-w-5xl above — everything else in this component (the
-          status cards, the teams row, this section's own heading/notices) stays reading-width. */}
-      <div className="mt-6 w-full px-6 pb-6">
+      {/* The one thing that actually breaks out of max-w-5xl above (while "Full width" is on) — everything else in
+          this component (the status cards, the teams row, the pick/clan-API notices) stays reading-width. */}
+      <div className={`mt-6 w-full px-6 pb-6 ${poolWidth === "narrow" ? "mx-auto max-w-5xl" : ""}`}>
         <Card className="p-4">
           <DraftPoolGrid
             pool={state.pool}
@@ -402,6 +404,11 @@ export function DraftRoom({ slug }: { slug: string }) {
             onPick={handlePick}
             picking={makePick.isPending}
             leftoverMode={shell.bingo.leftoverMode}
+            heading={
+              <h3 className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+                Available players <span className="num font-normal text-on-surface-subtle">({poolCount})</span>
+              </h3>
+            }
           />
         </Card>
       </div>

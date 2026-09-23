@@ -12,7 +12,7 @@
 // popover) because the reason that rule exists — many heavy interactive components × many rows made the signup
 // roster's mount slow — doesn't apply here (one rating widget per row, a pool that's typically a few dozen units
 // at most, not 60+).
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type { CustomCellRendererProps } from "ag-grid-react";
 import type {
@@ -43,6 +43,8 @@ import { useGridTheme } from "../ui/agGrid";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { Badge } from "../ui/Card";
 import { ColumnPicker } from "../ui/ColumnPicker";
+import { usePreference } from "../ui/preferences";
+import { Switch } from "../ui/Switch";
 import { CellButton, Mark } from "../ui/gridCells";
 import { useHiddenColumns } from "../ui/hiddenColumns";
 import { LinkIcon } from "../ui/icons";
@@ -326,7 +328,10 @@ export function DraftPoolGrid({
   onPick,
   picking,
   leftoverMode,
+  heading,
 }: {
+  /** Shown at the left of the toolbar row (DraftRoom's "Available players (n)"). */
+  heading: ReactNode;
   pool: DraftUnit[];
   questions: SignupQuestion[];
   /** Present only for team leads — they see and edit their own team's ratings. */
@@ -359,6 +364,8 @@ export function DraftPoolGrid({
     };
   });
   const [search, setSearch] = useTableSearch();
+  // The wrapper that actually changes width is DraftRoom's — this just renders the switch for it in the toolbar.
+  const [poolWidth, setPoolWidth] = usePreference("draftPoolWidth");
   const statsRefreshing = useStatsRefreshingSignupIds();
 
   const entries = useMemo(() => pool.flatMap((u) => u.entries), [pool]);
@@ -650,13 +657,26 @@ export function DraftPoolGrid({
     gridApiRef.current?.refreshCells({ force: true, columns: markColumnIds });
   }, [search, markColumnIds]);
 
-  if (pool.length === 0) return <p className="text-sm text-on-surface-subtle">No one left to draft.</p>;
+  if (pool.length === 0) {
+    return (
+      <div className="space-y-3">
+        {heading}
+        <p className="text-sm text-on-surface-subtle">No one left to draft.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {heading}
+        <div className="flex items-center gap-2">
         <TableSearchInput value={search} onChange={setSearch} matchCount={matchingEntries.length} totalCount={entries.length} />
         <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={handleHiddenChange} />
+        <Switch isSelected={poolWidth === "full"} onChange={(full) => setPoolWidth(full ? "full" : "narrow")}>
+          Full width
+        </Switch>
+        </div>
       </div>
       {rows.length === 0 ? (
         <p className="text-sm text-on-surface-subtle">No one matches this search.</p>
