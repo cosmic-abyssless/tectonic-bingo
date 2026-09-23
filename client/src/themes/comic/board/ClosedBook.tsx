@@ -290,8 +290,10 @@ export function ClosedBook({
           {dogEar && <CoverDogEar colors={page} pageFill={page.PAPER} />}
         </div>
         {/* The inside of the cover is page 1: page weight of outline, and
-            none at the spine — the right-hand page draws that line. */}
+            none at the spine — the right-hand page draws that line.
+            data-cover-inside: TileModal clips its shadow at the spine. */}
         <div
+          data-cover-inside
           className="absolute inset-0 overflow-hidden"
           style={{
             border: pageBorder,
@@ -499,14 +501,11 @@ function Layer({
 export function Page({
   colors,
   side,
-  gutter = true,
   dragScroll = false,
   children,
 }: {
   colors: ComicColors;
   side: "left" | "right";
-  /** Off for a copy of the page drawn on a fold-back, where a gutter shadow would float mid-sheet. */
-  gutter?: boolean;
   /** Scroll by touch drag in script rather than natively (phones: see dragScroll.ts). */
   dragScroll?: boolean;
   children: ReactNode;
@@ -517,7 +516,7 @@ export function Page({
       ? `inset ${bw(-0.04)} 0 ${bw(0.04)} ${bw(-0.03)} rgba(0,0,0,0.35)`
       : `inset ${bw(0.04)} 0 ${bw(0.04)} ${bw(-0.03)} rgba(0,0,0,0.35)`;
   return (
-    <div className="pointer-events-none absolute inset-0" style={{ boxShadow: gutter ? gutterShadow : undefined, color: colors.INK_BODY }}>
+    <div className="pointer-events-none absolute inset-0" style={{ boxShadow: gutterShadow, color: colors.INK_BODY }}>
       <div
         ref={scroll.ref}
         className="pointer-events-auto h-full overflow-y-auto"

@@ -568,7 +568,6 @@ function clipPolygon(poly: Point[], signedDistance: (p: Point) => number): Point
 }
 
 const toClipPolygon = (poly: Point[]) => `polygon(${poly.map((p) => `${p.x.toFixed(2)}px ${p.y.toFixed(2)}px`).join(", ")})`;
-const toSvgPoints = (poly: Point[]) => poly.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
 
 /**
  * Where a page is folded, and how. Worked out on one canonical page: width
@@ -583,8 +582,14 @@ const toSvgPoints = (poly: Point[]) => poly.map((p) => `${p.x.toFixed(2)},${p.y.
  * right on it. Its angle runs from vertical at the middle of the edge (a
  * rectangular strip peels back) to 45° at a corner (a corner triangle),
  * tilting toward whichever corner's nearer.
+ *
+ * `kept` is the part of the page left in place, for the face's clip-path. Its
+ * outer sides run `bleed` past the page's own edges: a clip-path clips the
+ * element's box-shadow too, so a clip at the page's edge would cut off a
+ * left-hand page's lifted shadow the moment a peel began (and it would come
+ * back when the peel ended). Only the fold side and the spine cut.
  */
-function peelGeometry(W: number, H: number, depth: number, v: number) {
+function peelGeometry(W: number, H: number, depth: number, v: number, bleed = 0) {
   const y = (H / 2) * (1 + Math.max(-1, Math.min(1, v)));
   const toward = v >= 0 ? 1 : -1;
   const theta = Math.min(1, Math.abs(v)) * (Math.PI / 4);
@@ -598,7 +603,15 @@ function peelGeometry(W: number, H: number, depth: number, v: number) {
     { x: W, y: H },
     { x: 0, y: H },
   ];
-  const kept = clipPolygon(page, dist);
+  // Not past the spine (x = 0), though: a left-hand page's shadow reaching
+  // over the facing page would come and go as the stacks' depths shuffle.
+  const withBleed: Point[] = [
+    { x: 0, y: -bleed },
+    { x: W + bleed, y: -bleed },
+    { x: W + bleed, y: H + bleed },
+    { x: 0, y: H + bleed },
+  ];
+  const kept = clipPolygon(withBleed, dist);
   const peeled = clipPolygon(page, (p) => -dist(p));
   const reflect = (p: Point) => {
     const d = dist(p);
@@ -606,6 +619,16 @@ function peelGeometry(W: number, H: number, depth: number, v: number) {
   };
   return { kept, folded: peeled.map(reflect), fold, n, reflect };
 }
+
+// How far past a peeling face's edges its clip-path reaches, as a fraction of the page's width: enough to keep the
+// whole of a lifted page's shadow (ClosedBook's LIFTED_PAGE_SHADOW: offset + blur, 0.06 of a page).
+const PEEL_CLIP_BLEED = 0.1;
+// A page face's clip-path when it isn't peeling: the same reach past its edges as a peel's, and cut at the spine
+// (see the frame's comment). inset() runs top, right, bottom, left; a front face's spine is its left, a back face's
+// its right.
+const REST_BLEED = `-${PEEL_CLIP_BLEED * 100}%`;
+const REST_FRONT_CLIP = `inset(${REST_BLEED} ${REST_BLEED} ${REST_BLEED} 0)`;
+const REST_BACK_CLIP = `inset(${REST_BLEED} 0 ${REST_BLEED} ${REST_BLEED})`;
 
 interface PageSwipe {
   begin: (leaf: number, side: Side) => boolean;
@@ -622,6 +645,8 @@ interface CurlState {
   v: number;
   /** Opacity of the shadow the fold-back casts (default CURL_SHADOW); fades out over a turn. */
   shadow?: number;
+  /** Opacity of the ink line along the crease (default 1); fades out at the end of a forward turn. */
+  crease?: number;
 }
 
 const CURL_SHADOW = 0.4;
@@ -635,7 +660,9 @@ interface CurlDom {
   copy: HTMLElement;
   shade: HTMLElement;
   outline: SVGSVGElement;
-  outlinePoly: SVGPolygonElement;
+  /** The fold-back's own edges, and the crease, drawn separately so the crease can fade on its own. */
+  outlineEdges: SVGPathElement;
+  outlineCrease: SVGPathElement;
 }
 
 function findCurlDom(root: HTMLElement): CurlDom | null {
@@ -646,9 +673,10 @@ function findCurlDom(root: HTMLElement): CurlDom | null {
   const copy = root.querySelector<HTMLElement>("[data-curl-copy]");
   const shade = root.querySelector<HTMLElement>("[data-curl-shade]");
   const outline = root.querySelector<SVGSVGElement>("[data-curl-outline]");
-  const outlinePoly = outline?.querySelector<SVGPolygonElement>("polygon") ?? null;
-  if (!frame || !layer || !sheet || !clip || !copy || !shade || !outline || !outlinePoly) return null;
-  return { frame, layer, sheet, clip, copy, shade, outline, outlinePoly };
+  const outlineEdges = outline?.querySelector<SVGPathElement>("[data-curl-edges]") ?? null;
+  const outlineCrease = outline?.querySelector<SVGPathElement>("[data-curl-crease]") ?? null;
+  if (!frame || !layer || !sheet || !clip || !copy || !shade || !outline || !outlineEdges || !outlineCrease) return null;
+  return { frame, layer, sheet, clip, copy, shade, outline, outlineEdges, outlineCrease };
 }
 
 const faceOf = (root: HTMLElement, leaf: number, side: Side) =>
@@ -673,7 +701,7 @@ const faceOf = (root: HTMLElement, leaf: number, side: Side) =>
  * coordinates run outer-edge-right for a front face and outer-edge-left
  * for a back face (see PageFace), which is the same mapping.
  */
-function renderCurl(root: HTMLElement, dom: CurlDom, ink: string, state: CurlState | null, prevFace: HTMLElement | null) {
+function renderCurl(root: HTMLElement, dom: CurlDom, ink: string, state: CurlState | null, prevFace: HTMLElement | null, bounds: HTMLElement | null) {
   if (prevFace) prevFace.style.clipPath = "";
   if (!state || state.depth < 0.5) {
     dom.layer.style.display = "none";
@@ -686,7 +714,7 @@ function renderCurl(root: HTMLElement, dom: CurlDom, ink: string, state: CurlSta
   }
   const W = dom.frame.clientWidth / 2;
   const H = dom.frame.clientHeight;
-  const { kept, folded, fold, n } = peelGeometry(W, H, state.depth, state.v);
+  const { kept, folded, fold, n } = peelGeometry(W, H, state.depth, state.v, W * PEEL_CLIP_BLEED);
   const right = state.side === "front";
   // Canonical → the frame's coordinates (and, one and the same, the face's).
   const px = (x: number) => (right ? W + x : W - x);
@@ -697,6 +725,7 @@ function renderCurl(root: HTMLElement, dom: CurlDom, ink: string, state: CurlSta
 
   const foldedFrame = toFrame(folded);
   dom.layer.style.display = "block";
+  fitCurlLayer(dom, bounds);
   const shadow = state.shadow ?? CURL_SHADOW;
   dom.sheet.style.filter =
     shadow > 0.005
@@ -749,11 +778,52 @@ function renderCurl(root: HTMLElement, dom: CurlDom, ink: string, state: CurlSta
       ? `linear-gradient(${angle.toFixed(1)}deg, rgba(0,0,0,${(0.28 * t).toFixed(3)}) ${creaseAt.toFixed(1)}px, rgba(0,0,0,${(0.05 * t).toFixed(3)}) ${(creaseAt + reach * 0.35).toFixed(1)}px, rgba(255,255,255,${(0.18 * t).toFixed(3)}) ${(creaseAt + reach).toFixed(1)}px)`
       : "none";
 
-  // Ink outline at the page's own border weight.
+  // Ink outline at the page's own border weight. The outline sits inside the
+  // clipped sheet and is stroked twice as wide, so only its inner half shows:
+  // it lies exactly where the page's own CSS border does, and a turn lands
+  // with no shift. The crease — the edge on the fold line — is its own path.
   dom.outline.setAttribute("viewBox", `0 0 ${frameW} ${H}`);
-  dom.outlinePoly.setAttribute("points", toSvgPoints(foldedFrame));
-  dom.outlinePoly.setAttribute("stroke", ink);
-  dom.outlinePoly.setAttribute("stroke-width", `${face.clientLeft}`);
+  const onFold = (p: Point) => Math.abs((p.x - foldF.x) * nf.x + (p.y - foldF.y) * nf.y) < 0.5;
+  let edges = "";
+  let crease = "";
+  foldedFrame.forEach((a, i) => {
+    const b = foldedFrame[(i + 1) % foldedFrame.length]!;
+    const seg = `M${a.x.toFixed(2)},${a.y.toFixed(2)}L${b.x.toFixed(2)},${b.y.toFixed(2)}`;
+    if (onFold(a) && onFold(b)) crease += seg;
+    else edges += seg;
+  });
+  const strokeWidth = `${face.clientLeft * 2}`;
+  for (const path of [dom.outlineEdges, dom.outlineCrease]) {
+    path.setAttribute("stroke", ink);
+    path.setAttribute("stroke-width", strokeWidth);
+  }
+  dom.outlineEdges.setAttribute("d", edges);
+  dom.outlineCrease.setAttribute("d", crease);
+  dom.outlineCrease.setAttribute("stroke-opacity", `${state.crease ?? 1}`);
+}
+
+/**
+ * Sizes the curl layer to what's visible of the scrolling overlay (`bounds`;
+ * its client box, so never over a scrollbar), and keeps the sheet inside it on
+ * the book's box. The fold-back may be drawn anywhere on screen, and never past
+ * it, which would give the overlay a scrollbar. Only while the book's open,
+ * when the frame isn't scaled, so its px are the viewport's.
+ */
+function fitCurlLayer(dom: CurlDom, bounds: HTMLElement | null) {
+  const r = dom.frame.getBoundingClientRect();
+  const b = bounds?.getBoundingClientRect();
+  // The client box: inside the borders, and short of any scrollbar.
+  const minX = b ? b.left + bounds!.clientLeft : 0;
+  const minY = b ? b.top + bounds!.clientTop : 0;
+  const maxX = b ? minX + bounds!.clientWidth : document.documentElement.clientWidth;
+  const maxY = b ? minY + bounds!.clientHeight : document.documentElement.clientHeight;
+  // Rounded in, so a fraction of a px never tips it over.
+  const top = Math.max(0, Math.floor(r.top - minY));
+  const right = Math.max(0, Math.floor(maxX - r.right));
+  const bottom = Math.max(0, Math.floor(maxY - r.bottom));
+  const left = Math.max(0, Math.floor(r.left - minX));
+  dom.layer.style.inset = `${-top}px ${-right}px ${-bottom}px ${-left}px`;
+  dom.sheet.style.inset = `${top}px ${right}px ${bottom}px ${left}px`;
 }
 
 function FlyingBook({
@@ -860,7 +930,17 @@ function FlyingBook({
     base.style.filter = "none";
     frame.style.opacity = "1";
     setBookAway(tileId);
-    animate(enterSequence(backdrop, burst, flight, !!mark));
+    // Once open, the book lies flat, so the perspective does nothing but
+    // project the leaves' small depth offsets a hair bigger or smaller: a page
+    // turn shuffles those depths, which would shift whole pages by a pixel as
+    // it starts and lands. The fly-home sets it again before it moves.
+    animate(enterSequence(backdrop, burst, flight, !!mark)).then(() => {
+      frame.style.perspective = "none";
+      // clipOpen stops a little below the book (it has to animate from the
+      // tile's crop); open, nothing's cut, so a fold-back swung past the
+      // book's bottom isn't either. The fly-home puts clipOpen back.
+      frame.style.clipPath = "none";
+    });
     // Runs once, on mount: the flight is from wherever the tile was then.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -878,7 +958,7 @@ function FlyingBook({
       if (!dom) return;
       const prev = curling.current;
       const prevFace = prev && (!state || prev.state.leaf !== state.leaf || prev.state.side !== state.side) ? prev.face : null;
-      renderCurl(root, dom, page.LINE, state, prevFace);
+      renderCurl(root, dom, page.LINE, state, prevFace, overlayRef.current);
       if (!state) {
         if (prev) prev.face.style.clipPath = "";
         curling.current = null;
@@ -1077,6 +1157,11 @@ function FlyingBook({
           v: from.v * (1 - p),
           // Gone by a third of the way across.
           shadow: CURL_SHADOW * Math.max(0, 1 - p * 3),
+          // Landing on the left, the crease ends up at the spine, where the
+          // left-hand page has no border (the right-hand page's own border
+          // draws that line): fade it out over the last stretch rather than
+          // have it double that line and then vanish.
+          crease: side === "front" ? Math.min(1, Math.max(0, (1 - p) / 0.2)) : 1,
         }),
       onComplete: () => {
         land();
@@ -1130,6 +1215,7 @@ function FlyingBook({
     // landing's right now, unseen: the open book is flat (no tilt, every
     // leaf lying flat), so it projects the same at any depth.
     const flight = measureFlight(root, tileId, tile.progress.allComplete);
+    frame.style.clipPath = flight.clipOpen;
     frame.style.perspective = `${flight.perspective}px`;
     frame.style.perspectiveOrigin = `${flight.originX}px ${flight.perspectiveOriginY}px`;
     animate(exitSequence(backdrop, burst, flight, poses.current, spreadRef.current, !!root.querySelector(PAGE_MARK))).then(finish, finish);
@@ -1273,7 +1359,9 @@ function TileDetails({
 
   // Page i (0-based) as it appears on a face: numbered and scrollable.
   // Fronts are right-hand pages, backs left-hand ones. The copy drawn on a
-  // fold-back is the same page without its gutter shadow.
+  // fold-back keeps its gutter shadow: that only comes into the fold-back
+  // as the fold reaches the spine, which is where the real page's is, so a
+  // turn lands without the shadow popping in.
   // What a page is, printed at its spine-side foot: contents, part k of m,
   // or the submissions. Blank if beyond pageCount.
   const roleOf = (i: number) => {
@@ -1282,9 +1370,9 @@ function TileDetails({
     if (i === pageCount - 1) return "Submissions";
     return ordered[i - 1] ? `Part ${ordered[i - 1].number} of ${tile.tasks.length}` : "";
   };
-  const face = (i: number, side: Side, gutter = true): ReactNode => (
+  const face = (i: number, side: Side): ReactNode => (
     <PageColorsContext.Provider value={page}>
-      <BookPage colors={page} side={side === "front" ? "right" : "left"} no={i + 1} role={roleOf(i)} gutter={gutter} dragScroll={single}>
+      <BookPage colors={page} side={side === "front" ? "right" : "left"} no={i + 1} role={roleOf(i)} dragScroll={single}>
         {pages[i]}
       </BookPage>
     </PageColorsContext.Provider>
@@ -1311,11 +1399,11 @@ function TileDetails({
     const k = curlCopy.leaf;
     if (single) {
       // The other side of a leaf's front is blank paper; the other side of its (blank) back is the page.
-      return k >= 1 && k <= pageCount && curlCopy.side === "back" ? face(k - 1, "front", false) : null;
+      return k >= 1 && k <= pageCount && curlCopy.side === "back" ? face(k - 1, "front") : null;
     }
     const i = curlCopy.side === "front" ? 2 * k : 2 * k - 1;
     if (k < 1 || i >= pageCount) return null;
-    return face(i, copySide, false);
+    return face(i, copySide);
   })();
 
   return (
@@ -1340,11 +1428,20 @@ function TileDetails({
       {/* The 2D frame — the flight's translate/scale, the perspective and
           the tile's crop all live here, mirroring TileCell's frame. Starts
           invisible; FlyingBook's layout effect poses it over the tile and
-          reveals it before first paint. */}
+          reveals it before first paint.
+          Every page face carries a clip-path while it isn't peeling
+          (REST_FRONT_CLIP / REST_BACK_CLIP). Chrome composites a 3D face with a
+          clip-path differently, so without one the first moment of a peel,
+          when renderCurl gives the face its real clip, visibly changes the
+          shadows and the page edges. And it stops a left-hand page's lifted
+          shadow at the spine: otherwise it reaches over the facing page or
+          not depending on which stack Chrome draws on top, which flips as a
+          turn shuffles the leaves' depths. The inside of the cover is a
+          left-hand page too. */}
       <div
         data-frame
-        className="relative w-full aspect-[4/3]"
-        style={{ opacity: 0, willChange: "transform" }}
+        className="relative w-full aspect-[4/3] [&_[data-face=front]]:[clip-path:var(--rest-front-clip)] [&_[data-face=back]]:[clip-path:var(--rest-back-clip)] [&_[data-cover-inside]]:[clip-path:var(--rest-back-clip)]"
+        style={{ opacity: 0, willChange: "transform", ["--rest-front-clip" as string]: REST_FRONT_CLIP, ["--rest-back-clip" as string]: REST_BACK_CLIP }}
       >
         {/* The book's 3D box — two 2:3 pages side by side, spine at the
             center — carrying the tilt. preserve-3d so the hinge rotations
@@ -1369,18 +1466,19 @@ function TileDetails({
             sheet (a pre-mirrored copy of the page's other side, ticks along
             its own edge included, shaded), its ink outline, and a shadow.
             Spans both pages so a turn can carry it across the spine. The
-            outer box clips: the reflected copy can
-            reach well outside the book, and a transformed box that pokes
-            out of the scrolling overlay would grow it a scrollbar. It's a
-            little bigger than the book so the shadow isn't cut; the sheet
-            inside is exactly the book's box, so its coordinates are the
-            frame's. */}
+            outer box clips: the reflected copy can reach well outside the
+            book (a turn from a corner swings it past the top or bottom),
+            and a transformed box that pokes out of the scrolling overlay
+            would grow it a scrollbar. So renderCurl sizes it to the
+            viewport (see fitCurlLayer): nothing on screen is cut, and
+            nothing reaches past the overlay. The sheet inside is exactly
+            the book's box, so its coordinates are the frame's. */}
         <div
           data-curl-layer
           className="pointer-events-none absolute overflow-hidden"
-          style={{ inset: bw(-0.12), display: "none" }}
+          style={{ display: "none" }}
         >
-          <div data-curl-sheet className="absolute" style={{ inset: bw(0.12) }}>
+          <div data-curl-sheet className="absolute">
             <div data-curl-clip className="absolute inset-0">
               <div
                 data-curl-copy
@@ -1388,7 +1486,14 @@ function TileDetails({
                 style={{
                   left: curlCopy?.side === "back" ? 0 : "50%",
                   backgroundColor: page.PAPER,
-                  border: `${bw(0.012)} solid transparent`,
+                  // The same box as the real face: a back face (a left-hand
+                  // page) has no border at the spine, so its copy mustn't
+                  // either, or its content lands a border's width narrower.
+                  // Longhands, always all set: React mishandles a shorthand
+                  // beside a longhand that comes and goes between renders.
+                  borderStyle: "solid",
+                  borderColor: "transparent",
+                  borderWidth: copySide === "back" ? `${bw(0.012)} 0 ${bw(0.012)} ${bw(0.012)}` : bw(0.012),
                   transformOrigin: "0 0",
                 }}
               >
@@ -1396,10 +1501,13 @@ function TileDetails({
                 {copySide && <PageEdgeTicks colors={page} side={copySide} />}
               </div>
               <div data-curl-shade className="absolute inset-0" />
+              {/* overflow-visible: a fold-back can swing past the book's top or
+                  bottom edge, and its outline has to go with it. */}
+              <svg data-curl-outline className="absolute inset-0 h-full w-full overflow-visible" preserveAspectRatio="none">
+                <path data-curl-edges fill="none" strokeLinecap="square" />
+                <path data-curl-crease fill="none" strokeLinecap="square" />
+              </svg>
             </div>
-            <svg data-curl-outline className="absolute inset-0 h-full w-full overflow-visible" preserveAspectRatio="none">
-              <polygon fill="none" strokeLinejoin="round" />
-            </svg>
           </div>
         </div>
 
@@ -1502,7 +1610,6 @@ function BookPage({
   side,
   no,
   role,
-  gutter = true,
   dragScroll = false,
   children,
 }: {
@@ -1510,13 +1617,12 @@ function BookPage({
   side: "left" | "right";
   no: number;
   role: string;
-  gutter?: boolean;
   dragScroll?: boolean;
   children: ReactNode;
 }) {
   return (
     <>
-      <Page colors={colors} side={side} gutter={gutter} dragScroll={dragScroll}>
+      <Page colors={colors} side={side} dragScroll={dragScroll}>
         <div style={{ paddingBottom: bw(0.12) }}>{children}</div>
       </Page>
       <PageFooter colors={colors} side={side} no={no} role={role} />
