@@ -154,6 +154,31 @@ export function getPendingOutgoingPairs(db: Db, bingoId: string): { pairing: Pai
 }
 
 // Everything the signup page needs to render the player's pairing situation.
+/**
+ * Everyone actively signed up for the bingo who has no accepted partner, other than `meUserId`: who a player without a
+ * partner can still ask. `waiting` marks those who've asked someone themselves and are waiting on the reply.
+ */
+export function getUnpairedSignups(db: Db, bingoId: string, meUserId: string): { userId: string; discordId: string; rsn: string; waiting: boolean }[] {
+  const paired = new Set(getAcceptedPairs(db, bingoId).flatMap((p) => p.userIds));
+  const asking = new Set(
+    db
+      .select({ userId: signupPairings.requesterUserId })
+      .from(signupPairings)
+      .where(and(eq(signupPairings.bingoId, bingoId), eq(signupPairings.status, "pending")))
+      .all()
+      .map((r) => r.userId),
+  );
+  return db
+    .select({ userId: signups.userId, rsn: signups.rsn, discordId: users.discordId })
+    .from(signups)
+    .innerJoin(users, eq(users.id, signups.userId))
+    .where(and(eq(signups.bingoId, bingoId), eq(signups.status, "active")))
+    .all()
+    .filter((r) => r.userId !== meUserId && !paired.has(r.userId))
+    .map((r) => ({ ...r, waiting: asking.has(r.userId) }))
+    .sort((a, b) => a.rsn.localeCompare(b.rsn, undefined, { sensitivity: "base" }));
+}
+
 export function getPairingState(db: Db, bingoId: string, me: Participant) {
   const rows = pairingsFor(db, bingoId, me);
   const accepted = rows.find((p) => p.status === "accepted") ?? null;

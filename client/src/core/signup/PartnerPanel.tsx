@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { PartnerCandidate } from "@bingo/shared";
-import { useMyPairing, usePartnerCandidates, useRemovePairing, useRequestPairing, useRespondToPairing } from "../../api/queries";
+import { useMyPairing, usePartnerCandidates, useRemovePairing, useRequestPairing, useRespondToPairing, useUnpairedSignups } from "../../api/queries";
 import { Button } from "../ui/Button";
 import { Card, CardHeader, Notice } from "../ui/Card";
 import { Field } from "../ui/Field";
@@ -19,6 +19,7 @@ export function PartnerPanel({ slug }: { slug: string }) {
   const { data: state, isLoading } = useMyPairing(slug, true);
   const needsPicker = !!state && !state.partner && !state.outgoing;
   const { data: candidatesData, error: candidatesError } = usePartnerCandidates(slug, needsPicker);
+  const { data: unpairedData } = useUnpairedSignups(slug, needsPicker);
   const request = useRequestPairing(slug);
   const remove = useRemovePairing(slug);
   const respond = useRespondToPairing(slug);
@@ -134,6 +135,30 @@ export function PartnerPanel({ slug }: { slug: string }) {
             <Button variant="primary" isDisabled={!target || busy} onPress={() => run(() => request.mutateAsync(target).then(() => setTarget("")))}>
               Send request
             </Button>
+            {unpairedData && (
+              <div className="space-y-2">
+                <p className="text-sm text-on-surface-muted">
+                  Signed up without a partner{unpairedData.players.length > 0 ? ` (${unpairedData.players.length})` : ""}
+                </p>
+                {unpairedData.players.length === 0 ? (
+                  <p className="text-sm text-on-surface-subtle">Everyone else who's signed up already has a partner.</p>
+                ) : (
+                  <ul className="max-h-64 divide-y divide-outline overflow-y-auto rounded-md border border-outline">
+                    {unpairedData.players.map((p) => (
+                      <li key={p.userId} className="flex items-center gap-3 px-3 py-1.5">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm text-on-surface">{p.rsn}</div>
+                          {p.waiting && <div className="text-xs text-on-surface-subtle">Waiting on a reply to their own request</div>}
+                        </div>
+                        <Button size="sm" variant="ghost" isDisabled={busy} onPress={() => run(() => request.mutateAsync(p.discordId))}>
+                          Request
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </>
         )}
 

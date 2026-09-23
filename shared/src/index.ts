@@ -655,6 +655,19 @@ export interface PartnerCandidatesResponse {
   candidates: PartnerCandidate[];
 }
 
+/** Someone signed up for a duo bingo who has no partner yet: who a player can still pair with. */
+export interface UnpairedSignup {
+  userId: string;
+  discordId: string;
+  rsn: string;
+  /** They've asked someone to pair and are waiting on the reply (not who: that's between the two of them). */
+  waiting: boolean;
+}
+
+export interface UnpairedSignupsResponse {
+  players: UnpairedSignup[];
+}
+
 // One side of a pairing as the other side should see them. `user` is null
 // until they've logged in; `rsn` is set once they've signed up for this bingo.
 // `name` is what to show: signup RSN, else clan-roster RSN, else Discord name,

@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
-  MinimalUser, ModSubmissionsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PendingCountResponse,
+  MinimalUser, ModSubmissionsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   PickRating, PlayerProfile, StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
@@ -28,6 +28,7 @@ export const queryKeys = {
   myTectonicRsns: (slug: string) => ["myTectonicRsns", slug] as const,
   myPairing: (slug: string) => ["myPairing", slug] as const,
   partnerCandidates: (slug: string) => ["partnerCandidates", slug] as const,
+  unpairedSignups: (slug: string) => ["unpairedSignups", slug] as const,
   draftState: (slug: string) => ["draftState", slug] as const,
   playerProfile: (slug: string, userId: string) => ["playerProfile", slug, userId] as const,
   stats: (slug: string) => ["stats", slug] as const,
@@ -330,6 +331,15 @@ export function usePartnerCandidates(slug: string | undefined, enabled: boolean)
   return useQuery({
     queryKey: queryKeys.partnerCandidates(slug ?? ""),
     queryFn: () => api.get<PartnerCandidatesResponse>(`/api/bingos/${slug}/signup/partners`),
+    enabled: !!slug && enabled,
+  });
+}
+
+/** Everyone else signed up without a partner yet (duo bingos): who a player choosing a partner can still ask. */
+export function useUnpairedSignups(slug: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.unpairedSignups(slug ?? ""),
+    queryFn: () => api.get<UnpairedSignupsResponse>(`/api/bingos/${slug}/signup/unpaired`),
     enabled: !!slug && enabled,
   });
 }
