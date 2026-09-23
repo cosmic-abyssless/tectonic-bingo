@@ -87,7 +87,27 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
             <span className="truncate pr-2">{player.rsn ?? name}</span>
           </>
         }
-        subtitle={player.rsn ? `Discord: ${name}` : "Not signed up for this bingo"}
+        subtitle={
+          player.rsn ? (
+            <>
+              Discord: {name} ·{" "}
+              <a className="underline hover:opacity-70" href={`https://wiseoldman.net/players/${encodeURIComponent(player.rsn)}`} target="_blank" rel="noreferrer noopener">
+                Wise Old Man
+              </a>{" "}
+              ·{" "}
+              <a
+                className="underline hover:opacity-70"
+                href={`https://secure.runescape.com/m=hiscore_oldschool/hiscorepersonal?user1=${encodeURIComponent(player.rsn)}`}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                OSRS hiscores
+              </a>
+            </>
+          ) : (
+            "Not signed up for this bingo"
+          )
+        }
         onClose={onClose}
         action={profile && <AchievementIcons profile={profile} large />}
       />
