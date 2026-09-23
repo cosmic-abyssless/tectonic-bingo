@@ -1,10 +1,13 @@
 name: Deploy
 
-# staging     Every commit that passes CI on main is built, shipped to the box and deployed to staging automatically, so
-#             staging is always the next production.
+# staging     Every push to main (a merged pull request) is built, shipped to the box and deployed to staging straight away,
+#             alongside CI on main rather than after it, so a merge reaches staging in a couple of minutes. The pull request's
+#             own CI already passed on the merged code; CI on main still runs and is what production waits for.
 # production  "Run workflow" (Actions tab, environment: production). It deploys the image staging is already running:
-#             nothing is built or shipped, so production gets exactly the bytes that were tested. Rolling back is the same
-#             button with action: rollback.
+#             nothing is built or shipped, so production gets exactly the bytes that were tested. It refuses a commit whose CI
+#             run on main has not passed (it waits for one still running), so a push that skipped the pull request rules, or
+#             two pull requests that pass alone but not together, can reach staging but never production. Rolling back is the
+#             same button with action: rollback.
 #
 # How a deploy reaches the box (see deploy/README.md, "Deploying"): the image is streamed over SSH (`docker save | docker
 # load`, so there is no registry to pay for or leak), the box fetches the commit's deploy/ directory from the repository
@@ -26,9 +29,7 @@ name: Deploy
 # Variables (optional): STAGING_URL, PRODUCTION_URL, e.g. https://staging.tectonic.bingo, for a check from outside after a deploy.
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
+  push:
     branches: [main]
   workflow_dispatch:
     inputs:
@@ -53,15 +54,11 @@ on:
 
 permissions:
   contents: read
+  # Production reads the result of CI on main for the commit it deploys.
+  actions: read
 
 jobs:
   resolve:
-    # A CI run on main that passed (and was a push to this repository, not a pull request), or a manual run.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     outputs:
       environment: ${{ steps.r.outputs.environment }}
@@ -76,15 +73,14 @@ jobs:
           IN_ACTION: ${{ inputs.action }}
           IN_SHA: ${{ inputs.sha }}
           IN_SKIP: ${{ inputs.skip_staging_check }}
-          CI_SHA: ${{ github.event.workflow_run.head_sha }}
-          DISPATCH_SHA: ${{ github.sha }}
+          HEAD_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          if [ "$EVENT" = workflow_run ]; then
-            environment=staging; action=deploy; sha="$CI_SHA"; skip=false
+          if [ "$EVENT" = push ]; then
+            environment=staging; action=deploy; sha="$HEAD_SHA"; skip=false
           else
             environment="$IN_ENVIRONMENT"; action="$IN_ACTION"; skip="$IN_SKIP"
-            sha="${IN_SHA:-$DISPATCH_SHA}"
+            sha="${IN_SHA:-$HEAD_SHA}"
           fi
           # Inputs are untrusted text: check each is exactly what it should be before anything uses it.
           [[ "$environment" =~ ^(staging|production)$ ]] || { echo "bad environment"; exit 1; }
@@ -117,6 +113,31 @@ jobs:
         run: |
           git fetch --quiet origin main
           git merge-base --is-ancestor "$SHA" origin/main || { echo "::error::$SHA is not on main. Only commits on main are deployed."; exit 1; }
+
+      # Staging does not wait for CI on main (the pull request's CI already ran on the merged code); production does. A run
+      # still going is waited for, so promoting right after a merge just takes a few minutes longer.
+      - name: Require CI on main to have passed for this commit
+        if: env.TARGET == 'production' && env.ACTION == 'deploy'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            query="repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&event=push&branch=main&per_page=1"
+            run=$(gh api "$query" --jq '.workflow_runs[0] | "\(.status) \(.conclusion) \(.html_url)"')
+            read -r status conclusion url <<<"$run"
+            if [ -z "$run" ] || [ "$run" = "null null null" ]; then
+              echo "::error::there is no CI run on main for $SHA. Only a commit CI has passed on main is deployed to production."; exit 1
+            fi
+            if [ "$status" = completed ]; then
+              [ "$conclusion" = success ] && { echo "CI passed: $url"; exit 0; }
+              echo "::error::CI on main did not pass for $SHA ($conclusion): $url"; exit 1
+            fi
+            echo "CI on main is $status for $SHA, waiting ($url)"
+            sleep 20
+          done
+          echo "::error::CI on main did not finish within 20 minutes for $SHA"; exit 1
 
       - name: Set up SSH to the box
         env:
