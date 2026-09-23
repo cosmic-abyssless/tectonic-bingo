@@ -1,6 +1,25 @@
-import type { CombatAchievementStats, WomPlayerStats } from "@bingo/shared";
-import { COMBAT_ACHIEVEMENT_TIER_LABEL } from "@bingo/shared";
+import type { CombatAchievementStats, CombatAchievementSubLevel, WomPlayerStats } from "@bingo/shared";
+import { CA_SUB_LEVELS, COMBAT_ACHIEVEMENT_TIER_LABEL, caSubLevel } from "@bingo/shared";
 import { SpinnerIcon } from "../ui/icons";
+
+const SUB_LEVEL_LABEL: Record<CombatAchievementSubLevel, string> = { low: "Low", medium: "Medium", high: "High" };
+// One segment per third, lit from the bottom up to the player's level; bronze -> silver -> gold like the podium Medal pills.
+const SEGMENT_LIT = ["bg-bronze", "bg-silver", "bg-gold"];
+
+/** Small vertical three-segment bar: how far through its tier a player is. Hover says e.g. "High Master tier". */
+function CaLevelBar({ stats, tooltip }: { stats: CombatAchievementStats; tooltip: boolean }) {
+  const level = caSubLevel(stats);
+  if (!level) return null;
+  const lit = CA_SUB_LEVELS.indexOf(level) + 1;
+  const label = `${SUB_LEVEL_LABEL[level]} ${COMBAT_ACHIEVEMENT_TIER_LABEL[stats.tier]} tier`;
+  return (
+    <span className="inline-flex shrink-0 flex-col-reverse gap-px" role="img" aria-label={label} title={tooltip ? label : undefined}>
+      {SEGMENT_LIT.map((color, i) => (
+        <span key={color} className={`h-[3px] w-1.5 ${i < lit ? color : "bg-outline-strong"}`} />
+      ))}
+    </span>
+  );
+}
 
 export function formatCaTier(stats: CombatAchievementStats | null | undefined): string {
   return stats ? COMBAT_ACHIEVEMENT_TIER_LABEL[stats.tier] : "Unknown";
@@ -27,10 +46,17 @@ function LoadingValue({ loading, title, children }: { loading?: boolean; title?:
 // nativeTitle: false when the caller already shows this same text some other way (AG Grid's own tooltip, in
 // SignupRosterGrid) — otherwise the two would render stacked/overlapping on hover.
 export function CaCell({ stats, loading, nativeTitle = true }: { stats: CombatAchievementStats | null | undefined; loading?: boolean; nativeTitle?: boolean }) {
-  return (
+  const value = (
     <LoadingValue loading={loading} title={nativeTitle ? caTitle(stats) : undefined}>
       {formatCaTier(stats)}
     </LoadingValue>
+  );
+  if (loading || !stats || !caSubLevel(stats)) return value;
+  return (
+    <span className="inline-flex items-center gap-2 whitespace-nowrap">
+      {value}
+      <CaLevelBar stats={stats} tooltip={nativeTitle} />
+    </span>
   );
 }
 

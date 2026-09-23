@@ -83,8 +83,8 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
         title={
           <>
             {/* Account type leads the name, like the in-game chat badge. */}
-            <AccountTypeIcon accountType={player.accountType} size={22} className="shrink-0" />
-            <span className="truncate">{player.rsn ?? name}</span>
+            <AccountTypeIcon accountType={player.accountType} size={26} className="mr-1 shrink-0" />
+            <span className="truncate pr-2">{player.rsn ?? name}</span>
           </>
         }
         subtitle={player.rsn ? `Discord: ${name}` : "Not signed up for this bingo"}
