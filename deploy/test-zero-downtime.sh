@@ -24,6 +24,10 @@ export MSYS_NO_PATHCONV=1
 here="$(cd "$(dirname "$0")" && pwd)"
 image="${1:-tectonic-bingo:local}"
 port="${ZD_PORT:-18080}"
+# CI runs the two halves as separate jobs, side by side: "probe" is the deploys under load, "guards" is the checks after
+# them. Run with neither set (the default, "all"), it does both, as it always has.
+part="${ZD_PART:-all}"
+case "$part" in all|probe|guards) ;; *) echo "ZD_PART must be all, probe or guards" >&2; exit 2 ;; esac
 native() { (cd "$1" && { pwd -W 2>/dev/null || pwd; }); }
 here_n="$(native "$here")"
 root="$(native "$(mktemp -d)")"
@@ -95,13 +99,22 @@ docker run --rm -v "$root/data:/d" alpine:3 chown -R 1000:1000 /d
 
 docker tag "$image" tectonic-bingo:zd-a
 docker tag "$image" tectonic-bingo:zd-b
+if [ "$part" != guards ]; then
 # An image whose api dies at once (migrations pass), and one whose migration fails. Both keep the real image otherwise.
 printf 'FROM %s\nENTRYPOINT ["sh","-c","if [ \\"$1\\" = migrate ]; then exit 0; fi; exit 1","--"]\n' "$image" | docker build -q -t tectonic-bingo:zd-unhealthy - >/dev/null
 printf 'FROM %s\nENTRYPOINT ["sh","-c","if [ \\"$1\\" = migrate ]; then echo migration exploded >&2; exit 1; fi; exec docker-entrypoint.sh \\"$@\\"","--"]\n' "$image" | docker build -q -t tectonic-bingo:zd-badmigration - >/dev/null
 
 # An image whose api is fine but whose screenshot service exits at once.
 printf 'FROM %s\nENTRYPOINT ["sh","-c","if [ \\"$1\\" = ocr ]; then exit 1; fi; exec docker-entrypoint.sh \\"$@\\"","--"]\n' "$image" | docker build -q -t tectonic-bingo:zd-badocr - >/dev/null
+fi
 
+if [ "$part" = guards ]; then
+  # The guards start from the state the probe half leaves staging in: the front door up and the first version live.
+  step "Starting the front door and putting staging on the first version"
+  deploy edge
+  deploy staging tectonic-bingo:zd-a --skip-smoke
+  expect_live tectonic-bingo:zd-a blue
+else
 step "Starting the front door and deploying the first version"
 deploy edge
 deploy staging tectonic-bingo:zd-a --skip-smoke
@@ -173,6 +186,9 @@ if (problems.length) { console.error(problems.join("\n")); process.exit(1); }
 console.log(`\n${r.requests} requests, 0 failed (${r.retried} retried once after a connection reset, as a browser would). Served by: ${JSON.stringify(r.servedBy)}. WebSocket: ${r.websocket.opened} connections, ${r.websocket.closed} closes (its clients reconnect on their own).`);
 ' "$result_file" || fail "users would have noticed"
 
+fi
+
+if [ "$part" != probe ]; then
 # ---- guards that protect production, checked here because a real production deploy can't be rehearsed on a laptop ----
 
 step "Production only accepts the image staging is running"
@@ -246,5 +262,7 @@ skipped="$(deploy staging "tectonic-bingo:$sha_a" --skip-smoke 2>&1)" || fail "d
 grep -q "not going back to an older commit" <<<"$skipped" || fail "the older commit was not skipped: $skipped"
 [ "$(live_image)" = "tectonic-bingo:$sha_b" ] || fail "staging went back to the older commit"
 echo "the older commit's deploy was skipped and staging still runs the newer one"
+
+fi
 
 printf '\nZERO-DOWNTIME TEST PASSED\n'

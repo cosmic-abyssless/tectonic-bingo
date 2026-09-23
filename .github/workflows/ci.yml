@@ -94,8 +94,8 @@ jobs:
         working-directory: infra
       - run: shellcheck -x --severity=warning infra/*.sh
 
-  # The image is built in two jobs that run at the same time (each from the same layer cache), rather than built once and
-  # handed over: the zero-downtime test alone takes about 2m40s, longer than moving a large image between jobs would save.
+  # The image is built in three jobs that run at the same time (each from the same layer cache), rather than built once and
+  # handed over: moving a large image between jobs would cost about what the parallelism saves.
   image:
     runs-on: ubuntu-latest
     steps:
@@ -134,6 +134,27 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      # Real deploy.sh, Caddy and containers: deploys, deploys again, tries two broken builds, and rolls back, while a probe
-      # requests the site continuously. Passes only if not one request failed and the live version was right every time.
+      # Half of the zero-downtime test (the other half is image-deploy-guards). Real deploy.sh, Caddy and containers: deploys,
+      # deploys again, tries broken builds, and rolls back, while a probe requests the site continuously. Passes only if not
+      # one request failed and the live version was right every time.
       - run: bash deploy/test-zero-downtime.sh tectonic-bingo:ci
+        env:
+          ZD_PART: probe
+
+  image-deploy-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: tectonic-bingo:ci
+          build-args: SENTRY_RELEASE=${{ github.sha }}
+          cache-from: type=gha
+      # The other half of the zero-downtime test: the guards that protect production (what staging runs, the password, the
+      # backup services, the emergency path, never going back to an older commit), on their own runner beside the probe half.
+      - run: bash deploy/test-zero-downtime.sh tectonic-bingo:ci
+        env:
+          ZD_PART: guards
