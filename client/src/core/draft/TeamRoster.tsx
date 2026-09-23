@@ -5,7 +5,7 @@ import { PlayerName } from "../tectonic/PlayerName";
 
 // A duo pair is drafted as one pick, so both rows share a pickNumber — show
 // them as one entry so the roster reads the same way the draft was made.
-function groupByPick(picks: DraftPick[]): DraftPick[][] {
+export function groupByPick(picks: DraftPick[]): DraftPick[][] {
   const byNumber = new Map<number, DraftPick[]>();
   for (const p of picks) byNumber.set(p.pickNumber, [...(byNumber.get(p.pickNumber) ?? []), p]);
   return [...byNumber.entries()].sort(([a], [b]) => a - b).map(([, group]) => group);

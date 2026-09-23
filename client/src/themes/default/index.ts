@@ -13,6 +13,7 @@ import { TeamBanner } from "./page/TeamBanner";
 import { PlanningStage } from "./page/PlanningStage";
 import { SignupStage } from "./page/SignupStage";
 import { ScoutBanner } from "./page/ScoutBanner";
+import { OnTheClockBanner } from "./draft/OnTheClockBanner";
 import { DraftStage } from "./page/DraftStage";
 import { NoTeamStage } from "./page/NoTeamStage";
 import { RulesDialog } from "./page/RulesDialog";
@@ -49,6 +50,7 @@ export const defaultTheme: ThemeDefinition = {
     DraftPage: DraftPageLayout,
     StatsPage: StatsPageLayout,
     DraftPickBurst,
+    OnTheClockBanner,
     PageLoading,
     PageError,
     PageHeader,
