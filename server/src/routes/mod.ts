@@ -295,6 +295,18 @@ router.patch(
   }),
 );
 
+// Set (or, with null, clear) a player's timezone from the roster — see signupService.setSignupTimezone.
+router.patch(
+  "/signups/:id/timezone",
+  asyncHandler(async (req, res) => {
+    const { timezone } = req.body as { timezone?: string | null };
+    if (timezone !== null && typeof timezone !== "string") throw new ServiceError(400, "timezone must be a string or null");
+    const signup = signupService.setSignupTimezone(db, req.bingo!, req.params.id as string, timezone, req.user!.id);
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    res.json({ signup });
+  }),
+);
+
 // Withdraw on a player's behalf (no-shows, duplicate accounts, ...). Soft
 // delete like self-withdrawal so the player can sign up again later.
 router.delete(

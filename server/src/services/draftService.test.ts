@@ -776,3 +776,14 @@ describe("pick ratings", () => {
     expect(rows.map((r) => JSON.parse(r.details).rsn)).toEqual(["a & b", "b & a"]);
   });
 });
+
+describe("timezone in the pool", () => {
+  it("follows the answers' visibility rule: shown to mods/captains, hidden from everyone else", () => {
+    const bingo = seedBingo();
+    const p1 = seedUser("p1");
+    createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p1.id, rsn: "p1", timezone: "Europe/London", answers: [] });
+    const timezoneIn = (includeAnswers: boolean) => getDraftState(db, bingo, { includeAnswers }).pool.flatMap((u) => u.entries.map((e) => e.signup.timezone));
+    expect(timezoneIn(true)).toEqual(["Europe/London"]);
+    expect(timezoneIn(false)).toEqual([null]);
+  });
+});

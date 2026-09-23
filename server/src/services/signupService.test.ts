@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createQuestion, deleteQuestion, reorderQuestions, updateQuestion } from "./signupService";
-import { createSignup, getAllSignups, getSignupForUser, markBuyin, updateSignup, withdrawSignup } from "./signupService";
+import { createSignup, getAllSignups, getAnswerCounts, getSignupForUser, markBuyin, setSignupTimezone, updateSignup, withdrawSignup } from "./signupService";
 import { cancelRequest, requestPairing } from "./pairingService";
 import { ServiceError } from "./errors";
 import { createTeam } from "./teamService";
@@ -325,6 +325,77 @@ describe("getAllSignups / markBuyin", () => {
     expect(neverLoggedIn.outgoingPairingRequest?.target.user).toBeNull();
     expect(neverLoggedIn.outgoingPairingRequest?.target.rsn).toBeNull();
     expect(neverLoggedIn.outgoingPairingRequest?.target.name).toBe("neverLoggedIn");
+  });
+});
+
+describe("deleting a question with answers", () => {
+  it("deletes its answers with it (only its own), counts non-blank ones, and records how many went", () => {
+    const { bingo, adminId, memberId } = seedBingo();
+    const tz = createQuestion(db, { bingoId: bingo.id, prompt: "What time zone?", type: "text" });
+    const other = createQuestion(db, { bingoId: bingo.id, prompt: "Other", type: "text" });
+    createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "A", answers: [{ questionId: tz.id, value: "EST" }, { questionId: other.id, value: "x" }] });
+    createSignup(db, bingo, { bingoId: bingo.id, userId: adminId, rsn: "B", answers: [{ questionId: tz.id, value: "" }] });
+    expect(getAnswerCounts(db, bingo.id)).toEqual({ [tz.id]: 1, [other.id]: 1 });
+
+    deleteQuestion(db, tz.id);
+
+    expect(db.select().from(schema.signupQuestions).all().map((q) => q.id)).toEqual([other.id]);
+    expect(db.select().from(schema.signupAnswers).all().map((a) => a.questionId)).toEqual([other.id]);
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "question.deleted")).get()!;
+    expect(JSON.parse(row.details)).toMatchObject({ prompt: "What time zone?", answersDeleted: 1 });
+  });
+});
+
+describe("timezone", () => {
+  it("stores a valid zone on create, rejects an invalid one, and allows none (signups from before it was asked)", () => {
+    const { bingo, memberId } = seedBingo();
+    expect(() => createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Me", timezone: "EST-ish", answers: [] })).toThrow(ServiceError);
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Me", timezone: " America/New_York ", answers: [] });
+    expect(signup.timezone).toBe("America/New_York");
+
+    const [other] = db.insert(schema.users).values({ discordId: "other", discordUsername: "other" }).returning().all();
+    expect(createSignup(db, bingo, { bingoId: bingo.id, userId: other.id, rsn: "Other", answers: [] }).timezone).toBeNull();
+  });
+
+  it("a player's update sets it and records the change on signup.updated", () => {
+    const { bingo, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Me", answers: [] });
+    expect(() => updateSignup(db, bingo, signup.id, { timezone: "nope" })).toThrow(ServiceError);
+
+    expect(updateSignup(db, bingo, signup.id, { timezone: "Europe/London" }).timezone).toBe("Europe/London");
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.updated")).get()!;
+    expect(JSON.parse(row.details)).toEqual({ changes: { before: { Timezone: "—" }, after: { Timezone: "Europe/London" } } });
+
+    // Saving the same zone again is no change, so no second entry.
+    updateSignup(db, bingo, signup.id, { timezone: "Europe/London" });
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.updated")).all()).toHaveLength(1);
+  });
+
+  it("a mod can set or clear it outside the signup stage, audited on the player's behalf", () => {
+    const { bingo, adminId, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Me", answers: [] });
+    const live = { ...bingo, stage: "live" as const };
+
+    expect(setSignupTimezone(db, live, signup.id, "America/Chicago", adminId).timezone).toBe("America/Chicago");
+    expect(setSignupTimezone(db, live, signup.id, null, adminId).timezone).toBeNull();
+    const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.timezone_set")).all();
+    expect(rows.map((r) => JSON.parse(r.details))).toEqual([
+      { before: null, after: "America/Chicago" },
+      { before: "America/Chicago", after: null },
+    ]);
+    expect(rows[0]).toMatchObject({ actorUserId: adminId, onBehalfOfUserId: memberId });
+
+    // Setting the same value again is a no-op, not another audit row.
+    setSignupTimezone(db, live, signup.id, null, adminId);
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.timezone_set")).all()).toHaveLength(2);
+  });
+
+  it("a mod can't set an invalid zone, touch another bingo's signup, or edit a finished bingo", () => {
+    const { bingo, adminId, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Me", answers: [] });
+    expect(() => setSignupTimezone(db, bingo, signup.id, "Mars/Olympus", adminId)).toThrow(ServiceError);
+    expect(() => setSignupTimezone(db, { ...bingo, id: "some-other-bingo" }, signup.id, "Europe/London", adminId)).toThrow("Signup not found");
+    expect(() => setSignupTimezone(db, { ...bingo, stage: "complete" }, signup.id, "Europe/London", adminId)).toThrow(ServiceError);
   });
 });
 
