@@ -7,7 +7,7 @@
 #   deploy.sh edge                    (re)start Caddy, the shared front door
 #
 #   --skip-smoke          don't boot the image on an empty database first (a rollback never does)
-#   --drain SECONDS       how long the old colour keeps running after traffic moves (default 10)
+#   --drain SECONDS       how long the old colour keeps running after traffic moves (default 5)
 #   --skip-staging-check  production only: deploy an image staging is not running (an emergency, and it is logged)
 #   --force               redeploy even if IMAGE is already live
 #
@@ -41,7 +41,7 @@ usage() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-1}"; }
 # ---- arguments ---------------------------------------------------------------------------------------------------
 [ $# -ge 1 ] || usage
 env="$1"; shift
-image=""; action="deploy"; skip_smoke=0; drain=10; skip_staging_check=0; force=0
+image=""; action="deploy"; skip_smoke=0; drain=5; skip_staging_check=0; force=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --rollback) action="rollback"; shift ;;
@@ -168,7 +168,7 @@ wait_healthy() {
     restarts="$(docker inspect -f '{{.RestartCount}}' "$id" 2>/dev/null || echo 0)"
     case "$status" in healthy) return 0 ;; exited|missing) return 1 ;; esac
     [ "$restarts" -lt 2 ] || return 1
-    sleep 2; waited=$((waited + 2))
+    sleep 1; waited=$((waited + 1))
   done
   return 1
 }

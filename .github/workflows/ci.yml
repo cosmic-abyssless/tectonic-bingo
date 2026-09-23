@@ -94,6 +94,8 @@ jobs:
         working-directory: infra
       - run: shellcheck -x --severity=warning infra/*.sh
 
+  # The image is built in two jobs that run at the same time (each from the same layer cache), rather than built once and
+  # handed over: the zero-downtime test alone takes about 2m40s, longer than moving a large image between jobs would save.
   image:
     runs-on: ubuntu-latest
     steps:
@@ -106,7 +108,9 @@ jobs:
           tags: tectonic-bingo:ci
           build-args: SENTRY_RELEASE=${{ github.sha }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Only main writes the cache (pull requests read it, and a cache is readable from the base branch): exporting it
+          # costs about 12 s, and a pull request's own layers are rarely reused.
+          cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,mode=max,ignore-error=true' || '' }}
       - run: bash deploy/smoke-test.sh tectonic-bingo:ci
       # Destroys a database and its uploads and gets them back from a local stand-in for the bucket: proves the backup and
       # restore tooling (Litestream, rclone, deploy/restore.sh) still works with this build, not just that it once did.
@@ -114,6 +118,19 @@ jobs:
       # The deploy scripts are what decide whether a release drops requests, so they are tested like code.
       - run: shellcheck -x --severity=warning deploy/*.sh infra/*.sh
       - run: bash deploy/test-ssh-entry.sh
+
+  image-zero-downtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: tectonic-bingo:ci
+          build-args: SENTRY_RELEASE=${{ github.sha }}
+          cache-from: type=gha
       - uses: actions/setup-node@v7
         with:
           node-version: 22
