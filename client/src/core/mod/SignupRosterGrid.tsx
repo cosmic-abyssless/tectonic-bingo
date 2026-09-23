@@ -205,7 +205,7 @@ const PartnerCell = memo(function PartnerCell({ data, context }: CustomCellRende
     const targetName = data.outgoingPairingRequest.target.name;
     return (
       <span className="min-w-0 truncate text-on-surface-subtle" title={`Waiting for ${targetName} to accept`}>
-        Requested {targetName}
+        Requested <Mark text={targetName} query={context.search} />
       </span>
     );
   }
@@ -417,6 +417,10 @@ export function SignupRosterGrid({
         colId: "partner",
         headerName: "Partner",
         valueGetter: (p) => (p.data?.pairing ? (p.context.partnerRsnMap.get(p.data.signup.id) ?? "") : ""),
+        // The search box also finds who someone has asked to pair with, not only who they're paired with. Kept out
+        // of the value itself, which the sort and the partner picker's editor both read.
+        getQuickFilterText: (p) =>
+          p.data?.pairing ? (p.context.partnerRsnMap.get(p.data.signup.id) ?? "") : (p.data?.outgoingPairingRequest?.target.name ?? ""),
         cellRenderer: PartnerCell,
         editable: (p) => !p.data?.pairing && p.data?.signup.status === "active",
         cellEditor: "agSelectCellEditor",
