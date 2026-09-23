@@ -18,6 +18,7 @@ import { getRuneProfileClient, parseAccountType, type RuneProfileClient } from "
 import { getTectonicClient, TectonicUnavailableError, type TectonicClient } from "./tectonicService";
 import { deriveCombatAchievements, parseStoredCaStats, peakCombatAchievements } from "./combatAchievements";
 import { audit } from "../audit/record";
+import { skipsIntegrations } from "../audit/context";
 import { broadcast } from "../ws";
 import { log } from "../log";
 
@@ -113,9 +114,10 @@ export function getSignupStats(db: Db, bingoId: string, userId: string): (Stored
 export async function fetchAndPersistPlayerStats(db: Db, signupId: string, rsn: string, opts: FetchPlayerStatsOpts = {}): Promise<void> {
   const signup = db.select({ bingoId: signups.bingoId, userId: signups.userId }).from(signups).where(eq(signups.id, signupId)).get();
   // Test hook — skips WOM/RuneProfile/Tectonic network calls entirely. Used
-  // by the E2E suite so a real signup during tests never hits those live APIs.
+  // by the E2E suite so a real signup during tests never hits those live APIs,
+  // and per request by the test data generator (skipsIntegrations).
   // Drop any in-flight spinner the refresh button already raised.
-  if (process.env.PLAYER_STATS_FETCH_DISABLED === "true") {
+  if (process.env.PLAYER_STATS_FETCH_DISABLED === "true" || skipsIntegrations()) {
     if (signup?.bingoId) {
       broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: { signupId, userId: signup.userId, statsRefreshing: false } });
     }

@@ -8,7 +8,7 @@ async function main(): Promise<void> {
   if (!raw.includes("--slug") && !raw.includes("--all")) throw new UsageError("Pass --slug testdata-... or --all");
   // parseArgs fills a default slug we don't want here, so only trust --slug when it was actually given.
   const args = parseArgs(raw);
-  const { api, admin } = await connect(args.base, args.admin);
+  const { api, admin } = await connect(args.base, args.admin, args.basicAuth);
   const session = api.as(admin.discordId);
 
   const slugs = args.all ? (await session.get<{ bingos: { slug: string }[] }>("/api/dev/bingos")).bingos.map((b) => b.slug) : [args.slug];

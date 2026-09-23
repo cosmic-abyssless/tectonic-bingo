@@ -10,3 +10,15 @@ export function isDevModeActive(): boolean {
 export function devSkipsOcr(headerValue: string | undefined): boolean {
   return isDevModeActive() && headerValue === "1";
 }
+
+/**
+ * Dev only: the X-Dev-Skip-Integrations header keeps a request away from the outside services a real player's would
+ * reach: for that request the clan API reads as not configured (no membership check, draft-room profiles or roster
+ * names) and no WOM/RuneProfile stats are fetched. So the test data generator's made-up players never hit those APIs,
+ * on a dev server with the integrations configured or on staging, and nobody has to turn the integrations off to run
+ * it. The audit middleware puts it on the request's context (audit/context.ts). Test data bingos are never synced to
+ * WOM either (womCompetitionService).
+ */
+export function devSkipsIntegrations(headerValue: string | undefined): boolean {
+  return isDevModeActive() && headerValue === "1";
+}

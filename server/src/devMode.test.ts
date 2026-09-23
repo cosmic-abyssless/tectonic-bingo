@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { devSkipsOcr, isDevModeActive } from "./devMode";
+import { devSkipsIntegrations, devSkipsOcr, isDevModeActive } from "./devMode";
 
 const saved = { NODE_ENV: process.env.NODE_ENV, DEV_LOGIN_ENABLED: process.env.DEV_LOGIN_ENABLED };
 afterEach(() => {
@@ -27,5 +27,17 @@ describe("devSkipsOcr", () => {
     expect(devSkipsOcr("true")).toBe(false);
     delete process.env.DEV_LOGIN_ENABLED;
     expect(devSkipsOcr("1")).toBe(false);
+  });
+});
+
+describe("devSkipsIntegrations", () => {
+  it("skips only on the exact header value, and only in dev mode (never in production)", () => {
+    process.env.DEV_LOGIN_ENABLED = "true";
+    process.env.NODE_ENV = "staging";
+    expect(devSkipsIntegrations("1")).toBe(true);
+    expect(devSkipsIntegrations(undefined)).toBe(false);
+    expect(devSkipsIntegrations("yes")).toBe(false);
+    process.env.NODE_ENV = "production";
+    expect(devSkipsIntegrations("1")).toBe(false);
   });
 });

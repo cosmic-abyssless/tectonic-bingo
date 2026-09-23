@@ -112,3 +112,17 @@ describe("TectonicClient", () => {
     expect(await clientB.getDetailedUser("999")).toBeNull();
   });
 });
+
+describe("getTectonicClient inside a request that skips the outside services", () => {
+  it("reads as not configured for that request only (the test data generator's players)", async () => {
+    vi.stubEnv("TECTONIC_API_URL", "http://x");
+    vi.stubEnv("TECTONIC_API_KEY", "k");
+    vi.stubEnv("TECTONIC_GUILD_ID", "g");
+    const { getTectonicClient } = await import("./tectonicService");
+    const { runWithAuditContext } = await import("../audit/context");
+    const ctx = { requestId: "r", actorUserId: null, actorType: "user" as const, actorRole: "player" as const, recorded: 0, skip: null };
+    expect(runWithAuditContext(ctx, () => getTectonicClient())).not.toBeNull();
+    expect(runWithAuditContext({ ...ctx, skipIntegrations: true }, () => getTectonicClient())).toBeNull();
+    expect(getTectonicClient()).not.toBeNull();
+  });
+});

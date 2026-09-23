@@ -933,3 +933,4 @@ export * from "./bingoExport.ts";
 export * from "./exclusivity.ts";
 export * from "./names.ts";
 export * from "./signupAnswers.ts";
+export * from "./testData.ts";

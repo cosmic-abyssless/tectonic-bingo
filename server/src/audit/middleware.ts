@@ -3,7 +3,7 @@
 import crypto from "node:crypto";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { db } from "../db";
-import { isDevModeActive } from "../devMode";
+import { devSkipsIntegrations, isDevModeActive } from "../devMode";
 import { runWithAuditContext, type AuditContext } from "./context";
 import { audit, redactBody } from "./record";
 import { log } from "../log";
@@ -32,6 +32,7 @@ export function auditContext(req: Request, res: Response, next: NextFunction): v
     }
     ctx.now = at;
   }
+  if (devSkipsIntegrations(req.header("x-dev-skip-integrations"))) ctx.skipIntegrations = true;
 
   // Closes over `ctx` directly rather than calling getAuditContext(): a
   // res.on("finish") callback fires outside the AsyncLocalStorage run() that
