@@ -28,7 +28,7 @@ import type {
   StateUpdatedEvent,
   TooltipCallbackParams,
 } from "ag-grid-community";
-import { formatSignupAnswer, formatTimeZone, timeZoneOptions, type RosterEntry, type SignupQuestion } from "@bingo/shared";
+import { formatSignupAnswer, formatTimeZone, timeZoneOffsetMinutes, timeZoneOptions, type RosterEntry, type SignupQuestion } from "@bingo/shared";
 import type { useMarkBuyin, useModPair, useModUnpair, useModWithdrawSignup, useRefreshSignupStats, useSetSignupTimezone } from "../../api/queries";
 import { useGridTheme } from "../ui/agGrid";
 import { discordName, displayName } from "../ui/user";
@@ -391,6 +391,9 @@ export function SignupRosterGrid({
         colId: "timezone",
         headerName: "Timezone",
         valueGetter: (p) => p.data?.signup.timezone ?? "",
+        // West to east by current UTC offset, not alphabetically by zone name; not set sorts first, so sorting
+        // ascending puts the ones still to fill in at the top.
+        comparator: (a: string, b: string) => (a ? timeZoneOffsetMinutes(a) : -Infinity) - (b ? timeZoneOffsetMinutes(b) : -Infinity) || a.localeCompare(b),
         cellRenderer: TimezoneCell,
         // The raw zone name ("America/New_York") on hover — the cell itself shows the friendlier city + offset.
         tooltip: (p: TooltipCallbackParams<RosterRow, string>) => usefulTooltip(p, p.data?.signup.timezone ?? ""),
@@ -457,6 +460,11 @@ export function SignupRosterGrid({
         colId: "collectedBy",
         headerName: "Collected by",
         valueGetter: (p) => p.data?.collectedByUser?.id ?? "",
+        // The value is a user id (what the select editor needs), so sort by the name shown instead; nobody first.
+        comparator: (a: string, b: string) => {
+          const name = (id: string) => (id ? (collectedByRefDataRef.current[id] ?? "") : "");
+          return name(a).localeCompare(name(b));
+        },
         cellRenderer: CollectedByCell,
         // Not `refData: collectedByRefData` (a static object baked at colDef-build time) — see the refs' own
         // comment above. Only the agSelectCellEditor's dropdown labels need this now; the cell's own display
@@ -619,6 +627,9 @@ export function SignupRosterGrid({
         stopEditingWhenCellsLoseFocus
         onCellEditRequest={onCellEditRequest}
         enableCellTextSelection
+        // Text columns sort with localeCompare: case-insensitive ("alice" beside "Alice", not after every capital)
+        // and accent-aware, instead of AG's default character-code order.
+        accentedSort
       />
     </div>
   );

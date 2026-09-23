@@ -4,7 +4,8 @@ import { EmptyState, Notice } from "../../../core/ui/Card";
 import { Button } from "../../../core/ui/Button";
 import { MilestoneCountdown } from "../../../core/ui/StageStepper";
 import { CheckIcon, UsersIcon } from "../../../core/ui/icons";
-import { TeamRoster } from "../../../core/draft/TeamRoster";
+import { FinalTeams } from "../../../core/draft/FinalTeams";
+import { useAuth } from "../../../context/AuthContext";
 
 /**
  * Draft stage: before it starts, a countdown; while it runs, a pointer into
@@ -12,6 +13,7 @@ import { TeamRoster } from "../../../core/draft/TeamRoster";
  * people who didn't sign up, so the error case just shows the generic copy.
  */
 export function DraftStage({ draft, milestone, onOpenDraft }: { draft: BingoPageModel["draft"]; milestone: StageMilestone | null; onOpenDraft: () => void }) {
+  const { user } = useAuth();
   if (draft.isLoading) return null;
 
   // Having draft state at all means the server let us into the room (mods,
@@ -58,11 +60,7 @@ export function DraftStage({ draft, milestone, onOpenDraft }: { draft: BingoPage
       <Notice tone="ok" icon={<CheckIcon />}>
         Draft complete. The board is revealed next.
       </Notice>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {draft.state.teams.map((team) => (
-          <TeamRoster key={team.id} team={team} picks={draft.state!.picks.filter((p) => p.teamId === team.id)} />
-        ))}
-      </div>
+      <FinalTeams teams={draft.state.teams} picks={draft.state.picks} myUserId={user?.id ?? null} />
     </section>
   );
 }

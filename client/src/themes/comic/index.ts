@@ -5,6 +5,7 @@ import { BoardPageLayout } from "./page/BoardPageLayout";
 import { DraftPageLayout } from "./page/DraftPageLayout";
 import { StatsPageLayout } from "./page/StatsPageLayout";
 import { DraftPickBurst } from "./draft/DraftPickBurst";
+import { OnTheClockBanner } from "./draft/OnTheClockBanner";
 import { BoardGrid } from "./board/BoardGrid";
 import { TileSearch } from "./page/TileSearch";
 import { TileCell } from "./board/TileCell";
@@ -115,6 +116,7 @@ const comicTheme: ThemeDefinition = {
     DraftPage: DraftPageLayout,
     StatsPage: StatsPageLayout,
     DraftPickBurst,
+    OnTheClockBanner,
     BoardGrid,
     TaskPanel,
     RequirementTree,

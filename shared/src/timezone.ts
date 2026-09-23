@@ -47,9 +47,28 @@ function placeName(tz: string): string {
   return (parts.length > 1 ? parts.slice(1) : parts).join("/").split("_").join(" ");
 }
 
-/** How a zone is shown in tables: "New York (UTC−04:00)". */
+// Each English locale only knows letter abbreviations for its own region's zones (en-US has EDT but calls London
+// "GMT+1"; en-GB has BST and CEST but calls New York "GMT-4"), so ask each in turn and take the first real one.
+const ABBREVIATION_LOCALES = ["en-US", "en-GB", "en-AU", "en-IN", "en-NZ"];
+
+/**
+ * The zone's abbreviation right now ("EDT" in summer, "EST" in winter; "BST", "CEST", "AEST"), or null where no
+ * English locale has one (Jerusalem, Tokyo: Intl only offers "GMT+3"-style text there).
+ */
+export function timeZoneAbbreviation(tz: string, at: Date = new Date()): string | null {
+  for (const locale of ABBREVIATION_LOCALES) {
+    const name = new Intl.DateTimeFormat(locale, { timeZone: tz, timeZoneName: "short" }).formatToParts(at).find((p) => p.type === "timeZoneName")?.value;
+    if (name && !/^(GMT|UTC)[+-−]/.test(name)) return name;
+  }
+  return null;
+}
+
+/** How a zone is shown in tables: "EDT (UTC−04:00)", or the city where there's no abbreviation ("Tokyo (UTC+09:00)"). */
 export function formatTimeZone(tz: string, at: Date = new Date()): string {
-  return isValidTimeZone(tz) ? `${placeName(tz)} (${timeZoneOffsetLabel(tz, at)})` : tz;
+  if (!isValidTimeZone(tz)) return tz;
+  const offset = timeZoneOffsetLabel(tz, at);
+  const name = timeZoneAbbreviation(tz, at) ?? placeName(tz);
+  return name === offset ? offset : `${name} (${offset})`;
 }
 
 export interface TimeZoneOption {
@@ -75,4 +94,27 @@ export function timeZoneOptions(include: (string | null | undefined)[] = [], at:
       const region = generic && !generic.startsWith("GMT") ? ` — ${generic}` : "";
       return { id, label: `(${timeZoneOffsetLabel(id, at)}) ${placeName(id)}${region} · ${id}` };
     });
+}
+
+export type TimeZoneRegion = "americas" | "europe" | "asia" | "oceania" | "other";
+
+/** Region filters, in the order they're offered. */
+export const TIME_ZONE_REGIONS: { key: TimeZoneRegion; label: string }[] = [
+  { key: "americas", label: "Americas" },
+  { key: "europe", label: "Europe" },
+  { key: "asia", label: "Asia" },
+  { key: "oceania", label: "Oceania" },
+  { key: "other", label: "Other" },
+];
+
+// Europe that IANA files elsewhere: the North Atlantic islands, and Cyprus (Asia/Nicosia).
+const EUROPE_ELSEWHERE = /^(Atlantic\/(Azores|Canary|Faroe|Faeroe|Madeira|Reykjavik)|Asia\/(Nicosia|Famagusta))$/;
+
+/** A coarse region for filtering by roughly-when-people-play, from the zone name's area. "other" is Africa, UTC and the like. */
+export function timeZoneRegion(tz: string): TimeZoneRegion {
+  if (EUROPE_ELSEWHERE.test(tz) || tz.startsWith("Europe/")) return "europe";
+  if (/^(America|US|Canada)\//.test(tz) || tz === "Pacific/Honolulu") return "americas";
+  if (tz.startsWith("Asia/") || tz.startsWith("Indian/")) return "asia";
+  if (tz.startsWith("Australia/") || tz.startsWith("Pacific/")) return "oceania";
+  return "other";
 }
