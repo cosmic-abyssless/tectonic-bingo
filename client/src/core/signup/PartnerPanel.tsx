@@ -125,9 +125,6 @@ export function PartnerPanel({ slug }: { slug: string }) {
         {needsPicker && (
           <>
             {candidatesError && <Notice tone="danger">{candidatesError.message}</Notice>}
-            <p className="text-sm text-on-surface-muted">
-              You're signed up. You don't need a partner yet — come back and pick one any time before signups close. Your partner also has to sign up.
-            </p>
             <Field as="div" label="Request a partner" hint="Anyone in the clan can be picked; if they haven't signed up yet they'll see your request when they do.">
               <SearchableSelect
                 value={target}

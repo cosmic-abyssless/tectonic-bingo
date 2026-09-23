@@ -91,12 +91,12 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
           player.rsn ? (
             <>
               Discord: {name} ·{" "}
-              <a className="underline hover:text-on-surface" href={`https://wiseoldman.net/players/${encodeURIComponent(player.rsn)}`} target="_blank" rel="noreferrer noopener">
+              <a className="underline hover:opacity-70" href={`https://wiseoldman.net/players/${encodeURIComponent(player.rsn)}`} target="_blank" rel="noreferrer noopener">
                 Wise Old Man
               </a>{" "}
               ·{" "}
               <a
-                className="underline hover:text-on-surface"
+                className="underline hover:opacity-70"
                 href={`https://secure.runescape.com/m=hiscore_oldschool/hiscorepersonal?user1=${encodeURIComponent(player.rsn)}`}
                 target="_blank"
                 rel="noreferrer noopener"
