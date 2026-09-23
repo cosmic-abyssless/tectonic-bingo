@@ -229,13 +229,18 @@ const GRID_STATE_KEY = "pref:gridState:signupRoster";
 // position in a persisted columnOrder.orderedColIds — a single flat list covering every column, pinned or not —
 // is never meaningful, and a stale entry there (from before either column existed or was pinned, or from before
 // some other column was added/removed) can conflict with the pinned declaration on load and break the pinned
-// section entirely. Stripping them out of what's read and written means their position always comes from
-// columnDefs alone, which is the only thing that should ever decide it.
+// section entirely. So they're always forced to the front, in this order, on read and write.
+//
+// Forced to the front, not stripped out (as they once were): when initialState has a columnOrder, AG only applies
+// state to the columns *listed* in it — sizing and sort for any column missing from orderedColIds are silently
+// dropped on restore, which is exactly how #/RSN's width and sort failed to persist while every other column's
+// did.
 const PINNED_COL_IDS = ["order", "rsn"];
 
-function stripPinnedFromOrder(state: GridState | undefined): GridState | undefined {
+function pinnedFirstInOrder(state: GridState | undefined): GridState | undefined {
   if (!state?.columnOrder) return state;
-  return { ...state, columnOrder: { orderedColIds: state.columnOrder.orderedColIds.filter((id) => !PINNED_COL_IDS.includes(id)) } };
+  const rest = state.columnOrder.orderedColIds.filter((id) => !PINNED_COL_IDS.includes(id));
+  return { ...state, columnOrder: { orderedColIds: [...PINNED_COL_IDS, ...rest] } };
 }
 
 function readInitialGridState(): GridState | undefined {
@@ -243,7 +248,7 @@ function readInitialGridState(): GridState | undefined {
     const raw = localStorage.getItem(GRID_STATE_KEY);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as unknown;
-    const state = stripPinnedFromOrder(parsed && typeof parsed === "object" ? (parsed as GridState) : undefined);
+    const state = pinnedFirstInOrder(parsed && typeof parsed === "object" ? (parsed as GridState) : undefined);
     return state ? { ...state, partialColumnState: true } : undefined;
   } catch {
     return undefined;
@@ -454,7 +459,7 @@ export function SignupRosterGrid({
   const onGridReady = useCallback(
     (e: GridReadyEvent<RosterRow>) => {
       gridApiRef.current = e.api;
-      // Belt-and-suspenders alongside stripPinnedFromOrder: reassert #/RSN's pin explicitly once, in case
+      // Belt-and-suspenders alongside pinnedFirstInOrder: reassert #/RSN's pin explicitly once, in case
       // anything else (a still-stale localStorage entry from before this fix shipped, some other state source)
       // put them somewhere columnDefs' own pinned: "left" didn't win outright.
       e.api.applyColumnState({ state: PINNED_COL_IDS.map((colId) => ({ colId, pinned: "left" })) });
@@ -473,7 +478,7 @@ export function SignupRosterGrid({
   const onStateUpdated = useCallback(
     (e: StateUpdatedEvent<RosterRow>) => {
       const { columnVisibility, columnSizing, sort } = e.state;
-      const { columnOrder } = stripPinnedFromOrder(e.state) ?? {};
+      const { columnOrder } = pinnedFirstInOrder(e.state) ?? {};
       try {
         localStorage.setItem(GRID_STATE_KEY, JSON.stringify({ columnOrder, columnVisibility, columnSizing, sort }));
       } catch {

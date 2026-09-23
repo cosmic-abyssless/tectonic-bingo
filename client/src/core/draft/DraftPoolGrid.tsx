@@ -283,9 +283,17 @@ const PairIconRenderer = ({ data }: CustomCellRendererProps<DraftUnit>) => (data
 const LeftoverBadgeRenderer = ({ data, context }: CustomCellRendererProps<DraftUnit, unknown, PoolGridContext>) => (data?.leftover ? <Badge tone="warn">{context.leftoverTag}</Badge> : null);
 
 // Movable column order, sizing and sort. Visibility stays in pref:hiddenColumns:draftPool (useHiddenColumns) so
-// ColumnPicker keeps working. Fixed columns are left out of the saved order — their place comes from lockPosition.
+// ColumnPicker keeps working. Fixed columns are always forced to their pinned places in the saved order — not
+// left out of it: when initialState has a columnOrder, AG only restores sizing/sort for the columns *listed* in
+// it, so leaving them out silently dropped their width and sort on every reload (same fix as SignupRosterGrid).
 const GRID_STATE_KEY = "pref:gridState:draftPool";
-const FIXED_COL_IDS = ["pairIcon", "rating", "rsn", "draft"];
+const FIXED_LEFT_COL_IDS = ["pairIcon", "rating", "rsn"];
+const FIXED_RIGHT_COL_IDS = ["draft"];
+const FIXED_COL_IDS = [...FIXED_LEFT_COL_IDS, ...FIXED_RIGHT_COL_IDS];
+
+function fixedColsInPlace(orderedColIds: string[]): string[] {
+  return [...FIXED_LEFT_COL_IDS, ...orderedColIds.filter((id) => !FIXED_COL_IDS.includes(id)), ...FIXED_RIGHT_COL_IDS];
+}
 
 // Same floor as SignupRosterGrid's own MIN_TABLE_HEIGHT (core/mod/SignupRoster.tsx), tuned to this grid's own
 // fixed row heights rather than shared outright: ~40px header + 10 solo rows (getRowHeight's 44px) lands at the
@@ -298,9 +306,9 @@ function readDraftColumnState(): Pick<GridState, "columnOrder" | "columnSizing" 
     if (!raw) return {};
     const parsed = JSON.parse(raw) as GridState;
     if (!parsed || typeof parsed !== "object") return {};
-    const orderedColIds = parsed.columnOrder?.orderedColIds?.filter((id) => typeof id === "string" && !FIXED_COL_IDS.includes(id));
+    const orderedColIds = parsed.columnOrder?.orderedColIds?.filter((id) => typeof id === "string");
     return {
-      ...(orderedColIds?.length ? { columnOrder: { orderedColIds } } : {}),
+      ...(orderedColIds?.length ? { columnOrder: { orderedColIds: fixedColsInPlace(orderedColIds) } } : {}),
       ...(parsed.columnSizing ? { columnSizing: parsed.columnSizing } : {}),
       ...(parsed.sort ? { sort: parsed.sort } : {}),
     };
@@ -603,12 +611,12 @@ export function DraftPoolGrid({
   // hiddenColumns (and the persisted store behind it) can't drift from what the grid is actually showing.
   const onStateUpdated = useCallback((e: StateUpdatedEvent<DraftUnit>) => {
     setHiddenColumns(new Set(e.state.columnVisibility?.hiddenColIds ?? []));
-    const orderedColIds = e.state.columnOrder?.orderedColIds.filter((id) => !FIXED_COL_IDS.includes(id));
+    const orderedColIds = e.state.columnOrder?.orderedColIds;
     try {
       localStorage.setItem(
         GRID_STATE_KEY,
         JSON.stringify({
-          columnOrder: orderedColIds?.length ? { orderedColIds } : undefined,
+          columnOrder: orderedColIds?.length ? { orderedColIds: fixedColsInPlace(orderedColIds) } : undefined,
           columnSizing: e.state.columnSizing,
           sort: e.state.sort,
         }),
