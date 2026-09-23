@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+env:
+  # onnxruntime-node's install step would otherwise download its CUDA/TensorRT GPU providers from NuGet on every
+  # `npm ci`: large, unused (the OCR runs on the CPU runtime the npm package already ships), and a network call that
+  # can time out and fail the job (it did, on main, 2026-09-23).
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 # A newer push to a pull request makes the older run pointless. Runs on main are never cancelled, so every commit on
 # main keeps a finished result.
 concurrency:
