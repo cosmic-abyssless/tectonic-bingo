@@ -45,6 +45,8 @@ import { useGridTheme } from "../ui/agGrid";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { Badge } from "../ui/Card";
 import { ColumnPicker } from "../ui/ColumnPicker";
+import { MultiSelect } from "../ui/MultiSelect";
+import { REGION_OPTIONS, regionOf } from "../ui/timezoneFilter";
 import { usePreference } from "../ui/preferences";
 import { Switch } from "../ui/Switch";
 import { CellButton, Mark } from "../ui/gridCells";
@@ -131,6 +133,8 @@ function makeUnitComparator(key: SortKey, ratings: Ratings) {
 
 interface PoolGridContext {
   search: string;
+  /** Search or the timezone filter is narrowing the pool: a pair's non-matching half is dimmed, not hidden. */
+  filtering: boolean;
   entryMatches: (entry: DraftPoolEntry) => boolean;
   statsRefreshing: ReadonlySet<string>;
   onPick: (userId: string) => void;
@@ -156,7 +160,7 @@ const StackedCell = ({ data, context, render }: CustomCellRendererProps<DraftUni
   return (
     <div className="flex flex-col justify-center gap-5 py-2 leading-tight">
       {data.entries.map((e) => (
-        <div key={e.signup.id}>{render(e, { dim: !!context.search && !context.entryMatches(e), search: context.search })}</div>
+        <div key={e.signup.id}>{render(e, { dim: context.filtering && !context.entryMatches(e), search: context.search })}</div>
       ))}
     </div>
   );
@@ -380,12 +384,18 @@ export function DraftPoolGrid({
     };
   });
   const [search, setSearch] = useTableSearch();
+  // Unticked regions (MultiSelect), so every region shows by default.
+  const [excludedRegions, setExcludedRegions] = useState<string[]>([]);
   // The wrapper that actually changes width is DraftRoom's — this just renders the switch for it in the toolbar.
   const [poolWidth, setPoolWidth] = usePreference("draftPoolWidth");
   const statsRefreshing = useStatsRefreshingSignupIds();
 
   const entries = useMemo(() => pool.flatMap((u) => u.entries), [pool]);
-  const entryMatches = useCallback((e: DraftPoolEntry) => matchesSearch(poolSearchValues(e, questions), search), [questions, search]);
+  const entryMatches = useCallback(
+    (e: DraftPoolEntry) => !excludedRegions.includes(regionOf(e.signup.timezone)) && matchesSearch(poolSearchValues(e, questions), search),
+    [questions, search, excludedRegions],
+  );
+  const filtering = !!search || excludedRegions.length > 0;
   const matchingEntries = useMemo(() => entries.filter(entryMatches), [entries, entryMatches]);
   // Answers are only sent to mods/captains — everyone else's pool entries have answers: null, so skip those
   // columns entirely rather than render a table full of "—". Same reasoning for WOM/CA (unused integration) and
@@ -416,8 +426,8 @@ export function DraftPoolGrid({
   );
 
   const context = useMemo<PoolGridContext & { ratings: Ratings; onRate: typeof onRate }>(
-    () => ({ search, entryMatches, statsRefreshing, onPick, picking, mainPoolEmpty, leftoverMode, leftoverTag, ratings: ratings ?? {}, onRate }),
-    [search, entryMatches, statsRefreshing, onPick, picking, mainPoolEmpty, leftoverMode, leftoverTag, ratings, onRate],
+    () => ({ search, filtering, entryMatches, statsRefreshing, onPick, picking, mainPoolEmpty, leftoverMode, leftoverTag, ratings: ratings ?? {}, onRate }),
+    [search, filtering, entryMatches, statsRefreshing, onPick, picking, mainPoolEmpty, leftoverMode, leftoverTag, ratings, onRate],
   );
 
   const columnDefs = useMemo<ColDef<DraftUnit>[]>(() => {
@@ -699,6 +709,15 @@ export function DraftPoolGrid({
       <div className="flex flex-wrap items-center justify-between gap-2">
         {heading}
         <div className="flex items-center gap-2">
+        {/* Timezones only reach mods and captains, the same as the answers (see showAnswers). */}
+        {showAnswers && (
+          <MultiSelect
+            label="Timezone"
+            options={REGION_OPTIONS.map((o) => ({ ...o, count: entries.filter((e) => regionOf(e.signup.timezone) === o.key && matchesSearch(poolSearchValues(e, questions), search)).length }))}
+            selected={REGION_OPTIONS.map((o) => o.key).filter((k) => !excludedRegions.includes(k))}
+            onChange={(visible) => setExcludedRegions(REGION_OPTIONS.map((o) => o.key).filter((k) => !visible.includes(k)))}
+          />
+        )}
         <TableSearchInput value={search} onChange={setSearch} matchCount={matchingEntries.length} totalCount={entries.length} />
         <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={handleHiddenChange} />
         <Switch isSelected={poolWidth === "full"} onChange={(full) => setPoolWidth(full ? "full" : "narrow")}>
@@ -707,7 +726,7 @@ export function DraftPoolGrid({
         </div>
       </div>
       {rows.length === 0 ? (
-        <p className="text-sm text-on-surface-subtle">No one matches this search.</p>
+        <p className="text-sm text-on-surface-subtle">{search ? "No one matches this search." : "No one in the pool is in that region."}</p>
       ) : (
         <div ref={setTableWrapper} className="overflow-hidden" style={{ height: tableHeight, minHeight: MIN_TABLE_HEIGHT }}>
           <AgGridReact<DraftUnit>
