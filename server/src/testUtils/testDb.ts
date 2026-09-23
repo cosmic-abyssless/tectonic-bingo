@@ -3,6 +3,7 @@ import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3"
 import fs from "fs";
 import path from "path";
 import * as schema from "../db/schema";
+import { withImmediateTransactions } from "../db/immediateTransactions";
 
 // Builds a fresh, fully-migrated in-memory SQLite DB for tests — real schema,
 // real foreign keys, no mocking. Applies every migration in server/drizzle in
@@ -16,5 +17,6 @@ export function createTestDb(): { sqlite: Database.Database; db: BetterSQLite3Da
     const migrationSql = fs.readFileSync(path.join(migrationsDir, file), "utf8");
     sqlite.exec(migrationSql.replace(/--> statement-breakpoint/g, ""));
   }
-  return { sqlite, db: drizzle(sqlite, { schema }) };
+  // The same transaction behavior as the app's db (db/index.ts), so tests exercise what runs.
+  return { sqlite, db: withImmediateTransactions(drizzle(sqlite, { schema })) };
 }
