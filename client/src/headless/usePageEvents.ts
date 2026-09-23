@@ -8,7 +8,7 @@ import { toast } from "../core/ui/Toast";
 export function usePageEvents(shell: BingoShellResponse | undefined): void {
   useWebSocketEvent((event) => {
     if (!shell) return;
-    if (event.bingoId !== shell.bingo.id) return;
+    if (!("bingoId" in event) || event.bingoId !== shell.bingo.id) return;
     if (event.type === "stage_changed") {
       toast({ title: "Stage changed", description: STAGE_LABEL[event.payload.stage] });
     }

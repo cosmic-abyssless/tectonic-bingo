@@ -64,6 +64,33 @@ export function Badge({ tone = "neutral", children, className, style }: { tone?:
   );
 }
 
+const DOT_TONE = { ok: "bg-ok", warn: "bg-warn", danger: "bg-danger", neutral: "bg-on-surface-subtle", info: "bg-info" } as const;
+
+/** Small pulsing dot for an unseen change (e.g. a bug report filed or resolved). Positions itself absolutely — give the parent `relative`. */
+export function PulseDot({ tone = "danger", className }: { tone?: keyof typeof TONE; className?: string }) {
+  return (
+    <span className={`pointer-events-none absolute flex size-2.5 ${className ?? ""}`}>
+      <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${DOT_TONE[tone]}`} />
+      <span className={`relative inline-flex size-2.5 rounded-full ${DOT_TONE[tone]}`} />
+    </span>
+  );
+}
+
+const QUOTE_BORDER = { ok: "border-ok/40", warn: "border-warn/40", danger: "border-danger/40", neutral: "border-outline-strong", info: "border-info/40" } as const;
+
+/** A resolver's note, styled as an attributed quote (e.g. why a bug report was fixed or closed). */
+export function ResolutionQuote({ message, author, at, tone = "neutral" }: { message: string; author: string; at?: string | null; tone?: keyof typeof TONE }) {
+  return (
+    <blockquote className={`border-l-2 pl-3 text-sm italic text-on-surface-muted ${QUOTE_BORDER[tone]}`}>
+      <p className="whitespace-pre-wrap">{message}</p>
+      <footer className="mt-1 text-xs font-medium not-italic text-on-surface-subtle">
+        — {author}
+        {at && <> · {at}</>}
+      </footer>
+    </blockquote>
+  );
+}
+
 /** Toggleable pill for filter rows; `count` renders as a mono numeral. */
 export function FilterChip({ active, count, children, onPress }: { active: boolean; count?: number; children: ReactNode; onPress: () => void }) {
   return (

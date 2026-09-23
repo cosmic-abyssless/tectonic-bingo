@@ -4,7 +4,7 @@ import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { createBugReport, getBugReports, resolveBugReport } from "./bugReportService";
+import { createBugReport, getBugReports, setBugReportStatus } from "./bugReportService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -86,28 +86,80 @@ describe("getBugReports", () => {
     expect(reports.map((r) => r.description)).toEqual(["Second", "First"]);
     expect(reports[0]!.reporter?.discordUsername).toBe("reporter");
   });
+
+  it("attaches the resolver's user info once resolved, and null while open", () => {
+    const report = createBugReport(db, { reporterUserId: reporterId, description: "Bug", pageUrl: null, userAgent: null, bingoId: null });
+    expect(getBugReports(db)[0]!.resolvedByUser).toBeNull();
+
+    setBugReportStatus(db, report.id, { status: "resolved", actorUserId: modId });
+    const resolved = getBugReports(db)[0]!;
+    expect(resolved.resolvedByUser?.discordUsername).toBe("mod");
+  });
+
+  it("filters to a single reporter's reports when reporterUserId is given, and returns all otherwise", () => {
+    const otherReporterId = db.insert(schema.users).values({ discordId: "other", discordUsername: "other" }).returning().get().id;
+    createBugReport(db, { reporterUserId: reporterId, description: "Mine", pageUrl: null, userAgent: null, bingoId: null });
+    createBugReport(db, { reporterUserId: otherReporterId, description: "Theirs", pageUrl: null, userAgent: null, bingoId: null });
+
+    expect(getBugReports(db, { reporterUserId: reporterId }).map((r) => r.description)).toEqual(["Mine"]);
+    expect(getBugReports(db).map((r) => r.description).sort()).toEqual(["Mine", "Theirs"]);
+  });
 });
 
-describe("resolveBugReport", () => {
+describe("setBugReportStatus", () => {
   it("marks a report resolved, stamping resolvedBy/resolvedAt", () => {
     const report = createBugReport(db, { reporterUserId: reporterId, description: "Bug", pageUrl: null, userAgent: null, bingoId: null });
-    const resolved = resolveBugReport(db, report.id, { resolved: true, resolvedByUserId: modId });
+    const resolved = setBugReportStatus(db, report.id, { status: "resolved", actorUserId: modId });
     expect(resolved.status).toBe("resolved");
     expect(resolved.resolvedByUserId).toBe(modId);
     expect(resolved.resolvedAt).not.toBeNull();
   });
 
-  it("reopens a resolved report, clearing resolvedBy/resolvedAt", () => {
+  it("marks a report closed, stamping resolvedBy/resolvedAt", () => {
     const report = createBugReport(db, { reporterUserId: reporterId, description: "Bug", pageUrl: null, userAgent: null, bingoId: null });
-    resolveBugReport(db, report.id, { resolved: true, resolvedByUserId: modId });
-    const reopened = resolveBugReport(db, report.id, { resolved: false, resolvedByUserId: modId });
+    const closed = setBugReportStatus(db, report.id, { status: "closed", actorUserId: modId, resolutionMessage: "Won't implement — out of scope" });
+    expect(closed.status).toBe("closed");
+    expect(closed.resolvedByUserId).toBe(modId);
+    expect(closed.resolvedAt).not.toBeNull();
+    expect(closed.resolutionMessage).toBe("Won't implement — out of scope");
+  });
+
+  it("reopens a resolved or closed report, clearing resolvedBy/resolvedAt/resolutionMessage", () => {
+    const report = createBugReport(db, { reporterUserId: reporterId, description: "Bug", pageUrl: null, userAgent: null, bingoId: null });
+    setBugReportStatus(db, report.id, { status: "closed", actorUserId: modId, resolutionMessage: "Not now" });
+    const reopened = setBugReportStatus(db, report.id, { status: "open", actorUserId: modId });
     expect(reopened.status).toBe("open");
     expect(reopened.resolvedByUserId).toBeNull();
     expect(reopened.resolvedAt).toBeNull();
+    expect(reopened.resolutionMessage).toBeNull();
   });
 
   it("throws on an unknown id", () => {
-    expect(() => resolveBugReport(db, "missing", { resolved: true, resolvedByUserId: modId })).toThrow(ServiceError);
+    expect(() => setBugReportStatus(db, "missing", { status: "resolved", actorUserId: modId })).toThrow(ServiceError);
+  });
+
+  it("stores a trimmed resolution message when resolving", () => {
+    const report = createBugReport(db, { reporterUserId: reporterId, description: "Bug", pageUrl: null, userAgent: null, bingoId: null });
+    const resolved = setBugReportStatus(db, report.id, { status: "resolved", actorUserId: modId, resolutionMessage: "  Fixed in v2  " });
+    expect(resolved.resolutionMessage).toBe("Fixed in v2");
+  });
+
+  it("stores null when resolving without a message, or with a blank one", () => {
+    const report = createBugReport(db, { reporterUserId: reporterId, description: "Bug", pageUrl: null, userAgent: null, bingoId: null });
+    const resolved = setBugReportStatus(db, report.id, { status: "resolved", actorUserId: modId, resolutionMessage: "   " });
+    expect(resolved.resolutionMessage).toBeNull();
+  });
+
+  it("clears the resolution message on reopen", () => {
+    const report = createBugReport(db, { reporterUserId: reporterId, description: "Bug", pageUrl: null, userAgent: null, bingoId: null });
+    setBugReportStatus(db, report.id, { status: "resolved", actorUserId: modId, resolutionMessage: "Fixed" });
+    const reopened = setBugReportStatus(db, report.id, { status: "open", actorUserId: modId });
+    expect(reopened.resolutionMessage).toBeNull();
+  });
+
+  it("rejects a resolution message over the length cap", () => {
+    const report = createBugReport(db, { reporterUserId: reporterId, description: "Bug", pageUrl: null, userAgent: null, bingoId: null });
+    expect(() => setBugReportStatus(db, report.id, { status: "resolved", actorUserId: modId, resolutionMessage: "a".repeat(2001) })).toThrow(ServiceError);
   });
 });
 
@@ -126,11 +178,11 @@ describe("audit trail", () => {
     expect(row.bingoId).toBe(bingoId);
   });
 
-  it("resolveBugReport records bug_report.resolved, carrying the report's bingoId", () => {
+  it("setBugReportStatus records bug_report.status_changed, carrying the report's bingoId", () => {
     const report = createBugReport(db, { reporterUserId: reporterId, description: "Bug", pageUrl: "/b/test-bingo/mod", userAgent: null, bingoId });
-    resolveBugReport(db, report.id, { resolved: true, resolvedByUserId: modId });
-    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "bug_report.resolved")).get()!;
+    setBugReportStatus(db, report.id, { status: "resolved", actorUserId: modId });
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "bug_report.status_changed")).get()!;
     expect(row.bingoId).toBe(bingoId);
-    expect(JSON.parse(row.details)).toEqual({ resolved: true });
+    expect(JSON.parse(row.details)).toEqual({ status: "resolved", resolutionMessage: null });
   });
 });

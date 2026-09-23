@@ -1,10 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Key } from "react-aria-components";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { STAGE_LABEL, type Bingo, type BingoExportDocument, type BingoListResponse, type User } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
 import { queryKeys, useBingos } from "../api/queries";
+import { useBugReports } from "../api/adminQueries";
 import * as adminApi from "../api/adminApi";
 import { optimisticUpdate } from "../api/optimistic";
 import { UserSearchInput } from "../core/admin/UserSearchInput";
@@ -14,8 +15,9 @@ import { BugReportsPanel } from "../core/admin/BugReportsPanel";
 import { SiteAuditLog } from "../core/admin/SiteAuditLog";
 import { displayName } from "../core/ui/user";
 import { AppHeader } from "../core/ui/AppHeader";
+import { useBugReportsUnseen } from "../core/ui/bugReportsUnseen";
 import { Button, IconButton } from "../core/ui/Button";
-import { Badge, Notice } from "../core/ui/Card";
+import { Badge, Notice, PulseDot } from "../core/ui/Card";
 import { Field, Input } from "../core/ui/Field";
 import { CheckIcon, TrashIcon } from "../core/ui/icons";
 import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
@@ -303,6 +305,13 @@ const NARROW = "mx-auto w-full max-w-6xl px-6";
 export function SiteAdminPage() {
   const { user, canGrantAdmin } = useAuth();
   const [tab, setTab] = useState("bugs");
+  // Fetched here (not just inside BugReportsPanel) so the tab shows a pulse dot for changes even while
+  // another tab is active; both calls share the same cached query.
+  const { data: bugReportsData } = useBugReports();
+  const { hasUnseen: hasUnseenBugReports, markSeen: markBugReportsSeen } = useBugReportsUnseen(bugReportsData?.bugReports, "bugReports:lastSeen:admin");
+  useEffect(() => {
+    if (tab === "bugs") markBugReportsSeen();
+  }, [tab, bugReportsData, markBugReportsSeen]);
   if (!user?.isAdmin) {
     return (
       <div className="flex min-h-dvh items-center justify-center gap-1 bg-background text-sm text-on-surface-muted">
@@ -321,7 +330,10 @@ export function SiteAdminPage() {
         <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key))}>
           <div className={NARROW}>
             <TabList>
-              <Tab id="bugs">Bug reports</Tab>
+              <Tab id="bugs">
+                Bug reports
+                {hasUnseenBugReports && <PulseDot className="-right-2 top-1" />}
+              </Tab>
               <Tab id="bingos">Bingos</Tab>
               <Tab id="audit">Site-wide audit log</Tab>
               <Tab id="item-groups">Item groups</Tab>
