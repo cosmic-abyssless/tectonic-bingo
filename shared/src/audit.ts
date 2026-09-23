@@ -102,7 +102,8 @@ export interface AuditDetailsMap {
 
   "question.created": { prompt: string; type: string; required: boolean };
   "question.updated": { changes: FieldChanges<{ prompt: string; helperText: string | null; type: string; optionsJson: string | null; required: boolean; sortOrder: number }> };
-  "question.deleted": { prompt: string; type: string; required: boolean };
+  /** `answersDeleted`: how many players' (non-blank) answers went with it. Absent on entries from before answers could be deleted along with it. */
+  "question.deleted": { prompt: string; type: string; required: boolean; answersDeleted?: number };
   "question.reordered": { order: string[] };
 
   "team.created": { name: string; captainUserId: string; captainName: string; coCaptainUserId: string | null; coCaptainName: string | null; color: string | null };
@@ -171,6 +172,8 @@ export interface AuditDetailsMap {
     answersChanged?: string[];
     changes?: { before: Record<string, string>; after: Record<string, string> };
   };
+  /** A mod set or cleared a player's timezone from the signup roster. (A player's own change is a signup.updated "Timezone" change.) */
+  "signup.timezone_set": { before: string | null; after: string | null };
   "signup.withdrawn": { rsn: string };
   "signup.buyin_marked": { received: boolean; collectedByUserId: string | null; collectedByName: string | null; before: { receivedAt: string | null } };
   "signup.stats_fetched": { womFound: boolean; runeProfileFound: boolean };
@@ -396,7 +399,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
   "line.deleted": { category: "board", tone: "danger", visibility: "mods", title: "Line deleted", label: (i) => `${actor(i)} deleted ${i.details.lineType} ${i.details.lineIndex + 1}` },
   "question.created": { category: "signup", tone: "ok", visibility: "mods", title: "Signup question added", label: (i) => `${actor(i)} added the signup question "${i.details.prompt}"` },
   "question.updated": { category: "signup", tone: "neutral", visibility: "mods", title: "Signup question updated", label: (i) => `${actor(i)} updated the signup question "${i.entityLabel ?? ""}"` },
-  "question.deleted": { category: "signup", tone: "danger", visibility: "mods", title: "Signup question deleted", label: (i) => `${actor(i)} deleted the signup question "${i.details.prompt}"` },
+  "question.deleted": { category: "signup", tone: "danger", visibility: "mods", title: "Signup question deleted", label: (i) => `${actor(i)} deleted the signup question "${i.details.prompt}"${i.details.answersDeleted ? ` and ${i.details.answersDeleted} answer${i.details.answersDeleted === 1 ? "" : "s"} to it` : ""}` },
   "question.reordered": { category: "signup", tone: "neutral", visibility: "mods", title: "Signup questions reordered", label: (i) => `${actor(i)} reordered the signup questions` },
   "team.created": { category: "team", tone: "ok", visibility: "team", title: "Team created", label: (i) => `${actor(i)} created the team "${i.details.name}"` },
   "team.updated": {
@@ -564,6 +567,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
       if (fields.length > 0) return `${actor(i)} updated their signup: ${fields.join(", ")}`;
       return `${actor(i)} updated their signup${i.details.rsn ? ` (RSN → ${i.details.rsn.after})` : ""}`;
     },
+  },
+  "signup.timezone_set": {
+    category: "signup",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Timezone set by a mod",
+    label: (i) => `${actor(i)} ${i.details.after ? `set ${i.onBehalfOfName ?? i.entityLabel ?? "a player"}'s timezone to ${i.details.after}` : `cleared ${i.onBehalfOfName ?? i.entityLabel ?? "a player"}'s timezone`}`,
   },
   "signup.withdrawn": {
     category: "signup",

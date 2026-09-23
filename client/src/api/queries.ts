@@ -255,6 +255,15 @@ export function useMarkBuyin(slug: string) {
   });
 }
 
+export function useSetSignupTimezone(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { signupId: string; timezone: string | null }) =>
+      api.patch<{ signup: Signup }>(`/api/bingos/${slug}/mod/signups/${params.signupId}/timezone`, { timezone: params.timezone }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
+  });
+}
+
 export function useModWithdrawSignup(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -292,7 +301,7 @@ export function useMyTectonicRsns(slug: string | undefined) {
 export function useCreateSignup(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { rsn: string; answers: SignupAnswerInput[] }) => api.post<{ signup: Signup }>(`/api/bingos/${slug}/signup`, payload),
+    mutationFn: (payload: { rsn: string; timezone: string; answers: SignupAnswerInput[] }) => api.post<{ signup: Signup }>(`/api/bingos/${slug}/signup`, payload),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.mySignup(slug) }),
   });
 }
@@ -300,7 +309,7 @@ export function useCreateSignup(slug: string) {
 export function useUpdateSignup(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { rsn?: string; answers?: SignupAnswerInput[] }) => api.patch<{ signup: Signup }>(`/api/bingos/${slug}/signup`, payload),
+    mutationFn: (payload: { rsn?: string; timezone?: string; answers?: SignupAnswerInput[] }) => api.patch<{ signup: Signup }>(`/api/bingos/${slug}/signup`, payload),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.mySignup(slug) }),
   });
 }

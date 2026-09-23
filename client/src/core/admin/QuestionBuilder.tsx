@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { SignupQuestion, SignupQuestionType } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
@@ -6,6 +6,7 @@ import { optimisticUpdate } from "../../api/optimistic";
 import { adminQueryKeys, useQuestions } from "../../api/adminQueries";
 import { Button, IconButton } from "../ui/Button";
 import { Card, EmptyState, Notice } from "../ui/Card";
+import { Dialog, DialogHeader } from "../ui/Dialog";
 import { Input, Select } from "../ui/Field";
 import { MAX_QUESTION_HELPER_TEXT } from "@bingo/shared";
 import { ChevronDownIcon, ChevronUpIcon, ListIcon, XIcon } from "../ui/icons";
@@ -43,6 +44,7 @@ function TypeSelect(props: { value: SignupQuestionType; onChange: (t: SignupQues
 export function QuestionBuilder({ slug }: { slug: string }) {
   const { data } = useQuestions(slug);
   const questions = data?.questions ?? [];
+  const answerCounts = data?.answerCounts ?? {};
   const queryClient = useQueryClient();
   const [newPrompt, setNewPrompt] = useState("");
   const [newType, setNewType] = useState<SignupQuestionType>("text");
@@ -50,6 +52,8 @@ export function QuestionBuilder({ slug }: { slug: string }) {
   const [newHelper, setNewHelper] = useState("");
   const [newRequired, setNewRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The question waiting on "delete it and its answers?" — only asked when players have answered it.
+  const [confirmingDelete, setConfirmingDelete] = useState<SignupQuestion | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.questions(slug) });
 
@@ -84,21 +88,25 @@ export function QuestionBuilder({ slug }: { slug: string }) {
     invalidate();
   }
   function remove(id: string) {
-    return optimisticUpdate<{ questions: SignupQuestion[] }>(
+    return optimisticUpdate<{ questions: SignupQuestion[]; answerCounts: Record<string, number> }>(
       queryClient,
       adminQueryKeys.questions(slug),
-      (d) => ({ questions: d.questions.filter((q) => q.id !== id) }),
+      (d) => ({ ...d, questions: d.questions.filter((q) => q.id !== id) }),
       () => adminApi.deleteQuestion(slug, id),
     );
+  }
+  function requestRemove(q: SignupQuestion) {
+    if (answerCounts[q.id]) setConfirmingDelete(q);
+    else void remove(q.id);
   }
   function move(index: number, dir: -1 | 1) {
     const reordered = [...questions];
     const [item] = reordered.splice(index, 1);
     reordered.splice(index + dir, 0, item);
-    return optimisticUpdate<{ questions: SignupQuestion[] }>(
+    return optimisticUpdate<{ questions: SignupQuestion[]; answerCounts: Record<string, number> }>(
       queryClient,
       adminQueryKeys.questions(slug),
-      () => ({ questions: reordered }),
+      (d) => ({ ...d, questions: reordered }),
       () => adminApi.reorderQuestions(slug, reordered.map((q) => q.id)),
     );
   }
@@ -128,7 +136,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                   <input type="checkbox" checked={q.required} onChange={(e) => patch(q.id, { required: e.target.checked })} className="size-4 accent-accent" />
                   Required
                 </label>
-                <IconButton label="Delete question" size="sm" onPress={() => remove(q.id)} className="hover:text-danger">
+                <IconButton label="Delete question" size="sm" onPress={() => requestRemove(q)} className="hover:text-danger">
                   <XIcon size={12} />
                 </IconButton>
               </div>
@@ -193,6 +201,53 @@ export function QuestionBuilder({ slug }: { slug: string }) {
         )}
         {error && <Notice tone="danger">{error}</Notice>}
       </Card>
+
+      <DeleteQuestionDialog
+        question={confirmingDelete}
+        answerCount={confirmingDelete ? (answerCounts[confirmingDelete.id] ?? 0) : 0}
+        onClose={() => setConfirmingDelete(null)}
+        onConfirm={(id) => {
+          setConfirmingDelete(null);
+          void remove(id);
+        }}
+      />
     </div>
+  );
+}
+
+function DeleteQuestionDialog({
+  question,
+  answerCount,
+  onClose,
+  onConfirm,
+}: {
+  question: SignupQuestion | null;
+  answerCount: number;
+  onClose: () => void;
+  onConfirm: (id: string) => void;
+}) {
+  // What's shown stays put while the dialog animates closed, rather than blanking out as `question` goes null.
+  const shown = useRef({ question, answerCount });
+  if (question) shown.current = { question, answerCount };
+  const { question: q, answerCount: n } = shown.current;
+  return (
+    <Dialog isOpen={question !== null} onClose={onClose}>
+      <DialogHeader title="Delete this question?" onClose={onClose} />
+      <div className="space-y-4 p-5 text-sm text-on-surface-muted">
+        <p>
+          <span className="font-medium text-on-surface">“{q?.prompt}”</span> has <span className="num text-on-surface">{n}</span> answer{n === 1 ? "" : "s"} from
+          players. Deleting the question deletes {n === 1 ? "that answer" : "those answers"} too, and it can't be undone.
+        </p>
+        <p>To keep a copy, use Copy as CSV on the Signups tab first.</p>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onPress={onClose}>
+            Cancel
+          </Button>
+          <Button variant="danger" onPress={() => question && onConfirm(question.id)}>
+            Delete question and answers
+          </Button>
+        </div>
+      </div>
+    </Dialog>
   );
 }
