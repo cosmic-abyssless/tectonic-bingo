@@ -168,6 +168,15 @@ router.post(
     res.status(201).json({ competition });
   }),
 );
+router.patch(
+  "/wom-competitions/:id",
+  asyncHandler(async (req, res) => {
+    const { title } = req.body as { title?: string };
+    if (typeof title !== "string") throw new ServiceError(400, "title must be a string");
+    const competition = pastWomCompetitionService.renamePastCompetition(db, req.params.id as string, title);
+    res.json({ competition });
+  }),
+);
 router.delete(
   "/wom-competitions/:id",
   asyncHandler(async (req, res) => {
