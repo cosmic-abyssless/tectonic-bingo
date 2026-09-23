@@ -47,9 +47,28 @@ function placeName(tz: string): string {
   return (parts.length > 1 ? parts.slice(1) : parts).join("/").split("_").join(" ");
 }
 
-/** How a zone is shown in tables: "New York (UTC−04:00)". */
+// Each English locale only knows letter abbreviations for its own region's zones (en-US has EDT but calls London
+// "GMT+1"; en-GB has BST and CEST but calls New York "GMT-4"), so ask each in turn and take the first real one.
+const ABBREVIATION_LOCALES = ["en-US", "en-GB", "en-AU", "en-IN", "en-NZ"];
+
+/**
+ * The zone's abbreviation right now ("EDT" in summer, "EST" in winter; "BST", "CEST", "AEST"), or null where no
+ * English locale has one (Jerusalem, Tokyo: Intl only offers "GMT+3"-style text there).
+ */
+export function timeZoneAbbreviation(tz: string, at: Date = new Date()): string | null {
+  for (const locale of ABBREVIATION_LOCALES) {
+    const name = new Intl.DateTimeFormat(locale, { timeZone: tz, timeZoneName: "short" }).formatToParts(at).find((p) => p.type === "timeZoneName")?.value;
+    if (name && !/^(GMT|UTC)[+-−]/.test(name)) return name;
+  }
+  return null;
+}
+
+/** How a zone is shown in tables: "EDT (UTC−04:00)", or the city where there's no abbreviation ("Tokyo (UTC+09:00)"). */
 export function formatTimeZone(tz: string, at: Date = new Date()): string {
-  return isValidTimeZone(tz) ? `${placeName(tz)} (${timeZoneOffsetLabel(tz, at)})` : tz;
+  if (!isValidTimeZone(tz)) return tz;
+  const offset = timeZoneOffsetLabel(tz, at);
+  const name = timeZoneAbbreviation(tz, at) ?? placeName(tz);
+  return name === offset ? offset : `${name} (${offset})`;
 }
 
 export interface TimeZoneOption {
