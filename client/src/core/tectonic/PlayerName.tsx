@@ -32,7 +32,10 @@ export function PlayerName({ userId, children, className = "" }: { userId: strin
         open(userId);
       }}
       title="View player profile"
-      className={`cursor-pointer rounded-sm border-0 bg-transparent p-0 text-left [font:inherit] [line-height:inherit] underline decoration-on-surface-subtle/60 decoration-dotted underline-offset-[3px] hover:text-on-surface hover:decoration-on-surface hover:decoration-solid focus-visible:decoration-on-surface focus-visible:decoration-solid focus-visible:outline-none ${className}`}
+      // pb/-mb: room for the underline inside the button's own box, layout unchanged. Where the name is truncated
+      // (the draft and signup grids), the box clips its overflow, and at one line's height the underline, 3px
+      // below the text, was clipped away with it.
+      className={`cursor-pointer rounded-sm border-0 bg-transparent p-0 pb-[4px] -mb-[4px] text-left [font:inherit] [line-height:inherit] underline decoration-on-surface-subtle/60 decoration-dotted underline-offset-[3px] hover:text-on-surface hover:decoration-on-surface hover:decoration-solid focus-visible:decoration-on-surface focus-visible:decoration-solid focus-visible:outline-none ${className}`}
     >
       {children}
     </button>
