@@ -65,21 +65,20 @@ export async function importBingo(ctx: Ctx, document: BingoExportDocument, name:
   ctx.log(`imported ${ctx.slug} (created ${fmt(tl.createdAt)}, starts ${fmt(tl.startsAt)}, ends ${fmt(tl.endsAt)})`);
 }
 
-/** Signup timezones, weighted roughly like the real clan's (mostly US East/Central and the UK). */
-const TIMEZONES: readonly (readonly [string, number])[] = [
-  ["America/New_York", 34],
-  ["America/Chicago", 19],
-  ["Europe/London", 16],
-  ["Europe/Helsinki", 8],
-  ["America/Toronto", 5],
-  ["America/Los_Angeles", 4],
-  ["America/Denver", 3],
-  ["Europe/Brussels", 3],
-  ["Europe/Amsterdam", 2],
-  ["Australia/Sydney", 2],
-  ["America/Phoenix", 1],
-  ["Asia/Jerusalem", 1],
-];
+/**
+ * A player's signup timezone: a zone whose standard UTC offset is the one the simulation already gave them
+ * (people.ts's UTC_OFFSETS, which drives when they're online), so what they sign up with matches when they play.
+ */
+const TIMEZONE_BY_OFFSET: Record<number, string> = {
+  [-8]: "America/Los_Angeles",
+  [-6]: "America/Chicago",
+  [-5]: "America/New_York",
+  [-4]: "America/Halifax",
+  0: "Europe/London",
+  1: "Europe/Berlin",
+  2: "Europe/Helsinki",
+  10: "Australia/Brisbane",
+};
 
 /** The bingo's signup questions (from the imported board), which every player has to answer. */
 export async function fetchSignupQuestions(ctx: Ctx): Promise<SignupQuestion[]> {
@@ -115,7 +114,7 @@ export async function runSignups(ctx: Ctx, players: Player[], pairs: [Player, Pl
           const { user } = await ctx.api.as(ctx.admin).post<{ user: { id: string } }>("/api/dev/users", { discordId: p.discordId, discordUsername: p.discordName }, { at: plus(p.signupAt!, -1 * MINUTE) });
           p.userId = user.id;
         }
-        const timezone = rng.fork(`timezone-${p.index}`).weighted(TIMEZONES);
+        const timezone = TIMEZONE_BY_OFFSET[p.offset] ?? "Etc/UTC";
         await ctx.api.as(p.discordId).post(path(ctx, "/signup"), { rsn: p.name, timezone, answers: answerQuestions(questions, p, rng.fork(`answers-${p.index}`)) }, { at: p.signupAt! });
         signedUp.add(p.index);
       },
