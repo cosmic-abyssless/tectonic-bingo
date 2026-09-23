@@ -23,13 +23,16 @@ export function Menu<T extends object>({ instant, popoverClassName = "", ...prop
       placement="bottom end"
       offset={6}
       shouldSkipAnimation={instant}
-      className={`${instant ? "" : "overlay-panel"} min-w-44 rounded-md border border-outline bg-surface-raised p-1 shadow-pop outline-none ${popoverClassName}`}
+      className={`${instant ? "" : "overlay-panel"} flex min-w-44 flex-col rounded-md border border-outline bg-surface-raised p-1 shadow-pop outline-none ${popoverClassName}`}
     >
       {/* max-h/overflow here, not just left to the Popover's own viewport-fit sizing — that constrains the panel
           height (so it stays on-screen) but doesn't add a scrollbar; without this, an option list too long for
           the popover's max-height was simply clipped, not scrollable — the options past that point were there,
-          just invisible and unreachable. `props` is spread after, so a caller can still override autoFocus. */}
-      <AriaMenu ref={listRef} autoFocus="first" {...props} className="max-h-120 overflow-y-auto outline-none" />
+          just invisible and unreachable. And min-h-0 in the popover's flex column: when the popover is squeezed
+          below max-h-120 (a short window, or opening upward with little room above), the list shrinks with it and
+          scrolls, instead of keeping its full height and spilling out past the panel's border.
+          `props` is spread after, so a caller can still override autoFocus. */}
+      <AriaMenu ref={listRef} autoFocus="first" {...props} className="max-h-120 min-h-0 overflow-y-auto outline-none" />
     </Popover>
   );
 }
