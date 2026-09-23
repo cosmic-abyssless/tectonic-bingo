@@ -30,7 +30,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "PUT /api/bingos/:slug/mod/draft/order": ["draft.order_set"],
   "POST /api/bingos/:slug/mod/pairings": ["pairing.admin_paired"],
   "DELETE /api/bingos/:slug/mod/pairings/:id": ["pairing.unpaired"],
-  "POST /api/bingos/:slug/mod/signups/:signupId/refresh-stats": ["signup.stats_fetched", "signup.stats_fetch_failed"],
+  "POST /api/bingos/:slug/mod/signups/:signupId/refresh-stats": ["signup.name_changed", "signup.stats_fetched", "signup.stats_fetch_failed"],
   "PATCH /api/bingos/:slug/mod/signups/:id/buyin": ["signup.buyin_marked"],
   "DELETE /api/bingos/:slug/mod/signups/:id": ["signup.withdrawn", "pairing.dissolved"],
 
