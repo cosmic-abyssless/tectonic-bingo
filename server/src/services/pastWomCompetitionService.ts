@@ -216,6 +216,21 @@ export async function addPastCompetition(db: Db, params: { womId: number; addedB
   return toPublic(row);
 }
 
+export function renamePastCompetition(db: Db, id: string, title: string): WomPastCompetition {
+  const trimmed = title.trim();
+  if (!trimmed) throw new ServiceError(400, "title must not be empty");
+  const existing = db.select().from(womPastCompetitions).where(eq(womPastCompetitions.id, id)).get();
+  if (!existing) throw new ServiceError(404, "Past competition not found");
+  const row = db.update(womPastCompetitions).set({ title: trimmed }).where(eq(womPastCompetitions.id, id)).returning().get();
+  audit(db, {
+    action: "wom_past_competition.renamed",
+    bingoId: existing.bingoId,
+    entity: { type: "wom_past_competition", id, label: row.title },
+    details: { womId: existing.womId, from: existing.title, to: row.title },
+  });
+  return toPublic(row);
+}
+
 export function deletePastCompetition(db: Db, id: string): void {
   const existing = db.select().from(womPastCompetitions).where(eq(womPastCompetitions.id, id)).get();
   if (!existing) throw new ServiceError(404, "Past competition not found");

@@ -206,7 +206,20 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
               <tbody className="divide-y divide-outline">
                 {player.pastBingoStats.map((p) => (
                   <tr key={p.competitionId}>
-                    <td className="py-1.5 pr-3 text-on-surface">{p.title}</td>
+                    <td className="py-1.5 pr-3 text-on-surface">
+                      {p.womId > 0 ? (
+                        <a
+                          href={`https://wiseoldman.net/competitions/${p.womId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline underline-offset-2 hover:text-on-surface"
+                        >
+                          {p.title}
+                        </a>
+                      ) : (
+                        p.title
+                      )}
+                    </td>
                     <td className="num py-1.5 pr-3 whitespace-nowrap">
                       {formatWomStat(p.gained)} <span className="text-on-surface-subtle uppercase">{p.metric}</span>
                     </td>

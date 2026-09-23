@@ -46,6 +46,9 @@ export function getPastWomCompetitions() {
 export function addPastWomCompetition(womId: number) {
   return api.post<{ competition: WomPastCompetition }>("/api/admin/wom-competitions", { womId });
 }
+export function renamePastWomCompetition(id: string, title: string) {
+  return api.patch<{ competition: WomPastCompetition }>(`/api/admin/wom-competitions/${id}`, { title });
+}
 export function deletePastWomCompetition(id: string) {
   return api.delete(`/api/admin/wom-competitions/${id}`);
 }
