@@ -220,6 +220,8 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
                 <tr>
                   <th className="py-1 pr-3 font-medium">Bingo</th>
                   <th className="py-1 pr-3 font-medium">Gained</th>
+                  <th className="py-1 pr-3 font-medium">Team</th>
+                  <th className="py-1 pr-3 font-medium">Total</th>
                   <th className="py-1 font-medium">Date</th>
                 </tr>
               </thead>
@@ -243,6 +245,8 @@ function ProfileBody({ player, questions, onClose }: { player: PlayerProfile; qu
                     <td className="num py-1.5 pr-3 whitespace-nowrap">
                       {formatWomStat(p.gained)} <span className="text-on-surface-subtle uppercase">{p.metric}</span>
                     </td>
+                    <td className="num py-1.5 pr-3 whitespace-nowrap">{p.teamRank !== null ? `#${p.teamRank}` : <span className="text-on-surface-subtle">—</span>}</td>
+                    <td className="num py-1.5 pr-3 whitespace-nowrap">#{p.totalRank}</td>
                     <td className="num py-1.5 whitespace-nowrap text-on-surface-muted">{new Date(p.startsAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</td>
                   </tr>
                 ))}

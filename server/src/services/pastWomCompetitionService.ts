@@ -14,7 +14,7 @@ import { and, desc, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { PastBingoParticipation, WomPastCompetition } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { bingos, signups, womPastCompetitions } from "../db/schema";
+import { bingos, signups, teamMembers, teams, womPastCompetitions } from "../db/schema";
 import { ServiceError } from "./errors";
 import { audit } from "../audit/record";
 import { log } from "../log";
@@ -81,6 +81,25 @@ interface RawParticipation {
   progress?: { gained?: unknown };
 }
 
+/** Normalized signup RSNs of everyone on the user's team in that bingo, or null if there's no bingo or they had no team. */
+function teamRsnsForBingo(db: Db, bingoId: string | null, userId: string): Set<string> | null {
+  if (!bingoId) return null;
+  const mine = db
+    .select({ teamId: teams.id })
+    .from(teamMembers)
+    .innerJoin(teams, eq(teamMembers.teamId, teams.id))
+    .where(and(eq(teams.bingoId, bingoId), eq(teamMembers.userId, userId)))
+    .get();
+  if (!mine) return null;
+  const rows = db
+    .select({ rsn: signups.rsn })
+    .from(teamMembers)
+    .innerJoin(signups, and(eq(signups.userId, teamMembers.userId), eq(signups.bingoId, bingoId)))
+    .where(eq(teamMembers.teamId, mine.teamId))
+    .all();
+  return new Set(rows.map((r) => normalizeRsn(r.rsn)));
+}
+
 /**
  * Every stored past competition where one of this user's signup RSNs (any
  * bingo, past or present — a player's RSN can differ bingo to bingo) turns
@@ -104,8 +123,15 @@ export function getPastParticipationsForUser(db: Db, userId: string): PastBingoP
     }
     const participations = (raw as { participations?: unknown[] } | null)?.participations;
     if (!Array.isArray(participations)) continue;
-    const match = (participations as RawParticipation[]).find((p) => typeof p.player?.username === "string" && rsns.has(normalizeRsn(p.player.username)));
+    const all = participations as RawParticipation[];
+    const match = all.find((p) => typeof p.player?.username === "string" && rsns.has(normalizeRsn(p.player.username)));
     if (!match) continue;
+    const gainedOf = (p: RawParticipation) => (typeof p.progress?.gained === "number" ? p.progress.gained : 0);
+    const gained = gainedOf(match);
+    // Ties share the better place.
+    const rankAmong = (pool: RawParticipation[]) => 1 + pool.filter((p) => gainedOf(p) > gained).length;
+    const team = teamRsnsForBingo(db, row.bingoId, userId);
+    const teammates = team ? all.filter((p) => p === match || (typeof p.player?.username === "string" && team.has(normalizeRsn(p.player.username)))) : null;
     results.push({
       competitionId: row.id,
       womId: row.womId,
@@ -114,7 +140,11 @@ export function getPastParticipationsForUser(db: Db, userId: string): PastBingoP
       metric: row.metric,
       startsAt: row.startsAt.toISOString(),
       endsAt: row.endsAt.toISOString(),
-      gained: typeof match.progress?.gained === "number" ? match.progress.gained : 0,
+      gained,
+      totalRank: rankAmong(all),
+      totalParticipants: all.length,
+      teamRank: teammates ? rankAmong(teammates) : null,
+      teamSize: teammates ? teammates.length : null,
     });
   }
   return results;
