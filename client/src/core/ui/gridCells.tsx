@@ -14,8 +14,10 @@ export function CellButton({
   variant,
   onClick,
   disabled,
+  className = "",
   children,
 }: {
+  className?: string;
   variant: keyof typeof CELL_BUTTON_VARIANT;
   onClick: () => void;
   disabled?: boolean;
@@ -26,7 +28,7 @@ export function CellButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border px-2 text-xs font-medium transition-colors duration-100 disabled:cursor-not-allowed disabled:opacity-40 ${CELL_BUTTON_VARIANT[variant]}`}
+      className={`inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border px-2 text-xs font-medium transition-colors duration-100 disabled:cursor-not-allowed disabled:opacity-40 ${CELL_BUTTON_VARIANT[variant]} ${className}`}
     >
       {children}
     </button>

@@ -754,6 +754,31 @@ export interface CombatAchievementStats {
   points: number;
 }
 
+// Points at which each reward tier starts (OSRS wiki). Kept here so the client can place a player inside their tier.
+export const CA_TIER_MIN_POINTS: Record<CombatAchievementTier, number> = {
+  none: 0,
+  easy: 41,
+  medium: 169,
+  hard: 436,
+  elite: 1100,
+  master: 1965,
+  grandmaster: 2697,
+};
+export const CA_SUB_LEVELS = ["low", "medium", "high"] as const;
+export type CombatAchievementSubLevel = (typeof CA_SUB_LEVELS)[number];
+
+/**
+ * Low/medium/high: which third of its tier's points range the player is in (Easy..Master run up to the next tier's
+ * threshold). Grandmaster has no upper bound to split, and None and Unknown have no tier to be in: all null.
+ */
+export function caSubLevel(stats: CombatAchievementStats | null | undefined): CombatAchievementSubLevel | null {
+  if (!stats || stats.tier === "none" || stats.tier === "grandmaster") return null;
+  const start = CA_TIER_MIN_POINTS[stats.tier];
+  const end = CA_TIER_MIN_POINTS[COMBAT_ACHIEVEMENT_TIERS[COMBAT_ACHIEVEMENT_TIERS.indexOf(stats.tier) + 1]!];
+  const index = Math.floor(((stats.points - start) / (end - start)) * CA_SUB_LEVELS.length);
+  return CA_SUB_LEVELS[Math.min(Math.max(index, 0), CA_SUB_LEVELS.length - 1)]!;
+}
+
 // Unified account type — sourced from RuneProfile when it has the player
 // set up there (it distinguishes group ironman variants; WOM just reports
 // "ironman" for a GIM member), falling back to WOM's coarser type when

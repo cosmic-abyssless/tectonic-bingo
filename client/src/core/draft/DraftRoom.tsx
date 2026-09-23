@@ -11,7 +11,7 @@ import { ChevronDownIcon, ChevronUpIcon } from "../ui/icons";
 import { useElementHeight } from "../ui/useElementHeight";
 import { DraftPoolGrid } from "./DraftPoolGrid";
 import { usePreference } from "../ui/preferences";
-import { TeamRoster } from "./TeamRoster";
+import { TeamRoster, pairPickRows } from "./TeamRoster";
 import { DraftPickReveal } from "./DraftPickReveal";
 import { namesForPick } from "./revealMath";
 import { useDraftReveals } from "./useDraftReveals";
@@ -90,6 +90,10 @@ function PickOrderDialog({
   );
 }
 
+// Not <Card>: the teams and the pool need a raised fill + stronger border than Card's surface/outline, which vanish
+// into the dark themes' backdrop.
+const DRAFT_PANEL = "rounded-lg border border-outline-strong bg-surface-raised p-4 shadow-[0_2px_10px_var(--color-shade)]";
+
 export function DraftRoom({ slug }: { slug: string }) {
   const { user } = useAuth();
   // Whether the pool table breaks out of max-w-5xl (the switch for it lives in DraftPoolGrid's toolbar).
@@ -146,6 +150,7 @@ export function DraftRoom({ slug }: { slug: string }) {
   const isAdmin = !!user.isAdmin;
   const myTeam = state.teams.find((t) => t.captainUserId === user.id || t.coCaptain?.userId === user.id) ?? null;
   const isLead = myTeam !== null;
+  const pairRows = pairPickRows(state.teams.map((t) => state.picks.filter((p) => p.teamId === t.id)));
   const currentTeam = state.currentPick ? (state.teams.find((t) => t.id === state.currentPick!.teamId) ?? null) : null;
   const isMyTurn = !!myTeam && currentTeam?.id === myTeam.id;
   const canAct = !!state.currentPick && (isAdmin || isMyTurn);
@@ -320,7 +325,7 @@ export function DraftRoom({ slug }: { slug: string }) {
 
         {isMyTurn && <Notice tone="ok">It's your turn to pick.</Notice>}
 
-        <section className="sticky z-10 -mx-6 bg-background px-6 pb-3 pt-2 shadow-[0_6px_8px_-6px_var(--color-shade)]" style={{ top: headerHeight }}>
+        <section className={`sticky z-10 ${DRAFT_PANEL}`} style={{ top: headerHeight }}>
           <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
             Teams
           </h3>
@@ -345,6 +350,8 @@ export function DraftRoom({ slug }: { slug: string }) {
                     isCurrent={currentTeam?.id === team.id}
                     showOrder={state.orderReady}
                     hiddenPickNumbers={reveals.hiddenPickNumbers}
+                    reserveCoCaptainRow={state.teams.some((t) => t.coCaptain)}
+                    pairRows={pairRows}
                   />
                 </motion.div>
               ))}
@@ -394,7 +401,7 @@ export function DraftRoom({ slug }: { slug: string }) {
       {/* The one thing that actually breaks out of max-w-5xl above (while "Full width" is on) — everything else in
           this component (the status cards, the teams row, the pick/clan-API notices) stays reading-width. */}
       <div className={`mt-6 w-full px-6 pb-6 ${poolWidth === "narrow" ? "mx-auto max-w-5xl" : ""}`}>
-        <Card className="p-4">
+        <div className={DRAFT_PANEL}>
           <DraftPoolGrid
             pool={state.pool}
             questions={questions}
@@ -410,7 +417,7 @@ export function DraftRoom({ slug }: { slug: string }) {
               </h3>
             }
           />
-        </Card>
+        </div>
       </div>
     </>
   );
