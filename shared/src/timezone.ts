@@ -95,3 +95,26 @@ export function timeZoneOptions(include: (string | null | undefined)[] = [], at:
       return { id, label: `(${timeZoneOffsetLabel(id, at)}) ${placeName(id)}${region} · ${id}` };
     });
 }
+
+export type TimeZoneRegion = "americas" | "europe" | "asia" | "oceania" | "other";
+
+/** Region filters, in the order they're offered. */
+export const TIME_ZONE_REGIONS: { key: TimeZoneRegion; label: string }[] = [
+  { key: "americas", label: "Americas" },
+  { key: "europe", label: "Europe" },
+  { key: "asia", label: "Asia" },
+  { key: "oceania", label: "Oceania" },
+  { key: "other", label: "Other" },
+];
+
+// Europe that IANA files elsewhere: the North Atlantic islands, and Cyprus (Asia/Nicosia).
+const EUROPE_ELSEWHERE = /^(Atlantic\/(Azores|Canary|Faroe|Faeroe|Madeira|Reykjavik)|Asia\/(Nicosia|Famagusta))$/;
+
+/** A coarse region for filtering by roughly-when-people-play, from the zone name's area. "other" is Africa, UTC and the like. */
+export function timeZoneRegion(tz: string): TimeZoneRegion {
+  if (EUROPE_ELSEWHERE.test(tz) || tz.startsWith("Europe/")) return "europe";
+  if (/^(America|US|Canada)\//.test(tz) || tz === "Pacific/Honolulu") return "americas";
+  if (tz.startsWith("Asia/") || tz.startsWith("Indian/")) return "asia";
+  if (tz.startsWith("Australia/") || tz.startsWith("Pacific/")) return "oceania";
+  return "other";
+}

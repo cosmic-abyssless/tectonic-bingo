@@ -17,7 +17,9 @@ import { useAuth } from "../../context/AuthContext";
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { discordName, displayName } from "../ui/user";
 import { Button } from "../ui/Button";
-import { EmptyState, Notice, FilterChip } from "../ui/Card";
+import { EmptyState, Notice } from "../ui/Card";
+import { MultiSelect } from "../ui/MultiSelect";
+import { REGION_OPTIONS, regionOf } from "../ui/timezoneFilter";
 import { ColumnPicker } from "../ui/ColumnPicker";
 import { usePreference } from "../ui/preferences";
 import { Switch } from "../ui/Switch";
@@ -111,32 +113,56 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
   return [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
 }
 
-type BuyinFilter = "all" | "paid" | "unpaid";
-type PairFilter = "all" | "paired" | "unpaired";
+// The filters above the grid, each a MultiSelect checklist. What's stored is what's *un*ticked (like the audit log),
+// so a new option shows by default. The one default that isn't "everything": withdrawn signups start hidden.
+type FilterKey = "status" | "buyin" | "pair" | "region";
+type Excluded = Record<FilterKey, string[]>;
+const DEFAULT_EXCLUDED: Excluded = { status: ["withdrawn"], buyin: [], pair: [], region: [] };
+
+function isDefaultFilters(excluded: Excluded): boolean {
+  return (Object.keys(DEFAULT_EXCLUDED) as FilterKey[]).every((key) => [...excluded[key]].sort().join() === [...DEFAULT_EXCLUDED[key]].sort().join());
+}
 
 // ~10 rows plus the header before the min-height floor kicks in. A row runs ~2.25rem (py-2 + text-sm) up to ~3rem
 // where a cell holds a size="sm" Select (Collected by, Partner) — 2.75rem/row is the rough middle.
 const MIN_TABLE_HEIGHT = "30rem";
 
-const BUYIN_FILTERS: { key: BuyinFilter; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "paid", label: "Paid" },
-  { key: "unpaid", label: "Unpaid" },
-];
-const PAIR_FILTERS: { key: PairFilter; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "paired", label: "Paired" },
-  { key: "unpaired", label: "Unpaired" },
-];
+const FILTER_OPTIONS: Record<FilterKey, { key: string; label: string }[]> = {
+  status: [
+    { key: "active", label: "Active" },
+    { key: "withdrawn", label: "Withdrawn" },
+  ],
+  buyin: [
+    { key: "paid", label: "Paid" },
+    { key: "unpaid", label: "Unpaid" },
+  ],
+  // Each signup is exactly one of these: in a pair, waiting on a request (sent or received), or neither.
+  pair: [
+    { key: "paired", label: "Paired" },
+    { key: "requested", label: "Requested" },
+    { key: "unpaired", label: "Unpaired" },
+  ],
+  region: REGION_OPTIONS,
+};
 
-const isPaid = (entry: RosterEntry) => !!entry.signup.buyinReceivedAt;
-const isPaired = (entry: RosterEntry) => !!entry.pairing;
-
-function matchesBuyin(entry: RosterEntry, filter: BuyinFilter): boolean {
-  return filter === "all" || isPaid(entry) === (filter === "paid");
+// `pending`: the Discord ids with a pending pairing request either way. The roster only carries each player's own
+// outgoing request, so who's been asked comes from everyone else's.
+function filterValue(entry: RosterEntry, key: FilterKey, pending: ReadonlySet<string>): string {
+  switch (key) {
+    case "status":
+      return entry.signup.status;
+    case "buyin":
+      return entry.signup.buyinReceivedAt ? "paid" : "unpaid";
+    case "pair":
+      return entry.pairing ? "paired" : pending.has(entry.user.discordId) ? "requested" : "unpaired";
+    case "region":
+      return regionOf(entry.signup.timezone);
+  }
 }
-function matchesPair(entry: RosterEntry, filter: PairFilter): boolean {
-  return filter === "all" || isPaired(entry) === (filter === "paired");
+
+/** Whether `entry` passes every filter (but `skip`, for counting that filter's own options). */
+function matchesFilters(entry: RosterEntry, excluded: Excluded, pending: ReadonlySet<string>, skip?: FilterKey): boolean {
+  return (Object.keys(excluded) as FilterKey[]).every((key) => key === skip || !excluded[key].includes(filterValue(entry, key, pending)));
 }
 
 export function SignupRoster({ slug }: { slug: string }) {
@@ -157,8 +183,7 @@ export function SignupRoster({ slug }: { slug: string }) {
   // Clan standing column only when tectonic-api knows at least one player.
   const showTier = roster.some((r) => r.tectonicProfile);
   const [copied, setCopied] = useState(false);
-  const [buyinFilter, setBuyinFilter] = useState<BuyinFilter>("all");
-  const [pairFilter, setPairFilter] = useState<PairFilter>("all");
+  const [excluded, setExcluded] = useState<Excluded>(DEFAULT_EXCLUDED);
   const [search, setSearch] = useTableSearch();
   // AG Grid (docs/ag-grid-tables-plan.md) replaces the hand-rolled <table> —
   // sticky header, striping, virtualisation and column sort/resize/reorder
@@ -188,16 +213,32 @@ export function SignupRoster({ slug }: { slug: string }) {
   const leftoverCount = roster.filter((r) => r.leftover).length;
   const teamCount = bingoData?.teams.length ?? 0;
   const leftoverMode = bingoData?.bingo.leftoverMode;
-  // Each chip's count reflects the other filter so the numbers show what
-  // clicking it would leave on screen.
-  const buyinCount = (f: BuyinFilter) => roster.filter((r) => matchesBuyin(r, f) && matchesPair(r, pairFilter)).length;
-  const pairCount = (f: PairFilter) => roster.filter((r) => matchesPair(r, f) && matchesBuyin(r, buyinFilter)).length;
-  // The buy-in/pair chips, as the grid's external filter (docs/ag-grid-tables-plan.md phase 2) — search itself is
-  // the grid's own quickFilterText, bound directly to `search` below.
-  const doesRowPassFilters = useCallback((row: RosterRow) => matchesBuyin(row, buyinFilter) && matchesPair(row, pairFilter), [buyinFilter, pairFilter]);
+  const pendingPairIds = useMemo(
+    () => new Set(roster.flatMap((r) => (r.outgoingPairingRequest ? [r.user.discordId, r.outgoingPairingRequest.target.discordId] : []))),
+    [roster],
+  );
+  // One MultiSelect per filter. Each option's count reflects the other filters, so it shows how many rows ticking it
+  // brings in.
+  const filterSelect = (key: FilterKey, label: string) => {
+    const options = FILTER_OPTIONS[key];
+    return (
+      <MultiSelect
+        label={label}
+        options={options.map((o) => ({
+          ...o,
+          count: roster.filter((r) => filterValue(r, key, pendingPairIds) === o.key && matchesFilters(r, excluded, pendingPairIds, key)).length,
+        }))}
+        selected={options.map((o) => o.key).filter((k) => !excluded[key].includes(k))}
+        onChange={(visible) => setExcluded((e) => ({ ...e, [key]: options.map((o) => o.key).filter((k) => !visible.includes(k)) }))}
+      />
+    );
+  };
+  // The dropdowns, as the grid's external filter (docs/ag-grid-tables-plan.md phase 2) — search itself is the grid's
+  // own quickFilterText, bound directly to `search` below.
+  const doesRowPassFilters = useCallback((row: RosterRow) => matchesFilters(row, excluded, pendingPairIds), [excluded, pendingPairIds]);
   // Independent of the grid (for the search box's "of N" total) — cheap, and avoids a render round-trip through
-  // the grid just to know how many rows the chips alone leave.
-  const totalCount = roster.filter((r) => matchesBuyin(r, buyinFilter) && matchesPair(r, pairFilter)).length;
+  // the grid just to know how many rows the filters alone leave.
+  const totalCount = roster.filter((r) => matchesFilters(r, excluded, pendingPairIds)).length;
   const rows = useMemo<RosterRow[]>(() => roster.map((entry, i) => ({ ...entry, order: i + 1 })), [roster]);
 
   // O(n), built once per roster rather than once per row — see buildPartnerRsnMap's own comment.
@@ -341,28 +382,18 @@ export function SignupRoster({ slug }: { slug: string }) {
             Players who sign up will appear here with their answers and buy-in status.
           </EmptyState>
         ) : (
-          // Issue #121: the buy-in/pair chips (quick, commonly-used filters) stay buttons, aligned opposite the
-          // page's dropdown-style controls (search, Columns) on the same row rather than a row of their own.
+          // The filters (MultiSelect checklists), aligned opposite search/Columns/CSV on the same row rather than a row of
+          // their own.
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by buy-in">
-                {BUYIN_FILTERS.map(({ key, label }) => (
-                  <FilterChip key={key} active={buyinFilter === key} count={buyinCount(key)} onPress={() => setBuyinFilter(key)}>
-                    {label}
-                  </FilterChip>
-                ))}
-              </div>
-              {isDuo && (
-                <>
-                  <div className="h-4 w-px shrink-0 bg-outline" aria-hidden="true" />
-                  <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by pairing">
-                    {PAIR_FILTERS.map(({ key, label }) => (
-                      <FilterChip key={key} active={pairFilter === key} count={pairCount(key)} onPress={() => setPairFilter(key)}>
-                        {label}
-                      </FilterChip>
-                    ))}
-                  </div>
-                </>
+            <div className="flex flex-wrap items-center gap-2">
+              {filterSelect("status", "Status")}
+              {filterSelect("buyin", "Buy-in")}
+              {isDuo && filterSelect("pair", "Pairing")}
+              {filterSelect("region", "Timezone")}
+              {!isDefaultFilters(excluded) && (
+                <Button size="sm" variant="ghost" onPress={() => setExcluded(DEFAULT_EXCLUDED)}>
+                  Reset filters
+                </Button>
               )}
             </div>
             <div className="flex items-center gap-2">

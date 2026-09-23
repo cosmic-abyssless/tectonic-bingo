@@ -460,6 +460,11 @@ export function SignupRosterGrid({
         colId: "collectedBy",
         headerName: "Collected by",
         valueGetter: (p) => p.data?.collectedByUser?.id ?? "",
+        // The value is a user id (what the select editor needs), so sort by the name shown instead; nobody first.
+        comparator: (a: string, b: string) => {
+          const name = (id: string) => (id ? (collectedByRefDataRef.current[id] ?? "") : "");
+          return name(a).localeCompare(name(b));
+        },
         cellRenderer: CollectedByCell,
         // Not `refData: collectedByRefData` (a static object baked at colDef-build time) — see the refs' own
         // comment above. Only the agSelectCellEditor's dropdown labels need this now; the cell's own display
@@ -622,6 +627,9 @@ export function SignupRosterGrid({
         stopEditingWhenCellsLoseFocus
         onCellEditRequest={onCellEditRequest}
         enableCellTextSelection
+        // Text columns sort with localeCompare: case-insensitive ("alice" beside "Alice", not after every capital)
+        // and accent-aware, instead of AG's default character-code order.
+        accentedSort
       />
     </div>
   );
