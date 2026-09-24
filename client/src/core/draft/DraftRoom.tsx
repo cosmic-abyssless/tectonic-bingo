@@ -6,8 +6,9 @@ import type { DraftTeam, PickRating } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
 import { queryKeys, useBingo, useDraftState, useMakePick, useSetDraftOrder, useSetPickRating, useShuffleDraftOrder, useSignupQuestions, useStartDraft, useUndoPick } from "../../api/queries";
 import { Button, IconButton } from "../ui/Button";
-import { Card, Notice } from "../ui/Card";
-import { Dialog, DialogHeader } from "../ui/Dialog";
+import { Notice } from "../ui/Card";
+import { Panel } from "../ui/Panel";
+import { useDialogParts } from "../ui/useDialogParts";
 import { ChevronDownIcon, ChevronUpIcon } from "../ui/icons";
 import { useElementHeight } from "../ui/useElementHeight";
 import { DraftPoolGrid } from "./DraftPoolGrid";
@@ -41,6 +42,7 @@ function PickOrderDialog({
   saving: boolean;
   error: string | null;
 }) {
+  const { Dialog, DialogHeader } = useDialogParts();
   const [ids, setIds] = useState<string[]>([]);
   useEffect(() => {
     if (isOpen) setIds(teams.map((t) => t.id));
@@ -93,8 +95,7 @@ function PickOrderDialog({
   );
 }
 
-// Not <Card>: the teams and the pool need a raised fill + stronger border than Card's surface/outline, which vanish
-// into the dark themes' backdrop.
+// The pool's frame: PlainPanel's look, kept as it is under every theme for now (the table inside isn't themed yet).
 const DRAFT_PANEL = "rounded-lg border border-outline-strong bg-surface-raised p-4 shadow-[0_2px_10px_var(--color-shade)]";
 
 export function DraftRoom({ slug }: { slug: string }) {
@@ -250,7 +251,7 @@ export function DraftRoom({ slug }: { slug: string }) {
             {isLead && " Star and note players now; your team's ratings carry over into the draft."}
           </Notice>
         ) : !state.draftStarted ? (
-          <Card className="space-y-3 p-4">
+          <Panel className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="font-semibold text-on-surface">The draft hasn't started</p>
@@ -297,7 +298,7 @@ export function DraftRoom({ slug }: { slug: string }) {
                 ))}
               </ol>
             )}
-          </Card>
+          </Panel>
         ) : state.currentPick && currentTeam && !revealing ? (
           // Pinned under the page header while the pool scrolls; the teams row below pins under it.
           <div ref={setBannerEl} className="sticky z-20 -mx-2 px-2 pb-1 pt-1" style={{ top: headerHeight }}>
@@ -346,12 +347,11 @@ export function DraftRoom({ slug }: { slug: string }) {
         )}
 
         {draftComplete ? (
-          <FinalTeams teams={state.teams} picks={state.picks} myUserId={user.id} />
+          <Panel title="Final teams">
+            <FinalTeams teams={state.teams} picks={state.picks} myUserId={user.id} />
+          </Panel>
         ) : (
-        <section className={`sticky z-10 ${DRAFT_PANEL}`} style={{ top: headerHeight + bannerHeight }}>
-          <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
-            Teams
-          </h3>
+        <Panel title="Teams" className="sticky z-10" style={{ top: headerHeight + bannerHeight }}>
           {/* grid-flow-col + a minimum column width, in a scrollable row —
               handles a handful of teams (spread to fill width) and a large
               number of teams (scrolls instead of squeezing RSNs unreadable). */}
@@ -381,7 +381,7 @@ export function DraftRoom({ slug }: { slug: string }) {
             </div>
           </div>
           {state.teams.length === 0 && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
-        </section>
+        </Panel>
         )}
 
         {revealedTeam && reveals.active && (

@@ -2,6 +2,7 @@ import type { DraftPick, DraftTeam } from "@bingo/shared";
 import { CrownIcon } from "../ui/icons";
 import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
+import { useOptionalSlot } from "../../themes/context";
 
 // A duo pair is drafted as one pick, so both rows share a pickNumber — show
 // them as one entry so the roster reads the same way the draft was made.
@@ -21,7 +22,7 @@ export function pairPickRows(picksByTeam: DraftPick[][]): boolean[] {
   return rows;
 }
 
-function ordinal(n: number): string {
+export function ordinal(n: number): string {
   const v = n % 100;
   if (v >= 11 && v <= 13) return `${n}th`;
   switch (n % 10) {
@@ -32,16 +33,7 @@ function ordinal(n: number): string {
   }
 }
 
-export function TeamRoster({
-  team,
-  picks,
-  isCurrent,
-  highlight,
-  showOrder,
-  hiddenPickNumbers,
-  reserveCoCaptainRow,
-  pairRows,
-}: {
+export interface TeamRosterProps {
   team: DraftTeam;
   picks: DraftPick[];
   isCurrent?: boolean;
@@ -53,7 +45,20 @@ export function TeamRoster({
   reserveCoCaptainRow?: boolean;
   /** pairPickRows across all teams: which pick rounds hold a pair somewhere, so solo picks there match its height. */
   pairRows?: boolean[];
-}) {
+}
+
+/**
+ * One team's column in the draft room: its card (name, captains), then its picks in order. Inside a theme that draws
+ * its own (the DraftTeamRoster slot) it's the theme's. Either way each pick's element carries data-team-id and
+ * data-pick-number: the pick reveal flies to it (DraftPickReveal), and it stays invisible while listed in
+ * hiddenPickNumbers.
+ */
+export function TeamRoster(props: TeamRosterProps) {
+  const Themed = useOptionalSlot("DraftTeamRoster");
+  return Themed ? <Themed {...props} /> : <PlainTeamRoster {...props} />;
+}
+
+export function PlainTeamRoster({ team, picks, isCurrent, highlight, showOrder, hiddenPickNumbers, reserveCoCaptainRow, pairRows }: TeamRosterProps) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <div className="h-4 text-[11px] font-medium uppercase tracking-wide text-on-surface">

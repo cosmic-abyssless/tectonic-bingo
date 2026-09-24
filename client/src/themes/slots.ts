@@ -1,6 +1,9 @@
 import type { ComponentType, ReactNode } from "react";
 import type { ButtonProps } from "../core/ui/Button";
 import type { MenuFrameProps, MenuRowProps } from "../core/ui/Menu";
+import type { NoticeProps } from "../core/ui/Card";
+import type { PanelProps } from "../core/ui/Panel";
+import type { TeamRosterProps } from "../core/draft/TeamRoster";
 import type { StageMilestone } from "@bingo/shared";
 import type {
   BingoPageModel,
@@ -37,6 +40,10 @@ export interface ThemeSlots {
   // draws only the shape — a fixed-size card or burst, no positioning; core handles the pop, the hold and the flight
   // to the roster. One name per drafted player (two for a duo pair). teamColor is null for a team with none.
   DraftPickBurst: ComponentType<{ names: string[]; teamName: string; teamColor: string | null }>;
+  // One team's column in the draft room (core/draft/TeamRoster): its card, then its picks. Read with useOptionalSlot.
+  // Each pick's element must carry data-team-id and data-pick-number (the pick reveal flies to it) and stay invisible
+  // while its number is in hiddenPickNumbers.
+  DraftTeamRoster: ComponentType<TeamRosterProps>;
   // The banner pinned above the draft room while a pick is on the clock: whose turn, in the team's colour. Core
   // remounts it on every pick, so its entrance animation plays on each turn change.
   OnTheClockBanner: ComponentType<OnTheClockProps>;
@@ -83,6 +90,11 @@ export interface ThemeSlots {
   // "option", or "action" for a row that acts on the list). Read with useOptionalSlot: outside a theme they're core's.
   Menu: ComponentType<MenuFrameProps>;
   MenuItem: ComponentType<MenuRowProps>;
+
+  // Every core Notice (core/ui/Card) and Panel (core/ui/Panel): a status line in a tone, and a raised section of a
+  // page. Read with useOptionalSlot: outside a theme they're core's.
+  Notice: ComponentType<NoticeProps>;
+  Panel: ComponentType<PanelProps>;
 
   // The header's report-a-bug button (AppHeader). Read with useOptionalSlot: the header also shows on pages outside
   // any ThemeProvider, which fall back to core's BugReportButton.

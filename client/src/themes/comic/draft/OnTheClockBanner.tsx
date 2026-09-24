@@ -20,7 +20,7 @@ export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isM
       role="status"
       aria-live="polite"
       className="relative flex flex-wrap items-center justify-between gap-x-6 gap-y-1 rounded-sm border-[4px] px-5 pb-3 pt-5"
-      style={{ backgroundColor: bg, color: ink, borderColor: colors.LINE, boxShadow: `6px 6px 0 ${colors.INK}` }}
+      style={{ backgroundColor: bg, color: ink, borderColor: colors.LINE, boxShadow: `6px 6px 0 ${colors.LINE}` }}
     >
       <motion.span
         initial={reduced ? false : { scale: 2.2, rotate: 8, opacity: 0 }}
