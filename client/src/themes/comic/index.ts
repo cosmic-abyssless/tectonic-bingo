@@ -23,6 +23,7 @@ import { NoTeamStage } from "./page/NoTeamStage";
 import { ScoutBanner } from "./page/ScoutBanner";
 import { BugReportButton } from "./page/BugReportButton";
 import { ThemedButton } from "./ui/ThemedButton";
+import { ComicMenu, ComicMenuItem } from "./ui/ComicMenu";
 import { SignupStage } from "./signup/SignupStage";
 import { ComicDialog, ComicDialogHeader } from "./ui/ComicDialog";
 import { SubmissionModal } from "./submission/SubmissionModal";
@@ -139,6 +140,8 @@ const comicTheme: ThemeDefinition = {
     SignupStage,
     BugReportButton,
     Button: ThemedButton,
+    Menu: ComicMenu,
+    MenuItem: ComicMenuItem,
     DialogFrame: ComicDialog,
     DialogHeader: ComicDialogHeader,
     SubmissionModal,
