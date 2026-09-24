@@ -28,7 +28,8 @@ export function TeamRoster({ team, picks, isCurrent, showOrder, hiddenPickNumber
         className="w-full overflow-hidden border-[3px] transition-[transform,box-shadow] duration-200"
         style={{
           borderColor: colors.LINE,
-          background: isCurrent ? colors.YELLOW : colors.PAPER,
+          // A shade lighter than the pick slips under it, so the team's card stands apart from its picks.
+          background: isCurrent ? colors.YELLOW : colors.PAPER_RAISED,
           color: isCurrent ? colors.ON_YELLOW : colors.INK,
           boxShadow: `${isCurrent ? 4 : 2}px ${isCurrent ? 4 : 2}px 0 ${colors.LINE}`,
           transform: isCurrent ? "translate(-1px, -2px)" : undefined,
