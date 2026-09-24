@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from "react";
+import { createContext, useId, type ComponentProps, type ReactNode } from "react";
 
 /*
  * Plain form controls with token styling. These wrap native elements rather
@@ -14,7 +14,7 @@ export const inputClass =
 const controlSize = { sm: "h-8 text-xs", md: "h-10 text-sm" } as const;
 export type ControlSize = keyof typeof controlSize;
 
-/** Full class string for a raw <input>/<select> that can't use the components below. */
+/** Full class string for a raw control that can't use the components below (and for Select's trigger). */
 export const controlClass = (size: ControlSize = "md") => `${inputClass} ${controlSize[size]}`;
 
 export function Input({ className, size = "md", ...props }: Omit<ComponentProps<"input">, "size"> & { size?: ControlSize }) {
@@ -25,16 +25,21 @@ export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
   return <textarea {...props} className={`${inputClass} py-2 text-sm ${className ?? ""}`} />;
 }
 
-export function Select({ className, size = "md", ...props }: Omit<ComponentProps<"select">, "size"> & { size?: ControlSize }) {
-  return <select {...props} className={`${controlClass(size)} ${className ?? ""}`} />;
-}
+/**
+ * The id of the label a control sits under. A <label> element names native inputs by wrapping them, but not a
+ * react-aria control like Select, which reads this and points aria-labelledby at it instead.
+ */
+export const FieldLabelContext = createContext<string | null>(null);
 
 /** Labelled control. Use `as="div"` when the content isn't a single form control (button groups, lists). */
 export function Field({ label, hint, children, className, as: Tag = "label" }: { label: ReactNode; hint?: ReactNode; children: ReactNode; className?: string; as?: "label" | "div" }) {
+  const labelId = useId();
   return (
     <Tag className={`block ${className ?? ""}`}>
-      <span className="mb-1.5 block text-xs font-medium text-on-surface-muted">{label}</span>
-      {children}
+      <span id={labelId} className="mb-1.5 block text-xs font-medium text-on-surface-muted">
+        {label}
+      </span>
+      <FieldLabelContext.Provider value={labelId}>{children}</FieldLabelContext.Provider>
       {hint && <span className="mt-1.5 block text-xs text-on-surface-subtle">{hint}</span>}
     </Tag>
   );

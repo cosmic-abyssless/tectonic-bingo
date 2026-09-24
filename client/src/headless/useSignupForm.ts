@@ -63,8 +63,6 @@ export interface SignupFormModel {
     set: (rsn: string) => void;
     /** The linked clan RSNs to choose from, or null when there are none (then it's typed in). */
     options: string[] | null;
-    /** More than one to choose from: the select starts on "Select…". */
-    needsChoice: boolean;
     /** The chosen RSN is one of the linked clan accounts. */
     verified: boolean;
   };
@@ -246,7 +244,6 @@ export function useSignupForm(slug: string): SignupFormModel {
       value: rsnValue,
       set: setRsn,
       options: rsnOptions.length > 0 ? rsnOptions.map((r) => r.rsn) : null,
-      needsChoice: rsnOptions.length > 1,
       verified: tectonicRsns.some((r) => r.rsn === rsnValue),
     },
     timezone: {

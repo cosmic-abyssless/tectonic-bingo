@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { SubmissionStatus } from "@bingo/shared";
 import type { SubmissionModel } from "../../../headless/types";
-import { Select } from "../../../core/ui/Field";
+import { Select } from "../../../core/ui/Select";
 import { ComicDialog, ComicDialogHeader } from "../ui/ComicDialog";
 import { ComicButton } from "../ui/ComicButton";
 import { CaptionBox } from "../ui/CaptionBox";
@@ -102,14 +102,14 @@ export function SubmissionsDrawer({
             );
           })}
           {submitters.length > 1 && (
-            <Select size="sm" value={submitter} onChange={(e) => setSubmitter(e.target.value)} aria-label="Submitted by" className="mb-2 ml-auto w-auto!">
-              <option value="">Everyone</option>
-              {submitters.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </Select>
+            <Select
+              size="sm"
+              value={submitter}
+              onChange={setSubmitter}
+              aria-label="Submitted by"
+              className="mb-2 ml-auto w-auto!"
+              options={[{ value: "", label: "Everyone" }, ...submitters.map((name) => ({ value: name, label: name }))]}
+            />
           )}
         </div>
       )}

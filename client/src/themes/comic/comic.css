@@ -270,15 +270,15 @@
   );
 }
 
-/* The core form controls (core/ui/Field, SearchableSelect) inside a comic sheet, e.g. the signup stage. The scope's
+/* The core form controls (core/ui/Field, Select, SearchableSelect) inside a comic sheet, e.g. the signup stage. The scope's
    CSS variables (signup/parts.tsx paperVars) already give them paper and ink; this adds the ink border and the hard
    shadow of the board's tile search, which grows when the field has focus. */
-.comic-fields :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+.comic-fields :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea, [data-select-trigger]) {
   border-width: 3px;
   box-shadow: 3px 3px 0 var(--comic-line);
   transition: box-shadow 150ms ease;
 }
-.comic-fields :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):focus {
+.comic-fields :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea, [data-select-trigger]):focus {
   outline: none;
   border-color: var(--comic-line);
   box-shadow: 5px 5px 0 var(--comic-line);

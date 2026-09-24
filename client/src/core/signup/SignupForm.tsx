@@ -3,7 +3,8 @@ import { PartnerPanel } from "./PartnerPanel";
 import { Button } from "../ui/Button";
 import { EmptyState, HEADING_FONT, Notice } from "../ui/Card";
 import { Disclosure } from "../ui/Disclosure";
-import { Field, Input, Select, Textarea } from "../ui/Field";
+import { Field, Input, Textarea } from "../ui/Field";
+import { Select } from "../ui/Select";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { AlertIcon, CheckIcon, LockIcon } from "../ui/icons";
 
@@ -156,14 +157,7 @@ export function SignupForm({ slug }: { slug: string }) {
                 )
               }
             >
-              <Select value={rsn.value} onChange={(e) => rsn.set(e.target.value)}>
-                {rsn.needsChoice && <option value="">Select…</option>}
-                {rsn.options.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </Select>
+              <Select value={rsn.value} onChange={rsn.set} options={rsn.options.map((name) => ({ value: name, label: name }))} />
             </Field>
           ) : (
             <Field label={rsnLabel}>

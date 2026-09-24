@@ -4,7 +4,7 @@ import type { SubmissionModel } from "../../../headless/types";
 import { Dialog, DialogHeader } from "../../../core/ui/Dialog";
 import { Button } from "../../../core/ui/Button";
 import { Badge, EmptyState, FilterChip } from "../../../core/ui/Card";
-import { Select } from "../../../core/ui/Field";
+import { Select } from "../../../core/ui/Select";
 import { ImageIcon } from "../../../core/ui/icons";
 import { SubmissionStatusBadge } from "../../../core/ui/StatusBadge";
 import { ScreenshotThumb } from "../../../core/submissions/ScreenshotThumb";
@@ -62,14 +62,14 @@ export function SubmissionsDrawer({
             </FilterChip>
           ))}
           {submitters.length > 1 && (
-            <Select size="sm" value={submitter} onChange={(e) => setSubmitter(e.target.value)} aria-label="Submitted by" className="ml-auto w-auto!">
-              <option value="">Everyone</option>
-              {submitters.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </Select>
+            <Select
+              size="sm"
+              value={submitter}
+              onChange={setSubmitter}
+              aria-label="Submitted by"
+              className="ml-auto w-auto!"
+              options={[{ value: "", label: "Everyone" }, ...submitters.map((name) => ({ value: name, label: name }))]}
+            />
           )}
         </div>
       )}

@@ -4,7 +4,7 @@ import { useBingo, useBoard, useStats } from "../../api/queries";
 import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { Card, CardHeader } from "../ui/Card";
-import { Select } from "../ui/Field";
+import { Select } from "../ui/Select";
 import { FALLBACK_TEAM_COLOR, PointsChart } from "./PointsChart";
 
 // The timeline and the contributors sit side by side and can each get long, so both scroll at the same height
@@ -66,13 +66,7 @@ function Heatmap({ heatmap, tiles, teams }: { heatmap: TileHeatmapCell[]; tiles:
   return (
     <div className="space-y-3">
       {teams.length > 1 && (
-        <Select aria-label="Team" value={teamId} onChange={(e) => setTeamId(e.target.value)} className="w-auto!">
-          {teams.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </Select>
+        <Select aria-label="Team" value={teamId} onChange={setTeamId} className="w-auto!" options={teams.map((t) => ({ value: t.id, label: t.name }))} />
       )}
       <div className="grid max-w-md gap-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
         {Array.from({ length: rows }, (_, r) =>

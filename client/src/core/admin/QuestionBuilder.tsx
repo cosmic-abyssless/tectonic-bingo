@@ -7,7 +7,8 @@ import { adminQueryKeys, useQuestions } from "../../api/adminQueries";
 import { Button, IconButton } from "../ui/Button";
 import { Card, EmptyState, Notice } from "../ui/Card";
 import { Dialog, DialogHeader } from "../ui/Dialog";
-import { Input, Select } from "../ui/Field";
+import { Input } from "../ui/Field";
+import { Select } from "../ui/Select";
 import { MAX_QUESTION_HELPER_TEXT } from "@bingo/shared";
 import { ChevronDownIcon, ChevronUpIcon, ListIcon, XIcon } from "../ui/icons";
 
@@ -41,26 +42,14 @@ function VisibilitySelect(props: { value: QuestionVisibility; onChange: (v: Ques
   return (
     <label className="flex shrink-0 items-center gap-1.5 text-xs text-on-surface-muted" title="Who can see players' answers (besides the player): this role and up">
       Visible to
-      <Select aria-label={props["aria-label"]} value={props.value} onChange={(e) => props.onChange(e.target.value as QuestionVisibility)} size="sm" className="w-auto!">
-        {VISIBILITIES.map((v) => (
-          <option key={v.value} value={v.value}>
-            {v.label}
-          </option>
-        ))}
-      </Select>
+      <Select aria-label={props["aria-label"]} value={props.value} onChange={(v) => props.onChange(v as QuestionVisibility)} size="sm" className="w-auto!" options={VISIBILITIES} />
     </label>
   );
 }
 
 function TypeSelect(props: { value: SignupQuestionType; onChange: (t: SignupQuestionType) => void; "aria-label": string }) {
   return (
-    <Select aria-label={props["aria-label"]} value={props.value} onChange={(e) => props.onChange(e.target.value as SignupQuestionType)} className="w-auto! shrink-0">
-      {TYPES.map((t) => (
-        <option key={t.value} value={t.value}>
-          {t.label}
-        </option>
-      ))}
-    </Select>
+    <Select aria-label={props["aria-label"]} value={props.value} onChange={(t) => props.onChange(t as SignupQuestionType)} className="w-auto! shrink-0" options={TYPES} />
   );
 }
 

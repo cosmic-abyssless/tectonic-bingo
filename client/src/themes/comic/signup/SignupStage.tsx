@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useSignupForm, type SignupFormModel, type SignupQuestionModel } from "../../../headless";
-import { Input, Select, Textarea } from "../../../core/ui/Field";
+import { Input, Textarea } from "../../../core/ui/Field";
+import { Select } from "../../../core/ui/Select";
 import { SearchableSelect } from "../../../core/ui/SearchableSelect";
 import { AlertIcon, CheckIcon, LockIcon } from "../../../core/ui/icons";
 import { pageColors } from "../board/colors";
@@ -23,7 +24,8 @@ export function SignupStage({ slug }: { slug: string }) {
   const page = pageColors(colors);
   return (
     <PageColorsContext.Provider value={page}>
-      <div className="comic-fields space-y-8" style={paperVars(page)}>
+      {/* data-portal-scope: a Select's list opens in here, so it's printed on the same paper. */}
+      <div data-portal-scope="" className="comic-fields space-y-8" style={paperVars(page)}>
         <SignupSheets slug={slug} />
       </div>
     </PageColorsContext.Provider>
@@ -117,14 +119,7 @@ function SignupSheet({ form }: { form: SignupFormModel }) {
             )
           }
         >
-          <Select value={rsn.value} onChange={(e) => rsn.set(e.target.value)}>
-            {rsn.needsChoice && <option value="">Select…</option>}
-            {rsn.options.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </Select>
+          <Select value={rsn.value} onChange={rsn.set} options={rsn.options.map((name) => ({ value: name, label: name }))} />
         </ComicField>
       ) : (
         <ComicField label={<RequiredLabel>RuneScape name</RequiredLabel>}>
