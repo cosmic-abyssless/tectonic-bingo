@@ -18,7 +18,7 @@ import { useAuth } from "../../context/AuthContext";
 import { Button } from "./Button";
 import { devLoginAs } from "./devLogin";
 import { controlClass } from "./Field";
-import { CheckIcon, UsersIcon } from "./icons";
+import { CheckIcon, SwapIcon } from "./icons";
 import { avatarUrl, displayName } from "./user";
 
 // Every row the same height, so the list can be virtualized: hundreds of accounts (every generated test bingo's
@@ -83,7 +83,7 @@ function Switcher({ currentUserId }: { currentUserId: string }) {
   return (
     <DialogTrigger isOpen={open} onOpenChange={setOpen}>
       <Button variant="ghost" size="sm" aria-label="Switch account (dev)" className="text-warn">
-        <UsersIcon size={16} />
+        <SwapIcon size={16} />
       </Button>
       <Popover placement="bottom end" offset={6} className="overlay-panel flex w-80 flex-col rounded-md border border-outline bg-surface-raised shadow-pop outline-none">
         <Dialog aria-label="Switch account" className="flex min-h-0 flex-col outline-none">
