@@ -3,6 +3,7 @@ import { CrownIcon } from "../ui/icons";
 import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { useOptionalSlot } from "../../themes/context";
+import { UndoPickButton, type UndoLatestPick } from "./UndoPick";
 
 // A duo pair is drafted as one pick, so both rows share a pickNumber — show
 // them as one entry so the roster reads the same way the draft was made.
@@ -45,6 +46,8 @@ export interface TeamRosterProps {
   reserveCoCaptainRow?: boolean;
   /** pairPickRows across all teams: which pick rounds hold a pair somewhere, so solo picks there match its height. */
   pairRows?: boolean[];
+  /** This team holds the latest pick and the viewer may take it back: its slip gets the undo button (UndoPickButton). */
+  undo?: UndoLatestPick;
 }
 
 /**
@@ -58,7 +61,7 @@ export function TeamRoster(props: TeamRosterProps) {
   return Themed ? <Themed {...props} /> : <PlainTeamRoster {...props} />;
 }
 
-export function PlainTeamRoster({ team, picks, isCurrent, highlight, showOrder, hiddenPickNumbers, reserveCoCaptainRow, pairRows }: TeamRosterProps) {
+export function PlainTeamRoster({ team, picks, isCurrent, highlight, showOrder, hiddenPickNumbers, reserveCoCaptainRow, pairRows, undo }: TeamRosterProps) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <div className="h-4 text-[11px] font-medium uppercase tracking-wide text-on-surface">
@@ -94,13 +97,16 @@ export function PlainTeamRoster({ team, picks, isCurrent, highlight, showOrder, 
             key={group[0].pickNumber}
             data-team-id={team.id}
             data-pick-number={group[0].pickNumber}
-            className={`flex flex-col justify-center rounded-sm border border-outline bg-surface-raised px-2.5 py-1 text-sm text-on-surface ${group.length === 1 && pairRows?.[i] ? "min-h-[50px]" : ""} ${hiddenPickNumbers?.has(group[0].pickNumber) ? "invisible" : ""}`}
+            className={`flex items-center gap-1 rounded-sm border border-outline bg-surface-raised px-2.5 py-1 text-sm text-on-surface ${group.length === 1 && pairRows?.[i] ? "min-h-[50px]" : ""} ${hiddenPickNumbers?.has(group[0].pickNumber) ? "invisible" : ""}`}
           >
-            {group.map((p) => (
-              <div key={p.id} className="truncate">
-                <PlayerName userId={p.userId}>{p.rsn || displayName(p.user)}</PlayerName>
-              </div>
-            ))}
+            <div className="flex min-w-0 flex-1 flex-col justify-center">
+              {group.map((p) => (
+                <div key={p.id} className="truncate">
+                  <PlayerName userId={p.userId}>{p.rsn || displayName(p.user)}</PlayerName>
+                </div>
+              ))}
+            </div>
+            {undo?.pickNumber === group[0].pickNumber && <UndoPickButton undo={undo} />}
           </li>
         ))}
       </ul>

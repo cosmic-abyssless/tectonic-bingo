@@ -18,7 +18,7 @@ import { TeamRoster, pairPickRows } from "./TeamRoster";
 import { DraftPickReveal } from "./DraftPickReveal";
 import { namesForPick } from "./revealMath";
 import { useDraftReveals } from "./useDraftReveals";
-import { UndoPick } from "./UndoPick";
+import type { UndoLatestPick } from "./UndoPick";
 import { FinalTeams } from "./FinalTeams";
 
 // Themeable via --font-heading/--font-heading-weight (set by ThemeProvider
@@ -180,6 +180,10 @@ export function DraftRoom({ slug }: { slug: string }) {
   const latestPickTeam = latestPick ? (state.teams.find((t) => t.id === latestPick.teamId) ?? null) : null;
   const canUndo = isAdmin && !scouting && state.draftStarted && !!latestPick && !!latestPickTeam;
   const busy = shuffleOrder.isPending || setOrder.isPending || startDraft.isPending;
+  // The undo button rides on the latest pick's slip, in its team's roster.
+  const undoLatest: UndoLatestPick | undefined = canUndo
+    ? { pickNumber: latestPickNumber, names: namesForPick(state.picks, latestPickNumber), teamName: latestPickTeam!.name, busy: undoPick.isPending, error: undoError, onUndo: handleUndo }
+    : undefined;
 
   async function handleShuffle() {
     setOrderError(null);
@@ -333,19 +337,6 @@ export function DraftRoom({ slug }: { slug: string }) {
           </Notice>
         )}
 
-        {canUndo && (
-          <UndoPick
-            // Reset the confirmation whenever the latest pick changes underneath it.
-            key={latestPickNumber}
-            pickNumber={latestPickNumber}
-            names={namesForPick(state.picks, latestPickNumber)}
-            teamName={latestPickTeam!.name}
-            busy={undoPick.isPending}
-            error={undoError}
-            onUndo={handleUndo}
-          />
-        )}
-
         {draftComplete ? (
           <Panel title="Final teams">
             <FinalTeams teams={state.teams} picks={state.picks} myUserId={user.id} />
@@ -375,6 +366,7 @@ export function DraftRoom({ slug }: { slug: string }) {
                     hiddenPickNumbers={reveals.hiddenPickNumbers}
                     reserveCoCaptainRow={state.teams.some((t) => t.coCaptain)}
                     pairRows={pairRows}
+                    undo={undoLatest && latestPickTeam?.id === team.id ? undoLatest : undefined}
                   />
                 </motion.div>
               ))}

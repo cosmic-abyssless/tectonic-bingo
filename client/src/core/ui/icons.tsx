@@ -62,6 +62,14 @@ export const ListIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Undo: an arrow bending back on itself. */
+export const UndoIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 4L3 7l3 3" />
+    <path d="M3 7h6.5a3.5 3.5 0 0 1 0 7H7" />
+  </Svg>
+);
+
 export const ArrowLeftIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M13 8H3M7 4L3 8l4 4" />

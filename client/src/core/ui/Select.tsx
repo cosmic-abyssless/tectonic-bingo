@@ -3,6 +3,7 @@ import { UNSAFE_PortalProvider } from "react-aria";
 import { Button, Header, ListBox, ListBoxItem, ListBoxSection, Popover, Select as AriaSelect, SelectValue, type Key } from "react-aria-components";
 import { FieldLabelContext, controlClass, type ControlSize } from "./Field";
 import { CheckIcon, ChevronDownIcon } from "./icons";
+import { portalScope } from "./portalScope";
 
 export interface SelectOption {
   value: string;
@@ -91,14 +92,6 @@ export function Select({
       </UNSAFE_PortalProvider>
     </AriaSelect>
   );
-}
-
-/**
- * Where a select's list is mounted: the nearest element marked data-portal-scope (a surface that restyles the controls
- * inside it, like the comic theme's paper sheets), else the theme root, whose CSS variables the list needs, else <body>.
- */
-function portalScope(trigger: HTMLElement | null): HTMLElement {
-  return trigger?.closest<HTMLElement>("[data-portal-scope]") ?? trigger?.closest<HTMLElement>("[data-theme]") ?? document.body;
 }
 
 /** Runs of options by group, in order: ungrouped options stay where they are, each group gathers under its first appearance. */

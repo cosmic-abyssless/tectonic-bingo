@@ -283,7 +283,7 @@
   border-color: var(--comic-line);
   box-shadow: 5px 5px 0 var(--comic-line);
 }
-.comic-fields [data-select-list] {
+.comic-fields :is([data-select-list], [data-popover-panel]) {
   border-width: 3px;
   box-shadow: 4px 4px 0 var(--comic-line);
 }

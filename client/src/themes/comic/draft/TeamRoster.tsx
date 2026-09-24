@@ -1,4 +1,5 @@
 import { groupByPick, ordinal, type TeamRosterProps } from "../../../core/draft/TeamRoster";
+import { UndoPickButton } from "../../../core/draft/UndoPick";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
 import { CrownIcon, LinkIcon } from "../../../core/ui/icons";
 import { displayName } from "../../../core/ui/user";
@@ -13,7 +14,7 @@ import { useComic } from "../ui/useComic";
  * is lifted and yellow. The cards and slips are the book pages' papyrus (in the dark palettes, set against the Teams
  * panel's charcoal); the order label above sits on the panel, in its palette.
  */
-export function TeamRoster({ team, picks, isCurrent, showOrder, hiddenPickNumbers, reserveCoCaptainRow, pairRows }: TeamRosterProps) {
+export function TeamRoster({ team, picks, isCurrent, showOrder, hiddenPickNumbers, reserveCoCaptainRow, pairRows, undo }: TeamRosterProps) {
   const { colors: panel } = useComic();
   const colors = pageColors(panel);
   const label = isCurrent ? "Picking!" : showOrder && team.draftOrder != null ? ordinal(team.draftOrder) : null;
@@ -62,18 +63,22 @@ export function TeamRoster({ team, picks, isCurrent, showOrder, hiddenPickNumber
             key={group[0].pickNumber}
             data-team-id={team.id}
             data-pick-number={group[0].pickNumber}
-            className={`flex flex-col justify-center rounded-sm border-2 px-2 py-1 text-sm font-semibold ${group.length === 1 && pairRows?.[i] ? "min-h-[52px]" : ""} ${hiddenPickNumbers?.has(group[0].pickNumber) ? "invisible" : ""}`}
+            className={`flex items-center gap-1 rounded-sm border-2 px-2 py-1 text-sm font-semibold ${group.length === 1 && pairRows?.[i] ? "min-h-[52px]" : ""} ${hiddenPickNumbers?.has(group[0].pickNumber) ? "invisible" : ""}`}
             style={{ borderColor: colors.LINE, background: colors.PAPER, color: colors.INK, boxShadow: `2px 2px 0 ${colors.LINE}` }}
           >
-            {group.map((p, j) => (
-              <div key={p.id} className="flex min-w-0 items-center gap-1">
-                <PlayerName userId={p.userId} className="truncate">
-                  {p.rsn || displayName(p.user)}
-                </PlayerName>
-                {/* A duo pair, drafted as one pick: linked. */}
-                {j < group.length - 1 && <LinkIcon size={11} className="shrink-0" style={{ color: colors.INK_SUBTLE }} aria-label="paired with" />}
-              </div>
-            ))}
+            <div className="flex min-w-0 flex-1 flex-col justify-center">
+              {group.map((p, j) => (
+                <div key={p.id} className="flex min-w-0 items-center gap-1">
+                  <PlayerName userId={p.userId} className="truncate">
+                    {p.rsn || displayName(p.user)}
+                  </PlayerName>
+                  {/* A duo pair, drafted as one pick: linked. */}
+                  {j < group.length - 1 && <LinkIcon size={11} className="shrink-0" style={{ color: colors.INK_SUBTLE }} aria-label="paired with" />}
+                </div>
+              ))}
+            </div>
+            {/* The latest pick, when the viewer may take it back. */}
+            {undo?.pickNumber === group[0].pickNumber && <UndoPickButton undo={undo} />}
           </li>
         ))}
       </ul>
