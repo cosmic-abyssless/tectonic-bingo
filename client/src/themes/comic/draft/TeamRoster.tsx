@@ -29,8 +29,7 @@ export function TeamRoster({ team, picks, isCurrent, showOrder, hiddenPickNumber
           borderColor: colors.LINE,
           background: isCurrent ? colors.YELLOW : colors.PAPER,
           color: isCurrent ? colors.ON_YELLOW : colors.INK,
-          // Shadows in the panel's line colour: the papyrus's sepia ink vanishes against the charcoal.
-          boxShadow: `${isCurrent ? 4 : 2}px ${isCurrent ? 4 : 2}px 0 ${panel.LINE}`,
+          boxShadow: `${isCurrent ? 4 : 2}px ${isCurrent ? 4 : 2}px 0 ${colors.LINE}`,
           transform: isCurrent ? "translate(-1px, -2px)" : undefined,
         }}
       >
@@ -64,7 +63,7 @@ export function TeamRoster({ team, picks, isCurrent, showOrder, hiddenPickNumber
             data-team-id={team.id}
             data-pick-number={group[0].pickNumber}
             className={`flex flex-col justify-center rounded-sm border-2 px-2 py-1 text-sm font-semibold ${group.length === 1 && pairRows?.[i] ? "min-h-[52px]" : ""} ${hiddenPickNumbers?.has(group[0].pickNumber) ? "invisible" : ""}`}
-            style={{ borderColor: colors.LINE, background: colors.PAPER, color: colors.INK, boxShadow: `2px 2px 0 ${panel.LINE}` }}
+            style={{ borderColor: colors.LINE, background: colors.PAPER, color: colors.INK, boxShadow: `2px 2px 0 ${colors.LINE}` }}
           >
             {group.map((p, j) => (
               <div key={p.id} className="flex min-w-0 items-center gap-1">
