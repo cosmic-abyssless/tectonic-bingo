@@ -6,7 +6,7 @@ import { AlertIcon, CheckIcon, UsersIcon } from "../../../core/ui/icons";
 import { COMIC_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { useComic } from "../ui/useComic";
-import { Callout, RowList, Sheet, SubHead } from "./parts";
+import { Callout, PaperCard, RowList, Sheet, SubHead } from "./parts";
 
 /** Step 2 of a duo signup, under the form: who they're paired with, or finding someone. */
 export function PartnerSheet({ slug }: { slug: string }) {
@@ -99,9 +99,11 @@ export function PartnerSheet({ slug }: { slug: string }) {
             </Callout>
           )}
           <div className="space-y-3">
-            <ComicField as="div" label="Request a partner" hint="Anyone in the clan can be picked; if they haven't signed up yet they'll see your request when they do.">
-              <SearchableSelect value={picker.target} options={picker.options} placeholder="Search players…" onChange={picker.setTarget} />
-            </ComicField>
+            <PaperCard>
+              <ComicField as="div" label="Request a partner" hint="Anyone in the clan can be picked; if they haven't signed up yet they'll see your request when they do.">
+                <SearchableSelect value={picker.target} options={picker.options} placeholder="Search players…" onChange={picker.setTarget} />
+              </ComicField>
+            </PaperCard>
             <ComicButton variant="primary" isDisabled={!picker.target || busy} onPress={picker.send}>
               Send request
             </ComicButton>

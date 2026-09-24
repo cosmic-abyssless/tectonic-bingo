@@ -4,10 +4,12 @@ import { CheckIcon, ChevronDownIcon, SpinnerIcon } from "../../../core/ui/icons"
 import type { ComicColors } from "../board/colors";
 import { COMIC_FONT } from "../font";
 import { CaptionBox } from "../ui/CaptionBox";
-import { comicVars, useComic } from "../ui/useComic";
+import { pageColors } from "../board/colors";
+import { comicVars, PageColorsContext, useComic } from "../ui/useComic";
 
-// The pieces the comic signup stage is drawn with. Everything here is printed on the same stock as the tile modal's
-// book pages (SignupStage provides the page palette), like the "Scout the signups!" caption above it.
+// The pieces the comic signup stage is drawn with: sheets on the palette's own paper (charcoal in the dark palettes),
+// like the draft room's panels, with each field on a card of the tile modal's page stock (PaperCard, the papyrus),
+// like the draft room's team cards.
 
 /**
  * The chrome tokens the core form controls (Input, Select, Textarea, SearchableSelect) read, pointed at the page
@@ -217,11 +219,11 @@ export function ChoiceChip({ type, name, checked, onChange, children }: { type: 
   );
 }
 
-/** A read-only stat on the signup (their combat achievements): a lettered value on a raised card. */
+/** A read-only stat on the signup (their combat achievements): a lettered value on a papyrus card. */
 export function StatBox({ label, value, note, loading }: { label: string; value: string; note?: string; loading?: boolean }) {
-  const { colors } = useComic();
+  const colors = pageColors(useComic().colors);
   return (
-    <div className="min-w-0 rounded-md border-[3px] px-3 py-2" style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.LINE}` }}>
+    <div className="min-w-0 border-[3px] px-3 py-2" style={{ borderColor: colors.LINE, background: colors.PAPER, boxShadow: `2px 2px 0 ${colors.LINE}` }}>
       <div className="text-sm uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
         {label}
       </div>
@@ -243,6 +245,27 @@ export function StatBox({ label, value, note, loading }: { label: string; value:
   );
 }
 
+/**
+ * A card of the book pages' papyrus on a sheet, holding one field (its tab label, control and hint): everything inside
+ * draws in the page palette — comic components through PageColorsContext, core controls through the chrome tokens
+ * (paperVars) — and a Select's list opens inside it (data-portal-scope), on the same paper.
+ */
+export function PaperCard({ children, className }: { children: ReactNode; className?: string }) {
+  const { colors } = useComic();
+  const page = pageColors(colors);
+  return (
+    <PageColorsContext.Provider value={page}>
+      <div
+        data-portal-scope=""
+        className={`border-[3px] p-3 ${className ?? ""}`}
+        style={{ ...paperVars(page), background: page.PAPER, borderColor: page.LINE, boxShadow: `2px 2px 0 ${page.LINE}`, color: page.INK_BODY }}
+      >
+        {children}
+      </div>
+    </PageColorsContext.Provider>
+  );
+}
+
 /** A small caption over a list or group inside a sheet ("Signed up without a partner (36)"). */
 export function SubHead({ children }: { children: ReactNode }) {
   const { colors } = useComic();
@@ -253,15 +276,17 @@ export function SubHead({ children }: { children: ReactNode }) {
   );
 }
 
-/** An ink-bordered list of people, one per row, as in the board's tile search results. */
+/** An ink-bordered list of people, one per row, on a papyrus card (its rows draw in the page palette). */
 export function RowList({ children, scroll }: { children: ReactNode; scroll?: boolean }) {
-  const { colors } = useComic();
+  const colors = pageColors(useComic().colors);
   return (
-    <ul
-      className={`comic-rows rounded-md border-[3px] ${scroll ? "max-h-64 overflow-y-auto" : ""}`}
-      style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.LINE}`, ["--comic-rule" as string]: colors.RULE }}
-    >
-      {children}
-    </ul>
+    <PageColorsContext.Provider value={colors}>
+      <ul
+        className={`comic-rows border-[3px] ${scroll ? "max-h-64 overflow-y-auto" : ""}`}
+        style={{ ...paperVars(colors), borderColor: colors.LINE, background: colors.PAPER, boxShadow: `2px 2px 0 ${colors.LINE}`, ["--comic-rule" as string]: colors.RULE }}
+      >
+        {children}
+      </ul>
+    </PageColorsContext.Provider>
   );
 }
