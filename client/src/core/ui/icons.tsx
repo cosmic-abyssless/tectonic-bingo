@@ -33,6 +33,14 @@ export const PhoneIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Two arrows, right over left: swapping one thing for another (the dev account switcher). */
+export const SwapIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M2.5 5h10.5M10.5 2.5 13 5l-2.5 2.5" />
+    <path d="M13.5 11H3M5.5 8.5 3 11l2.5 2.5" />
+  </Svg>
+);
+
 export const XIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M4 4l8 8M12 4l-8 8" />

@@ -1,4 +1,4 @@
-import type { Key, ReactNode } from "react";
+import { useState, type Key, type ReactNode } from "react";
 import { formatSignupAnswer, type PlayerProfile, type SignupQuestion } from "@bingo/shared";
 import { useBingo, usePlayerProfile, useSignupQuestions } from "../../api/queries";
 import { useDialogParts } from "../ui/useDialogParts";
@@ -13,6 +13,9 @@ import { formatRecordValue, isBingoEvent, podiumSummary, recordSummary } from ".
 import { CaCell, WomCell, formatWomStat } from "../signup/caStats";
 import { useStatsRefreshingUserIds } from "../../context/WebSocketContext";
 import { useAnswerViewer, visibleQuestions } from "../ui/answerVisibility";
+import { useAuth } from "../../context/AuthContext";
+import { Button } from "../ui/Button";
+import { devLoginAs } from "../ui/devLogin";
 import { PointsShareBreakdown } from "../stats/PointsShareBreakdown";
 import { usePlayerContribution } from "../stats/usePlayerContribution";
 
@@ -58,6 +61,26 @@ function ProfileLoader({ slug, userId, onClose }: { slug: string; userId: string
     );
   }
   return <ProfileBody slug={slug} player={data.player} questions={visibleQuestions(questionsData?.questions ?? [], answerViewer)} onClose={onClose} />;
+}
+
+/** Dev mode only: log in as this player, staying on the page you're on (devLoginAs). */
+function ViewAsButton({ userId }: { userId: string }) {
+  const { user, devMode } = useAuth();
+  const [state, setState] = useState<"idle" | "switching" | "failed">("idle");
+  if (!devMode || !user || user.id === userId) return null;
+  return (
+    <Button
+      size="sm"
+      className="shrink-0"
+      isDisabled={state === "switching"}
+      onPress={() => {
+        setState("switching");
+        devLoginAs({ userId }).catch(() => setState("failed"));
+      }}
+    >
+      {state === "switching" ? "Switching…" : state === "failed" ? "Couldn't switch" : "View as"}
+    </Button>
+  );
 }
 
 function Stat({ label, children }: { label: string; children: ReactNode }) {
@@ -124,7 +147,12 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
           )
         }
         onClose={onClose}
-        action={profile && <AchievementIcons profile={profile} large />}
+        action={
+          <>
+            <ViewAsButton userId={player.user.id} />
+            {profile && <AchievementIcons profile={profile} large />}
+          </>
+        }
       />
       <div className="p-5">
         <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key) as typeof savedTab)}>
