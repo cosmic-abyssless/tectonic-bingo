@@ -31,3 +31,10 @@ export async function dismissNotifPromptIfPresent(page: Page): Promise<void> {
     await noThanks.click();
   }
 }
+
+// The app's dropdowns (client/src/core/ui/Select) are a button that opens a listbox, not a native <select>, so
+// Playwright's selectOption doesn't apply: open it by its label, then press the option.
+export async function pickOption(page: Page, label: string, option: string): Promise<void> {
+  await page.getByRole("button", { name: label }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
+}

@@ -4,7 +4,8 @@ import { useItemGroups } from "../../api/adminQueries";
 import { useBoard } from "../../api/queries";
 import { boardItemSources, type ItemSource } from "../board/exclusivity";
 import { Button } from "../ui/Button";
-import { Field, Input, Select } from "../ui/Field";
+import { Field, Input } from "../ui/Field";
+import { Select, type SelectOption } from "../ui/Select";
 import { ItemSearchInput } from "../ui/ItemSearchInput";
 
 const SCOPE_HELP: Record<ExclusivityScope, string> = {
@@ -27,29 +28,16 @@ function mergeNames(existing: readonly string[], added: readonly string[]): stri
 }
 
 /** A "Start from" / "Add items from" choice: an item group, or a tile or part of this board. */
-function SourceOptions({ groups, sources }: { groups: ItemGroup[]; sources: ItemSource[] }) {
-  return (
-    <>
-      {sources.length > 0 && (
-        <optgroup label="Tiles and parts of this board">
-          {sources.map((s) => (
-            <option key={s.key} value={`board:${s.key}`}>
-              {s.label} ({s.itemNames.length})
-            </option>
-          ))}
-        </optgroup>
-      )}
-      {groups.length > 0 && (
-        <optgroup label="Item groups">
-          {groups.map((g) => (
-            <option key={g.id} value={`group:${g.id}`}>
-              {g.name} ({g.itemNames.length})
-            </option>
-          ))}
-        </optgroup>
-      )}
-    </>
-  );
+const SCOPE_OPTIONS: SelectOption[] = [
+  { value: "tile", label: "One tile" },
+  { value: "part", label: "One part" },
+];
+
+function sourceOptions(groups: ItemGroup[], sources: ItemSource[]): SelectOption[] {
+  return [
+    ...sources.map((s) => ({ value: `board:${s.key}`, label: `${s.label} (${s.itemNames.length})`, group: "Tiles and parts of this board" })),
+    ...groups.map((g) => ({ value: `group:${g.id}`, label: `${g.name} (${g.itemNames.length})`, group: "Item groups" })),
+  ];
 }
 
 function resolveSource(value: string, groups: ItemGroup[], sources: ItemSource[]): { label: string; itemNames: string[] } | null {
@@ -90,10 +78,14 @@ function RuleRow({
     <li className="space-y-2 px-3 py-2.5" data-testid="exclusive-rule">
       <div className="flex flex-wrap items-center gap-3">
         <Input aria-label="Rule name" value={rule.label} onChange={(e) => onChange({ ...rule, label: e.target.value })} size="sm" className="min-w-40 flex-1" />
-        <Select aria-label={`Scope of ${rule.label}`} value={rule.scope} onChange={(e) => onChange({ ...rule, scope: e.target.value as ExclusivityScope })} size="sm" className="w-auto!">
-          <option value="tile">One tile</option>
-          <option value="part">One part</option>
-        </Select>
+        <Select
+          aria-label={`Scope of ${rule.label}`}
+          value={rule.scope}
+          onChange={(scope) => onChange({ ...rule, scope: scope as ExclusivityScope })}
+          size="sm"
+          className="w-auto!"
+          options={SCOPE_OPTIONS}
+        />
         <Button size="sm" variant="danger" onPress={onRemove}>
           Remove
         </Button>
@@ -140,10 +132,13 @@ function RuleRow({
           Add item
         </Button>
         <Field label="Or everything on" className="min-w-48 flex-1">
-          <Select aria-label={`Add items to ${rule.label} from`} value={sourceValue} onChange={(e) => setSourceValue(e.target.value)}>
-            <option value="">Choose a tile, part or group…</option>
-            <SourceOptions groups={groups} sources={sources} />
-          </Select>
+          <Select
+            aria-label={`Add items to ${rule.label} from`}
+            value={sourceValue}
+            onChange={setSourceValue}
+            placeholder="Choose a tile, part or group…"
+            options={sourceOptions(groups, sources)}
+          />
         </Field>
         <Button
           size="sm"
@@ -211,19 +206,13 @@ export function ExclusiveItemsSection({ slug, rules, onChange }: { slug: string;
 
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Start from" className="min-w-48 flex-1">
-          <Select value={sourceValue} onChange={(e) => setSourceValue(e.target.value)}>
-            <option value="">Nothing (add items one by one)</option>
-            <SourceOptions groups={groups} sources={sources} />
-          </Select>
+          <Select value={sourceValue} onChange={setSourceValue} options={[{ value: "", label: "Nothing (add items one by one)" }, ...sourceOptions(groups, sources)]} />
         </Field>
         <Field label="New rule name" className="min-w-40">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={source?.label ?? "e.g. Slayer boss uniques"} />
         </Field>
         <Field label="Scope">
-          <Select value={scope} onChange={(e) => setScope(e.target.value as ExclusivityScope)} className="w-auto!">
-            <option value="tile">One tile</option>
-            <option value="part">One part</option>
-          </Select>
+          <Select value={scope} onChange={(s) => setScope(s as ExclusivityScope)} className="w-auto!" options={SCOPE_OPTIONS} />
         </Field>
         <Button onPress={add} isDisabled={!label}>
           Add rule

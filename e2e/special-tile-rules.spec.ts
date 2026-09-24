@@ -1,6 +1,6 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { loginAs, dismissNotifPromptIfPresent, E2E_USERS } from "./helpers";
+import { loginAs, dismissNotifPromptIfPresent, pickOption, E2E_USERS } from "./helpers";
 
 // Separate bingo/slug from full-flow.spec.ts's "pokemon" — this test exists
 // purely to exercise node-graph mechanics the main lifecycle test never
@@ -187,7 +187,7 @@ test("special tile-rule mechanics", async ({ page }) => {
     await expect(page.getByText("Signups closed", { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "Captains" }).click();
-    await page.getByLabel("Assign a captain").selectOption({ label: "RuleTester (e2e_player_4)" });
+    await pickOption(page, "Assign a captain", "RuleTester (e2e_player_4)");
     await page.getByRole("button", { name: "Make captain" }).click();
     await expect(page.getByText(/There will be 1 team of 1/)).toBeVisible();
   });

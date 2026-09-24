@@ -5,19 +5,15 @@ import { useBugReports } from "../../api/adminQueries";
 import { useAuth } from "../../context/AuthContext";
 import { useColorSchemePreference } from "./colorScheme";
 import { ADMIN_BUG_REPORTS_SEEN_KEY, useBugReportsUnseen } from "./bugReportsUnseen";
+import { BugReportButton } from "./BugReportButton";
 import { BugReportDialog } from "./BugReportDialog";
-import { Button, IconButton } from "./Button";
+import { Button } from "./Button";
 import { PulseDot } from "./Card";
-import { iconUrlFor } from "./ItemSearchInput";
 import { Menu, MenuItem, MenuTrigger } from "./Menu";
 import { TextTooltip } from "./Tooltip";
-import { ArrowLeftIcon, BugIcon, CheckIcon, MonitorIcon, MoonIcon, SunIcon } from "./icons";
+import { ArrowLeftIcon, CheckIcon, MonitorIcon, MoonIcon, SunIcon } from "./icons";
+import { useOptionalSlot } from "../../themes/context";
 import { avatarUrl, displayName } from "./user";
-
-// A little fun: the wiki's item-sprite icon for a Kalphite Queen head, in place of a literal bug icon for
-// "report a bug". Same OSRS Wiki image convention ItemSearchInput uses; onError below falls back to BugIcon if
-// the wiki ever moves/renames it, so a report-a-bug button never just silently shows a broken image.
-const BUG_REPORT_ICON_URL = iconUrlFor("Kq head");
 
 const COLOR_SCHEME_OPTIONS = [
   { value: "light", label: "Light", icon: SunIcon },
@@ -66,7 +62,6 @@ export function AppHeader({
   const { data: shell } = useBingo(bingoSlug);
   const myRsn = user ? shell?.teams.flatMap((t) => t.members).find((m) => m.user.id === user.id)?.user.rsn : null;
   const [bugReportOpen, setBugReportOpen] = useState(false);
-  const [bugIconFailed, setBugIconFailed] = useState(false);
   const [colorScheme, setColorScheme] = useColorSchemePreference();
   const compact = !!mobileMenu;
   // Fetched here (not gated on the dialog being open) so the pulse dot can show without opening it —
@@ -77,6 +72,8 @@ export function AppHeader({
   // looked at the Bug reports tab, which shares this "last seen" and clears it. New reports only, not status changes:
   // an admin resolving one shouldn't light it up.
   const { data: allReports } = useBugReports(!!user?.isAdmin);
+  // A theme can draw its own (the BugReportButton slot); pages outside a theme (mod panel, site admin) get core's.
+  const BugButton = useOptionalSlot("BugReportButton") ?? BugReportButton;
   const { hasUnseen: hasNewReportsForAdmin } = useBugReportsUnseen(user?.isAdmin ? allReports?.bugReports : undefined, ADMIN_BUG_REPORTS_SEEN_KEY, { newOnly: true });
 
   // The bug-report button and the signed-in user's menu.
@@ -85,24 +82,13 @@ export function AppHeader({
       {user?.inGuild && (
         <>
           <TextTooltip text="Report a bug">
-            <IconButton
-              label="Report a bug"
-              size="sm"
-              className="relative"
+            <BugButton
+              hasUnseen={hasUnseenBugReports}
               onPress={() => {
                 setBugReportOpen(true);
                 markBugReportsSeen();
               }}
-            >
-              {bugIconFailed ? (
-                <BugIcon />
-              ) : (
-                <span className="flex size-5 items-center justify-center rounded-sm bg-icon-backdrop">
-                  <img src={BUG_REPORT_ICON_URL} alt="" className="size-4 object-contain" onError={() => setBugIconFailed(true)} />
-                </span>
-              )}
-              {hasUnseenBugReports && <PulseDot className="-right-0.5 -top-0.5" />}
-            </IconButton>
+            />
           </TextTooltip>
           <BugReportDialog isOpen={bugReportOpen} onClose={() => setBugReportOpen(false)} />
         </>

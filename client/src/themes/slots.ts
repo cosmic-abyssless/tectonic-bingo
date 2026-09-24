@@ -1,4 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
+import type { ButtonProps } from "../core/ui/Button";
+import type { MenuFrameProps, MenuRowProps } from "../core/ui/Menu";
 import type { StageMilestone } from "@bingo/shared";
 import type {
   BingoPageModel,
@@ -72,6 +74,19 @@ export interface ThemeSlots {
   // to the core Dialog/DialogHeader.
   DialogFrame: ComponentType<{ isOpen: boolean; onClose: () => void; size?: "md" | "lg"; isDismissable?: boolean; children: ReactNode }>;
   DialogHeader: ComponentType<{ title: ReactNode; subtitle?: ReactNode; onClose: () => void; action?: ReactNode }>;
+
+  // Every core Button (core/ui/Button): the same props, variants (primary, secondary, ghost, danger) and sizes, drawn
+  // the theme's way. Read with useOptionalSlot: outside a theme, Button is core's PlainButton.
+  Button: ComponentType<ButtonProps>;
+
+  // Every core Menu and MenuItem (core/ui/Menu): the account menu, the pickers' menus. Same props (MenuItem's variant:
+  // "option", or "action" for a row that acts on the list). Read with useOptionalSlot: outside a theme they're core's.
+  Menu: ComponentType<MenuFrameProps>;
+  MenuItem: ComponentType<MenuRowProps>;
+
+  // The header's report-a-bug button (AppHeader). Read with useOptionalSlot: the header also shows on pages outside
+  // any ThemeProvider, which fall back to core's BugReportButton.
+  BugReportButton: ComponentType<{ onPress: () => void; hasUnseen: boolean }>;
 
   // Menu chrome for ColumnPicker / MultiSelect / SingleSelect. Props are
   // inlined so this file does not import Picker (that would cycle through

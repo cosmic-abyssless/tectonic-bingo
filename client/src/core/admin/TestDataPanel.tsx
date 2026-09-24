@@ -8,7 +8,8 @@ import * as devApi from "../../api/devApi";
 import { devQueryKeys, useGenerateJob, useTestBingos } from "../../api/devApi";
 import { Button } from "../ui/Button";
 import { Badge, Notice } from "../ui/Card";
-import { Field, Input, Select } from "../ui/Field";
+import { Field, Input } from "../ui/Field";
+import { Select } from "../ui/Select";
 import { Switch } from "../ui/Switch";
 
 // The test data generator, started from the browser: it runs inside the server (docs/generate-bingo.md), so this works
@@ -65,22 +66,10 @@ function GenerateForm({ running, onStarted }: { running: boolean; onStarted: () 
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Copy the board of" hint="Its tiles, lines, rules and signup questions. Nothing else is copied.">
-          <Select value={source} onChange={(e) => setFrom(e.target.value)}>
-            {sources.map((b) => (
-              <option key={b.id} value={b.slug}>
-                {b.name} ({b.slug})
-              </option>
-            ))}
-          </Select>
+          <Select value={source} onChange={setFrom} options={sources.map((b) => ({ value: b.slug, label: `${b.name} (${b.slug})` }))} />
         </Field>
         <Field label="Leave it at" hint={stage === "draft" ? "Halfway through the draft." : undefined}>
-          <Select value={stage} onChange={(e) => setStage(e.target.value as TestDataStage)}>
-            {TEST_DATA_STAGES.map((s) => (
-              <option key={s} value={s}>
-                {STAGE_LABEL[s]}
-              </option>
-            ))}
-          </Select>
+          <Select value={stage} onChange={(s) => setStage(s as TestDataStage)} options={TEST_DATA_STAGES.map((s) => ({ value: s, label: STAGE_LABEL[s] }))} />
         </Field>
         {stage === "live" && (
           <Field label="How far through the event (%)">

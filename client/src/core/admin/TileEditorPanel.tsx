@@ -6,7 +6,8 @@ import { queryKeys } from "../../api/queries";
 import { Dialog, DialogHeader } from "../ui/Dialog";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
-import { Field, Input, Select } from "../ui/Field";
+import { Field, Input } from "../ui/Field";
+import { Select } from "../ui/Select";
 import { ImageIcon, LockIcon, PlusIcon } from "../ui/icons";
 import { TaskEditor, optimisticTasks } from "./TaskEditor";
 import type { ExistingLeaf, ExistingCondition } from "./RequirementTreeEditor";
@@ -102,6 +103,9 @@ function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string;
   // in this form) — bonusEnabled toggles instantly instead of waiting on the
   // refetch, and bonusDraft remembers the last non-zero value so unchecking
   // then re-checking doesn't lose what the mod had typed in.
+  // The category just picked, shown until the board refetches with it (the save doesn't update the cache itself).
+  const [pendingCategory, setPendingCategory] = useState<{ tileId: string; value: string } | null>(null);
+  const categoryValue = pendingCategory?.tileId === tile.id ? pendingCategory.value : (tile.categoryId ?? "");
   const [bonusEnabled, setBonusEnabled] = useState(tile.node.points > 0);
   const [bonusDraft, setBonusDraft] = useState(tile.node.points || 25);
   async function updateBonusPoints(points: number) {
@@ -151,14 +155,14 @@ function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string;
               <Input defaultValue={tile.name} onBlur={(e) => patch({ name: e.target.value })} />
             </Field>
             <Field label="Category">
-              <Select defaultValue={tile.categoryId ?? ""} onChange={(e) => patch({ categoryId: e.target.value || null })}>
-                <option value="">None</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
-              </Select>
+              <Select
+                value={categoryValue}
+                onChange={(value) => {
+                  setPendingCategory({ tileId: tile.id, value });
+                  void patch({ categoryId: value || null });
+                }}
+                options={[{ value: "", label: "None" }, ...categories.map((c) => ({ value: c.id, label: c.label }))]}
+              />
             </Field>
             <label className="mt-6 flex h-10 items-center gap-2 text-sm text-on-surface-muted">
               <input type="checkbox" defaultChecked={tile.hasFreezePeriod} onChange={(e) => patch({ hasFreezePeriod: e.target.checked })} className="size-4 accent-accent" />

@@ -6,6 +6,7 @@ import { SearchableSelect } from "../ui/SearchableSelect";
 import { Button, IconButton } from "../ui/Button";
 import { controlClass } from "../ui/Field";
 import { Menu, MenuItem } from "../ui/Menu";
+import { Select } from "../ui/Select";
 import { ChevronDownIcon, LinkIcon, PlusIcon, XIcon } from "../ui/icons";
 import { toGraphNodeInput, collectLabeledConditions } from "../board/requirementTree";
 import { describeRules, useRulesFor } from "./exclusiveItems";
@@ -271,11 +272,11 @@ function GroupNode(props: NodeProps) {
             Condition {ownLabel}
           </span>
         )}
-        <select
+        <Select
           aria-label="Requirement kind"
           value={node.kind}
-          onChange={(e) => {
-            const kind = e.target.value as NodeKind;
+          onChange={(value) => {
+            const kind = value as NodeKind;
             update(path, (n) => ({
               ...n,
               kind,
@@ -283,14 +284,10 @@ function GroupNode(props: NodeProps) {
               quantity: kind === "SUM" ? n.quantity ?? 1 : undefined,
             }));
           }}
-          className={`${controlClass("sm")} w-auto`}
-        >
-          {GROUP_KINDS.map((k) => (
-            <option key={k.kind} value={k.kind}>
-              {k.label}
-            </option>
-          ))}
-        </select>
+          size="sm"
+          className="w-auto!"
+          options={GROUP_KINDS.map((k) => ({ value: k.kind, label: k.label }))}
+        />
         {node.kind === "COUNT" && (
           <input
             aria-label="Minimum count"

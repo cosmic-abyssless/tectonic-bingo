@@ -7,7 +7,8 @@ import { Markdown } from "../ui/Markdown";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
 import { Disclosure } from "../ui/Disclosure";
-import { Field, Input, Select, Textarea } from "../ui/Field";
+import { Field, Input, Textarea } from "../ui/Field";
+import { Select } from "../ui/Select";
 import { Switch } from "../ui/Switch";
 import { ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { THEME_KEYS } from "../../themes/keys";
@@ -139,14 +140,14 @@ export function BingoSettingsForm({
             <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </Field>
           <Field label="Theme">
-            <Select value={form.theme} onChange={(e) => setForm({ ...form, theme: e.target.value })}>
-              {!(THEME_KEYS as readonly string[]).includes(form.theme) && <option value={form.theme}>{form.theme} (unknown — falls back to default)</option>}
-              {THEME_KEYS.map((key) => (
-                <option key={key} value={key}>
-                  {key}
-                </option>
-              ))}
-            </Select>
+            <Select
+              value={form.theme}
+              onChange={(theme) => setForm({ ...form, theme })}
+              options={[
+                ...((THEME_KEYS as readonly string[]).includes(form.theme) ? [] : [{ value: form.theme, label: `${form.theme} (unknown — falls back to default)` }]),
+                ...THEME_KEYS.map((key) => ({ value: key, label: key })),
+              ]}
+            />
           </Field>
         </div>
         <Field label="Description">
@@ -156,19 +157,30 @@ export function BingoSettingsForm({
 
       <Section title="Signups">
         <Field label="Signup mode" hint={hasSignups ? "Locked — players have already signed up." : "Duo: players pair up during signup and get drafted together."}>
-          <Select value={form.signupMode} onChange={(e) => setForm({ ...form, signupMode: e.target.value as SignupMode })} disabled={hasSignups} className="w-auto!">
-            <option value="solo">Solo</option>
-            <option value="duo">Duo</option>
-          </Select>
+          <Select
+            value={form.signupMode}
+            onChange={(signupMode) => setForm({ ...form, signupMode: signupMode as SignupMode })}
+            disabled={hasSignups}
+            className="w-auto!"
+            options={[
+              { value: "solo", label: "Solo" },
+              { value: "duo", label: "Duo" },
+            ]}
+          />
         </Field>
         <Field
           label="Leftover signups"
           hint="Teams get equal picks. The newest signups that don't fill a full round are either cut or drafted in a final singles round, where the team that picked last picks first."
         >
-          <Select value={form.leftoverMode} onChange={(e) => setForm({ ...form, leftoverMode: e.target.value as LeftoverMode })} className="w-auto!">
-            <option value="cut">Cut — not drafted</option>
-            <option value="singles">Singles round</option>
-          </Select>
+          <Select
+            value={form.leftoverMode}
+            onChange={(leftoverMode) => setForm({ ...form, leftoverMode: leftoverMode as LeftoverMode })}
+            className="w-auto!"
+            options={[
+              { value: "cut", label: "Cut — not drafted" },
+              { value: "singles", label: "Singles round" },
+            ]}
+          />
         </Field>
         <label className="flex items-center gap-2 text-sm text-on-surface">
           <input type="checkbox" checked={form.warnLeftovers} onChange={(e) => setForm({ ...form, warnLeftovers: e.target.checked })} className="size-4 cursor-pointer accent-accent" />

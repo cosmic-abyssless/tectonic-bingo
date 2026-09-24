@@ -11,7 +11,8 @@ import { PlayerName } from "../tectonic/PlayerName";
 import { Button, IconButton } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
 import { Disclosure } from "../ui/Disclosure";
-import { Field, Input, Select } from "../ui/Field";
+import { Field, Input } from "../ui/Field";
+import { Select } from "../ui/Select";
 import { CrownIcon, TrashIcon, XIcon } from "../ui/icons";
 
 // Forward-looking estimate while captains are still being assigned — teams
@@ -227,30 +228,24 @@ export function TeamManager({ slug }: { slug: string }) {
         ) : (
           <div className="space-y-3">
             <Field label="Captain">
-              <Select value={selectedCaptainId} onChange={(e) => selectCaptain(e.target.value)}>
-                <option value="">Select a signed-up player…</option>
-                {candidates.map((c) => (
-                  <option key={c.user.id} value={c.user.id}>
-                    {candidateLabel(c)}
-                  </option>
-                ))}
-              </Select>
+              <Select
+                value={selectedCaptainId}
+                onChange={selectCaptain}
+                placeholder="Select a signed-up player…"
+                options={candidates.map((c) => ({ value: c.user.id, label: candidateLabel(c) }))}
+              />
             </Field>
             <Field label="Co-captain" hint={isDuo ? "Shares the captain's draft and rename powers. Paired captains bring their partner." : "Optional. Shares the captain's draft and rename powers."}>
-              <Select value={coCaptainId} onChange={(e) => setSelectedCoCaptainId(e.target.value)} disabled={!!partner}>
-                {partner ? (
-                  <option value={partner.user.id}>{candidateLabel(partner)}</option>
-                ) : (
-                  <>
-                    <option value="">None</option>
-                    {coCaptainOptions.map((c) => (
-                      <option key={c.user.id} value={c.user.id}>
-                        {candidateLabel(c)}
-                      </option>
-                    ))}
-                  </>
-                )}
-              </Select>
+              <Select
+                value={coCaptainId}
+                onChange={setSelectedCoCaptainId}
+                disabled={!!partner}
+                options={
+                  partner
+                    ? [{ value: partner.user.id, label: candidateLabel(partner) }]
+                    : [{ value: "", label: "None" }, ...coCaptainOptions.map((c) => ({ value: c.user.id, label: candidateLabel(c) }))]
+                }
+              />
             </Field>
             <Button variant="primary" onPress={createTeam} isDisabled={!selectedCaptainId || creating}>
               {creating ? "Creating…" : "Create team"}

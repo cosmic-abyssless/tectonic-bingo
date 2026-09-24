@@ -161,9 +161,11 @@ app.use("/uploads", serveImageVariants(UPLOADS_DIR), express.static(UPLOADS_DIR,
 
 // OSRS wiki item icons, fetched once and served from disk (players never hit the
 // wiki). Public reference data, so it lives outside /api and is cached publicly.
+// Any item's icon, for the UI as well as boards: a name no board uses is only
+// looked up for a signed-in viewer, so this isn't an open proxy to the wiki.
 app.use(
   "/wiki-icons",
-  serveWikiIcons({ dir: WIKI_ICONS_DIR, isKnownName: (name) => getKnownItemNames().has(name), enabled: isOsrsItemSearchEnabled }),
+  serveWikiIcons({ dir: WIKI_ICONS_DIR, mayLookUp: (name, req) => !!req.user || getKnownItemNames().has(name), enabled: isOsrsItemSearchEnabled }),
 );
 
 // Routes

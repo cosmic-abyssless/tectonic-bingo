@@ -1,22 +1,52 @@
 import { useLayoutEffect, useRef } from "react";
 import { Menu as AriaMenu, MenuItem as AriaMenuItem, MenuTrigger, Popover, type MenuItemProps, type MenuProps } from "react-aria-components";
+import { useOptionalSlot } from "../../themes/context";
 
 export { MenuTrigger };
 
-/** Popover menu; pair with a `<Button>` inside `<MenuTrigger>`. */
-export function Menu<T extends object>({ instant, popoverClassName = "", ...props }: MenuProps<T> & { instant?: boolean; popoverClassName?: string }) {
-  const listRef = useRef<HTMLDivElement>(null);
+export type MenuFrameProps<T extends object = object> = MenuProps<T> & {
+  /** Open and close without the pop animation (pickers, which open and close often). */
+  instant?: boolean;
+  popoverClassName?: string;
+};
 
-  // Belt-and-suspenders on top of autoFocus="first" below: that alone turned out not to be reliable here — react-
-  // aria's own focus-strategy resolution can still land the menu's real focused key on some arbitrary item (e.g.
-  // whatever was last hovered/focused the previous time this menu was open), and focusing that off-screen item
-  // auto-scrolls the just-opened menu straight to it, same bug as before just from a different cause. The menu
-  // fully unmounts on close (no leftover DOM between opens), so this mount-only effect reruns on every open, and
-  // — because child effects flush before the parent's own — it runs after react-aria's internal focus/scroll
-  // effects inside <AriaMenu>, so it wins and reliably lands the menu scrolled to the top.
+export type MenuItemVariant = "option" | "action";
+export type MenuRowProps = MenuItemProps & { variant?: MenuItemVariant };
+
+/**
+ * Popover menu; pair with a `<Button>` inside `<MenuTrigger>`. Inside a theme that draws its own (the Menu and
+ * MenuItem slots) it's the theme's; elsewhere, PlainMenu.
+ */
+export function Menu<T extends object>(props: MenuFrameProps<T>) {
+  const Themed = useOptionalSlot("Menu");
+  return Themed ? <Themed {...(props as MenuFrameProps)} /> : <PlainMenu {...props} />;
+}
+
+export function MenuItem(props: MenuRowProps) {
+  const Themed = useOptionalSlot("MenuItem");
+  return Themed ? <Themed {...props} /> : <PlainMenuItem {...props} />;
+}
+
+/**
+ * A ref for a menu's list that starts it scrolled to the top on every open. Belt-and-suspenders on top of
+ * autoFocus="first": that alone turned out not to be reliable — react-aria's own focus-strategy resolution can still
+ * land the menu's real focused key on some arbitrary item (e.g. whatever was last hovered/focused the previous time
+ * this menu was open), and focusing that off-screen item auto-scrolls the just-opened menu straight to it. The menu
+ * fully unmounts on close (no leftover DOM between opens), so this mount-only effect reruns on every open, and —
+ * because child effects flush before the parent's own — it runs after react-aria's internal focus/scroll effects
+ * inside <AriaMenu>, so it wins and reliably lands the menu scrolled to the top.
+ */
+export function useMenuListRef() {
+  const listRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     if (listRef.current) listRef.current.scrollTop = 0;
   }, []);
+  return listRef;
+}
+
+/** The unthemed menu: a raised surface with a hairline border. */
+export function PlainMenu<T extends object>({ instant, popoverClassName = "", ...props }: MenuFrameProps<T>) {
+  const listRef = useMenuListRef();
 
   return (
     <Popover
@@ -37,15 +67,15 @@ export function Menu<T extends object>({ instant, popoverClassName = "", ...prop
   );
 }
 
-const MENU_ITEM_VARIANT = {
+const MENU_ITEM_VARIANT: Record<MenuItemVariant, string> = {
   // A regular, selectable/actionable row.
   option: "text-sm text-on-surface-muted hover:text-on-surface focus:text-on-surface selected:text-on-surface",
   // A row that acts on the *list* rather than being part of it — a picker's "Select all"/"Deselect all", say.
   // Deliberately reads as a smaller, quieter control, not one more option to scan past — see Picker.tsx.
   action: "text-xs font-medium text-on-surface-subtle hover:text-on-surface focus:text-on-surface",
-} as const;
+};
 
-export function MenuItem({ children, className, variant = "option", ...props }: MenuItemProps & { variant?: keyof typeof MENU_ITEM_VARIANT }) {
+export function PlainMenuItem({ children, className, variant = "option", ...props }: MenuRowProps) {
   return (
     <AriaMenuItem
       {...props}

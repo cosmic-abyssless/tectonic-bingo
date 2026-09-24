@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { loginAs, dismissNotifPromptIfPresent, E2E_USERS } from "./helpers";
+import { loginAs, dismissNotifPromptIfPresent, pickOption, E2E_USERS } from "./helpers";
 
 const SLUG = "pokemon";
 
@@ -135,7 +135,7 @@ test("full bingo lifecycle", async ({ page, browser }) => {
     const questionRows = page.locator(".bg-slate-900.border.border-slate-700.rounded-lg.p-3.space-y-2");
 
     await page.getByPlaceholder("New question…").fill("What is your preferred combat style?");
-    await page.getByLabel("New question type").selectOption({ label: "Single choice" });
+    await pickOption(page, "New question type", "Single choice");
     await page.getByPlaceholder("Comma-separated options").fill("Melee, Ranged, Magic");
     await page.getByRole("button", { name: "Add" }).click();
     await expect(questionRows).toHaveCount(1);
@@ -146,7 +146,7 @@ test("full bingo lifecycle", async ({ page, browser }) => {
     await expect(questionRows.first().getByLabel("Required")).toBeChecked();
 
     await page.getByPlaceholder("New question…").fill("Willing to captain?");
-    await page.getByLabel("New question type").selectOption({ label: "Yes / No" });
+    await pickOption(page, "New question type", "Yes / No");
     await page.getByRole("button", { name: "Add" }).click();
     await expect(questionRows).toHaveCount(2);
     await expect(questionRows.nth(1).locator("input").first()).toHaveValue("Willing to captain?");
@@ -228,11 +228,11 @@ test("full bingo lifecycle", async ({ page, browser }) => {
     // remainingCandidates / currentTeamCount, not a final roster count, so
     // it changes shape with each captain assigned rather than jumping
     // straight to "2 teams of 2".
-    await page.getByLabel("Assign a captain").selectOption({ label: "Trainer1 (e2e_player_1)" });
+    await pickOption(page, "Assign a captain", "Trainer1 (e2e_player_1)");
     await page.getByRole("button", { name: "Make captain" }).click();
     await expect(page.getByText(/There will be 1 team of 5/)).toBeVisible();
 
-    await page.getByLabel("Assign a captain").selectOption({ label: "Trainer2 (e2e_player_2)" });
+    await pickOption(page, "Assign a captain", "Trainer2 (e2e_player_2)");
     await page.getByRole("button", { name: "Make captain" }).click();
     await expect(page.getByText(/There will be 2 teams of 2/)).toBeVisible();
     await expect(page.getByText(/1 team will have an extra player/)).toBeVisible();
