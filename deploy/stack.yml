@@ -21,12 +21,14 @@ x-api: &api
     - ${TB_DATA_DIR}/uploads:/data/uploads
   healthcheck:
     test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
-    # A deploy waits for the first healthy result, and Docker runs the first check one interval after start, so a short
-    # interval is a shorter deploy. Retries keep the same 60 s of tolerance for a running container.
-    interval: 2s
+    # A deploy waits for the first healthy result: while starting, the check runs every second (start_interval), so the
+    # deploy sees the api healthy about a second after it listens. Once running, every 5 s is plenty, and each check
+    # starts a node process.
+    interval: 5s
     timeout: 3s
-    retries: 30
+    retries: 12
     start_period: 20s
+    start_interval: 1s
   # Long enough for in-flight requests and the WebSocket close, matching the server's own 10 s forced-exit timer.
   stop_grace_period: 20s
 
@@ -81,10 +83,11 @@ services:
     mem_limit: ${TB_OCR_MEMORY:-2g}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
-      interval: 3s
+      interval: 10s
       timeout: 3s
-      retries: 20
+      retries: 6
       start_period: 30s
+      start_interval: 1s
     stop_grace_period: 15s
 
   # Backups (see "Backups and restoring" in deploy/README.md). The same services as deploy/compose.backup.yml, keyed to

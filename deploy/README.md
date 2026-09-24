@@ -141,7 +141,7 @@ other.
 5. Point Caddy at the new colour (rewrite one snippet, validate the whole config, graceful reload) and check the public
    address answers from it. Requests already in flight finish on the old colour; open WebSockets stay on it until it stops
    and then reconnect on their own.
-6. After a drain (5 s), stop the old colour. It is kept, stopped, so the previous version is one command away.
+6. After a drain (10 s), stop the old colour. It is kept, stopped, so the previous version is one command away.
 
 Anything that fails before step 5 leaves the old colour serving, untouched; a failed check after the switch switches back.
 The script says which step failed and shows the new container's log. Only one deploy per environment runs at a time.
