@@ -923,8 +923,31 @@ export type TimelineEventType = "points_earned" | "line_completed" | "point_adju
 export interface TimelineEvent {
   at: string;
   type: TimelineEventType;
-  label: string;
   teamId: string | null;
+  /** What happened, without the team or the points: "ZULRAH — Page 1", "Row 2 line bonus", a mod's reason. */
+  what: string;
+  /** Points it moved; null for first completions and stage changes. */
+  points: number | null;
+}
+
+export interface ContributionClaim {
+  submissionId: string;
+  label: string;
+  /** How much of it counted: a SUM's last claim only counts for what was still needed. */
+  quantity: number;
+}
+
+// One award a player has a Points share of (CONTEXT.md).
+export interface ContributionAward {
+  nodeId: string;
+  kind: "task" | "tile" | "line";
+  label: string;
+  awardPoints: number;
+  points: number;
+  fraction: number;
+  claims: ContributionClaim[];
+  /** Line bonuses: the tiles of the line this player had a share of. */
+  viaTiles?: string[];
 }
 
 export interface ContributionCount {
@@ -932,6 +955,9 @@ export interface ContributionCount {
   user: MinimalUser;
   teamId: string;
   approvedSubmissions: number;
+  /** Unrounded; shown to two decimal places. */
+  pointsShare: number;
+  awards: ContributionAward[];
 }
 
 export interface TileHeatmapCell {

@@ -12,7 +12,7 @@ import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { MultiSelect } from "../ui/MultiSelect";
 import { applyColumnVisibility } from "../ui/hiddenColumns";
-import { inclusionFilter } from "./AuditLog";
+import { inclusionFilter } from "../ui/inclusionFilter";
 import { ScreenshotThumb } from "../submissions/ScreenshotThumb";
 import { claimsSummary } from "../submissions/claimsSummary";
 import { fullUrl } from "../../api/imageVariants";

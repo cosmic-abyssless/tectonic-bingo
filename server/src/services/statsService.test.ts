@@ -128,13 +128,13 @@ describe("getTimeline", () => {
     expect(types).toContain("first_completion");
     expect(types).not.toContain("draft_pick");
     // Only the bingo going live and ending are milestones; other stage changes aren't in the timeline.
-    expect(timeline.filter((e) => e.type === "stage_changed").map((e) => e.label)).toEqual(expect.arrayContaining(["The bingo went live", "The bingo ended"]));
+    expect(timeline.filter((e) => e.type === "stage_changed").map((e) => e.what)).toEqual(expect.arrayContaining(["The bingo went live", "The bingo ended"]));
     expect(timeline.filter((e) => e.type === "stage_changed")).toHaveLength(2);
 
-    const labels = timeline.map((e) => e.label);
-    expect(labels).toContain("Team A completed Test Tile — Task (+20)");
-    expect(labels.some((l) => /^Team A earned the row 1 line bonus \(\+15\)$/.test(l))).toBe(true);
-    expect(labels).toContain("Team A got +15 from a moderator: well played");
+    const rows = timeline.map(({ type, teamId, what, points }) => ({ type, teamId, what, points }));
+    expect(rows).toContainEqual({ type: "points_earned", teamId: fx.teamAId, what: "Test Tile — Task", points: 20 });
+    expect(rows).toContainEqual({ type: "line_completed", teamId: fx.teamAId, what: "Row 1 line bonus", points: 15 });
+    expect(rows).toContainEqual({ type: "point_adjustment", teamId: fx.teamAId, what: "well played", points: 15 });
 
     const times = timeline.map((e) => e.at.getTime());
     expect(times).toEqual([...times].sort((a, b) => a - b));
@@ -153,7 +153,7 @@ describe("getTimeline", () => {
     submitAndApprove(fx.teamBId, task.id, fx.memberUserId, fx.modUserId);
     db.update(teamNodeState).set({ completedAt: new Date() }).where(and(eq(teamNodeState.teamId, fx.teamBId), eq(teamNodeState.nodeId, task.id))).run();
 
-    const firstCompletions = getTimeline(db, fx.bingoId).filter((e) => e.type === "first_completion" && e.label.includes("Task"));
+    const firstCompletions = getTimeline(db, fx.bingoId).filter((e) => e.type === "first_completion" && e.what.includes("Task"));
     expect(firstCompletions).toHaveLength(1);
     expect(firstCompletions[0]!.teamId).toBe(fx.teamAId);
   });
@@ -171,7 +171,40 @@ describe("getContributionCounts", () => {
 
     const counts = getContributionCounts(db, fx.bingoId);
     expect(counts).toHaveLength(1);
-    expect(counts[0]).toMatchObject({ userId: fx.memberUserId, teamId: fx.teamAId, approvedSubmissions: 1 });
+    expect(counts[0]).toMatchObject({ userId: fx.memberUserId, teamId: fx.teamAId, approvedSubmissions: 1, pointsShare: 20 });
+  });
+
+  it("includes team members with nothing approved at 0", () => {
+    const fx = seedFixture();
+    const [idle] = db.insert(schema.users).values({ discordId: "idle", discordUsername: "idle" }).returning().all();
+    db.insert(schema.teamMembers).values([{ teamId: fx.teamAId, userId: fx.memberUserId }, { teamId: fx.teamAId, userId: idle.id }]).run();
+    const task = addTask(fx.tileId, { points: 20 });
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId);
+
+    const counts = getContributionCounts(db, fx.bingoId);
+    expect(counts.map((c) => [c.userId, c.approvedSubmissions, c.pointsShare])).toEqual([
+      [fx.memberUserId, 1, 20],
+      [idle.id, 0, 0],
+    ]);
+  });
+
+  it("credits the drop that completed a task, not a duplicate approved afterwards", () => {
+    const fx = seedFixture();
+    const [spammer] = db.insert(schema.users).values({ discordId: "spam", discordUsername: "spam" }).returning().all();
+    const task = addTask(fx.tileId, { points: 20 });
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId);
+    db.update(submissions).set({ reviewedAt: new Date(Date.now() - 60_000) }).where(eq(submissions.submittedByUserId, fx.memberUserId)).run();
+    submitAndApprove(fx.teamAId, task.id, spammer.id, fx.modUserId);
+    submitAndApprove(fx.teamAId, task.id, spammer.id, fx.modUserId);
+
+    const counts = getContributionCounts(db, fx.bingoId);
+    const member = counts.find((c) => c.userId === fx.memberUserId)!;
+    const spam = counts.find((c) => c.userId === spammer.id)!;
+    expect(spam.approvedSubmissions).toBe(2);
+    expect(spam.pointsShare).toBe(0);
+    expect(member.pointsShare).toBe(20);
+    expect(member.awards[0]).toMatchObject({ label: "Test Tile — Task", awardPoints: 20, points: 20, claims: [{ label: "Bruma torch", quantity: 1 }] });
+    expect(counts[0]!.userId).toBe(fx.memberUserId);
   });
 });
 
@@ -222,25 +255,25 @@ describe("getStatsForViewer", () => {
 
   it("gives a mod everything, including who was first to complete a task", () => {
     const fx = seedRace();
-    const timeline = getStatsForViewer(db, fx.bingoId, { isMod: true, teamId: null }).timeline;
+    const timeline = getStatsForViewer(db, fx.bingoId, { isMod: true, teamId: null, bingoComplete: false }).timeline;
     expect(timeline.filter((e) => e.type === "first_completion").map((e) => e.teamId)).toEqual([fx.teamAId]);
     expect(types(timeline)).toContain("stage_changed");
   });
 
-  it("hides first completions from a player on a team, even their own team's", () => {
+  it("hides first completions from a player on a team while live, even their own team's", () => {
     const fx = seedRace();
     for (const teamId of [fx.teamAId, fx.teamBId]) {
-      const timeline = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId }).timeline;
+      const timeline = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId, bingoComplete: false }).timeline;
       expect(types(timeline)).not.toContain("first_completion");
       expect(timeline.length).toBeGreaterThan(0); // their own points are still there
       expect(timeline.every((e) => e.teamId === teamId)).toBe(true);
     }
   });
 
-  it("hides first completions from a player who sees every team too (once the bingo is complete)", () => {
+  it("shows first completions to players once the bingo is complete", () => {
     const fx = seedRace();
-    const stats = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: null });
-    expect(types(stats.timeline)).not.toContain("first_completion");
+    const stats = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: null, bingoComplete: true });
+    expect(stats.timeline.filter((e) => e.type === "first_completion").map((e) => e.teamId)).toEqual([fx.teamAId]);
     expect(types(stats.timeline)).toContain("points_earned");
     expect(stats.pointsOverTime.length).toBeGreaterThan(0);
   });

@@ -75,7 +75,7 @@ export function conflictMessage(c: ExclusivityConflict): string {
  * Refusing at submission normally keeps this a no-op; it matters when a rule is added after claims exist, or a
  * mod approves two pending claims that conflict.
  */
-export function applyExclusivity(db: Queryable, bingoId: string, approved: ApprovedClaim[]): ApprovedClaim[] {
+export function applyExclusivity<T extends ApprovedClaim>(db: Queryable, bingoId: string, approved: T[]): T[] {
   const row = db.select({ json: schema.bingos.exclusivityRulesJson }).from(schema.bingos).where(eq(schema.bingos.id, bingoId)).get();
   const rules = parseExclusivityRules(row?.json);
   if (rules.length === 0) return approved;

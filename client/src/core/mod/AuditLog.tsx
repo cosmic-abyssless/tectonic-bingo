@@ -10,6 +10,7 @@ import { Button } from "../ui/Button";
 import { Card, EmptyState, Notice } from "../ui/Card";
 import { ChevronDownIcon, ChevronRightIcon, ListIcon } from "../ui/icons";
 import { MultiSelect } from "../ui/MultiSelect";
+import { inclusionFilter } from "../ui/inclusionFilter";
 import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { DateTimeRangeFilter } from "../ui/DateTimeRangeFilter";
 import { isRangeSet, type TimeRange } from "../ui/timeRange";
@@ -32,17 +33,6 @@ export const CATEGORIES: { key: AuditCategory; label: string }[] = [
   { key: "bug_report", label: "Bug reports" },
   { key: "http", label: "Unaudited" },
 ];
-
-export function inclusionFilter(excluded: Set<string>, options: { key: string }[]) {
-  const checked = options.map((o) => o.key).filter((key) => !excluded.has(key));
-  const narrowed = checked.length < options.length;
-  return {
-    checked,
-    query: narrowed && checked.length > 0 ? checked : undefined,
-    none: options.length > 0 && checked.length === 0,
-    narrowed,
-  };
-}
 
 export function useActorCatalog(scope: string): [Map<string, string>, (entries: AuditEntry[]) => void] {
   const [catalog, setCatalog] = useState<{ scope: string; names: Map<string, string> }>({ scope, names: new Map() });

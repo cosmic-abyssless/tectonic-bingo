@@ -195,6 +195,15 @@ An Item a Team may use in **one place only**: a Claim on it locks the same Item 
 ### Point Adjustment
 A manual grant or deduction of points applied to a Team by a Moderator or Admin, with a required written reason, outside regular Tile completions.
 
+### Points share
+A Player's portion of their Team's points, credited from the Claims that completed each award.
+- **Rules:** Each award (a Task, Part or Tile bonus) is split between the Players whose approved Claims were on the path that completed it, weighted by quantity: ALL counts every child, ANY the first child to complete, COUNT N the first N, SUM N and item quantities in approval order, capped at what was still needed. Claims approved after the award, or on branches that didn't decide it, earn nothing. A Tile bonus, and each Tile's equal part of a Line bonus, go to Players by their share of that Tile. Point Adjustments are left out. Shown to two decimal places.
+- **Not:** A count of Submissions. Many easy Claims don't beat one Claim that completed a raid Part.
+
+### Stats
+The Bingo's stats page: points over time, the timeline, top contributors (ranked by Points share) and tile completion.
+- **Rules:** Moderators see every Team at every stage. While the Bingo is Live a Player sees only their own Team; once it is Finished everyone sees every Team. "First to complete" events are shown to Moderators throughout and to Players only once the Bingo is Finished.
+
 ### Pot
 The total GP reward pool for a Bingo, computed from the per-player Buy-in amount plus an optional bonus pot contributed by the clan or sponsors.
 

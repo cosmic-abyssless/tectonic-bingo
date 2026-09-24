@@ -25,6 +25,11 @@ export function PlayerProfileProvider({ slug, children }: { slug: string; childr
   );
 }
 
+/** Opens a player's profile from anywhere under PlayerProfileProvider; null on pages without one. */
+export function useOpenProfile(): ((userId: string) => void) | null {
+  return useContext(OpenProfileContext);
+}
+
 /**
  * The account badge (ironman, UIM, GIM…) before a name: the one given, else the player's from the bingo's account
  * types. "reserve" keeps the badge's width for a player with none, so names in a column line up.
