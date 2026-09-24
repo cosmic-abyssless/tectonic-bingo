@@ -22,6 +22,7 @@ import { PointBreakdownDialog } from "./page/PointBreakdownDialog";
 import { NoTeamStage } from "./page/NoTeamStage";
 import { ScoutBanner } from "./page/ScoutBanner";
 import { BugReportButton } from "./page/BugReportButton";
+import { ThemedButton } from "./ui/ThemedButton";
 import { SignupStage } from "./signup/SignupStage";
 import { ComicDialog, ComicDialogHeader } from "./ui/ComicDialog";
 import { SubmissionModal } from "./submission/SubmissionModal";
@@ -137,6 +138,7 @@ const comicTheme: ThemeDefinition = {
     ScoutBanner,
     SignupStage,
     BugReportButton,
+    Button: ThemedButton,
     DialogFrame: ComicDialog,
     DialogHeader: ComicDialogHeader,
     SubmissionModal,

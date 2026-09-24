@@ -1,4 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
+import type { ButtonProps } from "../core/ui/Button";
 import type { StageMilestone } from "@bingo/shared";
 import type {
   BingoPageModel,
@@ -72,6 +73,10 @@ export interface ThemeSlots {
   // to the core Dialog/DialogHeader.
   DialogFrame: ComponentType<{ isOpen: boolean; onClose: () => void; size?: "md" | "lg"; isDismissable?: boolean; children: ReactNode }>;
   DialogHeader: ComponentType<{ title: ReactNode; subtitle?: ReactNode; onClose: () => void; action?: ReactNode }>;
+
+  // Every core Button (core/ui/Button): the same props, variants (primary, secondary, ghost, danger) and sizes, drawn
+  // the theme's way. Read with useOptionalSlot: outside a theme, Button is core's PlainButton.
+  Button: ComponentType<ButtonProps>;
 
   // The header's report-a-bug button (AppHeader). Read with useOptionalSlot: the header also shows on pages outside
   // any ThemeProvider, which fall back to core's BugReportButton.

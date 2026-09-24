@@ -1,5 +1,6 @@
 import { Button as AriaButton, type ButtonProps as AriaButtonProps } from "react-aria-components";
 import type { ReactNode } from "react";
+import { useOptionalSlot } from "../../themes/context";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md";
@@ -22,7 +23,17 @@ export interface ButtonProps extends AriaButtonProps {
   children?: ReactNode;
 }
 
-export function Button({ variant = "secondary", size = "md", className, ...props }: ButtonProps) {
+/**
+ * The app's button. Inside a theme that draws its own (the Button slot), it's the theme's, with the same variants and
+ * sizes; elsewhere, and in themes that don't, it's PlainButton.
+ */
+export function Button(props: ButtonProps) {
+  const Themed = useOptionalSlot("Button");
+  return Themed ? <Themed {...props} /> : <PlainButton {...props} />;
+}
+
+/** The unthemed button: token colours, a hairline border (or the theme's --control-border-width). */
+export function PlainButton({ variant = "secondary", size = "md", className, ...props }: ButtonProps) {
   return (
     <AriaButton
       {...props}
