@@ -11,7 +11,7 @@ import { Badge } from "../ui/Card";
 import { Mark } from "../ui/gridCells";
 import { LinkIcon } from "../ui/icons";
 import { MultiSelect } from "../ui/MultiSelect";
-import { Select, type SelectOption } from "../ui/Select";
+import { SingleSelect } from "../ui/SingleSelect";
 import { TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
 import { compareSortValues } from "../ui/tableSort";
 import { REGION_OPTIONS, regionOf } from "../ui/timezoneFilter";
@@ -80,12 +80,12 @@ export function DraftPoolList({
 
   if (pool.length === 0) return <p className="text-sm text-on-surface-subtle">No one left to draft.</p>;
 
-  const sortOptions: SelectOption[] = sorts.map((s) => ({ value: s.key, label: s.label }));
   return (
     <div className="space-y-3">
       <TableSearchInput value={search} onChange={setSearch} matchCount={matchingCount} totalCount={entries.length} />
       <div className="flex flex-wrap items-center gap-2">
-        <Select aria-label="Sort by" value={sort.key} onChange={setSortKey} options={sortOptions} size="sm" className="w-auto!" />
+        {/* Labelled like the Timezone picker beside it ("Sort: Current CA"), so it reads as a sort. */}
+        <SingleSelect label="Sort" options={sorts.map((s) => ({ key: s.key, label: s.label }))} selected={sort.key} onChange={setSortKey} />
         {/* Timezones only reach mods and captains, the same as the answers. */}
         {showAnswers && (
           <MultiSelect

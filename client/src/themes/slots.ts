@@ -27,6 +27,8 @@ export interface OnTheClockProps {
   isMyTurn: boolean; // the viewer leads this team
   // Drawn as the top strip of the draft room's Teams panel (full width, no frame of its own), not a card of its own.
   embedded?: boolean;
+  // With embedded: the phone's pinned header, where nothing can hang outside the strip and height is precious.
+  compact?: boolean;
 }
 
 export interface ThemeSlots {

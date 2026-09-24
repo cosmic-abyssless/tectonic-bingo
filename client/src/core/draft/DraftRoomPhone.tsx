@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { Button } from "../ui/Button";
+import { Tab, TabList, TabPanel, Tabs } from "react-aria-components";
 import { Panel } from "../ui/Panel";
 import { useElementHeight } from "../ui/useElementHeight";
 
@@ -7,9 +7,10 @@ type PhoneTab = "players" | "teams";
 
 /**
  * The draft room laid out for a phone, from the same pieces DraftRoom builds for the desktop (the status, the
- * on-the-clock banner, the team rosters, the pool): the banner and a Players / Teams switch pinned under the page
- * header, and one of the two below it. Players is the pool as a list of cards (DraftPoolList); Teams is every team's
- * roster, two to a row, so the picks so far read top to bottom rather than in a row too wide for the screen.
+ * on-the-clock banner, the team rosters, the pool): one panel whose top — the banner (compact) and the Players / Teams
+ * tabs — stays pinned under the page header while the tab's content scrolls beneath it. Players is the pool as a list
+ * of cards (DraftPoolList); Teams is every team's roster, two to a row, so the picks so far read top to bottom rather
+ * than in a row too wide for the screen.
  *
  * A lead (or mod) starts on Players, a spectator on Teams, and anyone is brought to Players when it becomes their pick.
  */
@@ -27,7 +28,7 @@ export function DraftRoomPhone({
   extras,
 }: {
   status: ReactNode;
-  /** Whose turn it is (OnTheClockBanner, embedded), or undefined when no pick is on the clock. */
+  /** Whose turn it is (OnTheClockBanner, embedded and compact), or undefined when no pick is on the clock. */
   banner: ReactNode;
   rosters: ReactNode[];
   noTeams: boolean;
@@ -54,43 +55,49 @@ export function DraftRoomPhone({
     <div className="space-y-3 px-3 pb-6 pt-3">
       {status}
 
-      {/* The pinned bar: a strip of the page's own background above the panel, so a theme's sticker over the panel's
-          top edge has room and the list scrolling under it doesn't show through the gap. */}
-      <div className="sticky z-20 -mx-3 bg-background px-3 pb-2 pt-4" style={{ top: headerHeight }}>
-        <Panel header={banner} padding="sm">
-          <div role="group" aria-label="Show" className="grid grid-cols-2 gap-2">
-            <TabButton active={tab === "players"} onPress={() => setTab("players")}>
-              Players <span className="num opacity-70">({poolCount})</span>
-            </TabButton>
-            <TabButton active={tab === "teams"} onPress={() => setTab("teams")}>
-              Teams
-            </TabButton>
+      <Tabs selectedKey={tab} onSelectionChange={(key) => setTab(key as PhoneTab)}>
+        {/* The Players tab frames the whole panel in the picking team's colour on your turn, as the table does. */}
+        <Panel className="transition-shadow" style={tab === "players" ? poolGlow : undefined}>
+          {/* The pinned top: full bleed across the panel's padding, on the panel's own fill so what scrolls under it
+              doesn't show through. */}
+          <div className="sticky z-20 -mx-4 -mt-4 mb-4 bg-surface" style={{ top: headerHeight }}>
+            {banner}
+            <TabList aria-label="Draft room" className="flex border-b border-outline">
+              <PhoneTabButton id="players">
+                Players <span className="num opacity-70">({poolCount})</span>
+              </PhoneTabButton>
+              <PhoneTabButton id="teams">Teams</PhoneTabButton>
+            </TabList>
           </div>
-        </Panel>
-      </div>
 
-      {tab === "players" ? (
-        <Panel className="transition-shadow" style={poolGlow}>
-          {pool}
+          <TabPanel id="players" className="outline-none">
+            {pool}
+          </TabPanel>
+          <TabPanel id="teams" className="outline-none">
+            {finalTeams ?? (
+              <>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-3">{rosters}</div>
+                {noTeams && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
+              </>
+            )}
+          </TabPanel>
         </Panel>
-      ) : (
-        (finalTeams ?? (
-          <Panel>
-            <div className="grid grid-cols-2 gap-x-2 gap-y-3">{rosters}</div>
-            {noTeams && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
-          </Panel>
-        ))
-      )}
+      </Tabs>
 
       {extras}
     </div>
   );
 }
 
-function TabButton({ active, onPress, children }: { active: boolean; onPress: () => void; children: ReactNode }) {
+/** One of the two tabs: half the row each, the selected one underlined in the accent colour. data-draft-tab: a hook for a theme's CSS. */
+function PhoneTabButton({ id, children }: { id: PhoneTab; children: ReactNode }) {
   return (
-    <Button aria-pressed={active} variant={active ? "primary" : "secondary"} size="sm" className="w-full" onPress={onPress}>
+    <Tab
+      id={id}
+      data-draft-tab=""
+      className="relative flex-1 cursor-pointer px-3 py-2.5 text-center text-sm font-semibold text-on-surface-muted outline-none transition-colors hover:text-on-surface focus-visible:text-on-surface selected:text-on-surface selected:after:absolute selected:after:inset-x-3 selected:after:-bottom-px selected:after:h-[3px] selected:after:bg-accent"
+    >
       {children}
-    </Button>
+    </Tab>
   );
 }

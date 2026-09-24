@@ -353,3 +353,13 @@
 :is([style*="Bangers"], [style*="Bangers"] *).truncate:not([class*="pr-"]) {
   padding-right: 0.2em;
 }
+
+/* The phone draft room's Players / Teams tabs (DraftRoomPhone), lettered like the panel titles. */
+.comic-fields [data-draft-tab] {
+  font-family: var(--comic-font);
+  font-weight: 400;
+  font-size: 1.15rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}

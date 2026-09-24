@@ -236,11 +236,12 @@ export function DraftRoom({ slug }: { slug: string }) {
     }
   }
 
-  // Whose turn it is: the Teams panel's header strip on a desktop, the pinned bar on a phone.
+  // Whose turn it is: the Teams panel's header strip on a desktop, the top of the pinned header on a phone (compact).
   const banner = onTheClock ? (
     <OnTheClockBanner
       key={state.currentPick!.pickNumber}
       embedded
+      compact={phone}
       teamName={currentTeam!.name}
       teamColor={currentTeam!.color ?? null}
       captains={[currentTeam!.captainRsn || "?", ...(currentTeam!.coCaptain ? [currentTeam!.coCaptain.rsn || "?"] : [])]}
