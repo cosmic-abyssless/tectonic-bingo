@@ -453,8 +453,9 @@ export function DraftRoom({ slug }: { slug: string }) {
     );
   }
 
-  // The teams (or, once the draft is done, the final teams): the same panel in both desktop layouts.
-  const teamsPanel =
+  // The teams (or, once the draft is done, the final teams): the same panel in both desktop layouts. `grow`: stretched
+  // down its column (the side-by-side layout, where it runs to the bottom of the window like the pool beside it).
+  const teamsPanel = (grow: boolean) =>
     finalTeams ?? (
       // While a pick is on the clock, the banner is the panel's header strip rather than a card of its own above
       // it: one block, and the rosters sit right under whose turn it is. Not pinned: it grows with the picks
@@ -463,7 +464,7 @@ export function DraftRoom({ slug }: { slug: string }) {
         title={onTheClock ? undefined : "Teams"}
         header={banner}
         // Room above for a theme's sticker over the top edge.
-        className={onTheClock ? "mt-4" : undefined}
+        className={`${onTheClock ? "mt-4" : ""} ${grow ? "flex-1" : ""}`}
       >
         {/* grid-flow-col + a minimum column width, in a row that scrolls
             sideways — handles a handful of teams (spread to fill width) and
@@ -509,13 +510,16 @@ export function DraftRoom({ slug }: { slug: string }) {
   if (roomy && state.teams.length > 0 && !draftComplete) {
     const pinnedTop = headerHeight + 24 + (onTheClock ? 16 : 0);
     return (
-      <div className="grid items-start gap-6 px-6 pb-6 pt-6" style={{ gridTemplateColumns: `minmax(${teamsWidth}px, 2fr) minmax(0, 3fr)` }}>
-        <div className="min-w-0 space-y-6">
+      <div className="grid gap-6 px-6 pb-6 pt-6" style={{ gridTemplateColumns: `minmax(${teamsWidth}px, 2fr) minmax(0, 3fr)` }}>
+        {/* Stretched to the row, which is at least the pool's height, with the teams panel filling it: it ends where
+            the pool does. */}
+        <div className="flex min-w-0 flex-col gap-6">
           {status}
-          {teamsPanel}
+          {teamsPanel(true)}
           {extras}
         </div>
-        <div data-pinned-pool="" className={`sticky min-w-0 ${onTheClock ? "mt-4" : ""}`} style={{ top: pinnedTop }}>
+        {/* self-start: sticky needs to be shorter than its row to have anywhere to stick. */}
+        <div data-pinned-pool="" className={`sticky min-w-0 self-start ${onTheClock ? "mt-4" : ""}`} style={{ top: pinnedTop }}>
           {poolPanel({ pinnedTop })}
         </div>
       </div>
@@ -530,7 +534,7 @@ export function DraftRoom({ slug }: { slug: string }) {
     <div>
       <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-6">
         {status}
-        {teamsPanel}
+        {teamsPanel(false)}
         {extras}
       </div>
 
