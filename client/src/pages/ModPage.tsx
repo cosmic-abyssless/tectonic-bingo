@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { Key } from "react-aria-components";
 import { STAGE_ORDER, type Stage } from "@bingo/shared";
@@ -57,11 +57,12 @@ function isOutOfStage(tab: TabDef, stage: Stage): boolean {
 }
 
 // The tab a mod most likely wants on landing (or lands back on once their current tab goes out of stage) —
-// Signups while signups are open, Settings for a still-being-set-up bingo (admin only — a non-admin mod has no
-// Settings tab to land on), Submissions otherwise. Signups is `adminOnly: false`, so this applies to every mod,
-// not just admins.
+// Signups while signups are open or just closed (who's in, who'll be cut, pairing people up), Captains during the
+// draft (admin only; a non-admin mod gets Signups), Settings for a still-being-set-up bingo (admin only — a non-admin
+// mod has no Settings tab to land on), Submissions otherwise.
 function defaultTabFor(stage: Stage | undefined, isAdmin: boolean): string {
-  if (stage === "signup") return "signups";
+  if (stage === "signup" || stage === "captains") return "signups";
+  if (stage === "draft") return isAdmin ? "teams" : "signups";
   if (stage === "planning" && isAdmin) return "settings";
   return "submissions";
 }
@@ -106,6 +107,15 @@ export function ModPage() {
     // isMod is per-bingo and only known once the shell loads — redirect once we know for sure.
     if (shell && !shell.isMod) navigate(`/b/${slug}`, { replace: true });
   }, [shell, navigate, slug]);
+
+  // Land on the stage's tab once the bingo has loaded: the initial useState ran before the stage was known (so it
+  // picked Submissions), and an out-of-stage tab can still be listed (dimmed), so the fallback below wouldn't move it.
+  const landed = useRef(false);
+  useEffect(() => {
+    if (landed.current || !stage || !user) return;
+    landed.current = true;
+    setTab(defaultTabFor(stage, isAdmin));
+  }, [stage, isAdmin, user]);
 
   // A tab the user can no longer see (isAdmin resolved to false after mount, the stage moved past it, or it's
   // just the pre-shell-load placeholder from the initial useState) shouldn't leave stale content selected.
