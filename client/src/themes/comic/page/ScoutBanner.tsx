@@ -51,11 +51,11 @@ export function ScoutBanner({ onOpen }: { onOpen: () => void }) {
           </div>
           {/* Outlined in the dark ink the palettes keep for lettering on bright fills, not the line colour: in a dark
               palette the line is light grey, which barely shows against the blue. --comic-line covers the hover and
-              press shadows too. */}
+              press shadows too. Tilted only beside the text: stacked under it on a phone, it lines up with the rest. */}
           <ComicButton
             variant="primary"
             size="md"
-            tilt={2}
+            className="sm:rotate-2"
             onPress={onOpen}
             style={{ borderColor: colors.ON_YELLOW, boxShadow: `3px 3px 0 ${colors.ON_YELLOW}`, ["--comic-line" as string]: colors.ON_YELLOW }}
           >
