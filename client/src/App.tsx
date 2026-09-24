@@ -5,6 +5,7 @@ import { ProtectedRoute } from "./core/ui/ProtectedRoute";
 import { ToastRegion } from "./core/ui/Toast";
 import { useSyncColorSchemeAttribute } from "./core/ui/colorScheme";
 import { Login } from "./pages/Login";
+import { PhoneLogin } from "./pages/PhoneLogin";
 import { BingoList } from "./pages/BingoList";
 import { BingoPage } from "./pages/BingoPage";
 import { ModPage } from "./pages/ModPage";
@@ -32,6 +33,8 @@ export default function App() {
         <WebSocketProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            {/* Public: where a phone lands from a logged-in computer's "Log in on your phone" QR code. */}
+            <Route path="/login/phone" element={<PhoneLogin />} />
             {/* Public: linked from the Discord application settings and the login page. */}
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />

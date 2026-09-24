@@ -24,6 +24,18 @@ export const users = sqliteTable('users', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
 
+// One-time links a logged-in browser makes to log the same account in on a phone: shown as a QR code the phone
+// scans, so the phone never meets Discord's web login. Only a hash of the link's token is kept; a link works once,
+// for a couple of minutes (phoneLoginService).
+export const phoneLoginLinks = sqliteTable('phone_login_links', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  tokenHash: text('token_hash').notNull().unique(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+  usedAt: integer('used_at', { mode: 'timestamp' }),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => [index('phone_login_links_user_idx').on(t.userId)]);
+
 // A single bingo instance. Everything below is scoped to one bingoId so the
 // platform can run (or have run) many bingos concurrently/historically.
 export const bingos = sqliteTable('bingos', {

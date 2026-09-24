@@ -55,6 +55,10 @@
      theme) — same in both schemes, not overridden below. */
   --color-icon-backdrop: #e4e4e7;
 
+  /* A QR code: dark on light, whatever the scheme, since not every camera reads one the other way round. */
+  --color-qr: #09090b;
+  --color-qr-backdrop: #ffffff;
+
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 10px;

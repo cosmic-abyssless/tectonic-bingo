@@ -26,6 +26,13 @@ function Svg({ size = 16, children, ...props }: IconProps) {
   );
 }
 
+export const PhoneIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="4.25" y="1.5" width="7.5" height="13" rx="1.75" />
+    <path d="M7 12h2" />
+  </Svg>
+);
+
 export const XIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M4 4l8 8M12 4l-8 8" />
