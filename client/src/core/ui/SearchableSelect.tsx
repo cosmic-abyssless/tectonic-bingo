@@ -182,6 +182,8 @@ export function SearchableSelect({
       {open && dropdownRect && (
         <div
           ref={dropdownRef}
+          // A hook for a theme's CSS to dress the list (the comic signup stage gives it an ink border).
+          data-select-list=""
           style={{
             position: "fixed",
             // max-h-60 below is 240px — if that much (or the space actually available) doesn't fit under the

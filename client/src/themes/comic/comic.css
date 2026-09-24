@@ -269,3 +269,25 @@
     42% 100%, 35% 98.5%, 28% 99.8%, 21% 98.7%, 14% 100%, 8% 98.6%, 3% 99.8%, 0% 98.5%
   );
 }
+
+/* The core form controls (core/ui/Field, SearchableSelect) inside a comic sheet, e.g. the signup stage. The scope's
+   CSS variables (signup/parts.tsx paperVars) already give them paper and ink; this adds the ink border and the hard
+   shadow of the board's tile search, which grows when the field has focus. */
+.comic-fields :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  border-width: 3px;
+  box-shadow: 3px 3px 0 var(--comic-line);
+  transition: box-shadow 150ms ease;
+}
+.comic-fields :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):focus {
+  outline: none;
+  border-color: var(--comic-line);
+  box-shadow: 5px 5px 0 var(--comic-line);
+}
+.comic-fields [data-select-list] {
+  border-width: 3px;
+  box-shadow: 4px 4px 0 var(--comic-line);
+}
+/* Rules between the rows of a sheet's list (signup/parts.tsx RowList). */
+.comic-rows > li + li {
+  border-top: 2px solid var(--comic-rule);
+}

@@ -73,6 +73,9 @@ Everything a slot needs comes from the **headless barrel**
 - `useBingoPage()`, `useBoardModel()`, `useTileModel(id)`, `usePageEvent` —
   the whole-surface `BoardPage` slot is the only place that normally calls
   these directly; leaf slots just receive props.
+- `useSignupForm(slug)`, `usePartnerPanel(slug)` — the signup form and a duo
+  bingo's partner step as view models, for a `SignupStage` slot that draws its
+  own form instead of wrapping `core/signup/SignupForm` (the comic theme's does).
 - `useSlot("SlotName")` (from `themes/context`) to render a nested slot —
   **always** go through `useSlot`, never a direct import of another
   component, or a partial override that doesn't touch that nested slot
