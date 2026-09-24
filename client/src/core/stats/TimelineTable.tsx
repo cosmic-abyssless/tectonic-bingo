@@ -3,6 +3,7 @@ import { AgGridReact, type CustomCellRendererProps } from "ag-grid-react";
 import type { ColDef, TooltipCallbackParams } from "ag-grid-community";
 import type { Team, TimelineEvent, TimelineEventType } from "@bingo/shared";
 import { useGridTheme } from "../ui/agGrid";
+import { useIsPhone } from "../ui/useMediaQuery";
 import { ColumnPicker } from "../ui/ColumnPicker";
 import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { usePersistedGridState } from "../ui/gridState";
@@ -50,6 +51,8 @@ const MAX_HEIGHT = 480;
 const ROW_HEIGHT = 44;
 const HEADER_HEIGHT = 40;
 const SCROLLBAR_HEIGHT = 18;
+// A theme's table frame: the comic panel's 3px ink border top and bottom, and its 3px header rule.
+const FRAME_HEIGHT = 12;
 
 function TeamCell({ data }: CustomCellRendererProps<Row>) {
   if (!data?.team) return <span className="text-on-surface-subtle">—</span>;
@@ -69,6 +72,7 @@ function formatPoints(points: number | null): string {
 /** Every scoring event in the stats, as a filterable table: newest first, one line per event. */
 export function TimelineTable({ events, teams, startsAt }: { events: TimelineEvent[]; teams: Team[]; startsAt: string | null }) {
   const gridTheme = useGridTheme();
+  const isPhone = useIsPhone();
   const [format, setFormat] = usePreference("statsTimeFormat");
   const { gridProps, hidden, setHidden } = usePersistedGridState<Row>("statsTimeline", PINNED);
   const [excludedKinds, setExcludedKinds] = useState<Set<string>>(() => new Set());
@@ -108,8 +112,8 @@ export function TimelineTable({ events, teams, startsAt }: { events: TimelineEve
     [format, startsAt],
   );
 
-  // Sized to the rows, plus room for the sideways scrollbar a phone gets; long tables scroll inside MAX_HEIGHT.
-  const height = Math.min(MAX_HEIGHT, HEADER_HEIGHT + Math.max(rows.length, 1) * ROW_HEIGHT + SCROLLBAR_HEIGHT);
+  // Sized to the rows, plus room for the sideways scrollbar only a phone gets; long tables scroll inside MAX_HEIGHT.
+  const height = Math.min(MAX_HEIGHT, HEADER_HEIGHT + Math.max(rows.length, 1) * ROW_HEIGHT + FRAME_HEIGHT + (isPhone ? SCROLLBAR_HEIGHT : 0));
 
   return (
     <div className="space-y-3">

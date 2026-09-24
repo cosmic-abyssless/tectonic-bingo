@@ -3,6 +3,7 @@ import { AgGridReact, type CustomCellRendererProps } from "ag-grid-react";
 import type { CellClickedEvent, ColDef, TooltipCallbackParams } from "ag-grid-community";
 import type { ContributionCount, Team } from "@bingo/shared";
 import { useGridTheme } from "../ui/agGrid";
+import { useIsPhone } from "../ui/useMediaQuery";
 import { ColumnPicker } from "../ui/ColumnPicker";
 import { usePersistedGridState } from "../ui/gridState";
 import { headerTooltip, usefulTooltip } from "../ui/gridTooltips";
@@ -18,6 +19,8 @@ const MAX_HEIGHT = 480;
 const ROW_HEIGHT = 44;
 const HEADER_HEIGHT = 40;
 const SCROLLBAR_HEIGHT = 18;
+// A theme's table frame: the comic panel's 3px ink border top and bottom, and its 3px header rule.
+const FRAME_HEIGHT = 12;
 
 function PlayerCell({ data }: CustomCellRendererProps<Row>) {
   if (!data) return null;
@@ -55,6 +58,7 @@ const DEFAULT_COL_DEF: ColDef<Row> = {
  */
 export function ContributorsTable({ contributions, teams }: { contributions: ContributionCount[]; teams: Team[] }) {
   const gridTheme = useGridTheme();
+  const isPhone = useIsPhone();
   const openProfile = useOpenProfile();
   const { gridProps, hidden, setHidden, apiRef } = usePersistedGridState<Row>("statsContributors", PINNED);
 
@@ -98,8 +102,8 @@ export function ContributorsTable({ contributions, teams }: { contributions: Con
   );
 
   const pickable = columnDefs.filter((c) => !PINNED.includes(c.colId!)).map((c) => ({ id: c.colId!, label: c.headerName! }));
-  // Sized to the rows, plus room for the sideways scrollbar a phone gets; long tables scroll inside MAX_HEIGHT.
-  const height = Math.min(MAX_HEIGHT, HEADER_HEIGHT + Math.max(rows.length, 1) * ROW_HEIGHT + SCROLLBAR_HEIGHT);
+  // Sized to the rows, plus room for the sideways scrollbar only a phone gets; long tables scroll inside MAX_HEIGHT.
+  const height = Math.min(MAX_HEIGHT, HEADER_HEIGHT + Math.max(rows.length, 1) * ROW_HEIGHT + FRAME_HEIGHT + (isPhone ? SCROLLBAR_HEIGHT : 0));
 
   return (
     <div className="space-y-3">

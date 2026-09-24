@@ -1,21 +1,18 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useBingo, useBoard, useStats } from "../../api/queries";
-import { Card, CardHeader } from "../ui/Card";
 import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { inclusionFilter } from "../ui/inclusionFilter";
 import { MultiSelect } from "../ui/MultiSelect";
+import { Panel } from "../ui/Panel";
 import { ContributorsTable } from "./ContributorsTable";
 import { PointsChart } from "./PointsChart";
 import { TileCompletion } from "./TileCompletion";
 import { TimelineTable } from "./TimelineTable";
 
+// A Panel, like the draft room's, so a theme that draws its own (the comic one) restyles the section and the
+// tables in it the same way.
 function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <Card>
-      <CardHeader title={title} />
-      <div className="p-5">{children}</div>
-    </Card>
-  );
+  return <Panel title={title}>{children}</Panel>;
 }
 
 export function StatsView({ slug }: { slug: string }) {
