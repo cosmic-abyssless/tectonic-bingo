@@ -1,5 +1,5 @@
 import type { DraftPick, DraftTeam } from "@bingo/shared";
-import { CrownIcon } from "../ui/icons";
+import { CaptainEmblem } from "../ui/CaptainEmblem";
 import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { useOptionalSlot } from "../../themes/context";
@@ -76,14 +76,14 @@ export function PlainTeamRoster({ team, picks, isCurrent, highlight, showOrder, 
           <span className="truncate text-sm font-semibold text-on-surface">{team.name}</span>
         </div>
         <div className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-on-surface-muted">
-          <CrownIcon size={12} className="shrink-0 text-warn" aria-label="Captain" />
+          <CaptainEmblem />
           <PlayerName userId={team.captainUserId} className="truncate">
             {team.captainRsn || "?"}
           </PlayerName>
         </div>
         {team.coCaptain && (
           <div className="flex min-w-0 items-center gap-1 text-xs text-on-surface-muted">
-            <CrownIcon size={12} className="shrink-0 text-on-surface-subtle" aria-label="Co-captain" />
+            <CaptainEmblem co />
             <PlayerName userId={team.coCaptain.userId} className="truncate">
               {team.coCaptain.rsn || "?"}
             </PlayerName>

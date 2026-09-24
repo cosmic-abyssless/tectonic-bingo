@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from "motion/react";
-import { CrownIcon } from "../../../core/ui/icons";
+import { CaptainEmblem } from "../../../core/ui/CaptainEmblem";
 import { inkOn } from "../../../core/draft/teamColor";
 import type { OnTheClockProps } from "../../slots";
 import { COMIC_FONT } from "../font";
@@ -43,8 +43,13 @@ export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isM
             </p>
             {captains.length > 0 && (
               <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-sm font-semibold">
-                <CrownIcon size={13} aria-label="Captains" />
-                {captains.join(" & ")}
+                {captains.map((name, i) => (
+                  <span key={i} className="inline-flex items-center gap-1">
+                    {i > 0 && <span className="mr-0.5">&amp;</span>}
+                    <CaptainEmblem co={i > 0} />
+                    {name}
+                  </span>
+                ))}
               </p>
             )}
           </motion.div>
@@ -80,8 +85,13 @@ export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isM
         </p>
         {captains.length > 0 && (
           <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-sm font-semibold">
-            <CrownIcon size={13} aria-label="Captains" />
-            {captains.join(" & ")}
+            {captains.map((name, i) => (
+              <span key={i} className="inline-flex items-center gap-1">
+                {i > 0 && <span className="mr-0.5">&amp;</span>}
+                <CaptainEmblem co={i > 0} />
+                {name}
+              </span>
+            ))}
           </p>
         )}
       </div>

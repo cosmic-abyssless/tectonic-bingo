@@ -13,7 +13,8 @@ import { Card, Notice } from "../ui/Card";
 import { Disclosure } from "../ui/Disclosure";
 import { Field, Input } from "../ui/Field";
 import { Select } from "../ui/Select";
-import { CrownIcon, TrashIcon, XIcon } from "../ui/icons";
+import { CaptainEmblem } from "../ui/CaptainEmblem";
+import { TrashIcon, XIcon } from "../ui/icons";
 
 // Forward-looking estimate while captains are still being assigned — teams
 // don't have their non-captain members yet, so this is just
@@ -109,8 +110,8 @@ function TeamCard({ slug, team, onDelete }: { slug: string; team: TeamWithMember
             <ul className="divide-y divide-outline rounded-md border border-outline">
               {team.members.map(({ user, isCaptain, isCoCaptain, isDrafted }) => (
                 <li key={user.id} className="flex h-9 items-center gap-2 px-3 text-sm">
-                  {isCaptain && <CrownIcon size={14} className="shrink-0 text-warn" aria-label="Captain" />}
-                  {isCoCaptain && <CrownIcon size={14} className="shrink-0 text-on-surface-subtle" aria-label="Co-captain" />}
+                  {isCaptain && <CaptainEmblem />}
+                  {isCoCaptain && <CaptainEmblem co />}
                   <PlayerName userId={user.id} className="min-w-0 flex-1 truncate text-on-surface">
                     {displayName(user)}
                   </PlayerName>

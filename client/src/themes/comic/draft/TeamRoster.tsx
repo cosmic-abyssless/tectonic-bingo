@@ -1,7 +1,8 @@
 import { groupByPick, ordinal, type TeamRosterProps } from "../../../core/draft/TeamRoster";
 import { UndoPickButton } from "../../../core/draft/UndoPick";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
-import { CrownIcon, LinkIcon } from "../../../core/ui/icons";
+import { CaptainEmblem } from "../../../core/ui/CaptainEmblem";
+import { LinkIcon } from "../../../core/ui/icons";
 import { displayName } from "../../../core/ui/user";
 import { pageColors } from "../board/colors";
 import { COMIC_FONT } from "../font";
@@ -42,14 +43,14 @@ export function TeamRoster({ team, picks, isCurrent, showOrder, hiddenPickNumber
             {team.name}
           </div>
           <div className="flex min-w-0 items-center gap-1 text-xs font-semibold">
-            <CrownIcon size={12} className="shrink-0" style={{ color: isCurrent ? colors.ON_YELLOW : colors.WARN }} aria-label="Captain" />
+            <CaptainEmblem />
             <PlayerName userId={team.captainUserId} className="truncate">
               {team.captainRsn || "?"}
             </PlayerName>
           </div>
           {team.coCaptain && (
             <div className="flex min-w-0 items-center gap-1 text-xs font-semibold">
-              <CrownIcon size={12} className="shrink-0 opacity-60" aria-label="Co-captain" />
+              <CaptainEmblem co />
               <PlayerName userId={team.coCaptain.userId} className="truncate">
                 {team.coCaptain.rsn || "?"}
               </PlayerName>

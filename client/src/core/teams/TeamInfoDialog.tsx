@@ -6,7 +6,7 @@ import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
 import { Dialog, DialogHeader } from "../ui/Dialog";
 import { Field, Input } from "../ui/Field";
-import { CrownIcon } from "../ui/icons";
+import { CaptainEmblem } from "../ui/CaptainEmblem";
 import { PlayerName } from "../tectonic/PlayerName";
 
 /** Who's on a team. The captain can also rename it from here. */
@@ -54,8 +54,8 @@ function TeamInfo({ slug, team, onClose }: { slug: string; team: TeamModel; onCl
               <PlayerName userId={member.id} className="truncate text-on-surface">
                 {member.displayName}
               </PlayerName>
-              {member.isCaptain && <CrownIcon size={14} className="shrink-0 text-warn" aria-label="Captain" />}
-              {member.isCoCaptain && <CrownIcon size={14} className="shrink-0 text-on-surface-subtle" aria-label="Co-captain" />}
+              {member.isCaptain && <CaptainEmblem />}
+              {member.isCoCaptain && <CaptainEmblem co />}
             </li>
           ))}
         </ul>
