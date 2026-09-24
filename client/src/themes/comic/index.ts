@@ -6,6 +6,7 @@ import { DraftPageLayout } from "./page/DraftPageLayout";
 import { StatsPageLayout } from "./page/StatsPageLayout";
 import { DraftPickBurst } from "./draft/DraftPickBurst";
 import { OnTheClockBanner } from "./draft/OnTheClockBanner";
+import { TeamRoster as DraftTeamRoster } from "./draft/TeamRoster";
 import { BoardGrid } from "./board/BoardGrid";
 import { TileSearch } from "./page/TileSearch";
 import { TileCell } from "./board/TileCell";
@@ -20,10 +21,12 @@ import { RulesDialog } from "./page/RulesDialog";
 import { TeamInfoDialog } from "./page/TeamInfoDialog";
 import { PointBreakdownDialog } from "./page/PointBreakdownDialog";
 import { NoTeamStage } from "./page/NoTeamStage";
+import { PlanningStage } from "./page/PlanningStage";
 import { ScoutBanner } from "./page/ScoutBanner";
 import { BugReportButton } from "./page/BugReportButton";
 import { ThemedButton } from "./ui/ThemedButton";
 import { ComicMenu, ComicMenuItem } from "./ui/ComicMenu";
+import { ComicNotice, ComicPanel } from "./ui/ComicPanel";
 import { SignupStage } from "./signup/SignupStage";
 import { ComicDialog, ComicDialogHeader } from "./ui/ComicDialog";
 import { SubmissionModal } from "./submission/SubmissionModal";
@@ -121,6 +124,7 @@ const comicTheme: ThemeDefinition = {
     StatsPage: StatsPageLayout,
     DraftPickBurst,
     OnTheClockBanner,
+    DraftTeamRoster,
     BoardGrid,
     TaskPanel,
     RequirementTree,
@@ -136,12 +140,15 @@ const comicTheme: ThemeDefinition = {
     TeamInfoDialog,
     PointBreakdownDialog,
     NoTeamStage,
+    PlanningStage,
     ScoutBanner,
     SignupStage,
     BugReportButton,
     Button: ThemedButton,
     Menu: ComicMenu,
     MenuItem: ComicMenuItem,
+    Notice: ComicNotice,
+    Panel: ComicPanel,
     DialogFrame: ComicDialog,
     DialogHeader: ComicDialogHeader,
     SubmissionModal,

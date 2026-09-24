@@ -1,4 +1,5 @@
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
+import { useOptionalSlot } from "../../themes/context";
 
 /** Flat surface with a hairline border. Elevation comes from borders, not shadows. */
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
@@ -34,8 +35,21 @@ const TONE = {
   danger: "border-danger/30 text-danger",
 } as const;
 
-/** Inline status line (locked, error, notice). */
-export function Notice({ tone = "neutral", icon, children, className }: { tone?: keyof typeof TONE; icon?: ReactNode; children: ReactNode; className?: string }) {
+export type NoticeTone = keyof typeof TONE;
+export interface NoticeProps {
+  tone?: NoticeTone;
+  icon?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}
+
+/** Inline status line (locked, error, notice). Inside a theme that draws its own (the Notice slot) it's the theme's. */
+export function Notice(props: NoticeProps) {
+  const Themed = useOptionalSlot("Notice");
+  return Themed ? <Themed {...props} /> : <PlainNotice {...props} />;
+}
+
+export function PlainNotice({ tone = "neutral", icon, children, className }: NoticeProps) {
   return (
     <div role={tone === "danger" ? "alert" : undefined} className={`flex items-start gap-2.5 rounded-md border bg-surface-raised px-3 py-2.5 text-sm ${TONE[tone]} ${className ?? ""}`}>
       {icon && <span className="mt-0.5 shrink-0">{icon}</span>}

@@ -33,8 +33,10 @@ export function ScoutBanner({ onOpen }: { onOpen: () => void }) {
             } as CSSProperties
           }
         />
-        <div className="relative flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0 flex-1">
+        {/* Stacked on a phone (the button under the text, rather than squeezing it to a few words a line), side by
+            side from sm up. */}
+        <div className="relative flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 sm:flex-1">
             <div className="flex items-center gap-2">
               {/* The wiki's Spyglass, at its own 31x29 so the pixel art stays crisp. */}
               <WikiIcon name="Spyglass" className="h-[29px] w-[31px] [image-rendering:pixelated]" />
@@ -49,11 +51,11 @@ export function ScoutBanner({ onOpen }: { onOpen: () => void }) {
           </div>
           {/* Outlined in the dark ink the palettes keep for lettering on bright fills, not the line colour: in a dark
               palette the line is light grey, which barely shows against the blue. --comic-line covers the hover and
-              press shadows too. */}
+              press shadows too. Tilted only beside the text: stacked under it on a phone, it lines up with the rest. */}
           <ComicButton
             variant="primary"
             size="md"
-            tilt={2}
+            className="sm:rotate-2"
             onPress={onOpen}
             style={{ borderColor: colors.ON_YELLOW, boxShadow: `3px 3px 0 ${colors.ON_YELLOW}`, ["--comic-line" as string]: colors.ON_YELLOW }}
           >

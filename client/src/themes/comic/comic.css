@@ -283,11 +283,73 @@
   border-color: var(--comic-line);
   box-shadow: 5px 5px 0 var(--comic-line);
 }
-.comic-fields [data-select-list] {
+.comic-fields :is([data-select-list], [data-popover-panel]) {
   border-width: 3px;
   box-shadow: 4px 4px 0 var(--comic-line);
 }
 /* Rules between the rows of a sheet's list (signup/parts.tsx RowList). */
 .comic-rows > li + li {
   border-top: 2px solid var(--comic-rule);
+}
+
+/* AG Grid tables on a comic panel (ComicPanel's gridVars set the header strip and rules): the header in capitals,
+   the cell buttons as small ink buttons, and a grid's heading lettered like the panel titles. */
+.comic-fields .ag-header-cell-text {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  /* Lettered like the masthead title (.comic-outline-text): the title fill (ComicPanel's --grid-header-fg), a thin
+     outline and a hard drop in the title's stroke colour. */
+  text-shadow:
+    -0.03em -0.03em 0 var(--comic-title-stroke, #000),
+    0.03em -0.03em 0 var(--comic-title-stroke, #000),
+    -0.03em 0.03em 0 var(--comic-title-stroke, #000),
+    0.03em 0.03em 0 var(--comic-title-stroke, #000),
+    0.08em 0.08em 0 var(--comic-title-stroke, #000);
+  /* Room for Bangers' lean inside the box AG clips the label to (see "Bangers leans right" below). */
+  padding-right: 0.2em;
+}
+/* AG wraps a cell's content in a box that clips, exactly as tall as the button in it: that shaved the ink button's
+   hard shadow (and its lift on hover) off the bottom. */
+.comic-fields .ag-cell-value:has([data-cell-button]) {
+  overflow: visible;
+}
+.comic-fields [data-cell-button] {
+  border-width: 2px;
+  font-family: var(--comic-font);
+  font-weight: 400;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition:
+    translate 90ms ease-out,
+    box-shadow 90ms ease-out;
+}
+.comic-fields [data-cell-button="primary"] {
+  border-color: var(--comic-line);
+  box-shadow: 2px 2px 0 var(--comic-line);
+}
+.comic-fields [data-cell-button="primary"]:hover:not(:disabled) {
+  translate: -1px -1px;
+  box-shadow: 3px 3px 0 var(--comic-line);
+  background: var(--color-button);
+}
+.comic-fields [data-cell-button="primary"]:active:not(:disabled) {
+  translate: 1px 1px;
+  box-shadow: none;
+}
+.comic-fields [data-panel-heading] {
+  font-family: var(--comic-font);
+  font-size: 1.25rem;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+/* Bangers leans right: the last glyph of a line overhangs the text's box by up to ~0.17em, so wherever that box clips
+   its overflow (truncated text) the edge of the last letter was sliced off. Every truncated element lettered in it, set
+   on itself or inherited from an ancestor (the theme sets the font inline, so the style attribute names it), gets a
+   little room on the right. One that sets its own right padding keeps it (the masthead title's allows for its drop shadow
+   too, headerStyle.ts). */
+:is([style*="Bangers"], [style*="Bangers"] *).truncate:not([class*="pr-"]) {
+  padding-right: 0.2em;
 }

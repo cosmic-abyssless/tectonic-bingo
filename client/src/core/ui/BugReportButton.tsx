@@ -3,6 +3,7 @@ import { wikiIconUrl } from "../../api/wikiIcons";
 import { IconButton } from "./Button";
 import { PulseDot } from "./Card";
 import { BugIcon } from "./icons";
+import { TextTooltip } from "./Tooltip";
 
 export interface BugReportButtonProps {
   onPress: () => void;
@@ -21,14 +22,20 @@ export function BugReportIcon({ className }: { className?: string }) {
   return <img src={wikiIconUrl("Kq head")} alt="" draggable={false} className={`object-contain ${className ?? ""}`} onError={() => setFailed(true)} />;
 }
 
-/** The header's report-a-bug button (AppHeader wraps it in its tooltip). Themes can replace it: the BugReportButton slot. */
+/**
+ * The header's report-a-bug button, with its "Report a bug" tooltip. Themes can replace it (the BugReportButton slot);
+ * a theme's must bring the tooltip too, round the button itself: the tooltip wires its hover and focus into its direct
+ * child, which has to pass them on to the real button element.
+ */
 export function BugReportButton({ onPress, hasUnseen }: BugReportButtonProps) {
   return (
-    <IconButton label="Report a bug" size="sm" className="relative" onPress={onPress}>
-      <span className="flex size-5 items-center justify-center rounded-sm bg-icon-backdrop">
-        <BugReportIcon className="size-4" />
-      </span>
-      {hasUnseen && <PulseDot className="-right-0.5 -top-0.5" />}
-    </IconButton>
+    <TextTooltip text="Report a bug">
+      <IconButton label="Report a bug" size="sm" className="relative" onPress={onPress}>
+        <span className="flex size-5 items-center justify-center rounded-sm bg-icon-backdrop">
+          <BugReportIcon className="size-4" />
+        </span>
+        {hasUnseen && <PulseDot className="-right-0.5 -top-0.5" />}
+      </IconButton>
+    </TextTooltip>
   );
 }

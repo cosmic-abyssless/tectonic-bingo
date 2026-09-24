@@ -846,6 +846,11 @@ export interface DraftPoolEntry {
   tectonicProfile: TectonicProfile | null;
 }
 
+// GET /:slug/account-types: each active signup's account type by user id (players with none known are left out).
+export interface AccountTypesResponse {
+  accountTypes: Record<string, AccountType>;
+}
+
 // One player's card, opened from any name on the page (GET /:slug/players/:userId).
 // Same fields the draft pool carries, resolved for a single user.
 export interface PlayerProfile {

@@ -6,10 +6,10 @@ import type { DraftTeam, PickRating } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
 import { queryKeys, useBingo, useDraftState, useMakePick, useSetDraftOrder, useSetPickRating, useShuffleDraftOrder, useSignupQuestions, useStartDraft, useUndoPick } from "../../api/queries";
 import { Button, IconButton } from "../ui/Button";
-import { Card, Notice } from "../ui/Card";
-import { Dialog, DialogHeader } from "../ui/Dialog";
+import { Notice } from "../ui/Card";
+import { Panel } from "../ui/Panel";
+import { useDialogParts } from "../ui/useDialogParts";
 import { ChevronDownIcon, ChevronUpIcon } from "../ui/icons";
-import { useElementHeight } from "../ui/useElementHeight";
 import { DraftPoolGrid } from "./DraftPoolGrid";
 import { useAnswerViewer, visibleQuestions } from "../ui/answerVisibility";
 import { usePreference } from "../ui/preferences";
@@ -17,7 +17,7 @@ import { TeamRoster, pairPickRows } from "./TeamRoster";
 import { DraftPickReveal } from "./DraftPickReveal";
 import { namesForPick } from "./revealMath";
 import { useDraftReveals } from "./useDraftReveals";
-import { UndoPick } from "./UndoPick";
+import type { UndoLatestPick } from "./UndoPick";
 import { FinalTeams } from "./FinalTeams";
 
 // Themeable via --font-heading/--font-heading-weight (set by ThemeProvider
@@ -41,6 +41,7 @@ function PickOrderDialog({
   saving: boolean;
   error: string | null;
 }) {
+  const { Dialog, DialogHeader } = useDialogParts();
   const [ids, setIds] = useState<string[]>([]);
   useEffect(() => {
     if (isOpen) setIds(teams.map((t) => t.id));
@@ -93,10 +94,6 @@ function PickOrderDialog({
   );
 }
 
-// Not <Card>: the teams and the pool need a raised fill + stronger border than Card's surface/outline, which vanish
-// into the dark themes' backdrop.
-const DRAFT_PANEL = "rounded-lg border border-outline-strong bg-surface-raised p-4 shadow-[0_2px_10px_var(--color-shade)]";
-
 export function DraftRoom({ slug }: { slug: string }) {
   const { user } = useAuth();
   // Whether the pool table breaks out of max-w-5xl (the switch for it lives in DraftPoolGrid's toolbar).
@@ -122,15 +119,6 @@ export function DraftRoom({ slug }: { slug: string }) {
   const [orderOpen, setOrderOpen] = useState(false);
   const OnTheClockBanner = useSlot("OnTheClockBanner");
   const reveals = useDraftReveals(shell?.bingo.id, state);
-  // The teams stay pinned under the page header while the pool scrolls — headerHeight is its own sticky `top`
-  // offset. The pool table's height is no longer derived from this (DraftPoolGrid measures its own position via
-  // useDocumentTop now, matching the signup roster), so there's no teamsHeight to measure alongside it any more.
-  const [pageHeader, setPageHeader] = useState<Element | null>(null);
-  useEffect(() => setPageHeader(document.querySelector("header")), []);
-  const headerHeight = useElementHeight(pageHeader);
-  // The on-the-clock banner pins under the page header; the teams row pins under the banner.
-  const [bannerEl, setBannerEl] = useState<HTMLDivElement | null>(null);
-  const bannerHeight = useElementHeight(bannerEl) * (bannerEl ? 1 : 0);
 
   useEffect(() => {
     if (!state?.orderLockedUntil) return;
@@ -179,6 +167,12 @@ export function DraftRoom({ slug }: { slug: string }) {
   const latestPickTeam = latestPick ? (state.teams.find((t) => t.id === latestPick.teamId) ?? null) : null;
   const canUndo = isAdmin && !scouting && state.draftStarted && !!latestPick && !!latestPickTeam;
   const busy = shuffleOrder.isPending || setOrder.isPending || startDraft.isPending;
+  // A pick is on the clock (the Teams panel carries the banner).
+  const onTheClock = !scouting && state.draftStarted && !!state.currentPick && !!currentTeam && !revealing;
+  // The undo button rides on the latest pick's slip, in its team's roster.
+  const undoLatest: UndoLatestPick | undefined = canUndo
+    ? { pickNumber: latestPickNumber, names: namesForPick(state.picks, latestPickNumber), teamName: latestPickTeam!.name, busy: undoPick.isPending, error: undoError, onUndo: handleUndo }
+    : undefined;
 
   async function handleShuffle() {
     setOrderError(null);
@@ -250,7 +244,8 @@ export function DraftRoom({ slug }: { slug: string }) {
             {isLead && " Star and note players now; your team's ratings carry over into the draft."}
           </Notice>
         ) : !state.draftStarted ? (
-          <Card className="space-y-3 p-4">
+          <Panel>
+            <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="font-semibold text-on-surface">The draft hasn't started</p>
@@ -297,20 +292,9 @@ export function DraftRoom({ slug }: { slug: string }) {
                 ))}
               </ol>
             )}
-          </Card>
-        ) : state.currentPick && currentTeam && !revealing ? (
-          // Pinned under the page header while the pool scrolls; the teams row below pins under it.
-          <div ref={setBannerEl} className="sticky z-20 -mx-2 px-2 pb-1 pt-1" style={{ top: headerHeight }}>
-            <OnTheClockBanner
-              key={state.currentPick.pickNumber}
-              teamName={currentTeam.name}
-              teamColor={currentTeam.color ?? null}
-              captains={[currentTeam.captainRsn || "?", ...(currentTeam.coCaptain ? [currentTeam.coCaptain.rsn || "?"] : [])]}
-              pickLabel={`${state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick ${state.currentPick.pickNumber}`}
-              isMyTurn={isMyTurn}
-            />
-          </div>
-        ) : revealing ? (
+            </div>
+          </Panel>
+        ) : onTheClock ? null : revealing ? (
           <Notice tone="info">Revealing pick order.</Notice>
         ) : !state.currentPick && canControlOrder ? (
           <Notice tone="info">Draft started.</Notice>
@@ -332,30 +316,37 @@ export function DraftRoom({ slug }: { slug: string }) {
           </Notice>
         )}
 
-        {canUndo && (
-          <UndoPick
-            // Reset the confirmation whenever the latest pick changes underneath it.
-            key={latestPickNumber}
-            pickNumber={latestPickNumber}
-            names={namesForPick(state.picks, latestPickNumber)}
-            teamName={latestPickTeam!.name}
-            busy={undoPick.isPending}
-            error={undoError}
-            onUndo={handleUndo}
-          />
-        )}
-
         {draftComplete ? (
-          <FinalTeams teams={state.teams} picks={state.picks} myUserId={user.id} />
+          <Panel title="Final teams">
+            <FinalTeams teams={state.teams} picks={state.picks} myUserId={user.id} />
+          </Panel>
         ) : (
-        <section className={`sticky z-10 ${DRAFT_PANEL}`} style={{ top: headerHeight + bannerHeight }}>
-          <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
-            Teams
-          </h3>
-          {/* grid-flow-col + a minimum column width, in a scrollable row —
-              handles a handful of teams (spread to fill width) and a large
-              number of teams (scrolls instead of squeezing RSNs unreadable). */}
-          <div className="max-h-[36vh] overflow-auto">
+        // While a pick is on the clock, the banner is the panel's header strip rather than a card of its own above it: one
+        // block, and the rosters sit right under whose turn it is. Not pinned: it grows with the picks (below), and a
+        // pinned panel taller than the window would sit over the pool.
+        <Panel
+          title={onTheClock ? undefined : "Teams"}
+          header={
+            onTheClock ? (
+              <OnTheClockBanner
+                key={state.currentPick!.pickNumber}
+                embedded
+                teamName={currentTeam!.name}
+                teamColor={currentTeam!.color ?? null}
+                captains={[currentTeam!.captainRsn || "?", ...(currentTeam!.coCaptain ? [currentTeam!.coCaptain.rsn || "?"] : [])]}
+                pickLabel={`${state.currentPick!.singlesRound ? "Singles round" : `Round ${state.currentPick!.round}`} · Pick ${state.currentPick!.pickNumber}`}
+                isMyTurn={isMyTurn}
+              />
+            ) : undefined
+          }
+          // Room above for a theme's sticker over the top edge.
+          className={onTheClock ? "mt-4" : undefined}
+        >
+          {/* grid-flow-col + a minimum column width, in a row that scrolls
+              sideways — handles a handful of teams (spread to fill width) and
+              a large number of teams (scrolls instead of squeezing RSNs
+              unreadable). Every pick shows: it grows down, never scrolls. */}
+          <div className="overflow-x-auto">
             <div className="grid auto-cols-[minmax(140px,1fr)] grid-flow-col gap-3">
               {state.teams.map((team) => (
                 <motion.div
@@ -375,13 +366,14 @@ export function DraftRoom({ slug }: { slug: string }) {
                     hiddenPickNumbers={reveals.hiddenPickNumbers}
                     reserveCoCaptainRow={state.teams.some((t) => t.coCaptain)}
                     pairRows={pairRows}
+                    undo={undoLatest && latestPickTeam?.id === team.id ? undoLatest : undefined}
                   />
                 </motion.div>
               ))}
             </div>
           </div>
           {state.teams.length === 0 && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
-        </section>
+        </Panel>
         )}
 
         {revealedTeam && reveals.active && (
@@ -426,8 +418,8 @@ export function DraftRoom({ slug }: { slug: string }) {
           this component (the status cards, the teams row, the pick/clan-API notices) stays reading-width. */}
       <div className={`mt-6 w-full px-6 pb-6 ${poolWidth === "narrow" ? "mx-auto max-w-5xl" : ""}`}>
         {/* The Captain on the clock gets the pool framed in their team's colour, on top of the banner everyone sees. */}
-        <div
-          className={`${DRAFT_PANEL} transition-shadow`}
+        <Panel
+          className="transition-shadow"
           style={isMyTurn ? { borderColor: currentTeam?.color ?? "var(--color-accent)", boxShadow: `0 0 0 4px ${currentTeam?.color ?? "var(--color-accent)"}, 0 0 24px ${currentTeam?.color ?? "var(--color-accent)"}` } : undefined}
         >
           <DraftPoolGrid
@@ -440,12 +432,13 @@ export function DraftRoom({ slug }: { slug: string }) {
             picking={makePick.isPending}
             leftoverMode={shell.bingo.leftoverMode}
             heading={
-              <h3 className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+              // data-panel-heading: a theme's panel can letter it like its own titles.
+              <h3 data-panel-heading="" className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
                 Available players <span className="num font-normal text-on-surface-subtle">({poolCount})</span>
               </h3>
             }
           />
-        </div>
+        </Panel>
       </div>
     </div>
   );

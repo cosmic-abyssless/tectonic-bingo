@@ -42,7 +42,6 @@ import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { CaCell, WomCell, caTitle, formatCaTier, formatWomStat } from "../signup/caStats";
 import { discordName } from "../ui/user";
 import { useGridTheme } from "../ui/agGrid";
-import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { Badge } from "../ui/Card";
 import { ColumnPicker } from "../ui/ColumnPicker";
 import { MultiSelect } from "../ui/MultiSelect";
@@ -156,7 +155,9 @@ type LineRender = (entry: DraftPoolEntry, opts: { dim: boolean; search: string }
 // LineRender's own markup.
 const StackedCell = ({ data, context, render }: CustomCellRendererProps<DraftUnit, unknown, PoolGridContext> & { render: LineRender }) => {
   if (!data) return null;
-  if (data.entries.length === 1) return <div className="leading-tight">{render(data.entries[0]!, { dim: false, search: context.search })}</div>;
+  // py-1: AG clips the cell to its content, and a solo line's content box ends at the text, above where PlayerName
+  // draws its dotted underline (3px below, in borrowed space) — a pair's own padding already leaves that room.
+  if (data.entries.length === 1) return <div className="py-1 leading-tight">{render(data.entries[0]!, { dim: false, search: context.search })}</div>;
   return (
     <div className="flex flex-col justify-center gap-5 py-2 leading-tight">
       {data.entries.map((e) => (
@@ -175,9 +176,9 @@ function dimClass(dim: boolean): string | undefined {
 // own (no way to suppress it short of forking those components), so those columns opt out of the AG tooltip
 // (tooltip: false) rather than show both at once.
 const rsnLine: LineRender = (entry, { dim, search }) => (
-  <span className={`inline-flex max-w-full min-w-0 items-center gap-2 ${dimClass(dim) ?? ""}`}>
-    <AccountTypeIcon accountType={entry.accountType} className="align-middle" reserveSpace />
-    <PlayerName userId={entry.user.id} className="min-w-0 truncate">
+  <span className={`inline-flex max-w-full min-w-0 items-center ${dimClass(dim) ?? ""}`}>
+    {/* The badge's slot is kept for a player with none, so the names in the column line up. */}
+    <PlayerName userId={entry.user.id} accountType={entry.accountType} badge="reserve" className="min-w-0 truncate">
       <Mark text={entry.signup.rsn} query={search} />
     </PlayerName>
   </span>
@@ -636,7 +637,8 @@ export function DraftPoolGrid({
   // edge — SignupRoster's bare wrapper has no such Card, so it never needed the extra rem. Getting this short
   // by even a few px is exactly what caused a double scrollbar (confirmed live: docScrollHeight 9px taller than
   // the viewport at 2rem) — the page itself scrolling a hair as well as the grid's own internal one.
-  const tableHeight = `calc(100dvh - ${tableTop}px - 2.5rem)`;
+  // - 4px more: room for a theme's panel border thicker than the plain 1px (the comic theme's is 3px).
+  const tableHeight = `calc(100dvh - ${tableTop}px - 2.5rem - 4px)`;
 
   const onGridReady = useCallback((e: GridReadyEvent<DraftUnit>) => {
     gridApiRef.current = e.api;

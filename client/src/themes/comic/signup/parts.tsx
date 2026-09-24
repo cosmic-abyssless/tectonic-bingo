@@ -6,8 +6,8 @@ import { COMIC_FONT } from "../font";
 import { CaptionBox } from "../ui/CaptionBox";
 import { comicVars, useComic } from "../ui/useComic";
 
-// The pieces the comic signup stage is drawn with. Everything here is printed on the same stock as the tile modal's
-// book pages (SignupStage provides the page palette), like the "Scout the signups!" caption above it.
+// The pieces the comic signup stage is drawn with: sheets on the palette's own paper (charcoal in the dark palettes),
+// like the draft room's panels, with the fields, stats and lists right on them in the same palette.
 
 /**
  * The chrome tokens the core form controls (Input, Select, Textarea, SearchableSelect) read, pointed at the page
@@ -21,7 +21,9 @@ export function paperVars(c: ComicColors): CSSProperties {
     "--field-bg": c.PAPER_RAISED,
     "--color-surface": c.PAPER,
     "--color-surface-raised": c.PAPER_RAISED,
-    "--color-surface-hover": c.YELLOW_TINT,
+    // A hovered option in a dropdown: the raised fill lifted a little toward the lettering (a lighter grey on charcoal,
+    // a darker shade on papyrus). The yellow tint read as a muddy olive on the dark palettes.
+    "--color-surface-hover": `color-mix(in srgb, ${c.PAPER_RAISED} 82%, ${c.INK})`,
     "--color-outline": c.LINE,
     "--color-outline-strong": c.LINE,
     "--color-on-surface": c.INK,
@@ -221,7 +223,7 @@ export function ChoiceChip({ type, name, checked, onChange, children }: { type: 
 export function StatBox({ label, value, note, loading }: { label: string; value: string; note?: string; loading?: boolean }) {
   const { colors } = useComic();
   return (
-    <div className="min-w-0 rounded-md border-[3px] px-3 py-2" style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.LINE}` }}>
+    <div className="min-w-0 border-[3px] px-3 py-2" style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.LINE}` }}>
       <div className="text-sm uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
         {label}
       </div>
@@ -253,12 +255,12 @@ export function SubHead({ children }: { children: ReactNode }) {
   );
 }
 
-/** An ink-bordered list of people, one per row, as in the board's tile search results. */
+/** An ink-bordered list of people, one per row, on a raised card. */
 export function RowList({ children, scroll }: { children: ReactNode; scroll?: boolean }) {
   const { colors } = useComic();
   return (
     <ul
-      className={`comic-rows rounded-md border-[3px] ${scroll ? "max-h-64 overflow-y-auto" : ""}`}
+      className={`comic-rows border-[3px] ${scroll ? "max-h-64 overflow-y-auto" : ""}`}
       style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.LINE}`, ["--comic-rule" as string]: colors.RULE }}
     >
       {children}

@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { DraftPick, DraftTeam } from "@bingo/shared";
-import { CrownIcon, LinkIcon } from "../ui/icons";
+import { CaptainEmblem } from "../ui/CaptainEmblem";
+import { LinkIcon } from "../ui/icons";
 import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { inkOn } from "./teamColor";
@@ -31,7 +32,7 @@ function FinalTeamCard({ team, picks, mine }: { team: DraftTeam; picks: DraftPic
         <ul className="mt-0.5 space-y-0.5 text-xs opacity-95">
           {captains.map((c) => (
             <li key={c.userId} className="flex min-w-0 items-center gap-1">
-              <CrownIcon size={12} className="shrink-0" aria-label={c.co ? "Co-captain" : "Captain"} />
+              <CaptainEmblem co={c.co} />
               <PlayerName userId={c.userId} className="truncate">
                 {c.rsn || "?"}
               </PlayerName>

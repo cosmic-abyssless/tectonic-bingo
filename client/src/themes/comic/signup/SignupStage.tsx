@@ -4,31 +4,27 @@ import { Input, Textarea } from "../../../core/ui/Field";
 import { Select } from "../../../core/ui/Select";
 import { SearchableSelect } from "../../../core/ui/SearchableSelect";
 import { AlertIcon, CheckIcon, LockIcon } from "../../../core/ui/icons";
-import { pageColors } from "../board/colors";
 import { COMIC_FONT } from "../font";
 import { ComicField } from "../submission/ComicField";
 import { ComicButton } from "../ui/ComicButton";
 import { Stamp } from "../ui/Stamp";
-import { PageColorsContext, useComic } from "../ui/useComic";
+import { useComic } from "../ui/useComic";
 import { PartnerSheet } from "./PartnerSheet";
 import { Callout, ChoiceChip, CollapsibleSheet, paperVars, Required, StatBox, TabLegend } from "./parts";
 
 /**
- * The signup stage in the comic theme: the form (and, in a duo bingo, the partner step under it) printed on the tile
- * modal's page stock — the papyrus in the dark palettes — like the "Scout the signups!" caption above it. Ink-bordered
- * sheets with lettered headers, yellow tab labels, answers as chips, comic buttons; the core form controls take the
- * paper colours from paperVars and their ink border from comic.css.
+ * The signup stage in the comic theme: the form (and, in a duo bingo, the partner step under it) as sheets on the
+ * palette's own paper (charcoal in the dark palettes), like the draft room's panels, with the fields, stats and lists
+ * right on it. Ink-bordered sheets with lettered headers, yellow tab labels,
+ * answers as chips, comic buttons; the core form controls take their colours from paperVars and their ink border from
+ * comic.css.
  */
 export function SignupStage({ slug }: { slug: string }) {
   const { colors } = useComic();
-  const page = pageColors(colors);
   return (
-    <PageColorsContext.Provider value={page}>
-      {/* data-portal-scope: a Select's list opens in here, so it's printed on the same paper. */}
-      <div data-portal-scope="" className="comic-fields space-y-8" style={paperVars(page)}>
-        <SignupSheets slug={slug} />
-      </div>
-    </PageColorsContext.Provider>
+    <div data-portal-scope="" className="comic-fields space-y-8" style={paperVars(colors)}>
+      <SignupSheets slug={slug} />
+    </div>
   );
 }
 

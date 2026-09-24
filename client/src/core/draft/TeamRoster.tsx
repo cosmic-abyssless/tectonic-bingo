@@ -1,7 +1,9 @@
 import type { DraftPick, DraftTeam } from "@bingo/shared";
-import { CrownIcon } from "../ui/icons";
+import { CaptainEmblem } from "../ui/CaptainEmblem";
 import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
+import { useOptionalSlot } from "../../themes/context";
+import { UndoPickButton, type UndoLatestPick } from "./UndoPick";
 
 // A duo pair is drafted as one pick, so both rows share a pickNumber — show
 // them as one entry so the roster reads the same way the draft was made.
@@ -21,7 +23,7 @@ export function pairPickRows(picksByTeam: DraftPick[][]): boolean[] {
   return rows;
 }
 
-function ordinal(n: number): string {
+export function ordinal(n: number): string {
   const v = n % 100;
   if (v >= 11 && v <= 13) return `${n}th`;
   switch (n % 10) {
@@ -32,16 +34,7 @@ function ordinal(n: number): string {
   }
 }
 
-export function TeamRoster({
-  team,
-  picks,
-  isCurrent,
-  highlight,
-  showOrder,
-  hiddenPickNumbers,
-  reserveCoCaptainRow,
-  pairRows,
-}: {
+export interface TeamRosterProps {
   team: DraftTeam;
   picks: DraftPick[];
   isCurrent?: boolean;
@@ -53,7 +46,22 @@ export function TeamRoster({
   reserveCoCaptainRow?: boolean;
   /** pairPickRows across all teams: which pick rounds hold a pair somewhere, so solo picks there match its height. */
   pairRows?: boolean[];
-}) {
+  /** This team holds the latest pick and the viewer may take it back: its slip gets the undo button (UndoPickButton). */
+  undo?: UndoLatestPick;
+}
+
+/**
+ * One team's column in the draft room: its card (name, captains), then its picks in order. Inside a theme that draws
+ * its own (the DraftTeamRoster slot) it's the theme's. Either way each pick's element carries data-team-id and
+ * data-pick-number: the pick reveal flies to it (DraftPickReveal), and it stays invisible while listed in
+ * hiddenPickNumbers.
+ */
+export function TeamRoster(props: TeamRosterProps) {
+  const Themed = useOptionalSlot("DraftTeamRoster");
+  return Themed ? <Themed {...props} /> : <PlainTeamRoster {...props} />;
+}
+
+export function PlainTeamRoster({ team, picks, isCurrent, highlight, showOrder, hiddenPickNumbers, reserveCoCaptainRow, pairRows, undo }: TeamRosterProps) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <div className="h-4 text-[11px] font-medium uppercase tracking-wide text-on-surface">
@@ -68,14 +76,14 @@ export function TeamRoster({
           <span className="truncate text-sm font-semibold text-on-surface">{team.name}</span>
         </div>
         <div className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-on-surface-muted">
-          <CrownIcon size={12} className="shrink-0 text-warn" aria-label="Captain" />
+          <CaptainEmblem />
           <PlayerName userId={team.captainUserId} className="truncate">
             {team.captainRsn || "?"}
           </PlayerName>
         </div>
         {team.coCaptain && (
           <div className="flex min-w-0 items-center gap-1 text-xs text-on-surface-muted">
-            <CrownIcon size={12} className="shrink-0 text-on-surface-subtle" aria-label="Co-captain" />
+            <CaptainEmblem co />
             <PlayerName userId={team.coCaptain.userId} className="truncate">
               {team.coCaptain.rsn || "?"}
             </PlayerName>
@@ -89,13 +97,16 @@ export function TeamRoster({
             key={group[0].pickNumber}
             data-team-id={team.id}
             data-pick-number={group[0].pickNumber}
-            className={`flex flex-col justify-center rounded-sm border border-outline bg-surface-raised px-2.5 py-1 text-sm text-on-surface ${group.length === 1 && pairRows?.[i] ? "min-h-[50px]" : ""} ${hiddenPickNumbers?.has(group[0].pickNumber) ? "invisible" : ""}`}
+            className={`flex items-center gap-1 rounded-sm border border-outline bg-surface-raised px-2.5 py-1 text-sm text-on-surface ${group.length === 1 && pairRows?.[i] ? "min-h-[50px]" : ""} ${hiddenPickNumbers?.has(group[0].pickNumber) ? "invisible" : ""}`}
           >
-            {group.map((p) => (
-              <div key={p.id} className="truncate">
-                <PlayerName userId={p.userId}>{p.rsn || displayName(p.user)}</PlayerName>
-              </div>
-            ))}
+            <div className="flex min-w-0 flex-1 flex-col justify-center">
+              {group.map((p) => (
+                <div key={p.id} className="truncate">
+                  <PlayerName userId={p.userId}>{p.rsn || displayName(p.user)}</PlayerName>
+                </div>
+              ))}
+            </div>
+            {undo?.pickNumber === group[0].pickNumber && <UndoPickButton undo={undo} />}
           </li>
         ))}
       </ul>

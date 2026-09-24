@@ -3,7 +3,7 @@ import { useRenameTeam } from "../../../api/queries";
 import { useTeamActivityModel } from "../../../headless/useTeamActivity";
 import type { TeamModel } from "../../../headless/types";
 import { Input } from "../../../core/ui/Field";
-import { CrownIcon } from "../../../core/ui/icons";
+import { CaptainEmblem } from "../../../core/ui/CaptainEmblem";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
 import { COMIC_FONT } from "../font";
 import { ComicDialog, ComicDialogHeader } from "../ui/ComicDialog";
@@ -81,8 +81,8 @@ function TeamDetails({ slug, team, onClose }: { slug: string; team: TeamModel; o
                   {member.isCaptain ? "Captain" : member.isCoCaptain ? "Co-captain" : "Member"}
                 </span>
               </div>
-              {member.isCaptain && <CrownIcon size={18} style={{ color: colors.YELLOW, filter: `drop-shadow(1px 1px 0 ${colors.LINE})` }} aria-label="Captain" />}
-              {member.isCoCaptain && <CrownIcon size={16} style={{ color: colors.INK_SUBTLE }} aria-label="Co-captain" />}
+              {member.isCaptain && <CaptainEmblem scale={2} />}
+              {member.isCoCaptain && <CaptainEmblem co scale={2} />}
             </li>
           ))}
         </ul>

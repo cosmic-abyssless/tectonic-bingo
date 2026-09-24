@@ -48,25 +48,36 @@ ModuleRegistry.registerModules([
 if (import.meta.env.DEV) enableDevValidations();
 
 // Every value is one of the app's tokens (client/src/index.css) — never a literal colour, per the design-tokens
-// rule. --color-surface-muted does not exist (tableChrome.tsx's STRIPE_ODD references it, which is a pre-existing
+// rule. A few can be restyled by whatever surface the grid sits on, through optional --grid-* variables (the comic
+// theme's panels set them: a lettered header strip, ink rules); unset, each falls back to the plain look.
+//   --grid-bg, --grid-header-bg, --grid-header-fg: colours
+//   --grid-header-font, --grid-header-weight, --grid-header-font-size: the header's lettering
+//   --grid-header-rule, --grid-row-rule, --grid-wrapper-border: CSS border shorthands
+//   --grid-odd-row, --grid-row-hover: row fills
+//   --grid-radius: the outer corners --color-surface-muted does not exist (tableChrome.tsx's STRIPE_ODD references it, which is a pre-existing
 // bug — see the AG Grid plan doc); oddRowBackgroundColor here uses the real --color-surface-hover token instead.
 const baseGridTheme = themeQuartz.withParams({
-  backgroundColor: "var(--color-surface)",
+  backgroundColor: "var(--grid-bg, var(--color-surface))",
   foregroundColor: "var(--color-on-surface)",
-  headerBackgroundColor: "var(--color-surface)",
-  headerTextColor: "var(--color-on-surface-subtle)",
+  headerBackgroundColor: "var(--grid-header-bg, var(--color-surface))",
+  headerTextColor: "var(--grid-header-fg, var(--color-on-surface-subtle))",
+  headerFontFamily: "var(--grid-header-font, inherit)",
+  headerFontWeight: "var(--grid-header-weight, 500)",
+  headerRowBorder: "var(--grid-header-rule, 1px solid var(--color-outline))",
+  rowBorder: "var(--grid-row-rule, 1px solid var(--color-outline))",
   borderColor: "var(--color-outline)",
   accentColor: "var(--color-accent)",
-  oddRowBackgroundColor: "color-mix(in srgb, var(--color-surface-hover) 40%, transparent)",
-  rowHoverColor: "var(--color-surface-hover)",
+  oddRowBackgroundColor: "var(--grid-odd-row, color-mix(in srgb, var(--color-surface-hover) 40%, transparent))",
+  rowHoverColor: "var(--grid-row-hover, var(--color-surface-hover))",
   fontFamily: "inherit",
   fontSize: "0.875rem",
-  headerFontSize: "0.75rem",
+  headerFontSize: "var(--grid-header-font-size, 0.75rem)",
   spacing: 6,
   rowHeight: 44,
   headerHeight: 40,
   borderRadius: 6,
-  wrapperBorder: false,
+  wrapperBorderRadius: "var(--grid-radius, 6px)",
+  wrapperBorder: "var(--grid-wrapper-border, none)",
   // A checked checkbox (the roster's "Buy-in received" column) reads as --color-ok green rather than the
   // theme's default accent-coloured check, so it stands out from the rest of the grid's UI at a glance.
   // --color-on-ok doesn't exist; --color-on-accent flips light/dark the same way --color-ok does, so it stays

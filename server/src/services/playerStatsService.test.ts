@@ -6,7 +6,7 @@ import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { WomClient } from "./womService";
 import { RuneProfileClient } from "./runeProfileService";
-import { fetchAndPersistPlayerStats, getSignupStats } from "./playerStatsService";
+import { fetchAndPersistPlayerStats, getAccountTypes, getSignupStats } from "./playerStatsService";
 import { parseStoredCaStats } from "./combatAchievements";
 import { broadcast } from "../ws";
 
@@ -281,5 +281,26 @@ describe("getSignupStats", () => {
     expect(getSignupStats(db, signup.bingoId, "nobody")).toBeNull();
     db.update(schema.signups).set({ status: "withdrawn" }).where(eq(schema.signups.id, signup.id)).run();
     expect(getSignupStats(db, signup.bingoId, signup.userId)).toBeNull();
+  });
+});
+
+describe("getAccountTypes", () => {
+  it("maps each active signup's user to its account type, RuneProfile's first, leaving out the unknown and the withdrawn", async () => {
+    const signup = seedSignup();
+    await fetchAndPersistPlayerStats(db, signup.id, "C osmic", {
+      womClient: fakeWomClient({ ehb: 1, type: "ironman" }),
+      runeProfileClient: fakeRuneProfileClient({ accountType: { key: "hardcore_ironman" }, combatAchievements: [] }),
+      tectonicClient: null,
+    });
+    // A second player with WOM data only, and a third with nothing fetched yet.
+    const [wom] = db.insert(schema.users).values({ discordId: "wom", discordUsername: "wom" }).returning().all();
+    db.insert(schema.signups).values({ bingoId: signup.bingoId, userId: wom.id, rsn: "Wom only", womDataJson: JSON.stringify({ ehb: 3, type: "ultimate" }) }).run();
+    const [none] = db.insert(schema.users).values({ discordId: "none", discordUsername: "none" }).returning().all();
+    db.insert(schema.signups).values({ bingoId: signup.bingoId, userId: none.id, rsn: "No stats" }).run();
+
+    expect(getAccountTypes(db, signup.bingoId)).toEqual({ [signup.userId]: "hardcore_ironman", [wom.id]: "ultimate_ironman" });
+
+    db.update(schema.signups).set({ status: "withdrawn" }).where(eq(schema.signups.id, signup.id)).run();
+    expect(getAccountTypes(db, signup.bingoId)).toEqual({ [wom.id]: "ultimate_ironman" });
   });
 });

@@ -70,8 +70,9 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       queryClient.invalidateQueries({ queryKey: ["adminCaptainCandidates"] });
       // Leads scouting the pool see new/withdrawn signups and pairs live.
       queryClient.invalidateQueries({ queryKey: ["draftState"] });
-      // CA / WOM snapshots land after the fire-and-forget fetch.
+      // CA / WOM snapshots land after the fire-and-forget fetch (and with them, account types).
       queryClient.invalidateQueries({ queryKey: ["playerProfile"] });
+      queryClient.invalidateQueries({ queryKey: ["accountTypes"] });
       break;
     case "audit_appended":
       queryClient.invalidateQueries({ queryKey: ["auditLog"] });
