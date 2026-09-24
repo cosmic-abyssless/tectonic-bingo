@@ -7,11 +7,54 @@ import { useComic } from "../ui/useComic";
 
 // A comic caption box: thick ink border, hard offset shadow, and a tilted "ON THE CLOCK!" sticker that
 // stamps in on every turn change.
-export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isMyTurn }: OnTheClockProps) {
+export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isMyTurn, embedded }: OnTheClockProps) {
   const { colors } = useComic();
   const reduced = useReducedMotion();
   const bg = teamColor ?? colors.YELLOW;
   const ink = teamColor ? inkOn(teamColor) : colors.ON_YELLOW;
+  if (embedded) {
+    // The top strip of the Teams panel: the team's colour edge to edge, ruled off from the rosters below, the sticker
+    // set in the strip (not hanging over its edge) and the team name sliding in on every turn change.
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b-[3px] px-4 py-3"
+        style={{ backgroundColor: bg, color: ink, borderColor: colors.LINE }}
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <motion.span
+            initial={reduced ? false : { scale: 2, rotate: 8, opacity: 0 }}
+            animate={{ scale: 1, rotate: -4, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 500, damping: 16 }}
+            className="shrink-0 rounded-sm border-[3px] px-2 py-0.5 text-sm uppercase leading-none tracking-wider"
+            style={{ fontFamily: COMIC_FONT, background: colors.PAPER, color: colors.INK, borderColor: colors.LINE, boxShadow: `2px 2px 0 ${colors.LINE}` }}
+          >
+            {isMyTurn ? "Your pick!" : "On the clock!"}
+          </motion.span>
+          <motion.div
+            className="min-w-0"
+            initial={reduced ? false : { opacity: 0, x: -24 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ type: "spring", stiffness: 420, damping: 24 }}
+          >
+            <p className="truncate text-3xl uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT }}>
+              {teamName}
+            </p>
+            {captains.length > 0 && (
+              <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-sm font-semibold">
+                <CrownIcon size={13} aria-label="Captains" />
+                {captains.join(" & ")}
+              </p>
+            )}
+          </motion.div>
+        </div>
+        <p className="num text-lg uppercase tracking-wide" style={{ fontFamily: COMIC_FONT }}>
+          {pickLabel}
+        </p>
+      </div>
+    );
+  }
   return (
     <motion.div
       initial={reduced ? false : { opacity: 0, x: -40, rotate: -1.5 }}

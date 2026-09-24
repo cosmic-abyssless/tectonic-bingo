@@ -12,20 +12,23 @@ import { useComic } from "./useComic";
  * selects open inside it (data-portal-scope). Content that wants the papyrus inside it (the draft room's team cards)
  * draws with pageColors itself. Never tilted: a transform would pin sticky or fixed content inside it to the panel.
  */
-export function ComicPanel({ title, children, padding = "md", className, style }: PanelProps) {
+export function ComicPanel({ title, header, children, padding = "md", className, style }: PanelProps) {
   const { colors } = useComic();
   return (
     <section
       data-portal-scope=""
-      className={`comic-fields border-[3px] ${padding === "sm" ? "px-4 py-2.5" : "p-4"} ${className ?? ""}`}
+      className={`comic-fields border-[3px] ${className ?? ""}`}
       style={{ ...paperVars(colors), background: colors.PAPER, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.LINE}`, color: colors.INK_BODY, ...style }}
     >
-      {title && (
-        <h3 className="mb-3 text-xl uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: colors.INK }}>
-          {title}
-        </h3>
-      )}
-      {children}
+      {header}
+      <div className={padding === "sm" ? "px-4 py-2.5" : "p-4"}>
+        {title && (
+          <h3 className="mb-3 text-xl uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: colors.INK }}>
+            {title}
+          </h3>
+        )}
+        {children}
+      </div>
     </section>
   );
 }

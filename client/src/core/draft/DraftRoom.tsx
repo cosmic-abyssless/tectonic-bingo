@@ -129,9 +129,6 @@ export function DraftRoom({ slug }: { slug: string }) {
   const [pageHeader, setPageHeader] = useState<Element | null>(null);
   useEffect(() => setPageHeader(document.querySelector("header")), []);
   const headerHeight = useElementHeight(pageHeader);
-  // The on-the-clock banner pins under the page header; the teams row pins under the banner.
-  const [bannerEl, setBannerEl] = useState<HTMLDivElement | null>(null);
-  const bannerHeight = useElementHeight(bannerEl) * (bannerEl ? 1 : 0);
 
   useEffect(() => {
     if (!state?.orderLockedUntil) return;
@@ -180,6 +177,8 @@ export function DraftRoom({ slug }: { slug: string }) {
   const latestPickTeam = latestPick ? (state.teams.find((t) => t.id === latestPick.teamId) ?? null) : null;
   const canUndo = isAdmin && !scouting && state.draftStarted && !!latestPick && !!latestPickTeam;
   const busy = shuffleOrder.isPending || setOrder.isPending || startDraft.isPending;
+  // A pick is on the clock (the Teams panel carries the banner).
+  const onTheClock = !scouting && state.draftStarted && !!state.currentPick && !!currentTeam && !revealing;
   // The undo button rides on the latest pick's slip, in its team's roster.
   const undoLatest: UndoLatestPick | undefined = canUndo
     ? { pickNumber: latestPickNumber, names: namesForPick(state.picks, latestPickNumber), teamName: latestPickTeam!.name, busy: undoPick.isPending, error: undoError, onUndo: handleUndo }
@@ -255,7 +254,8 @@ export function DraftRoom({ slug }: { slug: string }) {
             {isLead && " Star and note players now; your team's ratings carry over into the draft."}
           </Notice>
         ) : !state.draftStarted ? (
-          <Panel className="space-y-3">
+          <Panel>
+            <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="font-semibold text-on-surface">The draft hasn't started</p>
@@ -302,20 +302,9 @@ export function DraftRoom({ slug }: { slug: string }) {
                 ))}
               </ol>
             )}
+            </div>
           </Panel>
-        ) : state.currentPick && currentTeam && !revealing ? (
-          // Pinned under the page header while the pool scrolls; the teams row below pins under it.
-          <div ref={setBannerEl} className="sticky z-20 -mx-2 px-2 pb-1 pt-1" style={{ top: headerHeight }}>
-            <OnTheClockBanner
-              key={state.currentPick.pickNumber}
-              teamName={currentTeam.name}
-              teamColor={currentTeam.color ?? null}
-              captains={[currentTeam.captainRsn || "?", ...(currentTeam.coCaptain ? [currentTeam.coCaptain.rsn || "?"] : [])]}
-              pickLabel={`${state.currentPick.singlesRound ? "Singles round" : `Round ${state.currentPick.round}`} · Pick ${state.currentPick.pickNumber}`}
-              isMyTurn={isMyTurn}
-            />
-          </div>
-        ) : revealing ? (
+        ) : onTheClock ? null : revealing ? (
           <Notice tone="info">Revealing pick order.</Notice>
         ) : !state.currentPick && canControlOrder ? (
           <Notice tone="info">Draft started.</Notice>
@@ -342,7 +331,26 @@ export function DraftRoom({ slug }: { slug: string }) {
             <FinalTeams teams={state.teams} picks={state.picks} myUserId={user.id} />
           </Panel>
         ) : (
-        <Panel title="Teams" className="sticky z-10" style={{ top: headerHeight + bannerHeight }}>
+        // Pinned under the page header while the pool scrolls. While a pick is on the clock, the banner is the panel's
+        // header strip rather than a card of its own above it: one block, and the rosters sit right under whose turn it is.
+        <Panel
+          title={onTheClock ? undefined : "Teams"}
+          header={
+            onTheClock ? (
+              <OnTheClockBanner
+                key={state.currentPick!.pickNumber}
+                embedded
+                teamName={currentTeam!.name}
+                teamColor={currentTeam!.color ?? null}
+                captains={[currentTeam!.captainRsn || "?", ...(currentTeam!.coCaptain ? [currentTeam!.coCaptain.rsn || "?"] : [])]}
+                pickLabel={`${state.currentPick!.singlesRound ? "Singles round" : `Round ${state.currentPick!.round}`} · Pick ${state.currentPick!.pickNumber}`}
+                isMyTurn={isMyTurn}
+              />
+            ) : undefined
+          }
+          className="sticky z-10"
+          style={{ top: headerHeight }}
+        >
           {/* grid-flow-col + a minimum column width, in a scrollable row —
               handles a handful of teams (spread to fill width) and a large
               number of teams (scrolls instead of squeezing RSNs unreadable). */}

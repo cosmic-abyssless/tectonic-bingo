@@ -3,7 +3,7 @@ import { CrownIcon } from "../../../core/ui/icons";
 import { inkOn } from "../../../core/draft/teamColor";
 import type { OnTheClockProps } from "../../slots";
 
-export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isMyTurn }: OnTheClockProps) {
+export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isMyTurn, embedded }: OnTheClockProps) {
   const reduced = useReducedMotion();
   const bg = teamColor ?? "var(--color-accent)";
   const ink = teamColor ? inkOn(teamColor) : "var(--color-on-accent)";
@@ -15,7 +15,7 @@ export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isM
       transition={{ type: "spring", stiffness: 380, damping: 26 }}
       role="status"
       aria-live="polite"
-      className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 rounded-lg px-5 py-3 shadow-[0_4px_16px_var(--color-shade)]"
+      className={`flex flex-wrap items-center justify-between gap-x-6 gap-y-1 px-5 py-3 ${embedded ? "" : "rounded-lg shadow-[0_4px_16px_var(--color-shade)]"}`}
       style={{ backgroundColor: bg, color: ink }}
     >
       <div className="min-w-0">

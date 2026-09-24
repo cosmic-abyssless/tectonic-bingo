@@ -25,6 +25,8 @@ export interface OnTheClockProps {
   captains: string[]; // RSNs: the captain, then the co-captain in a duo bingo
   pickLabel: string; // "Round 2 · Pick 7" / "Singles round · Pick 31"
   isMyTurn: boolean; // the viewer leads this team
+  // Drawn as the top strip of the draft room's Teams panel (full width, no frame of its own), not a card of its own.
+  embedded?: boolean;
 }
 
 export interface ThemeSlots {
