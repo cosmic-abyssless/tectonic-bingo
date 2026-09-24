@@ -10,7 +10,6 @@ import { Notice } from "../ui/Card";
 import { Panel } from "../ui/Panel";
 import { useDialogParts } from "../ui/useDialogParts";
 import { ChevronDownIcon, ChevronUpIcon } from "../ui/icons";
-import { useElementHeight } from "../ui/useElementHeight";
 import { DraftPoolGrid } from "./DraftPoolGrid";
 import { useAnswerViewer, visibleQuestions } from "../ui/answerVisibility";
 import { usePreference } from "../ui/preferences";
@@ -120,12 +119,6 @@ export function DraftRoom({ slug }: { slug: string }) {
   const [orderOpen, setOrderOpen] = useState(false);
   const OnTheClockBanner = useSlot("OnTheClockBanner");
   const reveals = useDraftReveals(shell?.bingo.id, state);
-  // The teams stay pinned under the page header while the pool scrolls — headerHeight is its own sticky `top`
-  // offset. The pool table's height is no longer derived from this (DraftPoolGrid measures its own position via
-  // useDocumentTop now, matching the signup roster), so there's no teamsHeight to measure alongside it any more.
-  const [pageHeader, setPageHeader] = useState<Element | null>(null);
-  useEffect(() => setPageHeader(document.querySelector("header")), []);
-  const headerHeight = useElementHeight(pageHeader);
 
   useEffect(() => {
     if (!state?.orderLockedUntil) return;
@@ -328,8 +321,9 @@ export function DraftRoom({ slug }: { slug: string }) {
             <FinalTeams teams={state.teams} picks={state.picks} myUserId={user.id} />
           </Panel>
         ) : (
-        // Pinned under the page header while the pool scrolls. While a pick is on the clock, the banner is the panel's
-        // header strip rather than a card of its own above it: one block, and the rosters sit right under whose turn it is.
+        // While a pick is on the clock, the banner is the panel's header strip rather than a card of its own above it: one
+        // block, and the rosters sit right under whose turn it is. Not pinned: it grows with the picks (below), and a
+        // pinned panel taller than the window would sit over the pool.
         <Panel
           title={onTheClock ? undefined : "Teams"}
           header={
@@ -345,14 +339,14 @@ export function DraftRoom({ slug }: { slug: string }) {
               />
             ) : undefined
           }
-          className="sticky z-10"
-          // Pinned a little below the header while the banner is in it: room for a theme's sticker over the top edge.
-          style={{ top: headerHeight + (onTheClock ? 16 : 0) }}
+          // Room above for a theme's sticker over the top edge.
+          className={onTheClock ? "mt-4" : undefined}
         >
-          {/* grid-flow-col + a minimum column width, in a scrollable row —
-              handles a handful of teams (spread to fill width) and a large
-              number of teams (scrolls instead of squeezing RSNs unreadable). */}
-          <div className="max-h-[36vh] overflow-auto">
+          {/* grid-flow-col + a minimum column width, in a row that scrolls
+              sideways — handles a handful of teams (spread to fill width) and
+              a large number of teams (scrolls instead of squeezing RSNs
+              unreadable). Every pick shows: it grows down, never scrolls. */}
+          <div className="overflow-x-auto">
             <div className="grid auto-cols-[minmax(140px,1fr)] grid-flow-col gap-3">
               {state.teams.map((team) => (
                 <motion.div
