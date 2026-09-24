@@ -291,3 +291,41 @@
 .comic-rows > li + li {
   border-top: 2px solid var(--comic-rule);
 }
+
+/* AG Grid tables on a comic panel (ComicPanel's gridVars set the header strip and rules): the header in capitals,
+   the cell buttons as small ink buttons, and a grid's heading lettered like the panel titles. */
+.comic-fields .ag-header-cell-text {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.comic-fields [data-cell-button] {
+  border-width: 2px;
+  font-family: var(--comic-font);
+  font-weight: 400;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition:
+    translate 90ms ease-out,
+    box-shadow 90ms ease-out;
+}
+.comic-fields [data-cell-button="primary"] {
+  border-color: var(--comic-line);
+  box-shadow: 2px 2px 0 var(--comic-line);
+}
+.comic-fields [data-cell-button="primary"]:hover:not(:disabled) {
+  translate: -1px -1px;
+  box-shadow: 3px 3px 0 var(--comic-line);
+  background: var(--color-button);
+}
+.comic-fields [data-cell-button="primary"]:active:not(:disabled) {
+  translate: 1px 1px;
+  box-shadow: none;
+}
+.comic-fields [data-panel-heading] {
+  font-family: var(--comic-font);
+  font-size: 1.25rem;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}

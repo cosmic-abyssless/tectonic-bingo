@@ -1,5 +1,7 @@
 import type { NoticeProps } from "../../../core/ui/Card";
+import type { CSSProperties } from "react";
 import type { PanelProps } from "../../../core/ui/Panel";
+import type { ComicColors } from "../board/colors";
 import { COMIC_FONT } from "../font";
 import { paperVars } from "../signup/parts";
 import { CaptionBox } from "./CaptionBox";
@@ -18,7 +20,7 @@ export function ComicPanel({ title, header, children, padding = "md", className,
     <section
       data-portal-scope=""
       className={`comic-fields border-[3px] ${className ?? ""}`}
-      style={{ ...paperVars(colors), background: colors.PAPER, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.LINE}`, color: colors.INK_BODY, ...style }}
+      style={{ ...paperVars(colors), ...gridVars(colors), background: colors.PAPER, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.LINE}`, color: colors.INK_BODY, ...style }}
     >
       {header}
       <div className={padding === "sm" ? "px-4 py-2.5" : "p-4"}>
@@ -31,6 +33,29 @@ export function ComicPanel({ title, header, children, padding = "md", className,
       </div>
     </section>
   );
+}
+
+/**
+ * An AG Grid table on a comic panel (core/ui/agGrid.ts reads these): a yellow header strip lettered in Bangers over a
+ * thick ink rule, quiet rules between the rows, alternate rows a shade raised, the panel's line colour round the
+ * outside, square corners. The cell buttons and the header's casing are in comic.css.
+ */
+function gridVars(c: ComicColors): CSSProperties {
+  return {
+    "--comic-font": COMIC_FONT,
+    "--grid-bg": c.PAPER,
+    "--grid-header-bg": c.YELLOW,
+    "--grid-header-fg": c.ON_YELLOW,
+    "--grid-header-font": COMIC_FONT,
+    "--grid-header-weight": "400",
+    "--grid-header-font-size": "1rem",
+    "--grid-header-rule": `3px solid ${c.LINE}`,
+    "--grid-row-rule": `1px solid ${c.RULE}`,
+    "--grid-odd-row": `color-mix(in srgb, ${c.PAPER_RAISED} 55%, transparent)`,
+    "--grid-row-hover": c.PAPER_RAISED,
+    "--grid-wrapper-border": `3px solid ${c.LINE}`,
+    "--grid-radius": "0px",
+  } as CSSProperties;
 }
 
 const FILL = { neutral: "paper", info: "blue", ok: "green", warn: "yellow", danger: "red" } as const;

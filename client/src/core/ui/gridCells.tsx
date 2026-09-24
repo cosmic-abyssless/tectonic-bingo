@@ -28,6 +28,8 @@ export function CellButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      // A hook for a surface's CSS to dress the button (the comic theme's panels give it an ink border).
+      data-cell-button={variant}
       className={`inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border px-2 text-xs font-medium transition-colors duration-100 disabled:cursor-not-allowed disabled:opacity-40 ${CELL_BUTTON_VARIANT[variant]} ${className}`}
     >
       {children}

@@ -636,7 +636,8 @@ export function DraftPoolGrid({
   // edge — SignupRoster's bare wrapper has no such Card, so it never needed the extra rem. Getting this short
   // by even a few px is exactly what caused a double scrollbar (confirmed live: docScrollHeight 9px taller than
   // the viewport at 2rem) — the page itself scrolling a hair as well as the grid's own internal one.
-  const tableHeight = `calc(100dvh - ${tableTop}px - 2.5rem)`;
+  // - 4px more: room for a theme's panel border thicker than the plain 1px (the comic theme's is 3px).
+  const tableHeight = `calc(100dvh - ${tableTop}px - 2.5rem - 4px)`;
 
   const onGridReady = useCallback((e: GridReadyEvent<DraftUnit>) => {
     gridApiRef.current = e.api;

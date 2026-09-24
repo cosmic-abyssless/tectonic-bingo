@@ -95,9 +95,6 @@ function PickOrderDialog({
   );
 }
 
-// The pool's frame: PlainPanel's look, kept as it is under every theme for now (the table inside isn't themed yet).
-const DRAFT_PANEL = "rounded-lg border border-outline-strong bg-surface-raised p-4 shadow-[0_2px_10px_var(--color-shade)]";
-
 export function DraftRoom({ slug }: { slug: string }) {
   const { user } = useAuth();
   // Whether the pool table breaks out of max-w-5xl (the switch for it lives in DraftPoolGrid's toolbar).
@@ -427,8 +424,8 @@ export function DraftRoom({ slug }: { slug: string }) {
           this component (the status cards, the teams row, the pick/clan-API notices) stays reading-width. */}
       <div className={`mt-6 w-full px-6 pb-6 ${poolWidth === "narrow" ? "mx-auto max-w-5xl" : ""}`}>
         {/* The Captain on the clock gets the pool framed in their team's colour, on top of the banner everyone sees. */}
-        <div
-          className={`${DRAFT_PANEL} transition-shadow`}
+        <Panel
+          className="transition-shadow"
           style={isMyTurn ? { borderColor: currentTeam?.color ?? "var(--color-accent)", boxShadow: `0 0 0 4px ${currentTeam?.color ?? "var(--color-accent)"}, 0 0 24px ${currentTeam?.color ?? "var(--color-accent)"}` } : undefined}
         >
           <DraftPoolGrid
@@ -441,12 +438,13 @@ export function DraftRoom({ slug }: { slug: string }) {
             picking={makePick.isPending}
             leftoverMode={shell.bingo.leftoverMode}
             heading={
-              <h3 className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+              // data-panel-heading: a theme's panel can letter it like its own titles.
+              <h3 data-panel-heading="" className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
                 Available players <span className="num font-normal text-on-surface-subtle">({poolCount})</span>
               </h3>
             }
           />
-        </div>
+        </Panel>
       </div>
     </div>
   );
