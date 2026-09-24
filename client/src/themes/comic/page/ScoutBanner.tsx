@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { WikiIcon } from "../../../core/ui/ItemIcon";
 import { COMIC_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { useComic } from "../ui/useComic";
@@ -32,11 +33,15 @@ export function ScoutBanner({ onOpen }: { onOpen: () => void }) {
         />
         <div className="relative flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div
-              className="comic-outline-text text-3xl uppercase leading-none"
-              style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", ["--comic-title-fill" as string]: colors.TITLE_FILL, ["--comic-title-stroke" as string]: colors.TITLE_STROKE }}
-            >
-              Scout the signups!
+            <div className="flex items-center gap-2">
+              {/* The wiki's Spyglass, at its own 31x29 so the pixel art stays crisp. */}
+              <WikiIcon name="Spyglass" className="h-[29px] w-[31px] [image-rendering:pixelated]" />
+              <span
+                className="comic-outline-text text-3xl uppercase leading-none"
+                style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", ["--comic-title-fill" as string]: colors.TITLE_FILL, ["--comic-title-stroke" as string]: colors.TITLE_STROKE }}
+              >
+                Scout the signups!
+              </span>
             </div>
             <p className="mt-1.5 text-sm font-semibold">Star and note players now, so your picks are ready when the draft starts.</p>
           </div>

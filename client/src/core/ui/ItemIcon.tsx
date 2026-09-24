@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { wikiIconUrl } from "../../api/wikiIcons";
 
 /**
  * An item's wiki icon, shown before the item's name. Decorative (the name is
@@ -22,4 +23,13 @@ export function ItemIcon({ url, className = "" }: { url: string | null | undefin
       className={`size-5 shrink-0 object-contain ${className}`}
     />
   );
+}
+
+/**
+ * Any OSRS item's wiki icon by its name, for decorating the UI itself (not a board's items, which come with their
+ * iconUrl): served by our own cache like every item icon, and an empty slot if the wiki has none. `className` sizes it;
+ * the icons are small pixel art, so draw them at their own size (or a whole multiple) with pixelated scaling.
+ */
+export function WikiIcon({ name, className }: { name: string; className?: string }) {
+  return <ItemIcon url={wikiIconUrl(name)} className={className} />;
 }
