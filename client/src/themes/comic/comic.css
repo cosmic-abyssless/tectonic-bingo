@@ -297,6 +297,14 @@
 .comic-fields .ag-header-cell-text {
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  /* Lettered like the masthead title (.comic-outline-text): the title fill (ComicPanel's --grid-header-fg), a thin
+     outline and a hard drop in the title's stroke colour. */
+  text-shadow:
+    -0.03em -0.03em 0 var(--comic-title-stroke, #000),
+    0.03em -0.03em 0 var(--comic-title-stroke, #000),
+    -0.03em 0.03em 0 var(--comic-title-stroke, #000),
+    0.03em 0.03em 0 var(--comic-title-stroke, #000),
+    0.08em 0.08em 0 var(--comic-title-stroke, #000);
   /* Room for Bangers' lean inside the box AG clips the label to (see "Bangers leans right" below). */
   padding-right: 0.2em;
 }

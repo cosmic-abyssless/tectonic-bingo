@@ -36,16 +36,17 @@ export function ComicPanel({ title, header, children, padding = "md", className,
 }
 
 /**
- * An AG Grid table on a comic panel (core/ui/agGrid.ts reads these): a yellow header strip lettered in Bangers over a
- * thick ink rule, quiet rules between the rows, alternate rows a shade raised, the panel's line colour round the
+ * An AG Grid table on a comic panel (core/ui/agGrid.ts reads these): a raised header strip lettered in Bangers like the
+ * masthead title (the title fill, outlined and dropped in comic.css) over a thick ink rule, quiet rules between the rows, alternate rows a shade raised, the panel's line colour round the
  * outside, square corners. The cell buttons and the header's casing are in comic.css.
  */
 function gridVars(c: ComicColors): CSSProperties {
   return {
     "--comic-font": COMIC_FONT,
     "--grid-bg": c.PAPER,
-    "--grid-header-bg": c.YELLOW,
-    "--grid-header-fg": c.ON_YELLOW,
+    // The raised fill lifted a little further toward the lettering: a lighter charcoal on the dark palettes.
+    "--grid-header-bg": `color-mix(in srgb, ${c.PAPER_RAISED} 86%, ${c.INK})`,
+    "--grid-header-fg": c.TITLE_FILL,
     "--grid-header-font": COMIC_FONT,
     "--grid-header-weight": "400",
     "--grid-header-font-size": "1rem",
