@@ -77,14 +77,14 @@ Two players who register to enter the Bingo together and must be drafted onto th
 - **Synonyms:** Pair (acceptable synonym), Pairing (internal record).
 - **Rules:** Both players must confirm the pairing. Consumes a single pick in a duo-draft round. A player signs up first and pairs afterwards: the pairing is a separate, deferrable step, not a precondition of signing up.
 
-### Leftover
-A player or duo that remains when total signups do not divide evenly into teams.
-- **Leftover Modes:**
-  - `cut` — Leftover players are excluded from the draft and cannot participate.
-  - `singles` — Leftover players enter the draft as solo picks in a dedicated **Singles Round** at the end of the draft.
-
-### Singles Round
-The final phase of a draft when `leftoverMode` is set to `singles`, in which odd leftover players are picked individually after regular team rounds.
+### Cut
+A signup left out of the Draft so that every Team comes out the same shape. Pairs and singles (solo players) are split across the Teams separately: every Team drafts the same number of pairs and the same number of singles, and whatever doesn't split evenly is cut, newest signups first. Who's cut changes while signups are open; mods see it on the Signups tab and again before moving into the Draft stage.
+- **Synonyms:** At risk (while signups are still open and it can change). Avoid "leftover" (the old name).
+- **Draft cuts setting** (`cutMode`):
+  - **Pairs + singles** (`even`; "Even teams" in a solo Bingo) — pairs and singles are each split evenly; the remainder of each is cut.
+  - **Pairs only** (`pairs_only`, duo Bingos only) — only pairs are drafted, split evenly; every single is cut. Mods can pair singles up by hand to keep them in.
+  - **No cuts** (`none`) — everyone is drafted, in any order; Teams may end up different sizes.
+- **Share:** What every Team drafts under the setting, e.g. "1 pair and 1 single". Captains pick in any order, but a Team that has its share of pairs can't take another pair (likewise singles).
 
 ### Draft
 The structured selection process during the `draft` stage where Captains take turns selecting Players (or Duos) onto their Teams.
