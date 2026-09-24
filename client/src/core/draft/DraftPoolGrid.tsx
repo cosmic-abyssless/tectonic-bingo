@@ -58,6 +58,8 @@ import { PlayerName } from "../tectonic/PlayerName";
 import { AchievementIcons, PlaceBreakdown, TierBadge } from "../tectonic/ProfileBadges";
 import { podiumSummary, podiumTitle, recordSummary, recordTitle } from "../tectonic/profile";
 import { RatingCell } from "./RatingCell";
+import { buildPoolCsv } from "./poolCsv";
+import { Button } from "../ui/Button";
 import { placeScore, poolSearchValues, unitSortValue, type PoolRatings, type PoolSortKey } from "./poolData";
 import { headerTooltip, usefulTooltip } from "../ui/gridTooltips";
 
@@ -340,6 +342,13 @@ export function DraftPoolGrid({
   // The wrapper that actually changes width is DraftRoom's — this just renders the switch for it in the toolbar.
   const [poolWidth, setPoolWidth] = usePreference("draftPoolWidth");
   const statsRefreshing = useStatsRefreshingSignupIds();
+  const [copied, setCopied] = useState(false);
+
+  async function copyCsv() {
+    await navigator.clipboard.writeText(buildPoolCsv(pool, questions, ratings, leftoverMode));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   const entries = useMemo(() => pool.flatMap((u) => u.entries), [pool]);
   const entryMatches = useCallback(
@@ -674,6 +683,10 @@ export function DraftPoolGrid({
         )}
         <TableSearchInput value={search} onChange={setSearch} matchCount={matchingEntries.length} totalCount={entries.length} />
         <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={handleHiddenChange} />
+        {/* Everyone in the pool with every column, hidden or not, and your ratings and notes (poolCsv.ts). */}
+        <Button size="sm" onPress={copyCsv}>
+          {copied ? "Copied" : "Copy as CSV"}
+        </Button>
         {widthSwitch && (
           <Switch isSelected={poolWidth === "full"} onChange={(full) => setPoolWidth(full ? "full" : "narrow")}>
             Full width
