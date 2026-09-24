@@ -45,7 +45,16 @@ export function ScoutBanner({ onOpen }: { onOpen: () => void }) {
             </div>
             <p className="mt-1.5 text-sm font-semibold">Star and note players now, so your picks are ready when the draft starts.</p>
           </div>
-          <ComicButton variant="primary" size="md" tilt={2} onPress={onOpen}>
+          {/* Outlined in the dark ink the palettes keep for lettering on bright fills, not the line colour: in a dark
+              palette the line is light grey, which barely shows against the blue. --comic-line covers the hover and
+              press shadows too. */}
+          <ComicButton
+            variant="primary"
+            size="md"
+            tilt={2}
+            onPress={onOpen}
+            style={{ borderColor: colors.ON_YELLOW, boxShadow: `3px 3px 0 ${colors.ON_YELLOW}`, ["--comic-line" as string]: colors.ON_YELLOW }}
+          >
             Open scouting room
           </ComicButton>
         </div>
