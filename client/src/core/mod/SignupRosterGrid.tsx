@@ -156,7 +156,7 @@ const StatusCell = memo(function StatusCell({ data, context }: CustomCellRendere
   return (
     <div className="flex h-full items-center gap-1">
       <Badge tone={active ? "ok" : "neutral"}>{data.signup.status}</Badge>
-      {data.cut && <Badge tone="warn">cut</Badge>}
+      {data.cut && <Badge tone="warn">will be cut</Badge>}
       {active && context.canWithdraw && (
         <CellIconButton label={`Withdraw ${data.signup.rsn}'s signup`} onClick={() => setConfirming(true)}>
           <XIcon size={12} />

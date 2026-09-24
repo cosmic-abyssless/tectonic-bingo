@@ -177,8 +177,8 @@ export function BingoSettingsForm({
           label="Draft cuts"
           hint={
             <>
-              {cutModeOptions(form.signupMode).find((o) => o.value === form.cutMode)?.help} Who's cut shows on the Signups tab, and is listed again
-              before moving into the draft.
+              {cutModeOptions(form.signupMode).find((o) => o.value === form.cutMode)?.help} Who will be cut shows on the Signups tab, and is listed
+              again before moving into the draft.
             </>
           }
         >

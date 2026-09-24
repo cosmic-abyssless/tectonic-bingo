@@ -246,9 +246,9 @@ const DraftButtonRenderer = ({ data, context }: CustomCellRendererProps<DraftUni
 
 const PairIconRenderer = ({ data }: CustomCellRendererProps<DraftUnit>) => (data && data.entries.length > 1 ? <LinkIcon size={14} aria-label="Duo pair" className="text-on-surface-subtle" /> : null);
 
-// Cut players only show while signups are open (after that the draft room leaves them out), and who's cut can still
-// change then, so they're "at risk".
-const CutBadgeRenderer = ({ data }: CustomCellRendererProps<DraftUnit, unknown, PoolGridContext>) => (data?.cut ? <Badge tone="warn">At risk</Badge> : null);
+// Cut players only show while signups are open (after that the draft room leaves them out), when who's cut can still
+// change, so it's said as what will happen.
+const CutBadgeRenderer = ({ data }: CustomCellRendererProps<DraftUnit, unknown, PoolGridContext>) => (data?.cut ? <Badge tone="warn">Will be cut</Badge> : null);
 
 // Movable column order, sizing and sort. Visibility stays in pref:hiddenColumns:draftPool (useHiddenColumns) so
 // ColumnPicker keeps working. Fixed columns are always forced to their pinned places in the saved order — not
@@ -572,7 +572,7 @@ export function DraftPoolGrid({
   // height via this callback (not an Enterprise feature) — the theme's own rowHeight (44) is the solo/fallback.
   const getRowHeight = useCallback((params: RowHeightParams<DraftUnit>) => (params.data && params.data.entries.length > 1 ? 84 : 44), []);
   const getRowId = useCallback((params: GetRowIdParams<DraftUnit>) => params.data.pairingId ?? params.data.entries[0]!.signup.id, []);
-  // At risk of being cut — muted. AG's own row border (the theme's default) is the only cue for where one unit ends and
+  // Will be cut — muted. AG's own row border (the theme's default) is the only cue for where one unit ends and
   // the next begins, which is easy to misread for a duo pair right after a solo unit — this doesn't change that, but
   // the at-risk row keeps standing out despite the striping (see below) either way.
   const getRowClass = useCallback((params: RowClassParams<DraftUnit>) => (params.data?.cut ? "text-on-surface-subtle" : ""), []);

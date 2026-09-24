@@ -25,7 +25,7 @@ describe("buildPoolCsv", () => {
     ];
     const csv = buildPoolCsv(pool, [question], { a: { stars: 2, note: 'says "hi"' } });
     const [header, alpha, bravo, charlie] = csv.split("\n");
-    expect(header).toBe('RSN,Discord,Paired with,Rating,Note,At risk of cut,Timezone,EHB,EHP,Current CA,Peak CA,"Hours, per day"');
+    expect(header).toBe('RSN,Discord,Paired with,Rating,Note,Will be cut,Timezone,EHB,EHP,Current CA,Peak CA,"Hours, per day"');
     expect(alpha).toMatch(/^Alpha,alpha_dc,Bravo,2,"says ""hi""",,/);
     expect(alpha).toMatch(/,"4, maybe 5"$/);
     expect(bravo).toMatch(/^Bravo,bravo_dc,Alpha,2,"says ""hi""",,/);

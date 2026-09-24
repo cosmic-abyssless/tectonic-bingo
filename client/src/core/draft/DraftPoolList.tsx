@@ -112,7 +112,7 @@ export function DraftPoolList({
                 rating={ratings ? { value: ratings[unit.entries[0]!.signup.id], onChange: (r) => onRate(unit.entries[0]!.signup.id, r) } : null}
                 // Cut players only show while signups are open (the draft room leaves them out after), when who's cut
                 // can still change.
-                cutTag={unit.cut ? "At risk" : null}
+                cutTag={unit.cut ? "Will be cut" : null}
                 pick={canPick ? { disabled: picking || !!blocked, reason: unit.cut ? null : blocked, onConfirm: () => onPick(unit.entries[0]!.user.id) } : null}
               />
             );

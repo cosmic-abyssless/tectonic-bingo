@@ -76,7 +76,7 @@ export type Takes = { pairs: boolean; singles: boolean } | null;
 
 /** Why this unit can't be drafted right now, or null if it can: it's cut, or the team on the clock has its share. */
 export function takesBlock(unit: DraftUnit, takes: Takes): string | null {
-  if (unit.cut) return "Cut from the draft";
+  if (unit.cut) return "Will be cut from the draft";
   const isPair = unit.entries.length > 1;
   if (takes && !(isPair ? takes.pairs : takes.singles)) return `The team on the clock already has its ${isPair ? "pairs" : "singles"}`;
   return null;

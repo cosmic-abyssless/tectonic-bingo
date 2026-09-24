@@ -142,10 +142,10 @@ const FILTER_OPTIONS: Record<FilterKey, { key: string; label: string }[]> = {
     { key: "unpaired", label: "Unpaired" },
   ],
   region: REGION_OPTIONS,
-  // Who's cut from the draft as things stand (see the bingo's draft cuts setting).
+  // Who will be cut from the draft as things stand (see the bingo's draft cuts setting).
   draft: [
-    { key: "in", label: "Making the draft" },
-    { key: "cut", label: "Cut" },
+    { key: "in", label: "Will be drafted" },
+    { key: "cut", label: "Will be cut" },
   ],
 };
 
@@ -374,10 +374,10 @@ export function SignupRoster({ slug }: { slug: string }) {
         )}
         {cutsApply && cutCount > 0 && cuts?.shares && bingoData && (
           <Notice tone="warn" icon={<AlertIcon />}>
-            <span className="num">{cutCount}</span> signup{cutCount !== 1 ? "s are" : " is"} cut from the draft as things stand (
-            {cutModeLabel(bingoData.bingo.cutMode, bingoData.bingo.signupMode)}: each of the <span className="num">{cuts.teamCount}</span> teams drafts{" "}
-            {describeShares(cuts.shares, bingoData.bingo.signupMode)}). The newest are cut first, and this changes as players sign up, pair up or withdraw, or
-            teams are added. Filter by Draft to see them.
+            As things stand, <span className="num">{cutCount}</span> signup{cutCount !== 1 ? "s" : ""} will be cut when the draft starts (
+            {cutModeLabel(bingoData.bingo.cutMode, bingoData.bingo.signupMode)}: each of the <span className="num">{cuts.teamCount}</span> teams will draft{" "}
+            {describeShares(cuts.shares, bingoData.bingo.signupMode)}). The newest signups are the ones cut. There's still time to change that: pair players up, get
+            more players to sign up, or add a team. Filter by Draft to see who.
             {bingoData.bingo.warnLeftovers ? " They can see this warning on their signup page." : " Turn on the warning in Settings to tell them."}
           </Notice>
         )}

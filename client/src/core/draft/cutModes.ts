@@ -9,14 +9,14 @@ export function cutModeOptions(signupMode: SignupMode): { value: CutMode; label:
   const none = {
     value: "none" as const,
     label: "No cuts",
-    help: "Everyone is drafted and nobody is cut. Captains can pick anyone, in any order, so teams may end up different sizes.",
+    help: "Everyone will be drafted and nobody will be cut. Captains can pick anyone, in any order, so teams may end up different sizes.",
   };
   if (signupMode === "solo") {
     return [
       {
         value: "even",
         label: "Even teams",
-        help: "Every team drafts the same number of players. The newest signups that don't split evenly across the teams are cut. For example, 5 teams and 23 players: each team drafts 4, and the 3 newest signups are cut.",
+        help: "Every team will draft the same number of players. The newest signups that don't split evenly across the teams will be cut. For example, 5 teams and 23 players: each team drafts 4, and the 3 newest signups will be cut.",
       },
       none,
     ];
@@ -25,12 +25,12 @@ export function cutModeOptions(signupMode: SignupMode): { value: CutMode; label:
     {
       value: "even",
       label: "Pairs + singles",
-      help: "Every team drafts the same number of pairs and the same number of singles, in any order. Pairs and singles that don't split evenly across the teams are cut, newest signups first. For example, 5 teams, 6 pairs and 7 singles: each team drafts 1 pair and 1 single; the newest pair and the 2 newest singles are cut.",
+      help: "Every team will draft the same number of pairs and the same number of singles, in any order. Pairs and singles that don't split evenly across the teams will be cut, newest signups first. For example, 5 teams, 6 pairs and 7 singles: each team drafts 1 pair and 1 single, and the newest pair and the 2 newest singles will be cut.",
     },
     {
       value: "pairs_only",
       label: "Pairs only",
-      help: "Only pairs are drafted, the same number to every team. Every single is cut, and so are the newest pairs that don't split evenly across the teams. To keep singles in, pair them up on the Signups tab before the draft.",
+      help: "Only pairs will be drafted, the same number to every team. Every single will be cut, and so will the newest pairs that don't split evenly across the teams. To keep singles in, pair them up on the Signups tab before the draft.",
     },
     none,
   ];

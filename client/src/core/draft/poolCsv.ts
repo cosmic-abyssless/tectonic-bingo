@@ -22,7 +22,7 @@ export function buildPoolCsv(pool: DraftUnit[], questions: SignupQuestion[], rat
     "Discord",
     ...(hasPairs ? ["Paired with"] : []),
     ...(ratings ? ["Rating", "Note"] : []),
-    ...(hasCuts ? ["At risk of cut"] : []),
+    ...(hasCuts ? ["Will be cut"] : []),
     "Timezone",
     ...(showProfiles ? ["Tier", "Clan points", "Clan rank", "Records", "Podiums", "Achievements"] : []),
     "EHB",
