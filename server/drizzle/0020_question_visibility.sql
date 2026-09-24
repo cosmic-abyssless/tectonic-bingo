@@ -1,0 +1,1 @@
+ALTER TABLE `signup_questions` ADD `visibility` text DEFAULT 'captains' NOT NULL;

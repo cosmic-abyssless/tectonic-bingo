@@ -12,6 +12,7 @@ import { AchievementIcons, Medal, PlaceBreakdown, TierBadge } from "./ProfileBad
 import { formatRecordValue, isBingoEvent, podiumSummary, recordSummary } from "./profile";
 import { CaCell, WomCell, formatWomStat } from "../signup/caStats";
 import { useStatsRefreshingUserIds } from "../../context/WebSocketContext";
+import { useAnswerViewer, visibleQuestions } from "../ui/answerVisibility";
 
 /**
  * One player's card: clan standing (tier, records, event placements), account
@@ -31,6 +32,8 @@ function ProfileLoader({ slug, userId, onClose }: { slug: string; userId: string
   const { DialogHeader } = useDialogParts();
   const { data, error } = usePlayerProfile(slug, userId);
   const { data: questionsData } = useSignupQuestions(slug);
+  // Only the questions whose answers this viewer gets, so a hidden one doesn't show up as a blank row.
+  const answerViewer = useAnswerViewer(slug);
 
   if (error) {
     return (
@@ -52,7 +55,7 @@ function ProfileLoader({ slug, userId, onClose }: { slug: string; userId: string
       </>
     );
   }
-  return <ProfileBody player={data.player} questions={questionsData?.questions ?? []} onClose={onClose} />;
+  return <ProfileBody player={data.player} questions={visibleQuestions(questionsData?.questions ?? [], answerViewer)} onClose={onClose} />;
 }
 
 function Stat({ label, children }: { label: string; children: ReactNode }) {

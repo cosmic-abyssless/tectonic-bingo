@@ -141,7 +141,7 @@ export function getQuestions(slug: string) {
   // answerCounts: non-blank answers per question id (absent = none), for the delete confirmation.
   return api.get<{ questions: SignupQuestion[]; answerCounts: Record<string, number> }>(`${base(slug)}/questions`);
 }
-export function createQuestion(slug: string, payload: { prompt: string; helperText?: string; type: SignupQuestion["type"]; optionsJson?: string; required?: boolean; sortOrder?: number }) {
+export function createQuestion(slug: string, payload: { prompt: string; helperText?: string; type: SignupQuestion["type"]; optionsJson?: string; required?: boolean; sortOrder?: number; visibility?: SignupQuestion["visibility"] }) {
   return api.post<{ question: SignupQuestion }>(`${base(slug)}/questions`, payload);
 }
 export function updateQuestion(slug: string, id: string, payload: Partial<SignupQuestion>) {

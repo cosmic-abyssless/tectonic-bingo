@@ -19,6 +19,7 @@ import { discordName, displayName } from "../ui/user";
 import { Button } from "../ui/Button";
 import { EmptyState, Notice } from "../ui/Card";
 import { MultiSelect } from "../ui/MultiSelect";
+import { useAnswerViewer, visibleQuestions } from "../ui/answerVisibility";
 import { REGION_OPTIONS, regionOf } from "../ui/timezoneFilter";
 import { ColumnPicker } from "../ui/ColumnPicker";
 import { usePreference } from "../ui/preferences";
@@ -175,7 +176,10 @@ export function SignupRoster({ slug }: { slug: string }) {
   const { user: me } = useAuth();
   const statsRefreshing = useStatsRefreshingSignupIds();
   const roster = data?.signups ?? [];
-  const questions = questionsData?.questions ?? [];
+  // Only the questions whose answers this viewer gets (a mod doesn't see admins-only ones). Memoized: the grid's
+  // columnDefs depend on this array's identity, and a new one each render would reset every column's width.
+  const answerViewer = useAnswerViewer(slug);
+  const questions = useMemo(() => visibleQuestions(questionsData?.questions ?? [], answerViewer), [questionsData, answerViewer]);
   const mods = useMemo(() => modsData?.mods ?? [], [modsData]);
   const isDuo = bingoData?.bingo.signupMode === "duo";
   const stage = bingoData?.bingo.stage;
