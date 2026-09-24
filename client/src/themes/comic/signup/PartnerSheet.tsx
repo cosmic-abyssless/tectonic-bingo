@@ -1,7 +1,8 @@
 import { usePartnerPanel } from "../../../headless";
 import { ComicField } from "../submission/ComicField";
 import { SearchableSelect } from "../../../core/ui/SearchableSelect";
-import { AlertIcon, CheckIcon, ClockIcon, UsersIcon } from "../../../core/ui/icons";
+import { WikiIcon } from "../../../core/ui/ItemIcon";
+import { AlertIcon, CheckIcon, UsersIcon } from "../../../core/ui/icons";
 import { COMIC_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { useComic } from "../ui/useComic";
@@ -75,8 +76,11 @@ export function PartnerSheet({ slug }: { slug: string }) {
       )}
 
       {panel.outgoing && (
-        <Callout tone="info" icon={<ClockIcon />}>
+        <Callout tone="info">
           <div className="flex flex-wrap items-center gap-3">
+            {/* In the row rather than the callout's icon slot, so it centres on the line (the slot top-aligns, for
+                notices that wrap). The wiki's Giant stopwatch, at its own 27x26. */}
+            <WikiIcon name="Giant stopwatch" className="h-[26px] w-[27px] [image-rendering:pixelated]" />
             <span className="flex-1">
               Waiting for <strong style={{ color: colors.INK }}>{panel.outgoing.name}</strong> to accept.
             </span>
