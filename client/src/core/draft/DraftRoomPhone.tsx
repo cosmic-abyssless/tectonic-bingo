@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Tab, TabList, TabPanel, Tabs } from "react-aria-components";
 import { Panel } from "../ui/Panel";
+import { PinnedGap } from "../ui/PinnedGap";
 import { useElementHeight } from "../ui/useElementHeight";
 
 type PhoneTab = "players" | "teams";
@@ -11,6 +12,9 @@ type PhoneTab = "players" | "teams";
  * tabs — stays pinned under the page header while the tab's content scrolls beneath it. Players is the pool as a list
  * of cards (DraftPoolList); Teams is every team's roster, two to a row, so the picks so far read top to bottom rather
  * than in a row too wide for the screen.
+ *
+ * The pinned top keeps the panel's gap from the header (a PinnedGap over what scrolls by) and draws the panel's top
+ * edge (--panel-border, the panel's border width) once the panel's own has scrolled away.
  *
  * A lead (or mod) starts on Players, a spectator on Teams, and anyone is brought to Players when it becomes their pick.
  */
@@ -52,39 +56,44 @@ export function DraftRoomPhone({
   const headerHeight = useElementHeight(pageHeader);
 
   return (
-    <div className="space-y-3 px-3 pb-6 pt-3">
-      {status}
+    <div className="pb-6">
+      <PinnedGap top={headerHeight} className="h-3" />
+      <div className="space-y-3 px-3">
+        {status}
 
-      <Tabs selectedKey={tab} onSelectionChange={(key) => setTab(key as PhoneTab)}>
-        {/* The Players tab frames the whole panel in the picking team's colour on your turn, as the table does. */}
-        <Panel className="transition-shadow" style={tab === "players" ? poolGlow : undefined}>
-          {/* The pinned top: full bleed across the panel's padding, on the panel's own fill so what scrolls under it
-              doesn't show through. */}
-          <div className="sticky z-20 -mx-4 -mt-4 mb-4 bg-surface" style={{ top: headerHeight }}>
-            {banner}
-            <TabList aria-label="Draft room" className="flex border-b border-outline">
-              <PhoneTabButton id="players">
-                Players <span className="num opacity-70">({poolCount})</span>
-              </PhoneTabButton>
-              <PhoneTabButton id="teams">Teams</PhoneTabButton>
-            </TabList>
-          </div>
+        <Tabs selectedKey={tab} onSelectionChange={(key) => setTab(key as PhoneTab)}>
+          {/* The Players tab frames the whole panel in the picking team's colour on your turn, as the table does. */}
+          <Panel className="transition-shadow" style={tab === "players" ? poolGlow : undefined}>
+            {/* The pinned top: full bleed across the panel's padding, on the panel's own fill so what scrolls under it
+                doesn't show through. */}
+            <div className="sticky z-20 -mx-4 -mt-4 mb-4 bg-surface" style={{ top: `calc(${headerHeight}px + 0.75rem + var(--panel-border, 0px))` }}>
+              {/* The panel's top edge, over its own at rest (so unseen), drawn when that has scrolled up under the gap. */}
+              <div aria-hidden className="absolute inset-x-[calc(-1*var(--panel-border,0px))] bottom-full h-(--panel-border) bg-outline-strong" />
+              {banner}
+              <TabList aria-label="Draft room" className="flex border-b border-outline">
+                <PhoneTabButton id="players">
+                  Players <span className="num opacity-70">({poolCount})</span>
+                </PhoneTabButton>
+                <PhoneTabButton id="teams">Teams</PhoneTabButton>
+              </TabList>
+            </div>
 
-          <TabPanel id="players" className="outline-none">
-            {pool}
-          </TabPanel>
-          <TabPanel id="teams" className="outline-none">
-            {finalTeams ?? (
-              <>
-                <div className="grid grid-cols-2 gap-x-2 gap-y-3">{rosters}</div>
-                {noTeams && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
-              </>
-            )}
-          </TabPanel>
-        </Panel>
-      </Tabs>
+            <TabPanel id="players" className="outline-none">
+              {pool}
+            </TabPanel>
+            <TabPanel id="teams" className="outline-none">
+              {finalTeams ?? (
+                <>
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-3">{rosters}</div>
+                  {noTeams && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
+                </>
+              )}
+            </TabPanel>
+          </Panel>
+        </Tabs>
 
-      {extras}
+        {extras}
+      </div>
     </div>
   );
 }

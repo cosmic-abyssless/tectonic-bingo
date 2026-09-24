@@ -27,6 +27,7 @@ import { BugReportButton } from "./page/BugReportButton";
 import { ThemedButton } from "./ui/ThemedButton";
 import { ComicMenu, ComicMenuItem } from "./ui/ComicMenu";
 import { ComicNotice, ComicPanel } from "./ui/ComicPanel";
+import { Halftone } from "./fx/Halftone";
 import { SignupStage } from "./signup/SignupStage";
 import { ComicDialog, ComicDialogHeader } from "./ui/ComicDialog";
 import { SubmissionModal } from "./submission/SubmissionModal";
@@ -149,6 +150,7 @@ const comicTheme: ThemeDefinition = {
     MenuItem: ComicMenuItem,
     Notice: ComicNotice,
     Panel: ComicPanel,
+    PageBackdrop: Halftone,
     DialogFrame: ComicDialog,
     DialogHeader: ComicDialogHeader,
     SubmissionModal,

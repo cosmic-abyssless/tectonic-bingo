@@ -18,6 +18,8 @@ export interface PanelProps {
  * A raised section of a page (the draft room's teams, its pre-draft setup). Inside a theme that draws its own (the
  * Panel slot) it's the theme's; elsewhere, PlainPanel. Its contents should draw with the chrome tokens
  * (bg-surface, text-on-surface…): a theme's panel may repoint them.
+ * It sets --panel-border to its border's width, for content that draws the panel's edge (the phone draft room's
+ * pinned top).
  */
 export function Panel(props: PanelProps) {
   const Themed = useOptionalSlot("Panel");
@@ -28,7 +30,10 @@ export function Panel(props: PanelProps) {
 // backdrop.
 export function PlainPanel({ title, header, children, padding = "md", className, style }: PanelProps) {
   return (
-    <section className={`rounded-lg border border-outline-strong bg-surface-raised shadow-[0_2px_10px_var(--color-shade)] ${className ?? ""}`} style={style}>
+    <section
+      className={`rounded-lg border border-outline-strong bg-surface-raised shadow-[0_2px_10px_var(--color-shade)] ${className ?? ""}`}
+      style={{ "--panel-border": "1px", ...style } as CSSProperties}
+    >
       {/* Rounded to the panel's corners rather than clipped by it: overlays opened inside the panel mustn't be cut off. */}
       {header && <div className="overflow-hidden rounded-t-[7px]">{header}</div>}
       <div className={padding === "sm" ? "px-4 py-2.5" : "p-4"}>

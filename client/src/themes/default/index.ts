@@ -82,6 +82,7 @@ export const defaultTheme: ThemeDefinition = {
     MenuItem: PlainMenuItem,
     Notice: PlainNotice,
     Panel: PlainPanel,
+    PageBackdrop: () => null,
     DraftTeamRoster: PlainTeamRoster,
     BoardGrid,
     RowLabel,

@@ -20,7 +20,7 @@ export function ComicPanel({ title, header, children, padding = "md", className,
     <section
       data-portal-scope=""
       className={`comic-fields border-[3px] ${className ?? ""}`}
-      style={{ ...paperVars(colors), ...gridVars(colors), background: colors.PAPER, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.LINE}`, color: colors.INK_BODY, ...style }}
+      style={{ ...paperVars(colors), ...gridVars(colors), ["--panel-border" as string]: "3px", background: colors.PAPER, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.LINE}`, color: colors.INK_BODY, ...style }}
     >
       {header}
       <div className={padding === "sm" ? "px-4 py-2.5" : "p-4"}>

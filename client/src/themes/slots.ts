@@ -100,6 +100,10 @@ export interface ThemeSlots {
   Notice: ComponentType<NoticeProps>;
   Panel: ComponentType<PanelProps>;
 
+  // The page's backdrop, the layers the theme draws behind every page (the comic's halftone), for a PinnedGap to show
+  // the page through. Fixed, full-window layers; nothing (the page colour alone) in a theme without one.
+  PageBackdrop: ComponentType;
+
   // The header's report-a-bug button (AppHeader). Read with useOptionalSlot: the header also shows on pages outside
   // any ThemeProvider, which fall back to core's BugReportButton.
   BugReportButton: ComponentType<{ onPress: () => void; hasUnseen: boolean }>;
