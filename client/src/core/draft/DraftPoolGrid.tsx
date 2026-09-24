@@ -58,74 +58,17 @@ import { PlayerName } from "../tectonic/PlayerName";
 import { AchievementIcons, PlaceBreakdown, TierBadge } from "../tectonic/ProfileBadges";
 import { podiumSummary, podiumTitle, recordSummary, recordTitle } from "../tectonic/profile";
 import { RatingCell } from "./RatingCell";
+import { placeScore, poolSearchValues, unitSortValue, type PoolRatings, type PoolSortKey } from "./poolData";
 import { headerTooltip, usefulTooltip } from "../ui/gridTooltips";
 
-// "rating" | "rsn" | "discord" | "tier" | "records" | "podiums" | "ehb" | "ehp" | a signup question's id.
-type SortKey = string;
-type Ratings = Record<string, PickRating>;
+type SortKey = PoolSortKey;
+type Ratings = PoolRatings;
 
-// Golds outrank silvers outrank bronzes, so a single #1 beats three #3s.
-const placeScore = (p: { first: number; second: number; third: number }) => p.first * 10_000 + p.second * 100 + p.third;
-
-function poolSortValue(entry: DraftPoolEntry, key: SortKey, ratings: Ratings): string | number {
-  if (key === "rating") return ratings[entry.signup.id]?.stars ?? 0;
-  if (key === "rsn") return entry.signup.rsn.toLowerCase();
-  if (key === "discord") return discordName(entry.user).toLowerCase();
-  // West to east by current UTC offset; not set sorts below every real offset (UTC−12 is −720), like the -1s below.
-  if (key === "timezone") return entry.signup.timezone ? timeZoneOffsetMinutes(entry.signup.timezone) : -10_000;
-  if (key === "tier") return entry.tectonicProfile?.points ?? -1;
-  if (key === "records") return entry.tectonicProfile ? placeScore(recordSummary(entry.tectonicProfile)) : -1;
-  if (key === "podiums") return entry.tectonicProfile ? placeScore(podiumSummary(entry.tectonicProfile)) : -1;
-  if (key === "ehb") return entry.womStats?.ehb ?? -1;
-  if (key === "ehp") return entry.womStats?.ehp ?? -1;
-  if (key === "caCurrent") return entry.caCurrent?.points ?? -1;
-  if (key === "caPeak") return entry.caPeak?.points ?? -1;
-  return (entry.answers?.find((a) => a.questionId === key)?.value ?? "").toLowerCase();
-}
-
-// Every column's text, whether or not it's currently shown — search covers all of them (issue #112).
-function poolSearchValues(entry: DraftPoolEntry, questions: SignupQuestion[]): string[] {
-  return [
-    entry.signup.rsn,
-    discordName(entry.user),
-    ...(entry.signup.timezone ? [entry.signup.timezone, formatTimeZone(entry.signup.timezone)] : []),
-    entry.tectonicProfile?.tier?.name ?? "",
-    formatWomStat(entry.womStats?.ehb),
-    formatWomStat(entry.womStats?.ehp),
-    formatCaTier(entry.caCurrent),
-    formatCaTier(entry.caPeak),
-    ...(entry.answers ?? []).map((a) => formatSignupAnswer(questions.find((q) => q.id === a.questionId)?.type ?? "text", a.value)),
-  ];
-}
-
-// EHB/EHP/CA are additive (a duo's combined grind), unlike a rating or an RSN — a pair sorts on the *sum* of its
-// two halves for these rather than best-of. Everything else (rating, rsn, discord, tier, records, podiums, a
-// signup question) keeps best-of: there's no meaningful "sum" of two ratings or two names.
-const SUM_KEYS: ReadonlySet<SortKey> = new Set(["ehb", "ehp", "caCurrent", "caPeak"]);
-
-// A pair sorts by whichever half ranks first (under the *active* sort direction — "first" means smallest
-// ascending, largest descending), so the pair sits where its stronger/earlier member would on their own. AG's
-// comparator gets isDescending, so this is computed here rather than needing a resorted copy of unit.entries the
-// way the old table's sortUnit did — entries stay in their original order for the stack's own display order.
+// AG hands the comparator isDescending, so a pair ranks by its better half under the active direction (unitSortValue)
+// without a resorted copy of unit.entries — entries stay in their original order for the stack's own display order.
 function makeUnitComparator(key: SortKey, ratings: Ratings) {
-  const summable = SUM_KEYS.has(key);
   return (_a: unknown, _b: unknown, nodeA: IRowNode<DraftUnit>, nodeB: IRowNode<DraftUnit>, isDescending: boolean): number => {
-    const valueOf = (unit: DraftUnit | undefined): string | number => {
-      if (!unit) return "";
-      // A solo unit's "sum" is just its one value — poolSortValue as-is, -1 sentinel and all, so a solo row's
-      // sort is untouched either way. Only a pair takes this branch, and unlike bestOf, an unmeasured half (-1)
-      // contributes nothing to the pair's total rather than dragging it below a fully-measured pair's.
-      if (summable && unit.entries.length > 1) {
-        return unit.entries.reduce((total, e) => total + Math.max(poolSortValue(e, key, ratings) as number, 0), 0);
-      }
-      let best = poolSortValue(unit.entries[0]!, key, ratings);
-      for (const e of unit.entries.slice(1)) {
-        const v = poolSortValue(e, key, ratings);
-        const better = isDescending ? compareSortValues(v, best) > 0 : compareSortValues(v, best) < 0;
-        if (better) best = v;
-      }
-      return best;
-    };
+    const valueOf = (unit: DraftUnit | undefined): string | number => (unit ? unitSortValue(unit, key, ratings, isDescending) : "");
     return compareSortValues(valueOf(nodeA.data), valueOf(nodeB.data));
   };
 }
