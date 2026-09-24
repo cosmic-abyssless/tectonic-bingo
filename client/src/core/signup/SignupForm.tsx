@@ -140,8 +140,9 @@ export function SignupForm({ slug }: { slug: string }) {
         <div className="space-y-5">
           {form.atRisk && (
             <Notice tone="warn" icon={<AlertIcon />}>
-              Teams get an equal number of picks, and you're among the newest signups that don't fit a full round right now. You'll be{" "}
-              {form.atRisk.singlesRound ? "drafted in a final singles round" : "left out of the draft"} unless more players sign up or another team is added.
+              {form.atRisk.reason === "pairs_only"
+                ? "Only pairs are drafted in this bingo, so you'll be left out of the draft unless you pair up with someone."
+                : "Every team drafts the same number of players, and you're among the newest signups that don't split evenly across the teams right now. You'll be left out of the draft unless more players sign up or another team is added."}
             </Notice>
           )}
           {rsn.options ? (

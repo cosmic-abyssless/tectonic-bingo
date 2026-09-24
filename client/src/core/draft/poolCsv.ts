@@ -1,4 +1,4 @@
-import { formatSignupAnswer, formatTimeZone, type DraftUnit, type LeftoverMode, type SignupQuestion } from "@bingo/shared";
+import { formatSignupAnswer, formatTimeZone, type DraftUnit, type SignupQuestion } from "@bingo/shared";
 import { formatCaTier, formatWomStat } from "../signup/caStats";
 import { formatTierName, podiumTitle, recordTitle } from "../tectonic/profile";
 import { toCsv } from "../ui/csv";
@@ -11,18 +11,18 @@ import type { PoolRatings } from "./poolData";
  * pool, whatever the search or timezone filter is showing. The profile, answer and rating columns come only when the
  * viewer gets them, as in the table.
  */
-export function buildPoolCsv(pool: DraftUnit[], questions: SignupQuestion[], ratings: PoolRatings | null, leftoverMode: LeftoverMode): string {
+export function buildPoolCsv(pool: DraftUnit[], questions: SignupQuestion[], ratings: PoolRatings | null): string {
   const entries = pool.flatMap((u) => u.entries);
   const showAnswers = entries.some((e) => e.answers !== null);
   const showProfiles = entries.some((e) => e.tectonicProfile !== null);
   const hasPairs = pool.some((u) => u.entries.length > 1);
-  const hasLeftovers = pool.some((u) => u.leftover);
+  const hasCuts = pool.some((u) => u.cut);
   const headers = [
     "RSN",
     "Discord",
     ...(hasPairs ? ["Paired with"] : []),
     ...(ratings ? ["Rating", "Note"] : []),
-    ...(hasLeftovers ? ["Leftover"] : []),
+    ...(hasCuts ? ["At risk of cut"] : []),
     "Timezone",
     ...(showProfiles ? ["Tier", "Clan points", "Clan rank", "Records", "Podiums", "Achievements"] : []),
     "EHB",
@@ -42,7 +42,7 @@ export function buildPoolCsv(pool: DraftUnit[], questions: SignupQuestion[], rat
         discordName(e.user),
         ...(hasPairs ? [partner?.signup.rsn ?? ""] : []),
         ...(ratings ? [rating && rating.stars > 0 ? String(rating.stars) : "", rating?.note ?? ""] : []),
-        ...(hasLeftovers ? [unit.leftover ? (leftoverMode === "singles" ? "Singles round" : "Cut") : ""] : []),
+        ...(hasCuts ? [unit.cut ? "Yes" : ""] : []),
         e.signup.timezone ? formatTimeZone(e.signup.timezone) : "",
         ...(showProfiles
           ? [

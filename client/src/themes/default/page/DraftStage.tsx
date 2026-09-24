@@ -48,7 +48,7 @@ export function DraftStage({ draft, milestone, onOpenDraft }: { draft: BingoPage
         }
       >
         <span className="num">
-          {draft.state.currentPick.singlesRound ? "Singles round" : `Round ${draft.state.currentPick.round}`}, pick {draft.state.currentPick.pickNumber}
+          Round {draft.state.currentPick.round}, pick {draft.state.currentPick.pickNumber}
         </span>
         . Teams are revealed here once the draft is complete.
       </EmptyState>

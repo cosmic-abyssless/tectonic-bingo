@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { STAGE_LABEL, STAGE_ORDER, nextMilestone, type Bingo, type Stage } from "@bingo/shared";
-import { useAdvanceStage } from "../../api/queries";
+import { useAdvanceStage, useDraftCuts } from "../../api/queries";
+import { cutModeLabel, describeShares } from "../draft/cutModes";
+import { useDialogParts } from "../ui/useDialogParts";
 import { Button } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
 import { MilestoneCountdown, StageStepper } from "../ui/StageStepper";
@@ -19,6 +21,7 @@ const ENTER_EFFECT: Record<Stage, string> = {
 
 /** The stage and what is next. Only site admins can change it: for anyone else there are no buttons, just the read-out. */
 export function StageControls({ slug, bingo, canChange }: { slug: string; bingo: Bingo; canChange: boolean }) {
+  const { Dialog, DialogHeader } = useDialogParts();
   const advanceStage = useAdvanceStage(slug);
   const [confirming, setConfirming] = useState<Stage | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,29 +71,75 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
         <MilestoneCountdown milestone={nextMilestone(bingo)} />
       </div>
 
-      {error && <Notice tone="danger">{error}</Notice>}
+      {error && !confirming && <Notice tone="danger">{error}</Notice>}
 
-      {canChange && confirming && (
+      {/* A stage change asks first, in a dialog: what the new stage does, and (into the draft) exactly who's cut. */}
+      <Dialog
+        isOpen={canChange && !!confirming}
+        onClose={() => {
+          setConfirming(null);
+          setError(null);
+        }}
+      >
+        {confirming && (
+          <>
+            <DialogHeader title={`Move to ${STAGE_LABEL[confirming]}?`} subtitle={`From ${STAGE_LABEL[bingo.stage]}`} onClose={() => setConfirming(null)} />
+            <div className="space-y-3 p-5 text-sm">
+              <p className="text-on-surface-muted">{ENTER_EFFECT[confirming]}</p>
+              {skipped.length > 0 && <p className="text-on-surface-muted">Skips {skipped.map((s) => STAGE_LABEL[s]).join(", ")}.</p>}
+              {confirming === "draft" && <DraftCutsPreview slug={slug} bingo={bingo} />}
+              {error && <Notice tone="danger">{error}</Notice>}
+              <div className="flex justify-end gap-2 pt-1">
+                <Button size="sm" variant="ghost" onPress={() => setConfirming(null)}>
+                  Cancel
+                </Button>
+                <Button size="sm" variant="primary" onPress={() => go(confirming)} isDisabled={advanceStage.isPending}>
+                  Confirm
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </Dialog>
+    </Card>
+  );
+}
+
+/** Before moving into the draft: what every team drafts, and who's cut (newest first), from the bingo's draft cuts setting. */
+function DraftCutsPreview({ slug, bingo }: { slug: string; bingo: Bingo }) {
+  const { data, isLoading, error } = useDraftCuts(slug);
+  if (isLoading) return <p className="text-on-surface-subtle">Working out who's cut…</p>;
+  if (error || !data) return <Notice tone="danger">Couldn't work out who's cut.</Notice>;
+  const mode = cutModeLabel(data.cutMode, bingo.signupMode);
+  if (data.cutMode === "none") {
+    return <Notice tone="neutral">{mode}: everyone is drafted and nobody is cut. Teams may end up different sizes.</Notice>;
+  }
+  if (!data.shares) {
+    return <Notice tone="warn">There are fewer than two teams, so nobody is cut yet. Add the captains first to see who will be.</Notice>;
+  }
+  const players = data.cut.reduce((n, c) => n + c.names.length, 0);
+  return (
+    <div className="space-y-2">
+      <p className="text-on-surface">
+        {mode}: each of the <span className="num">{data.teamCount}</span> teams drafts {describeShares(data.shares, bingo.signupMode)}.
+      </p>
+      {data.cut.length === 0 ? (
+        <Notice tone="ok">Nobody is cut.</Notice>
+      ) : (
         <Notice tone="warn">
           <p className="font-medium text-on-surface">
-            Move from {STAGE_LABEL[bingo.stage]} to {STAGE_LABEL[confirming]}?
+            {players === 1 ? "This signup is" : <><span className="num">{players}</span> signups are</>} cut from the draft:
           </p>
-          <p className="mt-1 text-on-surface-muted">{ENTER_EFFECT[confirming]}</p>
-          {skipped.length > 0 && (
-            <p className="mt-1 text-on-surface-muted">
-              Skips {skipped.map((s) => STAGE_LABEL[s]).join(", ")}.
-            </p>
-          )}
-          <div className="mt-3 flex gap-2">
-            <Button size="sm" variant="ghost" onPress={() => setConfirming(null)}>
-              Cancel
-            </Button>
-            <Button size="sm" variant="primary" onPress={() => go(confirming)} isDisabled={advanceStage.isPending}>
-              Confirm
-            </Button>
-          </div>
+          <ul className="mt-1.5 max-h-48 space-y-0.5 overflow-y-auto">
+            {data.cut.map((c) => (
+              <li key={c.names.join("+")}>
+                {c.names.join(" & ")}
+                {c.pair && <span className="text-on-surface-subtle"> (pair)</span>}
+              </li>
+            ))}
+          </ul>
         </Notice>
       )}
-    </Card>
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Bingo, ExclusivityRule, LeftoverMode, SignupMode } from "@bingo/shared";
+import type { Bingo, CutMode, ExclusivityRule, SignupMode } from "@bingo/shared";
+import { cutModeOptions } from "../draft/cutModes";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
 import { Markdown } from "../ui/Markdown";
@@ -51,7 +52,7 @@ export function BingoSettingsForm({
     description: bingo.description ?? "",
     theme: bingo.theme,
     signupMode: bingo.signupMode,
-    leftoverMode: bingo.leftoverMode,
+    cutMode: bingo.cutMode,
     warnLeftovers: bingo.warnLeftovers,
     buyinAmount: bingo.buyinAmount?.toString() ?? "",
     bonusPotAmount: bingo.bonusPotAmount.toString(),
@@ -106,7 +107,7 @@ export function BingoSettingsForm({
         description: form.description || null,
         theme: form.theme,
         signupMode: form.signupMode,
-        leftoverMode: form.leftoverMode,
+        cutMode: form.cutMode,
         warnLeftovers: form.warnLeftovers,
         buyinAmount: form.buyinAmount ? Number(form.buyinAmount) : null,
         bonusPotAmount: Number(form.bonusPotAmount) || 0,
@@ -159,7 +160,10 @@ export function BingoSettingsForm({
         <Field label="Signup mode" hint={hasSignups ? "Locked — players have already signed up." : "Duo: players pair up during signup and get drafted together."}>
           <Select
             value={form.signupMode}
-            onChange={(signupMode) => setForm({ ...form, signupMode: signupMode as SignupMode })}
+            // Pairs only means nothing in a solo bingo (the server drops it back to even too).
+            onChange={(signupMode) =>
+              setForm({ ...form, signupMode: signupMode as SignupMode, cutMode: signupMode === "solo" && form.cutMode === "pairs_only" ? "even" : form.cutMode })
+            }
             disabled={hasSignups}
             className="w-auto!"
             options={[
@@ -168,24 +172,29 @@ export function BingoSettingsForm({
             ]}
           />
         </Field>
+        {/* The chosen mode's explanation under the picker, so a mod knows who'll be cut before choosing. */}
         <Field
-          label="Leftover signups"
-          hint="Teams get equal picks. The newest signups that don't fill a full round are either cut or drafted in a final singles round, where the team that picked last picks first."
+          label="Draft cuts"
+          hint={
+            <>
+              {cutModeOptions(form.signupMode).find((o) => o.value === form.cutMode)?.help} Who's cut shows on the Signups tab, and is listed again
+              before moving into the draft.
+            </>
+          }
         >
           <Select
-            value={form.leftoverMode}
-            onChange={(leftoverMode) => setForm({ ...form, leftoverMode: leftoverMode as LeftoverMode })}
+            value={form.cutMode}
+            onChange={(cutMode) => setForm({ ...form, cutMode: cutMode as CutMode })}
             className="w-auto!"
-            options={[
-              { value: "cut", label: "Cut — not drafted" },
-              { value: "singles", label: "Singles round" },
-            ]}
+            options={cutModeOptions(form.signupMode).map(({ value, label }) => ({ value, label }))}
           />
         </Field>
-        <label className="flex items-center gap-2 text-sm text-on-surface">
-          <input type="checkbox" checked={form.warnLeftovers} onChange={(e) => setForm({ ...form, warnLeftovers: e.target.checked })} className="size-4 cursor-pointer accent-accent" />
-          Warn at-risk signups on their signup page
-        </label>
+        {form.cutMode !== "none" && (
+          <label className="flex items-center gap-2 text-sm text-on-surface">
+            <input type="checkbox" checked={form.warnLeftovers} onChange={(e) => setForm({ ...form, warnLeftovers: e.target.checked })} className="size-4 cursor-pointer accent-accent" />
+            Warn signups at risk of being cut, on their signup page
+          </label>
+        )}
       </Section>
 
       <Section title="Pot">
