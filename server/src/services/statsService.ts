@@ -1,8 +1,10 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { bingoLines, nodeEdges, nodes, stageTransitions, submissions, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
-import { findAncestorIds } from "./graphService";
+import { bingoLines, claims, nodeEdges, nodes, stageTransitions, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
+import { findAncestorIds, getFullGraph } from "./graphService";
+import { applyExclusivity } from "./exclusivityService";
+import { creditAwards, type AwardCredit, type CreditClaim } from "./pointsShare";
 import { rsnsInBingo } from "./playerNames";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -35,7 +37,7 @@ function labelNodes(db: Db, bingoId: string, nodeIds: string[]): Map<string, Nod
   for (const nodeId of nodeIds) {
     const line = lineByNodeId.get(nodeId);
     if (line) {
-      labels.set(nodeId, { kind: "line", label: `${line.lineType} ${line.lineIndex + 1} line bonus` });
+      labels.set(nodeId, { kind: "line", label: `${line.lineType[0]!.toUpperCase()}${line.lineType.slice(1)} ${line.lineIndex + 1} line bonus` });
       continue;
     }
     const directTile = tileByNodeId.get(nodeId);
@@ -82,8 +84,11 @@ export function getPointsOverTime(db: Db, bingoId: string): PointsOverTimePoint[
 export interface TimelineEvent {
   at: Date;
   type: "points_earned" | "line_completed" | "point_adjustment" | "first_completion" | "stage_changed";
-  label: string;
   teamId: string | null;
+  /** What happened, without the team or the points: "ZULRAH — Page 1", "Row 2 line bonus", a mod's reason. */
+  what: string;
+  /** Points it moved; null for events that aren't an award (first completions, stage changes). */
+  points: number | null;
 }
 
 // What happened, in a stats context: every award of points (a task or tile completed, a line bonus, a mod's
@@ -96,13 +101,10 @@ export function getTimeline(db: Db, bingoId: string): TimelineEvent[] {
     .where(eq(stageTransitions.bingoId, bingoId))
     .all()
     .filter((s) => s.toStage === "live" || s.toStage === "complete")
-    .map((s) => ({ at: s.createdAt, type: "stage_changed", label: s.toStage === "live" ? "The bingo went live" : "The bingo ended", teamId: null }));
+    .map((s) => ({ at: s.createdAt, type: "stage_changed", teamId: null, what: s.toStage === "live" ? "The bingo went live" : "The bingo ended", points: null }));
 
-  const teamRows = db.select().from(teams).where(eq(teams.bingoId, bingoId)).all();
-  const teamById = new Map(teamRows.map((t) => [t.id, t]));
-  const teamIds = teamRows.map((t) => t.id);
+  const teamIds = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.id);
   if (teamIds.length === 0) return stageEvents.sort((a, b) => a.at.getTime() - b.at.getTime());
-  const teamName = (teamId: string) => teamById.get(teamId)?.name ?? "A team";
 
   const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
   const tileByNodeId = new Map(tileRows.map((t) => [t.nodeId, t]));
@@ -113,10 +115,8 @@ export function getTimeline(db: Db, bingoId: string): TimelineEvent[] {
   const labels = labelNodes(db, bingoId, [...new Set(awards.map((r) => r.nodeId))]);
   const awardEvents: TimelineEvent[] = awards.map((r) => {
     const { kind, label } = labels.get(r.nodeId)!;
-    const team = teamName(r.teamId);
-    if (kind === "line") return { at: r.completedAt, type: "line_completed", teamId: r.teamId, label: `${team} earned the ${label} (+${r.pointsAwarded})` };
-    const what = kind === "tile" ? `the ${label} tile bonus` : label;
-    return { at: r.completedAt, type: "points_earned", teamId: r.teamId, label: `${team} ${kind === "tile" ? "earned" : "completed"} ${what} (+${r.pointsAwarded})` };
+    const what = kind === "tile" ? `${label} tile bonus` : label;
+    return { at: r.completedAt, type: kind === "line" ? "line_completed" : "points_earned", teamId: r.teamId, what, points: r.pointsAwarded };
   });
 
   const adjustmentEvents: TimelineEvent[] = db
@@ -124,12 +124,7 @@ export function getTimeline(db: Db, bingoId: string): TimelineEvent[] {
     .from(teamPointAdjustments)
     .where(eq(teamPointAdjustments.bingoId, bingoId))
     .all()
-    .map((a) => ({
-      at: a.createdAt,
-      type: "point_adjustment",
-      teamId: a.teamId,
-      label: `${teamName(a.teamId)} got ${a.amount > 0 ? "+" : ""}${a.amount} from a moderator: ${a.reason}`,
-    }));
+    .map((a) => ({ at: a.createdAt, type: "point_adjustment", teamId: a.teamId, what: a.reason, points: a.amount }));
 
   // "Task" here means any node that's a direct child of a tile's node.
   const taskEdges = tileNodeIds.length ? db.select({ parentId: nodeEdges.parentId, childId: nodeEdges.childId }).from(nodeEdges).where(inArray(nodeEdges.parentId, tileNodeIds)).all() : [];
@@ -149,15 +144,31 @@ export function getTimeline(db: Db, bingoId: string): TimelineEvent[] {
   const firstEvents: TimelineEvent[] = [...firstByTask.values()].map((r) => {
     const tile = tileByNodeId.get(tileIdByTaskNode.get(r.nodeId)!);
     const node = taskNodeById.get(r.nodeId);
-    return {
-      at: r.completedAt,
-      type: "first_completion",
-      teamId: r.teamId,
-      label: `${teamName(r.teamId)} was first to complete ${tile?.name ?? ""} — ${node?.label ?? "Task"}`,
-    };
+    return { at: r.completedAt, type: "first_completion", teamId: r.teamId, what: `${tile?.name ?? ""} — ${node?.label ?? "Task"}`, points: null };
   });
 
   return [...stageEvents, ...awardEvents, ...adjustmentEvents, ...firstEvents].sort((a, b) => a.at.getTime() - b.at.getTime());
+}
+
+export interface ContributionClaim {
+  submissionId: string;
+  /** The item or task the claim was for. */
+  label: string;
+  /** How much of it counted (a SUM's last claim only counts for what was still needed). */
+  quantity: number;
+}
+
+export interface ContributionAward {
+  nodeId: string;
+  kind: "task" | "tile" | "line";
+  label: string;
+  /** The whole award, and this player's part of it. */
+  awardPoints: number;
+  points: number;
+  fraction: number;
+  claims: ContributionClaim[];
+  /** Line bonuses: the tiles of the line this player had a share of. */
+  viaTiles?: string[];
 }
 
 export interface ContributionCount {
@@ -165,35 +176,118 @@ export interface ContributionCount {
   user: MinimalUser;
   teamId: string;
   approvedSubmissions: number;
+  /** Points share (CONTEXT.md), unrounded. */
+  pointsShare: number;
+  awards: ContributionAward[];
 }
 
-// How many approved submissions each player personally submitted — a rough
-// "who did the work" ranking, distinct from the team-level scoreboard.
+/**
+ * Every award each team holds, credited to the Players whose Claims completed it (pointsShare.ts). Replays the
+ * same inputs rebuildTeamState scored from: the bingo's graph and each team's exclusivity-filtered approved
+ * claims. The per-player breakdown is kept whole so other stats (player titles, later) can build on it.
+ */
+export function getPointsShares(db: Db, bingoId: string): Map<string, { teamId: string; credits: AwardCredit[] }> {
+  const teamIds = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.id);
+  const out = new Map<string, { teamId: string; credits: AwardCredit[] }>();
+  if (teamIds.length === 0) return out;
+
+  const { engineNodes, childrenOf } = getFullGraph(db, bingoId);
+  const tileNodeIds = new Set(db.select({ nodeId: tiles.nodeId }).from(tiles).where(eq(tiles.bingoId, bingoId)).all().map((t) => t.nodeId));
+  const lineNodeIds = new Set(db.select({ nodeId: bingoLines.nodeId }).from(bingoLines).where(eq(bingoLines.bingoId, bingoId)).all().map((l) => l.nodeId));
+
+  for (const teamId of teamIds) {
+    const approved: CreditClaim[] = db
+      .select({ claimId: claims.id, submissionId: submissions.id, userId: submissions.submittedByUserId, nodeId: claims.nodeId, itemName: claims.itemName, quantity: claims.quantity, reviewedAt: submissions.reviewedAt })
+      .from(claims)
+      .innerJoin(submissions, eq(claims.submissionId, submissions.id))
+      .innerJoin(nodes, eq(claims.nodeId, nodes.id))
+      .where(and(eq(submissions.teamId, teamId), eq(submissions.status, "approved"), eq(nodes.bingoId, bingoId)))
+      .all()
+      .map((r) => ({ ...r, reviewedAt: r.reviewedAt! }));
+    const awards = db
+      .select({ nodeId: teamNodeState.nodeId, points: teamNodeState.pointsAwarded })
+      .from(teamNodeState)
+      .where(eq(teamNodeState.teamId, teamId))
+      .all()
+      .filter((a) => a.points > 0);
+    const credits = creditAwards({ nodes: engineNodes, childrenOf, claims: applyExclusivity(db, bingoId, approved), awards, tileNodeIds, lineNodeIds });
+    for (const credit of credits) {
+      for (const share of credit.shares) {
+        const entry = out.get(share.userId) ?? { teamId, credits: [] };
+        entry.credits.push({ ...credit, shares: [share] });
+        out.set(share.userId, entry);
+      }
+    }
+  }
+  return out;
+}
+
+// Every member of every team with their approved submissions and Points share, highest share first. Members
+// with nothing approved yet are included at 0, so a team sees its whole roster.
 export function getContributionCounts(db: Db, bingoId: string): ContributionCount[] {
   const teamIds = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.id);
   if (teamIds.length === 0) return [];
 
+  const teamByUser = new Map<string, string>();
+  for (const m of db.select({ userId: teamMembers.userId, teamId: teamMembers.teamId }).from(teamMembers).where(inArray(teamMembers.teamId, teamIds)).all()) teamByUser.set(m.userId, m.teamId);
+
+  const submissionCounts = new Map<string, number>();
   const rows = db
     .select({ userId: submissions.submittedByUserId, teamId: submissions.teamId })
     .from(submissions)
     .where(and(inArray(submissions.teamId, teamIds), eq(submissions.status, "approved")))
     .all();
-
-  const counts = new Map<string, { teamId: string; count: number }>();
   for (const r of rows) {
-    const existing = counts.get(r.userId);
-    if (existing) existing.count += 1;
-    else counts.set(r.userId, { teamId: r.teamId, count: 1 });
+    submissionCounts.set(r.userId, (submissionCounts.get(r.userId) ?? 0) + 1);
+    if (!teamByUser.has(r.userId)) teamByUser.set(r.userId, r.teamId);
   }
 
-  const userIds = [...counts.keys()];
+  const shares = getPointsShares(db, bingoId);
+  const nodeIds = [...new Set([...shares.values()].flatMap((s) => s.credits.flatMap((c) => [c.nodeId, ...c.shares.flatMap((sh) => sh.claims.map((cl) => cl.nodeId))])))];
+  const labels = labelNodes(db, bingoId, nodeIds);
+  const leafRows = nodeIds.length ? db.select({ id: nodes.id, label: nodes.label, itemName: nodes.itemName }).from(nodes).where(inArray(nodes.id, nodeIds)).all() : [];
+  const leafById = new Map(leafRows.map((n) => [n.id, n]));
+  const tileNameByNodeId = new Map(db.select({ nodeId: tiles.nodeId, name: tiles.name }).from(tiles).where(eq(tiles.bingoId, bingoId)).all().map((t) => [t.nodeId, t.name]));
+
+  const awardsFor = (credits: AwardCredit[]): ContributionAward[] =>
+    credits
+      .map((credit) => {
+        const share = credit.shares[0]!;
+        const label = labels.get(credit.nodeId)?.label ?? "Bonus";
+        return {
+          nodeId: credit.nodeId,
+          kind: credit.kind,
+          label: credit.kind === "tile" ? `${label} tile bonus` : label,
+          awardPoints: credit.points,
+          points: share.points,
+          fraction: share.fraction,
+          claims: share.claims.map((c) => {
+            const leaf = leafById.get(c.nodeId);
+            return { submissionId: c.submissionId, label: c.itemName ?? leaf?.itemName ?? leaf?.label ?? "Task", quantity: c.quantity };
+          }),
+          ...(share.viaTileNodeIds ? { viaTiles: share.viaTileNodeIds.map((id) => tileNameByNodeId.get(id) ?? "A tile") } : {}),
+        };
+      })
+      .sort((a, b) => b.points - a.points);
+
+  const userIds = [...teamByUser.keys()];
   const userRows = userIds.length ? db.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, userIds)).all() : [];
   const rsns = rsnsInBingo(db, bingoId, userIds);
   const userById = new Map(userRows.map((u) => [u.id, { ...u, rsn: rsns.get(u.id) ?? null }]));
 
   return userIds
-    .map((userId) => ({ userId, user: userById.get(userId)!, teamId: counts.get(userId)!.teamId, approvedSubmissions: counts.get(userId)!.count }))
-    .sort((a, b) => b.approvedSubmissions - a.approvedSubmissions);
+    .map((userId) => {
+      const awards = awardsFor(shares.get(userId)?.credits ?? []);
+      return {
+        userId,
+        user: userById.get(userId)!,
+        teamId: teamByUser.get(userId)!,
+        approvedSubmissions: submissionCounts.get(userId) ?? 0,
+        pointsShare: awards.reduce((sum, a) => sum + a.points, 0),
+        awards,
+      };
+    })
+    .sort((a, b) => b.pointsShare - a.pointsShare || b.approvedSubmissions - a.approvedSubmissions);
 }
 
 export interface Stats {
@@ -220,20 +314,20 @@ export function filterStatsForTeam(stats: Stats, teamId: string): Stats {
   return { pointsOverTime: own(stats.pointsOverTime), timeline: own(stats.timeline), contributions: own(stats.contributions), heatmap: own(stats.heatmap) };
 }
 
-// "Team X was first to complete Y" tells every other team what has and hasn't been done yet, so it is for mods
-// only: players never get it, live or after the bingo.
+// "Team X was first to complete Y" tells a team what the others have and haven't done, so a Player only gets it
+// once the bingo is over. Mods get it throughout.
 function withoutFirstCompletions(stats: Stats): Stats {
   return { ...stats, timeline: stats.timeline.filter((e) => e.type !== "first_completion") };
 }
 
 /**
- * The stats one viewer may see. Mods get everything. Anyone else loses the first-completion events, and a player
- * still in the running (`teamId` set) sees only their own team's rows.
+ * The stats one viewer may see. Mods get everything. A Player still in the running (`teamId` set) sees only
+ * their own team's rows, and first completions only once the bingo is `complete`.
  */
-export function getStatsForViewer(db: Db, bingoId: string, viewer: { isMod: boolean; teamId: string | null }): Stats {
+export function getStatsForViewer(db: Db, bingoId: string, viewer: { isMod: boolean; teamId: string | null; bingoComplete: boolean }): Stats {
   const stats = getStats(db, bingoId);
   if (viewer.isMod) return stats;
-  const visible = withoutFirstCompletions(stats);
+  const visible = viewer.bingoComplete ? stats : withoutFirstCompletions(stats);
   return viewer.teamId ? filterStatsForTeam(visible, viewer.teamId) : visible;
 }
 

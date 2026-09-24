@@ -5,6 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createQuestion, deleteQuestion, reorderQuestions, updateQuestion } from "./signupService";
+import { seesProfileAnswers } from "./signupService";
 import { createSignup, getAllSignups, getAnswerCounts, getSignupForUser, markBuyin, setSignupTimezone, updateSignup, withdrawSignup } from "./signupService";
 import { cancelRequest, requestPairing } from "./pairingService";
 import { ServiceError } from "./errors";
@@ -554,5 +555,19 @@ describe("re-signing up after withdrawing", () => {
 
     const cleared = markBuyin(db, bingo, first.id, { received: false, recordedByUserId: adminId });
     expect(cleared.buyinReceivedAt).toBeNull();
+  });
+});
+
+describe("seesProfileAnswers", () => {
+  const stages = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"] as const;
+
+  it("shows a team lead the answers only while scouting and drafting", () => {
+    const lead = { isMod: false, isTeamLead: true };
+    expect(stages.filter((stage) => seesProfileAnswers(lead, stage))).toEqual(["signup", "captains", "draft"]);
+  });
+
+  it("always shows a mod, and never a plain player", () => {
+    expect(stages.every((stage) => seesProfileAnswers({ isMod: true, isTeamLead: false }, stage))).toBe(true);
+    expect(stages.some((stage) => seesProfileAnswers({ isMod: false, isTeamLead: false }, stage))).toBe(false);
   });
 });

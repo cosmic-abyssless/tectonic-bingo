@@ -1,6 +1,6 @@
 import { now as clockNow } from "../clock";
 import { and, count, eq, inArray, isNotNull, ne, or } from "drizzle-orm";
-import { canSeeAnswers, formatSignupAnswer, isBlankAnswer, isValidTimeZone, QUESTION_VISIBILITIES, MAX_CHOICE_LENGTH, MAX_MULTISELECT_CHOICES, MAX_QUESTION_HELPER_TEXT, type AnswerViewer, type QuestionVisibility, type SignupQuestionType } from "@bingo/shared";
+import { canSeeAnswers, formatSignupAnswer, isBlankAnswer, isValidTimeZone, QUESTION_VISIBILITIES, MAX_CHOICE_LENGTH, MAX_MULTISELECT_CHOICES, MAX_QUESTION_HELPER_TEXT, type AnswerViewer, type QuestionVisibility, type SignupQuestionType, type Stage } from "@bingo/shared";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
@@ -76,6 +76,14 @@ function assertVisibility(value: unknown): void {
 /** The level a request sees answers from: a site admin, else a bingo mod, else (a team lead) a captain. */
 export function answerViewerFor(isSiteAdmin: boolean, isMod: boolean): AnswerViewer {
   return isSiteAdmin ? "admin" : isMod ? "mod" : "captain";
+}
+
+/**
+ * Whether a viewer gets another player's signup answers in their profile. Mods (and site admins) always do; a
+ * team lead (captain or co-captain) only while scouting and drafting, the window the draft pool gives them too.
+ */
+export function seesProfileAnswers(viewer: { isMod: boolean; isTeamLead: boolean }, stage: Stage): boolean {
+  return viewer.isMod || (viewer.isTeamLead && (stage === "signup" || stage === "captains" || stage === "draft"));
 }
 
 /** The ids of a bingo's questions whose answers `viewer` may see (their own answers aside, which they always can). */

@@ -119,8 +119,8 @@ router.get(
 
 // Stats expose every team's progress, so players only get the full picture once
 // the bingo is over; while it's live they see just their own team. Mods can
-// watch everything throughout. "First to complete" events are mods-only, always
-// (statsService.getStatsForViewer).
+// watch everything throughout. "First to complete" events reach players only
+// once the bingo is over (statsService.getStatsForViewer).
 router.get(
   "/:slug/stats",
   requireAuth,
@@ -132,7 +132,7 @@ router.get(
     const myTeam = seesEveryTeam ? null : teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
     if (!seesEveryTeam && (bingo.stage !== "live" || !myTeam)) throw new ServiceError(403, "Stats aren't visible until the bingo is complete");
 
-    res.json(statsService.getStatsForViewer(db, bingo.id, { isMod, teamId: myTeam?.id ?? null }));
+    res.json(statsService.getStatsForViewer(db, bingo.id, { isMod, teamId: myTeam?.id ?? null, bingoComplete: bingo.stage === "complete" }));
   }),
 );
 
@@ -586,8 +586,8 @@ router.get(
 
     const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
     const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
-    // Signup answers follow the draft room's rule: mods and team leads only.
-    const seesAnswers = isMod || (!!myTeam && teamService.isTeamLead(db, myTeam.id, req.user!.id));
+    // Signup answers follow the draft room's rule: mods always, team leads while scouting and drafting.
+    const seesAnswers = signupService.seesProfileAnswers({ isMod, isTeamLead: !!myTeam && teamService.isTeamLead(db, myTeam.id, req.user!.id) }, bingo.stage);
     // ...and of those, only the questions visible at the viewer's level.
     const visibleQuestions = signupService.visibleQuestionIds(db, bingo.id, signupService.answerViewerFor(req.user!.isAdmin, isMod));
 
