@@ -2,7 +2,7 @@ import { devSkipsOcr } from "../devMode";
 import { privateRevalidate } from "../middleware/cacheControl";
 import { Router } from "express";
 import fs from "fs";
-import type { ClaimInput, PlayerProfile } from "@bingo/shared";
+import type { AccountTypesResponse, ClaimInput, PlayerProfile } from "@bingo/shared";
 import { UPLOADS_DIR } from "../config";
 import { imageUpload } from "../middleware/upload";
 import { requireAuth } from "../middleware/requireAuth";
@@ -24,7 +24,7 @@ import { isOcrEnabled, analyzeSubmissionScreenshot } from "../ocr";
 import { getTectonicClient, TectonicUnavailableError, type TectonicDetailedUser } from "../services/tectonicService";
 import { fetchProfiles } from "../services/tectonicProfileService";
 import { applyRosterNames, partiesInPairingState } from "../services/pairingNames";
-import { fetchAndPersistPlayerStats, getSignupStats, parseStoredPlayerStats } from "../services/playerStatsService";
+import { fetchAndPersistPlayerStats, getAccountTypes, getSignupStats, parseStoredPlayerStats } from "../services/playerStatsService";
 import { parseStoredCaStats } from "../services/combatAchievements";
 import { syncWomTeamRename } from "../services/womCompetitionService";
 import { getPastParticipationsForUser } from "../services/pastWomCompetitionService";
@@ -557,6 +557,17 @@ router.get(
     }));
 
     res.json({ ...state, pool, ratings, tectonicUnavailable: tectonic.unavailable });
+  }),
+);
+
+// Every signed-up player's account type (ironman, UIM…), for the badge beside their name wherever it's shown.
+router.get(
+  "/:slug/account-types",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const response: AccountTypesResponse = { accountTypes: getAccountTypes(db, req.bingo!.id) };
+    res.json(response);
   }),
 );
 

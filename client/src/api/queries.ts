@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
+  AccountTypesResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   MinimalUser, ModSubmissionsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   PickRating, PlayerProfile, StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
@@ -31,6 +31,7 @@ export const queryKeys = {
   unpairedSignups: (slug: string) => ["unpairedSignups", slug] as const,
   draftState: (slug: string) => ["draftState", slug] as const,
   playerProfile: (slug: string, userId: string) => ["playerProfile", slug, userId] as const,
+  accountTypes: (slug: string) => ["accountTypes", slug] as const,
   stats: (slug: string) => ["stats", slug] as const,
   auditLog: (slug: string, filters: AuditLogFilters) => ["auditLog", slug, filters] as const,
   teamActivity: (slug: string, teamId: string) => ["teamActivity", slug, teamId, "condensed"] as const,
@@ -539,6 +540,15 @@ export function useAdvanceStage(slug: string) {
 
 // Clan standing is fetched live, so keep it short-lived; the server caches
 // the upstream call for 60s anyway.
+/** Every signed-up player's account type, by user id: the badge beside a name (core/tectonic/PlayerName). */
+export function useAccountTypes(slug: string) {
+  return useQuery({
+    queryKey: queryKeys.accountTypes(slug),
+    queryFn: () => api.get<AccountTypesResponse>(`/api/bingos/${slug}/account-types`),
+    staleTime: 60_000,
+  });
+}
+
 export function usePlayerProfile(slug: string, userId: string | null) {
   return useQuery({
     queryKey: queryKeys.playerProfile(slug, userId ?? ""),

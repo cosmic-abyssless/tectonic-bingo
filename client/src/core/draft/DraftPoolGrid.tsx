@@ -42,7 +42,6 @@ import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { CaCell, WomCell, caTitle, formatCaTier, formatWomStat } from "../signup/caStats";
 import { discordName } from "../ui/user";
 import { useGridTheme } from "../ui/agGrid";
-import { AccountTypeIcon } from "../ui/AccountTypeIcon";
 import { Badge } from "../ui/Card";
 import { ColumnPicker } from "../ui/ColumnPicker";
 import { MultiSelect } from "../ui/MultiSelect";
@@ -175,9 +174,9 @@ function dimClass(dim: boolean): string | undefined {
 // own (no way to suppress it short of forking those components), so those columns opt out of the AG tooltip
 // (tooltip: false) rather than show both at once.
 const rsnLine: LineRender = (entry, { dim, search }) => (
-  <span className={`inline-flex max-w-full min-w-0 items-center gap-2 ${dimClass(dim) ?? ""}`}>
-    <AccountTypeIcon accountType={entry.accountType} className="align-middle" reserveSpace />
-    <PlayerName userId={entry.user.id} className="min-w-0 truncate">
+  <span className={`inline-flex max-w-full min-w-0 items-center ${dimClass(dim) ?? ""}`}>
+    {/* The badge's slot is kept for a player with none, so the names in the column line up. */}
+    <PlayerName userId={entry.user.id} accountType={entry.accountType} badge="reserve" className="min-w-0 truncate">
       <Mark text={entry.signup.rsn} query={search} />
     </PlayerName>
   </span>

@@ -91,6 +91,24 @@ export function parseStoredPlayerStats(row: {
   };
 }
 
+/**
+ * Every active signup's account type in this bingo, by user id (RuneProfile's, else WOM's, as in parseStoredPlayerStats);
+ * players with none known are left out. Drives the account badge the client shows beside a player's name.
+ */
+export function getAccountTypes(db: Db, bingoId: string): Record<string, AccountType> {
+  const rows = db
+    .select({ userId: signups.userId, womDataJson: signups.womDataJson, runeProfileDataJson: signups.runeProfileDataJson })
+    .from(signups)
+    .where(and(eq(signups.bingoId, bingoId), eq(signups.status, "active")))
+    .all();
+  const types: Record<string, AccountType> = {};
+  for (const row of rows) {
+    const { accountType } = parseStoredPlayerStats(row);
+    if (accountType) types[row.userId] = accountType;
+  }
+  return types;
+}
+
 /** A player's active signup for this bingo with its stored stats parsed and their answers, or null. */
 export function getSignupStats(db: Db, bingoId: string, userId: string): (StoredPlayerStats & { rsn: string; answers: SignupAnswer[] }) | null {
   const signup = db
