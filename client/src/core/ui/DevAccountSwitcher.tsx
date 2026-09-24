@@ -14,10 +14,9 @@ import {
   Virtualizer,
 } from "react-aria-components";
 import type { User } from "@bingo/shared";
-import { clearAuthCache } from "../../api/authCache";
-import { clearBoardCache } from "../../api/boardCache";
 import { useAuth } from "../../context/AuthContext";
 import { Button } from "./Button";
+import { devLoginAs } from "./devLogin";
 import { controlClass } from "./Field";
 import { CheckIcon, UsersIcon } from "./icons";
 import { avatarUrl, displayName } from "./user";
@@ -74,17 +73,7 @@ function Switcher({ currentUserId }: { currentUserId: string }) {
   async function switchTo(discordId: string) {
     setSwitching(discordId);
     try {
-      const res = await fetch("/auth/dev-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ discordId }),
-      });
-      if (!res.ok) throw new Error();
-      // The cached board and identity are the old account's.
-      clearBoardCache();
-      clearAuthCache();
-      window.location.reload();
+      await devLoginAs({ discordId });
     } catch {
       setError("Couldn't switch to that account.");
       setSwitching(null);

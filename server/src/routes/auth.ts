@@ -108,13 +108,14 @@ if (isDevModeActive()) {
     res.json({ users: rows.map((u) => ({ ...u, ...access.get(u.id) })) });
   });
 
+  // By discordId, or by our own userId (what a player's profile has: the dev "View as" button).
   router.post("/dev-login", async (req: Request, res: Response) => {
-    const { discordId } = req.body as { discordId?: string };
-    if (!discordId) {
-      res.status(400).json({ error: "discordId is required" });
+    const { discordId, userId } = req.body as { discordId?: string; userId?: string };
+    if (!discordId && !userId) {
+      res.status(400).json({ error: "discordId or userId is required" });
       return;
     }
-    const [user] = await db.select().from(users).where(eq(users.discordId, discordId));
+    const [user] = await db.select().from(users).where(discordId ? eq(users.discordId, discordId) : eq(users.id, userId!));
     if (!user) {
       res.status(404).json({ error: "No user with that discordId — seed one first" });
       return;
