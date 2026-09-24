@@ -10,7 +10,6 @@ import { BugReportDialog } from "./BugReportDialog";
 import { Button } from "./Button";
 import { PulseDot } from "./Card";
 import { Menu, MenuItem, MenuTrigger } from "./Menu";
-import { TextTooltip } from "./Tooltip";
 import { ArrowLeftIcon, CheckIcon, MonitorIcon, MoonIcon, SunIcon } from "./icons";
 import { useOptionalSlot } from "../../themes/context";
 import { avatarUrl, displayName } from "./user";
@@ -81,15 +80,15 @@ export function AppHeader({
     <>
       {user?.inGuild && (
         <>
-          <TextTooltip text="Report a bug">
-            <BugButton
-              hasUnseen={hasUnseenBugReports}
-              onPress={() => {
-                setBugReportOpen(true);
-                markBugReportsSeen();
-              }}
-            />
-          </TextTooltip>
+          {/* Brings its own "Report a bug" tooltip: wrapped from out here, the tooltip's hover wiring reached the slot
+              component, not the button inside it. */}
+          <BugButton
+            hasUnseen={hasUnseenBugReports}
+            onPress={() => {
+              setBugReportOpen(true);
+              markBugReportsSeen();
+            }}
+          />
           <BugReportDialog isOpen={bugReportOpen} onClose={() => setBugReportOpen(false)} />
         </>
       )}

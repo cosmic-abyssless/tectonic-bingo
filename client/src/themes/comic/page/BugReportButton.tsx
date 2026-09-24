@@ -1,5 +1,6 @@
 import { BugReportIcon, type BugReportButtonProps } from "../../../core/ui/BugReportButton";
 import { PulseDot } from "../../../core/ui/Card";
+import { TextTooltip } from "../../../core/ui/Tooltip";
 import { ComicButton } from "../ui/ComicButton";
 import { useComic } from "../ui/useComic";
 
@@ -12,16 +13,18 @@ import { useComic } from "../ui/useComic";
 export function BugReportButton({ onPress, hasUnseen }: BugReportButtonProps) {
   const { scheme } = useComic();
   return (
-    <ComicButton
-      aria-label="Report a bug"
-      size="sm"
-      variant={scheme === "dark" ? "yellow" : "secondary"}
-      sfx={false}
-      className="relative w-8 px-0!"
-      onPress={onPress}
-    >
-      <BugReportIcon className="h-[19px] w-[22px]" />
-      {hasUnseen && <PulseDot className="-right-1.5 -top-1.5" />}
-    </ComicButton>
+    <TextTooltip text="Report a bug">
+      <ComicButton
+        aria-label="Report a bug"
+        size="sm"
+        variant={scheme === "dark" ? "yellow" : "secondary"}
+        sfx={false}
+        className="relative w-8 px-0!"
+        onPress={onPress}
+      >
+        <BugReportIcon className="h-[19px] w-[22px]" />
+        {hasUnseen && <PulseDot className="-right-1.5 -top-1.5" />}
+      </ComicButton>
+    </TextTooltip>
   );
 }
