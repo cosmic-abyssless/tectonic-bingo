@@ -12,13 +12,16 @@ export function DraftPage() {
   const navigate = useNavigate();
   const { data: shell } = useBingo(slug);
 
+  // Escape goes back to the board, except during the draft stage, when the board sends you straight back here.
+  const inDraftStage = shell?.bingo.stage === "draft";
   useEffect(() => {
+    if (inDraftStage) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") navigate(`/b/${slug}`);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [navigate, slug]);
+  }, [navigate, slug, inDraftStage]);
 
   useRememberTheme(slug, shell?.bingo.theme);
 

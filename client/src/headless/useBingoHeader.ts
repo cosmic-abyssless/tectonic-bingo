@@ -7,6 +7,7 @@ import { useAuth } from "../context/AuthContext";
 
 export interface BingoHeaderModel {
   name: string;
+  stage: BingoShellResponse["bingo"]["stage"];
   /** "Signups open", "Draft", "Live"… */
   stageLabel: string;
   isMod: boolean;
@@ -35,6 +36,7 @@ export function useBingoHeader(slug: string): BingoHeaderModel | null {
   if (!shell) return null;
   return {
     name: shell.bingo.name,
+    stage: shell.bingo.stage,
     stageLabel: STAGE_LABEL[shell.bingo.stage],
     isMod: shell.isMod,
     canViewStats: canViewStats(shell),
