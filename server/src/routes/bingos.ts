@@ -519,7 +519,11 @@ router.get(
     }
 
     const ledTeamId = isLead && myTeam ? myTeam.id : null;
-    const state = draftService.getDraftState(db, bingo, { includeAnswers: isMod || !!ledTeamId, hideCut: true });
+    const state = draftService.getDraftState(db, bingo, {
+      includeAnswers: isMod || !!ledTeamId,
+      answerViewer: signupService.answerViewerFor(req.user!.isAdmin, isMod),
+      hideCut: true,
+    });
     // Scouting notes are private to the lead's own team.
     const ratings = ledTeamId ? draftService.getTeamRatings(db, ledTeamId) : {};
 
@@ -573,6 +577,8 @@ router.get(
     const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
     // Signup answers follow the draft room's rule: mods and team leads only.
     const seesAnswers = isMod || (!!myTeam && teamService.isTeamLead(db, myTeam.id, req.user!.id));
+    // ...and of those, only the questions visible at the viewer's level.
+    const visibleQuestions = signupService.visibleQuestionIds(db, bingo.id, signupService.answerViewerFor(req.user!.isAdmin, isMod));
 
     const signup = getSignupStats(db, bingo.id, userId);
     const tectonic = await fetchProfiles(db, [userId]);
@@ -584,7 +590,7 @@ router.get(
       caCurrent: signup?.caCurrent ?? null,
       caPeak: signup?.caPeak ?? null,
       profile: tectonic.profiles[userId] ?? null,
-      answers: signup && seesAnswers ? signup.answers : null,
+      answers: signup && seesAnswers ? signup.answers.filter((a) => visibleQuestions.has(a.questionId)) : null,
       tectonicUnavailable: tectonic.unavailable,
       pastBingoStats: getPastParticipationsForUser(db, userId),
     };

@@ -328,6 +328,41 @@ describe("getAllSignups / markBuyin", () => {
   });
 });
 
+describe("question visibility", () => {
+  it("defaults to captains and rejects an unknown level", () => {
+    const { bingo } = seedBingo();
+    expect(createQuestion(db, { bingoId: bingo.id, prompt: "Q", type: "text" }).visibility).toBe("captains");
+    expect(() => createQuestion(db, { bingoId: bingo.id, prompt: "Q", type: "text", visibility: "everyone" as never })).toThrow(ServiceError);
+    const q = createQuestion(db, { bingoId: bingo.id, prompt: "Q2", type: "text", visibility: "mods" });
+    expect(() => updateQuestion(db, q.id, { visibility: "nobody" as never })).toThrow(ServiceError);
+    expect(updateQuestion(db, q.id, { visibility: "admins" }).visibility).toBe("admins");
+  });
+
+  it("limits which answers the roster carries to the viewer's level and up", () => {
+    const { bingo, memberId } = seedBingo();
+    const open = createQuestion(db, { bingoId: bingo.id, prompt: "Open", type: "text" });
+    const mods = createQuestion(db, { bingoId: bingo.id, prompt: "Mods", type: "text", visibility: "mods" });
+    const admins = createQuestion(db, { bingoId: bingo.id, prompt: "Admins", type: "text", visibility: "admins" });
+    createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Me", answers: [open, mods, admins].map((q) => ({ questionId: q.id, value: q.prompt })) });
+    const seen = (viewer: "captain" | "mod" | "admin") => getAllSignups(db, bingo.id, viewer)[0]!.answers.map((a) => a.value).sort();
+    expect(seen("captain")).toEqual(["Open"]);
+    expect(seen("mod")).toEqual(["Mods", "Open"]);
+    expect(seen("admin")).toEqual(["Admins", "Mods", "Open"]);
+    // The player always has their own.
+    expect(getSignupForUser(db, bingo.id, memberId)!.answers).toHaveLength(3);
+  });
+
+  it("keeps an admins-only answer's values out of the signup.updated audit entry", () => {
+    const { bingo, memberId } = seedBingo();
+    const admins = createQuestion(db, { bingoId: bingo.id, prompt: "Secret", type: "text", visibility: "admins" });
+    const open = createQuestion(db, { bingoId: bingo.id, prompt: "Open", type: "text" });
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Me", answers: [{ questionId: admins.id, value: "a" }, { questionId: open.id, value: "x" }] });
+    updateSignup(db, bingo, signup.id, { answers: [{ questionId: admins.id, value: "b" }, { questionId: open.id, value: "y" }] });
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "signup.updated")).get()!;
+    expect(JSON.parse(row.details)).toEqual({ changes: { before: { Secret: "(hidden)", Open: "x" }, after: { Secret: "(hidden)", Open: "y" } } });
+  });
+});
+
 describe("deleting a question with answers", () => {
   it("deletes its answers with it (only its own), counts non-blank ones, and records how many went", () => {
     const { bingo, adminId, memberId } = seedBingo();

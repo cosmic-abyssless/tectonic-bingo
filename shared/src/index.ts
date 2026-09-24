@@ -510,6 +510,23 @@ export interface ReviewSubmissionResponse {
  */
 export type SignupQuestionType = "text" | "textarea" | "select" | "multiselect" | "boolean";
 
+/**
+ * Who, besides the player who answered, can see a question's answers: that level and up (captains < mods < admins).
+ * "captains" is the default and means every role that sees answers at all (team leads in the draft, mods, admins).
+ */
+export const QUESTION_VISIBILITIES = ["captains", "mods", "admins"] as const;
+export type QuestionVisibility = (typeof QUESTION_VISIBILITIES)[number];
+
+/** The level someone looks at other players' answers from: a team lead, a bingo moderator, or a site admin. */
+export type AnswerViewer = "captain" | "mod" | "admin";
+
+const VISIBILITY_RANK: Record<QuestionVisibility, number> = { captains: 0, mods: 1, admins: 2 };
+const VIEWER_RANK: Record<AnswerViewer, number> = { captain: 0, mod: 1, admin: 2 };
+
+export function canSeeAnswers(visibility: QuestionVisibility, viewer: AnswerViewer): boolean {
+  return VIEWER_RANK[viewer] >= VISIBILITY_RANK[visibility];
+}
+
 export interface SignupQuestion {
   id: string;
   bingoId: string;
@@ -520,6 +537,7 @@ export interface SignupQuestion {
   optionsJson: string | null;
   required: boolean;
   sortOrder: number;
+  visibility: QuestionVisibility;
 }
 
 /** The longest helper text a question may carry. */

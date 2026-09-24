@@ -74,7 +74,9 @@ function QuestionField({ question, value, onChange }: { question: SignupQuestion
     </>
   );
 
-  const hint = question.helperText || undefined;
+  // A question limited to mods/admins says so, so players know who reads what they write there.
+  const privacy = question.visibility === "admins" ? "Only admins see your answer." : question.visibility === "mods" ? "Only mods and admins see your answer." : null;
+  const hint = [question.helperText, privacy].filter(Boolean).join(" ") || undefined;
 
   if (question.type === "boolean") {
     return (

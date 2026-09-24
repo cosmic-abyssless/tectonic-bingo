@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { SignupQuestion, SignupQuestionType } from "@bingo/shared";
+import type { QuestionVisibility, SignupQuestion, SignupQuestionType } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { optimisticUpdate } from "../../api/optimistic";
 import { adminQueryKeys, useQuestions } from "../../api/adminQueries";
@@ -29,6 +29,29 @@ function parseOptions(optionsJson: string | null | undefined): string {
   }
 }
 
+// Who besides the player sees the answers: that level and up. Captains (the default) is everyone who sees answers
+// at all; narrow it for anything sensitive.
+const VISIBILITIES: { value: QuestionVisibility; label: string }[] = [
+  { value: "captains", label: "Captains" },
+  { value: "mods", label: "Mods" },
+  { value: "admins", label: "Admins" },
+];
+
+function VisibilitySelect(props: { value: QuestionVisibility; onChange: (v: QuestionVisibility) => void; "aria-label": string }) {
+  return (
+    <label className="flex shrink-0 items-center gap-1.5 text-xs text-on-surface-muted" title="Who can see players' answers (besides the player): this role and up">
+      Visible to
+      <Select aria-label={props["aria-label"]} value={props.value} onChange={(e) => props.onChange(e.target.value as QuestionVisibility)} size="sm" className="w-auto!">
+        {VISIBILITIES.map((v) => (
+          <option key={v.value} value={v.value}>
+            {v.label}
+          </option>
+        ))}
+      </Select>
+    </label>
+  );
+}
+
 function TypeSelect(props: { value: SignupQuestionType; onChange: (t: SignupQuestionType) => void; "aria-label": string }) {
   return (
     <Select aria-label={props["aria-label"]} value={props.value} onChange={(e) => props.onChange(e.target.value as SignupQuestionType)} className="w-auto! shrink-0">
@@ -51,6 +74,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
   const [newOptions, setNewOptions] = useState("");
   const [newHelper, setNewHelper] = useState("");
   const [newRequired, setNewRequired] = useState(false);
+  const [newVisibility, setNewVisibility] = useState<QuestionVisibility>("captains");
   const [error, setError] = useState<string | null>(null);
   // The question waiting on "delete it and its answers?" — only asked when players have answered it.
   const [confirmingDelete, setConfirmingDelete] = useState<SignupQuestion | null>(null);
@@ -73,11 +97,13 @@ export function QuestionBuilder({ slug }: { slug: string }) {
         type: newType,
         sortOrder: questions.length,
         optionsJson: isChoice(newType) ? JSON.stringify(options) : undefined,
+        visibility: newVisibility,
       });
       setNewPrompt("");
       setNewOptions("");
       setNewHelper("");
       setNewRequired(false);
+      setNewVisibility("captains");
       invalidate();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to add question");
@@ -140,14 +166,18 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                   <XIcon size={12} />
                 </IconButton>
               </div>
-              <Input
-                aria-label="Helper text"
-                defaultValue={q.helperText ?? ""}
-                onBlur={(e) => e.target.value.trim() !== (q.helperText ?? "") && patch(q.id, { helperText: e.target.value })}
-                maxLength={MAX_QUESTION_HELPER_TEXT}
-                placeholder="Helper text shown under the question (optional)"
-                size="sm"
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  aria-label="Helper text"
+                  defaultValue={q.helperText ?? ""}
+                  onBlur={(e) => e.target.value.trim() !== (q.helperText ?? "") && patch(q.id, { helperText: e.target.value })}
+                  maxLength={MAX_QUESTION_HELPER_TEXT}
+                  placeholder="Helper text shown under the question (optional)"
+                  size="sm"
+                  className="min-w-0 flex-1"
+                />
+                <VisibilitySelect aria-label="Answers visible to" value={q.visibility} onChange={(visibility) => patch(q.id, { visibility })} />
+              </div>
               {isChoice(q.type) && (
                 <Input
                   aria-label="Choice options"
@@ -181,14 +211,18 @@ export function QuestionBuilder({ slug }: { slug: string }) {
             Add
           </Button>
         </div>
-        <Input
-          aria-label="New question helper text"
-          value={newHelper}
-          onChange={(e) => setNewHelper(e.target.value)}
-          maxLength={MAX_QUESTION_HELPER_TEXT}
-          placeholder="Helper text shown under the question (optional)"
-          size="sm"
-        />
+        <div className="flex items-center gap-2">
+          <Input
+            aria-label="New question helper text"
+            value={newHelper}
+            onChange={(e) => setNewHelper(e.target.value)}
+            maxLength={MAX_QUESTION_HELPER_TEXT}
+            placeholder="Helper text shown under the question (optional)"
+            size="sm"
+            className="min-w-0 flex-1"
+          />
+          <VisibilitySelect aria-label="New question answers visible to" value={newVisibility} onChange={setNewVisibility} />
+        </div>
         {isChoice(newType) && (
           <Input
             aria-label="Choice options"

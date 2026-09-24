@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useSlot } from "../../themes/context";
 import { motion, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -11,6 +11,7 @@ import { Dialog, DialogHeader } from "../ui/Dialog";
 import { ChevronDownIcon, ChevronUpIcon } from "../ui/icons";
 import { useElementHeight } from "../ui/useElementHeight";
 import { DraftPoolGrid } from "./DraftPoolGrid";
+import { useAnswerViewer, visibleQuestions } from "../ui/answerVisibility";
 import { usePreference } from "../ui/preferences";
 import { TeamRoster, pairPickRows } from "./TeamRoster";
 import { DraftPickReveal } from "./DraftPickReveal";
@@ -105,6 +106,9 @@ export function DraftRoom({ slug }: { slug: string }) {
   const { data: shell } = useBingo(slug);
   const { data: state, error: stateError } = useDraftState(slug);
   const { data: questionsData } = useSignupQuestions(slug);
+  // The pool's answer columns: only questions whose answers this viewer gets (captains see fewer than mods/admins).
+  const answerViewer = useAnswerViewer(slug);
+  const questions = useMemo(() => visibleQuestions(questionsData?.questions ?? [], answerViewer), [questionsData, answerViewer]);
   const shuffleOrder = useShuffleDraftOrder(slug);
   const setOrder = useSetDraftOrder(slug);
   const startDraft = useStartDraft(slug);
@@ -164,7 +168,6 @@ export function DraftRoom({ slug }: { slug: string }) {
   // browse and rate signups; nothing can start or be picked yet.
   const scouting = shell.bingo.stage !== "draft";
   const poolCount = state.pool.reduce((n, u) => n + u.entries.length, 0);
-  const questions = questionsData?.questions ?? [];
   const lockMs = state.orderLockedUntil ? Math.max(0, new Date(state.orderLockedUntil).getTime() - Date.now()) : 0;
   const revealing = lockMs > 0;
   const revealedTeam = reveals.active ? (state.teams.find((t) => t.id === reveals.active!.teamId) ?? null) : null;
