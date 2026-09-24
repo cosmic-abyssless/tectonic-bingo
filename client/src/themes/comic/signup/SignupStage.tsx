@@ -4,19 +4,18 @@ import { Input, Textarea } from "../../../core/ui/Field";
 import { Select } from "../../../core/ui/Select";
 import { SearchableSelect } from "../../../core/ui/SearchableSelect";
 import { AlertIcon, CheckIcon, LockIcon } from "../../../core/ui/icons";
-import { pageColors } from "../board/colors";
 import { COMIC_FONT } from "../font";
 import { ComicField } from "../submission/ComicField";
 import { ComicButton } from "../ui/ComicButton";
 import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
 import { PartnerSheet } from "./PartnerSheet";
-import { Callout, ChoiceChip, CollapsibleSheet, PaperCard, paperVars, Required, StatBox, TabLegend } from "./parts";
+import { Callout, ChoiceChip, CollapsibleSheet, paperVars, Required, StatBox, TabLegend } from "./parts";
 
 /**
  * The signup stage in the comic theme: the form (and, in a duo bingo, the partner step under it) as sheets on the
- * palette's own paper (charcoal in the dark palettes), each field on a card of the tile modal's papyrus (PaperCard),
- * like the draft room's team cards on its Teams panel. Ink-bordered sheets with lettered headers, yellow tab labels,
+ * palette's own paper (charcoal in the dark palettes), like the draft room's panels, the fields right on it and the
+ * CA stats and people lists as cards of the tile modal's papyrus. Ink-bordered sheets with lettered headers, yellow tab labels,
  * answers as chips, comic buttons; the core form controls take their colours from paperVars and their ink border from
  * comic.css.
  */
@@ -69,8 +68,6 @@ function Blocked({ form }: { form: SignupFormModel }) {
 
 function SignupSheet({ form }: { form: SignupFormModel }) {
   const { colors } = useComic();
-  // The RSN hint is built here but printed inside its field's papyrus card.
-  const paper = pageColors(colors);
   const { rsn, timezone, ca, withdraw } = form;
 
   return (
@@ -103,17 +100,16 @@ function SignupSheet({ form }: { form: SignupFormModel }) {
         </Callout>
       )}
 
-      <PaperCard>
       {rsn.options ? (
         <ComicField
           label={<RequiredLabel>RuneScape name</RequiredLabel>}
           hint={
             rsn.verified ? (
-              <span className="inline-flex items-center gap-1 font-semibold" style={{ color: paper.OK }}>
+              <span className="inline-flex items-center gap-1 font-semibold" style={{ color: colors.OK }}>
                 <CheckIcon size={12} /> Verified against your linked clan account
               </span>
             ) : (
-              <span className="font-semibold" style={{ color: paper.WARN }}>
+              <span className="font-semibold" style={{ color: colors.WARN }}>
                 This RSN isn't currently linked to your clan account
               </span>
             )
@@ -126,21 +122,16 @@ function SignupSheet({ form }: { form: SignupFormModel }) {
           <Input value={rsn.value} onChange={(e) => rsn.set(e.target.value)} maxLength={12} />
         </ComicField>
       )}
-      </PaperCard>
 
-      <PaperCard>
       <ComicField
         label={<RequiredLabel>Timezone</RequiredLabel>}
         hint={timezone.fromBrowser ? "Filled in from your browser. Change it if that's not where you'll be playing from." : "Search by city, region or UTC offset."}
       >
         <SearchableSelect value={timezone.value} options={timezone.options} placeholder="Search for your timezone…" onChange={timezone.set} />
       </ComicField>
-      </PaperCard>
 
       {form.questions.map((q) => (
-        <PaperCard key={q.id}>
-          <Question question={q} />
-        </PaperCard>
+        <Question key={q.id} question={q} />
       ))}
 
       {ca && (

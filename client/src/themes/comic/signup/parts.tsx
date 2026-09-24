@@ -8,8 +8,8 @@ import { pageColors } from "../board/colors";
 import { comicVars, PageColorsContext, useComic } from "../ui/useComic";
 
 // The pieces the comic signup stage is drawn with: sheets on the palette's own paper (charcoal in the dark palettes),
-// like the draft room's panels, with each field on a card of the tile modal's page stock (PaperCard, the papyrus),
-// like the draft room's team cards.
+// like the draft room's panels, the fields right on them, and the CA stats and people lists as cards of the tile
+// modal's page stock (the papyrus), like the draft room's team cards.
 
 /**
  * The chrome tokens the core form controls (Input, Select, Textarea, SearchableSelect) read, pointed at the page
@@ -242,27 +242,6 @@ export function StatBox({ label, value, note, loading }: { label: string; value:
         </div>
       )}
     </div>
-  );
-}
-
-/**
- * A card of the book pages' papyrus on a sheet, holding one field (its tab label, control and hint): everything inside
- * draws in the page palette — comic components through PageColorsContext, core controls through the chrome tokens
- * (paperVars) — and a Select's list opens inside it (data-portal-scope), on the same paper.
- */
-export function PaperCard({ children, className }: { children: ReactNode; className?: string }) {
-  const { colors } = useComic();
-  const page = pageColors(colors);
-  return (
-    <PageColorsContext.Provider value={page}>
-      <div
-        data-portal-scope=""
-        className={`border-[3px] p-3 ${className ?? ""}`}
-        style={{ ...paperVars(page), background: page.PAPER, borderColor: page.LINE, boxShadow: `2px 2px 0 ${page.LINE}`, color: page.INK_BODY }}
-      >
-        {children}
-      </div>
-    </PageColorsContext.Provider>
   );
 }
 
