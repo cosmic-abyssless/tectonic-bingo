@@ -349,7 +349,8 @@ export function DraftRoom({ slug }: { slug: string }) {
             ) : undefined
           }
           className="sticky z-10"
-          style={{ top: headerHeight }}
+          // Pinned a little below the header while the banner is in it: room for a theme's sticker over the top edge.
+          style={{ top: headerHeight + (onTheClock ? 16 : 0) }}
         >
           {/* grid-flow-col + a minimum column width, in a scrollable row —
               handles a handful of teams (spread to fill width) and a large

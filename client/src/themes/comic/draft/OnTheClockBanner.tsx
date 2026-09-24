@@ -14,24 +14,24 @@ export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isM
   const ink = teamColor ? inkOn(teamColor) : colors.ON_YELLOW;
   if (embedded) {
     // The top strip of the Teams panel: the team's colour edge to edge, ruled off from the rosters below, the sticker
-    // set in the strip (not hanging over its edge) and the team name sliding in on every turn change.
+    // hanging over the panel's top-left corner as on the standalone banner, and the team name sliding in on every turn.
     return (
       <div
         role="status"
         aria-live="polite"
-        className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b-[3px] px-4 py-3"
+        className="relative flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b-[3px] px-4 pb-3 pt-5"
         style={{ backgroundColor: bg, color: ink, borderColor: colors.LINE }}
       >
+        <motion.span
+          initial={reduced ? false : { scale: 2.2, rotate: 8, opacity: 0 }}
+          animate={{ scale: 1, rotate: -3, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 500, damping: 16, delay: 0.1 }}
+          className="absolute -top-4 left-3 rounded-sm border-[3px] px-2 py-0.5 text-sm uppercase tracking-wider"
+          style={{ fontFamily: COMIC_FONT, background: colors.PAPER, color: colors.INK, borderColor: colors.LINE }}
+        >
+          {isMyTurn ? "Your pick!" : "On the clock!"}
+        </motion.span>
         <div className="flex min-w-0 items-center gap-3">
-          <motion.span
-            initial={reduced ? false : { scale: 2, rotate: 8, opacity: 0 }}
-            animate={{ scale: 1, rotate: -4, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 500, damping: 16 }}
-            className="shrink-0 rounded-sm border-[3px] px-2 py-0.5 text-sm uppercase leading-none tracking-wider"
-            style={{ fontFamily: COMIC_FONT, background: colors.PAPER, color: colors.INK, borderColor: colors.LINE, boxShadow: `2px 2px 0 ${colors.LINE}` }}
-          >
-            {isMyTurn ? "Your pick!" : "On the clock!"}
-          </motion.span>
           <motion.div
             className="min-w-0"
             initial={reduced ? false : { opacity: 0, x: -24 }}
