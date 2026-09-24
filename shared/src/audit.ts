@@ -64,6 +64,7 @@ export interface AuditDetailsMap {
       theme: string;
       signupMode: string;
       leftoverMode: string;
+      cutMode: string;
       warnLeftovers: boolean;
       buyinAmount: number | null;
       bonusPotAmount: number;

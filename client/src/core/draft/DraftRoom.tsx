@@ -23,6 +23,7 @@ import { DraftPoolList } from "./DraftPoolList";
 import { DraftRoomPhone } from "./DraftRoomPhone";
 import { useIsPhone, useMediaQuery } from "../ui/useMediaQuery";
 import { useElementHeight } from "../ui/useElementHeight";
+import { describeShares } from "./cutModes";
 
 // Themeable via --font-heading/--font-heading-weight (set by ThemeProvider
 // from tokens.chrome.headingFont/headingWeight); both fall back to a no-op
@@ -262,7 +263,7 @@ export function DraftRoom({ slug }: { slug: string }) {
       teamName={currentTeam!.name}
       teamColor={currentTeam!.color ?? null}
       captains={[currentTeam!.captainRsn || "?", ...(currentTeam!.coCaptain ? [currentTeam!.coCaptain.rsn || "?"] : [])]}
-      pickLabel={`${state.currentPick!.singlesRound ? "Singles round" : `Round ${state.currentPick!.round}`} · Pick ${state.currentPick!.pickNumber}`}
+      pickLabel={`Round ${state.currentPick!.round} · Pick ${state.currentPick!.pickNumber}`}
       isMyTurn={isMyTurn}
     />
   ) : undefined;
@@ -297,6 +298,7 @@ export function DraftRoom({ slug }: { slug: string }) {
       <Notice tone="info">
         Scouting. Signups are {shell.bingo.stage === "signup" ? "still open" : "closed"} — the draft starts once the mods move the bingo to the draft stage.
         {isLead && " Star and note players now; your team's ratings carry over into the draft."}
+        {state.shares && ` As things stand, each team drafts ${describeShares(state.shares, shell.bingo.signupMode)}.`}
       </Notice>
     ) : !state.draftStarted ? (
       <Panel>
@@ -359,7 +361,7 @@ export function DraftRoom({ slug }: { slug: string }) {
         {poolCount > 0 && (
           <>
             {" "}
-            <span className="num">{poolCount}</span> leftover signup{poolCount === 1 ? " was" : "s were"} not drafted.
+            <span className="num">{poolCount}</span> signup{poolCount === 1 ? " was" : "s were"} not drafted.
           </>
         )}
         {state.cutCount > 0 && (
@@ -445,7 +447,7 @@ export function DraftRoom({ slug }: { slug: string }) {
             canPick={canAct}
             onPick={handlePick}
             picking={makePick.isPending}
-            leftoverMode={shell.bingo.leftoverMode}
+            takes={state.currentPick?.takes ?? null}
           />
         }
         extras={extras}
@@ -489,13 +491,17 @@ export function DraftRoom({ slug }: { slug: string }) {
         canPick={canAct}
         onPick={handlePick}
         picking={makePick.isPending}
-        leftoverMode={shell.bingo.leftoverMode}
+        takes={state.currentPick?.takes ?? null}
         pinnedTop={wide?.pinnedTop}
         widthSwitch={!wide}
         heading={
           // data-panel-heading: a theme's panel can letter it like its own titles.
           <h3 data-panel-heading="" className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
             Available players <span className="num font-normal text-on-surface-subtle">({poolCount})</span>
+            {/* What every team drafts, so a captain knows what they're picking towards. */}
+            {state.shares && !scouting && (
+              <span className="ml-2 font-normal text-on-surface-subtle">· each team drafts {describeShares(state.shares, shell.bingo.signupMode)}</span>
+            )}
           </h3>
         }
       />

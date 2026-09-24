@@ -3,7 +3,7 @@
 // tier, the lead's own rating) and the Draft button; the full picture is a tap on a name away (the profile dialog).
 // Search, the region filter and the sort match the table's (poolData.ts).
 import { useEffect, useMemo, useState } from "react";
-import { formatSignupAnswer, formatTimeZone, type DraftPoolEntry, type DraftUnit, type LeftoverMode, type PickRating, type SignupQuestion } from "@bingo/shared";
+import { formatSignupAnswer, formatTimeZone, type DraftPoolEntry, type DraftUnit, type PickRating, type SignupQuestion } from "@bingo/shared";
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { formatCaTier, formatWomStat } from "../signup/caStats";
 import { Button } from "../ui/Button";
@@ -18,7 +18,7 @@ import { REGION_OPTIONS, regionOf } from "../ui/timezoneFilter";
 import { PlayerName } from "../tectonic/PlayerName";
 import { TierBadge } from "../tectonic/ProfileBadges";
 import { RatingCell } from "./RatingCell";
-import { poolSearchValues, unitSortValue, type PoolRatings } from "./poolData";
+import { poolSearchValues, takesBlock, unitSortValue, type PoolRatings, type Takes } from "./poolData";
 
 // Each sort runs in the direction you'd want it: the best first for stats and ratings, A→Z for names, west→east.
 const SORTS: { key: string; label: string; descending: boolean; when?: "ratings" | "profiles" }[] = [
@@ -40,7 +40,7 @@ export function DraftPoolList({
   canPick,
   onPick,
   picking,
-  leftoverMode,
+  takes,
 }: {
   pool: DraftUnit[];
   questions: SignupQuestion[];
@@ -50,7 +50,8 @@ export function DraftPoolList({
   canPick: boolean;
   onPick: (userId: string) => void;
   picking: boolean;
-  leftoverMode: LeftoverMode;
+  /** What the team on the clock may still draft (DraftState.currentPick.takes); null: anything. */
+  takes: Takes;
 }) {
   const [search, setSearch] = useTableSearch();
   const [excludedRegions, setExcludedRegions] = useState<string[]>([]);
@@ -75,8 +76,6 @@ export function DraftPoolList({
     // entryMatches reads search/excludedRegions/questions, listed instead.
   }, [pool, search, excludedRegions, questions, ratings, sort.key, sort.descending]);
   const matchingCount = entries.filter(entryMatches).length;
-  const mainPoolEmpty = pool.every((u) => u.leftover);
-  const leftoverTag = leftoverMode === "singles" ? "Singles round" : "Cut";
 
   if (pool.length === 0) return <p className="text-sm text-on-surface-subtle">No one left to draft.</p>;
 
@@ -101,7 +100,7 @@ export function DraftPoolList({
       ) : (
         <ul className="space-y-2.5">
           {units.map((unit) => {
-            const draftable = !unit.leftover || (mainPoolEmpty && leftoverMode === "singles");
+            const blocked = takesBlock(unit, takes);
             return (
               <PoolCard
                 key={unit.pairingId ?? unit.entries[0]!.signup.id}
@@ -111,8 +110,10 @@ export function DraftPoolList({
                 dimmed={(e) => filtering && !entryMatches(e)}
                 statsLoading={(e) => statsRefreshing.has(e.signup.id)}
                 rating={ratings ? { value: ratings[unit.entries[0]!.signup.id], onChange: (r) => onRate(unit.entries[0]!.signup.id, r) } : null}
-                leftoverTag={unit.leftover ? leftoverTag : null}
-                pick={canPick ? { disabled: picking || !draftable, onConfirm: () => onPick(unit.entries[0]!.user.id) } : null}
+                // Cut players only show while signups are open (the draft room leaves them out after), when who's cut
+                // can still change.
+                cutTag={unit.cut ? "Will be cut" : null}
+                pick={canPick ? { disabled: picking || !!blocked, reason: unit.cut ? null : blocked, onConfirm: () => onPick(unit.entries[0]!.user.id) } : null}
               />
             );
           })}
@@ -129,7 +130,7 @@ function PoolCard({
   dimmed,
   statsLoading,
   rating,
-  leftoverTag,
+  cutTag,
   pick,
 }: {
   unit: DraftUnit;
@@ -139,15 +140,16 @@ function PoolCard({
   statsLoading: (e: DraftPoolEntry) => boolean;
   /** Pairs are rated together, under the first half's signup (as in the table). */
   rating: { value: PickRating | undefined; onChange: (r: PickRating) => void } | null;
-  leftoverTag: string | null;
-  pick: { disabled: boolean; onConfirm: () => void } | null;
+  cutTag: string | null;
+  /** reason: why it can't be drafted now (the team on the clock has its share of these), shown under the button. */
+  pick: { disabled: boolean; reason: string | null; onConfirm: () => void } | null;
 }) {
   const [answersOpen, setAnswersOpen] = useState(false);
   const pair = unit.entries.length > 1;
   const hasAnswers = unit.entries.some((e) => (e.answers?.length ?? 0) > 0);
   return (
     // data-pool-card: a hook for a theme's CSS (the comic theme gives it an ink border and hard shadow).
-    <li data-pool-card="" className={`rounded-md border border-outline bg-surface-raised p-3 ${leftoverTag ? "text-on-surface-subtle" : ""}`}>
+    <li data-pool-card="" className={`rounded-md border border-outline bg-surface-raised p-3 ${cutTag ? "text-on-surface-subtle" : ""}`}>
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1 space-y-2">
           {unit.entries.map((e, i) => (
@@ -179,9 +181,9 @@ function PoolCard({
         )}
       </div>
 
-      {(leftoverTag || hasAnswers) && (
+      {(cutTag || hasAnswers) && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {leftoverTag && <Badge tone="warn">{leftoverTag}</Badge>}
+          {cutTag && <Badge tone="warn">{cutTag}</Badge>}
           {hasAnswers && (
             <button type="button" onClick={() => setAnswersOpen((o) => !o)} className="text-xs text-on-surface-subtle underline underline-offset-2 hover:text-on-surface" aria-expanded={answersOpen}>
               {answersOpen ? "Hide answers" : "Signup answers"}
@@ -209,6 +211,7 @@ function PoolCard({
       )}
 
       {pick && <DraftButton label={pair ? "Draft pair" : "Draft"} disabled={pick.disabled} onConfirm={pick.onConfirm} />}
+      {pick?.reason && <p className="mt-1.5 text-center text-xs text-on-surface-subtle">{pick.reason}</p>}
     </li>
   );
 }

@@ -88,10 +88,17 @@ export interface User {
 export const SIGNUP_MODES = ["solo", "duo"] as const;
 export type SignupMode = (typeof SIGNUP_MODES)[number];
 
-// What happens to signups that don't fill a full draft round (teams stay
-// equal-sized): dropped from the draft, or drafted in a final singles round.
-export const LEFTOVER_MODES = ["cut", "singles"] as const;
-export type LeftoverMode = (typeof LEFTOVER_MODES)[number];
+// Who makes the draft (bingos.cutMode), so the teams come out the same shape:
+// - "even": every team drafts the same number of pairs and the same number of singles; the newest pairs and the
+//   newest singles that don't split evenly across the teams are cut. (A solo bingo has only singles.)
+// - "pairs_only" (duo bingos): every team drafts the same number of pairs; the newest pairs that don't split evenly,
+//   and every single, are cut.
+// - "none": everyone is drafted, in any order, and teams may come out uneven.
+export const CUT_MODES = ["even", "pairs_only", "none"] as const;
+export type CutMode = (typeof CUT_MODES)[number];
+
+// The setting CutMode replaced, only still read from older export files: "cut" is now "even", "singles" is "none".
+export type LeftoverMode = "cut" | "singles";
 
 // Keep in sync with server/src/middleware/upload.ts (the server can't import this at runtime).
 export const MAX_UPLOAD_MB = 5;
@@ -107,7 +114,8 @@ export interface Bingo {
   boardRows: number;
   boardCols: number;
   signupMode: SignupMode;
-  leftoverMode: LeftoverMode;
+  cutMode: CutMode;
+  // Tell signups at risk of being cut, on their signup page.
   warnLeftovers: boolean;
   buyinAmount: number | null;
   bonusPotAmount: number;
@@ -615,8 +623,8 @@ export interface RosterEntry {
   // Duo mode, mod roster only: this player's own outstanding request to pair with someone, before it's been
   // accepted/declined. `target` is resolved the same as MyPairingResponse's own `outgoing.target`.
   outgoingPairingRequest?: { pairing: SignupPairing; target: PairingParty } | null;
-  // Mod roster only: undrafted and not fitting a full draft round (see LeftoverMode).
-  leftover?: boolean;
+  // Mod roster only: undrafted and cut from the draft as things stand (see CutMode).
+  cut?: boolean;
   // Mod roster only: clan standing from tectonic-api; null when the player
   // isn't registered there or the lookup was unavailable.
   tectonicProfile?: TectonicProfile | null;
@@ -878,7 +886,23 @@ export interface DraftTeam extends Team {
 export interface DraftUnit {
   pairingId: string | null;
   entries: DraftPoolEntry[];
-  leftover: boolean; // doesn't fit a full round: cut, or drafted in the singles round
+  cut: boolean; // cut from the draft as things stand (see CutMode): never drafted
+}
+
+// What every team drafts under the bingo's CutMode: the same number of pairs and of singles each.
+export interface DraftShares {
+  pairs: number;
+  singles: number;
+}
+
+// GET /mod/draft/cuts: who is cut as things stand, for the confirmation before the draft stage.
+export interface DraftCutPreview {
+  cutMode: CutMode;
+  teamCount: number;
+  // Null with no cuts ("none") or fewer than two teams.
+  shares: DraftShares | null;
+  // Newest first; a pair is one entry with both names.
+  cut: { names: string[]; pair: boolean }[];
 }
 
 // A team's private scouting note on a signup. Shared by captain and
@@ -897,9 +921,12 @@ export interface DraftState {
   orderReady: boolean; // ≥2 teams with a dense draftOrder 1..N
   // ISO timestamp until which picks are blocked after a shuffle. Null if unlocked.
   orderLockedUntil: string | null;
-  // singlesRound: the main pool is empty and leftovers are being drafted.
-  currentPick: { pickNumber: number; round: number; teamId: string; singlesRound: boolean } | null;
-  // Signups cut from the draft (leftover mode "cut", once signups have closed). They are not in `pool`.
+  // takes: what the team on the clock may still draft; a team that has its share of pairs (or singles) can't take
+  // another. Both true with no cuts.
+  currentPick: { pickNumber: number; round: number; teamId: string; takes: { pairs: boolean; singles: boolean } } | null;
+  // What every team drafts; null with no cuts or fewer than two teams.
+  shares: DraftShares | null;
+  // Signups cut from the draft, once signups have closed. They are not in `pool`.
   cutCount: number;
   ratings: Record<string, PickRating>; // by signupId; empty unless the viewer leads a team
   tectonicUnavailable: boolean; // the clan API lookup failed, so every tectonicProfile is null

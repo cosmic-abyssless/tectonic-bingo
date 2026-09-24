@@ -4,6 +4,7 @@ import { formatSignupAnswer, type RosterEntry, type SignupQuestionType } from "@
 import {
   useBingo,
   useBingoMods,
+  useDraftCuts,
   useMarkBuyin,
   useModPair,
   useModUnpair,
@@ -30,6 +31,7 @@ import { useDocumentTop } from "../ui/tableChrome";
 import { TableSearchInput, useTableSearch } from "../ui/tableSearch";
 import { formatTierName } from "../tectonic/profile";
 import { toCsv } from "../ui/csv";
+import { cutModeLabel, describeShares } from "../draft/cutModes";
 import { SignupRosterGrid, type GridContext, type RosterRow } from "./SignupRosterGrid";
 
 // GP totals here are buy-in multiples, always in the millions for this event — "30M GP" reads faster than
@@ -112,9 +114,9 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
 
 // The filters above the grid, each a MultiSelect checklist. What's stored is what's *un*ticked (like the audit log),
 // so a new option shows by default. The one default that isn't "everything": withdrawn signups start hidden.
-type FilterKey = "status" | "buyin" | "pair" | "region";
+type FilterKey = "status" | "buyin" | "pair" | "region" | "draft";
 type Excluded = Record<FilterKey, string[]>;
-const DEFAULT_EXCLUDED: Excluded = { status: ["withdrawn"], buyin: [], pair: [], region: [] };
+const DEFAULT_EXCLUDED: Excluded = { status: ["withdrawn"], buyin: [], pair: [], region: [], draft: [] };
 
 function isDefaultFilters(excluded: Excluded): boolean {
   return (Object.keys(DEFAULT_EXCLUDED) as FilterKey[]).every((key) => [...excluded[key]].sort().join() === [...DEFAULT_EXCLUDED[key]].sort().join());
@@ -140,6 +142,11 @@ const FILTER_OPTIONS: Record<FilterKey, { key: string; label: string }[]> = {
     { key: "unpaired", label: "Unpaired" },
   ],
   region: REGION_OPTIONS,
+  // Who will be cut from the draft as things stand (see the bingo's draft cuts setting).
+  draft: [
+    { key: "in", label: "Will be drafted" },
+    { key: "cut", label: "Will be cut" },
+  ],
 };
 
 // `pending`: the Discord ids with a pending pairing request either way. The roster only carries each player's own
@@ -154,6 +161,8 @@ function filterValue(entry: RosterEntry, key: FilterKey, pending: ReadonlySet<st
       return entry.pairing ? "paired" : pending.has(entry.user.discordId) ? "requested" : "unpaired";
     case "region":
       return regionOf(entry.signup.timezone);
+    case "draft":
+      return entry.cut ? "cut" : "in";
   }
 }
 
@@ -210,9 +219,11 @@ export function SignupRoster({ slug }: { slug: string }) {
 
   const activeCount = roster.filter((r) => r.signup.status === "active").length;
   const withdrawnCount = roster.length - activeCount;
-  const leftoverCount = roster.filter((r) => r.leftover).length;
-  const teamCount = bingoData?.teams.length ?? 0;
-  const leftoverMode = bingoData?.bingo.leftoverMode;
+  const cutCount = roster.filter((r) => r.cut).length;
+  const cutMode = bingoData?.bingo.cutMode;
+  // Who's cut only means something once there are two teams to split the players across.
+  const cutsApply = !!cutMode && cutMode !== "none" && (bingoData?.teams.length ?? 0) >= 2;
+  const { data: cuts } = useDraftCuts(slug, cutsApply);
   const pendingPairIds = useMemo(
     () => new Set(roster.flatMap((r) => (r.outgoingPairingRequest ? [r.user.discordId, r.outgoingPairingRequest.target.discordId] : []))),
     [roster],
@@ -361,11 +372,22 @@ export function SignupRoster({ slug }: { slug: string }) {
             </div>
           </div>
         )}
-        {leftoverCount > 0 && (
+        {cutsApply && cutCount > 0 && cuts?.shares && bingoData && (
           <Notice tone="warn" icon={<AlertIcon />}>
-            <span className="num">{leftoverCount}</span> newest signup{leftoverCount !== 1 ? "s" : ""} {leftoverCount !== 1 ? "don't" : "doesn't"} fit a full round of{" "}
-            <span className="num">{teamCount}</span> teams and will be {leftoverMode === "singles" ? "drafted in a singles round" : "cut from the draft"} unless more players sign up or a
-            team is added.{bingoData?.bingo.warnLeftovers ? " They can see this warning on their signup page." : " Turn on the warning in Settings to tell them."}
+            As things stand, <span className="num">{cutCount}</span> signup{cutCount !== 1 ? "s" : ""} will be cut when the draft starts (
+            {cutModeLabel(bingoData.bingo.cutMode, bingoData.bingo.signupMode)}: each of the <span className="num">{cuts.teamCount}</span> teams will draft{" "}
+            {describeShares(cuts.shares, bingoData.bingo.signupMode)}). The newest signups are the ones cut. There's still time to change that: pair players up, get
+            more players to sign up, or add a team.
+            {bingoData.bingo.warnLeftovers ? " They can see this warning on their signup page." : " Turn on the warning in Settings to tell them."} Filter by
+            Draft to see who:{" "}
+            {/* Sets the Draft filter to just "Will be cut" (the other filters stay as they are). */}
+            <button
+              type="button"
+              onClick={() => setExcluded((e) => ({ ...e, draft: ["in"] }))}
+              className="cursor-pointer font-medium text-on-surface underline underline-offset-2 hover:opacity-70"
+            >
+              Show me
+            </button>
           </Notice>
         )}
         <p className="text-sm text-on-surface-muted">
@@ -390,6 +412,7 @@ export function SignupRoster({ slug }: { slug: string }) {
               {filterSelect("buyin", "Buy-in")}
               {isDuo && filterSelect("pair", "Pairing")}
               {filterSelect("region", "Timezone")}
+              {cutsApply && filterSelect("draft", "Draft")}
               {!isDefaultFilters(excluded) && (
                 <Button size="sm" variant="ghost" onPress={() => setExcluded(DEFAULT_EXCLUDED)}>
                   Reset filters

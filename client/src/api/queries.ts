@@ -2,7 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import type {
   AccountTypesResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   MinimalUser, ModSubmissionsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, UnpairedSignupsResponse, PendingCountResponse,
-  ReviewSubmissionResponse, RosterResponse, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
+  ReviewSubmissionResponse, RosterResponse, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   PickRating, PlayerProfile, StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
@@ -22,6 +22,8 @@ export const queryKeys = {
   modSubmissions: (slug: string) => ["modSubmissions", slug] as const,
   pendingCount: (slug: string) => ["pendingCount", slug] as const,
   signupRoster: (slug: string) => ["signupRoster", slug] as const,
+  // Under the roster's key, so whatever refreshes the roster (a signup, a pairing, a new team, the settings) refreshes it.
+  draftCuts: (slug: string) => ["signupRoster", slug, "cuts"] as const,
   bingoMods: (slug: string) => ["bingoMods", slug] as const,
   signupQuestions: (slug: string) => ["signupQuestions", slug] as const,
   mySignup: (slug: string) => ["mySignup", slug] as const,
@@ -225,6 +227,15 @@ export function useSignupRoster(slug: string | undefined) {
     queryKey: queryKeys.signupRoster(slug ?? ""),
     queryFn: () => api.get<RosterResponse>(`/api/bingos/${slug}/mod/signups`),
     enabled: !!slug,
+  });
+}
+
+/** Mods: who's cut from the draft as things stand, and what every team drafts (GET /mod/draft/cuts). */
+export function useDraftCuts(slug: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.draftCuts(slug ?? ""),
+    queryFn: () => api.get<DraftCutPreview>(`/api/bingos/${slug}/mod/draft/cuts`),
+    enabled: !!slug && enabled,
   });
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { detectTimeZone, encodeChoices, isBlankAnswer, parseChoices, timeZoneOptions, type CombatAchievementStats, type SignupAnswerInput, type SignupQuestion, type TimeZoneOption } from "@bingo/shared";
-import { useBingo, useCreateSignup, useMySignup, useMyTectonicRsns, useSignupQuestions, useUpdateSignup, useWithdrawSignup } from "../api/queries";
+import { useBingo, useCreateSignup, useMyPairing, useMySignup, useMyTectonicRsns, useSignupQuestions, useUpdateSignup, useWithdrawSignup } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { useStatsRefreshingUserIds } from "../context/WebSocketContext";
 import { caTitle, formatCaTier } from "../core/signup/caStats";
@@ -56,8 +56,11 @@ export interface SignupFormModel {
   /** The form's section is open. Follows whether they've signed up until they open or close it themselves. */
   expanded: boolean;
   setExpanded: (expanded: boolean) => void;
-  /** Among the newest signups that don't fit a full round; `singlesRound` says what happens to them then. */
-  atRisk: { singlesRound: boolean } | null;
+  /**
+   * Cut from the draft as things stand: "pairs_only", an unpaired player in a bingo that drafts only pairs; "uneven",
+   * among the newest signups that don't split evenly across the teams.
+   */
+  atRisk: { reason: "pairs_only" | "uneven" } | null;
   rsn: {
     value: string;
     set: (rsn: string) => void;
@@ -137,6 +140,8 @@ export function useSignupForm(slug: string): SignupFormModel {
 
   const questions = questionsData?.questions ?? [];
   const existing = mySignup?.signup && mySignup.signup.status === "active" ? mySignup.signup : null;
+  // Whether an at-risk player is unpaired (the partner panel shares this query).
+  const { data: pairing } = useMyPairing(slug, shell?.bingo.signupMode === "duo" && !!existing && !!mySignup?.atRisk);
   const tectonicRsns = tectonicRsnsData?.rsns ?? [];
   // If the currently-saved RSN isn't (or is no longer) one of the signer's
   // linked RSNs, keep it selectable rather than silently dropping it.
@@ -239,7 +244,7 @@ export function useSignupForm(slug: string): SignupFormModel {
     isDuo: shell?.bingo.signupMode === "duo",
     expanded,
     setExpanded,
-    atRisk: existing && mySignup?.atRisk ? { singlesRound: shell?.bingo.leftoverMode === "singles" } : null,
+    atRisk: existing && mySignup?.atRisk ? { reason: shell?.bingo.cutMode === "pairs_only" && !pairing?.partner ? "pairs_only" : "uneven" } : null,
     rsn: {
       value: rsnValue,
       set: setRsn,

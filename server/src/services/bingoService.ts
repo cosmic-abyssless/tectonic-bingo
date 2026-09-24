@@ -1,4 +1,4 @@
-import type { ExclusivityRule } from "@bingo/shared";
+import type { CutMode, ExclusivityRule } from "@bingo/shared";
 import { now as clockNow } from "../clock";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -349,7 +349,7 @@ export interface UpdateBingoSettingsParams {
   description?: string | null;
   theme?: string;
   signupMode?: "solo" | "duo";
-  leftoverMode?: "cut" | "singles";
+  cutMode?: CutMode;
   warnLeftovers?: boolean;
   buyinAmount?: number | null;
   bonusPotAmount?: number;
@@ -375,6 +375,10 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
       const hasSignups = tx.select({ id: signups.id }).from(signups).where(eq(signups.bingoId, bingoId)).get();
       if (hasSignups) throw new ServiceError(400, "The signup mode can't change once players have signed up");
     }
+    // Pairs only means nothing without pairs; a bingo switched to solo drops back to splitting its singles evenly.
+    const signupMode = params.signupMode ?? existing.signupMode;
+    if (params.cutMode === "pairs_only" && signupMode !== "duo") throw new ServiceError(400, "Pairs only is for duo bingos");
+    if (params.cutMode === undefined && signupMode !== "duo" && existing.cutMode === "pairs_only") params.cutMode = "even";
     if (params.womGroupId != null && !/^\d+$/.test(params.womGroupId)) {
       throw new ServiceError(400, "WOM group ID must be a number");
     }

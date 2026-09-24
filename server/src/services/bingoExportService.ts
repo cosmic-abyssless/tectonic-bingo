@@ -7,7 +7,7 @@
 // Import always creates a brand-new bingo — never overwrites an existing one.
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { BINGO_EXPORT_FORMAT_VERSION, type BingoExportDocument, type ExportNode } from "@bingo/shared";
+import { BINGO_EXPORT_FORMAT_VERSION, CUT_MODES, type BingoExportDocument, type ExportNode } from "@bingo/shared";
 import type { GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingos, nodeEdges } from "../db/schema";
@@ -143,7 +143,7 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
       boardRows: bingo.boardRows,
       boardCols: bingo.boardCols,
       signupMode: bingo.signupMode,
-      leftoverMode: bingo.leftoverMode,
+      cutMode: bingo.cutMode,
       warnLeftovers: bingo.warnLeftovers,
       buyinAmount: bingo.buyinAmount,
       bonusPotAmount: bingo.bonusPotAmount,
@@ -170,6 +170,9 @@ function assertValidDocument(doc: BingoExportDocument): void {
   }
   if (!Array.isArray(doc.categories) || !Array.isArray(doc.tiles) || !Array.isArray(doc.lines) || !Array.isArray(doc.signupQuestions)) {
     throw new ServiceError(400, "Malformed import file: expected categories/tiles/lines/signupQuestions arrays");
+  }
+  if (doc.bingo.cutMode !== undefined && !(CUT_MODES as readonly string[]).includes(doc.bingo.cutMode)) {
+    throw new ServiceError(400, "Malformed import file: unknown cut mode");
   }
   if (doc.bingo.leftoverMode !== undefined && doc.bingo.leftoverMode !== "cut" && doc.bingo.leftoverMode !== "singles") {
     throw new ServiceError(400, "Malformed import file: unknown leftover mode");
@@ -263,7 +266,12 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
     });
     bingoService.updateBingoSettings(tx, bingo.id, {
       signupMode: doc.bingo.signupMode,
-      ...(doc.bingo.leftoverMode !== undefined ? { leftoverMode: doc.bingo.leftoverMode } : {}),
+      // Older files carry leftoverMode instead: "cut" was the remainder cut ("even"), "singles" drafted it last ("none").
+      ...(doc.bingo.cutMode !== undefined
+        ? { cutMode: doc.bingo.cutMode }
+        : doc.bingo.leftoverMode !== undefined
+          ? { cutMode: doc.bingo.leftoverMode === "singles" ? ("none" as const) : ("even" as const) }
+          : {}),
       ...(doc.bingo.warnLeftovers !== undefined ? { warnLeftovers: doc.bingo.warnLeftovers } : {}),
       buyinAmount: doc.bingo.buyinAmount,
       bonusPotAmount: doc.bingo.bonusPotAmount,

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { GraphNodeInput } from "@bingo/shared";
+import { CUT_MODES, type CutMode, type GraphNodeInput } from "@bingo/shared";
 import path from "path";
 import { UPLOADS_DIR } from "../config";
 import { imageUpload } from "../middleware/upload";
@@ -54,9 +54,9 @@ router.patch(
       if (body.signupMode !== "solo" && body.signupMode !== "duo") throw new ServiceError(400, "signupMode must be solo or duo");
       params.signupMode = body.signupMode;
     }
-    if ("leftoverMode" in body) {
-      if (body.leftoverMode !== "cut" && body.leftoverMode !== "singles") throw new ServiceError(400, "leftoverMode must be cut or singles");
-      params.leftoverMode = body.leftoverMode;
+    if ("cutMode" in body) {
+      if (!(CUT_MODES as readonly unknown[]).includes(body.cutMode)) throw new ServiceError(400, `cutMode must be one of ${CUT_MODES.join(", ")}`);
+      params.cutMode = body.cutMode as CutMode;
     }
     if ("warnLeftovers" in body) params.warnLeftovers = !!body.warnLeftovers;
     // Validated and cleaned by the service (label, scope, names).

@@ -7,7 +7,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createTeam } from "./teamService";
 import { createQuestion, createSignup } from "./signupService";
 import { adminPair } from "./pairingService";
-import { canViewDraftRoom, draftRoomForbiddenMessage, getDraftState, getLeftoverUserIds, getTeamRatings, makePick, pickOrderTeamIndex, setDraftOrder, setPickRating, shuffleDraftOrder, startDraft, undoLastPick } from "./draftService";
+import { canViewDraftRoom, draftRoomForbiddenMessage, getCutPreview, getCutUserIds, getDraftState, getTeamRatings, makePick, pickOrderTeamIndex, setDraftOrder, setPickRating, shuffleDraftOrder, startDraft, undoLastPick } from "./draftService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -493,7 +493,8 @@ describe("getDraftState", () => {
 
 describe("duo mode", () => {
   function setupDuo() {
-    const bingo = seedBingo({ signupMode: "duo" });
+    // No cuts: these are about how a pair is drafted, not who makes the draft (1 pair and 1 single across 2 teams).
+    const bingo = seedBingo({ signupMode: "duo", cutMode: "none" });
     const signupStage = { ...bingo, stage: "signup" as const };
     const c1 = seedCaptain(bingo.id, "c1");
     const c2 = seedCaptain(bingo.id, "c2");
@@ -568,10 +569,10 @@ describe("duo mode", () => {
   });
 });
 
-describe("leftovers", () => {
-  // 2 teams, 3 signups: the newest one doesn't fit a full round.
-  function setupLeftover(leftoverMode: "cut" | "singles") {
-    const bingo = seedBingo({ leftoverMode });
+describe("cuts", () => {
+  // 2 teams, 3 signups: the newest one doesn't split evenly.
+  function setupLeftover(cutMode: "even" | "none") {
+    const bingo = seedBingo({ cutMode });
     const c1 = seedCaptain(bingo.id, "c1");
     const c2 = seedCaptain(bingo.id, "c2");
     createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
@@ -588,18 +589,19 @@ describe("leftovers", () => {
     return { bingo, first, second, p1: players[0]!, p2: players[1]!, newest: players[2]! };
   }
 
-  it("marks only the newest signups that don't fill a round", () => {
-    const { bingo, newest } = setupLeftover("cut");
+  it("cuts only the newest signups that don't split evenly", () => {
+    const { bingo, newest } = setupLeftover("even");
     const state = getDraftState(db, bingo, { includeAnswers: false });
-    expect(state.pool.filter((u) => u.leftover).map((u) => u.entries[0]!.user.id)).toEqual([newest.id]);
-    expect(getLeftoverUserIds(db, bingo)).toEqual(new Set([newest.id]));
+    expect(state.pool.filter((u) => u.cut).map((u) => u.entries[0]!.user.id)).toEqual([newest.id]);
+    expect(state.shares).toEqual({ pairs: 0, singles: 1 });
+    expect(getCutUserIds(db, bingo)).toEqual(new Set([newest.id]));
   });
 
   // createdAt only has 1-second resolution, so same-second signups (bulk seeding, a rush right as signups open)
   // tie there. Without a tiebreaker, "newest" falls back to whatever order the DB scan happens to return — not
   // actually newest. This pins that the true (insertion) order wins the tie instead.
   it("breaks a createdAt tie by insertion order, not DB scan order", () => {
-    const bingo = seedBingo({ leftoverMode: "cut" });
+    const bingo = seedBingo({ cutMode: "even" });
     const c1 = seedCaptain(bingo.id, "c1");
     const c2 = seedCaptain(bingo.id, "c2");
     createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
@@ -612,27 +614,28 @@ describe("leftovers", () => {
     });
     beginDraft(bingo);
     // p3 was inserted last — the true newest despite the tied timestamp.
-    expect(getLeftoverUserIds(db, bingo)).toEqual(new Set([players[2]!.id]));
+    expect(getCutUserIds(db, bingo)).toEqual(new Set([players[2]!.id]));
   });
 
-  it("marks nothing until there are two teams", () => {
+  it("cuts nothing until there are two teams", () => {
     const bingo = seedBingo({ stage: "signup" });
     const c1 = seedCaptain(bingo.id, "c1");
     createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
     const p1 = seedUser("p1");
     createSignup(db, bingo, { bingoId: bingo.id, userId: p1.id, rsn: "p1", answers: [] });
-    expect(getLeftoverUserIds(db, bingo).size).toBe(0);
+    expect(getCutUserIds(db, bingo).size).toBe(0);
+    expect(getDraftState(db, bingo, { includeAnswers: false }).shares).toBeNull();
   });
 
-  it("keeps the same signups marked as the draft progresses", () => {
-    const { bingo, first, p1, newest } = setupLeftover("cut");
+  it("keeps the same signups cut as the draft progresses", () => {
+    const { bingo, first, p1, newest } = setupLeftover("even");
     makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
-    expect(getLeftoverUserIds(db, bingo)).toEqual(new Set([newest.id]));
+    expect(getCutUserIds(db, bingo)).toEqual(new Set([newest.id]));
   });
 
-  it("cut: refuses to draft a leftover and ends the draft once the main pool is empty", () => {
-    const { bingo, first, second, p1, p2, newest } = setupLeftover("cut");
-    expect(() => makePick(db, { bingo, pickedUserId: newest.id, actingUserId: first.captainUserId, actingIsAdmin: false })).toThrow(/doesn't fit a full round/i);
+  it("refuses to draft a cut signup and ends the draft once everyone else is drafted", () => {
+    const { bingo, first, second, p1, p2, newest } = setupLeftover("even");
+    expect(() => makePick(db, { bingo, pickedUserId: newest.id, actingUserId: first.captainUserId, actingIsAdmin: false })).toThrow(/cut from the draft/i);
     makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
     makePick(db, { bingo, pickedUserId: p2.id, actingUserId: second.captainUserId, actingIsAdmin: false });
     const state = getDraftState(db, bingo, { includeAnswers: false });
@@ -640,11 +643,114 @@ describe("leftovers", () => {
     expect(state.pool.map((u) => u.entries[0]!.user.id)).toEqual([newest.id]);
   });
 
+  it("no cuts: drafts everyone, in any order, though the teams come out uneven", () => {
+    const { bingo, first, second, p1, p2, newest } = setupLeftover("none");
+    const state = getDraftState(db, bingo, { includeAnswers: false });
+    expect(state.shares).toBeNull();
+    expect(state.pool.some((u) => u.cut)).toBe(false);
+    makePick(db, { bingo, pickedUserId: newest.id, actingUserId: first.captainUserId, actingIsAdmin: false });
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: second.captainUserId, actingIsAdmin: false });
+    // Pick 3 of a 2-team snake goes back to whoever picked last.
+    expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick).toMatchObject({ pickNumber: 3, teamId: second.id });
+    makePick(db, { bingo, pickedUserId: p2.id, actingUserId: second.captainUserId, actingIsAdmin: false });
+    expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick).toBeNull();
+  });
+
+  describe("pairs and singles (duo bingos)", () => {
+    // Two teams led by solo captains, and a pool signed up oldest to newest: `pairs` pairs, then `singles` singles.
+    function setupDuoPool(cutMode: "even" | "pairs_only" | "none", counts: { pairs: number; singles: number }) {
+      const bingo = seedBingo({ signupMode: "duo", cutMode });
+      const signupStage = { ...bingo, stage: "signup" as const };
+      const c1 = seedCaptain(bingo.id, "c1");
+      const c2 = seedCaptain(bingo.id, "c2");
+      createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, name: "A" });
+      createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
+      let n = 0;
+      const signUp = (d: string) => {
+        const user = seedUser(d);
+        db.insert(schema.signups).values({ bingoId: bingo.id, userId: user.id, rsn: d, createdAt: new Date(1_700_000_000_000 + n++ * 60_000) }).run();
+        return user;
+      };
+      const pairs = Array.from({ length: counts.pairs }, (_, i) => {
+        const [a, b] = [signUp(`pair${i}a`), signUp(`pair${i}b`)];
+        adminPair(db, signupStage, { userIdA: a.id, userIdB: b.id, createdByUserId: c1.id });
+        // The pair's first half (enough to draft the pair by), and its partner.
+        return { ...a, partner: b };
+      });
+      const singles = Array.from({ length: counts.singles }, (_, i) => signUp(`single${i}`));
+      beginDraft(bingo);
+      const teams = db.select().from(schema.teams).where(eq(schema.teams.bingoId, bingo.id)).all();
+      const first = teams.find((t) => t.draftOrder === 1)!;
+      const second = teams.find((t) => t.draftOrder === 2)!;
+      const pick = (userId: string, team: typeof first) => makePick(db, { bingo, pickedUserId: userId, actingUserId: team.captainUserId, actingIsAdmin: false });
+      return { bingo, first, second, pairs, singles, pick };
+    }
+    const cutIds = (bingo: typeof schema.bingos.$inferSelect) => getCutUserIds(db, bingo);
+
+    it("pairs + singles: as many pairs as teams and as many singles, so no one is cut and each team gets one of each", () => {
+      const { bingo, first, second, pairs, singles, pick } = setupDuoPool("even", { pairs: 2, singles: 2 });
+      expect(getDraftState(db, bingo, { includeAnswers: false }).shares).toEqual({ pairs: 1, singles: 1 });
+      expect(cutIds(bingo).size).toBe(0);
+      // Any order: the first team takes its single first, the second its pair; the second (picking again, the snake)
+      // may then only take a single.
+      pick(singles[0]!.id, first);
+      pick(pairs[0]!.id, second);
+      expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick).toMatchObject({ teamId: second.id, takes: { pairs: false, singles: true } });
+      expect(() => pick(pairs[1]!.id, second)).toThrow(`${second.name} already has its 1 pair: every team drafts 1 pair and 1 single`);
+      pick(singles[1]!.id, second);
+      expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick).toMatchObject({ teamId: first.id, takes: { pairs: true, singles: false } });
+      pick(pairs[1]!.id, first);
+      expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick).toBeNull();
+    });
+
+    it("pairs + singles: cuts the newest pairs and the newest singles that don't split evenly", () => {
+      const { bingo, pairs, singles } = setupDuoPool("even", { pairs: 3, singles: 3 });
+      expect(getDraftState(db, bingo, { includeAnswers: false }).shares).toEqual({ pairs: 1, singles: 1 });
+      expect(cutIds(bingo)).toEqual(new Set([pairs[2]!.id, pairs[2]!.partner.id, singles[2]!.id]));
+    });
+
+    it("pairs + singles: cuts every single when there are fewer singles than teams", () => {
+      const { bingo, singles } = setupDuoPool("even", { pairs: 2, singles: 1 });
+      expect(getDraftState(db, bingo, { includeAnswers: false }).shares).toEqual({ pairs: 1, singles: 0 });
+      expect(cutIds(bingo)).toEqual(new Set([singles[0]!.id]));
+    });
+
+    it("pairs only: cuts every single, and says why a single can't be drafted", () => {
+      const { bingo, first, singles } = setupDuoPool("pairs_only", { pairs: 2, singles: 2 });
+      expect(getDraftState(db, bingo, { includeAnswers: false }).shares).toEqual({ pairs: 1, singles: 0 });
+      expect(cutIds(bingo)).toEqual(new Set(singles.map((s) => s.id)));
+      expect(() => makePick(db, { bingo, pickedUserId: singles[0]!.id, actingUserId: first.captainUserId, actingIsAdmin: false })).toThrow(/pairs only/i);
+    });
+
+    it("no cuts: anyone, any order", () => {
+      const { bingo, first, second, pairs, singles, pick } = setupDuoPool("none", { pairs: 1, singles: 2 });
+      pick(pairs[0]!.id, first);
+      pick(singles[0]!.id, second);
+      pick(singles[1]!.id, second);
+      const state = getDraftState(db, bingo, { includeAnswers: false });
+      expect(state.currentPick).toBeNull();
+      expect(cutIds(bingo).size).toBe(0);
+    });
+
+    it("previews who's cut, newest first, a pair as one entry", () => {
+      const { bingo } = setupDuoPool("even", { pairs: 3, singles: 1 });
+      expect(getCutPreview(db, bingo)).toEqual({
+        cutMode: "even",
+        teamCount: 2,
+        shares: { pairs: 1, singles: 0 },
+        cut: [
+          { names: ["single0"], pair: false },
+          { names: expect.arrayContaining(["pair2a", "pair2b"]), pair: true },
+        ],
+      });
+    });
+  });
+
   describe("hiding cut players from the draft room", () => {
     const poolIds = (state: ReturnType<typeof getDraftState>) => state.pool.flatMap((u) => u.entries.map((e) => e.user.id));
 
     it("leaves them out of the pool and counts them once signups are closed", () => {
-      const { bingo, p1, p2, newest } = setupLeftover("cut");
+      const { bingo, p1, p2, newest } = setupLeftover("even");
       const shown = getDraftState(db, bingo, { includeAnswers: false, hideCut: true });
       expect(poolIds(shown).sort()).toEqual([p1.id, p2.id].sort());
       expect(shown.cutCount).toBe(1);
@@ -652,11 +758,11 @@ describe("leftovers", () => {
       const full = getDraftState(db, bingo, { includeAnswers: false });
       expect(poolIds(full)).toContain(newest.id);
       expect(full.cutCount).toBe(0);
-      expect(getLeftoverUserIds(db, bingo)).toEqual(new Set([newest.id]));
+      expect(getCutUserIds(db, bingo)).toEqual(new Set([newest.id]));
     });
 
-    it("still reports whose turn it is, and keeps counting them after the main pool runs out", () => {
-      const { bingo, first, second, p1, p2 } = setupLeftover("cut");
+    it("still reports whose turn it is, and keeps counting them once everyone else is drafted", () => {
+      const { bingo, first, second, p1, p2 } = setupLeftover("even");
       expect(getDraftState(db, bingo, { includeAnswers: false, hideCut: true }).currentPick).toMatchObject({ pickNumber: 1, teamId: first.id });
       makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
       makePick(db, { bingo, pickedUserId: p2.id, actingUserId: second.captainUserId, actingIsAdmin: false });
@@ -667,13 +773,13 @@ describe("leftovers", () => {
     });
 
     it("hides a cut duo pair as one unit", () => {
-      const bingo = seedBingo({ leftoverMode: "cut", signupMode: "duo" });
+      const bingo = seedBingo({ cutMode: "even", signupMode: "duo" });
       const signupStage = { ...bingo, stage: "signup" as const };
       const c1 = seedCaptain(bingo.id, "c1");
       const c2 = seedCaptain(bingo.id, "c2");
       createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
       createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
-      // Signed up oldest to newest, so the pair (a, b) is the newest of three units and 3 mod 2 teams cuts it.
+      // Two singles split evenly; the one pair doesn't split across two teams, so it's cut.
       const [solo1, solo2, a, b] = ["solo1", "solo2", "a", "b"].map((d, i) => {
         const user = seedUser(d);
         db.insert(schema.signups).values({ bingoId: bingo.id, userId: user.id, rsn: d, createdAt: new Date(1_700_000_000_000 + i * 60_000) }).run();
@@ -687,31 +793,19 @@ describe("leftovers", () => {
     });
 
     it("keeps them listed while signups are still open, since who is cut changes with every signup", () => {
-      const { bingo, newest } = setupLeftover("cut");
+      const { bingo, newest } = setupLeftover("even");
       db.update(schema.bingos).set({ stage: "signup" }).where(eq(schema.bingos.id, bingo.id)).run();
       const open = getDraftState(db, bingo, { includeAnswers: false, hideCut: true });
       expect(poolIds(open)).toContain(newest.id);
       expect(open.cutCount).toBe(0);
     });
 
-    it("does nothing in singles mode, where those players are drafted last", () => {
-      const { bingo, newest } = setupLeftover("singles");
+    it("does nothing with no cuts", () => {
+      const { bingo, newest } = setupLeftover("none");
       const state = getDraftState(db, bingo, { includeAnswers: false, hideCut: true });
       expect(poolIds(state)).toContain(newest.id);
       expect(state.cutCount).toBe(0);
     });
-  });
-
-  it("singles: drafts leftovers after the main pool, continuing the snake", () => {
-    const { bingo, first, second, p1, p2, newest } = setupLeftover("singles");
-    expect(() => makePick(db, { bingo, pickedUserId: newest.id, actingUserId: first.captainUserId, actingIsAdmin: false })).toThrow(/singles round/i);
-    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: first.captainUserId, actingIsAdmin: false });
-    makePick(db, { bingo, pickedUserId: p2.id, actingUserId: second.captainUserId, actingIsAdmin: false });
-    const state = getDraftState(db, bingo, { includeAnswers: false });
-    // Pick 3 of a 2-team snake goes back to whoever picked last.
-    expect(state.currentPick).toMatchObject({ pickNumber: 3, teamId: second.id, singlesRound: true });
-    makePick(db, { bingo, pickedUserId: newest.id, actingUserId: second.captainUserId, actingIsAdmin: false });
-    expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick).toBeNull();
   });
 });
 

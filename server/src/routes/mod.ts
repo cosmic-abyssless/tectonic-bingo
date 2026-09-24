@@ -189,7 +189,7 @@ router.post(
 router.get(
   "/signups",
   asyncHandler(async (req, res) => {
-    const leftovers = draftService.getLeftoverUserIds(db, req.bingo!);
+    const cut = draftService.getCutUserIds(db, req.bingo!);
     const roster = signupService.getAllSignups(db, req.bingo!.id, signupService.answerViewerFor(req.user!.isAdmin, true));
     const [tectonic] = await Promise.all([
       fetchProfiles(db, roster.map((entry) => entry.user.id)),
@@ -197,10 +197,18 @@ router.get(
     ]);
     const signups = roster.map((entry) => ({
       ...entry,
-      leftover: leftovers.has(entry.user.id),
+      cut: cut.has(entry.user.id),
       tectonicProfile: tectonic.profiles[entry.user.id] ?? null,
     }));
     res.json({ signups });
+  }),
+);
+
+// Who's cut as things stand, and what every team drafts: shown before moving into the draft stage.
+router.get(
+  "/draft/cuts",
+  asyncHandler(async (req, res) => {
+    res.json(draftService.getCutPreview(db, req.bingo!));
   }),
 );
 

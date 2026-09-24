@@ -40,7 +40,7 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       queryClient.invalidateQueries({ queryKey: ["adminMods"] });
       queryClient.invalidateQueries({ queryKey: ["bingoMods"] });
       queryClient.invalidateQueries({ queryKey: ["adminCaptainCandidates"] });
-      // Team count and leftover settings decide who is at risk of being cut.
+      // Team count and the draft cuts setting decide who is cut (the draft cuts preview is under signupRoster).
       queryClient.invalidateQueries({ queryKey: ["mySignup"] });
       queryClient.invalidateQueries({ queryKey: ["signupRoster"] });
       queryClient.invalidateQueries({ queryKey: ["draftState"] });

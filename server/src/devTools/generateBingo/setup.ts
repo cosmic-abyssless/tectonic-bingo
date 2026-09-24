@@ -206,7 +206,7 @@ export async function runDraft(ctx: Ctx, players: Player[], seeds: TeamSeed[], o
   await admin.post(path(ctx, "/mod/draft/start"), undefined, { at });
 
   let state = await admin.get<DraftState & { pool: DraftUnit[] }>(path(ctx, "/draft"));
-  const total = state.pool.filter((u) => !u.leftover).length;
+  const total = state.pool.filter((u) => !u.cut).length;
   const stopAt = opts.stopAfterFraction ? Math.ceil(total * opts.stopAfterFraction) : Infinity;
   const adminPicks = new Set([rng.int(6, 12), rng.int(20, 30), rng.int(34, 44)]);
   const captainOf = new Map<string, TeamSeed>();
@@ -214,7 +214,9 @@ export async function runDraft(ctx: Ctx, players: Player[], seeds: TeamSeed[], o
 
   let picks = 0;
   while (state.currentPick && picks < stopAt) {
-    const units = state.pool.filter((u) => !u.leftover);
+    // Only what the team on the clock may take: once it has its share of pairs (or singles), not another.
+    const { takes } = state.currentPick;
+    const units = state.pool.filter((u) => !u.cut && (u.entries.length > 1 ? takes.pairs : takes.singles));
     if (units.length === 0) break;
     const scored = units.map((u) => {
       const skills = u.entries.map((e) => byUserId.get(e.user.id)?.skill ?? 0.5);
