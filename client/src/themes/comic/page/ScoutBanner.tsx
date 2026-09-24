@@ -33,8 +33,10 @@ export function ScoutBanner({ onOpen }: { onOpen: () => void }) {
             } as CSSProperties
           }
         />
-        <div className="relative flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0 flex-1">
+        {/* Stacked on a phone (the button under the text, rather than squeezing it to a few words a line), side by
+            side from sm up. */}
+        <div className="relative flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 sm:flex-1">
             <div className="flex items-center gap-2">
               {/* The wiki's Spyglass, at its own 31x29 so the pixel art stays crisp. */}
               <WikiIcon name="Spyglass" className="h-[29px] w-[31px] [image-rendering:pixelated]" />
