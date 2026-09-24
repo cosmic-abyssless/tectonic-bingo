@@ -17,7 +17,9 @@ export function ScoutBanner({ onOpen }: { onOpen: () => void }) {
     <div className="mx-auto mb-8 mt-2 max-w-lg">
       <div
         className="relative overflow-hidden border-[3px] px-4 py-3"
-        style={{ background: colors.BLUE, borderColor: colors.LINE, color: colors.ON_LOUD, boxShadow: `6px 6px 0 ${colors.LINE}`, transform: "rotate(-1.2deg)" }}
+        // The palette's blue deepened with 30% of its dark ink: a night-sky blue that the light lettering reads well on
+        // (the dark palettes' own blue is bright enough that it didn't).
+        style={{ background: `color-mix(in srgb, ${colors.BLUE} 70%, ${colors.ON_YELLOW})`, borderColor: colors.LINE, color: colors.ON_LOUD, boxShadow: `6px 6px 0 ${colors.LINE}`, transform: "rotate(-1.2deg)" }}
       >
         {/* Printed shading: dots of the lettering's own colour, faint, fading in towards the right (the mask only reads currentColor's alpha). */}
         <div
