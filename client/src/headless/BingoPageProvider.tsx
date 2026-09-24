@@ -8,6 +8,7 @@ import { useHasPassed } from "../core/ui/useHasPassed";
 import { toCategoryModel, toTeamModel, buildSubmissionModels } from "./boardModel";
 import { lockedLeaves, type ExclusiveLocks } from "../core/board/exclusivity";
 import { useViewingTeam } from "./useViewingTeam";
+import { canViewStats as canViewStatsOf } from "./useBingoHeader";
 import { useTileSearch } from "./useTileSearch";
 import { usePageEvents } from "./usePageEvents";
 import { BoardProvider } from "./BoardProvider";
@@ -103,9 +104,7 @@ export function BingoPageProvider({
   // Hands go up on your own team's board only, from reveal onwards (the
   // board isn't visible to players before that) until the bingo is over.
   const canToggleInterest = !!myTeam && viewingTeamId === myTeam.id && (bingo.stage === "reveal" || bingo.stage === "live");
-  // Players see their own team's stats while live and everyone's once the bingo
-  // is over (the stats endpoint 403s otherwise); mods see them throughout.
-  const canViewStats = isMod || bingo.stage === "complete" || (bingo.stage === "live" && !!myTeam);
+  const canViewStats = canViewStatsOf(shell);
 
   // Exact branch order as the old BingoPage.tsx: signup -> planning|captains
   // -> draft -> !viewingTeamId -> board.

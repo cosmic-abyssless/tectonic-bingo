@@ -1,22 +1,20 @@
-import { AppHeader } from "../../../core/ui/AppHeader";
-import { ShieldIcon } from "../../../core/ui/icons";
+import { useState } from "react";
+import { useBingoHeader } from "../../../headless";
 import { DraftRoom } from "../../../core/draft/DraftRoom";
+import { useSlot } from "../../context";
 import { ComicPage } from "../fx/ComicPage";
-import { comicHeaderProps } from "./headerStyle";
-import { ComicButton } from "../ui/ComicButton";
+import { Masthead } from "./Masthead";
 
-export function DraftPageLayout({ slug, bingoName, isMod }: { slug: string; bingoName: string; isMod: boolean }) {
+/** The draft room under the same masthead as the board, its back arrow returning to the board. */
+export function DraftPageLayout({ slug }: { slug: string; bingoName: string; isMod: boolean }) {
+  const header = useBingoHeader(slug);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const RulesDialog = useSlot("RulesDialog");
   return (
     <ComicPage>
-      <AppHeader back={{ to: `/b/${slug}`, label: "Back to bingo" }} title="Draft" subtitle={bingoName} {...comicHeaderProps()}>
-        {isMod && (
-          <ComicButton size="sm" href={`/b/${slug}/mod`}>
-            <ShieldIcon />
-            Mod panel
-          </ComicButton>
-        )}
-      </AppHeader>
+      {header && <Masthead slug={slug} header={header} back={{ to: `/b/${slug}`, label: "Back to bingo" }} onShowRules={() => setRulesOpen(true)} />}
       <DraftRoom slug={slug} />
+      <RulesDialog isOpen={rulesOpen} markdown={header?.rulesMarkdown ?? ""} onClose={() => setRulesOpen(false)} />
     </ComicPage>
   );
 }
