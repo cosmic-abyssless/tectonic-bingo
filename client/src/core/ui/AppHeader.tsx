@@ -7,6 +7,7 @@ import { useColorSchemePreference } from "./colorScheme";
 import { ADMIN_BUG_REPORTS_SEEN_KEY, useBugReportsUnseen } from "./bugReportsUnseen";
 import { BugReportButton } from "./BugReportButton";
 import { BugReportDialog } from "./BugReportDialog";
+import { DevAccountSwitcher } from "./DevAccountSwitcher";
 import { PhoneLoginDialog } from "./PhoneLoginDialog";
 import { useIsPhone } from "./useMediaQuery";
 import { Button } from "./Button";
@@ -83,6 +84,8 @@ export function AppHeader({
   // The bug-report button and the signed-in user's menu.
   const utility = (
     <>
+      {/* Dev mode only (renders nothing otherwise). */}
+      <DevAccountSwitcher />
       {user?.inGuild && (
         <>
           {/* Brings its own "Report a bug" tooltip: wrapped from out here, the tooltip's hover wiring reached the slot

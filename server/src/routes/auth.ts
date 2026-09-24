@@ -4,6 +4,7 @@ import passport from "passport";
 import { eq, notLike } from "drizzle-orm";
 import { db } from "../db";
 import { users } from "../db/schema";
+import { devPageAccess } from "../services/devPageAccessService";
 import { requireAuth } from "../middleware/requireAuth";
 import { noStore } from "../middleware/cacheControl";
 import { LINK_TTL_MS, createPhoneLoginLink, getPhoneLoginLinkStatus, previewPhoneLoginLink, redeemPhoneLoginLink } from "../services/phoneLoginService";
@@ -94,9 +95,17 @@ if (isDevModeActive()) {
   // "dev-seed-*" throwaway test bots (a since-removed seed tool's leftovers,
   // if a dev DB still has any) so the list stays focused on real accounts
   // worth switching into.
-  router.get("/dev-users", async (_req: Request, res: Response) => {
+  // ?path=<a client page>: each user also says whether they could open that page and who they are in its bingo
+  // (services/devPageAccessService.ts), for the header's account switcher to dim the ones who'd be turned away.
+  router.get("/dev-users", async (req: Request, res: Response) => {
     const rows = await db.select().from(users).where(notLike(users.discordId, "dev-seed-%")).orderBy(users.discordUsername);
-    res.json({ users: rows });
+    const path = typeof req.query.path === "string" ? req.query.path : null;
+    if (!path) {
+      res.json({ users: rows });
+      return;
+    }
+    const access = devPageAccess(db, path, rows);
+    res.json({ users: rows.map((u) => ({ ...u, ...access.get(u.id) })) });
   });
 
   router.post("/dev-login", async (req: Request, res: Response) => {
