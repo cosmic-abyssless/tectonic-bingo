@@ -14,8 +14,8 @@ import { Callout, ChoiceChip, CollapsibleSheet, paperVars, Required, StatBox, Ta
 
 /**
  * The signup stage in the comic theme: the form (and, in a duo bingo, the partner step under it) as sheets on the
- * palette's own paper (charcoal in the dark palettes), like the draft room's panels, the fields right on it and the
- * CA stats and people lists as cards of the tile modal's papyrus. Ink-bordered sheets with lettered headers, yellow tab labels,
+ * palette's own paper (charcoal in the dark palettes), like the draft room's panels, with the fields, stats and lists
+ * right on it. Ink-bordered sheets with lettered headers, yellow tab labels,
  * answers as chips, comic buttons; the core form controls take their colours from paperVars and their ink border from
  * comic.css.
  */

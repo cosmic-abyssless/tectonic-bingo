@@ -4,12 +4,10 @@ import { CheckIcon, ChevronDownIcon, SpinnerIcon } from "../../../core/ui/icons"
 import type { ComicColors } from "../board/colors";
 import { COMIC_FONT } from "../font";
 import { CaptionBox } from "../ui/CaptionBox";
-import { pageColors } from "../board/colors";
-import { comicVars, PageColorsContext, useComic } from "../ui/useComic";
+import { comicVars, useComic } from "../ui/useComic";
 
 // The pieces the comic signup stage is drawn with: sheets on the palette's own paper (charcoal in the dark palettes),
-// like the draft room's panels, the fields right on them, and the CA stats and people lists as cards of the tile
-// modal's page stock (the papyrus), like the draft room's team cards.
+// like the draft room's panels, with the fields, stats and lists right on them in the same palette.
 
 /**
  * The chrome tokens the core form controls (Input, Select, Textarea, SearchableSelect) read, pointed at the page
@@ -219,11 +217,11 @@ export function ChoiceChip({ type, name, checked, onChange, children }: { type: 
   );
 }
 
-/** A read-only stat on the signup (their combat achievements): a lettered value on a papyrus card. */
+/** A read-only stat on the signup (their combat achievements): a lettered value on a raised card. */
 export function StatBox({ label, value, note, loading }: { label: string; value: string; note?: string; loading?: boolean }) {
-  const colors = pageColors(useComic().colors);
+  const { colors } = useComic();
   return (
-    <div className="min-w-0 border-[3px] px-3 py-2" style={{ borderColor: colors.LINE, background: colors.PAPER, boxShadow: `2px 2px 0 ${colors.LINE}` }}>
+    <div className="min-w-0 border-[3px] px-3 py-2" style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.LINE}` }}>
       <div className="text-sm uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
         {label}
       </div>
@@ -255,17 +253,15 @@ export function SubHead({ children }: { children: ReactNode }) {
   );
 }
 
-/** An ink-bordered list of people, one per row, on a papyrus card (its rows draw in the page palette). */
+/** An ink-bordered list of people, one per row, on a raised card. */
 export function RowList({ children, scroll }: { children: ReactNode; scroll?: boolean }) {
-  const colors = pageColors(useComic().colors);
+  const { colors } = useComic();
   return (
-    <PageColorsContext.Provider value={colors}>
-      <ul
-        className={`comic-rows border-[3px] ${scroll ? "max-h-64 overflow-y-auto" : ""}`}
-        style={{ ...paperVars(colors), borderColor: colors.LINE, background: colors.PAPER, boxShadow: `2px 2px 0 ${colors.LINE}`, ["--comic-rule" as string]: colors.RULE }}
-      >
-        {children}
-      </ul>
-    </PageColorsContext.Provider>
+    <ul
+      className={`comic-rows border-[3px] ${scroll ? "max-h-64 overflow-y-auto" : ""}`}
+      style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.LINE}`, ["--comic-rule" as string]: colors.RULE }}
+    >
+      {children}
+    </ul>
   );
 }
