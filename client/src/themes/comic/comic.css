@@ -297,6 +297,13 @@
 .comic-fields .ag-header-cell-text {
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  /* Room for Bangers' lean inside the box AG clips the label to (see "Bangers leans right" below). */
+  padding-right: 0.2em;
+}
+/* AG wraps a cell's content in a box that clips, exactly as tall as the button in it: that shaved the ink button's
+   hard shadow (and its lift on hover) off the bottom. */
+.comic-fields .ag-cell-value:has([data-cell-button]) {
+  overflow: visible;
 }
 .comic-fields [data-cell-button] {
   border-width: 2px;
@@ -328,4 +335,13 @@
   line-height: 1;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+}
+
+/* Bangers leans right: the last glyph of a line overhangs the text's box by up to ~0.17em, so wherever that box clips
+   its overflow (truncated text) the edge of the last letter was sliced off. Every truncated element lettered in it, set
+   on itself or inherited from an ancestor (the theme sets the font inline, so the style attribute names it), gets a
+   little room on the right. One that sets its own right padding keeps it (the masthead title's allows for its drop shadow
+   too, headerStyle.ts). */
+:is([style*="Bangers"], [style*="Bangers"] *).truncate:not([class*="pr-"]) {
+  padding-right: 0.2em;
 }
