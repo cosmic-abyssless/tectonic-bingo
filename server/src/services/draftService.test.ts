@@ -5,7 +5,7 @@ import { and, eq, ne } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createTeam } from "./teamService";
-import { createSignup } from "./signupService";
+import { createQuestion, createSignup } from "./signupService";
 import { adminPair } from "./pairingService";
 import { canViewDraftRoom, draftRoomForbiddenMessage, getDraftState, getLeftoverUserIds, getTeamRatings, makePick, pickOrderTeamIndex, setDraftOrder, setPickRating, shuffleDraftOrder, startDraft, undoLastPick } from "./draftService";
 import { ServiceError } from "./errors";
@@ -774,6 +774,21 @@ describe("pick ratings", () => {
 
     const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.rating_set")).all();
     expect(rows.map((r) => JSON.parse(r.details).rsn)).toEqual(["a & b", "b & a"]);
+  });
+});
+
+describe("answers in the pool by question visibility", () => {
+  it("gives each viewer level only the answers visible to it", () => {
+    const bingo = seedBingo();
+    const p1 = seedUser("p1");
+    const q = (prompt: string, visibility: "captains" | "mods" | "admins") => createQuestion(db, { bingoId: bingo.id, prompt, type: "text", visibility });
+    const qs = [q("Open", "captains"), q("Mods", "mods"), q("Admins", "admins")];
+    createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p1.id, rsn: "p1", answers: qs.map((x) => ({ questionId: x.id, value: x.prompt })) });
+    const seen = (answerViewer: "captain" | "mod" | "admin") =>
+      getDraftState(db, bingo, { includeAnswers: true, answerViewer }).pool.flatMap((u) => u.entries.flatMap((e) => (e.answers ?? []).map((a) => a.value))).sort();
+    expect(seen("captain")).toEqual(["Open"]);
+    expect(seen("mod")).toEqual(["Mods", "Open"]);
+    expect(seen("admin")).toEqual(["Admins", "Mods", "Open"]);
   });
 });
 

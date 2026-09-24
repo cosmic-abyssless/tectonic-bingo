@@ -1,7 +1,8 @@
 import { now as clockNow } from "../clock";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { playerName } from "@bingo/shared";
+import { playerName, type AnswerViewer } from "@bingo/shared";
+import { visibleQuestionIds } from "./signupService";
 import * as schema from "../db/schema";
 import { bingos, draftPicks, pickRatings, signupAnswers, signups, teamMembers, teams, tileInterests, users } from "../db/schema";
 import { ServiceError } from "./errors";
@@ -163,13 +164,14 @@ function insertionRank(unit: DraftUnit, insertionOrder: Map<string, number>): nu
 }
 
 // includeAnswers gates signup-answer visibility — only mods and team leads
-// should see what a prospective draftee wrote on the signup form.
+// should see what a prospective draftee wrote on the signup form — and answerViewer (default "admin") then limits it
+// to the questions visible at that level (QuestionVisibility).
 //
 // hideCut is for the draft room: signups that don't fit a full round in "cut" mode will never be drafted, so once
 // signups have closed they are left out of the pool (and counted in cutCount) instead of sitting there greyed out.
 // While signups are still open the newest ones are only at risk, and who is cut changes with every new signup, so
 // they stay listed. Everything else (the at-risk warnings, pick validation) works on the full pool.
-export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: boolean; hideCut?: boolean }): DraftState {
+export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: boolean; answerViewer?: AnswerViewer; hideCut?: boolean }): DraftState {
   const bingoId = bingo.id;
   const fresh = db.select().from(bingos).where(eq(bingos.id, bingoId)).get() ?? bingo;
   const teamRows = db.select().from(teams).where(eq(teams.bingoId, bingoId)).all();
@@ -223,11 +225,12 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
       ? db.select().from(signupAnswers).where(inArray(signupAnswers.signupId, poolSignups.map((s) => s.id))).all()
       : [];
 
+  const visibleQuestions = opts.includeAnswers ? visibleQuestionIds(db, bingo.id, opts.answerViewer ?? "admin") : new Set<string>();
   const poolEntries: DraftPoolEntry[] = poolSignups.map((s) => ({
     // Timezone follows the answers' visibility rule (it replaced a custom question that did).
     signup: opts.includeAnswers ? s : { ...s, timezone: null },
     user: { ...poolUserById.get(s.userId)!, rsn: s.rsn },
-    answers: opts.includeAnswers ? poolAnswers.filter((a) => a.signupId === s.id) : null,
+    answers: opts.includeAnswers ? poolAnswers.filter((a) => a.signupId === s.id && visibleQuestions.has(a.questionId)) : null,
   }));
   const fullPool = groupIntoUnits(db, bingoId, poolEntries);
   const draftedUnitCount = new Set(pickRows.map((p) => p.pickNumber)).size;

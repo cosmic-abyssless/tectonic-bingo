@@ -1,6 +1,6 @@
 import { now as clockNow } from "../clock";
 import { and, count, eq, inArray, isNotNull, ne, or } from "drizzle-orm";
-import { formatSignupAnswer, isBlankAnswer, isValidTimeZone, MAX_CHOICE_LENGTH, MAX_MULTISELECT_CHOICES, MAX_QUESTION_HELPER_TEXT, type SignupQuestionType } from "@bingo/shared";
+import { canSeeAnswers, formatSignupAnswer, isBlankAnswer, isValidTimeZone, QUESTION_VISIBILITIES, MAX_CHOICE_LENGTH, MAX_MULTISELECT_CHOICES, MAX_QUESTION_HELPER_TEXT, type AnswerViewer, type QuestionVisibility, type SignupQuestionType } from "@bingo/shared";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
@@ -56,6 +56,7 @@ export interface CreateQuestionParams {
   optionsJson?: string | null;
   required?: boolean;
   sortOrder?: number;
+  visibility?: QuestionVisibility;
 }
 /** Trims the helper text; blank (or absent) is none. */
 function normalizeHelperText(value: unknown): string | null {
@@ -66,10 +67,28 @@ function normalizeHelperText(value: unknown): string | null {
   return trimmed || null;
 }
 
+function assertVisibility(value: unknown): void {
+  if (value !== undefined && !(QUESTION_VISIBILITIES as readonly unknown[]).includes(value)) {
+    throw new ServiceError(400, `visibility must be one of ${QUESTION_VISIBILITIES.join(", ")}`);
+  }
+}
+
+/** The level a request sees answers from: a site admin, else a bingo mod, else (a team lead) a captain. */
+export function answerViewerFor(isSiteAdmin: boolean, isMod: boolean): AnswerViewer {
+  return isSiteAdmin ? "admin" : isMod ? "mod" : "captain";
+}
+
+/** The ids of a bingo's questions whose answers `viewer` may see (their own answers aside, which they always can). */
+export function visibleQuestionIds(db: Db, bingoId: string, viewer: AnswerViewer): Set<string> {
+  const questions = db.select({ id: signupQuestions.id, visibility: signupQuestions.visibility }).from(signupQuestions).where(eq(signupQuestions.bingoId, bingoId)).all();
+  return new Set(questions.filter((q) => canSeeAnswers(q.visibility, viewer)).map((q) => q.id));
+}
+
 export function createQuestion(db: Db, params: CreateQuestionParams) {
   if ((params.type === "select" || params.type === "multiselect") && !params.optionsJson) {
     throw new ServiceError(400, "optionsJson is required for a choice question");
   }
+  assertVisibility(params.visibility);
   const values = { ...params, helperText: normalizeHelperText(params.helperText) };
   return db.transaction((tx) => {
     const question = tx.insert(signupQuestions).values(values).returning().get();
@@ -87,6 +106,7 @@ export function updateQuestion(db: Db, id: string, params: Partial<Omit<CreateQu
   return db.transaction((tx) => {
     const existing = tx.select().from(signupQuestions).where(eq(signupQuestions.id, id)).get();
     if (!existing) throw new ServiceError(404, "Question not found");
+    assertVisibility(params.visibility);
     const set = "helperText" in params ? { ...params, helperText: normalizeHelperText(params.helperText) } : params;
     const updated = tx.update(signupQuestions).set(set).where(eq(signupQuestions.id, id)).returning().get();
 
@@ -341,8 +361,10 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
       }
       const question = questionById.get(a.questionId);
       if (question) {
-        before[question.prompt] = shown(question.type, existingAnswer?.value ?? "");
-        after[question.prompt] = shown(question.type, a.value);
+        // The audit log is readable by every mod, so an admins-only answer is recorded as changed, not what to.
+        const hidden = question.visibility === "admins";
+        before[question.prompt] = hidden ? "(hidden)" : shown(question.type, existingAnswer?.value ?? "");
+        after[question.prompt] = hidden ? "(hidden)" : shown(question.type, a.value);
       }
     }
 
@@ -427,7 +449,8 @@ export function withdrawSignup(db: Db, bingo: Bingo, signupId: string, { byMod =
   });
 }
 
-export function getAllSignups(db: Db, bingoId: string) {
+/** The whole roster. `viewer` limits which questions' answers come with it (see QuestionVisibility). */
+export function getAllSignups(db: Db, bingoId: string, viewer: AnswerViewer = "admin") {
   const rows = db
     .select({ signup: PUBLIC_SIGNUP_COLS, user: users, ...SIGNUP_CA_COLS })
     .from(signups)
@@ -437,6 +460,7 @@ export function getAllSignups(db: Db, bingoId: string) {
     .all();
   const signupIds = rows.map((r) => r.signup.id);
   const answers = signupIds.length ? db.select().from(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).all() : [];
+  const visible = visibleQuestionIds(db, bingoId, viewer);
 
   const collectorIds = [...new Set(rows.map((r) => r.signup.buyinCollectedByUserId).filter((id): id is string => !!id))];
   const collectors = collectorIds.length ? db.select().from(users).where(inArray(users.id, collectorIds)).all() : [];
@@ -454,7 +478,7 @@ export function getAllSignups(db: Db, bingoId: string) {
     return {
       signup: r.signup,
       user: { ...r.user, rsn: r.signup.rsn },
-      answers: answers.filter((a) => a.signupId === r.signup.id),
+      answers: answers.filter((a) => a.signupId === r.signup.id && visible.has(a.questionId)),
       collectedByUser: r.signup.buyinCollectedByUserId ? (collectorById.get(r.signup.buyinCollectedByUserId) ?? null) : null,
       pairing: pairingByUserId.get(r.signup.userId) ?? null,
       outgoingPairingRequest: outgoingRequestByUserId.get(r.signup.userId) ?? null,

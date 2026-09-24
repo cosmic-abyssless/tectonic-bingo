@@ -190,7 +190,7 @@ router.get(
   "/signups",
   asyncHandler(async (req, res) => {
     const leftovers = draftService.getLeftoverUserIds(db, req.bingo!);
-    const roster = signupService.getAllSignups(db, req.bingo!.id);
+    const roster = signupService.getAllSignups(db, req.bingo!.id, signupService.answerViewerFor(req.user!.isAdmin, true));
     const [tectonic] = await Promise.all([
       fetchProfiles(db, roster.map((entry) => entry.user.id)),
       applyRosterNames(roster.flatMap((entry) => (entry.outgoingPairingRequest ? [entry.outgoingPairingRequest.target] : []))),

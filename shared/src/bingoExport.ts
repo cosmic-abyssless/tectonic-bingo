@@ -17,7 +17,7 @@
 // server/src/services/bingoExportService.ts's importBingo() rejects a
 // document whose formatVersion is newer than this build understands, but
 // must keep reading every older version forever.
-import type { LeftoverMode, NodeKind, SignupMode, SignupQuestionType } from "./index.ts";
+import type { LeftoverMode, NodeKind, QuestionVisibility, SignupMode, SignupQuestionType } from "./index.ts";
 import type { ExclusivityRule } from "./exclusivity.ts";
 
 export const BINGO_EXPORT_FORMAT_VERSION = 1;
@@ -102,6 +102,8 @@ export interface ExportSignupQuestion {
   optionsJson: string | null;
   required: boolean;
   sortOrder: number;
+  /** Absent in files exported before answers could be limited to mods/admins; imports as "captains". */
+  visibility?: QuestionVisibility;
 }
 
 export interface BingoExportDocument {
