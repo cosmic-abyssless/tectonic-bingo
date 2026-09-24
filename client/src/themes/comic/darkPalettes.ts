@@ -171,16 +171,19 @@ export const DARK_PALETTES: DarkPalette[] = [
       // The comic book's pages: dark papyrus stock with sepia ink and lines,
       // so the open book reads as paper rather than another dark panel.
       // Semantic colours are the deeper printing-ink versions of the base
-      // ones (a bright green on tan is too faint to read as text).
+      // ones (a bright green on tan is too faint to read as text). The paper
+      // is a shade darker than a light-mode page, so it doesn't glare in a
+      // dark room; the text inks are deepened to match, each keeping the
+      // contrast it had on the lighter stock.
       page: {
         INK: "#2a1f12",
         LINE: "#2a1f12",
         INK_BODY: "#33271a",
-        INK_SUBTLE: "#54432b",
+        INK_SUBTLE: "#473925",
         RULE: "rgba(42,31,18,0.30)",
-        PAPER: "#c9b58c",
-        PAPER_ALT: "#b7a173",
-        PAPER_RAISED: "#dccca4",
+        PAPER: "#b9a781",
+        PAPER_ALT: "#a8946a",
+        PAPER_RAISED: "#cabc97",
         YELLOW: "#f2c418",
         BLUE: "#2c58c8",
         RED: "#c8201a",
@@ -189,11 +192,11 @@ export const DARK_PALETTES: DarkPalette[] = [
         RED_TINT: "#e3b0a4",
         GREEN_TINT: "#b3d8b1",
         CYAN_TINT: "#a6d5db",
-        OK: "#0b5a2a",
-        WARN: "#7a3703",
-        BAD: "#96121a",
-        INFO: "#173799",
-        FROZEN: "#065a7d",
+        OK: "#0a4e25",
+        WARN: "#692f03",
+        BAD: "#821017",
+        INFO: "#132e81",
+        FROZEN: "#054f6e",
         ON_LOUD: "#fffaf0",
         ON_YELLOW: "#2a1f12",
         SHADE: "rgba(42,31,18,0.25)",
