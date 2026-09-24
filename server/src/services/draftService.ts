@@ -1,7 +1,7 @@
 import { now as clockNow } from "../clock";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { playerName, type AnswerViewer } from "@bingo/shared";
+import { playerName, type AnswerViewer, type CutMode, type DraftCutPreview, type DraftShares } from "@bingo/shared";
 import { visibleQuestionIds } from "./signupService";
 import * as schema from "../db/schema";
 import { bingos, draftPicks, pickRatings, signupAnswers, signups, teamMembers, teams, tileInterests, users } from "../db/schema";
@@ -69,8 +69,10 @@ export interface DraftPoolEntry {
 export interface DraftUnit {
   pairingId: string | null;
   entries: DraftPoolEntry[];
-  leftover: boolean; // doesn't fit a full round — see markLeftovers
+  cut: boolean; // cut from the draft as things stand — see markCuts
 }
+
+const isPair = (unit: DraftUnit) => unit.entries.length > 1;
 
 export const DRAFT_ORDER_REVEAL_MS = 2000;
 
@@ -117,9 +119,10 @@ export interface DraftState {
   draftStarted: boolean;
   orderReady: boolean;
   orderLockedUntil: string | null;
-  // singlesRound: the main pool is empty and leftovers are being drafted
-  // (leftoverMode "singles" only).
-  currentPick: { pickNumber: number; round: number; teamId: string; singlesRound: boolean } | null;
+  // takes: what the team on the clock may still draft (see teamTakes).
+  currentPick: { pickNumber: number; round: number; teamId: string; takes: { pairs: boolean; singles: boolean } } | null;
+  // What every team drafts; null with no cuts or fewer than two teams (see markCuts).
+  shares: DraftShares | null;
   // Signups left out of `pool` because they were cut (see hideCut in getDraftState); 0 when they are shown or none were.
   cutCount: number;
 }
@@ -132,27 +135,53 @@ function groupIntoUnits(db: Db, bingoId: string, entries: DraftPoolEntry[]): Dra
   for (const { pairing, userIds } of getAcceptedPairs(db, bingoId)) {
     const pair = userIds.map((id) => byUserId.get(id)).filter((e): e is DraftPoolEntry => !!e);
     if (pair.length !== 2) continue;
-    units.push({ pairingId: pairing.id, entries: pair, leftover: false });
+    units.push({ pairingId: pairing.id, entries: pair, cut: false });
     for (const id of userIds) byUserId.delete(id);
   }
-  for (const entry of byUserId.values()) units.push({ pairingId: null, entries: [entry], leftover: false });
+  for (const entry of byUserId.values()) units.push({ pairingId: null, entries: [entry], cut: false });
   return units;
 }
 
-// Every team drafts the same number of units, so with T teams the newest
-// (total units mod T) units don't fit a full round. Units already drafted
-// count towards the total so the answer is stable mid-draft. A pair is as
-// new as its later signup. Nothing is marked until there are 2 teams, since
-// the team count is what decides it.
+// Who's cut so every team drafts the same: pairs and singles are split across the teams separately. With T teams and
+// P pairs in all (drafted and not), each team drafts floor(P / T) pairs and the newest P mod T pairs are cut; singles
+// the same way, except that "pairs_only" drafts no singles at all (every one is cut). A pair is as new as its later
+// signup; a pair whose other half has gone is a single. Drafted picks count, so the answer holds as the draft goes.
+// Returns each team's share, or null when nothing is cut: "none", or fewer than two teams (the team count decides it).
 //
 // createdAt only has 1-second resolution, so signups landing in the same second (bulk test seeding, a rush right
 // as signups open) tie there. insertionOrder (true row insertion order — see its caller) breaks the tie, so the
 // newest-first sort stays deterministic instead of falling back to whatever order the DB scan happened to return.
-export function markLeftovers(units: DraftUnit[], teamCount: number, draftedUnitCount: number, insertionOrder: Map<string, number>): void {
-  if (teamCount < 2) return;
-  const leftoverCount = (draftedUnitCount + units.length) % teamCount;
-  const newestFirst = [...units].sort((a, b) => signedUpAt(b) - signedUpAt(a) || insertionRank(b, insertionOrder) - insertionRank(a, insertionOrder));
-  for (const unit of newestFirst.slice(0, leftoverCount)) unit.leftover = true;
+export function markCuts(
+  units: DraftUnit[],
+  cutMode: CutMode,
+  teamCount: number,
+  drafted: { pairs: number; singles: number },
+  insertionOrder: Map<string, number>,
+): DraftShares | null {
+  if (cutMode === "none" || teamCount < 2) return null;
+  const newestFirst = (list: DraftUnit[]) =>
+    [...list].sort((a, b) => signedUpAt(b) - signedUpAt(a) || insertionRank(b, insertionOrder) - insertionRank(a, insertionOrder));
+  const pairs = units.filter(isPair);
+  const singles = units.filter((u) => !isPair(u));
+  const shares = {
+    pairs: Math.floor((drafted.pairs + pairs.length) / teamCount),
+    singles: cutMode === "pairs_only" ? 0 : Math.floor((drafted.singles + singles.length) / teamCount),
+  };
+  const cutPairs = drafted.pairs + pairs.length - shares.pairs * teamCount;
+  const cutSingles = drafted.singles + singles.length - shares.singles * teamCount;
+  for (const unit of newestFirst(pairs).slice(0, Math.max(0, cutPairs))) unit.cut = true;
+  for (const unit of newestFirst(singles).slice(0, Math.max(0, cutSingles))) unit.cut = true;
+  return shares;
+}
+
+// What a team may still draft: a pair while it has fewer than its share of pairs, a single likewise. The pool left
+// always holds exactly what the teams still need, so the team on the clock always has something to take; if a mid-draft
+// change (a new team, a switched mode) ever leaves it with nothing it may take, it takes whatever is left rather than
+// stalling the draft.
+function teamTakes(shares: DraftShares | null, has: { pairs: number; singles: number }, available: DraftUnit[]): { pairs: boolean; singles: boolean } {
+  if (!shares) return { pairs: true, singles: true };
+  const takes = { pairs: has.pairs < shares.pairs, singles: has.singles < shares.singles };
+  return available.some((u) => (isPair(u) ? takes.pairs : takes.singles)) ? takes : { pairs: true, singles: true };
 }
 
 function signedUpAt(unit: DraftUnit): number {
@@ -213,7 +242,7 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
   const picks = pickRows.map((p) => ({ ...p, user: { ...pickedUserById.get(p.userId)!, rsn: pickedRsnByUserId.get(p.userId) ?? null }, rsn: pickedRsnByUserId.get(p.userId) ?? "" }));
 
   const draftedUserIds = getDraftedUserIds(db, bingoId);
-  // rowid order is true insertion order — see markLeftovers, which uses it to break createdAt ties.
+  // rowid order is true insertion order — see markCuts, which uses it to break createdAt ties.
   const activeSignups = db.select().from(signups).where(and(eq(signups.bingoId, bingoId), eq(signups.status, "active"))).orderBy(sql`rowid`).all();
   const insertionOrder = new Map(activeSignups.map((s, i) => [s.id, i]));
   const poolSignups = activeSignups.filter((s) => !draftedUserIds.has(s.userId));
@@ -233,38 +262,50 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
     answers: opts.includeAnswers ? poolAnswers.filter((a) => a.signupId === s.id && visibleQuestions.has(a.questionId)) : null,
   }));
   const fullPool = groupIntoUnits(db, bingoId, poolEntries);
-  const draftedUnitCount = new Set(pickRows.map((p) => p.pickNumber)).size;
-  markLeftovers(fullPool, orderedTeams.length, draftedUnitCount, insertionOrder);
-  const hideCut = !!opts.hideCut && fresh.leftoverMode === "cut" && fresh.stage !== "signup";
-  const pool = hideCut ? fullPool.filter((u) => !u.leftover) : fullPool;
-  const cutCount = hideCut ? fullPool.filter((u) => u.leftover).reduce((n, u) => n + u.entries.length, 0) : 0;
+  // Each pick is a pair (two rows under one pick number) or a single; what's been drafted, overall and per team.
+  const pickSizes = new Map<number, { teamId: string; size: number }>();
+  for (const p of pickRows) pickSizes.set(p.pickNumber, { teamId: p.teamId, size: (pickSizes.get(p.pickNumber)?.size ?? 0) + 1 });
+  const drafted = { pairs: 0, singles: 0 };
+  const draftedByTeam = new Map<string, { pairs: number; singles: number }>();
+  for (const { teamId, size } of pickSizes.values()) {
+    const team = draftedByTeam.get(teamId) ?? { pairs: 0, singles: 0 };
+    const kind = size > 1 ? "pairs" : "singles";
+    drafted[kind]++;
+    team[kind]++;
+    draftedByTeam.set(teamId, team);
+  }
+  const shares = markCuts(fullPool, fresh.cutMode, orderedTeams.length, drafted, insertionOrder);
+  const hideCut = !!opts.hideCut && fresh.cutMode !== "none" && fresh.stage !== "signup";
+  const pool = hideCut ? fullPool.filter((u) => !u.cut) : fullPool;
+  const cutCount = hideCut ? fullPool.filter((u) => u.cut).reduce((n, u) => n + u.entries.length, 0) : 0;
 
   let currentPick: DraftState["currentPick"] = null;
-  const pickable = draftablePool(fullPool, bingo);
-  if (draftStarted && orderReady && lockExpired && pickable.length > 0) {
+  const available = fullPool.filter((u) => !u.cut);
+  if (draftStarted && orderReady && lockExpired && available.length > 0) {
     const pickNumber = nextPickNumber(db, bingoId);
     const round = Math.ceil(pickNumber / orderedTeams.length);
-    const teamIndex = pickOrderTeamIndex(orderedTeams.length, pickNumber);
-    currentPick = { pickNumber, round, teamId: orderedTeams[teamIndex]!.id, singlesRound: pickable.every((u) => u.leftover) };
+    const teamId = orderedTeams[pickOrderTeamIndex(orderedTeams.length, pickNumber)]!.id;
+    currentPick = { pickNumber, round, teamId, takes: teamTakes(shares, draftedByTeam.get(teamId) ?? { pairs: 0, singles: 0 }, available) };
   }
 
-  return { teams: orderedTeams, picks, pool, draftStarted, orderReady, orderLockedUntil, currentPick, cutCount };
+  return { teams: orderedTeams, picks, pool, draftStarted, orderReady, orderLockedUntil, currentPick, shares, cutCount };
 }
 
-// Which units may be drafted next: the main pool while it lasts, then (in
-// singles mode) the leftovers. The snake simply carries on into the singles
-// round, so whoever picked last in the final full round picks first.
-function draftablePool(pool: DraftUnit[], bingo: Bingo): DraftUnit[] {
-  const main = pool.filter((u) => !u.leftover);
-  if (main.length > 0) return main;
-  return bingo.leftoverMode === "singles" ? pool : [];
-}
-
-// User ids of undrafted signups currently at risk of being cut / pushed to
-// the singles round. Used by the roster and the signup page.
-export function getLeftoverUserIds(db: Db, bingo: Bingo): Set<string> {
+// User ids of undrafted signups cut from the draft as things stand. Used by the roster and the signup page.
+export function getCutUserIds(db: Db, bingo: Bingo): Set<string> {
   const { pool } = getDraftState(db, bingo, { includeAnswers: false });
-  return new Set(pool.filter((u) => u.leftover).flatMap((u) => u.entries.map((e) => e.user.id)));
+  return new Set(pool.filter((u) => u.cut).flatMap((u) => u.entries.map((e) => e.user.id)));
+}
+
+// Who's cut as things stand, and what every team drafts: the confirmation before moving into the draft stage.
+export function getCutPreview(db: Db, bingo: Bingo): DraftCutPreview {
+  const { pool, shares, teams: teamRows } = getDraftState(db, bingo, { includeAnswers: false });
+  const fresh = db.select({ cutMode: bingos.cutMode }).from(bingos).where(eq(bingos.id, bingo.id)).get() ?? bingo;
+  const cut = pool
+    .filter((u) => u.cut)
+    .sort((a, b) => signedUpAt(b) - signedUpAt(a))
+    .map((u) => ({ names: u.entries.map((e) => e.signup.rsn), pair: isPair(u) }));
+  return { cutMode: fresh.cutMode, teamCount: teamRows.length, shares, cut };
 }
 
 function shuffled<T>(arr: T[]): T[] {
@@ -420,11 +461,20 @@ export function makePick(db: Db, params: MakePickParams) {
       if (alreadyDrafted) throw new ServiceError(400, "That player has already been drafted");
     }
 
-    const { pool } = getDraftState(tx, bingo, { includeAnswers: false });
-    if (!draftablePool(pool, bingo).some((u) => u.entries.some((e) => e.user.id === pickedUserId))) {
+    // Cut signups are never drafted, and a team only takes a pair (or a single) while it's short of its share.
+    const state = getDraftState(tx, bingo, { includeAnswers: false });
+    const unit = state.pool.find((u) => u.entries.some((e) => e.user.id === pickedUserId));
+    if (!unit || unit.cut) {
+      const pairsOnly = !!unit && !isPair(unit) && bingo.cutMode === "pairs_only";
+      throw new ServiceError(400, pairsOnly ? "Singles aren't drafted in this bingo (pairs only)" : "That signup is cut from the draft: they don't split evenly across the teams");
+    }
+    const takes = state.currentPick?.takes ?? { pairs: true, singles: true };
+    if (state.shares && (isPair(unit) ? !takes.pairs : !takes.singles)) {
+      const count = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`;
+      const { pairs, singles } = state.shares;
       throw new ServiceError(
         400,
-        bingo.leftoverMode === "singles" ? "Leftover signups are drafted in the singles round, after the main pool is empty" : "That signup doesn't fit a full round and isn't being drafted",
+        `${currentTeam.name} already has its ${isPair(unit) ? count(pairs, "pair") : count(singles, "single")}: every team drafts ${count(pairs, "pair")} and ${count(singles, "single")}`,
       );
     }
 

@@ -250,6 +250,21 @@ describe("updateBingoSettings — WOM fields", () => {
   });
 });
 
+describe("updateBingoSettings — cut mode", () => {
+  it("refuses pairs only for a solo bingo", () => {
+    expect(() => updateBingoSettings(db, seedBingo({ signupMode: "solo" }).id, { cutMode: "pairs_only" })).toThrow(/duo bingos/);
+  });
+
+  it("lets a duo bingo draft pairs only", () => {
+    expect(updateBingoSettings(db, seedBingo({ signupMode: "duo" }).id, { cutMode: "pairs_only" }).cutMode).toBe("pairs_only");
+  });
+
+  it("drops a bingo switched to solo from pairs only back to splitting its singles evenly", () => {
+    const bingo = seedBingo({ signupMode: "duo", cutMode: "pairs_only" });
+    expect(updateBingoSettings(db, bingo.id, { signupMode: "solo" }).cutMode).toBe("even");
+  });
+});
+
 describe("assertBoardEditable", () => {
   it.each(["planning", "signup", "captains", "draft", "reveal", "live"] as const)("allows edits during %s", (stage) => {
     expect(() => assertBoardEditable(seedBingo({ stage }))).not.toThrow();

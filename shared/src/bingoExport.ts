@@ -17,7 +17,7 @@
 // server/src/services/bingoExportService.ts's importBingo() rejects a
 // document whose formatVersion is newer than this build understands, but
 // must keep reading every older version forever.
-import type { LeftoverMode, NodeKind, QuestionVisibility, SignupMode, SignupQuestionType } from "./index.ts";
+import type { CutMode, LeftoverMode, NodeKind, QuestionVisibility, SignupMode, SignupQuestionType } from "./index.ts";
 import type { ExclusivityRule } from "./exclusivity.ts";
 
 export const BINGO_EXPORT_FORMAT_VERSION = 1;
@@ -116,7 +116,9 @@ export interface BingoExportDocument {
     boardRows: number;
     boardCols: number;
     signupMode: SignupMode;
-    /** Absent in older files: the app's defaults (cut / off). */
+    /** Absent in older files: the app's defaults (even / off). */
+    cutMode?: CutMode;
+    /** Older files only, in place of cutMode: "cut" reads as "even", "singles" as "none". */
     leftoverMode?: LeftoverMode;
     warnLeftovers?: boolean;
     buyinAmount: number | null;

@@ -54,10 +54,13 @@ export const bingos = sqliteTable('bingos', {
   // 'duo': players pair up during signup and are drafted as a unit. Only
   // changeable while the bingo has no signups.
   signupMode: text('signup_mode', { enum: ['solo', 'duo'] }).notNull().default('solo'),
-  // Teams end up equal-sized, so signups that don't fill a full draft round
-  // are "leftovers": either cut from the draft, or drafted in a final singles
-  // round once the main pool is empty.
+  // Replaced by cutMode (kept only so the column can be dropped in a later deploy, per the additive-migration rule
+  // in docs/zero-downtime-deploy-plan.md). Nothing reads or writes it.
   leftoverMode: text('leftover_mode', { enum: ['cut', 'singles'] }).notNull().default('cut'),
+  // Who makes the draft so teams come out the same shape: "even" (every team the same number of pairs and of
+  // singles; the newest that don't split evenly are cut), "pairs_only" (duo: pairs only, split evenly; every single is
+  // cut) or "none" (everyone drafted, any order, teams may be uneven). See CutMode in shared and draftService.
+  cutMode: text('cut_mode', { enum: ['even', 'pairs_only', 'none'] }).notNull().default('even'),
   // Show at-risk signups a notice on the signup page.
   warnLeftovers: integer('warn_leftovers', { mode: 'boolean' }).notNull().default(false),
   buyinAmount: integer('buyin_amount'), // GP per player, nullable until decided

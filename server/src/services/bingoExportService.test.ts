@@ -31,7 +31,7 @@ function seedFullBingo() {
     .insert(schema.bingos)
     .values({
       slug: "source", name: "Source Bingo", description: "A test bingo", theme: "comic", boardRows: 2, boardCols: 2,
-      signupMode: "duo", leftoverMode: "singles", warnLeftovers: true, buyinAmount: 10_000_000, bonusPotAmount: 5_000_000, rulesMarkdown: "# Rules\n\nDo the thing.",
+      signupMode: "duo", cutMode: "pairs_only", warnLeftovers: true, buyinAmount: 10_000_000, bonusPotAmount: 5_000_000, rulesMarkdown: "# Rules\n\nDo the thing.",
       createdByUserId: admin.id,
     })
     .returning()
@@ -280,25 +280,37 @@ describe("the tile bonus", () => {
 });
 
 describe("settings", () => {
-  it("carries the leftover handling over, and defaults it for a file that predates it", () => {
+  it("carries the cut mode over, and defaults it for a file that predates it", () => {
     const { bingo, admin } = seedFullBingo();
     const doc = exportBingo(db, bingo.id);
-    expect(doc.bingo).toMatchObject({ leftoverMode: "singles", warnLeftovers: true });
+    expect(doc.bingo).toMatchObject({ cutMode: "pairs_only", warnLeftovers: true });
     const imported = importBingo(db, doc, { slug: "settings-target", createdByUserId: admin.id });
-    expect(getBingoBySlug(db, "settings-target")).toMatchObject({ id: imported.id, leftoverMode: "singles", warnLeftovers: true });
+    expect(getBingoBySlug(db, "settings-target")).toMatchObject({ id: imported.id, cutMode: "pairs_only", warnLeftovers: true });
 
     const old = JSON.parse(JSON.stringify(doc)) as BingoExportDocument;
-    delete old.bingo.leftoverMode;
+    delete old.bingo.cutMode;
     delete old.bingo.warnLeftovers;
     importBingo(db, old, { slug: "settings-old", createdByUserId: admin.id });
-    expect(getBingoBySlug(db, "settings-old")).toMatchObject({ leftoverMode: "cut", warnLeftovers: false });
+    expect(getBingoBySlug(db, "settings-old")).toMatchObject({ cutMode: "even", warnLeftovers: false });
   });
 
-  it("rejects a leftover mode it doesn't know", () => {
+  it("reads the setting cutMode replaced, from older files", () => {
     const { bingo, admin } = seedFullBingo();
     const doc = JSON.parse(JSON.stringify(exportBingo(db, bingo.id))) as BingoExportDocument;
-    (doc.bingo as { leftoverMode?: string }).leftoverMode = "banish";
-    expect(() => importBingo(db, doc, { slug: "bad-leftover", createdByUserId: admin.id })).toThrow(ServiceError);
+    delete doc.bingo.cutMode;
+    doc.bingo.leftoverMode = "singles";
+    importBingo(db, doc, { slug: "settings-singles", createdByUserId: admin.id });
+    expect(getBingoBySlug(db, "settings-singles")).toMatchObject({ cutMode: "none" });
+    doc.bingo.leftoverMode = "cut";
+    importBingo(db, doc, { slug: "settings-cut", createdByUserId: admin.id });
+    expect(getBingoBySlug(db, "settings-cut")).toMatchObject({ cutMode: "even" });
+  });
+
+  it("rejects a cut mode it doesn't know", () => {
+    const { bingo, admin } = seedFullBingo();
+    const doc = JSON.parse(JSON.stringify(exportBingo(db, bingo.id))) as BingoExportDocument;
+    (doc.bingo as { cutMode?: string }).cutMode = "banish";
+    expect(() => importBingo(db, doc, { slug: "bad-cut", createdByUserId: admin.id })).toThrow(ServiceError);
   });
 });
 
@@ -413,6 +425,7 @@ describe("every column is accounted for", () => {
         "signupOpensAt", "draftScheduledAt", "revealScheduledAt", "startsAt", "endsAt", // the schedule of one event
         "womEnabled", "womGroupId", "womGroupVerificationCode", "womCompetitionId", "womSyncError", // Wise Old Man: ids, a secret, sync state
         "draftStarted", "draftOrderLockedUntil", // live draft ceremony — not a template setting
+        "leftoverMode", // replaced by cutMode, kept only until the column is dropped
       ],
     );
   });

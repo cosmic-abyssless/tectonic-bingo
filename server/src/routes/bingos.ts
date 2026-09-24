@@ -300,7 +300,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const result = signupService.getSignupForUser(db, req.bingo!.id, req.user!.id);
     // Only warn while the mods have opted in and the player can still act on it.
-    const atRisk = !!result?.signup && result.signup.status === "active" && req.bingo!.warnLeftovers && draftService.getLeftoverUserIds(db, req.bingo!).has(req.user!.id);
+    const atRisk = !!result?.signup && result.signup.status === "active" && req.bingo!.warnLeftovers && draftService.getCutUserIds(db, req.bingo!).has(req.user!.id);
     res.json({
       signup: result?.signup ?? null,
       answers: result?.answers ?? [],
