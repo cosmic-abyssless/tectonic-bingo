@@ -5,11 +5,13 @@ import {
   Dialog,
   DialogTrigger,
   Input,
+  ListLayout,
   Menu,
   MenuItem,
   Popover,
   SearchField,
   useFilter,
+  Virtualizer,
 } from "react-aria-components";
 import type { User } from "@bingo/shared";
 import { clearAuthCache } from "../../api/authCache";
@@ -19,6 +21,10 @@ import { Button } from "./Button";
 import { controlClass } from "./Field";
 import { CheckIcon, UsersIcon } from "./icons";
 import { avatarUrl, displayName } from "./user";
+
+// Every row the same height, so the list can be virtualized: hundreds of accounts (every generated test bingo's
+// players), and drawing them all took over half a second to open.
+const ROW_HEIGHT = 48;
 
 // The server's dev user list, asked about the page you're on (server: routes/auth.ts, services/devPageAccessService.ts).
 type DevUser = User & { access?: boolean; role?: string | null };
@@ -101,36 +107,39 @@ function Switcher({ currentUserId }: { currentUserId: string }) {
             {!users && !error ? (
               <p className="px-3 pb-3 text-sm text-on-surface-muted">Loading…</p>
             ) : (
-              <Menu
-                items={ordered}
-                aria-label="Accounts"
-                onAction={(key) => {
-                  const picked = ordered.find((u) => u.id === key);
-                  if (picked && picked.id !== currentUserId) void switchTo(picked.discordId);
-                }}
-                renderEmptyState={() => <p className="px-3 py-2 text-sm text-on-surface-subtle">No one matches.</p>}
-                className="max-h-96 min-h-0 overflow-y-auto p-1 outline-none"
-              >
-                {(u) => (
-                  <MenuItem
-                    id={u.id}
-                    textValue={`${displayName(u)} ${u.discordUsername} ${u.role ?? ""}`}
-                    isDisabled={!!switching}
-                    className={`flex cursor-default items-center gap-2.5 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-surface-hover focus:bg-surface-hover ${
-                      u.access === false ? "opacity-40" : ""
-                    }`}
-                  >
-                    <img src={avatarUrl(u)} alt="" className="size-6 shrink-0 rounded-full" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-on-surface">{displayName(u)}</span>
-                      <span className="block truncate text-xs text-on-surface-subtle">
-                        {switching === u.discordId ? "Switching…" : [u.role, u.access === false ? "can't open this page" : null].filter(Boolean).join(" · ") || u.discordUsername}
+              <Virtualizer layout={ListLayout} layoutOptions={{ rowSize: ROW_HEIGHT, padding: 4 }}>
+                <Menu
+                  items={ordered}
+                  aria-label="Accounts"
+                  onAction={(key) => {
+                    const picked = ordered.find((u) => u.id === key);
+                    if (picked && picked.id !== currentUserId) void switchTo(picked.discordId);
+                  }}
+                  renderEmptyState={() => <p className="px-3 py-2 text-sm text-on-surface-subtle">No one matches.</p>}
+                  className="max-h-96 min-h-0 overflow-y-auto outline-none"
+                >
+                  {(u) => (
+                    <MenuItem
+                      id={u.id}
+                      textValue={`${displayName(u)} ${u.discordUsername} ${u.role ?? ""}`}
+                      isDisabled={!!switching}
+                      style={{ height: ROW_HEIGHT }}
+                      className={`mx-1 flex cursor-default items-center gap-2.5 rounded-sm px-2 text-sm outline-none hover:bg-surface-hover focus:bg-surface-hover ${
+                        u.access === false ? "opacity-40" : ""
+                      }`}
+                    >
+                      <img src={avatarUrl(u)} alt="" className="size-6 shrink-0 rounded-full" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-on-surface">{displayName(u)}</span>
+                        <span className="block truncate text-xs text-on-surface-subtle">
+                          {switching === u.discordId ? "Switching…" : [u.role, u.access === false ? "can't open this page" : null].filter(Boolean).join(" · ") || u.discordUsername}
+                        </span>
                       </span>
-                    </span>
-                    {u.id === currentUserId && <CheckIcon size={14} className="shrink-0 text-on-surface-muted" />}
-                  </MenuItem>
-                )}
-              </Menu>
+                      {u.id === currentUserId && <CheckIcon size={14} className="shrink-0 text-on-surface-muted" />}
+                    </MenuItem>
+                  )}
+                </Menu>
+              </Virtualizer>
             )}
           </Autocomplete>
         </Dialog>
