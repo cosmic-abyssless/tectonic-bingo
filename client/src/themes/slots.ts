@@ -73,6 +73,10 @@ export interface ThemeSlots {
   DialogFrame: ComponentType<{ isOpen: boolean; onClose: () => void; size?: "md" | "lg"; isDismissable?: boolean; children: ReactNode }>;
   DialogHeader: ComponentType<{ title: ReactNode; subtitle?: ReactNode; onClose: () => void; action?: ReactNode }>;
 
+  // The header's report-a-bug button (AppHeader). Read with useOptionalSlot: the header also shows on pages outside
+  // any ThemeProvider, which fall back to core's BugReportButton.
+  BugReportButton: ComponentType<{ onPress: () => void; hasUnseen: boolean }>;
+
   // Menu chrome for ColumnPicker / MultiSelect / SingleSelect. Props are
   // inlined so this file does not import Picker (that would cycle through
   // themes/context). Read with useOptionalSlot: mod and admin have no

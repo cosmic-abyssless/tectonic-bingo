@@ -1,4 +1,5 @@
 import type { ThemeDefinition } from "../registry";
+import { BugReportButton } from "../../core/ui/BugReportButton";
 import { defaultTokens } from "../tokens";
 import { BoardPageLayout } from "./page/BoardPageLayout";
 import { DraftPageLayout } from "./page/DraftPageLayout";
@@ -70,6 +71,7 @@ export const defaultTheme: ThemeDefinition = {
     DialogFrame: Dialog,
     DialogHeader,
     PickerFrame: Picker,
+    BugReportButton,
     BoardGrid,
     RowLabel,
     EmptyCell,
