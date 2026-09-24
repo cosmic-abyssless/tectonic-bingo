@@ -27,6 +27,8 @@ export interface OnTheClockProps {
   isMyTurn: boolean; // the viewer leads this team
   // Drawn as the top strip of the draft room's Teams panel (full width, no frame of its own), not a card of its own.
   embedded?: boolean;
+  // With embedded: the phone's pinned header, where nothing can hang outside the strip and height is precious.
+  compact?: boolean;
 }
 
 export interface ThemeSlots {
@@ -97,6 +99,10 @@ export interface ThemeSlots {
   // page. Read with useOptionalSlot: outside a theme they're core's.
   Notice: ComponentType<NoticeProps>;
   Panel: ComponentType<PanelProps>;
+
+  // The page's backdrop, the layers the theme draws behind every page (the comic's halftone), for a PinnedGap to show
+  // the page through. Fixed, full-window layers; nothing (the page colour alone) in a theme without one.
+  PageBackdrop: ComponentType;
 
   // The header's report-a-bug button (AppHeader). Read with useOptionalSlot: the header also shows on pages outside
   // any ThemeProvider, which fall back to core's BugReportButton.
