@@ -29,12 +29,8 @@ import { formatCaTier, formatWomStat } from "../signup/caStats";
 import { useDocumentTop } from "../ui/tableChrome";
 import { TableSearchInput, useTableSearch } from "../ui/tableSearch";
 import { formatTierName } from "../tectonic/profile";
+import { toCsv } from "../ui/csv";
 import { SignupRosterGrid, type GridContext, type RosterRow } from "./SignupRosterGrid";
-
-function csvEscape(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
-}
 
 // GP totals here are buy-in multiples, always in the millions for this event — "30M GP" reads faster than
 // "30,000,000 GP". Decimals only show up if the amount isn't a clean multiple of a million.
@@ -111,7 +107,7 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
       ...questionPrompts.map((q) => formatSignupAnswer(q.type, answerByQ.get(q.id))),
     ];
   });
-  return [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
+  return toCsv([headers, ...rows]);
 }
 
 // The filters above the grid, each a MultiSelect checklist. What's stored is what's *un*ticked (like the audit log),

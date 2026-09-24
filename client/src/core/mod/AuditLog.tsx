@@ -13,6 +13,7 @@ import { MultiSelect } from "../ui/MultiSelect";
 import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { DateTimeRangeFilter } from "../ui/DateTimeRangeFilter";
 import { isRangeSet, type TimeRange } from "../ui/timeRange";
+import { toCsv } from "../ui/csv";
 import { TableSearchInput } from "../ui/tableSearch";
 
 // Shared with SiteAuditLog.tsx — bug_report entries are bingo-scoped when
@@ -74,15 +75,10 @@ export function actorOptionsFrom(names: Map<string, string>, entries: AuditEntry
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
-export function csvEscape(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
-}
-
 export function buildCsv(entries: AuditEntry[]): string {
   const headers = ["Time", "Action", "Actor", "Team", "Label"];
   const rows = entries.map((e) => [new Date(e.at).toISOString(), e.action, e.actor ? displayName(e.actor) : e.actorType, e.team?.name ?? "", e.label]);
-  return [headers, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
+  return toCsv([headers, ...rows]);
 }
 
 // A before/after diff for a `changes` field; every other detail key renders

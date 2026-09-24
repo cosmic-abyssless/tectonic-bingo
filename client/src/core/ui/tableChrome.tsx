@@ -40,6 +40,30 @@ export const QUESTION_COLUMN_MAX_WIDTH = "12rem";
  * changing height (a notice appearing, filter chips wrapping to a second
  * line, the window itself resizing) moves it.
  */
+/**
+ * How far an element sits below its closest `selector` ancestor, kept up to date. For a table sized to the window
+ * inside a pinned (sticky) block: its place in the document moves as the page scrolls, its place in the block doesn't.
+ */
+export function useOffsetWithin(element: Element | null, selector: string): number {
+  const [offset, setOffset] = useState(0);
+  useEffect(() => {
+    if (!element) return;
+    const measure = () => {
+      const container = element.closest(selector);
+      setOffset(container ? element.getBoundingClientRect().top - container.getBoundingClientRect().top : 0);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(document.body);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [element, selector]);
+  return offset;
+}
+
 export function useDocumentTop(element: Element | null): number {
   const [top, setTop] = useState(0);
   useEffect(() => {

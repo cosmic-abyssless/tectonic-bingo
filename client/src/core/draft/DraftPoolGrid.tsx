@@ -53,11 +53,13 @@ import { useHiddenColumns } from "../ui/hiddenColumns";
 import { LinkIcon } from "../ui/icons";
 import { compareSortValues } from "../ui/tableSort";
 import { TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
-import { useDocumentTop } from "../ui/tableChrome";
+import { useDocumentTop, useOffsetWithin } from "../ui/tableChrome";
 import { PlayerName } from "../tectonic/PlayerName";
 import { AchievementIcons, PlaceBreakdown, TierBadge } from "../tectonic/ProfileBadges";
 import { podiumSummary, podiumTitle, recordSummary, recordTitle } from "../tectonic/profile";
 import { RatingCell } from "./RatingCell";
+import { buildPoolCsv } from "./poolCsv";
+import { Button } from "../ui/Button";
 import { placeScore, poolSearchValues, unitSortValue, type PoolRatings, type PoolSortKey } from "./poolData";
 import { headerTooltip, usefulTooltip } from "../ui/gridTooltips";
 
@@ -293,9 +295,16 @@ export function DraftPoolGrid({
   picking,
   leftoverMode,
   heading,
+  pinnedTop,
+  widthSwitch = true,
 }: {
   /** Shown at the left of the toolbar row (DraftRoom's "Available players (n)"). */
   heading: ReactNode;
+  /** When the grid's panel is pinned (sticky, in a [data-pinned-pool] block) this far from the top of the window: the
+   *  table is sized to the window from there, not from its place in the document, which moves as the page scrolls. */
+  pinnedTop?: number;
+  /** The "Full width" switch (off where the room lays the table out itself). */
+  widthSwitch?: boolean;
   pool: DraftUnit[];
   questions: SignupQuestion[];
   /** Present only for team leads — they see and edit their own team's ratings. */
@@ -333,6 +342,13 @@ export function DraftPoolGrid({
   // The wrapper that actually changes width is DraftRoom's — this just renders the switch for it in the toolbar.
   const [poolWidth, setPoolWidth] = usePreference("draftPoolWidth");
   const statsRefreshing = useStatsRefreshingSignupIds();
+  const [copied, setCopied] = useState(false);
+
+  async function copyCsv() {
+    await navigator.clipboard.writeText(buildPoolCsv(pool, questions, ratings, leftoverMode));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   const entries = useMemo(() => pool.flatMap((u) => u.entries), [pool]);
   const entryMatches = useCallback(
@@ -572,7 +588,9 @@ export function DraftPoolGrid({
   // default) needs a real height on its container — useDocumentTop's measured remaining-viewport value becomes
   // that directly, same as the signup roster. minHeight: MIN_TABLE_HEIGHT is the same floor for the same reason.
   const [tableWrapper, setTableWrapper] = useState<HTMLDivElement | null>(null);
-  const tableTop = useDocumentTop(tableWrapper);
+  const documentTop = useDocumentTop(pinnedTop === undefined ? tableWrapper : null);
+  const offsetInPin = useOffsetWithin(pinnedTop === undefined ? null : tableWrapper, "[data-pinned-pool]");
+  const tableTop = pinnedTop === undefined ? documentTop : pinnedTop + offsetInPin;
   // 2.5rem, not SignupRosterGrid's own 1.5rem: 1.5rem is that same page-bottom padding (DraftRoom's page wrapper
   // has it too, confirmed via getComputedStyle — this grid's own useDocumentTop measurement already covers
   // everything ABOVE the wrapper, but not what's below it before the page's actual edge). +1rem on top of that
@@ -665,9 +683,15 @@ export function DraftPoolGrid({
         )}
         <TableSearchInput value={search} onChange={setSearch} matchCount={matchingEntries.length} totalCount={entries.length} />
         <ColumnPicker columns={columnOptions} hidden={hiddenColumns} onHiddenChange={handleHiddenChange} />
-        <Switch isSelected={poolWidth === "full"} onChange={(full) => setPoolWidth(full ? "full" : "narrow")}>
-          Full width
-        </Switch>
+        {/* Everyone in the pool with every column, hidden or not, and your ratings and notes (poolCsv.ts). */}
+        <Button size="sm" onPress={copyCsv}>
+          {copied ? "Copied" : "Copy as CSV"}
+        </Button>
+        {widthSwitch && (
+          <Switch isSelected={poolWidth === "full"} onChange={(full) => setPoolWidth(full ? "full" : "narrow")}>
+            Full width
+          </Switch>
+        )}
         </div>
       </div>
       {rows.length === 0 ? (
