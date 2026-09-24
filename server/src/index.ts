@@ -132,10 +132,13 @@ app.use(
     secret: process.env.SESSION_SECRET!,
     resave: false,
     saveUninitialized: false,
+    // Every response pushes the cookie's expiry out again, so a login lasts 30 days from the last visit, not from the
+    // login: a bingo runs longer than a week, and nobody should be sent back to Discord's login partway through.
+    rolling: true,
     cookie: {
       secure: sessionCookieSecure(),
       httpOnly: true,
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
     },
   })
 );

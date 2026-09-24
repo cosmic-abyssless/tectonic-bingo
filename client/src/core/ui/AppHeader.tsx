@@ -7,10 +7,12 @@ import { useColorSchemePreference } from "./colorScheme";
 import { ADMIN_BUG_REPORTS_SEEN_KEY, useBugReportsUnseen } from "./bugReportsUnseen";
 import { BugReportButton } from "./BugReportButton";
 import { BugReportDialog } from "./BugReportDialog";
+import { PhoneLoginDialog } from "./PhoneLoginDialog";
+import { useIsPhone } from "./useMediaQuery";
 import { Button } from "./Button";
 import { PulseDot } from "./Card";
 import { Menu, MenuItem, MenuTrigger } from "./Menu";
-import { ArrowLeftIcon, CheckIcon, MonitorIcon, MoonIcon, SunIcon } from "./icons";
+import { ArrowLeftIcon, CheckIcon, MonitorIcon, MoonIcon, PhoneIcon, SunIcon } from "./icons";
 import { useOptionalSlot } from "../../themes/context";
 import { avatarUrl, displayName } from "./user";
 
@@ -61,6 +63,9 @@ export function AppHeader({
   const { data: shell } = useBingo(bingoSlug);
   const myRsn = user ? shell?.teams.flatMap((t) => t.members).find((m) => m.user.id === user.id)?.user.rsn : null;
   const [bugReportOpen, setBugReportOpen] = useState(false);
+  // "Log in on your phone" (a QR code): offered on a computer, where it's the way onto the phone.
+  const [phoneLoginOpen, setPhoneLoginOpen] = useState(false);
+  const phone = useIsPhone();
   const [colorScheme, setColorScheme] = useColorSchemePreference();
   const compact = !!mobileMenu;
   // Fetched here (not gated on the dialog being open) so the pulse dot can show without opening it —
@@ -109,6 +114,14 @@ export function AppHeader({
               </MenuItem>
             )}
             {menuItems}
+            {!phone && (
+              <MenuItem id="phone-login" onAction={() => setPhoneLoginOpen(true)}>
+                <span className="flex items-center gap-2">
+                  <PhoneIcon size={14} />
+                  Log in on your phone
+                </span>
+              </MenuItem>
+            )}
             {COLOR_SCHEME_OPTIONS.map(({ value, label, icon: Icon }) => (
               <MenuItem key={value} id={`color-scheme-${value}`} className="justify-between" onAction={() => setColorScheme(value)}>
                 <span className="flex items-center gap-2">
@@ -124,6 +137,7 @@ export function AppHeader({
           </Menu>
         </MenuTrigger>
       )}
+      {user && <PhoneLoginDialog isOpen={phoneLoginOpen} onClose={() => setPhoneLoginOpen(false)} />}
     </>
   );
 
