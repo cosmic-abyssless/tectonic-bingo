@@ -1,138 +1,78 @@
-import { useState, type ReactNode } from "react";
-import type { ContributionCount, Team, Tile, TileHeatmapCell, TimelineEvent } from "@bingo/shared";
+import { useMemo, useState, type ReactNode } from "react";
 import { useBingo, useBoard, useStats } from "../../api/queries";
-import { displayName } from "../ui/user";
-import { PlayerName } from "../tectonic/PlayerName";
-import { Card, CardHeader } from "../ui/Card";
-import { Select } from "../ui/Select";
-import { FALLBACK_TEAM_COLOR, PointsChart } from "./PointsChart";
+import { applyColumnVisibility } from "../ui/hiddenColumns";
+import { inclusionFilter } from "../ui/inclusionFilter";
+import { MultiSelect } from "../ui/MultiSelect";
+import { Panel } from "../ui/Panel";
+import { ContributorsTable } from "./ContributorsTable";
+import { PointsChart } from "./PointsChart";
+import { TileCompletion } from "./TileCompletion";
+import { TimelineTable } from "./TimelineTable";
 
-// The timeline and the contributors sit side by side and can each get long, so both scroll at the same height
-// rather than one stretching the page or sitting oddly short beside the other.
-const SCROLL_LIST = "max-h-96 overflow-y-auto pr-1";
-
-function Empty({ children }: { children: string }) {
-  return <p className="text-sm text-on-surface-subtle">{children}</p>;
-}
-
-function TimelineList({ events }: { events: TimelineEvent[] }) {
-  const sorted = [...events].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
-  if (sorted.length === 0) return <Empty>Nothing has happened yet.</Empty>;
-  return (
-    <ol className={`space-y-1.5 text-sm ${SCROLL_LIST}`}>
-      {sorted.map((e, i) => (
-        <li key={i} className="flex items-start gap-2 text-on-surface-muted">
-          <span className="num mt-0.5 shrink-0 text-xs text-on-surface-subtle">{new Date(e.at).toLocaleString()}</span>
-          <span>{e.label}</span>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-function ContributionList({ contributions, teams }: { contributions: ContributionCount[]; teams: Team[] }) {
-  if (contributions.length === 0) return <Empty>No approved submissions yet.</Empty>;
-  return (
-    <ol className={`space-y-1.5 text-sm ${SCROLL_LIST}`}>
-      {contributions.map((c, i) => {
-        const team = teams.find((t) => t.id === c.teamId);
-        return (
-          <li key={c.userId} className="flex items-center justify-between text-on-surface-muted">
-            <span>
-              <span className="num text-on-surface-subtle">#{i + 1}</span>{" "}
-              <PlayerName userId={c.userId} className="text-on-surface">
-                {displayName(c.user)}
-              </PlayerName>{" "}
-              <span className="text-on-surface-subtle">— {team?.name ?? "Unknown team"}</span>
-            </span>
-            <span className="num shrink-0 font-semibold text-on-surface">{c.approvedSubmissions}</span>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-function Heatmap({ heatmap, tiles, teams }: { heatmap: TileHeatmapCell[]; tiles: Tile[]; teams: Team[] }) {
-  const [teamId, setTeamId] = useState(teams[0]?.id ?? "");
-  if (tiles.length === 0 || teams.length === 0) return null;
-
-  const rows = Math.max(...tiles.map((t) => t.boardRow)) + 1;
-  const cols = Math.max(...tiles.map((t) => t.boardCol)) + 1;
-  const tileAt = (r: number, c: number) => tiles.find((t) => t.boardRow === r && t.boardCol === c);
-  const cellFor = (tileId: string) => heatmap.find((c) => c.tileId === tileId && c.teamId === teamId);
-  const teamColor = teams.find((t) => t.id === teamId)?.color ?? FALLBACK_TEAM_COLOR;
-
-  return (
-    <div className="space-y-3">
-      {teams.length > 1 && (
-        <Select aria-label="Team" value={teamId} onChange={setTeamId} className="w-auto!" options={teams.map((t) => ({ value: t.id, label: t.name }))} />
-      )}
-      <div className="grid max-w-md gap-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
-        {Array.from({ length: rows }, (_, r) =>
-          Array.from({ length: cols }, (_, c) => {
-            const tile = tileAt(r, c);
-            if (!tile) return <div key={`${r}-${c}`} />;
-            const cell = cellFor(tile.id);
-            const frac = cell && cell.totalTasks > 0 ? cell.completedTasks / cell.totalTasks : 0;
-            return (
-              <div
-                key={tile.id}
-                title={`${tile.name}: ${cell?.completedTasks ?? 0}/${cell?.totalTasks ?? 0} tasks`}
-                className="flex aspect-square items-center justify-center overflow-hidden rounded-sm border border-outline px-0.5 text-center text-[9px] leading-tight text-on-surface"
-                // Team colour at 8% opacity for untouched tiles, ramping to ~85% when complete.
-                style={{ backgroundColor: `color-mix(in srgb, ${teamColor} ${Math.round(8 + frac * 77)}%, transparent)` }}
-              >
-                {tile.name}
-              </div>
-            );
-          }),
-        )}
-      </div>
-    </div>
-  );
-}
-
+// A Panel, like the draft room's, so a theme that draws its own (the comic one) restyles the section and the
+// tables in it the same way.
 function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <Card>
-      <CardHeader title={title} />
-      <div className="p-5">{children}</div>
-    </Card>
-  );
+  return <Panel title={title}>{children}</Panel>;
 }
 
 export function StatsView({ slug }: { slug: string }) {
   const { data: shell } = useBingo(slug);
   const { data: stats, error } = useStats(slug);
   const { data: boardData } = useBoard(slug);
+  const [excludedTeams, setExcludedTeams] = useState<Set<string>>(() => new Set());
+
+  // While the bingo is live the server only returns the viewer's own team, so the team list is whatever
+  // actually has rows. The team filter then narrows every panel; it only shows when there's a choice to make.
+  const visibleTeams = useMemo(() => {
+    if (!shell || !stats) return [];
+    const ids = new Set([...stats.heatmap, ...stats.pointsOverTime, ...stats.contributions].map((r) => r.teamId));
+    return shell.teams.filter((t) => ids.has(t.id));
+  }, [shell, stats]);
+  const teamOptions = useMemo(() => visibleTeams.map((t) => ({ key: t.id, label: t.name })), [visibleTeams]);
+  const teamFilter = inclusionFilter(excludedTeams, teamOptions);
+
+  const filtered = useMemo(() => {
+    if (!stats) return null;
+    const keep = new Set(visibleTeams.filter((t) => !excludedTeams.has(t.id)).map((t) => t.id));
+    // Events with no team (the bingo going live or ending) belong to everyone, so they always stay.
+    const ours = <T extends { teamId: string | null }>(rows: T[]) => rows.filter((r) => r.teamId === null || keep.has(r.teamId));
+    return {
+      teams: visibleTeams.filter((t) => keep.has(t.id)),
+      pointsOverTime: ours(stats.pointsOverTime),
+      timeline: ours(stats.timeline),
+      contributions: ours(stats.contributions),
+      heatmap: ours(stats.heatmap),
+    };
+  }, [stats, visibleTeams, excludedTeams]);
 
   if (error) return <div className="py-24 text-center text-sm text-on-surface-muted">{error.message}</div>;
-  if (!shell || !stats) return <div className="py-24 text-center text-sm text-on-surface-muted">Loading…</div>;
-
-  // While the bingo is live the server only returns the viewer's own team, so
-  // scope the team list to whatever actually has rows.
-  const statTeamIds = new Set([...stats.heatmap, ...stats.pointsOverTime, ...stats.contributions].map((r) => r.teamId));
-  const teams = shell.teams.filter((t) => statTeamIds.has(t.id));
-  const tiles = boardData?.tiles ?? [];
+  if (!shell || !stats || !filtered) return <div className="py-24 text-center text-sm text-on-surface-muted">Loading…</div>;
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6 px-6 py-6">
+    <div className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
+      {teamOptions.length > 1 && (
+        <MultiSelect
+          label="Teams"
+          options={teamOptions}
+          selected={teamFilter.checked}
+          onChange={(visible) => setExcludedTeams(applyColumnVisibility(excludedTeams, teamOptions.map((t) => t.key), visible))}
+        />
+      )}
+
       <Section title="Points over time">
-        <PointsChart points={stats.pointsOverTime} teams={teams} />
+        <PointsChart points={filtered.pointsOverTime} teams={filtered.teams} />
       </Section>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Section title="Timeline">
-          <TimelineList events={stats.timeline} />
-        </Section>
-        <Section title="Top contributors">
-          <ContributionList contributions={stats.contributions} teams={teams} />
-        </Section>
-      </div>
+      <Section title="Timeline">
+        <TimelineTable events={filtered.timeline} teams={filtered.teams} startsAt={shell.bingo.effectiveStartsAt} />
+      </Section>
+
+      <Section title="Top contributors">
+        <ContributorsTable contributions={filtered.contributions} teams={filtered.teams} />
+      </Section>
 
       <Section title="Tile completion">
-        <Heatmap heatmap={stats.heatmap} tiles={tiles} teams={teams} />
+        <TileCompletion heatmap={filtered.heatmap} tiles={boardData?.tiles ?? []} teams={filtered.teams} />
       </Section>
     </div>
   );

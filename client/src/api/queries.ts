@@ -480,11 +480,12 @@ export function useRenameTeam(slug: string) {
   });
 }
 
-export function useStats(slug: string | undefined) {
+// `enabled` lets a caller that only sometimes may see stats (the player profile) skip the 403.
+export function useStats(slug: string | undefined, enabled = true) {
   return useQuery({
     queryKey: queryKeys.stats(slug ?? ""),
     queryFn: () => api.get<StatsResponse>(`/api/bingos/${slug}/stats`),
-    enabled: !!slug,
+    enabled: !!slug && enabled,
   });
 }
 

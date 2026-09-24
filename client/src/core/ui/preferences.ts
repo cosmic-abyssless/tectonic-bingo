@@ -14,6 +14,10 @@ const PREFERENCES = {
   // content above it uses.
   signupRosterWidth: ["full", "narrow"],
   draftPoolWidth: ["full", "narrow"],
+  // How the stats timeline shows when each event happened (core/stats/timeFormat.ts).
+  statsTimeFormat: ["clock", "sinceStart", "ago", "full"],
+  // The player profile's last picked tab (core/tectonic/PlayerProfileDialog.tsx).
+  profileTab: ["bingo", "clan", "past", "signup"],
 } as const satisfies Record<string, readonly string[]>;
 
 type PreferenceKey = keyof typeof PREFERENCES;

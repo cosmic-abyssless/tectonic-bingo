@@ -99,7 +99,8 @@ describe("what the bingo sends", () => {
     expect(playerName(detail!.submittedByUser!)).toBe("Zezima");
     expect(playerName(detail!.postedByUser!)).toBe("Lynx Titan");
     expect(playerName(getAllSubmissionsForBingo(db, one.id)[0]!.submittedByUser!)).toBe("Zezima");
-    expect(getContributionCounts(db, one.id).map((c) => playerName(c.user))).toEqual(["Zezima"]);
+    // The poster is on the team too, so they are listed (at 0) after the player the drop belongs to.
+    expect(getContributionCounts(db, one.id).map((c) => playerName(c.user))).toEqual(["Zezima", "Lynx Titan"]);
   });
 
   it("names tile interests by RSN", () => {
