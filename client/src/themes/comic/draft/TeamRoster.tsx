@@ -2,29 +2,35 @@ import { groupByPick, ordinal, type TeamRosterProps } from "../../../core/draft/
 import { PlayerName } from "../../../core/tectonic/PlayerName";
 import { CrownIcon, LinkIcon } from "../../../core/ui/icons";
 import { displayName } from "../../../core/ui/user";
+import { pageColors } from "../board/colors";
 import { COMIC_FONT } from "../font";
+import { paperVars } from "../signup/parts";
 import { useComic } from "../ui/useComic";
 
 /**
  * The comic theme's draft room column for a team: a card like a character card (the team's colour as a band across
  * the top, its name in Bangers, the captains under it), then each pick as an ink-outlined slip. The team on the clock
- * is lifted and yellow. Drawn in whatever palette it's printed in (the Teams panel's paper).
+ * is lifted and yellow. The cards and slips are the book pages' papyrus (in the dark palettes, set against the Teams
+ * panel's charcoal); the order label above sits on the panel, in its palette.
  */
 export function TeamRoster({ team, picks, isCurrent, showOrder, hiddenPickNumbers, reserveCoCaptainRow, pairRows }: TeamRosterProps) {
-  const { colors } = useComic();
+  const { colors: panel } = useComic();
+  const colors = pageColors(panel);
   const label = isCurrent ? "Picking!" : showOrder && team.draftOrder != null ? ordinal(team.draftOrder) : null;
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <div className="h-4 text-sm uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: isCurrent ? colors.RED : colors.INK_SUBTLE }}>
+    // The chrome tokens point at the papyrus too, for PlayerName's underline and hover colours.
+    <div className="flex min-w-0 flex-col gap-1.5" style={paperVars(colors)}>
+      <div className="h-4 text-sm uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: isCurrent ? panel.RED : panel.INK_SUBTLE }}>
         {label}
       </div>
       <div
         className="w-full overflow-hidden border-[3px] transition-[transform,box-shadow] duration-200"
         style={{
           borderColor: colors.LINE,
-          background: isCurrent ? colors.YELLOW : colors.PAPER_RAISED,
+          background: isCurrent ? colors.YELLOW : colors.PAPER,
           color: isCurrent ? colors.ON_YELLOW : colors.INK,
-          boxShadow: `${isCurrent ? 4 : 2}px ${isCurrent ? 4 : 2}px 0 ${colors.LINE}`,
+          // Shadows in the panel's line colour: the papyrus's sepia ink vanishes against the charcoal.
+          boxShadow: `${isCurrent ? 4 : 2}px ${isCurrent ? 4 : 2}px 0 ${panel.LINE}`,
           transform: isCurrent ? "translate(-1px, -2px)" : undefined,
         }}
       >
@@ -58,7 +64,7 @@ export function TeamRoster({ team, picks, isCurrent, showOrder, hiddenPickNumber
             data-team-id={team.id}
             data-pick-number={group[0].pickNumber}
             className={`flex flex-col justify-center rounded-sm border-2 px-2 py-1 text-sm font-semibold ${group.length === 1 && pairRows?.[i] ? "min-h-[52px]" : ""} ${hiddenPickNumbers?.has(group[0].pickNumber) ? "invisible" : ""}`}
-            style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK, boxShadow: `2px 2px 0 ${colors.LINE}` }}
+            style={{ borderColor: colors.LINE, background: colors.PAPER, color: colors.INK, boxShadow: `2px 2px 0 ${panel.LINE}` }}
           >
             {group.map((p, j) => (
               <div key={p.id} className="flex min-w-0 items-center gap-1">

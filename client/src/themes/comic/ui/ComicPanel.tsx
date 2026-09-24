@@ -1,36 +1,32 @@
 import type { NoticeProps } from "../../../core/ui/Card";
 import type { PanelProps } from "../../../core/ui/Panel";
-import { pageColors } from "../board/colors";
 import { COMIC_FONT } from "../font";
 import { paperVars } from "../signup/parts";
 import { CaptionBox } from "./CaptionBox";
-import { PageColorsContext, useComic } from "./useComic";
+import { useComic } from "./useComic";
 
 /**
- * The comic theme's Panel slot: a sheet printed on the tile modal's page stock, like the signup sheets. The chrome
- * tokens inside point at the page palette (paperVars), so core content drawn with them (the draft room's team
- * rosters) prints on the paper too, and comic components inside draw with the page palette. Its menus and selects
- * open inside it (data-portal-scope), on the same paper. Never tilted: a transform would pin sticky or fixed content
- * inside it to the panel.
+ * The comic theme's Panel slot: an ink-bordered panel on the palette's own paper (charcoal in the dark palettes, not
+ * the book pages' papyrus: a page of it is a lot of light paper in a dark room), with a hard shadow and a Bangers
+ * title. The chrome tokens inside point at that palette (paperVars) so core content in it matches, and its menus and
+ * selects open inside it (data-portal-scope). Content that wants the papyrus inside it (the draft room's team cards)
+ * draws with pageColors itself. Never tilted: a transform would pin sticky or fixed content inside it to the panel.
  */
 export function ComicPanel({ title, children, padding = "md", className, style }: PanelProps) {
   const { colors } = useComic();
-  const page = pageColors(colors);
   return (
-    <PageColorsContext.Provider value={page}>
-      <section
-        data-portal-scope=""
-        className={`comic-fields border-[3px] ${padding === "sm" ? "px-4 py-2.5" : "p-4"} ${className ?? ""}`}
-        style={{ ...paperVars(page), background: page.PAPER, borderColor: page.LINE, boxShadow: `4px 4px 0 ${page.LINE}`, color: page.INK_BODY, ...style }}
-      >
-        {title && (
-          <h3 className="mb-3 text-xl uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: page.INK }}>
-            {title}
-          </h3>
-        )}
-        {children}
-      </section>
-    </PageColorsContext.Provider>
+    <section
+      data-portal-scope=""
+      className={`comic-fields border-[3px] ${padding === "sm" ? "px-4 py-2.5" : "p-4"} ${className ?? ""}`}
+      style={{ ...paperVars(colors), background: colors.PAPER, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.LINE}`, color: colors.INK_BODY, ...style }}
+    >
+      {title && (
+        <h3 className="mb-3 text-xl uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: colors.INK }}>
+          {title}
+        </h3>
+      )}
+      {children}
+    </section>
   );
 }
 
