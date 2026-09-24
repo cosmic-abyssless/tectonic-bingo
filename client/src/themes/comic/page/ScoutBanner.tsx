@@ -1,43 +1,50 @@
-import { StarIcon } from "../../../core/ui/icons";
-import { pageColors } from "../board/colors";
+import type { CSSProperties } from "react";
 import { COMIC_FONT } from "../font";
-import { CaptionBox } from "../ui/CaptionBox";
 import { ComicButton } from "../ui/ComicButton";
-import { PageColorsContext, useComic } from "../ui/useComic";
+import { useComic } from "../ui/useComic";
 
 /**
  * The nudge a team lead gets while signups are open (or captains are being picked): scout the players before the
- * draft. A comic caption box, tilted a hair like the rest of the page's call-outs, printed on the same stock as the
- * tile modal's book pages (the papyrus in dark mode): everything inside draws in the page palette, as on a book page.
+ * draft. Loud on purpose, so it reads as a call to action rather than another panel of the form under it (which is
+ * printed on the book-page paper): a process-blue caption, knocked askew, with outlined cover lettering, a halftone
+ * shading and a red button. Blue stands out from both the light palette's yellow page and the dark palettes' papyrus
+ * sheets.
  */
 export function ScoutBanner({ onOpen }: { onOpen: () => void }) {
   const { colors } = useComic();
-  const page = pageColors(colors);
   return (
-    <PageColorsContext.Provider value={page}>
-      <ScoutCaption onOpen={onOpen} paper={page.PAPER} />
-    </PageColorsContext.Provider>
-  );
-}
-
-function ScoutCaption({ onOpen, paper }: { onOpen: () => void; paper: string }) {
-  const { colors } = useComic();
-  return (
-    <CaptionBox tilt={-0.6} className="mx-auto mb-6 max-w-lg" style={{ background: paper }}>
-      <div className="flex flex-wrap items-center justify-between gap-3 py-1">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 text-xl uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: colors.INK }}>
-            <StarIcon size={18} />
-            Scout the signups!
+    <div className="mx-auto mb-8 mt-2 max-w-lg">
+      <div
+        className="relative overflow-hidden border-[3px] px-4 py-3"
+        style={{ background: colors.BLUE, borderColor: colors.LINE, color: colors.ON_LOUD, boxShadow: `6px 6px 0 ${colors.LINE}`, transform: "rotate(-1.2deg)" }}
+      >
+        {/* Printed shading: dots of the lettering's own colour, faint, fading in towards the right (the mask only reads currentColor's alpha). */}
+        <div
+          aria-hidden
+          className="comic-shade pointer-events-none absolute inset-0"
+          style={
+            {
+              "--comic-shade-ink": `color-mix(in srgb, ${colors.ON_LOUD} 22%, transparent)`,
+              maskImage: "linear-gradient(to right, transparent 25%, currentColor)",
+              WebkitMaskImage: "linear-gradient(to right, transparent 25%, currentColor)",
+            } as CSSProperties
+          }
+        />
+        <div className="relative flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div
+              className="comic-outline-text text-3xl uppercase leading-none"
+              style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", ["--comic-title-fill" as string]: colors.TITLE_FILL, ["--comic-title-stroke" as string]: colors.TITLE_STROKE }}
+            >
+              Scout the signups!
+            </div>
+            <p className="mt-1.5 text-sm font-semibold">Star and note players now, so your picks are ready when the draft starts.</p>
           </div>
-          <p className="mt-1 text-sm" style={{ color: colors.INK_BODY }}>
-            Star and note players now, so your picks are ready when the draft starts.
-          </p>
+          <ComicButton variant="primary" size="md" tilt={2} onPress={onOpen}>
+            Open scouting room
+          </ComicButton>
         </div>
-        <ComicButton variant="yellow" size="sm" tilt={1} onPress={onOpen}>
-          Open scouting room
-        </ComicButton>
       </div>
-    </CaptionBox>
+    </div>
   );
 }
