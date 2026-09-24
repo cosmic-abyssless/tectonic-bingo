@@ -168,7 +168,7 @@ wait_healthy() {
     restarts="$(docker inspect -f '{{.RestartCount}}' "$id" 2>/dev/null || echo 0)"
     case "$status" in healthy) return 0 ;; exited|missing) return 1 ;; esac
     [ "$restarts" -lt 2 ] || return 1
-    sleep 2; waited=$((waited + 2))
+    sleep 1; waited=$((waited + 1))
   done
   return 1
 }
