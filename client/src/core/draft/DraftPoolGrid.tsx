@@ -155,7 +155,9 @@ type LineRender = (entry: DraftPoolEntry, opts: { dim: boolean; search: string }
 // LineRender's own markup.
 const StackedCell = ({ data, context, render }: CustomCellRendererProps<DraftUnit, unknown, PoolGridContext> & { render: LineRender }) => {
   if (!data) return null;
-  if (data.entries.length === 1) return <div className="leading-tight">{render(data.entries[0]!, { dim: false, search: context.search })}</div>;
+  // py-1: AG clips the cell to its content, and a solo line's content box ends at the text, above where PlayerName
+  // draws its dotted underline (3px below, in borrowed space) — a pair's own padding already leaves that room.
+  if (data.entries.length === 1) return <div className="py-1 leading-tight">{render(data.entries[0]!, { dim: false, search: context.search })}</div>;
   return (
     <div className="flex flex-col justify-center gap-5 py-2 leading-tight">
       {data.entries.map((e) => (
