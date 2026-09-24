@@ -21,7 +21,9 @@ export function paperVars(c: ComicColors): CSSProperties {
     "--field-bg": c.PAPER_RAISED,
     "--color-surface": c.PAPER,
     "--color-surface-raised": c.PAPER_RAISED,
-    "--color-surface-hover": c.YELLOW_TINT,
+    // A hovered option in a dropdown: the raised fill lifted a little toward the lettering (a lighter grey on charcoal,
+    // a darker shade on papyrus). The yellow tint read as a muddy olive on the dark palettes.
+    "--color-surface-hover": `color-mix(in srgb, ${c.PAPER_RAISED} 82%, ${c.INK})`,
     "--color-outline": c.LINE,
     "--color-outline-strong": c.LINE,
     "--color-on-surface": c.INK,
