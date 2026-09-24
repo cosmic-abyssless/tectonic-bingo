@@ -21,13 +21,24 @@ import type { UndoLatestPick } from "./UndoPick";
 import { FinalTeams } from "./FinalTeams";
 import { DraftPoolList } from "./DraftPoolList";
 import { DraftRoomPhone } from "./DraftRoomPhone";
-import { useIsPhone } from "../ui/useMediaQuery";
+import { useIsPhone, useMediaQuery } from "../ui/useMediaQuery";
+import { useElementHeight } from "../ui/useElementHeight";
 
 // Themeable via --font-heading/--font-heading-weight (set by ThemeProvider
 // from tokens.chrome.headingFont/headingWeight); both fall back to a no-op
 // (this element's own weight class) outside a themed page, or when a theme
 // sets a font but not a weight.
 const HEADING_FONT: CSSProperties = { fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" };
+
+// The wide layout (the teams and the pool table side by side) takes a window with room for every team's column at its
+// minimum (TeamRoster's 140px + the 12px gap) and the table at a usable width beside them. Below that they stack.
+const TEAM_COLUMN = 152;
+// The teams panel's own padding, border and the scroller's shadow room.
+const TEAMS_PANEL_CHROME = 44;
+// Enough of the pool table to read: the pinned name and Draft columns and most of the stats, before it scrolls sideways.
+const POOL_MIN = 1000;
+// The page's side padding and the gap between the two.
+const PAGE_CHROME = 72;
 
 function PickOrderDialog({
   isOpen,
@@ -107,6 +118,12 @@ export function DraftRoom({ slug }: { slug: string }) {
   const phone = useIsPhone();
   const { data: shell } = useBingo(slug);
   const { data: state, error: stateError } = useDraftState(slug);
+  const teamsWidth = (state?.teams.length ?? 0) * TEAM_COLUMN + TEAMS_PANEL_CHROME;
+  const roomy = useMediaQuery(`(min-width: ${teamsWidth + POOL_MIN + PAGE_CHROME}px)`);
+  // Side by side, the pool is pinned under the page header (sticky), whose height is measured.
+  const [pageHeader, setPageHeader] = useState<Element | null>(null);
+  useEffect(() => setPageHeader(document.querySelector("header")), []);
+  const headerHeight = useElementHeight(pageHeader);
   const { data: questionsData } = useSignupQuestions(slug);
   // The pool's answer columns: only questions whose answers this viewer gets (captains see fewer than mods/admins).
   const answerViewer = useAnswerViewer(slug);
@@ -436,6 +453,75 @@ export function DraftRoom({ slug }: { slug: string }) {
     );
   }
 
+  // The teams (or, once the draft is done, the final teams): the same panel in both desktop layouts.
+  const teamsPanel =
+    finalTeams ?? (
+      // While a pick is on the clock, the banner is the panel's header strip rather than a card of its own above
+      // it: one block, and the rosters sit right under whose turn it is. Not pinned: it grows with the picks
+      // (below), and a pinned panel taller than the window would sit over the pool.
+      <Panel
+        title={onTheClock ? undefined : "Teams"}
+        header={banner}
+        // Room above for a theme's sticker over the top edge.
+        className={onTheClock ? "mt-4" : undefined}
+      >
+        {/* grid-flow-col + a minimum column width, in a row that scrolls
+            sideways — handles a handful of teams (spread to fill width) and
+            a large number of teams (scrolls instead of squeezing RSNs
+            unreadable). Every pick shows: it grows down, never scrolls. pb-1/pr-1:
+            room for the slips' hard shadows, which would otherwise count as overflow (a
+            sideways scroller clips vertically too) and bring up a stray scrollbar. */}
+        <div className="overflow-x-auto pb-1 pr-1">
+          <div className="grid auto-cols-[minmax(140px,1fr)] grid-flow-col gap-3">{rosters}</div>
+        </div>
+        {state.teams.length === 0 && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
+      </Panel>
+    );
+
+  const poolPanel = (wide: { pinnedTop: number } | null) => (
+    <Panel className="transition-shadow" style={poolGlow}>
+      <DraftPoolGrid
+        pool={state.pool}
+        questions={questions}
+        ratings={isLead ? state.ratings : null}
+        onRate={handleRate}
+        canPick={canAct}
+        onPick={handlePick}
+        picking={makePick.isPending}
+        leftoverMode={shell.bingo.leftoverMode}
+        pinnedTop={wide?.pinnedTop}
+        widthSwitch={!wide}
+        heading={
+          // data-panel-heading: a theme's panel can letter it like its own titles.
+          <h3 data-panel-heading="" className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+            Available players <span className="num font-normal text-on-surface-subtle">({poolCount})</span>
+          </h3>
+        }
+      />
+    </Panel>
+  );
+
+  // A very wide window: the teams and the pool side by side, the teams as wide as their columns need (growing with
+  // the window) and the pool taking the rest. The pool is pinned under the page header, so it stays put while the
+  // teams column, which grows with the picks, scrolls. Its top at rest is where it pins (the page's pt-6 below the
+  // header, and the teams panel's room for the banner's sticker while a pick is on the clock, so the two line up), so
+  // the table fits the window either way.
+  if (roomy && state.teams.length > 0 && !draftComplete) {
+    const pinnedTop = headerHeight + 24 + (onTheClock ? 16 : 0);
+    return (
+      <div className="grid items-start gap-6 px-6 pb-6 pt-6" style={{ gridTemplateColumns: `minmax(${teamsWidth}px, 2fr) minmax(0, 3fr)` }}>
+        <div className="min-w-0 space-y-6">
+          {status}
+          {teamsPanel}
+          {extras}
+        </div>
+        <div data-pinned-pool="" className={`sticky min-w-0 ${onTheClock ? "mt-4" : ""}`} style={{ top: pinnedTop }}>
+          {poolPanel({ pinnedTop })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     // Only the pool table itself goes full width — everything above it (status/notices, the teams row, "Available
     // players" heading) stays at the original reading width (max-w-5xl). A Fragment root, not one div, so the
@@ -444,55 +530,13 @@ export function DraftRoom({ slug }: { slug: string }) {
     <div>
       <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-6">
         {status}
-
-        {finalTeams ?? (
-          // While a pick is on the clock, the banner is the panel's header strip rather than a card of its own above
-          // it: one block, and the rosters sit right under whose turn it is. Not pinned: it grows with the picks
-          // (below), and a pinned panel taller than the window would sit over the pool.
-          <Panel
-            title={onTheClock ? undefined : "Teams"}
-            header={banner}
-            // Room above for a theme's sticker over the top edge.
-            className={onTheClock ? "mt-4" : undefined}
-          >
-            {/* grid-flow-col + a minimum column width, in a row that scrolls
-                sideways — handles a handful of teams (spread to fill width) and
-                a large number of teams (scrolls instead of squeezing RSNs
-                unreadable). Every pick shows: it grows down, never scrolls. pb-1/pr-1:
-                room for the slips' hard shadows, which would otherwise count as overflow (a
-                sideways scroller clips vertically too) and bring up a stray scrollbar. */}
-            <div className="overflow-x-auto pb-1 pr-1">
-              <div className="grid auto-cols-[minmax(140px,1fr)] grid-flow-col gap-3">{rosters}</div>
-            </div>
-            {state.teams.length === 0 && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
-          </Panel>
-        )}
-
+        {teamsPanel}
         {extras}
       </div>
 
       {/* The one thing that actually breaks out of max-w-5xl above (while "Full width" is on) — everything else in
           this component (the status cards, the teams row, the pick/clan-API notices) stays reading-width. */}
-      <div className={`mt-6 w-full px-6 pb-6 ${poolWidth === "narrow" ? "mx-auto max-w-5xl" : ""}`}>
-        <Panel className="transition-shadow" style={poolGlow}>
-          <DraftPoolGrid
-            pool={state.pool}
-            questions={questions}
-            ratings={isLead ? state.ratings : null}
-            onRate={handleRate}
-            canPick={canAct}
-            onPick={handlePick}
-            picking={makePick.isPending}
-            leftoverMode={shell.bingo.leftoverMode}
-            heading={
-              // data-panel-heading: a theme's panel can letter it like its own titles.
-              <h3 data-panel-heading="" className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
-                Available players <span className="num font-normal text-on-surface-subtle">({poolCount})</span>
-              </h3>
-            }
-          />
-        </Panel>
-      </div>
+      <div className={`mt-6 w-full px-6 pb-6 ${poolWidth === "narrow" ? "mx-auto max-w-5xl" : ""}`}>{poolPanel(null)}</div>
     </div>
   );
 }
