@@ -54,9 +54,10 @@ export interface AuditDetailsMap {
   "item_group.updated": { changes: FieldChanges<{ name: string; description: string | null }>; items: { added: string[]; removed: string[] } };
   "item_group.deleted": { name: string; itemNames: string[] };
 
-  "piece_value.created": { pieceItemName: string; wholeItemName: string; divisor: number; otherPieces: string[] };
-  "piece_value.updated": { changes: FieldChanges<{ pieceItemName: string; wholeItemName: string; divisor: number; otherPieces: string[] }> };
-  "piece_value.deleted": { pieceItemName: string; wholeItemName: string; divisor: number; otherPieces: string[] };
+  // wholeQuantity is absent in entries written before it existed (read as 1).
+  "piece_value.created": { pieceItemName: string; wholeItemName: string; wholeQuantity?: number; divisor: number; otherPieces: string[] };
+  "piece_value.updated": { changes: FieldChanges<{ pieceItemName: string; wholeItemName: string; wholeQuantity: number; divisor: number; otherPieces: string[] }> };
+  "piece_value.deleted": { pieceItemName: string; wholeItemName: string; wholeQuantity?: number; divisor: number; otherPieces: string[] };
   "piece_value.item_dismissed": { itemName: string };
   "piece_value.item_restored": { itemName: string };
 
@@ -360,7 +361,8 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     label: (i) => {
       // Entries written before Other pieces existed have no otherPieces.
       const others = (i.details.otherPieces ?? []).map((o) => ` − ${o}`).join("");
-      return `${actor(i)} valued ${i.details.pieceItemName} as ${others ? `(${i.details.wholeItemName}${others})` : i.details.wholeItemName} ÷ ${i.details.divisor}`;
+      const whole = `${(i.details.wholeQuantity ?? 1) > 1 ? `${i.details.wholeQuantity}× ` : ""}${i.details.wholeItemName}`;
+      return `${actor(i)} valued ${i.details.pieceItemName} as ${others ? `(${whole}${others})` : whole} ÷ ${i.details.divisor}`;
     },
   },
   "piece_value.updated": {

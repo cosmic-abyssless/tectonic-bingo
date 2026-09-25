@@ -23,6 +23,8 @@ export interface OtherPiece {
 export interface PieceValueInput {
   pieceItemName: string;
   wholeItemName: string;
+  /** How many of the whole item (Dizana's quiver is 4000× Sunfire splinters). Defaults to 1. */
+  wholeQuantity: number;
   divisor: number;
   otherPieces: OtherPiece[];
 }
@@ -35,6 +37,7 @@ export function getPieceValues(db: Db | Tx, table: GePriceTable = getGePriceTabl
       id: rule.id,
       pieceItemName: rule.pieceItemName,
       wholeItemName: rule.wholeItemName,
+      wholeQuantity: rule.wholeQuantity,
       divisor: rule.divisor,
       otherPieces: rule.otherPieces,
       unitPrice: pieceUnitPrice(table, rule),
@@ -76,8 +79,10 @@ function validate(db: Db, table: GePriceTable, input: Partial<PieceValueInput>, 
   const pieceItemName = input.pieceItemName?.trim();
   const wholeItemName = input.wholeItemName?.trim();
   const divisor = input.divisor;
+  const wholeQuantity = input.wholeQuantity ?? 1;
   if (!pieceItemName || !wholeItemName) throw new ServiceError(400, "pieceItemName and wholeItemName are required");
   if (typeof divisor !== "number" || !Number.isInteger(divisor) || divisor < 1) throw new ServiceError(400, "divisor must be a whole number of at least 1");
+  if (typeof wholeQuantity !== "number" || !Number.isInteger(wholeQuantity) || wholeQuantity < 1) throw new ServiceError(400, "wholeQuantity must be a whole number of at least 1");
   const otherPieces = validOtherPieces(input.otherPieces);
 
   const priced = [wholeItemName, ...otherPieces.map((o) => o.itemName)];
@@ -94,7 +99,7 @@ function validate(db: Db, table: GePriceTable, input: Partial<PieceValueInput>, 
   }
   const usedBy = others.find((p) => [p.wholeItemName, ...p.otherPieces.map((o) => o.itemName)].some((name) => key(name) === key(pieceItemName)));
   if (usedBy) throw new ServiceError(400, `"${pieceItemName}" is used to value ${usedBy.pieceItemName}, so it can't be a piece`);
-  return { pieceItemName, wholeItemName, divisor, otherPieces };
+  return { pieceItemName, wholeItemName, wholeQuantity, divisor, otherPieces };
 }
 
 function writeOtherPieces(tx: Tx, pieceValueId: string, otherPieces: OtherPiece[]) {
@@ -165,7 +170,7 @@ export function deletePieceValue(db: Db, id: string): void {
       action: "piece_value.deleted",
       bingoId: null,
       entity: { type: "piece_value", id, label: existing.pieceItemName },
-      details: { pieceItemName: existing.pieceItemName, wholeItemName: existing.wholeItemName, divisor: existing.divisor, otherPieces: describeOtherPieces(otherPieces) },
+      details: { pieceItemName: existing.pieceItemName, wholeItemName: existing.wholeItemName, wholeQuantity: existing.wholeQuantity, divisor: existing.divisor, otherPieces: describeOtherPieces(otherPieces) },
     });
   });
 }

@@ -1064,10 +1064,12 @@ export interface PieceValue {
   id: string;
   pieceItemName: string;
   wholeItemName: string;
+  /** How many of the whole item the piece is valued from (Dizana's quiver is 4000× Sunfire splinters). Usually 1. */
+  wholeQuantity: number;
   divisor: number;
   /** The whole item's Other pieces, subtracted before dividing. */
   otherPieces: { itemName: string; quantity: number }[];
-  /** What one piece is worth at today's prices: (whole − other pieces) ÷ divisor. Null while prices aren't loaded, or when it works out to nothing (an item with no price, or zero or less). */
+  /** What one piece is worth at today's prices: (quantity × whole − other pieces) ÷ divisor. Null while prices aren't loaded, or when it works out to nothing (an item with no price, or zero or less). */
   unitPrice: number | null;
 }
 

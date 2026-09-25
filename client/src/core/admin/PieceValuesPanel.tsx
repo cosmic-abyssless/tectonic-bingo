@@ -14,7 +14,7 @@ import { WikiItemLink } from "../ui/WikiItemLink";
 import { ItemSearchInput } from "../ui/ItemSearchInput";
 
 type OtherPiece = { itemName: string; quantity: number };
-type PieceValueInput = { pieceItemName: string; wholeItemName: string; divisor: number; otherPieces: OtherPiece[] };
+type PieceValueInput = { pieceItemName: string; wholeItemName: string; wholeQuantity: number; divisor: number; otherPieces: OtherPiece[] };
 // An other piece being edited: the quantity as typed, and a stable key so removing a row doesn't reshuffle inputs.
 type OtherPieceDraft = { key: number; itemName: string; quantity: string };
 
@@ -28,6 +28,7 @@ function Formula({ pieceValue }: { pieceValue: PieceValueInput }) {
   return (
     <span className="min-w-0">
       {others.length > 0 && "("}
+      {pieceValue.wholeQuantity > 1 && `${pieceValue.wholeQuantity.toLocaleString()}× `}
       <WikiItemLink name={pieceValue.wholeItemName} />
       {others.map((o) => (
         <Fragment key={o.itemName}>
@@ -51,12 +52,13 @@ interface PieceValueFormProps {
 function PieceValueForm({ initial, submitLabel, onSave, onCancel }: PieceValueFormProps) {
   const [piece, setPiece] = useState(initial?.pieceItemName ?? "");
   const [whole, setWhole] = useState(initial?.wholeItemName ?? "");
+  const [wholeQuantity, setWholeQuantity] = useState(String(initial?.wholeQuantity ?? 1));
   const [divisor, setDivisor] = useState(String(initial?.divisor ?? 1));
   const [others, setOthers] = useState<OtherPieceDraft[]>(() => (initial?.otherPieces ?? []).map(draftOf));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const filledOthers = others.filter((o) => o.itemName.trim());
-  const valid = piece.trim() && whole.trim() && isWholeNumber(divisor) && filledOthers.every((o) => isWholeNumber(o.quantity));
+  const valid = piece.trim() && whole.trim() && isWholeNumber(wholeQuantity) && isWholeNumber(divisor) && filledOthers.every((o) => isWholeNumber(o.quantity));
   const setOther = (key: number, patch: Partial<OtherPieceDraft>) => setOthers((list) => list.map((o) => (o.key === key ? { ...o, ...patch } : o)));
 
   async function save() {
@@ -66,6 +68,7 @@ function PieceValueForm({ initial, submitLabel, onSave, onCancel }: PieceValueFo
       await onSave({
         pieceItemName: piece.trim(),
         wholeItemName: whole.trim(),
+        wholeQuantity: Number(wholeQuantity),
         divisor: Number(divisor),
         otherPieces: filledOthers.map((o) => ({ itemName: o.itemName.trim(), quantity: Number(o.quantity) })),
       });
@@ -73,6 +76,7 @@ function PieceValueForm({ initial, submitLabel, onSave, onCancel }: PieceValueFo
       if (!onCancel) {
         setPiece("");
         setWhole("");
+        setWholeQuantity("1");
         setDivisor("1");
         setOthers([]);
       }
@@ -85,9 +89,13 @@ function PieceValueForm({ initial, submitLabel, onSave, onCancel }: PieceValueFo
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_6rem]">
+      <div className="grid gap-2 sm:grid-cols-[1fr_6rem_1fr_6rem]">
         <Field label="Piece">
           <ItemSearchInput ariaLabel="Piece" placeholder="e.g. Ultor vestige" value={piece} onChange={setPiece} onPickItem={setPiece} />
+        </Field>
+        {/* Read left to right as the formula: piece = how many × whole item ÷ N (Dizana's quiver = 4000 × Sunfire splinters). */}
+        <Field label="How many">
+          <Input aria-label="How many of the whole item" type="number" min={1} step={1} value={wholeQuantity} onChange={(e) => setWholeQuantity(e.target.value)} />
         </Field>
         <Field label="Whole item">
           <ItemSearchInput ariaLabel="Whole item" placeholder="e.g. Ultor ring" value={whole} onChange={setWhole} onPickItem={setWhole} />
