@@ -9,10 +9,22 @@ export class ApiError extends Error {
   }
 }
 
+// The device's IANA zone, sent on every request (Achievements' "device clock" rule — CONTEXT.md "Achievement",
+// server/src/audit/context.ts getTimezone). Never blocks a request: an unresolvable zone just falls back server-side.
+function clientTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return "UTC";
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path, { credentials: "include", ...init });
+    // Merged so init's own headers (jsonInit's Content-Type, or postForm's none) still win on conflicts — this
+    // only adds the timezone alongside them.
+    res = await fetch(path, { credentials: "include", ...init, headers: { "X-Client-Timezone": clientTimezone(), ...init?.headers } });
   } catch (err) {
     const message = err instanceof Error ? err.message : "network error";
     reportClientError(`${path} ${message}`, "api.network");

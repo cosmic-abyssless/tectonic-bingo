@@ -232,6 +232,13 @@
       "when": 1790367209757,
       "tag": "0032_site_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1790368285587,
+      "tag": "0033_player_achievements",
+      "breakpoints": true
     }
   ]
 }

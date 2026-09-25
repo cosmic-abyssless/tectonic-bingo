@@ -10,6 +10,9 @@ import { BoardPageLayout } from "./page/BoardPageLayout";
 import { DraftPageLayout } from "./page/DraftPageLayout";
 import { StatsPageLayout } from "./page/StatsPageLayout";
 import { DraftPickBurst } from "./draft/DraftPickBurst";
+import { AchievementUnlockCard } from "./achievements/AchievementUnlockCard";
+import { AchievementRow } from "./achievements/AchievementRow";
+import { AchievementTotal } from "./achievements/AchievementTotal";
 import { PageLoading, PageError } from "./page/PageStates";
 import { PageHeader } from "./page/PageHeader";
 import { TeamSelector } from "./page/TeamSelector";
@@ -56,6 +59,9 @@ export const defaultTheme: ThemeDefinition = {
     DraftPage: DraftPageLayout,
     StatsPage: StatsPageLayout,
     DraftPickBurst,
+    AchievementUnlockCard,
+    AchievementRow,
+    AchievementTotal,
     OnTheClockBanner,
     PageLoading,
     PageError,

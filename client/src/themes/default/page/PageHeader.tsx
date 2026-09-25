@@ -1,9 +1,11 @@
 import type { BingoPageModel } from "../../../headless/types";
 import { useAuth } from "../../../context/AuthContext";
+import { useAchievementsEligible, useOpenAchievements } from "../../../core/achievements/AchievementsProvider";
 import { AppHeader } from "../../../core/ui/AppHeader";
 import { Button } from "../../../core/ui/Button";
 import { Badge } from "../../../core/ui/Card";
 import { CountdownTimer } from "../../../core/ui/CountdownTimer";
+import { MenuItem } from "../../../core/ui/Menu";
 import { UsersIcon } from "../../../core/ui/icons";
 import { useSlot } from "../../context";
 
@@ -11,6 +13,8 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
   const { user, devMode } = useAuth();
   const TeamSelector = useSlot("TeamSelector");
   const TeamBadge = useSlot("TeamBadge");
+  const achievementsEligible = useAchievementsEligible();
+  const openAchievements = useOpenAchievements();
 
   return (
     <AppHeader
@@ -28,6 +32,7 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
           page.bingo.stageLabel
         )
       }
+      menuItems={achievementsEligible && openAchievements ? <MenuItem id="achievements" onAction={openAchievements}>Achievements</MenuItem> : undefined}
     >
       {page.isMod && page.teams.length > 0 && (
         <>

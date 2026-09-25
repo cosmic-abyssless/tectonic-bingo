@@ -15,6 +15,7 @@ import { effectiveStartsAt, endedAt } from "./bingoStart";
 import { TESTDATA_PREFIX } from "./devTestDataService";
 import { rsnsInBingo } from "./playerNames";
 import { getWomClient, parseSnapshots, type WomClient, type WomSnapshot } from "./womService";
+import * as achievementService from "./achievementService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -88,6 +89,8 @@ export async function readPlayer(db: Db, client: WomClient, job: ReadJob, opts: 
     if (state) tx.update(womReads).set(read).where(where).run();
     else tx.insert(womReads).values({ bingoId: bingo.id, userId: job.userId, ...read }).run();
   });
+  // Achievements (CONTEXT.md): Leech looks at the clue counts just stored. After the commit, and never fails the read.
+  achievementService.recordWomSnapshotsRead(db, bingo.id, job.userId);
   return "read";
 }
 

@@ -11,6 +11,7 @@
 
 import type { ExclusivityRule } from "./exclusivity.ts";
 import type { AuditVisibility } from "./audit.ts";
+import type { AchievementCount } from "./achievements.ts";
 import type { PlayerTitleFacts, TitleSettings } from "./titles.ts";
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
@@ -139,6 +140,9 @@ export interface Bingo {
   draftStarted: boolean;
   createdByUserId: string;
   createdAt: string;
+  // Achievements master switch (CONTEXT.md "Achievement"): off hides every Achievement from reads, counts and
+  // popups for this bingo, but earning keeps happening in the background (see achievementService.ts).
+  achievementsEnabled: boolean;
 }
 
 export interface TileCategory {
@@ -910,6 +914,9 @@ export interface PlayerProfile {
   // newest first. Best-effort: only covers competitions where one of this
   // user's signup RSNs (any bingo, past or present) appears in the roster.
   pastBingoStats: PastBingoParticipation[];
+  // Earned / total switched-on Achievements (CONTEXT.md "Achievement") for this bingo — count only, never which
+  // ones: other players' individual Achievements stay personal. Null when the feature is switched off.
+  achievements: AchievementCount | null;
 }
 
 export interface DraftTeam extends Team {
@@ -1145,8 +1152,13 @@ export type BroadcastEvent =
   // A bug report was filed or its status changed. Site-wide, not bingo-scoped
   // — id only, per the unauthenticated-broadcast rule above. Clients refetch
   // the admin list and their own reports under their own auth.
-  | { type: "bug_report_changed"; payload: { id: string } };
+  | { type: "bug_report_changed"; payload: { id: string } }
+  // A player earned (or unlocked, on switching an Achievement back on) an Achievement, or a Big spender popup
+  // finished pricing. Id only, per the unauthenticated-broadcast rule above — the client refetches "my
+  // Achievements" only when the userId is its own signed-in user.
+  | { type: "achievements_changed"; bingoId: string; payload: { userId: string } };
 
+export * from "./achievements.ts";
 export * from "./audit.ts";
 export * from "./auditCondense.ts";
 export * from "./bingoExport.ts";

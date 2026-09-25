@@ -59,6 +59,11 @@ export interface PlayerTitleFacts {
   wom: WomGains | null;
   /** Null without a Wise Old Man snapshot from before the Bingo: their drops can't be judged. */
   luck: LuckFacts | null;
+  /**
+   * The Achievements (CONTEXT.md) they've earned that are switched on in this Bingo, and when they earned the latest of
+   * them (reaching that count). Null when the Bingo has Achievements switched off.
+   */
+  achievements: { earned: number; lastEarnedAt: string | null } | null;
 }
 
 /** The luck Titles' tunable numbers (luck.ts on the server applies them). */
@@ -109,7 +114,8 @@ export type TitleId =
   | "tourist"
   | "specialist"
   | "hoarder"
-  | "postman";
+  | "postman"
+  | "overachiever";
 
 export interface TitleDefinition {
   id: TitleId;
@@ -132,6 +138,11 @@ export interface TitleDefinition {
   requirement: (min: number, luck: LuckWeights) => string;
   /** The number behind a holder's Title: "42% of the team's points". */
   format: (value: number, facts: PlayerTitleFacts, ctx: TitleContext) => string;
+  /**
+   * Optional: breaks a tie at the best value, lowest first, so only one Player holds the Title (e.g. who got there
+   * first). Without one, tied Players share it.
+   */
+  tieBreak?: (facts: PlayerTitleFacts) => number;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -402,6 +413,20 @@ export const TITLES: TitleDefinition[] = [
     requirement: (min) => `Post ${plural(min, "submission")} for teammates`,
     format: (v) => `Posted ${plural(v, "submission")} for teammates`,
   },
+  {
+    id: "overachiever",
+    name: "Overachiever",
+    flavour: "Collected them all. Well, most of them.",
+    hidden: false,
+    source: "bingo",
+    measure: (f) => f.achievements?.earned ?? null,
+    minimum: { default: 5, label: "Achievements earned", whole: true },
+    qualifies: (v, _f, min) => v >= min,
+    requirement: (min) => `Earn at least ${plural(min, "achievement")}`,
+    format: (v) => `Earned ${plural(v, "achievement")}`,
+    // No sharing it: of the Players tied at the most, whoever reached that count first.
+    tieBreak: (f) => (f.achievements?.lastEarnedAt ? new Date(f.achievements.lastEarnedAt).getTime() : Infinity),
+  },
 ];
 
 export interface TitleHolder {
@@ -444,8 +469,13 @@ export function pickTitles(pool: PlayerTitleFacts[], ctx: TitleContext, settings
       if (value !== null && Number.isFinite(value) && title.qualifies(value, facts, min)) qualifying.push({ facts, value });
     }
     const best = qualifying.reduce((max, q) => Math.max(max, q.value), -Infinity);
-    const holders = qualifying
-      .filter((q) => tied(q.value, best))
+    let top = qualifying.filter((q) => tied(q.value, best));
+    if (title.tieBreak && top.length > 1) {
+      const breakOf = new Map(top.map((q) => [q, title.tieBreak!(q.facts)]));
+      const first = Math.min(...breakOf.values());
+      top = top.filter((q) => breakOf.get(q) === first);
+    }
+    const holders = top
       .map((q) => ({
         userId: q.facts.userId,
         value: q.value,

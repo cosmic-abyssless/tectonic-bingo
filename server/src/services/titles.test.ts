@@ -20,6 +20,7 @@ function player(userId: string, facts: Partial<PlayerTitleFacts> = {}): PlayerTi
     totalQuantity: 0,
     wom: null,
     luck: null,
+    achievements: null,
     ...facts,
   };
 }
@@ -30,6 +31,25 @@ function award(points: number, hours: number, extra: Partial<TitleAwardFact> = {
 
 const TITLE_BY_ID = (id: TitleId) => TITLES.find((t) => t.id === id)!;
 const holdersOf = (pool: PlayerTitleFacts[], id: TitleId, ctx = live(48)) => pickTitles(pool, ctx).find((p) => p.title.id === id)?.holders.map((h) => h.userId);
+
+describe("Overachiever", () => {
+  const earned = (n: number, hours: number) => ({ achievements: { earned: n, lastEarnedAt: at(hours).toISOString() } });
+
+  it("goes to the Player with the most Achievements", () => {
+    const pool = [player("a", earned(6, 5)), player("b", earned(8, 9)), player("c", earned(7, 1))];
+    expect(holdersOf(pool, "overachiever")).toEqual(["b"]);
+  });
+
+  it("isn't shared: of the Players tied at the most, whoever reached that count first holds it", () => {
+    const pool = [player("a", earned(8, 12)), player("b", earned(8, 3)), player("c", earned(8, 7))];
+    expect(holdersOf(pool, "overachiever")).toEqual(["b"]);
+  });
+
+  it("needs the minimum (5 by default), and nobody's eligible with Achievements switched off", () => {
+    expect(holdersOf([player("a", earned(4, 1))], "overachiever")).toEqual([]);
+    expect(holdersOf([player("a")], "overachiever")).toEqual([]); // achievements: null
+  });
+});
 
 describe("pickTitles", () => {
   it("gives Carry to the biggest share of their own Team's points", () => {

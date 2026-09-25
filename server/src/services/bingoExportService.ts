@@ -15,6 +15,7 @@ import { ServiceError } from "./errors";
 import * as bingoService from "./bingoService";
 import * as boardService from "./boardService";
 import * as signupService from "./signupService";
+import * as achievementService from "./achievementService";
 import { setNodeGates } from "./graphService";
 import { decodeExportImage, readTileImage, removeFiles, storeTileImage, type DecodedImage } from "./exportImages";
 import { log } from "../log";
@@ -155,6 +156,7 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
     tiles,
     lines,
     signupQuestions,
+    achievementKeys: achievementService.getEnabledAchievementKeys(db, bingoId),
   };
 }
 
@@ -179,6 +181,9 @@ function assertValidDocument(doc: BingoExportDocument): void {
     throw new ServiceError(400, "Malformed import file: unknown leftover mode");
   }
   if (doc.bingo.exclusivityRules !== undefined) bingoService.normalizeExclusivityRules(doc.bingo.exclusivityRules);
+  if (doc.achievementKeys !== undefined && !Array.isArray(doc.achievementKeys)) {
+    throw new ServiceError(400, "Malformed import file: achievementKeys must be an array");
+  }
   for (const t of doc.tiles) {
     if (t.bonusPoints !== undefined && (!Number.isInteger(t.bonusPoints) || t.bonusPoints < 0)) {
       throw new ServiceError(400, `Malformed import file: tile "${t.name}" has an invalid bonus`);
@@ -369,6 +374,10 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
     for (const q of doc.signupQuestions) {
       signupService.createQuestion(tx, { bingoId: bingo.id, prompt: q.prompt, helperText: q.helperText ?? null, type: q.type, optionsJson: q.optionsJson, required: q.required, sortOrder: q.sortOrder, visibility: q.visibility ?? "captains" });
     }
+
+    // Achievements (CONTEXT.md): createBingo above switched every catalogue key on (the default for a brand-new
+    // bingo); a document with an explicit list restricts it to exactly those. Absent means "all on", already true.
+    if (doc.achievementKeys !== undefined) achievementService.restrictAchievementSettingsTo(tx, bingo.id, doc.achievementKeys);
 
     return bingo;
   });

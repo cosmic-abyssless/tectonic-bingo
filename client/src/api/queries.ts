@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  AccountTypesResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
-  MinimalUser, ModSubmissionsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, UnpairedSignupsResponse, PendingCountResponse,
+  AccountTypesResponse, AchievementKey, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
+  MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   PickRating, PlayerProfile, StatsResponse, SubmissionReaction, SubmissionReactionGroup, Team, TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
@@ -39,6 +39,7 @@ export const queryKeys = {
   auditLog: (slug: string, filters: AuditLogFilters) => ["auditLog", slug, filters] as const,
   teamActivity: (slug: string, teamId: string) => ["teamActivity", slug, teamId, "condensed"] as const,
   myBugReports: () => ["myBugReports"] as const,
+  myAchievements: (slug: string) => ["myAchievements", slug] as const,
 };
 
 export function useBingos() {
@@ -133,6 +134,8 @@ export function useSetTileInterest(slug: string) {
         }),
         () => api.put<TeamProgressSummary>(`/api/bingos/${slug}/tiles/${tileId}/tasks/${taskId}/interest`, { interested }),
       ),
+    // Eager beaver can be earned by marking interest — refetch so its popup shows on this device right away.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.myAchievements(slug) }),
   });
 }
 
@@ -150,6 +153,8 @@ export function useSetSubmissionReaction(slug: string) {
         }),
         () => api.put(`/api/bingos/${slug}/submissions/${submissionId}/reactions`, { emoji, reacted }),
       ),
+    // Hypeman/Cheerleader/Superfan/Main character can be earned by reacting — refetch so its popup shows right away.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.myAchievements(slug) }),
   });
 }
 
@@ -195,6 +200,8 @@ export function useCreateSubmission(slug: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["teamProgress", slug] });
       queryClient.invalidateQueries({ queryKey: ["teamSubmissions", slug] });
+      // Strong start/Partner slayer/Night owl/Regular/... can be earned by posting — refetch for an immediate popup.
+      queryClient.invalidateQueries({ queryKey: queryKeys.myAchievements(slug) });
     },
   });
 }
@@ -611,5 +618,32 @@ export function usePlayerProfile(slug: string, userId: string | null) {
     queryFn: () => api.get<{ player: PlayerProfile }>(`/api/bingos/${slug}/players/${userId}`),
     enabled: !!userId,
     staleTime: 60_000,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Achievements (CONTEXT.md "Achievement")
+// ---------------------------------------------------------------------------
+
+/** The signed-in player's Achievements for this bingo, and any unlock popups not yet shown. `enabled` lets a caller skip the request when the viewer isn't eligible (not a Player on a Team, or the feature is off). */
+export function useMyAchievements(slug: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.myAchievements(slug),
+    queryFn: () => api.get<MyAchievementsResponse>(`/api/bingos/${slug}/achievements`),
+    enabled,
+  });
+}
+
+/** Reports popups the player's device has just played, so they don't play again (see AchievementPopupHost). */
+export function useMarkAchievementPopupsShown(slug: string) {
+  return useMutation({
+    mutationFn: (keys: AchievementKey[]) => api.post<void>(`/api/bingos/${slug}/achievements/popups-shown`, { keys }),
+  });
+}
+
+/** Fire-and-forget signal that a Tile's details, the Rules, or the Stats page were opened (always 204; the server ignores ineligible callers). */
+export function useRecordAchievementOpened(slug: string) {
+  return useMutation({
+    mutationFn: (payload: { kind: "tile"; tileId: string } | { kind: "rules" } | { kind: "stats" }) => api.post<void>(`/api/bingos/${slug}/achievements/opened`, payload),
   });
 }

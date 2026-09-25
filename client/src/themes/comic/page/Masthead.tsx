@@ -21,6 +21,8 @@ export function Masthead({
   status,
   onShowRules,
   submissions,
+  menuItems,
+  extraMenuEntries = [],
   children,
 }: {
   slug: string;
@@ -32,6 +34,10 @@ export function Masthead({
   onShowRules: () => void;
   /** The board's submissions drawer: its button, with the viewed team's pending count. */
   submissions?: { pending: number; onShow: () => void };
+  /** Extra items for the avatar menu (AppHeader's own account menu), e.g. Achievements. */
+  menuItems?: ReactNode;
+  /** Extra entries appended to the narrow-screen hamburger, after the built-in ones. */
+  extraMenuEntries?: HeaderMenuEntry[];
   /** After the page links (the board's Submit). */
   children?: ReactNode;
 }) {
@@ -70,6 +76,7 @@ export function Masthead({
           },
         ]
       : []),
+    ...extraMenuEntries,
   ];
 
   return (
@@ -87,6 +94,7 @@ export function Masthead({
           <HeaderMenu entries={menuEntries} />
         </div>
       }
+      menuItems={menuItems}
       {...comicHeaderProps()}
     >
       {/* The two route changes are links; everything after them acts on the page and stays a button. The mod panel

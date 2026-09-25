@@ -12,6 +12,7 @@ import { StageControls } from "../core/mod/StageControls";
 import { SignupRoster } from "../core/mod/SignupRoster";
 import { BingoSettingsForm } from "../core/admin/BingoSettingsForm";
 import { ModsManager } from "../core/admin/ModsManager";
+import { AchievementsManager } from "../core/admin/AchievementsManager";
 import { BoardEditor } from "../core/admin/BoardEditor";
 import { LineEditor } from "../core/admin/LineEditor";
 import { QuestionBuilder } from "../core/admin/QuestionBuilder";
@@ -40,6 +41,7 @@ const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; unti
   { key: "signups", label: "Signups", adminOnly: false, until: "draft" },
   { key: "audit", label: "Audit log", adminOnly: false },
   { key: "settings", label: "Settings", adminOnly: true },
+  { key: "achievements", label: "Achievements", adminOnly: true },
   { key: "board", label: "Board", adminOnly: true, until: "reveal" },
   { key: "lines", label: "Lines", adminOnly: true, until: "reveal" },
   { key: "questions", label: "Signup questions", adminOnly: true, until: "signup" },
@@ -174,6 +176,11 @@ export function ModPage() {
                 <TabPanel id="settings">
                   <div className={NARROW}>
                     <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} hasSignups={shell.hasSignups} />
+                  </div>
+                </TabPanel>
+                <TabPanel id="achievements">
+                  <div className={NARROW}>
+                    <AchievementsManager slug={slug} bingo={shell.bingo} />
                   </div>
                 </TabPanel>
                 <TabPanel id="board">

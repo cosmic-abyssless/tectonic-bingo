@@ -7,6 +7,7 @@
 // compile-time half of "a new action can't silently escape the log" (the
 // other two are the server's routeCoverage test and the http.mutation
 // fallback — see server/src/audit/routePolicy.ts and middleware.ts).
+import type { AchievementKey } from "./achievements.ts";
 import type { MinimalUser, Stage } from "./index.ts";
 import { playerName } from "./names.ts";
 
@@ -16,7 +17,7 @@ export type AuditActorRole = "admin" | "mod" | "player" | "system";
 // Matches client/src/core/ui/Card.tsx's Badge TONE keys.
 export type AuditTone = "neutral" | "info" | "ok" | "warn" | "danger";
 
-export type AuditCategory = "bingo" | "settings" | "board" | "signup" | "draft" | "team" | "submission" | "points" | "moderation" | "system" | "http" | "bug_report";
+export type AuditCategory = "bingo" | "settings" | "board" | "signup" | "draft" | "team" | "submission" | "points" | "moderation" | "system" | "http" | "bug_report" | "achievement";
 
 export type AuditEntityType =
   | "bingo"
@@ -36,7 +37,8 @@ export type AuditEntityType =
   | "signup"
   | "pairing"
   | "http"
-  | "bug_report";
+  | "bug_report"
+  | "achievement";
 
 /** Changed fields only — before/after per key, never a full row snapshot. */
 export type FieldChanges<T> = { before: Partial<T>; after: Partial<T> };
@@ -89,6 +91,7 @@ export interface AuditDetailsMap {
       womEnabled: boolean;
       womGroupId: string | null;
       womGroupVerificationCode: string;
+      achievementsEnabled: boolean;
     }>;
   };
 
@@ -211,6 +214,9 @@ export interface AuditDetailsMap {
 
   "bug_report.created": { description: string; pageUrl: string | null; palette: string | null };
   "bug_report.status_changed": { status: "open" | "resolved" | "closed"; resolutionMessage: string | null };
+
+  /** A player earned an Achievement (CONTEXT.md). Actor is the player themselves. */
+  "achievement.earned": { key: AchievementKey; name: string };
 }
 
 export interface PointChangeDetails {
@@ -743,6 +749,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Bug report status changed",
     label: (i) => `${actor(i)} marked a bug report ${i.details.status === "resolved" ? "fixed" : i.details.status === "closed" ? "closed" : "reopened"}`,
+  },
+  "achievement.earned": {
+    category: "achievement",
+    tone: "ok",
+    visibility: "mods",
+    title: "Achievement earned",
+    label: (i) => `${actor(i)} earned "${i.details.name}"`,
   },
 };
 

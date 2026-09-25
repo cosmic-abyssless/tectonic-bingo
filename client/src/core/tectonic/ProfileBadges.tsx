@@ -14,8 +14,8 @@ export function TierBadge({ profile, showRank = true }: { profile: TectonicProfi
   );
 }
 
-/** Small thumbnails for Maxed / Grandmaster / Gilded log etc. */
-export function AchievementIcons({ profile, large = false }: { profile: TectonicProfile; large?: boolean }) {
+/** Small thumbnails for the clan's own honours — Maxed / Grandmaster / Gilded log etc. Not Achievements (CONTEXT.md "Achievement" reserves that name for the site's own feature). */
+export function ClanHonourIcons({ profile, large = false }: { profile: TectonicProfile; large?: boolean }) {
   if (profile.achievements.length === 0) return null;
   return (
     <span className={`inline-flex items-center ${large ? "gap-1.5" : "gap-1"}`}>

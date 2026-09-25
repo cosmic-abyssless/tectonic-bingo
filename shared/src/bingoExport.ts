@@ -19,6 +19,7 @@
 // must keep reading every older version forever.
 import type { CutMode, LeftoverMode, NodeKind, QuestionVisibility, SignupMode, SignupQuestionType } from "./index.ts";
 import type { ExclusivityRule } from "./exclusivity.ts";
+import type { AchievementKey } from "./achievements.ts";
 
 export const BINGO_EXPORT_FORMAT_VERSION = 1;
 
@@ -133,4 +134,10 @@ export interface BingoExportDocument {
   tiles: ExportTile[];
   lines: ExportLine[];
   signupQuestions: ExportSignupQuestion[];
+  /**
+   * Which Achievements (CONTEXT.md) are switched on. Absent means every current catalogue key (a file from before
+   * Achievements existed, or an export that didn't change any switch, imports as "all on" — createBingo's default).
+   * The master switch itself isn't carried: an import always starts with it on.
+   */
+  achievementKeys?: AchievementKey[];
 }

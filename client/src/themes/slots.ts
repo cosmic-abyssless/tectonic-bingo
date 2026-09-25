@@ -5,7 +5,7 @@ import type { NoticeProps } from "../core/ui/Card";
 import type { PanelProps } from "../core/ui/Panel";
 import type { TeamRosterProps } from "../core/draft/TeamRoster";
 import type { ReactionBarProps } from "../core/submissions/ReactionBar";
-import type { StageMilestone } from "@bingo/shared";
+import type { MyAchievement, StageMilestone } from "@bingo/shared";
 import type {
   BingoPageModel,
   BoardModel,
@@ -45,6 +45,20 @@ export interface ThemeSlots {
   // draws only the shape — a fixed-size card or burst, no positioning; core handles the pop, the hold and the flight
   // to the roster. One name per drafted player (two for a duo pair). teamColor is null for a team with none.
   DraftPickBurst: ComponentType<{ names: string[]; teamName: string; teamColor: string | null }>;
+  // One Achievement's unlock popup (core/achievements/AchievementUnlockReveal). The theme draws only the card: its own
+  // width, no positioning or motion; core reveals it OSRS-style (a dot on the card's top edge fanning out into a line,
+  // then scanning down with a copy of the card's bottom border on its leading edge), holds it and takes it away. The
+  // card's root must be the bordered box, its top edge a solid line at least 3px thick: the dot and the line show just
+  // the top 2px of it. Shows the Achievement's description with its flavour under it, and a "View my achievements"
+  // link that calls onViewAchievements.
+  AchievementUnlockCard: ComponentType<{ achievement: MyAchievement; onViewAchievements: () => void }>;
+  // One Achievement in the Achievements modal's single-column list (core/achievements/AchievementsModal): earned,
+  // locked (greyed, with progress when it's counted) or masked (a Hidden one not yet earned: "???", nothing else is
+  // known). Shows the description, with its flavour under it once earned.
+  AchievementRow: ComponentType<{ achievement: MyAchievement }>;
+  // The top of the Achievements modal: how many of the switched-on Achievements the Player has earned, as a count and
+  // a progress bar (Hidden ones included in both numbers).
+  AchievementTotal: ComponentType<{ earned: number; total: number }>;
   // One team's column in the draft room (core/draft/TeamRoster): its card, then its picks. Read with useOptionalSlot.
   // Each pick's element must carry data-team-id and data-pick-number (the pick reveal flies to it) and stay invisible
   // while its number is in hiddenPickNumbers.

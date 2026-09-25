@@ -55,6 +55,13 @@
      theme) — same in both schemes, not overridden below. */
   --color-icon-backdrop: #e4e4e7;
 
+  /* The Achievement unlock popup (CONTEXT.md "Achievement"): an OSRS-styled panel, echoing the game's own combat
+     achievement / collection log popups — same palette in both schemes, not overridden below (like gold/silver/bronze). */
+  --color-achievement-surface: oklch(0.22 0.02 55 / 0.94);
+  --color-achievement-border: #a68a52;
+  --color-achievement-title: #ffb830;
+  --color-achievement-body: #ece3cf;
+
   /* A QR code: dark on light, whatever the scheme, since not every camera reads one the other way round. */
   --color-qr: #09090b;
   --color-qr-backdrop: #ffffff;

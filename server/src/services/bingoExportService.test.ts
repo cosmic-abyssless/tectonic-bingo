@@ -12,8 +12,9 @@ import { exportBingo, importBingo, importBingoWithImages } from "./bingoExportSe
 import { createCategory, createTask, createTile, deleteLine, generateLines, getBoardLines, getBoardTiles, updateLinePoints, updateTileBonusPoints } from "./boardService";
 import { createQuestion } from "./signupService";
 import { getBingoBySlug, toPublicBingo, updateBingoSettings } from "./bingoService";
+import * as achievementService from "./achievementService";
 import { ServiceError } from "./errors";
-import type { BingoExportDocument } from "@bingo/shared";
+import { ACHIEVEMENT_KEYS, type BingoExportDocument } from "@bingo/shared";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -168,6 +169,25 @@ describe("importBingo", () => {
     const broken = { ...doc, bingo: { ...doc.bingo, exclusivityRules: [{ id: "x", label: "Pets", itemNames: [], scope: "tile" as const }] } };
     expect(() => importBingo(db, broken, { slug: "broken", name: "Broken", createdByUserId: admin.id })).toThrow(ServiceError);
     expect(getBingoBySlug(db, "broken")).toBeUndefined();
+  });
+
+  it("carries switched-on Achievements over, and switches on every catalogue key when the field is absent", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    const now = new Date("2026-01-01T00:00:00Z");
+    db.transaction((tx) => achievementService.initializeAchievementSettings(tx, source.id, now));
+    db.transaction((tx) => achievementService.applyAchievementSwitches(tx, source.id, { strong_start: false, hypeman: false }));
+    const doc = exportBingo(db, source.id);
+    expect(doc.achievementKeys?.sort()).toEqual(ACHIEVEMENT_KEYS.filter((k) => k !== "strong_start" && k !== "hypeman").slice().sort());
+
+    const imported = importBingo(db, doc, { slug: "some-achievements", createdByUserId: admin.id });
+    const enabled = achievementService.getAchievementSettings(db, imported.id).filter((a) => a.enabled).map((a) => a.key);
+    expect(enabled.sort()).toEqual(doc.achievementKeys!.slice().sort());
+    expect(enabled).not.toContain("strong_start");
+
+    // No achievementKeys field at all (an older export, or one that never touched the switches): every key is on.
+    const { achievementKeys: _dropped, ...docWithoutField } = doc;
+    const importedAll = importBingo(db, docWithoutField, { slug: "all-achievements", createdByUserId: admin.id });
+    expect(achievementService.getAchievementSettings(db, importedAll.id).every((a) => a.enabled)).toBe(true);
   });
 
   it("carries over settings and signup questions", () => {
@@ -426,6 +446,7 @@ describe("every column is accounted for", () => {
         "womEnabled", "womGroupId", "womGroupVerificationCode", "womCompetitionId", "womSyncError", // Wise Old Man: ids, a secret, sync state
         "draftStarted", "draftOrderLockedUntil", // live draft ceremony — not a template setting
         "leftoverMode", // replaced by cutMode, kept only until the column is dropped
+        "achievementsEnabled", // the master switch isn't carried — an import always starts with it on (achievementKeys carries the per-key switches instead)
       ],
     );
   });

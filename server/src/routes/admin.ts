@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { CUT_MODES, type CutMode, type GraphNodeInput } from "@bingo/shared";
+import { CUT_MODES, isAchievementKey, type AchievementKey, type CutMode, type GraphNodeInput } from "@bingo/shared";
+import * as achievementService from "../services/achievementService";
 import path from "path";
 import { UPLOADS_DIR } from "../config";
 import { imageUpload } from "../middleware/upload";
@@ -80,6 +81,22 @@ router.patch(
       const code = body.womGroupVerificationCode ? String(body.womGroupVerificationCode).trim() : "";
       if (code) params.womGroupVerificationCode = code;
     }
+    // Achievements (CONTEXT.md "Achievement"): the master switch, and/or a partial map of per-Achievement switches.
+    if ("achievementsEnabled" in body) {
+      if (typeof body.achievementsEnabled !== "boolean") throw new ServiceError(400, "achievementsEnabled must be a boolean");
+      params.achievementsEnabled = body.achievementsEnabled;
+    }
+    if ("achievements" in body) {
+      const raw = body.achievements;
+      if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new ServiceError(400, "achievements must be an object of key -> boolean");
+      const switches: Partial<Record<AchievementKey, boolean>> = {};
+      for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+        if (!isAchievementKey(key)) throw new ServiceError(400, `Unknown achievement key: ${key}`);
+        if (typeof value !== "boolean") throw new ServiceError(400, `achievements.${key} must be a boolean`);
+        switches[key] = value;
+      }
+      params.achievements = switches;
+    }
     const bingo = bingoService.updateBingoSettings(db, req.bingo!.id, params);
     // Rules decide which claims count, so a change re-scores every team (a rule added mid-event takes effect now).
     if (params.exclusivityRules !== undefined) rescoreBingo(db, req.bingo!.id);
@@ -101,6 +118,15 @@ router.post(
     const groupId = String(body.groupId || req.bingo!.womGroupId || "").trim();
     const verificationCode = String(body.verificationCode || req.bingo!.womGroupVerificationCode || "").trim();
     res.json(await checkWomGroup(groupId, verificationCode));
+  }),
+);
+
+// Every catalogue Achievement's current switch state, for the settings form's "Achievements" section — see
+// achievementService.getAchievementSettings. The master switch is on the bingo shell (achievementsEnabled).
+router.get(
+  "/achievements",
+  asyncHandler(async (req, res) => {
+    res.json({ achievements: achievementService.getAchievementSettings(db, req.bingo!.id) });
   }),
 );
 

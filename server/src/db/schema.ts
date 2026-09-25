@@ -101,6 +101,9 @@ export const bingos = sqliteTable('bingos', {
   draftOrderLockedUntil: integer('draft_order_locked_until', { mode: 'timestamp' }),
   createdByUserId: text('created_by_user_id').notNull().references(() => users.id),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  // Achievements master switch (CONTEXT.md "Achievement"): off hides every Achievement from reads, counts and
+  // popups, but earning keeps happening in the background — see achievementService.ts and bingoAchievementSettings.
+  achievementsEnabled: integer('achievements_enabled', { mode: 'boolean' }).notNull().default(true),
 });
 
 // Mod is per-bingo, not a global flag — fixes v1's single global isModerator.
@@ -694,3 +697,69 @@ export const teamPointAdjustments = sqliteTable('team_point_adjustments', {
   createdByUserId: text('created_by_user_id').notNull().references(() => users.id),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
+
+// ---------------------------------------------------------------------------
+// ACHIEVEMENTS (CONTEXT.md "Achievement"): a just-for-fun layer, never read by
+// scoring/board/review code. See server/src/services/achievementService.ts.
+// ---------------------------------------------------------------------------
+
+// Per (bingo, achievement key): whether it's currently switched on, and when it was FIRST switched on for this
+// bingo — never moves once set, so switching off and back on doesn't reset counting. No row for a key in a bingo
+// means that Achievement has never been switched on there, and it is never earned (achievementService.tryEarn).
+export const bingoAchievementSettings = sqliteTable('bingo_achievement_settings', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  // An AchievementKey (shared/src/achievements.ts) — plain text, not an enum column, so a key added to the
+  // catalogue later needs no migration.
+  achievementKey: text('achievement_key').notNull(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  firstSwitchedOnAt: integer('first_switched_on_at', { mode: 'timestamp' }).notNull(),
+}, (t) => [
+  uniqueIndex('bingo_achievement_settings_bingo_key_unq').on(t.bingoId, t.achievementKey),
+]);
+
+// One row per player action Achievements care about. Written only while the bingo is Live and only for an
+// eligible player (a Team member acting on their own Team's concern), whether or not any Achievement is currently
+// switched on — so a later switch-on can count activity that happened while it was off, back to the moment it was
+// FIRST switched on. `subjectId`/`tileId`/`creditedUserId` are populated per `kind` (see achievementService.ts):
+//   posted          — subjectId: submission id, tileId: the tile, creditedUserId: who the drop belongs to
+//   reacted         — subjectId: submission id, creditedUserId: who the submission belongs to
+//   interest_marked — subjectId: the Part (task) id, tileId: the tile
+//   tile_opened     — subjectId: the tile id, tileId: the same tile id
+//   yama_opened     — subjectId: a fresh id per opening of the Yama Tile (Yammma counts them), tileId: that tile
+//   rules_opened / stats_opened — subjectId: a constant ("rules"/"stats"); there's only one per bingo
+// Upserted on (bingoId, userId, kind, subjectId): page opens are de-duplicated this way, keeping the latest time
+// (all that Drop detective/Rules lawyer/Number cruncher need); other kinds just avoid a duplicate row for a
+// resubmitted request.
+export const achievementActivity = sqliteTable('achievement_activity', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  kind: text('kind', { enum: ['posted', 'reacted', 'interest_marked', 'tile_opened', 'yama_opened', 'rules_opened', 'stats_opened'] }).notNull(),
+  subjectId: text('subject_id').notNull(),
+  tileId: text('tile_id'),
+  creditedUserId: text('credited_user_id'),
+  teamId: text('team_id').notNull().references(() => teams.id),
+  // Device-local (CONTEXT.md "Achievement" > time of day), from the request's X-Client-Timezone header.
+  localDate: text('local_date').notNull(), // YYYY-MM-DD
+  localHour: integer('local_hour').notNull(), // 0-23
+  occurredAt: integer('occurred_at', { mode: 'timestamp' }).notNull(),
+}, (t) => [
+  uniqueIndex('achievement_activity_bingo_user_kind_subject_unq').on(t.bingoId, t.userId, t.kind, t.subjectId),
+  index('achievement_activity_bingo_user_kind_idx').on(t.bingoId, t.userId, t.kind),
+]);
+
+// One row per (bingo, player, achievement) ever earned. Never deleted or updated except popupShownAt — earning is
+// never re-evaluated once a row exists (CONTEXT.md "never revisited"): not by a rejection, an un-react, a change of
+// credited player, a re-price, or an Achievement being switched off and on again.
+export const achievementEarned = sqliteTable('achievement_earned', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  achievementKey: text('achievement_key').notNull(),
+  earnedAt: integer('earned_at', { mode: 'timestamp' }).notNull(),
+  // Empty until the player's device reports the unlock popup played (POST mark popups shown).
+  popupShownAt: integer('popup_shown_at', { mode: 'timestamp' }),
+}, (t) => [
+  uniqueIndex('achievement_earned_bingo_user_key_unq').on(t.bingoId, t.userId, t.achievementKey),
+]);

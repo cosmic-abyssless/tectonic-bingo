@@ -6,6 +6,7 @@ import { ClockIcon, HandIcon } from "../../../core/ui/icons";
 import { useThemeTokens } from "../../context";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
+import { isYamaTile } from "@bingo/shared";
 import { sfxAt } from "../fx/SfxLayer";
 import { BACK_VIEW, bw, CLOSED_BOOK, ClosedBook, FIRST_LEAF_STAGGER } from "./ClosedBook";
 import { registerBook, useIsBookAway } from "./bookFlight";
@@ -129,7 +130,8 @@ export const TileCell = memo(function TileCell({
       onClick={(e) => {
         // A comic sound-effect burst where you clicked — or, for a
         // keyboard-triggered click (no pointer position), on the tile itself.
-        sfxAt(e.detail === 0 ? e.currentTarget : e);
+        // The Yama tile always says its own name.
+        sfxAt(e.detail === 0 ? e.currentTarget : e, isYamaTile(tile.name) ? { text: "Yammma" } : undefined);
         onOpen(tile.id);
       }}
       title={tile.name}
