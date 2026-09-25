@@ -3,7 +3,7 @@ import type { GraphNode, SubmissionDetails, Tile, TeamNodeState } from "@bingo/s
 import { summarizeTileProgress } from "./tileProgress";
 
 const node = (over: Partial<GraphNode> & Pick<GraphNode, "id" | "kind">): GraphNode =>
-  ({ bingoId: "b", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName: null, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, children: [], ...over }) as GraphNode;
+  ({ bingoId: "b", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName: null, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, children: [], ...over }) as GraphNode;
 
 const item = (id: string) => node({ id, kind: "ITEM", itemName: id });
 const sum = node({ id: "sum", kind: "SUM", quantity: 3, children: [item("a"), item("b"), item("c")] });

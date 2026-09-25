@@ -210,6 +210,19 @@ export function useChangeSubmissionAttribution(slug: string) {
   });
 }
 
+// Prices a submission's claims again when they were priced from the wrong thing (CONTEXT.md "GP value").
+export function useRepriceSubmission(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (submissionId: string) =>
+      api.post<{ claims: { itemName: string; before: number | null; after: number | null }[] }>(`/api/bingos/${slug}/mod/submissions/${submissionId}/reprice`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.modSubmissions(slug) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.stats(slug) });
+    },
+  });
+}
+
 // The only way to hand out points outside the node graph now that approval
 // no longer takes a per-submission points override — e.g. correcting a
 // mistake, or a bonus/penalty with no node behind it.

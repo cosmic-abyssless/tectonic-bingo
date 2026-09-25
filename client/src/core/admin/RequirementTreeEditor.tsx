@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { MenuTrigger } from "react-aria-components";
-import type { ItemGroup, NodeKind, GraphNode, GraphNodeInput } from "@bingo/shared";
+import { describeValuedAs, type ItemGroup, type NodeKind, type GraphNode, type GraphNodeInput, type ValuedAs } from "@bingo/shared";
 import { ItemSearchInput, iconUrlFor } from "../ui/ItemSearchInput";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { Button, IconButton } from "../ui/Button";
@@ -399,7 +399,7 @@ function RemoveButton({ shared, label, what, onPress, className }: { shared: boo
 // docs/item-quantity-model.md §2). Renaming isn't supported here; remove and
 // re-add (or "+ existing item") instead, matching the read-only-once-added
 // behavior a chip always had.
-function ItemLeafRow({ node, path, remove, existingLeaves, sharedNodeIds }: NodeProps) {
+function ItemLeafRow({ node, path, remove, update, existingLeaves, sharedNodeIds }: NodeProps) {
   const isRoot = path.length === 0;
   const name = node.itemName ?? "";
   // This leaf *itself* has 2+ direct parents — not just "reachable somewhere
@@ -409,21 +409,93 @@ function ItemLeafRow({ node, path, remove, existingLeaves, sharedNodeIds }: Node
   const isShared = !!node.id && sharedNodeIds.has(node.id);
   const sharedWithTasks = isShared ? Array.from(new Set((existingLeaves ?? []).filter((l) => l.id === node.id).map((l) => l.taskLabel))) : [];
   const exclusiveRules = useRulesFor(name);
+  const [editingValue, setEditingValue] = useState(false);
+  const valuedAs = node.valuedAs ?? null;
 
   return (
-    <div className="flex h-8 items-center gap-2 rounded-md border border-outline bg-surface px-2">
-      {isShared && <SharedMark tasks={sharedWithTasks} />}
-      <ChipIcon name={name} className="size-4" />
-      <span className="flex-1 truncate text-xs text-on-surface">{name}</span>
-      {exclusiveRules.length > 0 && (
-        <span
-          title={`A team can use this item in one place only (${describeRules(exclusiveRules)}). Set in the bingo's settings, under Exclusive items.`}
-          className="shrink-0 rounded border border-outline px-1 text-[10px] uppercase tracking-wide text-on-surface-subtle"
+    <div className="space-y-1">
+      <div className="flex h-8 items-center gap-2 rounded-md border border-outline bg-surface px-2">
+        {isShared && <SharedMark tasks={sharedWithTasks} />}
+        <ChipIcon name={name} className="size-4" />
+        <span className="flex-1 truncate text-xs text-on-surface">{name}</span>
+        {exclusiveRules.length > 0 && (
+          <span
+            title={`A team can use this item in one place only (${describeRules(exclusiveRules)}). Set in the bingo's settings, under Exclusive items.`}
+            className="shrink-0 rounded border border-outline px-1 text-[10px] uppercase tracking-wide text-on-surface-subtle"
+          >
+            exclusive
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => setEditingValue((open) => !open)}
+          title={
+            valuedAs
+              ? `Claims here get their GP value from ${valuedAs.itemName} ÷ ${valuedAs.divisor}, not from ${name}'s own price`
+              : `Price claims here as another item instead of ${name} (e.g. a gold ring from a DT2 boss as a third of its vestige)`
+          }
+          className={`shrink-0 rounded px-1 text-[10px] tracking-wide ${valuedAs ? "border border-outline text-on-surface-muted" : "text-on-surface-subtle hover:text-on-surface"}`}
         >
-          exclusive
-        </span>
+          {valuedAs ? `valued as ${describeValuedAs(valuedAs)}${valuedAs.source ? ` · ${valuedAs.source}` : ""}` : "GP value…"}
+        </button>
+        {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${name}` : `Remove ${name}`} what="item" onPress={() => remove(path)} />}
+      </div>
+      {editingValue && (
+        <ValuedAsEditor
+          itemName={name}
+          valuedAs={valuedAs}
+          onSave={(next) => {
+            update(path, (n) => ({ ...n, valuedAs: next }));
+            setEditingValue(false);
+          }}
+          onCancel={() => setEditingValue(false)}
+        />
       )}
-      {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${name}` : `Remove ${name}`} what="item" onPress={() => remove(path)} />}
+    </div>
+  );
+}
+
+// A Task's "Valued as" (CONTEXT.md): its claims are priced as another item ÷ N instead of their own item. For the
+// rare item whose worth depends on where it's claimed, like a DT2 boss's gold ring (a third of that boss's vestige).
+function ValuedAsEditor({ itemName, valuedAs, onSave, onCancel }: { itemName: string; valuedAs: ValuedAs | null; onSave: (valuedAs: ValuedAs | null) => void; onCancel: () => void }) {
+  const [item, setItem] = useState(valuedAs?.itemName ?? "");
+  const [divisor, setDivisor] = useState(String(valuedAs?.divisor ?? 1));
+  const [source, setSource] = useState(valuedAs?.source ?? "");
+  const n = Number(divisor);
+  const valid = item.trim() !== "" && Number.isInteger(n) && n >= 1;
+
+  return (
+    <div className="space-y-2 rounded-md border border-outline bg-surface px-2 py-2">
+      <p className="text-[11px] text-on-surface-muted">Price {itemName} claimed here as:</p>
+      <div className="flex items-center gap-2">
+        <ItemSearchInput ariaLabel="Valued as item" placeholder="e.g. Magus vestige" containerClassName="min-w-0 flex-1" value={item} onChange={setItem} onPickItem={setItem} />
+        <span className="text-xs text-on-surface-muted">÷</span>
+        {/* controlClass is w-full, so the wrapper sets the width. */}
+        <div className="w-16 shrink-0">
+          <input aria-label="Divided by" type="number" min={1} step={1} value={divisor} onChange={(e) => setDivisor(e.target.value)} className={controlClass("sm")} />
+        </div>
+      </div>
+      <input
+        aria-label="Source"
+        placeholder="Source, shown next to the item (optional, e.g. Vardorvis)"
+        maxLength={40}
+        value={source}
+        onChange={(e) => setSource(e.target.value)}
+        className={controlClass("sm")}
+      />
+      <div className="flex gap-2">
+        <Button size="sm" variant="primary" isDisabled={!valid} onPress={() => onSave({ itemName: item.trim(), divisor: n, source: source.trim() || null })}>
+          Save
+        </Button>
+        {valuedAs && (
+          <Button size="sm" variant="ghost" onPress={() => onSave(null)}>
+            Use {itemName}'s own price
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" onPress={onCancel}>
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }

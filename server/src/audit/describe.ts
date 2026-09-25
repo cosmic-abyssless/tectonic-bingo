@@ -4,7 +4,7 @@
 import { eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { playerName, type GraphNode } from "@bingo/shared";
-import type { TaskSnapshot } from "@bingo/shared";
+import { describeValuedAs, type TaskSnapshot } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { users } from "../db/schema";
 import { rsnsInBingo } from "../services/playerNames";
@@ -52,6 +52,7 @@ export function describeTaskNode(node: GraphNode): TaskSnapshot {
     minCount: node.minCount,
     quantity: node.quantity,
     itemName: node.itemName,
+    ...(node.valuedAs ? { valuedAs: `${describeValuedAs(node.valuedAs)}${node.valuedAs.source ? ` (${node.valuedAs.source})` : ""}` } : {}),
     children: node.children.map(describeTaskNode),
   };
 }

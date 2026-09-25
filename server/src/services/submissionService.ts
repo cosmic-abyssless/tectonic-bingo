@@ -1,7 +1,7 @@
 import { now as clockNow } from "../clock";
 import { eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { ClaimInput, NodeKind } from "@bingo/shared";
+import type { ClaimInput, NodeKind, ValuedAs } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { claims, nodes, submissions, submissionScreenshots, teamNodeState, teams, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
@@ -10,6 +10,7 @@ import { conflictMessage, conflictsForClaims } from "./exclusivityService";
 import { effectiveStartsAt } from "./bingoStart";
 import { rsnsAcrossBingos } from "./playerNames";
 import { audit } from "../audit/record";
+import { pricer, valuedAsOf } from "./gpValueService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -113,15 +114,14 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
 
     tx.insert(submissionScreenshots).values({ submissionId: submission.id, storageUrl: params.screenshotUrl, uploadedAt: now }).run();
 
+    // GP values from the in-memory price table, so this never waits on the wiki; any it can't price yet are filled
+    // in after a refresh (gpValueService.refreshPricesAndFill, run by the route after responding).
+    const price = pricer(tx);
     for (const claim of params.claims) {
-      tx.insert(claims)
-        .values({
-          submissionId: submission.id,
-          nodeId: claim.nodeId,
-          itemName: claim.itemName ?? null,
-          quantity: claim.quantity ?? 1,
-        })
-        .run();
+      const itemName = claim.itemName ?? null;
+      const quantity = claim.quantity ?? 1;
+      const gpValue = price.gpValue(itemName, quantity, valuedAsOf(leafById.get(claim.nodeId)!));
+      tx.insert(claims).values({ submissionId: submission.id, nodeId: claim.nodeId, itemName, quantity, gpValue }).run();
     }
 
     const taskLabels = nodeIds.map((id) => leafById.get(id)?.label).filter((l): l is string => !!l);
@@ -208,6 +208,7 @@ export interface ClaimRow {
   nodeId: string;
   itemName: string | null;
   quantity: number;
+  gpValue: number | null;
 }
 
 export interface SubmissionDetails {
@@ -254,6 +255,8 @@ export interface ClaimedLeaf {
   id: string;
   kind: NodeKind;
   label: string | null;
+  /** Why an item claimed here has the GP value it does, when the Task has a Valued as. */
+  valuedAs: ValuedAs | null;
 }
 
 export interface ModSubmissionRow extends SubmissionDetails {
@@ -272,8 +275,8 @@ export function getAllSubmissionsForBingo(db: Db, bingoId: string): ModSubmissio
 
   const details = attachDetails(db, rows.map((r) => r.submission));
   const leafIds = [...new Set(details.flatMap((d) => d.claims.map((c) => c.nodeId)))];
-  const leafRows = leafIds.length ? db.select({ id: nodes.id, kind: nodes.kind, label: nodes.label }).from(nodes).where(inArray(nodes.id, leafIds)).all() : [];
-  const leafById = new Map(leafRows.map((l) => [l.id, l]));
+  const leafRows = leafIds.length ? db.select().from(nodes).where(inArray(nodes.id, leafIds)).all() : [];
+  const leafById = new Map(leafRows.map((l): [string, ClaimedLeaf] => [l.id, { id: l.id, kind: l.kind, label: l.label, valuedAs: valuedAsOf(l) }]));
 
   const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
   const tileByNodeId = new Map(tileRows.map((t) => [t.nodeId, t]));

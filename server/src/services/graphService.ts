@@ -4,6 +4,7 @@ import type { GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingoLines, claims, nodeEdges, nodes, submissions, teamNodeState, tileInterests, tiles } from "../db/schema";
 import { ServiceError } from "./errors";
+import { valuedAsOf } from "./gpValueService";
 import type { ApprovedClaim, EngineNode } from "./engine";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -36,6 +37,7 @@ function toGraphNode(id: string, ctx: TreeCtx): GraphNode {
     pointsGateNodeId: row.pointsGateNodeId,
     submitGateNodeId: row.submitGateNodeId,
     allowsPreLoad: row.allowsPreLoad,
+    valuedAs: valuedAsOf(row),
     children: childIds.map((cid) => toGraphNode(cid, ctx)),
   };
 }
@@ -201,7 +203,22 @@ function nodeFields(bingoId: string, input: GraphNodeInput): Omit<NodeRow, "id">
     pointsGateNodeId: input.pointsGateNodeId ?? null,
     submitGateNodeId: input.submitGateNodeId ?? null,
     allowsPreLoad: input.allowsPreLoad ?? false,
+    ...valuedAsFields(input),
   };
+}
+
+// Only an ITEM leaf can be Valued as something; anything else drops it.
+const VALUED_AS_SOURCE_MAX = 40;
+
+function valuedAsFields(input: GraphNodeInput): Pick<NodeRow, "valuedAsItemName" | "valuedAsDivisor" | "valuedAsSource"> {
+  const valuedAs = input.kind === "ITEM" ? input.valuedAs : null;
+  if (!valuedAs) return { valuedAsItemName: null, valuedAsDivisor: null, valuedAsSource: null };
+  const itemName = valuedAs.itemName?.trim();
+  if (!itemName) throw new ServiceError(400, "Valued as needs an item name");
+  if (!Number.isInteger(valuedAs.divisor) || valuedAs.divisor < 1) throw new ServiceError(400, "Valued as needs a divisor that is a whole number of at least 1");
+  const source = valuedAs.source?.trim() || null;
+  if (source && source.length > VALUED_AS_SOURCE_MAX) throw new ServiceError(400, `Valued as source must be at most ${VALUED_AS_SOURCE_MAX} characters`);
+  return { valuedAsItemName: itemName, valuedAsDivisor: valuedAs.divisor, valuedAsSource: source };
 }
 
 // Inserts a brand-new subtree (used for a freshly created tile/line/task with

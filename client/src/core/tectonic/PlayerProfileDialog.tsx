@@ -18,6 +18,12 @@ import { Button } from "../ui/Button";
 import { devLoginAs } from "../ui/devLogin";
 import { PointsShareBreakdown } from "../stats/PointsShareBreakdown";
 import { usePlayerContribution } from "../stats/usePlayerContribution";
+import { useUrlParam } from "../ui/useUrlParam";
+
+/** The URL parameter holding the open profile's tab (PlayerName.tsx keeps the open profile in ?player=). */
+export const PROFILE_TAB_PARAM = "profileTab";
+const PROFILE_TABS = ["bingo", "clan", "past", "signup"] as const;
+type ProfileTab = (typeof PROFILE_TABS)[number];
 
 /**
  * One player's card, in tabs: their Points share in this bingo, clan standing (tier, records, event
@@ -102,9 +108,16 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
   const stage = shell?.bingo.stage;
   const showBingoTab = stage === "live" || stage === "complete";
   const showSignupTab = !!shell?.isMod || player.answers !== null;
-  // The tab last picked, in any profile: flicking through players stays on the same one, unless it isn't here.
-  const [savedTab, setTab] = usePreference("profileTab");
-  const tab = (savedTab === "bingo" && !showBingoTab) || (savedTab === "signup" && !showSignupTab) ? "clan" : savedTab;
+  // The tab in the URL (?profileTab=, so a shared link opens it), else the tab last picked in any profile: flicking
+  // through players stays on the same one, unless it isn't here.
+  const [savedTab, saveTab] = usePreference("profileTab");
+  const [urlTab, setUrlTab] = useUrlParam(PROFILE_TAB_PARAM);
+  const wanted = PROFILE_TABS.includes(urlTab as ProfileTab) ? (urlTab as ProfileTab) : savedTab;
+  const tab = (wanted === "bingo" && !showBingoTab) || (wanted === "signup" && !showSignupTab) ? "clan" : wanted;
+  const setTab = (next: ProfileTab) => {
+    saveTab(next);
+    setUrlTab(next);
+  };
   const bingoContribution = usePlayerContribution(slug, player.user.id);
   const { profile } = player;
   const name = discordName(player.user);
@@ -155,7 +168,7 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
         }
       />
       <div className="p-5">
-        <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key) as typeof savedTab)}>
+        <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key) as ProfileTab)}>
           {/* One row that scrolls sideways on a phone, rather than wrapping to two. */}
           <TabList className="flex-nowrap! overflow-x-auto">
             {showBingoTab && (

@@ -4,7 +4,7 @@ import { buildLeafClaimMaps } from "../core/board/taskClaims";
 import { buildRequirementTree } from "./boardModel";
 
 const node = (over: Partial<GraphNode> & Pick<GraphNode, "id" | "kind">): GraphNode =>
-  ({ bingoId: "b", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName: null, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, children: [], ...over }) as GraphNode;
+  ({ bingoId: "b", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName: null, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, children: [], ...over }) as GraphNode;
 
 const sub = (id: string, status: "approved" | "pending" | "rejected", claims: Pick<Claim, "nodeId" | "quantity">[]): SubmissionDetails =>
   ({

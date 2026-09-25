@@ -1,8 +1,13 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, type ReactNode } from "react";
 import type { AccountType } from "@bingo/shared";
 import { useAccountTypes } from "../../api/queries";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
-import { PlayerProfileDialog } from "./PlayerProfileDialog";
+import { useClearUrlParams, useUrlParam } from "../ui/useUrlParam";
+import { INTERACTIVE_TEXT } from "../ui/interactiveText";
+import { PlayerProfileDialog, PROFILE_TAB_PARAM } from "./PlayerProfileDialog";
+
+const PROFILE_PARAM = "player";
+const PROFILE_PARAMS = [PROFILE_PARAM, PROFILE_TAB_PARAM];
 
 const OpenProfileContext = createContext<((userId: string) => void) | null>(null);
 const AccountTypesContext = createContext<Record<string, AccountType> | null>(null);
@@ -13,13 +18,21 @@ const AccountTypesContext = createContext<Record<string, AccountType> | null>(nu
  * badge. Pages without the provider render names as plain text.
  */
 export function PlayerProfileProvider({ slug, children }: { slug: string; children: ReactNode }) {
-  const [userId, setUserId] = useState<string | null>(null);
+  // Which profile is open is in the URL (?player=<userId>), so a link opens it. Opening pushes a history entry, so
+  // Back closes it.
+  const [userId, setUserId] = useUrlParam(PROFILE_PARAM);
+  const close = useClearUrlParams(PROFILE_PARAMS);
+  const open = useCallback((id: string) => setUserId(id, { push: true }), [setUserId]);
   const { data } = useAccountTypes(slug);
   return (
-    <OpenProfileContext.Provider value={setUserId}>
+    <OpenProfileContext.Provider value={open}>
       <AccountTypesContext.Provider value={data?.accountTypes ?? null}>
         {children}
-        <PlayerProfileDialog slug={slug} userId={userId} onClose={() => setUserId(null)} />
+        <PlayerProfileDialog
+          slug={slug}
+          userId={userId}
+          onClose={close}
+        />
       </AccountTypesContext.Provider>
     </OpenProfileContext.Provider>
   );
@@ -85,7 +98,7 @@ export function PlayerName({
       // pb/-mb: room for the underline inside the button's own box, layout unchanged. Where the name is truncated
       // (the draft and signup grids), the box clips its overflow, and at one line's height the underline, 3px
       // below the text, was clipped away with it.
-      className={`cursor-pointer rounded-sm border-0 bg-transparent p-0 pb-[4px] -mb-[4px] text-left [font:inherit] [line-height:inherit] underline decoration-on-surface-subtle/60 decoration-dotted underline-offset-[3px] hover:text-on-surface hover:decoration-on-surface hover:decoration-solid focus-visible:decoration-on-surface focus-visible:decoration-solid focus-visible:outline-none ${className}`}
+      className={`cursor-pointer rounded-sm border-0 bg-transparent p-0 pb-[4px] -mb-[4px] text-left [font:inherit] [line-height:inherit] ${INTERACTIVE_TEXT} ${className}`}
     >
       {badgeEl}
       {children}

@@ -41,6 +41,8 @@ export interface ExportNode {
   pointsGateLocalId: number | null;
   submitGateLocalId: number | null;
   allowsPreLoad: boolean;
+  /** Absent in files exported before Valued as existed. */
+  valuedAs?: { itemName: string; divisor: number; source?: string | null } | null;
   /**
    * A node can have several parents (one requirement counting toward two tasks). It is
    * written out in full at the first place it is met, and everywhere else as a stub with

@@ -1,0 +1,1 @@
+ALTER TABLE `nodes` ADD `valued_as_source` text;

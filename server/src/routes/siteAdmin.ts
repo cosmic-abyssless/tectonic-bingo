@@ -7,6 +7,7 @@ import { db } from "../db";
 import * as bingoService from "../services/bingoService";
 import * as bingoExportService from "../services/bingoExportService";
 import * as itemGroupService from "../services/itemGroupService";
+import * as pieceValueService from "../services/pieceValueService";
 import * as bugReportService from "../services/bugReportService";
 import * as pastWomCompetitionService from "../services/pastWomCompetitionService";
 import * as userService from "../services/userService";
@@ -144,6 +145,48 @@ router.delete(
   "/item-groups/:id",
   asyncHandler(async (req, res) => {
     itemGroupService.deleteItemGroup(db, req.params.id as string);
+    res.status(204).end();
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Piece values (CONTEXT.md) — global, price item pieces as a whole item ÷ N
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/piece-values",
+  asyncHandler(async (_req, res) => {
+    res.json({ pieceValues: pieceValueService.getPieceValues(db), unvaluedItems: pieceValueService.getUnvaluedItems(db) });
+  }),
+);
+router.post(
+  "/piece-values",
+  asyncHandler(async (req, res) => {
+    const pieceValue = await pieceValueService.createPieceValue(db, req.body, req.user!.id);
+    res.status(201).json({ pieceValue });
+  }),
+);
+router.patch(
+  "/piece-values/:id",
+  asyncHandler(async (req, res) => {
+    const pieceValue = await pieceValueService.updatePieceValue(db, req.params.id as string, req.body);
+    res.json({ pieceValue });
+  }),
+);
+router.delete(
+  "/piece-values/:id",
+  asyncHandler(async (req, res) => {
+    pieceValueService.deletePieceValue(db, req.params.id as string);
+    res.status(204).end();
+  }),
+);
+// Dismiss (or restore) an item on the unvalued items list.
+router.put(
+  "/unvalued-items/dismissed",
+  asyncHandler(async (req, res) => {
+    const { itemName, dismissed } = req.body as { itemName?: string; dismissed?: boolean };
+    if (typeof dismissed !== "boolean") throw new ServiceError(400, "dismissed must be a boolean");
+    pieceValueService.setUnvaluedItemDismissed(db, itemName, dismissed, req.user!.id);
     res.status(204).end();
   }),
 );

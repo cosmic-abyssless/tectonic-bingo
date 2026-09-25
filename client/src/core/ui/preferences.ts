@@ -18,6 +18,8 @@ const PREFERENCES = {
   statsTimeFormat: ["clock", "sinceStart", "ago", "full"],
   // The player profile's last picked tab (core/tectonic/PlayerProfileDialog.tsx).
   profileTab: ["bingo", "clan", "past", "signup"],
+  // Whether this browser has already confirmed what re-pricing a submission's GP value is for (core/mod/RepriceGpButton.tsx).
+  repriceGpWarning: ["unseen", "seen"],
 } as const satisfies Record<string, readonly string[]>;
 
 type PreferenceKey = keyof typeof PREFERENCES;

@@ -11,6 +11,7 @@ import { displayName } from "../ui/user";
 import { PlayerName, useOpenProfile } from "../tectonic/PlayerName";
 import { FALLBACK_TEAM_COLOR } from "./PointsChart";
 import { formatShare } from "./PointsShareBreakdown";
+import { formatGp, formatGpExact } from "../ui/gp";
 
 type Row = ContributionCount & { team: Team | null };
 
@@ -87,6 +88,18 @@ export function ContributorsTable({ contributions, teams }: { contributions: Con
         cellClass: "num font-semibold",
       },
       { colId: "approvedSubmissions", headerName: "Submissions", headerTooltip: "Approved submissions", field: "approvedSubmissions", sortingOrder: ["desc", "asc"], flex: 1, minWidth: 110, cellClass: "num" },
+      {
+        colId: "gpGained",
+        headerName: "GP gained",
+        headerTooltip: "What the player's approved drops were worth when submitted (Grand Exchange prices)",
+        field: "gpGained",
+        sortingOrder: ["desc", "asc"],
+        flex: 1,
+        minWidth: 110,
+        valueFormatter: (p) => formatGp(p.value as number),
+        tooltip: (p: TooltipCallbackParams<Row>) => formatGpExact(p.value as number),
+        cellClass: "num",
+      },
     ];
     // One team's table doesn't need to say which team every row is on.
     return multiTeam ? cols : cols.filter((c) => c.colId !== "team");

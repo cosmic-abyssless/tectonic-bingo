@@ -27,7 +27,8 @@ import { errorHandler } from "./middleware/errorHandler";
 import { requireGuildMember } from "./middleware/requireGuildMember";
 import { auditContext } from "./audit/middleware";
 import { closeWebSocketServer, initWebSocketServer } from "./ws";
-import { DB_PATH, sqlite } from "./db";
+import { DB_PATH, db, sqlite } from "./db";
+import { refreshPricesAndFill } from "./services/gpValueService";
 import { UPLOADS_DIR, WIKI_ICONS_DIR, getAdminDiscordIds, sessionCookieSecure } from "./config";
 import { warmOcr } from "./ocr";
 import { shouldWarmOcr } from "./ocrConfig";
@@ -209,6 +210,8 @@ server.listen(PORT, () => {
   });
   // After the server is up and taking requests, so a slow model download never delays a deploy going healthy.
   if (shouldWarmOcr()) void warmOcr();
+  // Loads the GE price table and prices any claims still missing a GP value (including ones made before GP values existed).
+  void refreshPricesAndFill(db);
 });
 
 // SQLite cannot be shared by overlapping replicas. On SIGTERM (Railway

@@ -19,6 +19,7 @@ export function toGraphNodeInput(node: GraphNode): GraphNodeInput {
     pointsGateNodeId: node.pointsGateNodeId,
     submitGateNodeId: node.submitGateNodeId,
     allowsPreLoad: node.allowsPreLoad,
+    valuedAs: node.valuedAs,
     children: node.children.map(toGraphNodeInput),
   };
 }
@@ -40,6 +41,7 @@ export function previewGraphNode(bingoId: string, input: GraphNodeInput): GraphN
     pointsGateNodeId: input.pointsGateNodeId ?? null,
     submitGateNodeId: input.submitGateNodeId ?? null,
     allowsPreLoad: input.allowsPreLoad ?? false,
+    valuedAs: input.valuedAs ?? null,
     children: (input.children ?? []).map((child) => previewGraphNode(bingoId, child)),
   };
 }

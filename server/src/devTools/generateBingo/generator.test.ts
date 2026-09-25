@@ -190,7 +190,7 @@ function toNode(t: ExportTask): GraphNode {
     minCount: t.minCount ?? null, quantity: t.quantity ?? null, itemName: t.itemName ?? null,
     pointsGateNodeId: t.pointsGateLocalId ? `n${t.pointsGateLocalId}` : null,
     submitGateNodeId: t.submitGateLocalId ? `n${t.submitGateLocalId}` : null,
-    allowsPreLoad: false, children: (t.children ?? []).map(toNode),
+    allowsPreLoad: false, valuedAs: null, children: (t.children ?? []).map(toNode),
   };
 }
 
@@ -282,7 +282,7 @@ describe("deadlockedParts", () => {
 });
 
 describe("claimable on a board with shared items", () => {
-  const item = (id: string, itemName: string): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, children: [] });
+  const item = (id: string, itemName: string): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, children: [] });
   const part = (id: string, label: string, kind: GraphNode["kind"], children: GraphNode[], gate: string | null = null): GraphNode => ({ ...item(id, ""), kind, label, itemName: null, points: 10, submitGateNodeId: gate, children });
   const tile = (children: GraphNode[]): Tile => ({ id: "t", name: "PETS", boardRow: 0, boardCol: 0, hasFreezePeriod: false, freezeDurationMinutes: 0, node: part("root", "", "ALL", children) }) as unknown as Tile;
 
@@ -311,7 +311,7 @@ describe("claimable on a board with shared items", () => {
 });
 
 describe("exclusive items on the board", () => {
-  const item = (id: string, itemName: string): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, children: [] });
+  const item = (id: string, itemName: string): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, children: [] });
   const part = (id: string, label: string, children: GraphNode[]): GraphNode => ({ ...item(id, ""), kind: "SUM", label, itemName: null, quantity: 1, points: 10, children });
   const tile = (id: string, name: string, col: number, parts: GraphNode[]): Tile => ({ id, name, boardRow: 0, boardCol: col, hasFreezePeriod: false, freezeDurationMinutes: 0, node: { ...part(`${id}-root`, "", parts), kind: "ALL" } }) as unknown as Tile;
   const tiles = [tile("zul", "ZULRAH", 0, [part("z1", "Page 1", [item("zul-snake", "Pet snakeling")])]), tile("pets", "PETS", 1, [part("p1", "Page 1", [item("pets-snake", "Pet snakeling"), item("pets-nid", "Nid")])])];

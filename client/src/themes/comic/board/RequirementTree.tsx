@@ -1,6 +1,8 @@
 import type { RequirementNodeModel } from "../../../headless/types";
 import { CheckIcon } from "../../../core/ui/icons";
 import { ItemIcon } from "../../../core/ui/ItemIcon";
+import { WikiItemLink } from "../../../core/ui/WikiItemLink";
+import { itemNameOf } from "../../../headless/requirementItems";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
 import type { ComicColors } from "./colors";
@@ -45,7 +47,7 @@ function LeafRow({ node, colors }: { node: RequirementNodeModel; colors: ComicCo
             {node.items.map((item) => (
               <li key={item.name} style={item.lockedBy ? { color: colors.INK_SUBTLE } : undefined}>
                 <ItemIcon url={item.iconUrl} className={`${ICON_CLASS} ${node.dim || item.lockedBy ? "opacity-60" : ""}`} />
-                {item.name}
+                <WikiItemLink name={item.name} />
                 {item.count > 0 && (
                   <span className="num ml-1.5 text-base leading-snug" style={{ fontFamily: COMIC_FONT, color: colors.OK }}>
                     ×{item.count}
@@ -58,7 +60,7 @@ function LeafRow({ node, colors }: { node: RequirementNodeModel; colors: ComicCo
         ) : (
           <span style={node.lockedBy ? { color: colors.INK_SUBTLE } : undefined}>
             <ItemIcon url={iconUrl} className={`${ICON_CLASS} ${node.dim || node.lockedBy ? "opacity-60" : ""}`} />
-            {node.label}
+            {itemNameOf(node) ? <WikiItemLink name={itemNameOf(node)!} /> : node.label}
             {node.lockedBy && <LockedTag text={node.lockedBy} colors={colors} />}
           </span>
         )}

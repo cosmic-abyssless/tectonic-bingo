@@ -1,5 +1,5 @@
 import { useEscapeBack } from "../core/ui/useEscapeBack";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { Key } from "react-aria-components";
 import { STAGE_ORDER, type Stage } from "@bingo/shared";
@@ -23,6 +23,7 @@ import { Dialog, DialogHeader } from "../core/ui/Dialog";
 import { MenuItem } from "../core/ui/Menu";
 import { usePreference } from "../core/ui/preferences";
 import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
+import { useUrlParam } from "../core/ui/useUrlParam";
 
 // adminOnly tabs are hidden from — and their content never rendered for — a
 // mod who isn't a site admin. The server enforces the same split on the
@@ -76,7 +77,7 @@ export function ModPage() {
   const { user } = useAuth();
   const isAdmin = !!user?.isAdmin;
   const stage = shell?.bingo.stage;
-  const [tab, setTab] = useState(() => defaultTabFor(stage, isAdmin));
+  const [urlTab, setUrlTab] = useUrlParam("tab");
   const [outOfStageTabs, setOutOfStageTabs] = usePreference("outOfStageTabs");
 
   const visibleTabs = useMemo(() => {
@@ -85,6 +86,17 @@ export function ModPage() {
     const current = allowed.filter((t) => !t.dimmed);
     return outOfStageTabs === "hide" ? current : [...current, ...allowed.filter((t) => t.dimmed)];
   }, [stage, isAdmin, outOfStageTabs]);
+
+  // The tab is in the URL (?tab=...) so a link opens it. Without one, or with one this mod can't see (an admin-only
+  // tab, or one the stage has moved past), it's the stage's natural landing tab; Settings is the fallback since it's
+  // always in-stage for an admin.
+  const tab = useMemo(() => {
+    if (urlTab && visibleTabs.some((t) => t.key === urlTab)) return urlTab;
+    const preferred = defaultTabFor(stage, isAdmin);
+    if (visibleTabs.length === 0 || visibleTabs.some((t) => t.key === preferred)) return preferred;
+    return visibleTabs.some((t) => t.key === "settings") ? "settings" : visibleTabs[0]!.key;
+  }, [urlTab, visibleTabs, stage, isAdmin]);
+  const setTab = (key: string) => setUrlTab(key);
 
   const [showNotifPrompt, setShowNotifPrompt] = useState(
     () => "Notification" in window && Notification.permission === "default" && !localStorage.getItem("mod_notif_prompted"),
@@ -102,24 +114,6 @@ export function ModPage() {
     // isMod is per-bingo and only known once the shell loads — redirect once we know for sure.
     if (shell && !shell.isMod) navigate(`/b/${slug}`, { replace: true });
   }, [shell, navigate, slug]);
-
-  // Land on the stage's tab once the bingo has loaded: the initial useState ran before the stage was known (so it
-  // picked Submissions), and an out-of-stage tab can still be listed (dimmed), so the fallback below wouldn't move it.
-  const landed = useRef(false);
-  useEffect(() => {
-    if (landed.current || !stage || !user) return;
-    landed.current = true;
-    setTab(defaultTabFor(stage, isAdmin));
-  }, [stage, isAdmin, user]);
-
-  // A tab the user can no longer see (isAdmin resolved to false after mount, the stage moved past it, or it's
-  // just the pre-shell-load placeholder from the initial useState) shouldn't leave stale content selected.
-  // Prefer the stage's natural landing tab; Settings is the fallback since it's always in-stage for an admin.
-  useEffect(() => {
-    if (visibleTabs.length === 0 || visibleTabs.some((t) => t.key === tab)) return;
-    const preferred = defaultTabFor(stage, isAdmin);
-    setTab(visibleTabs.some((t) => t.key === preferred) ? preferred : visibleTabs.some((t) => t.key === "settings") ? "settings" : visibleTabs[0].key);
-  }, [visibleTabs, tab, stage, isAdmin]);
 
   if (!shell || !shell.isMod || !slug) return null;
 

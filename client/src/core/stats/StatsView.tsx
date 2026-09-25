@@ -5,6 +5,7 @@ import { inclusionFilter } from "../ui/inclusionFilter";
 import { MultiSelect } from "../ui/MultiSelect";
 import { Panel } from "../ui/Panel";
 import { ContributorsTable } from "./ContributorsTable";
+import { GpGained } from "./GpGained";
 import { PointsChart } from "./PointsChart";
 import { TileCompletion } from "./TileCompletion";
 import { TimelineTable } from "./TimelineTable";
@@ -42,6 +43,8 @@ export function StatsView({ slug }: { slug: string }) {
       timeline: ours(stats.timeline),
       contributions: ours(stats.contributions),
       heatmap: ours(stats.heatmap),
+      teamGpGained: ours(stats.teamGpGained),
+      drops: ours(stats.drops),
     };
   }, [stats, visibleTeams, excludedTeams]);
 
@@ -69,6 +72,10 @@ export function StatsView({ slug }: { slug: string }) {
 
       <Section title="Top contributors">
         <ContributorsTable contributions={filtered.contributions} teams={filtered.teams} />
+      </Section>
+
+      <Section title="GP gained">
+        <GpGained slug={slug} teamGpGained={filtered.teamGpGained} drops={filtered.drops} teams={filtered.teams} canReprice={shell.isMod} />
       </Section>
 
       <Section title="Tile completion">
