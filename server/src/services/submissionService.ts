@@ -1,9 +1,9 @@
 import { now as clockNow } from "../clock";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { ClaimInput, NodeKind, ValuedAs } from "@bingo/shared";
+import { SUBMISSION_REACTIONS, type ClaimInput, type NodeKind, type SubmissionReaction, type SubmissionReactionGroup, type ValuedAs } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { claims, nodes, submissions, submissionScreenshots, teamNodeState, teams, tiles, users } from "../db/schema";
+import { claims, nodes, submissionReactions, submissions, submissionScreenshots, teamMembers, teamNodeState, teams, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { findAncestorIds, submitGateBlock } from "./graphService";
 import { conflictMessage, conflictsForClaims } from "./exclusivityService";
@@ -217,6 +217,7 @@ export interface SubmissionDetails {
   claims: ClaimRow[];
   submittedByUser: MinimalUser | null;
   postedByUser: MinimalUser | null;
+  reactions: SubmissionReactionGroup[];
 }
 
 // Attaches screenshots, claims, and the submitter's (minimal) user row to a
@@ -227,7 +228,10 @@ function attachDetails(db: Db, subs: (typeof submissions.$inferSelect)[]): Submi
   const submissionIds = subs.map((s) => s.id);
   const screenshots = db.select().from(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, submissionIds)).all();
   const claimRows = db.select().from(claims).where(inArray(claims.submissionId, submissionIds)).all();
-  const userIds = [...new Set(subs.flatMap((s) => (s.postedByUserId ? [s.submittedByUserId, s.postedByUserId] : [s.submittedByUserId])))];
+  const reactionRows = db.select().from(submissionReactions).where(inArray(submissionReactions.submissionId, submissionIds)).orderBy(submissionReactions.createdAt).all();
+  const userIds = [
+    ...new Set([...subs.flatMap((s) => (s.postedByUserId ? [s.submittedByUserId, s.postedByUserId] : [s.submittedByUserId])), ...reactionRows.map((r) => r.userId)]),
+  ];
   const userRows = db
     .select({ id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick })
     .from(users)
@@ -248,7 +252,42 @@ function attachDetails(db: Db, subs: (typeof submissions.$inferSelect)[]): Submi
     claims: claimRows.filter((c) => c.submissionId === s.id),
     submittedByUser: userFor(s, s.submittedByUserId),
     postedByUser: userFor(s, s.postedByUserId),
+    reactions: groupReactions(reactionRows.filter((r) => r.submissionId === s.id).map((r) => ({ emoji: r.emoji, user: userFor(s, r.userId) }))),
   }));
+}
+
+// A submission's reactions, one group per emoji in SUBMISSION_REACTIONS order, each with its reactors oldest first.
+function groupReactions(rows: { emoji: string; user: MinimalUser | null }[]): SubmissionReactionGroup[] {
+  return SUBMISSION_REACTIONS.map((emoji) => ({ emoji, users: rows.filter((r) => r.emoji === emoji && r.user).map((r) => r.user!) })).filter((g) => g.users.length > 0);
+}
+
+export function isSubmissionReaction(value: unknown): value is SubmissionReaction {
+  return (SUBMISSION_REACTIONS as readonly unknown[]).includes(value);
+}
+
+/**
+ * Puts one of a player's reactions on a submission, or takes it off. Only the submission's own team reacts. Returns the
+ * submission's team, for the broadcast. Not audited: a reaction is chat, not a change to the bingo.
+ */
+export function setSubmissionReaction(db: Db, submissionId: string, userId: string, emoji: SubmissionReaction, reacted: boolean): { teamId: string } {
+  return db.transaction((tx) => {
+    const submission = tx.select({ teamId: submissions.teamId }).from(submissions).where(eq(submissions.id, submissionId)).get();
+    if (!submission) throw new ServiceError(404, "Submission not found");
+    const member = tx.select({ id: teamMembers.id }).from(teamMembers).where(and(eq(teamMembers.teamId, submission.teamId), eq(teamMembers.userId, userId))).get();
+    if (!member) throw new ServiceError(403, "Only the submission's team can react to it");
+    const where = and(eq(submissionReactions.submissionId, submissionId), eq(submissionReactions.userId, userId), eq(submissionReactions.emoji, emoji));
+    if (!reacted) tx.delete(submissionReactions).where(where).run();
+    else if (!tx.select({ id: submissionReactions.id }).from(submissionReactions).where(where).get()) {
+      tx.insert(submissionReactions).values({ submissionId, userId, emoji, createdAt: clockNow() }).run();
+    }
+    return { teamId: submission.teamId };
+  });
+}
+
+/** One submission as the team's list has it (with its reactions), or undefined. */
+export function getSubmissionDetails(db: Db, submissionId: string): SubmissionDetails | undefined {
+  const row = getSubmissionById(db, submissionId);
+  return row ? attachDetails(db, [row])[0] : undefined;
 }
 
 export interface ClaimedLeaf {

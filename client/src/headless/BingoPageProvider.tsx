@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { STAGE_LABEL, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
-import { useBingo, useBoard, useDraftState, usePendingCount, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
+import { useBingo, useBoard, useDraftState, usePendingCount, useSetSubmissionReaction, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { displayName, avatarUrl } from "../core/ui/user";
 import { useHasPassed } from "../core/ui/useHasPassed";
@@ -64,6 +64,7 @@ export function BingoPageProvider({
   const { viewingTeamId, setViewingTeamId } = useViewingTeam(shell?.myTeam ?? null);
   const { data: progressData } = useTeamProgress(slug, viewingTeamId ?? undefined);
   const setTileInterest = useSetTileInterest(slug);
+  const setReaction = useSetSubmissionReaction(slug);
   const { data: submissionsData } = useTeamSubmissions(slug, viewingTeamId ?? undefined);
   const { data: pendingData } = usePendingCount(slug, !!shell?.isMod);
   // Only fetches while actually on the draft stage — same net effect as the
@@ -104,6 +105,8 @@ export function BingoPageProvider({
   // Hands go up on your own team's board only, from reveal onwards (the
   // board isn't visible to players before that) until the bingo is over.
   const canToggleInterest = !!myTeam && viewingTeamId === myTeam.id && (bingo.stage === "reveal" || bingo.stage === "live");
+  // Reactions are for teammates: on your own team's submissions, at any stage they're shown.
+  const canReact = !!myTeam && viewingTeamId === myTeam.id;
   const canViewStats = canViewStatsOf(shell);
 
   // Exact branch order as the old BingoPage.tsx: signup -> planning|captains
@@ -165,7 +168,7 @@ export function BingoPageProvider({
     canSubmit,
     pendingCount: pendingData?.count ?? 0,
     showEndCountdown: bingo.stage === "live" && !!bingo.endsAt,
-    submissions: buildSubmissionModels(tiles, teamSubmissions),
+    submissions: buildSubmissionModels(tiles, teamSubmissions, user.id),
     teamSelector: { teams: teamModels, selectedId: viewingTeamId, select: setViewingTeamId },
     search,
     openTile: { id: openTileId, open: setOpenTileId, close: () => setOpenTileId(null) },
@@ -197,6 +200,14 @@ export function BingoPageProvider({
         if (!canToggleInterest) return;
         const mine = interests.some((i) => i.taskId === taskId && i.user.id === user.id);
         setTileInterest.mutate({ teamId: myTeam.id, tileId, taskId, user, interested: !mine });
+      },
+    },
+    reactions: {
+      canReact,
+      toggle: (submissionId, emoji) => {
+        if (!canReact) return;
+        const reactors = teamSubmissions.find((s) => s.submission.id === submissionId)?.reactions?.find((g) => g.emoji === emoji)?.users ?? [];
+        setReaction.mutate({ teamId: myTeam.id, submissionId, emoji, user, reacted: !reactors.some((u) => u.id === user.id) });
       },
     },
   };

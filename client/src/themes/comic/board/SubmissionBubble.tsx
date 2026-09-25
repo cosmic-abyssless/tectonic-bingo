@@ -1,4 +1,6 @@
+import { useBingoPage } from "../../../headless";
 import type { SubmissionModel } from "../../../headless/types";
+import { ReactionBar } from "../../../core/submissions/ReactionBar";
 import { thumbUrl } from "../../../api/imageVariants";
 import { ImageIcon } from "../../../core/ui/icons";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
@@ -17,6 +19,7 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
   const { colors } = useComic();
   const stampKind = submission.status;
   const who = submission.detail.submittedByUser;
+  const { reactions } = useBingoPage();
 
   return (
     <article
@@ -70,6 +73,8 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
           {submission.reviewerNotes}
         </p>
       )}
+
+      <ReactionBar className="mt-2" reactions={submission.reactions} canReact={reactions.canReact} onToggle={(emoji) => reactions.toggle(submission.id, emoji)} />
     </article>
   );
 }

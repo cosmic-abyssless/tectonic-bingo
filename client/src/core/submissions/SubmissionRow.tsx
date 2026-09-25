@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { SubmissionDetails } from "@bingo/shared";
 import { SubmissionStatusBadge } from "../ui/StatusBadge";
 import { timeAgo } from "../ui/time";
@@ -6,7 +7,8 @@ import { PlayerName } from "../tectonic/PlayerName";
 import { LinkedClaimsSummary } from "./LinkedClaimsSummary";
 import { ScreenshotThumb } from "./ScreenshotThumb";
 
-export function SubmissionRow({ detail }: { detail: SubmissionDetails }) {
+/** `footer`: under the row's text (the theme's reactions). */
+export function SubmissionRow({ detail, footer }: { detail: SubmissionDetails; footer?: ReactNode }) {
   const { submission, screenshots, claims, submittedByUser, postedByUser } = detail;
 
   return (
@@ -27,6 +29,7 @@ export function SubmissionRow({ detail }: { detail: SubmissionDetails }) {
           </p>
         )}
         {submission.reviewerNotes && <p className="mt-0.5 truncate text-xs text-warn">{submission.reviewerNotes}</p>}
+        {footer}
       </div>
     </div>
   );
