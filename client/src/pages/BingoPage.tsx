@@ -4,6 +4,7 @@ import { ThemeProvider } from "../themes/ThemeProvider";
 import { useSlot } from "../themes/context";
 import { PageLoading, PageError } from "../themes/default/page/PageStates";
 import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
+import { AchievementsProvider } from "../core/achievements/AchievementsProvider";
 import { useRememberTheme } from "../themes/rememberedTheme";
 
 export function BingoPage() {
@@ -30,9 +31,13 @@ function ThemedSurface({ slug }: { slug: string }) {
   }
   return (
     <ThemeProvider themeKey={page.themeKey} fallback={<PageLoading />}>
-      <PlayerProfileProvider slug={slug}>
-        <BoardPageSlot />
-      </PlayerProfileProvider>
+      {/* Outside PlayerProfileProvider so the player card it renders (a sibling of BoardPageSlot, not a descendant)
+          still sits under AchievementsProvider — its "This bingo" tab opens the Achievements modal from here. */}
+      <AchievementsProvider slug={slug}>
+        <PlayerProfileProvider slug={slug}>
+          <BoardPageSlot />
+        </PlayerProfileProvider>
+      </AchievementsProvider>
     </ThemeProvider>
   );
 }

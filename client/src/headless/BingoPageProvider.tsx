@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { STAGE_LABEL, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
-import { useBingo, useBoard, useDraftState, usePendingCount, useSetSubmissionReaction, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
+import { useBingo, useBoard, useDraftState, usePendingCount, useRecordAchievementOpened, useSetSubmissionReaction, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { displayName, avatarUrl } from "../core/ui/user";
 import { useHasPassed } from "../core/ui/useHasPassed";
@@ -86,7 +86,17 @@ export function BingoPageProvider({
   const [submitInitialTaskId, setSubmitInitialTaskId] = useState<string | undefined>(undefined);
   const [submitInitialFile, setSubmitInitialFile] = useState<File | undefined>(undefined);
 
-  const search = useTileSearch(tiles, (tileId) => setOpenTileId(tileId));
+  // Achievements' "Tile opened" / "Rules opened" signal (CONTEXT.md "Achievement"): fire-and-forget, and only while
+  // the bingo is Live and the viewer is on a team — the server ignores an ineligible caller anyway, but there's no
+  // point sending the request. Wraps both places a tile's details open (the search box included).
+  const recordOpened = useRecordAchievementOpened(slug);
+  const eligibleForOpens = shell?.bingo.stage === "live" && !!shell?.myTeam;
+  const openTileTracked = (tileId: string | null) => {
+    setOpenTileId(tileId);
+    if (tileId && eligibleForOpens) recordOpened.mutate({ kind: "tile", tileId });
+  };
+
+  const search = useTileSearch(tiles, openTileTracked);
   const exclusivityRules = shell?.bingo.exclusivityRules;
   const locks = useMemo(() => lockedLeaves(exclusivityRules ?? [], tiles, submissionsData?.submissions ?? EMPTY_SUBMISSIONS), [exclusivityRules, tiles, submissionsData]);
 
@@ -171,8 +181,15 @@ export function BingoPageProvider({
     submissions: buildSubmissionModels(tiles, teamSubmissions, user.id),
     teamSelector: { teams: teamModels, selectedId: viewingTeamId, select: setViewingTeamId },
     search,
-    openTile: { id: openTileId, open: setOpenTileId, close: () => setOpenTileId(null) },
-    rules: { open: rulesOpen, show: () => setRulesOpen(true), hide: () => setRulesOpen(false) },
+    openTile: { id: openTileId, open: openTileTracked, close: () => setOpenTileId(null) },
+    rules: {
+      open: rulesOpen,
+      show: () => {
+        setRulesOpen(true);
+        if (eligibleForOpens) recordOpened.mutate({ kind: "rules" });
+      },
+      hide: () => setRulesOpen(false),
+    },
     teamInfo: { open: teamInfoOpen, show: () => setTeamInfoOpen(true), hide: () => setTeamInfoOpen(false) },
     pointBreakdown: { open: pointBreakdownOpen, show: () => setPointBreakdownOpen(true), hide: () => setPointBreakdownOpen(false) },
     drawer: { open: drawerOpen, show: () => setDrawerOpen(true), hide: () => setDrawerOpen(false) },
