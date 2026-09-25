@@ -30,6 +30,7 @@ import type {
 import {
   formatSignupAnswer,
   formatTimeZone,
+  MAX_RATING_STARS,
   timeZoneOffsetMinutes,
   type DraftPoolEntry,
   type DraftUnit,
@@ -227,6 +228,26 @@ const RatingRenderer = ({ data, context }: CustomCellRendererProps<DraftUnit, un
   const signupId = data.entries[0]!.signup.id;
   return <RatingCell rating={context.ratings[signupId]} onChange={(r) => context.onRate(signupId, r)} showNote={false} />;
 };
+
+type RatingContext = PoolGridContext & { ratings: Ratings; onRate: (signupId: string, rating: PickRating) => void };
+
+// Rates from the keyboard, on a focused Rating cell (see the column's comment). Returns whether the key was the
+// rating's (so AG doesn't also act on it); acts on keydown only. A pair is rated under its first half, as with a click.
+function rateFromKey(event: KeyboardEvent, unit: DraftUnit | undefined, context: RatingContext): boolean {
+  const key = event.key;
+  if (!unit || !["0", "1", "2", "3", "Delete", "Backspace", "Enter"].includes(key)) return false;
+  if (event.type === "keydown") {
+    // Also stops a focused star button's own Enter "click" from rating it a second time.
+    event.preventDefault();
+    const signupId = unit.entries[0]!.signup.id;
+    const current = context.ratings[signupId] ?? { stars: 0, note: "" };
+    let stars = 0; // 0, Delete, Backspace
+    if (key === "Enter") stars = (current.stars + 1) % (MAX_RATING_STARS + 1);
+    else if (key >= "1" && key <= "3") stars = Number(key) === current.stars ? 0 : Number(key);
+    if (stars !== current.stars) context.onRate(signupId, { ...current, stars });
+  }
+  return true;
+}
 
 // The captain's (and co-captain's) note on a unit, edited in the cell (AG's large text editor, a popup textarea: see the Note column). The
 // pencil says it's editable at a glance; an empty one invites a note. A long note wraps to fill the row (2 lines for a
@@ -436,6 +457,10 @@ export function DraftPoolGrid({
         valueGetter: (p) => (p.data ? (ratings[p.data.entries[0]!.signup.id]?.stars ?? 0) : 0),
         comparator: makeUnitComparator("rating", ratings),
         cellRenderer: RatingRenderer,
+        // Keyboard, on this cell: 1-3 sets that many stars (the current number again clears, as clicking the lit star
+        // does), 0/Delete/Backspace clears, Enter adds a star (3 wraps to none). Arrows still move between cells.
+        headerTooltip: "Your stars for this player. On the cell: 1-3 sets them, 0 or Delete clears, Enter adds one",
+        suppressKeyboardEvent: (p) => rateFromKey(p.event, p.data, p.context as RatingContext),
         // Just the three stars (3 x 24px) and the cell's padding; the note has a column of its own.
         width: RATING_WIDTH,
         // No static `sort: "desc"` here — the initialState fallback above sets it instead (see the comment
