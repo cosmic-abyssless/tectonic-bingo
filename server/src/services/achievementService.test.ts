@@ -368,6 +368,27 @@ describe("Eager beaver", () => {
   });
 });
 
+describe("getAchievementTallies (for the Overachiever Title)", () => {
+  it("counts each Player's switched-on earned Achievements and when they got the latest", () => {
+    const { bingo, team, alice, bob } = seed();
+    const a = tileWithLeaf(bingo.id, 0, 0);
+    submit(bingo, team.id, alice.id, a.leafId, a.itemName, { now: new Date(STARTS_AT.getTime() + 60_000), tz: "UTC" }); // Strong start (00:01 UTC: no Night owl, which starts at 02:00)
+    at(new Date(STARTS_AT.getTime() + 120_000), "UTC", () => setTileInterest(db, team.id, alice.id, a.tile.id, a.leafId, true)); // Eager beaver
+    const tallies = achievementService.getAchievementTallies(db, getBingo(bingo.id))!;
+    const alices = tallies.get(alice.id)!;
+    expect(alices.earned).toBe(2);
+    expect(tallies.get(bob.id)).toBeUndefined();
+
+    // Switched off: no longer counted.
+    db.transaction((tx) => achievementService.applyAchievementSwitches(tx, bingo.id, { eager_beaver: false }));
+    expect(achievementService.getAchievementTallies(db, getBingo(bingo.id))!.get(alice.id)!.earned).toBe(1);
+
+    // The whole feature off: no tallies at all.
+    db.update(schema.bingos).set({ achievementsEnabled: false }).where(eq(schema.bingos.id, bingo.id)).run();
+    expect(achievementService.getAchievementTallies(db, getBingo(bingo.id))).toBeNull();
+  });
+});
+
 describe("Yammma", () => {
   const open = (bingoId: string, userId: string, teamId: string, tileId: string) =>
     at(STARTS_AT, "UTC", () => achievementService.recordPageOpened(db, { bingoId, userId, teamId, kind: "tile", tileId, occurredAt: STARTS_AT }));

@@ -666,6 +666,29 @@ function progressFor(
   return null;
 }
 
+/**
+ * For Titles (Overachiever): each Player's count of earned Achievements that are switched on, and when they earned the
+ * latest of them. Null when the Bingo has Achievements switched off.
+ */
+export function getAchievementTallies(db: Db, bingo: Bingo): Map<string, { earned: number; lastEarnedAt: string | null }> | null {
+  if (!bingo.achievementsEnabled) return null;
+  const switched = switchedOnFor(db, bingo);
+  const out = new Map<string, { earned: number; lastEarnedAt: string | null }>();
+  if (switched.size === 0) return out;
+  const rows = db
+    .select({ userId: achievementEarned.userId, earnedAt: achievementEarned.earnedAt })
+    .from(achievementEarned)
+    .where(and(eq(achievementEarned.bingoId, bingo.id), inArray(achievementEarned.achievementKey, [...switched.keys()])))
+    .all();
+  for (const r of rows) {
+    const t = out.get(r.userId) ?? { earned: 0, lastEarnedAt: null };
+    t.earned += 1;
+    if (!t.lastEarnedAt || r.earnedAt.getTime() > new Date(t.lastEarnedAt).getTime()) t.lastEarnedAt = r.earnedAt.toISOString();
+    out.set(r.userId, t);
+  }
+  return out;
+}
+
 /** Earned / total switched-on (Hidden ones included) for a player card. Null when the feature is switched off. */
 export function getAchievementCount(db: Db, bingo: Bingo, userId: string): AchievementCount | null {
   if (!bingo.achievementsEnabled) return null;

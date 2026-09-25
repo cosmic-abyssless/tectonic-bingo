@@ -10,6 +10,7 @@ import { creditAwards, type AwardCredit, type CreditClaim } from "./pointsShare"
 import { rsnsInBingo } from "./playerNames";
 import { effectiveStartsAt, endedAt } from "./bingoStart";
 import { gainsOf, lastReadAt, loadTimelines } from "./womReadService";
+import { getAchievementTallies } from "./achievementService";
 import type { EngineNode } from "./engine";
 import { openItems } from "./openItems";
 import { playerLuck, type LuckClaim } from "./luck/luck";
@@ -537,6 +538,7 @@ export function getTitleFacts(
   const end = endedAt(db, bingo);
   const timelines: Map<string, WomSnapshot[]> = start ? loadTimelines(db, bingoId) : new Map();
   const luck = start ? luckFacts(graph, teamCredits, timelines, teamByUser, start, end, luckWeights) : new Map<string, LuckFacts>();
+  const achievementTallies = getAchievementTallies(db, bingo);
 
   return contributions.map((c) => {
     const awards: TitleAwardFact[] = (shares.get(c.userId)?.credits ?? []).map((credit) => {
@@ -564,6 +566,7 @@ export function getTitleFacts(
       totalQuantity: quantity.get(c.userId) ?? 0,
       wom: start && timeline ? gainsOf(timeline, start, end) : null,
       luck: luck.get(c.userId) ?? null,
+      achievements: achievementTallies ? (achievementTallies.get(c.userId) ?? { earned: 0, lastEarnedAt: null }) : null,
     };
   });
 }
