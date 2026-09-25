@@ -348,6 +348,8 @@ export type MinimalUser = Pick<User, "id" | "discordUsername" | "discordGlobalNa
 /** The reactions a player can leave on a teammate's submission, in the order they're shown. */
 export const SUBMISSION_REACTIONS = ["🔥", "🎉", "😂", "💀", "👀"] as const;
 export type SubmissionReaction = (typeof SUBMISSION_REACTIONS)[number];
+/** What each reaction is called in words: in labels and the audit log, where an emoji would be the device's font. */
+export const SUBMISSION_REACTION_NAMES: Record<SubmissionReaction, string> = { "🔥": "fire", "🎉": "party popper", "😂": "laughing", "💀": "skull", "👀": "eyes" };
 
 /** One emoji on a submission and who left it, oldest first. Only emojis someone has used are listed. */
 export interface SubmissionReactionGroup {

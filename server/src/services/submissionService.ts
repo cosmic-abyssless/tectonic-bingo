@@ -1,7 +1,7 @@
 import { now as clockNow } from "../clock";
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { SUBMISSION_REACTIONS, type ClaimInput, type NodeKind, type SubmissionReaction, type SubmissionReactionGroup, type ValuedAs } from "@bingo/shared";
+import { playerName, SUBMISSION_REACTION_NAMES, SUBMISSION_REACTIONS, type ClaimInput, type NodeKind, type SubmissionReaction, type SubmissionReactionGroup, type ValuedAs } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { claims, nodes, submissionReactions, submissions, submissionScreenshots, teamMembers, teamNodeState, teams, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
@@ -9,7 +9,7 @@ import { findAncestorIds, submitGateBlock } from "./graphService";
 import { conflictMessage, conflictsForClaims } from "./exclusivityService";
 import { effectiveStartsAt } from "./bingoStart";
 import { rsnsAcrossBingos } from "./playerNames";
-import { audit } from "../audit/record";
+import { audit, markAuditedNoop } from "../audit/record";
 import { pricer, valuedAsOf } from "./gpValueService";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -266,20 +266,49 @@ export function isSubmissionReaction(value: unknown): value is SubmissionReactio
 }
 
 /**
- * Puts one of a player's reactions on a submission, or takes it off. Only the submission's own team reacts. Returns the
- * submission's team, for the broadcast. Not audited: a reaction is chat, not a change to the bingo.
+ * Puts one of a player's reactions on a submission, or takes it off. Only the submission's own team reacts. Audited for
+ * the team (their activity feed), naming the reaction in words and whose submission for which tile. Returns the
+ * submission's team, for the broadcast.
  */
 export function setSubmissionReaction(db: Db, submissionId: string, userId: string, emoji: SubmissionReaction, reacted: boolean): { teamId: string } {
   return db.transaction((tx) => {
-    const submission = tx.select({ teamId: submissions.teamId }).from(submissions).where(eq(submissions.id, submissionId)).get();
+    const submission = tx.select({ teamId: submissions.teamId, submittedByUserId: submissions.submittedByUserId }).from(submissions).where(eq(submissions.id, submissionId)).get();
     if (!submission) throw new ServiceError(404, "Submission not found");
     const member = tx.select({ id: teamMembers.id }).from(teamMembers).where(and(eq(teamMembers.teamId, submission.teamId), eq(teamMembers.userId, userId))).get();
     if (!member) throw new ServiceError(403, "Only the submission's team can react to it");
     const where = and(eq(submissionReactions.submissionId, submissionId), eq(submissionReactions.userId, userId), eq(submissionReactions.emoji, emoji));
-    if (!reacted) tx.delete(submissionReactions).where(where).run();
-    else if (!tx.select({ id: submissionReactions.id }).from(submissionReactions).where(where).get()) {
-      tx.insert(submissionReactions).values({ submissionId, userId, emoji, createdAt: clockNow() }).run();
+    const existing = tx.select({ id: submissionReactions.id }).from(submissionReactions).where(where).get();
+    if (reacted === !!existing) {
+      markAuditedNoop();
+      return { teamId: submission.teamId };
     }
+    if (reacted) tx.insert(submissionReactions).values({ submissionId, userId, emoji, createdAt: clockNow() }).run();
+    else tx.delete(submissionReactions).where(where).run();
+
+    const bingoId = tx.select({ bingoId: teams.bingoId }).from(teams).where(eq(teams.id, submission.teamId)).get()!.bingoId;
+    const claim = tx.select({ nodeId: claims.nodeId }).from(claims).where(eq(claims.submissionId, submissionId)).get();
+    const tileByNodeId = new Map(tx.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all().map((t) => [t.nodeId, t]));
+    const tile = claim ? tileForLeaf(tx, claim.nodeId, tileByNodeId) : null;
+    const submitter = tx
+      .select({ id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick })
+      .from(users)
+      .where(eq(users.id, submission.submittedByUserId))
+      .get();
+    const rsn = rsnsAcrossBingos(tx, [{ bingoId, userId: submission.submittedByUserId }]).get(`${bingoId}|${submission.submittedByUserId}`) ?? null;
+    audit(tx, {
+      action: "submission.reaction_set",
+      bingoId,
+      entity: { type: "submission", id: submissionId, label: tile?.name ?? null },
+      teamId: submission.teamId,
+      details: {
+        emoji,
+        reaction: SUBMISSION_REACTION_NAMES[emoji],
+        reacted,
+        tileName: tile?.name ?? null,
+        submitterName: submitter ? playerName({ ...submitter, rsn }) : null,
+        ownSubmission: submission.submittedByUserId === userId,
+      },
+    });
     return { teamId: submission.teamId };
   });
 }

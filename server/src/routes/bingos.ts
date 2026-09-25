@@ -632,13 +632,12 @@ router.put(
   }),
 );
 
-// A teammate puts an emoji on one of their team's submissions, or takes it off. Not audited (chat, not a change to the
-// bingo); teammates refetch the team's submissions from the broadcast.
+// A teammate puts an emoji on one of their team's submissions, or takes it off (audited for the team); teammates
+// refetch the team's submissions from the broadcast.
 router.put(
   "/:slug/submissions/:id/reactions",
   requireAuth,
   requireBingo,
-  auditSkip("a teammate's reaction on a submission: chat, not a change to the bingo"),
   asyncHandler(async (req, res) => {
     const { emoji, reacted } = req.body as { emoji?: unknown; reacted?: unknown };
     if (!submissionService.isSubmissionReaction(emoji)) throw new ServiceError(400, "Not a reaction");

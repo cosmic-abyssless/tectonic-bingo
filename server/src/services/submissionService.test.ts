@@ -511,6 +511,26 @@ describe("setSubmissionReaction", () => {
     expect(db.select().from(schema.submissionReactions).all()).toEqual([]);
   });
 
+  it("is audited for the team: the reaction in words, whose submission, which tile; a repeat records nothing", () => {
+    const { teamId, captainUserId, memberUserId, submissionId } = reactable();
+    const reactions = () => db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "submission.reaction_set")).all();
+    runWithAuditContext({ requestId: "r1", actorUserId: captainUserId, actorType: "user", actorRole: "player", recorded: 0, skip: null }, () =>
+      setSubmissionReaction(db, submissionId, captainUserId, "🔥", true),
+    );
+    const repeat = { requestId: "r2", actorUserId: captainUserId, actorType: "user" as const, actorRole: "player" as const, recorded: 0, skip: null };
+    runWithAuditContext(repeat, () => setSubmissionReaction(db, submissionId, captainUserId, "🔥", true));
+    expect(repeat.recorded).toBe(1); // the no-op still counts as audited
+    runWithAuditContext({ requestId: "r3", actorUserId: memberUserId, actorType: "user", actorRole: "player", recorded: 0, skip: null }, () =>
+      setSubmissionReaction(db, submissionId, memberUserId, "💀", true),
+    );
+
+    const rows = reactions();
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ teamId, visibility: "team", entityType: "submission", entityId: submissionId, entityLabel: "Tile" });
+    expect(JSON.parse(rows[0]!.details)).toEqual({ emoji: "🔥", reaction: "fire", reacted: true, tileName: "Tile", submitterName: "member", ownSubmission: false });
+    expect(JSON.parse(rows[1]!.details)).toMatchObject({ reaction: "skull", ownSubmission: true });
+  });
+
   it("goes with the bingo when it's deleted", () => {
     const { bingo, captainUserId, submissionId } = reactable();
     setSubmissionReaction(db, submissionId, captainUserId, "💀", true);
