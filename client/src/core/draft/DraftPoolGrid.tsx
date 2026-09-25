@@ -279,6 +279,14 @@ function fixedColsInPlace(orderedColIds: string[]): string[] {
 // same ~30rem.
 const MIN_TABLE_HEIGHT = "30rem";
 
+const RATING_WIDTH = 96;
+// The Rating column was 140px wide while it also held the note's button. Every width gets saved, touched or not, so a
+// saved 140 is almost certainly that old default rather than someone's choice: it's dropped, for the new default.
+const OLD_RATING_WIDTH = 140;
+function withoutOldRatingWidth(sizing: NonNullable<GridState["columnSizing"]>): NonNullable<GridState["columnSizing"]> {
+  return { ...sizing, columnSizingModel: sizing.columnSizingModel.filter((c) => !(c.colId === "rating" && c.width === OLD_RATING_WIDTH)) };
+}
+
 // An order saved before the Note column existed lacks it, and AG would put a column the saved order doesn't list at
 // the end, far from the stars; it goes right after RSN instead, as it does for someone with no saved order.
 function withNoteAfterRsn(ids: string[]): string[] {
@@ -296,7 +304,7 @@ function readDraftColumnState(): Pick<GridState, "columnOrder" | "columnSizing" 
     const orderedColIds = parsed.columnOrder?.orderedColIds?.filter((id) => typeof id === "string");
     return {
       ...(orderedColIds?.length ? { columnOrder: { orderedColIds: fixedColsInPlace(withNoteAfterRsn(orderedColIds)) } } : {}),
-      ...(parsed.columnSizing ? { columnSizing: parsed.columnSizing } : {}),
+      ...(parsed.columnSizing ? { columnSizing: withoutOldRatingWidth(parsed.columnSizing) } : {}),
       ...(parsed.sort ? { sort: parsed.sort } : {}),
     };
   } catch {
@@ -428,7 +436,8 @@ export function DraftPoolGrid({
         valueGetter: (p) => (p.data ? (ratings[p.data.entries[0]!.signup.id]?.stars ?? 0) : 0),
         comparator: makeUnitComparator("rating", ratings),
         cellRenderer: RatingRenderer,
-        width: 140,
+        // Just the three stars (3 x 24px) and the cell's padding; the note has a column of its own.
+        width: RATING_WIDTH,
         // No static `sort: "desc"` here — the initialState fallback above sets it instead (see the comment
         // there for why a colDef-level default doesn't play well with a restored sort on another column).
         pinned: "left",
