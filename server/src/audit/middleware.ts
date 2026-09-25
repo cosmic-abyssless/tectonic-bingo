@@ -7,6 +7,7 @@ import { devSkipsIntegrations, isDevModeActive } from "../devMode";
 import { runWithAuditContext, type AuditContext } from "./context";
 import { audit, redactBody } from "./record";
 import { log } from "../log";
+import { normalizeTimezone } from "../localTime";
 
 // Mount after passport.session() (so req.user is populated) and before the
 // routers, in server/src/index.ts.
@@ -18,6 +19,9 @@ export function auditContext(req: Request, res: Response, next: NextFunction): v
     actorRole: req.user?.isAdmin ? "admin" : "player",
     recorded: 0,
     skip: null,
+    // Achievements' time-of-day/date rules (CONTEXT.md "Achievement"): set once in the client's central request
+    // function (see localTime.ts) — a missing or invalid zone reads as UTC.
+    timezone: normalizeTimezone(req.header("x-client-timezone")),
   };
   req.audit = ctx;
 

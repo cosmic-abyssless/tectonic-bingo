@@ -16,6 +16,12 @@ export interface AuditContext {
   /** Dev only: the request's clock, from the X-Dev-Now header (see clock.ts). Absent outside dev mode. */
   now?: Date;
   /**
+   * The client's IANA time zone, from the X-Client-Timezone header (see localTime.ts) — used only by Achievements'
+   * time-of-day/date rules (CONTEXT.md "Achievement"). Optional so every existing test-built AuditContext literal
+   * stays valid; read it through getTimezone(), which falls back to UTC.
+   */
+  timezone?: string;
+  /**
    * Dev only: the request asked (X-Dev-Skip-Integrations) to stay away from the outside services, so the clan API
    * client reads as not configured (tectonicService) and no player stats are fetched (playerStatsService). How the
    * test data generator's made-up players keep off the real APIs. Absent outside dev mode.
@@ -26,6 +32,11 @@ export interface AuditContext {
 /** Whether this request asked to skip the outside services (see AuditContext.skipIntegrations). */
 export function skipsIntegrations(): boolean {
   return getAuditContext()?.skipIntegrations === true;
+}
+
+/** The current request's device time zone (see AuditContext.timezone), or "UTC" outside a request/when absent. */
+export function getTimezone(): string {
+  return getAuditContext()?.timezone ?? "UTC";
 }
 
 const storage = new AsyncLocalStorage<AuditContext>();
