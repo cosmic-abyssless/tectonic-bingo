@@ -19,6 +19,7 @@ import { AgGridReact } from "ag-grid-react";
 import type { CustomCellEditorProps, CustomCellRendererProps } from "ag-grid-react";
 import type {
   CellEditRequestEvent,
+  CellKeyDownEvent,
   ColDef,
   GetRowIdParams,
   GridApi,
@@ -34,7 +35,9 @@ import { useGridTheme } from "../ui/agGrid";
 import { discordName, displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { Badge } from "../ui/Card";
-import { CellButton, CellIconButton, Mark } from "../ui/gridCells";
+import { CellIconButton, EditableCellValue, Mark } from "../ui/gridCells";
+import { Button } from "../ui/Button";
+import { toast } from "../ui/Toast";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { CheckIcon, RefreshIcon, XIcon } from "../ui/icons";
 import { CaCell, WomCell, caTitle, formatCaTier, formatWomStat } from "../signup/caStats";
@@ -48,6 +51,10 @@ export interface RosterRow extends RosterEntry {
   order: number;
 }
 
+function refreshFailed(rsn: string) {
+  return { onError: (err: unknown) => toast({ title: `Couldn't refresh ${rsn}'s stats`, description: err instanceof Error ? err.message : undefined, tone: "warning" as const }) };
+}
+
 function getRowId(params: GetRowIdParams<RosterRow>): string {
   return params.data.signup.id;
 }
@@ -59,6 +66,8 @@ export interface GridContext {
   search: string;
   partnerRsnMap: Map<string, string>;
   canWithdraw: boolean;
+  /** Pairings can change (mods pair or unpair from the Partner cell): only while signups are open. */
+  canPair: boolean;
   statsRefreshing: ReadonlySet<string>;
   /** Whoever's checking the buy-in box — defaults "Collected by" to them (below) rather than leaving it "Nobody
    * yet" until a second, separate edit. Null only if somehow rendered before auth resolves. */
@@ -69,6 +78,8 @@ export interface GridContext {
   withdrawSignup: ReturnType<typeof useModWithdrawSignup>;
   refreshStats: ReturnType<typeof useRefreshSignupStats>;
   setTimezone: ReturnType<typeof useSetSignupTimezone>;
+  /** Opens a player's profile (Enter on their RSN); null outside a PlayerProfileProvider. */
+  openProfile: ((userId: string) => void) | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,9 +109,11 @@ const TierCell = memo(function TierCell({ data }: CustomCellRendererProps<Roster
   return <TierBadge profile={data.tectonicProfile} />;
 });
 
+// Editable once the buy-in is marked received (who took the GP); before that there's nothing to credit.
 const CollectedByCell = memo(function CollectedByCell({ data }: CustomCellRendererProps<RosterRow>) {
-  if (!data?.collectedByUser) return <span className="text-on-surface-subtle">Nobody yet</span>;
-  return <span>{displayName(data.collectedByUser)}</span>;
+  if (!data) return null;
+  if (!data.signup.buyinReceivedAt) return <span className="text-on-surface-subtle">—</span>;
+  return <EditableCellValue prompt="Nobody yet">{data.collectedByUser ? displayName(data.collectedByUser) : null}</EditableCellValue>;
 });
 
 const CaCurrentCell = memo(function CaCurrentCell({ data, context }: CustomCellRendererProps<RosterRow, number, GridContext>) {
@@ -120,107 +133,126 @@ const EhpCell = memo(function EhpCell({ data, context }: CustomCellRendererProps
   return <WomCell stats={data.womStats} field="ehp" loading={context.statsRefreshing.has(data.signup.id)} />;
 });
 
-// Badge + at-risk badge + (while the roster can still change) a two-step withdraw button for removing a no-show
-// on a player's behalf. `confirming`/`error` are local — each rendered instance is a real React component in the
-// grid's own tree (no portal), so this is the same pattern the old per-row StatusCell used.
+// The status badge (and "will be cut"). While the roster can still change, an active signup's cell edits: a click or
+// Enter opens WithdrawEditor, a confirmation, to withdraw a no-show on the player's behalf. The X says it's there.
 const StatusCell = memo(function StatusCell({ data, context }: CustomCellRendererProps<RosterRow, string, GridContext>) {
-  const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   if (!data) return null;
   const active = data.signup.status === "active";
   const busy = context.withdrawSignup.isPending && context.withdrawSignup.variables === data.signup.id;
-  const signupId = data.signup.id;
-
-  async function withdraw() {
-    setError(null);
-    try {
-      await context.withdrawSignup.mutateAsync(signupId);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to withdraw signup");
-      setConfirming(false);
-    }
-  }
-
-  if (confirming) {
-    return (
-      <div className="flex h-full items-center gap-1 whitespace-nowrap">
-        <CellButton variant="danger" onClick={withdraw} disabled={busy}>
-          Withdraw {data.signup.rsn}
-        </CellButton>
-        <CellButton variant="ghost" onClick={() => setConfirming(false)}>
-          Cancel
-        </CellButton>
-      </div>
-    );
-  }
   return (
-    <div className="flex h-full items-center gap-1">
-      <Badge tone={active ? "ok" : "neutral"}>{data.signup.status}</Badge>
+    <div className="flex h-full cursor-default items-center gap-1" title={active && context.canWithdraw ? `Click (or press Enter) to withdraw ${data.signup.rsn}` : undefined}>
+      <Badge tone={active ? "ok" : "neutral"}>{busy ? "withdrawing…" : data.signup.status}</Badge>
       {data.cut && <Badge tone="warn">will be cut</Badge>}
-      {active && context.canWithdraw && (
-        <CellIconButton label={`Withdraw ${data.signup.rsn}'s signup`} onClick={() => setConfirming(true)}>
-          <XIcon size={12} />
-        </CellIconButton>
-      )}
-      {error && <span className="text-xs text-danger">{error}</span>}
+      {active && context.canWithdraw && <XIcon size={12} className="ml-auto shrink-0 text-on-surface-subtle" aria-hidden />}
     </div>
   );
 });
 
-// Duo mode only. Paired rows show the partner's name (highlighted) + an unpair button. Unpaired active rows show
-// a hint — who they've asked, if anyone, else that they can be paired; picking a partner happens through AG's own
-// edit gesture (double-click → agSelectCellEditor), which is why there is no "Pair" button here the way the old
-// table had one.
-const PartnerCell = memo(function PartnerCell({ data, context }: CustomCellRendererProps<RosterRow, string, GridContext>) {
-  const [error, setError] = useState<string | null>(null);
-  if (!data) return null;
-
-  if (data.pairing) {
-    const pairingId = data.pairing.id;
-    const partner = context.partnerRsnMap.get(data.signup.id) ?? "Not signed up yet";
-    const busy = context.modUnpair.isPending && context.modUnpair.variables === pairingId;
-    return (
-      <div className="flex min-w-0 items-center gap-1">
-        <span className="min-w-0 truncate text-on-surface">
-          <Mark text={partner} query={context.search} />
-        </span>
-        <CellIconButton
-          label="Unpair"
-          disabled={busy}
-          onClick={async () => {
-            setError(null);
-            try {
-              await context.modUnpair.mutateAsync(pairingId);
-            } catch (e: unknown) {
-              setError(e instanceof Error ? e.message : "Failed to unpair");
-            }
+// A confirmation, not an instant action: withdrawing takes the player off the roster. Enter (the Withdraw button has
+// focus) confirms; Escape or Cancel backs out. Ends the edit with "withdrawn" for onCellEditRequest to act on.
+function WithdrawEditor({ data, onValueChange, stopEditing }: CustomCellEditorProps<RosterRow, string, GridContext>) {
+  const [confirmed, setConfirmed] = useState(false);
+  useEffect(() => {
+    if (confirmed) stopEditing();
+  }, [confirmed, stopEditing]);
+  return (
+    <div className="w-72 space-y-3 p-3 text-sm">
+      <p className="text-on-surface">
+        Withdraw <span className="font-semibold">{data.signup.rsn}</span>'s signup? They come off the roster{data.pairing ? ", and their pairing ends" : ""}.
+      </p>
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="ghost" onPress={() => stopEditing(true)}>
+          Cancel
+        </Button>
+        <Button
+          size="sm"
+          variant="danger"
+          autoFocus
+          onPress={() => {
+            onValueChange("withdrawn");
+            setConfirmed(true);
           }}
         >
-          <XIcon size={12} />
-        </CellIconButton>
-        {error && <span className="text-xs text-danger">{error}</span>}
+          Withdraw
+        </Button>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
+// Duo mode only. While pairings can change (signups open), every active row's Partner cell edits (a click or Enter),
+// with PartnerEditor: a paired row's to an Unpair confirmation, an unpaired row's to a searchable list of the other
+// unpaired players. An unpaired row says who they've asked, if anyone. After that it's just who's paired with whom.
+const PartnerCell = memo(function PartnerCell({ data, context }: CustomCellRendererProps<RosterRow, string, GridContext>) {
+  if (!data) return null;
+  if (data.pairing) {
+    const partner = <Mark text={context.partnerRsnMap.get(data.signup.id) ?? "Not signed up yet"} query={context.search} />;
+    return context.canPair ? <EditableCellValue prompt="">{partner}</EditableCellValue> : <span className="min-w-0 truncate text-on-surface">{partner}</span>;
+  }
   if (data.signup.status !== "active") return <span className="text-on-surface-subtle">—</span>;
   if (data.outgoingPairingRequest) {
     const targetName = data.outgoingPairingRequest.target.name;
     return (
-      <span className="min-w-0 truncate text-on-surface-subtle" title={`Waiting for ${targetName} to accept`}>
-        Requested <Mark text={targetName} query={context.search} />
+      <span className="flex h-full min-w-0 items-center gap-1.5" title={`Waiting for ${targetName} to accept. Click to pair them with someone now.`}>
+        <span className="min-w-0 flex-1 truncate text-on-surface-subtle">
+          Requested <Mark text={targetName} query={context.search} />
+        </span>
       </span>
     );
   }
-  return <span className="text-on-surface-subtle">Double-click to pair</span>;
+  return context.canPair ? <EditableCellValue prompt="Pair with…" /> : <span className="text-on-surface-subtle">Unpaired</span>;
 });
+
+const UNPAIR = "__unpair__";
+
+// Pairs the row (pick someone: the search box has focus, arrows and Enter pick) or, for a paired row, unpairs it
+// (Enter on the focused Unpair button). Ends the edit with the partner's user id, or UNPAIR, for onCellEditRequest.
+function PartnerEditor({ data, context, onValueChange, stopEditing, unpaired }: CustomCellEditorProps<RosterRow, string, GridContext> & { unpaired: () => RosterRow[] }) {
+  const [done, setDone] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!data.pairing) ref.current?.querySelector("input")?.focus();
+  }, [data.pairing]);
+  useEffect(() => {
+    if (done) stopEditing();
+  }, [done, stopEditing]);
+  const finish = (value: string) => {
+    onValueChange(value);
+    setDone(true);
+  };
+  if (data.pairing) {
+    const partner = context.partnerRsnMap.get(data.signup.id) ?? "their partner";
+    return (
+      <div className="w-72 space-y-3 p-3 text-sm">
+        <p className="text-on-surface">
+          Unpair <span className="font-semibold">{data.signup.rsn}</span> and <span className="font-semibold">{partner}</span>? Both stay signed up, unpaired.
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onPress={() => stopEditing(true)}>
+            Cancel
+          </Button>
+          <Button size="sm" variant="danger" autoFocus onPress={() => finish(UNPAIR)}>
+            Unpair
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  const options = unpaired()
+    .filter((r) => r.signup.id !== data.signup.id)
+    .map((r) => ({ id: r.user.id, label: r.signup.rsn }));
+  return (
+    <div ref={ref} className="w-72 p-2">
+      <SearchableSelect value="" options={options} placeholder={`Pair ${data.signup.rsn} with…`} onChange={(id) => id && finish(id)} />
+    </div>
+  );
+}
 
 // Signups from before timezone was asked have none until the player confirms it or a mod sets it here — the gap is
 // the point of this column, so an empty cell says how to fill it rather than just showing a dash.
 const TimezoneCell = memo(function TimezoneCell({ data }: CustomCellRendererProps<RosterRow, string, GridContext>) {
   if (!data) return null;
-  if (!data.signup.timezone) return <span className="text-on-surface-subtle">Double-click to set</span>;
-  return <span className="min-w-0 truncate text-on-surface">{formatTimeZone(data.signup.timezone)}</span>;
+  return <EditableCellValue prompt="Set timezone">{data.signup.timezone ? formatTimeZone(data.signup.timezone) : null}</EditableCellValue>;
 });
 
 // A popup with the same searchable picker as the signup form — ~420 zones is too many for agSelectCellEditor's plain
@@ -325,11 +357,6 @@ export function SignupRosterGrid({
   const [initialState] = useState(readInitialGridState);
 
   const unpairedActive = useMemo(() => rows.filter((r) => r.signup.status === "active" && !r.pairing), [rows]);
-  const unpairedRefData = useMemo(() => {
-    const refData: Record<string, string> = { "": "Unpaired" };
-    for (const r of unpairedActive) refData[r.user.id] = r.signup.rsn;
-    return refData;
-  }, [unpairedActive]);
   const collectedByRefData = useMemo(() => {
     const refData: Record<string, string> = { "": "Nobody yet" };
     for (const o of collectedByOptions) refData[o.id] = o.label;
@@ -347,8 +374,6 @@ export function SignupRosterGrid({
   // stable ref lets them stay current without columnDefs ever needing to know these values changed at all.
   const unpairedActiveRef = useRef(unpairedActive);
   unpairedActiveRef.current = unpairedActive;
-  const unpairedRefDataRef = useRef(unpairedRefData);
-  unpairedRefDataRef.current = unpairedRefData;
   const collectedByRefDataRef = useRef(collectedByRefData);
   collectedByRefDataRef.current = collectedByRefData;
   const collectedByValuesRef = useRef(collectedByValues);
@@ -381,6 +406,8 @@ export function SignupRosterGrid({
         headerName: "RSN",
         valueGetter: (p) => p.data?.signup.rsn,
         cellRenderer: RsnCell,
+        // Keyboard, on this cell: Enter opens the player's profile, R refreshes their stats (see onCellKeyDown).
+        headerTooltip: "On a name: Enter opens the player's profile, R refreshes their stats",
         lockPosition: "left",
         suppressMovable: true,
         width: 150,
@@ -428,6 +455,12 @@ export function SignupRosterGrid({
         headerName: "Status",
         valueGetter: (p) => p.data?.signup.status,
         cellRenderer: StatusCell,
+        editable: (p) => p.data?.signup.status === "active" && !!p.context.canWithdraw,
+        cellEditor: WithdrawEditor,
+        cellEditorPopup: true,
+        cellEditorPopupPosition: "under",
+        // Enter presses the focused button in the confirmation rather than ending the edit.
+        suppressKeyboardEvent: (p) => p.editing && ["Enter", "Tab"].includes(p.event.key),
         width: 150,
       },
       {
@@ -484,14 +517,14 @@ export function SignupRosterGrid({
         getQuickFilterText: (p) =>
           p.data?.pairing ? (p.context.partnerRsnMap.get(p.data.signup.id) ?? "") : (p.data?.outgoingPairingRequest?.target.name ?? ""),
         cellRenderer: PartnerCell,
-        editable: (p) => !p.data?.pairing && p.data?.signup.status === "active",
-        cellEditor: "agSelectCellEditor",
-        cellEditorParams: (p: { data?: RosterRow }) => ({
-          values: ["", ...unpairedActiveRef.current.filter((r) => r.signup.id !== p.data?.signup.id).map((r) => r.user.id)],
-        }),
-        // Not `refData: unpairedRefData` — same reasoning as "collectedBy" above. PartnerCell (the cellRenderer)
-        // already handles the cell's own display without this; only the editor's dropdown labels need it.
-        valueFormatter: (p) => unpairedRefDataRef.current[p.value as string] ?? p.value,
+        editable: (p) => p.data?.signup.status === "active" && !!p.context.canPair,
+        cellEditor: PartnerEditor,
+        // Read when the editor opens, so the list is the unpaired players as they are then (see the refs above).
+        cellEditorParams: () => ({ unpaired: () => unpairedActiveRef.current }),
+        cellEditorPopup: true,
+        cellEditorPopupPosition: "under",
+        // The picker's own list navigation (and Enter on the Unpair button) rather than AG's "finish editing"/"move cell".
+        suppressKeyboardEvent: (p) => p.editing && ["Enter", "ArrowUp", "ArrowDown", "Tab"].includes(p.event.key),
         width: 180,
       },
     ];
@@ -505,7 +538,7 @@ export function SignupRosterGrid({
       },
     }));
     return [...cols.filter((c): c is ColDef<RosterRow> => c !== false), ...questionCols];
-    // collectedByRefData/collectedByValues/unpairedActive/unpairedRefData deliberately excluded — read via the
+    // collectedByRefData/collectedByValues/unpairedActive deliberately excluded — read via the
     // refs above instead, precisely so their (frequent) changes don't force columnDefs to a new identity. See
     // that comment for why a new columnDefs identity is the actual problem being avoided here.
   }, [questions, isDuo, showTier]);
@@ -580,25 +613,42 @@ export function SignupRosterGrid({
 
   const onCellEditRequest = useCallback((e: CellEditRequestEvent<RosterRow>) => {
     const { colDef, data, newValue } = e;
+    // A failed edit says so (the cell just snaps back otherwise).
+    const failed = (what: string) => ({ onError: (err: unknown) => toast({ title: `Couldn't ${what}`, description: err instanceof Error ? err.message : undefined, tone: "warning" }) });
     switch (colDef.colId) {
       case "buyin":
         // Checking the box defaults the collector to whoever's checking it — a mod who collected the GP and
         // marked it received in one motion shouldn't then have to make a second edit just to say it was them.
         // Still freely overridable via the "Collected by" cell itself (e.g. logging it for someone else).
         // Unchecking clears it either way (markBuyin service forces collectedByUserId null when !received).
-        context.markBuyin.mutate({ signupId: data.signup.id, received: !!newValue, collectedByUserId: newValue ? context.currentUserId : undefined });
+        context.markBuyin.mutate({ signupId: data.signup.id, received: !!newValue, collectedByUserId: newValue ? context.currentUserId : undefined }, failed("mark the buy-in"));
         break;
       case "collectedBy":
-        context.markBuyin.mutate({ signupId: data.signup.id, received: true, collectedByUserId: (newValue as string) || null });
+        context.markBuyin.mutate({ signupId: data.signup.id, received: true, collectedByUserId: (newValue as string) || null }, failed("change who collected it"));
         break;
       case "partner":
-        if (newValue) context.modPair.mutate({ userIdA: data.user.id, userIdB: newValue as string });
+        if (newValue === UNPAIR && data.pairing) context.modUnpair.mutate(data.pairing.id, failed("unpair them"));
+        else if (newValue && newValue !== UNPAIR) context.modPair.mutate({ userIdA: data.user.id, userIdB: newValue as string }, failed("pair them"));
+        break;
+      case "status":
+        if (newValue === "withdrawn") context.withdrawSignup.mutate(data.signup.id, failed(`withdraw ${data.signup.rsn}`));
         break;
       case "timezone":
-        if (newValue && newValue !== data.signup.timezone) context.setTimezone.mutate({ signupId: data.signup.id, timezone: newValue as string });
+        if (newValue && newValue !== data.signup.timezone) context.setTimezone.mutate({ signupId: data.signup.id, timezone: newValue as string }, failed("set the timezone"));
         break;
     }
-  }, [context.markBuyin, context.modPair, context.setTimezone, context.currentUserId]);
+  }, [context.markBuyin, context.modPair, context.modUnpair, context.withdrawSignup, context.setTimezone, context.currentUserId]);
+
+  // Keys on the RSN cell (it doesn't edit): Enter opens the player's profile, R refreshes their stats.
+  const onCellKeyDown = useCallback(
+    (e: CellKeyDownEvent<RosterRow>) => {
+      const key = (e.event as KeyboardEvent | null)?.key;
+      if (e.colDef.colId !== "rsn" || !e.data || !key) return;
+      if (key === "Enter") context.openProfile?.(e.data.user.id);
+      else if (key === "r" || key === "R") context.refreshStats.mutate(e.data.signup.id, refreshFailed(e.data.signup.rsn));
+    },
+    [context.openProfile, context.refreshStats],
+  );
 
   return (
     <div className="h-full min-h-0">
@@ -626,6 +676,7 @@ export function SignupRosterGrid({
         singleClickEdit
         stopEditingWhenCellsLoseFocus
         onCellEditRequest={onCellEditRequest}
+        onCellKeyDown={onCellKeyDown}
         enableCellTextSelection
         // Text columns sort with localeCompare: case-insensitive ("alice" beside "Alice", not after every capital)
         // and accent-aware, instead of AG's default character-code order.

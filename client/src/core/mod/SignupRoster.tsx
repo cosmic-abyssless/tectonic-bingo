@@ -31,6 +31,7 @@ import { useDocumentTop } from "../ui/tableChrome";
 import { TableSearchInput, useTableSearch } from "../ui/tableSearch";
 import { formatTierName } from "../tectonic/profile";
 import { toCsv } from "../ui/csv";
+import { useOpenProfile } from "../tectonic/PlayerName";
 import { cutModeLabel, describeShares } from "../draft/cutModes";
 import { SignupRosterGrid, type GridContext, type RosterRow } from "./SignupRosterGrid";
 
@@ -180,6 +181,8 @@ export function SignupRoster({ slug }: { slug: string }) {
   const { data: modsData } = useBingoMods(slug);
   const { user: me } = useAuth();
   const statsRefreshing = useStatsRefreshingSignupIds();
+  // Enter on a name in the table opens their profile (the mod panel provides the profile dialog).
+  const openProfile = useOpenProfile();
   const roster = data?.signups ?? [];
   // Only the questions whose answers this viewer gets (a mod doesn't see admins-only ones). Memoized: the grid's
   // columnDefs depend on this array's identity, and a new one each render would reset every column's width.
@@ -294,8 +297,8 @@ export function SignupRoster({ slug }: { slug: string }) {
   const refreshStats = useRefreshSignupStats(slug);
   const setTimezone = useSetSignupTimezone(slug);
   const gridContext = useMemo<GridContext>(
-    () => ({ search, partnerRsnMap, canWithdraw, statsRefreshing, currentUserId: me?.id ?? null, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone }),
-    [search, partnerRsnMap, canWithdraw, statsRefreshing, me, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone],
+    () => ({ search, partnerRsnMap, canWithdraw, canPair: stage === "signup", statsRefreshing, currentUserId: me?.id ?? null, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, openProfile }),
+    [search, partnerRsnMap, canWithdraw, stage, statsRefreshing, me, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, openProfile],
   );
 
   // ColumnPicker's own option list — every colId the grid can show except # and RSN, neither of which is

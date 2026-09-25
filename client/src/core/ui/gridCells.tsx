@@ -3,6 +3,7 @@
 // search-match highlighting inlines core/ui/tableSearch.tsx's Highlight *logic* rather than importing the
 // component — see docs/ag-grid-tables-plan.md for why grid cells stay off core/ui.
 import type { ReactNode } from "react";
+import { PencilIcon } from "./icons";
 
 const CELL_BUTTON_VARIANT = {
   primary: "border-transparent bg-button text-on-button hover:bg-on-surface",
@@ -79,5 +80,19 @@ export function Mark({ text, query }: { text: string; query: string }) {
         ),
       )}
     </>
+  );
+}
+
+/**
+ * A table cell that a click (or Enter, from the keyboard) edits, in AG Grid's own editing: its value, or a muted
+ * prompt when there's none ("Set timezone"), and a pencil so it reads as editable at a glance.
+ */
+export function EditableCellValue({ children, prompt }: { children?: ReactNode; prompt: string }) {
+  const empty = children == null || children === "" || children === false;
+  return (
+    <span className="flex h-full min-w-0 cursor-pointer items-center gap-1.5">
+      <span className={`min-w-0 flex-1 truncate ${empty ? "text-on-surface-subtle" : "text-on-surface"}`}>{empty ? prompt : children}</span>
+      <PencilIcon size={12} className="shrink-0 text-on-surface-subtle" />
+    </span>
   );
 }
