@@ -51,8 +51,16 @@ export interface RosterRow extends RosterEntry {
   order: number;
 }
 
-function refreshFailed(rsn: string) {
-  return { onError: (err: unknown) => toast({ title: `Couldn't refresh ${rsn}'s stats`, description: err instanceof Error ? err.message : undefined, tone: "warning" as const }) };
+/** Mutation options that say so when an edit fails ("Couldn't mark the buy-in"): the cell just snaps back otherwise. */
+function editFailed(what: string) {
+  return { onError: (err: unknown) => toast({ title: `Couldn't ${what}`, description: err instanceof Error ? err.message : undefined, tone: "warning" as const }) };
+}
+
+/** Flips a signup's buy-in. Checking it credits whoever's checking it as the collector (still changeable in "Collected
+ *  by"); unchecking clears that. The checkbox's click and Enter/Space on the cell both come here. */
+function toggleBuyin(row: RosterRow, context: GridContext) {
+  const received = !row.signup.buyinReceivedAt;
+  context.markBuyin.mutate({ signupId: row.signup.id, received, collectedByUserId: received ? context.currentUserId : undefined }, editFailed("mark the buy-in"));
 }
 
 function getRowId(params: GetRowIdParams<RosterRow>): string {
@@ -492,6 +500,16 @@ export function SignupRosterGrid({
         cellDataType: "boolean",
         editable: true,
         valueGetter: (p) => !!p.data?.signup.buyinReceivedAt,
+        // Enter or Space on the cell ticks or unticks the box, like a checkbox, rather than opening AG's checkbox
+        // editor around it.
+        suppressKeyboardEvent: (p) => {
+          if (p.editing || (p.event.key !== "Enter" && p.event.key !== " ")) return false;
+          if (p.event.type === "keydown" && p.data) {
+            p.event.preventDefault();
+            toggleBuyin(p.data, p.context as GridContext);
+          }
+          return true;
+        },
         width: 130,
       },
       {
@@ -618,28 +636,26 @@ export function SignupRosterGrid({
 
   const onCellEditRequest = useCallback((e: CellEditRequestEvent<RosterRow>) => {
     const { colDef, data, newValue } = e;
-    // A failed edit says so (the cell just snaps back otherwise).
-    const failed = (what: string) => ({ onError: (err: unknown) => toast({ title: `Couldn't ${what}`, description: err instanceof Error ? err.message : undefined, tone: "warning" }) });
     switch (colDef.colId) {
       case "buyin":
         // Checking the box defaults the collector to whoever's checking it — a mod who collected the GP and
         // marked it received in one motion shouldn't then have to make a second edit just to say it was them.
         // Still freely overridable via the "Collected by" cell itself (e.g. logging it for someone else).
         // Unchecking clears it either way (markBuyin service forces collectedByUserId null when !received).
-        context.markBuyin.mutate({ signupId: data.signup.id, received: !!newValue, collectedByUserId: newValue ? context.currentUserId : undefined }, failed("mark the buy-in"));
+        context.markBuyin.mutate({ signupId: data.signup.id, received: !!newValue, collectedByUserId: newValue ? context.currentUserId : undefined }, editFailed("mark the buy-in"));
         break;
       case "collectedBy":
-        context.markBuyin.mutate({ signupId: data.signup.id, received: true, collectedByUserId: (newValue as string) || null }, failed("change who collected it"));
+        context.markBuyin.mutate({ signupId: data.signup.id, received: true, collectedByUserId: (newValue as string) || null }, editFailed("change who collected it"));
         break;
       case "partner":
-        if (newValue === UNPAIR && data.pairing) context.modUnpair.mutate(data.pairing.id, failed("unpair them"));
-        else if (newValue && newValue !== UNPAIR) context.modPair.mutate({ userIdA: data.user.id, userIdB: newValue as string }, failed("pair them"));
+        if (newValue === UNPAIR && data.pairing) context.modUnpair.mutate(data.pairing.id, editFailed("unpair them"));
+        else if (newValue && newValue !== UNPAIR) context.modPair.mutate({ userIdA: data.user.id, userIdB: newValue as string }, editFailed("pair them"));
         break;
       case "status":
-        if (newValue === "withdrawn") context.withdrawSignup.mutate(data.signup.id, failed(`withdraw ${data.signup.rsn}`));
+        if (newValue === "withdrawn") context.withdrawSignup.mutate(data.signup.id, editFailed(`withdraw ${data.signup.rsn}`));
         break;
       case "timezone":
-        if (newValue && newValue !== data.signup.timezone) context.setTimezone.mutate({ signupId: data.signup.id, timezone: newValue as string }, failed("set the timezone"));
+        if (newValue && newValue !== data.signup.timezone) context.setTimezone.mutate({ signupId: data.signup.id, timezone: newValue as string }, editFailed("set the timezone"));
         break;
     }
   }, [context.markBuyin, context.modPair, context.modUnpair, context.withdrawSignup, context.setTimezone, context.currentUserId]);
@@ -650,7 +666,7 @@ export function SignupRosterGrid({
       const key = (e.event as KeyboardEvent | null)?.key;
       if (e.colDef.colId !== "rsn" || !e.data || !key) return;
       if (key === "Enter") context.openProfile?.(e.data.user.id);
-      else if (key === "r" || key === "R") context.refreshStats.mutate(e.data.signup.id, refreshFailed(e.data.signup.rsn));
+      else if (key === "r" || key === "R") context.refreshStats.mutate(e.data.signup.id, editFailed(`refresh ${e.data.signup.rsn}'s stats`));
     },
     [context.openProfile, context.refreshStats],
   );
