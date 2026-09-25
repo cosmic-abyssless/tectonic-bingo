@@ -11,6 +11,7 @@ import { effectiveStartsAt } from "./bingoStart";
 import { rsnsAcrossBingos } from "./playerNames";
 import { audit, markAuditedNoop } from "../audit/record";
 import { pricer, valuedAsOf } from "./gpValueService";
+import * as achievementService from "./achievementService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -42,7 +43,7 @@ export interface CreateSubmissionParams {
 // All submission-time gating lives here — the client mirrors these checks
 // for UX, but this is the enforcement.
 export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionParams) {
-  return db.transaction((tx) => {
+  const { submission, achievementHook } = db.transaction((tx) => {
     const now = params.now ?? clockNow();
 
     if (bingo.stage !== "live") {
@@ -142,8 +143,29 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
       onBehalfOfUserId: postedByUserId ? params.submittedByUserId : null,
     });
 
-    return submission;
+    return {
+      submission,
+      achievementHook: {
+        bingoId: bingo.id,
+        submissionId: submission.id,
+        posterUserId: postedByUserId ?? params.submittedByUserId,
+        creditedUserId: params.submittedByUserId,
+        teamId: params.teamId,
+        tileId: tile.id,
+        tileNodeId: tile.nodeId,
+        claimedLeafIds: nodeIds,
+        occurredAt: now,
+      },
+    };
   });
+
+  // Achievements (CONTEXT.md): notified after this transaction has committed, and swallowed on any failure — see
+  // achievementService.ts. "First priced" is evaluated from the claims' current gpValue (some may still be null;
+  // gpValueService.fillMissingGpValuesAndNotify notifies again once they resolve).
+  achievementService.recordSubmissionPosted(db, achievementHook);
+  achievementService.recordSubmissionsFirstPriced(db, [submission.id]);
+
+  return submission;
 }
 
 // Runs after createSubmission, once OCR finishes — see routes/bingos.ts.
@@ -271,7 +293,7 @@ export function isSubmissionReaction(value: unknown): value is SubmissionReactio
  * submission's team, for the broadcast.
  */
 export function setSubmissionReaction(db: Db, submissionId: string, userId: string, emoji: SubmissionReaction, reacted: boolean): { teamId: string } {
-  return db.transaction((tx) => {
+  const { teamId, achievementHook } = db.transaction((tx) => {
     const submission = tx.select({ teamId: submissions.teamId, submittedByUserId: submissions.submittedByUserId }).from(submissions).where(eq(submissions.id, submissionId)).get();
     if (!submission) throw new ServiceError(404, "Submission not found");
     const member = tx.select({ id: teamMembers.id }).from(teamMembers).where(and(eq(teamMembers.teamId, submission.teamId), eq(teamMembers.userId, userId))).get();
@@ -280,9 +302,11 @@ export function setSubmissionReaction(db: Db, submissionId: string, userId: stri
     const existing = tx.select({ id: submissionReactions.id }).from(submissionReactions).where(where).get();
     if (reacted === !!existing) {
       markAuditedNoop();
-      return { teamId: submission.teamId };
+      return { teamId: submission.teamId, achievementHook: null };
     }
-    if (reacted) tx.insert(submissionReactions).values({ submissionId, userId, emoji, createdAt: clockNow() }).run();
+    const wasAdd = reacted && !existing;
+    const now = clockNow();
+    if (reacted) tx.insert(submissionReactions).values({ submissionId, userId, emoji, createdAt: now }).run();
     else tx.delete(submissionReactions).where(where).run();
 
     const bingoId = tx.select({ bingoId: teams.bingoId }).from(teams).where(eq(teams.id, submission.teamId)).get()!.bingoId;
@@ -309,8 +333,17 @@ export function setSubmissionReaction(db: Db, submissionId: string, userId: stri
         ownSubmission: submission.submittedByUserId === userId,
       },
     });
-    return { teamId: submission.teamId };
+    return {
+      teamId: submission.teamId,
+      achievementHook: wasAdd
+        ? { bingoId, submissionId, reactorUserId: userId, creditedUserId: submission.submittedByUserId, teamId: submission.teamId, occurredAt: now }
+        : null,
+    };
   });
+
+  // Achievements (CONTEXT.md): only a reaction ADD notifies — see achievementService.ts.
+  if (achievementHook) achievementService.recordReactionAdded(db, achievementHook);
+  return { teamId };
 }
 
 /** One submission as the team's list has it (with its reactions), or undefined. */

@@ -10,6 +10,7 @@ import { claims, nodes, pieceValueOtherPieces, pieceValues, submissions, teams }
 import { broadcast } from "../ws";
 import { log } from "../log";
 import { getGePriceTable, type GePriceTable } from "./gePriceService";
+import * as achievementService from "./achievementService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -84,15 +85,22 @@ export function valuedAsOf(row: { valuedAsItemName: string | null; valuedAsDivis
   return row.valuedAsItemName && row.valuedAsDivisor ? { itemName: row.valuedAsItemName, divisor: row.valuedAsDivisor, source: row.valuedAsSource ?? null } : null;
 }
 
+export interface GpValueFillResult {
+  bingoIds: string[];
+  /** Submissions with at least one claim that just got its first GP value — for Achievements' Big spender (CONTEXT.md). */
+  submissionIds: string[];
+}
+
 /**
  * Prices every item claim that has no GP value yet, at today's prices. Only ever fills nulls, so a value once set
- * stays what it was when submitted. Returns the bingos whose claims changed.
+ * stays what it was when submitted. Returns the bingos and submissions whose claims changed.
  */
-export function fillMissingGpValues(db: Db, table: GePriceTable = getGePriceTable()): string[] {
+export function fillMissingGpValues(db: Db, table: GePriceTable = getGePriceTable()): GpValueFillResult {
   const price = pricer(db, table);
   const rows = db
     .select({
       id: claims.id,
+      submissionId: claims.submissionId,
       itemName: claims.itemName,
       quantity: claims.quantity,
       bingoId: teams.bingoId,
@@ -106,22 +114,25 @@ export function fillMissingGpValues(db: Db, table: GePriceTable = getGePriceTabl
     .where(and(isNotNull(claims.itemName), isNull(claims.gpValue)))
     .all();
   const bingoIds = new Set<string>();
+  const submissionIds = new Set<string>();
   db.transaction((tx) => {
     for (const row of rows) {
       const gpValue = price.gpValue(row.itemName, row.quantity, valuedAsOf(row));
       if (gpValue === null) continue;
       tx.update(claims).set({ gpValue }).where(and(eq(claims.id, row.id), isNull(claims.gpValue))).run();
       bingoIds.add(row.bingoId);
+      submissionIds.add(row.submissionId);
     }
   });
-  return [...bingoIds];
+  return { bingoIds: [...bingoIds], submissionIds: [...submissionIds] };
 }
 
-/** Fills missing GP values and tells the bingos' clients to refetch. */
+/** Fills missing GP values, tells the bingos' clients to refetch, and notifies Achievements' Big spender for whichever submissions just got a claim first-priced. */
 export function fillMissingGpValuesAndNotify(db: Db, table: GePriceTable = getGePriceTable()): void {
-  const bingoIds = fillMissingGpValues(db, table);
+  const { bingoIds, submissionIds } = fillMissingGpValues(db, table);
   if (bingoIds.length) log.info("gp values filled", { bingoIds });
   for (const bingoId of bingoIds) broadcast({ type: "gp_values_updated", bingoId, payload: {} });
+  achievementService.recordSubmissionsFirstPriced(db, submissionIds);
 }
 
 /**

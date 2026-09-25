@@ -1,9 +1,12 @@
-import type { CutMode, ExclusivityRule } from "@bingo/shared";
+import type { AchievementKey, CutMode, ExclusivityRule } from "@bingo/shared";
 import { now as clockNow } from "../clock";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import {
+  achievementActivity,
+  achievementEarned,
+  bingoAchievementSettings,
   bingoLines,
   bingoModerators,
   bingos,
@@ -34,6 +37,7 @@ import { ServiceError } from "./errors";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 import { rsnsInBingo } from "./playerNames";
+import * as achievementService from "./achievementService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -179,6 +183,8 @@ export function createBingo(db: Db, params: CreateBingoParams) {
     if (existing) throw new ServiceError(409, "A bingo with this slug already exists");
     const bingo = tx.insert(bingos).values({ ...row, createdAt: clockNow() }).returning().get();
     tx.insert(bingoModerators).values({ bingoId: bingo.id, userId: row.createdByUserId, createdAt: clockNow() }).run();
+    // Every Achievement starts switched on for a new bingo (CONTEXT.md "Achievement").
+    achievementService.initializeAchievementSettings(tx, bingo.id, clockNow());
     audit(tx, {
       action: "bingo.created",
       bingoId: bingo.id,
@@ -259,6 +265,12 @@ export function deleteBingo(db: Db, bingoId: string): void {
         },
       },
     });
+
+    // Achievements (CONTEXT.md): removed first — activity/earned rows reference this bingo's teams and users,
+    // which are deleted further down.
+    tx.delete(achievementActivity).where(eq(achievementActivity.bingoId, bingoId)).run();
+    tx.delete(achievementEarned).where(eq(achievementEarned.bingoId, bingoId)).run();
+    tx.delete(bingoAchievementSettings).where(eq(bingoAchievementSettings.bingoId, bingoId)).run();
 
     tx.delete(claims).where(inArray(claims.submissionId, submissionIds)).run();
     tx.delete(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, submissionIds)).run();
@@ -365,12 +377,17 @@ export interface UpdateBingoSettingsParams {
   womEnabled?: boolean;
   womGroupId?: string | null;
   womGroupVerificationCode?: string | null;
+  // Achievements (CONTEXT.md "Achievement"): the master switch is a plain column (below); per-Achievement
+  // switches live in their own table and are applied separately (see achievementService.applyAchievementSwitches).
+  achievementsEnabled?: boolean;
+  achievements?: Partial<Record<AchievementKey, boolean>>;
 }
 
 export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingoSettingsParams) {
   return db.transaction((tx) => {
     const existing = tx.select().from(bingos).where(eq(bingos.id, bingoId)).get();
     if (!existing) throw new ServiceError(404, "Bingo not found");
+    if (params.achievements) achievementService.applyAchievementSwitches(tx, bingoId, params.achievements);
     if (params.signupMode !== undefined && params.signupMode !== existing.signupMode) {
       // Existing signups were made under the other mode's rules (pairings only
       // mean something in duo), so the switch is only allowed on a clean slate.
@@ -384,7 +401,7 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
     if (params.womGroupId != null && !/^\d+$/.test(params.womGroupId)) {
       throw new ServiceError(400, "WOM group ID must be a number");
     }
-    const { exclusivityRules, ...columns } = params;
+    const { exclusivityRules, achievements: _achievements, ...columns } = params;
     const set: Partial<typeof bingos.$inferInsert> = { ...columns };
     if (exclusivityRules !== undefined) set.exclusivityRulesJson = JSON.stringify(normalizeExclusivityRules(exclusivityRules));
     const updated = tx.update(bingos).set(set).where(eq(bingos.id, bingoId)).returning().get();

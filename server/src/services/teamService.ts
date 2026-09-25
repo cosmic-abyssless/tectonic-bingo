@@ -11,6 +11,7 @@ import { MINIMAL_USER_COLS } from "./userService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 import { rsnsInBingo } from "./playerNames";
+import * as achievementService from "./achievementService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -102,7 +103,7 @@ export function getTeamProgress(db: Db, teamId: string): TeamProgressSummary {
 // Team-scoped so leaving a team takes the hand down with it; the task must be
 // a direct child of the tile's root and the tile must belong to the team's bingo.
 export function setTileInterest(db: Db, teamId: string, userId: string, tileId: string, taskId: string, interested: boolean): void {
-  db.transaction((tx) => {
+  const achievementHook = db.transaction((tx) => {
     const team = tx.select({ bingoId: teams.bingoId }).from(teams).where(eq(teams.id, teamId)).get();
     const tile = tx.select({ id: tiles.id, bingoId: tiles.bingoId, name: tiles.name, nodeId: tiles.nodeId }).from(tiles).where(eq(tiles.id, tileId)).get();
     if (!team || !tile || tile.bingoId !== team.bingoId) throw new ServiceError(404, "Tile not found");
@@ -118,9 +119,11 @@ export function setTileInterest(db: Db, teamId: string, userId: string, tileId: 
     const existing = tx.select({ id: tileInterests.id }).from(tileInterests).where(where).get();
     if (interested === !!existing) {
       markAuditedNoop();
-      return;
+      return null;
     }
-    if (interested) tx.insert(tileInterests).values({ tileId, taskId, teamId, userId, createdAt: clockNow() }).run();
+    const wasOn = interested && !existing;
+    const now = clockNow();
+    if (interested) tx.insert(tileInterests).values({ tileId, taskId, teamId, userId, createdAt: now }).run();
     else tx.delete(tileInterests).where(where).run();
     audit(tx, {
       action: "team.tile_interest_set",
@@ -129,7 +132,11 @@ export function setTileInterest(db: Db, teamId: string, userId: string, tileId: 
       teamId,
       details: { tileName: tile.name, taskLabel: task.label ?? "Untitled part", interested },
     });
+    return wasOn ? { bingoId: team.bingoId, userId, teamId, tileId, partId: taskId, occurredAt: now } : null;
   });
+
+  // Achievements (CONTEXT.md): only interest turned ON notifies — see achievementService.ts.
+  if (achievementHook) achievementService.recordInterestMarked(db, achievementHook);
 }
 
 // The only way to hand out points outside the node graph now that approval
