@@ -54,7 +54,7 @@ export interface ThemeSlots {
   AchievementUnlockCard: ComponentType<{ achievement: MyAchievement; onViewAchievements: () => void }>;
   // One Achievement in the Achievements modal's single-column list (core/achievements/AchievementsModal): earned,
   // locked (greyed, with progress when it's counted) or masked (a Hidden one not yet earned: "???", nothing else is
-  // known). Shows the description with its flavour under it, like the unlock popup.
+  // known). Shows the description, with its flavour under it once earned.
   AchievementRow: ComponentType<{ achievement: MyAchievement }>;
   // One team's column in the draft room (core/draft/TeamRoster): its card, then its picks. Read with useOptionalSlot.
   // Each pick's element must carry data-team-id and data-pick-number (the pick reveal flies to it) and stay invisible

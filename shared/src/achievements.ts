@@ -27,7 +27,7 @@ export interface AchievementDef {
   name: string;
   /** Short, player-facing — no fine print ("during Live", "device time", "as first priced"). */
   description: string;
-  /** A line of flavour, shown under the description in both the unlock popup and the Achievements list. */
+  /** A line of flavour, shown under the description in the unlock popup and, once earned, the Achievements list. */
   flavor: string;
   /** Shown as a "???" slot until earned; the server never reveals its name/description/icon before then. */
   hidden: boolean;
@@ -89,6 +89,7 @@ export interface MyAchievement {
   masked: boolean;
   name: string | null;
   description: string | null;
+  /** Only once earned — a locked Achievement, Hidden or not, doesn't show its flavour yet. */
   flavor: string | null;
   itemName: string | null;
   earned: boolean;

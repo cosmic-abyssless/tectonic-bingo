@@ -32,7 +32,7 @@ export function AchievementRow({ achievement }: { achievement: MyAchievement }) 
           {earned && <div className="shrink-0 text-[11px] text-on-surface-subtle">{earnedLabel(achievement.earnedAt)}</div>}
         </div>
         <div className="text-xs text-on-surface-muted">{achievement.description}</div>
-        <div className="text-xs italic text-on-surface-subtle">{achievement.flavor}</div>
+        {earned && <div className="text-xs italic text-on-surface-subtle">{achievement.flavor}</div>}
         {!earned && label && (
           <div className="mt-1.5 flex items-center gap-2">
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-raised">

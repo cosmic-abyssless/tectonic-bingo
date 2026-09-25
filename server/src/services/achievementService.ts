@@ -479,7 +479,8 @@ export function getMyAchievements(db: Db, bingo: Bingo, userId: string): MyAchie
       masked,
       name: masked ? null : def.name,
       description: masked ? null : def.description,
-      flavor: masked ? null : def.flavor,
+      // The flavour line is part of the reward: none until earned, even for a visible one.
+      flavor: earned ? def.flavor : null,
       itemName: masked ? null : def.itemName,
       earned: !!earned,
       earnedAt: earned ? earned.earnedAt.toISOString() : null,

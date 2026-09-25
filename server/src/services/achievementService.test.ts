@@ -224,6 +224,15 @@ describe("Called it (hidden)", () => {
     expect(earned(bingo, alice.id, "called_it")).toBe(false);
   });
 
+  it("a visible one's flavour only comes once it's earned", () => {
+    const { bingo, team, alice } = seed();
+    const read = () => myAchievements(bingo, alice.id).achievements.find((a) => a.key === "strong_start")!;
+    expect(read()).toMatchObject({ masked: false, flavor: null, earned: false });
+    const { leafId, itemName } = tileWithLeaf(bingo.id, 0, 0);
+    submit(bingo, team.id, alice.id, leafId, itemName);
+    expect(read().flavor).toBeTruthy();
+  });
+
   it("is masked in the read until earned", () => {
     const { bingo, alice } = seed();
     const entry = myAchievements(bingo, alice.id).achievements.find((a) => a.key === "called_it")!;

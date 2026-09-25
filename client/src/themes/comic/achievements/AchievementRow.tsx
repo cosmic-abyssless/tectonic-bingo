@@ -52,7 +52,7 @@ export function AchievementRow({ achievement }: { achievement: MyAchievement }) 
         <div className={`mt-1 text-sm leading-snug ${masked ? "italic" : ""}`} style={{ color: earned ? colors.INK_BODY : colors.INK_SUBTLE }}>
           {masked ? "Keep playing to discover this one." : achievement.description}
         </div>
-        {!masked && (
+        {earned && (
           <div className="text-sm italic leading-snug" style={{ color: colors.INK_SUBTLE }}>
             {achievement.flavor}
           </div>
