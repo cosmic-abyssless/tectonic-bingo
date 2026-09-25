@@ -112,7 +112,6 @@ const RsnCell = memo(function RsnCell({ data, context }: CustomCellRendererProps
       <PlayerName userId={data.user.id} className="min-w-0 truncate">
         <Mark text={data.signup.rsn} query={context.search} />
       </PlayerName>
-      {data.signup.rsnVerified && <CheckIcon size={14} className="shrink-0 text-ok" aria-label="Verified against the linked clan account" />}
     </span>
   );
 });
