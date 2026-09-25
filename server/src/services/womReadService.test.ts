@@ -6,6 +6,7 @@ import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { WomClient, type WomSnapshot } from "./womService";
 import { gainsOf, queueDueReads, readPlayer, WomReadQueue } from "./womReadService";
+import * as achievementService from "./achievementService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -108,6 +109,73 @@ describe("readPlayer", () => {
     const wom = fakeWom([], { status: 404 });
     expect(await readPlayer(db, wom.client, { bingoId, userId: userIds[0]! }, { now: at(5) })).toBe("failed");
     expect(db.select().from(schema.womReads).get()?.lastError).toMatch(/no snapshots/);
+  });
+});
+
+describe("Leech (an Achievement read from the clue counts)", () => {
+  const leechEarned = (bingoId: string, userId: string) =>
+    db
+      .select()
+      .from(schema.achievementEarned)
+      .all()
+      .some((e) => e.bingoId === bingoId && e.userId === userId && e.achievementKey === "leech");
+  const switchOn = (bingoId: string, at: Date) => db.transaction((tx) => achievementService.initializeAchievementSettings(tx, bingoId, at));
+
+  it("is earned once a snapshot during the Bingo shows more clues than before it started", async () => {
+    const { bingoId, userIds } = seed();
+    switchOn(bingoId, START);
+    const wom = fakeWom([raw(at(-2), 1, 40), raw(at(3), 1, 40)]);
+    await readPlayer(db, wom.client, { bingoId, userId: userIds[0]! }, { now: at(5) });
+    expect(leechEarned(bingoId, userIds[0]!)).toBe(false);
+
+    const later = fakeWom([raw(at(3), 1, 40), raw(at(8), 1, 41)]);
+    await readPlayer(db, later.client, { bingoId, userId: userIds[0]! }, { now: at(10) });
+    expect(leechEarned(bingoId, userIds[0]!)).toBe(true);
+  });
+
+  it("doesn't count clues opened before the Bingo started", async () => {
+    const { bingoId, userIds } = seed();
+    switchOn(bingoId, START);
+    const wom = fakeWom([raw(at(-20), 1, 30), raw(at(-2), 1, 40), raw(at(3), 1, 40)]);
+    await readPlayer(db, wom.client, { bingoId, userId: userIds[0]! }, { now: at(5) });
+    expect(leechEarned(bingoId, userIds[0]!)).toBe(false);
+  });
+
+  it("counts reaching the hiscores' minimum at all (stored as no count before) as a clue opened", async () => {
+    const { bingoId, userIds } = seed();
+    switchOn(bingoId, START);
+    const unranked = { ...raw(at(-2), 1), data: { ...raw(at(-2), 1).data, activities: { clue_scrolls_all: { score: -1 } } } };
+    const wom = fakeWom([unranked, raw(at(3), 1, 1)]);
+    await readPlayer(db, wom.client, { bingoId, userId: userIds[0]! }, { now: at(5) });
+    expect(leechEarned(bingoId, userIds[0]!)).toBe(true);
+  });
+
+  it("counts a clue from while it was Live on the final read, but not one after the Bingo ended", async () => {
+    const during = seed({ stage: "complete", endedAt: at(48) });
+    switchOn(during.bingoId, START);
+    await readPlayer(db, fakeWom([raw(at(1), 1, 10), raw(at(47), 1, 11)]).client, { bingoId: during.bingoId, userId: during.userIds[0]! }, { now: at(100) });
+    expect(leechEarned(during.bingoId, during.userIds[0]!)).toBe(true);
+  });
+
+  it("isn't earned from a clue opened after the Bingo ended", async () => {
+    const after = seed({ stage: "complete", endedAt: at(48) });
+    switchOn(after.bingoId, START);
+    await readPlayer(db, fakeWom([raw(at(1), 1, 10), raw(at(60), 1, 11)]).client, { bingoId: after.bingoId, userId: after.userIds[0]! }, { now: at(100) });
+    expect(leechEarned(after.bingoId, after.userIds[0]!)).toBe(false);
+  });
+
+  it("switched on mid-Bingo, only counts clues from then on", async () => {
+    const { bingoId, userIds } = seed();
+    switchOn(bingoId, at(10));
+    // The clue at 5 h came before Leech was switched on; nothing since.
+    await readPlayer(db, fakeWom([raw(at(-2), 1, 40), raw(at(5), 1, 41), raw(at(20), 1, 41)]).client, { bingoId, userId: userIds[0]! }, { now: at(25) });
+    expect(leechEarned(bingoId, userIds[0]!)).toBe(false);
+  });
+
+  it("isn't earned in a Bingo where it has never been switched on", async () => {
+    const { bingoId, userIds } = seed();
+    await readPlayer(db, fakeWom([raw(at(-2), 1, 40), raw(at(3), 1, 41)]).client, { bingoId, userId: userIds[0]! }, { now: at(5) });
+    expect(leechEarned(bingoId, userIds[0]!)).toBe(false);
   });
 });
 

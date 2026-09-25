@@ -19,13 +19,14 @@ import {
   type MyAchievementsResponse,
 } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { achievementActivity, achievementEarned, bingoAchievementSettings, bingos, nodeEdges, submissionReactions, submissions, teamMembers, teams, tileInterests, tiles } from "../db/schema";
+import { achievementActivity, achievementEarned, bingoAchievementSettings, bingos, nodeEdges, submissionReactions, submissions, teamMembers, teams, tileInterests, tiles, womSnapshots } from "../db/schema";
 import { now as clockNow } from "../clock";
 import { getTimezone } from "../audit/context";
 import { localTimeOf } from "../localTime";
 import { audit } from "../audit/record";
 import { broadcast } from "../ws";
 import { findAncestorIds } from "./graphService";
+import { effectiveStartsAt, endedAt } from "./bingoStart";
 import { log } from "../log";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -450,6 +451,47 @@ export function recordPageOpened(db: Db, event: PageOpenedEvent): void {
           return boardTileIds.length > 0 && boardTileIds.every((id) => openedTileIds.has(id));
         });
       }
+    });
+  });
+}
+
+/**
+ * A Player's Wise Old Man snapshots were just stored (womReadService.readPlayer): Leech, for a clue scroll opened during
+ * the Bingo. Earned once a snapshot taken during it shows more clues than the baseline — their last snapshot from before
+ * it started (or from before Leech was switched on, if that's later), else their first one since — the same baseline
+ * the Titles' clue gains use. Checked on every read, the final one after the Bingo is Finished too, since that read is
+ * still about play while it was Live; snapshots after its end don't count.
+ */
+export function recordWomSnapshotsRead(db: Db, bingoId: string, userId: string): void {
+  safely(() => {
+    db.transaction((tx) => {
+      const bingo = tx.select().from(bingos).where(eq(bingos.id, bingoId)).get();
+      if (!bingo || (bingo.stage !== "live" && bingo.stage !== "complete")) return;
+      const onATeam = tx
+        .select({ id: teamMembers.id })
+        .from(teamMembers)
+        .innerJoin(teams, eq(teams.id, teamMembers.teamId))
+        .where(and(eq(teams.bingoId, bingoId), eq(teamMembers.userId, userId)))
+        .get();
+      const settings = loadSettings(tx, bingoId);
+      const setting = settings.get("leech");
+      const start = effectiveStartsAt(tx, bingo);
+      if (!onATeam || !setting || !start) return;
+
+      const cutoff = setting.firstSwitchedOnAt > start ? setting.firstSwitchedOnAt : start;
+      const end = endedAt(tx, bingo);
+      const snapshots = tx
+        .select({ at: womSnapshots.takenAt, clues: womSnapshots.clues })
+        .from(womSnapshots)
+        .where(and(eq(womSnapshots.bingoId, bingoId), eq(womSnapshots.userId, userId)))
+        .orderBy(womSnapshots.takenAt)
+        .all()
+        .filter((s) => !end || s.at <= end);
+      const latest = snapshots.at(-1);
+      if (!latest || latest.at <= cutoff) return;
+      const baseline = snapshots.filter((s) => s.at <= cutoff).at(-1) ?? snapshots[0]!;
+      // A clue count below the hiscores' minimum is stored as null: reaching it at all is a clue opened.
+      tryEarn(tx, bingoId, userId, "leech", latest.at, settings, () => (latest.clues ?? 0) > (baseline.clues ?? 0));
     });
   });
 }
