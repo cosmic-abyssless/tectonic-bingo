@@ -3,7 +3,7 @@ import type { Claim } from "@bingo/shared";
 import { WikiItemLink } from "../ui/WikiItemLink";
 
 /** claimsSummary() with each item linked to its wiki page: "2× Bruma torch, Vorki". */
-export function ClaimsSummary({ claims }: { claims: Claim[] }) {
+export function LinkedClaimsSummary({ claims }: { claims: Claim[] }) {
   const items = claims.filter((c) => c.itemName !== null);
   if (items.length === 0) return <>(no items claimed — judged manually)</>;
   return (

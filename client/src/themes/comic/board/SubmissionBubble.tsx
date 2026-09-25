@@ -6,7 +6,7 @@ import { InkTag } from "../ui/CaptionBox";
 import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
 import { displayName } from "../../../core/ui/user";
-import { ClaimsSummary } from "../../../core/submissions/ClaimsSummary";
+import { LinkedClaimsSummary } from "../../../core/submissions/LinkedClaimsSummary";
 
 /**
  * A submission rendered as a postcard-ish paper card
@@ -52,7 +52,7 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
             </div>
           )}
           <p className="text-sm leading-snug" style={{ color: colors.INK }}>
-            <ClaimsSummary claims={submission.detail.claims} />
+            <LinkedClaimsSummary claims={submission.detail.claims} />
           </p>
           <p className="mt-1 text-xs italic" style={{ color: colors.INK_SUBTLE }}>
             {"— "}

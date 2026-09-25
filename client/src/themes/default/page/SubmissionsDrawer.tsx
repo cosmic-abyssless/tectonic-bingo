@@ -10,7 +10,7 @@ import { SubmissionStatusBadge } from "../../../core/ui/StatusBadge";
 import { ScreenshotThumb } from "../../../core/submissions/ScreenshotThumb";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
 import { displayName } from "../../../core/ui/user";
-import { ClaimsSummary } from "../../../core/submissions/ClaimsSummary";
+import { LinkedClaimsSummary } from "../../../core/submissions/LinkedClaimsSummary";
 
 type Filter = SubmissionStatus | "all";
 const FILTERS: { key: Filter; label: string }[] = [
@@ -99,7 +99,7 @@ export function SubmissionsDrawer({
                   ))}
                 </div>
                 <p className="truncate text-sm text-on-surface-muted">
-                  <ClaimsSummary claims={s.detail.claims} />
+                  <LinkedClaimsSummary claims={s.detail.claims} />
                 </p>
                 {s.detail.submittedByUser && (
                   <p className="mt-0.5 text-xs text-on-surface-subtle">

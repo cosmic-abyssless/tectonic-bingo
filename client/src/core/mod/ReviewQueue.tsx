@@ -15,7 +15,7 @@ import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { inclusionFilter } from "../ui/inclusionFilter";
 import { ScreenshotThumb } from "../submissions/ScreenshotThumb";
 import { claimsGpBreakdown, claimsGpValue } from "../submissions/claimsSummary";
-import { ClaimsSummary } from "../submissions/ClaimsSummary";
+import { LinkedClaimsSummary } from "../submissions/LinkedClaimsSummary";
 import { formatGp } from "../ui/gp";
 import { RepriceGpButton } from "./RepriceGpButton";
 import { fullUrl } from "../../api/imageVariants";
@@ -292,7 +292,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
                       {isManual && <Badge tone="info">manual</Badge>}
                     </div>
                     <p className="truncate text-sm text-on-surface-muted">
-                      <ClaimsSummary claims={row.claims} />
+                      <LinkedClaimsSummary claims={row.claims} />
                       {row.claims.some((c) => c.itemName !== null) && (
                         <>
                           <span className="num" title={claimsGpBreakdown(row.claims, formatGp, new Map(row.leaves.flatMap((l) => (l.valuedAs ? [[l.id, l.valuedAs] as const] : []))))}>
