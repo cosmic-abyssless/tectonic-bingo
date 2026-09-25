@@ -17,10 +17,18 @@ function Chip({ children }: { children: string }) {
   return <span className="inline-flex max-w-full items-center truncate rounded-sm bg-surface-hover px-1.5 py-0.5 text-[11px] text-on-surface-muted">{children}</span>;
 }
 
+// A task's claims as one chip per item, quantities added up: five Blood shard claims read "Blood shard × 5", not
+// five chips of "× 1". In the order each item first appears.
+function claimChips(claims: ContributionAward["claims"]): string[] {
+  const totals = new Map<string, number>();
+  for (const c of claims) totals.set(c.label, (totals.get(c.label) ?? 0) + c.quantity);
+  return [...totals].map(([label, quantity]) => `${label} × ${formatShare(quantity)}`);
+}
+
 function AwardRow({ award, color }: { award: ContributionAward; color: string }) {
   const chips =
     award.kind === "task"
-      ? award.claims.map((c) => `${c.label} × ${formatShare(c.quantity)}`)
+      ? claimChips(award.claims)
       : award.kind === "line"
         ? (award.viaTiles ?? [])
         : [`${Math.round(award.fraction * 100)}% of the tile`];
