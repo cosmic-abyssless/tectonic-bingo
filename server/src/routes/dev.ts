@@ -13,6 +13,7 @@ import { ServiceError } from "../services/errors";
 import * as devTestDataService from "../services/devTestDataService";
 import { mockPastCompetition } from "../services/pastWomCompetitionService";
 import { OptionsError, normalizeOptions, type RawOptions } from "../devTools/generateBingo/options";
+import { fillFakeWomSnapshots } from "../devTools/generateBingo/womSnapshots";
 import { getGenerateJob, isGenerateJobRunning, jobView, startGenerateJob } from "../devTools/generateBingo/job";
 import type { BoardSource } from "../devTools/generateBingo/run";
 import type { BingoExportDocument } from "@bingo/shared";
@@ -44,6 +45,18 @@ router.post(
   auditSkip("dev test data"),
   asyncHandler(async (req, res) => {
     res.json(devTestDataService.fillFakeStats(db, req.params.slug as string));
+  }),
+);
+
+// Gives a generated bingo's Players made-up Wise Old Man snapshots up to now, for the WOM Titles and luck
+// (devTools/generateBingo/womSnapshots.ts). Not audited: test data, like the fake-stats route above.
+router.post(
+  "/bingos/:slug/fake-wom-snapshots",
+  auditSkip("dev test data"),
+  asyncHandler(async (req, res) => {
+    const { seed } = (req.body ?? {}) as { seed?: unknown };
+    if (typeof seed !== "number" || !Number.isInteger(seed)) throw new ServiceError(400, "seed must be a whole number");
+    res.json(fillFakeWomSnapshots(db, req.params.slug as string, seed));
   }),
 );
 
