@@ -872,6 +872,15 @@ function FlyingBook({
   const poses = useRef<Map<number, LeafPose>>(new Map());
   // Which page the curl layer is showing the other side of, if any.
   const [curlCopy, setCurlCopy] = useState<{ leaf: number; side: Side } | null>(null);
+  // True while the book is still flying out: until it has landed open, nothing in it responds (a hover would start
+  // a page curl mid-flight, and the curl layer then fights the flight for the overlay's scrollbar). Only clicking off
+  // it, to cancel, works. The ref is for handlers that must see it synchronously.
+  const [opening, setOpening] = useState(true);
+  const openingRef = useRef(true);
+  const opened = useCallback(() => {
+    openingRef.current = false;
+    setOpening(false);
+  }, []);
 
   const flipTo = useCallback(
     (next: number) => {
@@ -901,6 +910,7 @@ function FlyingBook({
     // stacked on the right.
     for (let k = 0; k < leafCount; k++) poses.current.set(k, { angle: k === 0 ? OPEN_ANGLE : 0, z: leafDepth(k, 1) });
     if (!root || !frame || !flyer || !cover || !page || !base || !backdrop || !burst) {
+      opened();
       setBookAway(tileId);
       return;
     }
@@ -915,7 +925,7 @@ function FlyingBook({
       if (back) back.style.transform = `translateZ(${-BACK_DEPTH}px) rotateY(180deg)`;
       if (mark) mark.style.opacity = "0";
       setBookAway(tileId);
-      animate(reducedEnterSequence(backdrop, burst));
+      animate(reducedEnterSequence(backdrop, burst)).then(opened, opened);
       return;
     }
     // Measure the cell's book BEFORE hiding it, pose our copy over it
@@ -940,7 +950,8 @@ function FlyingBook({
       // tile's crop); open, nothing's cut, so a fold-back swung past the
       // book's bottom isn't either. The fly-home puts clipOpen back.
       frame.style.clipPath = "none";
-    });
+      opened();
+    }, opened);
     // Runs once, on mount: the flight is from wherever the tile was then.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -979,7 +990,7 @@ function FlyingBook({
     (leaf: number, side: Side, at: Point | null) => {
       const root = scope.current;
       const frame = root?.querySelector<HTMLElement>(FRAME);
-      if (!root || !frame || turning.current) return;
+      if (!root || !frame || turning.current || openingRef.current) return;
       const current = curling.current;
       if (at) {
         current?.anim?.stop();
@@ -1229,6 +1240,7 @@ function FlyingBook({
     if (!isPresent) return;
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      if (openingRef.current) return;
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       e.preventDefault();
@@ -1263,22 +1275,26 @@ function FlyingBook({
             viewport's height too — an open comic should fit on screen. */}
         <AriaModal className="w-full outline-none" style={{ maxWidth: single ? PHONE_BOOK_MAX_WIDTH : BOOK_MAX_WIDTH }}>
           <AriaDialog aria-label={tile.name} className="outline-none">
-            <TileDetails
-              ref={scope}
-              tile={tile}
-              colors={colors}
-              spread={spread}
-              lastSpread={lastSpread}
-              curlCopy={curlCopy}
-              single={single}
-              onFlipTo={flipTo}
-              onStep={step}
-              onCurl={curl}
-              swipe={swipe}
-              onClose={onClose}
-              onSubmit={onSubmit}
-              onToggleInterest={onToggleInterest}
-            />
+            {/* Inert to the pointer while the book is still flying out (see `opening`). A click on its spot lands on
+                the modal around it, so it doesn't count as clicking off; only the backdrop cancels. */}
+            <div style={{ pointerEvents: opening ? "none" : undefined }}>
+              <TileDetails
+                ref={scope}
+                tile={tile}
+                colors={colors}
+                spread={spread}
+                lastSpread={lastSpread}
+                curlCopy={curlCopy}
+                single={single}
+                onFlipTo={flipTo}
+                onStep={step}
+                onCurl={curl}
+                swipe={swipe}
+                onClose={onClose}
+                onSubmit={onSubmit}
+                onToggleInterest={onToggleInterest}
+              />
+            </div>
           </AriaDialog>
         </AriaModal>
       </div>
