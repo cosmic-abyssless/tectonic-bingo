@@ -1,14 +1,16 @@
 import { useState, type Key, type ReactNode } from "react";
-import { formatSignupAnswer, type PlayerProfile, type SignupQuestion } from "@bingo/shared";
+import { formatSignupAnswer, type AchievementCount, type PlayerProfile, type SignupQuestion } from "@bingo/shared";
 import { useBingo, usePlayerProfile, useSignupQuestions } from "../../api/queries";
+import { useOpenAchievements } from "../achievements/AchievementsProvider";
 import { useDialogParts } from "../ui/useDialogParts";
 import { Badge, Notice } from "../ui/Card";
 import { SpinnerIcon } from "../ui/icons";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
+import { INTERACTIVE_TEXT } from "../ui/interactiveText";
 import { discordName } from "../ui/user";
 import { usePreference } from "../ui/preferences";
 import { Tab, TabList, TabPanel, Tabs } from "../ui/Tabs";
-import { AchievementIcons, Medal, PlaceBreakdown, TierBadge } from "./ProfileBadges";
+import { ClanHonourIcons, Medal, PlaceBreakdown, TierBadge } from "./ProfileBadges";
 import { formatRecordValue, isBingoEvent, podiumSummary, recordSummary } from "./profile";
 import { CaCell, WomCell, formatWomStat } from "../signup/caStats";
 import { useStatsRefreshingUserIds } from "../../context/WebSocketContext";
@@ -100,6 +102,7 @@ function Stat({ label, children }: { label: string; children: ReactNode }) {
 
 function ProfileBody({ slug, player, questions, onClose }: { slug: string; player: PlayerProfile; questions: SignupQuestion[]; onClose: () => void }) {
   const { DialogHeader } = useDialogParts();
+  const { user: viewer } = useAuth();
   const statsRefreshing = useStatsRefreshingUserIds();
   const caLoading = statsRefreshing.has(player.user.id);
   const { data: shell } = useBingo(slug);
@@ -163,7 +166,7 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
         action={
           <>
             <ViewAsButton userId={player.user.id} />
-            {profile && <AchievementIcons profile={profile} large />}
+            {profile && <ClanHonourIcons profile={profile} large />}
           </>
         }
       />
@@ -190,11 +193,14 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
           </TabList>
           {showBingoTab && (
             <TabPanel id="bingo">
-              {bingoContribution ? (
-                <PointsShareBreakdown {...bingoContribution} />
-              ) : (
-                <Empty>While the bingo is live, stats only show for your own team.</Empty>
-              )}
+              <div className="space-y-4">
+                {player.achievements && <AchievementsCount count={player.achievements} isOwnCard={viewer?.id === player.user.id} />}
+                {bingoContribution ? (
+                  <PointsShareBreakdown {...bingoContribution} />
+                ) : (
+                  <Empty>While the bingo is live, stats only show for your own team.</Empty>
+                )}
+              </div>
             </TabPanel>
           )}
           <TabPanel id="clan">
@@ -352,6 +358,21 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
 
 function Empty({ children }: { children: string }) {
   return <p className="text-sm text-on-surface-subtle">{children}</p>;
+}
+
+// CONTEXT.md "Achievement": every player's card shows only the count, never which ones — Hidden ones stay unspoiled
+// and other players' collections stay personal. On the viewer's own card it opens the modal.
+function AchievementsCount({ count, isOwnCard }: { count: AchievementCount; isOwnCard: boolean }) {
+  const open = useOpenAchievements();
+  const label = `Achievements ${count.earned} / ${count.total}`;
+  if (isOwnCard && open) {
+    return (
+      <button type="button" onClick={open} className={`text-sm font-medium text-on-surface ${INTERACTIVE_TEXT}`}>
+        {label}
+      </button>
+    );
+  }
+  return <p className="text-sm font-medium text-on-surface">{label}</p>;
 }
 
 function Section({ title, empty, children }: { title: string; empty?: string; children: ReactNode }) {

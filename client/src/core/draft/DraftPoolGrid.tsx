@@ -53,7 +53,7 @@ import { compareSortValues } from "../ui/tableSort";
 import { TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
 import { useDocumentTop, useOffsetWithin } from "../ui/tableChrome";
 import { PlayerName } from "../tectonic/PlayerName";
-import { AchievementIcons, PlaceBreakdown, TierBadge } from "../tectonic/ProfileBadges";
+import { ClanHonourIcons, PlaceBreakdown, TierBadge } from "../tectonic/ProfileBadges";
 import { podiumSummary, podiumTitle, recordSummary, recordTitle } from "../tectonic/profile";
 import { RatingCell } from "./RatingCell";
 import { buildPoolCsv } from "./poolCsv";
@@ -165,7 +165,7 @@ const podiumsLine: LineRender = (entry, { dim }) => {
   );
 };
 
-const achievementsLine: LineRender = (entry, { dim }) => (entry.tectonicProfile ? <span className={dimClass(dim)}><AchievementIcons profile={entry.tectonicProfile} /></span> : null);
+const achievementsLine: LineRender = (entry, { dim }) => (entry.tectonicProfile ? <span className={dimClass(dim)}><ClanHonourIcons profile={entry.tectonicProfile} /></span> : null);
 
 function womLine(field: "ehb" | "ehp", statsRefreshing: ReadonlySet<string>): LineRender {
   return (entry, { dim }) => (
