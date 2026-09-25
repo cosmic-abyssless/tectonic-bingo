@@ -588,31 +588,49 @@ export function setPickRating(db: Db, teamId: string, signupId: string, rating: 
       : undefined;
     const rated = partner ? [signup, partner] : [signup];
     const signupIds = rated.map((s) => s.id);
-    const label = rated.map((s) => s.rsn).join(" & ");
+    const names = rated.map((s) => s.rsn);
+    const label = names.join(" & ");
 
-    const cleared = rating.stars === 0 && !note;
-    if (cleared) {
-      const removed = tx.delete(pickRatings).where(and(eq(pickRatings.teamId, teamId), inArray(pickRatings.signupId, signupIds))).run();
-      if (removed.changes === 0) {
-        markAuditedNoop();
-        return;
-      }
+    // What the save changes: the stars, the note, or both (the table saves them separately). Nothing: no write, no entry.
+    const before = tx
+      .select({ stars: pickRatings.stars, note: pickRatings.note })
+      .from(pickRatings)
+      .where(and(eq(pickRatings.teamId, teamId), inArray(pickRatings.signupId, signupIds)))
+      .get() ?? { stars: 0, note: "" };
+    const starsChanged = rating.stars !== before.stars;
+    const noteChanged = note !== before.note;
+    if (!starsChanged && !noteChanged) {
+      markAuditedNoop();
+      return;
+    }
+
+    if (rating.stars === 0 && !note) {
+      tx.delete(pickRatings).where(and(eq(pickRatings.teamId, teamId), inArray(pickRatings.signupId, signupIds))).run();
     } else {
       tx.insert(pickRatings)
         .values(signupIds.map((id) => ({ teamId, signupId: id, stars: rating.stars, note })))
         .onConflictDoUpdate({ target: [pickRatings.teamId, pickRatings.signupId], set: { stars: rating.stars, note, updatedAt: clockNow() } })
         .run();
     }
-    // Ratings are a team's private scouting notes, so the entry stays
-    // team-scoped rather than joining the mod-visible signup history. Same
-    // treatment as the note: record that a rating was set/changed, not the
-    // stars value itself — that's still a private opinion about a player.
-    audit(tx, {
-      action: "draft.rating_set",
-      bingoId: team.bingoId,
-      teamId,
-      entity: { type: "signup", id: signupId, label },
-      details: { rsn: label, hasRating: rating.stars > 0, hasNote: note.length > 0, cleared },
-    });
+    // Ratings and notes are the leads' private opinions, so each entry stays team-scoped rather than joining the
+    // mod-visible signup history, and says only that the stars or the note changed, never to what.
+    if (starsChanged) {
+      audit(tx, {
+        action: "draft.rating_set",
+        bingoId: team.bingoId,
+        teamId,
+        entity: { type: "signup", id: signupId, label },
+        details: { rsn: label, names, hasRating: rating.stars > 0, cleared: rating.stars === 0 },
+      });
+    }
+    if (noteChanged) {
+      audit(tx, {
+        action: "draft.note_set",
+        bingoId: team.bingoId,
+        teamId,
+        entity: { type: "signup", id: signupId, label },
+        details: { rsn: label, names, hasNote: note.length > 0, cleared: note.length === 0 },
+      });
+    }
   });
 }

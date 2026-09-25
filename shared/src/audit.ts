@@ -150,7 +150,10 @@ export interface AuditDetailsMap {
   "draft.order_set": { order: { teamId: string; name: string; draftOrder: number }[] };
   "draft.pick": { pickNumber: number; userIds: string[]; displayNames: string[]; pair: boolean };
   "draft.pick_undone": { pickNumber: number; userIds: string[]; displayNames: string[]; pair: boolean };
-  "draft.rating_set": { rsn: string; hasRating: boolean; hasNote: boolean; cleared: boolean };
+  // names: the rated player(s), a pair's two halves. Rows from before notes were logged on their own lack names and
+  // carry hasNote (whether the save also had a note) instead.
+  "draft.rating_set": { rsn: string; names?: string[]; hasRating: boolean; hasNote?: boolean; cleared: boolean };
+  "draft.note_set": { rsn: string; names: string[]; hasNote: boolean; cleared: boolean };
 
   "pairing.requested": { requesterUserId: string; targetDiscordId: string };
   "pairing.accepted": { requesterUserId: string; targetDiscordId: string; partnerUserId: string | null };
@@ -250,6 +253,10 @@ export interface AuditActionDef<A extends AuditAction> {
 
 const actor = (i: { actorName: string | null }) => i.actorName ?? "Someone";
 const onBehalf = (i: { onBehalfOfName: string | null }) => (i.onBehalfOfName ? ` (on behalf of ${i.onBehalfOfName})` : "");
+/** "Green team's", or "their" when the team isn't known. */
+const teamPossessive = (i: { teamName: string | null }) => (i.teamName ? `${i.teamName}'s` : "their");
+/** The rated player(s): "A and B" for a pair. Older rows only have "A & B" (rsn). */
+const ratedNames = (d: { rsn: string; names?: string[] }) => joinList(d.names ?? d.rsn.split(" & "));
 /** "a, b and c". */
 function joinList(parts: string[]): string {
   return parts.length <= 1 ? (parts[0] ?? "") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
@@ -533,14 +540,22 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     title: "Draft pick undone",
     label: (i) => `${actor(i)} undid the pick of ${i.details.displayNames.join(" & ")}`,
   },
+  // Ratings and notes are logged apart ("Cosmic updated Green team's notes for A and B"), and only ever say that one
+  // changed, never the stars or the note's text: those are the captains' private opinions about players.
   "draft.rating_set": {
     category: "draft",
     tone: "neutral",
     visibility: "team",
     title: "Pick rated",
-    // Same reasoning as the note: the audit entry says a rating changed, not what it was — that's still a private
-    // opinion about a player, even at team visibility.
-    label: (i) => (i.details.cleared ? `${actor(i)} cleared their rating of ${i.details.rsn}` : `${actor(i)} updated their rating of ${i.details.rsn}${i.details.hasNote ? " with a note" : ""}`),
+    label: (i) =>
+      `${actor(i)} ${i.details.cleared ? "cleared" : "updated"} ${teamPossessive(i)} rating for ${ratedNames(i.details)}${!i.details.names && i.details.hasNote ? " with a note" : ""}`,
+  },
+  "draft.note_set": {
+    category: "draft",
+    tone: "neutral",
+    visibility: "team",
+    title: "Pick note",
+    label: (i) => `${actor(i)} ${i.details.cleared ? "cleared" : "updated"} ${teamPossessive(i)} notes for ${ratedNames(i.details)}`,
   },
   "pairing.requested": { category: "signup", tone: "neutral", visibility: "mods", title: "Duo pairing requested", label: (i) => `${actor(i)} requested a duo pairing` },
   "pairing.accepted": { category: "signup", tone: "ok", visibility: "mods", title: "Duo pairing accepted", label: (i) => `${actor(i)} accepted a duo pairing` },
