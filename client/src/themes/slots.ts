@@ -46,10 +46,12 @@ export interface ThemeSlots {
   // to the roster. One name per drafted player (two for a duo pair). teamColor is null for a team with none.
   DraftPickBurst: ComponentType<{ names: string[]; teamName: string; teamColor: string | null }>;
   // One Achievement's unlock popup (core/achievements/AchievementUnlockReveal). The theme draws only the card: its own
-  // width, no positioning, motion or button; core reveals it OSRS-style (a dot on the card's top edge fanning out into
-  // a line, then scanning down), holds it, takes it away and makes it open the Achievements modal. The card's top
-  // edge must be a solid line at least 3px thick: the dot and the line show just the top 2px of it.
-  AchievementUnlockCard: ComponentType<{ achievement: MyAchievement }>;
+  // width, no positioning or motion; core reveals it OSRS-style (a dot on the card's top edge fanning out into a line,
+  // then scanning down with a copy of the card's bottom border on its leading edge), holds it and takes it away. The
+  // card's root must be the bordered box, its top edge a solid line at least 3px thick: the dot and the line show just
+  // the top 2px of it. Shows the Achievement's flavour (not its description, which is the modal's), and a "View my
+  // achievements" link that calls onViewAchievements.
+  AchievementUnlockCard: ComponentType<{ achievement: MyAchievement; onViewAchievements: () => void }>;
   // One team's column in the draft room (core/draft/TeamRoster): its card, then its picks. Read with useOptionalSlot.
   // Each pick's element must carry data-team-id and data-pick-number (the pick reveal flies to it) and stay invisible
   // while its number is in hiddenPickNumbers.

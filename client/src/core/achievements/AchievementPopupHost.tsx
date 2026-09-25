@@ -43,16 +43,14 @@ export function AchievementPopupHost({ slug, onOpen }: { slug: string; onOpen: (
   return createPortal(
     <div className="pointer-events-none fixed inset-x-0 top-4 z-[110] flex justify-center px-4" role="status" aria-live="polite">
       {/* Keyed by the achievement so a new popup remounts a fresh reveal (and its animation) rather than reusing the old one. */}
-      <AchievementUnlockReveal
-        key={key}
-        label={`Achievement unlocked: ${achievement.name}. Open Achievements`}
-        onOpen={() => {
-          finish();
-          onOpen();
-        }}
-        onDone={finish}
-      >
-        <Card achievement={achievement} />
+      <AchievementUnlockReveal key={key} onDone={finish}>
+        <Card
+          achievement={achievement}
+          onViewAchievements={() => {
+            finish();
+            onOpen();
+          }}
+        />
       </AchievementUnlockReveal>
     </div>,
     document.body,

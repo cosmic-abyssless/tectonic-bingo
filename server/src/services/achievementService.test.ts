@@ -212,7 +212,7 @@ describe("Called it (hidden)", () => {
   it("is masked in the read until earned", () => {
     const { bingo, alice } = seed();
     const entry = myAchievements(bingo, alice.id).achievements.find((a) => a.key === "called_it")!;
-    expect(entry).toMatchObject({ hidden: true, masked: true, name: null, description: null, itemName: null, earned: false });
+    expect(entry).toMatchObject({ hidden: true, masked: true, name: null, description: null, flavor: null, itemName: null, earned: false });
   });
 });
 

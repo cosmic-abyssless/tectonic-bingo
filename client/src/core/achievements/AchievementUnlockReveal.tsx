@@ -26,18 +26,19 @@ const toClip = ([top, right, bottom, left]: Inset) => `inset(${top}px ${right}px
 /**
  * Reveals one Achievement's unlock card (CONTEXT.md "Achievement") the way OSRS reveals its combat achievement and
  * collection log popups: a dot appears on the card's top edge, fans out left and right into a line the card's full
- * width, then scans downward until the whole card shows. It holds, then goes back the same way. The card itself is the
- * theme's (the AchievementUnlockCard slot); pressing it opens the Achievements modal. `onDone` fires once the whole
- * cycle has finished — the host advances its queue and marks the popup shown from there. Reduced motion: it simply
- * appears, holds and goes.
+ * width, then scans downward until the whole card shows, a copy of its bottom border riding the scan's leading edge.
+ * It holds, then goes back the same way. The card itself is the theme's (the AchievementUnlockCard slot). `onDone`
+ * fires once the whole cycle has finished — the host advances its queue and marks the popup shown from there. Reduced
+ * motion: it simply appears, holds and goes.
  *
  * The clip is stepped by hand, one requestAnimationFrame at a time, rather than handed to Motion: Motion runs
  * clip-path as a native (WAAPI) animation, which Chrome can composite, and the card flashed uncovered for a frame
  * whenever one of those started or finished. Here the element's own style is the only thing clipping it, always.
  */
-export function AchievementUnlockReveal({ label, children, onOpen, onDone }: { label: string; children: ReactNode; onOpen: () => void; onDone: () => void }) {
+export function AchievementUnlockReveal({ children, onDone }: { children: ReactNode; onDone: () => void }) {
   const reducedMotion = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
+  const edgeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let stopped = false;
@@ -47,19 +48,22 @@ export function AchievementUnlockReveal({ label, children, onOpen, onDone }: { l
     timers.push(setTimeout(() => { stopped = true; onDone(); }, WATCHDOG_MS));
 
     const el = ref.current;
-    if (!el) {
+    const edge = edgeRef.current;
+    if (!el || !edge) {
       onDone();
       return;
     }
 
     // Linear, like the game's: each frame sets the clip for how far through the step we are.
-    const tween = (from: Inset, to: Inset, ms: number) =>
+    const tween = (from: Inset, to: Inset, ms: number, onFrame?: (clip: Inset) => void) =>
       new Promise<void>((resolve) => {
         const start = performance.now();
         const step = (now: number) => {
           if (stopped) return;
           const t = Math.min(1, (now - start) / ms);
-          el.style.clipPath = toClip(from.map((v, i) => v + (to[i]! - v) * t) as Inset);
+          const clip = from.map((v, i) => v + (to[i]! - v) * t) as Inset;
+          el.style.clipPath = toClip(clip);
+          onFrame?.(clip);
           if (t < 1) frame = requestAnimationFrame(step);
           else resolve();
         };
@@ -84,6 +88,20 @@ export function AchievementUnlockReveal({ label, children, onOpen, onDone }: { l
       const line: Inset = [PAD, PAD, edgeBottom, PAD];
       const full: Inset = [0, 0, 0, 0];
 
+      // The scan's leading edge: a copy of the card's own bottom border (its colour and thickness, read off the card
+      // so every theme's matches), kept at the bottom of what the scan has uncovered, never below the card itself.
+      const card = el.firstElementChild as HTMLElement;
+      const cardStyle = getComputedStyle(card);
+      const thickness = parseFloat(cardStyle.borderBottomWidth) || EDGE;
+      // One pixel taller than the border, reaching past the clip's edge: at a scaled DPR the two round differently, and
+      // without it a sliver of whatever sits just under the edge showed through below the line.
+      Object.assign(edge.style, { left: `${card.offsetLeft}px`, width: `${card.offsetWidth}px`, height: `${thickness + 1}px`, background: cardStyle.borderBottomColor });
+      const cardTop = card.offsetTop;
+      const cardBottom = card.offsetTop + card.offsetHeight;
+      const followScan = ([, , bottom]: Inset) => {
+        edge.style.top = `${Math.min(Math.max(height - bottom, cardTop + thickness), cardBottom) - thickness}px`;
+      };
+
       // Clipped to the dot before it is made visible, so nothing but the dot ever shows first.
       el.style.clipPath = toClip(dot);
       el.style.opacity = "1";
@@ -93,8 +111,11 @@ export function AchievementUnlockReveal({ label, children, onOpen, onDone }: { l
       if (stopped) return;
       await wait(PAUSE_MS);
       if (stopped) return;
-      await tween(line, full, SCAN_MS);
+      followScan(line);
+      edge.style.display = "block";
+      await tween(line, full, SCAN_MS, followScan);
       if (stopped) return;
+      edge.style.display = "none";
 
       // Unclipped while it holds, so a shadow reaching past the padding isn't cut square; clipped again to go.
       el.style.clipPath = "none";
@@ -102,8 +123,11 @@ export function AchievementUnlockReveal({ label, children, onOpen, onDone }: { l
       if (stopped) return;
       el.style.clipPath = toClip(full);
 
-      await tween(full, line, SCAN_MS * OUT);
+      followScan(full);
+      edge.style.display = "block";
+      await tween(full, line, SCAN_MS * OUT, followScan);
       if (stopped) return;
+      edge.style.display = "none";
       await wait(PAUSE_MS);
       if (stopped) return;
       await tween(line, dot, FAN_MS * OUT);
@@ -125,10 +149,9 @@ export function AchievementUnlockReveal({ label, children, onOpen, onDone }: { l
 
   return (
     // The negative margin keeps the shadow's room from taking up layout (so phone gutters stay 16px).
-    <div ref={ref} className="pointer-events-auto -m-3 p-3" style={{ opacity: 0 }}>
-      <button type="button" onClick={onOpen} aria-label={label} className="block text-left">
-        {children}
-      </button>
+    <div ref={ref} className="pointer-events-auto relative -m-3 p-3" style={{ opacity: 0 }}>
+      {children}
+      <div ref={edgeRef} aria-hidden className="pointer-events-none absolute" style={{ display: "none" }} />
     </div>
   );
 }

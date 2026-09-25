@@ -3,7 +3,7 @@ import type { MyAchievement } from "@bingo/shared";
 import { achievementCardKind, achievementCountLabel, progressFraction, progressLabel } from "./achievementCard";
 
 function achievement(overrides: Partial<MyAchievement> = {}): MyAchievement {
-  return { key: "strong_start", hidden: false, masked: false, name: "Strong start", description: "Submit your first drop.", itemName: "Bronze sword", earned: false, earnedAt: null, progress: null, ...overrides };
+  return { key: "strong_start", hidden: false, masked: false, name: "Strong start", description: "Submit your first drop.", flavor: "First drop's in. Only a few thousand more to go.", itemName: "Bronze sword", earned: false, earnedAt: null, progress: null, ...overrides };
 }
 
 describe("achievementCardKind", () => {

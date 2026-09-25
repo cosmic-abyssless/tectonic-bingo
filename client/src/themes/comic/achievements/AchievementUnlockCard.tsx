@@ -5,7 +5,7 @@ import { useComic } from "../ui/useComic";
 
 // A yellow narration caption, inked and hard-shadowed like the rest of the book, with the item sprite in a little
 // paper panel of its own.
-export function AchievementUnlockCard({ achievement }: { achievement: MyAchievement }) {
+export function AchievementUnlockCard({ achievement, onViewAchievements }: { achievement: MyAchievement; onViewAchievements: () => void }) {
   const { colors } = useComic();
   return (
     <div
@@ -23,7 +23,15 @@ export function AchievementUnlockCard({ achievement }: { achievement: MyAchievem
           <div className="mt-1 text-3xl uppercase leading-none tracking-wide [overflow-wrap:anywhere]" style={{ fontFamily: COMIC_FONT }}>
             {achievement.name}
           </div>
-          <div className="mt-1 text-base font-semibold leading-snug">{achievement.description}</div>
+          <div className="mt-1 text-base font-semibold italic leading-snug">{achievement.flavor}</div>
+          <button
+            type="button"
+            onClick={onViewAchievements}
+            className="mt-1 text-base uppercase tracking-wide underline decoration-2 underline-offset-2 hover:no-underline"
+            style={{ fontFamily: COMIC_FONT }}
+          >
+            View my achievements
+          </button>
         </div>
       </div>
     </div>

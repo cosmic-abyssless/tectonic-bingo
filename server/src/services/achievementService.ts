@@ -451,7 +451,7 @@ function switchedOnFor(db: Queryable, bingo: Bingo): Map<AchievementKey, { first
 
 /**
  * The signed-in player's Achievements for this bingo: every switched-on Achievement (Hidden ones included), earned
- * or locked, with progress for the counted ones — a locked Hidden Achievement is masked (no name/description/icon).
+ * or locked, with progress for the counted ones — a locked Hidden Achievement is masked (no name/description/flavour/icon).
  * Plus the earned-but-not-shown popups, oldest first.
  */
 export function getMyAchievements(db: Db, bingo: Bingo, userId: string): MyAchievementsResponse {
@@ -478,6 +478,7 @@ export function getMyAchievements(db: Db, bingo: Bingo, userId: string): MyAchie
       masked,
       name: masked ? null : def.name,
       description: masked ? null : def.description,
+      flavor: masked ? null : def.flavor,
       itemName: masked ? null : def.itemName,
       earned: !!earned,
       earnedAt: earned ? earned.earnedAt.toISOString() : null,
