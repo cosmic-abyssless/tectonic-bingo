@@ -212,7 +212,7 @@ What a Claim's drop is worth in GP (gold pieces, the game's currency): the item'
 
 ### Valued as
 An optional setting on an item Task: Claims on that Task get their GP value from another item ÷ N instead of their own item's price.
-- **Example:** On a DT2 boss's page, the Gold ring Task is valued as that boss's vestige ÷ 3. A gold ring is an ordinary tradeable item (~160 GP), but from these bosses it counts as a third of the vestige, and which vestige depends on the boss.
+- **Example:** On a DT2 boss's page, the Gold ring Task is valued as that boss's vestige ÷ 3. A gold ring is an ordinary tradeable item (~160 GP), but from these bosses it counts as a third of the vestige, and which vestige depends on the boss. The page's vestige Task is valued the same way (its own vestige ÷ 3), so on that tile a vestige counts like a ring roll, while its Piece value (the whole vestige) still applies everywhere else.
 - **Source:** An optional short name for where these Claims come from ("Vardorvis"), shown dimmed next to the item wherever its GP value is listed, with the valuation on hover, so players see why an ordinary-looking item is worth so much. Without a Source, the valuation itself is shown.
 - **Rules:** Set per Task in the board editor, saved with the board (exported and imported with the Bingo). The named item is priced like any other, including its Piece value. One value per Task, so a Task that could be claimed from several sources worth different amounts has to be split into one Task per source (issue #189).
 - **Not:** A Piece value. A Piece value prices an item the same everywhere; Valued as prices one Task, for an item whose worth depends on where it's claimed.
