@@ -19,7 +19,7 @@ import {
   type MyAchievementsResponse,
 } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { achievementActivity, achievementEarned, bingoAchievementSettings, bingos, nodeEdges, submissions, teamMembers, teams, tileInterests, tiles } from "../db/schema";
+import { achievementActivity, achievementEarned, bingoAchievementSettings, bingos, nodeEdges, submissionReactions, submissions, teamMembers, teams, tileInterests, tiles } from "../db/schema";
 import { now as clockNow } from "../clock";
 import { getTimezone } from "../audit/context";
 import { localTimeOf } from "../localTime";
@@ -274,7 +274,7 @@ export interface ReactionAddedEvent {
   occurredAt: Date;
 }
 
-/** A Reaction was ADDED (not removed, not a no-op toggle): Hypeman, Cheerleader, Superfan, Main character. */
+/** A Reaction was ADDED (not removed, not a no-op toggle): Hypeman, Cheerleader, Superfan, Main character — and Popular, for the Player it was credited to. */
 export function recordReactionAdded(db: Db, event: ReactionAddedEvent): void {
   safely(() => {
     db.transaction((tx) => {
@@ -294,6 +294,21 @@ export function recordReactionAdded(db: Db, event: ReactionAddedEvent): void {
         localHour: hour,
         occurredAt: event.occurredAt,
       });
+
+      // Popular is the credited Player's, not the reactor's: the one Achievement earned by what teammates do. 5 Reactions
+      // on the Submission from anyone but them (any emoji, one Player's several emojis each count: a team may not have 5
+      // other members), made since it was switched on.
+      if (event.creditedUserId !== event.reactorUserId && isTeamMember(tx, event.teamId, event.creditedUserId)) {
+        tryEarn(tx, event.bingoId, event.creditedUserId, "popular", event.occurredAt, settings, () => {
+          const cutoff = settings.get("popular")!.firstSwitchedOnAt;
+          const received = tx
+            .select({ id: submissionReactions.id })
+            .from(submissionReactions)
+            .where(and(eq(submissionReactions.submissionId, event.submissionId), ne(submissionReactions.userId, event.creditedUserId), gte(submissionReactions.createdAt, cutoff)))
+            .all().length;
+          return received >= 5;
+        });
+      }
 
       if (event.creditedUserId === event.reactorUserId) {
         tryEarn(tx, event.bingoId, event.reactorUserId, "main_character", event.occurredAt, settings, () => true);

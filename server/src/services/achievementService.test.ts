@@ -244,6 +244,59 @@ describe("Called it (hidden)", () => {
 // Reactions
 // ---------------------------------------------------------------------------
 
+describe("Popular", () => {
+  const react = (submissionId: string, userId: string, emoji: "🔥" | "🎉" | "😂" | "💀" | "👀") =>
+    at(STARTS_AT, "UTC", () => setSubmissionReaction(db, submissionId, userId, emoji, true));
+
+  it("is earned by the Player a Submission is credited to, once teammates leave it 5 Reactions (several emojis each count)", () => {
+    const { bingo, team, captain, alice, bob } = seed();
+    const { leafId, itemName } = tileWithLeaf(bingo.id, 0, 0);
+    const sub = submit(bingo, team.id, bob.id, leafId, itemName);
+    react(sub.id, alice.id, "🔥");
+    react(sub.id, alice.id, "🎉");
+    react(sub.id, alice.id, "😂");
+    react(sub.id, captain.id, "🔥");
+    expect(earned(bingo, bob.id, "popular")).toBe(false);
+    react(sub.id, captain.id, "👀");
+    expect(earned(bingo, bob.id, "popular")).toBe(true);
+    // The reactors don't earn it for reacting.
+    expect(earned(bingo, alice.id, "popular")).toBe(false);
+    expect(earned(bingo, captain.id, "popular")).toBe(false);
+  });
+
+  it("goes to whoever the drop is credited to, not a teammate who posted it for them", () => {
+    const { bingo, team, captain, alice, bob } = seed();
+    const { leafId, itemName } = tileWithLeaf(bingo.id, 0, 0);
+    const sub = submit(bingo, team.id, bob.id, leafId, itemName, { postedByUserId: alice.id });
+    for (const emoji of ["🔥", "🎉", "😂", "💀", "👀"] as const) react(sub.id, captain.id, emoji);
+    expect(earned(bingo, bob.id, "popular")).toBe(true);
+    expect(earned(bingo, alice.id, "popular")).toBe(false);
+  });
+
+  it("doesn't count the Player's own Reactions, nor Reactions spread over several Submissions", () => {
+    const { bingo, team, alice, bob } = seed();
+    const a = tileWithLeaf(bingo.id, 0, 0);
+    const b = tileWithLeaf(bingo.id, 0, 1);
+    const subA = submit(bingo, team.id, bob.id, a.leafId, a.itemName);
+    const subB = submit(bingo, team.id, bob.id, b.leafId, b.itemName);
+    for (const emoji of ["🔥", "🎉", "😂", "💀", "👀"] as const) react(subA.id, bob.id, emoji);
+    for (const emoji of ["🔥", "🎉", "😂"] as const) react(subA.id, alice.id, emoji);
+    for (const emoji of ["💀", "👀"] as const) react(subB.id, alice.id, emoji);
+    expect(earned(bingo, bob.id, "popular")).toBe(false);
+  });
+
+  it("stays hidden, and isn't taken away when Reactions are removed", () => {
+    const { bingo, team, captain, alice, bob } = seed();
+    const { leafId, itemName } = tileWithLeaf(bingo.id, 0, 0);
+    const sub = submit(bingo, team.id, bob.id, leafId, itemName);
+    expect(myAchievements(bingo, bob.id).achievements.find((a) => a.key === "popular")).toMatchObject({ hidden: true, masked: true });
+    for (const emoji of ["🔥", "🎉", "😂"] as const) react(sub.id, alice.id, emoji);
+    for (const emoji of ["💀", "👀"] as const) react(sub.id, captain.id, emoji);
+    at(STARTS_AT, "UTC", () => setSubmissionReaction(db, sub.id, alice.id, "🔥", false));
+    expect(earned(bingo, bob.id, "popular")).toBe(true);
+  });
+});
+
 describe("Hypeman / Cheerleader / Superfan / Main character", () => {
   it("Hypeman is earned reacting to a teammate's submission, not one's own (that's Main character instead)", () => {
     const { bingo, team, alice, bob } = seed();
