@@ -746,6 +746,8 @@ export function DraftPoolGrid({
             onStateUpdated={onStateUpdated}
             context={context}
             animateRows={false}
+            // A click anywhere outside the table ends a Note edit (saving it), not just a click on another cell.
+            stopEditingWhenCellsLoseFocus
             tooltipShowDelay={200}
             tooltipHideDelay={4000}
             enableCellTextSelection
