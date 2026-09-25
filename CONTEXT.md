@@ -219,12 +219,12 @@ A Title nobody knows exists until someone holds it: it shows up only then, marke
 
 ### Luck
 How unlikely a drop, or a dry streak, was: "1 in N". Judged against the Item's real drop rate and the kills the Player gained at its bosses during the Bingo, as counted by Wise Old Man.
-- **Rules:** A drop is judged over the kills since the Player's previous drop of the same Item (or the Bingo's start), up to the drop, so grinding on afterwards doesn't lessen it. The kills are never understated: a count missing from Wise Old Man makes a drop look less lucky, never more. A dry streak is judged against every Item on the Board the boss drops, and ends at the Player's last drop of one of them. Only Items from bosses Wise Old Man counts have luck (not Slayer monsters, minigames or skilling). A raid counts one completion as one kill, at a typical run's rates.
+- **Rules:** A drop is judged over the kills since the Player's previous drop of the same Item (or the Bingo's start), up to the drop, so grinding on afterwards doesn't lessen it. The kills are never understated: a count missing from Wise Old Man makes a drop look less lucky, never more. A dry streak is judged against every Item on the Board the boss drops, and ends at the Player's last drop of one of them. Only Items from bosses Wise Old Man counts have luck (not Slayer monsters, minigames or skilling). A raid counts one completion as one kill, at a typical run's rates. The luck Titles need at least 1 in 10: Spoon over a Player's drops (the luckiest in full, each further one counting half as much as the one before), Dry over a streak, and Clutch on the drop itself, before its GP value weighs in.
 - **Not:** Points share, or GP value. A 1-in-1,000 pet is very lucky and worth nothing.
 
 ### Useful drop
 A drop that still moved its Task forward when it came, judged by the Items that were still open on the Task (the last missing piece of a set is rarer than the first, when any of them would do).
-- **Rules:** A drop that earned no Points share is not useful.
+- **Rules:** A drop that earned no Points share is not useful. When it earned Points share on both a Task and the Part around it, it's judged on the outermost one, where the most Items could still have helped.
 
 ### GP value
 What a Claim's drop is worth in GP (gold pieces, the game's currency): the item's Grand Exchange price times its quantity, fixed when the Submission is made.

@@ -13,11 +13,19 @@ import type { BossMetric } from "./bossSources";
 import type { DropRateTable } from "./dropRates";
 import { killsAtLeast, killsAtMost, killsUpToDrop } from "./kc";
 
-// Starting values, to tune after the first Bingo with luck Titles.
-/** Spoon: each drop after a Player's luckiest counts this much of its luck. */
-export const SPOON_FURTHER_DROP_WEIGHT = 0.5;
-/** Dry: a streak counts from this luck (1 in 10). */
-export const DRY_MIN_LUCK = 1;
+/** The luck Titles' tunable numbers. Starting values are in DEFAULT_LUCK_WEIGHTS. */
+export interface LuckWeights {
+  /** Spoon: the luckiest drop counts in full, the next at this much, the one after at this squared, and so on. */
+  spoonDecay: number;
+  /** Spoon: the combined luck a Player needs (1 = 1 in 10). */
+  spoonMinLuck: number;
+  /** Dry: a streak counts from this luck. */
+  dryMinLuck: number;
+  /** Clutch: a drop's own luck must reach this, before its GP weight. */
+  clutchMinLuck: number;
+}
+
+export const DEFAULT_LUCK_WEIGHTS: LuckWeights = { spoonDecay: 0.5, spoonMinLuck: 1, dryMinLuck: 1, clutchMinLuck: 1 };
 
 export interface LuckClaim {
   claimId: string;
@@ -44,6 +52,7 @@ export interface LuckInput {
   boardItems: string[];
   /** The Items still open on a Task, given the Team's Claims approved by `at` (see openItems). */
   openItemsAt(taskNodeId: string, at: Date): Set<string>;
+  weights?: LuckWeights;
 }
 
 export interface DropLuck {
@@ -55,7 +64,7 @@ export interface DropLuck {
 }
 
 export interface PlayerLuck {
-  /** Best drop at full weight, each further drop at SPOON_FURTHER_DROP_WEIGHT. */
+  /** Best drop at full weight, each further drop at a decaying weight (LuckWeights.spoonDecay). */
   spoon: { value: number; best: DropLuck } | null;
   /** The most unlikely current dry streak, over every Board Item the boss drops. */
   dry: { value: number; oneIn: number; metric: BossMetric; kills: number } | null;
@@ -132,8 +141,10 @@ function spoon(input: LuckInput, timeline: WomSnapshot[], mine: LuckClaim[]): Pl
   }
   if (drops.length === 0) return null;
   drops.sort((a, b) => b.luck - a.luck);
-  const value = drops.reduce((sum, d, i) => sum + (i === 0 ? d.luck : d.luck * SPOON_FURTHER_DROP_WEIGHT), 0);
-  return { value, best: drops[0]! };
+  // Decaying, so repeat luck adds up to at most 1 / (1 − decay) times the best drop: frequency never beats rarity.
+  const { spoonDecay, spoonMinLuck } = input.weights ?? DEFAULT_LUCK_WEIGHTS;
+  const value = drops.reduce((sum, d, i) => sum + d.luck * spoonDecay ** i, 0);
+  return value >= spoonMinLuck ? { value, best: drops[0]! } : null;
 }
 
 function dry(input: LuckInput, timeline: WomSnapshot[], mine: LuckClaim[]): PlayerLuck["dry"] {
@@ -162,10 +173,11 @@ function dry(input: LuckInput, timeline: WomSnapshot[], mine: LuckClaim[]): Play
     const value = -kills * Math.log10(1 - p);
     if (!worst || value > worst.value) worst = { value, oneIn: 10 ** value, metric, kills };
   }
-  return worst && worst.value >= DRY_MIN_LUCK ? worst : null;
+  return worst && worst.value >= (input.weights ?? DEFAULT_LUCK_WEIGHTS).dryMinLuck ? worst : null;
 }
 
 function clutch(input: LuckInput, timeline: WomSnapshot[], mine: LuckClaim[]): PlayerLuck["clutch"] {
+  const { clutchMinLuck } = input.weights ?? DEFAULT_LUCK_WEIGHTS;
   let best: PlayerLuck["clutch"] = null;
   const lastOnTask = new Map<string, Date>();
   for (const claim of mine) {
@@ -179,6 +191,8 @@ function clutch(input: LuckInput, timeline: WomSnapshot[], mine: LuckClaim[]): P
     const expected = expectedDrops(timeline, useful, from, claim.at);
     if (!expected) continue;
     const drop = dropLuck(claim, expected);
+    // An easy drop stays easy however much it's worth.
+    if (drop.luck < clutchMinLuck) continue;
     const value = drop.luck * gpWeight(claim.gpValue);
     if (!best || value > best.value) best = { value, drop, gpValue: claim.gpValue };
   }

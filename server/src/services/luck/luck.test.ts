@@ -3,7 +3,7 @@ import type { ApprovedClaim, EngineNode } from "../engine";
 import { openItems } from "../openItems";
 import type { WomSnapshot } from "../womService";
 import { dropRateTable } from "./dropRates";
-import { DRY_MIN_LUCK, gpWeight, luckOf, playerLuck, type LuckClaim, type LuckInput } from "./luck";
+import { DEFAULT_LUCK_WEIGHTS, gpWeight, luckOf, playerLuck, type LuckClaim, type LuckInput } from "./luck";
 
 const rates = dropRateTable({
   Vardorvis: { "Ultor vestige": 1 / 1000, "Virtus mask": 1 / 3000 },
@@ -72,28 +72,46 @@ describe("Spoon", () => {
     expect(spoon.best.kills).toBe(2);
   });
 
-  it("counts the luckiest drop in full and each further one at half", () => {
-    const timeline = [snap(-1, { vardorvis: 0 }), snap(40, { vardorvis: 10 }), snap(80, { vardorvis: 60 })];
-    const spoon = luck([claim("Ultor vestige", 30), claim("Virtus mask", 70)], timeline)!.spoon!;
+  it("counts the luckiest drop in full, the next at half, the one after at a quarter", () => {
+    const timeline = [snap(-1, { vardorvis: 0 }), snap(40, { vardorvis: 10 }), snap(80, { vardorvis: 60 }), snap(120, { vardorvis: 360 })];
+    const spoon = luck([claim("Ultor vestige", 30), claim("Virtus mask", 70), claim("Ultor vestige", 110)], timeline)!.spoon!;
     const ultor = luckOf(10 / 1000);
     const virtus = luckOf(60 / 3000);
+    const secondUltor = luckOf(350 / 1000);
     expect(spoon.best.itemName).toBe("Ultor vestige");
-    expect(spoon.value).toBeCloseTo(ultor + virtus / 2);
+    expect(spoon.value).toBeCloseTo(ultor + virtus / 2 + secondUltor / 4);
+  });
+
+  it("never lets a pile of ordinary drops beat one rare drop", () => {
+    // Ten drops, each 20 kills after the last at 1/100 (1 in ~5.5), against one Ultor at 10 KC (1 in ~100).
+    const snaps = [snap(-1, { general_graardor: 0 }), ...Array.from({ length: 10 }, (_, i) => snap(10 * (i + 1), { general_graardor: 20 * (i + 1) }))];
+    const pile = luck(Array.from({ length: 10 }, (_, i) => claim("Bandos boots", 10 * (i + 1))), snaps)!.spoon!.value;
+    const rare = luck([claim("Ultor vestige", 30)], [snap(-1, { vardorvis: 0 }), snap(40, { vardorvis: 10 })])!.spoon!.value;
+    expect(pile).toBeLessThan(2 * luckOf(20 / 100));
+    expect(rare).toBeGreaterThan(pile);
+  });
+
+  it("needs at least 1 in 10 in total", () => {
+    // A 1/100 drop right on rate is about 1 in 1.6.
+    const timeline = [snap(-1, { general_graardor: 0 }), snap(40, { general_graardor: 100 })];
+    expect(luck([claim("Bandos boots", 30)], timeline)!.spoon).toBeNull();
+    expect(luck([claim("Bandos boots", 30)], timeline, { weights: { ...DEFAULT_LUCK_WEIGHTS, spoonMinLuck: 0 } })!.spoon!.best.oneIn).toBeCloseTo(1.6, 1);
   });
 
   it("values rarity: one rare drop beats a common one at the same KC", () => {
     const timeline = [snap(-1, { zulrah: 0 }), snap(40, { zulrah: 5 })];
-    const fang = luck([claim("Tanzanite fang", 30)], timeline)!.spoon!.value;
-    const scales = luck([claim("Zulrah's scales", 30)], timeline)!.spoon!.value;
+    const noFloor = { weights: { ...DEFAULT_LUCK_WEIGHTS, spoonMinLuck: 0 } };
+    const fang = luck([claim("Tanzanite fang", 30)], timeline, noFloor)!.spoon!.value;
+    const scales = luck([claim("Zulrah's scales", 30)], timeline, noFloor)!.spoon!.value;
     expect(fang).toBeGreaterThan(scales);
     expect(scales).toBeGreaterThanOrEqual(0);
   });
 
   it("adds up an Item's bosses", () => {
-    const timeline = [snap(-1, { callisto: 0, venenatis: 0 }), snap(40, { callisto: 50, venenatis: 50 })];
+    const timeline = [snap(-1, { callisto: 0, venenatis: 0 }), snap(40, { callisto: 10, venenatis: 10 })];
     const spoon = luck([claim("Dragon pickaxe", 30)], timeline)!.spoon!;
-    expect(spoon.best.kills).toBe(100);
-    expect(spoon.value).toBeCloseTo(luckOf(100 / 300));
+    expect(spoon.best.kills).toBe(20);
+    expect(spoon.value).toBeCloseTo(luckOf(20 / 300));
   });
 
   it("leaves out Items no tracked boss drops", () => {
@@ -142,7 +160,7 @@ describe("Dry", () => {
 
   it("needs a streak of at least 1 in 10", () => {
     const timeline = [snap(-1, { general_graardor: 0 }), snap(100, { general_graardor: 10 })];
-    expect(-10 * Math.log10(0.97)).toBeLessThan(DRY_MIN_LUCK);
+    expect(-10 * Math.log10(0.97)).toBeLessThan(DEFAULT_LUCK_WEIGHTS.dryMinLuck);
     expect(luck([], timeline, { boardItems: board })!.dry).toBeNull();
   });
 
@@ -176,18 +194,25 @@ describe("Clutch", () => {
   }
 
   it("judges the last missing piece as rarer than the first", () => {
-    const timeline = [snap(-1, { general_graardor: 0 }), snap(10, { general_graardor: 20 }), snap(20, { general_graardor: 40 }), snap(30, { general_graardor: 60 })];
+    const timeline = [snap(-1, { general_graardor: 0 }), snap(10, { general_graardor: 5 }), snap(20, { general_graardor: 10 }), snap(30, { general_graardor: 15 })];
     const boots = claim("Bandos boots", 30, { taskNodeId: "set" });
     const clutch = clutchFor([claim("Bandos chestplate", 10, { taskNodeId: "set" }), claim("Bandos tassets", 20, { taskNodeId: "set" }), boots], timeline)!;
-    // Each piece took 20 kills; the first had 3 open Items to hit, the last only 1.
+    // Each piece took 5 kills; the first had 3 open Items to hit, the last only 1.
     expect(clutch.drop.claimId).toBe(boots.claimId);
-    expect(clutch.drop.luck).toBeCloseTo(luckOf(20 * (1 / 100)));
-    expect(clutch.drop.luck).toBeGreaterThan(luckOf(20 * (3 / 100)));
+    expect(clutch.drop.luck).toBeCloseTo(luckOf(5 * (1 / 100)));
+    expect(clutch.drop.luck).toBeGreaterThan(luckOf(5 * (3 / 100)));
   });
 
   it("gives no Clutch luck to a Claim that advanced nothing", () => {
     const timeline = [snap(-1, { general_graardor: 0 }), snap(15, { general_graardor: 1 })];
     expect(clutchFor([claim("Bandos boots", 10)], timeline)).toBeNull();
+  });
+
+  it("leaves out a drop that wasn't 1 in 10, however much it's worth", () => {
+    // 50 kills at 1/100 on the last piece: about 1 in 2.5.
+    const timeline = [snap(-1, { general_graardor: 0 }), snap(15, { general_graardor: 50 })];
+    const claims = [claim("Bandos boots", 10, { taskNodeId: "boots", gpValue: 5_000_000_000 })];
+    expect(luck(claims, timeline, { openItemsAt: () => new Set(["Bandos boots"]) })!.clutch).toBeNull();
   });
 
   it("weights the drop by its GP value and keeps the single best", () => {

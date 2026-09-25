@@ -25,6 +25,19 @@ export interface WomGains {
   asOf: string;
 }
 
+/**
+ * A Player's Luck (CONTEXT.md) from their drops and kills during the Bingo (#195). `value` is −log₁₀ of how unlikely,
+ * so "1 in N" is N = 10^value. Each part is null when the Player doesn't reach its floor.
+ */
+export interface LuckFacts {
+  /** Their drops' luck, the luckiest in full and further ones decaying. `itemName` and `kills` are the luckiest drop's. */
+  spoon: { value: number; itemName: string; kills: number } | null;
+  /** Their most unlikely current dry streak: `kills` at `boss` without a Board drop from it. */
+  dry: { value: number; boss: string; kills: number } | null;
+  /** Their luckiest Useful drop. `value` is weighted by GP value; `luck` is the drop's own. */
+  clutch: { value: number; luck: number; itemName: string; gpValue: number | null } | null;
+}
+
 export interface PlayerTitleFacts {
   userId: string;
   teamId: string;
@@ -44,6 +57,8 @@ export interface PlayerTitleFacts {
   totalQuantity: number;
   /** Null until Wise Old Man has been read for them, or when it has nothing for them. */
   wom: WomGains | null;
+  /** Null without a Wise Old Man snapshot from before the Bingo: their drops can't be judged. */
+  luck: LuckFacts | null;
 }
 
 export interface TitleContext {
@@ -58,8 +73,11 @@ export type TitleId =
   | "on_fire"
   | "carry"
   | "closer"
+  | "clutch"
   | "grinder"
+  | "spoon"
   | "butterfingers"
+  | "dry"
   | "sniper"
   | "clue_goblin"
   | "skiller"
@@ -92,6 +110,23 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const num = (n: number, digits = 1) => n.toLocaleString("en-US", { maximumFractionDigits: digits });
 const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 const percent = (fraction: number) => `${Math.round(fraction * 100)}%`;
+
+/** "1 in N" from a luck value: 1 in 340, 1 in 12,500, 1 in 2.3m. */
+export function oneIn(luck: number): string {
+  const n = 10 ** luck;
+  if (n >= 1_000_000_000) return `1 in ${num(n / 1_000_000_000)}b`;
+  if (n >= 1_000_000) return `1 in ${num(n / 1_000_000)}m`;
+  return `1 in ${num(n, n < 10 ? 1 : 0)}`;
+}
+
+/** A GP amount the way players shorten it (like the client's formatGp): 1.5b, 12.3m, 450k. */
+export function shortGp(gp: number): string {
+  const short = (n: number, unit: string) => `${num(n, n < 10 ? 2 : n < 100 ? 1 : 0)}${unit}`;
+  if (gp >= 1_000_000_000) return short(gp / 1_000_000_000, "b");
+  if (gp >= 1_000_000) return short(gp / 1_000_000, "m");
+  if (gp >= 1_000) return short(gp / 1_000, "k");
+  return num(gp, 0);
+}
 
 /** On Fire's window: the last 24 h, or the Bingo's final 24 h once it's Finished. Null until it has been Live that long. */
 export function onFireWindow(ctx: TitleContext): { from: Date; to: Date } | null {
@@ -162,6 +197,21 @@ export const TITLES: TitleDefinition[] = [
     format: (v) => `Finished off ${plural(v, "task")}`,
   },
   {
+    id: "clutch",
+    name: "Clutch",
+    flavour: "The drop the team was waiting for.",
+    hidden: false,
+    source: "wom",
+    // The calculator only keeps drops that were at least 1 in 10 (luck.ts).
+    measure: (f) => f.luck?.clutch?.value ?? null,
+    qualifies: (v) => v > 0,
+    requirement: "A drop the team still needed, at 1 in 10 luck or better",
+    format: (_v, f) => {
+      const c = f.luck!.clutch!;
+      return `Clutched ${c.itemName} (${oneIn(c.luck)})${c.gpValue ? `, ${shortGp(c.gpValue)}` : ""}`;
+    },
+  },
+  {
     id: "grinder",
     name: "Grinder",
     flavour: "Lives at the boss.",
@@ -173,6 +223,21 @@ export const TITLES: TitleDefinition[] = [
     format: (v) => `${num(v)} EHB gained`,
   },
   {
+    id: "spoon",
+    name: "Spoon",
+    flavour: "Born with it.",
+    hidden: false,
+    source: "wom",
+    // The calculator only keeps a total of at least 1 in 10 (luck.ts).
+    measure: (f) => f.luck?.spoon?.value ?? null,
+    qualifies: (v) => v > 0,
+    requirement: "Drops adding up to 1 in 10 luck",
+    format: (v, f) => {
+      const best = f.luck!.spoon!;
+      return `${oneIn(v)} luck (${best.itemName} at ${plural(best.kills, "kill")})`;
+    },
+  },
+  {
     id: "butterfingers",
     name: "Butterfingers",
     flavour: "Maybe crop the screenshot next time.",
@@ -182,6 +247,21 @@ export const TITLES: TitleDefinition[] = [
     qualifies: (v) => v >= 2,
     requirement: "2 rejected submissions",
     format: (v) => plural(v, "rejected submission"),
+  },
+  {
+    id: "dry",
+    name: "Dry",
+    flavour: "It's coming. Any kill now.",
+    hidden: true,
+    source: "wom",
+    // The calculator only keeps a streak of at least 1 in 10 (luck.ts).
+    measure: (f) => f.luck?.dry?.value ?? null,
+    qualifies: (v) => v > 0,
+    requirement: "A dry streak of 1 in 10 at a boss on the board",
+    format: (v, f) => {
+      const dry = f.luck!.dry!;
+      return `${num(dry.kills, 0)} KC dry at ${dry.boss} (${oneIn(v)})`;
+    },
   },
   {
     id: "sniper",

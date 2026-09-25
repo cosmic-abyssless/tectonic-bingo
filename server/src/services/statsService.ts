@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { PlayerTitleFacts, TitleAwardFact, ValuedAs } from "@bingo/shared";
+import type { LuckFacts, PlayerTitleFacts, TitleAwardFact, ValuedAs } from "@bingo/shared";
 import { valuedAsOf } from "./gpValueService";
 import * as schema from "../db/schema";
 import { bingoLines, bingos, claims, nodeEdges, nodes, stageTransitions, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
@@ -10,6 +10,13 @@ import { creditAwards, type AwardCredit, type CreditClaim } from "./pointsShare"
 import { rsnsInBingo } from "./playerNames";
 import { effectiveStartsAt, endedAt } from "./bingoStart";
 import { gainsOf, lastReadAt, loadTimelines } from "./womReadService";
+import type { EngineNode } from "./engine";
+import { openItems } from "./openItems";
+import { playerLuck, type LuckClaim } from "./luck/luck";
+import { getDropRates } from "./luck/dropRates";
+import { BOSS_NAMES } from "./luck/bossSources";
+import type { WomSnapshot } from "./womService";
+import { now } from "../clock";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -187,23 +194,28 @@ export interface ContributionCount {
   awards: ContributionAward[];
 }
 
+/** A Team's exclusivity-filtered approved Claims, and the awards they earned. */
+export interface TeamCredits {
+  teamId: string;
+  claims: (CreditClaim & { submittedAt: Date; gpValue: number | null })[];
+  credits: AwardCredit[];
+}
+
 /**
  * Every award each team holds, credited to the Players whose Claims completed it (pointsShare.ts). Replays the
- * same inputs rebuildTeamState scored from: the bingo's graph and each team's exclusivity-filtered approved
- * claims. The per-player breakdown is kept whole so other stats (player titles, later) can build on it.
+ * same inputs rebuildTeamState scored from: the bingo's graph and each team's exclusivity-filtered approved claims.
  */
-export function getPointsShares(db: Db, bingoId: string): Map<string, { teamId: string; credits: AwardCredit[] }> {
+export function getTeamCredits(db: Db, bingoId: string): TeamCredits[] {
   const teamIds = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.id);
-  const out = new Map<string, { teamId: string; credits: AwardCredit[] }>();
-  if (teamIds.length === 0) return out;
+  if (teamIds.length === 0) return [];
 
   const { engineNodes, childrenOf } = getFullGraph(db, bingoId);
   const tileNodeIds = new Set(db.select({ nodeId: tiles.nodeId }).from(tiles).where(eq(tiles.bingoId, bingoId)).all().map((t) => t.nodeId));
   const lineNodeIds = new Set(db.select({ nodeId: bingoLines.nodeId }).from(bingoLines).where(eq(bingoLines.bingoId, bingoId)).all().map((l) => l.nodeId));
 
-  for (const teamId of teamIds) {
-    const approved: CreditClaim[] = db
-      .select({ claimId: claims.id, submissionId: submissions.id, userId: submissions.submittedByUserId, nodeId: claims.nodeId, itemName: claims.itemName, quantity: claims.quantity, reviewedAt: submissions.reviewedAt })
+  return teamIds.map((teamId) => {
+    const approved = db
+      .select({ claimId: claims.id, submissionId: submissions.id, userId: submissions.submittedByUserId, nodeId: claims.nodeId, itemName: claims.itemName, quantity: claims.quantity, reviewedAt: submissions.reviewedAt, submittedAt: submissions.submittedAt, gpValue: claims.gpValue })
       .from(claims)
       .innerJoin(submissions, eq(claims.submissionId, submissions.id))
       .innerJoin(nodes, eq(claims.nodeId, nodes.id))
@@ -216,7 +228,15 @@ export function getPointsShares(db: Db, bingoId: string): Map<string, { teamId: 
       .where(eq(teamNodeState.teamId, teamId))
       .all()
       .filter((a) => a.points > 0);
-    const credits = creditAwards({ nodes: engineNodes, childrenOf, claims: applyExclusivity(db, bingoId, approved), awards, tileNodeIds, lineNodeIds });
+    const kept = applyExclusivity(db, bingoId, approved);
+    return { teamId, claims: kept, credits: creditAwards({ nodes: engineNodes, childrenOf, claims: kept, awards, tileNodeIds, lineNodeIds }) };
+  });
+}
+
+/** Each Player's credits from getTeamCredits. The per-player breakdown is kept whole so other stats (Titles) can build on it. */
+export function getPointsShares(db: Db, bingoId: string, teamCredits = getTeamCredits(db, bingoId)): Map<string, { teamId: string; credits: AwardCredit[] }> {
+  const out = new Map<string, { teamId: string; credits: AwardCredit[] }>();
+  for (const { teamId, credits } of teamCredits) {
     for (const credit of credits) {
       for (const share of credit.shares) {
         const entry = out.get(share.userId) ?? { teamId, credits: [] };
@@ -389,11 +409,77 @@ function tileOfNodes(childrenOf: Map<string, string[]>, tileNodeIds: string[]): 
   return out;
 }
 
+// How far each node is below the top of its Tile: the outermost of several awards has the smallest depth.
+function depthOfNodes(nodeIds: string[], childrenOf: Map<string, string[]>): Map<string, number> {
+  const children = new Set([...childrenOf.values()].flat());
+  const out = new Map<string, number>();
+  const queue: [string, number][] = nodeIds.filter((id) => !children.has(id)).map((id) => [id, 0]);
+  for (let i = 0; i < queue.length; i++) {
+    const [id, depth] = queue[i]!;
+    if (out.has(id)) continue;
+    out.set(id, depth);
+    for (const child of childrenOf.get(id) ?? []) queue.push([child, depth + 1]);
+  }
+  return out;
+}
+
+/**
+ * Each Player's Luck (#195), from their Team's approved Claims and their Wise Old Man timeline. A Claim's Task for
+ * Clutch is the outermost Task or Part award it earned Points share on: the most Items could still advance that, so
+ * its drop is never made to look rarer than it was.
+ */
+function luckFacts(
+  graph: { engineNodes: EngineNode[]; childrenOf: Map<string, string[]> },
+  teamCredits: TeamCredits[],
+  timelines: Map<string, WomSnapshot[]>,
+  teamByUser: Map<string, string>,
+  bingoStart: Date,
+  bingoEnd: Date | null,
+): Map<string, LuckFacts> {
+  const { engineNodes, childrenOf } = graph;
+  const boardItems = [...new Set(engineNodes.filter((n) => n.kind === "ITEM" && n.itemName).map((n) => n.itemName!))];
+  const depth = depthOfNodes(engineNodes.map((n) => n.id), childrenOf);
+  const rates = getDropRates();
+  const out = new Map<string, LuckFacts>();
+
+  for (const team of teamCredits) {
+    const taskOf = new Map<string, string>();
+    for (const credit of team.credits) {
+      if (credit.kind !== "task") continue;
+      for (const claim of credit.shares.flatMap((sh) => sh.claims)) {
+        const current = taskOf.get(claim.claimId);
+        if (!current || (depth.get(credit.nodeId) ?? 0) < (depth.get(current) ?? 0)) taskOf.set(claim.claimId, credit.nodeId);
+      }
+    }
+    const claims: LuckClaim[] = team.claims
+      .filter((c) => c.itemName)
+      .map((c) => ({ claimId: c.claimId, userId: c.userId, itemName: c.itemName!, at: c.submittedAt, taskNodeId: taskOf.get(c.claimId) ?? null, gpValue: c.gpValue }));
+    // Every call replays the Team's whole graph, and many Claims share a start (the Bingo's).
+    const openAt = new Map<number, Map<string, Set<string>>>();
+    const openItemsAt = (taskNodeId: string, at: Date) => {
+      let open = openAt.get(at.getTime());
+      if (!open) openAt.set(at.getTime(), (open = openItems(engineNodes, childrenOf, team.claims, at)));
+      return open.get(taskNodeId) ?? new Set<string>();
+    };
+    const teamTimelines = new Map([...timelines].filter(([userId]) => teamByUser.get(userId) === team.teamId));
+
+    const luck = playerLuck({ rates, bingoStart, bingoEnd, now: now(), claims, timelines: teamTimelines, boardItems, openItemsAt });
+    for (const [userId, l] of luck) {
+      out.set(userId, {
+        spoon: l.spoon && { value: l.spoon.value, itemName: l.spoon.best.itemName, kills: l.spoon.best.kills },
+        dry: l.dry && { value: l.dry.value, boss: BOSS_NAMES[l.dry.metric], kills: l.dry.kills },
+        clutch: l.clutch && { value: l.clutch.value, luck: l.clutch.drop.luck, itemName: l.clutch.drop.itemName, gpValue: l.clutch.gpValue },
+      });
+    }
+  }
+  return out;
+}
+
 /**
  * What Titles (shared/titles.ts) are picked from: one entry per Player of `contributions`, built from their awards
  * (with when each completed and whether they closed it), their Submissions and Claims, and their Wise Old Man gains.
  */
-export function getTitleFacts(db: Db, bingoId: string, contributions: ContributionCount[], shares: ReturnType<typeof getPointsShares>): PlayerTitleFacts[] {
+export function getTitleFacts(db: Db, bingoId: string, contributions: ContributionCount[], teamCredits: TeamCredits[], shares = getPointsShares(db, bingoId, teamCredits)): PlayerTitleFacts[] {
   const teamIds = [...new Set(contributions.map((c) => c.teamId))];
   if (teamIds.length === 0) return [];
   const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get()!;
@@ -405,7 +491,8 @@ export function getTitleFacts(db: Db, bingoId: string, contributions: Contributi
 
   const tileRows = db.select({ nodeId: tiles.nodeId, name: tiles.name }).from(tiles).where(eq(tiles.bingoId, bingoId)).all();
   const tileName = new Map(tileRows.map((t) => [t.nodeId, t.name]));
-  const tileOf = tileOfNodes(getFullGraph(db, bingoId).childrenOf, tileRows.map((t) => t.nodeId));
+  const graph = getFullGraph(db, bingoId);
+  const tileOf = tileOfNodes(graph.childrenOf, tileRows.map((t) => t.nodeId));
 
   const teamByUser = new Map(contributions.map((c) => [c.userId, c.teamId]));
   const count = () => new Map<string, number>();
@@ -439,7 +526,8 @@ export function getTitleFacts(db: Db, bingoId: string, contributions: Contributi
 
   const start = effectiveStartsAt(db, bingo);
   const end = endedAt(db, bingo);
-  const timelines = start ? loadTimelines(db, bingoId) : new Map();
+  const timelines: Map<string, WomSnapshot[]> = start ? loadTimelines(db, bingoId) : new Map();
+  const luck = start ? luckFacts(graph, teamCredits, timelines, teamByUser, start, end) : new Map<string, LuckFacts>();
 
   return contributions.map((c) => {
     const awards: TitleAwardFact[] = (shares.get(c.userId)?.credits ?? []).map((credit) => {
@@ -466,6 +554,7 @@ export function getTitleFacts(db: Db, bingoId: string, contributions: Contributi
       distinctItems: items.get(c.userId)?.size ?? 0,
       totalQuantity: quantity.get(c.userId) ?? 0,
       wom: start && timeline ? gainsOf(timeline, start, end) : null,
+      luck: luck.get(c.userId) ?? null,
     };
   });
 }
@@ -483,7 +572,8 @@ export interface Stats {
 }
 
 export function getStats(db: Db, bingoId: string): Stats {
-  const shares = getPointsShares(db, bingoId);
+  const teamCredits = getTeamCredits(db, bingoId);
+  const shares = getPointsShares(db, bingoId, teamCredits);
   const contributions = getContributionCounts(db, bingoId, shares);
   const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get()!;
   return {
@@ -493,7 +583,7 @@ export function getStats(db: Db, bingoId: string): Stats {
     heatmap: getTileHeatmap(db, bingoId),
     teamGpGained: getTeamGpGained(db, bingoId),
     drops: getGpDrops(db, bingoId),
-    titleFacts: getTitleFacts(db, bingoId, contributions, shares),
+    titleFacts: getTitleFacts(db, bingoId, contributions, teamCredits, shares),
     titleContext: { liveAt: effectiveStartsAt(db, bingo), endedAt: endedAt(db, bingo) },
     womReadAt: lastReadAt(db, bingoId),
   };
