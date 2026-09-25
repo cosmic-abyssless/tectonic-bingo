@@ -278,3 +278,55 @@ describe("getStatsForViewer", () => {
     expect(stats.pointsOverTime.length).toBeGreaterThan(0);
   });
 });
+
+describe("GP gained", () => {
+  // A claim with a GP value, approved or left in `status`.
+  function valuedClaim(fx: Fixture, teamId: string, userId: string, gpValue: number, status: "approved" | "pending" | "rejected" = "approved") {
+    const task = addTask(fx.tileId, { points: 1 });
+    const [submission] = db.insert(submissions).values({ teamId, submittedByUserId: userId, status, reviewedAt: status === "pending" ? null : new Date() }).returning().all();
+    db.insert(claims).values({ submissionId: submission.id, nodeId: task.id, itemName: "Bruma torch", gpValue }).run();
+  }
+
+  it("sums only approved claims' GP values, per player and per team", () => {
+    const fx = seedFixture();
+    valuedClaim(fx, fx.teamAId, fx.memberUserId, 1_000);
+    valuedClaim(fx, fx.teamAId, fx.memberUserId, 500);
+    valuedClaim(fx, fx.teamAId, fx.memberUserId, 9_999, "pending");
+    valuedClaim(fx, fx.teamAId, fx.memberUserId, 9_999, "rejected");
+    valuedClaim(fx, fx.teamBId, fx.modUserId, 200);
+
+    const stats = getStats(db, fx.bingoId);
+    expect(stats.teamGpGained).toEqual([
+      { teamId: fx.teamAId, gpGained: 1_500 },
+      { teamId: fx.teamBId, gpGained: 200 },
+    ]);
+    expect(stats.contributions.find((c) => c.userId === fx.memberUserId)!.gpGained).toBe(1_500);
+    expect(stats.drops.map((d) => d.gpValue)).toEqual([1_000, 500, 200]);
+  });
+
+  it("shows a player only their own team's GP and drops", () => {
+    const fx = seedFixture();
+    for (let i = 1; i <= 12; i++) valuedClaim(fx, fx.teamAId, fx.memberUserId, i * 1_000);
+    valuedClaim(fx, fx.teamBId, fx.modUserId, 1_000_000);
+
+    const player = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: fx.teamAId, bingoComplete: false });
+    expect(player.teamGpGained.map((t) => t.teamId)).toEqual([fx.teamAId]);
+    expect(player.drops).toHaveLength(12);
+    expect(player.drops.every((d) => d.teamId === fx.teamAId)).toBe(true);
+
+    const mod = getStatsForViewer(db, fx.bingoId, { isMod: true, teamId: null, bingoComplete: false });
+    expect(mod.drops).toHaveLength(13);
+    expect(mod.drops[0]!.gpValue).toBe(1_000_000);
+  });
+});
+
+describe("GP drops' Valued as", () => {
+  it("tells why a drop has its value when its Task is Valued as something", () => {
+    const fx = seedFixture();
+    const ring = createTask(db, fx.tileId, { kind: "ITEM", itemName: "Gold ring", label: "Vardorvis page", valuedAs: { itemName: "Ultor vestige", divisor: 3, source: "Vardorvis" } });
+    const [submission] = db.insert(submissions).values({ teamId: fx.teamAId, submittedByUserId: fx.memberUserId, status: "approved", reviewedAt: new Date() }).returning().all();
+    db.insert(claims).values({ submissionId: submission.id, nodeId: ring.id, itemName: "Gold ring", gpValue: 33_000_000 }).run();
+
+    expect(getStats(db, fx.bingoId).drops[0]!.valuedAs).toEqual({ itemName: "Ultor vestige", divisor: 3, source: "Vardorvis" });
+  });
+});

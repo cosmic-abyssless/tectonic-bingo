@@ -439,7 +439,14 @@ export const nodes = sqliteTable('nodes', {
   // requirementNodes.parentId.
   pointsGateNodeId: text('points_gate_node_id'), // this node's points stay 0 until the gate node completes too
   submitGateNodeId: text('submit_gate_node_id'), // submissions targeting a leaf under this node are rejected until the gate node completes
-  allowsPreLoad: integer('allows_pre_load', { mode: 'boolean' }).notNull().default(false), // display hint: player may submit an empty-state screenshot beforehand
+  allowsPreLoad: integer('allows_pre_load', { mode: 'boolean' }).notNull().default(false),
+  // ITEM only, optional (CONTEXT.md "Valued as"): claims on this leaf get their GP value from this item ÷ divisor
+  // instead of their own item's price, e.g. a DT2 page's Gold ring valued as Magus vestige ÷ 3. Both set or both null.
+  valuedAsItemName: text('valued_as_item_name'),
+  valuedAsDivisor: integer('valued_as_divisor'),
+  // Optional, with Valued as: where these claims come from ("Vardorvis"), shown next to the item so players see why
+  // an ordinary-looking item has a value.
+  valuedAsSource: text('valued_as_source'), // display hint: player may submit an empty-state screenshot beforehand
 });
 
 // A node may have several parents (DAG). sortOrder is scoped to one parent —
@@ -573,6 +580,42 @@ export const claims = sqliteTable('claims', {
   nodeId: text('node_id').notNull().references(() => nodes.id),
   itemName: text('item_name'),
   quantity: integer('quantity').notNull().default(1),
+  // What the drop was worth in GP when submitted (CONTEXT.md "GP value"): unit price × quantity. Null for MANUAL
+  // claims, items with no GE price or Piece value, or until the price table loads (gpValueService fills it in).
+  // Never changed once set, and never used for scoring.
+  gpValue: integer('gp_value'),
+});
+
+// Site-wide Piece values (CONTEXT.md): an item piece priced as its whole item's GE price ÷ divisor, e.g.
+// Bludgeon axon = Abyssal bludgeon ÷ 3. Item names are matched case-insensitively.
+export const pieceValues = sqliteTable('piece_values', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  pieceItemName: text('piece_item_name').notNull().unique(),
+  wholeItemName: text('whole_item_name').notNull(),
+  divisor: integer('divisor').notNull(),
+  // Null for the starter Piece values a migration added (0025), which no one person created.
+  createdByUserId: text('created_by_user_id').references(() => users.id),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+});
+
+// A Piece value's Other pieces (CONTEXT.md): the other items in its whole item, subtracted (× quantity) from the
+// whole item's price before it's divided, e.g. Ultor vestige = (Ultor ring − Berserker ring − 3× Chromium ingot) ÷ 1.
+export const pieceValueOtherPieces = sqliteTable('piece_value_other_pieces', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  pieceValueId: text('piece_value_id').notNull().references(() => pieceValues.id, { onDelete: 'cascade' }),
+  itemName: text('item_name').notNull(),
+  quantity: integer('quantity').notNull(),
+}, (t) => [
+  uniqueIndex('piece_value_other_pieces_value_item_unq').on(t.pieceValueId, t.itemName),
+]);
+
+// Item names an Admin chose to leave without a GP value (pets and the like), hidden from the Piece values page's
+// list of unvalued items.
+export const unvaluedItemDismissals = sqliteTable('unvalued_item_dismissals', {
+  itemName: text('item_name').primaryKey(),
+  dismissedByUserId: text('dismissed_by_user_id').notNull().references(() => users.id),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
 
 // Manual point adjustments applied by moderators. Also the only way to hand

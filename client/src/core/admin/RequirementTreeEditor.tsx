@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { MenuTrigger } from "react-aria-components";
-import type { ItemGroup, NodeKind, GraphNode, GraphNodeInput } from "@bingo/shared";
+import { describeValuedAs, type ItemGroup, type NodeKind, type GraphNode, type GraphNodeInput, type ValuedAs } from "@bingo/shared";
 import { ItemSearchInput, iconUrlFor } from "../ui/ItemSearchInput";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { Button, IconButton } from "../ui/Button";
@@ -8,6 +8,8 @@ import { controlClass } from "../ui/Field";
 import { Menu, MenuItem } from "../ui/Menu";
 import { Select } from "../ui/Select";
 import { ChevronDownIcon, LinkIcon, PlusIcon, XIcon } from "../ui/icons";
+import { Dialog, DialogHeader } from "../ui/Dialog";
+import * as adminApi from "../../api/adminApi";
 import { toGraphNodeInput, collectLabeledConditions } from "../board/requirementTree";
 import { describeRules, useRulesFor } from "./exclusiveItems";
 
@@ -135,9 +137,12 @@ function labelConditions(root: GraphNodeInput): Map<GraphNodeInput, string> {
 }
 
 export interface RequirementTreeEditorProps {
+  /** The bingo, for the few rows that talk to the server themselves (re-pricing after a Valued as changes). */
+  slug: string;
   root: GraphNodeInput;
   itemGroups: ItemGroup[];
-  onChange: (root: GraphNodeInput) => void;
+  /** Saves the tree; resolves whether it saved, when the caller can tell. */
+  onChange: (root: GraphNodeInput) => void | Promise<boolean>;
   /** Persists a set of item names as a new reusable group. Does not affect the row that called it — groups are a one-time authoring template, not a live reference (see docs/item-quantity-model.md §6). */
   onSaveAsGroup?: (itemNames: string[]) => Promise<ItemGroup | null>;
   /**
@@ -172,9 +177,10 @@ export interface RequirementTreeEditorProps {
 // the task itself a bare ITEM leaf — dispatch on kind here exactly like
 // GroupNode does for its own children, or such a task would render as an
 // empty composite instead of its actual item row.
-export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGroup, existingLeaves, existingConditions, sharedNodeIds }: RequirementTreeEditorProps) {
+export function RequirementTreeEditor({ slug, root, itemGroups, onChange, onSaveAsGroup, existingLeaves, existingConditions, sharedNodeIds }: RequirementTreeEditorProps) {
   const conditionLabels = labelConditions(root);
   const props: NodeProps = {
+    slug,
     node: root,
     path: [],
     itemGroups,
@@ -196,6 +202,7 @@ export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGrou
 }
 
 interface NodeProps {
+  slug: string;
   node: GraphNodeInput;
   path: Path;
   itemGroups: ItemGroup[];
@@ -204,7 +211,7 @@ interface NodeProps {
   existingConditions?: ExistingCondition[];
   sharedNodeIds: Set<string>;
   conditionLabels: Map<GraphNodeInput, string>;
-  update: (path: Path, fn: (node: GraphNodeInput) => GraphNodeInput) => void;
+  update: (path: Path, fn: (node: GraphNodeInput) => GraphNodeInput) => void | Promise<boolean>;
   remove: (path: Path) => void;
   add: (path: Path, child: GraphNodeInput) => void;
   addMany: (path: Path, children: GraphNodeInput[]) => void;
@@ -399,7 +406,7 @@ function RemoveButton({ shared, label, what, onPress, className }: { shared: boo
 // docs/item-quantity-model.md §2). Renaming isn't supported here; remove and
 // re-add (or "+ existing item") instead, matching the read-only-once-added
 // behavior a chip always had.
-function ItemLeafRow({ node, path, remove, existingLeaves, sharedNodeIds }: NodeProps) {
+function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedNodeIds }: NodeProps) {
   const isRoot = path.length === 0;
   const name = node.itemName ?? "";
   // This leaf *itself* has 2+ direct parents — not just "reachable somewhere
@@ -409,21 +416,135 @@ function ItemLeafRow({ node, path, remove, existingLeaves, sharedNodeIds }: Node
   const isShared = !!node.id && sharedNodeIds.has(node.id);
   const sharedWithTasks = isShared ? Array.from(new Set((existingLeaves ?? []).filter((l) => l.id === node.id).map((l) => l.taskLabel))) : [];
   const exclusiveRules = useRulesFor(name);
+  const [editingValue, setEditingValue] = useState(false);
+  const valuedAs = node.valuedAs ?? null;
+  // A changed Valued as on a Task that already has priced submissions (mid-bingo): the new value waits here while
+  // the admin picks whether to re-price them too.
+  const [pending, setPending] = useState<{ next: ValuedAs | null; count: number } | null>(null);
+  const [repriceNote, setRepriceNote] = useState<string | null>(null);
+
+  async function saveValuedAs(next: ValuedAs | null) {
+    setRepriceNote(null);
+    const changed = JSON.stringify(next) !== JSON.stringify(valuedAs);
+    if (!changed) return setEditingValue(false);
+    const count = node.id ? (await adminApi.countPricedSubmissions(slug, node.id).catch(() => ({ count: 0 }))).count : 0;
+    if (count > 0) return setPending({ next, count });
+    setEditingValue(false);
+    await update(path, (n) => ({ ...n, valuedAs: next }));
+  }
+
+  async function applyPending(reprice: boolean) {
+    if (!pending) return;
+    const { next } = pending;
+    setPending(null);
+    setEditingValue(false);
+    const saved = await update(path, (n) => ({ ...n, valuedAs: next }));
+    if (!reprice || saved === false || !node.id) return;
+    try {
+      const { repriced } = await adminApi.repriceNodeClaims(slug, node.id);
+      setRepriceNote(`Re-priced ${repriced} submission${repriced === 1 ? "" : "s"}`);
+    } catch (e) {
+      setRepriceNote(e instanceof Error ? e.message : "Couldn't re-price");
+    }
+  }
 
   return (
-    <div className="flex h-8 items-center gap-2 rounded-md border border-outline bg-surface px-2">
-      {isShared && <SharedMark tasks={sharedWithTasks} />}
-      <ChipIcon name={name} className="size-4" />
-      <span className="flex-1 truncate text-xs text-on-surface">{name}</span>
-      {exclusiveRules.length > 0 && (
-        <span
-          title={`A team can use this item in one place only (${describeRules(exclusiveRules)}). Set in the bingo's settings, under Exclusive items.`}
-          className="shrink-0 rounded border border-outline px-1 text-[10px] uppercase tracking-wide text-on-surface-subtle"
+    <div className="space-y-1">
+      <div className="flex h-8 items-center gap-2 rounded-md border border-outline bg-surface px-2">
+        {isShared && <SharedMark tasks={sharedWithTasks} />}
+        <ChipIcon name={name} className="size-4" />
+        <span className="flex-1 truncate text-xs text-on-surface">{name}</span>
+        {exclusiveRules.length > 0 && (
+          <span
+            title={`A team can use this item in one place only (${describeRules(exclusiveRules)}). Set in the bingo's settings, under Exclusive items.`}
+            className="shrink-0 rounded border border-outline px-1 text-[10px] uppercase tracking-wide text-on-surface-subtle"
+          >
+            exclusive
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => setEditingValue((open) => !open)}
+          title={
+            valuedAs
+              ? `Claims here get their GP value from ${valuedAs.itemName} ÷ ${valuedAs.divisor}, not from ${name}'s own price`
+              : `Price claims here as another item instead of ${name} (e.g. a gold ring from a DT2 boss as a third of its vestige)`
+          }
+          className={`shrink-0 rounded px-1 text-[10px] tracking-wide ${valuedAs ? "border border-outline text-on-surface-muted" : "text-on-surface-subtle hover:text-on-surface"}`}
         >
-          exclusive
-        </span>
-      )}
-      {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${name}` : `Remove ${name}`} what="item" onPress={() => remove(path)} />}
+          {valuedAs ? `valued as ${describeValuedAs(valuedAs)}${valuedAs.source ? ` · ${valuedAs.source}` : ""}` : "GP value…"}
+        </button>
+        {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${name}` : `Remove ${name}`} what="item" onPress={() => remove(path)} />}
+      </div>
+      {editingValue && <ValuedAsEditor itemName={name} valuedAs={valuedAs} onSave={(next) => void saveValuedAs(next)} onCancel={() => setEditingValue(false)} />}
+      {repriceNote && <p className="px-2 text-[11px] text-on-surface-muted">{repriceNote}</p>}
+
+      <Dialog isOpen={!!pending} onClose={() => setPending(null)}>
+        <DialogHeader title="Re-price the submissions already made?" onClose={() => setPending(null)} />
+        <div className="space-y-3 p-5 text-sm text-on-surface-muted">
+          <p>
+            {pending?.count} submission{pending?.count === 1 ? " already has" : "s already have"} a GP value from {name} on this Task. Re-pricing prices{" "}
+            {pending?.count === 1 ? "it" : "them"} again with the new value at today's prices (only this Task's items); saving only leaves{" "}
+            {pending?.count === 1 ? "it" : "them"} as {pending?.count === 1 ? "it is" : "they are"} and applies the new value to new submissions.
+          </p>
+          <div className="flex flex-wrap justify-end gap-2 pt-2">
+            <Button variant="ghost" size="sm" onPress={() => setPending(null)}>
+              Cancel
+            </Button>
+            <Button variant="secondary" size="sm" onPress={() => void applyPending(false)}>
+              Save only
+            </Button>
+            <Button variant="primary" size="sm" onPress={() => void applyPending(true)}>
+              Save and re-price {pending?.count}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    </div>
+  );
+}
+
+// A Task's "Valued as" (CONTEXT.md): its claims are priced as another item ÷ N instead of their own item. For the
+// rare item whose worth depends on where it's claimed, like a DT2 boss's gold ring (a third of that boss's vestige).
+function ValuedAsEditor({ itemName, valuedAs, onSave, onCancel }: { itemName: string; valuedAs: ValuedAs | null; onSave: (valuedAs: ValuedAs | null) => void; onCancel: () => void }) {
+  const [item, setItem] = useState(valuedAs?.itemName ?? "");
+  const [divisor, setDivisor] = useState(String(valuedAs?.divisor ?? 1));
+  const [source, setSource] = useState(valuedAs?.source ?? "");
+  const n = Number(divisor);
+  const valid = item.trim() !== "" && Number.isInteger(n) && n >= 1;
+
+  return (
+    <div className="space-y-2 rounded-md border border-outline bg-surface px-2 py-2">
+      <p className="text-[11px] text-on-surface-muted">Price {itemName} claimed here as:</p>
+      <div className="flex items-center gap-2">
+        <ItemSearchInput ariaLabel="Valued as item" placeholder="e.g. Magus vestige" containerClassName="min-w-0 flex-1" value={item} onChange={setItem} onPickItem={setItem} />
+        <span className="text-xs text-on-surface-muted">÷</span>
+        {/* controlClass is w-full, so the wrapper sets the width. */}
+        <div className="w-16 shrink-0">
+          <input aria-label="Divided by" type="number" min={1} step={1} value={divisor} onChange={(e) => setDivisor(e.target.value)} className={controlClass("sm")} />
+        </div>
+      </div>
+      <input
+        aria-label="Source"
+        placeholder="Source, shown next to the item (optional, e.g. Vardorvis)"
+        maxLength={40}
+        value={source}
+        onChange={(e) => setSource(e.target.value)}
+        className={controlClass("sm")}
+      />
+      <div className="flex gap-2">
+        <Button size="sm" variant="primary" isDisabled={!valid} onPress={() => onSave({ itemName: item.trim(), divisor: n, source: source.trim() || null })}>
+          Save
+        </Button>
+        {valuedAs && (
+          <Button size="sm" variant="ghost" onPress={() => onSave(null)}>
+            Use {itemName}'s own price
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" onPress={onCancel}>
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }

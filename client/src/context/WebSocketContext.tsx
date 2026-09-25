@@ -26,6 +26,11 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       queryClient.invalidateQueries({ queryKey: ["modSubmissions"] });
       queryClient.invalidateQueries({ queryKey: ["pendingCount"] });
       break;
+    case "gp_values_updated":
+      queryClient.invalidateQueries({ queryKey: ["teamSubmissions"] });
+      queryClient.invalidateQueries({ queryKey: ["modSubmissions"] });
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
+      break;
     case "stage_changed":
       queryClient.invalidateQueries({ queryKey: ["bingo"] });
       queryClient.invalidateQueries({ queryKey: ["board"] });

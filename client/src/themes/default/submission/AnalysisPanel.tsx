@@ -1,6 +1,7 @@
 import type { SubmissionFlowModel } from "../../../headless/types";
 import { Notice } from "../../../core/ui/Card";
 import { AlertIcon, CheckIcon, SpinnerIcon } from "../../../core/ui/icons";
+import { WikiItemLink } from "../../../core/ui/WikiItemLink";
 
 export function AnalysisPanel({ analysis }: { analysis: SubmissionFlowModel["analysis"] }) {
   if (analysis.status === "failed") {
@@ -29,7 +30,7 @@ export function AnalysisPanel({ analysis }: { analysis: SubmissionFlowModel["ana
         <p className="text-xs text-on-surface-muted">
           {result.detected ? (
             <>
-              Detected: <span className="font-medium text-on-surface">{result.detected.itemName}</span>
+              Detected: <WikiItemLink name={result.detected.itemName} className="font-medium text-on-surface" />
               <span className="text-on-surface-subtle"> — {result.detected.tileName}</span>
             </>
           ) : (

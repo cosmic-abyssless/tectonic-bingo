@@ -1,5 +1,7 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type { ValuedAs } from "@bingo/shared";
+import { valuedAsOf } from "./gpValueService";
 import * as schema from "../db/schema";
 import { bingoLines, claims, nodeEdges, nodes, stageTransitions, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
 import { findAncestorIds, getFullGraph } from "./graphService";
@@ -178,6 +180,8 @@ export interface ContributionCount {
   approvedSubmissions: number;
   /** Points share (CONTEXT.md), unrounded. */
   pointsShare: number;
+  /** GP gained (CONTEXT.md): GP values of this player's approved claims. */
+  gpGained: number;
   awards: ContributionAward[];
 }
 
@@ -242,6 +246,12 @@ export function getContributionCounts(db: Db, bingoId: string): ContributionCoun
     if (!teamByUser.has(r.userId)) teamByUser.set(r.userId, r.teamId);
   }
 
+  const gpByUser = new Map<string, number>();
+  for (const r of approvedGpRows(db, teamIds)) {
+    gpByUser.set(r.userId, (gpByUser.get(r.userId) ?? 0) + r.gpValue!);
+    if (!teamByUser.has(r.userId)) teamByUser.set(r.userId, r.teamId);
+  }
+
   const shares = getPointsShares(db, bingoId);
   const nodeIds = [...new Set([...shares.values()].flatMap((s) => s.credits.flatMap((c) => [c.nodeId, ...c.shares.flatMap((sh) => sh.claims.map((cl) => cl.nodeId))])))];
   const labels = labelNodes(db, bingoId, nodeIds);
@@ -284,10 +294,82 @@ export function getContributionCounts(db: Db, bingoId: string): ContributionCoun
         teamId: teamByUser.get(userId)!,
         approvedSubmissions: submissionCounts.get(userId) ?? 0,
         pointsShare: awards.reduce((sum, a) => sum + a.points, 0),
+        gpGained: gpByUser.get(userId) ?? 0,
         awards,
       };
     })
     .sort((a, b) => b.pointsShare - a.pointsShare || b.approvedSubmissions - a.approvedSubmissions);
+}
+
+// The approved claims that have a GP value, with whose drop and which team. What GP gained is summed from.
+function approvedGpRows(db: Db, teamIds: string[]) {
+  if (teamIds.length === 0) return [];
+  return db
+    .select({
+      claimId: claims.id,
+      submissionId: submissions.id,
+      userId: submissions.submittedByUserId,
+      teamId: submissions.teamId,
+      itemName: claims.itemName,
+      quantity: claims.quantity,
+      gpValue: claims.gpValue,
+      at: submissions.submittedAt,
+      valuedAsItemName: nodes.valuedAsItemName,
+      valuedAsDivisor: nodes.valuedAsDivisor,
+      valuedAsSource: nodes.valuedAsSource,
+    })
+    .from(claims)
+    .innerJoin(submissions, eq(claims.submissionId, submissions.id))
+    .innerJoin(nodes, eq(claims.nodeId, nodes.id))
+    .where(and(inArray(submissions.teamId, teamIds), eq(submissions.status, "approved"), isNotNull(claims.gpValue)))
+    .all();
+}
+
+export interface TeamGpGained {
+  teamId: string;
+  gpGained: number;
+}
+
+export interface GpDrop {
+  claimId: string;
+  submissionId: string;
+  teamId: string;
+  user: MinimalUser;
+  itemName: string;
+  quantity: number;
+  gpValue: number;
+  at: Date;
+  /** The claimed Task's Valued as, when it has one: why an ordinary item has this value. */
+  valuedAs: ValuedAs | null;
+}
+
+/** GP gained per team, every team included (at 0 when nothing valued is approved yet). */
+export function getTeamGpGained(db: Db, bingoId: string): TeamGpGained[] {
+  const teamIds = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.id);
+  const gp = new Map(teamIds.map((id) => [id, 0]));
+  for (const r of approvedGpRows(db, teamIds)) gp.set(r.teamId, gp.get(r.teamId)! + r.gpValue!);
+  return teamIds.map((teamId) => ({ teamId, gpGained: gp.get(teamId)! })).sort((a, b) => b.gpGained - a.gpGained);
+}
+
+/** Every approved claim with a GP value, most valuable first. */
+export function getGpDrops(db: Db, bingoId: string): GpDrop[] {
+  const teamIds = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.id);
+  const rows = approvedGpRows(db, teamIds).sort((a, b) => b.gpValue! - a.gpValue!);
+  const userIds = [...new Set(rows.map((r) => r.userId))];
+  const userRows = userIds.length ? db.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, userIds)).all() : [];
+  const rsns = rsnsInBingo(db, bingoId, userIds);
+  const userById = new Map(userRows.map((u) => [u.id, { ...u, rsn: rsns.get(u.id) ?? null }]));
+  return rows.map((r) => ({
+    claimId: r.claimId,
+    submissionId: r.submissionId,
+    teamId: r.teamId,
+    user: userById.get(r.userId)!,
+    itemName: r.itemName!,
+    quantity: r.quantity,
+    gpValue: r.gpValue!,
+    at: r.at,
+    valuedAs: valuedAsOf(r),
+  }));
 }
 
 export interface Stats {
@@ -295,6 +377,8 @@ export interface Stats {
   timeline: TimelineEvent[];
   contributions: ContributionCount[];
   heatmap: TileHeatmapCell[];
+  teamGpGained: TeamGpGained[];
+  drops: GpDrop[];
 }
 
 export function getStats(db: Db, bingoId: string): Stats {
@@ -303,6 +387,8 @@ export function getStats(db: Db, bingoId: string): Stats {
     timeline: getTimeline(db, bingoId),
     contributions: getContributionCounts(db, bingoId),
     heatmap: getTileHeatmap(db, bingoId),
+    teamGpGained: getTeamGpGained(db, bingoId),
+    drops: getGpDrops(db, bingoId),
   };
 }
 
@@ -311,7 +397,14 @@ export function getStats(db: Db, bingoId: string): Stats {
 // timeline along with everything else that isn't theirs.
 export function filterStatsForTeam(stats: Stats, teamId: string): Stats {
   const own = <T extends { teamId: string | null }>(rows: T[]) => rows.filter((r) => r.teamId === teamId);
-  return { pointsOverTime: own(stats.pointsOverTime), timeline: own(stats.timeline), contributions: own(stats.contributions), heatmap: own(stats.heatmap) };
+  return {
+    pointsOverTime: own(stats.pointsOverTime),
+    timeline: own(stats.timeline),
+    contributions: own(stats.contributions),
+    heatmap: own(stats.heatmap),
+    teamGpGained: own(stats.teamGpGained),
+    drops: own(stats.drops),
+  };
 }
 
 // "Team X was first to complete Y" tells a team what the others have and haven't done, so a Player only gets it

@@ -59,6 +59,7 @@ export default defineConfig({
         PLAYER_STATS_FETCH_DISABLED: "true",
         SCREENSHOT_OCR_DISABLED: "true",
         OSRS_ITEM_SEARCH_DISABLED: "true",
+        GE_PRICES_FETCH_DISABLED: "true",
       },
     },
     {

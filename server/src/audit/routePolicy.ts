@@ -22,6 +22,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
 
   // routes/mod.ts, mounted at /api/bingos/:slug/mod
   "PATCH /api/bingos/:slug/mod/submissions/:id/attribution": ["submission.attribution_changed"],
+  "POST /api/bingos/:slug/mod/submissions/:id/reprice": ["submission.repriced"],
   "PATCH /api/bingos/:slug/mod/submissions/:id": ["submission.approved", "submission.rejected", "submission.review_undone", "points.earned", "points.lost"],
   "POST /api/bingos/:slug/mod/teams/:teamId/adjustments": ["points.adjusted"],
   "POST /api/bingos/:slug/mod/stage": ["stage.changed"],
@@ -50,6 +51,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "POST /api/bingos/:slug/admin/tiles/:tileId/tasks": ["task.created", "points.rescored"],
   "PATCH /api/bingos/:slug/admin/tasks/:id": ["task.updated", "points.rescored"],
   "DELETE /api/bingos/:slug/admin/tasks/:id": ["task.deleted", "points.rescored"],
+  "POST /api/bingos/:slug/admin/nodes/:nodeId/reprice": ["submission.repriced"],
   "POST /api/bingos/:slug/admin/lines/generate": ["line.generated", "points.rescored"],
   "PATCH /api/bingos/:slug/admin/lines/:id": ["line.updated", "points.rescored"],
   "DELETE /api/bingos/:slug/admin/lines/:id": ["line.deleted", "points.rescored"],
@@ -71,6 +73,10 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "POST /api/admin/item-groups": ["item_group.created"],
   "PATCH /api/admin/item-groups/:id": ["item_group.updated"],
   "DELETE /api/admin/item-groups/:id": ["item_group.deleted"],
+  "POST /api/admin/piece-values": ["piece_value.created"],
+  "PATCH /api/admin/piece-values/:id": ["piece_value.updated"],
+  "DELETE /api/admin/piece-values/:id": ["piece_value.deleted"],
+  "PUT /api/admin/unvalued-items/dismissed": ["piece_value.item_dismissed", "piece_value.item_restored"],
   "POST /api/admin/wom-competitions": ["wom_past_competition.added"],
   "PATCH /api/admin/wom-competitions/:id": ["wom_past_competition.renamed"],
   "DELETE /api/admin/wom-competitions/:id": ["wom_past_competition.deleted"],

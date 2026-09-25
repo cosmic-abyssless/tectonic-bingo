@@ -22,6 +22,7 @@ export type AuditEntityType =
   | "bingo"
   | "user"
   | "item_group"
+  | "piece_value"
   | "wom_past_competition"
   | "category"
   | "tile"
@@ -52,6 +53,12 @@ export interface AuditDetailsMap {
   "item_group.created": { name: string; itemCount: number };
   "item_group.updated": { changes: FieldChanges<{ name: string; description: string | null }>; items: { added: string[]; removed: string[] } };
   "item_group.deleted": { name: string; itemNames: string[] };
+
+  "piece_value.created": { pieceItemName: string; wholeItemName: string; divisor: number; otherPieces: string[] };
+  "piece_value.updated": { changes: FieldChanges<{ pieceItemName: string; wholeItemName: string; divisor: number; otherPieces: string[] }> };
+  "piece_value.deleted": { pieceItemName: string; wholeItemName: string; divisor: number; otherPieces: string[] };
+  "piece_value.item_dismissed": { itemName: string };
+  "piece_value.item_restored": { itemName: string };
 
   "wom_past_competition.added": { womId: number; title: string; participantCount: number; source: "manual" | "auto" };
   "wom_past_competition.renamed": { womId: number; from: string; to: string };
@@ -132,6 +139,8 @@ export interface AuditDetailsMap {
   };
   /** A mod changed which player a submission is credited to (someone forgot to pick the player they posted for). */
   "submission.attribution_changed": { tileName: string | null; taskLabels: string[]; fromUserId: string; fromName: string; toUserId: string; toName: string };
+  /** A Moderator priced the submission's claims again (only the claims whose GP value changed). */
+  "submission.repriced": { tileName: string | null; taskLabels: string[]; claims: { itemName: string; before: number | null; after: number | null }[] };
   "submission.screenshot_analyzed": { codewordVerified: boolean; detectedItemName: string | null; textLength: number };
   "submission.screenshot_analysis_failed": Record<string, never>;
 
@@ -218,6 +227,8 @@ export interface TaskSnapshot {
   minCount: number | null;
   quantity: number | null;
   itemName: string | null;
+  /** "Magus vestige ÷ 3"; absent when none, and in entries written before Valued as existed. */
+  valuedAs?: string;
   children: TaskSnapshot[];
 }
 
@@ -340,6 +351,45 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Item group deleted",
     label: (i) => `${actor(i)} deleted the item group "${i.details.name}"`,
+  },
+  "piece_value.created": {
+    category: "system",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Piece value added",
+    label: (i) => {
+      // Entries written before Other pieces existed have no otherPieces.
+      const others = (i.details.otherPieces ?? []).map((o) => ` − ${o}`).join("");
+      return `${actor(i)} valued ${i.details.pieceItemName} as ${others ? `(${i.details.wholeItemName}${others})` : i.details.wholeItemName} ÷ ${i.details.divisor}`;
+    },
+  },
+  "piece_value.updated": {
+    category: "system",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Piece value changed",
+    label: (i) => `${actor(i)} changed the piece value of ${i.entityLabel ?? "an item"}`,
+  },
+  "piece_value.deleted": {
+    category: "system",
+    tone: "danger",
+    visibility: "mods",
+    title: "Piece value removed",
+    label: (i) => `${actor(i)} removed the piece value of ${i.details.pieceItemName}`,
+  },
+  "piece_value.item_dismissed": {
+    category: "system",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Unvalued item dismissed",
+    label: (i) => `${actor(i)} left ${i.details.itemName} without a GP value`,
+  },
+  "piece_value.item_restored": {
+    category: "system",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Unvalued item restored",
+    label: (i) => `${actor(i)} put ${i.details.itemName} back on the unvalued items list`,
   },
   "wom_past_competition.added": {
     category: "system",
@@ -480,6 +530,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "team",
     title: "Submission credit changed",
     label: (i) => `${actor(i)} changed who a submission for "${i.details.tileName ?? "a tile"}" is credited to, from ${i.details.fromName} to ${i.details.toName}`,
+  },
+  "submission.repriced": {
+    category: "submission",
+    tone: "warn",
+    visibility: "mods",
+    title: "Submission re-priced",
+    label: (i) => `${actor(i)} re-priced the GP value of a submission for "${i.details.tileName ?? "a tile"}" (${i.details.claims.map((c) => c.itemName).join(", ")})`,
   },
   "submission.screenshot_analyzed": {
     category: "submission",

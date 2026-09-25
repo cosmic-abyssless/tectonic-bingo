@@ -83,6 +83,7 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
       pointsGateLocalId: null,
       submitGateLocalId: null,
       allowsPreLoad: node.allowsPreLoad,
+      valuedAs: node.valuedAs,
       children: [],
     };
     flatNodes.push({ exportNode, graphNode: node });
@@ -199,6 +200,7 @@ function toGraphNodeInput(node: ExportNode): GraphNodeInput {
     quantity: node.quantity ?? undefined,
     itemName: node.itemName,
     allowsPreLoad: node.allowsPreLoad,
+    valuedAs: node.valuedAs ?? null,
     // A `reuse` stub isn't created (it is an already-created node's other parent linking to it,
     // done after creation: see the linking step in importBingo).
     children: node.children.filter((c) => !c.reuse).map(toGraphNodeInput),

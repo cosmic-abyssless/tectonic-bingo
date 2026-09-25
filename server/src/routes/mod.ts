@@ -27,6 +27,7 @@ import { broadcast } from "../ws";
 import { markAuditedNoop } from "../audit/record";
 import { queryAuditLog } from "../audit/query";
 import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility } from "@bingo/shared";
+import { repriceSubmission } from "../services/gpRepriceService";
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth, requireBingo, requireBingoMod);
@@ -101,6 +102,15 @@ router.patch(
     // The same refresh a review triggers: drawers, the mod queue and the board all show who it is credited to.
     broadcast({ type: "submission_reviewed", bingoId: req.bingo!.id, payload: { teamId: submission.teamId, nodeIds: [] } });
     res.json({ submission });
+  }),
+);
+
+// Prices a submission's claims again, when they were priced from the wrong thing (CONTEXT.md "GP value").
+router.post(
+  "/submissions/:id/reprice",
+  asyncHandler(async (req, res) => {
+    const claims = await repriceSubmission(db, req.bingo!.id, req.params.id as string);
+    res.json({ claims });
   }),
 );
 

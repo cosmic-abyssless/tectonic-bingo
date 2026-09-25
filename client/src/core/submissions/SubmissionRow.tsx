@@ -3,7 +3,7 @@ import { SubmissionStatusBadge } from "../ui/StatusBadge";
 import { timeAgo } from "../ui/time";
 import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
-import { claimsSummary } from "./claimsSummary";
+import { ClaimsSummary } from "./ClaimsSummary";
 import { ScreenshotThumb } from "./ScreenshotThumb";
 
 export function SubmissionRow({ detail }: { detail: SubmissionDetails }) {
@@ -17,7 +17,9 @@ export function SubmissionRow({ detail }: { detail: SubmissionDetails }) {
           <SubmissionStatusBadge status={submission.status} />
           <span className="text-xs text-on-surface-subtle">{timeAgo(submission.submittedAt)}</span>
         </div>
-        <p className="truncate text-sm text-on-surface">{claimsSummary(claims)}</p>
+        <p className="truncate text-sm text-on-surface">
+          <ClaimsSummary claims={claims} />
+        </p>
         {submittedByUser && (
           <p className="mt-0.5 text-xs text-on-surface-subtle">
             by <PlayerName userId={submittedByUser.id}>{displayName(submittedByUser)}</PlayerName>

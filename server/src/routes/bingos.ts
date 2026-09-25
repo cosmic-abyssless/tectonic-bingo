@@ -29,6 +29,7 @@ import { parseStoredCaStats } from "../services/combatAchievements";
 import { syncWomCompetition } from "../services/womCompetitionService";
 import { getPastParticipationsForUser } from "../services/pastWomCompetitionService";
 import { ServiceError } from "../services/errors";
+import { refreshPricesAndFill } from "../services/gpValueService";
 import { broadcast } from "../ws";
 import { auditSkip } from "../audit/middleware";
 import { queryTeamActivity } from "../audit/query";
@@ -236,6 +237,9 @@ router.post(
     }
     broadcast({ type: "submission_created", bingoId: bingo.id, payload: { teamId: team.id } });
     res.status(201).json({ submission });
+
+    // After responding: refreshes the GE price table if it's due and prices any claims that came in without a GP value.
+    void refreshPricesAndFill(db);
 
     // Runs after responding — OCR (~1.6s+) shouldn't hold up submission
     // creation. Populates the same fields the mod panel shows (issue #7);

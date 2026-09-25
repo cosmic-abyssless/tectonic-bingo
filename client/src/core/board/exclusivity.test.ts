@@ -3,7 +3,7 @@ import type { ExclusivityRule, GraphNode, SubmissionDetails, Tile } from "@bingo
 import { NO_LOCKS, boardItemSources, lockReason, lockTag, lockedLeaves, placeLeaves } from "./exclusivity";
 
 const node = (over: Partial<GraphNode> & Pick<GraphNode, "id" | "kind">): GraphNode =>
-  ({ bingoId: "b", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName: null, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, children: [], ...over }) as GraphNode;
+  ({ bingoId: "b", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName: null, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, children: [], ...over }) as GraphNode;
 const item = (id: string, itemName: string) => node({ id, kind: "ITEM", itemName });
 const part = (id: string, label: string, kind: GraphNode["kind"], children: GraphNode[]) => node({ id, kind, label, children });
 const tile = (id: string, name: string, parts: GraphNode[]) => ({ id, name, node: node({ id: `${id}-root`, kind: "ALL", children: parts }) }) as unknown as Tile;

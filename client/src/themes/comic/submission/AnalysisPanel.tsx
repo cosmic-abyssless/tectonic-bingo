@@ -4,6 +4,7 @@ import { COMIC_FONT } from "../font";
 import { CaptionBox } from "../ui/CaptionBox";
 import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
+import { WikiItemLink } from "../../../core/ui/WikiItemLink";
 
 /** The detective's verdict on the screenshot, delivered as a narration caption. */
 export function AnalysisPanel({ analysis }: { analysis: SubmissionFlowModel["analysis"] }) {
@@ -53,7 +54,9 @@ export function AnalysisPanel({ analysis }: { analysis: SubmissionFlowModel["ana
         <p className="mt-1 text-xs" style={{ color: colors.INK_BODY }}>
           {r.detected ? (
             <>
-              Detected <span className="font-semibold" style={{ color: colors.INK }}>{r.detected.itemName}</span>
+              Detected <span style={{ color: colors.INK }}>
+                <WikiItemLink name={r.detected.itemName} className="font-semibold" />
+              </span>
               <span style={{ color: colors.INK_SUBTLE }}> — {r.detected.tileName}</span>
             </>
           ) : (

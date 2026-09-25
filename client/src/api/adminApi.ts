@@ -1,5 +1,5 @@
 import type {
-  Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, SignupQuestion, Team,
+  Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, PieceValue, SignupQuestion, UnvaluedItem, Team,
   TeamMember, Tile, TileCategory, User, WomPastCompetition,
 } from "@bingo/shared";
 import { api } from "./client";
@@ -38,6 +38,23 @@ export function updateItemGroup(id: string, payload: Partial<{ name: string; des
 }
 export function deleteItemGroup(id: string) {
   return api.delete(`/api/admin/item-groups/${id}`);
+}
+
+export function getPieceValues() {
+  return api.get<{ pieceValues: PieceValue[]; unvaluedItems: UnvaluedItem[] }>("/api/admin/piece-values");
+}
+type PieceValuePayload = { pieceItemName: string; wholeItemName: string; divisor: number; otherPieces: { itemName: string; quantity: number }[] };
+export function createPieceValue(payload: PieceValuePayload) {
+  return api.post<{ pieceValue: PieceValue }>("/api/admin/piece-values", payload);
+}
+export function updatePieceValue(id: string, payload: Partial<PieceValuePayload>) {
+  return api.patch<{ pieceValue: PieceValue }>(`/api/admin/piece-values/${id}`, payload);
+}
+export function deletePieceValue(id: string) {
+  return api.delete(`/api/admin/piece-values/${id}`);
+}
+export function setUnvaluedItemDismissed(itemName: string, dismissed: boolean) {
+  return api.put("/api/admin/unvalued-items/dismissed", { itemName, dismissed });
 }
 
 export function getPastWomCompetitions() {
@@ -125,6 +142,13 @@ export function createTask(slug: string, tileId: string, input: GraphNodeInput, 
 }
 export function updateTask(slug: string, id: string, input: GraphNodeInput) {
   return api.patch<{ task: GraphNode }>(`${base(slug)}/tasks/${id}`, input);
+}
+// A Task's Valued as changed mid-bingo: how many submissions already have a GP value from it, and re-pricing them.
+export function countPricedSubmissions(slug: string, nodeId: string) {
+  return api.get<{ count: number }>(`${base(slug)}/nodes/${nodeId}/priced-submissions`);
+}
+export function repriceNodeClaims(slug: string, nodeId: string) {
+  return api.post<{ repriced: number }>(`${base(slug)}/nodes/${nodeId}/reprice`);
 }
 export function deleteTask(slug: string, id: string) {
   return api.delete(`${base(slug)}/tasks/${id}`);

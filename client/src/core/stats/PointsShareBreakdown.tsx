@@ -1,5 +1,6 @@
 import type { ContributionAward, ContributionCount } from "@bingo/shared";
 import { FALLBACK_TEAM_COLOR } from "./PointsChart";
+import { formatGp } from "../ui/gp";
 
 /** Points share to at most two decimals: 12, 12.5, 12.33. */
 export function formatShare(points: number): string {
@@ -52,10 +53,12 @@ export function PointsShareBreakdown({ contribution, teamColor, rank }: { contri
   const color = teamColor ?? FALLBACK_TEAM_COLOR;
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Figure label="Points share" value={formatShare(contribution.pointsShare)} />
         <Figure label="Submissions" value={String(contribution.approvedSubmissions)} />
         <Figure label="On the team" value={`#${rank.place} of ${rank.of}`} />
+        {/* GP gained (CONTEXT.md): what their approved drops were worth. */}
+        <Figure label="GP gained" value={formatGp(contribution.gpGained)} />
       </div>
       {contribution.awards.length === 0 ? (
         <p className="text-sm text-on-surface-subtle">None of their claims have completed anything yet.</p>

@@ -10,6 +10,7 @@ import * as adminApi from "../api/adminApi";
 import { optimisticUpdate } from "../api/optimistic";
 import { UserSearchInput } from "../core/admin/UserSearchInput";
 import { ItemGroupsPanel } from "../core/admin/ItemGroupsPanel";
+import { PieceValuesPanel } from "../core/admin/PieceValuesPanel";
 import { PastWomCompetitionsPanel } from "../core/admin/PastWomCompetitionsPanel";
 import { TestDataPanel } from "../core/admin/TestDataPanel";
 import { BugReportsPanel } from "../core/admin/BugReportsPanel";
@@ -22,6 +23,7 @@ import { Badge, Notice, PulseDot } from "../core/ui/Card";
 import { Field, Input } from "../core/ui/Field";
 import { CheckIcon, TrashIcon } from "../core/ui/icons";
 import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
+import { useUrlTab } from "../core/ui/useUrlParam";
 
 function slugify(s: string): string {
   return s
@@ -246,10 +248,12 @@ function BingosList() {
 // Bingos (the list) plus the two ways to add a new one — Create and Import
 // both land on the same list, so they live as sub-tabs here rather than
 // their own top-level sections.
+const BINGOS_SECTIONS = ["bingos", "create", "import"] as const;
+
 function BingosPanel() {
-  const [tab, setTab] = useState<"bingos" | "create" | "import">("bingos");
+  const [tab, setTab] = useUrlTab("section", BINGOS_SECTIONS, "bingos");
   return (
-    <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key) as "bingos" | "create" | "import")}>
+    <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key) as (typeof BINGOS_SECTIONS)[number])}>
       <TabList>
         <Tab id="bingos">Bingos</Tab>
         <Tab id="create">Create</Tab>
@@ -305,7 +309,9 @@ const NARROW = "mx-auto w-full max-w-6xl px-6";
 
 export function SiteAdminPage() {
   const { user, canGrantAdmin, devMode } = useAuth();
-  const [tab, setTab] = useState("bugs");
+  // In the URL (?tab=...), so a link opens the same tab. Only tabs this admin has are honoured.
+  const tabs = ["bugs", "bingos", "audit", "item-groups", "piece-values", "past-wom", ...(canGrantAdmin ? ["grant-admin"] : []), ...(devMode ? ["test-data"] : [])];
+  const [tab, setTab] = useUrlTab("tab", tabs, "bugs");
   // Fetched here (not just inside BugReportsPanel) so the tab shows a pulse dot for changes even while
   // another tab is active; both calls share the same cached query.
   const { data: bugReportsData } = useBugReports();
@@ -338,6 +344,7 @@ export function SiteAdminPage() {
               <Tab id="bingos">Bingos</Tab>
               <Tab id="audit">Site-wide audit log</Tab>
               <Tab id="item-groups">Item groups</Tab>
+              <Tab id="piece-values">Piece values</Tab>
               <Tab id="past-wom">Past WOM competitions</Tab>
               {canGrantAdmin && <Tab id="grant-admin">Grant site admin</Tab>}
               {/* Dev mode only (local servers and staging): the server has no test data routes otherwise. */}
@@ -363,6 +370,11 @@ export function SiteAdminPage() {
           <TabPanel id="item-groups">
             <div className={NARROW}>
               <ItemGroupsPanel />
+            </div>
+          </TabPanel>
+          <TabPanel id="piece-values">
+            <div className={NARROW}>
+              <PieceValuesPanel />
             </div>
           </TabPanel>
           <TabPanel id="past-wom">

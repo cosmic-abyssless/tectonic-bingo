@@ -12,6 +12,7 @@ export const adminQueryKeys = {
   captainCandidates: (slug: string) => ["adminCaptainCandidates", slug] as const,
   itemGroups: ["adminItemGroups"] as const,
   pastWomCompetitions: ["adminPastWomCompetitions"] as const,
+  pieceValues: ["adminPieceValues"] as const,
   bugReports: ["adminBugReports"] as const,
   siteAuditLog: (bingoScope: string | null | "all", filters: AuditLogFilters) => ["siteAuditLog", bingoScope, filters] as const,
 };
@@ -34,6 +35,10 @@ export function useSiteAuditLog(bingoScope: string | null | "all", filters: Audi
 
 export function useItemGroups() {
   return useQuery({ queryKey: adminQueryKeys.itemGroups, queryFn: () => adminApi.getItemGroups() });
+}
+
+export function usePieceValues() {
+  return useQuery({ queryKey: adminQueryKeys.pieceValues, queryFn: () => adminApi.getPieceValues() });
 }
 
 export function usePastWomCompetitions() {

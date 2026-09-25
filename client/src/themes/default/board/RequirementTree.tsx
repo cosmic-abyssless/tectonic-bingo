@@ -1,6 +1,8 @@
 import type { RequirementNodeModel } from "../../../headless/types";
 import { CheckIcon } from "../../../core/ui/icons";
 import { ItemIcon } from "../../../core/ui/ItemIcon";
+import { WikiItemLink } from "../../../core/ui/WikiItemLink";
+import { itemNameOf } from "../../../headless/requirementItems";
 
 function Check() {
   return <CheckIcon size={12} className="shrink-0 text-ok" aria-label="complete" />;
@@ -31,7 +33,7 @@ function LeafOrSumRow({ node }: { node: RequirementNodeModel }) {
           {node.items.map((item) => (
             <li key={item.name} className={item.lockedBy ? "text-on-surface-subtle" : undefined}>
               <ItemIcon url={item.iconUrl} className={iconClass} />
-              {item.name}
+              <WikiItemLink name={item.name} />
               {item.count > 0 && <span className="num ml-1.5 text-xs font-medium text-ok">×{item.count}</span>}
               {item.lockedBy && <span className="ml-1.5 text-xs text-warn">{item.lockedBy}</span>}
             </li>
@@ -40,7 +42,7 @@ function LeafOrSumRow({ node }: { node: RequirementNodeModel }) {
       ) : (
         <span className={node.lockedBy ? "text-on-surface-subtle" : undefined}>
           <ItemIcon url={iconUrl} className={iconClass} />
-          {node.label}
+          {itemNameOf(node) ? <WikiItemLink name={itemNameOf(node)!} /> : node.label}
           {node.lockedBy && <span className="ml-1.5 text-xs text-warn">{node.lockedBy}</span>}
         </span>
       )}

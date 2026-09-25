@@ -241,6 +241,8 @@ export interface GraphNode {
   submitGateNodeId: string | null;
   /** Display hint: player may submit an empty-state screenshot beforehand. */
   allowsPreLoad: boolean;
+  /** ITEM only (CONTEXT.md "Valued as"): claims here are priced as this item ÷ divisor, not as their own item. */
+  valuedAs: ValuedAs | null;
   /** In parent-relative sortOrder. Empty for leaves. */
   children: GraphNode[];
 }
@@ -264,7 +266,21 @@ export interface GraphNodeInput {
   pointsGateNodeId?: string | null;
   submitGateNodeId?: string | null;
   allowsPreLoad?: boolean;
+  valuedAs?: ValuedAs | null;
   children?: GraphNodeInput[];
+}
+
+/** A Task's "Valued as" (CONTEXT.md): its claims' GP value comes from `itemName` ÷ `divisor`. */
+export interface ValuedAs {
+  itemName: string;
+  divisor: number;
+  /** Where these claims come from ("Vardorvis"), shown next to the item. Optional. */
+  source?: string | null;
+}
+
+/** "Ultor vestige ÷ 3", as the board editor and hover text show a Valued as. */
+export function describeValuedAs(valuedAs: Pick<ValuedAs, "itemName" | "divisor">): string {
+  return `${valuedAs.itemName} ÷ ${valuedAs.divisor}`;
 }
 
 // The raw tiles row, as returned unnested (e.g. in mod submission rows).
@@ -323,6 +339,8 @@ export interface Claim {
   nodeId: string;
   itemName: string | null;
   quantity: number;
+  /** What the drop was worth in GP when submitted (CONTEXT.md "GP value"); null when it has none (yet). */
+  gpValue: number | null;
 }
 
 export type MinimalUser = Pick<User, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick" | "rsn">;
@@ -372,6 +390,8 @@ export interface ClaimedLeaf {
   id: string;
   kind: NodeKind;
   label: string | null;
+  /** Why an item claimed here has the GP value it does, when the Task has a Valued as. */
+  valuedAs: ValuedAs | null;
 }
 
 export interface ModSubmissionRow extends SubmissionDetails {
@@ -984,7 +1004,28 @@ export interface ContributionCount {
   approvedSubmissions: number;
   /** Unrounded; shown to two decimal places. */
   pointsShare: number;
+  /** GP gained (CONTEXT.md): GP values of this player's approved claims. */
+  gpGained: number;
   awards: ContributionAward[];
+}
+
+export interface TeamGpGained {
+  teamId: string;
+  gpGained: number;
+}
+
+/** An approved claim with a GP value. */
+export interface GpDrop {
+  claimId: string;
+  submissionId: string;
+  teamId: string;
+  user: MinimalUser;
+  itemName: string;
+  quantity: number;
+  gpValue: number;
+  at: string;
+  /** The claimed Task's Valued as, when it has one: why an ordinary item has this value. */
+  valuedAs: ValuedAs | null;
 }
 
 export interface TileHeatmapCell {
@@ -999,6 +1040,10 @@ export interface StatsResponse {
   timeline: TimelineEvent[];
   contributions: ContributionCount[];
   heatmap: TileHeatmapCell[];
+  /** Highest first. */
+  teamGpGained: TeamGpGained[];
+  /** Every approved claim with a GP value, most valuable first. */
+  drops: GpDrop[];
 }
 
 // ---------------------------------------------------------------------------
@@ -1012,12 +1057,37 @@ export interface OsrsItemSearchResult {
 }
 
 // ---------------------------------------------------------------------------
+// Piece values (CONTEXT.md), matching server/src/services/pieceValueService.ts
+// ---------------------------------------------------------------------------
+
+export interface PieceValue {
+  id: string;
+  pieceItemName: string;
+  wholeItemName: string;
+  divisor: number;
+  /** The whole item's Other pieces, subtracted before dividing. */
+  otherPieces: { itemName: string; quantity: number }[];
+  /** What one piece is worth at today's prices: (whole − other pieces) ÷ divisor. Null while prices aren't loaded, or when it works out to nothing (an item with no price, or zero or less). */
+  unitPrice: number | null;
+}
+
+/** An item name on claims that have no GP value. */
+export interface UnvaluedItem {
+  itemName: string;
+  claimCount: number;
+  /** An Admin chose to leave it without a value (a pet, say). */
+  dismissed: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // WebSocket envelope, matching server/src/ws.ts
 // ---------------------------------------------------------------------------
 
 export type BroadcastEvent =
   | { type: "submission_created"; bingoId: string; payload: { teamId: string } }
   | { type: "submission_reviewed"; bingoId: string; payload: { teamId: string; nodeIds: string[] } }
+  // Claims of this bingo that had no GP value got one (the GE price table loaded, or a Piece value was added).
+  | { type: "gp_values_updated"; bingoId: string; payload: Record<string, never> }
   | { type: "stage_changed"; bingoId: string; payload: { stage: Stage } }
   | { type: "draft_started"; bingoId: string; payload: Record<string, never> }
   | { type: "draft_order_shuffled"; bingoId: string; payload: { lockedUntil: string; order: { teamId: string; draftOrder: number }[] } }

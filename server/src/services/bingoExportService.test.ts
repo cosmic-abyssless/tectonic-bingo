@@ -443,8 +443,12 @@ describe("every column is accounted for", () => {
   it("nodes", () => {
     const { bingo } = seedFullBingo();
     const node = exportBingo(db, bingo.id).tiles.find((t) => t.name === "Tile A")!.tasks[0]!;
-    const renamed: Record<string, string> = { pointsGateLocalId: "pointsGateNodeId", submitGateLocalId: "submitGateNodeId" };
-    accounted(schema.nodes, Object.keys(node).map((k) => renamed[k] ?? k), ["id", "bingoId"], ["localId", "children", "reuse"]);
+    const renamed: Record<string, string[]> = {
+      pointsGateLocalId: ["pointsGateNodeId"],
+      submitGateLocalId: ["submitGateNodeId"],
+      valuedAs: ["valuedAsItemName", "valuedAsDivisor", "valuedAsSource"],
+    };
+    accounted(schema.nodes, Object.keys(node).flatMap((k) => renamed[k] ?? [k]), ["id", "bingoId"], ["localId", "children", "reuse"]);
   });
 
   it("categories and signup questions", () => {

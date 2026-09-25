@@ -204,6 +204,29 @@ A Player's portion of their Team's points, credited from the Claims that complet
 The Bingo's stats page: points over time, the timeline, top contributors (ranked by Points share) and tile completion.
 - **Rules:** Moderators see every Team at every stage. While the Bingo is Live a Player sees only their own Team; once it is Finished everyone sees every Team. "First to complete" events are shown to Moderators throughout and to Players only once the Bingo is Finished.
 
+### GP value
+What a Claim's drop is worth in GP (gold pieces, the game's currency): the item's Grand Exchange price times its quantity, fixed when the Submission is made.
+- **Rules:** Priced at the midpoint of the item's latest buy and sell prices. A charged item that isn't sold on the Grand Exchange is priced as its uncharged version (Craw's bow as Craw's bow (u), Tumeken's shadow as its (uncharged) version). It may arrive shortly after the Submission is made and is never changed once set. A Claim with no item (a MANUAL task), or an item with no Grand Exchange price and no Piece value (e.g. a pet), has no GP value, shown as "—".
+- **Not:** A scoring source. GP value never earns or costs points.
+- **Re-price:** A Moderator can price a Submission's Claims again, when a value is wrong because it was priced from the wrong thing (before its Task got a Valued as, or before its item had a Piece value). Not for bringing values up to today's prices. A Claim that can't be priced right now keeps its value. Recorded in the audit log.
+- **Re-pricing a Task:** Changing a Task's Valued as once Submissions have a GP value from it asks whether to re-price them too (only that Task's Claims, at today's prices) or leave them and apply it to new Submissions only.
+
+### Valued as
+An optional setting on an item Task: Claims on that Task get their GP value from another item ÷ N instead of their own item's price.
+- **Example:** On a DT2 boss's page, the Gold ring Task is valued as that boss's vestige ÷ 3. A gold ring is an ordinary tradeable item (~160 GP), but from these bosses it counts as a third of the vestige, and which vestige depends on the boss. The page's vestige Task is valued the same way (its own vestige ÷ 3), so on that tile a vestige counts like a ring roll, while its Piece value (the whole vestige) still applies everywhere else.
+- **Source:** An optional short name for where these Claims come from ("Vardorvis"), shown dimmed next to the item wherever its GP value is listed, with the valuation on hover, so players see why an ordinary-looking item is worth so much. Without a Source, the valuation itself is shown.
+- **Rules:** Set per Task in the board editor, saved with the board (exported and imported with the Bingo). The named item is priced like any other, including its Piece value. One value per Task, so a Task that could be claimed from several sources worth different amounts has to be split into one Task per source (issue #189).
+- **Not:** A Piece value. A Piece value prices an item the same everywhere; Valued as prices one Task, for an item whose worth depends on where it's claimed.
+
+### GP gained
+The sum of GP values of a Player's or Team's approved Submissions. Pending and rejected Submissions show their GP value to Moderators but don't count.
+
+### Piece value
+A site-wide rule, set by an Admin, that values an item piece as a share of its **Whole item**: the Whole item's price, minus its **Other pieces**, divided by N.
+- **Examples:** Bludgeon axon = Abyssal bludgeon ÷ 3. Ultor vestige = (Ultor ring − Berserker ring − 3× Chromium ingot) ÷ 1.
+- **Other pieces:** The other items that go into the Whole item, each with a quantity, subtracted before dividing. Optional. Equal pieces covered by ÷ N (the bludgeon's other two pieces) are not listed as Other pieces.
+- **Rules:** The Whole item and every Other piece must have a Grand Exchange price and can't themselves be a piece. One Piece value per piece; it overrides the piece's own price. When a Piece value works out to nothing (an Other piece has no price right now, or the result is zero or less) the Claim gets no GP value until it works out again. Adding or changing one prices only Claims that have no GP value yet.
+
 ### Pot
 The total GP reward pool for a Bingo, computed from the per-player Buy-in amount plus an optional bonus pot contributed by the clan or sponsors.
 

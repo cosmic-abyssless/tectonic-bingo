@@ -14,7 +14,10 @@ import { MultiSelect } from "../ui/MultiSelect";
 import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { inclusionFilter } from "../ui/inclusionFilter";
 import { ScreenshotThumb } from "../submissions/ScreenshotThumb";
-import { claimsSummary } from "../submissions/claimsSummary";
+import { claimsGpBreakdown, claimsGpValue } from "../submissions/claimsSummary";
+import { ClaimsSummary } from "../submissions/ClaimsSummary";
+import { formatGp } from "../ui/gp";
+import { RepriceGpButton } from "./RepriceGpButton";
 import { fullUrl } from "../../api/imageVariants";
 
 function KeyCap({ children }: { children: React.ReactNode }) {
@@ -288,7 +291,18 @@ export function ReviewQueue({ slug }: { slug: string }) {
                       <Badge>{row.team.name}</Badge>
                       {isManual && <Badge tone="info">manual</Badge>}
                     </div>
-                    <p className="truncate text-sm text-on-surface-muted">{claimsSummary(row.claims)}</p>
+                    <p className="truncate text-sm text-on-surface-muted">
+                      <ClaimsSummary claims={row.claims} />
+                      {row.claims.some((c) => c.itemName !== null) && (
+                        <>
+                          <span className="num" title={claimsGpBreakdown(row.claims, formatGp, new Map(row.leaves.flatMap((l) => (l.valuedAs ? [[l.id, l.valuedAs] as const] : []))))}>
+                            {" · "}
+                            {claimsGpValue(row.claims) === null ? "— GP value" : `${formatGp(claimsGpValue(row.claims))} GP`}
+                          </span>{" "}
+                          <RepriceGpButton slug={slug} submissionId={row.submission.id} />
+                        </>
+                      )}
+                    </p>
                     <p className="mt-0.5 text-xs text-on-surface-subtle">by {row.submittedByUser ? <PlayerName userId={row.submittedByUser.id}>{displayName(row.submittedByUser)}</PlayerName> : "unknown"}
                       {row.postedByUser && <> (posted by <PlayerName userId={row.postedByUser.id}>{displayName(row.postedByUser)}</PlayerName>)</>}
                       {creditFor !== row.submission.id && (
@@ -308,6 +322,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
                           </button>
                         </>
                       )}
+
                     </p>
                     {creditFor === row.submission.id && (
                       <div className="mt-2 max-w-md space-y-2" onClick={(e) => e.stopPropagation()}>

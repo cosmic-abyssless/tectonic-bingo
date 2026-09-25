@@ -6,3 +6,9 @@ export function wikiIconUrl(name: string | null | undefined): string | undefined
   const trimmed = name?.trim();
   return trimmed ? `/wiki-icons/${encodeURIComponent(trimmed)}.png` : undefined;
 }
+
+// The item's OSRS wiki page, by way of the wiki's search: a name that is a page title goes straight to it, and one that
+// isn't (a bingo-specific label like "Any Cerberus drop") lands on search results instead of a missing page.
+export function wikiPageUrl(name: string): string {
+  return `https://oldschool.runescape.wiki/?search=${encodeURIComponent(name.trim())}`;
+}
