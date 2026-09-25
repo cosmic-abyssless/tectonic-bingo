@@ -11,6 +11,7 @@ import { DraftPageLayout } from "./page/DraftPageLayout";
 import { StatsPageLayout } from "./page/StatsPageLayout";
 import { DraftPickBurst } from "./draft/DraftPickBurst";
 import { AchievementUnlockCard } from "./achievements/AchievementUnlockCard";
+import { AchievementRow } from "./achievements/AchievementRow";
 import { PageLoading, PageError } from "./page/PageStates";
 import { PageHeader } from "./page/PageHeader";
 import { TeamSelector } from "./page/TeamSelector";
@@ -58,6 +59,7 @@ export const defaultTheme: ThemeDefinition = {
     StatsPage: StatsPageLayout,
     DraftPickBurst,
     AchievementUnlockCard,
+    AchievementRow,
     OnTheClockBanner,
     PageLoading,
     PageError,

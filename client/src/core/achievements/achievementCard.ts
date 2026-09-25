@@ -1,7 +1,7 @@
 import type { AchievementProgress, MyAchievement } from "@bingo/shared";
 
 /**
- * How one Achievement renders in the modal's grid (AchievementsModal): a locked Hidden one is always "masked" (the
+ * How one Achievement renders in the modal's list (AchievementsModal): a locked Hidden one is always "masked" (the
  * server never sends its name/description/icon before it's earned), everything else is "earned" or "locked" — see
  * CONTEXT.md "Achievement".
  */
@@ -27,4 +27,19 @@ export function progressFraction(progress: AchievementProgress | null): number |
 export function achievementCountLabel(achievements: readonly Pick<MyAchievement, "earned">[]): string {
   const earned = achievements.filter((a) => a.earned).length;
   return `${earned} / ${achievements.length}`;
+}
+
+const LIST_RANK: Record<AchievementCardKind, number> = { earned: 0, locked: 1, masked: 2 };
+
+/** The modal's order: earned first, then the visible ones still to get, then the Hidden "???" ones — each group in catalogue order. */
+export function orderForList<T extends Pick<MyAchievement, "masked" | "earned">>(achievements: readonly T[]): T[] {
+  return achievements
+    .map((a, i) => ({ a, i }))
+    .sort((x, y) => LIST_RANK[achievementCardKind(x.a)] - LIST_RANK[achievementCardKind(y.a)] || x.i - y.i)
+    .map(({ a }) => a);
+}
+
+/** "Earned 3 Mar" (in the viewer's locale), or null when not earned. */
+export function earnedLabel(earnedAt: string | null): string | null {
+  return earnedAt ? `Earned ${new Date(earnedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : null;
 }
