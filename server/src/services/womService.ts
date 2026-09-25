@@ -19,7 +19,8 @@ const WOM_USER_AGENT = `${USER_AGENT} player stats`;
 
 type FetchLike = typeof fetch;
 
-const SNAPSHOTS_PAGE_SIZE = 50;
+// WOM accepts at least 200 snapshots per page (checked by hand); 100 keeps each response modest.
+const SNAPSHOTS_PAGE_SIZE = 100;
 
 export class WomClient {
   // Set from a 429's `retry-after` header. While in the future, new requests
@@ -40,6 +41,9 @@ export class WomClient {
    * Every snapshot WOM holds for the RSN between two dates, raw and newest first, paging through them all
    * (see parseSnapshots). Null if any page is unreachable or rate-limited. Only reads what WOM already has:
    * it never asks WOM to update the player.
+   *
+   * Each page is one request against WOM's rate limit. A caller reading repeatedly should store what it has and
+   * start from its last stored snapshot, not re-read the whole Bingo every time.
    */
   async getSnapshots(rsn: string, start: Date, end: Date): Promise<unknown[] | null> {
     const snapshots: unknown[] = [];

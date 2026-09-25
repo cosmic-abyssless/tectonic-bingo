@@ -149,9 +149,9 @@ describe("WomClient.getSnapshots", () => {
   });
 
   it("pages through every snapshot in the range", async () => {
-    const fetchImpl = pagedFetch(120);
+    const fetchImpl = pagedFetch(250);
     const snapshots = await new WomClient(fetchImpl).getSnapshots("Zezima", start, end);
-    expect(snapshots).toHaveLength(120);
+    expect(snapshots).toHaveLength(250);
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(3);
   });
 
