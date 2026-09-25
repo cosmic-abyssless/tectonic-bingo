@@ -48,9 +48,8 @@ export interface ThemeSlots {
   // One Achievement's unlock popup (core/achievements/AchievementUnlockReveal). The theme draws only the card: its own
   // width, no positioning, motion or button; core reveals it OSRS-style (a dot on the card's top edge fanning out into
   // a line, then scanning down), holds it, takes it away and makes it open the Achievements modal. The card's top
-  // edge must be a solid line at least 3px thick, since that edge is what the dot and the line show. Only the frame
-  // (border and fill) unrolls: keep the icon and text invisible until `contentShown`, and fade them on its changes.
-  AchievementUnlockCard: ComponentType<{ achievement: MyAchievement; contentShown: boolean }>;
+  // edge must be a solid line at least 3px thick: the dot and the line show just the top 2px of it.
+  AchievementUnlockCard: ComponentType<{ achievement: MyAchievement }>;
   // One team's column in the draft room (core/draft/TeamRoster): its card, then its picks. Read with useOptionalSlot.
   // Each pick's element must carry data-team-id and data-pick-number (the pick reveal flies to it) and stay invisible
   // while its number is in hiddenPickNumbers.
