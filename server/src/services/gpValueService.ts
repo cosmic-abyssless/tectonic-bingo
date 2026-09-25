@@ -24,19 +24,20 @@ export interface Pricer {
 
 export interface PieceValueRule {
   wholeItemName: string;
+  wholeQuantity: number;
   divisor: number;
   otherPieces: { itemName: string; quantity: number }[];
 }
 
 /**
- * What one piece is worth at today's prices: (whole item − other pieces) ÷ divisor. Null when it works out to
+ * What one piece is worth at today's prices: (quantity × whole item − other pieces) ÷ divisor. Null when it works out to
  * nothing: the whole item or an other piece has no price right now, or the result is zero or less. Such claims stay
  * without a GP value until it works out again, rather than being frozen at a wrong one.
  */
 export function pieceUnitPrice(table: GePriceTable, rule: PieceValueRule): number | null {
   const whole = table.unitPrice(rule.wholeItemName);
   if (whole === null) return null;
-  let rest = whole;
+  let rest = whole * rule.wholeQuantity;
   for (const other of rule.otherPieces) {
     const price = table.unitPrice(other.itemName);
     if (price === null) return null;

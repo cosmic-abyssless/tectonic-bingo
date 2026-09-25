@@ -43,7 +43,7 @@ export function deleteItemGroup(id: string) {
 export function getPieceValues() {
   return api.get<{ pieceValues: PieceValue[]; unvaluedItems: UnvaluedItem[] }>("/api/admin/piece-values");
 }
-type PieceValuePayload = { pieceItemName: string; wholeItemName: string; divisor: number; otherPieces: { itemName: string; quantity: number }[] };
+type PieceValuePayload = { pieceItemName: string; wholeItemName: string; wholeQuantity: number; divisor: number; otherPieces: { itemName: string; quantity: number }[] };
 export function createPieceValue(payload: PieceValuePayload) {
   return api.post<{ pieceValue: PieceValue }>("/api/admin/piece-values", payload);
 }
