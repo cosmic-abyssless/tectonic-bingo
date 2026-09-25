@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { isBlankAnswer, parseChoices, type GraphNode, type SignupQuestion, type Tile } from "@bingo/shared";
 import { answerQuestions } from "./answers";
 import { DIFFICULTY, buildBoard, deadlockedParts, difficultyOf, planSubmissions, type Claim, type PartModel } from "./board";
@@ -203,8 +203,14 @@ function loadRealBoard() {
   return { doc, board: buildBoard(tiles, []) };
 }
 
+// The board export isn't in git (it's big): these run only where a local copy is. Loaded in beforeAll, not in the
+// describe body, which runs even when the block is skipped.
 describe.skipIf(!fs.existsSync(EXPORT_PATH))("the real board", () => {
-  const { doc, board } = loadRealBoard();
+  let doc: ExportDoc;
+  let board: ReturnType<typeof loadRealBoard>["board"];
+  beforeAll(() => {
+    ({ doc, board } = loadRealBoard());
+  });
 
   it("knows how hard every tile is (a new or renamed tile needs a row in DIFFICULTY)", () => {
     const unknown = doc.tiles.map((t) => t.name).filter((name) => !(name.toUpperCase() in DIFFICULTY));

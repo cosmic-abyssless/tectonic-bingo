@@ -267,6 +267,8 @@ export interface AuditActionDef<A extends AuditAction> {
 }
 
 const actor = (i: { actorName: string | null }) => i.actorName ?? "Someone";
+// ` on "Pets"`, or nothing when the tile's name isn't there.
+const onTile = (preposition: string, tileName: string | undefined) => (tileName ? ` ${preposition} "${tileName}"` : "");
 const onBehalf = (i: { onBehalfOfName: string | null }) => (i.onBehalfOfName ? ` (on behalf of ${i.onBehalfOfName})` : "");
 /** "Green team's", or "their" when the team isn't known. */
 const teamPossessive = (i: { teamName: string | null }) => (i.teamName ? `${i.teamName}'s` : "their");
@@ -457,9 +459,10 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
         ? `${actor(i)} set "${i.entityLabel ?? ""}"'s full-completion bonus to ${i.details.points.after} pts`
         : `${actor(i)} removed "${i.entityLabel ?? ""}"'s full-completion bonus`,
   },
-  "task.created": { category: "board", tone: "ok", visibility: "mods", title: "Task created", label: (i) => `${actor(i)} added a task to "${i.details.tileName}"` },
-  "task.updated": { category: "board", tone: "neutral", visibility: "mods", title: "Task updated", label: (i) => `${actor(i)} updated a task on "${i.details.tileName}"` },
-  "task.deleted": { category: "board", tone: "danger", visibility: "mods", title: "Task deleted", label: (i) => `${actor(i)} deleted a task from "${i.details.tileName}"` },
+  // The tile's name can be missing: entries whose details went over the size cap before it kept the small fields.
+  "task.created": { category: "board", tone: "ok", visibility: "mods", title: "Task created", label: (i) => `${actor(i)} added a task${onTile("to", i.details.tileName)}` },
+  "task.updated": { category: "board", tone: "neutral", visibility: "mods", title: "Task updated", label: (i) => `${actor(i)} updated a task${onTile("on", i.details.tileName)}` },
+  "task.deleted": { category: "board", tone: "danger", visibility: "mods", title: "Task deleted", label: (i) => `${actor(i)} deleted a task${onTile("from", i.details.tileName)}` },
   "line.generated": { category: "board", tone: "neutral", visibility: "mods", title: "Lines generated", label: (i) => `${actor(i)} regenerated bingo lines (${i.details.pointsPerLine} pts each)` },
   "line.updated": { category: "board", tone: "neutral", visibility: "mods", title: "Line updated", label: (i) => `${actor(i)} changed ${i.details.lineType} ${i.details.lineIndex + 1}'s points to ${i.details.points.after}` },
   "line.deleted": { category: "board", tone: "danger", visibility: "mods", title: "Line deleted", label: (i) => `${actor(i)} deleted ${i.details.lineType} ${i.details.lineIndex + 1}` },

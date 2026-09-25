@@ -4,7 +4,7 @@ import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { audit, diffFields, markAuditedNoop, redactBody } from "./record";
+import { audit, capDetails, diffFields, markAuditedNoop, redactBody } from "./record";
 import { runWithAuditContext, type AuditContext } from "./context";
 
 let sqlite: Database.Database;
@@ -90,6 +90,32 @@ describe("audit()", () => {
     const row = db.select().from(schema.auditLog).all().find((r) => r.id === id)!;
     const parsed = JSON.parse(row.details);
     expect(parsed.truncated).toBe(true);
+  });
+
+  it("over the cap, drops the biggest fields first and keeps the small ones a label reads", () => {
+    const tree = { kind: "ALL", children: Array.from({ length: 200 }, (_, i) => ({ kind: "ITEM", itemName: `Pet ${i}`, children: [] })) };
+    const id = audit(db, {
+      action: "task.updated",
+      bingoId: "b1",
+      entity: { type: "node", id: "n1", label: "Part A" },
+      details: { tileId: "t1", tileName: "Pets", before: tree, after: tree } as never,
+    });
+    const parsed = JSON.parse(db.select().from(schema.auditLog).all().find((r) => r.id === id)!.details);
+    expect(parsed).toMatchObject({ tileId: "t1", tileName: "Pets", truncated: true });
+    expect(parsed.before).toBeUndefined();
+    expect(parsed.after).toBeUndefined();
+    expect([...parsed.dropped].sort()).toEqual(["after", "before"]);
+  });
+});
+
+describe("capDetails()", () => {
+  it("leaves details under the cap alone", () => {
+    expect(capDetails({ a: 1, b: "two" }, 100)).toBe(JSON.stringify({ a: 1, b: "two" }));
+  });
+
+  it("drops only as much as it needs to, biggest first", () => {
+    const parsed = JSON.parse(capDetails({ small: "keep", medium: "m".repeat(60), big: "b".repeat(300) }, 200));
+    expect(parsed).toMatchObject({ small: "keep", medium: "m".repeat(60), truncated: true, dropped: ["big"] });
   });
 });
 
