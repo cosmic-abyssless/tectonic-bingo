@@ -1,5 +1,5 @@
 import type {
-  Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, PieceValue, SignupQuestion, UnvaluedItem, Team,
+  AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, PieceValue, SignupQuestion, UnvaluedItem, Team,
   TeamMember, Tile, TileCategory, User, WomPastCompetition,
 } from "@bingo/shared";
 import { api } from "./client";
@@ -79,9 +79,10 @@ export function setBugReportStatus(id: string, status: BugReportStatus, resoluti
 
 const base = (slug: string) => `/api/bingos/${slug}/admin`;
 
-// womGroupVerificationCode isn't on the Bingo type at all — the server never
-// sends it back (bingoService.toPublicBingo), so it can only ever be written.
-export function updateBingoSettings(slug: string, payload: Partial<Bingo> & { womGroupVerificationCode?: string }) {
+// womGroupVerificationCode isn't on the Bingo type at all — the server never sends it back (bingoService.toPublicBingo),
+// so it can only ever be written. `achievements` (CONTEXT.md "Achievement") is per-catalogue-entry switches, also not
+// on Bingo itself — only the master switch (achievementsEnabled) is.
+export function updateBingoSettings(slug: string, payload: Partial<Bingo> & { womGroupVerificationCode?: string; achievements?: Partial<Record<AchievementKey, boolean>> }) {
   return api.patch<{ bingo: Bingo }>(`${base(slug)}/settings`, payload);
 }
 /** What the server's WOM Test connection found (checkWomGroup). */
@@ -201,5 +202,19 @@ export function addTeamMember(slug: string, teamId: string, userId: string) {
 }
 export function removeTeamMember(slug: string, teamId: string, userId: string) {
   return api.delete(`${base(slug)}/teams/${teamId}/members/${userId}`);
+}
+
+// Every catalogue Achievement's current switch state for this bingo (CONTEXT.md "Achievement"), for the settings
+// form's "Achievements" section — matches server/src/services/achievementService.ts's AchievementSettingRow.
+export interface AchievementSettingRow {
+  key: AchievementKey;
+  name: string;
+  description: string;
+  hidden: boolean;
+  itemName: string;
+  enabled: boolean;
+}
+export function getAchievementSettings(slug: string) {
+  return api.get<{ achievements: AchievementSettingRow[] }>(`${base(slug)}/achievements`);
 }
 

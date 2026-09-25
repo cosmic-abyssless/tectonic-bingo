@@ -15,6 +15,7 @@ export const adminQueryKeys = {
   pieceValues: ["adminPieceValues"] as const,
   bugReports: ["adminBugReports"] as const,
   siteAuditLog: (bingoScope: string | null | "all", filters: AuditLogFilters) => ["siteAuditLog", bingoScope, filters] as const,
+  achievementSettings: (slug: string) => ["adminAchievements", slug] as const,
 };
 
 // The site-wide audit log — every bingo, or just site-level entries
@@ -64,6 +65,11 @@ export function useQuestions(slug: string) {
 
 export function useCaptainCandidates(slug: string) {
   return useQuery({ queryKey: adminQueryKeys.captainCandidates(slug), queryFn: () => adminApi.getCaptainCandidates(slug) });
+}
+
+/** The Achievements settings section's per-catalogue-entry switch state (CONTEXT.md "Achievement"). */
+export function useAchievementSettings(slug: string) {
+  return useQuery({ queryKey: adminQueryKeys.achievementSettings(slug), queryFn: () => adminApi.getAchievementSettings(slug) });
 }
 
 // scope is either a bingo slug (search within that bingo's admin routes) or
