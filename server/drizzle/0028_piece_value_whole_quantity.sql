@@ -1,0 +1,1 @@
+ALTER TABLE `piece_values` ADD `whole_quantity` integer DEFAULT 1 NOT NULL;

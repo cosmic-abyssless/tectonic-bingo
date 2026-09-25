@@ -592,6 +592,9 @@ export const pieceValues = sqliteTable('piece_values', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   pieceItemName: text('piece_item_name').notNull().unique(),
   wholeItemName: text('whole_item_name').notNull(),
+  // How many of the whole item the piece is valued from, before other pieces come off: Dizana's quiver is 4000×
+  // Sunfire splinters. Usually 1.
+  wholeQuantity: integer('whole_quantity').notNull().default(1),
   divisor: integer('divisor').notNull(),
   // Null for the starter Piece values a migration added (0025), which no one person created.
   createdByUserId: text('created_by_user_id').references(() => users.id),

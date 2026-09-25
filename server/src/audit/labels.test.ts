@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AUDIT_ACTIONS, describeClaims, type AuditAction, type AuditDetailsMap } from "@bingo/shared";
+import { AUDIT_ACTIONS, describeClaims, describeValuedAs, type AuditAction, type AuditDetailsMap } from "@bingo/shared";
 
 function label<A extends AuditAction>(action: A, details: AuditDetailsMap[A], teamName: string | null = "Comfy") {
   const def = AUDIT_ACTIONS[action] as { label(input: unknown): string };
@@ -64,5 +64,19 @@ describe("describeClaims", () => {
   it("is what the submission label says", () => {
     const details = { tileId: "t", tileName: "GWD ISSUE 2", taskLabels: [], claims: [{ nodeId: "n", ...item("Armadyl crossbow") }], screenshotUrl: "/x.png" };
     expect(label("submission.created", details)).toBe('Mod submitted 1 Armadyl crossbow for "GWD ISSUE 2"');
+  });
+});
+
+describe("GP formulas", () => {
+  it("leave out ÷ 1, and the brackets that would only group for it", () => {
+    const piece = (divisor: number, otherPieces: string[], wholeQuantity = 1) =>
+      label("piece_value.created", { pieceItemName: "Piece", wholeItemName: "Whole", wholeQuantity, divisor, otherPieces });
+    expect(piece(1, ["Berserker ring", "3× Chromium ingot"])).toBe("Mod valued Piece as Whole − Berserker ring − 3× Chromium ingot");
+    expect(piece(3, [])).toBe("Mod valued Piece as Whole ÷ 3");
+    expect(piece(2, ["Other"])).toBe("Mod valued Piece as (Whole − Other) ÷ 2");
+    expect(piece(1, [], 4000)).toBe("Mod valued Piece as 4000× Whole");
+
+    expect(describeValuedAs({ itemName: "Ultor vestige", divisor: 1 })).toBe("Ultor vestige");
+    expect(describeValuedAs({ itemName: "Ultor vestige", divisor: 3 })).toBe("Ultor vestige ÷ 3");
   });
 });

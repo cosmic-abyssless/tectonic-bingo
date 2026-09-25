@@ -14,7 +14,7 @@ import { WikiItemLink } from "../ui/WikiItemLink";
 import { ItemSearchInput } from "../ui/ItemSearchInput";
 
 type OtherPiece = { itemName: string; quantity: number };
-type PieceValueInput = { pieceItemName: string; wholeItemName: string; divisor: number; otherPieces: OtherPiece[] };
+type PieceValueInput = { pieceItemName: string; wholeItemName: string; wholeQuantity: number; divisor: number; otherPieces: OtherPiece[] };
 // An other piece being edited: the quantity as typed, and a stable key so removing a row doesn't reshuffle inputs.
 type OtherPieceDraft = { key: number; itemName: string; quantity: string };
 
@@ -22,12 +22,18 @@ let nextDraftKey = 0;
 const draftOf = (o?: OtherPiece): OtherPieceDraft => ({ key: nextDraftKey++, itemName: o?.itemName ?? "", quantity: String(o?.quantity ?? 1) });
 const isWholeNumber = (raw: string) => Number.isInteger(Number(raw)) && Number(raw) >= 1;
 
-/** "(Ultor ring − Berserker ring − 3× Chromium ingot) ÷ 1", or "Abyssal bludgeon ÷ 3" with no other pieces; each item links to its wiki page. */
+/**
+ * "Ultor ring − Berserker ring − 3× Chromium ingot", "Abyssal bludgeon ÷ 3", "(A − B) ÷ 2": "÷ 1" is left off, and so
+ * are the brackets that would only group the subtraction for it. Each item links to its wiki page.
+ */
 function Formula({ pieceValue }: { pieceValue: PieceValueInput }) {
   const others = pieceValue.otherPieces;
+  const divided = pieceValue.divisor > 1;
+  const bracketed = divided && others.length > 0;
   return (
     <span className="min-w-0">
-      {others.length > 0 && "("}
+      {bracketed && "("}
+      {pieceValue.wholeQuantity > 1 && `${pieceValue.wholeQuantity.toLocaleString()}× `}
       <WikiItemLink name={pieceValue.wholeItemName} />
       {others.map((o) => (
         <Fragment key={o.itemName}>
@@ -36,7 +42,8 @@ function Formula({ pieceValue }: { pieceValue: PieceValueInput }) {
           <WikiItemLink name={o.itemName} />
         </Fragment>
       ))}
-      {others.length > 0 && ")"} ÷ {pieceValue.divisor}
+      {bracketed && ")"}
+      {divided && ` ÷ ${pieceValue.divisor}`}
     </span>
   );
 }
@@ -51,12 +58,13 @@ interface PieceValueFormProps {
 function PieceValueForm({ initial, submitLabel, onSave, onCancel }: PieceValueFormProps) {
   const [piece, setPiece] = useState(initial?.pieceItemName ?? "");
   const [whole, setWhole] = useState(initial?.wholeItemName ?? "");
+  const [wholeQuantity, setWholeQuantity] = useState(String(initial?.wholeQuantity ?? 1));
   const [divisor, setDivisor] = useState(String(initial?.divisor ?? 1));
   const [others, setOthers] = useState<OtherPieceDraft[]>(() => (initial?.otherPieces ?? []).map(draftOf));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const filledOthers = others.filter((o) => o.itemName.trim());
-  const valid = piece.trim() && whole.trim() && isWholeNumber(divisor) && filledOthers.every((o) => isWholeNumber(o.quantity));
+  const valid = piece.trim() && whole.trim() && isWholeNumber(wholeQuantity) && isWholeNumber(divisor) && filledOthers.every((o) => isWholeNumber(o.quantity));
   const setOther = (key: number, patch: Partial<OtherPieceDraft>) => setOthers((list) => list.map((o) => (o.key === key ? { ...o, ...patch } : o)));
 
   async function save() {
@@ -66,6 +74,7 @@ function PieceValueForm({ initial, submitLabel, onSave, onCancel }: PieceValueFo
       await onSave({
         pieceItemName: piece.trim(),
         wholeItemName: whole.trim(),
+        wholeQuantity: Number(wholeQuantity),
         divisor: Number(divisor),
         otherPieces: filledOthers.map((o) => ({ itemName: o.itemName.trim(), quantity: Number(o.quantity) })),
       });
@@ -73,6 +82,7 @@ function PieceValueForm({ initial, submitLabel, onSave, onCancel }: PieceValueFo
       if (!onCancel) {
         setPiece("");
         setWhole("");
+        setWholeQuantity("1");
         setDivisor("1");
         setOthers([]);
       }
@@ -85,9 +95,13 @@ function PieceValueForm({ initial, submitLabel, onSave, onCancel }: PieceValueFo
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_6rem]">
+      <div className="grid gap-2 sm:grid-cols-[1fr_6rem_1fr_6rem]">
         <Field label="Piece">
           <ItemSearchInput ariaLabel="Piece" placeholder="e.g. Ultor vestige" value={piece} onChange={setPiece} onPickItem={setPiece} />
+        </Field>
+        {/* Read left to right as the formula: piece = how many × whole item ÷ N (Dizana's quiver = 4000 × Sunfire splinters). */}
+        <Field label="How many">
+          <Input aria-label="How many of the whole item" type="number" min={1} step={1} value={wholeQuantity} onChange={(e) => setWholeQuantity(e.target.value)} />
         </Field>
         <Field label="Whole item">
           <ItemSearchInput ariaLabel="Whole item" placeholder="e.g. Ultor ring" value={whole} onChange={setWhole} onPickItem={setWhole} />
@@ -258,7 +272,7 @@ export function PieceValuesPanel() {
     <div className="space-y-6">
       <p className="text-sm text-on-surface-muted">
         Submissions get a GP value from the item's Grand Exchange price. A piece with no price of its own (an untradeable part of a tradeable item) can be valued as a
-        share of its whole item instead: Bludgeon axon = Abyssal bludgeon ÷ 3, or Ultor vestige = (Ultor ring − Berserker ring − 3× Chromium ingot) ÷ 1. Adding one
+        share of its whole item instead: Bludgeon axon = Abyssal bludgeon ÷ 3, or Ultor vestige = Ultor ring − Berserker ring − 3× Chromium ingot. Adding one
         prices the claims that have no GP value yet; values already set don't change.
       </p>
 
