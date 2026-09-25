@@ -3,7 +3,8 @@ import type { ApprovedClaim, EngineNode } from "../engine";
 import { openItems } from "../openItems";
 import type { WomSnapshot } from "../womService";
 import { dropRateTable } from "./dropRates";
-import { DEFAULT_LUCK_WEIGHTS, gpWeight, luckOf, playerLuck, type LuckClaim, type LuckInput } from "./luck";
+import { DEFAULT_LUCK_WEIGHTS } from "@bingo/shared";
+import { gpWeight, luckOf, playerLuck, type LuckClaim, type LuckInput } from "./luck";
 
 const rates = dropRateTable({
   Vardorvis: { "Ultor vestige": 1 / 1000, "Virtus mask": 1 / 3000 },

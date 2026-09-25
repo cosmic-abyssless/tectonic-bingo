@@ -672,6 +672,15 @@ export const unvaluedItemDismissals = sqliteTable('unvalued_item_dismissals', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
 
+// Site-wide settings a Site admin changes from the Site admin page, one JSON value per key. "titles" holds the
+// Title settings (shared/titles.ts TitleSettings): only what differs from the defaults, so new defaults still apply.
+export const siteSettings = sqliteTable('site_settings', {
+  key: text('key').primaryKey(),
+  valueJson: text('value_json').notNull(),
+  updatedByUserId: text('updated_by_user_id').notNull().references(() => users.id),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
 // Manual point adjustments applied by moderators. Also the only way to hand
 // out points outside the node graph (e.g. correcting a mistake) since nodes
 // no longer accept a per-submission points override.

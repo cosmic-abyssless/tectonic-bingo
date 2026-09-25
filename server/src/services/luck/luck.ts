@@ -8,24 +8,11 @@
 // luck is −log₁₀ P(at least one drop in those kills); "1 in N" is N = 10^luck.
 // Each drop is judged over the kills since the Player's previous one (or the
 // Bingo's start), so an early drop stays lucky however long they grind after.
+import { DEFAULT_LUCK_WEIGHTS, type LuckWeights } from "@bingo/shared";
 import type { WomSnapshot } from "../womService";
 import type { BossMetric } from "./bossSources";
 import type { DropRateTable } from "./dropRates";
 import { killsAtLeast, killsAtMost, killsUpToDrop } from "./kc";
-
-/** The luck Titles' tunable numbers. Starting values are in DEFAULT_LUCK_WEIGHTS. */
-export interface LuckWeights {
-  /** Spoon: the luckiest drop counts in full, the next at this much, the one after at this squared, and so on. */
-  spoonDecay: number;
-  /** Spoon: the combined luck a Player needs (1 = 1 in 10). */
-  spoonMinLuck: number;
-  /** Dry: a streak counts from this luck. */
-  dryMinLuck: number;
-  /** Clutch: a drop's own luck must reach this, before its GP weight. */
-  clutchMinLuck: number;
-}
-
-export const DEFAULT_LUCK_WEIGHTS: LuckWeights = { spoonDecay: 0.5, spoonMinLuck: 1, dryMinLuck: 1, clutchMinLuck: 1 };
 
 export interface LuckClaim {
   claimId: string;

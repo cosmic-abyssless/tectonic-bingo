@@ -10,6 +10,8 @@ import { approveSubmission, rejectSubmission } from "./scoringService";
 import { getTeamProgress } from "./teamService";
 import { getDropRates } from "./luck/dropRates";
 import { luckOf } from "./luck/luck";
+import { updateTitleSettings } from "./titleSettingsService";
+import { DEFAULT_LUCK_WEIGHTS } from "@bingo/shared";
 import { filterStatsForTeam, getContributionCounts, getPointsOverTime, getStats, getStatsForViewer, getTileHeatmap, getTimeline } from "./statsService";
 
 let sqlite: Database.Database;
@@ -476,6 +478,19 @@ describe("Luck facts", () => {
     // Credited on the mask's own Task and on the Part: the Part still needed either piece.
     const clutch = luckOfPlayer(fx.bingoId, fx.memberUserId)!.clutch!;
     expect(clutch.luck).toBeCloseTo(luckOf(10 * (vardorvisRate("Virtus mask") + vardorvisRate("Virtus robe top"))));
+  });
+
+  it("uses the Site admin's luck weights, and sends the Title settings along", () => {
+    const fx = seedLuck();
+    const task = createTask(db, fx.tileId, { kind: "ITEM", itemName: "Ultor vestige", label: "Ultor", points: 10 });
+    timeline(fx.bingoId, fx.memberUserId, [[-2, 100], [5, 110]]);
+    drop(fx.teamAId, task.id, "Ultor vestige", fx.memberUserId, 4, fx.modUserId);
+    // 10 kills at about 1/1000 is about 1 in 100: short of a 1-in-1,000 floor.
+    updateTitleSettings(db, { luck: { ...DEFAULT_LUCK_WEIGHTS, spoonMinLuck: 3 } }, fx.modUserId);
+
+    expect(luckOfPlayer(fx.bingoId, fx.memberUserId)!.spoon).toBeNull();
+    expect(getStats(db, fx.bingoId).titleSettings.luck.spoonMinLuck).toBe(3);
+    expect(getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: fx.teamAId, bingoComplete: false }).titleSettings.luck.spoonMinLuck).toBe(3);
   });
 
   it("gives no Clutch to a Claim that earned no Points share, but still counts it for Spoon", () => {

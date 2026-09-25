@@ -11,6 +11,7 @@ import { optimisticUpdate } from "../api/optimistic";
 import { UserSearchInput } from "../core/admin/UserSearchInput";
 import { ItemGroupsPanel } from "../core/admin/ItemGroupsPanel";
 import { PieceValuesPanel } from "../core/admin/PieceValuesPanel";
+import { TitleSettingsPanel } from "../core/admin/TitleSettingsPanel";
 import { PastWomCompetitionsPanel } from "../core/admin/PastWomCompetitionsPanel";
 import { TestDataPanel } from "../core/admin/TestDataPanel";
 import { BugReportsPanel } from "../core/admin/BugReportsPanel";
@@ -310,7 +311,7 @@ const NARROW = "mx-auto w-full max-w-6xl px-6";
 export function SiteAdminPage() {
   const { user, canGrantAdmin, devMode } = useAuth();
   // In the URL (?tab=...), so a link opens the same tab. Only tabs this admin has are honoured.
-  const tabs = ["bugs", "bingos", "audit", "item-groups", "piece-values", "past-wom", ...(canGrantAdmin ? ["grant-admin"] : []), ...(devMode ? ["test-data"] : [])];
+  const tabs = ["bugs", "bingos", "audit", "item-groups", "piece-values", "titles", "past-wom", ...(canGrantAdmin ? ["grant-admin"] : []), ...(devMode ? ["test-data"] : [])];
   const [tab, setTab] = useUrlTab("tab", tabs, "bugs");
   // Fetched here (not just inside BugReportsPanel) so the tab shows a pulse dot for changes even while
   // another tab is active; both calls share the same cached query.
@@ -345,6 +346,7 @@ export function SiteAdminPage() {
               <Tab id="audit">Site-wide audit log</Tab>
               <Tab id="item-groups">Item groups</Tab>
               <Tab id="piece-values">Piece values</Tab>
+              <Tab id="titles">Titles</Tab>
               <Tab id="past-wom">Past WOM competitions</Tab>
               {canGrantAdmin && <Tab id="grant-admin">Grant site admin</Tab>}
               {/* Dev mode only (local servers and staging): the server has no test data routes otherwise. */}
@@ -375,6 +377,11 @@ export function SiteAdminPage() {
           <TabPanel id="piece-values">
             <div className={NARROW}>
               <PieceValuesPanel />
+            </div>
+          </TabPanel>
+          <TabPanel id="titles">
+            <div className={NARROW}>
+              <TitleSettingsPanel />
             </div>
           </TabPanel>
           <TabPanel id="past-wom">

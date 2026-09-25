@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chipTitles, oneIn, pickTitles, shortGp, TITLES, titlesHeldBy, type LuckFacts, type PlayerTitleFacts, type TitleAwardFact, type TitleContext, type TitleId } from "@bingo/shared";
+import { chipTitles, DEFAULT_TITLE_SETTINGS, oneIn, pickTitles, shortGp, TITLES, titlesHeldBy, type LuckFacts, type PlayerTitleFacts, type TitleAwardFact, type TitleContext, type TitleId } from "@bingo/shared";
 
 const HOUR = 60 * 60 * 1000;
 const LIVE_AT = new Date("2026-01-01T00:00:00Z");
@@ -160,6 +160,31 @@ describe("luck Titles", () => {
     expect(shortGp(12_000_000)).toBe("12m");
     expect(shortGp(1_530_000_000)).toBe("1.53b");
     expect(shortGp(450_000)).toBe("450k");
+  });
+});
+
+describe("Title settings", () => {
+  const pickWith = (pool: PlayerTitleFacts[], settings: Partial<typeof DEFAULT_TITLE_SETTINGS>) => pickTitles(pool, live(48), { ...DEFAULT_TITLE_SETTINGS, ...settings });
+
+  it("leaves out a Title a Site admin turned off, held or not", () => {
+    const pool = [player("a", { pointsShare: 20 }), player("b", { rejectedSubmissions: 5 })];
+    const ids = pickWith(pool, { disabled: ["carry", "butterfingers"] }).map((p) => p.title.id);
+    expect(ids).not.toContain("carry");
+    expect(ids).not.toContain("butterfingers");
+    expect(ids).toContain("closer");
+  });
+
+  it("holds Players to a Site admin's minimum, and says so on an unheld Title", () => {
+    const pool = [player("a", { distinctItems: 4 })];
+    expect(pickWith(pool, {}).find((p) => p.title.id === "collector")!.holders.map((h) => h.userId)).toEqual(["a"]);
+    const raised = pickWith(pool, { minimums: { collector: 5 } }).find((p) => p.title.id === "collector")!;
+    expect(raised.holders).toEqual([]);
+    expect(raised.requirement).toBe("5 different items claimed");
+  });
+
+  it("states the luck Titles' floors from the luck weights", () => {
+    const luck = { ...DEFAULT_TITLE_SETTINGS.luck, spoonMinLuck: 2 };
+    expect(pickWith([], { luck }).find((p) => p.title.id === "spoon")!.requirement).toBe("Drops adding up to 1 in 100 luck");
   });
 });
 

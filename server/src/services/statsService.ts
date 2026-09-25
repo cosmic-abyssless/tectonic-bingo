@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { LuckFacts, PlayerTitleFacts, TitleAwardFact, ValuedAs } from "@bingo/shared";
+import type { LuckFacts, LuckWeights, PlayerTitleFacts, TitleAwardFact, TitleSettings, ValuedAs } from "@bingo/shared";
 import { valuedAsOf } from "./gpValueService";
 import * as schema from "../db/schema";
 import { bingoLines, bingos, claims, nodeEdges, nodes, stageTransitions, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
@@ -17,6 +17,7 @@ import { getDropRates } from "./luck/dropRates";
 import { BOSS_NAMES } from "./luck/bossSources";
 import type { WomSnapshot } from "./womService";
 import { now } from "../clock";
+import { getTitleSettings } from "./titleSettingsService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -435,6 +436,7 @@ function luckFacts(
   teamByUser: Map<string, string>,
   bingoStart: Date,
   bingoEnd: Date | null,
+  weights: LuckWeights,
 ): Map<string, LuckFacts> {
   const { engineNodes, childrenOf } = graph;
   const boardItems = [...new Set(engineNodes.filter((n) => n.kind === "ITEM" && n.itemName).map((n) => n.itemName!))];
@@ -463,7 +465,7 @@ function luckFacts(
     };
     const teamTimelines = new Map([...timelines].filter(([userId]) => teamByUser.get(userId) === team.teamId));
 
-    const luck = playerLuck({ rates, bingoStart, bingoEnd, now: now(), claims, timelines: teamTimelines, boardItems, openItemsAt });
+    const luck = playerLuck({ rates, bingoStart, bingoEnd, now: now(), claims, timelines: teamTimelines, boardItems, openItemsAt, weights });
     for (const [userId, l] of luck) {
       out.set(userId, {
         spoon: l.spoon && { value: l.spoon.value, itemName: l.spoon.best.itemName, kills: l.spoon.best.kills },
@@ -479,7 +481,14 @@ function luckFacts(
  * What Titles (shared/titles.ts) are picked from: one entry per Player of `contributions`, built from their awards
  * (with when each completed and whether they closed it), their Submissions and Claims, and their Wise Old Man gains.
  */
-export function getTitleFacts(db: Db, bingoId: string, contributions: ContributionCount[], teamCredits: TeamCredits[], shares = getPointsShares(db, bingoId, teamCredits)): PlayerTitleFacts[] {
+export function getTitleFacts(
+  db: Db,
+  bingoId: string,
+  contributions: ContributionCount[],
+  teamCredits: TeamCredits[],
+  shares = getPointsShares(db, bingoId, teamCredits),
+  luckWeights = getTitleSettings(db).luck,
+): PlayerTitleFacts[] {
   const teamIds = [...new Set(contributions.map((c) => c.teamId))];
   if (teamIds.length === 0) return [];
   const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get()!;
@@ -527,7 +536,7 @@ export function getTitleFacts(db: Db, bingoId: string, contributions: Contributi
   const start = effectiveStartsAt(db, bingo);
   const end = endedAt(db, bingo);
   const timelines: Map<string, WomSnapshot[]> = start ? loadTimelines(db, bingoId) : new Map();
-  const luck = start ? luckFacts(graph, teamCredits, timelines, teamByUser, start, end) : new Map<string, LuckFacts>();
+  const luck = start ? luckFacts(graph, teamCredits, timelines, teamByUser, start, end, luckWeights) : new Map<string, LuckFacts>();
 
   return contributions.map((c) => {
     const awards: TitleAwardFact[] = (shares.get(c.userId)?.credits ?? []).map((credit) => {
@@ -568,6 +577,8 @@ export interface Stats {
   drops: GpDrop[];
   titleFacts: PlayerTitleFacts[];
   titleContext: { liveAt: Date | null; endedAt: Date | null };
+  /** The Site admin's Title settings: which Titles are on and their minimums, for picking holders. */
+  titleSettings: TitleSettings;
   womReadAt: Date | null;
 }
 
@@ -576,6 +587,7 @@ export function getStats(db: Db, bingoId: string): Stats {
   const shares = getPointsShares(db, bingoId, teamCredits);
   const contributions = getContributionCounts(db, bingoId, shares);
   const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get()!;
+  const titleSettings = getTitleSettings(db);
   return {
     pointsOverTime: getPointsOverTime(db, bingoId),
     timeline: getTimeline(db, bingoId),
@@ -583,8 +595,9 @@ export function getStats(db: Db, bingoId: string): Stats {
     heatmap: getTileHeatmap(db, bingoId),
     teamGpGained: getTeamGpGained(db, bingoId),
     drops: getGpDrops(db, bingoId),
-    titleFacts: getTitleFacts(db, bingoId, contributions, teamCredits, shares),
+    titleFacts: getTitleFacts(db, bingoId, contributions, teamCredits, shares, titleSettings.luck),
     titleContext: { liveAt: effectiveStartsAt(db, bingo), endedAt: endedAt(db, bingo) },
+    titleSettings,
     womReadAt: lastReadAt(db, bingoId),
   };
 }
@@ -603,6 +616,7 @@ export function filterStatsForTeam(stats: Stats, teamId: string): Stats {
     drops: own(stats.drops),
     titleFacts: own(stats.titleFacts),
     titleContext: stats.titleContext,
+    titleSettings: stats.titleSettings,
     womReadAt: stats.womReadAt,
   };
 }

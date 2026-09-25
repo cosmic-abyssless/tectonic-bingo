@@ -7,6 +7,6 @@ export function titleContextOf(stats: Pick<StatsResponse, "titleContext">, now =
 }
 
 /** Every Title's holders among the Players in `pool` (the ones the team filter shows). */
-export function pickStatsTitles(stats: Pick<StatsResponse, "titleContext">, pool: PlayerTitleFacts[]): PickedTitle[] {
-  return pickTitles(pool, titleContextOf(stats));
+export function pickStatsTitles(stats: Pick<StatsResponse, "titleContext" | "titleSettings">, pool: PlayerTitleFacts[]): PickedTitle[] {
+  return pickTitles(pool, titleContextOf(stats), stats.titleSettings);
 }

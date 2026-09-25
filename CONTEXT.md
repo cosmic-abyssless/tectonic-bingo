@@ -211,7 +211,7 @@ The Bingo's stats page: points over time, the timeline, top contributors (ranked
 
 ### Title
 A tongue-in-cheek label a Player holds on the Stats page for how they played ("Carry", "Closer", "Butterfingers"), recomputed as the stats change.
-- **Rules:** Each Title goes to the Players tied at the best value among the Players shown, once they meet its minimum. With a Team selected in the team filter it's that Team's; unfiltered, the Bingo's. Titles follow the Stats visibility rules. A Player's chip in the contributors table shows their highest-priority Title, and their profile lists every one they hold. Some Titles use their Wise Old Man gains during the Bingo (EHB, EHP, clues), read from what Wise Old Man already has (never an update request), so they lag until the Player updates, and they freeze once the Bingo is Finished.
+- **Rules:** Each Title goes to the Players tied at the best value among the Players shown, once they meet its minimum. With a Team selected in the team filter it's that Team's; unfiltered, the Bingo's. Titles follow the Stats visibility rules. A Player's chip in the contributors table shows their highest-priority Title, and their profile lists every one they hold. Some Titles use their Wise Old Man gains during the Bingo (EHB, EHP, clues), read from what Wise Old Man already has (never an update request), so they lag until the Player updates, and they freeze once the Bingo is Finished. A Site admin can turn Titles off and tune each one's minimum (and the luck Titles' floors) for every Bingo at once, from Site admin > Titles; a change applies straight away.
 - **Not:** A permanent award. Titles belong to one Bingo and move as it goes.
 
 ### Hidden Title
