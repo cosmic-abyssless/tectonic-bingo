@@ -247,7 +247,7 @@ function PartnerEditor({ data, context, onValueChange, stopEditing, unpaired }: 
     .map((r) => ({ id: r.user.id, label: r.signup.rsn }));
   return (
     <div ref={ref} className={`${EDITOR_POPUP} w-72 p-2`}>
-      <SearchableSelect value="" options={options} placeholder={`Pair ${data.signup.rsn} with…`} onChange={(id) => id && finish(id)} />
+      <SearchableSelect value="" options={options} placeholder={`Pair ${data.signup.rsn} with…`} onChange={(id) => id && finish(id)} passEscape />
     </div>
   );
 }
@@ -278,6 +278,7 @@ function TimezoneEditor({ value, onValueChange, stopEditing }: CustomCellEditorP
         value={value ?? ""}
         options={options}
         placeholder="Search by city, region or UTC offset…"
+        passEscape
         onChange={(id) => {
           onValueChange(id);
           setPicked(true);

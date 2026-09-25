@@ -14,12 +14,16 @@ export function SearchableSelect({
   placeholder,
   onChange,
   readOnly,
+  passEscape,
 }: {
   value: string;
   options: Option[];
   placeholder: string;
   onChange: (id: string) => void;
   readOnly?: boolean;
+  /** Leave Escape to whatever the select sits in (a table cell's editor, which cancels the edit and puts focus back
+   *  on the cell) rather than closing the list and blurring the input, which would drop focus out of the table. */
+  passEscape?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -132,7 +136,7 @@ export function SearchableSelect({
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (filtered[highlighted]) select(filtered[highlighted].id);
-    } else if (e.key === "Escape") {
+    } else if (e.key === "Escape" && !passEscape) {
       e.preventDefault();
       setOpen(false);
       setQuery("");
