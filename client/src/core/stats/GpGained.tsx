@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { AgGridReact, type CustomCellRendererProps } from "ag-grid-react";
 import type { ColDef, TooltipCallbackParams } from "ag-grid-community";
 import { describeValuedAs, type GpDrop, type Team, type TeamGpGained, type ValuedAs } from "@bingo/shared";
@@ -8,6 +8,7 @@ import { ColumnPicker } from "../ui/ColumnPicker";
 import { usePersistedGridState } from "../ui/gridState";
 import { headerTooltip, usefulTooltip } from "../ui/gridTooltips";
 import { formatGp, formatGpExact } from "../ui/gp";
+import { TableSearchInput, matchesSearch } from "../ui/tableSearch";
 import { WikiIcon } from "../ui/ItemIcon";
 import { WikiItemLink } from "../ui/WikiItemLink";
 import { timeAgo } from "../ui/time";
@@ -105,7 +106,15 @@ export function GpGained({
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
   const multiTeam = teams.length > 1;
 
-  const rows = useMemo<Row[]>(() => drops.map((d) => ({ ...d, team: teamById.get(d.teamId) ?? null })), [drops, teamById]);
+  const [search, setSearch] = useState("");
+  // Searches every column, shown or hidden: the drop and its note, the player and the team.
+  const rows = useMemo<Row[]>(
+    () =>
+      drops
+        .map((d) => ({ ...d, team: teamById.get(d.teamId) ?? null }))
+        .filter((r) => matchesSearch([dropLabel(r), displayName(r.user), r.team?.name], search)),
+    [drops, teamById, search],
+  );
 
   const columnDefs = useMemo<ColDef<Row>[]>(() => {
     const cols: ColDef<Row>[] = [
@@ -173,13 +182,14 @@ export function GpGained({
         ))}
       </ul>
       <div className="flex flex-wrap items-center gap-2">
+        <TableSearchInput value={search} onChange={setSearch} placeholder="Search drops, players…" matchCount={rows.length} totalCount={drops.length} />
         <ColumnPicker columns={pickable} hidden={hidden} onHiddenChange={setHidden} />
         <p className="text-xs text-on-surface-subtle">
-          {rows.length} approved {rows.length === 1 ? "drop" : "drops"} with a GP value.
+          {drops.length} approved {drops.length === 1 ? "drop" : "drops"} with a GP value.
         </p>
       </div>
       {rows.length === 0 ? (
-        <p className="text-sm text-on-surface-subtle">No approved drops with a GP value yet.</p>
+        <p className="text-sm text-on-surface-subtle">{drops.length === 0 ? "No approved drops with a GP value yet." : "No drops match your search."}</p>
       ) : (
         <div style={{ height }}>
           <AgGridReact<Row>

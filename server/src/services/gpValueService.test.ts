@@ -23,6 +23,12 @@ const MAPPING = [
   { id: 28276, name: "Chromium ingot" },
   { id: 999, name: "Untraded thing" },
   { id: 28338, name: "Soulreaper axe" },
+  { id: 28924, name: "Sunfire splinters" },
+  { id: 31106, name: "Confliction gauntlets" },
+  { id: 19544, name: "Tormented bracelet" },
+  { id: 31111, name: "Demon tear" },
+  { id: 29794, name: "Etched araxyte fang" },
+  { id: 565, name: "Blood rune" },
 ];
 const LATEST = {
   data: {
@@ -33,6 +39,12 @@ const LATEST = {
     "6737": { high: 4_000_000, low: 4_000_000 },
     "28276": { high: 50_000, low: 50_000 },
     "28338": { high: 400_000_000, low: 400_000_000 },
+    "28924": { high: 350, low: 350 },
+    "31106": { high: 56_000_000, low: 56_000_000 },
+    "19544": { high: 19_000_000, low: 19_000_000 },
+    "31111": { high: 250, low: 250 },
+    "29794": { high: 28_000_000, low: 28_000_000 },
+    "565": { high: 300, low: 300 },
   },
 };
 
@@ -148,7 +160,7 @@ describe("starter piece values (migration 0025)", () => {
     const starters = getPieceValues(db, table);
 
     expect(starters.map((p) => p.pieceItemName)).toEqual(
-      expect.arrayContaining(["Ultor vestige", "Bellator vestige", "Magus vestige", "Venator vestige", "Araxyte fang", "Hydra's fang", "Hydra's eye", "Hydra's heart", "Executioner's axe head", "Leviathan's lure", "Siren's staff", "Eye of the duke"]),
+      expect.arrayContaining(["Ultor vestige", "Bellator vestige", "Magus vestige", "Venator vestige", "Araxyte fang", "Hydra's fang", "Hydra's eye", "Hydra's heart", "Executioner's axe head", "Leviathan's lure", "Siren's staff", "Eye of the Duke"]),
     );
     expect(starters.find((p) => p.pieceItemName === "Ultor vestige")).toMatchObject({
       wholeItemName: "Ultor ring",
@@ -156,8 +168,43 @@ describe("starter piece values (migration 0025)", () => {
       otherPieces: [{ itemName: "Berserker ring", quantity: 1 }, { itemName: "Chromium ingot", quantity: 3 }],
       unitPrice: 95_850_000,
     });
-    // A quarter of the axe; matched case-insensitively, as the board spells it "Eye of the Duke".
-    expect(pricer(db, table).gpValue("Eye of the Duke", 1)).toBe(100_000_000);
+    // A quarter of the axe less its 2000 Blood runes (0029): (400M − 2000 × 300) ÷ 4. Matched case-insensitively.
+    expect(pricer(db, table).gpValue("eye of the duke", 1)).toBe(99_850_000);
+    expect(starters.find((p) => p.pieceItemName === "Eye of the Duke")!.otherPieces).toEqual([{ itemName: "Blood rune", quantity: 2000 }]);
+  });
+});
+
+describe("whole item quantity", () => {
+  it("values a piece as a number of the whole item", async () => {
+    const fx = seed();
+    const table = await loadedTable();
+    const pv = await createPieceValue(db, { pieceItemName: "Quiver", wholeItemName: "Sunfire splinters", wholeQuantity: 4000, divisor: 1 }, fx.adminId, table);
+    expect(pv.unitPrice).toBe(1_400_000);
+    expect(pv.wholeQuantity).toBe(4000);
+  });
+
+  it("defaults to 1 and refuses anything but a whole number of at least 1", async () => {
+    const fx = seed();
+    const table = await loadedTable();
+    expect((await createPieceValue(db, { pieceItemName: "Axon", wholeItemName: "Abyssal bludgeon", divisor: 3 }, fx.adminId, table)).wholeQuantity).toBe(1);
+    await expect(createPieceValue(db, { pieceItemName: "Quiver", wholeItemName: "Sunfire splinters", wholeQuantity: 0, divisor: 1 }, fx.adminId, table)).rejects.toMatchObject({ status: 400 });
+    await expect(createPieceValue(db, { pieceItemName: "Quiver", wholeItemName: "Sunfire splinters", wholeQuantity: 1.5, divisor: 1 }, fx.adminId, table)).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe("starter piece values (migration 0029)", () => {
+  it("adds the quiver, Mokhaiotl cloth, fangs, noxious and bludgeon pieces, and values Araxyte fang as the etched one", async () => {
+    ({ sqlite, db } = createTestDb());
+    const table = await loadedTable();
+    const byName = new Map(getPieceValues(db, table).map((p) => [p.pieceItemName, p]));
+
+    expect(byName.get("Dizana's quiver")).toMatchObject({ wholeItemName: "Sunfire splinters", wholeQuantity: 4000, unitPrice: 1_400_000 });
+    // 56M − 19M − 10,000 × 250
+    expect(byName.get("Mokhaiotl cloth")).toMatchObject({ unitPrice: 34_500_000 });
+    expect(byName.get("Elder venator fang")).toMatchObject({ wholeItemName: "Etched elder venator fang", divisor: 1 });
+    for (const piece of ["Noxious point", "Noxious blade", "Noxious pommel"]) expect(byName.get(piece)).toMatchObject({ wholeItemName: "Noxious halberd", divisor: 3 });
+    for (const piece of ["Bludgeon axon", "Bludgeon claw", "Bludgeon spine"]) expect(byName.get(piece)).toMatchObject({ wholeItemName: "Abyssal bludgeon", divisor: 3, unitPrice: 3_000_000 });
+    expect(byName.get("Araxyte fang")).toMatchObject({ wholeItemName: "Etched araxyte fang", otherPieces: [], unitPrice: 28_000_000 });
   });
 });
 
