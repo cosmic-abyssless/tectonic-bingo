@@ -229,10 +229,17 @@ const RatingRenderer = ({ data, context }: CustomCellRendererProps<DraftUnit, un
 };
 
 // The team's note on a unit, edited in the cell (AG's large text editor, a popup textarea: see the Note column). The
-// pencil says it's editable at a glance; an empty one invites a note.
-const NoteRenderer = ({ value }: CustomCellRendererProps<DraftUnit, string>) => (
+// pencil says it's editable at a glance; an empty one invites a note. A long note wraps to fill the row (2 lines for a
+// solo player's row, 4 for a pair's taller one) before it's cut off with an ellipsis.
+const NoteRenderer = ({ value, data }: CustomCellRendererProps<DraftUnit, string>) => (
   <span className="flex h-full min-w-0 cursor-text items-center gap-1.5">
-    <span className={`min-w-0 flex-1 truncate ${value ? "text-on-surface" : "text-on-surface-subtle"}`}>{value || "Add a note"}</span>
+    <span
+      className={`min-w-0 flex-1 whitespace-normal break-words leading-tight ${data && data.entries.length > 1 ? "line-clamp-4" : "line-clamp-2"} ${
+        value ? "text-on-surface" : "text-on-surface-subtle"
+      }`}
+    >
+      {value || "Add a note"}
+    </span>
     <PencilIcon size={12} className="shrink-0 text-on-surface-subtle" />
   </span>
 );
