@@ -24,6 +24,7 @@ export type AuditEntityType =
   | "item_group"
   | "piece_value"
   | "wom_past_competition"
+  | "site_settings"
   | "category"
   | "tile"
   | "node"
@@ -60,6 +61,8 @@ export interface AuditDetailsMap {
   "piece_value.deleted": { pieceItemName: string; wholeItemName: string; wholeQuantity?: number; divisor: number; otherPieces: string[] };
   "piece_value.item_dismissed": { itemName: string };
   "piece_value.item_restored": { itemName: string };
+
+  "title_settings.updated": { changes: FieldChanges<Record<string, number | string | boolean>> };
 
   "wom_past_competition.added": { womId: number; title: string; participantCount: number; source: "manual" | "auto" };
   "wom_past_competition.renamed": { womId: number; from: string; to: string };
@@ -267,6 +270,7 @@ export interface AuditActionDef<A extends AuditAction> {
 }
 
 const actor = (i: { actorName: string | null }) => i.actorName ?? "Someone";
+const settingValue = (v: unknown) => (v === true ? "on" : v === false ? "off" : String(v));
 // ` on "Pets"`, or nothing when the tile's name isn't there.
 const onTile = (preposition: string, tileName: string | undefined) => (tileName ? ` ${preposition} "${tileName}"` : "");
 const onBehalf = (i: { onBehalfOfName: string | null }) => (i.onBehalfOfName ? ` (on behalf of ${i.onBehalfOfName})` : "");
@@ -356,6 +360,17 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Item group deleted",
     label: (i) => `${actor(i)} deleted the item group "${i.details.name}"`,
+  },
+  "title_settings.updated": {
+    category: "settings",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Title settings changed",
+    label: (i) => {
+      const keys = Object.keys(i.details.changes.after);
+      const shown = keys.slice(0, 3).map((k) => `${k} ${settingValue(i.details.changes.before[k])} → ${settingValue(i.details.changes.after[k])}`);
+      return `${actor(i)} changed the Title settings: ${shown.join(", ")}${keys.length > 3 ? ` and ${keys.length - 3} more` : ""}`;
+    },
   },
   "piece_value.created": {
     category: "system",

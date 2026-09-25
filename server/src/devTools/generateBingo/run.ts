@@ -87,7 +87,8 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
       isMe: true, isMod: false, reviewWindows: [], partnerIndex: null, signupAt: null,
     });
   }
-  const pairs = pairUp(players, rng.fork("pairs"), 0.6);
+  // A solo bingo refuses pairing requests, so its players sign up alone.
+  const pairs = document.bingo.signupMode === "duo" ? pairUp(players, rng.fork("pairs"), 0.6) : [];
   const mods = chooseMods(players, rng.fork("mods"), options.mods);
 
   const capableRng = rng.fork("capable");

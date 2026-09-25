@@ -8,6 +8,10 @@ import { createTestDb } from "../testUtils/testDb";
 import { createTile, createTask, generateLines } from "./boardService";
 import { approveSubmission, rejectSubmission } from "./scoringService";
 import { getTeamProgress } from "./teamService";
+import { getDropRates } from "./luck/dropRates";
+import { luckOf } from "./luck/luck";
+import { updateTitleSettings } from "./titleSettingsService";
+import { DEFAULT_LUCK_WEIGHTS } from "@bingo/shared";
 import { filterStatsForTeam, getContributionCounts, getPointsOverTime, getStats, getStatsForViewer, getTileHeatmap, getTimeline } from "./statsService";
 
 let sqlite: Database.Database;
@@ -419,5 +423,106 @@ describe("Title facts", () => {
     db.insert(schema.womSnapshots).values([snap("2026-01-09T20:00:00Z", 100), snap("2026-01-11T20:00:00Z", 112.5)]).run();
     expect(factsOf(fx.bingoId, fx.memberUserId).wom).toEqual({ ehb: 12.5, ehp: 0, clues: 0, asOf: "2026-01-11T20:00:00.000Z" });
     expect(factsOf(fx.bingoId, fx.secondUserId).wom).toBeNull();
+  });
+});
+
+describe("Luck facts", () => {
+  const START = new Date("2026-01-10T00:00:00Z");
+  const hours = (h: number) => new Date(START.getTime() + h * 60 * 60 * 1000);
+  // Virtus also drops from the other three DT2 bosses: they're at 0 so only Vardorvis kills count.
+  const DT2 = { duke_sucellus: 0, the_leviathan: 0, the_whisperer: 0 };
+  const vardorvisRate = (item: string) => getDropRates().sourcesOf(item).find((s) => s.metric === "vardorvis")!.rate;
+
+  function seedLuck() {
+    const fx = seedFixture();
+    const [second] = db.insert(schema.users).values({ discordId: "second", discordUsername: "second" }).returning().all();
+    const [rival] = db.insert(schema.users).values({ discordId: "rival", discordUsername: "rival" }).returning().all();
+    db.insert(schema.teamMembers).values([
+      { teamId: fx.teamAId, userId: fx.memberUserId },
+      { teamId: fx.teamAId, userId: second.id },
+      { teamId: fx.teamBId, userId: rival.id },
+    ]).run();
+    db.update(schema.bingos).set({ startsAt: START }).where(eq(schema.bingos.id, fx.bingoId)).run();
+    return { ...fx, secondUserId: second.id, rivalUserId: rival.id };
+  }
+  function timeline(bingoId: string, userId: string, snaps: [number, number][]) {
+    db.insert(schema.womSnapshots).values(snaps.map(([h, vardorvis]) => ({ bingoId, userId, takenAt: hours(h), ehb: 0, ehp: 0, clues: 0, bossKillsJson: JSON.stringify({ vardorvis, ...DT2 }) }))).run();
+  }
+  function drop(teamId: string, nodeId: string, itemName: string, userId: string, h: number, modUserId: string, gpValue: number | null = null) {
+    const [submission] = db.insert(submissions).values({ teamId, submittedByUserId: userId, submittedAt: hours(h) }).returning().all();
+    db.insert(claims).values({ submissionId: submission.id, nodeId, itemName, gpValue }).run();
+    approveSubmission(db, { submissionId: submission.id, reviewedByUserId: modUserId });
+  }
+  const luckOfPlayer = (bingoId: string, userId: string) => getStats(db, bingoId).titleFacts.find((f) => f.userId === userId)!.luck;
+
+  it("judges a Player's drop on the kills between their snapshots", () => {
+    const fx = seedLuck();
+    const task = createTask(db, fx.tileId, { kind: "ITEM", itemName: "Ultor vestige", label: "Ultor", points: 10 });
+    timeline(fx.bingoId, fx.memberUserId, [[-2, 100], [5, 110]]);
+    drop(fx.teamAId, task.id, "Ultor vestige", fx.memberUserId, 4, fx.modUserId, 90_000_000);
+
+    const luck = luckOfPlayer(fx.bingoId, fx.memberUserId)!;
+    expect(luck.spoon).toMatchObject({ itemName: "Ultor vestige", kills: 10 });
+    expect(luck.spoon!.value).toBeCloseTo(luckOf(10 * vardorvisRate("Ultor vestige")));
+    expect(luck.clutch).toMatchObject({ itemName: "Ultor vestige", gpValue: 90_000_000 });
+  });
+
+  it("judges Clutch on the outermost award the Claim earned Points share on", () => {
+    const fx = seedLuck();
+    const part = createTask(db, fx.tileId, { kind: "ALL", label: "Virtus", points: 30, children: [{ kind: "ITEM", itemName: "Virtus mask", points: 10 }, { kind: "ITEM", itemName: "Virtus robe top", points: 10 }] });
+    const [mask, top] = part.children!;
+    timeline(fx.bingoId, fx.memberUserId, [[-2, 0], [5, 10]]);
+    drop(fx.teamAId, mask!.id, "Virtus mask", fx.memberUserId, 4, fx.modUserId);
+    drop(fx.teamAId, top!.id, "Virtus robe top", fx.secondUserId, 6, fx.modUserId);
+
+    // Credited on the mask's own Task and on the Part: the Part still needed either piece.
+    const clutch = luckOfPlayer(fx.bingoId, fx.memberUserId)!.clutch!;
+    expect(clutch.luck).toBeCloseTo(luckOf(10 * (vardorvisRate("Virtus mask") + vardorvisRate("Virtus robe top"))));
+  });
+
+  it("uses the Site admin's luck weights, and sends the Title settings along", () => {
+    const fx = seedLuck();
+    const task = createTask(db, fx.tileId, { kind: "ITEM", itemName: "Ultor vestige", label: "Ultor", points: 10 });
+    timeline(fx.bingoId, fx.memberUserId, [[-2, 100], [5, 110]]);
+    drop(fx.teamAId, task.id, "Ultor vestige", fx.memberUserId, 4, fx.modUserId);
+    // 10 kills at about 1/1000 is about 1 in 100: short of a 1-in-1,000 floor.
+    updateTitleSettings(db, { luck: { ...DEFAULT_LUCK_WEIGHTS, spoonMinLuck: 3 } }, fx.modUserId);
+
+    expect(luckOfPlayer(fx.bingoId, fx.memberUserId)!.spoon).toBeNull();
+    expect(getStats(db, fx.bingoId).titleSettings.luck.spoonMinLuck).toBe(3);
+    expect(getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: fx.teamAId, bingoComplete: false }).titleSettings.luck.spoonMinLuck).toBe(3);
+  });
+
+  it("gives no Clutch to a Claim that earned no Points share, but still counts it for Spoon", () => {
+    const fx = seedLuck();
+    const task = createTask(db, fx.tileId, { kind: "ITEM", itemName: "Ultor vestige", label: "Ultor", points: 10 });
+    timeline(fx.bingoId, fx.secondUserId, [[-2, 0], [3, 5]]);
+    drop(fx.teamAId, task.id, "Ultor vestige", fx.memberUserId, 1, fx.modUserId);
+    drop(fx.teamAId, task.id, "Ultor vestige", fx.secondUserId, 2, fx.modUserId);
+
+    const luck = luckOfPlayer(fx.bingoId, fx.secondUserId)!;
+    expect(luck.clutch).toBeNull();
+    expect(luck.spoon).toMatchObject({ itemName: "Ultor vestige", kills: 5 });
+  });
+
+  it("gives no luck to a Player without a snapshot from before the Bingo", () => {
+    const fx = seedLuck();
+    const task = createTask(db, fx.tileId, { kind: "ITEM", itemName: "Ultor vestige", label: "Ultor", points: 10 });
+    timeline(fx.bingoId, fx.memberUserId, [[1, 100], [5, 110]]);
+    drop(fx.teamAId, task.id, "Ultor vestige", fx.memberUserId, 4, fx.modUserId);
+    expect(luckOfPlayer(fx.bingoId, fx.memberUserId)!.spoon).toBeNull();
+    expect(luckOfPlayer(fx.bingoId, fx.secondUserId)).toBeNull();
+  });
+
+  it("measures Dry from the Player's own Team's drops, and shows it to that Team only while Live", () => {
+    const fx = seedLuck();
+    const task = createTask(db, fx.tileId, { kind: "ITEM", itemName: "Ultor vestige", label: "Ultor", points: 10 });
+    timeline(fx.bingoId, fx.rivalUserId, [[-2, 0], [10, 3000]]);
+    drop(fx.teamAId, task.id, "Ultor vestige", fx.memberUserId, 4, fx.modUserId);
+
+    // Team A's Ultor doesn't end the rival's streak.
+    expect(luckOfPlayer(fx.bingoId, fx.rivalUserId)!.dry).toMatchObject({ boss: "Vardorvis", kills: 3000 });
+    const own = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: fx.teamAId, bingoComplete: false }).titleFacts;
+    expect(own.some((f) => f.userId === fx.rivalUserId)).toBe(false);
   });
 });

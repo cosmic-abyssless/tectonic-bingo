@@ -225,6 +225,13 @@
       "when": 1790360551199,
       "tag": "0031_wom_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1790367209757,
+      "tag": "0032_site_settings",
+      "breakpoints": true
     }
   ]
 }

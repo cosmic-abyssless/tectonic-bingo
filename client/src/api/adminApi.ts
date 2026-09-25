@@ -1,6 +1,6 @@
 import type {
   Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, PieceValue, SignupQuestion, UnvaluedItem, Team,
-  TeamMember, Tile, TileCategory, User, WomPastCompetition,
+  TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition,
 } from "@bingo/shared";
 import { api } from "./client";
 
@@ -38,6 +38,13 @@ export function updateItemGroup(id: string, payload: Partial<{ name: string; des
 }
 export function deleteItemGroup(id: string) {
   return api.delete(`/api/admin/item-groups/${id}`);
+}
+
+export function getTitleSettings() {
+  return api.get<{ settings: TitleSettings }>("/api/admin/title-settings");
+}
+export function updateTitleSettings(settings: TitleSettings) {
+  return api.put<{ settings: TitleSettings }>("/api/admin/title-settings", settings);
 }
 
 export function getPieceValues() {
