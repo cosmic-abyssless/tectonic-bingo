@@ -121,7 +121,6 @@ export function setTileInterest(db: Db, teamId: string, userId: string, tileId: 
       markAuditedNoop();
       return null;
     }
-    const wasOn = interested && !existing;
     const now = clockNow();
     if (interested) tx.insert(tileInterests).values({ tileId, taskId, teamId, userId, createdAt: now }).run();
     else tx.delete(tileInterests).where(where).run();
@@ -132,11 +131,12 @@ export function setTileInterest(db: Db, teamId: string, userId: string, tileId: 
       teamId,
       details: { tileName: tile.name, taskLabel: task.label ?? "Untitled part", interested },
     });
-    return wasOn ? { bingoId: team.bingoId, userId, teamId, tileId, partId: taskId, occurredAt: now } : null;
+    return { event: { bingoId: team.bingoId, userId, teamId, tileId, partId: taskId, occurredAt: now }, interested };
   });
 
-  // Achievements (CONTEXT.md): only interest turned ON notifies — see achievementService.ts.
-  if (achievementHook) achievementService.recordInterestMarked(db, achievementHook);
+  // Achievements (CONTEXT.md): interest actually turned on or off (never a no-op toggle) notifies — see achievementService.ts.
+  if (achievementHook?.interested) achievementService.recordInterestMarked(db, achievementHook.event);
+  else if (achievementHook) achievementService.recordInterestRemoved(db, achievementHook.event);
 }
 
 // The only way to hand out points outside the node graph now that approval

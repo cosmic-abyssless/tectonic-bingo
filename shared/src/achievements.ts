@@ -20,6 +20,7 @@ export type AchievementKey =
   | "leech"
   | "diversification"
   | "skiller"
+  | "ragequit"
   | "night_owl"
   | "early_bird"
   | "main_character"
@@ -61,6 +62,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { key: "leech", name: "Leech", description: "Open a clue casket mid-bingo", flavor: "?????", hidden: true, itemName: "Reward casket (master)" },
   { key: "diversification", name: "Diversification", description: "Kill 10 different bosses during the bingo", flavor: "Gotta slay 'em all!", hidden: true, itemName: "Enchanted gem" },
   { key: "skiller", name: "Skiller", description: "Get at least 3 EHP during the bingo", flavor: "I hope you got this chopping ice demon trees...", hidden: true, itemName: "Dragon axe" },
+  { key: "ragequit", name: "Ragequit", description: "Remove interest from a tile", flavor: "This is somebody else's problem now", hidden: true, itemName: "Logout" },
   { key: "night_owl", name: "Night owl", description: "Submit a drop between 2am and 6am", flavor: "Sleep is for the people not playing bingo", hidden: true, itemName: "Bullseye lantern" },
   { key: "early_bird", name: "Early bird", description: "Submit a drop between 6am and 9am", flavor: "The early bird gets the drop", hidden: true, itemName: "Bird nest" },
   { key: "main_character", name: "Main character", description: "React to your own submission", flavor: "You're your own biggest fan", hidden: true, itemName: "Mirror" },

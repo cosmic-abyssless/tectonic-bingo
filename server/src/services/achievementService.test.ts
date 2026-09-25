@@ -368,6 +368,38 @@ describe("Eager beaver", () => {
   });
 });
 
+describe("Ragequit", () => {
+  it("is earned taking interest OFF, not marking it on", () => {
+    const { bingo, team, bob } = seed();
+    const t = tileWithLeaf(bingo.id, 0, 0);
+    at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, bob.id, t.tile.id, t.leafId, true));
+    expect(earned(bingo, bob.id, "ragequit")).toBe(false);
+    at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, bob.id, t.tile.id, t.leafId, false));
+    expect(earned(bingo, bob.id, "ragequit")).toBe(true);
+  });
+
+  it("isn't earned by a no-op toggle (interest that was never on)", () => {
+    const { bingo, team, bob } = seed();
+    const t = tileWithLeaf(bingo.id, 0, 0);
+    at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, bob.id, t.tile.id, t.leafId, false));
+    expect(earned(bingo, bob.id, "ragequit")).toBe(false);
+  });
+
+  it("counts interest marked before Live but taken off during it; not taken off before Live", () => {
+    const { bingo, team, alice, bob } = seed();
+    db.update(schema.bingos).set({ stage: "reveal" }).where(eq(schema.bingos.id, bingo.id)).run();
+    const a = tileWithLeaf(bingo.id, 0, 0);
+    const b = tileWithLeaf(bingo.id, 0, 1);
+    at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, alice.id, a.tile.id, a.leafId, true));
+    at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, bob.id, b.tile.id, b.leafId, true));
+    at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, bob.id, b.tile.id, b.leafId, false)); // during reveal
+    db.update(schema.bingos).set({ stage: "live" }).where(eq(schema.bingos.id, bingo.id)).run();
+    at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, alice.id, a.tile.id, a.leafId, false)); // during Live
+    expect(earned(getBingo(bingo.id), alice.id, "ragequit")).toBe(true);
+    expect(earned(getBingo(bingo.id), bob.id, "ragequit")).toBe(false);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Big spender / GP value fill
 // ---------------------------------------------------------------------------

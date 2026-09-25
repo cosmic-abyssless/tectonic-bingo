@@ -398,6 +398,16 @@ export function recordInterestMarked(db: Db, event: InterestMarkedEvent): void {
   });
 }
 
+/** Interest was taken OFF (not a no-op toggle): Ragequit. */
+export function recordInterestRemoved(db: Db, event: InterestMarkedEvent): void {
+  safely(() => {
+    db.transaction((tx) => {
+      if (!isLive(tx, event.bingoId) || !isTeamMember(tx, event.teamId, event.userId)) return;
+      tryEarn(tx, event.bingoId, event.userId, "ragequit", event.occurredAt, loadSettings(tx, event.bingoId), () => true);
+    });
+  });
+}
+
 export interface PageOpenedEvent {
   bingoId: string;
   userId: string;
