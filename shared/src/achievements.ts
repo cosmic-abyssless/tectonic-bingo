@@ -54,7 +54,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { key: "eager_beaver", name: "Eager beaver", description: "Mark your interest in a tile", flavor: "You've got this one covered", hidden: false, itemName: "Beaver" },
   { key: "superfan", name: "Superfan", description: "React to a submission from every teammate", flavor: "You get a reaction, you get a reaction, everyone gets a reaction!", hidden: true, itemName: "Hand fan" },
   { key: "popular", name: "Popular", description: "Receive 5 reactions to one of your submissions", flavor: "Slaaaay bitch!", hidden: true, itemName: "Red flowers" },
-  { key: "leech", name: "Leech", description: "Open a clue scroll mid-bingo", flavor: "?????", hidden: true, itemName: "Reward casket (master)" },
+  { key: "leech", name: "Leech", description: "Open a clue casket mid-bingo", flavor: "?????", hidden: true, itemName: "Reward casket (master)" },
   { key: "night_owl", name: "Night owl", description: "Submit a drop between 2am and 6am", flavor: "Sleep is for the people not playing bingo", hidden: true, itemName: "Bullseye lantern" },
   { key: "early_bird", name: "Early bird", description: "Submit a drop between 6am and 9am", flavor: "The early bird gets the drop", hidden: true, itemName: "Bird nest" },
   { key: "main_character", name: "Main character", description: "React to your own submission", flavor: "You're your own biggest fan", hidden: true, itemName: "Mirror" },
