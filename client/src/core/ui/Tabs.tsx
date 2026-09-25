@@ -19,7 +19,7 @@ export function Tab({ id, dimmed, children }: { id: string; dimmed?: boolean; ch
   return (
     <AriaTab
       id={id}
-      className={`${dimmed ? "opacity-50 " : ""}relative cursor-pointer whitespace-nowrap px-3 py-2.5 text-sm font-medium text-on-surface-muted transition-colors hovered:text-on-surface selected:text-on-surface selected:after:absolute selected:after:inset-x-3 selected:after:bottom-0 selected:after:h-px selected:after:bg-on-surface outline-none`}
+      className={`${dimmed ? "opacity-50 " : ""}relative cursor-pointer whitespace-nowrap px-3 py-2.5 text-sm font-medium text-on-surface-muted transition-colors hovered:text-on-surface selected:text-on-surface selected:after:absolute selected:after:inset-x-3 selected:after:bottom-0 selected:after:h-0.5 selected:after:bg-on-surface outline-none`}
     >
       {children}
     </AriaTab>
