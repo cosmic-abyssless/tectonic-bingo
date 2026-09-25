@@ -632,6 +632,24 @@ router.put(
   }),
 );
 
+// A teammate puts an emoji on one of their team's submissions, or takes it off (audited for the team); teammates
+// refetch the team's submissions from the broadcast.
+router.put(
+  "/:slug/submissions/:id/reactions",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const { emoji, reacted } = req.body as { emoji?: unknown; reacted?: unknown };
+    if (!submissionService.isSubmissionReaction(emoji)) throw new ServiceError(400, "Not a reaction");
+    const submissionId = req.params.id as string;
+    const team = teamService.getTeamById(db, submissionService.getSubmissionById(db, submissionId)?.teamId ?? "");
+    if (!team || team.bingoId !== req.bingo!.id) throw new ServiceError(404, "Submission not found");
+    const { teamId } = submissionService.setSubmissionReaction(db, submissionId, req.user!.id, emoji, reacted === true);
+    broadcast({ type: "submission_reactions_changed", bingoId: req.bingo!.id, payload: { teamId, submissionId } });
+    res.json({ reactions: submissionService.getSubmissionDetails(db, submissionId)?.reactions ?? [] });
+  }),
+);
+
 // A player raises or lowers their hand for one part (task) of a tile on their
 // own team's board.
 router.put(

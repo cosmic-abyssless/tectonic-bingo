@@ -4,6 +4,7 @@ import type { MenuFrameProps, MenuRowProps } from "../core/ui/Menu";
 import type { NoticeProps } from "../core/ui/Card";
 import type { PanelProps } from "../core/ui/Panel";
 import type { TeamRosterProps } from "../core/draft/TeamRoster";
+import type { ReactionBarProps } from "../core/submissions/ReactionBar";
 import type { StageMilestone } from "@bingo/shared";
 import type {
   BingoPageModel,
@@ -99,6 +100,10 @@ export interface ThemeSlots {
   // page. Read with useOptionalSlot: outside a theme they're core's.
   Notice: ComponentType<NoticeProps>;
   Panel: ComponentType<PanelProps>;
+
+  // The emoji reactions under a submission (core/submissions/ReactionBar), in the theme's own colours: a theme whose
+  // cards aren't the page's surface (the comic's paper, even in dark mode) needs its own. Read with useOptionalSlot.
+  ReactionBar: ComponentType<ReactionBarProps>;
 
   // The page's backdrop, the layers the theme draws behind every page (the comic's halftone), for a PinnedGap to show
   // the page through. Fixed, full-window layers; nothing (the page colour alone) in a theme without one.

@@ -550,6 +550,19 @@ export const submissions = sqliteTable('submissions', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
 
+// A teammate's emoji on a submission (SUBMISSION_REACTIONS). A player can leave several different ones on the same
+// submission, each once. Only the submission's own team reacts (and sees them, with mods).
+export const submissionReactions = sqliteTable('submission_reactions', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  submissionId: text('submission_id').notNull().references(() => submissions.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  emoji: text('emoji').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => [
+  uniqueIndex('submission_reactions_submission_user_emoji_unq').on(t.submissionId, t.userId, t.emoji),
+  index('submission_reactions_submission_idx').on(t.submissionId),
+]);
+
 // One submission can have multiple screenshots (main + pre-screenshot, bank,
 // etc.). The scrape_* fields are populated by the AI screenshot-analysis job.
 export const submissionScreenshots = sqliteTable('submission_screenshots', {

@@ -345,6 +345,18 @@ export interface Claim {
 
 export type MinimalUser = Pick<User, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick" | "rsn">;
 
+/** The reactions a player can leave on a teammate's submission, in the order they're shown. */
+export const SUBMISSION_REACTIONS = ["🔥", "🎉", "😂", "💀", "👀"] as const;
+export type SubmissionReaction = (typeof SUBMISSION_REACTIONS)[number];
+/** What each reaction is called in words: in labels and the audit log, where an emoji would be the device's font. */
+export const SUBMISSION_REACTION_NAMES: Record<SubmissionReaction, string> = { "🔥": "fire", "🎉": "party popper", "😂": "laughing", "💀": "skull", "👀": "eyes" };
+
+/** One emoji on a submission and who left it, oldest first. Only emojis someone has used are listed. */
+export interface SubmissionReactionGroup {
+  emoji: SubmissionReaction;
+  users: MinimalUser[];
+}
+
 export interface SubmissionDetails {
   submission: Submission;
   screenshots: SubmissionScreenshot[];
@@ -352,6 +364,8 @@ export interface SubmissionDetails {
   submittedByUser: MinimalUser | null;
   /** Set only when someone else posted it for `submittedByUser`. */
   postedByUser: MinimalUser | null;
+  /** Teammates' reactions, in SUBMISSION_REACTIONS order. Missing from a copy cached before reactions existed. */
+  reactions?: SubmissionReactionGroup[];
 }
 
 /** `resolved` = fixed; `closed` = deliberately not implemented (usually with a reason in `resolutionMessage`). */
@@ -1103,6 +1117,8 @@ export type BroadcastEvent =
   // Someone on a team raised or lowered a hand for a tile; teammates refetch
   // progress so the board shows who's on what.
   | { type: "tile_interest_changed"; bingoId: string; payload: { teamId: string } }
+  // A teammate reacted to (or took a reaction off) one of the team's submissions; teammates refetch its submissions.
+  | { type: "submission_reactions_changed"; bingoId: string; payload: { teamId: string; submissionId: string } }
   | { type: "team_updated"; bingoId: string; payload: { teamId: string } }
   // A duo pairing request was created, answered, cancelled, or dissolved, or a
   // signup changed. Clients refetch their own signup/pairing state and the mod

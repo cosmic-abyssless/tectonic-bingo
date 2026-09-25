@@ -283,6 +283,16 @@ export const GripIcon = (p: IconProps) => (
   </Svg>
 );
 
+// A smiley with a plus: add a reaction.
+export const SmilePlusIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12.9 8.6A5.6 5.6 0 1 1 7.4 3" />
+    <path d="M4.9 9.9c.6.8 1.4 1.2 2.4 1.2s1.8-.4 2.4-1.2" />
+    <path d="M5.3 6.9h.01M9.3 6.9h.01" />
+    <path d="M12.5 1.5v4M10.5 3.5h4" />
+  </Svg>
+);
+
 // Hamburger — collapses the header's entries on narrow screens.
 export const MenuIcon = (p: IconProps) => (
   <Svg {...p}>

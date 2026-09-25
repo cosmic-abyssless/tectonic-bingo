@@ -170,7 +170,7 @@ export function buildTaskModels(tile: Tile, summary: TileProgressSummary, maps: 
 // one shared shape for both the drawer and a tile's own submissions list.
 // Task labels are deduped per submission (TileModal's original behavior);
 // newest first.
-export function buildSubmissionModels(tiles: Tile[], submissions: SubmissionDetails[]): SubmissionModel[] {
+export function buildSubmissionModels(tiles: Tile[], submissions: SubmissionDetails[], viewerUserId: string): SubmissionModel[] {
   const taskLookup = new Map<string, { tile: Tile; taskLabel: string }>();
   for (const tile of tiles) {
     for (const task of tile.node.children) {
@@ -197,6 +197,7 @@ export function buildSubmissionModels(tiles: Tile[], submissions: SubmissionDeta
       tileId: infos[0]?.tile.id ?? null,
       tileName: infos[0]?.tile.name ?? null,
       taskLabels,
+      reactions: (detail.reactions ?? []).map((g) => ({ emoji: g.emoji, count: g.users.length, names: g.users.map(displayName), mine: g.users.some((u) => u.id === viewerUserId) })),
       detail,
     };
   });
@@ -253,7 +254,7 @@ export function buildTileModelsStatic(args: {
   for (const [tileId, list] of groupSubmissionsByTile(tiles, teamSubmissions)) {
     submissionIdsByTile.set(tileId, new Set(list.map((d) => d.submission.id)));
   }
-  const allSubmissionModels = buildSubmissionModels(tiles, teamSubmissions);
+  const allSubmissionModels = buildSubmissionModels(tiles, teamSubmissions, viewerUserId);
   // Interest is stored per task; the tile keeps a deduped rollup for its badge.
   const interestsByTask = new Map<string, TileInterest[]>();
   for (const i of interests) interestsByTask.set(i.taskId, [...(interestsByTask.get(i.taskId) ?? []), i]);
