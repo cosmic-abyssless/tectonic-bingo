@@ -41,22 +41,22 @@ export interface AchievementDef {
 }
 
 export const ACHIEVEMENTS: readonly AchievementDef[] = [
-  { key: "strong_start", name: "Strong start", description: "Submit your first drop.", flavor: "First drop's in. Only a few thousand more to go.", hidden: false, itemName: "Bronze sword" },
-  { key: "drop_detective", name: "Drop detective", description: "Open every tile on the board.", flavor: "Every tile inspected. Nothing gets past you.", hidden: false, itemName: "Clue scroll (master)" },
-  { key: "hypeman", name: "Hypeman", description: "React to a teammate's submission.", flavor: "Somebody's got to bring the energy.", hidden: false, itemName: "Enchanted lyre" },
-  { key: "cheerleader", name: "Cheerleader", description: "React to 10 different submissions.", flavor: "Your team's loudest fan, ten times over.", hidden: false, itemName: "Red partyhat", progressTarget: 10 },
-  { key: "partner_slayer", name: "Partner slayer", description: "Submit a drop on behalf of a teammate.", flavor: "Your slayer partner owes you one.", hidden: false, itemName: "Slayer helmet" },
-  { key: "big_spender", name: "Big spender", description: "Submit a drop worth 25m or more.", flavor: "25m in one go. The GE tax collector sends his regards.", hidden: false, itemName: "Coins" },
-  { key: "regular", name: "Regular", description: "Submit drops on 5 different days.", flavor: "The bartender knows your order by now.", hidden: false, itemName: "Beer", progressTarget: 5 },
-  { key: "globetrotter", name: "Globetrotter", description: "Submit drops on 5 different tiles.", flavor: "Five tiles down, no fairy ring required.", hidden: false, itemName: "Explorer's ring 4", progressTarget: 5 },
-  { key: "eager_beaver", name: "Eager beaver", description: "Mark your interest in a tile.", flavor: "Calling dibs is half the battle.", hidden: false, itemName: "Beaver" },
-  { key: "superfan", name: "Superfan", description: "React to a submission from every teammate.", flavor: "Nobody on your team goes uncheered.", hidden: true, itemName: "Rubber chicken" },
-  { key: "night_owl", name: "Night owl", description: "Submit a drop between midnight and 5am.", flavor: "Sleep is for people without a bingo.", hidden: true, itemName: "Bullseye lantern" },
-  { key: "early_bird", name: "Early bird", description: "Submit a drop between 5am and 8am.", flavor: "The early bird gets the drop.", hidden: true, itemName: "Bird nest" },
-  { key: "main_character", name: "Main character", description: "React to your own submission.", flavor: "If you don't hype yourself, who will?", hidden: true, itemName: "Mirror shield" },
-  { key: "called_it", name: "Called it", description: "Submit a drop for a part you marked interest in.", flavor: "You said it would happen, and it did.", hidden: true, itemName: "Seers ring" },
-  { key: "rules_lawyer", name: "Rules lawyer", description: "Read the rules.", flavor: "Actually, if you read section 4...", hidden: true, itemName: "Book of law" },
-  { key: "number_cruncher", name: "Number cruncher", description: "Check out the stats.", flavor: "Numbers don't lie. Neither does your points share.", hidden: true, itemName: "Antique lamp" },
+  { key: "strong_start", name: "Strong start", description: "Submit your first drop", flavor: "Spoooon!", hidden: false, itemName: "Bronze sword" },
+  { key: "drop_detective", name: "Drop detective", description: "Open every tile on the board", flavor: "Very thorough of you!", hidden: false, itemName: "Deerstalker" },
+  { key: "hypeman", name: "Hypeman", description: "React to a teammate's submission", flavor: "Let's gooooo", hidden: false, itemName: "Enchanted lyre" },
+  { key: "cheerleader", name: "Cheerleader", description: "React to 10 different submissions", flavor: "Keeping the hype train going", hidden: true, itemName: "Red partyhat", progressTarget: 10 },
+  { key: "partner_slayer", name: "Partner slayer", description: "Submit a drop on behalf of a teammate", flavor: "What a team player you are", hidden: false, itemName: "Slayer helmet" },
+  { key: "big_spender", name: "Moneybags", description: "Submit a drop worth 25m or more", flavor: "Split, I TBed!", hidden: false, itemName: "Coins 10000" },
+  { key: "regular", name: "Regular", description: "Submit drops on 5 different days", flavor: "Did you take PTO for this bingo?", hidden: false, itemName: "Giant stopwatch", progressTarget: 5 },
+  { key: "globetrotter", name: "Globetrotter", description: "Submit drops on 5 different tiles", flavor: "Bro's content hopping", hidden: false, itemName: "Explorer's ring 4", progressTarget: 5 },
+  { key: "eager_beaver", name: "Eager beaver", description: "Mark your interest in a tile", flavor: "You've got this one covered", hidden: false, itemName: "Beaver" },
+  { key: "superfan", name: "Superfan", description: "React to a submission from every teammate", flavor: "You get a reaction, you get a reaction, everyone gets a reaction!", hidden: true, itemName: "Hand fan" },
+  { key: "night_owl", name: "Night owl", description: "Submit a drop between 2am and 6am", flavor: "Sleep is for the people not playing bingo", hidden: true, itemName: "Bullseye lantern" },
+  { key: "early_bird", name: "Early bird", description: "Submit a drop between 6am and 9am", flavor: "The early bird gets the drop", hidden: true, itemName: "Bird nest" },
+  { key: "main_character", name: "Main character", description: "React to your own submission", flavor: "You're your own biggest fan", hidden: true, itemName: "Mirror" },
+  { key: "called_it", name: "Called it", description: "Submit a drop for a part you marked interest in", flavor: "If you call the tbow every raid, you know it doesn't count when you get it right?", hidden: true, itemName: "Improved Reflexes" },
+  { key: "rules_lawyer", name: "Teacher's pet", description: "Read the rules", flavor: "\"Out of a sea of players, just know that you're my favorite\" - Jedi", hidden: true, itemName: "Book of Knowledge" },
+  { key: "number_cruncher", name: "Number cruncher", description: "Check out the stats", flavor: "Calc is short for calculator btw", hidden: true, itemName: "Stats icon" },
 ];
 
 export const ACHIEVEMENT_KEYS: readonly AchievementKey[] = ACHIEVEMENTS.map((a) => a.key);

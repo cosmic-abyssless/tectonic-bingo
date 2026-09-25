@@ -148,12 +148,27 @@ describe("Night owl / Early bird", () => {
     expect(earned(bingo, bob.id, "early_bird")).toBe(false);
   });
 
-  it("Early bird covers 05:00-07:59 device-local", () => {
+  it("Early bird covers 06:00-08:59 device-local", () => {
     const { bingo, team, alice } = seed();
     const a = tileWithLeaf(bingo.id, 0, 0);
     submit(bingo, team.id, alice.id, a.leafId, a.itemName, { now: new Date("2026-03-02T06:00:00Z"), tz: "UTC" });
     expect(earned(bingo, alice.id, "early_bird")).toBe(true);
     expect(earned(bingo, alice.id, "night_owl")).toBe(false);
+  });
+
+  it.each([
+    ["01:59", null],
+    ["02:00", "night_owl"],
+    ["05:59", "night_owl"],
+    ["06:00", "early_bird"],
+    ["08:59", "early_bird"],
+    ["09:00", null],
+  ] as const)("a post at %s earns %s", (time, key) => {
+    const { bingo, team, alice } = seed();
+    const a = tileWithLeaf(bingo.id, 0, 0);
+    submit(bingo, team.id, alice.id, a.leafId, a.itemName, { now: new Date(`2026-03-02T${time}:00Z`), tz: "UTC" });
+    expect(earned(bingo, alice.id, "night_owl")).toBe(key === "night_owl");
+    expect(earned(bingo, alice.id, "early_bird")).toBe(key === "early_bird");
   });
 });
 
@@ -246,7 +261,8 @@ describe("Hypeman / Cheerleader / Superfan / Main character", () => {
       return submit(bingo, team.id, bob.id, t.leafId, t.itemName);
     });
     subs.slice(0, 9).forEach((s) => at(STARTS_AT, "UTC", () => setSubmissionReaction(db, s.id, alice.id, "🔥", true)));
-    expect(myAchievements(bingo, alice.id).achievements.find((a) => a.key === "cheerleader")!.progress).toEqual({ current: 9, target: 10 });
+    // Cheerleader is Hidden: no progress shows until it's earned, or "9/10" would give it away.
+    expect(myAchievements(bingo, alice.id).achievements.find((a) => a.key === "cheerleader")!).toMatchObject({ masked: true, progress: null });
     expect(earned(bingo, alice.id, "cheerleader")).toBe(false);
 
     // A second emoji on an already-reacted submission doesn't count twice.
@@ -255,6 +271,7 @@ describe("Hypeman / Cheerleader / Superfan / Main character", () => {
 
     at(STARTS_AT, "UTC", () => setSubmissionReaction(db, subs[9]!.id, alice.id, "🔥", true));
     expect(earned(bingo, alice.id, "cheerleader")).toBe(true);
+    expect(myAchievements(bingo, alice.id).achievements.find((a) => a.key === "cheerleader")!.progress).toEqual({ current: 10, target: 10 });
   });
 
   it("Superfan (hidden) needs a reaction to a submission from every OTHER current team member", () => {

@@ -171,8 +171,9 @@ export function recordSubmissionPosted(db: Db, event: SubmissionPostedEvent): vo
         tryEarn(tx, event.bingoId, event.posterUserId, "partner_slayer", event.occurredAt, settings, () => true);
       }
 
-      if (hour <= 4) tryEarn(tx, event.bingoId, event.posterUserId, "night_owl", event.occurredAt, settings, () => true);
-      else if (hour <= 7) tryEarn(tx, event.bingoId, event.posterUserId, "early_bird", event.occurredAt, settings, () => true);
+      // Night owl 02:00-05:59, Early bird 06:00-08:59, device-local (see the catalogue's descriptions).
+      if (hour >= 2 && hour <= 5) tryEarn(tx, event.bingoId, event.posterUserId, "night_owl", event.occurredAt, settings, () => true);
+      else if (hour >= 6 && hour <= 8) tryEarn(tx, event.bingoId, event.posterUserId, "early_bird", event.occurredAt, settings, () => true);
 
       tryEarn(tx, event.bingoId, event.posterUserId, "regular", event.occurredAt, settings, () => {
         const cutoff = settings.get("regular")!.firstSwitchedOnAt;
@@ -482,7 +483,8 @@ export function getMyAchievements(db: Db, bingo: Bingo, userId: string): MyAchie
       itemName: masked ? null : def.itemName,
       earned: !!earned,
       earnedAt: earned ? earned.earnedAt.toISOString() : null,
-      progress: progressFor(db, bingo.id, userId, def.key, switched, tileCount),
+      // A masked one's progress would hint at what it is (Cheerleader's "4/10"), so it has none until earned.
+      progress: masked ? null : progressFor(db, bingo.id, userId, def.key, switched, tileCount),
     };
   });
 
