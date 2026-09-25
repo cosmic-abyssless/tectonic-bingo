@@ -14,7 +14,7 @@
 // at most, not 60+).
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AgGridReact } from "ag-grid-react";
-import type { CustomCellRendererProps } from "ag-grid-react";
+import type { CustomCellEditorProps, CustomCellRendererProps } from "ag-grid-react";
 import type {
   ColDef,
   GetRowIdParams,
@@ -48,7 +48,7 @@ import { usePreference } from "../ui/preferences";
 import { Switch } from "../ui/Switch";
 import { CellButton, Mark } from "../ui/gridCells";
 import { useHiddenColumns } from "../ui/hiddenColumns";
-import { LinkIcon, PencilIcon } from "../ui/icons";
+import { LinkIcon, PencilIcon, StarIcon } from "../ui/icons";
 import { compareSortValues } from "../ui/tableSort";
 import { TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
 import { useDocumentTop, useOffsetWithin } from "../ui/tableChrome";
@@ -231,22 +231,43 @@ const RatingRenderer = ({ data, context }: CustomCellRendererProps<DraftUnit, un
 
 type RatingContext = PoolGridContext & { ratings: Ratings; onRate: (signupId: string, rating: PickRating) => void };
 
-// Rates from the keyboard, on a focused Rating cell (see the column's comment). Returns whether the key was the
-// rating's (so AG doesn't also act on it); acts on keydown only. A pair is rated under its first half, as with a click.
-function rateFromKey(event: KeyboardEvent, unit: DraftUnit | undefined, context: RatingContext): boolean {
-  const key = event.key;
-  if (!unit || !["0", "1", "2", "3", "Delete", "Backspace", "Enter"].includes(key)) return false;
-  if (event.type === "keydown") {
-    // Also stops a focused star button's own Enter "click" from rating it a second time.
-    event.preventDefault();
-    const signupId = unit.entries[0]!.signup.id;
-    const current = context.ratings[signupId] ?? { stars: 0, note: "" };
-    let stars = 0; // 0, Delete, Backspace
-    if (key === "Enter") stars = (current.stars + 1) % (MAX_RATING_STARS + 1);
-    else if (key >= "1" && key <= "3") stars = Number(key) === current.stars ? 0 : Number(key);
-    if (stars !== current.stars) context.onRate(signupId, { ...current, stars });
-  }
-  return true;
+// The Rating cell's editor, for the keyboard (Enter on the cell opens it): ← and → take the stars down and up (0 to 3,
+// no wrapping), Enter saves them (the column's valueSetter), Escape cancels. A click on a star still rates at once.
+function RatingEditor({ value, onValueChange }: CustomCellEditorProps<DraftUnit, number, RatingContext>) {
+  const [stars, setStars] = useState(value ?? 0);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => ref.current?.focus(), []);
+  const change = (next: number) => {
+    setStars(next);
+    onValueChange(next);
+  };
+  return (
+    <div
+      ref={ref}
+      tabIndex={-1}
+      role="slider"
+      aria-label="Rating: left and right to change, Enter to save, Escape to cancel"
+      aria-valuemin={0}
+      aria-valuemax={MAX_RATING_STARS}
+      aria-valuenow={stars}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowLeft") change(Math.max(0, stars - 1));
+        else if (e.key === "ArrowRight") change(Math.min(MAX_RATING_STARS, stars + 1));
+        else return;
+        e.preventDefault();
+      }}
+      className="flex h-full items-center outline-none"
+    >
+      {/* The ring says it's being edited; the stars are the pending rating. */}
+      <div className="flex rounded-sm ring-1 ring-warn">
+        {Array.from({ length: MAX_RATING_STARS }, (_, i) => i + 1).map((n) => (
+          <span key={n} className={`flex size-6 items-center justify-center ${n <= stars ? "text-warn" : "text-on-surface-subtle"}`}>
+            <StarIcon size={14} fill={n <= stars ? "currentColor" : "none"} />
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // The captain's (and co-captain's) note on a unit, edited in the cell (AG's large text editor, a popup textarea: see the Note column). The
@@ -458,10 +479,23 @@ export function DraftPoolGrid({
         valueGetter: (p) => (p.data ? (ratings[p.data.entries[0]!.signup.id]?.stars ?? 0) : 0),
         comparator: makeUnitComparator("rating", ratings),
         cellRenderer: RatingRenderer,
-        // Keyboard, on this cell: 1-3 sets that many stars (the current number again clears, as clicking the lit star
-        // does), 0/Delete/Backspace clears, Enter adds a star (3 wraps to none). Arrows still move between cells.
-        headerTooltip: "Your stars for this player. On the cell: 1-3 sets them, 0 or Delete clears, Enter adds one",
-        suppressKeyboardEvent: (p) => rateFromKey(p.event, p.data, p.context as RatingContext),
+        // Keyboard: Enter on the cell opens RatingEditor (← → to change, Enter to save, Escape to cancel). A click on a
+        // star rates at once, as ever.
+        headerTooltip: "Your stars for this player. From the keyboard: Enter, then ← and → to change them, Enter to save",
+        editable: true,
+        cellEditor: RatingEditor,
+        // While editing, ← and → are the editor's, not AG's move-to-the-next-cell.
+        suppressKeyboardEvent: (p) => p.editing && (p.event.key === "ArrowLeft" || p.event.key === "ArrowRight"),
+        // Saved through the same rating update as a click (optimistic, keeping the note); the cell reads it back.
+        valueSetter: (p) => {
+          if (!p.data) return false;
+          const context = p.context as RatingContext;
+          const signupId = p.data.entries[0]!.signup.id;
+          const current = context.ratings[signupId] ?? { stars: 0, note: "" };
+          const stars = Number(p.newValue) || 0;
+          if (stars !== current.stars) context.onRate(signupId, { ...current, stars });
+          return false;
+        },
         // Just the three stars (3 x 24px) and the cell's padding; the note has a column of its own. Fixed: nothing in it
         // needs more room.
         width: RATING_WIDTH,
