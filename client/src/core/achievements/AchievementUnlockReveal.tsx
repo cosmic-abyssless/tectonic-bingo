@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useAnimate, useReducedMotion } from "motion/react";
 
 // OSRS unrolls its unlock popups at a deliberate pace, and so does this: a dot, a line fanning out, a slow scan down.
@@ -7,10 +7,12 @@ const FAN_S = 0.9;
 const PAUSE_MS = 150;
 const SCAN_S = 1.1;
 const HOLD_MS = 5000;
+// The card's icon and text fade in once its frame is fully open, and out before it folds away.
+const CONTENT_FADE_MS = 250;
 // The way out runs the same steps backwards, a little quicker.
 const OUT = 0.7;
 // However the animation goes, the popup must move on — a stuck one would block the whole queue.
-const WATCHDOG_MS = (DOT_S + FAN_S + SCAN_S) * 2000 + PAUSE_MS * 2 + HOLD_MS + 3000;
+const WATCHDOG_MS = (DOT_S + FAN_S + SCAN_S) * 2000 + PAUSE_MS * 2 + CONTENT_FADE_MS * 2 + HOLD_MS + 3000;
 
 // Room around the card for its shadow, which the scan uncovers along with the card.
 const PAD = 12;
@@ -23,12 +25,24 @@ const inset = (top: number, right: number, bottom: number, left: number) => `ins
 /**
  * Reveals one Achievement's unlock card (CONTEXT.md "Achievement") the way OSRS reveals its combat achievement and
  * collection log popups: a dot appears on the card's top edge, fans out left and right into a line the card's full
- * width, then scans downward until the whole card shows. It holds, then goes back the same way. The card itself is the
+ * width, then scans downward until the whole card shows. Only the card's frame unrolls: its icon and text fade in once
+ * it is fully open (and out again first when it goes). It holds, then goes back the same way. The card itself is the
  * theme's (the AchievementUnlockCard slot); pressing it opens the Achievements modal. `onDone` fires once the whole
  * cycle has finished — the host advances its queue and marks the popup shown from there. Reduced motion: a plain fade.
  */
-export function AchievementUnlockReveal({ label, children, onOpen, onDone }: { label: string; children: ReactNode; onOpen: () => void; onDone: () => void }) {
+export function AchievementUnlockReveal({
+  label,
+  children,
+  onOpen,
+  onDone,
+}: {
+  label: string;
+  children: (contentShown: boolean) => ReactNode;
+  onOpen: () => void;
+  onDone: () => void;
+}) {
   const reducedMotion = useReducedMotion();
+  const [contentShown, setContentShown] = useState(!!reducedMotion);
   const [scope, animate] = useAnimate<HTMLDivElement>();
 
   useEffect(() => {
@@ -42,6 +56,7 @@ export function AchievementUnlockReveal({ label, children, onOpen, onDone }: { l
       if (!el) return onDone();
 
       if (reducedMotion) {
+        setContentShown(true);
         await animate(el, { opacity: [0, 1] }, { duration: 0.2 });
         if (stopped) return;
         await wait(HOLD_MS);
@@ -72,7 +87,11 @@ export function AchievementUnlockReveal({ label, children, onOpen, onDone }: { l
 
       // Unclipped while it holds, so a shadow reaching past the padding isn't cut square; clipped again to go.
       el.style.clipPath = "none";
-      await wait(HOLD_MS);
+      setContentShown(true);
+      await wait(CONTENT_FADE_MS + HOLD_MS);
+      if (stopped) return;
+      setContentShown(false);
+      await wait(CONTENT_FADE_MS);
       if (stopped) return;
       el.style.clipPath = full;
 
@@ -98,7 +117,7 @@ export function AchievementUnlockReveal({ label, children, onOpen, onDone }: { l
     // The negative margin keeps the shadow's room from taking up layout (so phone gutters stay 16px).
     <div ref={scope} className="pointer-events-auto -m-3 p-3" style={{ opacity: 0 }}>
       <button type="button" onClick={onOpen} aria-label={label} className="block text-left">
-        {children}
+        {children(contentShown)}
       </button>
     </div>
   );

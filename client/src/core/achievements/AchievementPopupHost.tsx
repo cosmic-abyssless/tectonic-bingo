@@ -52,7 +52,7 @@ export function AchievementPopupHost({ slug, onOpen }: { slug: string; onOpen: (
         }}
         onDone={finish}
       >
-        <Card achievement={achievement} />
+        {(contentShown) => <Card achievement={achievement} contentShown={contentShown} />}
       </AchievementUnlockReveal>
     </div>,
     document.body,
