@@ -4,7 +4,7 @@ import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { WomCompetitionClient, WomCompetitionError, syncWomCompetition, syncWomCompetitionAfterDraft } from "./womCompetitionService";
+import { WomCompetitionClient, WomCompetitionError, checkWomGroup, syncWomCompetition, syncWomCompetitionAfterDraft } from "./womCompetitionService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -396,5 +396,47 @@ describe("syncWomCompetition", () => {
 
     const updated = db.select().from(schema.bingos).where(eq(schema.bingos.id, bingo.id)).get()!;
     expect(updated.womSyncError).toContain("HTTP 500");
+  });
+});
+
+describe("checkWomGroup", () => {
+  it("is ok when the code gets past WOM's check to the empty edit's 400, and changes nothing", async () => {
+    const fetchImpl = mockFetch([{ body: { id: 123, name: "Tectonic" } }, { status: 400, body: { message: "Nothing to update." } }]);
+    expect(await checkWomGroup("123", "abc-def-ghi", new WomCompetitionClient(fetchImpl))).toEqual({ ok: true, groupName: "Tectonic" });
+    const [, put] = calls(fetchImpl);
+    expect(String(put![0])).toBe("https://api.wiseoldman.net/v2/groups/123");
+    expect(put![1].method).toBe("PUT");
+    // Only the code: no field to change.
+    expect(JSON.parse(put![1].body as string)).toEqual({ verificationCode: "abc-def-ghi" });
+  });
+
+  it("is ok on a 2xx too (an empty edit WOM accepted)", async () => {
+    const fetchImpl = mockFetch([{ body: { name: "Tectonic" } }, { body: {} }]);
+    expect(await checkWomGroup("123", "abc", new WomCompetitionClient(fetchImpl))).toMatchObject({ ok: true });
+  });
+
+  it("says when the code is wrong", async () => {
+    const fetchImpl = mockFetch([{ body: { name: "Tectonic" } }, { status: 403, body: { message: "Incorrect verification code." } }]);
+    expect(await checkWomGroup("123", "nope", new WomCompetitionClient(fetchImpl))).toMatchObject({ ok: false, problem: "wrong_code" });
+  });
+
+  it("says when there's no such group, without trying the code", async () => {
+    const fetchImpl = mockFetch([{ status: 404, body: { message: "Group not found." } }]);
+    expect(await checkWomGroup("999", "abc", new WomCompetitionClient(fetchImpl))).toMatchObject({ ok: false, problem: "no_group" });
+    expect(calls(fetchImpl)).toHaveLength(1);
+  });
+
+  it("doesn't call WOM for a missing field or a group id that isn't a number", async () => {
+    const fetchImpl = mockFetch([{ body: {} }]);
+    const client = new WomCompetitionClient(fetchImpl);
+    expect(await checkWomGroup("", "abc", client)).toMatchObject({ ok: false, problem: "missing" });
+    expect(await checkWomGroup("123", "", client)).toMatchObject({ ok: false, problem: "missing" });
+    expect(await checkWomGroup("tectonic", "abc", client)).toMatchObject({ ok: false, problem: "no_group" });
+    expect(calls(fetchImpl)).toHaveLength(0);
+  });
+
+  it("never throws when WOM is down", async () => {
+    const fetchImpl = mockFetch([{ status: 502 }]);
+    expect(await checkWomGroup("123", "abc", new WomCompetitionClient(fetchImpl))).toMatchObject({ ok: false, problem: "unreachable" });
   });
 });

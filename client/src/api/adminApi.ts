@@ -67,6 +67,12 @@ const base = (slug: string) => `/api/bingos/${slug}/admin`;
 export function updateBingoSettings(slug: string, payload: Partial<Bingo> & { womGroupVerificationCode?: string }) {
   return api.patch<{ bingo: Bingo }>(`${base(slug)}/settings`, payload);
 }
+/** What the server's WOM Test connection found (checkWomGroup). */
+export type WomGroupCheck = { ok: true; groupName: string } | { ok: false; problem: "missing" | "no_group" | "wrong_code" | "unreachable"; message: string };
+/** Checks a WOM group id and code without changing anything. Blank fields fall back to the saved ones. */
+export function checkWomGroup(slug: string, payload: { groupId?: string; verificationCode?: string }) {
+  return api.post<WomGroupCheck>(`${base(slug)}/settings/wom-check`, payload);
+}
 export function searchBingoUsers(slug: string, q: string) {
   return api.get<{ users: User[] }>(`${base(slug)}/users?q=${encodeURIComponent(q)}`);
 }

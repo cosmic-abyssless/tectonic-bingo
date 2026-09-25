@@ -70,11 +70,17 @@ export interface WomCompetitionState {
 
 /** WOM couldn't be reached, rejected the credentials, or returned a non-2xx. */
 export class WomCompetitionError extends Error {
-  constructor(message: string) {
+  /** WOM's HTTP status, when it answered at all. */
+  readonly status?: number;
+  constructor(message: string, status?: number) {
     super(message);
     this.name = "WomCompetitionError";
+    this.status = status;
   }
 }
+
+/** The outcome of checking a group id and verification code (checkWomGroup). */
+export type WomGroupCheck = { ok: true; groupName: string } | { ok: false; problem: "missing" | "no_group" | "wrong_code" | "unreachable"; message: string };
 
 const ERROR_DETAIL_MAX_CHARS = 300;
 
@@ -147,6 +153,33 @@ export class WomCompetitionClient {
   }
 
   /** Full competition details (title, dates, and every participant's progress) — a public read, no verification code needed. */
+  /** The group's name, or null if WOM has no group with that id. */
+  async getGroupName(groupId: string): Promise<string | null> {
+    try {
+      const raw = (await (await this.request(`/groups/${groupId}`, "GET")).json()) as { name?: unknown };
+      return typeof raw.name === "string" ? raw.name : "";
+    } catch (err) {
+      if (err instanceof WomCompetitionError && err.status === 404) return null;
+      throw err;
+    }
+  }
+
+  /**
+   * Whether the code is the group's verification code, without changing the group: the same check WOM's own site makes.
+   * WOM checks the code before anything else on a group edit (a wrong one is 403), so an edit with nothing in it
+   * getting past that to a 400 for having nothing to change, or a 2xx, means the code is right.
+   */
+  async isGroupCodeCorrect(groupId: string, verificationCode: string): Promise<boolean> {
+    try {
+      await this.request(`/groups/${groupId}`, "PUT", { verificationCode });
+      return true;
+    } catch (err) {
+      if (err instanceof WomCompetitionError && err.status === 400) return true;
+      if (err instanceof WomCompetitionError && err.status === 403) return false;
+      throw err;
+    }
+  }
+
   async getCompetition(competitionId: number): Promise<unknown> {
     const res = await this.request(`/competitions/${competitionId}`, "GET");
     return res.json();
@@ -169,7 +202,7 @@ export class WomCompetitionClient {
     }
     if (!res.ok) {
       const detail = summarizeErrorBody(await res.text().catch(() => ""));
-      throw new WomCompetitionError(`${method} ${path}: HTTP ${res.status}${detail ? ` — ${detail}` : ""}`);
+      throw new WomCompetitionError(`${method} ${path}: HTTP ${res.status}${detail ? ` — ${detail}` : ""}`, res.status);
     }
     return res;
   }
@@ -194,10 +227,12 @@ function getWomIntegrationConfig(bingo: Bingo): WomIntegrationConfig | null {
   return { groupId: bingo.womGroupId, groupVerificationCode: bingo.womGroupVerificationCode };
 }
 
-/** One WOM team entry per bingo team, named after the team with its current roster's RSNs. Teams with no RSN-bearing members are dropped — WOM rejects an empty team. */
-// Each member by their signup's RSN, except a player the competition already has (matched by WOM id): WOM's name for
-// them wins. WOM follows an in-game rename by itself, so our RSN can only be the same or out of date, and sending an
-// out-of-date one would swap the player for their old name.
+/**
+ * One WOM team entry per bingo team, named after the team, with its members' names. Teams with none are dropped (WOM
+ * rejects an empty team). Each member goes by their signup's RSN, except a player the competition already has (matched
+ * by WOM id): WOM's name for them wins. WOM follows an in-game rename by itself, so our RSN can only be the same or out
+ * of date, and sending an out-of-date one would swap the player for their old name.
+ */
 function getTeamRosters(db: Db, bingoId: string, womNamesById: Map<string, string> = new Map()): WomCompetitionTeamInput[] {
   const teamRows = db.select().from(teams).where(eq(teams.bingoId, bingoId)).all();
   if (teamRows.length === 0) return [];
@@ -342,5 +377,25 @@ export async function syncWomCompetition(db: Db, bingoId: string, client: WomCom
       details: { operation: "sync", message },
       actor: "system",
     });
+  }
+}
+
+/**
+ * Checks a WOM group id and verification code before they're needed (the settings' Test connection), so a typo shows up
+ * now rather than as a failed competition when the draft finishes. Changes nothing on WOM, and never throws.
+ */
+export async function checkWomGroup(groupId: string, verificationCode: string, client: WomCompetitionClient = getWomCompetitionClient()): Promise<WomGroupCheck> {
+  if (!groupId || !verificationCode) return { ok: false, problem: "missing", message: "Enter the group ID and its verification code first." };
+  if (!/^\d+$/.test(groupId)) return { ok: false, problem: "no_group", message: "The group ID is a number: the one in the group's Wise Old Man link." };
+  try {
+    const groupName = await client.getGroupName(groupId);
+    if (groupName === null) return { ok: false, problem: "no_group", message: `Wise Old Man has no group ${groupId}.` };
+    if (!(await client.isGroupCodeCorrect(groupId, verificationCode))) {
+      return { ok: false, problem: "wrong_code", message: `That isn't the verification code for ${groupName || `group ${groupId}`}.` };
+    }
+    return { ok: true, groupName };
+  } catch (err) {
+    log.warn("wom group check failed", { groupId, err: err instanceof Error ? err.message : String(err) });
+    return { ok: false, problem: "unreachable", message: "Couldn't reach Wise Old Man. Try again in a moment." };
   }
 }

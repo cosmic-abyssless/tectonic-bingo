@@ -15,7 +15,8 @@ import { rescoreBingo } from "../services/scoringService";
 import * as signupService from "../services/signupService";
 import * as teamService from "../services/teamService";
 import * as userService from "../services/userService";
-import { syncWomCompetition } from "../services/womCompetitionService";
+import { checkWomGroup, syncWomCompetition } from "../services/womCompetitionService";
+import { auditSkip } from "../audit/middleware";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
 
@@ -27,11 +28,11 @@ const router = Router({ mergeParams: true });
 router.use(requireAuth, requireBingo, requireAdmin);
 
 // Every successful mutation here changes what other clients are looking at
-// (board, settings, teams…), so tell them to refetch.
+// (board, settings, teams…), so tell them to refetch. (A read-only POST sets res.locals.readOnly.)
 router.use((req, res, next) => {
   if (req.method !== "GET") {
     res.on("finish", () => {
-      if (res.statusCode < 400) broadcast({ type: "bingo_changed", bingoId: req.bingo!.id, payload: {} });
+      if (res.statusCode < 400 && !res.locals.readOnly) broadcast({ type: "bingo_changed", bingoId: req.bingo!.id, payload: {} });
     });
   }
   next();
@@ -84,6 +85,21 @@ router.patch(
     // The WOM competition carries the bingo's name and dates (fire-and-forget; a no-op without a competition).
     if (params.name !== undefined || params.startsAt !== undefined || params.endsAt !== undefined) void syncWomCompetition(db, req.bingo!.id);
     res.json({ bingo: bingoService.toPublicBingo(bingo) });
+  }),
+);
+
+// Test connection: checks a WOM group id and verification code without changing anything, on WOM or here. A POST so
+// the code stays out of the URL. Each comes from the form if typed there, before saving; otherwise the saved one (the
+// saved code is never sent to the client, so a blank code field means the saved code).
+router.post(
+  "/settings/wom-check",
+  auditSkip("read-only WOM credential check"),
+  asyncHandler(async (req, res) => {
+    res.locals.readOnly = true;
+    const body = req.body as { groupId?: unknown; verificationCode?: unknown };
+    const groupId = String(body.groupId || req.bingo!.womGroupId || "").trim();
+    const verificationCode = String(body.verificationCode || req.bingo!.womGroupVerificationCode || "").trim();
+    res.json(await checkWomGroup(groupId, verificationCode));
   }),
 );
 
