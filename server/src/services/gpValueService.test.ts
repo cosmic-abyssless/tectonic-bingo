@@ -28,6 +28,7 @@ const MAPPING = [
   { id: 19544, name: "Tormented bracelet" },
   { id: 31111, name: "Demon tear" },
   { id: 29794, name: "Etched araxyte fang" },
+  { id: 565, name: "Blood rune" },
 ];
 const LATEST = {
   data: {
@@ -43,6 +44,7 @@ const LATEST = {
     "19544": { high: 19_000_000, low: 19_000_000 },
     "31111": { high: 250, low: 250 },
     "29794": { high: 28_000_000, low: 28_000_000 },
+    "565": { high: 300, low: 300 },
   },
 };
 
@@ -158,7 +160,7 @@ describe("starter piece values (migration 0025)", () => {
     const starters = getPieceValues(db, table);
 
     expect(starters.map((p) => p.pieceItemName)).toEqual(
-      expect.arrayContaining(["Ultor vestige", "Bellator vestige", "Magus vestige", "Venator vestige", "Araxyte fang", "Hydra's fang", "Hydra's eye", "Hydra's heart", "Executioner's axe head", "Leviathan's lure", "Siren's staff", "Eye of the duke"]),
+      expect.arrayContaining(["Ultor vestige", "Bellator vestige", "Magus vestige", "Venator vestige", "Araxyte fang", "Hydra's fang", "Hydra's eye", "Hydra's heart", "Executioner's axe head", "Leviathan's lure", "Siren's staff", "Eye of the Duke"]),
     );
     expect(starters.find((p) => p.pieceItemName === "Ultor vestige")).toMatchObject({
       wholeItemName: "Ultor ring",
@@ -166,8 +168,9 @@ describe("starter piece values (migration 0025)", () => {
       otherPieces: [{ itemName: "Berserker ring", quantity: 1 }, { itemName: "Chromium ingot", quantity: 3 }],
       unitPrice: 95_850_000,
     });
-    // A quarter of the axe; matched case-insensitively, as the board spells it "Eye of the Duke".
-    expect(pricer(db, table).gpValue("Eye of the Duke", 1)).toBe(100_000_000);
+    // A quarter of the axe less its 2000 Blood runes (0029): (400M − 2000 × 300) ÷ 4. Matched case-insensitively.
+    expect(pricer(db, table).gpValue("eye of the duke", 1)).toBe(99_850_000);
+    expect(starters.find((p) => p.pieceItemName === "Eye of the Duke")!.otherPieces).toEqual([{ itemName: "Blood rune", quantity: 2000 }]);
   });
 });
 

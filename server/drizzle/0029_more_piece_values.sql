@@ -17,3 +17,12 @@ INSERT INTO `piece_values` (`id`, `piece_item_name`, `whole_item_name`, `whole_q
 -- the untouched starter from 0025 changes; one an Admin made or pointed elsewhere is left alone.
 DELETE FROM `piece_value_other_pieces` WHERE `piece_value_id` IN (SELECT `id` FROM `piece_values` WHERE `piece_item_name` = 'Araxyte fang' AND `created_by_user_id` IS NULL AND `whole_item_name` = 'Amulet of rancour');--> statement-breakpoint
 UPDATE `piece_values` SET `whole_item_name` = 'Etched araxyte fang', `updated_at` = unixepoch() WHERE `piece_item_name` = 'Araxyte fang' AND `created_by_user_id` IS NULL AND `whole_item_name` = 'Amulet of rancour';
+--> statement-breakpoint
+
+-- The Soulreaper axe also takes 2000 Blood runes to make, so each of its four pieces is (axe − 2000× Blood rune) ÷ 4.
+-- Only the untouched starters from 0025 (still axe ÷ 4 with no other pieces) change.
+INSERT OR IGNORE INTO `piece_value_other_pieces` (`id`, `piece_value_id`, `item_name`, `quantity`) SELECT lower(hex(randomblob(16))), `id`, 'Blood rune', 2000 FROM `piece_values` WHERE `piece_item_name` IN ('Executioner''s axe head', 'Leviathan''s lure', 'Siren''s staff', 'Eye of the duke') AND `created_by_user_id` IS NULL AND `whole_item_name` = 'Soulreaper axe' AND `divisor` = 4 AND `id` NOT IN (SELECT `piece_value_id` FROM `piece_value_other_pieces`);--> statement-breakpoint
+
+-- 0025 spelled it "Eye of the duke"; the item (and its wiki icon) is "Eye of the Duke". Names match case-insensitively
+-- for pricing, but the Piece values page shows and looks up the icon by this name.
+UPDATE `piece_values` SET `piece_item_name` = 'Eye of the Duke', `updated_at` = unixepoch() WHERE `piece_item_name` = 'Eye of the duke' AND `created_by_user_id` IS NULL;
