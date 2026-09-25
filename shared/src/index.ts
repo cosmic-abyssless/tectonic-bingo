@@ -278,9 +278,9 @@ export interface ValuedAs {
   source?: string | null;
 }
 
-/** "Ultor vestige ÷ 3", as the board editor and hover text show a Valued as. */
+/** "Ultor vestige ÷ 3" (just the item when ÷ 1), as the board editor and hover text show a Valued as. */
 export function describeValuedAs(valuedAs: Pick<ValuedAs, "itemName" | "divisor">): string {
-  return `${valuedAs.itemName} ÷ ${valuedAs.divisor}`;
+  return valuedAs.divisor === 1 ? valuedAs.itemName : `${valuedAs.itemName} ÷ ${valuedAs.divisor}`;
 }
 
 // The raw tiles row, as returned unnested (e.g. in mod submission rows).

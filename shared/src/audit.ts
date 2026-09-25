@@ -362,7 +362,10 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
       // Entries written before Other pieces existed have no otherPieces.
       const others = (i.details.otherPieces ?? []).map((o) => ` − ${o}`).join("");
       const whole = `${(i.details.wholeQuantity ?? 1) > 1 ? `${i.details.wholeQuantity}× ` : ""}${i.details.wholeItemName}`;
-      return `${actor(i)} valued ${i.details.pieceItemName} as ${others ? `(${whole}${others})` : whole} ÷ ${i.details.divisor}`;
+      // "÷ 1" is left off, and so are the brackets that would only group the subtraction for it.
+      const divided = i.details.divisor > 1;
+      const value = others && divided ? `(${whole}${others})` : `${whole}${others}`;
+      return `${actor(i)} valued ${i.details.pieceItemName} as ${value}${divided ? ` ÷ ${i.details.divisor}` : ""}`;
     },
   },
   "piece_value.updated": {

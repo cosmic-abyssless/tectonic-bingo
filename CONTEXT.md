@@ -223,7 +223,7 @@ The sum of GP values of a Player's or Team's approved Submissions. Pending and r
 
 ### Piece value
 A site-wide rule, set by an Admin, that values an item piece as a share of its **Whole item**: the Whole item's price (times how many of it, usually 1), minus its **Other pieces**, divided by N.
-- **Examples:** Bludgeon axon = Abyssal bludgeon ÷ 3. Ultor vestige = (Ultor ring − Berserker ring − 3× Chromium ingot) ÷ 1. Dizana's quiver = 4000× Sunfire splinters.
+- **Examples:** Bludgeon axon = Abyssal bludgeon ÷ 3. Ultor vestige = Ultor ring − Berserker ring − 3× Chromium ingot. Dizana's quiver = 4000× Sunfire splinters.
 - **Other pieces:** The other items that go into the Whole item, each with a quantity, subtracted before dividing. Optional. Equal pieces covered by ÷ N (the bludgeon's other two pieces) are not listed as Other pieces.
 - **Rules:** The Whole item and every Other piece must have a Grand Exchange price and can't themselves be a piece. One Piece value per piece; it overrides the piece's own price. When a Piece value works out to nothing (an Other piece has no price right now, or the result is zero or less) the Claim gets no GP value until it works out again. Adding or changing one prices only Claims that have no GP value yet.
 

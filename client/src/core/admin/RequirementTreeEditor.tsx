@@ -467,7 +467,7 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
           onClick={() => setEditingValue((open) => !open)}
           title={
             valuedAs
-              ? `Claims here get their GP value from ${valuedAs.itemName} ÷ ${valuedAs.divisor}, not from ${name}'s own price`
+              ? `Claims here get their GP value from ${describeValuedAs(valuedAs)}, not from ${name}'s own price`
               : `Price claims here as another item instead of ${name} (e.g. a gold ring from a DT2 boss as a third of its vestige)`
           }
           className={`shrink-0 rounded px-1 text-[10px] tracking-wide ${valuedAs ? "border border-outline text-on-surface-muted" : "text-on-surface-subtle hover:text-on-surface"}`}

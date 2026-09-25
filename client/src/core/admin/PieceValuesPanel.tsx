@@ -22,12 +22,17 @@ let nextDraftKey = 0;
 const draftOf = (o?: OtherPiece): OtherPieceDraft => ({ key: nextDraftKey++, itemName: o?.itemName ?? "", quantity: String(o?.quantity ?? 1) });
 const isWholeNumber = (raw: string) => Number.isInteger(Number(raw)) && Number(raw) >= 1;
 
-/** "(Ultor ring − Berserker ring − 3× Chromium ingot) ÷ 1", or "Abyssal bludgeon ÷ 3" with no other pieces; each item links to its wiki page. */
+/**
+ * "Ultor ring − Berserker ring − 3× Chromium ingot", "Abyssal bludgeon ÷ 3", "(A − B) ÷ 2": "÷ 1" is left off, and so
+ * are the brackets that would only group the subtraction for it. Each item links to its wiki page.
+ */
 function Formula({ pieceValue }: { pieceValue: PieceValueInput }) {
   const others = pieceValue.otherPieces;
+  const divided = pieceValue.divisor > 1;
+  const bracketed = divided && others.length > 0;
   return (
     <span className="min-w-0">
-      {others.length > 0 && "("}
+      {bracketed && "("}
       {pieceValue.wholeQuantity > 1 && `${pieceValue.wholeQuantity.toLocaleString()}× `}
       <WikiItemLink name={pieceValue.wholeItemName} />
       {others.map((o) => (
@@ -37,7 +42,8 @@ function Formula({ pieceValue }: { pieceValue: PieceValueInput }) {
           <WikiItemLink name={o.itemName} />
         </Fragment>
       ))}
-      {others.length > 0 && ")"} ÷ {pieceValue.divisor}
+      {bracketed && ")"}
+      {divided && ` ÷ ${pieceValue.divisor}`}
     </span>
   );
 }
@@ -266,7 +272,7 @@ export function PieceValuesPanel() {
     <div className="space-y-6">
       <p className="text-sm text-on-surface-muted">
         Submissions get a GP value from the item's Grand Exchange price. A piece with no price of its own (an untradeable part of a tradeable item) can be valued as a
-        share of its whole item instead: Bludgeon axon = Abyssal bludgeon ÷ 3, or Ultor vestige = (Ultor ring − Berserker ring − 3× Chromium ingot) ÷ 1. Adding one
+        share of its whole item instead: Bludgeon axon = Abyssal bludgeon ÷ 3, or Ultor vestige = Ultor ring − Berserker ring − 3× Chromium ingot. Adding one
         prices the claims that have no GP value yet; values already set don't change.
       </p>
 
