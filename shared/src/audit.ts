@@ -186,8 +186,9 @@ export interface AuditDetailsMap {
   "signup.name_changed": { before: string; after: string; womId: string };
 
   "wom.competition_created": { competitionId: number };
-  "wom.roster_synced": Record<string, never>;
-  "wom.sync_failed": { operation: "create" | "rename"; message: string };
+  // changed: what the sync sent (older entries, from team renames only, have none).
+  "wom.roster_synced": { changed?: ("title" | "startsAt" | "endsAt" | "teams")[] };
+  "wom.sync_failed": { operation: "create" | "rename" | "sync"; message: string };
 
   // Fallback-only: written by the server's finish-middleware for any
   // successful non-GET /api/* mutation that recorded nothing itself.
@@ -615,7 +616,18 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     label: (i) => `${i.details.before} changed their name to ${i.details.after}`,
   },
   "wom.competition_created": { category: "system", tone: "ok", visibility: "mods", title: "WOM competition created", label: () => "Created the Wise Old Man competition" },
-  "wom.roster_synced": { category: "system", tone: "neutral", visibility: "mods", title: "WOM roster synced", label: () => "Synced the Wise Old Man competition roster" },
+  "wom.roster_synced": {
+    category: "system",
+    tone: "neutral",
+    visibility: "mods",
+    title: "WOM competition synced",
+    label: (i) => {
+      const what = { title: "name", startsAt: "start date", endsAt: "end date", teams: "teams" } as const;
+      return i.details.changed?.length
+        ? `Updated the Wise Old Man competition's ${joinList(i.details.changed.map((c) => what[c]))}`
+        : "Synced the Wise Old Man competition roster";
+    },
+  },
   "wom.sync_failed": { category: "system", tone: "warn", visibility: "mods", title: "WOM sync failed", label: (i) => `Wise Old Man ${i.details.operation} failed: ${i.details.message}` },
   "http.mutation": {
     category: "http",

@@ -15,7 +15,7 @@ import { rescoreBingo } from "../services/scoringService";
 import * as signupService from "../services/signupService";
 import * as teamService from "../services/teamService";
 import * as userService from "../services/userService";
-import { syncWomTeamRename } from "../services/womCompetitionService";
+import { syncWomCompetition } from "../services/womCompetitionService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
 
@@ -81,6 +81,8 @@ router.patch(
     const bingo = bingoService.updateBingoSettings(db, req.bingo!.id, params);
     // Rules decide which claims count, so a change re-scores every team (a rule added mid-event takes effect now).
     if (params.exclusivityRules !== undefined) rescoreBingo(db, req.bingo!.id);
+    // The WOM competition carries the bingo's name and dates (fire-and-forget; a no-op without a competition).
+    if (params.name !== undefined || params.startsAt !== undefined || params.endsAt !== undefined) void syncWomCompetition(db, req.bingo!.id);
     res.json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );
@@ -364,6 +366,7 @@ router.post(
     const { captainUserId, coCaptainUserId, name } = req.body as { captainUserId?: string; coCaptainUserId?: string | null; name?: string };
     if (!captainUserId) throw new ServiceError(400, "captainUserId is required");
     const team = teamService.createTeam(db, { bingoId: req.bingo!.id, captainUserId, coCaptainUserId, name });
+    void syncWomCompetition(db, req.bingo!.id);
     res.status(201).json({ team });
   }),
 );
@@ -372,9 +375,9 @@ router.patch(
   asyncHandler(async (req, res) => {
     const { name, color, codeword } = req.body as teamService.UpdateTeamParams;
     const team = teamService.updateTeam(db, req.params.id as string, { name, color, codeword });
-    // Keep the WOM competition's roster labels in sync with renames made
+    // Keep the WOM competition's team names in sync with renames made
     // from the admin panel too, not just the captain self-service route.
-    if (name !== undefined) void syncWomTeamRename(db, req.bingo!.id);
+    if (name !== undefined) void syncWomCompetition(db, req.bingo!.id);
     res.json({ team });
   }),
 );
@@ -384,6 +387,7 @@ router.post(
     const { userId } = req.body as { userId?: string };
     if (!userId) throw new ServiceError(400, "userId is required");
     const member = teamService.addTeamMember(db, req.params.id as string, userId);
+    void syncWomCompetition(db, req.bingo!.id);
     res.status(201).json({ member });
   }),
 );
@@ -391,6 +395,7 @@ router.delete(
   "/teams/:id",
   asyncHandler(async (req, res) => {
     teamService.deleteTeam(db, req.params.id as string);
+    void syncWomCompetition(db, req.bingo!.id);
     res.status(204).end();
   }),
 );
@@ -398,6 +403,7 @@ router.delete(
   "/teams/:id/members/:userId",
   asyncHandler(async (req, res) => {
     teamService.removeTeamMember(db, req.params.id as string, req.params.userId as string);
+    void syncWomCompetition(db, req.bingo!.id);
     res.status(204).end();
   }),
 );

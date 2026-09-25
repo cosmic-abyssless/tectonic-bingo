@@ -1,7 +1,8 @@
 // Optional per-bingo integration: when a mod turns it on in the settings
 // panel (bingos.womEnabled) and supplies a WOM group id + group verification
 // code, a WOM group competition is created for the bingo's teams once the
-// draft finishes, and kept in sync when a captain renames their team.
+// draft finishes, and kept in sync after that (syncWomCompetition): the
+// bingo's name, its start and end dates, and every team's name and members.
 //
 // WOM lets a competition linked to a group be edited with that same group's
 // verification code (https://docs.wiseoldman.net/api/competitions/competition-endpoints)
@@ -9,12 +10,11 @@
 // need to persist a second secret — only the group's, already required to
 // create the competition in the first place.
 //
-// Both entry points (syncWomCompetitionAfterDraft, syncWomTeamRename) are
+// Both entry points (syncWomCompetitionAfterDraft, syncWomCompetition) are
 // called fire-and-forget from the route layer, same convention as
 // playerStatsService.fetchAndPersistPlayerStats: never throws, and any
 // failure is persisted onto bingos.womSyncError for the settings panel to
-// surface rather than bubbling up and breaking the stage change or rename
-// that triggered it.
+// surface rather than bubbling up and breaking the change that triggered it.
 import { now as clockNow } from "../clock";
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -24,6 +24,7 @@ import { audit } from "../audit/record";
 import { USER_AGENT } from "../config";
 import { log } from "../log";
 import { TESTDATA_PREFIX } from "./devTestDataService";
+import { effectiveStartsAt } from "./bingoStart";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type FetchLike = typeof fetch;
@@ -46,10 +47,23 @@ export interface CreateCompetitionParams {
   teams: WomCompetitionTeamInput[];
 }
 
+// Only the fields given are changed (WOM's edit leaves the rest alone); `teams` replaces every team.
 export interface EditCompetitionParams {
   competitionId: number;
   groupVerificationCode: string;
-  teams: WomCompetitionTeamInput[];
+  title?: string;
+  startsAt?: Date;
+  endsAt?: Date;
+  teams?: WomCompetitionTeamInput[];
+}
+
+/** What WOM has for a competition, as far as the sync compares it (read from the public GET). */
+export interface WomCompetitionState {
+  title: string | null;
+  startsAt: Date | null;
+  endsAt: Date | null;
+  /** Team name -> its members' usernames, lowercased (how WOM stores them), sorted. */
+  teams: Map<string, string[]>;
 }
 
 /** WOM couldn't be reached, rejected the credentials, or returned a non-2xx. */
@@ -102,8 +116,29 @@ export class WomCompetitionClient {
     // validation, so a team rename never actually updated the roster.
     await this.request(`/competitions/${params.competitionId}`, "PUT", {
       verificationCode: params.groupVerificationCode,
-      teams: params.teams,
+      ...(params.title !== undefined && { title: params.title }),
+      ...(params.startsAt && { startsAt: params.startsAt.toISOString() }),
+      ...(params.endsAt && { endsAt: params.endsAt.toISOString() }),
+      ...(params.teams && { teams: params.teams }),
     });
+  }
+
+  /** The competition's title, dates and teams as WOM has them, to compare with the bingo's before an edit. */
+  async getCompetitionState(competitionId: number): Promise<WomCompetitionState> {
+    const raw = (await this.getCompetition(competitionId)) as {
+      title?: unknown;
+      startsAt?: unknown;
+      endsAt?: unknown;
+      participations?: { teamName?: unknown; player?: { username?: unknown } }[];
+    };
+    const date = (v: unknown) => (typeof v === "string" && !Number.isNaN(Date.parse(v)) ? new Date(v) : null);
+    const teams = new Map<string, string[]>();
+    for (const p of raw.participations ?? []) {
+      if (typeof p.teamName !== "string" || typeof p.player?.username !== "string") continue;
+      teams.set(p.teamName, [...(teams.get(p.teamName) ?? []), p.player.username.toLowerCase()]);
+    }
+    for (const [name, members] of teams) teams.set(name, members.sort());
+    return { title: typeof raw.title === "string" ? raw.title : null, startsAt: date(raw.startsAt), endsAt: date(raw.endsAt), teams };
   }
 
   /** Full competition details (title, dates, and every participant's progress) — a public read, no verification code needed. */
@@ -235,11 +270,24 @@ export async function syncWomCompetitionAfterDraft(db: Db, bingoId: string, clie
   }
 }
 
+/** The same teams and members, whatever the order (WOM keeps usernames lowercased). */
+function sameTeams(ours: WomCompetitionTeamInput[], theirs: Map<string, string[]>): boolean {
+  if (ours.length !== theirs.size) return false;
+  return ours.every((t) => {
+    const members = theirs.get(t.name);
+    const mine = t.participants.map((p) => p.toLowerCase()).sort();
+    return !!members && members.length === mine.length && members.every((m, i) => m === mine[i]);
+  });
+}
+
 /**
- * Fired after a team rename so the WOM competition's roster stays in sync.
- * No-op unless a competition has already been created for this bingo.
+ * Brings the bingo's WOM competition up to date: its title (the bingo's name), start and end dates, and teams (every
+ * team's name and members). Fired after anything that changes one of those: the settings (name, dates), putting the
+ * bingo live (with no start date set, that's when it starts), a team created, renamed or deleted, a member added or
+ * removed, a player's in-game rename. Reads what WOM has first and sends only what differs, so an unchanged start
+ * date is never sent to a competition that's already running. No-op until the competition exists.
  */
-export async function syncWomTeamRename(db: Db, bingoId: string, client: WomCompetitionClient = getWomCompetitionClient()): Promise<void> {
+export async function syncWomCompetition(db: Db, bingoId: string, client: WomCompetitionClient = getWomCompetitionClient()): Promise<void> {
   if (syncDisabled()) return;
   const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get();
   if (!bingo || !bingo.womCompetitionId || isTestData(bingo)) return;
@@ -247,25 +295,43 @@ export async function syncWomTeamRename(db: Db, bingoId: string, client: WomComp
   if (!config) return;
 
   try {
+    const current = await client.getCompetitionState(bingo.womCompetitionId);
+    const changes: Omit<EditCompetitionParams, "competitionId" | "groupVerificationCode"> = {};
+    if (bingo.name !== current.title) changes.title = bingo.name;
+    // The bingo's dates, where it has them: with none, WOM keeps what it was created with (the draft's end, and two
+    // weeks on). WOM needs the end after the start.
+    const startsAt = effectiveStartsAt(db, bingo) ?? current.startsAt;
+    const endsAt = bingo.endsAt ?? current.endsAt;
+    if (startsAt && endsAt && endsAt > startsAt) {
+      if (startsAt.getTime() !== current.startsAt?.getTime()) changes.startsAt = startsAt;
+      if (endsAt.getTime() !== current.endsAt?.getTime()) changes.endsAt = endsAt;
+    }
     const rosters = getTeamRosters(db, bingoId);
-    await client.editCompetition({ competitionId: bingo.womCompetitionId, groupVerificationCode: config.groupVerificationCode, teams: rosters });
+    if (rosters.length > 0 && !sameTeams(rosters, current.teams)) changes.teams = rosters;
+
+    const changed = Object.keys(changes) as (keyof typeof changes)[];
+    if (changed.length === 0) {
+      if (bingo.womSyncError) db.update(bingos).set({ womSyncError: null }).where(eq(bingos.id, bingoId)).run();
+      return;
+    }
+    await client.editCompetition({ competitionId: bingo.womCompetitionId, groupVerificationCode: config.groupVerificationCode, ...changes });
     db.update(bingos).set({ womSyncError: null }).where(eq(bingos.id, bingoId)).run();
     audit(db, {
       action: "wom.roster_synced",
       bingoId,
       entity: { type: "bingo", id: bingoId, label: bingo.name },
-      details: {},
+      details: { changed },
       actor: "system",
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    log.warn("wom competition rename failed", { bingoId, err: message });
+    log.warn("wom competition sync failed", { bingoId, err: message });
     db.update(bingos).set({ womSyncError: message }).where(eq(bingos.id, bingoId)).run();
     audit(db, {
       action: "wom.sync_failed",
       bingoId,
       entity: { type: "bingo", id: bingoId, label: bingo.name },
-      details: { operation: "rename", message },
+      details: { operation: "sync", message },
       actor: "system",
     });
   }

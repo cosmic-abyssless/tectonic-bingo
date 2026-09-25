@@ -4,7 +4,7 @@ import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { WomCompetitionClient, WomCompetitionError, syncWomCompetitionAfterDraft, syncWomTeamRename } from "./womCompetitionService";
+import { WomCompetitionClient, WomCompetitionError, syncWomCompetition, syncWomCompetitionAfterDraft } from "./womCompetitionService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -239,47 +239,151 @@ describe("audit trail", () => {
     expect(JSON.parse(failed.details)).toMatchObject({ operation: "create" });
   });
 
-  it("syncWomTeamRename records wom.roster_synced", async () => {
+  it("syncWomCompetition records wom.roster_synced as system, with what it changed", async () => {
     const { bingo } = seedBingoWithTeam({ womCompetitionId: 42 });
-    await syncWomTeamRename(db, bingo.id, new WomCompetitionClient(mockFetch([{ body: {} }])));
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(mockFetch([{ body: womState({ title: "Old Name" }) }, { body: {} }])));
     const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "wom.roster_synced")).get()!;
     expect(row.actorType).toBe("system");
+    expect(JSON.parse(row.details)).toEqual({ changed: ["title"] });
+  });
+
+  it("syncWomCompetition records wom.sync_failed on error", async () => {
+    const { bingo } = seedBingoWithTeam({ womCompetitionId: 42 });
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(mockFetch([{ status: 500 }])));
+    const failed = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "wom.sync_failed")).get()!;
+    expect(JSON.parse(failed.details)).toMatchObject({ operation: "sync" });
   });
 });
 
-describe("syncWomTeamRename", () => {
-  it("edits the existing competition with the current roster", async () => {
+// What WOM's GET /competitions/:id returns, by default matching seedBingoWithTeam's bingo exactly (it has no dates, so
+// WOM's own are kept).
+function womState(overrides: { title?: string; startsAt?: string; endsAt?: string; participations?: { teamName: string; player: { username: string } }[] } = {}) {
+  return {
+    id: 42,
+    title: "Test Bingo",
+    startsAt: "2026-03-01T18:00:00.000Z",
+    endsAt: "2026-03-15T18:00:00.000Z",
+    participations: [{ teamName: "Team One", player: { username: "captainrsn" } }],
+    ...overrides,
+  };
+}
+
+function calls(fetchImpl: typeof fetch) {
+  return (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls as [string, RequestInit][];
+}
+
+function putBody(fetchImpl: typeof fetch) {
+  const put = calls(fetchImpl).find((c) => c[1].method === "PUT");
+  return put ? (JSON.parse(put[1].body as string) as Record<string, unknown>) : undefined;
+}
+
+describe("syncWomCompetition", () => {
+  it("reads the competition first, then edits it", async () => {
+    const { bingo } = seedBingoWithTeam({ womCompetitionId: 42, name: "New Name" });
+    const fetchImpl = mockFetch([{ body: womState() }, { body: {} }]);
+
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+
+    const [get, put] = calls(fetchImpl);
+    expect(String(get![0])).toBe("https://api.wiseoldman.net/v2/competitions/42");
+    expect(get![1].method).toBe("GET");
+    expect(String(put![0])).toBe("https://api.wiseoldman.net/v2/competitions/42");
+    expect(put![1].method).toBe("PUT");
+  });
+
+  it("sends only the name when only the name differs", async () => {
+    const { bingo } = seedBingoWithTeam({ womCompetitionId: 42, name: "New Name" });
+    const fetchImpl = mockFetch([{ body: womState() }, { body: {} }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+    expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", title: "New Name" });
+  });
+
+  it("sends the teams after a team rename", async () => {
     const { bingo, team } = seedBingoWithTeam({ womCompetitionId: 42 });
     db.update(schema.teams).set({ name: "Renamed Team" }).where(eq(schema.teams.id, team.id)).run();
-    const fetchImpl = mockFetch([{ body: {} }]);
+    const fetchImpl = mockFetch([{ body: womState() }, { body: {} }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+    expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", teams: [{ name: "Renamed Team", participants: ["CaptainRsn"] }] });
+  });
 
-    await syncWomTeamRename(db, bingo.id, new WomCompetitionClient(fetchImpl));
+  it("sends the teams after a member joins", async () => {
+    const { bingo, team } = seedBingoWithTeam({ womCompetitionId: 42 });
+    const [player] = db.insert(schema.users).values({ discordId: "player", discordUsername: "player" }).returning().all();
+    db.insert(schema.signups).values({ bingoId: bingo.id, userId: player.id, rsn: "NewPlayer" }).run();
+    db.insert(schema.teamMembers).values({ teamId: team.id, userId: player.id }).run();
+    const fetchImpl = mockFetch([{ body: womState() }, { body: {} }]);
 
-    const call = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
-    expect(String(call[0])).toBe("https://api.wiseoldman.net/v2/competitions/42");
-    const body = JSON.parse(call[1].body);
-    expect(body.teams).toEqual([{ name: "Renamed Team", participants: ["CaptainRsn"] }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+
+    const teams = putBody(fetchImpl)!.teams as { name: string; participants: string[] }[];
+    expect(teams).toHaveLength(1);
+    expect([...teams[0]!.participants].sort()).toEqual(["CaptainRsn", "NewPlayer"]);
+  });
+
+  it("sends the teams after a player's in-game rename", async () => {
+    const { bingo, captain } = seedBingoWithTeam({ womCompetitionId: 42 });
+    db.update(schema.signups).set({ rsn: "RenamedRsn" }).where(eq(schema.signups.userId, captain.id)).run();
+    const fetchImpl = mockFetch([{ body: womState() }, { body: {} }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+    expect(putBody(fetchImpl)!.teams).toEqual([{ name: "Team One", participants: ["RenamedRsn"] }]);
+  });
+
+  it("sends the bingo's start and end dates when they differ", async () => {
+    const startsAt = new Date("2026-03-02T18:00:00.000Z");
+    const endsAt = new Date("2026-03-12T20:00:00.000Z");
+    const { bingo } = seedBingoWithTeam({ womCompetitionId: 42, startsAt, endsAt });
+    const fetchImpl = mockFetch([{ body: womState() }, { body: {} }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+    expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() });
+  });
+
+  it("with no start date set, starts the competition when the bingo went live", async () => {
+    const { bingo } = seedBingoWithTeam({ womCompetitionId: 42, stage: "live" });
+    const wentLive = new Date("2026-03-01T20:30:00.000Z");
+    db.insert(schema.stageTransitions).values({ bingoId: bingo.id, fromStage: "reveal", toStage: "live", changedByUserId: bingo.createdByUserId, createdAt: wentLive }).run();
+    const fetchImpl = mockFetch([{ body: womState() }, { body: {} }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+    expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", startsAt: wentLive.toISOString() });
+  });
+
+  it("leaves the dates alone when the end wouldn't come after the start", async () => {
+    const { bingo } = seedBingoWithTeam({ womCompetitionId: 42, endsAt: new Date("2026-02-01T00:00:00.000Z") });
+    const fetchImpl = mockFetch([{ body: womState() }, { body: {} }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+    expect(calls(fetchImpl)).toHaveLength(1);
+  });
+
+  it("doesn't edit anything when WOM already matches (usernames compared as WOM stores them)", async () => {
+    const { bingo } = seedBingoWithTeam({ womCompetitionId: 42, womSyncError: "an old failure" });
+    const fetchImpl = mockFetch([{ body: womState() }, { body: {} }]);
+
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+
+    expect(calls(fetchImpl)).toHaveLength(1);
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "wom.roster_synced")).get()).toBeUndefined();
+    // WOM already matching is as good as a successful sync.
+    expect(db.select().from(schema.bingos).where(eq(schema.bingos.id, bingo.id)).get()!.womSyncError).toBeNull();
   });
 
   it("never touches WOM for a test data bingo", async () => {
     const { bingo } = seedBingoWithTeam({ slug: "testdata-20260923-0900", womCompetitionId: 42 });
-    const fetchImpl = mockFetch([{ body: {} }]);
-    await syncWomTeamRename(db, bingo.id, new WomCompetitionClient(fetchImpl));
-    expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
+    const fetchImpl = mockFetch([{ body: womState() }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+    expect(calls(fetchImpl)).toHaveLength(0);
   });
 
   it("does nothing when no competition has been created yet", async () => {
     const { bingo } = seedBingoWithTeam();
-    const fetchImpl = mockFetch([{ body: {} }]);
-    await syncWomTeamRename(db, bingo.id, new WomCompetitionClient(fetchImpl));
-    expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
+    const fetchImpl = mockFetch([{ body: womState() }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+    expect(calls(fetchImpl)).toHaveLength(0);
   });
 
   it("never throws, and persists the failure reason on the bingo row", async () => {
-    const { bingo } = seedBingoWithTeam({ womCompetitionId: 42 });
-    const fetchImpl = mockFetch([{ status: 500 }]);
+    const { bingo } = seedBingoWithTeam({ womCompetitionId: 42, name: "New Name" });
+    const fetchImpl = mockFetch([{ body: womState() }, { status: 500 }]);
 
-    await expect(syncWomTeamRename(db, bingo.id, new WomCompetitionClient(fetchImpl))).resolves.toBeUndefined();
+    await expect(syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl))).resolves.toBeUndefined();
 
     const updated = db.select().from(schema.bingos).where(eq(schema.bingos.id, bingo.id)).get()!;
     expect(updated.womSyncError).toContain("HTTP 500");

@@ -10,6 +10,7 @@ import { audit } from "../audit/record";
 import { log } from "../log";
 import { broadcast } from "../ws";
 import { getTectonicClient, TectonicUnavailableError, type TectonicClient } from "./tectonicService";
+import { syncWomCompetition } from "./womCompetitionService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -58,5 +59,7 @@ export async function syncSignupRsn(db: Db, signupId: string, client: TectonicCl
   });
   log.info("rsn sync: signup renamed", { signupId, before: signup.rsn, after: next });
   broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: {} });
+  // A drafted player's new name has to reach their team in the WOM competition too (a no-op before one exists).
+  void syncWomCompetition(db, signup.bingoId);
   return { rsn: next, renamedFrom: signup.rsn };
 }

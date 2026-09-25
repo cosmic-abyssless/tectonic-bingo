@@ -17,7 +17,7 @@ function row(overrides: Partial<typeof auditLog.$inferInsert> = {}) {
     .insert(auditLog)
     .values({
       bingoId: "b1",
-      // wom.roster_synced's label ignores `details` entirely, so the
+      // wom.roster_synced's label reads fine from empty `details`, so the
       // default row here never needs a shape matching some other action's
       // renderer — only tests that care about a specific action/label
       // override it.

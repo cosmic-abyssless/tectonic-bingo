@@ -224,8 +224,8 @@ export function BingoSettingsForm({
 
       <WomSection enabled={form.womEnabled} onToggle={(womEnabled) => setForm({ ...form, womEnabled })}>
         <Notice tone="info">
-          When enabled, a Wise Old Man group competition is created automatically for this bingo's teams once the draft finishes, and kept up to date if a
-          captain renames their team.
+          When enabled, a Wise Old Man group competition is created automatically for this bingo's teams once the draft finishes, then kept up to date:
+          the bingo's name, its start and end dates, and every team's name and players.
         </Notice>
         <div className="grid grid-cols-2 gap-4">
           <Field label="WOM group ID">
