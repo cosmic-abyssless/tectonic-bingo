@@ -165,6 +165,10 @@ A single proof package submitted by a player on behalf of their Team to claim co
 - **Who may post for whom:** A Player posts to their own Team, for themselves or any teammate. A Moderator (or Admin) may also submit to any Team of the Bingo while viewing it, and must say which of its Players the drop belongs to. The Bingo must be live either way.
 - **Changing the credit:** A Moderator can move a Submission's credit to another Player of its Team ("Change player" in the mod queue), in any state, when the poster forgot to pick who it was for. The credit moves; the review, the points and the Team don't. The original uploader stays as the poster, and the change is recorded in the audit log.
 
+### Reaction
+An emoji a Player leaves on a Submission of their own Team, from a fixed set of five (🔥 🎉 😂 💀 👀).
+- **Rules:** Only members of the Submission's Team can react, to a Submission in any status (their own included). Each Player can leave each emoji once per Submission, and can take it back. Seen by the Team and Moderators only.
+
 ### Screenshot
 An image attached to a Submission proving in-game completion.
 - **Types:** Main drop screenshot, pre-screenshot (for pre-loaded tasks), bank screenshot, collection log screenshot, other.
@@ -232,3 +236,19 @@ The total GP reward pool for a Bingo, computed from the per-player Buy-in amount
 
 ### Buy-in
 The entry fee in OSRS GP that each participating player must pay to join the Bingo, which contributes to the Pot.
+
+---
+
+## Achievements
+
+### Achievement
+A just-for-fun milestone a Player earns during a Bingo, e.g. "Strong start: submit your first drop". Never affects points, scoring or the Board.
+- **Scope:** Per Bingo: every Bingo starts everyone from nothing. Only Players on a Team earn them (a Moderator who isn't playing never does), and only while the Bingo is Live.
+- **Who earns it:** The Player who did the thing, through the app, so the unlock plays on their own device. Posting a teammate's drop earns the poster "Strong start", not the teammate the drop is credited to.
+- **Rules:** Earned the moment its condition is met, and never revisited: not taken away if the Submission behind it is rejected or a Reaction is taken back, and never awarded after the fact by a correction someone else makes. Every Bingo offers the same Achievements; an Admin can switch individual ones, or all of them, off for a Bingo (switching off only hides them). An Achievement added to the catalogue later reaches a Bingo already under way only if an Admin switches it on there, and is earned from then on, never from earlier play.
+- **Visibility:** Not secret, just not shown off: the Player sees their own list, other Players see at most their count ("5 / 16"), and Moderators can see earns in the audit log. Unearned ones show greyed out; a **Hidden** Achievement shows as a "???" slot until earned, so there's something to discover by playing around.
+- **Unlock:** Announced once, on the Player's own device, with a popup in the style of OSRS's combat achievement and collection log popups (icon, title, description underneath). If they weren't there to see it, it plays next time they open the Bingo; several queue one after another.
+- **Time of day:** Achievements about the time of day ("Night owl") go by the Player's own device clock, and must be earnable on any day of the Bingo, not only at its start or end.
+- **Should work for anyone:** Every Achievement must be earnable, in theory, by any Player. A one-off honour ("first Submission of the Bingo") or a ranking ("most Achievements") is a Title, not an Achievement.
+- **Avoid:** Badge, Trophy, Medal.
+- **Not:** Combat Achievements (the in-game OSRS ones shown in a Player's clan standing), nor the clan's own honours shown beside a Player's name (Maxed, Grandmaster, Gilded log).
