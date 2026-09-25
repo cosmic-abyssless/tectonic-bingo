@@ -457,21 +457,29 @@ export function recordPageOpened(db: Db, event: PageOpenedEvent): void {
 
 /** Long weekend's goal: Efficient Hours Bossed gained during the Bingo. */
 const LONG_WEEKEND_EHB = 20;
+/** Diversification's goal: different bosses killed at least once during the Bingo. */
+const DIVERSIFICATION_BOSSES = 10;
+
+interface WomPoint {
+  at: Date;
+  clues: number | null;
+  ehb: number | null;
+  bossKills: Record<string, number | null>;
+}
 
 /**
- * How much one Wise Old Man measure (clues, EHB) a Player gained during the Bingo, from their stored snapshots: their
- * latest one taken by its end, less a baseline — their last snapshot from before it started (or from before the
- * Achievement was switched on, if that's later), else their first one since — the same baseline the Titles' gains use.
- * A measure below the hiscores' minimum is stored as null and counts as 0: reaching it at all is a gain. Null until
- * there's a snapshot after that cutoff.
+ * A Player's Wise Old Man snapshots bracketing their play during the Bingo: their latest one taken by its end, and a
+ * baseline — their last snapshot from before it started (or from before the Achievement was switched on, if that's
+ * later), else their first one since — the same baseline the Titles' gains use. Null until there's a snapshot after
+ * that cutoff.
  */
-function womGain(q: Queryable, bingo: Bingo, userId: string, firstSwitchedOnAt: Date, pick: (s: { clues: number | null; ehb: number | null }) => number | null): { gain: number; latestAt: Date } | null {
+function womWindow(q: Queryable, bingo: Bingo, userId: string, firstSwitchedOnAt: Date): { baseline: WomPoint; latest: WomPoint } | null {
   const start = effectiveStartsAt(q, bingo);
   if (!start) return null;
   const cutoff = firstSwitchedOnAt > start ? firstSwitchedOnAt : start;
   const end = endedAt(q, bingo);
   const snapshots = q
-    .select({ at: womSnapshots.takenAt, clues: womSnapshots.clues, ehb: womSnapshots.ehb })
+    .select({ at: womSnapshots.takenAt, clues: womSnapshots.clues, ehb: womSnapshots.ehb, bossKillsJson: womSnapshots.bossKillsJson })
     .from(womSnapshots)
     .where(and(eq(womSnapshots.bingoId, bingo.id), eq(womSnapshots.userId, userId)))
     .orderBy(womSnapshots.takenAt)
@@ -480,14 +488,22 @@ function womGain(q: Queryable, bingo: Bingo, userId: string, firstSwitchedOnAt: 
   const latest = snapshots.at(-1);
   if (!latest || latest.at <= cutoff) return null;
   const baseline = snapshots.filter((s) => s.at <= cutoff).at(-1) ?? snapshots[0]!;
-  return { gain: Math.max(0, (pick(latest) ?? 0) - (pick(baseline) ?? 0)), latestAt: latest.at };
+  const point = (s: typeof latest): WomPoint => ({ at: s.at, clues: s.clues, ehb: s.ehb, bossKills: JSON.parse(s.bossKillsJson) as Record<string, number | null> });
+  return { baseline: point(baseline), latest: point(latest) };
 }
+
+// A measure below the hiscores' minimum is stored as null and counts as 0: reaching the minimum at all is a gain.
+const gainOf = (before: number | null | undefined, after: number | null | undefined) => Math.max(0, (after ?? 0) - (before ?? 0));
+const ehbGained = (w: { baseline: WomPoint; latest: WomPoint }) => gainOf(w.baseline.ehb, w.latest.ehb);
+/** Every boss (each Wise Old Man boss metric, a raid's harder mode included) with at least one more kill. */
+const bossesKilled = (w: { baseline: WomPoint; latest: WomPoint }) =>
+  Object.keys(w.latest.bossKills).filter((metric) => gainOf(w.baseline.bossKills[metric], w.latest.bossKills[metric]) >= 1).length;
 
 /**
  * A Player's Wise Old Man snapshots were just stored (womReadService.readPlayer): Leech (a clue casket opened during the
- * Bingo: any clue gain) and Long weekend (20 EHB gained during it), from womGain. Checked on every read, the final one
- * after the Bingo is Finished too, since that read is still about play while it was Live; snapshots after its end
- * don't count.
+ * Bingo: any clue gain), Long weekend (20 EHB gained during it) and Diversification (10 different bosses killed during
+ * it), from womWindow. Checked on every read, the final one after the Bingo is Finished too, since that read is still
+ * about play while it was Live; snapshots after its end don't count.
  */
 export function recordWomSnapshotsRead(db: Db, bingoId: string, userId: string): void {
   safely(() => {
@@ -503,15 +519,16 @@ export function recordWomSnapshotsRead(db: Db, bingoId: string, userId: string):
       if (!onATeam) return;
       const settings = loadSettings(tx, bingoId);
 
-      const measures: [AchievementKey, (s: { clues: number | null; ehb: number | null }) => number | null, (gain: number) => boolean][] = [
-        ["leech", (s) => s.clues, (gain) => gain > 0],
-        ["long_weekend", (s) => s.ehb, (gain) => gain >= LONG_WEEKEND_EHB],
+      const goals: [AchievementKey, (w: { baseline: WomPoint; latest: WomPoint }) => boolean][] = [
+        ["leech", (w) => gainOf(w.baseline.clues, w.latest.clues) > 0],
+        ["long_weekend", (w) => ehbGained(w) >= LONG_WEEKEND_EHB],
+        ["diversification", (w) => bossesKilled(w) >= DIVERSIFICATION_BOSSES],
       ];
-      for (const [key, pick, enough] of measures) {
+      for (const [key, reached] of goals) {
         const setting = settings.get(key);
         if (!setting) continue;
-        const gained = womGain(tx, bingo, userId, setting.firstSwitchedOnAt, pick);
-        if (gained) tryEarn(tx, bingoId, userId, key, gained.latestAt, settings, () => enough(gained.gain));
+        const window = womWindow(tx, bingo, userId, setting.firstSwitchedOnAt);
+        if (window) tryEarn(tx, bingoId, userId, key, window.latest.at, settings, () => reached(window));
       }
     });
   });
@@ -613,8 +630,8 @@ function progressFor(
   }
   if (key === "long_weekend") {
     // Whole hours: "12/20", never rounded up to a goal not yet reached.
-    const gained = womGain(db, bingo, userId, cutoff, (s) => s.ehb);
-    return { current: Math.min(Math.floor(gained?.gain ?? 0), LONG_WEEKEND_EHB), target: LONG_WEEKEND_EHB };
+    const window = womWindow(db, bingo, userId, cutoff);
+    return { current: Math.min(Math.floor(window ? ehbGained(window) : 0), LONG_WEEKEND_EHB), target: LONG_WEEKEND_EHB };
   }
   return null;
 }

@@ -45,7 +45,7 @@ const raw = (createdAt: Date, ehb: number, clues = 0) => ({
 });
 
 // A WOM that holds `snapshots` and serves them like the real one: in the date range, newest first, paged.
-function fakeWom(snapshots: ReturnType<typeof raw>[], opts: { status?: number } = {}) {
+function fakeWom(snapshots: { createdAt: string }[], opts: { status?: number } = {}) {
   const fetchImpl = vi.fn(async (input: string | URL, _init?: RequestInit) => {
     if (opts.status) return new Response("", { status: opts.status, headers: { "retry-after": "30" } });
     const url = new URL(String(input));
@@ -209,6 +209,59 @@ describe("Long weekend (an Achievement read from EHB)", () => {
     await readPlayer(db, fakeWom([raw(at(-20), 50), raw(at(-2), 100), raw(at(10), 110)]).client, { bingoId, userId: userIds[0]! }, { now: at(12) });
     expect(earned(bingoId, userIds[0]!)).toBe(false);
     expect(progress(bingoId, userIds[0]!)).toEqual({ current: 10, target: 20 });
+  });
+});
+
+describe("Diversification (an Achievement read from boss kill counts)", () => {
+  const BOSSES = ["vorkath", "zulrah", "cerberus", "kraken", "scorpia", "callisto", "vetion", "venenatis", "obor", "bryophyta", "sarachnis", "scurrius"];
+  // A snapshot with the given kill count at each boss (-1: below the hiscores' minimum, as WOM sends it).
+  const withKills = (createdAt: Date, kills: Record<string, number>) => ({
+    createdAt: createdAt.toISOString(),
+    data: {
+      bosses: Object.fromEntries(BOSSES.map((b) => [b, { kills: kills[b] ?? 50 }])),
+      activities: { clue_scrolls_all: { score: 0 } },
+      computed: { ehb: { value: 0 }, ehp: { value: 0 } },
+    },
+  });
+  const plusOneAt = (n: number) => Object.fromEntries(BOSSES.slice(0, n).map((b) => [b, 51]));
+  const earned = (bingoId: string, userId: string) =>
+    db
+      .select()
+      .from(schema.achievementEarned)
+      .all()
+      .some((e) => e.bingoId === bingoId && e.userId === userId && e.achievementKey === "diversification");
+
+  it("is earned at 10 different bosses killed at least once since the Bingo started", async () => {
+    const { bingoId, userIds } = seed();
+    db.transaction((tx) => achievementService.initializeAchievementSettings(tx, bingoId, START));
+    await readPlayer(db, fakeWom([withKills(at(-2), {}), withKills(at(5), plusOneAt(9))]).client, { bingoId, userId: userIds[0]! }, { now: at(6) });
+    expect(earned(bingoId, userIds[0]!)).toBe(false);
+
+    await readPlayer(db, fakeWom([withKills(at(5), plusOneAt(9)), withKills(at(9), plusOneAt(10))]).client, { bingoId, userId: userIds[0]! }, { now: at(10) });
+    expect(earned(bingoId, userIds[0]!)).toBe(true);
+  });
+
+  it("counts many kills at one boss as one boss", async () => {
+    const { bingoId, userIds } = seed();
+    db.transaction((tx) => achievementService.initializeAchievementSettings(tx, bingoId, START));
+    await readPlayer(db, fakeWom([withKills(at(-2), {}), withKills(at(5), { ...plusOneAt(9), vorkath: 500 })]).client, { bingoId, userId: userIds[0]! }, { now: at(6) });
+    expect(earned(bingoId, userIds[0]!)).toBe(false);
+  });
+
+  it("counts reaching a boss's hiscores minimum as a kill there", async () => {
+    const { bingoId, userIds } = seed();
+    db.transaction((tx) => achievementService.initializeAchievementSettings(tx, bingoId, START));
+    const unranked = Object.fromEntries(BOSSES.map((b) => [b, -1]));
+    const ranked = Object.fromEntries(BOSSES.slice(0, 10).map((b) => [b, 5]));
+    await readPlayer(db, fakeWom([withKills(at(-2), unranked), withKills(at(5), { ...unranked, ...ranked })]).client, { bingoId, userId: userIds[0]! }, { now: at(6) });
+    expect(earned(bingoId, userIds[0]!)).toBe(true);
+  });
+
+  it("doesn't count kills from before the Bingo started", async () => {
+    const { bingoId, userIds } = seed();
+    db.transaction((tx) => achievementService.initializeAchievementSettings(tx, bingoId, START));
+    await readPlayer(db, fakeWom([withKills(at(-20), {}), withKills(at(-2), plusOneAt(12)), withKills(at(5), plusOneAt(12))]).client, { bingoId, userId: userIds[0]! }, { now: at(6) });
+    expect(earned(bingoId, userIds[0]!)).toBe(false);
   });
 });
 
