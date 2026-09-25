@@ -1,13 +1,15 @@
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { ValuedAs } from "@bingo/shared";
+import type { PlayerTitleFacts, TitleAwardFact, ValuedAs } from "@bingo/shared";
 import { valuedAsOf } from "./gpValueService";
 import * as schema from "../db/schema";
-import { bingoLines, claims, nodeEdges, nodes, stageTransitions, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
+import { bingoLines, bingos, claims, nodeEdges, nodes, stageTransitions, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
 import { findAncestorIds, getFullGraph } from "./graphService";
 import { applyExclusivity } from "./exclusivityService";
 import { creditAwards, type AwardCredit, type CreditClaim } from "./pointsShare";
 import { rsnsInBingo } from "./playerNames";
+import { effectiveStartsAt, endedAt } from "./bingoStart";
+import { gainsOf, lastReadAt, loadTimelines } from "./womReadService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -228,7 +230,7 @@ export function getPointsShares(db: Db, bingoId: string): Map<string, { teamId: 
 
 // Every member of every team with their approved submissions and Points share, highest share first. Members
 // with nothing approved yet are included at 0, so a team sees its whole roster.
-export function getContributionCounts(db: Db, bingoId: string): ContributionCount[] {
+export function getContributionCounts(db: Db, bingoId: string, shares = getPointsShares(db, bingoId)): ContributionCount[] {
   const teamIds = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.id);
   if (teamIds.length === 0) return [];
 
@@ -252,7 +254,6 @@ export function getContributionCounts(db: Db, bingoId: string): ContributionCoun
     if (!teamByUser.has(r.userId)) teamByUser.set(r.userId, r.teamId);
   }
 
-  const shares = getPointsShares(db, bingoId);
   const nodeIds = [...new Set([...shares.values()].flatMap((s) => s.credits.flatMap((c) => [c.nodeId, ...c.shares.flatMap((sh) => sh.claims.map((cl) => cl.nodeId))])))];
   const labels = labelNodes(db, bingoId, nodeIds);
   const leafRows = nodeIds.length ? db.select({ id: nodes.id, label: nodes.label, itemName: nodes.itemName }).from(nodes).where(inArray(nodes.id, nodeIds)).all() : [];
@@ -372,6 +373,103 @@ export function getGpDrops(db: Db, bingoId: string): GpDrop[] {
   }));
 }
 
+// Each tile's node, for every node under it: which Tile a Task or Part award counts towards.
+function tileOfNodes(childrenOf: Map<string, string[]>, tileNodeIds: string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const tileNodeId of tileNodeIds) {
+    const walk = (id: string) => {
+      for (const child of childrenOf.get(id) ?? []) {
+        if (out.has(child)) continue;
+        out.set(child, tileNodeId);
+        walk(child);
+      }
+    };
+    walk(tileNodeId);
+  }
+  return out;
+}
+
+/**
+ * What Titles (shared/titles.ts) are picked from: one entry per Player of `contributions`, built from their awards
+ * (with when each completed and whether they closed it), their Submissions and Claims, and their Wise Old Man gains.
+ */
+export function getTitleFacts(db: Db, bingoId: string, contributions: ContributionCount[], shares: ReturnType<typeof getPointsShares>): PlayerTitleFacts[] {
+  const teamIds = [...new Set(contributions.map((c) => c.teamId))];
+  if (teamIds.length === 0) return [];
+  const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get()!;
+
+  const stateRows = db.select().from(teamNodeState).where(inArray(teamNodeState.teamId, teamIds)).all();
+  const completedAt = new Map(stateRows.map((r) => [`${r.teamId}:${r.nodeId}`, r.completedAt]));
+  const teamAwardPoints = new Map<string, number>();
+  for (const r of stateRows) teamAwardPoints.set(r.teamId, (teamAwardPoints.get(r.teamId) ?? 0) + r.pointsAwarded);
+
+  const tileRows = db.select({ nodeId: tiles.nodeId, name: tiles.name }).from(tiles).where(eq(tiles.bingoId, bingoId)).all();
+  const tileName = new Map(tileRows.map((t) => [t.nodeId, t.name]));
+  const tileOf = tileOfNodes(getFullGraph(db, bingoId).childrenOf, tileRows.map((t) => t.nodeId));
+
+  const teamByUser = new Map(contributions.map((c) => [c.userId, c.teamId]));
+  const count = () => new Map<string, number>();
+  const bump = (m: Map<string, number>, userId: string, by = 1) => m.set(userId, (m.get(userId) ?? 0) + by);
+  const approved = count();
+  const rejected = count();
+  const posted = count();
+  for (const sub of db.select().from(submissions).where(inArray(submissions.teamId, teamIds)).all()) {
+    // The poster counts only when they're on the Team (a Moderator posting for a Team isn't one of its Players).
+    const postedByTeammate = sub.postedByUserId && sub.postedByUserId !== sub.submittedByUserId && teamByUser.get(sub.postedByUserId) === sub.teamId;
+    if (sub.status === "approved") {
+      bump(approved, sub.submittedByUserId);
+      if (postedByTeammate) bump(posted, sub.postedByUserId!);
+    } else if (sub.status === "rejected") {
+      bump(rejected, postedByTeammate ? sub.postedByUserId! : sub.submittedByUserId);
+    }
+  }
+
+  const items = new Map<string, Set<string>>();
+  const quantity = count();
+  const itemClaims = db
+    .select({ userId: submissions.submittedByUserId, itemName: claims.itemName, quantity: claims.quantity })
+    .from(claims)
+    .innerJoin(submissions, eq(claims.submissionId, submissions.id))
+    .where(and(inArray(submissions.teamId, teamIds), eq(submissions.status, "approved"), isNotNull(claims.itemName)))
+    .all();
+  for (const c of itemClaims) {
+    items.set(c.userId, (items.get(c.userId) ?? new Set()).add(c.itemName!.toLowerCase()));
+    bump(quantity, c.userId, c.quantity);
+  }
+
+  const start = effectiveStartsAt(db, bingo);
+  const end = endedAt(db, bingo);
+  const timelines = start ? loadTimelines(db, bingoId) : new Map();
+
+  return contributions.map((c) => {
+    const awards: TitleAwardFact[] = (shares.get(c.userId)?.credits ?? []).map((credit) => {
+      const tileNodeId = credit.kind === "line" ? null : credit.kind === "tile" ? credit.nodeId : (tileOf.get(credit.nodeId) ?? null);
+      return {
+        kind: credit.kind,
+        tileNodeId,
+        tileName: tileNodeId ? (tileName.get(tileNodeId) ?? null) : null,
+        points: credit.shares[0]!.points,
+        completedAt: (completedAt.get(`${c.teamId}:${credit.nodeId}`) ?? new Date(0)).toISOString(),
+        closed: credit.kind === "task" && credit.closedBy.includes(c.userId),
+      };
+    });
+    const timeline = timelines.get(c.userId);
+    return {
+      userId: c.userId,
+      teamId: c.teamId,
+      pointsShare: c.pointsShare,
+      teamAwardPoints: teamAwardPoints.get(c.teamId) ?? 0,
+      awards,
+      approvedSubmissions: approved.get(c.userId) ?? 0,
+      rejectedSubmissions: rejected.get(c.userId) ?? 0,
+      postedForTeammates: posted.get(c.userId) ?? 0,
+      distinctItems: items.get(c.userId)?.size ?? 0,
+      totalQuantity: quantity.get(c.userId) ?? 0,
+      wom: start && timeline ? gainsOf(timeline, start, end) : null,
+    };
+  });
+}
+
 export interface Stats {
   pointsOverTime: PointsOverTimePoint[];
   timeline: TimelineEvent[];
@@ -379,16 +477,25 @@ export interface Stats {
   heatmap: TileHeatmapCell[];
   teamGpGained: TeamGpGained[];
   drops: GpDrop[];
+  titleFacts: PlayerTitleFacts[];
+  titleContext: { liveAt: Date | null; endedAt: Date | null };
+  womReadAt: Date | null;
 }
 
 export function getStats(db: Db, bingoId: string): Stats {
+  const shares = getPointsShares(db, bingoId);
+  const contributions = getContributionCounts(db, bingoId, shares);
+  const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get()!;
   return {
     pointsOverTime: getPointsOverTime(db, bingoId),
     timeline: getTimeline(db, bingoId),
-    contributions: getContributionCounts(db, bingoId),
+    contributions,
     heatmap: getTileHeatmap(db, bingoId),
     teamGpGained: getTeamGpGained(db, bingoId),
     drops: getGpDrops(db, bingoId),
+    titleFacts: getTitleFacts(db, bingoId, contributions, shares),
+    titleContext: { liveAt: effectiveStartsAt(db, bingo), endedAt: endedAt(db, bingo) },
+    womReadAt: lastReadAt(db, bingoId),
   };
 }
 
@@ -404,6 +511,9 @@ export function filterStatsForTeam(stats: Stats, teamId: string): Stats {
     heatmap: own(stats.heatmap),
     teamGpGained: own(stats.teamGpGained),
     drops: own(stats.drops),
+    titleFacts: own(stats.titleFacts),
+    titleContext: stats.titleContext,
+    womReadAt: stats.womReadAt,
   };
 }
 

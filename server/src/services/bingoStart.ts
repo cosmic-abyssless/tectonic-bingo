@@ -27,3 +27,15 @@ export function lastWentLiveAt(db: Db | Tx, bingoId: string): Date | null {
 export function effectiveStartsAt(db: Db | Tx, bingo: { id: string; startsAt: Date | null }): Date | null {
   return bingo.startsAt ?? lastWentLiveAt(db, bingo.id);
 }
+
+/** When the bingo moved to "complete" (the last time it did), or null while it isn't complete. */
+export function endedAt(db: Db | Tx, bingo: { id: string; stage: string }): Date | null {
+  if (bingo.stage !== "complete") return null;
+  const row = db
+    .select({ at: stageTransitions.createdAt })
+    .from(stageTransitions)
+    .where(and(eq(stageTransitions.bingoId, bingo.id), eq(stageTransitions.toStage, "complete")))
+    .orderBy(desc(stageTransitions.createdAt))
+    .get();
+  return row?.at ?? null;
+}

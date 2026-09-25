@@ -1,10 +1,13 @@
-import type { ContributionCount } from "@bingo/shared";
+import { titlesHeldBy, type ContributionCount, type PickedTitle } from "@bingo/shared";
 import { useBingo, useStats } from "../../api/queries";
+import { pickStatsTitles } from "./titles";
 
 export interface PlayerContribution {
   contribution: ContributionCount;
   teamColor: string | null;
   rank: { place: number; of: number };
+  /** Every Title they hold among the Players the viewer may see (the whole Bingo unfiltered), in priority order. */
+  titles: PickedTitle[];
 }
 
 /**
@@ -26,5 +29,6 @@ export function usePlayerContribution(slug: string, userId: string): PlayerContr
     contribution,
     teamColor: shell.teams.find((t) => t.id === contribution.teamId)?.color ?? null,
     rank: { place: teammates.findIndex((c) => c.userId === userId) + 1, of: teammates.length },
+    titles: titlesHeldBy(pickStatsTitles(stats, stats.titleFacts), userId),
   };
 }

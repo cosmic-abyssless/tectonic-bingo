@@ -29,6 +29,8 @@ import {
   tiles,
   users,
   womPastCompetitions,
+  womReads,
+  womSnapshots,
 } from "../db/schema";
 import { ServiceError } from "./errors";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
@@ -282,6 +284,8 @@ export function deleteBingo(db: Db, bingoId: string): void {
     tx.delete(nodes).where(eq(nodes.bingoId, bingoId)).run();
     tx.delete(stageTransitions).where(eq(stageTransitions.bingoId, bingoId)).run();
     tx.delete(bingoModerators).where(eq(bingoModerators.bingoId, bingoId)).run();
+    tx.delete(womSnapshots).where(eq(womSnapshots.bingoId, bingoId)).run();
+    tx.delete(womReads).where(eq(womReads.bingoId, bingoId)).run();
     // Detach, don't delete: a past WOM competition snapshot is deliberately
     // independent of the bingo it came from (issue #128) — it should outlive
     // the bingo the same way the audit log does, not get swept up with it.

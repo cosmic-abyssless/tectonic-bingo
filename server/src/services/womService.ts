@@ -42,12 +42,14 @@ export class WomClient {
    * (see parseSnapshots). Null if any page is unreachable or rate-limited. Only reads what WOM already has:
    * it never asks WOM to update the player.
    *
-   * Each page is one request against WOM's rate limit. A caller reading repeatedly should store what it has and
-   * start from its last stored snapshot, not re-read the whole Bingo every time.
+   * Each page is one request against WOM's rate limit: `beforeEachPage` is awaited before each, for a caller that
+   * paces its requests. A caller reading repeatedly should store what it has and start from its last stored
+   * snapshot, not re-read the whole Bingo every time.
    */
-  async getSnapshots(rsn: string, start: Date, end: Date): Promise<unknown[] | null> {
+  async getSnapshots(rsn: string, start: Date, end: Date, opts: { beforeEachPage?: () => Promise<void> } = {}): Promise<unknown[] | null> {
     const snapshots: unknown[] = [];
     for (let offset = 0; ; offset += SNAPSHOTS_PAGE_SIZE) {
+      await opts.beforeEachPage?.();
       const query = new URLSearchParams({
         startDate: start.toISOString(),
         endDate: end.toISOString(),
@@ -59,6 +61,16 @@ export class WomClient {
       snapshots.push(...page);
       if (page.length < SNAPSHOTS_PAGE_SIZE) return snapshots;
     }
+  }
+
+  /** Until when WOM's 429 holds new requests off (ms since epoch); in the past when it doesn't. */
+  get rateLimitedUntilMs(): number {
+    return this.rateLimitedUntil;
+  }
+
+  /** Whether requests are sent with an API key, which raises WOM's limit from 20 to 100 a minute. */
+  get hasApiKey(): boolean {
+    return this.apiKey !== null;
   }
 
   private async get(path: string, context: Record<string, unknown>): Promise<unknown | null> {

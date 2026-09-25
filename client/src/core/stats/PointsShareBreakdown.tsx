@@ -1,4 +1,4 @@
-import type { ContributionAward, ContributionCount } from "@bingo/shared";
+import type { ContributionAward, ContributionCount, PickedTitle } from "@bingo/shared";
 import { FALLBACK_TEAM_COLOR } from "./PointsChart";
 import { formatGp } from "../ui/gp";
 
@@ -57,10 +57,11 @@ function AwardRow({ award, color }: { award: ContributionAward; color: string })
 }
 
 /** Where a player's Points share (CONTEXT.md) came from, grouped by kind of award. */
-export function PointsShareBreakdown({ contribution, teamColor, rank }: { contribution: ContributionCount; teamColor: string | null; rank: { place: number; of: number } }) {
+export function PointsShareBreakdown({ contribution, teamColor, rank, titles }: { contribution: ContributionCount; teamColor: string | null; rank: { place: number; of: number }; titles: PickedTitle[] }) {
   const color = teamColor ?? FALLBACK_TEAM_COLOR;
   return (
     <div className="space-y-4">
+      {titles.length > 0 && <HeldTitles userId={contribution.userId} titles={titles} />}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Figure label="Points share" value={formatShare(contribution.pointsShare)} />
         <Figure label="Submissions" value={String(contribution.approvedSubmissions)} />
@@ -106,5 +107,24 @@ function Figure({ label, value }: { label: string; value: string }) {
       <div className="text-[11px] tracking-wide text-on-surface-subtle uppercase">{label}</div>
       <div className="num mt-0.5 truncate text-lg font-semibold text-on-surface">{value}</div>
     </div>
+  );
+}
+
+// Every Title the Player holds (shared/titles.ts), with the number behind each.
+function HeldTitles({ userId, titles }: { userId: string; titles: PickedTitle[] }) {
+  return (
+    <section className="rounded-lg border border-outline">
+      <header className="border-b border-outline bg-surface-hover/50 px-3 py-2 text-xs font-semibold tracking-wide text-on-surface uppercase">Titles</header>
+      <ul className="divide-y divide-outline px-3">
+        {titles.map(({ title, holders }) => (
+          <li key={title.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2">
+            <span className="min-w-0 text-sm">
+              <span className="font-semibold text-on-surface">{title.name}</span> <span className="text-xs text-on-surface-subtle italic">{title.flavour}</span>
+            </span>
+            <span className="num text-xs text-on-surface-muted">{holders.find((h) => h.userId === userId)?.text}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

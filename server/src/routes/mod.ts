@@ -17,6 +17,7 @@ import { applyRosterNames } from "../services/pairingNames";
 import * as pairingService from "../services/pairingService";
 import * as teamService from "../services/teamService";
 import { syncWomCompetition, syncWomCompetitionAfterDraft } from "../services/womCompetitionService";
+import { getWomReadQueue, queueBingoReads } from "../services/womReadService";
 import { archiveBingoCompetition } from "../services/pastWomCompetitionService";
 import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
 import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
@@ -154,6 +155,8 @@ router.post(
     // once it's actually over, so its per-player gains survive independently
     // of WOM's own record. No-ops when the bingo has no linked competition.
     if (toStage === "complete") void archiveBingoCompetition(db, bingo.id);
+    // Wise Old Man snapshots for Titles: a first read (with the baseline) as it goes live, and the final one as it ends.
+    if (toStage === "live" || toStage === "complete") queueBingoReads(db, getWomReadQueue(db), bingo.id);
     res.json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );

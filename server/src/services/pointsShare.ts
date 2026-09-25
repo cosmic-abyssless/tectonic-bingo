@@ -18,6 +18,7 @@ export interface CreditedClaim {
   itemName: string | null;
   /** How much of the claim counted: a SUM's last claim only counts for what was still needed. */
   quantity: number;
+  reviewedAt: Date;
 }
 
 export interface AwardShare {
@@ -35,6 +36,11 @@ export interface AwardCredit {
   kind: "task" | "tile" | "line";
   points: number;
   shares: AwardShare[];
+  /**
+   * Tasks and Parts: the Players whose Claim was the last one approved on the path that decided the award (more
+   * than one only when their Claims were approved at the same moment). Empty for tile and line bonuses.
+   */
+  closedBy: string[];
 }
 
 type Fractions = Map<string, number>; // claimId → fraction of a node, summing to 1 for a complete node
@@ -126,10 +132,17 @@ export function creditAwards(input: {
       const share = byUser.get(c.userId) ?? { userId: c.userId, points: 0, fraction: 0, claims: [] };
       share.fraction += fraction;
       share.points += fraction * points;
-      share.claims.push({ claimId, submissionId: c.submissionId, nodeId: c.nodeId, itemName: c.itemName, quantity: counted.get(claimId) ?? c.quantity });
+      share.claims.push({ claimId, submissionId: c.submissionId, nodeId: c.nodeId, itemName: c.itemName, quantity: counted.get(claimId) ?? c.quantity, reviewedAt: c.reviewedAt });
       byUser.set(c.userId, share);
     }
     return [...byUser.values()];
+  }
+
+  // Who approved last on the deciding path: the Claim that tipped the award over the line.
+  function closers(fractions: Fractions): string[] {
+    const deciding = [...fractions.keys()].map((id) => claimById.get(id)!);
+    const last = Math.max(...deciding.map((c) => c.reviewedAt.getTime()));
+    return [...new Set(deciding.filter((c) => c.reviewedAt.getTime() === last).map((c) => c.userId))];
   }
 
   const descendants = (rootId: string): Set<string> => {
@@ -148,7 +161,7 @@ export function creditAwards(input: {
   // Tasks and Parts first: they are what tile shares are built from.
   const taskCredits: AwardCredit[] = input.awards
     .filter((a) => !tileNodeIds.has(a.nodeId) && !lineNodeIds.has(a.nodeId))
-    .map((a) => ({ nodeId: a.nodeId, kind: "task", points: a.points, shares: sharesFrom(deciding(a.nodeId), a.points) }));
+    .map((a) => ({ nodeId: a.nodeId, kind: "task", points: a.points, shares: sharesFrom(deciding(a.nodeId), a.points), closedBy: closers(deciding(a.nodeId)) }));
 
   // A player's share of a tile: their part of the points credited inside it. A tile whose parts scored
   // nothing falls back to the claims that completed it.
@@ -180,7 +193,7 @@ export function creditAwards(input: {
     .map((a) => {
       if (tileNodeIds.has(a.nodeId)) {
         const shares = [...tileShare(a.nodeId)].map(([userId, fraction]) => ({ userId, fraction, points: fraction * a.points, claims: [] }));
-        return { nodeId: a.nodeId, kind: "tile" as const, points: a.points, shares };
+        return { nodeId: a.nodeId, kind: "tile" as const, points: a.points, shares, closedBy: [] };
       }
       const lineTiles = (childrenOf.get(a.nodeId) ?? []).filter((id) => tileNodeIds.has(id));
       const byUser = new Map<string, AwardShare>();
@@ -194,7 +207,7 @@ export function creditAwards(input: {
           byUser.set(userId, share);
         }
       }
-      return { nodeId: a.nodeId, kind: "line" as const, points: a.points, shares: [...byUser.values()] };
+      return { nodeId: a.nodeId, kind: "line" as const, points: a.points, shares: [...byUser.values()], closedBy: [] };
     });
 
   return [...taskCredits, ...bonusCredits];

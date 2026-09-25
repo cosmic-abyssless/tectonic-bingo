@@ -209,6 +209,14 @@ A Player's portion of their Team's points, credited from the Claims that complet
 The Bingo's stats page: points over time, the timeline, top contributors (ranked by Points share) and tile completion.
 - **Rules:** Moderators see every Team at every stage. While the Bingo is Live a Player sees only their own Team; once it is Finished everyone sees every Team. "First to complete" events are shown to Moderators throughout and to Players only once the Bingo is Finished.
 
+### Title
+A tongue-in-cheek label a Player holds on the Stats page for how they played ("Carry", "Closer", "Butterfingers"), recomputed as the stats change.
+- **Rules:** Each Title goes to the Players tied at the best value among the Players shown, once they meet its minimum. With a Team selected in the team filter it's that Team's; unfiltered, the Bingo's. Titles follow the Stats visibility rules. A Player's chip in the contributors table shows their highest-priority Title, and their profile lists every one they hold. Some Titles use their Wise Old Man gains during the Bingo (EHB, EHP, clues), read from what Wise Old Man already has (never an update request), so they lag until the Player updates, and they freeze once the Bingo is Finished.
+- **Not:** A permanent award. Titles belong to one Bingo and move as it goes.
+
+### Hidden Title
+A Title nobody knows exists until someone holds it: it shows up only then, marked as a hidden Title unlocked, and there's no hint of it before.
+
 ### Luck
 How unlikely a drop, or a dry streak, was: "1 in N". Judged against the Item's real drop rate and the kills the Player gained at its bosses during the Bingo, as counted by Wise Old Man.
 - **Rules:** A drop is judged over the kills since the Player's previous drop of the same Item (or the Bingo's start), up to the drop, so grinding on afterwards doesn't lessen it. The kills are never understated: a count missing from Wise Old Man makes a drop look less lucky, never more. A dry streak is judged against every Item on the Board the boss drops, and ends at the Player's last drop of one of them. Only Items from bosses Wise Old Man counts have luck (not Slayer monsters, minigames or skilling). A raid counts one completion as one kill, at a typical run's rates.
