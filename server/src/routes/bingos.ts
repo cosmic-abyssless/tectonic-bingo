@@ -3,6 +3,9 @@ import { privateRevalidate } from "../middleware/cacheControl";
 import { Router } from "express";
 import fs from "fs";
 import type { AccountTypesResponse, ClaimInput, PlayerProfile } from "@bingo/shared";
+import { isAchievementKey } from "@bingo/shared";
+import { now as clockNow } from "../clock";
+import * as achievementService from "../services/achievementService";
 import { UPLOADS_DIR } from "../config";
 import { imageUpload } from "../middleware/upload";
 import { requireAuth } from "../middleware/requireAuth";
@@ -608,6 +611,7 @@ router.get(
       answers: signup && seesAnswers ? signup.answers.filter((a) => visibleQuestions.has(a.questionId)) : null,
       tectonicUnavailable: tectonic.unavailable,
       pastBingoStats: getPastParticipationsForUser(db, userId),
+      achievements: achievementService.getAchievementCount(db, bingo, userId),
     };
     res.json({ player });
   }),
@@ -716,6 +720,56 @@ router.patch(
     broadcast({ type: "team_updated", bingoId: req.bingo!.id, payload: { teamId: team.id } });
     void syncWomCompetition(db, req.bingo!.id);
     res.json({ team: updated });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Achievements (CONTEXT.md "Achievement")
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/:slug/achievements",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    res.json(achievementService.getMyAchievements(db, req.bingo!, req.user!.id));
+  }),
+);
+
+// The player's device reports which unlock popups it has already played, so they don't play again.
+router.post(
+  "/:slug/achievements/popups-shown",
+  requireAuth,
+  requireBingo,
+  auditSkip("device reporting a popup already played — UI state, nothing to audit"),
+  asyncHandler(async (req, res) => {
+    const { keys } = req.body as { keys?: unknown[] };
+    const valid = Array.isArray(keys) ? keys.filter(isAchievementKey) : [];
+    achievementService.markPopupsShown(db, req.bingo!.id, req.user!.id, valid);
+    res.status(204).end();
+  }),
+);
+
+// A Tile's details, the Rules, or the Stats page were opened. Fire-and-forget: always 204, even for a viewer not on
+// a team (achievementService itself no-ops outside Live too) — the client never needs to handle a failure here.
+router.post(
+  "/:slug/achievements/opened",
+  requireAuth,
+  requireBingo,
+  auditSkip("fire-and-forget page-open signal for Achievements — no visible state to audit"),
+  asyncHandler(async (req, res) => {
+    const bingo = req.bingo!;
+    const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
+    if (myTeam) {
+      const body = req.body as { kind?: unknown; tileId?: unknown };
+      const base = { bingoId: bingo.id, userId: req.user!.id, teamId: myTeam.id, occurredAt: clockNow() };
+      if (body.kind === "tile" && typeof body.tileId === "string") {
+        achievementService.recordPageOpened(db, { ...base, kind: "tile", tileId: body.tileId });
+      } else if (body.kind === "rules" || body.kind === "stats") {
+        achievementService.recordPageOpened(db, { ...base, kind: body.kind });
+      }
+    }
+    res.status(204).end();
   }),
 );
 
