@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chipTitles, DEFAULT_TITLE_SETTINGS, oneIn, pickTitles, shortGp, TITLES, titlesHeldBy, type LuckFacts, type PlayerTitleFacts, type TitleAwardFact, type TitleContext, type TitleId } from "@bingo/shared";
+import { DEFAULT_TITLE_SETTINGS, oneIn, pickTitles, shortGp, TITLES, titlesByHolder, titlesHeldBy, type LuckFacts, type PlayerTitleFacts, type TitleAwardFact, type TitleContext, type TitleId } from "@bingo/shared";
 
 const HOUR = 60 * 60 * 1000;
 const LIVE_AT = new Date("2026-01-01T00:00:00Z");
@@ -103,7 +103,6 @@ describe("pickTitles", () => {
   it("leaves Players without Wise Old Man data out of its Titles", () => {
     const pool = [player("a"), player("b", { wom: { ehb: 12, ehp: 0, clues: 0, asOf: at(5).toISOString() } })];
     expect(holdersOf(pool, "grinder")).toEqual(["b"]);
-    expect(holdersOf(pool, "skiller")).toBeUndefined();
   });
 
   it("needs 3 approved Submissions for Sniper, and ranks by points per Submission", () => {
@@ -208,12 +207,12 @@ describe("Title settings", () => {
   });
 });
 
-describe("chipTitles and titlesHeldBy", () => {
-  it("shows a Player's highest-priority Title on the chip, and lists all of them", () => {
+describe("titlesByHolder and titlesHeldBy", () => {
+  it("lists every Title a Player holds, in priority order", () => {
     const pool = [player("a", { pointsShare: 20, distinctItems: 5, rejectedSubmissions: 3 }), player("b", { pointsShare: 10 })];
     const picked = pickTitles(pool, live(48));
-    expect(chipTitles(picked).get("a")?.id).toBe("carry");
+    expect(titlesByHolder(picked).get("a")?.map((t) => t.id)).toEqual(["carry", "butterfingers", "collector"]);
     expect(titlesHeldBy(picked, "a").map((p) => p.title.id)).toEqual(["carry", "butterfingers", "collector"]);
-    expect(chipTitles(picked).has("b")).toBe(false);
+    expect(titlesByHolder(picked).has("b")).toBe(false);
   });
 });

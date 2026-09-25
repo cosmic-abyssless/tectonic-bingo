@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { chipTitles } from "@bingo/shared";
+import { titlesByHolder } from "@bingo/shared";
 import { useBingo, useBoard, useStats } from "../../api/queries";
 import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { inclusionFilter } from "../ui/inclusionFilter";
@@ -54,7 +54,7 @@ export function StatsView({ slug }: { slug: string }) {
 
   // Titles go to the best among the Players shown: a Team's own Carry with one Team selected, the Bingo's otherwise.
   const titles = useMemo(() => (stats && filtered ? pickStatsTitles(stats, filtered.titleFacts) : []), [stats, filtered]);
-  const chips = useMemo(() => chipTitles(titles), [titles]);
+  const titlesByPlayer = useMemo(() => titlesByHolder(titles), [titles]);
 
   if (error) return <div className="py-24 text-center text-sm text-on-surface-muted">{error.message}</div>;
   if (!shell || !stats || !filtered) return <div className="py-24 text-center text-sm text-on-surface-muted">Loading…</div>;
@@ -83,7 +83,7 @@ export function StatsView({ slug }: { slug: string }) {
       </Section>
 
       <Section title="Top contributors">
-        <ContributorsTable contributions={filtered.contributions} teams={filtered.teams} chips={chips} />
+        <ContributorsTable contributions={filtered.contributions} teams={filtered.teams} titles={titlesByPlayer} />
       </Section>
 
       <Section title="GP gained">

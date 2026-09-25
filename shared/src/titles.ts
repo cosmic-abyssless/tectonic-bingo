@@ -108,8 +108,6 @@ export type TitleId =
   | "butterfingers"
   | "dry"
   | "sniper"
-  | "clue_goblin"
-  | "skiller"
   | "collector"
   | "tourist"
   | "specialist"
@@ -117,10 +115,19 @@ export type TitleId =
   | "postman"
   | "overachiever";
 
+/** What a Title is about, for grouping and colour: scoring, luck, grinding, or a mishap. */
+export type TitleGroup = "points" | "luck" | "grind" | "mishaps";
+
+/** The groups in the order they're shown. */
+export const TITLE_GROUPS: TitleGroup[] = ["points", "luck", "grind", "mishaps"];
+
 export interface TitleDefinition {
   id: TitleId;
   name: string;
   flavour: string;
+  /** How it's judged, in a sentence or so. Shown on the stats page. */
+  explanation: string;
+  group: TitleGroup;
   /** Shown only once someone holds it: nobody knows it exists until then. */
   hidden: boolean;
   /** "wom" Titles come from Wise Old Man gains, and show how fresh those are. */
@@ -200,12 +207,14 @@ function topTile(facts: PlayerTitleFacts): { name: string; fraction: number } | 
   return best && { name: best.name, fraction: best.points / facts.pointsShare };
 }
 
-/** Every Title, in chip priority order: a Player holding several shows the first. Minimums are starting values. */
+/** Every Title, in priority order: a Player's chips list theirs in this order. Minimums are starting values. */
 export const TITLES: TitleDefinition[] = [
   {
     id: "on_fire",
     name: "On Fire",
     flavour: "Can't stop, won't stop.",
+    explanation: "The most points share earned in the last 24 hours. Once the bingo has finished, in its final 24 hours.",
+    group: "points",
     hidden: false,
     source: "bingo",
     measure: (f, ctx) => {
@@ -225,6 +234,8 @@ export const TITLES: TitleDefinition[] = [
     id: "carry",
     name: "Carry",
     flavour: "Put the team on their back.",
+    explanation: "The biggest part of their team's points: their points share out of every point the team was awarded, point adjustments left out.",
+    group: "points",
     hidden: false,
     source: "bingo",
     measure: (f) => (f.teamAwardPoints > 0 ? f.pointsShare / f.teamAwardPoints : null),
@@ -237,6 +248,8 @@ export const TITLES: TitleDefinition[] = [
     id: "closer",
     name: "Closer",
     flavour: "Always there for the last piece.",
+    explanation: "The most tasks finished off: their submission was the last one approved on the path that completed the task.",
+    group: "points",
     hidden: false,
     source: "bingo",
     measure: (f) => f.awards.filter((a) => a.kind === "task" && a.closed).length,
@@ -249,6 +262,8 @@ export const TITLES: TitleDefinition[] = [
     id: "clutch",
     name: "Clutch",
     flavour: "The drop the team was waiting for.",
+    explanation: "The luckiest drop a task still needed. Pricier drops count for more.",
+    group: "luck",
     hidden: false,
     source: "wom",
     // The calculator only keeps drops that were at least 1 in 10 (luck.ts).
@@ -265,6 +280,8 @@ export const TITLES: TitleDefinition[] = [
     id: "grinder",
     name: "Grinder",
     flavour: "Lives at the boss.",
+    explanation: "The most efficient hours bossed (EHB) gained during the bingo, by Wise Old Man.",
+    group: "grind",
     hidden: false,
     source: "wom",
     measure: (f) => f.wom?.ehb ?? null,
@@ -277,6 +294,8 @@ export const TITLES: TitleDefinition[] = [
     id: "spoon",
     name: "Spoon",
     flavour: "Born with it.",
+    explanation: "The luckiest drops during the bingo. One rare drop beats a pile of common ones.",
+    group: "luck",
     hidden: false,
     source: "wom",
     // The calculator only keeps a total of at least 1 in 10 (luck.ts).
@@ -293,6 +312,8 @@ export const TITLES: TitleDefinition[] = [
     id: "butterfingers",
     name: "Butterfingers",
     flavour: "Maybe crop the screenshot next time.",
+    explanation: "The most of their submissions the mods rejected, whether they posted them or someone posted for them.",
+    group: "mishaps",
     hidden: true,
     source: "bingo",
     measure: (f) => f.rejectedSubmissions,
@@ -305,6 +326,8 @@ export const TITLES: TitleDefinition[] = [
     id: "dry",
     name: "Dry",
     flavour: "It's coming. Any kill now.",
+    explanation: "The driest streak at a boss that drops something on the board, since their last board drop from it.",
+    group: "luck",
     hidden: true,
     source: "wom",
     // The calculator only keeps a streak of at least 1 in 10 (luck.ts).
@@ -321,6 +344,8 @@ export const TITLES: TitleDefinition[] = [
     id: "sniper",
     name: "Sniper",
     flavour: "Few shots, all of them count.",
+    explanation: "The most points share per approved submission they posted.",
+    group: "points",
     hidden: true,
     source: "bingo",
     measure: (f) => (f.approvedSubmissions > 0 ? f.pointsShare / f.approvedSubmissions : null),
@@ -330,33 +355,11 @@ export const TITLES: TitleDefinition[] = [
     format: (v) => `${num(v, 2)} points per submission`,
   },
   {
-    id: "clue_goblin",
-    name: "Clue Goblin",
-    flavour: "Just one more casket.",
-    hidden: true,
-    source: "wom",
-    measure: (f) => f.wom?.clues ?? null,
-    minimum: { default: 5, label: "Clues completed", whole: true },
-    qualifies: (v, _f, min) => v >= min,
-    requirement: (min) => `${plural(min, "clue")} completed`,
-    format: (v) => `${plural(v, "clue")} completed`,
-  },
-  {
-    id: "skiller",
-    name: "Skiller",
-    flavour: "Wrong event, friend.",
-    hidden: true,
-    source: "wom",
-    measure: (f) => f.wom?.ehp ?? null,
-    minimum: { default: 5, label: "EHP gained", whole: false },
-    qualifies: (v, _f, min) => v >= min,
-    requirement: (min) => `${num(min)} EHP gained`,
-    format: (v) => `${num(v)} EHP gained`,
-  },
-  {
     id: "collector",
     name: "Collector",
     flavour: "One of everything, please.",
+    explanation: "The most different items across their approved submissions.",
+    group: "grind",
     hidden: false,
     source: "bingo",
     measure: (f) => f.distinctItems,
@@ -369,6 +372,8 @@ export const TITLES: TitleDefinition[] = [
     id: "tourist",
     name: "Tourist",
     flavour: "Been everywhere, done a bit of everything.",
+    explanation: "Points share on the most different tiles.",
+    group: "points",
     hidden: false,
     source: "bingo",
     measure: (f) => new Set(f.awards.filter((a) => a.kind !== "line" && a.tileNodeId).map((a) => a.tileNodeId)).size,
@@ -381,6 +386,8 @@ export const TITLES: TitleDefinition[] = [
     id: "specialist",
     name: "Specialist",
     flavour: "Found a tile and moved in.",
+    explanation: "The most of their points from a single tile, and at least half of them.",
+    group: "points",
     hidden: false,
     source: "bingo",
     measure: (f) => topTile(f)?.fraction ?? null,
@@ -393,6 +400,8 @@ export const TITLES: TitleDefinition[] = [
     id: "hoarder",
     name: "Hoarder",
     flavour: "Needs a bigger bank.",
+    explanation: "The most items claimed in total across their approved submissions, counting every one of a stack.",
+    group: "grind",
     hidden: true,
     source: "bingo",
     measure: (f) => f.totalQuantity,
@@ -405,6 +414,8 @@ export const TITLES: TitleDefinition[] = [
     id: "postman",
     name: "Postman",
     flavour: "Delivering drops for the whole team.",
+    explanation: "The most approved submissions they posted for a teammate.",
+    group: "grind",
     hidden: true,
     source: "bingo",
     measure: (f) => f.postedForTeammates,
@@ -417,6 +428,8 @@ export const TITLES: TitleDefinition[] = [
     id: "overachiever",
     name: "Overachiever",
     flavour: "Collected them all. Well, most of them.",
+    explanation: "The most achievements earned during the bingo. A tie goes to whoever got there first.",
+    group: "grind",
     hidden: false,
     source: "bingo",
     measure: (f) => f.achievements?.earned ?? null,
@@ -493,9 +506,9 @@ export function titlesHeldBy(picked: PickedTitle[], userId: string): PickedTitle
   return picked.filter((p) => p.holders.some((h) => h.userId === userId));
 }
 
-/** Each holder's highest-priority Title: the one their chip shows. */
-export function chipTitles(picked: PickedTitle[]): Map<string, TitleDefinition> {
-  const out = new Map<string, TitleDefinition>();
-  for (const p of picked) for (const h of p.holders) if (!out.has(h.userId)) out.set(h.userId, p.title);
+/** Every Title each holder holds, in priority order: their chips in the contributors table. */
+export function titlesByHolder(picked: PickedTitle[]): Map<string, TitleDefinition[]> {
+  const out = new Map<string, TitleDefinition[]>();
+  for (const p of picked) for (const h of p.holders) out.set(h.userId, [...(out.get(h.userId) ?? []), p.title]);
   return out;
 }

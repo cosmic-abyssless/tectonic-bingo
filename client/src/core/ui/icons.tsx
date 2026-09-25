@@ -104,6 +104,15 @@ export const LockIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** An eye struck through: hidden until something shows it. */
+export const EyeOffIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6.6 3.7A6.5 6.5 0 0 1 8 3.5c3.5 0 5.75 3.2 6 4.5-.12.6-.6 1.55-1.4 2.4M4.2 4.9C2.9 5.8 2.15 7.2 2 8c.25 1.3 2.5 4.5 6 4.5 1.35 0 2.5-.48 3.4-1.13" />
+    <path d="M6.6 6.6a2 2 0 0 0 2.8 2.8" />
+    <path d="M2.5 2.5l11 11" />
+  </Svg>
+);
+
 export const ClockIcon = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="8" cy="8" r="5.5" />
