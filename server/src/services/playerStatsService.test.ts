@@ -87,7 +87,7 @@ describe("fetchAndPersistPlayerStats", () => {
     const signupChanged = vi.mocked(broadcast).mock.calls.map(([event]) => event).filter((event) => event.type === "signup_changed");
     expect(signupChanged).toEqual([
       { type: "signup_changed", bingoId: signup.bingoId, payload: { signupId: signup.id, userId: signup.userId, statsRefreshing: true } },
-      { type: "signup_changed", bingoId: signup.bingoId, payload: { signupId: signup.id, userId: signup.userId, statsRefreshing: false } },
+      { type: "signup_changed", bingoId: signup.bingoId, payload: { signupId: signup.id, userId: signup.userId, statsRefreshing: false, statsFailed: false } },
     ]);
   });
 
@@ -122,7 +122,7 @@ describe("fetchAndPersistPlayerStats", () => {
     expect(broadcast).toHaveBeenCalledWith({
       type: "signup_changed",
       bingoId: signup.bingoId,
-      payload: { signupId: signup.id, userId: signup.userId, statsRefreshing: false },
+      payload: { signupId: signup.id, userId: signup.userId, statsRefreshing: false, statsFailed: true },
     });
   });
 
@@ -225,7 +225,7 @@ describe("fetchAndPersistPlayerStats", () => {
     expect(broadcast).toHaveBeenCalledWith({
       type: "signup_changed",
       bingoId: signup.bingoId,
-      payload: { signupId: signup.id, userId: signup.userId, statsRefreshing: false },
+      payload: { signupId: signup.id, userId: signup.userId, statsRefreshing: false, statsFailed: false },
     });
   });
 });

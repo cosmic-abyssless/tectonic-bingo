@@ -1036,7 +1036,8 @@ export type BroadcastEvent =
   // signup changed. Clients refetch their own signup/pairing state and the mod
   // roster. statsRefreshing is a boolean flag only (no CA values) — the
   // unauthenticated socket may carry IDs, not snapshots.
-  | { type: "signup_changed"; bingoId: string; payload: { signupId?: string; userId?: string; statsRefreshing?: boolean } }
+  // statsFailed: with statsRefreshing false, whether that stats lookup failed (the roster's refresh button shows a tick or a cross).
+  | { type: "signup_changed"; bingoId: string; payload: { signupId?: string; userId?: string; statsRefreshing?: boolean; statsFailed?: boolean } }
   // Any successful admin mutation (settings, board, lines, questions, teams,
   // mods). Coarse on purpose: clients refetch the bingo shell + board.
   | { type: "bingo_changed"; bingoId: string; payload: Record<string, never> }

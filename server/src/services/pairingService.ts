@@ -57,6 +57,16 @@ function hasActiveSignup(db: Db, bingoId: string, userId: string): boolean {
 
 // Captains can be assigned during signups; once someone leads a team their
 // pairing is fixed (their co-captain), so they can't pair or be paired.
+// Mods pair and unpair by hand at any stage before the draft: while signups are open, and after they close (to pair up
+// the singles who'd otherwise be cut) until the draft stage begins. Players' own requests stay to signups (assertDuoSignupOpen).
+const MOD_PAIRING_STAGES: Bingo["stage"][] = ["planning", "signup", "captains"];
+function assertModPairingOpen(bingo: Bingo): void {
+  if (bingo.signupMode !== "duo") throw new ServiceError(400, "This bingo doesn't use duo signups");
+  if (!MOD_PAIRING_STAGES.includes(bingo.stage)) {
+    throw new ServiceError(400, `Pairings can only change before the draft stage (current stage: ${bingo.stage})`);
+  }
+}
+
 function assertNotOnATeam(db: Db, bingoId: string, userId: string, message: string): void {
   const onTeam = db
     .select({ id: teamMembers.id })
@@ -369,7 +379,7 @@ export interface AdminPairParams {
 
 // Mods pair two unpaired signups by hand; no consent step.
 export function adminPair(db: Db, bingo: Bingo, params: AdminPairParams): Pairing {
-  assertDuoSignupOpen(bingo);
+  assertModPairingOpen(bingo);
   if (params.userIdA === params.userIdB) throw new ServiceError(400, "Pick two different players");
   return db.transaction((tx) => {
     const a = userById(tx, params.userIdA);
@@ -405,15 +415,19 @@ export function adminPair(db: Db, bingo: Bingo, params: AdminPairParams): Pairin
   });
 }
 
-// Mods split an accepted pair; both players go back to picking.
+// Mods split an accepted pair; both players go back to picking. Not a pair that leads a team (a captain and their
+// co-captain): the team is built on it.
 export function unpair(db: Db, bingo: Bingo, pairingId: string): void {
-  assertDuoSignupOpen(bingo);
+  assertModPairingOpen(bingo);
   db.transaction((tx) => {
     const pairing = tx.select().from(signupPairings).where(eq(signupPairings.id, pairingId)).get();
     if (!pairing || pairing.bingoId !== bingo.id) throw new ServiceError(404, "Pairing not found");
     if (pairing.status !== "accepted") throw new ServiceError(400, "Those players aren't paired");
     const requester = userById(tx, pairing.requesterUserId);
     const target = userByDiscordId(tx, pairing.targetDiscordId);
+    for (const u of [requester, target]) {
+      if (u) assertNotOnATeam(tx, bingo.id, u.id, "They're on a team (a captain and co-captain): change the team on the Captains tab first");
+    }
     tx.update(signupPairings).set({ status: "dissolved", respondedAt: clockNow() }).where(eq(signupPairings.id, pairingId)).run();
 
     const userIds = [pairing.requesterUserId, target?.id].filter((id): id is string => !!id);

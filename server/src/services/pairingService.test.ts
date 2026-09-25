@@ -185,6 +185,25 @@ describe("adminPair / unpair", () => {
     adminPair(db, bingo, { userIdA: a.id, userIdB: b.id, createdByUserId: admin.id });
     expect(() => adminPair(db, bingo, { userIdA: b.id, userIdB: c.id, createdByUserId: admin.id })).toThrow(/already has a partner/);
   });
+
+  // After signups close, mods can still pair up the singles who'd otherwise be cut, until the draft stage.
+  it("lets mods pair and unpair before the draft stage, while players' own requests stop when signups close", () => {
+    const { bingo, admin, a, b, c } = seed();
+    const closed = { ...bingo, stage: "captains" as const };
+    const pairing = adminPair(db, closed, { userIdA: a.id, userIdB: b.id, createdByUserId: admin.id });
+    unpair(db, closed, pairing.id);
+    expect(() => requestPairing(db, closed, { requester: a, targetDiscordId: c.discordId })).toThrow(/signup stage/);
+    const drafting = { ...bingo, stage: "draft" as const };
+    expect(() => adminPair(db, drafting, { userIdA: a.id, userIdB: b.id, createdByUserId: admin.id })).toThrow(/before the draft stage/);
+  });
+
+  it("won't unpair a captain from their co-captain", () => {
+    const { bingo, admin, a, b } = seed();
+    const pairing = adminPair(db, bingo, { userIdA: a.id, userIdB: b.id, createdByUserId: admin.id });
+    createTeam(db, { bingoId: bingo.id, captainUserId: a.id, coCaptainUserId: b.id });
+    expect(() => unpair(db, bingo, pairing.id)).toThrow(/on a team/);
+    expect(getAcceptedPairs(db, bingo.id)).toHaveLength(1);
+  });
 });
 
 describe("audit trail", () => {

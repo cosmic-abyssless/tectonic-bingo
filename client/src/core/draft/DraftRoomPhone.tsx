@@ -61,7 +61,8 @@ export function DraftRoomPhone({
       <div className="space-y-3 px-3">
         {status}
 
-        <Tabs selectedKey={tab} onSelectionChange={(key) => setTab(key as PhoneTab)}>
+        {/* outline-none: see core/ui/Tabs (keyboard focus inside would otherwise outline the whole panel). */}
+      <Tabs selectedKey={tab} onSelectionChange={(key) => setTab(key as PhoneTab)} className="outline-none">
           {/* The Players tab frames the whole panel in the picking team's colour on your turn, as the table does. */}
           <Panel className="transition-shadow" style={tab === "players" ? poolGlow : undefined}>
             {/* The pinned top: full bleed across the panel's padding, on the panel's own fill so what scrolls under it

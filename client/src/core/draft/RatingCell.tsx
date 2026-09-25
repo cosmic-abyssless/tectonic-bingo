@@ -12,11 +12,14 @@ const EMPTY_RATING: PickRating = { stars: 0, note: "" };
  * the current star count clears it. The draft table leaves the note out: it has a Note column of its own.
  */
 export function RatingCell({ rating = EMPTY_RATING, onChange, showNote = true }: { rating?: PickRating; onChange: (rating: PickRating) => void; showNote?: boolean }) {
+  // The star under the pointer: it and every star before it light up (a preview of clicking it).
+  const [hovered, setHovered] = useState<number | null>(null);
   return (
     <div className="flex items-center gap-1">
-      <div className="flex" role="radiogroup" aria-label="Rating">
+      <div className="flex" role="radiogroup" aria-label="Rating" onMouseLeave={() => setHovered(null)}>
         {Array.from({ length: MAX_RATING_STARS }, (_, i) => i + 1).map((n) => {
           const lit = n <= rating.stars;
+          const previewed = hovered !== null && n <= hovered;
           return (
             <button
               key={n}
@@ -25,7 +28,8 @@ export function RatingCell({ rating = EMPTY_RATING, onChange, showNote = true }:
               aria-checked={n === rating.stars}
               aria-label={`${n} star${n === 1 ? "" : "s"}`}
               onClick={() => onChange({ ...rating, stars: n === rating.stars ? 0 : n })}
-              className={`flex size-6 items-center justify-center rounded-sm transition-colors hover:text-warn ${lit ? "text-warn" : "text-on-surface-subtle"}`}
+              onMouseEnter={() => setHovered(n)}
+              className={`flex size-6 cursor-pointer items-center justify-center rounded-sm transition-colors ${lit || previewed ? "text-warn" : "text-on-surface-subtle"}`}
             >
               <StarIcon size={14} fill={lit ? "currentColor" : "none"} />
             </button>

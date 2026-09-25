@@ -9,7 +9,13 @@ const WebSocketContext = createContext<{
   statsRefreshingSignupIds: ReadonlySet<string>;
   statsRefreshingUserIds: ReadonlySet<string>;
   markStatsRefreshing: (signupId: string, refreshing: boolean) => void;
+  statsResults: ReadonlyMap<string, StatsResult>;
+  markStatsResult: (signupId: string, result: StatsResult) => void;
 } | null>(null);
+
+/** How a signup's last stats refresh went: shown (a tick or a cross) for STATS_RESULT_MS after it finishes. */
+export type StatsResult = "ok" | "failed";
+const STATS_RESULT_MS = 3000;
 
 function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
   switch (event.type) {
@@ -97,6 +103,24 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const [statsRefreshingSignupIds, setStatsRefreshingSignupIds] = useState<ReadonlySet<string>>(() => new Set());
   const [statsRefreshingUserIds, setStatsRefreshingUserIds] = useState<ReadonlySet<string>>(() => new Set());
 
+  const [statsResults, setStatsResults] = useState<ReadonlyMap<string, StatsResult>>(() => new Map());
+  const resultTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const markStatsResult = useCallback((signupId: string, result: StatsResult) => {
+    setStatsResults((prev) => new Map(prev).set(signupId, result));
+    clearTimeout(resultTimers.current.get(signupId));
+    resultTimers.current.set(
+      signupId,
+      setTimeout(() => {
+        resultTimers.current.delete(signupId);
+        setStatsResults((prev) => {
+          const next = new Map(prev);
+          next.delete(signupId);
+          return next;
+        });
+      }, STATS_RESULT_MS),
+    );
+  }, []);
+
   const markStatsRefreshing = useCallback((signupId: string, refreshing: boolean) => {
     setStatsRefreshingSignupIds((prev) => {
       const next = new Set(prev);
@@ -108,8 +132,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
   const applyStatsRefreshing = useCallback((event: BroadcastEvent) => {
     if (event.type !== "signup_changed") return;
-    const { signupId, userId, statsRefreshing } = event.payload;
+    const { signupId, userId, statsRefreshing, statsFailed } = event.payload;
     if (statsRefreshing === undefined) return;
+    // A finished lookup (older servers don't say how it went: no result then).
+    if (signupId && !statsRefreshing && statsFailed !== undefined) markStatsResult(signupId, statsFailed ? "failed" : "ok");
     if (signupId) {
       setStatsRefreshingSignupIds((prev) => {
         const next = new Set(prev);
@@ -126,7 +152,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         return next;
       });
     }
-  }, []);
+  }, [markStatsResult]);
 
   useEffect(() => {
     let closed = false;
@@ -175,7 +201,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <WebSocketContext.Provider value={{ subscribe, statsRefreshingSignupIds, statsRefreshingUserIds, markStatsRefreshing }}>{children}</WebSocketContext.Provider>
+    <WebSocketContext.Provider value={{ subscribe, statsRefreshingSignupIds, statsRefreshingUserIds, markStatsRefreshing, statsResults, markStatsResult }}>
+      {children}
+    </WebSocketContext.Provider>
   );
 }
 
@@ -203,4 +231,17 @@ export function useMarkStatsRefreshing(): (signupId: string, refreshing: boolean
   const ctx = useContext(WebSocketContext);
   if (!ctx) throw new Error("useMarkStatsRefreshing must be used within WebSocketProvider");
   return ctx.markStatsRefreshing;
+}
+
+/** How each signup's last stats refresh went, for a few seconds after it finishes (see StatsResult). */
+export function useStatsResults(): ReadonlyMap<string, StatsResult> {
+  const ctx = useContext(WebSocketContext);
+  if (!ctx) throw new Error("useStatsResults must be used within WebSocketProvider");
+  return ctx.statsResults;
+}
+
+export function useMarkStatsResult(): (signupId: string, result: StatsResult) => void {
+  const ctx = useContext(WebSocketContext);
+  if (!ctx) throw new Error("useMarkStatsResult must be used within WebSocketProvider");
+  return ctx.markStatsResult;
 }
