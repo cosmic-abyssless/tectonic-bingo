@@ -111,9 +111,15 @@ const num = (n: number, digits = 1) => n.toLocaleString("en-US", { maximumFracti
 const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 const percent = (fraction: number) => `${Math.round(fraction * 100)}%`;
 
-/** "1 in N" from a luck value: 1 in 340, 1 in 12,500, 1 in 2.3m. */
+const SUPERSCRIPT = "⁰¹²³⁴⁵⁶⁷⁸⁹";
+
+/** "1 in N" from a luck value: 1 in 340, 1 in 12,500, 1 in 2.3m, and past a trillion 1 in 1.7 × 10¹⁶. */
 export function oneIn(luck: number): string {
   const n = 10 ** luck;
+  if (n >= 1e12) {
+    const exp = Math.floor(luck);
+    return `1 in ${num(10 ** (luck - exp))} × 10${[...String(exp)].map((d) => SUPERSCRIPT[Number(d)]).join("")}`;
+  }
   if (n >= 1_000_000_000) return `1 in ${num(n / 1_000_000_000)}b`;
   if (n >= 1_000_000) return `1 in ${num(n / 1_000_000)}m`;
   return `1 in ${num(n, n < 10 ? 1 : 0)}`;

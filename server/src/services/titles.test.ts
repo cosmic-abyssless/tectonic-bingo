@@ -156,6 +156,7 @@ describe("luck Titles", () => {
     expect(oneIn(0.2)).toBe("1 in 1.6");
     expect(oneIn(4.1)).toBe("1 in 12,589");
     expect(oneIn(6.36)).toBe("1 in 2.3m");
+    expect(oneIn(16.22)).toBe("1 in 1.7 × 10¹⁶");
     expect(shortGp(12_000_000)).toBe("12m");
     expect(shortGp(1_530_000_000)).toBe("1.53b");
     expect(shortGp(450_000)).toBe("450k");
