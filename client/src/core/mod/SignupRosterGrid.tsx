@@ -82,6 +82,10 @@ export interface GridContext {
   openProfile: ((userId: string) => void) | null;
 }
 
+// The surface every popup cell editor here sits on (AG gives a popup editor none of its own, so it would float over
+// the rows): the raised panel colour, a hairline border and the pop shadow, like the app's menus.
+const EDITOR_POPUP = "rounded-md border border-outline bg-surface-raised shadow-pop";
+
 // ---------------------------------------------------------------------------
 // Renderers. Each reads its mutation(s) from context (called once, not per row) and is memo'd so a re-render of
 // SignupRoster (a keystroke in the search box, a filter chip) doesn't re-render every cell — AG only actually
@@ -156,7 +160,7 @@ function WithdrawEditor({ data, onValueChange, stopEditing }: CustomCellEditorPr
     if (confirmed) stopEditing();
   }, [confirmed, stopEditing]);
   return (
-    <div className="w-72 space-y-3 p-3 text-sm">
+    <div className={`${EDITOR_POPUP} w-72 space-y-3 p-3 text-sm`}>
       <p className="text-on-surface">
         Withdraw <span className="font-semibold">{data.signup.rsn}</span>'s signup? They come off the roster{data.pairing ? ", and their pairing ends" : ""}.
       </p>
@@ -223,7 +227,7 @@ function PartnerEditor({ data, context, onValueChange, stopEditing, unpaired }: 
   if (data.pairing) {
     const partner = context.partnerRsnMap.get(data.signup.id) ?? "their partner";
     return (
-      <div className="w-72 space-y-3 p-3 text-sm">
+      <div className={`${EDITOR_POPUP} w-72 space-y-3 p-3 text-sm`}>
         <p className="text-on-surface">
           Unpair <span className="font-semibold">{data.signup.rsn}</span> and <span className="font-semibold">{partner}</span>? Both stay signed up, unpaired.
         </p>
@@ -242,7 +246,7 @@ function PartnerEditor({ data, context, onValueChange, stopEditing, unpaired }: 
     .filter((r) => r.signup.id !== data.signup.id)
     .map((r) => ({ id: r.user.id, label: r.signup.rsn }));
   return (
-    <div ref={ref} className="w-72 p-2">
+    <div ref={ref} className={`${EDITOR_POPUP} w-72 p-2`}>
       <SearchableSelect value="" options={options} placeholder={`Pair ${data.signup.rsn} with…`} onChange={(id) => id && finish(id)} />
     </div>
   );
@@ -269,7 +273,7 @@ function TimezoneEditor({ value, onValueChange, stopEditing }: CustomCellEditorP
     if (picked) stopEditing();
   }, [picked, stopEditing]);
   return (
-    <div ref={ref} className="w-96 p-2">
+    <div ref={ref} className={`${EDITOR_POPUP} w-96 p-2`}>
       <SearchableSelect
         value={value ?? ""}
         options={options}
