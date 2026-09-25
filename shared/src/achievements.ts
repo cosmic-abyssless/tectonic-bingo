@@ -13,6 +13,7 @@ export type AchievementKey =
   | "big_spender"
   | "regular"
   | "globetrotter"
+  | "long_weekend"
   | "eager_beaver"
   | "superfan"
   | "popular"
@@ -51,6 +52,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { key: "big_spender", name: "Moneybags", description: "Submit a drop worth 25m or more", flavor: "Split, I TBed!", hidden: false, itemName: "Coins 10000" },
   { key: "regular", name: "Regular", description: "Submit drops on 5 different days", flavor: "Did you take PTO for this bingo?", hidden: false, itemName: "Giant stopwatch", progressTarget: 5 },
   { key: "globetrotter", name: "Globetrotter", description: "Submit drops on 5 different tiles", flavor: "Bro's content hopping", hidden: false, itemName: "Explorer's ring 4", progressTarget: 5 },
+  { key: "long_weekend", name: "Long weekend", description: "Gain at least 20 EHB during the bingo", flavor: "The grind never stops", hidden: false, itemName: "Divine super combat potion(4)", progressTarget: 20 },
   { key: "eager_beaver", name: "Eager beaver", description: "Mark your interest in a tile", flavor: "You've got this one covered", hidden: false, itemName: "Beaver" },
   { key: "superfan", name: "Superfan", description: "React to a submission from every teammate", flavor: "You get a reaction, you get a reaction, everyone gets a reaction!", hidden: true, itemName: "Hand fan" },
   { key: "popular", name: "Popular", description: "Receive 5 reactions to one of your submissions", flavor: "Slaaaay bitch!", hidden: true, itemName: "Red flowers" },
@@ -99,7 +101,7 @@ export interface MyAchievement {
   earned: boolean;
   /** ISO, only when earned. */
   earnedAt: string | null;
-  /** Only for counted Achievements (Cheerleader, Regular, Globetrotter, Drop detective). */
+  /** Only for counted Achievements (Cheerleader, Regular, Globetrotter, Long weekend, Drop detective). */
   progress: AchievementProgress | null;
 }
 

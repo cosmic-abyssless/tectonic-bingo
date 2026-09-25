@@ -179,6 +179,39 @@ describe("Leech (an Achievement read from the clue counts)", () => {
   });
 });
 
+describe("Long weekend (an Achievement read from EHB)", () => {
+  const earned = (bingoId: string, userId: string) =>
+    db
+      .select()
+      .from(schema.achievementEarned)
+      .all()
+      .some((e) => e.bingoId === bingoId && e.userId === userId && e.achievementKey === "long_weekend");
+  const progress = (bingoId: string, userId: string) => {
+    const bingo = db.select().from(schema.bingos).where(eq(schema.bingos.id, bingoId)).get()!;
+    return achievementService.getMyAchievements(db, bingo, userId).achievements.find((a) => a.key === "long_weekend")!.progress;
+  };
+
+  it("is earned at 20 EHB gained since the Bingo started, with progress in whole hours until then", async () => {
+    const { bingoId, userIds } = seed();
+    db.transaction((tx) => achievementService.initializeAchievementSettings(tx, bingoId, START));
+    await readPlayer(db, fakeWom([raw(at(-2), 100), raw(at(10), 112.7)]).client, { bingoId, userId: userIds[0]! }, { now: at(12) });
+    expect(earned(bingoId, userIds[0]!)).toBe(false);
+    expect(progress(bingoId, userIds[0]!)).toEqual({ current: 12, target: 20 });
+
+    await readPlayer(db, fakeWom([raw(at(10), 112.7), raw(at(30), 120)]).client, { bingoId, userId: userIds[0]! }, { now: at(31) });
+    expect(earned(bingoId, userIds[0]!)).toBe(true);
+    expect(progress(bingoId, userIds[0]!)).toEqual({ current: 20, target: 20 });
+  });
+
+  it("doesn't count EHB from before the Bingo started", async () => {
+    const { bingoId, userIds } = seed();
+    db.transaction((tx) => achievementService.initializeAchievementSettings(tx, bingoId, START));
+    await readPlayer(db, fakeWom([raw(at(-20), 50), raw(at(-2), 100), raw(at(10), 110)]).client, { bingoId, userId: userIds[0]! }, { now: at(12) });
+    expect(earned(bingoId, userIds[0]!)).toBe(false);
+    expect(progress(bingoId, userIds[0]!)).toEqual({ current: 10, target: 20 });
+  });
+});
+
 describe("gainsOf", () => {
   const snap = (hours: number, ehb: number | null, clues: number | null = 0): WomSnapshot => ({ at: at(hours), bossKills: {}, ehb, ehp: 0, clues });
 

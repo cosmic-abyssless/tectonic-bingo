@@ -455,12 +455,39 @@ export function recordPageOpened(db: Db, event: PageOpenedEvent): void {
   });
 }
 
+/** Long weekend's goal: Efficient Hours Bossed gained during the Bingo. */
+const LONG_WEEKEND_EHB = 20;
+
 /**
- * A Player's Wise Old Man snapshots were just stored (womReadService.readPlayer): Leech, for a clue scroll opened during
- * the Bingo. Earned once a snapshot taken during it shows more clues than the baseline — their last snapshot from before
- * it started (or from before Leech was switched on, if that's later), else their first one since — the same baseline
- * the Titles' clue gains use. Checked on every read, the final one after the Bingo is Finished too, since that read is
- * still about play while it was Live; snapshots after its end don't count.
+ * How much one Wise Old Man measure (clues, EHB) a Player gained during the Bingo, from their stored snapshots: their
+ * latest one taken by its end, less a baseline — their last snapshot from before it started (or from before the
+ * Achievement was switched on, if that's later), else their first one since — the same baseline the Titles' gains use.
+ * A measure below the hiscores' minimum is stored as null and counts as 0: reaching it at all is a gain. Null until
+ * there's a snapshot after that cutoff.
+ */
+function womGain(q: Queryable, bingo: Bingo, userId: string, firstSwitchedOnAt: Date, pick: (s: { clues: number | null; ehb: number | null }) => number | null): { gain: number; latestAt: Date } | null {
+  const start = effectiveStartsAt(q, bingo);
+  if (!start) return null;
+  const cutoff = firstSwitchedOnAt > start ? firstSwitchedOnAt : start;
+  const end = endedAt(q, bingo);
+  const snapshots = q
+    .select({ at: womSnapshots.takenAt, clues: womSnapshots.clues, ehb: womSnapshots.ehb })
+    .from(womSnapshots)
+    .where(and(eq(womSnapshots.bingoId, bingo.id), eq(womSnapshots.userId, userId)))
+    .orderBy(womSnapshots.takenAt)
+    .all()
+    .filter((s) => !end || s.at <= end);
+  const latest = snapshots.at(-1);
+  if (!latest || latest.at <= cutoff) return null;
+  const baseline = snapshots.filter((s) => s.at <= cutoff).at(-1) ?? snapshots[0]!;
+  return { gain: Math.max(0, (pick(latest) ?? 0) - (pick(baseline) ?? 0)), latestAt: latest.at };
+}
+
+/**
+ * A Player's Wise Old Man snapshots were just stored (womReadService.readPlayer): Leech (a clue casket opened during the
+ * Bingo: any clue gain) and Long weekend (20 EHB gained during it), from womGain. Checked on every read, the final one
+ * after the Bingo is Finished too, since that read is still about play while it was Live; snapshots after its end
+ * don't count.
  */
 export function recordWomSnapshotsRead(db: Db, bingoId: string, userId: string): void {
   safely(() => {
@@ -473,25 +500,19 @@ export function recordWomSnapshotsRead(db: Db, bingoId: string, userId: string):
         .innerJoin(teams, eq(teams.id, teamMembers.teamId))
         .where(and(eq(teams.bingoId, bingoId), eq(teamMembers.userId, userId)))
         .get();
+      if (!onATeam) return;
       const settings = loadSettings(tx, bingoId);
-      const setting = settings.get("leech");
-      const start = effectiveStartsAt(tx, bingo);
-      if (!onATeam || !setting || !start) return;
 
-      const cutoff = setting.firstSwitchedOnAt > start ? setting.firstSwitchedOnAt : start;
-      const end = endedAt(tx, bingo);
-      const snapshots = tx
-        .select({ at: womSnapshots.takenAt, clues: womSnapshots.clues })
-        .from(womSnapshots)
-        .where(and(eq(womSnapshots.bingoId, bingoId), eq(womSnapshots.userId, userId)))
-        .orderBy(womSnapshots.takenAt)
-        .all()
-        .filter((s) => !end || s.at <= end);
-      const latest = snapshots.at(-1);
-      if (!latest || latest.at <= cutoff) return;
-      const baseline = snapshots.filter((s) => s.at <= cutoff).at(-1) ?? snapshots[0]!;
-      // A clue count below the hiscores' minimum is stored as null: reaching it at all is a clue opened.
-      tryEarn(tx, bingoId, userId, "leech", latest.at, settings, () => (latest.clues ?? 0) > (baseline.clues ?? 0));
+      const measures: [AchievementKey, (s: { clues: number | null; ehb: number | null }) => number | null, (gain: number) => boolean][] = [
+        ["leech", (s) => s.clues, (gain) => gain > 0],
+        ["long_weekend", (s) => s.ehb, (gain) => gain >= LONG_WEEKEND_EHB],
+      ];
+      for (const [key, pick, enough] of measures) {
+        const setting = settings.get(key);
+        if (!setting) continue;
+        const gained = womGain(tx, bingo, userId, setting.firstSwitchedOnAt, pick);
+        if (gained) tryEarn(tx, bingoId, userId, key, gained.latestAt, settings, () => enough(gained.gain));
+      }
     });
   });
 }
@@ -542,7 +563,7 @@ export function getMyAchievements(db: Db, bingo: Bingo, userId: string): MyAchie
       earned: !!earned,
       earnedAt: earned ? earned.earnedAt.toISOString() : null,
       // A masked one's progress would hint at what it is (Cheerleader's "4/10"), so it has none until earned.
-      progress: masked ? null : progressFor(db, bingo.id, userId, def.key, switched, tileCount),
+      progress: masked ? null : progressFor(db, bingo, userId, def.key, switched, tileCount),
     };
   });
 
@@ -556,7 +577,7 @@ export function getMyAchievements(db: Db, bingo: Bingo, userId: string): MyAchie
 
 function progressFor(
   db: Queryable,
-  bingoId: string,
+  bingo: Bingo,
   userId: string,
   key: AchievementKey,
   switched: Map<AchievementKey, { firstSwitchedOnAt: Date }>,
@@ -564,6 +585,7 @@ function progressFor(
 ): { current: number; target: number } | null {
   const cutoff = switched.get(key)?.firstSwitchedOnAt;
   if (!cutoff) return null;
+  const bingoId = bingo.id;
   const base = and(eq(achievementActivity.bingoId, bingoId), eq(achievementActivity.userId, userId), gte(achievementActivity.occurredAt, cutoff));
 
   if (key === "cheerleader") {
@@ -588,6 +610,11 @@ function progressFor(
   if (key === "drop_detective") {
     const current = distinct(db.select({ subjectId: achievementActivity.subjectId }).from(achievementActivity).where(and(base, eq(achievementActivity.kind, "tile_opened"))).all().map((r) => r.subjectId)).size;
     return { current: Math.min(current, tileCount), target: tileCount };
+  }
+  if (key === "long_weekend") {
+    // Whole hours: "12/20", never rounded up to a goal not yet reached.
+    const gained = womGain(db, bingo, userId, cutoff, (s) => s.ehb);
+    return { current: Math.min(Math.floor(gained?.gain ?? 0), LONG_WEEKEND_EHB), target: LONG_WEEKEND_EHB };
   }
   return null;
 }
