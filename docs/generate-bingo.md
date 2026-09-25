@@ -36,7 +36,9 @@ npm run generate-bingo -- --stage live --progress 0.5 --me <your discordId>
 ```
 
 This starts the same job on the server (`--base`, default `http://localhost:3001`) and prints its log as it goes.
-By default it sends the repo's board (`tectonic-comics-bingo-export.json`, so it works on an empty server);
+By default it sends the board in `tectonic-comics-bingo-export.json` at the repo root, so it works on an empty server.
+That file isn't in git (it's big, with the tile images in it): export the bingo from its Settings page and save it
+there, or pass `--export <file>`;
 `--from <slug>` copies a bingo already on the server instead. It ends with the bingo's URL (`/b/testdata-...`) and
 the teardown command:
 
