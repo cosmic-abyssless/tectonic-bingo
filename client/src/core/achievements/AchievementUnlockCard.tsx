@@ -73,7 +73,7 @@ export function AchievementUnlockCard({ achievement, onOpen, onDone }: { achieve
       style={{ opacity: 0, clipPath: reducedMotion ? undefined : POINT }}
     >
       <button type="button" onClick={onOpen} className="flex w-full items-start gap-3 rounded-md border border-achievement-border bg-achievement-surface p-3 text-left shadow-pop">
-        <WikiIcon name={achievement.itemName ?? ""} className="size-9 shrink-0 rounded-sm bg-icon-backdrop p-1 [image-rendering:pixelated]" />
+        <WikiIcon name={achievement.itemName ?? ""} className="size-9 shrink-0 object-contain [image-rendering:pixelated]" />
         <div className="min-w-0">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-achievement-title">Achievement unlocked</div>
           <div className="truncate text-sm font-semibold text-achievement-title">{achievement.name}</div>

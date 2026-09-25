@@ -52,7 +52,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { key: "night_owl", name: "Night owl", description: "Submit a drop between midnight and 5am.", hidden: true, itemName: "Bullseye lantern" },
   { key: "early_bird", name: "Early bird", description: "Submit a drop between 5am and 8am.", hidden: true, itemName: "Bird nest" },
   { key: "main_character", name: "Main character", description: "React to your own submission.", hidden: true, itemName: "Mirror shield" },
-  { key: "called_it", name: "Called it", description: "Submit a drop for a part you marked interest in.", hidden: true, itemName: "Crystal ball" },
+  { key: "called_it", name: "Called it", description: "Submit a drop for a part you marked interest in.", hidden: true, itemName: "Seers ring" },
   { key: "rules_lawyer", name: "Rules lawyer", description: "Read the rules.", hidden: true, itemName: "Book of law" },
   { key: "number_cruncher", name: "Number cruncher", description: "Check out the stats.", hidden: true, itemName: "Antique lamp" },
 ];
