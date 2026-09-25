@@ -420,7 +420,8 @@ export function DraftPoolGrid({
 
   const columnOptions = useMemo(
     () => [
-      ...(ratings ? [{ id: "note", label: "Note" }] : []),
+      // Rating and Note can be hidden too, say to share your screen without showing your ratings.
+      ...(ratings ? [{ id: "rating", label: "Rating" }, { id: "note", label: "Note" }] : []),
       { id: "discord", label: "Discord" },
       ...(showAnswers ? [{ id: "timezone", label: "Timezone" }] : []),
       ...(showProfiles ? [{ id: "tier", label: "Tier" }, { id: "records", label: "Records" }, { id: "podiums", label: "Podiums" }, { id: "achievements", label: "Achievements" }] : []),
@@ -461,8 +462,10 @@ export function DraftPoolGrid({
         // does), 0/Delete/Backspace clears, Enter adds a star (3 wraps to none). Arrows still move between cells.
         headerTooltip: "Your stars for this player. On the cell: 1-3 sets them, 0 or Delete clears, Enter adds one",
         suppressKeyboardEvent: (p) => rateFromKey(p.event, p.data, p.context as RatingContext),
-        // Just the three stars (3 x 24px) and the cell's padding; the note has a column of its own.
+        // Just the three stars (3 x 24px) and the cell's padding; the note has a column of its own. Fixed: nothing in it
+        // needs more room.
         width: RATING_WIDTH,
+        resizable: false,
         // No static `sort: "desc"` here — the initialState fallback above sets it instead (see the comment
         // there for why a colDef-level default doesn't play well with a restored sort on another column).
         pinned: "left",
