@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MyAchievement } from "@bingo/shared";
-import { achievementCardKind, achievementCountLabel, earnedLabel, orderForList, progressFraction, progressLabel } from "./achievementCard";
+import { achievementCardKind, achievementTotals, earnedLabel, orderForList, progressFraction, progressLabel } from "./achievementCard";
 
 function achievement(overrides: Partial<MyAchievement> = {}): MyAchievement {
   return { key: "strong_start", hidden: false, masked: false, name: "Strong start", description: "Submit your first drop.", flavor: "First drop's in. Only a few thousand more to go.", itemName: "Bronze sword", earned: false, earnedAt: null, progress: null, ...overrides };
@@ -40,14 +40,14 @@ describe("progressLabel / progressFraction", () => {
   });
 });
 
-describe("achievementCountLabel", () => {
+describe("achievementTotals", () => {
   it("counts earned out of the total switched-on achievements", () => {
     const achievements = [achievement({ earned: true }), achievement({ earned: false }), achievement({ earned: true })];
-    expect(achievementCountLabel(achievements)).toBe("2 / 3");
+    expect(achievementTotals(achievements)).toEqual({ earned: 2, total: 3 });
   });
 
-  it("reads 0 / 0 with nothing switched on", () => {
-    expect(achievementCountLabel([])).toBe("0 / 0");
+  it("is 0 of 0 with nothing switched on", () => {
+    expect(achievementTotals([])).toEqual({ earned: 0, total: 0 });
   });
 });
 

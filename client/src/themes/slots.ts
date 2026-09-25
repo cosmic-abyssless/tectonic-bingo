@@ -56,6 +56,9 @@ export interface ThemeSlots {
   // locked (greyed, with progress when it's counted) or masked (a Hidden one not yet earned: "???", nothing else is
   // known). Shows the description, with its flavour under it once earned.
   AchievementRow: ComponentType<{ achievement: MyAchievement }>;
+  // The top of the Achievements modal: how many of the switched-on Achievements the Player has earned, as a count and
+  // a progress bar (Hidden ones included in both numbers).
+  AchievementTotal: ComponentType<{ earned: number; total: number }>;
   // One team's column in the draft room (core/draft/TeamRoster): its card, then its picks. Read with useOptionalSlot.
   // Each pick's element must carry data-team-id and data-pick-number (the pick reveal flies to it) and stay invisible
   // while its number is in hiddenPickNumbers.

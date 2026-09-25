@@ -23,10 +23,9 @@ export function progressFraction(progress: AchievementProgress | null): number |
   return Math.min(1, Math.max(0, progress.current / progress.target));
 }
 
-/** The modal's header count, "5 / 16" — Hidden Achievements included either way. */
-export function achievementCountLabel(achievements: readonly Pick<MyAchievement, "earned">[]): string {
-  const earned = achievements.filter((a) => a.earned).length;
-  return `${earned} / ${achievements.length}`;
+/** How many of the switched-on Achievements are earned — Hidden ones included either way. */
+export function achievementTotals(achievements: readonly Pick<MyAchievement, "earned">[]): { earned: number; total: number } {
+  return { earned: achievements.filter((a) => a.earned).length, total: achievements.length };
 }
 
 const LIST_RANK: Record<AchievementCardKind, number> = { earned: 0, locked: 1, masked: 2 };
