@@ -32,7 +32,8 @@ export function caTitle(stats: CombatAchievementStats | null | undefined): strin
 
 function LoadingValue({ loading, title, children }: { loading?: boolean; title?: string; children: string }) {
   return (
-    <span className="relative inline-block whitespace-nowrap" title={loading ? "Looking up…" : title}>
+    // max-w-full + truncate: in a narrow table cell the value ends in "…" rather than being cut off at the cell's edge.
+    <span className="relative inline-block max-w-full min-w-0 truncate whitespace-nowrap align-middle" title={loading ? "Looking up…" : title}>
       <span className={loading ? "invisible" : undefined}>{children}</span>
       {loading && (
         <span className="absolute inset-y-0 left-0 flex items-center">
@@ -53,7 +54,8 @@ export function CaCell({ stats, loading, nativeTitle = true }: { stats: CombatAc
   );
   if (loading || !stats || !caSubLevel(stats)) return value;
   return (
-    <span className="inline-flex items-center gap-2 whitespace-nowrap">
+    // max-w-full/min-w-0: squeezed (a narrow table column), the tier name truncates and the level bar stays whole.
+    <span className="inline-flex max-w-full min-w-0 items-center gap-2 whitespace-nowrap">
       {value}
       <CaLevelBar stats={stats} tooltip={nativeTitle} />
     </span>

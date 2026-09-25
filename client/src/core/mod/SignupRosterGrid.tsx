@@ -107,7 +107,8 @@ const EDITOR_POPUP = "rounded-md border border-outline bg-surface-raised shadow-
 const RsnCell = memo(function RsnCell({ data, context }: CustomCellRendererProps<RosterRow, string, GridContext>) {
   if (!data) return null;
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5">
+    // max-w-full: held to the cell's width, so a long name ends in "…" rather than being cut off at the edge.
+    <span className="inline-flex max-w-full min-w-0 items-center gap-1.5">
       <PlayerName userId={data.user.id} className="min-w-0 truncate">
         <Mark text={data.signup.rsn} query={context.search} />
       </PlayerName>
