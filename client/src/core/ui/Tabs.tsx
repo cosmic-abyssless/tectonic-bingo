@@ -1,8 +1,11 @@
 import { Tab as AriaTab, TabList as AriaTabList, TabPanel as AriaTabPanel, Tabs as AriaTabs, type TabsProps } from "react-aria-components";
 import type { ReactNode } from "react";
 
+// outline-none: React Aria marks the whole Tabs container focus-visible whenever keyboard focus is anywhere inside it
+// (tabbing through a table in a tab panel, say), and the global focus ring (index.css) would then outline the page's
+// whole tabbed area. The tabs and whatever is focused inside keep their own focus styles.
 export function Tabs(props: TabsProps) {
-  return <AriaTabs {...props} className={`flex flex-col ${props.className ?? ""}`} />;
+  return <AriaTabs {...props} className={`flex flex-col outline-none ${props.className ?? ""}`} />;
 }
 
 export function TabList({ children, className }: { children: ReactNode; className?: string }) {
