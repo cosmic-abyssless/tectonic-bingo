@@ -459,11 +459,14 @@ export function recordPageOpened(db: Db, event: PageOpenedEvent): void {
 const LONG_WEEKEND_EHB = 20;
 /** Diversification's goal: different bosses killed at least once during the Bingo. */
 const DIVERSIFICATION_BOSSES = 10;
+/** Skiller's goal: Efficient Hours Played gained during the Bingo. */
+const SKILLER_EHP = 3;
 
 interface WomPoint {
   at: Date;
   clues: number | null;
   ehb: number | null;
+  ehp: number | null;
   bossKills: Record<string, number | null>;
 }
 
@@ -479,7 +482,7 @@ function womWindow(q: Queryable, bingo: Bingo, userId: string, firstSwitchedOnAt
   const cutoff = firstSwitchedOnAt > start ? firstSwitchedOnAt : start;
   const end = endedAt(q, bingo);
   const snapshots = q
-    .select({ at: womSnapshots.takenAt, clues: womSnapshots.clues, ehb: womSnapshots.ehb, bossKillsJson: womSnapshots.bossKillsJson })
+    .select({ at: womSnapshots.takenAt, clues: womSnapshots.clues, ehb: womSnapshots.ehb, ehp: womSnapshots.ehp, bossKillsJson: womSnapshots.bossKillsJson })
     .from(womSnapshots)
     .where(and(eq(womSnapshots.bingoId, bingo.id), eq(womSnapshots.userId, userId)))
     .orderBy(womSnapshots.takenAt)
@@ -488,7 +491,7 @@ function womWindow(q: Queryable, bingo: Bingo, userId: string, firstSwitchedOnAt
   const latest = snapshots.at(-1);
   if (!latest || latest.at <= cutoff) return null;
   const baseline = snapshots.filter((s) => s.at <= cutoff).at(-1) ?? snapshots[0]!;
-  const point = (s: typeof latest): WomPoint => ({ at: s.at, clues: s.clues, ehb: s.ehb, bossKills: JSON.parse(s.bossKillsJson) as Record<string, number | null> });
+  const point = (s: typeof latest): WomPoint => ({ at: s.at, clues: s.clues, ehb: s.ehb, ehp: s.ehp, bossKills: JSON.parse(s.bossKillsJson) as Record<string, number | null> });
   return { baseline: point(baseline), latest: point(latest) };
 }
 
@@ -501,8 +504,8 @@ const bossesKilled = (w: { baseline: WomPoint; latest: WomPoint }) =>
 
 /**
  * A Player's Wise Old Man snapshots were just stored (womReadService.readPlayer): Leech (a clue casket opened during the
- * Bingo: any clue gain), Long weekend (20 EHB gained during it) and Diversification (10 different bosses killed during
- * it), from womWindow. Checked on every read, the final one after the Bingo is Finished too, since that read is still
+ * Bingo: any clue gain), Long weekend (20 EHB gained during it), Diversification (10 different bosses killed during it)
+ * and Skiller (3 EHP gained during it), from womWindow. Checked on every read, the final one after the Bingo is Finished too, since that read is still
  * about play while it was Live; snapshots after its end don't count.
  */
 export function recordWomSnapshotsRead(db: Db, bingoId: string, userId: string): void {
@@ -523,6 +526,7 @@ export function recordWomSnapshotsRead(db: Db, bingoId: string, userId: string):
         ["leech", (w) => gainOf(w.baseline.clues, w.latest.clues) > 0],
         ["long_weekend", (w) => ehbGained(w) >= LONG_WEEKEND_EHB],
         ["diversification", (w) => bossesKilled(w) >= DIVERSIFICATION_BOSSES],
+        ["skiller", (w) => gainOf(w.baseline.ehp, w.latest.ehp) >= SKILLER_EHP],
       ];
       for (const [key, reached] of goals) {
         const setting = settings.get(key);

@@ -265,6 +265,37 @@ describe("Diversification (an Achievement read from boss kill counts)", () => {
   });
 });
 
+describe("Skiller (an Achievement read from EHP)", () => {
+  // raw() only sets EHB; this one sets EHP.
+  const withEhp = (createdAt: Date, ehp: number) => ({
+    createdAt: createdAt.toISOString(),
+    data: { bosses: {}, activities: { clue_scrolls_all: { score: 0 } }, computed: { ehb: { value: 0 }, ehp: { value: ehp } } },
+  });
+  const earned = (bingoId: string, userId: string) =>
+    db
+      .select()
+      .from(schema.achievementEarned)
+      .all()
+      .some((e) => e.bingoId === bingoId && e.userId === userId && e.achievementKey === "skiller");
+
+  it("is earned at 3 EHP gained since the Bingo started, not before", async () => {
+    const { bingoId, userIds } = seed();
+    db.transaction((tx) => achievementService.initializeAchievementSettings(tx, bingoId, START));
+    await readPlayer(db, fakeWom([withEhp(at(-2), 500), withEhp(at(5), 502.9)]).client, { bingoId, userId: userIds[0]! }, { now: at(6) });
+    expect(earned(bingoId, userIds[0]!)).toBe(false);
+
+    await readPlayer(db, fakeWom([withEhp(at(5), 502.9), withEhp(at(9), 503)]).client, { bingoId, userId: userIds[0]! }, { now: at(10) });
+    expect(earned(bingoId, userIds[0]!)).toBe(true);
+  });
+
+  it("doesn't count EHP from before the Bingo started", async () => {
+    const { bingoId, userIds } = seed();
+    db.transaction((tx) => achievementService.initializeAchievementSettings(tx, bingoId, START));
+    await readPlayer(db, fakeWom([withEhp(at(-20), 490), withEhp(at(-2), 500), withEhp(at(5), 501)]).client, { bingoId, userId: userIds[0]! }, { now: at(6) });
+    expect(earned(bingoId, userIds[0]!)).toBe(false);
+  });
+});
+
 describe("gainsOf", () => {
   const snap = (hours: number, ehb: number | null, clues: number | null = 0): WomSnapshot => ({ at: at(hours), bossKills: {}, ehb, ehp: 0, clues });
 
