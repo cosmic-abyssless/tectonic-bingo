@@ -64,6 +64,8 @@ export interface WomCompetitionState {
   endsAt: Date | null;
   /** Team name -> its members' usernames, lowercased (how WOM stores them), sorted. */
   teams: Map<string, string[]>;
+  /** WOM player id -> the name WOM has for them now (it follows an in-game rename), for players in the competition. */
+  namesById: Map<string, string>;
 }
 
 /** WOM couldn't be reached, rejected the credentials, or returned a non-2xx. */
@@ -129,16 +131,19 @@ export class WomCompetitionClient {
       title?: unknown;
       startsAt?: unknown;
       endsAt?: unknown;
-      participations?: { teamName?: unknown; player?: { username?: unknown } }[];
+      participations?: { teamName?: unknown; player?: { id?: unknown; username?: unknown; displayName?: unknown } }[];
     };
     const date = (v: unknown) => (typeof v === "string" && !Number.isNaN(Date.parse(v)) ? new Date(v) : null);
     const teams = new Map<string, string[]>();
+    const namesById = new Map<string, string>();
     for (const p of raw.participations ?? []) {
-      if (typeof p.teamName !== "string" || typeof p.player?.username !== "string") continue;
-      teams.set(p.teamName, [...(teams.get(p.teamName) ?? []), p.player.username.toLowerCase()]);
+      const player = p.player;
+      if (typeof p.teamName !== "string" || typeof player?.username !== "string") continue;
+      teams.set(p.teamName, [...(teams.get(p.teamName) ?? []), player.username.toLowerCase()]);
+      if (typeof player.id === "number") namesById.set(String(player.id), typeof player.displayName === "string" ? player.displayName : player.username);
     }
     for (const [name, members] of teams) teams.set(name, members.sort());
-    return { title: typeof raw.title === "string" ? raw.title : null, startsAt: date(raw.startsAt), endsAt: date(raw.endsAt), teams };
+    return { title: typeof raw.title === "string" ? raw.title : null, startsAt: date(raw.startsAt), endsAt: date(raw.endsAt), teams, namesById };
   }
 
   /** Full competition details (title, dates, and every participant's progress) — a public read, no verification code needed. */
@@ -190,16 +195,19 @@ function getWomIntegrationConfig(bingo: Bingo): WomIntegrationConfig | null {
 }
 
 /** One WOM team entry per bingo team, named after the team with its current roster's RSNs. Teams with no RSN-bearing members are dropped — WOM rejects an empty team. */
-function getTeamRosters(db: Db, bingoId: string): WomCompetitionTeamInput[] {
+// Each member by their signup's RSN, except a player the competition already has (matched by WOM id): WOM's name for
+// them wins. WOM follows an in-game rename by itself, so our RSN can only be the same or out of date, and sending an
+// out-of-date one would swap the player for their old name.
+function getTeamRosters(db: Db, bingoId: string, womNamesById: Map<string, string> = new Map()): WomCompetitionTeamInput[] {
   const teamRows = db.select().from(teams).where(eq(teams.bingoId, bingoId)).all();
   if (teamRows.length === 0) return [];
   const teamIds = teamRows.map((t) => t.id);
   const memberRows = db.select({ teamId: teamMembers.teamId, userId: teamMembers.userId }).from(teamMembers).where(inArray(teamMembers.teamId, teamIds)).all();
   const userIds = memberRows.map((m) => m.userId);
   const signupRows = userIds.length
-    ? db.select({ userId: signups.userId, rsn: signups.rsn }).from(signups).where(and(eq(signups.bingoId, bingoId), inArray(signups.userId, userIds))).all()
+    ? db.select({ userId: signups.userId, rsn: signups.rsn, womId: signups.womId }).from(signups).where(and(eq(signups.bingoId, bingoId), inArray(signups.userId, userIds))).all()
     : [];
-  const rsnByUserId = new Map(signupRows.map((s) => [s.userId, s.rsn]));
+  const rsnByUserId = new Map(signupRows.map((s) => [s.userId, (s.womId && womNamesById.get(s.womId)) || s.rsn]));
   return teamRows
     .map((team) => ({
       name: team.name,
@@ -284,7 +292,7 @@ function sameTeams(ours: WomCompetitionTeamInput[], theirs: Map<string, string[]
  * Brings the bingo's WOM competition up to date: its title (the bingo's name), start and end dates, and teams (every
  * team's name and members). Fired after anything that changes one of those: the settings (name, dates), putting the
  * bingo live (with no start date set, that's when it starts), a team created, renamed or deleted, a member added or
- * removed, a player's in-game rename. Reads what WOM has first and sends only what differs, so an unchanged start
+ * removed. (Not a player's in-game rename: WOM follows that itself, and is where we learn of it.) Reads what WOM has first and sends only what differs, so an unchanged start
  * date is never sent to a competition that's already running. No-op until the competition exists.
  */
 export async function syncWomCompetition(db: Db, bingoId: string, client: WomCompetitionClient = getWomCompetitionClient()): Promise<void> {
@@ -306,7 +314,7 @@ export async function syncWomCompetition(db: Db, bingoId: string, client: WomCom
       if (startsAt.getTime() !== current.startsAt?.getTime()) changes.startsAt = startsAt;
       if (endsAt.getTime() !== current.endsAt?.getTime()) changes.endsAt = endsAt;
     }
-    const rosters = getTeamRosters(db, bingoId);
+    const rosters = getTeamRosters(db, bingoId, current.namesById);
     if (rosters.length > 0 && !sameTeams(rosters, current.teams)) changes.teams = rosters;
 
     const changed = Object.keys(changes) as (keyof typeof changes)[];

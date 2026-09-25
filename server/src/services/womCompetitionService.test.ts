@@ -257,7 +257,7 @@ describe("audit trail", () => {
 
 // What WOM's GET /competitions/:id returns, by default matching seedBingoWithTeam's bingo exactly (it has no dates, so
 // WOM's own are kept).
-function womState(overrides: { title?: string; startsAt?: string; endsAt?: string; participations?: { teamName: string; player: { username: string } }[] } = {}) {
+function womState(overrides: { title?: string; startsAt?: string; endsAt?: string; participations?: { teamName: string; player: { id?: number; username: string; displayName?: string } }[] } = {}) {
   return {
     id: 42,
     title: "Test Bingo",
@@ -320,12 +320,21 @@ describe("syncWomCompetition", () => {
     expect([...teams[0]!.participants].sort()).toEqual(["CaptainRsn", "NewPlayer"]);
   });
 
-  it("sends the teams after a player's in-game rename", async () => {
+  it("keeps WOM's name for a player it already has, over an out-of-date RSN", async () => {
     const { bingo, captain } = seedBingoWithTeam({ womCompetitionId: 42 });
-    db.update(schema.signups).set({ rsn: "RenamedRsn" }).where(eq(schema.signups.userId, captain.id)).run();
-    const fetchImpl = mockFetch([{ body: womState() }, { body: {} }]);
-    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
-    expect(putBody(fetchImpl)!.teams).toEqual([{ name: "Team One", participants: ["RenamedRsn"] }]);
+    db.update(schema.signups).set({ womId: "7" }).where(eq(schema.signups.userId, captain.id)).run();
+    // The captain renamed in-game: WOM has the new name, our signup still the old one.
+    const renamed = womState({ participations: [{ teamName: "Team One", player: { id: 7, username: "newname", displayName: "NewName" } }] });
+
+    const unchanged = mockFetch([{ body: renamed }, { body: {} }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(unchanged));
+    expect(calls(unchanged)).toHaveLength(1);
+
+    // And when the teams do change, the player goes out under WOM's name, not the old one.
+    db.update(schema.teams).set({ name: "Renamed Team" }).where(eq(schema.teams.bingoId, bingo.id)).run();
+    const edited = mockFetch([{ body: renamed }, { body: {} }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(edited));
+    expect(putBody(edited)!.teams).toEqual([{ name: "Renamed Team", participants: ["NewName"] }]);
   });
 
   it("sends the bingo's start and end dates when they differ", async () => {
