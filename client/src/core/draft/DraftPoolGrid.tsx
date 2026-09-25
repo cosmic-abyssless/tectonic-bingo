@@ -256,7 +256,8 @@ function RatingEditor({ value, onValueChange }: CustomCellEditorProps<DraftUnit,
         else return;
         e.preventDefault();
       }}
-      className="flex h-full items-center outline-none"
+      // Centred: an editing cell loses its padding, so left-aligned the stars would jump sideways from where they sat.
+      className="flex h-full w-full items-center justify-center outline-none"
     >
       {/* The ring says it's being edited; the stars are the pending rating. */}
       <div className="flex rounded-sm ring-1 ring-warn">
