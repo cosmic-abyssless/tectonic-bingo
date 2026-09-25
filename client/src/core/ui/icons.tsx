@@ -271,6 +271,18 @@ export const ShieldIcon = (p: IconProps) => (
   </Svg>
 );
 
+// Six dots: a handle to drag a row by.
+export const GripIcon = (p: IconProps) => (
+  <Svg {...p} fill="currentColor" stroke="none">
+    <circle cx="6" cy="3.5" r="1.2" />
+    <circle cx="10" cy="3.5" r="1.2" />
+    <circle cx="6" cy="8" r="1.2" />
+    <circle cx="10" cy="8" r="1.2" />
+    <circle cx="6" cy="12.5" r="1.2" />
+    <circle cx="10" cy="12.5" r="1.2" />
+  </Svg>
+);
+
 // Hamburger — collapses the header's entries on narrow screens.
 export const MenuIcon = (p: IconProps) => (
   <Svg {...p}>
