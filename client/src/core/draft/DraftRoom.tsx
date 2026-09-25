@@ -297,7 +297,7 @@ export function DraftRoom({ slug }: { slug: string }) {
     scouting ? (
       <Notice tone="info">
         Scouting. Signups are {shell.bingo.stage === "signup" ? "still open" : "closed"} — the draft starts once the mods move the bingo to the draft stage.
-        {isLead && " Star and note players now; your team's ratings carry over into the draft."}
+        {isLead && " Star and note players now; your ratings carry over into the draft, and only your co-captain sees them."}
         {state.shares && ` As things stand, each team drafts ${describeShares(state.shares, shell.bingo.signupMode)}.`}
       </Notice>
     ) : !state.draftStarted ? (

@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
+import { AUDIT_ACTIONS } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createTeam } from "./teamService";
 import { createQuestion, createSignup } from "./signupService";
 import { adminPair } from "./pairingService";
-import { canViewDraftRoom, draftRoomForbiddenMessage, getCutPreview, getCutUserIds, getDraftState, getTeamRatings, makePick, pickOrderTeamIndex, setDraftOrder, setPickRating, shuffleDraftOrder, startDraft, undoLastPick } from "./draftService";
+import { canViewDraftRoom, draftRoomForbiddenMessage, getCutPreview, getCutUserIds, getDraftState, getTeamRatings, ratingsForViewer, makePick, pickOrderTeamIndex, setDraftOrder, setPickRating, shuffleDraftOrder, startDraft, undoLastPick } from "./draftService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -810,6 +811,39 @@ describe("cuts", () => {
 });
 
 describe("pick ratings", () => {
+  // Ratings and notes are the leads' private opinions about players (some of whom end up on their own team), so they go
+  // to the captain and co-captain only: never the team's drafted players, a mod or site admin who doesn't lead it, or
+  // another team.
+  it("shows a team's ratings to its captain and co-captain only", () => {
+    const bingo = seedBingo({ stage: "draft", signupMode: "duo" });
+    const signupStage = { ...bingo, stage: "signup" as const };
+    const captain = seedCaptain(bingo.id, "captain");
+    const coCaptain = seedUser("co-captain");
+    createSignup(db, signupStage, { bingoId: bingo.id, userId: coCaptain.id, rsn: "co-captain", answers: [] });
+    adminPair(db, signupStage, { userIdA: captain.id, userIdB: coCaptain.id, createdByUserId: captain.id });
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, coCaptainUserId: coCaptain.id, name: "A" });
+    const otherCaptain = seedCaptain(bingo.id, "other-captain");
+    createTeam(db, { bingoId: bingo.id, captainUserId: otherCaptain.id, name: "B" });
+
+    const drafted = seedCaptain(bingo.id, "drafted");
+    db.insert(schema.teamMembers).values({ teamId: team.id, userId: drafted.id }).run();
+    const mod = seedUser("mod");
+    db.insert(schema.bingoModerators).values({ bingoId: bingo.id, userId: mod.id }).run();
+    const siteAdmin = db.insert(schema.users).values({ discordId: "site-admin", discordUsername: "site-admin", isAdmin: true }).returning().get();
+
+    const rated = seedCaptain(bingo.id, "rated");
+    const signupId = db.select().from(schema.signups).where(eq(schema.signups.userId, rated.id)).get()!.id;
+    setPickRating(db, team.id, signupId, { stars: 3, note: "secret" });
+
+    const sees = (userId: string) => ratingsForViewer(db, bingo.id, userId);
+    expect(sees(captain.id)).toEqual({ [signupId]: { stars: 3, note: "secret" } });
+    expect(sees(coCaptain.id)).toEqual({ [signupId]: { stars: 3, note: "secret" } });
+    expect(sees(drafted.id)).toEqual({});
+    expect(sees(mod.id)).toEqual({});
+    expect(sees(siteAdmin.id)).toEqual({});
+    expect(sees(otherCaptain.id)).toEqual({});
+  });
+
   it("upserts, clears on zero stars without a note, and stays per team", () => {
     const bingo = seedBingo({ stage: "signup" });
     const capA = seedCaptain(bingo.id, "capA");
@@ -829,12 +863,38 @@ describe("pick ratings", () => {
     setPickRating(db, teamA.id, signup.id, { stars: 0, note: "" });
     expect(getTeamRatings(db, teamA.id)).toEqual({});
 
-    const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.rating_set")).all();
-    expect(rows.map((r) => [r.teamId, JSON.parse(r.details)])).toEqual([
-      [teamA.id, { rsn: "p1", hasRating: true, hasNote: true, cleared: false }],
-      [teamA.id, { rsn: "p1", hasRating: true, hasNote: false, cleared: false }],
-      [teamA.id, { rsn: "p1", hasRating: false, hasNote: false, cleared: true }],
+    // Stars and notes are logged apart, each only when it changed.
+    const rows = db.select().from(schema.auditLog).where(inArray(schema.auditLog.action, ["draft.rating_set", "draft.note_set"])).orderBy(schema.auditLog.id).all();
+    expect(rows.map((r) => [r.action, r.teamId, JSON.parse(r.details)])).toEqual([
+      ["draft.rating_set", teamA.id, { rsn: "p1", names: ["p1"], hasRating: true, cleared: false }],
+      ["draft.note_set", teamA.id, { rsn: "p1", names: ["p1"], hasNote: true, cleared: false }],
+      ["draft.rating_set", teamA.id, { rsn: "p1", names: ["p1"], hasRating: true, cleared: false }],
+      ["draft.note_set", teamA.id, { rsn: "p1", names: ["p1"], hasNote: false, cleared: true }],
+      ["draft.rating_set", teamA.id, { rsn: "p1", names: ["p1"], hasRating: false, cleared: true }],
     ]);
+  });
+
+  it("logs a note change on its own, naming the team and both halves of a pair, and nothing for a save that changes nothing", () => {
+    const bingo = seedBingo({ signupMode: "duo", stage: "signup" });
+    const cap = seedCaptain(bingo.id, "cap");
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: cap.id, name: "Green team" });
+    const [a, b] = ["CrimsonSlayer", "AncientDruid"].map((d) => seedUser(d));
+    const signupA = createSignup(db, bingo, { bingoId: bingo.id, userId: a!.id, rsn: "CrimsonSlayer", answers: [] });
+    createSignup(db, bingo, { bingoId: bingo.id, userId: b!.id, rsn: "AncientDruid", answers: [] });
+    adminPair(db, bingo, { userIdA: a!.id, userIdB: b!.id, createdByUserId: cap.id });
+
+    setPickRating(db, team.id, signupA.id, { stars: 0, note: "Great duo" });
+    setPickRating(db, team.id, signupA.id, { stars: 0, note: "Great duo" });
+    const rows = db.select().from(schema.auditLog).where(inArray(schema.auditLog.action, ["draft.rating_set", "draft.note_set"])).all();
+    expect(rows.map((r) => r.action)).toEqual(["draft.note_set"]);
+    const label = AUDIT_ACTIONS["draft.note_set"].label({
+      details: JSON.parse(rows[0]!.details),
+      entityLabel: null,
+      actorName: "Cosmic",
+      teamName: "Green team",
+      onBehalfOfName: null,
+    });
+    expect(label).toBe("Cosmic updated Green team's notes for CrimsonSlayer and AncientDruid");
   });
 
   it("rejects out-of-range stars and signups from another bingo", () => {
@@ -867,7 +927,7 @@ describe("pick ratings", () => {
     expect(getTeamRatings(db, team.id)).toEqual({});
 
     const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.rating_set")).all();
-    expect(rows.map((r) => JSON.parse(r.details).rsn)).toEqual(["a & b", "b & a"]);
+    expect(rows.map((r) => JSON.parse(r.details).names)).toEqual([["a", "b"], ["b", "a"]]);
   });
 });
 

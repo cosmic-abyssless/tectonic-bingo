@@ -206,6 +206,14 @@ export const StarIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** A pencil: this can be edited. */
+export const PencilIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10.5 2.5l3 3-8 8H2.5v-3z" />
+    <path d="M9 4l3 3" />
+  </Svg>
+);
+
 export const NoteIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M3.5 2.5h9v8l-3 3h-6z" />

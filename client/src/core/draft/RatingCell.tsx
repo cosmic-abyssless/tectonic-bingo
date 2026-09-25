@@ -8,10 +8,10 @@ import { NoteIcon, StarIcon } from "../ui/icons";
 const EMPTY_RATING: PickRating = { stars: 0, note: "" };
 
 /**
- * A team lead's private rating of one signup: 0-3 stars plus a short note
- * behind a popover. Clicking the current star count clears it.
+ * A team lead's private rating of one signup: 0-3 stars plus (with showNote) a short note behind a popover. Clicking
+ * the current star count clears it. The draft table leaves the note out: it has a Note column of its own.
  */
-export function RatingCell({ rating = EMPTY_RATING, onChange }: { rating?: PickRating; onChange: (rating: PickRating) => void }) {
+export function RatingCell({ rating = EMPTY_RATING, onChange, showNote = true }: { rating?: PickRating; onChange: (rating: PickRating) => void; showNote?: boolean }) {
   return (
     <div className="flex items-center gap-1">
       <div className="flex" role="radiogroup" aria-label="Rating">
@@ -32,7 +32,7 @@ export function RatingCell({ rating = EMPTY_RATING, onChange }: { rating?: PickR
           );
         })}
       </div>
-      <NotePopover note={rating.note} onSave={(note) => onChange({ ...rating, note })} />
+      {showNote && <NotePopover note={rating.note} onSave={(note) => onChange({ ...rating, note })} />}
     </div>
   );
 }

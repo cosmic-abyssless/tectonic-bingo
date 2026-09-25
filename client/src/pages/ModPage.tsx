@@ -1,3 +1,4 @@
+import { useEscapeBack } from "../core/ui/useEscapeBack";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { Key } from "react-aria-components";
@@ -89,13 +90,7 @@ export function ModPage() {
     () => "Notification" in window && Notification.permission === "default" && !localStorage.getItem("mod_notif_prompted"),
   );
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") navigate(`/b/${slug}`);
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [navigate, slug]);
+  useEscapeBack(`/b/${slug}`);
 
   useWebSocketEvent((event) => {
     if (event.type === "submission_created" && "Notification" in window && Notification.permission === "granted") {

@@ -376,10 +376,8 @@ export function SignupRoster({ slug }: { slug: string }) {
           <Notice tone="warn" icon={<AlertIcon />}>
             As things stand, <span className="num">{cutCount}</span> signup{cutCount !== 1 ? "s" : ""} will be cut when the draft starts (
             {cutModeLabel(bingoData.bingo.cutMode, bingoData.bingo.signupMode)}: each of the <span className="num">{cuts.teamCount}</span> teams will draft{" "}
-            {describeShares(cuts.shares, bingoData.bingo.signupMode)}). The newest signups are the ones cut. There's still time to change that: pair players up, get
-            more players to sign up, or add a team.
-            {bingoData.bingo.warnLeftovers ? " They can see this warning on their signup page." : " Turn on the warning in Settings to tell them."} Filter by
-            Draft to see who:{" "}
+            {describeShares(cuts.shares, bingoData.bingo.signupMode)}). The newest signups are the ones cut.
+            {bingoData.bingo.warnLeftovers && " They can see this warning on their signup page."} Filter by Draft to see who:{" "}
             {/* Sets the Draft filter to just "Will be cut" (the other filters stay as they are). */}
             <button
               type="button"

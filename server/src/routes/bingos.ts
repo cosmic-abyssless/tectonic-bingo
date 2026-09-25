@@ -524,8 +524,8 @@ router.get(
       answerViewer: signupService.answerViewerFor(req.user!.isAdmin, isMod),
       hideCut: true,
     });
-    // Scouting notes are private to the lead's own team.
-    const ratings = ledTeamId ? draftService.getTeamRatings(db, ledTeamId) : {};
+    // Ratings and notes are private to the team's leads (captain and co-captain): not its other players, not mods.
+    const ratings = draftService.ratingsForViewer(db, bingo.id, req.user!.id);
 
     // Clan standing (points, tier, records, event placements) is fetched live
     // from tectonic-api in one batched call so it stays current through weeks

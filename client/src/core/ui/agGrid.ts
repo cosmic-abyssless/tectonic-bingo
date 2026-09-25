@@ -7,6 +7,7 @@ import {
   themeQuartz,
   ClientSideRowModelModule,
   TextEditorModule,
+  LargeTextEditorModule,
   SelectEditorModule,
   CheckboxEditorModule,
   CustomEditorModule,
@@ -27,6 +28,8 @@ import { useResolvedColorScheme } from "./colorScheme";
 ModuleRegistry.registerModules([
   ClientSideRowModelModule,
   TextEditorModule,
+  // The draft pool's Note column (a popup textarea).
+  LargeTextEditorModule,
   SelectEditorModule,
   CheckboxEditorModule,
   // The signup roster's timezone picker (a React popup editor, not one of AG's own).

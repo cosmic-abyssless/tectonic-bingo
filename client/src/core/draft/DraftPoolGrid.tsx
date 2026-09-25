@@ -23,7 +23,6 @@ import type {
   GridState,
   IRowNode,
   ITooltipParams,
-  RowClassParams,
   RowHeightParams,
   StateUpdatedEvent,
   TooltipCallbackParams,
@@ -41,7 +40,6 @@ import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { CaCell, WomCell, caTitle, formatCaTier, formatWomStat } from "../signup/caStats";
 import { discordName } from "../ui/user";
 import { useGridTheme } from "../ui/agGrid";
-import { Badge } from "../ui/Card";
 import { ColumnPicker } from "../ui/ColumnPicker";
 import { MultiSelect } from "../ui/MultiSelect";
 import { REGION_OPTIONS, regionOf } from "../ui/timezoneFilter";
@@ -49,7 +47,7 @@ import { usePreference } from "../ui/preferences";
 import { Switch } from "../ui/Switch";
 import { CellButton, Mark } from "../ui/gridCells";
 import { useHiddenColumns } from "../ui/hiddenColumns";
-import { LinkIcon } from "../ui/icons";
+import { LinkIcon, PencilIcon } from "../ui/icons";
 import { compareSortValues } from "../ui/tableSort";
 import { TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
 import { useDocumentTop, useOffsetWithin } from "../ui/tableChrome";
@@ -227,8 +225,24 @@ function StackedTooltip({ value }: ITooltipParams<DraftUnit, string, PoolGridCon
 const RatingRenderer = ({ data, context }: CustomCellRendererProps<DraftUnit, unknown, PoolGridContext & { ratings: Ratings; onRate: (signupId: string, rating: PickRating) => void }>) => {
   if (!data) return null;
   const signupId = data.entries[0]!.signup.id;
-  return <RatingCell rating={context.ratings[signupId]} onChange={(r) => context.onRate(signupId, r)} />;
+  return <RatingCell rating={context.ratings[signupId]} onChange={(r) => context.onRate(signupId, r)} showNote={false} />;
 };
+
+// The captain's (and co-captain's) note on a unit, edited in the cell (AG's large text editor, a popup textarea: see the Note column). The
+// pencil says it's editable at a glance; an empty one invites a note. A long note wraps to fill the row (2 lines for a
+// solo player's row, 4 for a pair's taller one) before it's cut off with an ellipsis.
+const NoteRenderer = ({ value, data }: CustomCellRendererProps<DraftUnit, string>) => (
+  <span className="flex h-full min-w-0 cursor-text items-center gap-1.5">
+    <span
+      className={`min-w-0 flex-1 whitespace-normal break-words leading-tight ${data && data.entries.length > 1 ? "line-clamp-4" : "line-clamp-2"} ${
+        value ? "text-on-surface" : "text-on-surface-subtle"
+      }`}
+    >
+      {value || "Add a note"}
+    </span>
+    <PencilIcon size={12} className="shrink-0 text-on-surface-subtle" />
+  </span>
+);
 
 const DraftButtonRenderer = ({ data, context }: CustomCellRendererProps<DraftUnit, unknown, PoolGridContext>) => {
   if (!data) return null;
@@ -246,9 +260,6 @@ const DraftButtonRenderer = ({ data, context }: CustomCellRendererProps<DraftUni
 
 const PairIconRenderer = ({ data }: CustomCellRendererProps<DraftUnit>) => (data && data.entries.length > 1 ? <LinkIcon size={14} aria-label="Duo pair" className="text-on-surface-subtle" /> : null);
 
-// Cut players only show while signups are open (after that the draft room leaves them out), when who's cut can still
-// change, so it's said as what will happen.
-const CutBadgeRenderer = ({ data }: CustomCellRendererProps<DraftUnit, unknown, PoolGridContext>) => (data?.cut ? <Badge tone="warn">Will be cut</Badge> : null);
 
 // Movable column order, sizing and sort. Visibility stays in pref:hiddenColumns:draftPool (useHiddenColumns) so
 // ColumnPicker keeps working. Fixed columns are always forced to their pinned places in the saved order — not
@@ -268,6 +279,22 @@ function fixedColsInPlace(orderedColIds: string[]): string[] {
 // same ~30rem.
 const MIN_TABLE_HEIGHT = "30rem";
 
+const RATING_WIDTH = 96;
+// The Rating column was 140px wide while it also held the note's button. Every width gets saved, touched or not, so a
+// saved 140 is almost certainly that old default rather than someone's choice: it's dropped, for the new default.
+const OLD_RATING_WIDTH = 140;
+function withoutOldRatingWidth(sizing: NonNullable<GridState["columnSizing"]>): NonNullable<GridState["columnSizing"]> {
+  return { ...sizing, columnSizingModel: sizing.columnSizingModel.filter((c) => !(c.colId === "rating" && c.width === OLD_RATING_WIDTH)) };
+}
+
+// An order saved before the Note column existed lacks it, and AG would put a column the saved order doesn't list at
+// the end, far from the stars; it goes right after RSN instead, as it does for someone with no saved order.
+function withNoteAfterRsn(ids: string[]): string[] {
+  if (ids.includes("note")) return ids;
+  const at = ids.indexOf("rsn");
+  return at === -1 ? ids : [...ids.slice(0, at + 1), "note", ...ids.slice(at + 1)];
+}
+
 function readDraftColumnState(): Pick<GridState, "columnOrder" | "columnSizing" | "sort"> {
   try {
     const raw = localStorage.getItem(GRID_STATE_KEY);
@@ -276,8 +303,8 @@ function readDraftColumnState(): Pick<GridState, "columnOrder" | "columnSizing" 
     if (!parsed || typeof parsed !== "object") return {};
     const orderedColIds = parsed.columnOrder?.orderedColIds?.filter((id) => typeof id === "string");
     return {
-      ...(orderedColIds?.length ? { columnOrder: { orderedColIds: fixedColsInPlace(orderedColIds) } } : {}),
-      ...(parsed.columnSizing ? { columnSizing: parsed.columnSizing } : {}),
+      ...(orderedColIds?.length ? { columnOrder: { orderedColIds: fixedColsInPlace(withNoteAfterRsn(orderedColIds)) } } : {}),
+      ...(parsed.columnSizing ? { columnSizing: withoutOldRatingWidth(parsed.columnSizing) } : {}),
       ...(parsed.sort ? { sort: parsed.sort } : {}),
     };
   } catch {
@@ -307,7 +334,7 @@ export function DraftPoolGrid({
   widthSwitch?: boolean;
   pool: DraftUnit[];
   questions: SignupQuestion[];
-  /** Present only for team leads — they see and edit their own team's ratings. */
+  /** Present only for team leads (captain and co-captain): they see and edit their ratings. Never the team's other players. */
   ratings: Ratings | null;
   onRate: (signupId: string, rating: PickRating) => void;
   canPick: boolean;
@@ -366,13 +393,13 @@ export function DraftPoolGrid({
   const showCa = entries.some((e) => e.caCurrent !== null || e.caPeak !== null || statsRefreshing.has(e.signup.id));
   const showProfiles = entries.some((e) => e.tectonicProfile !== null);
   const hasPairs = pool.some((u) => u.entries.length > 1);
-  const hasCuts = pool.some((u) => u.cut);
 
   // A duo pair stays on screen if either half matches — the half that didn't is dimmed, not hidden (StackedCell).
   const rows = useMemo(() => pool.filter((u) => u.entries.some(entryMatches)), [pool, entryMatches]);
 
   const columnOptions = useMemo(
     () => [
+      ...(ratings ? [{ id: "note", label: "Note" }] : []),
       { id: "discord", label: "Discord" },
       ...(showAnswers ? [{ id: "timezone", label: "Timezone" }] : []),
       ...(showProfiles ? [{ id: "tier", label: "Tier" }, { id: "records", label: "Records" }, { id: "podiums", label: "Podiums" }, { id: "achievements", label: "Achievements" }] : []),
@@ -409,7 +436,8 @@ export function DraftPoolGrid({
         valueGetter: (p) => (p.data ? (ratings[p.data.entries[0]!.signup.id]?.stars ?? 0) : 0),
         comparator: makeUnitComparator("rating", ratings),
         cellRenderer: RatingRenderer,
-        width: 140,
+        // Just the three stars (3 x 24px) and the cell's padding; the note has a column of its own.
+        width: RATING_WIDTH,
         // No static `sort: "desc"` here — the initialState fallback above sets it instead (see the comment
         // there for why a colDef-level default doesn't play well with a restored sort on another column).
         pinned: "left",
@@ -429,6 +457,30 @@ export function DraftPoolGrid({
         width: 210,
         sort: ratings ? undefined : "asc",
         suppressMovable: true,
+      },
+      !!ratings && {
+        colId: "note",
+        headerName: "Note",
+        headerTooltip: "Your note on this player (only your co-captain sees it). Click to edit.",
+        // Pairs are rated (and noted) together, under the first half's signup, as with the stars.
+        valueGetter: (p) => (p.data ? (ratings[p.data.entries[0]!.signup.id]?.note ?? "") : ""),
+        // Saved through the same rating update as the stars (optimistic); the cell reads it back from the ratings.
+        valueSetter: (p) => {
+          if (!p.data) return false;
+          const signupId = p.data.entries[0]!.signup.id;
+          const current = p.context.ratings[signupId] ?? { stars: 0, note: "" };
+          const note = String(p.newValue ?? "").trim();
+          if (note !== current.note) p.context.onRate(signupId, { ...current, note });
+          return false;
+        },
+        editable: true,
+        singleClickEdit: true,
+        cellEditor: "agLargeTextCellEditor",
+        cellEditorPopup: true,
+        cellEditorParams: { maxLength: 200, rows: 4, cols: 40 },
+        cellRenderer: NoteRenderer,
+        tooltip: false,
+        width: 200,
       },
       {
         colId: "discord",
@@ -451,7 +503,6 @@ export function DraftPoolGrid({
         tooltip: stackedTooltip((e) => e.signup.timezone ?? ""),
         width: 170,
       },
-      hasCuts && { colId: "cut", headerName: "", cellRenderer: CutBadgeRenderer, width: 110, sortable: false, resizable: false },
       showProfiles && {
         colId: "tier",
         headerName: "Tier",
@@ -559,7 +610,7 @@ export function DraftPoolGrid({
     // Visibility is grid state now (initialState/onStateUpdated below), not something columnDefs re-imposes —
     // hiddenColumns/shown aren't dependencies here on purpose; a column that structurally exists always does,
     // and only starts hidden via initialState.
-  }, [ratings, hasPairs, hasCuts, showProfiles, showWomStats, showCa, showAnswers, questions, canPick, statsRefreshing]);
+  }, [ratings, hasPairs, showProfiles, showWomStats, showCa, showAnswers, questions, canPick, statsRefreshing]);
 
   // lockPinned: a column's pinned state (left/unpinned) is set by the colDef, not by the user — without this, an
   // unpinned column can be dragged past the pinned pairIcon/rating/RSN block into it, which looked like a bug.
@@ -572,10 +623,6 @@ export function DraftPoolGrid({
   // height via this callback (not an Enterprise feature) — the theme's own rowHeight (44) is the solo/fallback.
   const getRowHeight = useCallback((params: RowHeightParams<DraftUnit>) => (params.data && params.data.entries.length > 1 ? 84 : 44), []);
   const getRowId = useCallback((params: GetRowIdParams<DraftUnit>) => params.data.pairingId ?? params.data.entries[0]!.signup.id, []);
-  // Will be cut — muted. AG's own row border (the theme's default) is the only cue for where one unit ends and
-  // the next begins, which is easy to misread for a duo pair right after a solo unit — this doesn't change that, but
-  // the at-risk row keeps standing out despite the striping (see below) either way.
-  const getRowClass = useCallback((params: RowClassParams<DraftUnit>) => (params.data?.cut ? "text-on-surface-subtle" : ""), []);
 
   // Same fixed-height-fills-the-viewport behaviour as SignupRosterGrid, not the pool's own previous
   // shrinks-with-content one (a comment here used to explain deliberately NOT doing this, so the pool wouldn't
@@ -700,7 +747,6 @@ export function DraftPoolGrid({
             rowData={rows}
             getRowId={getRowId}
             getRowHeight={getRowHeight}
-            getRowClass={getRowClass}
             columnDefs={columnDefs}
             defaultColDef={defaultColDef}
             initialState={initialState}
@@ -709,6 +755,8 @@ export function DraftPoolGrid({
             onStateUpdated={onStateUpdated}
             context={context}
             animateRows={false}
+            // A click anywhere outside the table ends a Note edit (saving it), not just a click on another cell.
+            stopEditingWhenCellsLoseFocus
             tooltipShowDelay={200}
             tooltipHideDelay={4000}
             enableCellTextSelection
