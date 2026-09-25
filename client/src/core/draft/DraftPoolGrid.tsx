@@ -23,7 +23,6 @@ import type {
   GridState,
   IRowNode,
   ITooltipParams,
-  RowClassParams,
   RowHeightParams,
   StateUpdatedEvent,
   TooltipCallbackParams,
@@ -41,7 +40,6 @@ import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { CaCell, WomCell, caTitle, formatCaTier, formatWomStat } from "../signup/caStats";
 import { discordName } from "../ui/user";
 import { useGridTheme } from "../ui/agGrid";
-import { Badge } from "../ui/Card";
 import { ColumnPicker } from "../ui/ColumnPicker";
 import { MultiSelect } from "../ui/MultiSelect";
 import { REGION_OPTIONS, regionOf } from "../ui/timezoneFilter";
@@ -246,9 +244,6 @@ const DraftButtonRenderer = ({ data, context }: CustomCellRendererProps<DraftUni
 
 const PairIconRenderer = ({ data }: CustomCellRendererProps<DraftUnit>) => (data && data.entries.length > 1 ? <LinkIcon size={14} aria-label="Duo pair" className="text-on-surface-subtle" /> : null);
 
-// Cut players only show while signups are open (after that the draft room leaves them out), when who's cut can still
-// change, so it's said as what will happen.
-const CutBadgeRenderer = ({ data }: CustomCellRendererProps<DraftUnit, unknown, PoolGridContext>) => (data?.cut ? <Badge tone="warn">Will be cut</Badge> : null);
 
 // Movable column order, sizing and sort. Visibility stays in pref:hiddenColumns:draftPool (useHiddenColumns) so
 // ColumnPicker keeps working. Fixed columns are always forced to their pinned places in the saved order — not
@@ -366,7 +361,6 @@ export function DraftPoolGrid({
   const showCa = entries.some((e) => e.caCurrent !== null || e.caPeak !== null || statsRefreshing.has(e.signup.id));
   const showProfiles = entries.some((e) => e.tectonicProfile !== null);
   const hasPairs = pool.some((u) => u.entries.length > 1);
-  const hasCuts = pool.some((u) => u.cut);
 
   // A duo pair stays on screen if either half matches — the half that didn't is dimmed, not hidden (StackedCell).
   const rows = useMemo(() => pool.filter((u) => u.entries.some(entryMatches)), [pool, entryMatches]);
@@ -451,7 +445,6 @@ export function DraftPoolGrid({
         tooltip: stackedTooltip((e) => e.signup.timezone ?? ""),
         width: 170,
       },
-      hasCuts && { colId: "cut", headerName: "", cellRenderer: CutBadgeRenderer, width: 110, sortable: false, resizable: false },
       showProfiles && {
         colId: "tier",
         headerName: "Tier",
@@ -559,7 +552,7 @@ export function DraftPoolGrid({
     // Visibility is grid state now (initialState/onStateUpdated below), not something columnDefs re-imposes —
     // hiddenColumns/shown aren't dependencies here on purpose; a column that structurally exists always does,
     // and only starts hidden via initialState.
-  }, [ratings, hasPairs, hasCuts, showProfiles, showWomStats, showCa, showAnswers, questions, canPick, statsRefreshing]);
+  }, [ratings, hasPairs, showProfiles, showWomStats, showCa, showAnswers, questions, canPick, statsRefreshing]);
 
   // lockPinned: a column's pinned state (left/unpinned) is set by the colDef, not by the user — without this, an
   // unpinned column can be dragged past the pinned pairIcon/rating/RSN block into it, which looked like a bug.
@@ -572,10 +565,6 @@ export function DraftPoolGrid({
   // height via this callback (not an Enterprise feature) — the theme's own rowHeight (44) is the solo/fallback.
   const getRowHeight = useCallback((params: RowHeightParams<DraftUnit>) => (params.data && params.data.entries.length > 1 ? 84 : 44), []);
   const getRowId = useCallback((params: GetRowIdParams<DraftUnit>) => params.data.pairingId ?? params.data.entries[0]!.signup.id, []);
-  // Will be cut — muted. AG's own row border (the theme's default) is the only cue for where one unit ends and
-  // the next begins, which is easy to misread for a duo pair right after a solo unit — this doesn't change that, but
-  // the at-risk row keeps standing out despite the striping (see below) either way.
-  const getRowClass = useCallback((params: RowClassParams<DraftUnit>) => (params.data?.cut ? "text-on-surface-subtle" : ""), []);
 
   // Same fixed-height-fills-the-viewport behaviour as SignupRosterGrid, not the pool's own previous
   // shrinks-with-content one (a comment here used to explain deliberately NOT doing this, so the pool wouldn't
@@ -700,7 +689,6 @@ export function DraftPoolGrid({
             rowData={rows}
             getRowId={getRowId}
             getRowHeight={getRowHeight}
-            getRowClass={getRowClass}
             columnDefs={columnDefs}
             defaultColDef={defaultColDef}
             initialState={initialState}

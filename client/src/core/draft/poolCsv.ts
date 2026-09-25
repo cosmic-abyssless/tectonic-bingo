@@ -16,13 +16,11 @@ export function buildPoolCsv(pool: DraftUnit[], questions: SignupQuestion[], rat
   const showAnswers = entries.some((e) => e.answers !== null);
   const showProfiles = entries.some((e) => e.tectonicProfile !== null);
   const hasPairs = pool.some((u) => u.entries.length > 1);
-  const hasCuts = pool.some((u) => u.cut);
   const headers = [
     "RSN",
     "Discord",
     ...(hasPairs ? ["Paired with"] : []),
     ...(ratings ? ["Rating", "Note"] : []),
-    ...(hasCuts ? ["Will be cut"] : []),
     "Timezone",
     ...(showProfiles ? ["Tier", "Clan points", "Clan rank", "Records", "Podiums", "Achievements"] : []),
     "EHB",
@@ -42,7 +40,6 @@ export function buildPoolCsv(pool: DraftUnit[], questions: SignupQuestion[], rat
         discordName(e.user),
         ...(hasPairs ? [partner?.signup.rsn ?? ""] : []),
         ...(ratings ? [rating && rating.stars > 0 ? String(rating.stars) : "", rating?.note ?? ""] : []),
-        ...(hasCuts ? [unit.cut ? "Yes" : ""] : []),
         e.signup.timezone ? formatTimeZone(e.signup.timezone) : "",
         ...(showProfiles
           ? [

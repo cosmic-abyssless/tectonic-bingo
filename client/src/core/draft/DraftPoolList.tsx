@@ -7,7 +7,6 @@ import { formatSignupAnswer, formatTimeZone, type DraftPoolEntry, type DraftUnit
 import { useStatsRefreshingSignupIds } from "../../context/WebSocketContext";
 import { formatCaTier, formatWomStat } from "../signup/caStats";
 import { Button } from "../ui/Button";
-import { Badge } from "../ui/Card";
 import { Mark } from "../ui/gridCells";
 import { LinkIcon } from "../ui/icons";
 import { MultiSelect } from "../ui/MultiSelect";
@@ -110,9 +109,6 @@ export function DraftPoolList({
                 dimmed={(e) => filtering && !entryMatches(e)}
                 statsLoading={(e) => statsRefreshing.has(e.signup.id)}
                 rating={ratings ? { value: ratings[unit.entries[0]!.signup.id], onChange: (r) => onRate(unit.entries[0]!.signup.id, r) } : null}
-                // Cut players only show while signups are open (the draft room leaves them out after), when who's cut
-                // can still change.
-                cutTag={unit.cut ? "Will be cut" : null}
                 pick={canPick ? { disabled: picking || !!blocked, reason: unit.cut ? null : blocked, onConfirm: () => onPick(unit.entries[0]!.user.id) } : null}
               />
             );
@@ -130,7 +126,6 @@ function PoolCard({
   dimmed,
   statsLoading,
   rating,
-  cutTag,
   pick,
 }: {
   unit: DraftUnit;
@@ -140,7 +135,6 @@ function PoolCard({
   statsLoading: (e: DraftPoolEntry) => boolean;
   /** Pairs are rated together, under the first half's signup (as in the table). */
   rating: { value: PickRating | undefined; onChange: (r: PickRating) => void } | null;
-  cutTag: string | null;
   /** reason: why it can't be drafted now (the team on the clock has its share of these), shown under the button. */
   pick: { disabled: boolean; reason: string | null; onConfirm: () => void } | null;
 }) {
@@ -149,7 +143,7 @@ function PoolCard({
   const hasAnswers = unit.entries.some((e) => (e.answers?.length ?? 0) > 0);
   return (
     // data-pool-card: a hook for a theme's CSS (the comic theme gives it an ink border and hard shadow).
-    <li data-pool-card="" className={`rounded-md border border-outline bg-surface-raised p-3 ${cutTag ? "text-on-surface-subtle" : ""}`}>
+    <li data-pool-card="" className="rounded-md border border-outline bg-surface-raised p-3">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1 space-y-2">
           {unit.entries.map((e, i) => (
@@ -181,14 +175,11 @@ function PoolCard({
         )}
       </div>
 
-      {(cutTag || hasAnswers) && (
+      {hasAnswers && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {cutTag && <Badge tone="warn">{cutTag}</Badge>}
-          {hasAnswers && (
-            <button type="button" onClick={() => setAnswersOpen((o) => !o)} className="text-xs text-on-surface-subtle underline underline-offset-2 hover:text-on-surface" aria-expanded={answersOpen}>
-              {answersOpen ? "Hide answers" : "Signup answers"}
-            </button>
-          )}
+          <button type="button" onClick={() => setAnswersOpen((o) => !o)} className="text-xs text-on-surface-subtle underline underline-offset-2 hover:text-on-surface" aria-expanded={answersOpen}>
+            {answersOpen ? "Hide answers" : "Signup answers"}
+          </button>
         </div>
       )}
       {answersOpen && (
