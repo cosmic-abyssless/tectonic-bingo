@@ -298,7 +298,7 @@ export function SignupRoster({ slug }: { slug: string }) {
   const refreshStats = useRefreshSignupStats(slug);
   const setTimezone = useSetSignupTimezone(slug);
   const gridContext = useMemo<GridContext>(
-    () => ({ search, partnerRsnMap, canWithdraw, canPair: stage === "signup", statsRefreshing, statsResults, currentUserId: me?.id ?? null, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, openProfile }),
+    () => ({ search, partnerRsnMap, canWithdraw, canPair: stage === "planning" || stage === "signup" || stage === "captains", statsRefreshing, statsResults, currentUserId: me?.id ?? null, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, openProfile }),
     [search, partnerRsnMap, canWithdraw, stage, statsRefreshing, statsResults, me, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, openProfile],
   );
 

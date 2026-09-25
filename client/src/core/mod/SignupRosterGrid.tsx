@@ -77,7 +77,7 @@ export interface GridContext {
   search: string;
   partnerRsnMap: Map<string, string>;
   canWithdraw: boolean;
-  /** Pairings can change (mods pair or unpair from the Partner cell): only while signups are open. */
+  /** Pairings can change (mods pair or unpair from the Partner cell): any stage before the draft. */
   canPair: boolean;
   statsRefreshing: ReadonlySet<string>;
   /** How each signup's last stats refresh went, for a few seconds after (the Refresh column's tick or cross). */
@@ -249,7 +249,7 @@ function WithdrawEditor({ data, onValueChange, stopEditing }: CustomCellEditorPr
   );
 }
 
-// Duo mode only. While pairings can change (signups open), every active row's Partner cell edits (a click or Enter),
+// Duo mode only. While pairings can change (before the draft), every active row's Partner cell edits (a click or Enter),
 // with PartnerEditor: a paired row's to an Unpair confirmation, an unpaired row's to a searchable list of the other
 // unpaired players. An unpaired row says who they've asked, if anyone. After that it's just who's paired with whom.
 const PartnerCell = memo(function PartnerCell({ data, context }: CustomCellRendererProps<RosterRow, string, GridContext>) {
