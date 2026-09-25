@@ -13,7 +13,7 @@ export function TitlesSection({ picked, contributions, womReadAt }: { picked: Pi
     <div className="space-y-3">
       <p className="text-xs text-on-surface-subtle">Picked from the players shown, and updated as submissions are approved. Some titles are hidden until someone earns one.</p>
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {picked.map(({ title, holders }) => (
+        {picked.map(({ title, requirement, holders }) => (
           <li key={title.id} className={`flex min-w-0 flex-col gap-2 rounded-lg border p-3 ${holders.length ? "border-outline-strong bg-surface" : "border-dashed border-outline"}`}>
             <div className="flex items-baseline justify-between gap-2">
               <span className="truncate text-sm font-semibold text-on-surface">{title.name}</span>
@@ -22,7 +22,7 @@ export function TitlesSection({ picked, contributions, womReadAt }: { picked: Pi
             <p className="text-xs text-on-surface-muted italic">{title.flavour}</p>
             {holders.length === 0 ? (
               <p className="text-xs text-on-surface-subtle">
-                No one yet. <span className="text-on-surface-muted">{title.requirement}.</span>
+                No one yet. <span className="text-on-surface-muted">{requirement}.</span>
               </p>
             ) : (
               <ul className="space-y-1">

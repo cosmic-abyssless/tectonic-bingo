@@ -8,6 +8,7 @@ import * as bingoService from "../services/bingoService";
 import * as bingoExportService from "../services/bingoExportService";
 import * as itemGroupService from "../services/itemGroupService";
 import * as pieceValueService from "../services/pieceValueService";
+import * as titleSettingsService from "../services/titleSettingsService";
 import * as bugReportService from "../services/bugReportService";
 import * as pastWomCompetitionService from "../services/pastWomCompetitionService";
 import * as userService from "../services/userService";
@@ -188,6 +189,23 @@ router.put(
     if (typeof dismissed !== "boolean") throw new ServiceError(400, "dismissed must be a boolean");
     pieceValueService.setUnvaluedItemDismissed(db, itemName, dismissed, req.user!.id);
     res.status(204).end();
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Title settings — global: each Title's minimum, Titles turned off, and the luck weights
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/title-settings",
+  asyncHandler(async (_req, res) => {
+    res.json({ settings: titleSettingsService.getTitleSettings(db) });
+  }),
+);
+router.put(
+  "/title-settings",
+  asyncHandler(async (req, res) => {
+    res.json({ settings: titleSettingsService.updateTitleSettings(db, req.body, req.user!.id) });
   }),
 );
 

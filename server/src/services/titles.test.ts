@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chipTitles, pickTitles, titlesHeldBy, type PlayerTitleFacts, type TitleAwardFact, type TitleContext, type TitleId } from "@bingo/shared";
+import { chipTitles, DEFAULT_TITLE_SETTINGS, oneIn, pickTitles, shortGp, TITLES, titlesHeldBy, type LuckFacts, type PlayerTitleFacts, type TitleAwardFact, type TitleContext, type TitleId } from "@bingo/shared";
 
 const HOUR = 60 * 60 * 1000;
 const LIVE_AT = new Date("2026-01-01T00:00:00Z");
@@ -19,6 +19,7 @@ function player(userId: string, facts: Partial<PlayerTitleFacts> = {}): PlayerTi
     distinctItems: 0,
     totalQuantity: 0,
     wom: null,
+    luck: null,
     ...facts,
   };
 }
@@ -27,6 +28,7 @@ function award(points: number, hours: number, extra: Partial<TitleAwardFact> = {
   return { kind: "task", tileNodeId: "t1", tileName: "Zulrah", points, completedAt: at(hours).toISOString(), closed: false, ...extra };
 }
 
+const TITLE_BY_ID = (id: TitleId) => TITLES.find((t) => t.id === id)!;
 const holdersOf = (pool: PlayerTitleFacts[], id: TitleId, ctx = live(48)) => pickTitles(pool, ctx).find((p) => p.title.id === id)?.holders.map((h) => h.userId);
 
 describe("pickTitles", () => {
@@ -102,6 +104,87 @@ describe("pickTitles", () => {
     const specialist = pickTitles([focused, spread, tiny], live(48)).find((p) => p.title.id === "specialist")!;
     expect(specialist.holders.map((h) => h.userId)).toEqual(["a"]);
     expect(specialist.holders[0]!.text).toBe("80% of their points from Zulrah");
+  });
+});
+
+describe("luck Titles", () => {
+  const WOM = { ehb: 0, ehp: 0, clues: 0, asOf: "2026-01-02T10:00:00.000Z" };
+  const lucky = (userId: string, luck: Partial<LuckFacts>) => player(userId, { wom: WOM, luck: { spoon: null, dry: null, clutch: null, ...luck } });
+  const textOf = (pool: PlayerTitleFacts[], id: TitleId) => pickTitles(pool, live(48)).find((p) => p.title.id === id)?.holders[0]?.text;
+
+  it("gives Spoon to the luckiest, reading 1 in N with their best drop", () => {
+    const pool = [lucky("a", { spoon: { value: 2.53, itemName: "Ultor vestige", kills: 3 } }), lucky("b", { spoon: { value: 1.2, itemName: "Virtus mask", kills: 40 } })];
+    expect(holdersOf(pool, "spoon")).toEqual(["a"]);
+    expect(textOf(pool, "spoon")).toBe("1 in 339 luck (Ultor vestige at 3 kills)");
+  });
+
+  it("shows how fresh the Wise Old Man data behind a luck Title is", () => {
+    const holder = pickTitles([lucky("a", { spoon: { value: 2, itemName: "Ultor vestige", kills: 3 } })], live(48)).find((p) => p.title.id === "spoon")!.holders[0]!;
+    expect(holder.asOf).toBe(WOM.asOf);
+  });
+
+  it("lets Players tied on luck share Spoon", () => {
+    const spoon = { value: 1.5, itemName: "Ultor vestige", kills: 30 };
+    expect(holdersOf([lucky("a", { spoon }), lucky("b", { spoon })], "spoon")).toEqual(["a", "b"]);
+  });
+
+  it("leaves Spoon and Clutch empty, and Dry out, for Players below the floors", () => {
+    const pool = [lucky("a", {}), player("b")];
+    expect(holdersOf(pool, "spoon")).toEqual([]);
+    expect(holdersOf(pool, "clutch")).toEqual([]);
+    expect(holdersOf(pool, "dry")).toBeUndefined();
+  });
+
+  it("gives hidden Dry to the most unlikely streak, naming the boss and the KC", () => {
+    const pool = [lucky("a", { dry: { value: 1.48, boss: "Vardorvis", kills: 412 } }), lucky("b", { dry: { value: 1.1, boss: "Zulrah", kills: 600 } })];
+    expect(holdersOf(pool, "dry")).toEqual(["a"]);
+    expect(textOf(pool, "dry")).toBe("412 KC dry at Vardorvis (1 in 30)");
+    expect(TITLE_BY_ID("dry").hidden).toBe(true);
+  });
+
+  it("gives Clutch to the best weighted drop, with its own odds and GP value", () => {
+    const pool = [
+      lucky("a", { clutch: { value: 2.8, luck: 1.4, itemName: "Bandos tassets", gpValue: 12_000_000 } }),
+      lucky("b", { clutch: { value: 2, luck: 2, itemName: "Pet general graardor", gpValue: null } }),
+    ];
+    expect(holdersOf(pool, "clutch")).toEqual(["a"]);
+    expect(textOf(pool, "clutch")).toBe("Clutched Bandos tassets (1 in 25), 12m");
+    expect(textOf([pool[1]!], "clutch")).toBe("Clutched Pet general graardor (1 in 100)");
+  });
+
+  it("formats 1 in N and GP short", () => {
+    expect(oneIn(0.2)).toBe("1 in 1.6");
+    expect(oneIn(4.1)).toBe("1 in 12,589");
+    expect(oneIn(6.36)).toBe("1 in 2.3m");
+    expect(oneIn(16.22)).toBe("1 in 1.7 × 10¹⁶");
+    expect(shortGp(12_000_000)).toBe("12m");
+    expect(shortGp(1_530_000_000)).toBe("1.53b");
+    expect(shortGp(450_000)).toBe("450k");
+  });
+});
+
+describe("Title settings", () => {
+  const pickWith = (pool: PlayerTitleFacts[], settings: Partial<typeof DEFAULT_TITLE_SETTINGS>) => pickTitles(pool, live(48), { ...DEFAULT_TITLE_SETTINGS, ...settings });
+
+  it("leaves out a Title a Site admin turned off, held or not", () => {
+    const pool = [player("a", { pointsShare: 20 }), player("b", { rejectedSubmissions: 5 })];
+    const ids = pickWith(pool, { disabled: ["carry", "butterfingers"] }).map((p) => p.title.id);
+    expect(ids).not.toContain("carry");
+    expect(ids).not.toContain("butterfingers");
+    expect(ids).toContain("closer");
+  });
+
+  it("holds Players to a Site admin's minimum, and says so on an unheld Title", () => {
+    const pool = [player("a", { distinctItems: 4 })];
+    expect(pickWith(pool, {}).find((p) => p.title.id === "collector")!.holders.map((h) => h.userId)).toEqual(["a"]);
+    const raised = pickWith(pool, { minimums: { collector: 5 } }).find((p) => p.title.id === "collector")!;
+    expect(raised.holders).toEqual([]);
+    expect(raised.requirement).toBe("5 different items claimed");
+  });
+
+  it("states the luck Titles' floors from the luck weights", () => {
+    const luck = { ...DEFAULT_TITLE_SETTINGS.luck, spoonMinLuck: 2 };
+    expect(pickWith([], { luck }).find((p) => p.title.id === "spoon")!.requirement).toBe("Drops adding up to 1 in 100 luck");
   });
 });
 

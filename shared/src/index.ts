@@ -12,7 +12,7 @@
 import type { ExclusivityRule } from "./exclusivity.ts";
 import type { AuditVisibility } from "./audit.ts";
 import type { AchievementCount } from "./achievements.ts";
-import type { PlayerTitleFacts } from "./titles.ts";
+import type { PlayerTitleFacts, TitleSettings } from "./titles.ts";
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
@@ -1070,6 +1070,8 @@ export interface StatsResponse {
   titleFacts: PlayerTitleFacts[];
   /** When the Bingo started and moved to Finished (null until it does), for On Fire's window. */
   titleContext: { liveAt: string | null; endedAt: string | null };
+  /** The Site admin's Title settings: which Titles are on and their minimums, for picking holders. */
+  titleSettings: TitleSettings;
   /** The last time Wise Old Man was read for any Player of the Bingo; null if it hasn't been. */
   womReadAt: string | null;
 }

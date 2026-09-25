@@ -13,6 +13,7 @@ export const adminQueryKeys = {
   itemGroups: ["adminItemGroups"] as const,
   pastWomCompetitions: ["adminPastWomCompetitions"] as const,
   pieceValues: ["adminPieceValues"] as const,
+  titleSettings: ["adminTitleSettings"] as const,
   bugReports: ["adminBugReports"] as const,
   siteAuditLog: (bingoScope: string | null | "all", filters: AuditLogFilters) => ["siteAuditLog", bingoScope, filters] as const,
   achievementSettings: (slug: string) => ["adminAchievements", slug] as const,
@@ -40,6 +41,10 @@ export function useItemGroups() {
 
 export function usePieceValues() {
   return useQuery({ queryKey: adminQueryKeys.pieceValues, queryFn: () => adminApi.getPieceValues() });
+}
+
+export function useTitleSettings() {
+  return useQuery({ queryKey: adminQueryKeys.titleSettings, queryFn: () => adminApi.getTitleSettings() });
 }
 
 export function usePastWomCompetitions() {

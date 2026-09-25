@@ -78,6 +78,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "PATCH /api/admin/piece-values/:id": ["piece_value.updated"],
   "DELETE /api/admin/piece-values/:id": ["piece_value.deleted"],
   "PUT /api/admin/unvalued-items/dismissed": ["piece_value.item_dismissed", "piece_value.item_restored"],
+  "PUT /api/admin/title-settings": ["title_settings.updated"],
   "POST /api/admin/wom-competitions": ["wom_past_competition.added"],
   "PATCH /api/admin/wom-competitions/:id": ["wom_past_competition.renamed"],
   "DELETE /api/admin/wom-competitions/:id": ["wom_past_competition.deleted"],
