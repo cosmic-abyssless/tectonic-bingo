@@ -9,7 +9,8 @@ import { createTile, createTask } from "./boardService";
 import { getTeamNodeStatuses } from "./boardService";
 import { getNodeTree } from "./graphService";
 import { updateBingoSettings } from "./bingoService";
-import { createSubmission, getAllSubmissionsForBingo, getTeamSubmissions, markScreenshotAnalysisFailed, recordScreenshotAnalysis } from "./submissionService";
+import { createSubmission, getAllSubmissionsForBingo, getTeamSubmissions, markScreenshotAnalysisFailed, recordScreenshotAnalysis, setSubmissionReaction } from "./submissionService";
+import { deleteBingo } from "./bingoService";
 import { ServiceError } from "./errors";
 import { runWithAuditContext } from "../audit/context";
 
@@ -465,5 +466,75 @@ describe("getTeamSubmissions / getAllSubmissionsForBingo", () => {
     expect(row!.leaves.map((l) => l.id)).toEqual([task.leafId]);
     expect(row!.team).toEqual(expect.objectContaining({ id: teamId, name: "Team A" }));
     expect(row!.screenshots).toHaveLength(1);
+  });
+});
+
+describe("setSubmissionReaction", () => {
+  // A submission on the seeded team, with the member and the captain on that team.
+  function reactable() {
+    const { bingo, teamId, memberUserId } = seed();
+    const captainUserId = db.select().from(schema.teams).get()!.captainUserId;
+    db.insert(schema.teamMembers).values([{ teamId, userId: memberUserId }, { teamId, userId: captainUserId, isCaptain: true }]).run();
+    const task = addTask(addTile(bingo.id).id, { sortOrder: 0, points: 20 });
+    const submission = createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId: task.leafId, itemName: "x" }], ...base });
+    return { bingo, teamId, memberUserId, captainUserId, submissionId: submission.id };
+  }
+
+  it("groups teammates' reactions by emoji, in the reactions' order, reactors oldest first", () => {
+    const { teamId, memberUserId, captainUserId, submissionId } = reactable();
+    setSubmissionReaction(db, submissionId, captainUserId, "😂", true);
+    setSubmissionReaction(db, submissionId, captainUserId, "🔥", true);
+    setSubmissionReaction(db, submissionId, memberUserId, "🔥", true);
+
+    const [details] = getTeamSubmissions(db, teamId);
+    expect(details!.reactions.map((g) => [g.emoji, g.users.map((u) => u.discordUsername)])).toEqual([
+      ["🔥", ["captain", "member"]],
+      ["😂", ["captain"]],
+    ]);
+  });
+
+  it("reacting twice with the same emoji counts once, and un-reacting takes it off", () => {
+    const { teamId, captainUserId, submissionId } = reactable();
+    setSubmissionReaction(db, submissionId, captainUserId, "🎉", true);
+    setSubmissionReaction(db, submissionId, captainUserId, "🎉", true);
+    expect(getTeamSubmissions(db, teamId)[0]!.reactions).toHaveLength(1);
+    expect(getTeamSubmissions(db, teamId)[0]!.reactions[0]!.users).toHaveLength(1);
+
+    setSubmissionReaction(db, submissionId, captainUserId, "🎉", false);
+    expect(getTeamSubmissions(db, teamId)[0]!.reactions).toEqual([]);
+  });
+
+  it("only the submission's own team can react", () => {
+    const { submissionId } = reactable();
+    const [outsider] = db.insert(schema.users).values({ discordId: "outsider", discordUsername: "outsider" }).returning().all();
+    expect(() => setSubmissionReaction(db, submissionId, outsider!.id, "🔥", true)).toThrow(ServiceError);
+    expect(db.select().from(schema.submissionReactions).all()).toEqual([]);
+  });
+
+  it("is audited for the team: the reaction in words, whose submission, which tile; a repeat records nothing", () => {
+    const { teamId, captainUserId, memberUserId, submissionId } = reactable();
+    const reactions = () => db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "submission.reaction_set")).all();
+    runWithAuditContext({ requestId: "r1", actorUserId: captainUserId, actorType: "user", actorRole: "player", recorded: 0, skip: null }, () =>
+      setSubmissionReaction(db, submissionId, captainUserId, "🔥", true),
+    );
+    const repeat = { requestId: "r2", actorUserId: captainUserId, actorType: "user" as const, actorRole: "player" as const, recorded: 0, skip: null };
+    runWithAuditContext(repeat, () => setSubmissionReaction(db, submissionId, captainUserId, "🔥", true));
+    expect(repeat.recorded).toBe(1); // the no-op still counts as audited
+    runWithAuditContext({ requestId: "r3", actorUserId: memberUserId, actorType: "user", actorRole: "player", recorded: 0, skip: null }, () =>
+      setSubmissionReaction(db, submissionId, memberUserId, "💀", true),
+    );
+
+    const rows = reactions();
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ teamId, visibility: "team", entityType: "submission", entityId: submissionId, entityLabel: "Tile" });
+    expect(JSON.parse(rows[0]!.details)).toEqual({ emoji: "🔥", reaction: "fire", reacted: true, tileName: "Tile", submitterName: "member", ownSubmission: false });
+    expect(JSON.parse(rows[1]!.details)).toMatchObject({ reaction: "skull", ownSubmission: true });
+  });
+
+  it("goes with the bingo when it's deleted", () => {
+    const { bingo, captainUserId, submissionId } = reactable();
+    setSubmissionReaction(db, submissionId, captainUserId, "💀", true);
+    deleteBingo(db, bingo.id);
+    expect(db.select().from(schema.submissionReactions).all()).toEqual([]);
   });
 });

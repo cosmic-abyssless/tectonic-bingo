@@ -18,6 +18,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "POST /api/bingos/:slug/draft/undo": ["draft.pick_undone"],
   "PUT /api/bingos/:slug/draft/ratings/:signupId": ["draft.rating_set", "draft.note_set"],
   "PUT /api/bingos/:slug/tiles/:tileId/tasks/:taskId/interest": ["team.tile_interest_set"],
+  "PUT /api/bingos/:slug/submissions/:id/reactions": ["submission.reaction_set"],
   "PATCH /api/bingos/:slug/teams/:teamId": ["team.updated"],
 
   // routes/mod.ts, mounted at /api/bingos/:slug/mod

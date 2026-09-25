@@ -71,6 +71,9 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
     case "tile_interest_changed":
       queryClient.invalidateQueries({ queryKey: ["teamProgress"] });
       break;
+    case "submission_reactions_changed":
+      queryClient.invalidateQueries({ queryKey: ["teamSubmissions"] });
+      break;
     case "signup_changed":
       // Signups, pairings, and who is eligible to captain all move together.
       queryClient.invalidateQueries({ queryKey: ["signupRoster"] });

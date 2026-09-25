@@ -45,6 +45,7 @@ function routesFor(router: Router, mountPrefix: string): RouteInfo[] {
 }
 
 describe("route coverage", () => {
+  // Imports every router, and with them the whole app: ~2.5s alone, past the 5s default in a busy full run.
   it("maps every non-GET /api/* route to AUDITED_ROUTES or an auditSkip marker, with no stale entries", async () => {
     const { default: bingosRouter } = await import("../routes/bingos");
     const { default: modRouter } = await import("../routes/mod");
@@ -71,7 +72,7 @@ describe("route coverage", () => {
     const allKeys = new Set(routes.map((r) => r.key));
     const stale = Object.keys(AUDITED_ROUTES).filter((key) => !allKeys.has(key));
     expect(stale).toEqual([]);
-  });
+  }, 20_000);
 
   it("fails a deliberately-unmapped route, proving the assertion above actually guards something", async () => {
     const { Router } = await import("express");

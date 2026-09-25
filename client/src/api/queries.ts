@@ -3,8 +3,9 @@ import type {
   AccountTypesResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   MinimalUser, ModSubmissionsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
-  PickRating, PlayerProfile, StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
+  PickRating, PlayerProfile, StatsResponse, SubmissionReaction, SubmissionReactionGroup, Team, TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
+import { SUBMISSION_REACTIONS } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
 import { useMarkStatsRefreshing, useMarkStatsResult } from "../context/WebSocketContext";
 import { api } from "./client";
@@ -133,6 +134,31 @@ export function useSetTileInterest(slug: string) {
         () => api.put<TeamProgressSummary>(`/api/bingos/${slug}/tiles/${tileId}/tasks/${taskId}/interest`, { interested }),
       ),
   });
+}
+
+// A teammate's emoji on one of the team's submissions, on or off. Shows at once; rolls back if the server refuses it.
+export function useSetSubmissionReaction(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ teamId, submissionId, emoji, user, reacted }: { teamId: string; submissionId: string; emoji: SubmissionReaction; user: MinimalUser; reacted: boolean }) =>
+      optimisticUpdate<TeamSubmissionsResponse>(
+        queryClient,
+        queryKeys.teamSubmissions(slug, teamId),
+        (prev) => ({
+          ...prev,
+          submissions: prev.submissions.map((s) => (s.submission.id === submissionId ? { ...s, reactions: toggleReaction(s.reactions ?? [], emoji, user, reacted) } : s)),
+        }),
+        () => api.put(`/api/bingos/${slug}/submissions/${submissionId}/reactions`, { emoji, reacted }),
+      ),
+  });
+}
+
+function toggleReaction(groups: SubmissionReactionGroup[], emoji: SubmissionReaction, user: MinimalUser, reacted: boolean): SubmissionReactionGroup[] {
+  const users = (groups.find((g) => g.emoji === emoji)?.users ?? []).filter((u) => u.id !== user.id);
+  const next = reacted ? [...users, user] : users;
+  const others = groups.filter((g) => g.emoji !== emoji);
+  const all = next.length > 0 ? [...others, { emoji, users: next }] : others;
+  return SUBMISSION_REACTIONS.flatMap((e) => all.filter((g) => g.emoji === e));
 }
 
 export function useTeamSubmissions(slug: string | undefined, teamId: string | undefined) {

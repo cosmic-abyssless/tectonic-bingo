@@ -25,6 +25,7 @@ import {
   teams,
   tileCategories,
   tileInterests,
+  submissionReactions,
   tiles,
   users,
   womPastCompetitions,
@@ -261,6 +262,7 @@ export function deleteBingo(db: Db, bingoId: string): void {
 
     tx.delete(claims).where(inArray(claims.submissionId, submissionIds)).run();
     tx.delete(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, submissionIds)).run();
+    tx.delete(submissionReactions).where(inArray(submissionReactions.submissionId, submissionIds)).run();
     tx.delete(submissions).where(inArray(submissions.teamId, teamIds)).run();
     tx.delete(teamPointAdjustments).where(eq(teamPointAdjustments.bingoId, bingoId)).run();
     tx.delete(teamNodeState).where(inArray(teamNodeState.teamId, teamIds)).run();

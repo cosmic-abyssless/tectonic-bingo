@@ -123,6 +123,8 @@ export interface AuditDetailsMap {
   "team.tile_interest_set": { tileName: string; taskLabel: string; interested: boolean };
 
   "submission.created": { tileId: string; tileName: string; taskLabels: string[]; claims: { nodeId: string; itemName: string | null; quantity: number }[]; screenshotUrl: string };
+  // reaction: the emoji's name in words (SUBMISSION_REACTION_NAMES). ownSubmission: the reactor is who it belongs to.
+  "submission.reaction_set": { emoji: string; reaction: string; reacted: boolean; tileName: string | null; submitterName: string | null; ownSubmission: boolean };
   "submission.approved": { tileName: string | null; taskLabels: string[]; nodeIds: string[]; newlyCompletedNodeIds: string[]; pointsDelta: number; reviewerNotes: string | null; submittedByUserId: string };
   "submission.rejected": { tileName: string | null; taskLabels: string[]; nodeIds: string[]; reviewerNotes: string | null; submittedByUserId: string };
   "submission.review_undone": {
@@ -504,6 +506,18 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
       const sameOwner = new Set(inputs.map((i) => i.onBehalfOfName ?? "")).size === 1; // only when they were all for the same player
       return `${actor(inputs[0]!)} submitted ${describeClaims({ claims: inputs.flatMap((i) => i.details.claims), taskLabels: inputs.flatMap((i) => i.details.taskLabels) })} for ${describeTiles(inputs)}${sameOwner ? onBehalf(inputs[0]!) : ""}`;
     },
+  },
+  "submission.reaction_set": {
+    category: "submission",
+    tone: "neutral",
+    visibility: "team",
+    title: "Reaction",
+    label: (i) => {
+      const whose = i.details.ownSubmission ? "their own" : i.details.submitterName ? `${i.details.submitterName}'s` : "a";
+      const what = `${whose} submission${i.details.tileName ? ` for "${i.details.tileName}"` : ""}`;
+      return i.details.reacted ? `${actor(i)} reacted with ${i.details.reaction} to ${what}` : `${actor(i)} took their ${i.details.reaction} off ${what}`;
+    },
+    condense: (inputs) => `${actor(inputs[0]!)} changed their reactions on ${describeTiles(inputs)}`,
   },
   "submission.approved": {
     category: "submission",

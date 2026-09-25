@@ -1,6 +1,8 @@
 import { useState } from "react";
 import type { SubmissionStatus } from "@bingo/shared";
+import { useBingoPage } from "../../../headless";
 import type { SubmissionModel } from "../../../headless/types";
+import { ReactionBar } from "../../../core/submissions/ReactionBar";
 import { Dialog, DialogHeader } from "../../../core/ui/Dialog";
 import { Button } from "../../../core/ui/Button";
 import { Badge, EmptyState, FilterChip } from "../../../core/ui/Card";
@@ -31,6 +33,7 @@ export function SubmissionsDrawer({
   onClose: () => void;
   onSubmit?: () => void;
 }) {
+  const { reactions } = useBingoPage();
   const [filter, setFilter] = useState<Filter>("all");
   // "" = everyone. Names come from the submissions themselves, so the list
   // only ever offers people who actually submitted something.
@@ -108,6 +111,7 @@ export function SubmissionsDrawer({
                   </p>
                 )}
                 {s.reviewerNotes && <p className="mt-0.5 truncate text-xs text-warn">{s.reviewerNotes}</p>}
+                <ReactionBar className="mt-1.5" reactions={s.reactions} canReact={reactions.canReact} onToggle={(emoji) => reactions.toggle(s.id, emoji)} />
               </div>
 
               <div className="flex shrink-0 flex-col items-end gap-1 text-right">

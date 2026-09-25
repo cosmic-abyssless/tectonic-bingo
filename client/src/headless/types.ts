@@ -3,7 +3,7 @@
 // never a raw Tile, TeamNodeState[], SubmissionDetails[], or LeafClaimMaps.
 // See docs/headless-theming-plan.md §2.
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
-import type { AuditCategory, AuditTone, DraftState, NodeKind, NodeStatus, Stage, StageMilestone, SubmissionDetails, SubmissionStatus } from "@bingo/shared";
+import type { AuditCategory, AuditTone, DraftState, NodeKind, NodeStatus, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus } from "@bingo/shared";
 
 export interface ActivityEntryModel {
   id: number;
@@ -124,8 +124,19 @@ export interface SubmissionModel {
   tileId: string | null;
   tileName: string | null;
   taskLabels: string[];
+  /** Teammates' emoji reactions, in SUBMISSION_REACTIONS order; only the ones someone has left. */
+  reactions: ReactionModel[];
   /** Escape hatch so core SubmissionRow still works — the ONE raw server shape a theme may see. Optional to use. */
   detail: SubmissionDetails;
+}
+
+export interface ReactionModel {
+  emoji: SubmissionReaction;
+  count: number;
+  /** Who left it, oldest first. */
+  names: string[];
+  /** The viewer is one of them. */
+  mine: boolean;
 }
 
 export interface TileModel {
@@ -311,6 +322,8 @@ export interface BingoPageModel {
   actions: { goHome(): void; goToStats(): void; goToMod(): void; goToDraft(): void };
   /** Raise/lower the viewer's hand for one part (task) of a tile on their own team. No-op unless task.interest.canToggle. */
   tileInterest: { toggle(tileId: string, taskId: string): void };
+  /** Emoji reactions on the viewed team's submissions: canReact when it's the viewer's own team. toggle() puts the viewer's on or takes it off. */
+  reactions: { canReact: boolean; toggle(submissionId: string, emoji: SubmissionReaction): void };
 }
 
 export interface SubmissionFlowModel {
