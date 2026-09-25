@@ -11,6 +11,7 @@
 
 import type { ExclusivityRule } from "./exclusivity.ts";
 import type { AuditVisibility } from "./audit.ts";
+import type { PlayerTitleFacts } from "./titles.ts";
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
@@ -1058,6 +1059,12 @@ export interface StatsResponse {
   teamGpGained: TeamGpGained[];
   /** Every approved claim with a GP value, most valuable first. */
   drops: GpDrop[];
+  /** What Titles (titles.ts) are picked from: one entry per Player, filtered like contributions. */
+  titleFacts: PlayerTitleFacts[];
+  /** When the Bingo started and moved to Finished (null until it does), for On Fire's window. */
+  titleContext: { liveAt: string | null; endedAt: string | null };
+  /** The last time Wise Old Man was read for any Player of the Bingo; null if it hasn't been. */
+  womReadAt: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1146,3 +1153,4 @@ export * from "./names.ts";
 export * from "./signupAnswers.ts";
 export * from "./testData.ts";
 export * from "./timezone.ts";
+export * from "./titles.ts";

@@ -90,6 +90,7 @@ DISCORD_CALLBACK_URL=http://localhost:$port/auth/discord/callback
 SENTRY_ENVIRONMENT=zero-downtime-test
 PLAYER_STATS_FETCH_DISABLED=true
 WOM_COMPETITION_SYNC_DISABLED=true
+WOM_SNAPSHOT_READS_DISABLED=true
 SENTRY_DSN=https://key@example.invalid/1
 OCR_THREADS=1
 LOG_LEVEL=info

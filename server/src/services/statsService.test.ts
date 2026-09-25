@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { and, eq } from "drizzle-orm";
@@ -6,7 +6,7 @@ import * as schema from "../db/schema";
 import { claims, stageTransitions, submissions, teamNodeState, teamPointAdjustments } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createTile, createTask, generateLines } from "./boardService";
-import { approveSubmission } from "./scoringService";
+import { approveSubmission, rejectSubmission } from "./scoringService";
 import { getTeamProgress } from "./teamService";
 import { filterStatsForTeam, getContributionCounts, getPointsOverTime, getStats, getStatsForViewer, getTileHeatmap, getTimeline } from "./statsService";
 
@@ -328,5 +328,96 @@ describe("GP drops' Valued as", () => {
     db.insert(claims).values({ submissionId: submission.id, nodeId: ring.id, itemName: "Gold ring", gpValue: 33_000_000 }).run();
 
     expect(getStats(db, fx.bingoId).drops[0]!.valuedAs).toEqual({ itemName: "Ultor vestige", divisor: 3, source: "Vardorvis" });
+  });
+});
+
+describe("Title facts", () => {
+  // Two players on team A and one on team B, each on their team's roster.
+  function seedPlayers() {
+    const fx = seedFixture();
+    const [second] = db.insert(schema.users).values({ discordId: "second", discordUsername: "second" }).returning().all();
+    const [rival] = db.insert(schema.users).values({ discordId: "rival", discordUsername: "rival" }).returning().all();
+    db.insert(schema.teamMembers).values([
+      { teamId: fx.teamAId, userId: fx.memberUserId },
+      { teamId: fx.teamAId, userId: second.id },
+      { teamId: fx.teamBId, userId: rival.id },
+    ]).run();
+    return { ...fx, secondUserId: second.id, rivalUserId: rival.id };
+  }
+  function submitItem(teamId: string, nodeId: string, itemName: string, submittedByUserId: string, opts: { quantity?: number; postedByUserId?: string } = {}) {
+    const [submission] = db.insert(submissions).values({ teamId, submittedByUserId, postedByUserId: opts.postedByUserId ?? null }).returning().all();
+    db.insert(claims).values({ submissionId: submission.id, nodeId, itemName, quantity: opts.quantity ?? 1 }).run();
+    return submission;
+  }
+  const factsOf = (bingoId: string, userId: string) => getStats(db, bingoId).titleFacts.find((f) => f.userId === userId)!;
+
+  afterEach(() => vi.useRealTimers());
+
+  it("marks the award closed for whoever's Claim was approved last, and maps it to its Tile", () => {
+    const fx = seedPlayers();
+    const task = createTask(db, fx.tileId, { kind: "ALL", label: "Set", points: 20, children: [{ kind: "ITEM", itemName: "Visage" }, { kind: "ITEM", itemName: "Vorki" }] });
+    const [visage, vorki] = task.children!;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-01-10T10:00:00Z"));
+    approveSubmission(db, { submissionId: submitItem(fx.teamAId, visage!.id, "Visage", fx.memberUserId).id, reviewedByUserId: fx.modUserId });
+    vi.setSystemTime(new Date("2026-01-10T11:00:00Z"));
+    approveSubmission(db, { submissionId: submitItem(fx.teamAId, vorki!.id, "Vorki", fx.secondUserId).id, reviewedByUserId: fx.modUserId });
+
+    const closed = (userId: string) => factsOf(fx.bingoId, userId).awards.find((a) => a.kind === "task")!;
+    expect(closed(fx.memberUserId)).toMatchObject({ closed: false, points: 10, tileName: "Test Tile" });
+    expect(closed(fx.secondUserId)).toMatchObject({ closed: true, points: 10, completedAt: "2026-01-10T11:00:00.000Z" });
+    expect(factsOf(fx.bingoId, fx.memberUserId).teamAwardPoints).toBe(20);
+  });
+
+  it("counts a rejection to whoever posted it, and approved posts for a teammate", () => {
+    const fx = seedPlayers();
+    const task = addTask(fx.tileId, { points: 5 });
+    for (let i = 0; i < 2; i++) {
+      const s = submitItem(fx.teamAId, task.id, "Bruma torch", fx.memberUserId, { postedByUserId: fx.secondUserId });
+      rejectSubmission(db, { submissionId: s.id, reviewedByUserId: fx.modUserId, reviewerNotes: "no codeword" });
+    }
+    rejectSubmission(db, { submissionId: submitItem(fx.teamAId, task.id, "Bruma torch", fx.memberUserId).id, reviewedByUserId: fx.modUserId, reviewerNotes: "blurry" });
+    approveSubmission(db, { submissionId: submitItem(fx.teamAId, task.id, "Bruma torch", fx.memberUserId, { postedByUserId: fx.secondUserId }).id, reviewedByUserId: fx.modUserId });
+
+    expect(factsOf(fx.bingoId, fx.secondUserId)).toMatchObject({ rejectedSubmissions: 2, postedForTeammates: 1, approvedSubmissions: 0 });
+    expect(factsOf(fx.bingoId, fx.memberUserId)).toMatchObject({ rejectedSubmissions: 1, postedForTeammates: 0, approvedSubmissions: 1 });
+  });
+
+  it("counts a Moderator's rejected post to the Player it was for", () => {
+    const fx = seedPlayers();
+    const task = addTask(fx.tileId, { points: 5 });
+    const s = submitItem(fx.teamAId, task.id, "Bruma torch", fx.memberUserId, { postedByUserId: fx.modUserId });
+    rejectSubmission(db, { submissionId: s.id, reviewedByUserId: fx.modUserId, reviewerNotes: "wrong item" });
+    expect(factsOf(fx.bingoId, fx.memberUserId).rejectedSubmissions).toBe(1);
+  });
+
+  it("counts distinct items and total quantity from approved Claims", () => {
+    const fx = seedPlayers();
+    const sum = createTask(db, fx.tileId, { kind: "SUM", label: "Shards", quantity: 100, points: 5, children: [{ kind: "ITEM", itemName: "Blood shard" }, { kind: "ITEM", itemName: "Onyx" }] });
+    const [shard, onyx] = sum.children!;
+    for (const [node, name, quantity] of [[shard!, "Blood shard", 3], [shard!, "Blood shard", 4], [onyx!, "Onyx", 1]] as const) {
+      approveSubmission(db, { submissionId: submitItem(fx.teamAId, node.id, name, fx.memberUserId, { quantity }).id, reviewedByUserId: fx.modUserId });
+    }
+    submitItem(fx.teamAId, onyx!.id, "Onyx", fx.memberUserId, { quantity: 50 }); // pending: doesn't count
+    expect(factsOf(fx.bingoId, fx.memberUserId)).toMatchObject({ distinctItems: 2, totalQuantity: 8 });
+  });
+
+  it("gives a Player only their own Team's facts while the Bingo is Live", () => {
+    const fx = seedPlayers();
+    const task = addTask(fx.tileId, { points: 5 });
+    approveSubmission(db, { submissionId: submitItem(fx.teamBId, task.id, "Bruma torch", fx.rivalUserId).id, reviewedByUserId: fx.modUserId });
+    const facts = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: fx.teamAId, bingoComplete: false }).titleFacts;
+    expect(facts.length).toBeGreaterThan(0);
+    expect(facts.every((f) => f.teamId === fx.teamAId)).toBe(true);
+    expect(getStatsForViewer(db, fx.bingoId, { isMod: true, teamId: null, bingoComplete: false }).titleFacts.map((f) => f.userId)).toContain(fx.rivalUserId);
+  });
+
+  it("adds each Player's Wise Old Man gains from their stored snapshots", () => {
+    const fx = seedPlayers();
+    db.update(schema.bingos).set({ startsAt: new Date("2026-01-10T00:00:00Z") }).where(eq(schema.bingos.id, fx.bingoId)).run();
+    const snap = (at: string, ehb: number) => ({ bingoId: fx.bingoId, userId: fx.memberUserId, takenAt: new Date(at), ehb, ehp: 1, clues: 2, bossKillsJson: "{}" });
+    db.insert(schema.womSnapshots).values([snap("2026-01-09T20:00:00Z", 100), snap("2026-01-11T20:00:00Z", 112.5)]).run();
+    expect(factsOf(fx.bingoId, fx.memberUserId).wom).toEqual({ ehb: 12.5, ehp: 0, clues: 0, asOf: "2026-01-11T20:00:00.000Z" });
+    expect(factsOf(fx.bingoId, fx.secondUserId).wom).toBeNull();
   });
 });

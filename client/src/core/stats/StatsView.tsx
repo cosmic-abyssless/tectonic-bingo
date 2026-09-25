@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { chipTitles } from "@bingo/shared";
 import { useBingo, useBoard, useStats } from "../../api/queries";
 import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { inclusionFilter } from "../ui/inclusionFilter";
@@ -9,6 +10,8 @@ import { GpGained } from "./GpGained";
 import { PointsChart } from "./PointsChart";
 import { TileCompletion } from "./TileCompletion";
 import { TimelineTable } from "./TimelineTable";
+import { pickStatsTitles } from "./titles";
+import { TitlesSection } from "./TitlesSection";
 
 // A Panel, like the draft room's, so a theme that draws its own (the comic one) restyles the section and the
 // tables in it the same way.
@@ -45,8 +48,13 @@ export function StatsView({ slug }: { slug: string }) {
       heatmap: ours(stats.heatmap),
       teamGpGained: ours(stats.teamGpGained),
       drops: ours(stats.drops),
+      titleFacts: ours(stats.titleFacts),
     };
   }, [stats, visibleTeams, excludedTeams]);
+
+  // Titles go to the best among the Players shown: a Team's own Carry with one Team selected, the Bingo's otherwise.
+  const titles = useMemo(() => (stats && filtered ? pickStatsTitles(stats, filtered.titleFacts) : []), [stats, filtered]);
+  const chips = useMemo(() => chipTitles(titles), [titles]);
 
   if (error) return <div className="py-24 text-center text-sm text-on-surface-muted">{error.message}</div>;
   if (!shell || !stats || !filtered) return <div className="py-24 text-center text-sm text-on-surface-muted">Loading…</div>;
@@ -70,8 +78,12 @@ export function StatsView({ slug }: { slug: string }) {
         <TimelineTable events={filtered.timeline} teams={filtered.teams} startsAt={shell.bingo.effectiveStartsAt} />
       </Section>
 
+      <Section title="Titles">
+        <TitlesSection picked={titles} contributions={filtered.contributions} womReadAt={stats.womReadAt} />
+      </Section>
+
       <Section title="Top contributors">
-        <ContributorsTable contributions={filtered.contributions} teams={filtered.teams} />
+        <ContributorsTable contributions={filtered.contributions} teams={filtered.teams} chips={chips} />
       </Section>
 
       <Section title="GP gained">

@@ -144,3 +144,52 @@ describe("creditAwards", () => {
     expect(line.shares.find((s) => s.userId === "u1")!.viaTileNodeIds).toEqual(["t1", "t2"]);
   });
 });
+
+describe("creditAwards closedBy", () => {
+  const none = { tileNodeIds: new Set<string>(), lineNodeIds: new Set<string>() };
+
+  it("is whoever's Claim was approved last on the deciding path", () => {
+    const g = graph([
+      { id: "part", kind: "ALL", points: 30, children: ["a", "b"] },
+      { id: "a", kind: "ITEM" },
+      { id: "b", kind: "ITEM" },
+    ]);
+    const credits = creditAwards({ ...g, ...none, claims: [claim("b", "u2", 1), claim("a", "u1", 2)], awards: [{ nodeId: "part", points: 30 }] });
+    expect(credits[0]!.closedBy).toEqual(["u1"]);
+  });
+
+  it("ignores later Claims on a branch that didn't decide an ANY", () => {
+    const g = graph([
+      { id: "any", kind: "ANY", points: 20, children: ["setA", "setB"] },
+      { id: "setA", kind: "ALL", children: ["a1", "a2"] },
+      { id: "setB", kind: "ALL", children: ["b1", "b2"] },
+      { id: "a1", kind: "ITEM" },
+      { id: "a2", kind: "ITEM" },
+      { id: "b1", kind: "ITEM" },
+      { id: "b2", kind: "ITEM" },
+    ]);
+    const claims = [claim("a1", "u1", 1), claim("b1", "u2", 2), claim("b2", "u3", 3), claim("a2", "u1", 4)];
+    const credits = creditAwards({ ...g, ...none, claims, awards: [{ nodeId: "any", points: 20 }] });
+    expect(credits[0]!.closedBy).toEqual(["u3"]);
+  });
+
+  it("is the Claim that crossed a SUM's target, not one after it", () => {
+    const g = graph([
+      { id: "sum", kind: "SUM", quantity: 10, points: 10, children: ["kc"] },
+      { id: "kc", kind: "ITEM" },
+    ]);
+    const claims = [claim("kc", "u1", 1, 6), claim("kc", "u2", 2, 6), claim("kc", "u3", 3, 6)];
+    const credits = creditAwards({ ...g, ...none, claims, awards: [{ nodeId: "sum", points: 10 }] });
+    expect(credits[0]!.closedBy).toEqual(["u2"]);
+  });
+
+  it("is empty for tile bonuses", () => {
+    const g = graph([
+      { id: "tile", kind: "ALL", points: 5, children: ["p1"] },
+      { id: "p1", kind: "ITEM", points: 10 },
+    ]);
+    const credits = creditAwards({ ...g, claims: [claim("p1", "u1", 1)], awards: [{ nodeId: "p1", points: 10 }, { nodeId: "tile", points: 5 }], tileNodeIds: new Set(["tile"]), lineNodeIds: new Set() });
+    expect(credits.find((c) => c.nodeId === "p1")!.closedBy).toEqual(["u1"]);
+    expect(credits.find((c) => c.nodeId === "tile")!.closedBy).toEqual([]);
+  });
+});

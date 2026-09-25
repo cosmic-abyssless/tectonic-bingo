@@ -29,6 +29,7 @@ import { auditContext } from "./audit/middleware";
 import { closeWebSocketServer, initWebSocketServer } from "./ws";
 import { DB_PATH, db, sqlite } from "./db";
 import { refreshPricesAndFill } from "./services/gpValueService";
+import { startWomReads } from "./services/womReadService";
 import { UPLOADS_DIR, WIKI_ICONS_DIR, getAdminDiscordIds, sessionCookieSecure } from "./config";
 import { warmOcr } from "./ocr";
 import { shouldWarmOcr } from "./ocrConfig";
@@ -212,6 +213,8 @@ server.listen(PORT, () => {
   if (shouldWarmOcr()) void warmOcr();
   // Loads the GE price table and prices any claims still missing a GP value (including ones made before GP values existed).
   void refreshPricesAndFill(db);
+  // Hourly Wise Old Man snapshot reads for Titles, paced within WOM's rate limit.
+  startWomReads(db);
 });
 
 // SQLite cannot be shared by overlapping replicas. On SIGTERM (Railway
