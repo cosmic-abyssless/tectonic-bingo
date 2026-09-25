@@ -217,14 +217,59 @@ const PartnerCell = memo(function PartnerCell({ data, context }: CustomCellRende
 
 const UNPAIR = "__unpair__";
 
-// Pairs the row (pick someone: the search box has focus, arrows and Enter pick) or, for a paired row, unpairs it
-// (Enter on the focused Unpair button). Ends the edit with the partner's user id, or UNPAIR, for onCellEditRequest.
-function PartnerEditor({ data, context, onValueChange, stopEditing, unpaired }: CustomCellEditorProps<RosterRow, string, GridContext> & { unpaired: () => RosterRow[] }) {
-  const [done, setDone] = useState(false);
+/**
+ * The cell editor for picking from a list (Collected by, Partner, Timezone): the app's searchable select in a popup,
+ * its search box focused so typing filters at once; arrows and Enter pick, which ends the edit with the picked id
+ * (onCellEditRequest acts on it). Escape is left to the table, which cancels and keeps focus on the cell.
+ */
+function PickerEditor({
+  value,
+  onValueChange,
+  stopEditing,
+  options,
+  placeholder,
+  wide,
+}: Pick<CustomCellEditorProps<RosterRow, string, GridContext>, "value" | "onValueChange" | "stopEditing"> & {
+  options: { id: string; label: string }[];
+  placeholder: string;
+  /** The timezone list's longer labels. */
+  wide?: boolean;
+}) {
+  const [picked, setPicked] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!data.pairing) ref.current?.querySelector("input")?.focus();
-  }, [data.pairing]);
+    ref.current?.querySelector("input")?.focus();
+  }, []);
+  // A render later, so AG reads the picked value rather than the one the edit opened with.
+  useEffect(() => {
+    if (picked) stopEditing();
+  }, [picked, stopEditing]);
+  return (
+    <div ref={ref} className={`${EDITOR_POPUP} ${wide ? "w-96" : "w-72"} p-2`}>
+      <SearchableSelect
+        value={value ?? ""}
+        options={options}
+        placeholder={placeholder}
+        passEscape
+        onChange={(id) => {
+          onValueChange(id);
+          setPicked(true);
+        }}
+      />
+    </div>
+  );
+}
+
+// Who collected a buy-in: the bingo's mods, or nobody. The options are read when it opens (see the refs in the grid).
+function CollectedByEditor(props: CustomCellEditorProps<RosterRow, string, GridContext> & { mods: () => { id: string; label: string }[] }) {
+  return <PickerEditor {...props} options={[{ id: "", label: "Nobody yet" }, ...props.mods()]} placeholder="Who collected it?" />;
+}
+
+// Pairs the row (pick someone: the search box has focus, arrows and Enter pick) or, for a paired row, unpairs it
+// (Enter on the focused Unpair button). Ends the edit with the partner's user id, or UNPAIR, for onCellEditRequest.
+function PartnerEditor(props: CustomCellEditorProps<RosterRow, string, GridContext> & { unpaired: () => RosterRow[] }) {
+  const { data, context, onValueChange, stopEditing, unpaired } = props;
+  const [done, setDone] = useState(false);
   useEffect(() => {
     if (done) stopEditing();
   }, [done, stopEditing]);
@@ -253,11 +298,7 @@ function PartnerEditor({ data, context, onValueChange, stopEditing, unpaired }: 
   const options = unpaired()
     .filter((r) => r.signup.id !== data.signup.id)
     .map((r) => ({ id: r.user.id, label: r.signup.rsn }));
-  return (
-    <div ref={ref} className={`${EDITOR_POPUP} w-72 p-2`}>
-      <SearchableSelect value="" options={options} placeholder={`Pair ${data.signup.rsn} with…`} onChange={(id) => id && finish(id)} passEscape />
-    </div>
-  );
+  return <PickerEditor {...props} value="" options={options} placeholder={`Pair ${data.signup.rsn} with…`} />;
 }
 
 // Signups from before timezone was asked have none until the player confirms it or a mod sets it here — the gap is
@@ -270,30 +311,9 @@ const TimezoneCell = memo(function TimezoneCell({ data }: CustomCellRendererProp
 // A popup with the same searchable picker as the signup form — ~420 zones is too many for agSelectCellEditor's plain
 // list. Picking one ends the edit (readOnlyEdit → cellEditRequest → setTimezone). stopEditing waits a render so AG
 // reads the picked value, not the one it opened with.
-function TimezoneEditor({ value, onValueChange, stopEditing }: CustomCellEditorProps<RosterRow, string, GridContext>) {
-  const options = useMemo(() => timeZoneOptions([value]), [value]);
-  const [picked, setPicked] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    ref.current?.querySelector("input")?.focus();
-  }, []);
-  useEffect(() => {
-    if (picked) stopEditing();
-  }, [picked, stopEditing]);
-  return (
-    <div ref={ref} className={`${EDITOR_POPUP} w-96 p-2`}>
-      <SearchableSelect
-        value={value ?? ""}
-        options={options}
-        placeholder="Search by city, region or UTC offset…"
-        passEscape
-        onChange={(id) => {
-          onValueChange(id);
-          setPicked(true);
-        }}
-      />
-    </div>
-  );
+function TimezoneEditor(props: CustomCellEditorProps<RosterRow, string, GridContext>) {
+  const options = useMemo(() => timeZoneOptions([props.value]), [props.value]);
+  return <PickerEditor {...props} options={options} placeholder="Search by city, region or UTC offset…" wide />;
 }
 
 // ---------------------------------------------------------------------------
@@ -375,7 +395,6 @@ export function SignupRosterGrid({
     for (const o of collectedByOptions) refData[o.id] = o.label;
     return refData;
   }, [collectedByOptions]);
-  const collectedByValues = useMemo(() => ["", ...collectedByOptions.map((o) => o.id)], [collectedByOptions]);
 
   // Read via these refs (kept current below, every render) rather than closed over directly in columnDefs — both
   // change reference on every roster refetch (a signup gets paired, a buy-in gets marked, ...), which is most
@@ -389,8 +408,8 @@ export function SignupRosterGrid({
   unpairedActiveRef.current = unpairedActive;
   const collectedByRefDataRef = useRef(collectedByRefData);
   collectedByRefDataRef.current = collectedByRefData;
-  const collectedByValuesRef = useRef(collectedByValues);
-  collectedByValuesRef.current = collectedByValues;
+  const collectedByOptionsRef = useRef(collectedByOptions);
+  collectedByOptionsRef.current = collectedByOptions;
 
   const columnDefs = useMemo<ColDef<RosterRow>[]>(() => {
     // Each `width` below is a starting size sized to its typical content (an RSN, a tier name, a checkbox), not
@@ -522,13 +541,16 @@ export function SignupRosterGrid({
           return name(a).localeCompare(name(b));
         },
         cellRenderer: CollectedByCell,
-        // Not `refData: collectedByRefData` (a static object baked at colDef-build time) — see the refs' own
-        // comment above. Only the agSelectCellEditor's dropdown labels need this now; the cell's own display
-        // reads data.collectedByUser directly via CollectedByCell, not through refData/valueFormatter.
+        // The name for the value (a user id): the tooltip and the quick filter read it (see the refs' comment above for
+        // why a ref, not refData). The cell itself shows data.collectedByUser via CollectedByCell.
         valueFormatter: (p) => collectedByRefDataRef.current[p.value as string] ?? p.value,
         editable: (p) => !!p.data?.signup.buyinReceivedAt,
-        cellEditor: "agSelectCellEditor",
-        cellEditorParams: () => ({ values: collectedByValuesRef.current }),
+        cellEditor: CollectedByEditor,
+        cellEditorParams: () => ({ mods: () => collectedByOptionsRef.current }),
+        cellEditorPopup: true,
+        cellEditorPopupPosition: "under",
+        // The picker's own list navigation rather than AG's "finish editing"/"move cell".
+        suppressKeyboardEvent: (p) => p.editing && ["Enter", "ArrowUp", "ArrowDown", "Tab"].includes(p.event.key),
         width: 150,
       },
       isDuo && {
@@ -561,7 +583,7 @@ export function SignupRosterGrid({
       },
     }));
     return [...cols.filter((c): c is ColDef<RosterRow> => c !== false), ...questionCols];
-    // collectedByRefData/collectedByValues/unpairedActive deliberately excluded — read via the
+    // collectedByRefData/collectedByOptions/unpairedActive deliberately excluded — read via the
     // refs above instead, precisely so their (frequent) changes don't force columnDefs to a new identity. See
     // that comment for why a new columnDefs identity is the actual problem being avoided here.
   }, [questions, isDuo, showTier]);
