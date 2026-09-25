@@ -13,6 +13,7 @@ import {
   ACHIEVEMENTS,
   ACHIEVEMENT_KEYS,
   achievementDef,
+  isYamaTile,
   type AchievementCount,
   type AchievementKey,
   type MyAchievement,
@@ -34,7 +35,8 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Queryable = Db | Tx;
 export type Bingo = typeof bingos.$inferSelect;
 
-type ActivityKind = "posted" | "reacted" | "interest_marked" | "tile_opened" | "rules_opened" | "stats_opened";
+// yama_opened: one row per opening of the Yama Tile (Yammma counts them), where tile_opened keeps just the latest per Tile.
+type ActivityKind = "posted" | "reacted" | "interest_marked" | "tile_opened" | "yama_opened" | "rules_opened" | "stats_opened";
 type SettingsMap = Map<AchievementKey, { enabled: boolean; firstSwitchedOnAt: Date }>;
 
 function safely(fn: () => void): void {
@@ -447,6 +449,20 @@ export function recordPageOpened(db: Db, event: PageOpenedEvent): void {
       } else if (event.kind === "stats") {
         tryEarn(tx, event.bingoId, event.userId, "number_cruncher", event.occurredAt, settings, () => true);
       } else {
+        const tile = tx.select({ name: tiles.name }).from(tiles).where(and(eq(tiles.id, subjectId), eq(tiles.bingoId, event.bingoId))).get();
+        if (tile && isYamaTile(tile.name)) {
+          // Every opening its own row (a fresh subject), so they can be counted.
+          upsertActivity(tx, { bingoId: event.bingoId, userId: event.userId, kind: "yama_opened", subjectId: crypto.randomUUID(), tileId: subjectId, creditedUserId: null, teamId: event.teamId, localDate: date, localHour: hour, occurredAt: event.occurredAt });
+          tryEarn(tx, event.bingoId, event.userId, "yammma", event.occurredAt, settings, () => {
+            const cutoff = settings.get("yammma")!.firstSwitchedOnAt;
+            const opens = tx
+              .select({ id: achievementActivity.id })
+              .from(achievementActivity)
+              .where(and(eq(achievementActivity.bingoId, event.bingoId), eq(achievementActivity.userId, event.userId), eq(achievementActivity.kind, "yama_opened"), gte(achievementActivity.occurredAt, cutoff)))
+              .all().length;
+            return opens >= 3;
+          });
+        }
         tryEarn(tx, event.bingoId, event.userId, "drop_detective", event.occurredAt, settings, () => {
           const cutoff = settings.get("drop_detective")!.firstSwitchedOnAt;
           const openedTileIds = distinct(

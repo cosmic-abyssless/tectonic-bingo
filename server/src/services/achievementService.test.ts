@@ -368,6 +368,41 @@ describe("Eager beaver", () => {
   });
 });
 
+describe("Yammma", () => {
+  const open = (bingoId: string, userId: string, teamId: string, tileId: string) =>
+    at(STARTS_AT, "UTC", () => achievementService.recordPageOpened(db, { bingoId, userId, teamId, kind: "tile", tileId, occurredAt: STARTS_AT }));
+
+  it("is earned opening the Yama Tile (by name, any case) a third time", () => {
+    const { bingo, team, alice } = seed();
+    const yama = createTile(db, { bingoId: bingo.id, name: " YAMA ", boardRow: 0, boardCol: 0 });
+    open(bingo.id, alice.id, team.id, yama.id);
+    open(bingo.id, alice.id, team.id, yama.id);
+    expect(earned(bingo, alice.id, "yammma")).toBe(false);
+    open(bingo.id, alice.id, team.id, yama.id);
+    expect(earned(bingo, alice.id, "yammma")).toBe(true);
+  });
+
+  it("doesn't count other Tiles, or another Player's opens", () => {
+    const { bingo, team, alice, bob } = seed();
+    const yama = createTile(db, { bingoId: bingo.id, name: "Yama", boardRow: 0, boardCol: 0 });
+    const other = addTile(bingo.id, 0, 1);
+    open(bingo.id, alice.id, team.id, other.id);
+    open(bingo.id, alice.id, team.id, other.id);
+    open(bingo.id, alice.id, team.id, yama.id);
+    open(bingo.id, bob.id, team.id, yama.id);
+    open(bingo.id, bob.id, team.id, yama.id);
+    expect(earned(bingo, alice.id, "yammma")).toBe(false);
+    expect(earned(bingo, bob.id, "yammma")).toBe(false);
+  });
+
+  it("still counts the Yama Tile toward Drop detective", () => {
+    const { bingo, team, alice } = seed();
+    const yama = createTile(db, { bingoId: bingo.id, name: "Yama", boardRow: 0, boardCol: 0 });
+    open(bingo.id, alice.id, team.id, yama.id);
+    expect(earned(bingo, alice.id, "drop_detective")).toBe(true); // the only tile on this board
+  });
+});
+
 describe("Ragequit", () => {
   it("is earned taking interest OFF, not marking it on", () => {
     const { bingo, team, bob } = seed();

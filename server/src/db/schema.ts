@@ -717,6 +717,7 @@ export const bingoAchievementSettings = sqliteTable('bingo_achievement_settings'
 //   reacted         — subjectId: submission id, creditedUserId: who the submission belongs to
 //   interest_marked — subjectId: the Part (task) id, tileId: the tile
 //   tile_opened     — subjectId: the tile id, tileId: the same tile id
+//   yama_opened     — subjectId: a fresh id per opening of the Yama Tile (Yammma counts them), tileId: that tile
 //   rules_opened / stats_opened — subjectId: a constant ("rules"/"stats"); there's only one per bingo
 // Upserted on (bingoId, userId, kind, subjectId): page opens are de-duplicated this way, keeping the latest time
 // (all that Drop detective/Rules lawyer/Number cruncher need); other kinds just avoid a duplicate row for a
@@ -725,7 +726,7 @@ export const achievementActivity = sqliteTable('achievement_activity', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
   userId: text('user_id').notNull().references(() => users.id),
-  kind: text('kind', { enum: ['posted', 'reacted', 'interest_marked', 'tile_opened', 'rules_opened', 'stats_opened'] }).notNull(),
+  kind: text('kind', { enum: ['posted', 'reacted', 'interest_marked', 'tile_opened', 'yama_opened', 'rules_opened', 'stats_opened'] }).notNull(),
   subjectId: text('subject_id').notNull(),
   tileId: text('tile_id'),
   creditedUserId: text('credited_user_id'),
