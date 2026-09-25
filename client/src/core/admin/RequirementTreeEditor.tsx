@@ -610,9 +610,10 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
               ? `Claims here get their GP value from ${describeValuedAs(valuedAs)}, not from ${name}'s own price`
               : `Price claims here as another item instead of ${name} (e.g. a gold ring from a DT2 boss as a third of its vestige)`
           }
-          className={`shrink-0 rounded px-1 text-[10px] tracking-wide ${valuedAs ? "border border-outline text-on-surface-muted" : "text-on-surface-subtle hover:text-on-surface"}`}
+          // Outlined either way, so the way to add one reads as a button before any Valued as exists.
+          className={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] leading-4 transition-colors hover:bg-surface-hover hover:text-on-surface ${valuedAs ? "border-outline text-on-surface-muted" : "border-dashed border-outline-strong text-on-surface-muted"}`}
         >
-          {valuedAs ? `valued as ${describeValuedAs(valuedAs)}${valuedAs.source ? ` · ${valuedAs.source}` : ""}` : "GP value…"}
+          {valuedAs ? `valued as ${describeValuedAs(valuedAs)}${valuedAs.source ? ` · ${valuedAs.source}` : ""}` : "+ Valued as"}
         </button>
         {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${name}` : `Remove ${name}`} what="item" onPress={() => remove(path)} />}
       </div>
