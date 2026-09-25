@@ -28,7 +28,7 @@ export function AchievementUnlockCard({ achievement, onViewAchievements }: { ach
           <button
             type="button"
             onClick={onViewAchievements}
-            className="mt-1 text-base uppercase tracking-wide underline decoration-2 underline-offset-2 hover:no-underline"
+            className="mt-1 cursor-pointer text-base uppercase tracking-wide underline decoration-2 underline-offset-2 hover:no-underline"
             style={{ fontFamily: COMIC_FONT }}
           >
             View my achievements
