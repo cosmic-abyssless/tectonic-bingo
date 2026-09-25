@@ -12,6 +12,7 @@
     "db:seed:dev": "tsx src/db/seed-dev.ts",
     "db:wipe": "tsx scripts/wipe-db.ts",
     "wiki-icons:warm": "tsx scripts/warm-wiki-icons.ts",
+    "drop-rates:refresh": "tsx scripts/fetch-drop-rates.ts",
     "db:reset": "npm run db:wipe && npm run db:generate && npm run db:migrate && npm run db:seed:dev",
     "generate-bingo": "tsx scripts/generate-bingo/generate.ts",
     "generate-bingo:teardown": "tsx scripts/generate-bingo/teardown.ts",

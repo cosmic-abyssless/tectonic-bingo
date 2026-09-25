@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { AgGridReact, type CustomCellRendererProps } from "ag-grid-react";
 import type { CellClickedEvent, ColDef, TooltipCallbackParams } from "ag-grid-community";
-import type { ContributionCount, Team } from "@bingo/shared";
+import type { ContributionCount, Team, TitleDefinition } from "@bingo/shared";
 import { useGridTheme } from "../ui/agGrid";
 import { useIsPhone } from "../ui/useMediaQuery";
 import { ColumnPicker } from "../ui/ColumnPicker";
@@ -13,7 +13,7 @@ import { FALLBACK_TEAM_COLOR } from "./PointsChart";
 import { formatShare } from "./PointsShareBreakdown";
 import { formatGp, formatGpExact } from "../ui/gp";
 
-type Row = ContributionCount & { team: Team | null };
+type Row = ContributionCount & { team: Team | null; title: TitleDefinition | null };
 
 const PINNED = ["rank", "player"];
 const MAX_HEIGHT = 480;
@@ -26,9 +26,21 @@ const FRAME_HEIGHT = 12;
 function PlayerCell({ data }: CustomCellRendererProps<Row>) {
   if (!data) return null;
   return (
-    <PlayerName userId={data.userId} badge="reserve" className="min-w-0 truncate text-on-surface">
-      {displayName(data.user)}
-    </PlayerName>
+    <span className="flex min-w-0 items-center gap-1.5">
+      <PlayerName userId={data.userId} badge="reserve" className="min-w-0 truncate text-on-surface">
+        {displayName(data.user)}
+      </PlayerName>
+      {data.title && <TitleChip title={data.title} />}
+    </span>
+  );
+}
+
+/** A Player's highest-priority Title, next to their name. */
+export function TitleChip({ title }: { title: TitleDefinition }) {
+  return (
+    <span title={title.flavour} className="shrink-0 rounded-sm border border-warn/40 px-1 text-[10px] leading-4 font-semibold text-warn">
+      {title.name}
+    </span>
   );
 }
 
@@ -57,7 +69,7 @@ const DEFAULT_COL_DEF: ColDef<Row> = {
  * heading to sort. Clicking a row opens the player's profile, whose "This bingo" section shows where their
  * share came from.
  */
-export function ContributorsTable({ contributions, teams }: { contributions: ContributionCount[]; teams: Team[] }) {
+export function ContributorsTable({ contributions, teams, chips }: { contributions: ContributionCount[]; teams: Team[]; chips: Map<string, TitleDefinition> }) {
   const gridTheme = useGridTheme();
   const isPhone = useIsPhone();
   const openProfile = useOpenProfile();
@@ -65,15 +77,15 @@ export function ContributorsTable({ contributions, teams }: { contributions: Con
 
   const rows = useMemo<Row[]>(() => {
     const teamById = new Map(teams.map((t) => [t.id, t]));
-    return contributions.map((c) => ({ ...c, team: teamById.get(c.teamId) ?? null }));
-  }, [contributions, teams]);
+    return contributions.map((c) => ({ ...c, team: teamById.get(c.teamId) ?? null, title: chips.get(c.userId) ?? null }));
+  }, [contributions, teams, chips]);
   const multiTeam = teams.length > 1;
 
   // Unpinned columns share the width (flex), so hiding one lets the rest take its space.
   const columnDefs = useMemo<ColDef<Row>[]>(() => {
     const cols: ColDef<Row>[] = [
       { colId: "rank", headerName: "#", pinned: "left", suppressMovable: true, width: 56, minWidth: 56, sortable: false, valueGetter: (p) => (p.node?.rowIndex ?? 0) + 1, cellClass: "num text-on-surface-subtle" },
-      { colId: "player", headerName: "Player", pinned: "left", suppressMovable: true, initialWidth: 150, valueGetter: (p) => (p.data ? displayName(p.data.user) : ""), cellRenderer: PlayerCell },
+      { colId: "player", headerName: "Player", pinned: "left", suppressMovable: true, initialWidth: 210, valueGetter: (p) => (p.data ? displayName(p.data.user) : ""), cellRenderer: PlayerCell },
       { colId: "team", headerName: "Team", flex: 2, minWidth: 120, valueGetter: (p) => p.data?.team?.name ?? "", cellRenderer: TeamCell },
       {
         colId: "pointsShare",

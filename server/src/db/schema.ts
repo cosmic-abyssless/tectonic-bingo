@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // ---------------------------------------------------------------------------
@@ -341,6 +341,44 @@ export const itemGroupItems = sqliteTable('item_group_items', {
   itemName: text('item_name').notNull(),
 }, (t) => [
   uniqueIndex('item_group_items_group_name_unq').on(t.groupId, t.itemName),
+]);
+
+// ---------------------------------------------------------------------------
+// WOM SNAPSHOTS DURING A BINGO (issue #182)
+// ---------------------------------------------------------------------------
+
+// Every Wise Old Man snapshot of a Player during a Bingo, from shortly before it started, read by womReadService.
+// Titles take EHB, EHP and clue gains from them, and luck (#195) takes each boss's kill counts over time. Only what
+// WOM already has is read; the site never asks WOM to update a Player.
+export const womSnapshots = sqliteTable('wom_snapshots', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  takenAt: integer('taken_at', { mode: 'timestamp' }).notNull(),
+  // Null while below the hiscores' minimum (WOM's -1), as parseSnapshots reads them.
+  ehb: real('ehb'),
+  ehp: real('ehp'),
+  clues: integer('clues'),
+  // { [WOM boss metric]: kills | null }
+  bossKillsJson: text('boss_kills_json').notNull(),
+}, (t) => [
+  uniqueIndex('wom_snapshots_bingo_user_taken_unq').on(t.bingoId, t.userId, t.takenAt),
+]);
+
+// Where each Player's snapshot reads stand: the next read starts from the last stored snapshot, and one that
+// has read through the Bingo's end is never read again.
+export const womReads = sqliteTable('wom_reads', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  rsn: text('rsn').notNull(),
+  // When the last successful read happened, and the end of its range: nothing up to readThrough is missing.
+  readAt: integer('read_at', { mode: 'timestamp' }),
+  readThrough: integer('read_through', { mode: 'timestamp' }),
+  lastError: text('last_error'),
+  lastErrorAt: integer('last_error_at', { mode: 'timestamp' }),
+}, (t) => [
+  uniqueIndex('wom_reads_bingo_user_unq').on(t.bingoId, t.userId),
 ]);
 
 // ---------------------------------------------------------------------------

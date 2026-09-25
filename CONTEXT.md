@@ -131,6 +131,11 @@ A concrete objective, check, or nested requirement that must be satisfied.
 - **Synonyms:** Leaf (engineering term for indivisible item/manual task), Requirement.
 - **Forbidden synonyms:** "Node" (never expose to players or in UI copy).
 
+### Item
+An individual OSRS item, as a leaf of the Requirement Tree, matched by its OSRS item name.
+- **Rules:** Usually a Task on its own ("Get a Twisted bow"). The same name can be an Item in several places on one Board. The Items on the Board are every Item leaf anywhere on it.
+- **Not:** A Claim. The Item is what's asked for; the Claim is one drop of it.
+
 ### Requirement Tree (Conditions)
 The recursive structure inside a Part or Task defining how objectives combine:
 - **Condition Types:**
@@ -207,6 +212,23 @@ A Player's portion of their Team's points, credited from the Claims that complet
 ### Stats
 The Bingo's stats page: points over time, the timeline, top contributors (ranked by Points share) and tile completion.
 - **Rules:** Moderators see every Team at every stage. While the Bingo is Live a Player sees only their own Team; once it is Finished everyone sees every Team. "First to complete" events are shown to Moderators throughout and to Players only once the Bingo is Finished.
+
+### Title
+A tongue-in-cheek label a Player holds on the Stats page for how they played ("Carry", "Closer", "Butterfingers"), recomputed as the stats change.
+- **Rules:** Each Title goes to the Players tied at the best value among the Players shown, once they meet its minimum. With a Team selected in the team filter it's that Team's; unfiltered, the Bingo's. Titles follow the Stats visibility rules. A Player's chip in the contributors table shows their highest-priority Title, and their profile lists every one they hold. Some Titles use their Wise Old Man gains during the Bingo (EHB, EHP, clues), read from what Wise Old Man already has (never an update request), so they lag until the Player updates, and they freeze once the Bingo is Finished.
+- **Not:** A permanent award. Titles belong to one Bingo and move as it goes.
+
+### Hidden Title
+A Title nobody knows exists until someone holds it: it shows up only then, marked as a hidden Title unlocked, and there's no hint of it before.
+
+### Luck
+How unlikely a drop, or a dry streak, was: "1 in N". Judged against the Item's real drop rate and the kills the Player gained at its bosses during the Bingo, as counted by Wise Old Man.
+- **Rules:** A drop is judged over the kills since the Player's previous drop of the same Item (or the Bingo's start), up to the drop, so grinding on afterwards doesn't lessen it. The kills are never understated: a count missing from Wise Old Man makes a drop look less lucky, never more. A dry streak is judged against every Item on the Board the boss drops, and ends at the Player's last drop of one of them. Only Items from bosses Wise Old Man counts have luck (not Slayer monsters, minigames or skilling). A raid counts one completion as one kill, at a typical run's rates.
+- **Not:** Points share, or GP value. A 1-in-1,000 pet is very lucky and worth nothing.
+
+### Useful drop
+A drop that still moved its Task forward when it came, judged by the Items that were still open on the Task (the last missing piece of a set is rarer than the first, when any of them would do).
+- **Rules:** A drop that earned no Points share is not useful.
 
 ### GP value
 What a Claim's drop is worth in GP (gold pieces, the game's currency): the item's Grand Exchange price times its quantity, fixed when the Submission is made.

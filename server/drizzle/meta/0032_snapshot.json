@@ -1,9 +1,245 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "5feebcd7-248e-45a1-87bd-7dbe5b690e47",
-  "prevId": "b86e0b74-2368-4337-8444-404f44964cfe",
+  "id": "29a6a3e7-23e8-42b4-bb4a-55abe8a80c15",
+  "prevId": "5feebcd7-248e-45a1-87bd-7dbe5b690e47",
   "tables": {
+    "achievement_activity": {
+      "name": "achievement_activity",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bingo_id": {
+          "name": "bingo_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subject_id": {
+          "name": "subject_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tile_id": {
+          "name": "tile_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "credited_user_id": {
+          "name": "credited_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "team_id": {
+          "name": "team_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "local_date": {
+          "name": "local_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "local_hour": {
+          "name": "local_hour",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "achievement_activity_bingo_user_kind_subject_unq": {
+          "name": "achievement_activity_bingo_user_kind_subject_unq",
+          "columns": [
+            "bingo_id",
+            "user_id",
+            "kind",
+            "subject_id"
+          ],
+          "isUnique": true
+        },
+        "achievement_activity_bingo_user_kind_idx": {
+          "name": "achievement_activity_bingo_user_kind_idx",
+          "columns": [
+            "bingo_id",
+            "user_id",
+            "kind"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "achievement_activity_bingo_id_bingos_id_fk": {
+          "name": "achievement_activity_bingo_id_bingos_id_fk",
+          "tableFrom": "achievement_activity",
+          "tableTo": "bingos",
+          "columnsFrom": [
+            "bingo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "achievement_activity_user_id_users_id_fk": {
+          "name": "achievement_activity_user_id_users_id_fk",
+          "tableFrom": "achievement_activity",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "achievement_activity_team_id_teams_id_fk": {
+          "name": "achievement_activity_team_id_teams_id_fk",
+          "tableFrom": "achievement_activity",
+          "tableTo": "teams",
+          "columnsFrom": [
+            "team_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "achievement_earned": {
+      "name": "achievement_earned",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bingo_id": {
+          "name": "bingo_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "achievement_key": {
+          "name": "achievement_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "earned_at": {
+          "name": "earned_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "popup_shown_at": {
+          "name": "popup_shown_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "achievement_earned_bingo_user_key_unq": {
+          "name": "achievement_earned_bingo_user_key_unq",
+          "columns": [
+            "bingo_id",
+            "user_id",
+            "achievement_key"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "achievement_earned_bingo_id_bingos_id_fk": {
+          "name": "achievement_earned_bingo_id_bingos_id_fk",
+          "tableFrom": "achievement_earned",
+          "tableTo": "bingos",
+          "columnsFrom": [
+            "bingo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "achievement_earned_user_id_users_id_fk": {
+          "name": "achievement_earned_user_id_users_id_fk",
+          "tableFrom": "achievement_earned",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "audit_log": {
       "name": "audit_log",
       "columns": {
@@ -187,6 +423,75 @@
           "tableTo": "users",
           "columnsFrom": [
             "on_behalf_of_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "bingo_achievement_settings": {
+      "name": "bingo_achievement_settings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bingo_id": {
+          "name": "bingo_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "achievement_key": {
+          "name": "achievement_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "first_switched_on_at": {
+          "name": "first_switched_on_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "bingo_achievement_settings_bingo_key_unq": {
+          "name": "bingo_achievement_settings_bingo_key_unq",
+          "columns": [
+            "bingo_id",
+            "achievement_key"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "bingo_achievement_settings_bingo_id_bingos_id_fk": {
+          "name": "bingo_achievement_settings_bingo_id_bingos_id_fk",
+          "tableFrom": "bingo_achievement_settings",
+          "tableTo": "bingos",
+          "columnsFrom": [
+            "bingo_id"
           ],
           "columnsTo": [
             "id"
@@ -577,6 +882,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(unixepoch())"
+        },
+        "achievements_enabled": {
+          "name": "achievements_enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
         }
       },
       "indexes": {

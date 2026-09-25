@@ -40,9 +40,10 @@ CREATE TABLE `bingo_achievement_settings` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `bingo_achievement_settings_bingo_key_unq` ON `bingo_achievement_settings` (`bingo_id`,`achievement_key`);--> statement-breakpoint
 ALTER TABLE `bingos` ADD `achievements_enabled` integer DEFAULT true NOT NULL;--> statement-breakpoint
--- Every v1 Achievement (CONTEXT.md), switched on for every existing bingo, stamped with this migration's time —
--- matches createBingo's default for a brand-new bingo (achievementService.initializeAchievementSettings). The
--- table is brand new in this same migration, so INSERT OR IGNORE is just defensive, not load-bearing.
+-- Every Achievement in the launch catalogue (CONTEXT.md), switched on for every existing bingo, stamped with this
+-- migration's time — matches createBingo's default for a brand-new bingo (achievementService.initializeAchievementSettings).
+-- One added to the catalogue after launch arrives switched off instead. The table is brand new in this same migration,
+-- so INSERT OR IGNORE is just defensive, not load-bearing.
 INSERT OR IGNORE INTO `bingo_achievement_settings` (`id`, `bingo_id`, `achievement_key`, `enabled`, `first_switched_on_at`) SELECT lower(hex(randomblob(16))), `id`, 'strong_start', 1, unixepoch() FROM `bingos`;--> statement-breakpoint
 INSERT OR IGNORE INTO `bingo_achievement_settings` (`id`, `bingo_id`, `achievement_key`, `enabled`, `first_switched_on_at`) SELECT lower(hex(randomblob(16))), `id`, 'drop_detective', 1, unixepoch() FROM `bingos`;--> statement-breakpoint
 INSERT OR IGNORE INTO `bingo_achievement_settings` (`id`, `bingo_id`, `achievement_key`, `enabled`, `first_switched_on_at`) SELECT lower(hex(randomblob(16))), `id`, 'hypeman', 1, unixepoch() FROM `bingos`;--> statement-breakpoint
@@ -53,6 +54,7 @@ INSERT OR IGNORE INTO `bingo_achievement_settings` (`id`, `bingo_id`, `achieveme
 INSERT OR IGNORE INTO `bingo_achievement_settings` (`id`, `bingo_id`, `achievement_key`, `enabled`, `first_switched_on_at`) SELECT lower(hex(randomblob(16))), `id`, 'globetrotter', 1, unixepoch() FROM `bingos`;--> statement-breakpoint
 INSERT OR IGNORE INTO `bingo_achievement_settings` (`id`, `bingo_id`, `achievement_key`, `enabled`, `first_switched_on_at`) SELECT lower(hex(randomblob(16))), `id`, 'eager_beaver', 1, unixepoch() FROM `bingos`;--> statement-breakpoint
 INSERT OR IGNORE INTO `bingo_achievement_settings` (`id`, `bingo_id`, `achievement_key`, `enabled`, `first_switched_on_at`) SELECT lower(hex(randomblob(16))), `id`, 'superfan', 1, unixepoch() FROM `bingos`;--> statement-breakpoint
+INSERT OR IGNORE INTO `bingo_achievement_settings` (`id`, `bingo_id`, `achievement_key`, `enabled`, `first_switched_on_at`) SELECT lower(hex(randomblob(16))), `id`, 'popular', 1, unixepoch() FROM `bingos`;--> statement-breakpoint
 INSERT OR IGNORE INTO `bingo_achievement_settings` (`id`, `bingo_id`, `achievement_key`, `enabled`, `first_switched_on_at`) SELECT lower(hex(randomblob(16))), `id`, 'night_owl', 1, unixepoch() FROM `bingos`;--> statement-breakpoint
 INSERT OR IGNORE INTO `bingo_achievement_settings` (`id`, `bingo_id`, `achievement_key`, `enabled`, `first_switched_on_at`) SELECT lower(hex(randomblob(16))), `id`, 'early_bird', 1, unixepoch() FROM `bingos`;--> statement-breakpoint
 INSERT OR IGNORE INTO `bingo_achievement_settings` (`id`, `bingo_id`, `achievement_key`, `enabled`, `first_switched_on_at`) SELECT lower(hex(randomblob(16))), `id`, 'main_character', 1, unixepoch() FROM `bingos`;--> statement-breakpoint

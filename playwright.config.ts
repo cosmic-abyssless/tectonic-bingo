@@ -60,6 +60,7 @@ export default defineConfig({
         SCREENSHOT_OCR_DISABLED: "true",
         OSRS_ITEM_SEARCH_DISABLED: "true",
         GE_PRICES_FETCH_DISABLED: "true",
+        WOM_SNAPSHOT_READS_DISABLED: "true",
       },
     },
     {
