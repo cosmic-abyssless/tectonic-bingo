@@ -43,6 +43,52 @@ export function SubmissionsDrawer({
   const countFor = (key: Filter) => (key === "all" ? bySubmitter.length : bySubmitter.filter((s) => s.status === key).length);
   const pending = submissions.filter((s) => s.status === "pending").length;
 
+  // Pinned under the header (ComicDialogHeader's `below`), so the filters stay put while the list scrolls. Index tabs:
+  // the picked one is the list's own paper and overlaps the rule, so it reads as the open tab; the rest sit on the
+  // unbroken rule, a shade darker.
+  const tabs = submissions.length > 0 && (
+    <div className="flex flex-wrap items-end gap-2 border-b-[3px] px-5 pt-3" style={{ borderColor: colors.LINE, background: colors.PAPER_ALT }}>
+      {FILTERS.map(({ key, label }) => {
+        const active = filter === key;
+        const count = countFor(key);
+        return (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setFilter(key)}
+            aria-pressed={active}
+            className={`comic-press relative flex items-center gap-2 border-[3px] border-b-0 px-3 text-lg uppercase leading-none tracking-wide ${active ? "-mb-[3px] pb-2.5 pt-2" : "pb-1.5 pt-1.5"}`}
+            style={{
+              fontFamily: COMIC_FONT,
+              borderColor: colors.LINE,
+              background: active ? colors.PAPER : `color-mix(in srgb, ${colors.PAPER_ALT} 90%, ${colors.INK})`,
+              color: active ? colors.INK : colors.INK_SUBTLE,
+              zIndex: active ? 2 : 1,
+            }}
+          >
+            {label}
+            <span
+              className="rounded-full px-1.5 text-xs leading-4"
+              style={{ background: active ? colors.INK : colors.RULE, color: active ? colors.PAPER : colors.INK, fontFamily: "inherit" }}
+            >
+              {count}
+            </span>
+          </button>
+        );
+      })}
+      {submitters.length > 1 && (
+        <Select
+          size="sm"
+          value={submitter}
+          onChange={setSubmitter}
+          aria-label="Submitted by"
+          className="mb-2 ml-auto w-auto!"
+          options={[{ value: "", label: "Everyone" }, ...submitters.map((name) => ({ value: name, label: name }))]}
+        />
+      )}
+    </div>
+  );
+
   return (
     <ComicDialog isOpen={isOpen} onClose={onClose} size="lg">
       <ComicDialogHeader
@@ -54,6 +100,7 @@ export function SubmissionsDrawer({
             : `${submissions.length} submission${submissions.length !== 1 ? "s" : ""}${pending ? ` · ${pending} pending review` : ""}`
         }
         onClose={onClose}
+        below={tabs}
         action={
           onSubmit && (
             <ComicButton
@@ -70,51 +117,7 @@ export function SubmissionsDrawer({
         }
       />
 
-      {submissions.length > 0 && (
-        <div className="flex flex-wrap items-end gap-2 border-b-[3px] px-5 pt-4" style={{ borderColor: colors.LINE, background: colors.PAPER_ALT }}>
-          {FILTERS.map(({ key, label }) => {
-            const active = filter === key;
-            const count = countFor(key);
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setFilter(key)}
-                aria-pressed={active}
-                className="comic-press relative -mb-[3px] flex items-center gap-2 border-[3px] border-b-0 px-3 pb-2 pt-1.5 text-lg uppercase leading-none tracking-wide transition-transform"
-                style={{
-                  fontFamily: COMIC_FONT,
-                  borderColor: colors.LINE,
-                  background: active ? colors.PAPER : colors.PAPER_RAISED,
-                  color: active ? colors.INK : colors.INK_SUBTLE,
-                  transform: active ? "translateY(0)" : "translateY(3px)",
-                  zIndex: active ? 2 : 1,
-                }}
-              >
-                {label}
-                <span
-                  className="rounded-full px-1.5 text-xs leading-4"
-                  style={{ background: active ? colors.INK : colors.RULE, color: active ? colors.PAPER : colors.INK, fontFamily: "inherit" }}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-          {submitters.length > 1 && (
-            <Select
-              size="sm"
-              value={submitter}
-              onChange={setSubmitter}
-              aria-label="Submitted by"
-              className="mb-2 ml-auto w-auto!"
-              options={[{ value: "", label: "Everyone" }, ...submitters.map((name) => ({ value: name, label: name }))]}
-            />
-          )}
-        </div>
-      )}
-
-      <div className="p-5">
+      <div className="isolate p-5">
         {submissions.length === 0 ? (
           <EmptySubmissions hasSubmit={!!onSubmit} />
         ) : shown.length === 0 ? (
