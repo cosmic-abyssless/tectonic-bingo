@@ -21,8 +21,10 @@ const startedFor = (slug: string, userId: string) => {
 };
 
 /**
- * Plays "my Achievements"' unshown unlock popups one at a time, top-centre, above everything (portalled to body,
- * z-[110] — over react-aria dialogs at z-50 and the toast region at z-[60]). Mount only where the viewer is eligible
+ * Plays "my Achievements"' unshown unlock popups one at a time, top-centre, above everything: portalled to body at
+ * z-[10000] (over the dialogs at z-50, the toasts at z-[60] and the dropdowns opened in dialogs at 9999), and marked
+ * as React Aria's top layer, so an open dialog neither hides it from interaction nor takes a click on it for a click
+ * outside itself (which would close the dialog). Mount only where the viewer is eligible
  * (see AchievementsProvider) — it fetches on mount and keeps up via invalidation, not on a timer.
  *
  * Each popup plays exactly once. It waits to start until the Player is on the page (its tab showing, the window
@@ -67,7 +69,7 @@ export function AchievementPopupHost({ slug, onOpen }: { slug: string; onOpen: (
   const done = () => setPlaying(null);
 
   return createPortal(
-    <div className="pointer-events-none fixed inset-x-0 top-4 z-[110] flex justify-center px-4" role="status" aria-live="polite">
+    <div data-react-aria-top-layer="true" className="pointer-events-none fixed inset-x-0 top-4 z-[10000] flex justify-center px-4" role="status" aria-live="polite">
       {/* Keyed by the achievement so a new popup remounts a fresh reveal (and its animation) rather than reusing the old one. */}
       <AchievementUnlockReveal key={playing} onDone={done}>
         <Card
