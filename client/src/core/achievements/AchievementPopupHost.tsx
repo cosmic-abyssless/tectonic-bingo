@@ -8,6 +8,7 @@ import { useWebSocketEvent } from "../../context/WebSocketContext";
 import { useSlot } from "../../themes/context";
 import { AchievementUnlockReveal } from "./AchievementUnlockReveal";
 import { nextPopupKey } from "./popupQueue";
+import { usePageFocused } from "./usePageFocused";
 
 /**
  * Plays "my Achievements"' unshown unlock popups one at a time, top-centre, above everything (portalled to body,
@@ -20,6 +21,7 @@ export function AchievementPopupHost({ slug, onOpen }: { slug: string; onOpen: (
   const { data } = useMyAchievements(slug, true);
   const markShown = useMarkAchievementPopupsShown(slug);
   const Card = useSlot("AchievementUnlockCard");
+  const focused = usePageFocused();
   // Popups already played this mount: a mid-queue refetch (a websocket event, or another mutation's invalidation)
   // must never replay one while the server hasn't caught up yet.
   const [playedThisSession, setPlayedThisSession] = useState<ReadonlySet<AchievementKey>>(() => new Set());
@@ -33,7 +35,10 @@ export function AchievementPopupHost({ slug, onOpen }: { slug: string; onOpen: (
   if (!data) return null;
   const key = nextPopupKey(data.unshownPopups, playedThisSession);
   const achievement = key ? data.achievements.find((a) => a.key === key) : undefined;
-  if (!key || !achievement) return null;
+  // Earned while the Player was away (another tab, another window): it waits until they're back to play, and one
+  // that was playing when they left starts again from the top when they return — it isn't marked shown until it has
+  // played through.
+  if (!key || !achievement || !focused) return null;
 
   const finish = () => {
     setPlayedThisSession((prev) => new Set(prev).add(key));
