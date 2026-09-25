@@ -8,6 +8,8 @@ import { controlClass } from "../ui/Field";
 import { Menu, MenuItem } from "../ui/Menu";
 import { Select } from "../ui/Select";
 import { ChevronDownIcon, LinkIcon, PlusIcon, XIcon } from "../ui/icons";
+import { Dialog, DialogHeader } from "../ui/Dialog";
+import * as adminApi from "../../api/adminApi";
 import { toGraphNodeInput, collectLabeledConditions } from "../board/requirementTree";
 import { describeRules, useRulesFor } from "./exclusiveItems";
 
@@ -135,9 +137,12 @@ function labelConditions(root: GraphNodeInput): Map<GraphNodeInput, string> {
 }
 
 export interface RequirementTreeEditorProps {
+  /** The bingo, for the few rows that talk to the server themselves (re-pricing after a Valued as changes). */
+  slug: string;
   root: GraphNodeInput;
   itemGroups: ItemGroup[];
-  onChange: (root: GraphNodeInput) => void;
+  /** Saves the tree; resolves whether it saved, when the caller can tell. */
+  onChange: (root: GraphNodeInput) => void | Promise<boolean>;
   /** Persists a set of item names as a new reusable group. Does not affect the row that called it — groups are a one-time authoring template, not a live reference (see docs/item-quantity-model.md §6). */
   onSaveAsGroup?: (itemNames: string[]) => Promise<ItemGroup | null>;
   /**
@@ -172,9 +177,10 @@ export interface RequirementTreeEditorProps {
 // the task itself a bare ITEM leaf — dispatch on kind here exactly like
 // GroupNode does for its own children, or such a task would render as an
 // empty composite instead of its actual item row.
-export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGroup, existingLeaves, existingConditions, sharedNodeIds }: RequirementTreeEditorProps) {
+export function RequirementTreeEditor({ slug, root, itemGroups, onChange, onSaveAsGroup, existingLeaves, existingConditions, sharedNodeIds }: RequirementTreeEditorProps) {
   const conditionLabels = labelConditions(root);
   const props: NodeProps = {
+    slug,
     node: root,
     path: [],
     itemGroups,
@@ -196,6 +202,7 @@ export function RequirementTreeEditor({ root, itemGroups, onChange, onSaveAsGrou
 }
 
 interface NodeProps {
+  slug: string;
   node: GraphNodeInput;
   path: Path;
   itemGroups: ItemGroup[];
@@ -204,7 +211,7 @@ interface NodeProps {
   existingConditions?: ExistingCondition[];
   sharedNodeIds: Set<string>;
   conditionLabels: Map<GraphNodeInput, string>;
-  update: (path: Path, fn: (node: GraphNodeInput) => GraphNodeInput) => void;
+  update: (path: Path, fn: (node: GraphNodeInput) => GraphNodeInput) => void | Promise<boolean>;
   remove: (path: Path) => void;
   add: (path: Path, child: GraphNodeInput) => void;
   addMany: (path: Path, children: GraphNodeInput[]) => void;
@@ -399,7 +406,7 @@ function RemoveButton({ shared, label, what, onPress, className }: { shared: boo
 // docs/item-quantity-model.md §2). Renaming isn't supported here; remove and
 // re-add (or "+ existing item") instead, matching the read-only-once-added
 // behavior a chip always had.
-function ItemLeafRow({ node, path, remove, update, existingLeaves, sharedNodeIds }: NodeProps) {
+function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedNodeIds }: NodeProps) {
   const isRoot = path.length === 0;
   const name = node.itemName ?? "";
   // This leaf *itself* has 2+ direct parents — not just "reachable somewhere
@@ -411,6 +418,35 @@ function ItemLeafRow({ node, path, remove, update, existingLeaves, sharedNodeIds
   const exclusiveRules = useRulesFor(name);
   const [editingValue, setEditingValue] = useState(false);
   const valuedAs = node.valuedAs ?? null;
+  // A changed Valued as on a Task that already has priced submissions (mid-bingo): the new value waits here while
+  // the admin picks whether to re-price them too.
+  const [pending, setPending] = useState<{ next: ValuedAs | null; count: number } | null>(null);
+  const [repriceNote, setRepriceNote] = useState<string | null>(null);
+
+  async function saveValuedAs(next: ValuedAs | null) {
+    setRepriceNote(null);
+    const changed = JSON.stringify(next) !== JSON.stringify(valuedAs);
+    if (!changed) return setEditingValue(false);
+    const count = node.id ? (await adminApi.countPricedSubmissions(slug, node.id).catch(() => ({ count: 0 }))).count : 0;
+    if (count > 0) return setPending({ next, count });
+    setEditingValue(false);
+    await update(path, (n) => ({ ...n, valuedAs: next }));
+  }
+
+  async function applyPending(reprice: boolean) {
+    if (!pending) return;
+    const { next } = pending;
+    setPending(null);
+    setEditingValue(false);
+    const saved = await update(path, (n) => ({ ...n, valuedAs: next }));
+    if (!reprice || saved === false || !node.id) return;
+    try {
+      const { repriced } = await adminApi.repriceNodeClaims(slug, node.id);
+      setRepriceNote(`Re-priced ${repriced} submission${repriced === 1 ? "" : "s"}`);
+    } catch (e) {
+      setRepriceNote(e instanceof Error ? e.message : "Couldn't re-price");
+    }
+  }
 
   return (
     <div className="space-y-1">
@@ -440,17 +476,30 @@ function ItemLeafRow({ node, path, remove, update, existingLeaves, sharedNodeIds
         </button>
         {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${name}` : `Remove ${name}`} what="item" onPress={() => remove(path)} />}
       </div>
-      {editingValue && (
-        <ValuedAsEditor
-          itemName={name}
-          valuedAs={valuedAs}
-          onSave={(next) => {
-            update(path, (n) => ({ ...n, valuedAs: next }));
-            setEditingValue(false);
-          }}
-          onCancel={() => setEditingValue(false)}
-        />
-      )}
+      {editingValue && <ValuedAsEditor itemName={name} valuedAs={valuedAs} onSave={(next) => void saveValuedAs(next)} onCancel={() => setEditingValue(false)} />}
+      {repriceNote && <p className="px-2 text-[11px] text-on-surface-muted">{repriceNote}</p>}
+
+      <Dialog isOpen={!!pending} onClose={() => setPending(null)}>
+        <DialogHeader title="Re-price the submissions already made?" onClose={() => setPending(null)} />
+        <div className="space-y-3 p-5 text-sm text-on-surface-muted">
+          <p>
+            {pending?.count} submission{pending?.count === 1 ? " already has" : "s already have"} a GP value from {name} on this Task. Re-pricing prices{" "}
+            {pending?.count === 1 ? "it" : "them"} again with the new value at today's prices (only this Task's items); saving only leaves{" "}
+            {pending?.count === 1 ? "it" : "them"} as {pending?.count === 1 ? "it is" : "they are"} and applies the new value to new submissions.
+          </p>
+          <div className="flex flex-wrap justify-end gap-2 pt-2">
+            <Button variant="ghost" size="sm" onPress={() => setPending(null)}>
+              Cancel
+            </Button>
+            <Button variant="secondary" size="sm" onPress={() => void applyPending(false)}>
+              Save only
+            </Button>
+            <Button variant="primary" size="sm" onPress={() => void applyPending(true)}>
+              Save and re-price {pending?.count}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 }

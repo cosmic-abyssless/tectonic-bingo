@@ -143,6 +143,13 @@ export function createTask(slug: string, tileId: string, input: GraphNodeInput, 
 export function updateTask(slug: string, id: string, input: GraphNodeInput) {
   return api.patch<{ task: GraphNode }>(`${base(slug)}/tasks/${id}`, input);
 }
+// A Task's Valued as changed mid-bingo: how many submissions already have a GP value from it, and re-pricing them.
+export function countPricedSubmissions(slug: string, nodeId: string) {
+  return api.get<{ count: number }>(`${base(slug)}/nodes/${nodeId}/priced-submissions`);
+}
+export function repriceNodeClaims(slug: string, nodeId: string) {
+  return api.post<{ repriced: number }>(`${base(slug)}/nodes/${nodeId}/reprice`);
+}
 export function deleteTask(slug: string, id: string) {
   return api.delete(`${base(slug)}/tasks/${id}`);
 }

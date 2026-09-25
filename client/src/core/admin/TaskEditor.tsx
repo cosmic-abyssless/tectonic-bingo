@@ -58,7 +58,8 @@ export function TaskEditor({
   // always send the full current input, overridden with just the changed
   // field(s), so editing one field can't wipe another (e.g. a label edit
   // wiping the requirement tree, or a tree edit resetting points to 0).
-  async function patch(fields: Partial<GraphNodeInput>) {
+  // Resolves whether it saved (a failure shows in the editor), so a caller can act once the change is in.
+  async function patch(fields: Partial<GraphNodeInput>): Promise<boolean> {
     const input = { ...toInput(task), ...fields };
     setError(null);
     try {
@@ -69,8 +70,10 @@ export function TaskEditor({
         (tasks) => tasks.map((t) => (t.id === task.id ? previewGraphNode(task.bingoId, input) : t)),
         () => adminApi.updateTask(slug, task.id, input),
       );
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save");
+      return false;
     }
   }
   async function saveAsGroup(itemNames: string[]) {
@@ -157,6 +160,7 @@ export function TaskEditor({
           {!isManual && (
             <Field label="Requirement" as="div">
               <RequirementTreeEditor
+                slug={slug}
                 root={toInput(task)}
                 itemGroups={itemGroups}
                 onChange={(updated) => patch(updated)}

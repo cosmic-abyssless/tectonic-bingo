@@ -19,6 +19,7 @@ import { checkWomGroup, syncWomCompetition } from "../services/womCompetitionSer
 import { auditSkip } from "../audit/middleware";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
+import { countPricedSubmissions, repriceNodeClaims } from "../services/gpRepriceService";
 
 // Site-admin only — not just any bingo mod. Board/settings/team/moderator
 // management is structural setup, distinct from mod.ts's day-of operational
@@ -268,6 +269,20 @@ router.patch(
     res.json({ task });
   }),
 );
+// Changing a Task's Valued as mid-bingo: how many submissions already have a GP value from it, and re-pricing them.
+router.get(
+  "/nodes/:nodeId/priced-submissions",
+  asyncHandler(async (req, res) => {
+    res.json({ count: countPricedSubmissions(db, req.bingo!.id, req.params.nodeId as string) });
+  }),
+);
+router.post(
+  "/nodes/:nodeId/reprice",
+  asyncHandler(async (req, res) => {
+    res.json({ repriced: await repriceNodeClaims(db, req.bingo!.id, req.params.nodeId as string) });
+  }),
+);
+
 router.delete(
   "/tasks/:id",
   asyncHandler(async (req, res) => {

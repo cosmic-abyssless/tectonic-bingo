@@ -9,7 +9,7 @@ import { createTask, createTile, updateNode } from "./boardService";
 import { exportBingo, importBingo } from "./bingoExportService";
 import { GePriceTable } from "./gePriceService";
 import { fillMissingGpValues } from "./gpValueService";
-import { repriceSubmission } from "./gpRepriceService";
+import { countPricedSubmissions, repriceNodeClaims, repriceSubmission } from "./gpRepriceService";
 import { getNodeTrees } from "./graphService";
 import { ServiceError } from "./errors";
 
@@ -129,5 +129,33 @@ describe("repriceSubmission", () => {
     const fx = seed();
     const { submissionId } = claim(fx, fx.duke.id, 158);
     await expect(repriceSubmission(db, "another-bingo", submissionId, await loadedTable())).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe("re-pricing a Task after its Valued as changed", () => {
+  it("counts the submissions already priced from it", () => {
+    const fx = seed();
+    claim(fx, fx.duke.id, 158);
+    claim(fx, fx.duke.id, 158);
+    claim(fx, fx.duke.id); // not priced yet
+    claim(fx, fx.plain.id, 160);
+    expect(countPricedSubmissions(db, fx.bingoId, fx.duke.id)).toBe(2);
+  });
+
+  it("re-prices only that Task's claims, fills ones with no value, and audits each submission", async () => {
+    const fx = seed();
+    const wrong = claim(fx, fx.duke.id, 158);
+    const empty = claim(fx, fx.duke.id);
+    const other = claim(fx, fx.plain.id, 999);
+    // A second claim on another Task in the same submission is left alone.
+    const [sameSub] = db.insert(claims).values({ submissionId: wrong.submissionId, nodeId: fx.plain.id, itemName: "Gold ring", gpValue: 123 }).returning().all();
+
+    expect(await repriceNodeClaims(db, fx.bingoId, fx.duke.id, await loadedTable())).toBe(2);
+
+    expect(gpOf(wrong.claimId)).toBe(GOLD_RING_AS_THIRD_OF_VESTIGE);
+    expect(gpOf(empty.claimId)).toBe(GOLD_RING_AS_THIRD_OF_VESTIGE);
+    expect(gpOf(other.claimId)).toBe(999);
+    expect(gpOf(sameSub!.id)).toBe(123);
+    expect(db.select().from(auditLog).where(eq(auditLog.action, "submission.repriced")).all()).toHaveLength(2);
   });
 });

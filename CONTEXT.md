@@ -209,6 +209,7 @@ What a Claim's drop is worth in GP (gold pieces, the game's currency): the item'
 - **Rules:** Priced at the midpoint of the item's latest buy and sell prices. A charged item that isn't sold on the Grand Exchange is priced as its uncharged version (Craw's bow as Craw's bow (u), Tumeken's shadow as its (uncharged) version). It may arrive shortly after the Submission is made and is never changed once set. A Claim with no item (a MANUAL task), or an item with no Grand Exchange price and no Piece value (e.g. a pet), has no GP value, shown as "—".
 - **Not:** A scoring source. GP value never earns or costs points.
 - **Re-price:** A Moderator can price a Submission's Claims again, when a value is wrong because it was priced from the wrong thing (before its Task got a Valued as, or before its item had a Piece value). Not for bringing values up to today's prices. A Claim that can't be priced right now keeps its value. Recorded in the audit log.
+- **Re-pricing a Task:** Changing a Task's Valued as once Submissions have a GP value from it asks whether to re-price them too (only that Task's Claims, at today's prices) or leave them and apply it to new Submissions only.
 
 ### Valued as
 An optional setting on an item Task: Claims on that Task get their GP value from another item ÷ N instead of their own item's price.
