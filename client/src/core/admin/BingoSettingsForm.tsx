@@ -224,8 +224,8 @@ export function BingoSettingsForm({
 
       <WomSection enabled={form.womEnabled} onToggle={(womEnabled) => setForm({ ...form, womEnabled })}>
         <Notice tone="info">
-          When enabled, a Wise Old Man group competition is created automatically for this bingo's teams once the draft finishes, and kept up to date if a
-          captain renames their team.
+          When enabled, a Wise Old Man group competition is created automatically for this bingo's teams once the draft finishes, then kept up to date:
+          the bingo's name, its start and end dates, and every team's name and players.
         </Notice>
         <div className="grid grid-cols-2 gap-4">
           <Field label="WOM group ID">
@@ -241,6 +241,7 @@ export function BingoSettingsForm({
             />
           </Field>
         </div>
+        <WomConnectionCheck slug={slug} groupId={form.womGroupId} verificationCode={form.womGroupVerificationCode} />
         {bingo.womCompetitionId && (
           <Notice tone="ok">
             Competition created —{" "}
@@ -321,6 +322,42 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 // The toggle and the expand/collapse control are two separate buttons (not
 // one nested in the other, which would be invalid HTML and would fire both
 // on a single click), so this can't just reuse Disclosure's single-trigger layout.
+// Test connection: checks the group ID and verification code as they are in the form (the saved code when the field is
+// blank) against Wise Old Man, without saving or changing anything, so a typo shows up before the draft rather than
+// as a competition that failed to be made. A result is cleared once either field changes.
+function WomConnectionCheck({ slug, groupId, verificationCode }: { slug: string; groupId: string; verificationCode: string }) {
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState<adminApi.WomGroupCheck | null>(null);
+  useEffect(() => setResult(null), [groupId, verificationCode]);
+
+  const check = async () => {
+    setChecking(true);
+    try {
+      setResult(await adminApi.checkWomGroup(slug, { groupId: groupId.trim(), verificationCode: verificationCode.trim() }));
+    } catch (e) {
+      setResult({ ok: false, problem: "unreachable", message: e instanceof Error ? e.message : "The check failed." });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <Button onPress={check} isDisabled={checking}>
+        {checking ? "Testing…" : "Test connection"}
+      </Button>
+      {result &&
+        (result.ok ? (
+          <Notice tone="ok">
+            Connected to <strong>{result.groupName || `group ${groupId}`}</strong>, and the verification code is right.
+          </Notice>
+        ) : (
+          <Notice tone="warn">{result.message}</Notice>
+        ))}
+    </div>
+  );
+}
+
 function WomSection({ enabled, onToggle, children }: { enabled: boolean; onToggle: (value: boolean) => void; children: ReactNode }) {
   const [expanded, setExpanded] = useState(enabled);
   useEffect(() => setExpanded(enabled), [enabled]);

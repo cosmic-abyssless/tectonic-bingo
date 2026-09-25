@@ -26,7 +26,7 @@ import { fetchProfiles } from "../services/tectonicProfileService";
 import { applyRosterNames, partiesInPairingState } from "../services/pairingNames";
 import { fetchAndPersistPlayerStats, getAccountTypes, getSignupStats, parseStoredPlayerStats } from "../services/playerStatsService";
 import { parseStoredCaStats } from "../services/combatAchievements";
-import { syncWomTeamRename } from "../services/womCompetitionService";
+import { syncWomCompetition } from "../services/womCompetitionService";
 import { getPastParticipationsForUser } from "../services/pastWomCompetitionService";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
@@ -692,7 +692,7 @@ router.patch(
     if (!name || !name.trim()) throw new ServiceError(400, "name is required");
     const updated = teamService.updateTeam(db, team.id, { name: name.trim() });
     broadcast({ type: "team_updated", bingoId: req.bingo!.id, payload: { teamId: team.id } });
-    void syncWomTeamRename(db, req.bingo!.id);
+    void syncWomCompetition(db, req.bingo!.id);
     res.json({ team: updated });
   }),
 );

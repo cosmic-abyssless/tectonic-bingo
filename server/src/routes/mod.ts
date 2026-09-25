@@ -16,7 +16,7 @@ import { fetchProfiles } from "../services/tectonicProfileService";
 import { applyRosterNames } from "../services/pairingNames";
 import * as pairingService from "../services/pairingService";
 import * as teamService from "../services/teamService";
-import { syncWomCompetitionAfterDraft } from "../services/womCompetitionService";
+import { syncWomCompetition, syncWomCompetitionAfterDraft } from "../services/womCompetitionService";
 import { archiveBingoCompetition } from "../services/pastWomCompetitionService";
 import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
 import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
@@ -138,6 +138,8 @@ router.post(
     // stage change itself. syncWomCompetitionAfterDraft no-ops when the
     // integration isn't configured.
     if (fromStage === "draft") void syncWomCompetitionAfterDraft(db, bingo.id);
+    // With no start date set, the bingo starts when it goes live: the competition's start moves to match.
+    if (toStage === "live") void syncWomCompetition(db, bingo.id);
     // Same fire-and-forget convention: snapshot the bingo's WOM competition
     // once it's actually over, so its per-player gains survive independently
     // of WOM's own record. No-ops when the bingo has no linked competition.
