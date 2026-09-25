@@ -19,7 +19,7 @@ const LATEST_MAX_AGE_MS = 5 * 60_000;
 const MAPPING_MAX_AGE_MS = 24 * 60 * 60_000;
 // A charged item (Craw's bow, Tumeken's shadow, Toxic blowpipe) isn't on the GE; its uncharged version is. A name the
 // GE doesn't know is tried with these suffixes, in order.
-const UNCHARGED_SUFFIXES = [" (u)", " (uncharged)", " (empty)"];
+export const UNCHARGED_SUFFIXES = [" (u)", " (uncharged)", " (empty)"];
 
 // After a failed refresh, wait this long before trying again, so a wiki outage isn't retried on every submission.
 const RETRY_AFTER_FAILURE_MS = 60_000;

@@ -1,0 +1,29 @@
+[
+  {
+    "drop_json": "{\"Name Notes\":\"\",\"Rarity Notes\":\"\",\"Rarity\":\"1/2,448\",\"Approx\":false,\"Alt Rarity Dash\":\"\",\"Drop level\":\"\",\"Drop type\":\"reward\",\"Drop Quantity\":\"1\",\"League region\":\"Morytania\",\"Dropped from\":\"Chest (Barrows)\",\"Quantity High\":1,\"Drop Value\":61800,\"Rolls\":7,\"Alt Rarity\":\"\",\"Quantity Low\":1,\"Dropped item\":\"Dharok's helm\"}"
+  },
+  {
+    "drop_json": "{\"Name Notes\":\"\",\"Rarity Notes\":\"\",\"Rarity\":\"379/1,012\",\"Approx\":false,\"Alt Rarity Dash\":\"\",\"Drop level\":\"\",\"Drop type\":\"reward\",\"Drop Quantity\":\"2\u2013774\",\"League region\":\"Morytania\",\"Dropped from\":\"Chest (Barrows)\",\"Quantity High\":774,\"Drop Value\":1,\"Rolls\":7,\"Alt Rarity\":\"\",\"Quantity Low\":2,\"Dropped item\":\"Coins\"}"
+  },
+  {
+    "drop_json": "{\"Name Notes\":\"\",\"Rarity Notes\":\"\",\"Rarity\":\"9/70\",\"Approx\":false,\"Alt Rarity Dash\":\"\",\"Drop level\":\"\",\"Drop type\":\"reward\",\"Drop Quantity\":\"150\",\"League region\":\"Varlamore\",\"Dropped from\":\"Rewards Chest (Fortis Colosseum)#Wave 3\",\"Quantity High\":150,\"Drop Value\":60,\"Rolls\":1,\"Alt Rarity\":\"\",\"Quantity Low\":150,\"Dropped item\":\"Sunfire splinters\"}"
+  },
+  {
+    "drop_json": "{\"Name Notes\":\"\",\"Rarity Notes\":\"\",\"Rarity\":\"1/70\",\"Approx\":false,\"Alt Rarity Dash\":\"\",\"Drop level\":\"\",\"Drop type\":\"reward\",\"Drop Quantity\":\"500\",\"League region\":\"Varlamore\",\"Dropped from\":\"Rewards Chest (Fortis Colosseum)#Wave 3\",\"Quantity High\":500,\"Drop Value\":60,\"Rolls\":1,\"Alt Rarity\":\"\",\"Quantity Low\":500,\"Dropped item\":\"Sunfire splinters\"}"
+  },
+  {
+    "drop_json": "{\"Name Notes\":\"\",\"Rarity Notes\":\"\",\"Rarity\":\"Varies\",\"Approx\":false,\"Alt Rarity Dash\":\"\",\"Drop level\":\"\",\"Drop type\":\"reward\",\"Drop Quantity\":\"1\",\"League region\":\"Varlamore\",\"Dropped from\":\"Rewards Chest (Fortis Colosseum)#Wave 3\",\"Quantity High\":1,\"Drop Value\":0,\"Rolls\":1,\"Alt Rarity\":\"\",\"Quantity Low\":1,\"Dropped item\":\"Token (Varlamore)\"}"
+  },
+  {
+    "drop_json": "{\"Name Notes\":\"\",\"Rarity Notes\":\"\",\"Rarity\":\"1/172\",\"Approx\":false,\"Alt Rarity Dash\":\"\",\"Drop level\":\"1001\",\"Drop type\":\"combat\",\"Drop Quantity\":\"1\",\"League region\":\"Asgarnia\",\"Dropped from\":\"Nex\",\"Quantity High\":1,\"Drop Value\":120000,\"Rolls\":1,\"Alt Rarity\":\"\",\"Quantity Low\":1,\"Dropped item\":\"Zaryte vambraces\"}"
+  },
+  {
+    "drop_json": "{\"Name Notes\":\"\",\"Rarity Notes\":\"\",\"Rarity\":\"Uncommon\",\"Approx\":false,\"Alt Rarity Dash\":\"\",\"Drop level\":\"1001\",\"Drop type\":\"combat\",\"Drop Quantity\":\"23\u20132354 (noted)\",\"League region\":\"Asgarnia\",\"Dropped from\":\"Nex\",\"Quantity High\":2354,\"Drop Value\":27,\"Rolls\":1,\"Alt Rarity\":\"\",\"Quantity Low\":23,\"Dropped item\":\"Coal\"}"
+  },
+  {
+    "drop_json": "{\"Name Notes\":\"\",\"Rarity Notes\":\"\",\"Rarity\":\"7.5/95.11\",\"Approx\":false,\"Alt Rarity Dash\":\"\",\"Drop level\":\"1238\",\"Drop type\":\"combat\",\"Drop Quantity\":\"3\u20134\",\"League region\":\"Kourend\",\"Dropped from\":\"Yama\",\"Quantity High\":4,\"Drop Value\":60,\"Rolls\":1,\"Alt Rarity\":\"\",\"Quantity Low\":3,\"Dropped item\":\"Pineapple pizza\"}"
+  },
+  {
+    "drop_json": "{\"Name Notes\":\"\",\"Rarity Notes\":\"\",\"Rarity\":\"Once\",\"Approx\":false,\"Alt Rarity Dash\":\"\",\"Drop level\":\"333\",\"Drop type\":\"combat\",\"Drop Quantity\":\"1\",\"League region\":\"desert\",\"Dropped from\":\"Kalphite Queen\",\"Quantity High\":1,\"Drop Value\":30000,\"Rolls\":1,\"Alt Rarity\":\"\",\"Quantity Low\":1,\"Dropped item\":\"Kq head (tattered)\"}"
+  }
+]

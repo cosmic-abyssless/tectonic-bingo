@@ -131,6 +131,11 @@ A concrete objective, check, or nested requirement that must be satisfied.
 - **Synonyms:** Leaf (engineering term for indivisible item/manual task), Requirement.
 - **Forbidden synonyms:** "Node" (never expose to players or in UI copy).
 
+### Item
+An individual OSRS item, as a leaf of the Requirement Tree, matched by its OSRS item name.
+- **Rules:** Usually a Task on its own ("Get a Twisted bow"). The same name can be an Item in several places on one Board. The Items on the Board are every Item leaf anywhere on it.
+- **Not:** A Claim. The Item is what's asked for; the Claim is one drop of it.
+
 ### Requirement Tree (Conditions)
 The recursive structure inside a Part or Task defining how objectives combine:
 - **Condition Types:**
