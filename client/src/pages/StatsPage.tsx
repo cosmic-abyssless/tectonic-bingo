@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEscapeBack } from "../core/ui/useEscapeBack";
+import { useParams } from "react-router-dom";
 import { useBingo } from "../api/queries";
 import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { PageLoading } from "../themes/default/page/PageStates";
@@ -9,16 +9,9 @@ import { useSlot } from "../themes/context";
 
 export function StatsPage() {
   const { slug } = useParams<{ slug: string }>();
-  const navigate = useNavigate();
   const { data: shell } = useBingo(slug);
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") navigate(`/b/${slug}`);
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [navigate, slug]);
+  useEscapeBack(`/b/${slug}`);
 
   useRememberTheme(slug, shell?.bingo.theme);
 

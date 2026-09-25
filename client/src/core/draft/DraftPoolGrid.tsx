@@ -47,7 +47,7 @@ import { usePreference } from "../ui/preferences";
 import { Switch } from "../ui/Switch";
 import { CellButton, Mark } from "../ui/gridCells";
 import { useHiddenColumns } from "../ui/hiddenColumns";
-import { LinkIcon } from "../ui/icons";
+import { LinkIcon, PencilIcon } from "../ui/icons";
 import { compareSortValues } from "../ui/tableSort";
 import { TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
 import { useDocumentTop, useOffsetWithin } from "../ui/tableChrome";
@@ -225,8 +225,17 @@ function StackedTooltip({ value }: ITooltipParams<DraftUnit, string, PoolGridCon
 const RatingRenderer = ({ data, context }: CustomCellRendererProps<DraftUnit, unknown, PoolGridContext & { ratings: Ratings; onRate: (signupId: string, rating: PickRating) => void }>) => {
   if (!data) return null;
   const signupId = data.entries[0]!.signup.id;
-  return <RatingCell rating={context.ratings[signupId]} onChange={(r) => context.onRate(signupId, r)} />;
+  return <RatingCell rating={context.ratings[signupId]} onChange={(r) => context.onRate(signupId, r)} showNote={false} />;
 };
+
+// The team's note on a unit, edited in the cell (AG's large text editor, a popup textarea: see the Note column). The
+// pencil says it's editable at a glance; an empty one invites a note.
+const NoteRenderer = ({ value }: CustomCellRendererProps<DraftUnit, string>) => (
+  <span className="flex h-full min-w-0 cursor-text items-center gap-1.5">
+    <span className={`min-w-0 flex-1 truncate ${value ? "text-on-surface" : "text-on-surface-subtle"}`}>{value || "Add a note"}</span>
+    <PencilIcon size={12} className="shrink-0 text-on-surface-subtle" />
+  </span>
+);
 
 const DraftButtonRenderer = ({ data, context }: CustomCellRendererProps<DraftUnit, unknown, PoolGridContext>) => {
   if (!data) return null;
@@ -263,6 +272,14 @@ function fixedColsInPlace(orderedColIds: string[]): string[] {
 // same ~30rem.
 const MIN_TABLE_HEIGHT = "30rem";
 
+// An order saved before the Note column existed lacks it, and AG would put a column the saved order doesn't list at
+// the end, far from the stars; it goes right after RSN instead, as it does for someone with no saved order.
+function withNoteAfterRsn(ids: string[]): string[] {
+  if (ids.includes("note")) return ids;
+  const at = ids.indexOf("rsn");
+  return at === -1 ? ids : [...ids.slice(0, at + 1), "note", ...ids.slice(at + 1)];
+}
+
 function readDraftColumnState(): Pick<GridState, "columnOrder" | "columnSizing" | "sort"> {
   try {
     const raw = localStorage.getItem(GRID_STATE_KEY);
@@ -271,7 +288,7 @@ function readDraftColumnState(): Pick<GridState, "columnOrder" | "columnSizing" 
     if (!parsed || typeof parsed !== "object") return {};
     const orderedColIds = parsed.columnOrder?.orderedColIds?.filter((id) => typeof id === "string");
     return {
-      ...(orderedColIds?.length ? { columnOrder: { orderedColIds: fixedColsInPlace(orderedColIds) } } : {}),
+      ...(orderedColIds?.length ? { columnOrder: { orderedColIds: fixedColsInPlace(withNoteAfterRsn(orderedColIds)) } } : {}),
       ...(parsed.columnSizing ? { columnSizing: parsed.columnSizing } : {}),
       ...(parsed.sort ? { sort: parsed.sort } : {}),
     };
@@ -367,6 +384,7 @@ export function DraftPoolGrid({
 
   const columnOptions = useMemo(
     () => [
+      ...(ratings ? [{ id: "note", label: "Note" }] : []),
       { id: "discord", label: "Discord" },
       ...(showAnswers ? [{ id: "timezone", label: "Timezone" }] : []),
       ...(showProfiles ? [{ id: "tier", label: "Tier" }, { id: "records", label: "Records" }, { id: "podiums", label: "Podiums" }, { id: "achievements", label: "Achievements" }] : []),
@@ -423,6 +441,30 @@ export function DraftPoolGrid({
         width: 210,
         sort: ratings ? undefined : "asc",
         suppressMovable: true,
+      },
+      !!ratings && {
+        colId: "note",
+        headerName: "Note",
+        headerTooltip: "Your team's note on this player (only your team sees it). Click to edit.",
+        // Pairs are rated (and noted) together, under the first half's signup, as with the stars.
+        valueGetter: (p) => (p.data ? (ratings[p.data.entries[0]!.signup.id]?.note ?? "") : ""),
+        // Saved through the same rating update as the stars (optimistic); the cell reads it back from the ratings.
+        valueSetter: (p) => {
+          if (!p.data) return false;
+          const signupId = p.data.entries[0]!.signup.id;
+          const current = p.context.ratings[signupId] ?? { stars: 0, note: "" };
+          const note = String(p.newValue ?? "").trim();
+          if (note !== current.note) p.context.onRate(signupId, { ...current, note });
+          return false;
+        },
+        editable: true,
+        singleClickEdit: true,
+        cellEditor: "agLargeTextCellEditor",
+        cellEditorPopup: true,
+        cellEditorParams: { maxLength: 200, rows: 4, cols: 40 },
+        cellRenderer: NoteRenderer,
+        tooltip: false,
+        width: 200,
       },
       {
         colId: "discord",
