@@ -5,7 +5,8 @@ import type { AchievementKey } from "@bingo/shared";
 import { queryKeys, useMarkAchievementPopupsShown, useMyAchievements } from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
 import { useWebSocketEvent } from "../../context/WebSocketContext";
-import { AchievementUnlockCard } from "./AchievementUnlockCard";
+import { useSlot } from "../../themes/context";
+import { AchievementUnlockReveal } from "./AchievementUnlockReveal";
 import { nextPopupKey } from "./popupQueue";
 
 /**
@@ -18,6 +19,7 @@ export function AchievementPopupHost({ slug, onOpen }: { slug: string; onOpen: (
   const queryClient = useQueryClient();
   const { data } = useMyAchievements(slug, true);
   const markShown = useMarkAchievementPopupsShown(slug);
+  const Card = useSlot("AchievementUnlockCard");
   // Popups already played this mount: a mid-queue refetch (a websocket event, or another mutation's invalidation)
   // must never replay one while the server hasn't caught up yet.
   const [playedThisSession, setPlayedThisSession] = useState<ReadonlySet<AchievementKey>>(() => new Set());
@@ -40,16 +42,18 @@ export function AchievementPopupHost({ slug, onOpen }: { slug: string; onOpen: (
 
   return createPortal(
     <div className="pointer-events-none fixed inset-x-0 top-4 z-[110] flex justify-center px-4" role="status" aria-live="polite">
-      {/* Keyed by the achievement so a new popup remounts a fresh card (and its animation) rather than reusing the old one. */}
-      <AchievementUnlockCard
+      {/* Keyed by the achievement so a new popup remounts a fresh reveal (and its animation) rather than reusing the old one. */}
+      <AchievementUnlockReveal
         key={key}
-        achievement={achievement}
+        label={`Achievement unlocked: ${achievement.name}. Open Achievements`}
         onOpen={() => {
           finish();
           onOpen();
         }}
         onDone={finish}
-      />
+      >
+        <Card achievement={achievement} />
+      </AchievementUnlockReveal>
     </div>,
     document.body,
   );

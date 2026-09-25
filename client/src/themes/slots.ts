@@ -5,7 +5,7 @@ import type { NoticeProps } from "../core/ui/Card";
 import type { PanelProps } from "../core/ui/Panel";
 import type { TeamRosterProps } from "../core/draft/TeamRoster";
 import type { ReactionBarProps } from "../core/submissions/ReactionBar";
-import type { StageMilestone } from "@bingo/shared";
+import type { MyAchievement, StageMilestone } from "@bingo/shared";
 import type {
   BingoPageModel,
   BoardModel,
@@ -45,6 +45,11 @@ export interface ThemeSlots {
   // draws only the shape — a fixed-size card or burst, no positioning; core handles the pop, the hold and the flight
   // to the roster. One name per drafted player (two for a duo pair). teamColor is null for a team with none.
   DraftPickBurst: ComponentType<{ names: string[]; teamName: string; teamColor: string | null }>;
+  // One Achievement's unlock popup (core/achievements/AchievementUnlockReveal). The theme draws only the card: its own
+  // width, no positioning, motion or button; core reveals it OSRS-style (a dot on the card's top edge fanning out into
+  // a line, then scanning down), holds it, takes it away and makes it open the Achievements modal. The card's top
+  // edge must be a solid line at least 3px thick, since that edge is what the dot and the line show.
+  AchievementUnlockCard: ComponentType<{ achievement: MyAchievement }>;
   // One team's column in the draft room (core/draft/TeamRoster): its card, then its picks. Read with useOptionalSlot.
   // Each pick's element must carry data-team-id and data-pick-number (the pick reveal flies to it) and stay invisible
   // while its number is in hiddenPickNumbers.

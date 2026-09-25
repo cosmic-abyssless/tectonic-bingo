@@ -5,6 +5,7 @@ import { BoardPageLayout } from "./page/BoardPageLayout";
 import { DraftPageLayout } from "./page/DraftPageLayout";
 import { StatsPageLayout } from "./page/StatsPageLayout";
 import { DraftPickBurst } from "./draft/DraftPickBurst";
+import { AchievementUnlockCard } from "./achievements/AchievementUnlockCard";
 import { OnTheClockBanner } from "./draft/OnTheClockBanner";
 import { TeamRoster as DraftTeamRoster } from "./draft/TeamRoster";
 import { BoardGrid } from "./board/BoardGrid";
@@ -125,6 +126,7 @@ const comicTheme: ThemeDefinition = {
     DraftPage: DraftPageLayout,
     StatsPage: StatsPageLayout,
     DraftPickBurst,
+    AchievementUnlockCard,
     OnTheClockBanner,
     DraftTeamRoster,
     BoardGrid,
