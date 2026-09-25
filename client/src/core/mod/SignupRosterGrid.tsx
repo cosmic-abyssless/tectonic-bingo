@@ -19,6 +19,7 @@ import { AgGridReact } from "ag-grid-react";
 import type { CustomCellEditorProps, CustomCellRendererProps } from "ag-grid-react";
 import type {
   CellEditRequestEvent,
+  CellClickedEvent,
   CellKeyDownEvent,
   ColDef,
   GetRowIdParams,
@@ -32,10 +33,11 @@ import type {
 import { formatSignupAnswer, formatTimeZone, timeZoneOffsetMinutes, timeZoneOptions, type RosterEntry, type SignupQuestion } from "@bingo/shared";
 import type { useMarkBuyin, useModPair, useModUnpair, useModWithdrawSignup, useRefreshSignupStats, useSetSignupTimezone } from "../../api/queries";
 import { useGridTheme } from "../ui/agGrid";
+import type { StatsResult } from "../../context/WebSocketContext";
 import { discordName, displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { Badge } from "../ui/Card";
-import { CellIconButton, EditableCellValue, Mark } from "../ui/gridCells";
+import { EditableCellValue, Mark } from "../ui/gridCells";
 import { Button } from "../ui/Button";
 import { toast } from "../ui/Toast";
 import { SearchableSelect } from "../ui/SearchableSelect";
@@ -56,8 +58,9 @@ function editFailed(what: string) {
   return { onError: (err: unknown) => toast({ title: `Couldn't ${what}`, description: err instanceof Error ? err.message : undefined, tone: "warning" as const }) };
 }
 
-/** Flips a signup's buy-in. Checking it credits whoever's checking it as the collector (still changeable in "Collected
- *  by"); unchecking clears that. The checkbox's click and Enter/Space on the cell both come here. */
+/** Flips a signup's buy-in. Checking it credits whoever's checking it as the collector: a mod who took the GP and ticks
+ *  it in one motion shouldn't need a second edit to say it was them (still changeable in "Collected by"). Unchecking
+ *  clears that. A click on the cell and Enter/Space on it both come here. */
 function toggleBuyin(row: RosterRow, context: GridContext) {
   const received = !row.signup.buyinReceivedAt;
   context.markBuyin.mutate({ signupId: row.signup.id, received, collectedByUserId: received ? context.currentUserId : undefined }, editFailed("mark the buy-in"));
@@ -77,6 +80,8 @@ export interface GridContext {
   /** Pairings can change (mods pair or unpair from the Partner cell): only while signups are open. */
   canPair: boolean;
   statsRefreshing: ReadonlySet<string>;
+  /** How each signup's last stats refresh went, for a few seconds after (the Refresh column's tick or cross). */
+  statsResults: ReadonlyMap<string, StatsResult>;
   /** Whoever's checking the buy-in box — defaults "Collected by" to them (below) rather than leaving it "Nobody
    * yet" until a second, separate edit. Null only if somehow rendered before auth resolves. */
   currentUserId: string | null;
@@ -101,18 +106,70 @@ const EDITOR_POPUP = "rounded-md border border-outline bg-surface-raised shadow-
 
 const RsnCell = memo(function RsnCell({ data, context }: CustomCellRendererProps<RosterRow, string, GridContext>) {
   if (!data) return null;
-  const refreshing = context.statsRefreshing.has(data.signup.id) || (context.refreshStats.isPending && context.refreshStats.variables === data.signup.id);
-  const label = refreshing ? `Looking up stats for ${data.signup.rsn}` : `Refresh stats for ${data.signup.rsn}`;
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5">
       <PlayerName userId={data.user.id} className="min-w-0 truncate">
         <Mark text={data.signup.rsn} query={context.search} />
       </PlayerName>
       {data.signup.rsnVerified && <CheckIcon size={14} className="shrink-0 text-ok" aria-label="Verified against the linked clan account" />}
-      <CellIconButton label={label} disabled={refreshing} onClick={() => context.refreshStats.mutate(data.signup.id)}>
-        <RefreshIcon size={12} className={refreshing ? "animate-spin" : undefined} />
-      </CellIconButton>
     </span>
+  );
+});
+
+// The buy-in checkbox: the cell toggles it (see toggleBuyin), so this only shows the state.
+const BuyinCell = memo(function BuyinCell({ data, value }: CustomCellRendererProps<RosterRow, boolean, GridContext>) {
+  if (!data) return null;
+  return (
+    <div className="flex h-full items-center">
+      <span
+        role="checkbox"
+        aria-checked={!!value}
+        aria-label={`Buy-in received from ${data.signup.rsn}`}
+        className={`flex size-4 items-center justify-center rounded-sm border ${value ? "border-ok bg-ok text-on-accent" : "border-outline-strong"}`}
+      >
+        {value && <CheckIcon size={11} strokeWidth={2.5} />}
+      </span>
+    </div>
+  );
+});
+
+// A signup's stats refresh, as the Refresh column's value: the cell shows the button, a spinner while it looks the
+// player up, then a tick or a cross (how it went) for a few seconds before the button comes back.
+type RefreshState = "idle" | "refreshing" | StatsResult;
+function refreshState(row: RosterRow, context: GridContext): RefreshState {
+  const id = row.signup.id;
+  if (context.statsRefreshing.has(id) || (context.refreshStats.isPending && context.refreshStats.variables === id)) return "refreshing";
+  return context.statsResults.get(id) ?? "idle";
+}
+
+// Looks the player up again (WOM, RuneProfile, the clan's linked accounts). Enter on the cell does the same (onCellKeyDown).
+function startRefresh(row: RosterRow, context: GridContext) {
+  context.refreshStats.mutate(row.signup.id, editFailed(`refresh ${row.signup.rsn}'s stats`));
+}
+
+const RefreshCell = memo(function RefreshCell({ data, value }: CustomCellRendererProps<RosterRow, RefreshState, GridContext>) {
+  if (!data) return null;
+  const rsn = data.signup.rsn;
+  const icon =
+    value === "ok" ? (
+      <CheckIcon size={14} className="text-ok" aria-label={`${rsn}'s stats refreshed`} />
+    ) : value === "failed" ? (
+      <XIcon size={14} className="text-danger" aria-label={`Couldn't refresh ${rsn}'s stats`} />
+    ) : null;
+  // The whole cell is the button (a click anywhere, or Enter: onCellClicked / onCellKeyDown), so this is just the icon.
+  return (
+    <div
+      className="flex h-full items-center justify-center"
+      title={value === "failed" ? "The lookup failed; try again in a moment" : value === "refreshing" ? `Looking up stats for ${rsn}` : `Refresh stats for ${rsn}`}
+    >
+      {icon ?? (
+        <RefreshIcon
+          size={13}
+          aria-label={value === "refreshing" ? `Looking up stats for ${rsn}` : `Refresh stats for ${rsn}`}
+          className={value === "refreshing" ? "animate-spin text-on-surface-subtle" : "text-on-surface-muted"}
+        />
+      )}
+    </div>
   );
 });
 
@@ -152,7 +209,7 @@ const StatusCell = memo(function StatusCell({ data, context }: CustomCellRendere
   const active = data.signup.status === "active";
   const busy = context.withdrawSignup.isPending && context.withdrawSignup.variables === data.signup.id;
   return (
-    <div className="flex h-full cursor-default items-center gap-1" title={active && context.canWithdraw ? `Click (or press Enter) to withdraw ${data.signup.rsn}` : undefined}>
+    <div className="flex h-full items-center gap-1" title={active && context.canWithdraw ? `Click (or press Enter) to withdraw ${data.signup.rsn}` : undefined}>
       <Badge tone={active ? "ok" : "neutral"}>{busy ? "withdrawing…" : data.signup.status}</Badge>
       {data.cut && <Badge tone="warn">will be cut</Badge>}
       {active && context.canWithdraw && <XIcon size={12} className="ml-auto shrink-0 text-on-surface-subtle" aria-hidden />}
@@ -347,12 +404,22 @@ function pinnedFirstInOrder(state: GridState | undefined): GridState | undefined
   return { ...state, columnOrder: { orderedColIds: [...PINNED_COL_IDS, ...rest] } };
 }
 
+// An order saved before the Refresh column existed lacks it, and AG would put it at the far end; it goes just before
+// the stats it refreshes (Current CA), where it is for someone with no saved order.
+function withRefreshColumn(state: GridState | undefined): GridState | undefined {
+  const ids = state?.columnOrder?.orderedColIds;
+  if (!state || !ids || ids.includes("refresh")) return state;
+  const at = ids.indexOf("caCurrent");
+  const orderedColIds = at === -1 ? [...ids, "refresh"] : [...ids.slice(0, at), "refresh", ...ids.slice(at)];
+  return { ...state, columnOrder: { orderedColIds } };
+}
+
 function readInitialGridState(): GridState | undefined {
   try {
     const raw = localStorage.getItem(GRID_STATE_KEY);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as unknown;
-    const state = pinnedFirstInOrder(parsed && typeof parsed === "object" ? (parsed as GridState) : undefined);
+    const state = withRefreshColumn(pinnedFirstInOrder(parsed && typeof parsed === "object" ? (parsed as GridState) : undefined));
     return state ? { ...state, partialColumnState: true } : undefined;
   } catch {
     return undefined;
@@ -438,8 +505,8 @@ export function SignupRosterGrid({
         headerName: "RSN",
         valueGetter: (p) => p.data?.signup.rsn,
         cellRenderer: RsnCell,
-        // Keyboard, on this cell: Enter opens the player's profile, R refreshes their stats (see onCellKeyDown).
-        headerTooltip: "On a name: Enter opens the player's profile, R refreshes their stats",
+        // Keyboard, on this cell: Enter opens the player's profile (see onCellKeyDown).
+        headerTooltip: "Enter on a name opens the player's profile",
         lockPosition: "left",
         suppressMovable: true,
         width: 150,
@@ -487,6 +554,7 @@ export function SignupRosterGrid({
         headerName: "Status",
         valueGetter: (p) => p.data?.signup.status,
         cellRenderer: StatusCell,
+        cellClass: (p) => (p.data?.signup.status === "active" && p.context.canWithdraw ? "cursor-pointer" : ""),
         editable: (p) => p.data?.signup.status === "active" && !!p.context.canWithdraw,
         cellEditor: WithdrawEditor,
         cellEditorPopup: true,
@@ -494,6 +562,20 @@ export function SignupRosterGrid({
         // Enter presses the focused button in the confirmation rather than ending the edit.
         suppressKeyboardEvent: (p) => p.editing && ["Enter", "Tab"].includes(p.event.key),
         width: 150,
+      },
+      {
+        colId: "refresh",
+        headerName: "Refresh",
+        headerTooltip: "Look a player's stats up again (Enter on the cell does it too)",
+        // The refresh's state (see RefreshCell), so a change re-renders just this cell (refreshCells, below).
+        valueGetter: (p) => (p.data ? refreshState(p.data, p.context as GridContext) : "idle"),
+        getQuickFilterText: () => "",
+        cellRenderer: RefreshCell,
+        cellClass: (p) => (p.value === "idle" ? "cursor-pointer" : ""),
+        sortable: false,
+        tooltip: false,
+        width: 84,
+        minWidth: 72,
       },
       {
         colId: "caCurrent",
@@ -516,11 +598,12 @@ export function SignupRosterGrid({
       {
         colId: "buyin",
         headerName: "Buy-in received",
-        cellDataType: "boolean",
-        editable: true,
         valueGetter: (p) => !!p.data?.signup.buyinReceivedAt,
-        // Enter or Space on the cell ticks or unticks the box, like a checkbox, rather than opening AG's checkbox
-        // editor around it.
+        getQuickFilterText: () => "",
+        // The whole cell is the checkbox: a click anywhere on it (onCellClicked), Enter or Space ticks or unticks it.
+        // Not AG's own boolean cell, whose checkbox editor opened around the box on a click or Enter.
+        cellRenderer: BuyinCell,
+        cellClass: "cursor-pointer",
         suppressKeyboardEvent: (p) => {
           if (p.editing || (p.event.key !== "Enter" && p.event.key !== " ")) return false;
           if (p.event.type === "keydown" && p.data) {
@@ -659,13 +742,6 @@ export function SignupRosterGrid({
   const onCellEditRequest = useCallback((e: CellEditRequestEvent<RosterRow>) => {
     const { colDef, data, newValue } = e;
     switch (colDef.colId) {
-      case "buyin":
-        // Checking the box defaults the collector to whoever's checking it — a mod who collected the GP and
-        // marked it received in one motion shouldn't then have to make a second edit just to say it was them.
-        // Still freely overridable via the "Collected by" cell itself (e.g. logging it for someone else).
-        // Unchecking clears it either way (markBuyin service forces collectedByUserId null when !received).
-        context.markBuyin.mutate({ signupId: data.signup.id, received: !!newValue, collectedByUserId: newValue ? context.currentUserId : undefined }, editFailed("mark the buy-in"));
-        break;
       case "collectedBy":
         context.markBuyin.mutate({ signupId: data.signup.id, received: true, collectedByUserId: (newValue as string) || null }, editFailed("change who collected it"));
         break;
@@ -682,16 +758,31 @@ export function SignupRosterGrid({
     }
   }, [context.markBuyin, context.modPair, context.modUnpair, context.withdrawSignup, context.setTimezone, context.currentUserId]);
 
-  // Keys on the RSN cell (it doesn't edit): Enter opens the player's profile, R refreshes their stats.
+  // Enter on a cell that acts rather than edits: RSN opens the player's profile, Refresh looks their stats up again.
   const onCellKeyDown = useCallback(
     (e: CellKeyDownEvent<RosterRow>) => {
-      const key = (e.event as KeyboardEvent | null)?.key;
-      if (e.colDef.colId !== "rsn" || !e.data || !key) return;
-      if (key === "Enter") context.openProfile?.(e.data.user.id);
-      else if (key === "r" || key === "R") context.refreshStats.mutate(e.data.signup.id, editFailed(`refresh ${e.data.signup.rsn}'s stats`));
+      if ((e.event as KeyboardEvent | null)?.key !== "Enter" || !e.data) return;
+      if (e.colDef.colId === "rsn") context.openProfile?.(e.data.user.id);
+      else if (e.colDef.colId === "refresh" && refreshState(e.data, context) === "idle") startRefresh(e.data, context);
     },
-    [context.openProfile, context.refreshStats],
+    [context],
   );
+
+  // A click on a cell that acts rather than edits: anywhere on a buy-in cell ticks or unticks it, anywhere on a Refresh
+  // cell looks the player up again.
+  const onCellClicked = useCallback(
+    (e: CellClickedEvent<RosterRow>) => {
+      if (!e.data) return;
+      if (e.colDef.colId === "buyin") toggleBuyin(e.data, context);
+      else if (e.colDef.colId === "refresh" && refreshState(e.data, context) === "idle") startRefresh(e.data, context);
+    },
+    [context],
+  );
+
+  // A refresh starting, finishing, or its tick/cross going: re-render the Refresh cells whose state changed.
+  useEffect(() => {
+    gridApiRef.current?.refreshCells({ columns: ["refresh"] });
+  }, [context.statsRefreshing, context.statsResults, context.refreshStats.isPending]);
 
   return (
     <div className="h-full min-h-0">
@@ -720,6 +811,7 @@ export function SignupRosterGrid({
         stopEditingWhenCellsLoseFocus
         onCellEditRequest={onCellEditRequest}
         onCellKeyDown={onCellKeyDown}
+        onCellClicked={onCellClicked}
         enableCellTextSelection
         // Text columns sort with localeCompare: case-insensitive ("alice" beside "Alice", not after every capital)
         // and accent-aware, instead of AG's default character-code order.

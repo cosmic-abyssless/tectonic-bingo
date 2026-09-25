@@ -134,10 +134,10 @@ export async function fetchAndPersistPlayerStats(db: Db, signupId: string, rsn: 
   // Test hook — skips WOM/RuneProfile/Tectonic network calls entirely. Used
   // by the E2E suite so a real signup during tests never hits those live APIs,
   // and per request by the test data generator (skipsIntegrations).
-  // Drop any in-flight spinner the refresh button already raised.
+  // Drop any in-flight spinner the refresh button already raised (and let it show its tick: nothing went wrong).
   if (process.env.PLAYER_STATS_FETCH_DISABLED === "true" || skipsIntegrations()) {
     if (signup?.bingoId) {
-      broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: { signupId, userId: signup.userId, statsRefreshing: false } });
+      broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: { signupId, userId: signup.userId, statsRefreshing: false, statsFailed: false } });
     }
     return;
   }
@@ -190,7 +190,7 @@ export async function fetchAndPersistPlayerStats(db: Db, signupId: string, rsn: 
       actor: "system",
     });
     if (signup?.bingoId) {
-      broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: { signupId, userId: signup.userId, statsRefreshing: false } });
+      broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: { signupId, userId: signup.userId, statsRefreshing: false, statsFailed: false } });
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -203,7 +203,7 @@ export async function fetchAndPersistPlayerStats(db: Db, signupId: string, rsn: 
       actor: "system",
     });
     if (signup?.bingoId) {
-      broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: { signupId, userId: signup.userId, statsRefreshing: false } });
+      broadcast({ type: "signup_changed", bingoId: signup.bingoId, payload: { signupId, userId: signup.userId, statsRefreshing: false, statsFailed: true } });
     }
   }
 }

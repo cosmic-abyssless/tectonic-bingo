@@ -6,7 +6,7 @@ import type {
   PickRating, PlayerProfile, StatsResponse, Team, TeamProgressSummary, TeamSubmissionsResponse,
 } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
-import { useMarkStatsRefreshing } from "../context/WebSocketContext";
+import { useMarkStatsRefreshing, useMarkStatsResult } from "../context/WebSocketContext";
 import { api } from "./client";
 import * as bugReportsApi from "./bugReportsApi";
 import { readBoardCache, writeBoardCache } from "./boardCache";
@@ -248,10 +248,15 @@ export function useBingoMods(slug: string) {
 
 export function useRefreshSignupStats(slug: string) {
   const markStatsRefreshing = useMarkStatsRefreshing();
+  const markStatsResult = useMarkStatsResult();
   return useMutation({
     mutationFn: (signupId: string) => api.post<void>(`/api/bingos/${slug}/mod/signups/${signupId}/refresh-stats`),
     onMutate: (signupId) => markStatsRefreshing(signupId, true),
-    onError: (_err, signupId) => markStatsRefreshing(signupId, false),
+    // The request itself failed (the lookup never started): a cross, as for a failed lookup.
+    onError: (_err, signupId) => {
+      markStatsRefreshing(signupId, false);
+      markStatsResult(signupId, "failed");
+    },
   });
 }
 
