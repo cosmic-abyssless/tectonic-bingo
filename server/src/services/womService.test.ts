@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { WomClient, parseWomSummary } from "./womService";
+import { WomClient, parseSnapshots, parseWomSummary } from "./womService";
 
 function mockFetch(responses: Record<string, { status?: number; body?: unknown; headers?: Record<string, string> }>) {
   return vi.fn(async (input: string | URL, init?: RequestInit) => {
@@ -110,5 +110,83 @@ describe("parseWomSummary", () => {
     expect(parseWomSummary(undefined)).toBeNull();
     expect(parseWomSummary("not an object")).toBeNull();
     expect(parseWomSummary({ type: "ironman" })).toBeNull();
+  });
+});
+
+const snapshot = (createdAt: string, vardorvis: number, clues = 10) => ({
+  createdAt,
+  data: {
+    bosses: { vardorvis: { metric: "vardorvis", kills: vardorvis }, zulrah: { metric: "zulrah", kills: -1 } },
+    activities: { clue_scrolls_all: { score: clues } },
+    computed: { ehb: { value: 12.5 }, ehp: { value: 40 } },
+  },
+});
+
+describe("WomClient.getSnapshots", () => {
+  const start = new Date("2026-01-01T00:00:00Z");
+  const end = new Date("2026-01-08T00:00:00Z");
+
+  // Serves `total` snapshots newest first, one page per request, honouring limit and offset.
+  function pagedFetch(total: number) {
+    const all = Array.from({ length: total }, (_, i) => snapshot(new Date(end.getTime() - i * 60_000).toISOString(), total - i));
+    return vi.fn(async (input: string | URL) => {
+      const url = new URL(String(input));
+      const limit = Number(url.searchParams.get("limit"));
+      const offset = Number(url.searchParams.get("offset"));
+      return new Response(JSON.stringify(all.slice(offset, offset + limit)));
+    }) as unknown as typeof fetch;
+  }
+
+  it("reads the date range from the player's snapshots", async () => {
+    const fetchImpl = pagedFetch(3);
+    const snapshots = await new WomClient(fetchImpl).getSnapshots("C osmic", start, end);
+    expect(snapshots).toHaveLength(3);
+
+    const url = new URL(String((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0]));
+    expect(url.pathname).toBe("/v2/players/C%20osmic/snapshots");
+    expect(url.searchParams.get("startDate")).toBe(start.toISOString());
+    expect(url.searchParams.get("endDate")).toBe(end.toISOString());
+  });
+
+  it("pages through every snapshot in the range", async () => {
+    const fetchImpl = pagedFetch(120);
+    const snapshots = await new WomClient(fetchImpl).getSnapshots("Zezima", start, end);
+    expect(snapshots).toHaveLength(120);
+    expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(3);
+  });
+
+  it("never asks WOM to update the player", async () => {
+    const fetchImpl = pagedFetch(3);
+    await new WomClient(fetchImpl).getSnapshots("Zezima", start, end);
+    for (const [input, init] of (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls) {
+      expect(init?.method ?? "GET").toBe("GET");
+      expect(String(input)).not.toMatch(/update/);
+    }
+  });
+
+  it("returns null when rate limited, and holds off until the retry-after passes", async () => {
+    const fetchImpl = mockFetch({ "/snapshots": { status: 429, headers: { "retry-after": "30" } } });
+    const client = new WomClient(fetchImpl);
+    expect(await client.getSnapshots("Zezima", start, end)).toBeNull();
+    expect(await client.getSnapshots("Zezima", start, end)).toBeNull();
+    expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+  });
+});
+
+describe("parseSnapshots", () => {
+  it("gives kill counts over time, oldest first", () => {
+    const timeline = parseSnapshots([snapshot("2026-01-02T00:00:00Z", 20, 15), snapshot("2026-01-01T00:00:00Z", 10)]);
+    expect(timeline.map((s) => s.at.toISOString())).toEqual(["2026-01-01T00:00:00.000Z", "2026-01-02T00:00:00.000Z"]);
+    expect(timeline[1]).toEqual({ at: new Date("2026-01-02T00:00:00Z"), bossKills: { vardorvis: 20, zulrah: null }, ehb: 12.5, ehp: 40, clues: 15 });
+  });
+
+  it("reads an unranked count (-1) as unknown, not zero", () => {
+    const [snap] = parseSnapshots([snapshot("2026-01-01T00:00:00Z", -1, -1)]);
+    expect(snap!.bossKills.vardorvis).toBeNull();
+    expect(snap!.clues).toBeNull();
+  });
+
+  it("drops entries it can't read", () => {
+    expect(parseSnapshots([null, { createdAt: "not a date", data: {} }, { createdAt: "2026-01-01T00:00:00Z" }])).toEqual([]);
   });
 });

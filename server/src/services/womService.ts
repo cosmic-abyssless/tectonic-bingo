@@ -19,6 +19,8 @@ const WOM_USER_AGENT = `${USER_AGENT} player stats`;
 
 type FetchLike = typeof fetch;
 
+const SNAPSHOTS_PAGE_SIZE = 50;
+
 export class WomClient {
   // Set from a 429's `retry-after` header. While in the future, new requests
   // short-circuit locally instead of hitting WOM.
@@ -31,22 +33,47 @@ export class WomClient {
 
   /** Raw WOM player object for the given RSN, or null if unranked/unreachable/rate-limited. Caller persists it verbatim. */
   async getPlayerByUsername(rsn: string): Promise<unknown | null> {
+    return this.get(`/players/${encodeURIComponent(rsn)}`, { rsn });
+  }
+
+  /**
+   * Every snapshot WOM holds for the RSN between two dates, raw and newest first, paging through them all
+   * (see parseSnapshots). Null if any page is unreachable or rate-limited. Only reads what WOM already has:
+   * it never asks WOM to update the player.
+   */
+  async getSnapshots(rsn: string, start: Date, end: Date): Promise<unknown[] | null> {
+    const snapshots: unknown[] = [];
+    for (let offset = 0; ; offset += SNAPSHOTS_PAGE_SIZE) {
+      const query = new URLSearchParams({
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        limit: String(SNAPSHOTS_PAGE_SIZE),
+        offset: String(offset),
+      });
+      const page = await this.get(`/players/${encodeURIComponent(rsn)}/snapshots?${query}`, { rsn });
+      if (!Array.isArray(page)) return null;
+      snapshots.push(...page);
+      if (page.length < SNAPSHOTS_PAGE_SIZE) return snapshots;
+    }
+  }
+
+  private async get(path: string, context: Record<string, unknown>): Promise<unknown | null> {
     if (Date.now() < this.rateLimitedUntil) return null;
 
     try {
       const headers: Record<string, string> = { "User-Agent": WOM_USER_AGENT };
       if (this.apiKey) headers["x-api-key"] = this.apiKey;
-      const res = await this.fetchImpl(`${WOM_BASE_URL}/players/${encodeURIComponent(rsn)}`, { headers });
+      const res = await this.fetchImpl(`${WOM_BASE_URL}${path}`, { headers });
       if (res.ok) return await res.json();
       if (res.status === 429) {
         const retryAfterSec = Number(res.headers.get("retry-after"));
         this.rateLimitedUntil = Date.now() + (Number.isFinite(retryAfterSec) ? retryAfterSec * 1000 : 60_000);
         log.warn("wom rate limited", { until: new Date(this.rateLimitedUntil).toISOString() });
       } else if (res.status !== 404) {
-        log.warn("wom request failed", { status: res.status, rsn });
+        log.warn("wom request failed", { status: res.status, ...context });
       }
     } catch (err) {
-      log.warn("wom request failed", { rsn, err });
+      log.warn("wom request failed", { ...context, err });
     }
     return null;
   }
@@ -90,4 +117,47 @@ export function parseWomSummary(raw: unknown): WomPlayerSummary | null {
   const accountType = (typeof player.type === "string" && WOM_TYPE_MAP[player.type]) || "unknown";
   // Blobs stored before EHP was read lack it; treat as 0 rather than dropping the whole summary.
   return { ehb: player.ehb, ehp: typeof player.ehp === "number" ? player.ehp : 0, accountType };
+}
+
+// --- A Player's kill counts over time, from their raw WOM snapshots (#195). ---
+
+export interface WomSnapshot {
+  at: Date;
+  /** Kill count per WOM boss metric. Null while it's below the hiscores' minimum (WOM's -1). */
+  bossKills: Record<string, number | null>;
+  ehb: number | null;
+  ehp: number | null;
+  /** Clue scrolls of every tier. Null while it's below the hiscores' minimum. */
+  clues: number | null;
+}
+
+interface RawSnapshot {
+  createdAt?: unknown;
+  data?: {
+    bosses?: Record<string, { kills?: unknown }>;
+    activities?: Record<string, { score?: unknown }>;
+    computed?: Record<string, { value?: unknown }>;
+  };
+}
+
+const ranked = (n: unknown): number | null => (typeof n === "number" && n >= 0 ? n : null);
+
+/** Raw snapshots (from getSnapshots) as a timeline, oldest first. Entries it can't read are dropped. */
+export function parseSnapshots(raw: unknown[]): WomSnapshot[] {
+  const out: WomSnapshot[] = [];
+  for (const entry of raw) {
+    const snap = entry as RawSnapshot;
+    const at = typeof snap?.createdAt === "string" ? new Date(snap.createdAt) : null;
+    if (!at || Number.isNaN(at.getTime()) || !snap.data) continue;
+    const bossKills: Record<string, number | null> = {};
+    for (const [metric, boss] of Object.entries(snap.data.bosses ?? {})) bossKills[metric] = ranked(boss?.kills);
+    out.push({
+      at,
+      bossKills,
+      ehb: ranked(snap.data.computed?.ehb?.value),
+      ehp: ranked(snap.data.computed?.ehp?.value),
+      clues: ranked(snap.data.activities?.clue_scrolls_all?.score),
+    });
+  }
+  return out.sort((a, b) => a.at.getTime() - b.at.getTime());
 }
