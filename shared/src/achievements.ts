@@ -25,9 +25,9 @@ export type AchievementKey =
 export interface AchievementDef {
   key: AchievementKey;
   name: string;
-  /** Short, player-facing — no fine print ("during Live", "device time", "as first priced"). Shown in the modal. */
+  /** Short, player-facing — no fine print ("during Live", "device time", "as first priced"). */
   description: string;
-  /** A line of flavour for the unlock popup, where the description would only repeat what the Player just did. */
+  /** A line of flavour, shown under the description in both the unlock popup and the Achievements list. */
   flavor: string;
   /** Shown as a "???" slot until earned; the server never reveals its name/description/icon before then. */
   hidden: boolean;
@@ -42,7 +42,7 @@ export interface AchievementDef {
 
 export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { key: "strong_start", name: "Strong start", description: "Submit your first drop", flavor: "Spoooon!", hidden: false, itemName: "Bronze sword" },
-  { key: "drop_detective", name: "Drop detective", description: "Open every tile on the board", flavor: "Very thorough of you!", hidden: false, itemName: "Deerstalker" },
+  { key: "drop_detective", name: "Drop detective", description: "Open every tile on the board", flavor: "Very thorough of you!", hidden: true, itemName: "Deerstalker" },
   { key: "hypeman", name: "Hypeman", description: "React to a teammate's submission", flavor: "Let's gooooo", hidden: false, itemName: "Enchanted lyre" },
   { key: "cheerleader", name: "Cheerleader", description: "React to 10 different submissions", flavor: "Keeping the hype train going", hidden: true, itemName: "Red partyhat", progressTarget: 10 },
   { key: "partner_slayer", name: "Partner slayer", description: "Submit a drop on behalf of a teammate", flavor: "What a team player you are", hidden: false, itemName: "Slayer helmet" },

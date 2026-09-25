@@ -11,7 +11,8 @@ export function AchievementUnlockCard({ achievement, onViewAchievements }: { ach
         <div className="min-w-0">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-achievement-body">Achievement unlocked</div>
           <div className="text-lg font-semibold leading-tight text-achievement-title">{achievement.name}</div>
-          <div className="mt-0.5 text-sm italic text-achievement-body">{achievement.flavor}</div>
+          <div className="mt-0.5 text-sm text-achievement-body">{achievement.description}</div>
+          <div className="mt-0.5 text-xs italic text-achievement-body opacity-80">{achievement.flavor}</div>
           <button type="button" onClick={onViewAchievements} className="mt-1.5 text-xs font-semibold text-achievement-title underline underline-offset-2 hover:no-underline">
             View my achievements
           </button>

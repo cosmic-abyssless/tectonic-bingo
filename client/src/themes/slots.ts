@@ -49,12 +49,12 @@ export interface ThemeSlots {
   // width, no positioning or motion; core reveals it OSRS-style (a dot on the card's top edge fanning out into a line,
   // then scanning down with a copy of the card's bottom border on its leading edge), holds it and takes it away. The
   // card's root must be the bordered box, its top edge a solid line at least 3px thick: the dot and the line show just
-  // the top 2px of it. Shows the Achievement's flavour (not its description, which is the modal's), and a "View my
-  // achievements" link that calls onViewAchievements.
+  // the top 2px of it. Shows the Achievement's description with its flavour under it, and a "View my achievements"
+  // link that calls onViewAchievements.
   AchievementUnlockCard: ComponentType<{ achievement: MyAchievement; onViewAchievements: () => void }>;
   // One Achievement in the Achievements modal's single-column list (core/achievements/AchievementsModal): earned,
   // locked (greyed, with progress when it's counted) or masked (a Hidden one not yet earned: "???", nothing else is
-  // known). Shows the description, never the flavour, which is the unlock popup's.
+  // known). Shows the description with its flavour under it, like the unlock popup.
   AchievementRow: ComponentType<{ achievement: MyAchievement }>;
   // One team's column in the draft room (core/draft/TeamRoster): its card, then its picks. Read with useOptionalSlot.
   // Each pick's element must carry data-team-id and data-pick-number (the pick reveal flies to it) and stay invisible

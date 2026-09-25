@@ -358,16 +358,18 @@ describe("Big spender", () => {
 // ---------------------------------------------------------------------------
 
 describe("Drop detective / Rules lawyer / Number cruncher", () => {
-  it("Drop detective needs every current tile opened, with progress against the board's tile count", () => {
+  it("Drop detective needs every current tile opened, its progress against the board's tile count once earned", () => {
     const { bingo, team, alice } = seed();
     const t1 = addTile(bingo.id, 0, 0);
     const t2 = addTile(bingo.id, 0, 1);
     at(STARTS_AT, "UTC", () => achievementService.recordPageOpened(db, { bingoId: bingo.id, userId: alice.id, teamId: team.id, kind: "tile", tileId: t1.id, occurredAt: STARTS_AT }));
-    expect(myAchievements(bingo, alice.id).achievements.find((a) => a.key === "drop_detective")!.progress).toEqual({ current: 1, target: 2 });
+    // Hidden: masked, with no progress, until earned.
+    expect(myAchievements(bingo, alice.id).achievements.find((a) => a.key === "drop_detective")!).toMatchObject({ masked: true, progress: null });
     expect(earned(bingo, alice.id, "drop_detective")).toBe(false);
 
     at(STARTS_AT, "UTC", () => achievementService.recordPageOpened(db, { bingoId: bingo.id, userId: alice.id, teamId: team.id, kind: "tile", tileId: t2.id, occurredAt: STARTS_AT }));
     expect(earned(bingo, alice.id, "drop_detective")).toBe(true);
+    expect(myAchievements(bingo, alice.id).achievements.find((a) => a.key === "drop_detective")!.progress).toEqual({ current: 2, target: 2 });
   });
 
   it("Rules lawyer / Number cruncher (both hidden) are earned opening the Rules / Stats page, only for a Player on a team", () => {
