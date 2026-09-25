@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { createContext, Fragment, useContext, useRef, useState, type ReactNode } from "react";
+import { DragPreview, mergeProps, useButton, useDrag, useDrop, type DragPreviewRenderer } from "react-aria";
 import { MenuTrigger } from "react-aria-components";
 import { describeValuedAs, type ItemGroup, type NodeKind, type GraphNode, type GraphNodeInput, type ValuedAs } from "@bingo/shared";
 import { ItemSearchInput, iconUrlFor } from "../ui/ItemSearchInput";
@@ -7,11 +8,12 @@ import { Button, IconButton } from "../ui/Button";
 import { controlClass } from "../ui/Field";
 import { Menu, MenuItem } from "../ui/Menu";
 import { Select } from "../ui/Select";
-import { ChevronDownIcon, LinkIcon, PlusIcon, XIcon } from "../ui/icons";
+import { ChevronDownIcon, GripIcon, LinkIcon, PlusIcon, XIcon } from "../ui/icons";
 import { Dialog, DialogHeader } from "../ui/Dialog";
 import * as adminApi from "../../api/adminApi";
 import { toGraphNodeInput, collectLabeledConditions } from "../board/requirementTree";
 import { describeRules, useRulesFor } from "./exclusiveItems";
+import { canMove, moveNode, type Path } from "./requirementMoves";
 
 /** An ITEM leaf that already exists elsewhere on the same tile — offered as a reference, not retyped. */
 export interface ExistingLeaf {
@@ -103,8 +105,6 @@ const GROUP_KINDS: { kind: NodeKind; label: string }[] = [
   { kind: "SUM", label: "Collect N in total across" },
 ];
 
-type Path = number[];
-
 function updateAt(root: GraphNodeInput, path: Path, fn: (node: GraphNodeInput) => GraphNodeInput): GraphNodeInput {
   if (path.length === 0) return fn(root);
   const [head, ...rest] = path;
@@ -123,6 +123,111 @@ function appendChild(root: GraphNodeInput, path: Path, child: GraphNodeInput): G
 }
 
 const NEW_GROUP: GraphNodeInput = { kind: "ALL", children: [] };
+
+// Drag and drop, to reorder a task's items and conditions or move one into another condition of the same task: every
+// row but the task's own has a handle (DragHandle), and there's a drop spot (DropGap) between rows, before the first
+// and after the last, at every level. Keyboard too (React Aria's): Enter on a handle, Tab to a spot, Enter to drop,
+// Escape to cancel. The row being dragged is tracked here, so the spots it can't go to (inside itself, where it
+// already is) stay out of the way; the move itself is a normal tree edit, saved like any other.
+const DRAG_TYPE = "application/x-bingo-requirement";
+
+interface Moves {
+  dragging: Path | null;
+  setDragging: (path: Path | null) => void;
+  canDrop: (parent: Path, index: number) => boolean;
+  drop: (parent: Path, index: number) => void;
+}
+const MovesContext = createContext<Moves | null>(null);
+
+// What a row is called in a drag's labels: its item, or its condition's number.
+function rowName(node: GraphNodeInput, labels?: Map<GraphNodeInput, string>): string {
+  if (node.kind === "ITEM") return node.itemName ?? "item";
+  const label = labels?.get(node);
+  return label ? `Condition ${label}` : "condition";
+}
+
+function samePath(a: Path | null, b: Path): boolean {
+  return !!a && a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+// React Aria calls a drag's handlers from outside React's render, so they read the current moves through a ref.
+function useMoves() {
+  const moves = useContext(MovesContext)!;
+  const ref = useRef(moves);
+  ref.current = moves;
+  return [moves, ref] as const;
+}
+
+function DragHandle({ path, label }: { path: Path; label: string }) {
+  const [, moves] = useMoves();
+  const ref = useRef<HTMLDivElement>(null);
+  const preview = useRef<DragPreviewRenderer>(null);
+  const { dragProps, dragButtonProps } = useDrag({
+    getItems: () => [{ [DRAG_TYPE]: JSON.stringify(path) }],
+    getAllowedDropOperations: () => ["move"],
+    hasDragButton: true,
+    preview,
+    onDragStart: () => moves.current.setDragging(path),
+    onDragEnd: () => moves.current.setDragging(null),
+  });
+  const { buttonProps } = useButton({ ...dragButtonProps, elementType: "div", "aria-label": `Move ${label}` }, ref);
+  return (
+    <>
+      <div
+        ref={ref}
+        {...mergeProps(dragProps, buttonProps)}
+        title="Drag to move"
+        className="flex h-6 w-4 shrink-0 cursor-grab items-center justify-center rounded-sm text-on-surface-subtle outline-none hover:text-on-surface focus-visible:ring-2 focus-visible:ring-accent active:cursor-grabbing"
+      >
+        <GripIcon size={12} />
+      </div>
+      <DragPreview ref={preview}>
+        {() => <div className="rounded-md border border-accent bg-surface px-2 py-1 text-xs text-on-surface">{label}</div>}
+      </DragPreview>
+    </>
+  );
+}
+
+// A place a dragged row can go: index `index` of the condition at `parent`. A strip the height of the gap between rows,
+// with a line across it while a drag is over it; its hit area reaches a little into the rows either side during a drag,
+// so it doesn't take pixel-perfect aim. With `children` (an empty condition's "no requirements yet"), that's the spot.
+// Focusable (though never in the tab order): a keyboard drag moves focus from spot to spot, and `label` says where each is.
+function DropGap({ parent, index, label, children }: { parent: Path; index: number; label: string; children?: ReactNode }) {
+  const [current, moves] = useMoves();
+  const ref = useRef<HTMLDivElement>(null);
+  const { dropProps, isDropTarget } = useDrop({
+    ref,
+    getDropOperation: (types) => (types.has(DRAG_TYPE) && moves.current.canDrop(parent, index) ? "move" : "cancel"),
+    onDrop: () => moves.current.drop(parent, index),
+  });
+  const open = !!current.dragging && current.canDrop(parent, index);
+  if (children) {
+    return (
+      <div
+        ref={ref}
+        {...dropProps}
+        role="button"
+        tabIndex={-1}
+        aria-label={label}
+        className={`mb-2 rounded-md border border-dashed px-2 py-1.5 outline-none ${isDropTarget ? "border-accent bg-accent/10" : open ? "border-outline-strong" : "border-transparent"}`}
+      >
+        {children}
+      </div>
+    );
+  }
+  return (
+    <div
+      ref={ref}
+      {...dropProps}
+      role="button"
+      tabIndex={-1}
+      aria-label={label}
+      className={`relative h-1.5 outline-none ${open ? "z-10 before:absolute before:inset-x-0 before:-inset-y-2 before:content-['']" : ""}`}
+    >
+      {isDropTarget && <div className="pointer-events-none absolute inset-x-0 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-accent" />}
+    </div>
+  );
+}
 
 // Labels every ALL/ANY/COUNT/SUM block in this tree with the same
 // dot-notation index (1, 1.1, 1.2, 1.1.1, ...) TileEditorPanel's
@@ -179,6 +284,25 @@ export interface RequirementTreeEditorProps {
 // empty composite instead of its actual item row.
 export function RequirementTreeEditor({ slug, root, itemGroups, onChange, onSaveAsGroup, existingLeaves, existingConditions, sharedNodeIds }: RequirementTreeEditorProps) {
   const conditionLabels = labelConditions(root);
+  // The dragged row is kept in a ref as well as state: React Aria asks every drop spot whether it takes the drag as the
+  // drag starts, before a re-render could have shown them the new state (and a keyboard drag only visits the spots
+  // that said yes).
+  const [dragging, setDraggingState] = useState<Path | null>(null);
+  const draggingRef = useRef<Path | null>(null);
+  const setDragging = (path: Path | null) => {
+    draggingRef.current = path;
+    setDraggingState(path);
+  };
+  const moves: Moves = {
+    dragging,
+    setDragging,
+    canDrop: (parent, index) => !!draggingRef.current && canMove(root, draggingRef.current, parent, index),
+    drop: (parent, index) => {
+      const from = draggingRef.current;
+      if (from && canMove(root, from, parent, index)) onChange(moveNode(root, from, parent, index));
+      setDragging(null);
+    },
+  };
   const props: NodeProps = {
     slug,
     node: root,
@@ -198,7 +322,7 @@ export function RequirementTreeEditor({ slug, root, itemGroups, onChange, onSave
     // survive — this is the "+ item" (group-pick) path.
     addMany: (path, children) => onChange(children.reduce((r, child) => appendChild(r, path, child), root)),
   };
-  return root.kind === "ITEM" ? <ItemLeafRow {...props} /> : <GroupNode {...props} />;
+  return <MovesContext.Provider value={moves}>{root.kind === "ITEM" ? <ItemLeafRow {...props} /> : <GroupNode {...props} />}</MovesContext.Provider>;
 }
 
 interface NodeProps {
@@ -222,6 +346,8 @@ function GroupNode(props: NodeProps) {
   const isRoot = path.length === 0;
   const children = node.children ?? [];
   const ownLabel = conditionLabels.get(node);
+  const dragging = samePath(useContext(MovesContext)!.dragging, path);
+  const conditionName = ownLabel ? `Condition ${ownLabel}` : "the task";
   // This block *itself* has 2+ direct parents (not merely "something inside
   // it is reachable from another task") — see sharedNodeIds' doc comment.
   const isShared = !!node.id && sharedNodeIds.has(node.id);
@@ -271,8 +397,9 @@ function GroupNode(props: NodeProps) {
   }
 
   return (
-    <div className={isRoot ? "" : "border-l-2 border-outline pl-3"}>
+    <div className={`${isRoot ? "" : "border-l-2 border-outline pl-3"} ${dragging ? "opacity-40" : ""}`}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
+        {!isRoot && <DragHandle path={path} label={conditionName} />}
         {isShared && <SharedMark tasks={sharedWithTasks} />}
         {ownLabel && (
           <span className="num shrink-0 text-xs text-on-surface-subtle" title="Shown in this task's own tree, and in other tasks' &quot;+ existing condition&quot; picker once saved">
@@ -368,17 +495,28 @@ function GroupNode(props: NodeProps) {
           />
         </div>
       )}
-      {children.length === 0 && <p className="mb-2 text-xs text-on-surface-subtle">No requirements yet — add an item or a condition.</p>}
-      <ul className="space-y-1.5">
-        {children.map((child, i) => (
-          // Inputs are uncontrolled (save on blur); include length so removing a sibling remounts the rest.
-          <li key={`${i}-${children.length}`}>
-            {child.kind === "ITEM" ? <ItemLeafRow {...props} node={child} path={[...path, i]} /> : <GroupNode {...props} node={child} path={[...path, i]} />}
-          </li>
-        ))}
-      </ul>
+      {children.length === 0 ? (
+        <DropGap parent={path} index={0} label={`Into ${conditionName}`}>
+          <p className="text-xs text-on-surface-subtle">No requirements yet — add an item or a condition.</p>
+        </DropGap>
+      ) : (
+        // A drop spot before, between and after the rows; the first sits in the header's bottom margin.
+        <div role="list" className="-mt-1.5">
+          {children.map((child, i) => (
+            // Keyed by id where there is one, so a row's own state (an open picker, an unsaved number) moves with it.
+            // Inputs are uncontrolled (save on blur); a new row's key includes length so removing a sibling remounts the rest.
+            <Fragment key={child.id ?? `new-${i}-${children.length}`}>
+              <DropGap parent={path} index={i} label={`Before ${rowName(child, conditionLabels)}`} />
+              <div role="listitem">
+                {child.kind === "ITEM" ? <ItemLeafRow {...props} node={child} path={[...path, i]} /> : <GroupNode {...props} node={child} path={[...path, i]} />}
+              </div>
+            </Fragment>
+          ))}
+          <DropGap parent={path} index={children.length} label={`At the end of ${conditionName}`} />
+        </div>
+      )}
       {canSaveAsGroup && (
-        <Button variant="ghost" size="sm" onPress={saveAsGroup} className="mt-1.5 -ml-2.5">
+        <Button variant="ghost" size="sm" onPress={saveAsGroup} className="-ml-2.5">
           Save these names as a new group…
         </Button>
       )}
@@ -422,6 +560,7 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
   // the admin picks whether to re-price them too.
   const [pending, setPending] = useState<{ next: ValuedAs | null; count: number } | null>(null);
   const [repriceNote, setRepriceNote] = useState<string | null>(null);
+  const dragging = samePath(useContext(MovesContext)!.dragging, path);
 
   async function saveValuedAs(next: ValuedAs | null) {
     setRepriceNote(null);
@@ -449,8 +588,9 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
   }
 
   return (
-    <div className="space-y-1">
-      <div className="flex h-8 items-center gap-2 rounded-md border border-outline bg-surface px-2">
+    <div className={`space-y-1 ${dragging ? "opacity-40" : ""}`}>
+      <div className={`flex h-8 items-center gap-2 rounded-md border border-outline bg-surface px-2 ${isRoot ? "" : "pl-1"}`}>
+        {!isRoot && <DragHandle path={path} label={name} />}
         {isShared && <SharedMark tasks={sharedWithTasks} />}
         <ChipIcon name={name} className="size-4" />
         <span className="flex-1 truncate text-xs text-on-surface">{name}</span>
