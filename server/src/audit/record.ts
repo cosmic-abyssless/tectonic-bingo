@@ -44,16 +44,34 @@ function resolveActor(
   return { userId: null, type: "system", role: "system" };
 }
 
+const CAP_NOTE = "details exceeded the 8KB cap";
+
+/**
+ * The details as stored: over the cap, the biggest fields go first (e.g. a big task's before/after trees) until the
+ * rest fits, so the small ones an entry's label reads (a tile's name) stay. `dropped` names what went.
+ */
+export function capDetails(details: object | null | undefined, maxBytes = DETAILS_MAX_BYTES): string {
+  const json = JSON.stringify(details ?? {});
+  if (json.length <= maxBytes) return json;
+  const kept: Record<string, unknown> = { ...(details as Record<string, unknown>) };
+  const size = (key: string) => (JSON.stringify(kept[key]) ?? "").length;
+  const dropped: string[] = [];
+  for (const key of Object.keys(kept).sort((a, b) => size(b) - size(a))) {
+    delete kept[key];
+    dropped.push(key);
+    const capped = JSON.stringify({ ...kept, truncated: true, dropped, note: CAP_NOTE });
+    if (capped.length <= maxBytes) return capped;
+  }
+  return JSON.stringify({ truncated: true, dropped, note: CAP_NOTE });
+}
+
 /** Inserts one row, bumps the request's recorded count, and broadcasts to connected clients. Returns the new row's id. */
 export function audit<A extends AuditAction>(db: Queryable, input: AuditInput<A>): number {
   const ctx = getAuditContext();
   const actor = resolveActor(input.actor, ctx);
   const visibility = input.visibility ?? AUDIT_ACTIONS[input.action].visibility;
 
-  let detailsJson = JSON.stringify(input.details ?? {});
-  if (detailsJson.length > DETAILS_MAX_BYTES) {
-    detailsJson = JSON.stringify({ truncated: true, note: "details exceeded the 8KB cap" });
-  }
+  const detailsJson = capDetails(input.details);
 
   const row = db
     .insert(auditLog)
