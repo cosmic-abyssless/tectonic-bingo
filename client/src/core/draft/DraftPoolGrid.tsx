@@ -228,7 +228,7 @@ const RatingRenderer = ({ data, context }: CustomCellRendererProps<DraftUnit, un
   return <RatingCell rating={context.ratings[signupId]} onChange={(r) => context.onRate(signupId, r)} showNote={false} />;
 };
 
-// The team's note on a unit, edited in the cell (AG's large text editor, a popup textarea: see the Note column). The
+// The captain's (and co-captain's) note on a unit, edited in the cell (AG's large text editor, a popup textarea: see the Note column). The
 // pencil says it's editable at a glance; an empty one invites a note. A long note wraps to fill the row (2 lines for a
 // solo player's row, 4 for a pair's taller one) before it's cut off with an ellipsis.
 const NoteRenderer = ({ value, data }: CustomCellRendererProps<DraftUnit, string>) => (
@@ -326,7 +326,7 @@ export function DraftPoolGrid({
   widthSwitch?: boolean;
   pool: DraftUnit[];
   questions: SignupQuestion[];
-  /** Present only for team leads — they see and edit their own team's ratings. */
+  /** Present only for team leads (captain and co-captain): they see and edit their ratings. Never the team's other players. */
   ratings: Ratings | null;
   onRate: (signupId: string, rating: PickRating) => void;
   canPick: boolean;
@@ -452,7 +452,7 @@ export function DraftPoolGrid({
       !!ratings && {
         colId: "note",
         headerName: "Note",
-        headerTooltip: "Your team's note on this player (only your team sees it). Click to edit.",
+        headerTooltip: "Your note on this player (only your co-captain sees it). Click to edit.",
         // Pairs are rated (and noted) together, under the first half's signup, as with the stars.
         valueGetter: (p) => (p.data ? (ratings[p.data.entries[0]!.signup.id]?.note ?? "") : ""),
         // Saved through the same rating update as the stars (optimistic); the cell reads it back from the ratings.

@@ -8,7 +8,7 @@ import { bingos, draftPicks, pickRatings, signupAnswers, signups, teamMembers, t
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
 import { rsnsInBingo } from "./playerNames";
-import { isTeamLead } from "./teamService";
+import { getUserTeamForBingo, isTeamLead } from "./teamService";
 import { audit, markAuditedNoop } from "../audit/record";
 import { log } from "../log";
 
@@ -550,6 +550,14 @@ export interface PickRating {
 }
 
 export const MAX_RATING_STARS = 3;
+
+// The ratings (stars and notes) a user gets to see: their team's, only if they lead it (the captain or the
+// co-captain). Never the team's drafted players, and never a mod who doesn't lead a team: they're the leads' private
+// opinions about players, some of whom end up on that very team.
+export function ratingsForViewer(db: Db, bingoId: string, userId: string): Record<string, PickRating> {
+  const team = getUserTeamForBingo(db, bingoId, userId);
+  return team && isTeamLead(db, team.id, userId) ? getTeamRatings(db, team.id) : {};
+}
 
 export function getTeamRatings(db: Db, teamId: string): Record<string, PickRating> {
   const rows = db.select({ signupId: pickRatings.signupId, stars: pickRatings.stars, note: pickRatings.note }).from(pickRatings).where(eq(pickRatings.teamId, teamId)).all();

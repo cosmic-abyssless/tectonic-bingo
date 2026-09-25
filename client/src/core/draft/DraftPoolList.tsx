@@ -43,7 +43,7 @@ export function DraftPoolList({
 }: {
   pool: DraftUnit[];
   questions: SignupQuestion[];
-  /** The viewer's team's ratings (team leads); null hides the stars. */
+  /** The viewer's ratings, for a team lead (captain or co-captain) only; null hides the stars. */
   ratings: PoolRatings | null;
   onRate: (signupId: string, rating: PickRating) => void;
   canPick: boolean;

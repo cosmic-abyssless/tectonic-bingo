@@ -7,7 +7,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createTeam } from "./teamService";
 import { createQuestion, createSignup } from "./signupService";
 import { adminPair } from "./pairingService";
-import { canViewDraftRoom, draftRoomForbiddenMessage, getCutPreview, getCutUserIds, getDraftState, getTeamRatings, makePick, pickOrderTeamIndex, setDraftOrder, setPickRating, shuffleDraftOrder, startDraft, undoLastPick } from "./draftService";
+import { canViewDraftRoom, draftRoomForbiddenMessage, getCutPreview, getCutUserIds, getDraftState, getTeamRatings, ratingsForViewer, makePick, pickOrderTeamIndex, setDraftOrder, setPickRating, shuffleDraftOrder, startDraft, undoLastPick } from "./draftService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -810,6 +810,39 @@ describe("cuts", () => {
 });
 
 describe("pick ratings", () => {
+  // Ratings and notes are the leads' private opinions about players (some of whom end up on their own team), so they go
+  // to the captain and co-captain only: never the team's drafted players, a mod or site admin who doesn't lead it, or
+  // another team.
+  it("shows a team's ratings to its captain and co-captain only", () => {
+    const bingo = seedBingo({ stage: "draft", signupMode: "duo" });
+    const signupStage = { ...bingo, stage: "signup" as const };
+    const captain = seedCaptain(bingo.id, "captain");
+    const coCaptain = seedUser("co-captain");
+    createSignup(db, signupStage, { bingoId: bingo.id, userId: coCaptain.id, rsn: "co-captain", answers: [] });
+    adminPair(db, signupStage, { userIdA: captain.id, userIdB: coCaptain.id, createdByUserId: captain.id });
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, coCaptainUserId: coCaptain.id, name: "A" });
+    const otherCaptain = seedCaptain(bingo.id, "other-captain");
+    createTeam(db, { bingoId: bingo.id, captainUserId: otherCaptain.id, name: "B" });
+
+    const drafted = seedCaptain(bingo.id, "drafted");
+    db.insert(schema.teamMembers).values({ teamId: team.id, userId: drafted.id }).run();
+    const mod = seedUser("mod");
+    db.insert(schema.bingoModerators).values({ bingoId: bingo.id, userId: mod.id }).run();
+    const siteAdmin = db.insert(schema.users).values({ discordId: "site-admin", discordUsername: "site-admin", isAdmin: true }).returning().get();
+
+    const rated = seedCaptain(bingo.id, "rated");
+    const signupId = db.select().from(schema.signups).where(eq(schema.signups.userId, rated.id)).get()!.id;
+    setPickRating(db, team.id, signupId, { stars: 3, note: "secret" });
+
+    const sees = (userId: string) => ratingsForViewer(db, bingo.id, userId);
+    expect(sees(captain.id)).toEqual({ [signupId]: { stars: 3, note: "secret" } });
+    expect(sees(coCaptain.id)).toEqual({ [signupId]: { stars: 3, note: "secret" } });
+    expect(sees(drafted.id)).toEqual({});
+    expect(sees(mod.id)).toEqual({});
+    expect(sees(siteAdmin.id)).toEqual({});
+    expect(sees(otherCaptain.id)).toEqual({});
+  });
+
   it("upserts, clears on zero stars without a note, and stays per team", () => {
     const bingo = seedBingo({ stage: "signup" });
     const capA = seedCaptain(bingo.id, "capA");
