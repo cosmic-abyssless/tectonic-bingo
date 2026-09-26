@@ -22,7 +22,6 @@ import { PlayerName } from "../../../core/tectonic/PlayerName";
 import { TaskInterestPeople } from "../../../core/ui/TaskInterestPeople";
 import { formatCountdown } from "../../../core/ui/time";
 import { useSlot, useThemeTokens } from "../../context";
-import { thumbUrl } from "../../../api/imageVariants";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { useEdgeSwipe } from "./useEdgeSwipe";
@@ -53,6 +52,7 @@ import { ComicBurstRays } from "../ui/ComicBurst";
 import { useModalDepth } from "../ui/modalStack";
 import { PageFooter } from "./PageFooter";
 import { getBookPose, setBookAway } from "./bookFlight";
+import { ArtViewer, ART_VIEWER, hidePin, PinnedArt, pinSequence, PIN_ART } from "./PinnedArt";
 import { pageColors, tilePageColors, TECTONIC_LOGO, type ComicColors } from "./colors";
 
 /*
@@ -432,7 +432,7 @@ const BACK_TO_STAGGERED = { ...BACK_STAGGER, z: -BACK_DEPTH, rotateY: 180 };
 // ×0.65.
 const FLIGHT_SPRING = { type: "spring", duration: 0.52, bounce: 0.2 } as const;
 
-function enterSequence(backdrop: Element, burst: Element, from: Flight, hasMark: boolean): AnimationSequence {
+function enterSequence(backdrop: Element, burst: Element, from: Flight, hasMark: boolean, hasPin: boolean): AnimationSequence {
   return [
     // (A selector matching nothing is skipped, hence the flag.)
     ...(hasMark ? ([[PAGE_MARK, { opacity: 0 }, { duration: 0.15, ease: "easeOut", at: 0.26 }]] as AnimationSequence) : []),
@@ -466,6 +466,8 @@ function enterSequence(backdrop: Element, burst: Element, from: Flight, hasMark:
     [burst, { opacity: 1 }, { duration: 0.33, ease: "easeOut", at: 0.26 + COVER_SWING }],
     // Then the trimmings pop in on top.
     [EXTRAS, { opacity: [0, 1], scale: [0.4, 1] }, { type: "spring", duration: 0.39, bounce: 0.45, delay: stagger(0.04), at: 0.55 }],
+    // The artwork lands on the contents page with them, and gets its tack.
+    ...(hasPin ? pinSequence(0.55) : []),
   ];
 }
 
@@ -924,6 +926,8 @@ function FlyingBook({
     // is invisible.
     const flight = measureFlight(root, tileId, tile.progress.allComplete);
     poseAtTile(frame, flyer, cover, page, base, root.querySelector<HTMLElement>(BACK), flight);
+    const hasPin = !!root.querySelector(PIN_ART);
+    if (hasPin) hidePin(root);
     // The base sheet's shadow only belongs to the closed book (see
     // BASE_SHADOW) — drop it right here, at the swap, while it's still
     // occluded under the cover either way.
@@ -934,7 +938,7 @@ function FlyingBook({
     // project the leaves' small depth offsets a hair bigger or smaller: a page
     // turn shuffles those depths, which would shift whole pages by a pixel as
     // it starts and lands. The fly-home sets it again before it moves.
-    animate(enterSequence(backdrop, burst, flight, !!mark)).then(() => {
+    animate(enterSequence(backdrop, burst, flight, !!mark, hasPin)).then(() => {
       frame.style.perspective = "none";
       // clipOpen stops a little below the book (it has to animate from the
       // tile's crop); open, nothing's cut, so a fold-back swung past the
@@ -1231,6 +1235,8 @@ function FlyingBook({
       if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      // Nor behind the artwork's full-size view.
+      if (target?.closest(ART_VIEWER)) return;
       e.preventDefault();
       step(e.key === "ArrowRight" ? 1 : -1);
     };
@@ -1327,6 +1333,11 @@ function TileDetails({
   // What's printed on the pages is drawn in the page stock, not the surrounding theme.
   const page = tilePageColors(colors, tile.freeze.isFrozen);
 
+  // The artwork's full-size view, and the picture that opened it, for focus
+  // to go back to.
+  const [artOpen, setArtOpen] = useState(false);
+  const artTrigger = useRef<HTMLElement | null>(null);
+
   // The pages, in reading order.
   const pages: ReactNode[] = [
     <SummaryPage
@@ -1338,6 +1349,10 @@ function TileDetails({
         // Phone: the task at `position` is page index position + 1, and the spread IS the page
         // index. Desktop: it is page position + 2 (1-based), and odd pages are left-hand.
         onFlipTo(single ? position + 1 : Math.floor((position + 1) / 2));
+      }}
+      onOpenArt={(trigger) => {
+        artTrigger.current = trigger;
+        setArtOpen(true);
       }}
       onSubmit={onSubmit}
       onToggleInterest={onToggleInterest ? () => onToggleInterest(ordered[0]?.task.id ?? "") : undefined}
@@ -1530,18 +1545,7 @@ function TileDetails({
       </div>
       </div>
 
-      {/* The trimmings: floating tilted artwork (not on a phone, where it takes
-          space the book needs), the close button, and the page nav under the
-          book. */}
-      {tile.imageUrl && !single && (
-        <img
-          data-extra
-          src={thumbUrl(tile.imageUrl)}
-          alt={tile.name}
-          className="border-2 absolute -top-[8.25rem] -left-14 size-36 shrink-0 object-contain -rotate-12"
-          style={{ borderColor: colors.LINE, opacity: 0 }}
-        />
-      )}
+      {/* The trimmings: the close button and the page nav under the book. */}
       <AriaButton
         data-extra
         aria-label="Close"
@@ -1573,6 +1577,16 @@ function TileDetails({
           <ArrowRightIcon size={20} />
         </NavButton>
       </div>
+      <ArtViewer
+        imageUrl={tile.imageUrl}
+        name={tile.name}
+        isOpen={artOpen}
+        colors={page}
+        onClose={() => {
+          setArtOpen(false);
+          artTrigger.current?.focus({ preventScroll: true });
+        }}
+      />
     </div>
   );
 }
@@ -1766,6 +1780,7 @@ function SummaryPage({
   ordered,
   colors,
   onGoToTask,
+  onOpenArt,
   onSubmit,
   onToggleInterest,
 }: {
@@ -1775,6 +1790,8 @@ function SummaryPage({
   colors: ComicColors;
   /** Takes the task's position in page order, not its own number. */
   onGoToTask?: (position: number) => void;
+  /** Opens the artwork full size; gets the picture that was pressed. */
+  onOpenArt: (trigger: HTMLElement) => void;
   onSubmit?: () => void;
   onToggleInterest?: () => void;
 }) {
@@ -1910,6 +1927,9 @@ function SummaryPage({
           </ol>
         </section>
       )}
+
+      {/* The Tile's artwork, pinned under the contents. */}
+      {tile.imageUrl && <PinnedArt imageUrl={tile.imageUrl} name={tile.name} colors={colors} onOpen={onOpenArt} />}
 
       {onSubmit && (
         <ComicButton

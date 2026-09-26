@@ -27,3 +27,22 @@ export function thumbUrl(url: string | null | undefined): string | undefined {
 export function fullUrl(url: string | null | undefined): string | undefined {
   return variant(url, FULL_SUFFIX);
 }
+
+// Full variants already asked for, kept so the browser holds on to the request
+// (and the decoded image) until the <img> that wants it mounts.
+const warmed = new Map<string, HTMLImageElement>();
+
+/**
+ * Starts loading an image's display-size variant ahead of showing it — at
+ * most once per URL, however often it's called, and a no-op without an image.
+ * For "about to open this" hints (a comic board cell's hover, focus or press),
+ * so the detail view's <img> finds it already on its way.
+ */
+export function warmFullUrl(url: string | null | undefined): void {
+  const src = fullUrl(url);
+  if (!src || warmed.has(src)) return;
+  const img = new Image();
+  img.decoding = "async";
+  img.src = src;
+  warmed.set(src, img);
+}

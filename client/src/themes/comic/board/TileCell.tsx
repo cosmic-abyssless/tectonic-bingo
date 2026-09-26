@@ -1,4 +1,4 @@
-import { memo, type CSSProperties } from "react";
+import { memo, useEffect, type CSSProperties } from "react";
 import { motion, type Variants } from "motion/react";
 import { useFocusRing } from "react-aria";
 import type { TileModel } from "../../../headless/types";
@@ -10,6 +10,7 @@ import { isYamaTile } from "@bingo/shared";
 import { sfxAt } from "../fx/SfxLayer";
 import { BACK_VIEW, bw, CLOSED_BOOK, ClosedBook, FIRST_LEAF_STAGGER } from "./ClosedBook";
 import { registerBook, useIsBookAway } from "./bookFlight";
+import { warmFullUrl } from "../../../api/imageVariants";
 
 /*
  * A little comic book sitting on the tile, cracked open just enough to show
@@ -120,13 +121,27 @@ export const TileCell = memo(function TileCell({
     : "none";
   const isLifted = isFocusVisible || !!isSearchHighlighted;
   const frozenIdx = tile.freeze.isFrozen ? 1 : 0;
+  // The modal draws the cover from the full-size artwork. Start fetching it the
+  // moment the tile looks about to be opened — hover, focus, press, or the
+  // search dropdown landing on it — so it's usually in by the time the book
+  // has flown out (the cover shows the thumb until then). Once per image,
+  // however often these fire; never for the whole board up front.
+  const warmCover = () => warmFullUrl(tile.imageUrl);
+  useEffect(() => {
+    if (isSearchHighlighted) warmFullUrl(tile.imageUrl);
+  }, [isSearchHighlighted, tile.imageUrl]);
 
   return (
     <motion.button
       // Just the two focus handlers, not a spread of focusProps: its wider
       // DOMAttributes type clashes with motion's own onAnimationStart.
-      onFocus={focusProps.onFocus}
+      onFocus={(e) => {
+        focusProps.onFocus?.(e);
+        warmCover();
+      }}
       onBlur={focusProps.onBlur}
+      onPointerEnter={warmCover}
+      onPointerDown={warmCover}
       onClick={(e) => {
         // A comic sound-effect burst where you clicked — or, for a
         // keyboard-triggered click (no pointer position), on the tile itself.
