@@ -242,33 +242,50 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
 
                   <Section title={`Records held (${records.length})`} empty="No current clan records.">
                     {records.length > 0 && (
-                      <table className="w-full text-sm">
-                        <thead className="text-left text-xs text-on-surface-subtle">
-                          <tr>
-                            <th className="py-1 pr-3 font-medium">Place</th>
-                            <th className="py-1 pr-3 font-medium">Boss</th>
-                            <th className="py-1 pr-3 font-medium">Time</th>
-                            <th className="py-1 pr-3 font-medium">Team</th>
-                            <th className="py-1 font-medium">Date</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-outline">
+                      <>
+                        {/* On a phone, two lines per record instead of five columns, so nothing runs off the side. */}
+                        <ul className="divide-y divide-outline text-sm sm:hidden">
                           {records.map((r, i) => (
-                            <tr key={i}>
-                              <td className="py-1.5 pr-3">
-                                <Medal place={r.position} />
-                              </td>
-                              <td className="py-1.5 pr-3">
-                                <span className="text-on-surface">{r.displayName}</span>
-                                {r.category !== r.displayName && <span className="ml-1.5 text-xs text-on-surface-subtle">{r.category}</span>}
-                              </td>
-                              <td className="num py-1.5 pr-3 whitespace-nowrap">{formatRecordValue(r.value, r.valueType)}</td>
-                              <td className="py-1.5 pr-3 text-on-surface-muted">{r.solo ? "Solo" : `${r.teamSize} players`}</td>
-                              <td className="num py-1.5 whitespace-nowrap text-on-surface-muted">{new Date(r.date).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</td>
-                            </tr>
+                            <li key={i} className="py-1.5">
+                              <div className="flex items-center gap-2">
+                                <Medal place={r.position} className="shrink-0" />
+                                <span className="min-w-0 flex-1 truncate text-on-surface">{r.displayName}</span>
+                                <span className="num shrink-0 whitespace-nowrap">{formatRecordValue(r.value, r.valueType)}</span>
+                              </div>
+                              <div className="mt-0.5 text-xs text-on-surface-muted">
+                                {[r.category !== r.displayName && r.category, r.solo ? "Solo" : `${r.teamSize} players`, formatDate(r.date)].filter(Boolean).join(" · ")}
+                              </div>
+                            </li>
                           ))}
-                        </tbody>
-                      </table>
+                        </ul>
+                        <table className="hidden w-full text-sm sm:table">
+                          <thead className="text-left text-xs text-on-surface-subtle">
+                            <tr>
+                              <th className="py-1 pr-3 font-medium">Place</th>
+                              <th className="py-1 pr-3 font-medium">Boss</th>
+                              <th className="py-1 pr-3 font-medium">Time</th>
+                              <th className="py-1 pr-3 font-medium">Team</th>
+                              <th className="py-1 font-medium">Date</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-outline">
+                            {records.map((r, i) => (
+                              <tr key={i}>
+                                <td className="py-1.5 pr-3">
+                                  <Medal place={r.position} />
+                                </td>
+                                <td className="py-1.5 pr-3">
+                                  <span className="text-on-surface">{r.displayName}</span>
+                                  {r.category !== r.displayName && <span className="ml-1.5 text-xs text-on-surface-subtle">{r.category}</span>}
+                                </td>
+                                <td className="num py-1.5 pr-3 whitespace-nowrap">{formatRecordValue(r.value, r.valueType)}</td>
+                                <td className="py-1.5 pr-3 text-on-surface-muted">{r.solo ? "Solo" : `${r.teamSize} players`}</td>
+                                <td className="num py-1.5 whitespace-nowrap text-on-surface-muted">{formatDate(r.date)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </>
                     )}
                   </Section>
 
@@ -293,43 +310,7 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
           </TabPanel>
           <TabPanel id="past">
             {player.pastBingoStats.length > 0 ? (
-              <table className="w-full text-sm">
-                <thead className="text-left text-xs text-on-surface-subtle">
-                  <tr>
-                    <th className="py-1 pr-3 font-medium">Bingo</th>
-                    <th className="py-1 pr-3 font-medium">Gained</th>
-                    <th className="py-1 pr-3 font-medium">Team</th>
-                    <th className="py-1 pr-3 font-medium">Total</th>
-                    <th className="py-1 font-medium">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-outline">
-                  {player.pastBingoStats.map((p) => (
-                    <tr key={p.competitionId}>
-                      <td className="py-1.5 pr-3 text-on-surface">
-                        {p.womId > 0 ? (
-                          <a
-                            href={`https://wiseoldman.net/competitions/${p.womId}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="underline underline-offset-2 hover:text-on-surface"
-                          >
-                            {p.title}
-                          </a>
-                        ) : (
-                          p.title
-                        )}
-                      </td>
-                      <td className="num py-1.5 pr-3 whitespace-nowrap">
-                        {formatWomStat(p.gained)} <span className="text-on-surface-subtle uppercase">{p.metric}</span>
-                      </td>
-                      <td className="num py-1.5 pr-3 whitespace-nowrap">{p.teamRank !== null ? `#${p.teamRank}` : <span className="text-on-surface-subtle">—</span>}</td>
-                      <td className="num py-1.5 pr-3 whitespace-nowrap">#{p.totalRank}</td>
-                      <td className="num py-1.5 whitespace-nowrap text-on-surface-muted">{new Date(p.startsAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <PastBingos stats={player.pastBingoStats} />
             ) : (
               <Empty>No past bingos on record for this player.</Empty>
             )}
@@ -353,6 +334,75 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
         </Tabs>
       </div>
     </>
+  );
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** The Past bingos tab: a five-column table, or on a phone two lines per bingo so nothing runs off the side. */
+function PastBingos({ stats }: { stats: PlayerProfile["pastBingoStats"] }) {
+  const gained = (p: (typeof stats)[number]) => (
+    <>
+      {formatWomStat(p.gained)} <span className="text-on-surface-subtle uppercase">{p.metric}</span>
+    </>
+  );
+  return (
+    <>
+      <ul className="divide-y divide-outline text-sm sm:hidden">
+        {stats.map((p) => (
+          <li key={p.competitionId} className="py-1.5">
+            <div className="flex items-baseline gap-3">
+              <PastBingoTitle stat={p} className="min-w-0 flex-1 truncate" />
+              <span className="num shrink-0 whitespace-nowrap">{gained(p)}</span>
+            </div>
+            <div className="num mt-0.5 text-xs text-on-surface-muted">
+              {p.teamRank !== null ? `Team #${p.teamRank}` : "—"} · Total #{p.totalRank} · {formatDate(p.startsAt)}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <table className="hidden w-full text-sm sm:table">
+        <thead className="text-left text-xs text-on-surface-subtle">
+          <tr>
+            <th className="py-1 pr-3 font-medium">Bingo</th>
+            <th className="py-1 pr-3 font-medium">Gained</th>
+            <th className="py-1 pr-3 font-medium">Team</th>
+            <th className="py-1 pr-3 font-medium">Total</th>
+            <th className="py-1 font-medium">Date</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-outline">
+          {stats.map((p) => (
+            <tr key={p.competitionId}>
+              <td className="py-1.5 pr-3">
+                <PastBingoTitle stat={p} />
+              </td>
+              <td className="num py-1.5 pr-3 whitespace-nowrap">{gained(p)}</td>
+              <td className="num py-1.5 pr-3 whitespace-nowrap">{p.teamRank !== null ? `#${p.teamRank}` : <span className="text-on-surface-subtle">—</span>}</td>
+              <td className="num py-1.5 pr-3 whitespace-nowrap">#{p.totalRank}</td>
+              <td className="num py-1.5 whitespace-nowrap text-on-surface-muted">{formatDate(p.startsAt)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+/** The Bingo's title, linking to its Wise Old Man competition when it has a real one (a mock's womId is negative). */
+function PastBingoTitle({ stat, className = "" }: { stat: PlayerProfile["pastBingoStats"][number]; className?: string }) {
+  if (stat.womId <= 0) return <span className={`text-on-surface ${className}`}>{stat.title}</span>;
+  return (
+    <a
+      href={`https://wiseoldman.net/competitions/${stat.womId}`}
+      target="_blank"
+      rel="noreferrer"
+      className={`text-on-surface underline underline-offset-2 hover:text-on-surface ${className}`}
+    >
+      {stat.title}
+    </a>
   );
 }
 
