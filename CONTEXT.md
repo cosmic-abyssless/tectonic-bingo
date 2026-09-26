@@ -14,10 +14,10 @@ A single OSRS clan bingo competition, run from start to finish across a set of l
 
 ### Stage
 The current lifecycle phase of a Bingo. Transitions move forward through a fixed sequence. The name in bold is the canonical one, used in UI copy, discussion and this glossary; the code value is engineering-only.
-1. **Planning** (`planning`) — Admin configures board, tiles, rules, signup questions. Hidden from normal players.
-2. **Signups open** (`signup`) — Players submit signups (solo or duo). Admins review and approve. Captains can already scout the signups.
+1. **Planning** (`planning`) — Admin configures board, tiles, rules, signup questions. Hidden from everyone but Moderators and Admins, and not listed.
+2. **Signups open** (`signup`) — Players submit signups (solo or duo). Captains can already scout the signups.
 3. **Signups closed** (`captains`) — The roster is final and signups are locked. Captains keep scouting until the draft starts.
-4. **Draft** (`draft`) — Captains take turns picking players/duos in structured rounds. Every signed-up player and everyone already on a team can watch.
+4. **Draft** (`draft`) — Captains take turns picking players/duos in structured rounds. Every Player can watch; Cut signups are no longer Players from this stage on.
 5. **Board revealed** (`reveal`) — Teams are set; the board is visible for prep, but submissions are not yet accepted.
 6. **Live** (`live`) — The Bingo is running. Submissions are accepted and reviewed; points accumulate.
 7. **Finished** (`complete`) — The Bingo has ended. Final scores are locked, winners declared.
@@ -56,9 +56,9 @@ A designated player who leads a Team during a Bingo.
 - **Rules:** Assigned by an Admin, from the signups as they come in, while signups are open or closed. Exactly one or two captains per team.
 
 ### Player
-Any clan member participating in a Bingo as a competitor.
+A clan member who is part of a Bingo as a competitor: until Board revealed, anyone with an active Signup, except Cut signups once the Draft stage begins; from Board revealed on, anyone on a Team. A withdrawn signup is never a Player.
 - **Capabilities:** Sign up, view the board, make Submissions for their team, view team progress.
-- **Rules:** Belongs to exactly one Team per Bingo once drafted.
+- **Rules:** Belongs to exactly one Team per Bingo once drafted. Anyone who isn't a Player, Moderator or Admin is "not part of this Bingo": they see only its name and stage, plus the signup form while Signups are open. Once the Bingo is Finished, every clan member can view it read-only.
 - **Name:** Inside a Bingo a Player is named by the RSN they signed up with, not their Discord name (rosters, submissions, stats, the audit log, the draft, the header). The server puts it on `rsn` for every user it sends within a Bingo, and `playerName` prefers it. An account with no Signup in that Bingo, like a Moderator who isn't playing, falls back to the Discord name, as do site-level lists. A Discord name is only shown where it is labelled as one (the "Discord" columns of the roster and draft room, the profile subtitle). Audit entries written before this keep the names they were stored with.
 
 ---
@@ -90,7 +90,7 @@ A signup left out of the Draft so that every Team comes out the same shape. Pair
 The structured selection process during the `draft` stage where Captains take turns selecting Players (or Duos) onto their Teams.
 - **Mechanics:** Snake draft or linear, divided into rounds.
 
-- **Draft room:** The page where the Draft happens. Captains and Moderators enter it once signups are open; every signed-up Player and everyone already on a Team can watch once the Draft stage begins.
+- **Draft room:** The page where the Draft happens. Captains and Moderators enter it once signups are open; every Player can watch once the Draft stage begins (Cut signups can't).
 - **On the clock:** The Team whose Captain is picking now. Shown to everyone as who is currently picking, with the round and pick number; the Captain on the clock also gets a stronger cue that it is their turn. There is no pick timer.
 
 ### Scouting
