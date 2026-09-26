@@ -116,6 +116,10 @@ export interface ThemeSlots {
   Notice: ComponentType<NoticeProps>;
   Panel: ComponentType<PanelProps>;
 
+  // "Beta" after the heading of a section still being tried out (core/ui/BetaTag). Read with useOptionalSlot: outside
+  // a theme it's core's.
+  BetaTag: ComponentType;
+
   // The stats page's Titles (core/stats/TitleChrome): the box around one Title group's rows, which sets --title-ink
   // and --title-rule for them (and --title-name-size, if it likes), and a Title's chip (the contributors table, the player's profile). Read with
   // useOptionalSlot: outside a theme they're core's.

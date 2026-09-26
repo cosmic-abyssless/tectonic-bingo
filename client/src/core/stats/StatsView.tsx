@@ -4,6 +4,7 @@ import { useBingo, useBoard, useStats } from "../../api/queries";
 import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { inclusionFilter } from "../ui/inclusionFilter";
 import { MultiSelect } from "../ui/MultiSelect";
+import { BetaTag } from "../ui/BetaTag";
 import { Panel } from "../ui/Panel";
 import { ContributorsTable } from "./ContributorsTable";
 import { GpGained } from "./GpGained";
@@ -15,8 +16,16 @@ import { TitlesSection } from "./TitlesSection";
 
 // A Panel, like the draft room's, so a theme that draws its own (the comic one) restyles the section and the
 // tables in it the same way.
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return <Panel title={title}>{children}</Panel>;
+function Section({ title, beta, children }: { title: string; beta?: boolean; children: ReactNode }) {
+  const heading = beta ? (
+    <span className="inline-flex items-center gap-2">
+      {title}
+      <BetaTag />
+    </span>
+  ) : (
+    title
+  );
+  return <Panel title={heading}>{children}</Panel>;
 }
 
 export function StatsView({ slug }: { slug: string }) {
@@ -78,7 +87,7 @@ export function StatsView({ slug }: { slug: string }) {
         <TimelineTable events={filtered.timeline} teams={filtered.teams} startsAt={shell.bingo.effectiveStartsAt} />
       </Section>
 
-      <Section title="Titles">
+      <Section title="Titles" beta>
         <TitlesSection picked={titles} contributions={filtered.contributions} womReadAt={stats.womReadAt} />
       </Section>
 

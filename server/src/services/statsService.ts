@@ -510,28 +510,50 @@ export function getTitleFacts(
   const approved = count();
   const rejected = count();
   const posted = count();
+  // When each count last went up, for Title ties (PlayerTitleFacts.lastAt).
+  const stamp = () => new Map<string, Date>();
+  const mark = (m: Map<string, Date>, userId: string, at: Date) => {
+    const prev = m.get(userId);
+    if (!prev || at > prev) m.set(userId, at);
+  };
+  const approvedAt = stamp();
+  const rejectedAt = stamp();
+  const postedAt = stamp();
   for (const sub of db.select().from(submissions).where(inArray(submissions.teamId, teamIds)).all()) {
     // The poster counts only when they're on the Team (a Moderator posting for a Team isn't one of its Players).
     const postedByTeammate = sub.postedByUserId && sub.postedByUserId !== sub.submittedByUserId && teamByUser.get(sub.postedByUserId) === sub.teamId;
     if (sub.status === "approved") {
       bump(approved, sub.submittedByUserId);
-      if (postedByTeammate) bump(posted, sub.postedByUserId!);
+      mark(approvedAt, sub.submittedByUserId, sub.submittedAt);
+      if (postedByTeammate) {
+        bump(posted, sub.postedByUserId!);
+        mark(postedAt, sub.postedByUserId!, sub.submittedAt);
+      }
     } else if (sub.status === "rejected") {
-      bump(rejected, postedByTeammate ? sub.postedByUserId! : sub.submittedByUserId);
+      const who = postedByTeammate ? sub.postedByUserId! : sub.submittedByUserId;
+      bump(rejected, who);
+      mark(rejectedAt, who, sub.submittedAt);
     }
   }
 
   const items = new Map<string, Set<string>>();
   const quantity = count();
+  const newItemAt = stamp();
+  const itemAt = stamp();
   const itemClaims = db
-    .select({ userId: submissions.submittedByUserId, itemName: claims.itemName, quantity: claims.quantity })
+    .select({ userId: submissions.submittedByUserId, itemName: claims.itemName, quantity: claims.quantity, at: submissions.submittedAt })
     .from(claims)
     .innerJoin(submissions, eq(claims.submissionId, submissions.id))
     .where(and(inArray(submissions.teamId, teamIds), eq(submissions.status, "approved"), isNotNull(claims.itemName)))
+    .orderBy(submissions.submittedAt)
     .all();
   for (const c of itemClaims) {
-    items.set(c.userId, (items.get(c.userId) ?? new Set()).add(c.itemName!.toLowerCase()));
+    const mine = items.get(c.userId) ?? new Set<string>();
+    const name = c.itemName!.toLowerCase();
+    if (!mine.has(name)) mark(newItemAt, c.userId, c.at);
+    items.set(c.userId, mine.add(name));
     bump(quantity, c.userId, c.quantity);
+    mark(itemAt, c.userId, c.at);
   }
 
   const start = effectiveStartsAt(db, bingo);
@@ -567,6 +589,13 @@ export function getTitleFacts(
       wom: start && timeline ? gainsOf(timeline, start, end) : null,
       luck: luck.get(c.userId) ?? null,
       achievements: achievementTallies ? (achievementTallies.get(c.userId) ?? { earned: 0, lastEarnedAt: null }) : null,
+      lastAt: {
+        approved: approvedAt.get(c.userId)?.toISOString() ?? null,
+        rejected: rejectedAt.get(c.userId)?.toISOString() ?? null,
+        posted: postedAt.get(c.userId)?.toISOString() ?? null,
+        newItem: newItemAt.get(c.userId)?.toISOString() ?? null,
+        item: itemAt.get(c.userId)?.toISOString() ?? null,
+      },
     };
   });
 }

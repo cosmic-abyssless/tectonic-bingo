@@ -21,6 +21,7 @@ function player(userId: string, facts: Partial<PlayerTitleFacts> = {}): PlayerTi
     wom: null,
     luck: null,
     achievements: null,
+    lastAt: { approved: null, rejected: null, posted: null, newItem: null, item: null },
     ...facts,
   };
 }
@@ -57,9 +58,19 @@ describe("pickTitles", () => {
     expect(holdersOf(pool, "carry")).toEqual(["b"]);
   });
 
-  it("lets tied Players both hold a Title", () => {
-    const pool = [player("a", { pointsShare: 20 }), player("b", { pointsShare: 20 }), player("c", { pointsShare: 5 })];
-    expect(holdersOf(pool, "carry")).toEqual(["a", "b"]);
+  it("gives a tie to the Player holding fewer Titles", () => {
+    // Tied on Carry, but "a" already holds Collector outright.
+    const pool = [player("a", { pointsShare: 20, distinctItems: 5 }), player("b", { pointsShare: 20 }), player("c", { pointsShare: 5 })];
+    expect(holdersOf(pool, "carry")).toEqual(["b"]);
+    expect(holdersOf(pool, "collector")).toEqual(["a"]);
+  });
+
+  it("gives a tie between Players holding as many Titles to whoever got there first, and counts it for the next tie", () => {
+    // Tied on Carry and on Specialist (all their points from one tile). "b" got there first, so takes Carry; then "a"
+    // holds fewer, so takes Specialist.
+    const pool = [player("a", { pointsShare: 20, awards: [award(20, 10)] }), player("b", { pointsShare: 20, awards: [award(20, 5)] })];
+    expect(holdersOf(pool, "carry")).toEqual(["b"]);
+    expect(holdersOf(pool, "specialist")).toEqual(["a"]);
   });
 
   it("shows a visible Title nobody qualifies for with no holders", () => {
@@ -142,9 +153,9 @@ describe("luck Titles", () => {
     expect(holder.asOf).toBe(WOM.asOf);
   });
 
-  it("lets Players tied on luck share Spoon", () => {
+  it("gives a luck tie, which it can't time, to the Player listed first", () => {
     const spoon = { value: 1.5, itemName: "Ultor vestige", kills: 30 };
-    expect(holdersOf([lucky("a", { spoon }), lucky("b", { spoon })], "spoon")).toEqual(["a", "b"]);
+    expect(holdersOf([lucky("a", { spoon }), lucky("b", { spoon })], "spoon")).toEqual(["a"]);
   });
 
   it("leaves Spoon and Clutch empty, and Dry out, for Players below the floors", () => {
