@@ -117,6 +117,11 @@ A single visual cell on the Board.
 - **Rules:** A Tile is a presentation wrapper around one root requirement. It has a position on the grid, an optional category, an image, and optional notes.
 - **Composition:** A Tile contains one or more **Parts**.
 - **Synonyms (theme-specific):** Comic Issue, Comic Book (in the comic theme, clicking a Tile opens it as an issue/comic book).
+
+### Sealed Tiles
+A per-Bingo option under which, during Board revealed, Players and Captains see each Tile's art, name and Category but can't open it. Its Parts, Tasks, Items and points stay hidden until an Admin unseals the Tiles or the Bingo goes Live.
+- **Rules:** Moderators and Admins can always open Tiles. No Task interest can be marked while sealed. Exclusive Item lists are hidden while sealed, because they name Items. Whether the rules text is visible is a separate option.
+- **Avoid:** "locked Tiles". "Locked" already means a Task blocked by its conditions, and a Tile in its Freeze Period.
 - **Player experience:** Players click a Tile to open its details (or open the comic issue in comic theme).
 
 ### Part
@@ -154,7 +159,8 @@ A grouping label applied to Tiles (or rows/columns) to organize the Board themat
 A completed sequence of Tiles across the Board (row, column, diagonal, or custom line) that awards bonus points when every Tile in the sequence is completed.
 
 ### Freeze Period
-A mandatory delay configured on a Tile: once a team completes the Tile, other teams cannot score it (or it cannot be scored again) until the freeze duration expires.
+A delay configured on a Tile: for its duration after the Bingo starts, no Team can submit to that Tile.
+- **Rules:** It runs from the moment the Bingo counts as started, once, for every Team. It isn't tied to any Team completing the Tile.
 
 ---
 
