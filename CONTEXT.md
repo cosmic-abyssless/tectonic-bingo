@@ -69,7 +69,10 @@ A clan member who is part of a Bingo as a competitor: until Board revealed, anyo
 A player's registration for a specific Bingo, submitted during the `signup` stage.
 - **Status:** Active or Withdrawn.
 - **Rules:** Includes answers to custom signup questions set by the Admin (e.g. timezone, gear tier, OSRS RSN).
-- **Question types:** Short text, long text, yes/no, **single choice** (radio buttons, one option) and **multiple choice** (checkboxes, any number of options). A multiple-choice answer is stored as a JSON list and shown as "Melee, Magic"; a required one needs at least one option ticked.
+- **Question types:** Short text, long text, yes/no, **single choice** (radio buttons, one option) and **multiple choice** (checkboxes, any number of options). A multiple-choice answer is stored as a JSON list and shown as "Melee, Magic"; a required one needs at least one option ticked. A yes/no answer is shown as "Yes" or "No".
+- **Member pick:** A question type whose answer is one or several clan members (for example "Who would you like to play with?"), picked by searching. The list is every clan member who has logged in, except the person answering, each named by the RSN of their latest Signup or else their Discord name. "Several" can carry a maximum. A pick stays even if that member later leaves the clan.
+  - **Avoid:** Player picker (the people picked needn't be Players).
+- **Other option:** A single- or multiple-choice question can allow **Other**: an extra choice with a short free-text box, shown as "Melee, Other: hybrid". A required question counts Other with text as answered.
 - **Question helper text:** Each signup question can carry optional plain-text helper text (up to 500 characters), shown under it on the signup form. It is exported and imported with the Bingo.
 
 ### Duo
@@ -178,7 +181,7 @@ A single proof package submitted by a player on behalf of their Team to claim co
 
 ### Reaction
 An emoji a Player leaves on a Submission of their own Team, from a fixed set of five (🔥 🎉 😂 💀 👀).
-- **Rules:** Only members of the Submission's Team can react, to a Submission in any status (their own included). Each Player can leave each emoji once per Submission, and can take it back. Seen by the Team and Moderators only.
+- **Rules:** Only members of the Submission's Team can react, to a Submission in any status (their own included). Each Player can leave each emoji once per Submission, and can take it back. Seen by the Team and Moderators only, except in Rewind, which shows them to everyone once the Bingo is Finished.
 
 ### Screenshot
 An image attached to a Submission proving in-game completion.
@@ -280,3 +283,32 @@ A just-for-fun milestone a Player earns during a Bingo, e.g. "Strong start: subm
 - **Should work for anyone:** Every Achievement must be earnable, in theory, by any Player. A one-off honour ("first Submission of the Bingo") or a ranking ("most Achievements") is a Title, not an Achievement.
 - **Avoid:** Badge, Trophy, Medal.
 - **Not:** Combat Achievements (the in-game OSRS ones shown in a Player's clan standing), nor the clan's own honours shown beside a Player's name (Maxed, Grandmaster, Gilded log).
+
+---
+
+## Recap
+
+### Bingo Recap
+The look back at a Finished Bingo, in the spirit of a year-in-review: a family of features (Rewind first) that retell how the Bingo went.
+- **Rules:** Only for Finished Bingos, and open to everyone who can see the Bingo.
+
+### Rewind
+Playback of a Finished Bingo on its own Board: a timeline of its Submissions that the Board, the scoreboard and popups of the drops follow as it plays or is scrubbed.
+- **Clock:** Submission time (when the drop was posted), not approval time, so a batch of approvals doesn't clump drops together. Its scoreboard can therefore differ mid-way from the Stats points chart, which goes by approval; the end totals agree.
+- **Rules:** Only approved Submissions move the Board and the scoreboard. Rejected ones can be shown, off by default, stamped "Rejected", and never change anything. Point Adjustments count from when they were made.
+- **Not:** The Stats timeline, which lists scoring events by approval time.
+
+### Significance
+How much a Submission stands out in Rewind, from its Luck, GP value, Reactions, and what it completed (a Tile, a Line, a first to complete). Missing signals are left out, not counted as zero, so a very lucky pet with no GP value can still stand out.
+- **Tiers:** minor (its Tile only flashes), notable (a small popup) and huge (a big popup that holds longer).
+
+### Wrapped
+A scrolling story of a Finished Bingo, told from one Player's point of view: You, then your Duo and your Team, then the Bingo as a whole. It ends in shareable cards to compare with others.
+- **Audience:** Every Player gets their own. Anyone else who can view the Finished Bingo (e.g. a Moderator who didn't play) gets only the Bingo-wide part. A Captain also gets a section on their Draft, and a Moderator on their reviews.
+- **Publishing:** Hidden until a Moderator publishes it, which leaves time for the wrap-up with the Players. A Bingo can be set to publish it the moment it is Finished (off by default). Publishing fixes its numbers: they don't change afterwards unless a Moderator publishes it again.
+- **Avoid:** Recap for this feature alone (Recap is the family it belongs to).
+
+### Steal
+A Draft pick who finished far higher in Points share than their pick number suggested: a late pick near the top. A Duo counts as one pick.
+- **Rules:** Wrapped names steals, never the opposite: an early pick who scored low is not singled out.
+- **Title:** The Overperformer Title goes to the Player who beat their draft position by the most, which is the Bingo's biggest Steal among eligible Players. In a Duo, only the higher scorer can hold it.
