@@ -31,6 +31,8 @@ import { ThemedButton } from "./ui/ThemedButton";
 import { ComicMenu, ComicMenuItem } from "./ui/ComicMenu";
 import { ComicNotice, ComicPanel } from "./ui/ComicPanel";
 import { ComicReactionBar } from "./ui/ComicReactionBar";
+import { ComicTitleChip, ComicTitleGroupBox } from "./ui/ComicTitles";
+import { ComicBetaTag } from "./ui/ComicBetaTag";
 import { Halftone } from "./fx/Halftone";
 import { SignupStage } from "./signup/SignupStage";
 import { ComicDialog, ComicDialogHeader } from "./ui/ComicDialog";
@@ -158,6 +160,9 @@ const comicTheme: ThemeDefinition = {
     Notice: ComicNotice,
     ReactionBar: ComicReactionBar,
     Panel: ComicPanel,
+    TitleGroupBox: ComicTitleGroupBox,
+    TitleChip: ComicTitleChip,
+    BetaTag: ComicBetaTag,
     PageBackdrop: Halftone,
     DialogFrame: ComicDialog,
     DialogHeader: ComicDialogHeader,
