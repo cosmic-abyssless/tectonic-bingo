@@ -1,11 +1,15 @@
 // Title settings (#195): a Site admin tunes each Title's minimum, turns Titles off, and sets the luck weights, while
 // a Bingo is Live. Only what differs from the defaults is stored, so a changed default in shared/titles.ts still
 // applies wherever nobody overrode it. Titles are recalculated on every stats load, so a change shows at once.
+//
+// A Finished Bingo keeps its own copy (#221): on every move into Finished the settings in force, fully resolved, and
+// the Titles that exist are frozen onto it, so tuning for the next Bingo, a changed default or a new Title can't
+// change its Titles. Moving it out of Finished drops the copy, and it uses the global settings again.
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { DEFAULT_LUCK_WEIGHTS, DEFAULT_TITLE_SETTINGS, TITLES, type LuckWeights, type TitleId, type TitleSettings } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { siteSettings } from "../db/schema";
+import { bingoTitleSettings, siteSettings } from "../db/schema";
 import { now } from "../clock";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { ServiceError } from "./errors";
@@ -51,6 +55,52 @@ export function getTitleSettings(db: Db | Tx): TitleSettings {
   } catch {
     return DEFAULT_TITLE_SETTINGS;
   }
+}
+
+/** Every minimum spelled out, defaults included, so a later change to a default in code doesn't reach a frozen copy. */
+function spelledOut(settings: TitleSettings): TitleSettings {
+  const minimums: TitleSettings["minimums"] = {};
+  for (const title of TITLES) if (title.minimum) minimums[title.id] = settings.minimums[title.id] ?? title.minimum.default;
+  return { minimums, disabled: [...settings.disabled], luck: { ...settings.luck } };
+}
+
+/**
+ * Freezes the Title settings in force, and the Titles that exist, onto a Bingo moving to Finished (called in the stage
+ * change's transaction). A Bingo finished again gets a fresh copy.
+ */
+export function freezeTitleSettings(tx: Db | Tx, bingoId: string, at: Date): void {
+  const settingsJson = JSON.stringify(spelledOut(getTitleSettings(tx)));
+  const titleIdsJson = JSON.stringify(TITLES.map((t) => t.id));
+  tx.insert(bingoTitleSettings)
+    .values({ bingoId, settingsJson, titleIdsJson, frozenAt: at })
+    .onConflictDoUpdate({ target: bingoTitleSettings.bingoId, set: { settingsJson, titleIdsJson, frozenAt: at } })
+    .run();
+}
+
+/** Drops a Bingo's frozen copy, when it moves out of Finished: it uses the global settings again. */
+export function unfreezeTitleSettings(tx: Db | Tx, bingoId: string): void {
+  tx.delete(bingoTitleSettings).where(eq(bingoTitleSettings.bingoId, bingoId)).run();
+}
+
+/**
+ * The Title settings a Bingo's Titles are picked with: its frozen copy once it's Finished, the global settings
+ * otherwise. A Title that didn't exist when it finished is switched off for it, so picking leaves it out.
+ */
+export function getBingoTitleSettings(db: Db | Tx, bingo: { id: string; stage: string }): TitleSettings {
+  if (bingo.stage !== "complete") return getTitleSettings(db);
+  const row = db.select().from(bingoTitleSettings).where(eq(bingoTitleSettings.bingoId, bingo.id)).get();
+  if (!row) return getTitleSettings(db);
+  let settings: TitleSettings;
+  let titleIds: unknown;
+  try {
+    settings = resolve(JSON.parse(row.settingsJson));
+    titleIds = JSON.parse(row.titleIdsJson);
+  } catch {
+    return getTitleSettings(db);
+  }
+  const existed = new Set(Array.isArray(titleIds) ? titleIds : []);
+  const added = TITLES.filter((t) => !existed.has(t.id) && !settings.disabled.includes(t.id)).map((t) => t.id);
+  return { ...settings, disabled: [...settings.disabled, ...added] };
 }
 
 function validate(input: unknown): TitleSettings {

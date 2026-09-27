@@ -18,7 +18,7 @@ import { getDropRates } from "./luck/dropRates";
 import { BOSS_NAMES } from "./luck/bossSources";
 import type { WomSnapshot } from "./womService";
 import { now } from "../clock";
-import { getTitleSettings } from "./titleSettingsService";
+import { getBingoTitleSettings } from "./titleSettingsService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -491,11 +491,12 @@ export function getTitleFacts(
   contributions: ContributionCount[],
   teamCredits: TeamCredits[],
   shares = getPointsShares(db, bingoId, teamCredits),
-  luckWeights = getTitleSettings(db).luck,
+  luckWeights?: LuckWeights,
 ): PlayerTitleFacts[] {
   const teamIds = [...new Set(contributions.map((c) => c.teamId))];
   if (teamIds.length === 0) return [];
   const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get()!;
+  luckWeights ??= getBingoTitleSettings(db, bingo).luck;
 
   const stateRows = db.select().from(teamNodeState).where(inArray(teamNodeState.teamId, teamIds)).all();
   const completedAt = new Map(stateRows.map((r) => [`${r.teamId}:${r.nodeId}`, r.completedAt]));
@@ -612,7 +613,7 @@ export interface Stats {
   drops: GpDrop[];
   titleFacts: PlayerTitleFacts[];
   titleContext: { liveAt: Date | null; endedAt: Date | null };
-  /** The Site admin's Title settings: which Titles are on and their minimums, for picking holders. */
+  /** The Title settings for picking holders: which Titles are on and their minimums. A Finished Bingo's frozen copy (#221). */
   titleSettings: TitleSettings;
   womReadAt: Date | null;
 }
@@ -622,7 +623,7 @@ export function getStats(db: Db, bingoId: string): Stats {
   const shares = getPointsShares(db, bingoId, teamCredits);
   const contributions = getContributionCounts(db, bingoId, shares);
   const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get()!;
-  const titleSettings = getTitleSettings(db);
+  const titleSettings = getBingoTitleSettings(db, bingo);
   return {
     pointsOverTime: getPointsOverTime(db, bingoId),
     timeline: getTimeline(db, bingoId),

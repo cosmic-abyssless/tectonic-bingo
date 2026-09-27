@@ -698,6 +698,17 @@ export const siteSettings = sqliteTable('site_settings', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
 
+// A Finished Bingo's own copy of the Title settings (#221, CONTEXT.md "Title"), taken when it moved to Finished so
+// later Site admin changes and new Titles don't reach it. settingsJson is the fully resolved TitleSettings (every
+// minimum and luck weight, defaults included); titleIdsJson is every Title id that existed then. Replaced on every
+// move into Finished, deleted on any move out of it. See titleSettingsService.
+export const bingoTitleSettings = sqliteTable('bingo_title_settings', {
+  bingoId: text('bingo_id').primaryKey().references(() => bingos.id),
+  settingsJson: text('settings_json').notNull(),
+  titleIdsJson: text('title_ids_json').notNull(),
+  frozenAt: integer('frozen_at', { mode: 'timestamp' }).notNull(),
+});
+
 // Manual point adjustments applied by moderators. Also the only way to hand
 // out points outside the node graph (e.g. correcting a mistake) since nodes
 // no longer accept a per-submission points override.
