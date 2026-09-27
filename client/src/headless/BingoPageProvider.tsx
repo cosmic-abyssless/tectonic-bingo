@@ -1,15 +1,16 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { STAGE_LABEL, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
+import { STAGE_LABEL, areRulesHidden, areTilesSealed, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { useBingo, useBoard, useDraftState, usePendingCount, useRecordAchievementOpened, useSetSubmissionReaction, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { displayName, avatarUrl } from "../core/ui/user";
 import { useHasPassed } from "../core/ui/useHasPassed";
-import { toCategoryModel, toTeamModel, buildSubmissionModels } from "./boardModel";
+import { toCategoryModel, toTeamModel, buildSubmissionModels, sealedBoardAsTiles } from "./boardModel";
 import { lockedLeaves, type ExclusiveLocks } from "../core/board/exclusivity";
 import { useViewingTeam } from "./useViewingTeam";
 import { canViewStats as canViewStatsOf } from "./useBingoHeader";
-import { useTileSearch } from "./useTileSearch";
+import { tileSearchMatcher, useTileSearch } from "./useTileSearch";
+import { toastQueue } from "../core/ui/Toast";
 import { usePageEvents } from "./usePageEvents";
 import { BoardProvider } from "./BoardProvider";
 import type { BingoPageModel, StageView, TeamModel } from "./types";
@@ -41,6 +42,14 @@ const EMPTY_NODE_STATES: TeamNodeState[] = [];
 const EMPTY_INTERESTS: TileInterest[] = [];
 const EMPTY_SUBMISSIONS: SubmissionDetails[] = [];
 const EMPTY_ADJUSTMENTS: PointAdjustment[] = [];
+const EMPTY_CATEGORIES: TileCategory[] = [];
+
+// Clicking a sealed tile says so, once: a click on another replaces the note instead of stacking a new one.
+let sealedNoteKey: string | null = null;
+function showSealedNote() {
+  if (sealedNoteKey) toastQueue.close(sealedNoteKey);
+  sealedNoteKey = toastQueue.add({ title: "The Tiles are sealed", description: "They open at a later date." }, { timeout: 4000 });
+}
 
 export function BingoPageProvider({
   slug,
@@ -57,20 +66,27 @@ export function BingoPageProvider({
   const { user } = useAuth();
 
   const { data: shell, isLoading: shellLoading, error: shellError } = useBingo(slug);
-  const { data: boardData } = useBoard(slug);
-  const tiles = boardData?.tiles ?? EMPTY_TILES;
-  const lines = boardData?.lines ?? EMPTY_LINES;
+  // Someone who can't see the bingo gets only its landing data (the server refuses the rest), so nothing else is asked for.
+  const canSee = !!shell?.viewer.canSee;
+  const { data: boardData } = useBoard(canSee ? slug : undefined);
+  // Sealed Tiles (CONTEXT.md): the server decides, by sending this viewer the sealed board.
+  const sealed = !!boardData?.sealed;
+  const bingoId = shell?.bingo.id ?? "";
+  const { tiles, lines } = useMemo(
+    () => (!boardData ? { tiles: EMPTY_TILES, lines: EMPTY_LINES } : boardData.sealed ? sealedBoardAsTiles(boardData, bingoId) : boardData),
+    [boardData, bingoId],
+  );
 
   const { viewingTeamId, setViewingTeamId } = useViewingTeam(shell?.myTeam ?? null);
-  const { data: progressData } = useTeamProgress(slug, viewingTeamId ?? undefined);
+  const { data: progressData } = useTeamProgress(canSee ? slug : undefined, viewingTeamId ?? undefined);
   const setTileInterest = useSetTileInterest(slug);
   const setReaction = useSetSubmissionReaction(slug);
-  const { data: submissionsData } = useTeamSubmissions(slug, viewingTeamId ?? undefined);
+  const { data: submissionsData } = useTeamSubmissions(canSee ? slug : undefined, viewingTeamId ?? undefined);
   const { data: pendingData } = usePendingCount(slug, !!shell?.isMod);
   // Only fetches while actually on the draft stage — same net effect as the
   // old DraftStageView only ever mounting (and thus only ever querying)
   // while it was rendered, just expressed via TanStack Query's `enabled`.
-  const { data: draftState, isLoading: draftLoading } = useDraftState(shell?.bingo.stage === "draft" ? slug : undefined);
+  const { data: draftState, isLoading: draftLoading } = useDraftState(shell?.bingo.stage === "draft" && canSee ? slug : undefined);
 
   usePageEvents(shell);
   // Mirrors the server's submission gate: nothing can be submitted before startsAt.
@@ -92,11 +108,15 @@ export function BingoPageProvider({
   const recordOpened = useRecordAchievementOpened(slug);
   const eligibleForOpens = shell?.bingo.stage === "live" && !!shell?.myTeam;
   const openTileTracked = (tileId: string | null) => {
+    // A sealed tile doesn't open: the note says when it will.
+    if (tileId && sealed) return showSealedNote();
     setOpenTileId(tileId);
     if (tileId && eligibleForOpens) recordOpened.mutate({ kind: "tile", tileId });
   };
 
-  const search = useTileSearch(tiles, openTileTracked);
+  const shellCategories = shell?.categories ?? EMPTY_CATEGORIES;
+  const matchTile = useMemo(() => tileSearchMatcher(sealed, shellCategories), [sealed, shellCategories]);
+  const search = useTileSearch(tiles, matchTile, openTileTracked);
   const exclusivityRules = shell?.bingo.exclusivityRules;
   const locks = useMemo(() => lockedLeaves(exclusivityRules ?? [], tiles, submissionsData?.submissions ?? EMPTY_SUBMISSIONS), [exclusivityRules, tiles, submissionsData]);
 
@@ -109,28 +129,35 @@ export function BingoPageProvider({
   const interests = progressData?.interests ?? EMPTY_INTERESTS;
   const teamSubmissions = submissionsData?.submissions ?? EMPTY_SUBMISSIONS;
 
-  const isViewingOtherTeam = isMod && !!viewingTeamId && viewingTeamId !== myTeam?.id;
+  // Mods can look at any team's board; once the bingo is Finished, so can everyone (read-only).
+  const canPickTeam = isMod || bingo.stage === "complete";
+  const isViewingOtherTeam = canPickTeam && !!viewingTeamId && viewingTeamId !== myTeam?.id;
   // Mods can submit for the team they are viewing too (naming the player it is for), so this doesn't depend on whose team it is.
   const canSubmit = bingo.stage === "live" && hasStarted && !!viewingTeamId;
   // Hands go up on your own team's board only, from reveal onwards (the
-  // board isn't visible to players before that) until the bingo is over.
-  const canToggleInterest = !!myTeam && viewingTeamId === myTeam.id && (bingo.stage === "reveal" || bingo.stage === "live");
+  // board isn't visible to players before that) until the bingo is over,
+  // and not by anyone while the Tiles are sealed (the server refuses it).
+  const canToggleInterest = !!myTeam && viewingTeamId === myTeam.id && (bingo.stage === "reveal" || bingo.stage === "live") && !areTilesSealed(bingo);
   // Reactions are for teammates: on your own team's submissions, at any stage they're shown.
   const canReact = !!myTeam && viewingTeamId === myTeam.id;
   const canViewStats = canViewStatsOf(shell);
 
   // Exact branch order as the old BingoPage.tsx: signup -> planning|captains
-  // -> draft -> !viewingTeamId -> board.
+  // -> draft -> !viewingTeamId -> board, with anyone who isn't part of the
+  // bingo stopped at a notice once signups have closed (while they're open,
+  // the signup form is the landing page).
   const stageView: StageView =
     bingo.stage === "signup"
       ? "signup"
-      : bingo.stage === "planning" || bingo.stage === "captains"
-        ? bingo.stage
-        : bingo.stage === "draft"
-          ? "draft"
-          : !viewingTeamId
-            ? "noTeam"
-            : "board";
+      : !shell.viewer.canSee
+        ? "notPart"
+        : bingo.stage === "planning" || bingo.stage === "captains"
+          ? bingo.stage
+          : bingo.stage === "draft"
+            ? "draft"
+            : !viewingTeamId
+              ? "noTeam"
+              : "board";
 
   const teamModels = teams.map((t) => toTeamModel(t, myTeam?.id ?? null, user.id, bingo.stage));
   // shell.myTeam is the bare row; the roster lives on the matching entry in shell.teams.
@@ -155,6 +182,7 @@ export function BingoPageProvider({
       stage: bingo.stage,
       stageLabel: STAGE_LABEL[bingo.stage],
       rulesMarkdown: bingo.rulesMarkdown,
+      rulesComeLater: !isMod && areRulesHidden(bingo),
       startsAt: bingo.effectiveStartsAt ? new Date(bingo.effectiveStartsAt).getTime() : null,
       endsAt: bingo.endsAt ? new Date(bingo.endsAt).getTime() : null,
       boardRows: bingo.boardRows,
@@ -167,6 +195,8 @@ export function BingoPageProvider({
     teams: teamModels,
     categories: categoriesRaw.map(toCategoryModel),
     stageView,
+    isCut: shell.viewer.isCut,
+    canPickTeam,
     canViewStats,
     canRewind: bingo.stage === "complete",
     canScout,
@@ -183,6 +213,7 @@ export function BingoPageProvider({
     teamSelector: { teams: teamModels, selectedId: viewingTeamId, select: setViewingTeamId },
     search,
     openTile: { id: openTileId, open: openTileTracked, close: () => setOpenTileId(null) },
+    sealed: { forMe: sealed, forPlayers: areTilesSealed(bingo) },
     rules: {
       open: rulesOpen,
       show: () => {
@@ -253,6 +284,7 @@ export function BingoPageProvider({
           totalPoints={progressData?.totalPoints ?? null}
           adjustments={progressData?.adjustments ?? EMPTY_ADJUSTMENTS}
           locks={locks}
+          sealed={sealed}
         >
           {children}
         </BoardProvider>

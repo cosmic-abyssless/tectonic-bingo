@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { normalizeItemName, type ExclusivityRule, type ExclusivityScope, type ItemGroup } from "@bingo/shared";
 import { useItemGroups } from "../../api/adminQueries";
-import { useBoard } from "../../api/queries";
+import { fullBoard, useBoard } from "../../api/queries";
 import { boardItemSources, type ItemSource } from "../board/exclusivity";
 import { Button } from "../ui/Button";
 import { Field, Input } from "../ui/Field";
@@ -165,7 +165,7 @@ function RuleRow({
  */
 export function ExclusiveItemsSection({ slug, rules, onChange }: { slug: string; rules: ExclusivityRule[]; onChange: (rules: ExclusivityRule[]) => void }) {
   const groups = useItemGroups().data?.itemGroups ?? [];
-  const tiles = useBoard(slug).data?.tiles;
+  const tiles = fullBoard(useBoard(slug).data)?.tiles;
   const sources = useMemo(() => boardItemSources(tiles ?? []), [tiles]);
   const [sourceValue, setSourceValue] = useState("");
   const [name, setName] = useState("");

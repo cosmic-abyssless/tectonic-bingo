@@ -59,6 +59,7 @@ A designated player who leads a Team during a Bingo.
 A clan member who is part of a Bingo as a competitor: until Board revealed, anyone with an active Signup, except Cut signups once the Draft stage begins; from Board revealed on, anyone on a Team. A withdrawn signup is never a Player.
 - **Capabilities:** Sign up, view the board, make Submissions for their team, view team progress.
 - **Rules:** Belongs to exactly one Team per Bingo once drafted. Anyone who isn't a Player, Moderator or Admin is "not part of this Bingo": they see only its name and stage, plus the signup form while Signups are open. Once the Bingo is Finished, every clan member can view it read-only.
+- **Show screenshots once Finished:** A per-Bingo setting, on by default, that only Admins can change. Off, other Teams' screenshots are hidden from everyone but Moderators once the Bingo is Finished; the Submissions themselves stay visible, and a viewer's own Team's screenshots stay too.
 - **Name:** Inside a Bingo a Player is named by the RSN they signed up with, not their Discord name (rosters, submissions, stats, the audit log, the draft, the header). The server puts it on `rsn` for every user it sends within a Bingo, and `playerName` prefers it. An account with no Signup in that Bingo, like a Moderator who isn't playing, falls back to the Discord name, as do site-level lists. A Discord name is only shown where it is labelled as one (the "Discord" columns of the roster and draft room, the profile subtitle). Audit entries written before this keep the names they were stored with.
 
 ---
@@ -72,7 +73,7 @@ A player's registration for a specific Bingo, submitted during the `signup` stag
 - **Question types:** Short text, long text, yes/no, **single choice** (radio buttons, one option) and **multiple choice** (checkboxes, any number of options). A multiple-choice answer is stored as a JSON list and shown as "Melee, Magic"; a required one needs at least one option ticked. A yes/no answer is shown as "Yes" or "No".
 - **Member pick:** A question type whose answer is one or several clan members (for example "Who would you like to play with?"), picked by searching. The list is every clan member who has logged in, except the person answering, each named by the RSN of their latest Signup or else their Discord name. "Several" can carry a maximum. A pick stays even if that member later leaves the clan.
   - **Avoid:** Player picker (the people picked needn't be Players).
-- **Other option:** A single- or multiple-choice question can allow **Other**: an extra choice with a short free-text box, shown as "Melee, Other: hybrid". A required question counts Other with text as answered.
+- **Other option:** A single- or multiple-choice question can allow **Other**: an extra choice with a short free-text box (up to 100 characters), shown as "Melee, Other: hybrid". Other can't be picked without text, and a required question counts Other with text as answered. The setting is exported and imported with the Bingo.
 - **Question helper text:** Each signup question can carry optional plain-text helper text (up to 500 characters), shown under it on the signup form. It is exported and imported with the Bingo.
 
 ### Duo

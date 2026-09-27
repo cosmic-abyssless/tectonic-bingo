@@ -1,0 +1,1 @@
+ALTER TABLE `signup_questions` ADD `allow_other` integer DEFAULT false NOT NULL;

@@ -7,6 +7,7 @@ import { users } from "../db/schema";
 import { devPageAccess } from "../services/devPageAccessService";
 import { requireAuth } from "../middleware/requireAuth";
 import { noStore } from "../middleware/cacheControl";
+import { closeSocketsForSession } from "../ws";
 import { LINK_TTL_MS, createPhoneLoginLink, getPhoneLoginLinkStatus, previewPhoneLoginLink, redeemPhoneLoginLink } from "../services/phoneLoginService";
 
 const router = Router();
@@ -76,7 +77,11 @@ router.post("/phone-link/redeem", (req: Request, res: Response) => {
 
 // Logout
 router.post("/logout", (req: Request, res: Response) => {
+  // Logging out moves the browser to a fresh session id, so note the one its sockets were opened under first.
+  const sessionId = req.sessionID;
   req.logout((err) => {
+    // This browser's live-update sockets go too (other tabs included); they were let in on this login.
+    if (sessionId) closeSocketsForSession(sessionId);
     if (err) {
       return res.status(500).json({ error: "Logout failed" });
     }

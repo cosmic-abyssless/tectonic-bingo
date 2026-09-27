@@ -103,6 +103,8 @@ export interface ExportSignupQuestion {
   helperText?: string | null;
   type: SignupQuestionType;
   optionsJson: string | null;
+  /** Absent in files exported before choice questions could allow Other; imports as off. */
+  allowOther?: boolean;
   required: boolean;
   sortOrder: number;
   /** Absent in files exported before answers could be limited to mods/admins; imports as "captains". */
@@ -129,6 +131,12 @@ export interface BingoExportDocument {
     rulesMarkdown: string | null;
     /** Absent in older files: no exclusivity rules. */
     exclusivityRules?: ExclusivityRule[];
+    /** Sealed Tiles (CONTEXT.md). Absent in older files: off. */
+    sealedTiles?: boolean;
+    /** Hide the rules text during Board revealed. Absent in older files: off. */
+    hideRules?: boolean;
+    /** Absent in older files: shown (the app's default). */
+    showScreenshotsWhenFinished?: boolean;
   };
   categories: ExportCategory[];
   tiles: ExportTile[];

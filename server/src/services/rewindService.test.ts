@@ -10,7 +10,7 @@ import { createTask, createTile, generateLines } from "./boardService";
 import { approveSubmission, rejectSubmission } from "./scoringService";
 import { getTeamProgress } from "./teamService";
 import { awardedPoints, evaluateGraph, type EngineNode } from "./engine";
-import { getRewind, replayedStateAt, replayTeam, type ReplayClaim, type ReplaySubmission } from "./rewindService";
+import { getRewind, hideScreenshots, replayedStateAt, replayTeam, type ReplayClaim, type ReplaySubmission } from "./rewindService";
 import { ServiceError } from "./errors";
 
 // ---------------------------------------------------------------------------
@@ -315,5 +315,20 @@ describe("getRewind", () => {
     const loud = getRewind(db, db.select().from(bingos).where(eq(bingos.id, fx.bingo.id)).get()!).submissions[0]!;
     expect(loud.reactions).toHaveLength(5);
     expect(loud.significance.score).toBeGreaterThan(quiet.significance.score);
+  });
+
+  it("leaves out other Teams' screenshots for non-mods when screenshots aren't shown once Finished", () => {
+    const fx = seed();
+    const a = submitAt(fx.teamA.id, fx.alice.id, t(1), { nodeId: fx.head.id, itemName: "Vorkath's head" });
+    const b = submitAt(fx.teamB.id, fx.bob.id, t(2), { nodeId: fx.head.id, itemName: "Vorkath's head" });
+    for (const s of [a, b]) approveSubmission(db, { submissionId: s.id, reviewedByUserId: fx.mod.id });
+    const rewind = getRewind(db, finish(fx.bingo.id, fx.mod.id));
+    const urls = (r: RewindResponse) => Object.fromEntries(r.submissions.map((s) => [s.teamId, s.screenshotUrl]));
+
+    const hidden = urls(hideScreenshots(rewind, { isMod: false, myTeamId: fx.teamA.id, showScreenshotsWhenFinished: false }));
+    expect(hidden[fx.teamA.id]).toBe(`/uploads/${a.id}.png`);
+    expect(hidden[fx.teamB.id]).toBeNull();
+    expect(urls(hideScreenshots(rewind, { isMod: true, myTeamId: null, showScreenshotsWhenFinished: false }))[fx.teamB.id]).toBe(`/uploads/${b.id}.png`);
+    expect(urls(hideScreenshots(rewind, { isMod: false, myTeamId: null, showScreenshotsWhenFinished: true }))[fx.teamB.id]).toBe(`/uploads/${b.id}.png`);
   });
 });

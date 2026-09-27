@@ -166,9 +166,34 @@ describe("toViewerBingo", () => {
 
   it("keeps them out of the bingo list before the reveal", () => {
     withRules("signup");
-    const [listed] = listBingos(db);
+    const [listed] = listBingos(db, { id: "someone", isAdmin: true });
     expect(listed!.rulesMarkdown).toBeNull();
     expect(listed!.exclusivityRules).toEqual([]);
+  });
+
+  // CONTEXT.md "Sealed Tiles": the exclusive item lists name Items, so they stay back while the Tiles are sealed.
+  it("holds back the exclusive item lists from a player while the Tiles are sealed, but not from a mod", () => {
+    const bingo = db.update(bingos).set({ sealedTiles: true }).where(eq(bingos.id, withRules("reveal").id)).returning().get();
+    expect(toViewerBingo(bingo, false).exclusivityRules).toEqual([]);
+    expect(toViewerBingo(bingo, false).rulesMarkdown).toBe("Bring a Baron.");
+    expect(toViewerBingo(bingo, true).exclusivityRules).toEqual(rules);
+  });
+
+  it("holds back the rules text from a player during the reveal with Hide rules on, but not from a mod", () => {
+    const bingo = db.update(bingos).set({ hideRules: true }).where(eq(bingos.id, withRules("reveal").id)).returning().get();
+    expect(toViewerBingo(bingo, false).rulesMarkdown).toBeNull();
+    expect(toViewerBingo(bingo, false).exclusivityRules).toEqual(rules);
+    expect(toViewerBingo(bingo, true).rulesMarkdown).toBe("Bring a Baron.");
+  });
+
+  it("ignores both settings once the bingo is live", () => {
+    withRules("reveal");
+    db.update(bingos).set({ sealedTiles: true, hideRules: true }).run();
+    for (const stage of ["live", "complete"] as const) {
+      const seen = toViewerBingo(withRules(stage), false);
+      expect(seen.rulesMarkdown, stage).toBe("Bring a Baron.");
+      expect(seen.exclusivityRules, stage).toEqual(rules);
+    }
   });
 });
 

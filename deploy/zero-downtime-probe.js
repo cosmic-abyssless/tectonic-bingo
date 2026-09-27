@@ -1,6 +1,7 @@
 // Used only by deploy/test-zero-downtime.sh: a stand-in for a crowd of users, so a deploy can be judged by what they saw.
 // It requests the site continuously (the health check, the page, and an API call that reads the database) while
-// holding one WebSocket open, and counts every request that failed. Needs Node 22+ (global fetch and WebSocket).
+// holding one WebSocket open (logged in, as the socket requires), and counts every request that failed. Needs Node 22+
+// (global fetch and WebSocket).
 //
 // One behaviour is deliberately like a browser's: a GET that fails at the connection level (the connection was reset
 // before any response) is retried once at once, because that is what browsers do transparently when a reused keep-alive
@@ -62,14 +63,39 @@ async function worker(id) {
   }
 }
 
+// The WebSocket is only for a logged-in clan member: the probe logs in, through the dev login, as the user
+// test-zero-downtime.sh seeds. Sessions live in the database, so the one cookie holds across both colours.
+const PROBE_DISCORD_ID = "zero-downtime-probe";
+async function login() {
+  const response = await fetch(base + "/auth/dev-login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ discordId: PROBE_DISCORD_ID }),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) throw new Error(`dev login: status ${response.status}`);
+  return response.headers.get("set-cookie").split(";")[0];
+}
+
 // One long-lived WebSocket, reconnecting like the app's own client does, so the summary shows what a deploy does to it.
 async function socket() {
   const url = base.replace(/^http/, "ws") + "/ws";
+  let cookie = null;
   while (!stopping) {
+    if (!cookie) {
+      try {
+        cookie = await login();
+      } catch (err) {
+        result.websocket.loginFailures = (result.websocket.loginFailures ?? 0) + 1;
+        result.websocket.lastLoginError = String(err && err.message ? err.message : err);
+        await sleep(1000);
+        continue;
+      }
+    }
     await new Promise((resolve) => {
       let ws;
       try {
-        ws = new WebSocket(url);
+        ws = new WebSocket(url, { headers: { cookie } });
       } catch {
         resolve();
         return;

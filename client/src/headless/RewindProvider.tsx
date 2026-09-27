@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { BoardLine, RewindSubmission, TileInterest } from "@bingo/shared";
-import { useBoard, useRewind } from "../api/queries";
+import { fullBoard, useBoard, useRewind } from "../api/queries";
 import { thumbUrl } from "../api/imageVariants";
 import { useAuth } from "../context/AuthContext";
 import { NO_LOCKS } from "../core/board/exclusivity";
@@ -282,7 +282,7 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
     <BoardProvider
       tiles={raw.tiles}
       categories={raw.categories}
-      lines={boardData?.lines ?? EMPTY_LINES}
+      lines={fullBoard(boardData)?.lines ?? EMPTY_LINES}
       nodeStates={nodeStates}
       teamSubmissions={teamSubmissions}
       bingoStartsAt={raw.bingo.effectiveStartsAt}
@@ -296,6 +296,8 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
       totalPoints={teamPoints}
       adjustments={adjustments}
       locks={NO_LOCKS}
+      // A Finished Bingo's Tiles are never sealed.
+      sealed={false}
     >
       <WithOpenTile model={model}>{children}</WithOpenTile>
     </BoardProvider>

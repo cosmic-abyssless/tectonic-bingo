@@ -1,7 +1,8 @@
-import { useBingoPage, useBoardModel, useTileModel } from "../../../headless";
+import { RULES_COME_LATER, useBingoPage, useBoardModel, useTileModel } from "../../../headless";
 import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
 import { useScreenshotCapture } from "../../../headless/useScreenshotCapture";
 import { ScreenshotDropOverlay } from "../../../core/ui/ScreenshotDropOverlay";
+import { SealedTilesNotice } from "../../../core/board/SealedTilesNotice";
 import { useSlot } from "../../context";
 import { ComicPage } from "../fx/ComicPage";
 import { SubmitButton } from "./SubmitButton";
@@ -23,6 +24,7 @@ export function BoardPageLayout() {
   const PlanningStage = useSlot("PlanningStage");
   const DraftStage = useSlot("DraftStage");
   const NoTeamStage = useSlot("NoTeamStage");
+  const NotPartStage = useSlot("NotPartStage");
   const TileSearch = useSlot("TileSearch");
   const BoardGrid = useSlot("BoardGrid");
   const RulesDialog = useSlot("RulesDialog");
@@ -40,6 +42,8 @@ export function BoardPageLayout() {
         {page.canScout && <ScoutBanner onOpen={page.actions.goToDraft} />}
         {page.stageView === "signup" ? (
           <SignupStage slug={page.slug} />
+        ) : page.stageView === "notPart" ? (
+          <NotPartStage isCut={page.isCut} />
         ) : page.stageView === "planning" || page.stageView === "captains" ? (
           <PlanningStage stage={page.stageView} />
         ) : page.stageView === "draft" ? (
@@ -49,15 +53,17 @@ export function BoardPageLayout() {
             onOpenDraft={page.actions.goToDraft}
           />
         ) : page.stageView === "noTeam" ? (
-          <NoTeamStage isMod={page.isMod} selector={page.isMod ? page.teamSelector : undefined} />
+          <NoTeamStage selector={page.teamSelector} />
         ) : (
           <>
+            {page.isMod && page.sealed.forPlayers && <SealedTilesNotice slug={page.slug} />}
             <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
               <TileSearch search={page.search} />
               {/* One control for the team: identity, score, the team dialog,
-                  and (mods) the team switcher. A mod with no team picked
-                  yet still gets it, as the "Select team" menu. */}
-              {(page.viewing.team || (page.isMod && page.teams.length > 0)) && (
+                  and (mods, and everyone once Finished) the team switcher.
+                  Someone who can pick a team but hasn't yet still gets it,
+                  as the "Select team" menu. */}
+              {(page.viewing.team || (page.canPickTeam && page.teams.length > 0)) && (
                 // On a phone this row is the banner filling the space with
                 // Submit to its right (Submit leaves the masthead there), and it
                 // sits above the search box rather than under it.
@@ -69,7 +75,7 @@ export function BoardPageLayout() {
                       totalPoints={board.totalPoints}
                       onOpen={page.teamInfo.show}
                       onOpenPoints={page.pointBreakdown.show}
-                      selector={page.isMod && page.teams.length > 0 ? page.teamSelector : undefined}
+                      selector={page.canPickTeam && page.teams.length > 0 ? page.teamSelector : undefined}
                     />
                   </div>
                   {page.canSubmit && <SubmitButton onPress={() => page.submit.show()} className="shrink-0 md:hidden" />}
@@ -98,7 +104,7 @@ export function BoardPageLayout() {
 
       <RulesDialog
         isOpen={page.rules.open}
-        markdown={page.bingo.rulesMarkdown ?? ""}
+        markdown={page.bingo.rulesComeLater ? RULES_COME_LATER : (page.bingo.rulesMarkdown ?? "")}
         onClose={page.rules.hide}
       />
 

@@ -164,3 +164,8 @@ export function tileMatchesSearch(tile: Tile, q: string): boolean {
     (task) => (task.description ?? "").toLowerCase().includes(q) || collectItemNames(task).some((n) => n.toLowerCase().includes(q)),
   );
 }
+
+// While the Tiles are sealed (CONTEXT.md "Sealed Tiles") a tile can only be found by its name and its Category.
+export function sealedTileMatchesSearch(tile: Pick<Tile, "name">, categoryLabel: string | null, q: string): boolean {
+  return tile.name.toLowerCase().includes(q) || (categoryLabel ?? "").toLowerCase().includes(q);
+}

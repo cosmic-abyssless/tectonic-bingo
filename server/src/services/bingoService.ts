@@ -39,6 +39,7 @@ import { ServiceError } from "./errors";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 import { rsnsInBingo } from "./playerNames";
+import { PUBLIC_USER_COLS } from "./userService";
 import * as achievementService from "./achievementService";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -50,9 +51,19 @@ export type Stage = (typeof STAGE_ORDER)[number];
 // bingos[0] as the "default" bingo (issue #3: simpler than an env var,
 // since there's realistically only ever one active bingo at a time).
 // The list is for picking a bingo, so it never carries the rules text or the exclusive item lists (which need
-// the board revealed; see toViewerBingo).
-export function listBingos(db: Db) {
-  return db.select().from(bingos).orderBy(desc(bingos.createdAt)).all().map((b) => toViewerBingo(b, false));
+// the board revealed; see toViewerBingo). A Planning bingo is left out for anyone but its Moderators and Admins
+// (CONTEXT.md "Stage"), so nobody else is redirected to one either; every other stage is listed to every clan member.
+export function listBingos(db: Db, viewer: { id: string; isAdmin: boolean }) {
+  const modOf = viewer.isAdmin
+    ? null
+    : new Set(db.select({ bingoId: bingoModerators.bingoId }).from(bingoModerators).where(eq(bingoModerators.userId, viewer.id)).all().map((r) => r.bingoId));
+  return db
+    .select()
+    .from(bingos)
+    .orderBy(desc(bingos.createdAt))
+    .all()
+    .filter((b) => b.stage !== "planning" || !modOf || modOf.has(b.id))
+    .map((b) => toViewerBingo(b, false));
 }
 
 export function getBingoBySlug(db: Db, slug: string) {
@@ -74,12 +85,18 @@ export function toPublicBingo<T extends { womGroupVerificationCode: string | nul
 /**
  * A bingo as one viewer may see it. The rules text and the exclusive item lists describe the board (which items
  * are on it), so a player gets neither until the board is revealed, the same point tiles become visible. Mods
- * always see them.
+ * always see them. During Board revealed, Sealed Tiles keeps back the exclusive item lists (they name Items) and
+ * Hide rules keeps back the rules text (CONTEXT.md "Sealed Tiles").
  */
 export function toViewerBingo<T extends typeof bingos.$inferSelect>(bingo: T, isMod: boolean) {
   const publicBingo = toPublicBingo(bingo);
-  if (isMod || isBoardRevealed(bingo)) return publicBingo;
-  return { ...publicBingo, rulesMarkdown: null, exclusivityRules: [] as ExclusivityRule[] };
+  if (isMod) return publicBingo;
+  if (!isBoardRevealed(bingo)) return { ...publicBingo, rulesMarkdown: null, exclusivityRules: [] as ExclusivityRule[] };
+  return {
+    ...publicBingo,
+    ...(areRulesHidden(bingo) ? { rulesMarkdown: null } : {}),
+    ...(areTilesSealed(bingo) ? { exclusivityRules: [] as ExclusivityRule[] } : {}),
+  };
 }
 
 const MAX_EXCLUSIVITY_RULES = 50;
@@ -164,6 +181,19 @@ export function isBoardRevealed(bingo: typeof bingos.$inferSelect): boolean {
 // can always see them (for building/testing the board before reveal).
 export function canViewTiles(bingo: typeof bingos.$inferSelect, isMod: boolean): boolean {
   return isMod || isBoardRevealed(bingo);
+}
+
+// Sealed Tiles (CONTEXT.md): only ever during Board revealed, so it ends by itself at Live. While sealed, Players
+// and Captains get only a Tile's art, name and Category (boardService.getSealedBoard), no exclusive item lists,
+// and nobody can mark Task interest. Mods see everything. Mirrors areTilesSealed in @bingo/shared.
+export function areTilesSealed(bingo: Pick<typeof bingos.$inferSelect, "stage" | "sealedTiles">): boolean {
+  return bingo.sealedTiles && bingo.stage === "reveal";
+}
+
+// Hide rules: during Board revealed, the rules text is held back from Players and Captains. Independent of
+// Sealed Tiles. Mirrors areRulesHidden in @bingo/shared.
+export function areRulesHidden(bingo: Pick<typeof bingos.$inferSelect, "stage" | "hideRules">): boolean {
+  return bingo.hideRules && bingo.stage === "reveal";
 }
 
 export interface CreateBingoParams {
@@ -353,7 +383,7 @@ export function removeModerator(db: Db, params: { bingoId: string; userId: strin
 
 export function getModerators(db: Db, bingoId: string) {
   const rows = db
-    .select({ id: bingoModerators.id, bingoId: bingoModerators.bingoId, userId: bingoModerators.userId, createdAt: bingoModerators.createdAt, user: users })
+    .select({ id: bingoModerators.id, bingoId: bingoModerators.bingoId, userId: bingoModerators.userId, createdAt: bingoModerators.createdAt, user: PUBLIC_USER_COLS })
     .from(bingoModerators)
     .innerJoin(users, eq(bingoModerators.userId, users.id))
     .where(eq(bingoModerators.bingoId, bingoId))
@@ -373,6 +403,8 @@ export interface UpdateBingoSettingsParams {
   bonusPotAmount?: number;
   rulesMarkdown?: string | null;
   exclusivityRules?: ExclusivityRule[];
+  sealedTiles?: boolean;
+  hideRules?: boolean;
   signupOpensAt?: Date | null;
   draftScheduledAt?: Date | null;
   revealScheduledAt?: Date | null;
@@ -385,6 +417,7 @@ export interface UpdateBingoSettingsParams {
   // switches live in their own table and are applied separately (see achievementService.applyAchievementSwitches).
   achievementsEnabled?: boolean;
   achievements?: Partial<Record<AchievementKey, boolean>>;
+  showScreenshotsWhenFinished?: boolean;
 }
 
 export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingoSettingsParams) {

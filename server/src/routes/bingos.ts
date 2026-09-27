@@ -1,8 +1,8 @@
 import { devSkipsOcr } from "../devMode";
 import { privateRevalidate } from "../middleware/cacheControl";
-import { Router } from "express";
+import { Router, type Request } from "express";
 import fs from "fs";
-import type { AccountTypesResponse, ClaimInput, PlayerProfile } from "@bingo/shared";
+import type { AccountTypesResponse, AuditLogResponse, ClaimInput, PlayerProfile } from "@bingo/shared";
 import { isAchievementKey } from "@bingo/shared";
 import { now as clockNow } from "../clock";
 import * as achievementService from "../services/achievementService";
@@ -10,6 +10,8 @@ import { UPLOADS_DIR } from "../config";
 import { imageUpload } from "../middleware/upload";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireBingo } from "../middleware/requireBingo";
+import { requireBingoViewer } from "../middleware/requireBingoViewer";
+import { getBingoAccess, isPartOfBingo } from "../services/bingoAccess";
 import { asyncHandler } from "../middleware/errorHandler";
 import { db } from "../db";
 import * as bingoService from "../services/bingoService";
@@ -73,11 +75,17 @@ const router = Router();
 
 // Every route here needs a login: the shell carries each team's roster (players' Discord accounts and RSNs), so
 // nothing about a bingo is served to an anonymous request (see requireLogin.test.ts).
+//
+// Past the login, a bingo's content is for the people who can see it (CONTEXT.md "Player"; services/bingoAccess.ts):
+// its Players, Moderators and Admins, and every clan member once it's Finished. A Planning bingo 404s for anyone else
+// (requireBingo). Everyone else gets the shell's landing data (name, stage, dates, buy-in: the signup form while
+// signups are open, a "not part of this bingo" notice after), and every content route below carries
+// requireBingoViewer (see bingoAccess.test.ts).
 router.get(
   "/",
   requireAuth,
-  asyncHandler(async (_req, res) => {
-    res.json({ bingos: bingoService.listBingos(db) });
+  asyncHandler(async (req, res) => {
+    res.json({ bingos: bingoService.listBingos(db, req.user!) });
   }),
 );
 
@@ -88,20 +96,23 @@ router.get(
   privateRevalidate,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
-    const isMod = req.user ? bingoService.isBingoMod(db, bingo.id, req.user.id, req.user.isAdmin) : false;
-    const myTeam = req.user ? teamService.getUserTeamForBingo(db, bingo.id, req.user.id) : null;
+    const { isMod, ...viewer } = getBingoAccess(db, bingo, req.user!);
     const paidSignupCount = signupService.getPaidSignupCount(db, bingo.id);
+    const viewerBingo = bingoService.toViewerBingo(bingo, isMod);
     res.json({
       // effectiveStartsAt: when the bingo counts as started (see bingoStart.ts) — the settings' start date, or else
       // when it was last put live. The client runs tile freezes and "has it started" from this, not from startsAt.
-      bingo: { ...bingoService.toViewerBingo(bingo, isMod), effectiveStartsAt: effectiveStartsAt(db, bingo) },
-      categories: boardService.getCategories(db, bingo.id),
-      teams: teamService.getTeamsWithMembers(db, bingo.id),
+      // Someone who can't see the bingo gets no rules or exclusive items (they describe the board), no board
+      // categories and no rosters.
+      bingo: { ...viewerBingo, ...(viewer.canSee ? {} : { rulesMarkdown: null, exclusivityRules: [] }), effectiveStartsAt: effectiveStartsAt(db, bingo) },
+      categories: viewer.canSee ? boardService.getCategories(db, bingo.id) : [],
+      teams: viewer.canSee ? teamService.getTeamsWithMembers(db, bingo.id) : [],
       isMod,
-      myTeam,
+      myTeam: viewer.canSee ? teamService.getUserTeamForBingo(db, bingo.id, req.user!.id) : null,
       paidSignupCount,
       potTotal: bingoService.calculatePotTotal(bingo, paidSignupCount),
       hasSignups: signupService.hasAnySignup(db, bingo.id),
+      viewer,
     });
   }),
 );
@@ -110,15 +121,12 @@ router.get(
   "/:slug/board",
   requireAuth,
   requireBingo,
+  requireBingoViewer,
   privateRevalidate,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
-    const isMod = req.user ? bingoService.isBingoMod(db, bingo.id, req.user.id, req.user.isAdmin) : false;
-    const canView = bingoService.canViewTiles(bingo, isMod);
-    res.json({
-      tiles: canView ? boardService.getBoardTiles(db, bingo.id) : [],
-      lines: canView ? boardService.getBoardLines(db, bingo.id) : [],
-    });
+    const isMod = req.bingoAccess!.isMod;
+    res.json(boardService.getBoardForViewer(db, bingo, isMod));
   }),
 );
 
@@ -130,9 +138,10 @@ router.get(
   "/:slug/stats",
   requireAuth,
   requireBingo,
+  requireBingoViewer,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
-    const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
+    const isMod = req.bingoAccess!.isMod;
     const seesEveryTeam = isMod || bingo.stage === "complete";
     const myTeam = seesEveryTeam ? null : teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
     if (!seesEveryTeam && (bingo.stage !== "live" || !myTeam)) throw new ServiceError(403, "Stats aren't visible until the bingo is complete");
@@ -142,13 +151,19 @@ router.get(
 );
 
 // Rewind (CONTEXT.md): a Finished Bingo played back on its Board. Open to everyone who can view the Bingo, and only
-// once it's Finished, when every Team's progress (and, in Rewind only, their Reactions) is visible to all.
+// once it's Finished, when every Team's progress (and, in Rewind only, their Reactions) is visible to all. With "Show
+// screenshots once Finished" off, other Teams' screenshots are left out for anyone but the mods, as in their
+// submission lists.
 router.get(
   "/:slug/rewind",
   requireAuth,
   requireBingo,
+  requireBingoViewer,
   asyncHandler(async (req, res) => {
-    res.json(rewindService.getRewind(db, req.bingo!));
+    const bingo = req.bingo!;
+    const rewind = rewindService.getRewind(db, bingo);
+    const myTeamId = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id)?.id ?? null;
+    res.json(rewindService.hideScreenshots(rewind, { isMod: req.bingoAccess!.isMod, myTeamId, showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished }));
   }),
 );
 
@@ -156,36 +171,56 @@ router.get(
   "/:slug/teams/:teamId/progress",
   requireAuth,
   requireBingo,
+  requireBingoViewer,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
     const teamId = req.params.teamId as string;
     const team = teamService.getTeamById(db, teamId);
     if (!team || team.bingoId !== bingo.id) throw new ServiceError(404, "Team not found");
 
-    const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
+    const isMod = req.bingoAccess!.isMod;
     const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
     if (!isMod && bingo.stage !== "complete" && myTeam?.id !== teamId) {
       throw new ServiceError(403, "Other teams' progress isn't visible until the bingo is complete");
     }
-    res.json(teamService.getTeamProgress(db, teamId));
+    res.json(teamService.getTeamProgressForViewer(db, bingo, teamId, isMod));
   }),
 );
+
+// A team's submissions and activity: its own players and the mods while the bingo runs; everyone who can see it once
+// it's Finished. Then, with "Show screenshots once Finished" off, other teams' screenshots are left out for anyone but
+// the mods (the submission records themselves stay).
+function teamHistoryAccess(req: Request, teamId: string, what: string) {
+  const bingo = req.bingo!;
+  const team = teamService.getTeamById(db, teamId);
+  if (!team || team.bingoId !== bingo.id) throw new ServiceError(404, "Team not found");
+  const isMod = req.bingoAccess!.isMod;
+  const ownTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id)?.id === teamId;
+  if (!isMod && !ownTeam && bingo.stage !== "complete") throw new ServiceError(403, `Other teams' ${what} isn't visible until the bingo is complete`);
+  return { isMod, hideScreenshots: !isMod && !ownTeam && !bingo.showScreenshotsWhenFinished };
+}
+
+// A submission's activity entry names its screenshot too.
+function withoutScreenshotUrls(activity: AuditLogResponse): AuditLogResponse {
+  return {
+    ...activity,
+    entries: activity.entries.map((e) => {
+      if (!e.details || typeof e.details !== "object" || !("screenshotUrl" in e.details)) return e;
+      const { screenshotUrl: _screenshotUrl, ...details } = e.details as Record<string, unknown>;
+      return { ...e, details };
+    }),
+  };
+}
 
 router.get(
   "/:slug/teams/:teamId/submissions",
   requireAuth,
   requireBingo,
+  requireBingoViewer,
   asyncHandler(async (req, res) => {
-    const bingo = req.bingo!;
-    const teamId = req.params.teamId as string;
-    const team = teamService.getTeamById(db, teamId);
-    if (!team || team.bingoId !== bingo.id) throw new ServiceError(404, "Team not found");
-
-    const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
-    const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
-    if (!isMod && myTeam?.id !== teamId) throw new ServiceError(403, "Not allowed to view another team's submissions");
-
-    res.json({ submissions: submissionService.getTeamSubmissions(db, teamId) });
+    const { hideScreenshots } = teamHistoryAccess(req, req.params.teamId as string, "submissions");
+    const submissions = submissionService.getTeamSubmissions(db, req.params.teamId as string);
+    res.json({ submissions: hideScreenshots ? submissions.map((s) => ({ ...s, screenshots: [] })) : submissions });
   }),
 );
 
@@ -193,20 +228,17 @@ router.get(
   "/:slug/teams/:teamId/activity",
   requireAuth,
   requireBingo,
+  requireBingoViewer,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
     const teamId = req.params.teamId as string;
-    const team = teamService.getTeamById(db, teamId);
-    if (!team || team.bingoId !== bingo.id) throw new ServiceError(404, "Team not found");
-
-    const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
-    const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
-    if (!isMod && myTeam?.id !== teamId) throw new ServiceError(403, "Not allowed to view another team's activity");
+    const { isMod, hideScreenshots } = teamHistoryAccess(req, teamId, "activity");
 
     const cursor = req.query.cursor ? Number(req.query.cursor) : undefined;
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
     const condensed = req.query.condensed === "1" || req.query.condensed === "true";
-    res.json(queryTeamActivity(db, bingo.id, teamId, { isMod, cursor, limit, condensed }));
+    const activity = queryTeamActivity(db, bingo.id, teamId, { isMod, cursor, limit, condensed });
+    res.json(hideScreenshots ? withoutScreenshotUrls(activity) : activity);
   }),
 );
 
@@ -284,6 +316,8 @@ router.post(
   auditSkip("read-only OCR analysis — no state changes"),
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
+    // Before anything reads the board: outside live, a match would tell anyone which tile holds an item. Mods included.
+    submissionService.assertSubmissionsOpen(bingo);
     // The codeword to look for is the team the screenshot is being submitted to (a mod may name another team).
     const team = resolveSubmissionTeam(db, bingo, req.user!, (req.body as { teamId?: string }).teamId);
     if (!req.file) throw new ServiceError(400, "Screenshot is required");
@@ -303,11 +337,13 @@ router.post(
 // Signup
 // ---------------------------------------------------------------------------
 
+// The signup form's questions: for anyone while signups are open, and afterwards for whoever can see the bingo.
 router.get(
   "/:slug/signup/questions",
   requireAuth,
   requireBingo,
   asyncHandler(async (req, res) => {
+    if (req.bingo!.stage !== "signup" && !getBingoAccess(db, req.bingo!, req.user!).canSee) throw new ServiceError(403, "You're not part of this bingo");
     res.json({ questions: signupService.getQuestions(db, req.bingo!.id) });
   }),
 );
@@ -427,6 +463,15 @@ router.delete(
 
 const me = (req: { user?: { id: string; discordId: string } }) => ({ id: req.user!.id, discordId: req.user!.discordId });
 
+// The signup helpers (who to pair with, who's unpaired, your pairing) are for the signup form: they answer while
+// signups are open, and to the bingo's mods at any time. The pairing actions keep their own stage rules
+// (pairingService).
+function assertSignupHelpersOpen(req: Request): void {
+  if (req.bingo!.stage === "signup") return;
+  if (bingoService.isBingoMod(db, req.bingo!.id, req.user!.id, req.user!.isAdmin)) return;
+  throw new ServiceError(403, "Signups are closed");
+}
+
 // Who a player may request as a duo: the whole clan roster when tectonic-api
 // is configured, otherwise (dev / no integration) everyone signed up so far.
 router.get(
@@ -434,6 +479,7 @@ router.get(
   requireAuth,
   requireBingo,
   asyncHandler(async (req, res) => {
+    assertSignupHelpersOpen(req);
     const client = getTectonicClient();
     let candidates: { discordId: string; rsns: string[] }[];
     if (client) {
@@ -449,7 +495,7 @@ router.get(
         .filter((r) => r.signup.status === "active")
         .map((r) => ({ discordId: r.user.discordId, rsns: [r.signup.rsn] }));
     }
-    const userByDiscordId = new Map(userService.getUsersByDiscordIds(db, candidates.map((c) => c.discordId)).map((u) => [u.discordId, u]));
+    const userByDiscordId = new Map(userService.getPublicUsersByDiscordIds(db, req.bingo!.id, candidates.map((c) => c.discordId)).map((u) => [u.discordId, u]));
     res.json({
       candidates: candidates
         .filter((c) => c.discordId !== req.user!.discordId)
@@ -464,6 +510,7 @@ router.get(
   requireAuth,
   requireBingo,
   asyncHandler(async (req, res) => {
+    assertSignupHelpersOpen(req);
     const players = req.bingo!.signupMode === "duo" ? pairingService.getUnpairedSignups(db, req.bingo!.id, req.user!.id) : [];
     res.json({ players });
   }),
@@ -474,6 +521,7 @@ router.get(
   requireAuth,
   requireBingo,
   asyncHandler(async (req, res) => {
+    assertSignupHelpersOpen(req);
     const state = pairingService.getPairingState(db, req.bingo!.id, me(req));
     await applyRosterNames(partiesInPairingState(state));
     res.json(state);
@@ -529,11 +577,10 @@ router.get(
   requireBingo,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
-    const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
+    const { isMod, canSee } = getBingoAccess(db, bingo, req.user!);
     const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
     const isLead = !!myTeam && teamService.isTeamLead(db, myTeam.id, req.user!.id);
-    const isSignedUp = !!signupService.getSignupForUser(db, bingo.id, req.user!.id)?.signup;
-    if (!draftService.canViewDraftRoom(bingo.stage, { isMod, isLead, isOnTeam: !!myTeam, isSignedUp })) {
+    if (!draftService.canViewDraftRoom(bingo.stage, { isMod, isLead, canSeeBingo: canSee })) {
       throw new ServiceError(403, draftService.draftRoomForbiddenMessage(bingo.stage));
     }
 
@@ -579,31 +626,36 @@ router.get(
   }),
 );
 
-// Every signed-up player's account type (ironman, UIM…), for the badge beside their name wherever it's shown.
+// Every signed-up player's account type (ironman, UIM…), for the badge beside their name wherever it's shown. Every
+// bingo page asks for it, so someone who can't see the bingo gets none rather than an error.
 router.get(
   "/:slug/account-types",
   requireAuth,
   requireBingo,
   asyncHandler(async (req, res) => {
-    const response: AccountTypesResponse = { accountTypes: getAccountTypes(db, req.bingo!.id) };
+    const canSee = getBingoAccess(db, req.bingo!, req.user!).canSee;
+    const response: AccountTypesResponse = { accountTypes: canSee ? getAccountTypes(db, req.bingo!.id) : {} };
     res.json(response);
   }),
 );
 
 // One player's card, opened from any name on the page. Same data as a draft
-// pool entry, plus it works for players who are already on a team (or never
-// signed up at all — then it's clan standing only).
+// pool entry, plus it works for players who are already on a team. The viewer
+// has to be able to see the bingo, and the card's subject has to be in it (an
+// active signup, or on a team); mods can open anyone's (then someone who never
+// signed up is clan standing only).
 router.get(
   "/:slug/players/:userId",
   requireAuth,
   requireBingo,
+  requireBingoViewer,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
     const userId = req.params.userId as string;
     const user = userService.getMinimalUser(db, userId);
-    if (!user) throw new ServiceError(404, "Player not found");
+    const isMod = req.bingoAccess!.isMod;
+    if (!user || (!isMod && !isPartOfBingo(db, bingo.id, userId))) throw new ServiceError(404, "Player not found");
 
-    const isMod = bingoService.isBingoMod(db, bingo.id, req.user!.id, req.user!.isAdmin);
     const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
     // Signup answers follow the draft room's rule: mods always, team leads while scouting and drafting.
     const seesAnswers = signupService.seesProfileAnswers({ isMod, isTeamLead: !!myTeam && teamService.isTeamLead(db, myTeam.id, req.user!.id) }, bingo.stage);
@@ -743,6 +795,7 @@ router.get(
   "/:slug/achievements",
   requireAuth,
   requireBingo,
+  requireBingoViewer,
   asyncHandler(async (req, res) => {
     res.json(achievementService.getMyAchievements(db, req.bingo!, req.user!.id));
   }),

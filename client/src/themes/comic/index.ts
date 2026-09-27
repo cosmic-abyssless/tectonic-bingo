@@ -24,6 +24,7 @@ import { RulesDialog } from "./page/RulesDialog";
 import { TeamInfoDialog } from "./page/TeamInfoDialog";
 import { PointBreakdownDialog } from "./page/PointBreakdownDialog";
 import { NoTeamStage } from "./page/NoTeamStage";
+import { NotPartStage } from "./page/NotPartStage";
 import { PlanningStage } from "./page/PlanningStage";
 import { ScoutBanner } from "./page/ScoutBanner";
 import { BugReportButton } from "./page/BugReportButton";
@@ -150,6 +151,7 @@ const comicTheme: ThemeDefinition = {
     TeamInfoDialog,
     PointBreakdownDialog,
     NoTeamStage,
+    NotPartStage,
     PlanningStage,
     ScoutBanner,
     SignupStage,

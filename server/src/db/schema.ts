@@ -104,6 +104,15 @@ export const bingos = sqliteTable('bingos', {
   // Achievements master switch (CONTEXT.md "Achievement"): off hides every Achievement from reads, counts and
   // popups, but earning keeps happening in the background — see achievementService.ts and bingoAchievementSettings.
   achievementsEnabled: integer('achievements_enabled', { mode: 'boolean' }).notNull().default(true),
+  // Sealed Tiles (CONTEXT.md): during Board revealed, Players and Captains see each Tile's art, name and Category
+  // only and can't open it. No effect in any other stage. See bingoService.areTilesSealed.
+  sealedTiles: integer('sealed_tiles', { mode: 'boolean' }).notNull().default(false),
+  // During Board revealed, the rules text is held back from Players and Captains. Independent of sealedTiles.
+  // See bingoService.areRulesHidden.
+  hideRules: integer('hide_rules', { mode: 'boolean' }).notNull().default(false),
+  // "Show screenshots once Finished" (CONTEXT.md "Player"): once the bingo is Finished every clan member can read
+  // every team's submissions; off, other teams' screenshot images are left out for anyone but Moderators. Admins only.
+  showScreenshotsWhenFinished: integer('show_screenshots_when_finished', { mode: 'boolean' }).notNull().default(true),
 });
 
 // Mod is per-bingo, not a global flag — fixes v1's single global isModerator.
@@ -174,6 +183,8 @@ export const signupQuestions = sqliteTable('signup_questions', {
   helperText: text('helper_text'),
   type: text('type', { enum: ['text', 'textarea', 'select', 'multiselect', 'boolean'] }).notNull(), // select = one choice, multiselect = several
   optionsJson: text('options_json'), // JSON string array; only for type = 'select' or 'multiselect'
+  // Choice questions only: an extra Other choice with the player's own text (see shared/src/signupAnswers.ts).
+  allowOther: integer('allow_other', { mode: 'boolean' }).notNull().default(false),
   required: integer('required', { mode: 'boolean' }).notNull().default(false),
   sortOrder: integer('sort_order').notNull().default(0),
   // Who besides the answerer sees the answers: 'captains' (and up), 'mods' (and site admins), or 'admins' only.

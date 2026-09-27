@@ -14,7 +14,7 @@ function user(discordId: string, extra: Partial<SessionUser> = {}): SessionUser 
   return db.insert(schema.users).values({ discordId, discordUsername: discordId, ...extra }).returning().get();
 }
 
-function bingoIn(stage: "signup" | "draft" | "live") {
+function bingoIn(stage: "planning" | "signup" | "draft" | "live") {
   db.update(schema.bingos).set({ stage }).run();
 }
 
@@ -73,6 +73,12 @@ describe("devPageAccess", () => {
     expect(allowed("/b/b1")).toEqual(["admin", "mod", "captain", "member", "signedUp", "stranger"]);
     expect(allowed("/")).toHaveLength(7);
     expect(allowed("/b/no-such-bingo")).toHaveLength(7);
+  });
+
+  it("keeps a Planning bingo to its mods", () => {
+    bingoIn("planning");
+    expect(allowed("/b/b1")).toEqual(["admin", "mod"]);
+    expect(allowed("/b/b1/draft")).toEqual(["admin", "mod"]);
   });
 
   it("says who each user is in the page's bingo", () => {
