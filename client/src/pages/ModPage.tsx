@@ -17,6 +17,7 @@ import { AchievementsManager } from "../core/admin/AchievementsManager";
 import { BoardEditor } from "../core/admin/BoardEditor";
 import { LineEditor } from "../core/admin/LineEditor";
 import { QuestionBuilder } from "../core/admin/QuestionBuilder";
+import { SuperlativesManager } from "../core/admin/SuperlativesManager";
 import { TeamManager } from "../core/admin/TeamManager";
 import { WrappedArtManager } from "../core/admin/WrappedArtManager";
 import { AppHeader } from "../core/ui/AppHeader";
@@ -47,6 +48,7 @@ const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; unti
   { key: "board", label: "Board", adminOnly: true, until: "reveal" },
   { key: "lines", label: "Lines", adminOnly: true, until: "reveal" },
   { key: "questions", label: "Signup questions", adminOnly: true, until: "signup" },
+  { key: "superlatives", label: "Superlatives", adminOnly: true },
   { key: "teams", label: "Captains", adminOnly: true, from: "signup" },
   { key: "mods", label: "Moderators", adminOnly: true },
   { key: "wrapped-art", label: "Wrapped art", adminOnly: true },
@@ -204,6 +206,11 @@ export function ModPage() {
                 <TabPanel id="questions">
                   <div className={NARROW}>
                     <QuestionBuilder slug={slug} />
+                  </div>
+                </TabPanel>
+                <TabPanel id="superlatives">
+                  <div className={NARROW}>
+                    <SuperlativesManager slug={slug} bingo={shell.bingo} />
                   </div>
                 </TabPanel>
                 <TabPanel id="teams">

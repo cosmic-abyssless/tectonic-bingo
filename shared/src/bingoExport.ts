@@ -128,6 +128,12 @@ export interface ExportSignupQuestion {
   visibility?: QuestionVisibility;
 }
 
+/** A Superlative category (CONTEXT.md); votes themselves never travel with an export. */
+export interface ExportSuperlativeCategory {
+  name: string;
+  sortOrder: number;
+}
+
 export interface BingoExportDocument {
   formatVersion: number;
   exportedAt: string; // ISO
@@ -160,6 +166,8 @@ export interface BingoExportDocument {
   tiles: ExportTile[];
   lines: ExportLine[];
   signupQuestions: ExportSignupQuestion[];
+  /** Absent in older files: no Superlative categories. */
+  superlativeCategories?: ExportSuperlativeCategory[];
   /**
    * Which Achievements (CONTEXT.md) are switched on. Absent means every current catalogue key (a file from before
    * Achievements existed, or an export that didn't change any switch, imports as "all on" — createBingo's default).

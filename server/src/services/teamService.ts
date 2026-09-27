@@ -3,7 +3,7 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { FieldChanges } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { bingos, draftPicks, nodeEdges, nodes, pickRatings, signupAnswers, signups, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tileInterests, tiles, users } from "../db/schema";
+import { bingos, draftPicks, nodeEdges, nodes, pickRatings, signupAnswers, signups, submissions, superlativeVotes, teamMembers, teamNodeState, teamPointAdjustments, teams, tileInterests, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
 import { PUBLIC_SIGNUP_COLS } from "./signupService";
@@ -423,6 +423,10 @@ export function removeTeamMember(db: Db, teamId: string, userId: string): void {
     if (pick) throw new ServiceError(409, "This player was drafted onto the team and can't be removed");
     const displayName = userLabelById(tx, userId, team.bingoId);
     tx.delete(tileInterests).where(and(eq(tileInterests.teamId, teamId), eq(tileInterests.userId, userId))).run();
+    // Superlatives (CONTEXT.md): a Player removed from a Team drops their own votes and every vote cast for them in
+    // it — both scoped to this Team, since a category's votes only ever compare its own Team's members.
+    tx.delete(superlativeVotes).where(and(eq(superlativeVotes.teamId, teamId), eq(superlativeVotes.voterUserId, userId))).run();
+    tx.delete(superlativeVotes).where(and(eq(superlativeVotes.teamId, teamId), eq(superlativeVotes.nomineeUserId, userId))).run();
     tx.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).run();
     audit(tx, {
       action: "team.member_removed",

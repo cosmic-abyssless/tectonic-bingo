@@ -1365,6 +1365,7 @@ export * from "./bingoExport.ts";
 export * from "./exclusivity.ts";
 export * from "./names.ts";
 export * from "./rewind.ts";
+export * from "./superlative.ts";
 export * from "./wrapped.ts";
 export * from "./signupAnswers.ts";
 export * from "./testData.ts";

@@ -116,6 +116,38 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
           </div>
         </WrappedScene>
       )}
+
+      {b.teamSuperlatives.length > 0 && (
+        <WrappedScene steps={1} className="text-center">
+          <div className="w-full max-w-2xl">
+            <Reveal step={0}>
+              <WrappedHeading kicker="Superlatives">Every Team's picks</WrappedHeading>
+              <div className="mt-8 space-y-6">
+                {b.teamSuperlatives.map((t) => (
+                  <div key={t.teamId} className="rounded-xl border border-outline bg-surface p-4">
+                    <p className="flex items-center justify-center gap-2 text-sm font-semibold">
+                      {t.color && <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />}
+                      {t.teamName}
+                    </p>
+                    <ul className="mt-3 space-y-3">
+                      {t.superlatives.map((s) => (
+                        <li key={s.category}>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-muted">{s.category}</p>
+                          <div className="mt-1.5 flex flex-wrap justify-center gap-4">
+                            {s.winners.map((w) => (
+                              <WrappedPerson key={w.id} person={w} size="sm" />
+                            ))}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </Reveal>
+          </div>
+        </WrappedScene>
+      )}
     </>
   );
 }

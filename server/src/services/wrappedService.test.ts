@@ -12,6 +12,7 @@ import { ServiceError } from "./errors";
 import * as statsService from "./statsService";
 import * as rewindService from "./rewindService";
 import { computeWrapped, duoMoments, getWrappedState, isPublished, publishWhenReady, publishWrapped, readBingoWrapped, readMyWrapped } from "./wrappedService";
+import { createCategory as createSuperlativeCategory, setVote as setSuperlativeVote } from "./superlativeService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -275,6 +276,22 @@ describe("computeWrapped", () => {
     expect(of(fx.carol.id).captain).toBeNull();
     expect(of(fx.bob.id).captain!.drafted).toBe(4);
     expect(picks[0]!.pointsShare).toBe(Math.max(of(fx.erin.id).you.pointsShare, of(fx.frank.id).you.pointsShare));
+  });
+
+  it("includes each Team's Superlative winners, sharing a tie and leaving out an unvoted category", () => {
+    const fx = seed();
+    play(fx);
+    const mvp = createSuperlativeCategory(db, { bingoId: fx.bingo.id, name: "Team MVP" });
+    createSuperlativeCategory(db, { bingoId: fx.bingo.id, name: "No votes" });
+    const live = db.select().from(bingos).where(eq(bingos.id, fx.bingo.id)).get()!;
+    setSuperlativeVote(db, live, { categoryId: mvp.id, teamId: fx.teamA.id, voterUserId: fx.alice.id, nomineeUserId: fx.dave.id });
+    setSuperlativeVote(db, live, { categoryId: mvp.id, teamId: fx.teamA.id, voterUserId: fx.carol.id, nomineeUserId: fx.dave.id });
+
+    const { bingo } = computeWrapped(db, finish(fx));
+    const teamA = bingo.teams.find((t) => t.teamId === fx.teamA.id)!;
+    expect(teamA.superlatives).toEqual([{ category: "Team MVP", winners: [expect.objectContaining({ id: fx.dave.id })] }]);
+    const teamB = bingo.teams.find((t) => t.teamId === fx.teamB.id)!;
+    expect(teamB.superlatives).toEqual([]);
   });
 
   it("computes the moderation stats", () => {

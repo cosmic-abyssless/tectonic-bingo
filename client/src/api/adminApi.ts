@@ -1,5 +1,5 @@
 import type {
-  AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, PieceValue, SignupQuestion, UnvaluedItem, Team,
+  AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, PieceValue, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
   TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtGroup, WrappedArtImage, WrappedArtKeying,
 } from "@bingo/shared";
 import { api } from "./client";
@@ -219,6 +219,22 @@ export function deleteQuestion(slug: string, id: string) {
 }
 export function reorderQuestions(slug: string, orderedIds: string[]) {
   return api.post<{ questions: SignupQuestion[] }>(`${base(slug)}/questions/reorder`, { orderedIds });
+}
+
+export function getSuperlativeCategories(slug: string) {
+  return api.get<{ categories: SuperlativeCategory[] }>(`${base(slug)}/superlatives`);
+}
+export function createSuperlativeCategory(slug: string, name: string) {
+  return api.post<{ category: SuperlativeCategory }>(`${base(slug)}/superlatives`, { name });
+}
+export function renameSuperlativeCategory(slug: string, id: string, name: string) {
+  return api.patch<{ category: SuperlativeCategory }>(`${base(slug)}/superlatives/${id}`, { name });
+}
+export function deleteSuperlativeCategory(slug: string, id: string) {
+  return api.delete(`${base(slug)}/superlatives/${id}`);
+}
+export function reorderSuperlativeCategories(slug: string, orderedIds: string[]) {
+  return api.post<{ categories: SuperlativeCategory[] }>(`${base(slug)}/superlatives/reorder`, { orderedIds });
 }
 
 export function getCaptainCandidates(slug: string) {

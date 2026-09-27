@@ -141,6 +141,12 @@ export interface PlayerWrapped {
   captain: WrappedCaptain | null;
 }
 
+/** A Superlative (CONTEXT.md) category's winner(s) within one Team, as fixed at publish time. A tie is shared. */
+export interface WrappedTeamSuperlative {
+  category: string;
+  winners: AvatarUser[];
+}
+
 export interface WrappedTeam {
   teamId: string;
   name: string;
@@ -155,6 +161,8 @@ export interface WrappedTeam {
   topGpEarner: { player: AvatarUser; gpGained: number } | null;
   biggestDrop: WrappedDrop | null;
   pointsOverTime: WrappedPointsPoint[];
+  /** Superlative winners (CONTEXT.md), a category with no votes left out. Missing from Wrapped published before it was stored. */
+  superlatives?: WrappedTeamSuperlative[];
 }
 
 export interface WrappedReviewStats {

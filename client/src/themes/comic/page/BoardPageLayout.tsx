@@ -113,6 +113,7 @@ export function BoardPageLayout() {
       <TeamInfoDialog
         slug={page.slug}
         team={page.teamInfo.open ? page.viewing.team : null}
+        stage={page.bingo.stage}
         onClose={page.teamInfo.hide}
       />
 

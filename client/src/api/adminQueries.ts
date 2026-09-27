@@ -9,6 +9,7 @@ export const adminQueryKeys = {
   mods: (slug: string) => ["adminMods", slug] as const,
   lines: (slug: string) => ["adminLines", slug] as const,
   questions: (slug: string) => ["adminQuestions", slug] as const,
+  superlatives: (slug: string) => ["adminSuperlatives", slug] as const,
   userSearch: (scope: string, q: string) => ["adminUserSearch", scope, q] as const,
   captainCandidates: (slug: string) => ["adminCaptainCandidates", slug] as const,
   itemGroups: ["adminItemGroups"] as const,
@@ -68,6 +69,10 @@ export function useLines(slug: string) {
 
 export function useQuestions(slug: string) {
   return useQuery({ queryKey: adminQueryKeys.questions(slug), queryFn: () => adminApi.getQuestions(slug) });
+}
+
+export function useSuperlativeCategories(slug: string) {
+  return useQuery({ queryKey: adminQueryKeys.superlatives(slug), queryFn: () => adminApi.getSuperlativeCategories(slug) });
 }
 
 export function useCaptainCandidates(slug: string) {

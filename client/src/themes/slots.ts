@@ -6,7 +6,8 @@ import type { PanelProps } from "../core/ui/Panel";
 import type { TeamRosterProps } from "../core/draft/TeamRoster";
 import type { ReactionBarProps } from "../core/submissions/ReactionBar";
 import type { TitleChipProps, TitleGroupBoxProps } from "../core/stats/TitleChrome";
-import type { MyAchievement, StageMilestone } from "@bingo/shared";
+import type { SuperlativeGroupBoxProps } from "../core/superlatives/SuperlativeChrome";
+import type { MyAchievement, Stage, StageMilestone } from "@bingo/shared";
 import type {
   BingoPageModel,
   BoardModel,
@@ -105,7 +106,8 @@ export interface ThemeSlots {
   // `isCut`: they signed up but were cut to keep the teams even.
   NotPartStage: ComponentType<{ isCut: boolean }>;
   RulesDialog: ComponentType<{ isOpen: boolean; markdown: string; onClose: () => void }>;
-  TeamInfoDialog: ComponentType<{ slug: string; team: TeamModel | null; onClose: () => void }>;
+  // `stage`: whether the Team's Superlative voting section (CONTEXT.md "Superlative") shows and is live.
+  TeamInfoDialog: ComponentType<{ slug: string; team: TeamModel | null; stage: Stage; onClose: () => void }>;
   // Where the team's points come from, opened from the point total on the banner. Open while `team` is set; reads its data with usePointBreakdown().
   PointBreakdownDialog: ComponentType<{ team: TeamModel | null; onClose: () => void }>;
   SubmissionsDrawer: ComponentType<{ isOpen: boolean; submissions: SubmissionModel[]; onClose: () => void; onSubmit?: () => void }>;
@@ -141,6 +143,10 @@ export interface ThemeSlots {
   // useOptionalSlot: outside a theme they're core's.
   TitleGroupBox: ComponentType<TitleGroupBoxProps>;
   TitleChip: ComponentType<TitleChipProps>;
+
+  // One Superlative category (core/superlatives/SuperlativeChrome), in the Team info dialog: a banner styled like a
+  // TitleGroupBox row. Read with useOptionalSlot: outside a theme it's core's.
+  SuperlativeGroupBox: ComponentType<SuperlativeGroupBoxProps>;
 
   // The emoji reactions under a submission (core/submissions/ReactionBar), in the theme's own colours: a theme whose
   // cards aren't the page's surface (the comic's paper, even in dark mode) needs its own. Read with useOptionalSlot.

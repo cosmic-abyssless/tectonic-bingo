@@ -28,6 +28,7 @@ import * as userService from "../services/userService";
 import * as statsService from "../services/statsService";
 import * as rewindService from "../services/rewindService";
 import * as wrappedService from "../services/wrappedService";
+import * as superlativeService from "../services/superlativeService";
 import { isOcrEnabled, analyzeSubmissionScreenshot } from "../ocr";
 import { getTectonicClient, TectonicUnavailableError, type TectonicDetailedUser } from "../services/tectonicService";
 import { fetchProfiles } from "../services/tectonicProfileService";
@@ -194,6 +195,53 @@ router.get(
   requireBingoViewer,
   asyncHandler(async (req, res) => {
     res.json(wrappedService.readBingoWrapped(db, req.bingo!, wrappedViewer(req)));
+  }),
+);
+
+// Superlative (CONTEXT.md) voting: the caller's own Team only — there's no reading or voting for another Team's
+// ballot, and no endpoint anywhere returns another voter's pick or a tally while the bingo is live.
+function myTeamOrThrow(req: Request) {
+  const team = teamService.getUserTeamForBingo(db, req.bingo!.id, req.user!.id);
+  if (!team) throw new ServiceError(403, "You're not on a Team in this bingo");
+  return team;
+}
+
+router.get(
+  "/:slug/superlatives/me",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  asyncHandler(async (req, res) => {
+    const team = myTeamOrThrow(req);
+    res.json(superlativeService.getBallot(db, req.bingo!, team.id, req.user!.id));
+  }),
+);
+
+router.put(
+  "/:slug/superlatives/:categoryId",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  auditSkip("superlative votes are secret — no entry records who voted for whom"),
+  asyncHandler(async (req, res) => {
+    const team = myTeamOrThrow(req);
+    const { nomineeUserId } = req.body as { nomineeUserId?: string };
+    if (!nomineeUserId) throw new ServiceError(400, "nomineeUserId is required");
+    superlativeService.setVote(db, req.bingo!, { categoryId: req.params.categoryId as string, teamId: team.id, voterUserId: req.user!.id, nomineeUserId });
+    res.json(superlativeService.getBallot(db, req.bingo!, team.id, req.user!.id));
+  }),
+);
+
+router.delete(
+  "/:slug/superlatives/:categoryId",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  auditSkip("superlative votes are secret — no entry records who voted for whom"),
+  asyncHandler(async (req, res) => {
+    const team = myTeamOrThrow(req);
+    superlativeService.clearVote(db, req.bingo!, { categoryId: req.params.categoryId as string, voterUserId: req.user!.id });
+    res.json(superlativeService.getBallot(db, req.bingo!, team.id, req.user!.id));
   }),
 );
 

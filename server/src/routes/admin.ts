@@ -15,6 +15,7 @@ import * as boardService from "../services/boardService";
 import * as wrappedArtService from "../services/wrappedArtService";
 import { rescoreBingo } from "../services/scoringService";
 import * as signupService from "../services/signupService";
+import * as superlativeService from "../services/superlativeService";
 import * as teamService from "../services/teamService";
 import * as cutReviewService from "../services/cutReviewService";
 import * as userService from "../services/userService";
@@ -474,6 +475,51 @@ router.post(
     if (!Array.isArray(orderedIds)) throw new ServiceError(400, "orderedIds must be an array");
     signupService.reorderQuestions(db, req.bingo!.id, orderedIds);
     res.json({ questions: signupService.getQuestions(db, req.bingo!.id) });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Superlative categories (CONTEXT.md "Superlative") — not locked to any stage
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/superlatives",
+  asyncHandler(async (req, res) => {
+    res.json({ categories: superlativeService.getCategories(db, req.bingo!.id) });
+  }),
+);
+router.post(
+  "/superlatives",
+  asyncHandler(async (req, res) => {
+    const { name } = req.body as { name?: string };
+    if (!name) throw new ServiceError(400, "name is required");
+    const category = superlativeService.createCategory(db, { bingoId: req.bingo!.id, name });
+    res.status(201).json({ category });
+  }),
+);
+router.patch(
+  "/superlatives/:id",
+  asyncHandler(async (req, res) => {
+    const { name } = req.body as { name?: string };
+    if (!name) throw new ServiceError(400, "name is required");
+    const category = superlativeService.renameCategory(db, req.params.id as string, name);
+    res.json({ category });
+  }),
+);
+router.delete(
+  "/superlatives/:id",
+  asyncHandler(async (req, res) => {
+    superlativeService.deleteCategory(db, req.params.id as string);
+    res.status(204).end();
+  }),
+);
+router.post(
+  "/superlatives/reorder",
+  asyncHandler(async (req, res) => {
+    const { orderedIds } = req.body as { orderedIds?: string[] };
+    if (!Array.isArray(orderedIds)) throw new ServiceError(400, "orderedIds must be an array");
+    superlativeService.reorderCategories(db, req.bingo!.id, orderedIds);
+    res.json({ categories: superlativeService.getCategories(db, req.bingo!.id) });
   }),
 );
 
