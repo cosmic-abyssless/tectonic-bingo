@@ -117,7 +117,7 @@ export interface AuditDetailsMap {
   "line.deleted": { lineType: string; lineIndex: number; points: number };
 
   "question.created": { prompt: string; type: string; required: boolean };
-  "question.updated": { changes: FieldChanges<{ prompt: string; helperText: string | null; type: string; optionsJson: string | null; required: boolean; sortOrder: number }> };
+  "question.updated": { changes: FieldChanges<{ prompt: string; helperText: string | null; type: string; optionsJson: string | null; allowOther: boolean; required: boolean; sortOrder: number }> };
   /** `answersDeleted`: how many players' (non-blank) answers went with it. Absent on entries from before answers could be deleted along with it. */
   "question.deleted": { prompt: string; type: string; required: boolean; answersDeleted?: number };
   "question.reordered": { order: string[] };

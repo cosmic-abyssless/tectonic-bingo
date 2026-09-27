@@ -73,7 +73,7 @@ A player's registration for a specific Bingo, submitted during the `signup` stag
 - **Question types:** Short text, long text, yes/no, **single choice** (radio buttons, one option) and **multiple choice** (checkboxes, any number of options). A multiple-choice answer is stored as a JSON list and shown as "Melee, Magic"; a required one needs at least one option ticked. A yes/no answer is shown as "Yes" or "No".
 - **Member pick:** A question type whose answer is one or several clan members (for example "Who would you like to play with?"), picked by searching. The list is every clan member who has logged in, except the person answering, each named by the RSN of their latest Signup or else their Discord name. "Several" can carry a maximum. A pick stays even if that member later leaves the clan.
   - **Avoid:** Player picker (the people picked needn't be Players).
-- **Other option:** A single- or multiple-choice question can allow **Other**: an extra choice with a short free-text box, shown as "Melee, Other: hybrid". A required question counts Other with text as answered.
+- **Other option:** A single- or multiple-choice question can allow **Other**: an extra choice with a short free-text box (up to 100 characters), shown as "Melee, Other: hybrid". Other can't be picked without text, and a required question counts Other with text as answered. The setting is exported and imported with the Bingo.
 - **Question helper text:** Each signup question can carry optional plain-text helper text (up to 500 characters), shown under it on the signup form. It is exported and imported with the Bingo.
 
 ### Duo

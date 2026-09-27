@@ -177,6 +177,8 @@ export const signupQuestions = sqliteTable('signup_questions', {
   helperText: text('helper_text'),
   type: text('type', { enum: ['text', 'textarea', 'select', 'multiselect', 'boolean'] }).notNull(), // select = one choice, multiselect = several
   optionsJson: text('options_json'), // JSON string array; only for type = 'select' or 'multiselect'
+  // Choice questions only: an extra Other choice with the player's own text (see shared/src/signupAnswers.ts).
+  allowOther: integer('allow_other', { mode: 'boolean' }).notNull().default(false),
   required: integer('required', { mode: 'boolean' }).notNull().default(false),
   sortOrder: integer('sort_order').notNull().default(0),
   // Who besides the answerer sees the answers: 'captains' (and up), 'mods' (and site admins), or 'admins' only.

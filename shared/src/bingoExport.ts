@@ -103,6 +103,8 @@ export interface ExportSignupQuestion {
   helperText?: string | null;
   type: SignupQuestionType;
   optionsJson: string | null;
+  /** Absent in files exported before choice questions could allow Other; imports as off. */
+  allowOther?: boolean;
   required: boolean;
   sortOrder: number;
   /** Absent in files exported before answers could be limited to mods/admins; imports as "captains". */

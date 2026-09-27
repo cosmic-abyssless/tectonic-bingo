@@ -302,6 +302,8 @@ router.post(
   auditSkip("read-only OCR analysis — no state changes"),
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
+    // Before anything reads the board: outside live, a match would tell anyone which tile holds an item. Mods included.
+    submissionService.assertSubmissionsOpen(bingo);
     // The codeword to look for is the team the screenshot is being submitted to (a mod may name another team).
     const team = resolveSubmissionTeam(db, bingo, req.user!, (req.body as { teamId?: string }).teamId);
     if (!req.file) throw new ServiceError(400, "Screenshot is required");
@@ -479,7 +481,7 @@ router.get(
         .filter((r) => r.signup.status === "active")
         .map((r) => ({ discordId: r.user.discordId, rsns: [r.signup.rsn] }));
     }
-    const userByDiscordId = new Map(userService.getUsersByDiscordIds(db, candidates.map((c) => c.discordId)).map((u) => [u.discordId, u]));
+    const userByDiscordId = new Map(userService.getPublicUsersByDiscordIds(db, req.bingo!.id, candidates.map((c) => c.discordId)).map((u) => [u.discordId, u]));
     res.json({
       candidates: candidates
         .filter((c) => c.discordId !== req.user!.discordId)

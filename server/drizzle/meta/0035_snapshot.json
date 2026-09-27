@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "67259a8c-b563-4a78-87be-f15870e032dc",
-  "prevId": "45c351e7-0766-42b8-aac1-8a10938c0a99",
+  "id": "c3c4b935-6006-400a-a8d9-0918fb2944dd",
+  "prevId": "67259a8c-b563-4a78-87be-f15870e032dc",
   "tables": {
     "achievement_activity": {
       "name": "achievement_activity",
@@ -885,6 +885,14 @@
         },
         "achievements_enabled": {
           "name": "achievements_enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "show_screenshots_when_finished": {
+          "name": "show_screenshots_when_finished",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

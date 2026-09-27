@@ -39,6 +39,7 @@ import { ServiceError } from "./errors";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 import { rsnsInBingo } from "./playerNames";
+import { PUBLIC_USER_COLS } from "./userService";
 import * as achievementService from "./achievementService";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -363,7 +364,7 @@ export function removeModerator(db: Db, params: { bingoId: string; userId: strin
 
 export function getModerators(db: Db, bingoId: string) {
   const rows = db
-    .select({ id: bingoModerators.id, bingoId: bingoModerators.bingoId, userId: bingoModerators.userId, createdAt: bingoModerators.createdAt, user: users })
+    .select({ id: bingoModerators.id, bingoId: bingoModerators.bingoId, userId: bingoModerators.userId, createdAt: bingoModerators.createdAt, user: PUBLIC_USER_COLS })
     .from(bingoModerators)
     .innerJoin(users, eq(bingoModerators.userId, users.id))
     .where(eq(bingoModerators.bingoId, bingoId))

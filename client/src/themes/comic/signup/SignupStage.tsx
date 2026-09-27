@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { useSignupForm, type SignupFormModel, type SignupQuestionModel } from "../../../headless";
 import { Input, Textarea } from "../../../core/ui/Field";
 import { Select } from "../../../core/ui/Select";
@@ -191,7 +191,6 @@ function Hint({ children, className }: { children: ReactNode; className?: string
 }
 
 function Question({ question }: { question: SignupQuestionModel }) {
-  const { colors } = useComic();
   const label = <RequiredLabel required={question.required}>{question.prompt}</RequiredLabel>;
 
   if (question.type === "boolean") {
@@ -206,25 +205,7 @@ function Question({ question }: { question: SignupQuestionModel }) {
   }
 
   if (question.type === "select" || question.type === "multiselect") {
-    const multiple = question.type === "multiselect";
-    return (
-      <fieldset>
-        <TabLegend>{label}</TabLegend>
-        <div className="flex flex-wrap gap-2">
-          {question.choices.map((choice) => (
-            <ChoiceChip key={choice.label} type={multiple ? "checkbox" : "radio"} name={multiple ? undefined : `question-${question.id}`} checked={choice.checked} onChange={choice.set}>
-              {choice.label}
-            </ChoiceChip>
-          ))}
-          {question.clear && (
-            <button type="button" onClick={question.clear} className="px-1 text-xs underline underline-offset-2 hover:opacity-70" style={{ color: colors.INK_SUBTLE }}>
-              Clear
-            </button>
-          )}
-        </div>
-        {question.hint && <Hint className="mt-1.5">{question.hint}</Hint>}
-      </fieldset>
-    );
+    return <ChoiceQuestion question={question} label={label} />;
   }
 
   return (
@@ -235,5 +216,57 @@ function Question({ question }: { question: SignupQuestionModel }) {
         <Input value={question.value} onChange={(e) => question.set(e.target.value)} />
       )}
     </ComicField>
+  );
+}
+
+function ChoiceQuestion({ question, label }: { question: SignupQuestionModel; label: ReactNode }) {
+  const { colors } = useComic();
+  const multiple = question.type === "multiselect";
+  const { other } = question;
+  const otherInput = useRef<HTMLInputElement>(null);
+  return (
+    <fieldset>
+      <TabLegend>{label}</TabLegend>
+      <div className="flex flex-wrap gap-2">
+        {question.choices.map((choice) => (
+          <ChoiceChip key={choice.label} type={multiple ? "checkbox" : "radio"} name={multiple ? undefined : `question-${question.id}`} checked={choice.checked} onChange={choice.set}>
+            {choice.label}
+          </ChoiceChip>
+        ))}
+        {other && (
+          <ChoiceChip
+            type={multiple ? "checkbox" : "radio"}
+            name={multiple ? undefined : `question-${question.id}`}
+            checked={other.checked}
+            onChange={(on) => {
+              other.set(on);
+              // Picking Other is for writing in it: go straight to the box.
+              if (on) requestAnimationFrame(() => otherInput.current?.focus());
+            }}
+          >
+            Other
+          </ChoiceChip>
+        )}
+        {question.clear && (
+          <button type="button" onClick={question.clear} className="px-1 text-xs underline underline-offset-2 hover:opacity-70" style={{ color: colors.INK_SUBTLE }}>
+            Clear
+          </button>
+        )}
+      </div>
+      {other?.checked && (
+        <Input
+          ref={otherInput}
+          aria-label={`Other answer to ${question.prompt}`}
+          aria-invalid={other.missingText || undefined}
+          value={other.text}
+          onChange={(e) => other.setText(e.target.value)}
+          maxLength={other.maxLength}
+          placeholder="Your answer"
+          className="mt-2"
+        />
+      )}
+      {other?.missingText && <Hint className="mt-1.5">Write your answer for Other, or untick it.</Hint>}
+      {question.hint && <Hint className="mt-1.5">{question.hint}</Hint>}
+    </fieldset>
   );
 }

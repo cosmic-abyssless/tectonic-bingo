@@ -243,8 +243,15 @@
     {
       "idx": 34,
       "version": "6",
-      "when": 1790482077342,
-      "tag": "0034_finished_screenshots",
+      "when": 1790481619589,
+      "tag": "0034_signup_question_allow_other",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1790483007414,
+      "tag": "0035_finished_screenshots",
       "breakpoints": true
     }
   ]
