@@ -3,7 +3,7 @@ import type {
   AccountTypesResponse, AchievementKey, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
-  PickRating, PlayerProfile, StatsResponse, SubmissionReaction, SubmissionReactionGroup, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
+  PickRating, PlayerProfile, RewindResponse, StatsResponse, SubmissionReaction, SubmissionReactionGroup, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
 } from "@bingo/shared";
 import { SUBMISSION_REACTIONS } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
@@ -36,6 +36,7 @@ export const queryKeys = {
   playerProfile: (slug: string, userId: string) => ["playerProfile", slug, userId] as const,
   accountTypes: (slug: string) => ["accountTypes", slug] as const,
   stats: (slug: string) => ["stats", slug] as const,
+  rewind: (slug: string) => ["rewind", slug] as const,
   auditLog: (slug: string, filters: AuditLogFilters) => ["auditLog", slug, filters] as const,
   teamActivity: (slug: string, teamId: string) => ["teamActivity", slug, teamId, "condensed"] as const,
   myBugReports: () => ["myBugReports"] as const,
@@ -556,6 +557,18 @@ export function useStats(slug: string | undefined, enabled = true) {
     queryKey: queryKeys.stats(slug ?? ""),
     queryFn: () => api.get<StatsResponse>(`/api/bingos/${slug}/stats`),
     enabled: !!slug && enabled,
+  });
+}
+
+// Rewind (CONTEXT.md): a Finished Bingo's whole history in one go, played back on the client so scrubbing is instant.
+// A Finished Bingo barely changes, so it isn't refetched on focus.
+export function useRewind(slug: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.rewind(slug ?? ""),
+    queryFn: () => api.get<RewindResponse>(`/api/bingos/${slug}/rewind`),
+    enabled: !!slug && enabled,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
 }
 

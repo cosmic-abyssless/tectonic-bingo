@@ -25,6 +25,7 @@ import * as draftService from "../services/draftService";
 import * as pairingService from "../services/pairingService";
 import * as userService from "../services/userService";
 import * as statsService from "../services/statsService";
+import * as rewindService from "../services/rewindService";
 import { isOcrEnabled, analyzeSubmissionScreenshot } from "../ocr";
 import { getTectonicClient, TectonicUnavailableError, type TectonicDetailedUser } from "../services/tectonicService";
 import { fetchProfiles } from "../services/tectonicProfileService";
@@ -146,6 +147,23 @@ router.get(
     if (!seesEveryTeam && (bingo.stage !== "live" || !myTeam)) throw new ServiceError(403, "Stats aren't visible until the bingo is complete");
 
     res.json(statsService.getStatsForViewer(db, bingo.id, { isMod, teamId: myTeam?.id ?? null, bingoComplete: bingo.stage === "complete" }));
+  }),
+);
+
+// Rewind (CONTEXT.md): a Finished Bingo played back on its Board. Open to everyone who can view the Bingo, and only
+// once it's Finished, when every Team's progress (and, in Rewind only, their Reactions) is visible to all. With "Show
+// screenshots once Finished" off, other Teams' screenshots are left out for anyone but the mods, as in their
+// submission lists.
+router.get(
+  "/:slug/rewind",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  asyncHandler(async (req, res) => {
+    const bingo = req.bingo!;
+    const rewind = rewindService.getRewind(db, bingo);
+    const myTeamId = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id)?.id ?? null;
+    res.json(rewindService.hideScreenshots(rewind, { isMod: req.bingoAccess!.isMod, myTeamId, showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished }));
   }),
 );
 

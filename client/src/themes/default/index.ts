@@ -51,6 +51,11 @@ import { SubmitterPicker } from "./submission/SubmitterPicker";
 import { TaskPicker } from "./submission/TaskPicker";
 import { RequirementPicker } from "./submission/RequirementPicker";
 import { StagedClaimsList } from "./submission/StagedClaimsList";
+import { RewindPageLayout } from "./rewind/RewindPageLayout";
+import { RewindTimeline } from "./rewind/RewindTimeline";
+import { RewindControls } from "./rewind/RewindControls";
+import { RewindScoreboard } from "./rewind/RewindScoreboard";
+import { RewindPopup } from "./rewind/RewindPopup";
 
 // The neutral/fallback theme: eager (it's what every unknown or loading
 // theme key falls back to), and the only theme that must define every slot.
@@ -61,6 +66,11 @@ export const defaultTheme: ThemeDefinition = {
     BoardPage: BoardPageLayout,
     DraftPage: DraftPageLayout,
     StatsPage: StatsPageLayout,
+    RewindPage: RewindPageLayout,
+    RewindTimeline,
+    RewindControls,
+    RewindScoreboard,
+    RewindPopup,
     DraftPickBurst,
     AchievementUnlockCard,
     AchievementRow,

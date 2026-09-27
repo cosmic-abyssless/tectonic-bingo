@@ -126,6 +126,7 @@ const contentRoutes = () => [
   "/b1/achievements",
   `/b1/players/${people.memberA.id}`,
   "/b1/draft",
+  "/b1/rewind",
 ];
 
 // Asked for by every bingo page, so it answers with nothing rather than refusing.
@@ -250,7 +251,7 @@ describe("a Finished bingo", () => {
     expect(shell.viewer.canSee).toBe(true);
     expect(shell.teams).toHaveLength(2);
     expect(shell.bingo.rulesMarkdown).toBe("# Rules");
-    for (const path of ["/b1/board", "/b1/stats", "/b1/draft", `/b1/teams/${teamA.id}/progress`, `/b1/players/${people.memberA.id}`]) {
+    for (const path of ["/b1/board", "/b1/stats", "/b1/draft", "/b1/rewind", `/b1/teams/${teamA.id}/progress`, `/b1/players/${people.memberA.id}`]) {
       expect((await get("stranger", path)).status, path).toBe(200);
     }
     expect(await accountTypesOf("stranger")).toBe(1);
@@ -277,6 +278,17 @@ describe("a Finished bingo", () => {
     const [entry] = activity.body.entries as { details: Record<string, unknown> }[];
     expect(entry!.details).not.toHaveProperty("screenshotUrl");
     expect(entry!.details.tileName).toBe("Tile");
+
+    // Rewind follows the same rule (it plays approved and rejected Submissions only).
+    db.update(schema.submissions).set({ status: "approved" }).run();
+    const rewindScreenshots = async (p: Person) => {
+      const { status, body } = await get(p, "/b1/rewind");
+      expect(status).toBe(200);
+      return Object.fromEntries((body.submissions as { teamId: string; screenshotUrl: string | null }[]).map((sub) => [sub.teamId, sub.screenshotUrl]));
+    };
+    expect(await rewindScreenshots("memberA")).toEqual({ [teamA.id]: "/uploads/Team A.png", [teamB.id]: null });
+    expect(await rewindScreenshots("stranger")).toEqual({ [teamA.id]: null, [teamB.id]: null });
+    expect(await rewindScreenshots("mod")).toEqual({ [teamA.id]: "/uploads/Team A.png", [teamB.id]: "/uploads/Team B.png" });
   });
 });
 

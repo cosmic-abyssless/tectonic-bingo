@@ -12,6 +12,10 @@ import type {
   BoardModel,
   CategoryModel,
   RequirementNodeModel,
+  RewindControlsModel,
+  RewindPopupModel,
+  RewindScoreboardModel,
+  RewindTimelineModel,
   SubmissionFlowModel,
   SubmissionModel,
   TaskModel,
@@ -182,6 +186,23 @@ export interface ThemeSlots {
   TaskPanel: ComponentType<{ task: TaskModel }>;
   RequirementTree: ComponentType<{ node: RequirementNodeModel; root?: boolean }>;
   TileSubmissions: ComponentType<{ submissions: SubmissionModel[] }>;
+
+  // Rewind (CONTEXT.md "Rewind"): a Finished Bingo played back on its own Board, at /b/:slug/rewind.
+  // Whole-surface, like BoardPage: may call useRewindModel() and useBoardModel() (the Board at the moment being
+  // viewed) directly, and draws the Board with the ordinary BoardGrid slot. Every other Rewind slot is props-only.
+  RewindPage: ComponentType<Record<string, never>>;
+  // The timeline: from going Live to Finishing in real time (quiet stretches show as gaps), one tick per Submission of
+  // the viewed Team sized by its tier (rejected ones greyed), and a scrubber to drag or click (timeline.seek).
+  RewindTimeline: ComponentType<{ timeline: RewindTimelineModel }>;
+  // Play/Pause, previous/next Submission, previous/next notable-or-bigger one, and the "show rejected" toggle.
+  RewindControls: ComponentType<{ controls: RewindControlsModel }>;
+  // Every Team's points at the moment being viewed (whatever Team's Board is shown); pressing one shows its Board.
+  RewindScoreboard: ComponentType<{ scoreboard: RewindScoreboardModel }>;
+  // One Submission's popup: the Player it's credited to, their Team, its items with GP value (and Luck when known),
+  // a thumbnail of its main screenshot, its Reactions and what it completed. size "big" (a huge Submission) or
+  // "small" (a notable one). A rejected one is greyed out and stamped "Rejected". The theme draws only the card (its
+  // own width, no positioning); the page places it and plays it in and out.
+  RewindPopup: ComponentType<{ popup: RewindPopupModel }>;
 
   // Submission flow — mounted only while open (see BoardPageLayout).
   SubmissionModal: ComponentType<{ flow: SubmissionFlowModel }>;

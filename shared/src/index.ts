@@ -1249,6 +1249,7 @@ export * from "./auditCondense.ts";
 export * from "./bingoExport.ts";
 export * from "./exclusivity.ts";
 export * from "./names.ts";
+export * from "./rewind.ts";
 export * from "./signupAnswers.ts";
 export * from "./testData.ts";
 export * from "./timezone.ts";

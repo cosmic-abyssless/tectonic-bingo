@@ -139,6 +139,14 @@ of truth and will drift less than a doc copy. Broadly:
 - **Board**: `BoardGrid`, `RowLabel`, `EmptyCell`, `TileCell`,
   `PreStartBanner`, `TileModal`, `TaskPanel`, `RequirementTree`,
   `TileSubmissions`.
+- **Rewind** (`/b/:slug/rewind`, Finished Bingos only): `RewindPage` (whole-surface
+  like `BoardPage`: calls `useRewindModel()` and `useBoardModel()`, which is the
+  viewed Team's Board at the moment being viewed, and draws it with `BoardGrid`),
+  and the props-only `RewindTimeline`, `RewindControls`, `RewindScoreboard` and
+  `RewindPopup`. `RewindPopup` draws only the card; the page places it and plays
+  it in and out. While playing, the popup's `holdMs` says how long it stays, for
+  a countdown (null when paused or stepping). `BoardGrid`'s `highlightedTileId` marks the Tile the current
+  Submission landed on.
 - **Submission flow**: `SubmissionModal`, `ScreenshotDropzone`,
   `AnalysisPanel`, `TilePicker`, `TaskPicker`, `RequirementPicker`,
   `StagedClaimsList`.
