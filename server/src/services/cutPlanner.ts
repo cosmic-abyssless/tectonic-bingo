@@ -50,8 +50,16 @@ export interface CutPlannerInput {
 
 export interface CutPlan {
   changes: CutChange[];
-  cutPlayers: number; // players cut once every change in `changes` is applied
+  cutPlayers: number; // players cut once every change in `changes` is applied (with the best Team pick, if any)
   cutPlayersNow: number; // players cut as things stand, before any change
+}
+
+/** A change list's count; see scoreChanges. */
+export interface CutScore {
+  cutPlayers: number; // best case, over an open Team pick
+  cutPlayersMax: number; // worst case, over an open Team pick (= cutPlayers once picked, or with no Team change)
+  cutPlayersNow: number;
+  pickOptions: Record<string, number> | null; // players cut per pick of the Team change; null without one
 }
 
 // Minimum average Team size (total players ÷ Teams) a Team-count change must keep, growing with the player count.
@@ -102,23 +110,38 @@ function scoreArrangement(units: CutPlannerUnit[], cutMode: CutMode, teamCount: 
 
 // ---------------------------------------------------------------------------
 // Team changes move players: an added Team's Captain (and their partner) leave the pool, a removed Team's members
-// rejoin it. With the Captain / Team already picked (an admin-edited list) that's exact; a plan never picks, so
-// then every way it could go is scored and the best kept — the admin's actual pick is scored exactly once made.
+// rejoin it. With the Captain / Team already picked (an admin-edited list) that's exact. With the pick still open,
+// every way it could go is scored: the planner keeps the best, and the modal shows the whole range, per pick, since
+// which Team goes (or who captains the new one) can change the count a lot.
 // ---------------------------------------------------------------------------
 
 type TeamChange = { kind: "addTeam"; captainUserId?: string } | { kind: "removeTeam"; teamId?: string };
 
-function poolsAfterTeamChange(units: CutPlannerUnit[], change: TeamChange | null, teams: CutPlannerTeam[]): CutPlannerUnit[][] {
-  if (!change) return [units];
+/** One way a Team change could go: `pick` is the Captain's userId or the removed Team's id (null = no pick to make). */
+interface TeamChangeOutcome {
+  pick: string | null;
+  units: CutPlannerUnit[];
+}
+
+/**
+ * The pool after `change`, once per way it could go. An open addTeam is scored for one single and one pair only
+ * unless `everyCaptain`: who leaves doesn't change how many are cut, only whether it's a single or a pair does —
+ * cheap enough for the planner's search, while the modal's per-Captain breakdown asks for every one.
+ */
+function poolsAfterTeamChange(units: CutPlannerUnit[], change: TeamChange | null, teams: CutPlannerTeam[], everyCaptain = false): TeamChangeOutcome[] {
+  if (!change) return [{ pick: null, units }];
   if (change.kind === "addTeam") {
+    const without = (leaving: CutPlannerUnit) => units.filter((u) => u !== leaving);
     if (change.captainUserId) {
       const unit = units.find((u) => u.entries.some((e) => e.userId === change.captainUserId));
       if (!unit) throw new ServiceError(400, "The new Team's Captain has to be a player who isn't on a Team yet");
-      return [units.filter((u) => u !== unit)];
+      return [{ pick: change.captainUserId, units: without(unit) }];
     }
-    // Which single (or which pair) doesn't change how many are cut — only whether it's a single or a pair does.
-    const options = [units.find((u) => !isPair(u)), units.find(isPair)].filter((u): u is CutPlannerUnit => !!u);
-    return options.length ? options.map((leaving) => units.filter((u) => u !== leaving)) : [units];
+    const leavers = everyCaptain ? units : [units.find((u) => !isPair(u)), units.find(isPair)].filter((u): u is CutPlannerUnit => !!u);
+    const outcomes = leavers.flatMap((leaving) =>
+      (everyCaptain ? leaving.entries : leaving.entries.slice(0, 1)).map((e) => ({ pick: e.userId, units: without(leaving) })),
+    );
+    return outcomes.length ? outcomes : [{ pick: null, units }];
   }
   const rejoin = (t: CutPlannerTeam): CutPlannerUnit[] =>
     t.pairingId && t.members.length === 2
@@ -127,9 +150,9 @@ function poolsAfterTeamChange(units: CutPlannerUnit[], change: TeamChange | null
   if (change.teamId) {
     const team = teams.find((t) => t.teamId === change.teamId);
     if (!team) throw new ServiceError(400, "That Team isn't in this bingo");
-    return [[...units, ...rejoin(team)]];
+    return [{ pick: team.teamId, units: [...units, ...rejoin(team)] }];
   }
-  return teams.length ? teams.map((t) => [...units, ...rejoin(t)]) : [units];
+  return teams.length ? teams.map((t) => ({ pick: t.teamId, units: [...units, ...rejoin(t)] })) : [{ pick: null, units }];
 }
 
 /** Players cut after `change` (if any) at `teamCount` Teams — the best case when the change's pick is still open. */
@@ -141,7 +164,7 @@ function scoreWithTeamChange(
   teamCount: number,
   drafted: { pairs: number; singles: number },
 ): number {
-  return Math.min(...poolsAfterTeamChange(units, change, teams).map((pool) => scoreArrangement(pool, cutMode, teamCount, drafted)));
+  return Math.min(...poolsAfterTeamChange(units, change, teams).map((o) => scoreArrangement(o.units, cutMode, teamCount, drafted)));
 }
 
 // ---------------------------------------------------------------------------
@@ -317,11 +340,30 @@ export function resolveChanges(input: CutPlannerInput, changes: CutChange[]): { 
   return { units: [...singles, ...pairs], teamCount, teamChange };
 }
 
-/** How many players `changes` would leave cut, validated against the current pool (see resolveChanges). */
-export function scoreChanges(input: CutPlannerInput, changes: CutChange[]): { cutPlayers: number; cutPlayersNow: number } {
+/**
+ * How many players `changes` would leave cut, validated against the current pool (see resolveChanges). A Team change
+ * is scored for every pick it could have (`pickOptions`: Captain userId, or removed Team id → players cut), so the
+ * modal can show what each option leaves. Once picked, the count is that pick's; while open, `cutPlayers` is the
+ * best case and `cutPlayersMax` the worst — so the modal never claims a count only one pick can deliver.
+ */
+export function scoreChanges(input: CutPlannerInput, changes: CutChange[]): CutScore {
   const cutPlayersNow = scoreArrangement(input.units, input.cutMode, input.teamCount, input.drafted);
-  if (input.cutMode === "none") return { cutPlayers: 0, cutPlayersNow: 0 };
+  if (input.cutMode === "none") return { cutPlayers: 0, cutPlayersMax: 0, cutPlayersNow: 0, pickOptions: null };
   const { units, teamCount, teamChange } = resolveChanges(input, changes);
-  const cutPlayers = scoreWithTeamChange(units, teamChange, input.teams ?? [], input.cutMode, teamCount, input.drafted);
-  return { cutPlayers, cutPlayersNow };
+  const teams = input.teams ?? [];
+  const score = (pool: CutPlannerUnit[]) => scoreArrangement(pool, input.cutMode, teamCount, input.drafted);
+  if (!teamChange) {
+    const cutPlayers = score(units);
+    return { cutPlayers, cutPlayersMax: cutPlayers, cutPlayersNow, pickOptions: null };
+  }
+  const outcomes = poolsAfterTeamChange(units, { kind: teamChange.kind }, teams, true).map((o) => ({ pick: o.pick, cutPlayers: score(o.units) }));
+  const pickOptions = Object.fromEntries(outcomes.flatMap((o) => (o.pick ? [[o.pick, o.cutPlayers] as const] : [])));
+  const picked = teamChange.kind === "addTeam" ? teamChange.captainUserId : teamChange.teamId;
+  if (picked) {
+    // Scored on its own too: that's what validates the pick (a Captain already on a Team, a Team from elsewhere).
+    const cutPlayers = score(poolsAfterTeamChange(units, teamChange, teams)[0]!.units);
+    return { cutPlayers, cutPlayersMax: cutPlayers, cutPlayersNow, pickOptions };
+  }
+  const counts = outcomes.map((o) => o.cutPlayers);
+  return { cutPlayers: Math.min(...counts), cutPlayersMax: Math.max(...counts), cutPlayersNow, pickOptions };
 }

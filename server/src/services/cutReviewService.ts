@@ -5,7 +5,7 @@
 import crypto from "node:crypto";
 import { eq, sql, and, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { timeZoneRegion, type AppliedCutChange, type CutChange, type CutReviewPool, type CutReviewPreview } from "@bingo/shared";
+import { timeZoneRegion, type AppliedCutChange, type CutChange, type CutReviewPool, type CutReviewPreview, type CutReviewScore } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingos, signups } from "../db/schema";
 import * as draftService from "./draftService";
@@ -120,7 +120,10 @@ export function currentCutReviewFingerprint(db: Db, bingo: Bingo): string {
 /** The plan a Cut review proposes right now, plus the Avoidable/Unavoidable split it implies. */
 export function getCutReviewPreview(db: Db, bingo: Bingo): CutReviewPreview {
   const { input, pool } = loadCutReview(db, bingo);
-  const plan = cutPlanner.planCutChanges(input);
+  const proposed = cutPlanner.planCutChanges(input);
+  // The plan's own changes, scored like any edited list: with a Team pick open, the range over every pick.
+  const { cutPlayersMax, pickOptions } = cutPlanner.scoreChanges(input, proposed.changes);
+  const plan = { ...proposed, cutPlayersMax, pickOptions };
   const stored = db.select({ cutReviewFingerprint: bingos.cutReviewFingerprint }).from(bingos).where(eq(bingos.id, bingo.id)).get()?.cutReviewFingerprint;
   return {
     plan,
@@ -132,8 +135,30 @@ export function getCutReviewPreview(db: Db, bingo: Bingo): CutReviewPreview {
 }
 
 /** How many players an (admin-edited) change list would leave cut, validated against the current pool. */
-export function scoreCutChanges(db: Db, bingo: Bingo, changes: CutChange[]): number {
-  return cutPlanner.scoreChanges(buildCutReviewInput(db, bingo), changes).cutPlayers;
+export function scoreCutChanges(db: Db, bingo: Bingo, changes: CutChange[]): CutReviewScore {
+  return cutPlanner.scoreChanges(buildCutReviewInput(db, bingo), changes);
+}
+
+/** Each change as the modal words it, for the audit entry — resolved by name against the pool before anything moves. */
+function describeChanges(pool: CutReviewPool, changes: AppliedCutChange[]): string[] {
+  const rsnOf = new Map([...pool.singles.map((s) => [s.userId, s.rsn] as const), ...pool.pairs.flatMap((p) => p.members.map((m) => [m.userId, m.rsn] as const))]);
+  const name = (userId: string) => rsnOf.get(userId) ?? "someone";
+  return changes.map((change) => {
+    switch (change.kind) {
+      case "pair":
+        return `Paired ${name(change.userIds[0])} & ${name(change.userIds[1])}`;
+      case "split": {
+        const pair = pool.pairs.find((p) => p.pairingId === change.pairingId);
+        return `Split ${pair ? pair.members.map((m) => m.rsn).join(" & ") : "a pair"}`;
+      }
+      case "addTeam":
+        return `Added a Team, Captain ${name(change.captainUserId)}`;
+      case "removeTeam": {
+        const team = pool.teams.find((t) => t.teamId === change.teamId);
+        return team ? `Removed ${team.name} (Captain ${team.captainRsn})` : "Removed a Team";
+      }
+    }
+  });
 }
 
 function partnerOf(db: Db, bingoId: string, userId: string): string | null {
@@ -156,7 +181,9 @@ export function applyCutReview(db: Db, bingo: Bingo, changes: AppliedCutChange[]
   return db.transaction((tx) => {
     // Before any change, purely for the audit entry's "how many were cut before this review" — not the plan's
     // hypothetical optimum, the roster's actual count as it stood.
-    const cutPlayersBefore = getCutReviewPreview(tx, bingo).plan.cutPlayersNow;
+    const before = getCutReviewPreview(tx, bingo);
+    const cutPlayersBefore = before.plan.cutPlayersNow;
+    const applied = describeChanges(before.pool, changes);
     let teamChanges = 0;
     // Pairings and splits first, the Team change last — the order they're scored in (cutPlanner.resolveChanges), so a
     // Captain the plan also pairs up leads the new Team with their new partner.
@@ -189,7 +216,7 @@ export function applyCutReview(db: Db, bingo: Bingo, changes: AppliedCutChange[]
       action: "draft.cut_review_applied",
       bingoId: bingo.id,
       entity: { type: "bingo", id: bingo.id, label: bingo.name },
-      details: { changes, cutPlayersNow: cutPlayersBefore, cutPlayers: cutPlayersAfter },
+      details: { applied, cutPlayersNow: cutPlayersBefore, cutPlayers: cutPlayersAfter },
       actor: { userId: actingUserId },
     });
 

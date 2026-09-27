@@ -232,8 +232,13 @@ export function SignupRoster({ slug }: { slug: string }) {
   const { data: cuts } = useDraftCuts(slug, cutsApply);
   // Before the Draft, a Cut review may avoid some of those cuts (CONTEXT.md "Avoidable cut"): the notice says so, and
   // Admins get to open it from there.
-  const { data: cutReview } = useCutReview(slug, cutsApply && cutCount > 0 && (stage === "signup" || stage === "captains"));
+  const reviewApplies = cutsApply && cutCount > 0 && (stage === "signup" || stage === "captains");
+  const { data: cutReview } = useCutReview(slug, reviewApplies);
   const someAvoidable = (cutReview?.avoidableCount ?? 0) > 0;
+  // Nothing until the plan is known, so the notice doesn't flash one message and then swap to the other. Once a
+  // review has been applied for this roster the admin has made their call: the numbers come back (with the review
+  // still a button away while something is avoidable).
+  const cutNotice = !cutsApply || cutCount === 0 || !cuts?.shares || !bingoData || (reviewApplies && !cutReview) ? null : someAvoidable && !cutReview?.reviewed ? "avoidable" : "numbers";
   const [reviewingCuts, setReviewingCuts] = useState(false);
   const pendingPairIds = useMemo(
     () => new Set(roster.flatMap((r) => (r.outgoingPairingRequest ? [r.user.discordId, r.outgoingPairingRequest.target.discordId] : []))),
@@ -384,8 +389,8 @@ export function SignupRoster({ slug }: { slug: string }) {
           </div>
         )}
         {/* While any cut is Avoidable the notice only says so (and Admins get the way to fix it); the numbers come
-            back once nothing is avoidable, when every cut left is an Unavoidable one (CONTEXT.md "Cut review"). */}
-        {cutsApply && cutCount > 0 && cuts?.shares && bingoData && someAvoidable && (
+            back once nothing is avoidable, or a review has been applied (CONTEXT.md "Cut review"). */}
+        {cutNotice === "avoidable" && (
           <Notice tone="warn" icon={<AlertIcon />}>
             <span className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <strong>Some cuts can be avoided.</strong>
@@ -397,7 +402,7 @@ export function SignupRoster({ slug }: { slug: string }) {
             </span>
           </Notice>
         )}
-        {cutsApply && cutCount > 0 && cuts?.shares && bingoData && !someAvoidable && (
+        {cutNotice === "numbers" && cuts?.shares && bingoData && (
           <Notice tone="warn" icon={<AlertIcon />}>
             As things stand, <span className="num">{cutCount}</span> signup{cutCount !== 1 ? "s" : ""} will be cut when the draft starts (
             {cutModeLabel(bingoData.bingo.cutMode, bingoData.bingo.signupMode)}: each of the <span className="num">{cuts.teamCount}</span> teams will draft{" "}
@@ -411,6 +416,14 @@ export function SignupRoster({ slug }: { slug: string }) {
             >
               Show me
             </button>
+            {me?.isAdmin && someAvoidable && (
+              <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                Some cuts can still be avoided.
+                <Button size="sm" onPress={() => setReviewingCuts(true)}>
+                  Review cuts
+                </Button>
+              </span>
+            )}
           </Notice>
         )}
         {me?.isAdmin && <CutReviewModal slug={slug} isOpen={reviewingCuts} onClose={() => setReviewingCuts(false)} />}

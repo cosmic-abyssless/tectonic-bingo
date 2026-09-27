@@ -94,8 +94,8 @@ describe("getCutReviewPreview / scoreCutChanges", () => {
 
   it("scores an admin's own edit against the current pool", () => {
     const { bingo, c, d } = seedAvoidableScenario();
-    expect(scoreCutChanges(db, bingo, [{ kind: "pair", userIds: [c.id, d.id] }])).toBe(0);
-    expect(scoreCutChanges(db, bingo, [])).toBe(2);
+    expect(scoreCutChanges(db, bingo, [{ kind: "pair", userIds: [c.id, d.id] }]).cutPlayers).toBe(0);
+    expect(scoreCutChanges(db, bingo, []).cutPlayers).toBe(2);
   });
 
   it("rejects scoring a change that no longer fits the roster", () => {
@@ -131,7 +131,8 @@ describe("applyCutReview", () => {
     // 2, not 1: seedAvoidableScenario's own setup (pairing "a" & "b") already recorded one.
     expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "pairing.admin_paired")).all()).toHaveLength(2);
     const applied = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.cut_review_applied")).get()!;
-    expect(JSON.parse(applied.details)).toMatchObject({ cutPlayers: 0, cutPlayersNow: 2 });
+    // By name, and not under `changes`, which the audit log reads as a before/after diff.
+    expect(JSON.parse(applied.details)).toEqual({ applied: ["Paired c & d"], cutPlayers: 0, cutPlayersNow: 2 });
 
     const fresh = db.select({ cutReviewFingerprint: schema.bingos.cutReviewFingerprint }).from(schema.bingos).where(eq(schema.bingos.id, bingo.id)).get()!;
     expect(fresh.cutReviewFingerprint).toBe(currentCutReviewFingerprint(db, bingo));
@@ -142,7 +143,7 @@ describe("applyCutReview", () => {
     const result = applyCutReview(db, bingo, [], admin.id);
     expect(result.cutPlayers).toBe(2); // nothing changed, so both are still cut
     const applied = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.cut_review_applied")).get()!;
-    expect(JSON.parse(applied.details).changes).toEqual([]);
+    expect(JSON.parse(applied.details).applied).toEqual([]);
   });
 
   it("adds a Team, choosing the captain's own accepted partner as co-captain automatically", () => {

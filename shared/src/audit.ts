@@ -8,7 +8,7 @@
 // other two are the server's routeCoverage test and the http.mutation
 // fallback — see server/src/audit/routePolicy.ts and middleware.ts).
 import type { AchievementKey } from "./achievements.ts";
-import type { CutChange, MinimalUser, Stage } from "./index.ts";
+import type { MinimalUser, Stage } from "./index.ts";
 import { playerName } from "./names.ts";
 
 export type AuditVisibility = "mods" | "team" | "public";
@@ -175,7 +175,9 @@ export interface AuditDetailsMap {
   // A Cut review was applied (CONTEXT.md "Cut review") — every individual pair/split/Team change it made is
   // audited separately under its own existing action; this entry is the record that a review happened for the
   // roster as it stood, including an empty `changes` (a deliberate "keep these cuts").
-  "draft.cut_review_applied": { changes: CutChange[]; cutPlayersNow: number; cutPlayers: number };
+  // `applied`: each change as the modal words it ("Paired A & B"). Not `changes`, which the audit log reads as a
+  // before/after diff; the earliest entries have that instead (the raw change list, ids only).
+  "draft.cut_review_applied": { applied?: string[]; changes?: unknown[]; cutPlayersNow: number; cutPlayers: number };
 
   "pairing.requested": { requesterUserId: string; targetDiscordId: string };
   "pairing.accepted": { requesterUserId: string; targetDiscordId: string; partnerUserId: string | null };
@@ -667,10 +669,12 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     tone: "info",
     visibility: "mods",
     title: "Cut review applied",
-    label: (i) =>
-      i.details.changes.length === 0
+    label: (i) => {
+      const count = (i.details.applied ?? i.details.changes ?? []).length;
+      return count === 0
         ? `${actor(i)} reviewed cuts and kept them as they stand (${i.details.cutPlayersNow} cut)`
-        : `${actor(i)} applied a Cut review (${i.details.changes.length} change${i.details.changes.length === 1 ? "" : "s"}, ${i.details.cutPlayers} still cut)`,
+        : `${actor(i)} applied a Cut review (${count} change${count === 1 ? "" : "s"}, ${i.details.cutPlayersNow} → ${i.details.cutPlayers} cut)`;
+    },
   },
   "pairing.requested": { category: "signup", tone: "neutral", visibility: "mods", title: "Duo pairing requested", label: (i) => `${actor(i)} requested a duo pairing` },
   "pairing.accepted": { category: "signup", tone: "ok", visibility: "mods", title: "Duo pairing accepted", label: (i) => `${actor(i)} accepted a duo pairing` },

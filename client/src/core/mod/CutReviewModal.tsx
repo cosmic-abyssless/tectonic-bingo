@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { TIME_ZONE_REGIONS, type ApplyCutReviewResponse, type CutReviewPool, type CutReviewPreview } from "@bingo/shared";
+import { TIME_ZONE_REGIONS, type ApplyCutReviewResponse, type CutReviewPool, type CutReviewPreview, type CutReviewScore } from "@bingo/shared";
 import { useCutReview } from "../../api/queries";
 import { useApplyCutReview, useCutReviewScore } from "../../api/adminQueries";
 import { useDialogParts } from "../ui/useDialogParts";
@@ -71,7 +71,9 @@ function CutReviewEditor({ slug, preview, onClose, onApplied }: { slug: string; 
   const scored = scoredChanges(rows);
   const edited = JSON.stringify(scored) !== JSON.stringify(scoredChanges(rowsFromPlan(plan.changes)));
   const score = useCutReviewScore(slug, scored, edited && !apply.isPending);
-  const cutPlayers = edited ? score.query.data?.cutPlayers : plan.cutPlayers;
+  const counts: CutReviewScore | undefined = edited ? score.query.data : plan;
+  const pickOptions = counts?.pickOptions ?? null;
+  const openPick = rows.some((r) => !r.dropped && r.kind === "addTeam") ? "addTeam" : "removeTeam";
 
   const toApply = appliedChanges(rows);
   const keepCuts = rows.every((r) => r.dropped);
@@ -91,7 +93,7 @@ function CutReviewEditor({ slug, preview, onClose, onApplied }: { slug: string; 
     <div className="space-y-4 p-5 text-sm">
       <div>
         <p className={`text-base font-semibold text-on-surface transition-opacity ${score.updating ? "opacity-50" : ""}`} aria-live="polite">
-          This plan leaves {cutPlayers === undefined ? "…" : <span className="num">{cutPlayers}</span>} player{cutPlayers === 1 ? "" : "s"} cut
+          <PlanCount counts={counts} openPick={openPick} />
         </p>
         <p className="text-on-surface-muted">
           <span className="num">{plan.cutPlayersNow}</span> cut as things stand. A pair counts as two.
@@ -104,7 +106,7 @@ function CutReviewEditor({ slug, preview, onClose, onApplied }: { slug: string; 
       ) : (
         <ul className="space-y-2">
           {rows.map((row) => (
-            <ChangeRow key={row.id} row={row} rows={rows} pool={pool} onChange={setRows} />
+            <ChangeRow key={row.id} row={row} rows={rows} pool={pool} pickOptions={pickOptions} onChange={setRows} />
           ))}
         </ul>
       )}
@@ -124,6 +126,31 @@ function CutReviewEditor({ slug, preview, onClose, onApplied }: { slug: string; 
   );
 }
 
+/**
+ * "This plan leaves N players cut" — or, while a Team change's pick is open and the picks don't all leave the same
+ * number, the range, so it never promises a count only one pick delivers.
+ */
+function PlanCount({ counts, openPick }: { counts: CutReviewScore | undefined; openPick: "addTeam" | "removeTeam" }) {
+  if (!counts) return <>This plan leaves … players cut</>;
+  const { cutPlayers, cutPlayersMax } = counts;
+  if (cutPlayersMax === cutPlayers) {
+    return (
+      <>
+        This plan leaves <span className="num">{cutPlayers}</span> player{cutPlayers === 1 ? "" : "s"} cut
+      </>
+    );
+  }
+  return (
+    <>
+      This plan leaves <span className="num">{cutPlayers}</span>–<span className="num">{cutPlayersMax}</span> players cut, depending on{" "}
+      {openPick === "addTeam" ? "who captains the new Team" : "which Team is removed"}
+    </>
+  );
+}
+
+// A Team pick's option, with how many players the plan leaves cut if it's the one picked.
+const withCount = (label: string, cut: number | undefined) => (cut === undefined ? label : `${label} · leaves ${cut} cut`);
+
 const REGION_LABEL = new Map(TIME_ZONE_REGIONS.map((r) => [r.key, r.label]));
 
 function singleLabel(single: CutReviewPool["singles"][number]): string {
@@ -137,17 +164,33 @@ const pairLabel = (pair: CutReviewPool["pairs"][number]) => pair.members.map((m)
 const teamLabel = (team: CutReviewPool["teams"][number]) => `${team.name} (Captain ${team.captainRsn})`;
 
 /** Everyone in the pool, for an added Team's Captain: a pair member brings their partner along as co-captain. */
-function captainOptions(pool: CutReviewPool): SelectOption[] {
+function captainOptions(pool: CutReviewPool, pickOptions: Record<string, number> | null = null): SelectOption[] {
   return [
-    ...pool.singles.map((s) => ({ value: s.userId, label: s.rsn, group: pool.pairs.length ? "Singles" : undefined })),
+    ...pool.singles.map((s) => ({ value: s.userId, label: withCount(s.rsn, pickOptions?.[s.userId]), group: pool.pairs.length ? "Singles" : undefined })),
     ...pool.pairs.flatMap((p) =>
-      p.members.map((m) => ({ value: m.userId, label: `${m.rsn} (with ${p.members.find((o) => o.userId !== m.userId)?.rsn ?? "partner"})`, group: "Pairs" })),
+      p.members.map((m) => ({
+        value: m.userId,
+        label: withCount(`${m.rsn} (with ${p.members.find((o) => o.userId !== m.userId)?.rsn ?? "partner"})`, pickOptions?.[m.userId]),
+        group: "Pairs",
+      })),
     ),
   ];
 }
 
 /** One change of the plan, by name, with its picks — or, once dropped, what it was and a way back. */
-function ChangeRow({ row, rows, pool, onChange }: { row: CutReviewRow; rows: CutReviewRow[]; pool: CutReviewPool; onChange: (rows: CutReviewRow[]) => void }) {
+function ChangeRow({
+  row,
+  rows,
+  pool,
+  pickOptions,
+  onChange,
+}: {
+  row: CutReviewRow;
+  rows: CutReviewRow[];
+  pool: CutReviewPool;
+  pickOptions: Record<string, number> | null;
+  onChange: (rows: CutReviewRow[]) => void;
+}) {
   const single = (userId: string) => pool.singles.find((s) => s.userId === userId);
   const conflict = restoreConflicts(rows, row.id);
 
@@ -198,7 +241,7 @@ function ChangeRow({ row, rows, pool, onChange }: { row: CutReviewRow; rows: Cut
           aria-label="Captain of the new Team"
           placeholder="Pick its Captain…"
           value={row.captainUserId ?? ""}
-          options={captainOptions(pool)}
+          options={captainOptions(pool, pickOptions)}
           onChange={(userId) => onChange(setTeamPick(rows, row.id, userId))}
         />
       );
@@ -213,7 +256,7 @@ function ChangeRow({ row, rows, pool, onChange }: { row: CutReviewRow; rows: Cut
           aria-label="Team to remove"
           placeholder="Pick the Team…"
           value={row.teamId ?? ""}
-          options={pool.teams.map((t) => ({ value: t.teamId, label: teamLabel(t) }))}
+          options={pool.teams.map((t) => ({ value: t.teamId, label: withCount(teamLabel(t), pickOptions?.[t.teamId]) }))}
           onChange={(teamId) => onChange(setTeamPick(rows, row.id, teamId))}
         />
       );

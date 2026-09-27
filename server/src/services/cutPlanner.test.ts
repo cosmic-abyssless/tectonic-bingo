@@ -138,12 +138,12 @@ describe("resolveChanges / scoreChanges", () => {
 
   it("scores an empty change list as the roster stands", () => {
     const result = scoreChanges(scenario(), []);
-    expect(result).toEqual({ cutPlayers: 2, cutPlayersNow: 2 });
+    expect(result).toEqual({ cutPlayers: 2, cutPlayersMax: 2, cutPlayersNow: 2, pickOptions: null });
   });
 
   it("scores the admin's own edit the same way the planner would", () => {
     const result = scoreChanges(scenario(), [{ kind: "pair", userIds: ["c", "d"] }]);
-    expect(result).toEqual({ cutPlayers: 0, cutPlayersNow: 2 });
+    expect(result).toEqual({ cutPlayers: 0, cutPlayersMax: 0, cutPlayersNow: 2, pickOptions: null });
   });
 
   it("resolves a multi-step edit in order: split, then pair one of the resulting halves", () => {
@@ -250,5 +250,35 @@ describe("Team changes move their Captains", () => {
     // Removing the pair's Team: 3 pairs over 2 Teams = 1 each, 1 pair (2 players) cut.
     expect(scoreChanges(input, [{ kind: "removeTeam", teamId: "t3" }]).cutPlayers).toBe(2);
     expect(() => scoreChanges(input, [{ kind: "removeTeam", teamId: "nope" }])).toThrow(ServiceError);
+  });
+
+  // The case an Admin hit: the plan claimed 0 cut, but only one of the Teams it could remove gets there.
+  it("gives the range over an open Team pick, and what each pick leaves cut, not just the best case", () => {
+    const pairTeam: CutPlannerTeam = {
+      teamId: "t3",
+      members: [
+        { userId: "x", signedUpAt: 0, insertionRank: nextRank++, timezoneRegion: null },
+        { userId: "y", signedUpAt: 0, insertionRank: nextRank++, timezoneRegion: null },
+      ],
+      pairingId: "pxy",
+    };
+    // 3 Teams, 5 pairs + 6 singles: 2 pairs (4 players) cut. Removing the pair-led Team: 6 pairs + 6 singles over 2 = 0 cut.
+    // Removing a solo-led one: 5 pairs (1 cut) + 7 singles (1 cut) over 2 = 3 cut.
+    const units = [pair("p1", "a", "b"), pair("p2", "c", "d"), pair("p3", "e", "f"), pair("p4", "g", "h"), pair("p5", "i", "j"), ...singles(6)];
+    const input = baseInput(units, { teamCount: 3, teams: [captainTeam("t1", "c1"), captainTeam("t2", "c2"), pairTeam] });
+    const open = scoreChanges(input, [{ kind: "removeTeam" }]);
+    expect(open).toMatchObject({ cutPlayers: 0, cutPlayersMax: 3, cutPlayersNow: 4 });
+    expect(open.pickOptions).toEqual({ t1: 3, t2: 3, t3: 0 });
+    // Once picked the count is exact, and the other picks still say what they would leave.
+    const picked = scoreChanges(input, [{ kind: "removeTeam", teamId: "t1" }]);
+    expect(picked).toMatchObject({ cutPlayers: 3, cutPlayersMax: 3 });
+    expect(picked.pickOptions).toEqual({ t1: 3, t2: 3, t3: 0 });
+  });
+
+  it("scores an open added Team for every possible Captain", () => {
+    const input = baseInput([pair("p1", "a", "b"), ...singles(7)], { teamCount: 2, teams: [captainTeam("t1", "c1"), captainTeam("t2", "c2")] });
+    const { pickOptions } = scoreChanges(input, [{ kind: "addTeam" }]);
+    expect(Object.keys(pickOptions ?? {}).sort()).toEqual(["a", "b", "s0", "s1", "s2", "s3", "s4", "s5", "s6"].sort());
+    expect(pickOptions?.a).toBe(pickOptions?.b); // a pair leaves together, whichever of them captains
   });
 });

@@ -972,10 +972,20 @@ export type AppliedCutChange =
   | { kind: "removeTeam"; teamId: string };
 
 /** The fewest-cut-players plan a Cut review proposes, or the result of scoring an admin-edited change list against the current roster. */
-export interface CutReviewPlan {
+export interface CutReviewPlan extends CutReviewScore {
   changes: CutChange[];
-  cutPlayers: number; // players cut once every change in `changes` is applied
+}
+
+/**
+ * How many players a change list leaves cut. A Team change whose pick is still open (no Captain / Team chosen) can
+ * go several ways: `cutPlayers` is then the best of them and `cutPlayersMax` the worst. `pickOptions` has the count
+ * for every pick, made or not — keyed by the added Team's Captain (userId) or the removed Team (teamId).
+ */
+export interface CutReviewScore {
+  cutPlayers: number; // players cut once every change is applied (best case over an open Team pick)
+  cutPlayersMax: number; // worst case over an open Team pick; equals cutPlayers otherwise
   cutPlayersNow: number; // players cut as things stand, before any change
+  pickOptions: Record<string, number> | null; // players cut per pick of the Team change; null without one
 }
 
 // GET /mod/draft/cut-review: the plan a Cut review proposes, plus the Avoidable/Unavoidable split it implies — for
@@ -1007,9 +1017,7 @@ export interface CutReviewPool {
 export interface ScoreCutReviewRequest {
   changes: CutChange[];
 }
-export interface ScoreCutReviewResponse {
-  cutPlayers: number;
-}
+export type ScoreCutReviewResponse = CutReviewScore;
 
 // POST .../admin/cut-review/apply: applies the (possibly edited) plan in one transaction through the existing
 // pairing and Captain/Team operations, and records that a review was applied for the roster as it now stands.

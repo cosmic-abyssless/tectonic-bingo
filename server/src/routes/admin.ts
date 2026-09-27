@@ -480,8 +480,7 @@ router.post(
     const { changes } = req.body as { changes?: CutChange[] };
     if (!Array.isArray(changes)) throw new ServiceError(400, "changes must be an array");
     res.locals.readOnly = true;
-    const cutPlayers = cutReviewService.scoreCutChanges(db, req.bingo!, changes);
-    res.json({ cutPlayers });
+    res.json(cutReviewService.scoreCutChanges(db, req.bingo!, changes));
   }),
 );
 

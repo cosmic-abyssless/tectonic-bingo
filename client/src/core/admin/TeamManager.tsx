@@ -58,6 +58,8 @@ function TeamCard({ slug, team, onDelete }: { slug: string; team: TeamWithMember
       // Membership changes also change who is free to captain a new team.
       queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.captainCandidates(slug) });
+      // And who the draft cuts (a Team is a share of the pool), with the Cut review worked out from it.
+      queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) });
     }
   }
   const update = (patch: Partial<Team>) => run(() => adminApi.updateTeam(slug, team.id, patch));
@@ -193,6 +195,7 @@ export function TeamManager({ slug }: { slug: string }) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) }),
         queryClient.invalidateQueries({ queryKey: adminQueryKeys.captainCandidates(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
       ]);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to create team");
@@ -214,6 +217,7 @@ export function TeamManager({ slug }: { slug: string }) {
       setError(e instanceof Error ? e.message : `Failed to delete ${team.name}`);
     } finally {
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.captainCandidates(slug) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) });
     }
   }
 
