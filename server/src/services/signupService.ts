@@ -1,6 +1,6 @@
 import { now as clockNow } from "../clock";
 import { and, count, eq, inArray, isNotNull, ne, or } from "drizzle-orm";
-import { canSeeAnswers, encodeChoices, formatSignupAnswer, isBlankAnswer, isValidTimeZone, otherText, parseChoiceAnswer, QUESTION_VISIBILITIES, MAX_CHOICE_LENGTH, MAX_MULTISELECT_CHOICES, MAX_OTHER_LENGTH, MAX_QUESTION_HELPER_TEXT, type AnswerViewer, type QuestionVisibility, type SignupQuestionType, type Stage } from "@bingo/shared";
+import { canSeeAnswers, encodeChoices, encodeMemberPicks, formatSignupAnswer, isBlankAnswer, isValidTimeZone, otherText, parseChoiceAnswer, parseMemberPicks, QUESTION_VISIBILITIES, MAX_CHOICE_LENGTH, MAX_MEMBER_PICKS, MAX_MULTISELECT_CHOICES, MAX_OTHER_LENGTH, MAX_QUESTION_HELPER_TEXT, type AnswerViewer, type QuestionVisibility, type SignupQuestionType, type Stage } from "@bingo/shared";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
@@ -12,6 +12,7 @@ import { withRsn } from "./playerNames";
 import { parseStoredCaStats } from "./combatAchievements";
 import { parseWomSummary } from "./womService";
 import { PUBLIC_USER_COLS } from "./userService";
+import { inGuildUserIds, nameMemberPicks, withMemberNames } from "./memberPickService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -57,6 +58,10 @@ export interface CreateQuestionParams {
   optionsJson?: string | null;
   /** Choice questions only: offer an Other choice with a free-text box. */
   allowOther?: boolean;
+  /** Member pick only: several members may be picked (otherwise one). */
+  multiplePicks?: boolean;
+  /** Member pick with several only: the most that may be picked; null for no limit. */
+  maxPicks?: number | null;
   required?: boolean;
   sortOrder?: number;
   visibility?: QuestionVisibility;
@@ -82,6 +87,19 @@ function assertChoiceSettings(type: SignupQuestionType, allowOther: unknown, opt
   if (allowOther !== undefined && typeof allowOther !== "boolean") throw new ServiceError(400, "allowOther must be true or false");
   if (allowOther && !isChoiceType(type)) throw new ServiceError(400, "Only a single- or multiple-choice question can allow Other");
   if (isChoiceType(type) && optionsOf(optionsJson).some((o) => otherText(o) !== null)) throw new ServiceError(400, "An option can't be written as an Other answer");
+}
+
+/**
+ * Checks a Member pick's settings: one or several only on a Member pick, and a maximum only with several, a whole
+ * number from 1 up. `multiplePicks` and `maxPicks` are what the question ends up with.
+ */
+function assertMemberSettings(type: SignupQuestionType, multiplePicks: unknown, maxPicks: unknown): void {
+  if (typeof multiplePicks !== "boolean") throw new ServiceError(400, "multiplePicks must be true or false");
+  if (maxPicks !== null && (typeof maxPicks !== "number" || !Number.isInteger(maxPicks) || maxPicks < 1 || maxPicks > MAX_MEMBER_PICKS)) {
+    throw new ServiceError(400, `The maximum must be a whole number from 1 to ${MAX_MEMBER_PICKS}, or empty for no limit`);
+  }
+  if (type !== "member" && (multiplePicks || maxPicks !== null)) throw new ServiceError(400, "Only a Member pick question can pick several members or have a maximum");
+  if (!multiplePicks && maxPicks !== null) throw new ServiceError(400, "Only a Member pick of several members can have a maximum");
 }
 
 /** Trims the helper text; blank (or absent) is none. */
@@ -123,6 +141,7 @@ export function createQuestion(db: Db, params: CreateQuestionParams) {
     throw new ServiceError(400, "optionsJson is required for a choice question");
   }
   assertChoiceSettings(params.type, params.allowOther, params.optionsJson);
+  assertMemberSettings(params.type, params.multiplePicks ?? false, params.maxPicks ?? null);
   assertVisibility(params.visibility);
   const values = { ...params, helperText: normalizeHelperText(params.helperText) };
   return db.transaction((tx) => {
@@ -147,6 +166,14 @@ export function updateQuestion(db: Db, id: string, params: Partial<Omit<CreateQu
     const set = "helperText" in params ? { ...params, helperText: normalizeHelperText(params.helperText) } : { ...params };
     // Other goes with the choices: a question that stops being a choice question stops allowing it.
     if (!isChoiceType(type) && existing.allowOther) set.allowOther = false;
+    // Likewise one/several and the maximum go with the Member pick, and the maximum with several.
+    if (type !== "member") {
+      if (params.multiplePicks === undefined && existing.multiplePicks) set.multiplePicks = false;
+      if (params.maxPicks === undefined && existing.maxPicks !== null) set.maxPicks = null;
+    }
+    const multiplePicks = set.multiplePicks ?? existing.multiplePicks;
+    if (!multiplePicks && params.maxPicks === undefined && existing.maxPicks !== null) set.maxPicks = null;
+    assertMemberSettings(type, multiplePicks, set.maxPicks === undefined ? existing.maxPicks : set.maxPicks);
     const updated = tx.update(signupQuestions).set(set).where(eq(signupQuestions.id, id)).returning().get();
 
     const changes = diffFields(existing, updated, { only: Object.keys(set) as (keyof typeof existing)[] });
@@ -240,7 +267,7 @@ export function getSignupForUser(db: Db, bingoId: string, userId: string) {
   if (!row) return null;
   const { caCurrentJson, caPeakJson, statsFetchedAt, womDataJson, ...signup } = row;
   void womDataJson;
-  const answers = db.select().from(signupAnswers).where(eq(signupAnswers.signupId, signup.id)).all();
+  const answers = withMemberNames(db, bingoId, db.select().from(signupAnswers).where(eq(signupAnswers.signupId, signup.id)).all());
   return { signup, answers, caCurrentJson, caPeakJson, statsFetchedAt };
 }
 
@@ -264,7 +291,36 @@ export interface CreateSignupParams {
   rsnVerified?: boolean;
 }
 
-type AnsweredQuestion = { id: string; type: SignupQuestionType; optionsJson: string | null; allowOther: boolean };
+type AnsweredQuestion = { id: string; type: SignupQuestionType; optionsJson: string | null; allowOther: boolean; multiplePicks: boolean; maxPicks: number | null };
+
+/**
+ * A Member pick answer in its stored form: a list of user ids, each an existing user in the clan right now who isn't
+ * the answerer, none twice, and no more than the question allows. A member already in the player's saved answer
+ * stays pickable after leaving the clan, so saving the form untouched still works.
+ */
+function normalizeMemberPicks(db: Db, question: AnsweredQuestion, value: unknown, answererUserId: string, previous: string | undefined): string {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) return "[]";
+  let items: unknown = null;
+  try {
+    items = JSON.parse(text);
+  } catch {
+    // not a list: refused below
+  }
+  // Each pick is a user id; the named form the server sends out ({ id, name }) is taken back too.
+  const ids = Array.isArray(items) ? items.map((i) => (typeof i === "string" ? i : i && typeof i === "object" ? (i as { id?: unknown }).id : null)) : null;
+  if (!ids || ids.some((id) => typeof id !== "string" || !id)) throw new ServiceError(400, "A Member pick answer must be a list of members");
+  const picks = ids as string[];
+  if (new Set(picks).size !== picks.length) throw new ServiceError(400, "The same member is picked twice");
+  if (picks.includes(answererUserId)) throw new ServiceError(400, "You can't pick yourself");
+  if (!question.multiplePicks && picks.length > 1) throw new ServiceError(400, "Pick only one member");
+  const max = Math.min(question.maxPicks ?? MAX_MEMBER_PICKS, MAX_MEMBER_PICKS);
+  if (picks.length > max) throw new ServiceError(400, `Pick at most ${max} member${max === 1 ? "" : "s"}`);
+  const kept = new Set(parseMemberPicks(previous).map((p) => p.id));
+  const inGuild = inGuildUserIds(db, picks.filter((id) => !kept.has(id)));
+  if (picks.some((id) => !kept.has(id) && !inGuild.has(id))) throw new ServiceError(400, "Only clan members who have logged in to the site can be picked");
+  return encodeMemberPicks(picks);
+}
 
 /**
  * Checks each answer against its question and returns it in its stored form. A choice has to be one of the options,
@@ -273,10 +329,11 @@ type AnsweredQuestion = { id: string; type: SignupQuestionType; optionsJson: str
  * has edited the options or turned Other off. A multiple-choice answer is stored as a cleaned JSON list (trimmed, no
  * blanks or repeats); text and yes/no answers are stored as given.
  */
-function normalizeAnswers<T extends { questionId: string; value: string }>(questions: AnsweredQuestion[], answers: T[], previous: ReadonlyMap<string, string> = new Map()): T[] {
+function normalizeAnswers<T extends { questionId: string; value: string }>(db: Db, answererUserId: string, questions: AnsweredQuestion[], answers: T[], previous: ReadonlyMap<string, string> = new Map()): T[] {
   const questionById = new Map(questions.map((q) => [q.id, q]));
   return answers.map((a) => {
     const question = questionById.get(a.questionId);
+    if (question?.type === "member") return { ...a, value: normalizeMemberPicks(db, question, a.value, answererUserId, previous.get(a.questionId)) };
     if (!question || !isChoiceType(question.type)) return a;
     const multiple = question.type === "multiselect";
     const text = typeof a.value === "string" ? a.value.trim() : "";
@@ -335,7 +392,7 @@ export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
     if (existing?.status === "active") throw new ServiceError(409, "You've already signed up for this bingo");
 
     const questions = tx.select().from(signupQuestions).where(eq(signupQuestions.bingoId, params.bingoId)).all();
-    const answers = normalizeAnswers(questions, params.answers, savedAnswers(tx, existing?.id));
+    const answers = normalizeAnswers(tx, params.userId, questions, params.answers, savedAnswers(tx, existing?.id));
     const answerById = new Map(answers.map((a) => [a.questionId, a.value]));
     const missingRequired = questions.some((q) => q.required && isBlankAnswer(q.type, answerById.get(q.id)));
     if (missingRequired) throw new ServiceError(400, "Please answer every required question");
@@ -423,8 +480,8 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
     }
     const questions = tx.select().from(signupQuestions).where(eq(signupQuestions.bingoId, bingo.id)).all();
     const questionById = new Map(questions.map((q) => [q.id, q]));
-    const shown = (type: SignupQuestionType, value: string) => formatSignupAnswer(type, value) || "—";
-    for (const a of normalizeAnswers(questions, params.answers ?? [], savedAnswers(tx, signupId))) {
+    const shown = (type: SignupQuestionType, value: string) => formatSignupAnswer(type, type === "member" ? nameMemberPicks(tx, bingo.id, value) : value) || "—";
+    for (const a of normalizeAnswers(tx, existing.userId, questions, params.answers ?? [], savedAnswers(tx, signupId))) {
       const existingAnswer = tx
         .select()
         .from(signupAnswers)
@@ -537,7 +594,7 @@ export function getAllSignups(db: Db, bingoId: string, viewer: AnswerViewer = "a
     .orderBy(signups.createdAt)
     .all();
   const signupIds = rows.map((r) => r.signup.id);
-  const answers = signupIds.length ? db.select().from(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).all() : [];
+  const answers = withMemberNames(db, bingoId, signupIds.length ? db.select().from(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).all() : []);
   const visible = visibleQuestionIds(db, bingoId, viewer);
 
   const collectorIds = [...new Set(rows.map((r) => r.signup.buyinCollectedByUserId).filter((id): id is string => !!id))];

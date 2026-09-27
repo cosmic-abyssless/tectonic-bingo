@@ -23,6 +23,7 @@ import { resolveSubmissionTarget, resolveSubmissionTeam } from "../services/subm
 import * as signupService from "../services/signupService";
 import * as draftService from "../services/draftService";
 import * as pairingService from "../services/pairingService";
+import * as memberPickService from "../services/memberPickService";
 import * as userService from "../services/userService";
 import * as statsService from "../services/statsService";
 import * as rewindService from "../services/rewindService";
@@ -501,6 +502,17 @@ router.get(
         .filter((c) => c.discordId !== req.user!.discordId)
         .map((c) => ({ ...c, user: userByDiscordId.get(c.discordId) ?? null })),
     });
+  }),
+);
+
+// Who a Member pick question on the signup form can pick: every clan member who has logged in, except the asker.
+router.get(
+  "/:slug/signup/members",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    assertSignupHelpersOpen(req);
+    res.json({ members: memberPickService.getPickableMembers(db, req.user!.id) });
   }),
 );
 

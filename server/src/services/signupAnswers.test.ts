@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeChoices, encodeSingleChoice, formatSignupAnswer, hasBlankOther, isBlankAnswer, parseChoiceAnswer, parseChoices } from "@bingo/shared";
+import { encodeChoices, encodeMemberPicks, encodeSingleChoice, formatSignupAnswer, hasBlankOther, isBlankAnswer, parseChoiceAnswer, parseChoices, parseMemberPicks } from "@bingo/shared";
 
 describe("multiple-choice answers", () => {
   it("reads a stored list, and treats a blank or plain value gently", () => {
@@ -68,5 +68,28 @@ describe("Other answers", () => {
     expect(hasBlankOther("multiselect", '["Melee",{"other":""}]')).toBe(true);
     expect(hasBlankOther("multiselect", '["Melee",{"other":"x"}]')).toBe(false);
     expect(hasBlankOther("multiselect", '["Melee"]')).toBe(false);
+  });
+});
+
+describe("Member pick answers", () => {
+  it("read the stored ids and the served names alike, and encode as ids without repeats", () => {
+    expect(parseMemberPicks('["u1","u2"]')).toEqual([{ id: "u1", name: null }, { id: "u2", name: null }]);
+    expect(parseMemberPicks('[{"id":"u1","name":"Zezima"}]')).toEqual([{ id: "u1", name: "Zezima" }]);
+    expect(parseMemberPicks("")).toEqual([]);
+    expect(parseMemberPicks("Zezima")).toEqual([]);
+    expect(encodeMemberPicks(["u1", "u2", "u1"])).toBe('["u1","u2"]');
+  });
+
+  it("show as the members' names, and an old free-text answer as written", () => {
+    expect(formatSignupAnswer("member", '[{"id":"u1","name":"Zezima"},{"id":"u2","name":"Lynx Titan"}]')).toBe("Zezima, Lynx Titan");
+    expect(formatSignupAnswer("member", '[{"id":"u1","name":null}]')).toBe("Unknown member");
+    expect(formatSignupAnswer("member", "[]")).toBe("");
+    expect(formatSignupAnswer("member", "Zezima")).toBe("Zezima");
+  });
+
+  it("count as answered with at least one pick", () => {
+    expect(isBlankAnswer("member", "[]")).toBe(true);
+    expect(isBlankAnswer("member", "")).toBe(true);
+    expect(isBlankAnswer("member", '["u1"]')).toBe(false);
   });
 });

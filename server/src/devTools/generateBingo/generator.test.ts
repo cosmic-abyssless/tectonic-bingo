@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import { isBlankAnswer, parseChoiceAnswer, parseChoices, type GraphNode, type SignupQuestion, type Tile } from "@bingo/shared";
+import { isBlankAnswer, parseChoiceAnswer, parseChoices, parseMemberPicks, type GraphNode, type SignupQuestion, type Tile } from "@bingo/shared";
 import { answerQuestions } from "./answers";
 import { DIFFICULTY, buildBoard, deadlockedParts, difficultyOf, planSubmissions, type Claim, type PartModel } from "./board";
 import { OptionsError, defaultSlug, normalizeOptions } from "./options";
@@ -338,7 +338,7 @@ describe("exclusive items on the board", () => {
 
 describe("answerQuestions", () => {
   const question = (over: Partial<SignupQuestion> & Pick<SignupQuestion, "id" | "prompt" | "type">): SignupQuestion =>
-    ({ bingoId: "b", helperText: null, optionsJson: null, allowOther: false, required: false, sortOrder: 0, ...over }) as SignupQuestion;
+    ({ bingoId: "b", helperText: null, optionsJson: null, allowOther: false, multiplePicks: false, maxPicks: null, required: false, sortOrder: 0, ...over }) as SignupQuestion;
   const QUESTIONS: SignupQuestion[] = [
     question({ id: "captain", prompt: "Interested in captaining?", type: "select", optionsJson: JSON.stringify(["Yes", "No", "Maybe"]) }),
     question({ id: "tz", prompt: "What time zone and/or country are you in?", type: "text", required: true }),
@@ -406,6 +406,21 @@ describe("answerQuestions", () => {
     }
     const without = players.flatMap((p) => answerQuestions(QUESTIONS, p, new Rng(p.index)));
     expect(without.every((a) => parseChoiceAnswer(a.value).other === null)).toBe(true);
+  });
+
+  it("answers a Member pick with other members, one or several up to the maximum", () => {
+    const pick = [
+      question({ id: "one", prompt: "Who would you like to play with?", type: "member", required: true }),
+      question({ id: "few", prompt: "Who have you played with?", type: "member", multiplePicks: true, maxPicks: 2, required: true }),
+    ];
+    const others = ["u1", "u2", "u3", "u4"];
+    for (const p of players) {
+      const [one, few] = answerQuestions(pick, p, new Rng(p.index), others).map((a) => parseMemberPicks(a.value).map((m) => m.id));
+      expect(one).toHaveLength(1);
+      expect(few!.length).toBeGreaterThanOrEqual(1);
+      expect(few!.length).toBeLessThanOrEqual(2);
+      expect([...one!, ...few!].every((id) => others.includes(id))).toBe(true);
+    }
   });
 
   it("is the same for the same player and seed, and doesn't depend on other players", () => {

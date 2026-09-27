@@ -21,6 +21,7 @@ import { audit } from "../audit/record";
 import { skipsIntegrations } from "../audit/context";
 import { broadcast } from "../ws";
 import { log } from "../log";
+import { withMemberNames } from "./memberPickService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -125,7 +126,7 @@ export function getSignupStats(db: Db, bingoId: string, userId: string): (Stored
     .where(and(eq(signups.bingoId, bingoId), eq(signups.userId, userId), eq(signups.status, "active")))
     .get();
   if (!signup) return null;
-  const answers = db.select().from(signupAnswers).where(eq(signupAnswers.signupId, signup.id)).all();
+  const answers = withMemberNames(db, bingoId, db.select().from(signupAnswers).where(eq(signupAnswers.signupId, signup.id)).all());
   return { rsn: signup.rsn, answers, ...parseStoredPlayerStats(signup) };
 }
 

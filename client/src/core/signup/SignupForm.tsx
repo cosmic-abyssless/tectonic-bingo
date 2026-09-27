@@ -7,7 +7,7 @@ import { Disclosure } from "../ui/Disclosure";
 import { Field, Input, Textarea } from "../ui/Field";
 import { Select } from "../ui/Select";
 import { SearchableSelect } from "../ui/SearchableSelect";
-import { AlertIcon, CheckIcon, LockIcon } from "../ui/icons";
+import { AlertIcon, CheckIcon, LockIcon, XIcon } from "../ui/icons";
 
 /** A group of radio buttons or checkboxes under one label, for the choice questions. */
 function ChoiceGroup({ question, label }: { question: SignupQuestionModel; label: React.ReactNode }) {
@@ -73,6 +73,45 @@ function ChoiceGroup({ question, label }: { question: SignupQuestionModel; label
   );
 }
 
+/**
+ * A Member pick: a search box over the clan's members. With one pick the box shows the pick and a new one replaces
+ * it; with several each pick becomes a removable chip under it, until the maximum.
+ */
+function MemberPickField({ question, label }: { question: SignupQuestionModel; label: React.ReactNode }) {
+  const members = question.members!;
+  const limit = members.max !== null ? `Pick up to ${members.max}.` : null;
+  const hint = [limit, question.hint].filter(Boolean).join(" ") || undefined;
+  const placeholder = members.loading ? "Loading members…" : members.full ? "That's the most you can pick" : "Search by RSN or Discord name…";
+  return (
+    <Field as="div" label={label} hint={hint}>
+      <SearchableSelect
+        value={members.multiple ? "" : (members.picked[0]?.id ?? "")}
+        options={members.options}
+        placeholder={placeholder}
+        onChange={members.pick}
+        readOnly={members.loading || members.full}
+      />
+      {members.multiple && members.picked.length > 0 && (
+        <ul aria-label={`Picked for ${question.prompt}`} className="mt-2 flex flex-wrap gap-1.5">
+          {members.picked.map((p) => (
+            <li key={p.id} className="flex items-center gap-1 rounded-full border border-outline bg-surface-raised py-0.5 pr-1 pl-2.5 text-sm text-on-surface">
+              {p.name}
+              <button type="button" aria-label={`Remove ${p.name}`} onClick={p.remove} className="rounded-full p-0.5 text-on-surface-subtle hover:text-danger">
+                <XIcon size={12} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {question.clear && (
+        <button type="button" onClick={question.clear} className="mt-1.5 text-xs text-on-surface-subtle underline underline-offset-2 hover:text-on-surface">
+          Clear
+        </button>
+      )}
+    </Field>
+  );
+}
+
 function Required() {
   return <span className="ml-1 text-danger">*</span>;
 }
@@ -105,6 +144,9 @@ function QuestionField({ question }: { question: SignupQuestionModel }) {
   }
   if (question.type === "select" || question.type === "multiselect") {
     return <ChoiceGroup question={question} label={label} />;
+  }
+  if (question.type === "member") {
+    return <MemberPickField question={question} label={label} />;
   }
   return (
     <Field label={label} hint={question.hint}>

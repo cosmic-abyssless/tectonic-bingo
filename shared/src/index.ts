@@ -628,9 +628,10 @@ export interface ReviewSubmissionResponse {
 
 /**
  * "select" is a single choice (shown as radio buttons) and "multiselect" is any number of choices (checkboxes), both
- * from `optionsJson`. A multiselect answer is stored as a JSON list (see signupAnswers.ts).
+ * from `optionsJson`. A multiselect answer is stored as a JSON list (see signupAnswers.ts). "member" is a Member pick:
+ * one or several clan members, stored as a JSON list of their user ids (see signupAnswers.ts).
  */
-export type SignupQuestionType = "text" | "textarea" | "select" | "multiselect" | "boolean";
+export type SignupQuestionType = "text" | "textarea" | "select" | "multiselect" | "boolean" | "member";
 
 /**
  * Who, besides the player who answered, can see a question's answers: that level and up (captains < mods < admins).
@@ -659,6 +660,10 @@ export interface SignupQuestion {
   optionsJson: string | null;
   /** Choice questions only: players can pick Other and write their own answer instead of (or besides) an option. */
   allowOther: boolean;
+  /** Member pick only: several members may be picked (otherwise one). */
+  multiplePicks: boolean;
+  /** Member pick with several only: the most that may be picked, or null for no limit. */
+  maxPicks: number | null;
   required: boolean;
   sortOrder: number;
   visibility: QuestionVisibility;
@@ -799,6 +804,20 @@ export interface PartnerCandidate {
   discordId: string;
   rsns: string[];
   user: PublicUser | null;
+}
+
+/**
+ * Someone a Member pick question can pick: a clan member who has logged in. `name` is the RSN of their latest signup
+ * (in any bingo), or their Discord name if they've never signed up; search matches either.
+ */
+export interface PickableMember {
+  userId: string;
+  name: string;
+  discordName: string;
+}
+
+export interface PickableMembersResponse {
+  members: PickableMember[];
 }
 
 export interface PartnerCandidatesResponse {

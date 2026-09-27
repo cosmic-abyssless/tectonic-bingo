@@ -115,7 +115,8 @@ export async function runSignups(ctx: Ctx, players: Player[], pairs: [Player, Pl
           p.userId = user.id;
         }
         const timezone = TIMEZONE_BY_OFFSET[p.offset] ?? "Etc/UTC";
-        await ctx.api.as(p.discordId).post(path(ctx, "/signup"), { rsn: p.name, timezone, answers: answerQuestions(questions, p, rng.fork(`answers-${p.index}`)) }, { at: p.signupAt! });
+        const others = players.flatMap((o) => (o !== p && o.userId ? [o.userId] : []));
+        await ctx.api.as(p.discordId).post(path(ctx, "/signup"), { rsn: p.name, timezone, answers: answerQuestions(questions, p, rng.fork(`answers-${p.index}`), others) }, { at: p.signupAt! });
         signedUp.add(p.index);
       },
     });

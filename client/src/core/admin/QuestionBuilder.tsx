@@ -9,7 +9,7 @@ import { Card, EmptyState, Notice } from "../ui/Card";
 import { Dialog, DialogHeader } from "../ui/Dialog";
 import { Input } from "../ui/Field";
 import { Select } from "../ui/Select";
-import { MAX_QUESTION_HELPER_TEXT } from "@bingo/shared";
+import { MAX_MEMBER_PICKS, MAX_QUESTION_HELPER_TEXT } from "@bingo/shared";
 import { ChevronDownIcon, ChevronUpIcon, ListIcon, XIcon } from "../ui/icons";
 
 const isChoice = (type: SignupQuestionType) => type === "select" || type === "multiselect";
@@ -20,6 +20,7 @@ const TYPES: { value: SignupQuestionType; label: string }[] = [
   { value: "select", label: "Single choice" },
   { value: "multiselect", label: "Multiple choice" },
   { value: "boolean", label: "Yes / No" },
+  { value: "member", label: "Member pick" },
 ];
 
 function parseOptions(optionsJson: string | null | undefined): string {
@@ -57,6 +58,56 @@ function AllowOtherCheckbox(props: { checked: boolean; onChange: (on: boolean) =
   );
 }
 
+// Member pick only: one member or several, and with several an optional maximum (empty: no limit).
+function MemberPickSettings(props: { multiple: boolean; max: number | null; onChange: (settings: { multiplePicks: boolean; maxPicks: number | null }) => void; label: string }) {
+  const [maxText, setMaxText] = useState(props.max === null ? "" : String(props.max));
+  const [seen, setSeen] = useState(props.max);
+  if (seen !== props.max) {
+    setSeen(props.max);
+    setMaxText(props.max === null ? "" : String(props.max));
+  }
+  const commitMax = () => {
+    const n = Number.parseInt(maxText, 10);
+    const max = Number.isFinite(n) && n >= 1 ? Math.min(n, MAX_MEMBER_PICKS) : null;
+    setMaxText(max === null ? "" : String(max));
+    if (max !== props.max) props.onChange({ multiplePicks: true, maxPicks: max });
+  };
+  return (
+    <div className="flex items-center gap-2">
+      <Select
+        aria-label={`${props.label} picks`}
+        value={props.multiple ? "several" : "one"}
+        onChange={(v) => props.onChange({ multiplePicks: v === "several", maxPicks: v === "several" ? props.max : null })}
+        size="sm"
+        className="w-auto!"
+        options={[
+          { value: "one", label: "One member" },
+          { value: "several", label: "Several members" },
+        ]}
+      />
+      {props.multiple && (
+        <label className="flex items-center gap-1.5 text-xs text-on-surface-muted">
+          At most
+          <Input
+            aria-label={`${props.label} maximum picks`}
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={MAX_MEMBER_PICKS}
+            value={maxText}
+            onChange={(e) => setMaxText(e.target.value)}
+            onBlur={commitMax}
+            onKeyDown={(e) => e.key === "Enter" && commitMax()}
+            placeholder="No limit"
+            size="sm"
+            className="w-24!"
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
 function TypeSelect(props: { value: SignupQuestionType; onChange: (t: SignupQuestionType) => void; "aria-label": string }) {
   return (
     <Select aria-label={props["aria-label"]} value={props.value} onChange={(t) => props.onChange(t as SignupQuestionType)} className="w-auto! shrink-0" options={TYPES} />
@@ -74,6 +125,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
   const [newHelper, setNewHelper] = useState("");
   const [newRequired, setNewRequired] = useState(false);
   const [newAllowOther, setNewAllowOther] = useState(false);
+  const [newPicks, setNewPicks] = useState<{ multiplePicks: boolean; maxPicks: number | null }>({ multiplePicks: false, maxPicks: null });
   const [newVisibility, setNewVisibility] = useState<QuestionVisibility>("captains");
   const [error, setError] = useState<string | null>(null);
   // The question waiting on "delete it and its answers?" — only asked when players have answered it.
@@ -98,6 +150,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
         sortOrder: questions.length,
         optionsJson: isChoice(newType) ? JSON.stringify(options) : undefined,
         allowOther: isChoice(newType) && newAllowOther,
+        ...(newType === "member" ? newPicks : {}),
         visibility: newVisibility,
       });
       setNewPrompt("");
@@ -105,6 +158,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
       setNewHelper("");
       setNewRequired(false);
       setNewAllowOther(false);
+      setNewPicks({ multiplePicks: false, maxPicks: null });
       setNewVisibility("captains");
       invalidate();
     } catch (e: unknown) {
@@ -193,6 +247,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                   <AllowOtherCheckbox aria-label="Allow Other" checked={q.allowOther} onChange={(allowOther) => patch(q.id, { allowOther })} />
                 </div>
               )}
+              {q.type === "member" && <MemberPickSettings label="Member pick" multiple={q.multiplePicks} max={q.maxPicks} onChange={(settings) => patch(q.id, settings)} />}
             </Card>
           ))}
         </div>
@@ -243,6 +298,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
             <AllowOtherCheckbox aria-label="New question allows Other" checked={newAllowOther} onChange={setNewAllowOther} />
           </div>
         )}
+        {newType === "member" && <MemberPickSettings label="New question" multiple={newPicks.multiplePicks} max={newPicks.maxPicks} onChange={setNewPicks} />}
         {error && <Notice tone="danger">{error}</Notice>}
       </Card>
 
