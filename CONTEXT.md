@@ -293,6 +293,13 @@ A just-for-fun milestone a Player earns during a Bingo, e.g. "Strong start: subm
 - **Avoid:** Badge, Trophy, Medal.
 - **Not:** Combat Achievements (the in-game OSRS ones shown in a Player's clan standing), nor the clan's own honours shown beside a Player's name (Maxed, Grandmaster, Gilded log).
 
+### Superlative
+An award within a Team, voted by its Players, e.g. "Team MVP", "Team Spirit", "The Grinder".
+- **Rules:** Each Team votes on its own members and gets its own winners. The categories are set per Bingo by an Admin. Only Players on the Team vote, never for themselves; Duo partners and Captains can be voted for like anyone else. Votes are secret: nobody, Moderators and Admins included, sees who voted for whom.
+- **Voting:** Open for the whole of Live, closing when the Bingo is Finished. A Player picks one teammate per category, can skip a category, and can change their votes until voting closes, so the votes can follow how the Bingo goes. Players added to the Team mid-Live can vote and be voted for from then on; a Player removed from it loses their votes and the votes cast for them. The categories can be added, renamed or deleted at any time; renaming keeps the votes, deleting removes them. A Bingo with no categories has no Superlatives.
+- **Results:** Only the winners are shown, never vote counts or runners-up; Admins alone can see the counts, once voting has closed. A tie is shared by everyone tied; a category with no votes has no winner. Hidden from everyone until Wrapped is published, then revealed there: a Player's Team section shows their Team's Superlatives, and the Bingo-wide part lists every Team's winners.
+- **Not:** A Title. Titles are computed from stats; Superlatives are voted.
+
 ---
 
 ## Recap
