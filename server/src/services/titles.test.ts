@@ -21,6 +21,7 @@ function player(userId: string, facts: Partial<PlayerTitleFacts> = {}): PlayerTi
     wom: null,
     luck: null,
     achievements: null,
+    draft: null,
     lastAt: { approved: null, rejected: null, posted: null, newItem: null, item: null },
     ...facts,
   };
@@ -49,6 +50,47 @@ describe("Overachiever", () => {
   it("needs the minimum (5 by default), and nobody's eligible with Achievements switched off", () => {
     expect(holdersOf([player("a", earned(4, 1))], "overachiever")).toEqual([]);
     expect(holdersOf([player("a")], "overachiever")).toEqual([]); // achievements: null
+  });
+});
+
+describe("Overperformer", () => {
+  const drafted = (position: number, rank: number, pointsShare = 10, hours = 1) => ({ draft: { position, rank }, pointsShare, awards: [award(pointsShare, hours)] });
+
+  it("goes to the late pick who beat their draft position by the most", () => {
+    // 18th drafted, finished 3rd: 15 places. 10th drafted, finished 1st: 9.
+    const pool = [player("early", drafted(10, 1, 50)), player("late", drafted(18, 3, 30)), player("mid", drafted(8, 2, 40))];
+    expect(holdersOf(pool, "overperformer")).toEqual(["late"]);
+    const picked = pickTitles(pool, live(48)).find((p) => p.title.id === "overperformer")!;
+    expect(picked.holders[0]).toMatchObject({ value: 15, text: "Picked 18th, finished 3rd" });
+  });
+
+  it("in a Duo, only the higher scorer can hold it: both halves share the pick, and the lower one's rank is worse", () => {
+    const pool = [player("higher", drafted(12, 2, 30)), player("lower", drafted(12, 5, 20))];
+    expect(holdersOf(pool, "overperformer")).toEqual(["higher"]);
+  });
+
+  it("isn't shared when a Duo's halves tie: whoever got there first holds it", () => {
+    const pool = [player("a", drafted(12, 2, 30, 9)), player("b", drafted(12, 2, 30, 4))];
+    expect(holdersOf(pool, "overperformer")).toEqual(["b"]);
+  });
+
+  it("never goes to Captains or undrafted Players, however well they did", () => {
+    expect(holdersOf([player("captain", { pointsShare: 100, awards: [award(100, 1)] })], "overperformer")).toEqual([]);
+  });
+
+  it("needs the minimum (3 places by default) and some points share", () => {
+    expect(holdersOf([player("a", drafted(5, 3))], "overperformer")).toEqual([]);
+    expect(holdersOf([player("a", drafted(6, 3))], "overperformer")).toEqual(["a"]);
+    expect(holdersOf([player("a", { draft: { position: 20, rank: 1 }, pointsShare: 0 })], "overperformer")).toEqual([]);
+  });
+
+  it("uses the tuned minimum, and can be switched off", () => {
+    const pool = [player("a", drafted(10, 3))];
+    const settings = (s: Partial<typeof DEFAULT_TITLE_SETTINGS>) => ({ ...DEFAULT_TITLE_SETTINGS, ...s });
+    const held = (s: Partial<typeof DEFAULT_TITLE_SETTINGS>) => pickTitles(pool, live(48), settings(s)).find((p) => p.title.id === "overperformer")?.holders.map((h) => h.userId);
+    expect(held({ minimums: { overperformer: 8 } })).toEqual([]);
+    expect(held({ minimums: { overperformer: 7 } })).toEqual(["a"]);
+    expect(held({ disabled: ["overperformer"] })).toBeUndefined();
   });
 });
 
