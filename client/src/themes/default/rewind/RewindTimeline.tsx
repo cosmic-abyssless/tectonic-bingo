@@ -7,7 +7,8 @@ const TICK_WIDTH: Record<SignificanceTier, number> = { minor: 1, notable: 2, hug
 
 /**
  * The Bingo from going Live to Finishing, in real time: quiet stretches show as gaps. One tick per Submission of the
- * viewed Team, sized by its tier; the ones already on the Board are in the accent colour. The scrubber is a native
+ * viewed Team, sized by its tier; the ones already on the Board are in the accent colour. In the All Teams view each
+ * tick is its Team's colour instead, faded until it's on the Board. The scrubber is a native
  * range input stretched over the track, so dragging, clicking and the arrow keys all seek, on touch too.
  */
 export function RewindTimeline({ timeline }: { timeline: RewindTimelineModel }) {
@@ -23,7 +24,12 @@ export function RewindTimeline({ timeline }: { timeline: RewindTimelineModel }) 
               className={`absolute bottom-0 -translate-x-1/2 rounded-full ${
                 tick.rejected ? "bg-on-surface-subtle/40" : tick.past ? "bg-accent" : "bg-on-surface-subtle/70"
               } ${tick.current ? "ring-2 ring-on-surface" : ""}`}
-              style={{ left: pct(tick.position), height: TICK_HEIGHT[tick.tier], width: TICK_WIDTH[tick.tier] }}
+              style={{
+                left: pct(tick.position),
+                height: TICK_HEIGHT[tick.tier],
+                width: TICK_WIDTH[tick.tier],
+                ...(tick.teamColor && !tick.rejected ? { backgroundColor: tick.teamColor, opacity: tick.past ? 1 : 0.35 } : {}),
+              }}
             />
           ))}
           <span className="absolute -inset-y-1 w-0.5 -translate-x-1/2 bg-on-surface" style={{ left: pct(timeline.position) }} />

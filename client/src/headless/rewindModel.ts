@@ -2,7 +2,12 @@
 // Submission a step lands on, and how long Play holds each one. No React; RewindProvider wires these up. The server
 // (rewindService) has already replayed the scoring engine on submission time, so the Board at T is a filter over its
 // results, cheap enough to redo on every scrub.
-import type { PointAdjustment, RewindResponse, RewindSubmission, RewindTeam, SignificanceTier, SubmissionDetails, TeamNodeState } from "@bingo/shared";
+import type { PointAdjustment, RewindResponse, RewindSubmission, RewindTeam, SignificanceTier, SubmissionDetails, TeamNodeState, Tile } from "@bingo/shared";
+import { summarizeTileProgress } from "../core/board/tileProgress";
+import type { BoardModel, TileModel } from "./types";
+
+/** The ?team= value (and view id) for the All Teams view: every Team's progress on one Board. */
+export const ALL_TEAMS = "all";
 
 /** A Submission on the timeline, its time parsed once. */
 export interface RewindItem {
@@ -15,17 +20,22 @@ export interface PreparedRewind {
   end: number;
   /** Every approved and rejected Submission, oldest first, by Team. */
   itemsByTeam: Map<string, RewindItem[]>;
+  /** The same, every Team's together (the All Teams view). */
+  allItems: RewindItem[];
   teams: Map<string, RewindTeam>;
 }
 
 export function prepareRewind(data: RewindResponse): PreparedRewind {
   const itemsByTeam = new Map<string, RewindItem[]>();
+  const allItems: RewindItem[] = [];
   for (const sub of data.submissions) {
+    const item = { sub, at: Date.parse(sub.submittedAt) };
+    allItems.push(item);
     const list = itemsByTeam.get(sub.teamId) ?? [];
-    list.push({ sub, at: Date.parse(sub.submittedAt) });
+    list.push(item);
     itemsByTeam.set(sub.teamId, list);
   }
-  return { start: Date.parse(data.startAt), end: Date.parse(data.endAt), itemsByTeam, teams: new Map(data.teams.map((t) => [t.teamId, t])) };
+  return { start: Date.parse(data.startAt), end: Date.parse(data.endAt), itemsByTeam, allItems, teams: new Map(data.teams.map((t) => [t.teamId, t])) };
 }
 
 /** The Submissions the timeline shows for a Team: its approved ones, plus its rejected ones when they're switched on. */
@@ -84,6 +94,45 @@ export function boardStateAt(team: RewindTeam | undefined, items: RewindItem[], 
   return { nodeStates, teamSubmissions };
 }
 
+/** One Team's progress on one Tile at time T. */
+export interface TileTeamProgress {
+  teamId: string;
+  completedTasks: number;
+  totalTasks: number;
+  pointsAwarded: number;
+  totalPoints: number;
+  complete: boolean;
+}
+
+/**
+ * Every Team's progress on every Tile at time T (the All Teams view), by Tile id, in `teamIds` order. Each Team's is
+ * exactly what its own Board shows at T (boardStateAt), so a Tile's "completed by" Teams match the single-Team views.
+ */
+export function tileTeamsAt(tiles: Tile[], prepared: PreparedRewind, teamIds: string[], at: number): Map<string, TileTeamProgress[]> {
+  const out = new Map<string, TileTeamProgress[]>(tiles.map((t) => [t.id, []]));
+  for (const teamId of teamIds) {
+    const { nodeStates, teamSubmissions } = boardStateAt(prepared.teams.get(teamId), prepared.itemsByTeam.get(teamId) ?? [], at);
+    for (const tile of tiles) {
+      const s = summarizeTileProgress(tile, nodeStates, teamSubmissions);
+      out.get(tile.id)!.push({ teamId, completedTasks: s.completedTasks, totalTasks: s.totalTasks, pointsAwarded: s.pointsAwarded, totalPoints: s.totalPoints, complete: s.allComplete });
+    }
+  }
+  return out;
+}
+
+const NO_PROGRESS: TileModel["progress"] = { completedTasks: 0, totalTasks: 0, pointsAwarded: 0, totalPoints: 0, bonusAwarded: 0, allComplete: false };
+
+/**
+ * The All Teams view's Board: the shared layout with nothing of any one Team's on it, so a Tile shows no points
+ * badge or part dots of its own (its Team markers say who completed it).
+ */
+export function layoutOnly(board: BoardModel): BoardModel {
+  const strip = (tile: TileModel): TileModel => ({ ...tile, progress: NO_PROGRESS, taskStatuses: [] });
+  const tiles = board.tiles.map(strip);
+  const tileById = new Map(tiles.map((t) => [t.id, t]));
+  return { ...board, tiles, tileById, grid: board.grid.map((row) => row.map((t) => (t ? tileById.get(t.id)! : null))), totalPoints: null, adjustments: [] };
+}
+
 /** The Team's Point Adjustments made by T, in the Board's shape. */
 export function adjustmentsAt(team: RewindTeam | undefined, bingoId: string, at: number): PointAdjustment[] {
   return (team?.adjustments ?? [])
@@ -129,16 +178,19 @@ export function stepPrev(items: RewindItem[], at: number, focusIndex: number, fi
  * (7 minutes) is a ceiling, not a target: a Bingo that would run longer has every hold shrunk to fit, keeping the
  * tiers' ratios. When so many minor ones would drop below `minMinorMs`, they get that minimum and the rest share
  * what's left, never below `minNotableMs` for a notable one (a very large Bingo can then run over the ceiling).
+ * The All Teams view plays every Team's Submissions at once, several times as many, so its minor ones may flash by
+ * as quickly as `allTeamsMinMinorMs` to keep the whole Bingo near the same 7 minutes.
  */
 export const PLAYBACK = {
   maxTotalMs: 7 * 60_000,
   holdMs: { minor: 500, notable: 3_000, huge: 6_000 } satisfies Record<SignificanceTier, number>,
   minMinorMs: 150,
+  allTeamsMinMinorMs: 50,
   minNotableMs: 600,
 } as const;
 
-export function playbackHolds(tiers: SignificanceTier[]): number[] {
-  const { maxTotalMs, holdMs, minMinorMs, minNotableMs } = PLAYBACK;
+export function playbackHolds(tiers: SignificanceTier[], minMinorMs: number = PLAYBACK.minMinorMs): number[] {
+  const { maxTotalMs, holdMs, minNotableMs } = PLAYBACK;
   const total = tiers.reduce((sum, t) => sum + holdMs[t], 0);
   if (total <= maxTotalMs) return tiers.map((t) => holdMs[t]);
   const scale = maxTotalMs / total;

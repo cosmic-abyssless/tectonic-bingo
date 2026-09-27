@@ -15,6 +15,7 @@ import type {
   RewindControlsModel,
   RewindPopupModel,
   RewindScoreboardModel,
+  RewindTileTeamsModel,
   RewindTimelineModel,
   SubmissionFlowModel,
   SubmissionModel,
@@ -164,7 +165,9 @@ export interface ThemeSlots {
   // default theme's BoardGrid/TileCell just ignore it) — it's the id of
   // whichever tile the search dropdown currently has highlighted, if any,
   // so a theme can visually tie the two together.
-  BoardGrid: ComponentType<{ board: BoardModel; onOpenTile: (tileId: string) => void; highlightedTileId?: string | null }>;
+  // tileOverlay (Rewind's All Teams view) draws something over a Tile's cell, above TileCell, in the same box; a
+  // BoardGrid must render it when it's given.
+  BoardGrid: ComponentType<{ board: BoardModel; onOpenTile: (tileId: string) => void; highlightedTileId?: string | null; tileOverlay?: (tile: TileModel) => ReactNode }>;
   RowLabel: ComponentType<{ category: CategoryModel | null }>;
   EmptyCell: ComponentType<{ row: number; col: number }>;
   // onOpen takes the tile id (rather than being pre-bound) so the default
@@ -203,6 +206,11 @@ export interface ThemeSlots {
   // "small" (a notable one). A rejected one is greyed out and stamped "Rejected". The theme draws only the card (its
   // own width, no positioning); the page places it and plays it in and out.
   RewindPopup: ComponentType<{ popup: RewindPopupModel }>;
+  // All Teams view: the marks on one Tile for each Team that has completed it by the moment being viewed (in
+  // scoreboard order; possibly none). Drawn over the Tile's cell, filling it; it takes no clicks.
+  RewindTileMarkers: ComponentType<{ tile: RewindTileTeamsModel }>;
+  // All Teams view: the dialog a Tile opens, listing every Team's progress on it at the moment being viewed.
+  RewindTileTeams: ComponentType<{ tile: RewindTileTeamsModel | null; isOpen: boolean; onClose: () => void }>;
 
   // Submission flow — mounted only while open (see BoardPageLayout).
   SubmissionModal: ComponentType<{ flow: SubmissionFlowModel }>;

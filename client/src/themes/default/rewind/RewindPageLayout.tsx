@@ -1,12 +1,15 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useBoardModel, useRewindModel } from "../../../headless";
+import type { TileModel } from "../../../headless/types";
 import { AppHeader } from "../../../core/ui/AppHeader";
+import { UsersIcon } from "../../../core/ui/icons";
 import { useSlot } from "../../context";
 
 /**
  * Rewind's page: the viewed Team's Board at the moment being viewed, every Team's score beside it (under it on a
  * phone), and the timeline with its controls pinned to the bottom. Popups rise over the Board while playing or
- * stepping.
+ * stepping. In the All Teams view the Board is the shared layout with each Tile's Team markers over it; hovering a
+ * Tile titles every Team's progress on it and opening one lists it.
  */
 export function RewindPageLayout() {
   const rewind = useRewindModel();
@@ -20,8 +23,23 @@ export function RewindPageLayout() {
   const RewindControls = useSlot("RewindControls");
   const RewindScoreboard = useSlot("RewindScoreboard");
   const RewindPopup = useSlot("RewindPopup");
+  const RewindTileMarkers = useSlot("RewindTileMarkers");
+  const RewindTileTeams = useSlot("RewindTileTeams");
 
   const popup = rewind.popup;
+  const tileTeams = rewind.tileTeams;
+  const tileOverlay = tileTeams
+    ? (tile: TileModel) => {
+        const teams = tileTeams.get(tile.id);
+        if (!teams) return null;
+        // Over the cell for the hover title; a click goes on to open the Tile, like the cell's own.
+        return (
+          <div title={`${teams.tileName}\n${teams.summary}`} className="absolute inset-0 z-20 cursor-pointer" onClick={() => rewind.openTile.open(tile.id)}>
+            <RewindTileMarkers tile={teams} />
+          </div>
+        );
+      }
+    : undefined;
 
   return (
     <div className="min-h-dvh bg-background text-on-surface">
@@ -31,6 +49,15 @@ export function RewindPageLayout() {
 
       <main className="mx-auto grid max-w-6xl gap-4 px-3 py-4 pb-44 sm:px-6 sm:py-6 sm:pb-40 lg:grid-cols-[minmax(0,1fr)_15rem]">
         <div className="min-w-0">
+          {rewind.allTeams && (
+            <div className="mb-3 flex h-10 items-center justify-between gap-3 rounded-md border border-outline bg-surface px-3">
+              <span className="flex min-w-0 items-center gap-2 text-sm">
+                <UsersIcon size={14} className="shrink-0 text-on-surface-subtle" />
+                <span className="truncate font-semibold">All Teams</span>
+              </span>
+              <span className="truncate text-xs text-on-surface-subtle">Dots mark the Teams that completed a Tile</span>
+            </div>
+          )}
           {rewind.team && (
             <div className="mb-3 flex h-10 items-center justify-between gap-3 rounded-md border border-outline bg-surface px-3" style={rewind.team.color ? { borderColor: `${rewind.team.color}99` } : undefined}>
               <span className="flex min-w-0 items-center gap-2 text-sm">
@@ -42,7 +69,7 @@ export function RewindPageLayout() {
               </span>
             </div>
           )}
-          <BoardGrid board={board} onOpenTile={rewind.openTile.open} highlightedTileId={rewind.highlightedTileId} />
+          <BoardGrid board={board} onOpenTile={rewind.openTile.open} highlightedTileId={rewind.highlightedTileId} tileOverlay={tileOverlay} />
         </div>
         <aside className="min-w-0">
           <RewindScoreboard scoreboard={rewind.scoreboard} />
@@ -75,6 +102,7 @@ export function RewindPageLayout() {
       </div>
 
       <TileModal tile={rewind.openTile.tile} isOpen={rewind.openTile.tile !== null} onClose={rewind.openTile.close} />
+      <RewindTileTeams tile={rewind.openTile.teams} isOpen={rewind.openTile.teams !== null} onClose={rewind.openTile.close} />
     </div>
   );
 }

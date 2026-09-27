@@ -1,7 +1,18 @@
-import type { BoardModel } from "../../../headless/types";
+import type { ReactNode } from "react";
+import type { BoardModel, TileModel } from "../../../headless/types";
 import { useSlot } from "../../context";
 
-export function BoardGrid({ board, onOpenTile, highlightedTileId }: { board: BoardModel; onOpenTile: (tileId: string) => void; highlightedTileId?: string | null }) {
+export function BoardGrid({
+  board,
+  onOpenTile,
+  highlightedTileId,
+  tileOverlay,
+}: {
+  board: BoardModel;
+  onOpenTile: (tileId: string) => void;
+  highlightedTileId?: string | null;
+  tileOverlay?: (tile: TileModel) => ReactNode;
+}) {
   const RowLabel = useSlot("RowLabel");
   const TileCell = useSlot("TileCell");
   const EmptyCell = useSlot("EmptyCell");
@@ -21,7 +32,14 @@ export function BoardGrid({ board, onOpenTile, highlightedTileId }: { board: Boa
                 {Array.from({ length: board.cols }, (_, col) => {
                   const tile = board.grid[row]?.[col];
                   if (!tile) return <EmptyCell key={`empty-${row}-${col}`} row={row} col={col} />;
-                  return <TileCell key={tile.id} tile={tile} onOpen={onOpenTile} isSearchHighlighted={tile.id === highlightedTileId} />;
+                  const cell = <TileCell key={tile.id} tile={tile} onOpen={onOpenTile} isSearchHighlighted={tile.id === highlightedTileId} />;
+                  if (!tileOverlay) return cell;
+                  return (
+                    <div key={tile.id} className="relative">
+                      {cell}
+                      {tileOverlay(tile)}
+                    </div>
+                  );
                 })}
               </div>
             );

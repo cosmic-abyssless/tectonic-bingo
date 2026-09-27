@@ -1,20 +1,31 @@
 import type { TeamSelectorModel } from "../../../headless/types";
 import { Button } from "../../../core/ui/Button";
 import { Menu, MenuItem, MenuTrigger } from "../../../core/ui/Menu";
-import { ChevronDownIcon } from "../../../core/ui/icons";
+import { ChevronDownIcon, UsersIcon } from "../../../core/ui/icons";
 import { teamBadgeStyle } from "./TeamBadge";
+
+// The All Teams choice's menu key; never a Team's id.
+const ALL_KEY = "__all-teams__";
 
 export function TeamSelector({ selector }: { selector: TeamSelectorModel }) {
   const selected = selector.teams.find((t) => t.id === selector.selectedId) ?? null;
+  const all = selector.allTeams;
 
   return (
     <MenuTrigger>
       <Button size="sm" style={selected ? teamBadgeStyle(selected) : undefined}>
         {selected?.color && <span className="size-2 rounded-full" style={{ backgroundColor: selected.color }} />}
-        {selected?.name ?? "Select team"}
+        {all?.selected && <UsersIcon size={14} />}
+        {all?.selected ? "All Teams" : (selected?.name ?? "Select team")}
         <ChevronDownIcon className="text-on-surface-subtle" />
       </Button>
-      <Menu onAction={(key) => selector.select(String(key))}>
+      <Menu onAction={(key) => (key === ALL_KEY ? all?.select() : selector.select(String(key)))}>
+        {all && (
+          <MenuItem key={ALL_KEY} id={ALL_KEY}>
+            <UsersIcon size={14} className="shrink-0" />
+            <span className="truncate font-medium">All Teams</span>
+          </MenuItem>
+        )}
         {selector.teams.map((team) => (
           <MenuItem key={team.id} id={team.id}>
             {team.color && <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: team.color }} />}
