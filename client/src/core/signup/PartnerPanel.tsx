@@ -16,20 +16,22 @@ export function PartnerPanel({ slug }: { slug: string }) {
       {/* Step 2 of a duo signup; step 1 is the signup form above it (SignupForm). */}
       <CardHeader title="2. Duo partner" description="This bingo is drafted in pairs. Pick who you want to play with — they need to accept before the draft." />
       <div className="space-y-4 p-5">
-        {partner && !partner.leave.confirming && (
+        {partner && !partner.leave?.confirming && (
           <Notice tone="ok" icon={<CheckIcon />}>
             <div className="flex items-center gap-3">
               <span className="flex-1">
                 You're paired with <strong>{partner.name}</strong>. You'll be drafted together.
               </span>
-              <Button size="sm" variant="ghost" className="-my-1.5" isDisabled={busy} onPress={partner.leave.ask}>
-                Remove pairing
-              </Button>
+              {partner.leave && (
+                <Button size="sm" variant="ghost" className="-my-1.5" isDisabled={busy} onPress={partner.leave.ask}>
+                  Remove pairing
+                </Button>
+              )}
             </div>
           </Notice>
         )}
 
-        {partner && partner.leave.confirming && (
+        {partner?.leave?.confirming && (
           <Notice tone="danger">
             <div className="flex items-center gap-3">
               <span className="flex-1">Remove your pairing with {partner.name}? You'll both need to find a new partner.</span>

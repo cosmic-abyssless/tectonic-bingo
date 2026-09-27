@@ -9,10 +9,10 @@ import { UserSearchInput } from "./UserSearchInput";
 import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { Button, IconButton } from "../ui/Button";
-import { Card, Notice } from "../ui/Card";
+import { Badge, Card, Notice } from "../ui/Card";
 import { Disclosure } from "../ui/Disclosure";
 import { Field, Input } from "../ui/Field";
-import { Select } from "../ui/Select";
+import { SearchableSelect } from "../ui/SearchableSelect";
 import { CaptainEmblem } from "../ui/CaptainEmblem";
 import { TrashIcon, XIcon } from "../ui/icons";
 
@@ -41,7 +41,7 @@ function optimisticTeams(queryClient: QueryClient, slug: string, update: (teams:
   return optimisticUpdate<BingoShellResponse>(queryClient, queryKeys.bingo(slug), (shell) => ({ ...shell, teams: update(shell.teams) }), request);
 }
 
-function TeamCard({ slug, team, onDelete }: { slug: string; team: TeamWithMembers; onDelete: () => void }) {
+function TeamCard({ slug, team, notLedByPair, onDelete }: { slug: string; team: TeamWithMembers; notLedByPair: boolean; onDelete: () => void }) {
   const queryClient = useQueryClient();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +58,8 @@ function TeamCard({ slug, team, onDelete }: { slug: string; team: TeamWithMember
       // Membership changes also change who is free to captain a new team.
       queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.captainCandidates(slug) });
+      // And who the draft cuts (a Team is a share of the pool), with the Cut review worked out from it.
+      queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) });
     }
   }
   const update = (patch: Partial<Team>) => run(() => adminApi.updateTeam(slug, team.id, patch));
@@ -84,6 +86,7 @@ function TeamCard({ slug, team, onDelete }: { slug: string; team: TeamWithMember
         <>
           <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: team.color ?? "var(--color-outline-strong)" }} />
           <span className="min-w-0 flex-1 truncate text-sm font-semibold text-on-surface">{team.name}</span>
+          {notLedByPair && <Badge tone="warn">Not led by a pair</Badge>}
           <span className="num text-xs text-on-surface-subtle">
             {team.members.length} {team.members.length === 1 ? "member" : "members"}
           </span>
@@ -91,6 +94,12 @@ function TeamCard({ slug, team, onDelete }: { slug: string; team: TeamWithMember
       }
     >
       <div className="space-y-3">
+          {notLedByPair && (
+            <Notice tone="warn">
+              In a duo bingo a Team is led by a pair: its Captain and their duo partner. Delete this Team and create it again
+              with a paired Captain. The Draft can't start until then.
+            </Notice>
+          )}
           <div className="flex items-end gap-2">
             <Field label="Name" className="flex-1">
               <Input key={team.name} defaultValue={team.name} onBlur={(e) => rename(e.target.value)} className="font-semibold" />
@@ -164,6 +173,9 @@ export function TeamManager({ slug }: { slug: string }) {
 
   const candidates = candidatesData?.candidates ?? [];
   const isDuo = data?.bingo.signupMode === "duo";
+  const notLedByPairs = new Set(candidatesData?.teamsNotLedByPairs ?? []);
+  // In a duo bingo a Team is led by a pair, so only a paired player can captain (their partner comes along).
+  const captainOptions = isDuo ? candidates.filter((c) => c.pairing) : candidates;
   const teamCount = data?.teams.length ?? 0;
   const totalParticipants = teamCount + candidates.length;
   const summary = teamSizeSummary(teamCount, totalParticipants);
@@ -193,6 +205,7 @@ export function TeamManager({ slug }: { slug: string }) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) }),
         queryClient.invalidateQueries({ queryKey: adminQueryKeys.captainCandidates(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
       ]);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to create team");
@@ -214,6 +227,7 @@ export function TeamManager({ slug }: { slug: string }) {
       setError(e instanceof Error ? e.message : `Failed to delete ${team.name}`);
     } finally {
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.captainCandidates(slug) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) });
     }
   }
 
@@ -226,25 +240,31 @@ export function TeamManager({ slug }: { slug: string }) {
         </div>
         {candidates.length === 0 ? (
           <p className="text-sm text-on-surface-subtle">No eligible signups — everyone who signed up is already on a team, or no one has signed up yet.</p>
+        ) : captainOptions.length === 0 ? (
+          <p className="text-sm text-on-surface-subtle">Nobody is paired yet. In a duo bingo a Team is led by a pair: pair players up on the Signups tab first.</p>
         ) : (
           <div className="space-y-3">
-            <Field label="Captain">
-              <Select
+            <Field label="Captain" hint={isDuo ? "Only paired players: a Team is led by a pair, so their duo partner becomes co-captain." : undefined}>
+              <SearchableSelect
                 value={selectedCaptainId}
                 onChange={selectCaptain}
-                placeholder="Select a signed-up player…"
-                options={candidates.map((c) => ({ value: c.user.id, label: candidateLabel(c) }))}
+                placeholder="Search signed-up players…"
+                options={captainOptions.map((c) => ({ id: c.user.id, label: candidateLabel(c) }))}
               />
             </Field>
-            <Field label="Co-captain" hint={isDuo ? "Shares the captain's draft and rename powers. Paired captains bring their partner." : "Optional. Shares the captain's draft and rename powers."}>
-              <Select
+            <Field label="Co-captain" hint={isDuo ? "The Captain's duo partner. Shares the captain's draft and rename powers." : "Optional. Shares the captain's draft and rename powers."}>
+              {/* Locked to a paired Captain's partner (always, in a duo bingo); otherwise optional, and "None" clears a pick. */}
+              <SearchableSelect
                 value={coCaptainId}
                 onChange={setSelectedCoCaptainId}
-                disabled={!!partner}
+                readOnly={!!partner || isDuo}
+                placeholder={isDuo ? "Pick a Captain first" : "None — search to add one…"}
                 options={
                   partner
-                    ? [{ value: partner.user.id, label: candidateLabel(partner) }]
-                    : [{ value: "", label: "None" }, ...coCaptainOptions.map((c) => ({ value: c.user.id, label: candidateLabel(c) }))]
+                    ? [{ id: partner.user.id, label: candidateLabel(partner) }]
+                    : isDuo
+                      ? []
+                      : [{ id: "", label: "None" }, ...coCaptainOptions.map((c) => ({ id: c.user.id, label: candidateLabel(c) }))]
                 }
               />
             </Field>
@@ -258,7 +278,7 @@ export function TeamManager({ slug }: { slug: string }) {
 
       <div className="space-y-3">
         {data?.teams.map((team) => (
-          <TeamCard key={team.id} slug={slug} team={team} onDelete={() => deleteTeam(team)} />
+          <TeamCard key={team.id} slug={slug} team={team} notLedByPair={notLedByPairs.has(team.id)} onDelete={() => deleteTeam(team)} />
         ))}
       </div>
     </div>

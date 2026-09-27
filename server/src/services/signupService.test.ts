@@ -7,7 +7,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createQuestion, deleteQuestion, reorderQuestions, updateQuestion } from "./signupService";
 import { seesProfileAnswers } from "./signupService";
 import { createSignup, getAllSignups, getAnswerCounts, getSignupForUser, markBuyin, setSignupTimezone, updateSignup, withdrawSignup } from "./signupService";
-import { cancelRequest, requestPairing } from "./pairingService";
+import { adminPair, cancelRequest, requestPairing } from "./pairingService";
 import { ServiceError } from "./errors";
 import { createTeam } from "./teamService";
 
@@ -279,11 +279,32 @@ describe("updateSignup / withdrawSignup", () => {
     expect(withdrawn.status).toBe("withdrawn");
   });
 
-  it("refuses to withdraw a player who leads a team", () => {
+  it("refuses to withdraw a player who leads a team, telling the player to contact an admin", () => {
     const { bingo, memberId } = seedBingo();
     const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Cap", answers: [] });
     createTeam(db, { bingoId: bingo.id, captainUserId: memberId });
-    expect(() => withdrawSignup(db, bingo, signup.id)).toThrow(/leads a team/);
+    expect(() => withdrawSignup(db, bingo, signup.id)).toThrow("You lead a Team, so you can't withdraw yourself. Contact an admin if you need to.");
+  });
+
+  it("refuses a mod withdrawing a team lead too, telling them to remove or delete the team first", () => {
+    const { bingo, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Cap", answers: [] });
+    createTeam(db, { bingoId: bingo.id, captainUserId: memberId });
+    expect(() => withdrawSignup(db, bingo, signup.id, { byMod: true })).toThrow("This player leads a team — remove or delete the team before withdrawing the signup");
+    expect(db.select().from(schema.signups).where(eq(schema.signups.id, signup.id)).get()!.status).toBe("active");
+  });
+
+  it("refuses to withdraw either half of the pair leading a duo team", () => {
+    const { bingo, adminId, memberId } = seedBingo({ signupMode: "duo" });
+    const partner = db.insert(schema.users).values({ discordId: "partner", discordUsername: "partner" }).returning().get();
+    const capSignup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Cap", answers: [] });
+    const coSignup = createSignup(db, bingo, { bingoId: bingo.id, userId: partner.id, rsn: "Co", answers: [] });
+    adminPair(db, bingo, { userIdA: memberId, userIdB: partner.id, createdByUserId: adminId });
+    createTeam(db, { bingoId: bingo.id, captainUserId: memberId, coCaptainUserId: partner.id });
+    for (const signup of [capSignup, coSignup]) {
+      expect(() => withdrawSignup(db, bingo, signup.id)).toThrow(/You lead a Team, so you can't withdraw yourself/);
+      expect(() => withdrawSignup(db, bingo, signup.id, { byMod: true })).toThrow(/leads a team — remove or delete the team/);
+    }
   });
 
   it("lets mods, but not players, withdraw during the captains stage", () => {

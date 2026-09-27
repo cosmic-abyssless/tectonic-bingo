@@ -40,6 +40,7 @@
 
   --color-ok: #16a34a;
   --color-warn: #b45309;
+  --color-attention: #eab308; /* a yellow dot that says "look here" (e.g. the Draft filter when someone will be cut); warn is too dark to read as yellow in light */
   --color-danger: #dc2626;
   --color-info: #2563eb;
   --color-beta: #6b21a8;
@@ -97,6 +98,7 @@
     --color-button-secondary-hover: #1c1c20;
     --color-ok: #4ade80;
     --color-warn: #fbbf24;
+    --color-attention: #fbbf24;
     --color-danger: #f87171;
     --color-info: #60a5fa;
     --color-beta: #c084fc;
@@ -123,6 +125,7 @@
   --color-button-secondary-hover: #1c1c20;
   --color-ok: #4ade80;
   --color-warn: #fbbf24;
+  --color-attention: #fbbf24;
   --color-danger: #f87171;
   --color-info: #60a5fa;
   --color-beta: #c084fc;

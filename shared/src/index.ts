@@ -13,6 +13,7 @@ import type { ExclusivityRule } from "./exclusivity.ts";
 import type { AuditVisibility } from "./audit.ts";
 import type { AchievementCount } from "./achievements.ts";
 import type { PlayerTitleFacts, TitleSettings } from "./titles.ts";
+import type { TimeZoneRegion } from "./timezone.ts";
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
@@ -712,6 +713,8 @@ export interface MySignupResponse {
   // Null until the fire-and-forget WOM/RuneProfile fetch stamps the row —
   // the signup form uses this to tell Looking up apart from Unknown.
   statsFetchedAt: string | null;
+  // The Team this player leads (Captain or co-captain), if any: they can't unpair or withdraw themselves, an admin has to.
+  leadsTeam: string | null;
 }
 
 // A tectonic-api-linked RSN.
@@ -867,6 +870,9 @@ export interface RosterResponse {
 
 export interface CaptainCandidatesResponse {
   candidates: RosterEntry[];
+  // A duo bingo's Teams not led by a pair (a Captain alone, or with someone other than their partner): the move into
+  // the Draft is refused until they're fixed. Always empty for a solo bingo.
+  teamsNotLedByPairs: string[];
 }
 
 // The raw bingo_lines row. Points live on the referenced node (see BoardLine).
@@ -1041,6 +1047,86 @@ export interface DraftCutPreview {
   shares: DraftShares | null;
   // Newest first; a pair is one entry with both names.
   cut: { names: string[]; pair: boolean }[];
+}
+
+// ---------------------------------------------------------------------------
+// Cut review (CONTEXT.md "Cut review", "Avoidable cut", "Unavoidable cut")
+// ---------------------------------------------------------------------------
+
+/**
+ * One change a Cut review plan may propose, in order of preference: pair two singles, split a pair, or add/remove
+ * one Team. Never switches the Draft cuts setting (CutMode) — see server/src/services/cutPlanner.ts.
+ */
+export type CutChange =
+  | { kind: "pair"; userIds: [string, string] }
+  | { kind: "split"; pairingId: string }
+  // A plan never names who captains an added Team or which Team goes; an admin-edited list being scored may, and
+  // then the score is exact (the Captain, and their partner, leave the pool; a removed Team's members rejoin it).
+  | { kind: "addTeam"; captainUserId?: string }
+  | { kind: "removeTeam"; teamId?: string };
+
+/** A CutChange as actually applied: an added Team needs its Captain chosen, a removed Team needs which one. */
+export type AppliedCutChange =
+  | { kind: "pair"; userIds: [string, string] }
+  | { kind: "split"; pairingId: string }
+  | { kind: "addTeam"; captainUserId: string }
+  | { kind: "removeTeam"; teamId: string };
+
+/** The fewest-cut-players plan a Cut review proposes, or the result of scoring an admin-edited change list against the current roster. */
+export interface CutReviewPlan extends CutReviewScore {
+  changes: CutChange[];
+}
+
+/**
+ * How many players a change list leaves cut. A Team change whose pick is still open (no Captain / Team chosen) can
+ * go several ways: `cutPlayers` is then the best of them and `cutPlayersMax` the worst. `pickOptions` has the count
+ * for every pick, made or not — keyed by the added Team's Captain (userId) or the removed Team (teamId).
+ */
+export interface CutReviewScore {
+  cutPlayers: number; // players cut once every change is applied (best case over an open Team pick)
+  cutPlayersMax: number; // worst case over an open Team pick; equals cutPlayers otherwise
+  cutPlayersNow: number; // players cut as things stand, before any change
+  pickOptions: Record<string, number> | null; // players cut per pick of the Team change; null without one
+}
+
+// GET /mod/draft/cut-review: the plan a Cut review proposes, plus the Avoidable/Unavoidable split it implies — for
+// the Signups tab notice ("Some cuts can be avoided. Review cuts") and the move-to-Draft confirmation. Visible to
+// any mod; only Admins get the "Review cuts" button (see cutReviewService.ts).
+export interface CutReviewPreview {
+  plan: CutReviewPlan;
+  avoidableCount: number; // plan.cutPlayersNow - plan.cutPlayers
+  unavoidableCount: number; // plan.cutPlayers
+  // A review has been applied since the roster last changed, so the move into the Draft needn't go through another.
+  reviewed: boolean;
+  // Who the plan's ids refer to, and what the Cut review modal lets the admin pick from.
+  pool: CutReviewPool;
+}
+
+/**
+ * The undrafted pool a Cut review plans over, by name: its singles (any of whom can be paired), its pairs (any of
+ * which can be split: a Captain's pair is on a Team, never in the pool) and the Teams (any of which can be removed).
+ * Captains of an added Team are picked from the singles and pairs.
+ */
+export interface CutReviewPool {
+  singles: { userId: string; rsn: string; region: TimeZoneRegion | null }[]; // oldest signup first
+  pairs: { pairingId: string; members: { userId: string; rsn: string }[] }[]; // oldest signup first
+  teams: { teamId: string; name: string; captainRsn: string }[];
+}
+
+// POST .../admin/cut-review/score: how many players an admin-edited change list would leave cut, for the Cut
+// review modal's live "This plan leaves N players cut" count.
+export interface ScoreCutReviewRequest {
+  changes: CutChange[];
+}
+export type ScoreCutReviewResponse = CutReviewScore;
+
+// POST .../admin/cut-review/apply: applies the (possibly edited) plan in one transaction through the existing
+// pairing and Captain/Team operations, and records that a review was applied for the roster as it now stands.
+export interface ApplyCutReviewRequest {
+  changes: AppliedCutChange[];
+}
+export interface ApplyCutReviewResponse {
+  cutPlayers: number;
 }
 
 // A team's private scouting note on a signup. Shared by captain and

@@ -99,6 +99,10 @@ export const bingos = sqliteTable('bingos', {
   // (draftOrderLockedUntil) has expired.
   draftStarted: integer('draft_started', { mode: 'boolean' }).notNull().default(false),
   draftOrderLockedUntil: integer('draft_order_locked_until', { mode: 'timestamp' }),
+  // Set by a Cut review apply (CONTEXT.md "Cut review") to a hash of the draft pool's unit composition, Team count
+  // and cutMode at that moment — see cutReviewService.ts. Moving into the Draft stage while any cut is Avoidable
+  // compares this against the current hash: a mismatch means the roster changed since, so the review is stale.
+  cutReviewFingerprint: text('cut_review_fingerprint'),
   createdByUserId: text('created_by_user_id').notNull().references(() => users.id),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   // Achievements master switch (CONTEXT.md "Achievement"): off hides every Achievement from reads, counts and

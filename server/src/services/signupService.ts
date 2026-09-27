@@ -570,7 +570,14 @@ export function withdrawSignup(db: Db, bingo: Bingo, signupId: string, { byMod =
       .innerJoin(teams, eq(teamMembers.teamId, teams.id))
       .where(and(eq(teams.bingoId, bingo.id), eq(teamMembers.userId, existing.userId), or(eq(teamMembers.isCaptain, true), eq(teamMembers.isCoCaptain, true))))
       .get();
-    if (lead) throw new ServiceError(400, "This player leads a team — remove or delete the team before withdrawing the signup");
+    if (lead) {
+      throw new ServiceError(
+        400,
+        byMod
+          ? "This player leads a team — remove or delete the team before withdrawing the signup"
+          : "You lead a Team, so you can't withdraw yourself. Contact an admin if you need to.",
+      );
+    }
     dissolveForUser(tx, bingo.id, { id: existing.userId, discordId: existing.discordId });
     const updated = tx.update(signups).set({ status: "withdrawn" }).where(eq(signups.id, signupId)).returning(PUBLIC_SIGNUP_COLS).get();
     audit(tx, {

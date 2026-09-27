@@ -2,9 +2,13 @@ import { reportClientError } from "../core/logging/reportClientError";
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  // The server's stable error code, when it sends one (e.g. "cut_review_required" on the move into the Draft) — for
+  // branching on without parsing the message.
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
     this.name = "ApiError";
   }
 }
@@ -32,14 +36,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
+    let code: string | undefined;
     try {
       const data = await res.json();
       if (data?.error) message = data.error;
+      if (typeof data?.code === "string") code = data.code;
     } catch {
       // response body wasn't JSON — keep the generic message
     }
     if (res.status >= 500) reportClientError(`${path} ${message}`, "api.5xx");
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, code);
   }
   if (res.status === 204) return undefined as T;
   return res.json();

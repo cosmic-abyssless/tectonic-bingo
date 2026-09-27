@@ -1,8 +1,8 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AccountTypesResponse, AchievementKey, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
-  ReviewSubmissionResponse, RosterResponse, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
+  ReviewSubmissionResponse, RosterResponse, CutReviewPreview, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   PickRating, PlayerProfile, RewindResponse, StatsResponse, SubmissionReaction, SubmissionReactionGroup, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
 } from "@bingo/shared";
 import { SUBMISSION_REACTIONS } from "@bingo/shared";
@@ -25,6 +25,10 @@ export const queryKeys = {
   signupRoster: (slug: string) => ["signupRoster", slug] as const,
   // Under the roster's key, so whatever refreshes the roster (a signup, a pairing, a new team, the settings) refreshes it.
   draftCuts: (slug: string) => ["signupRoster", slug, "cuts"] as const,
+  // The Cut review's plan, and the score of an edited one (keyed by the edited change list, as JSON): under the
+  // roster's key for the same reason.
+  cutReview: (slug: string) => ["signupRoster", slug, "cutReview"] as const,
+  cutReviewScore: (slug: string, changesJson: string) => ["signupRoster", slug, "cutReview", "score", changesJson] as const,
   bingoMods: (slug: string) => ["bingoMods", slug] as const,
   signupQuestions: (slug: string) => ["signupQuestions", slug] as const,
   mySignup: (slug: string) => ["mySignup", slug] as const,
@@ -293,6 +297,18 @@ export function useDraftCuts(slug: string | undefined, enabled = true) {
     queryFn: () => api.get<DraftCutPreview>(`/api/bingos/${slug}/mod/draft/cuts`),
     enabled: !!slug && enabled,
   });
+}
+
+/** Mods: the plan a Cut review proposes, its Avoidable/Unavoidable split and the pool it plans over (GET /mod/draft/cut-review). */
+export function cutReviewQuery(slug: string) {
+  return queryOptions({
+    queryKey: queryKeys.cutReview(slug),
+    queryFn: () => api.get<CutReviewPreview>(`/api/bingos/${slug}/mod/draft/cut-review`),
+  });
+}
+
+export function useCutReview(slug: string | undefined, enabled = true) {
+  return useQuery({ ...cutReviewQuery(slug ?? ""), enabled: !!slug && enabled });
 }
 
 export function useBingoMods(slug: string) {
