@@ -388,12 +388,15 @@ export function SignupRoster({ slug }: { slug: string }) {
             </div>
           </div>
         )}
-        {/* While any cut is Avoidable the notice only says so, and Admins get the way to fix it (CONTEXT.md "Cut review"). */}
-        {cutState === "avoidable" && (
-          <Notice tone="warn" icon={<AlertIcon />}>
+        {/* How many will be cut; while any cut is Avoidable it says so too, and Admins get the way to fix it (CONTEXT.md
+            "Cut review"). */}
+        {cutState && (
+          <Notice tone="warn" icon={<AlertIcon />} iconAlign="center">
             <span className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <strong>Some cuts can be avoided.</strong>
-              {me?.isAdmin && (
+              <strong>
+                <span className="num">{cutCount}</span> player{cutCount === 1 ? "" : "s"} will be cut.{cutState === "avoidable" && " Some cuts can be avoided."}
+              </strong>
+              {cutState === "avoidable" && me?.isAdmin && (
                 <Button size="sm" onPress={() => setReviewingCuts(true)}>
                   Review cuts
                 </Button>

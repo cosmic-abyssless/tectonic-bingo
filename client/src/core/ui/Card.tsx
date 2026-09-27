@@ -39,6 +39,8 @@ export type NoticeTone = keyof typeof TONE;
 export interface NoticeProps {
   tone?: NoticeTone;
   icon?: ReactNode;
+  /** "start" (the default) lines the icon up with the first line of a long notice; "center" centres it, for a one-line notice with a button in it. */
+  iconAlign?: "start" | "center";
   children: ReactNode;
   className?: string;
 }
@@ -49,10 +51,11 @@ export function Notice(props: NoticeProps) {
   return Themed ? <Themed {...props} /> : <PlainNotice {...props} />;
 }
 
-export function PlainNotice({ tone = "neutral", icon, children, className }: NoticeProps) {
+export function PlainNotice({ tone = "neutral", icon, iconAlign = "start", children, className }: NoticeProps) {
+  const center = iconAlign === "center";
   return (
-    <div role={tone === "danger" ? "alert" : undefined} className={`flex items-start gap-2.5 rounded-md border bg-surface-raised px-3 py-2.5 text-sm ${TONE[tone]} ${className ?? ""}`}>
-      {icon && <span className="mt-0.5 shrink-0">{icon}</span>}
+    <div role={tone === "danger" ? "alert" : undefined} className={`flex ${center ? "items-center" : "items-start"} gap-2.5 rounded-md border bg-surface-raised px-3 py-2.5 text-sm ${TONE[tone]} ${className ?? ""}`}>
+      {icon && <span className={`${center ? "" : "mt-0.5 "}shrink-0`}>{icon}</span>}
       <div className="min-w-0 flex-1 text-on-surface-muted [&_strong]:text-on-surface">{children}</div>
     </div>
   );
