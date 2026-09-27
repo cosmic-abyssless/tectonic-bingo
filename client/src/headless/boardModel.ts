@@ -104,7 +104,9 @@ export function buildRequirementTree(
       notNeeded: ancestorSatisfied,
       dim: complete || ancestorSatisfied,
       progress: null,
+      quantity: null,
       showHeading: false,
+      divider: null,
       children: [],
     };
   }
@@ -113,23 +115,28 @@ export function buildRequirementTree(
     const target = node.quantity ?? 1;
     const progress = node.children.reduce((sum, child) => sum + itemLeafValue(child.id, maps), 0);
     const complete = progress >= target;
+    const items = node.children
+      .filter((child) => !!child.itemName)
+      .map((child) => ({ name: child.itemName!, iconUrl: wikiIconUrl(child.itemName!) ?? null, count: itemLeafValue(child.id, maps), lockedBy: lockOf(child.id) }));
+    // Over several items it's a group ("5 in total from", one row per item); over one it stays a single row.
+    const isGroup = items.length > 1;
     return {
       id: node.id,
       kind: node.kind,
-      label: leafLabel(node),
-      items: node.children
-        .filter((child) => !!child.itemName)
-        .map((child) => ({ name: child.itemName!, iconUrl: wikiIconUrl(child.itemName!) ?? null, count: itemLeafValue(child.id, maps), lockedBy: lockOf(child.id) })),
+      label: isGroup ? conditionHeading(node) : leafLabel(node),
+      items,
       iconUrl: null,
       lockedBy: null,
-      isLeaf: true,
+      isLeaf: !isGroup,
       status: statusByNodeId.get(node.id) ?? "not_started",
       complete,
       submitted: node.children.some((child) => maps.submittedNodeIds.has(child.id)),
       notNeeded: ancestorSatisfied,
       dim: complete || ancestorSatisfied,
       progress: { current: progress, target },
-      showHeading: false,
+      quantity: !isGroup && target > 1 ? target : null,
+      showHeading: isGroup,
+      divider: null,
       children: [],
     };
   }
@@ -154,8 +161,10 @@ export function buildRequirementTree(
     submitted: false,
     notNeeded: ancestorSatisfied,
     dim: false,
-    progress: null,
+    progress: node.kind === "COUNT" ? { current: children.filter((c) => c.complete).length, target: node.minCount ?? 1 } : null,
+    quantity: null,
     showHeading: true,
+    divider: node.kind === "ANY" ? { label: "OR", dim: childAncestorSatisfied } : null,
     children,
   };
 }

@@ -145,7 +145,7 @@ export function conditionHeading(node: { kind: NodeKind; minCount?: number | nul
     case "COUNT":
       return `Complete at least ${node.minCount ?? 1} of`;
     case "SUM":
-      return `Collect ${node.quantity ?? 1} in total across`;
+      return `${node.quantity ?? 1} in total from`;
     default:
       return "";
   }
