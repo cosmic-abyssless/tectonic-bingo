@@ -8,7 +8,7 @@ import { useSlot } from "../../context";
 /**
  * Rewind's page: the viewed Team's Board at the moment being viewed, every Team's score beside it (under it on a
  * phone), and the timeline with its controls pinned to the bottom. Popups rise over the Board while playing or
- * stepping. In the All Teams view the Board is the shared layout with each Tile's Team markers over it; hovering a
+ * stepping, and the closing card with the final Titles once the moment reaches the end. In the All Teams view the Board is the shared layout with each Tile's Team markers over it; hovering a
  * Tile titles every Team's progress on it and opening one lists it.
  */
 export function RewindPageLayout() {
@@ -23,10 +23,12 @@ export function RewindPageLayout() {
   const RewindControls = useSlot("RewindControls");
   const RewindScoreboard = useSlot("RewindScoreboard");
   const RewindPopup = useSlot("RewindPopup");
+  const RewindClosing = useSlot("RewindClosing");
   const RewindTileMarkers = useSlot("RewindTileMarkers");
   const RewindTileTeams = useSlot("RewindTileTeams");
 
   const popup = rewind.popup;
+  const closing = rewind.closing;
   const tileTeams = rewind.tileTeams;
   const tileOverlay = tileTeams
     ? (tile: TileModel) => {
@@ -96,6 +98,18 @@ export function RewindPageLayout() {
               transition={popup.size === "big" && !reduceMotion ? { type: "spring", stiffness: 380, damping: 24 } : { duration: 0.16 }}
             >
               <RewindPopup popup={popup} />
+            </motion.div>
+          )}
+          {!popup && closing && (
+            <motion.div
+              key="closing"
+              className="pointer-events-auto"
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.98 }}
+              transition={reduceMotion ? { duration: 0.16 } : { type: "spring", stiffness: 320, damping: 28 }}
+            >
+              <RewindClosing closing={closing} />
             </motion.div>
           )}
         </AnimatePresence>
