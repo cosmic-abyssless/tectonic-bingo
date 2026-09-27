@@ -45,6 +45,7 @@ import { userLabelById } from "../audit/describe";
 import { rsnsInBingo } from "./playerNames";
 import { PUBLIC_USER_COLS } from "./userService";
 import * as achievementService from "./achievementService";
+import * as wrappedArtService from "./wrappedArtService";
 import { assertCutReviewSatisfied } from "./cutReviewService";
 import { assertTeamsLedByPairs } from "./teamService";
 
@@ -223,6 +224,8 @@ export function createBingo(db: Db, params: CreateBingoParams) {
     tx.insert(bingoModerators).values({ bingoId: bingo.id, userId: row.createdByUserId, createdAt: clockNow() }).run();
     // Every Achievement starts switched on for a new bingo (CONTEXT.md "Achievement").
     achievementService.initializeAchievementSettings(tx, bingo.id, clockNow());
+    // Wrapped art (#262) carries over from the previous Bingo; Admins replace what they want.
+    wrappedArtService.copyFromPreviousBingo(tx, bingo.id);
     audit(tx, {
       action: "bingo.created",
       bingoId: bingo.id,
@@ -346,6 +349,7 @@ export function deleteBingo(db: Db, bingoId: string): void {
     tx.delete(bingoTitleSettings).where(eq(bingoTitleSettings.bingoId, bingoId)).run();
     tx.delete(playerWrapped).where(eq(playerWrapped.bingoId, bingoId)).run();
     tx.delete(bingoWrapped).where(eq(bingoWrapped.bingoId, bingoId)).run();
+    wrappedArtService.deleteBingoArt(tx, bingoId);
     tx.delete(bingoModerators).where(eq(bingoModerators.bingoId, bingoId)).run();
     tx.delete(womSnapshots).where(eq(womSnapshots.bingoId, bingoId)).run();
     tx.delete(womReads).where(eq(womReads.bingoId, bingoId)).run();

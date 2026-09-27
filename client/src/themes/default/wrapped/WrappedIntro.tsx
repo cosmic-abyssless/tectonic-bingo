@@ -1,6 +1,7 @@
 import type { WrappedIntroModel } from "../../../headless/types";
 import { Reveal, WrappedScene } from "../../../core/wrapped/Scene";
 import { ChevronDownIcon } from "../../../core/ui/icons";
+import { WrappedSectionArt } from "../../../core/wrapped/WrappedParts";
 
 export function WrappedIntro({ section, preview }: { section: WrappedIntroModel; preview: boolean }) {
   return (
@@ -11,6 +12,7 @@ export function WrappedIntro({ section, preview }: { section: WrappedIntroModel;
             A Moderator's preview, computed just now. Nobody else can see it until it's published.
           </p>
         )}
+        <WrappedSectionArt art={section.art} />
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-on-surface-muted">{section.playerName ? "Your Bingo Wrapped" : "Bingo Wrapped"}</p>
       </Reveal>
       <Reveal step={1}>

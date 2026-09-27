@@ -316,6 +316,7 @@ How much a Submission stands out in Rewind, from its Luck, GP value, Reactions, 
 A scrolling story of a Finished Bingo, told from one Player's point of view: You, then your Duo and your Team, then the Bingo as a whole. It ends in shareable cards to compare with others.
 - **Audience:** Every Player gets their own. Anyone else who can view the Finished Bingo (e.g. a Moderator who didn't play) gets only the Bingo-wide part. A Captain also gets a section on their Draft, and a Moderator on their reviews.
 - **Publishing:** Hidden until a Moderator publishes it, which leaves time for the wrap-up with the Players. Refused while any Submission is pending, so it's never missing drops still in the review queue. A Bingo can be set to publish it on its own once it is Finished and nothing is pending (off by default). Publishing fixes its numbers: they don't change afterwards unless a Moderator publishes it again.
+- **Wrapped art:** A decorative in-game character cut-out per section of the story, drawn as a sticker on torn paper. It doesn't represent the Players; it just matches the section. Admins upload it per Bingo, as a transparent PNG or a screenshot on one solid colour (keyed out on upload), and a new Bingo starts with a copy of the previous Bingo's. Unlike the numbers, publishing doesn't fix it.
 - **Avoid:** Recap for this feature alone (Recap is the family it belongs to).
 
 ### Steal

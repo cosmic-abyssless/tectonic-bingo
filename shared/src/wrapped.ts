@@ -203,6 +203,8 @@ export interface MyWrappedResponse {
   player: PlayerWrapped | null;
   /** The viewer's reviews, when they're a Moderator or Admin who reviewed Submissions of this Bingo. */
   moderator: WrappedModerator | null;
+  /** The Bingo's Wrapped art as it is now (not fixed by publishing). */
+  art: WrappedArtSet;
 }
 
 /** GET /api/bingos/:slug/wrapped: the Bingo-wide Wrapped. */
@@ -210,4 +212,50 @@ export interface BingoWrappedResponse {
   state: WrappedState;
   preview: boolean;
   bingo: BingoWrapped;
+  art: WrappedArtSet;
+}
+
+/**
+ * Wrapped art: a decorative in-game character cut-out for a section of the story, drawn as a sticker on torn paper.
+ * Admins upload them per Bingo (a new Bingo starts with a copy of the previous one's). Duo and Captain are kept for
+ * the sections of those names.
+ */
+export const WRAPPED_ART_SECTIONS = ["intro", "you", "duo", "captain", "moderator", "team", "bingo", "outro"] as const;
+export type WrappedArtSection = (typeof WRAPPED_ART_SECTIONS)[number];
+
+export function isWrappedArtSection(value: unknown): value is WrappedArtSection {
+  return typeof value === "string" && (WRAPPED_ART_SECTIONS as readonly string[]).includes(value);
+}
+
+/**
+ * The two "boil" frames of a section's sticker (transparent WebP, same size), which the page swaps slowly. The shadow
+ * isn't in them: the page adds it with CSS drop-shadow, which follows the torn edge.
+ */
+export type WrappedArtFrames = [string, string];
+
+/** The art the story shows, by section; a section without art is missing. */
+export type WrappedArtSet = Partial<Record<WrappedArtSection, WrappedArtFrames>>;
+
+/**
+ * How a solid-background screenshot was keyed (RGB distances, 0–441): within `tolerance` of the key colour is
+ * background, and the next `softness` is the anti-aliased fringe.
+ */
+export interface WrappedArtKeying {
+  tolerance: number;
+  softness: number;
+}
+
+export const WRAPPED_ART_KEYING_DEFAULTS: WrappedArtKeying = { tolerance: 30, softness: 150 };
+
+/** One section's art, as the admin UI shows it. */
+export interface WrappedArtSlot {
+  section: WrappedArtSection;
+  /** The upload as it was: a transparent PNG, or the solid-background screenshot it was keyed from. */
+  originalUrl: string;
+  frames: WrappedArtFrames;
+  /** How it was keyed; null for an upload that was already transparent. */
+  keying: WrappedArtKeying | null;
+  /** The background colour that was keyed out, "#rrggbb"; null when nothing was. */
+  keyColor: string | null;
+  updatedAt: string;
 }

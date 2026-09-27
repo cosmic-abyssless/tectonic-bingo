@@ -152,10 +152,12 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
   };
 
   const sections: WrappedSectionModel[] = [];
+  const art = (kind: WrappedSectionModel["kind"]) => data.art?.[kind] ?? null;
 
   // Intro.
   const intro: WrappedIntroModel = {
     kind: "intro",
+    art: art("intro"),
     bingoName: bingo.bingoName,
     playerName: player ? opts.viewerName : null,
     datesLabel:
@@ -173,6 +175,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
     const bosses = (y.wom?.bosses ?? []).filter((b) => b.kills > 0);
     const you: WrappedYouModel = {
       kind: "you",
+      art: art("you"),
       submissions: y.submissions > 0 ? { countLabel: plural(y.submissions, "Submission"), comparison: aboveAverage(y.submissions, y.bingoAverageSubmissions) } : null,
       points:
         y.pointsShare > 0
@@ -205,7 +208,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
       wom: y.wom && (y.wom.ehb > 0 || bosses.length > 0) ? { ehbLabel: y.wom.ehb.toLocaleString(undefined, { maximumFractionDigits: 1 }), bosses: bosses.map((b) => ({ name: b.name, killsLabel: plural(b.kills, "kill") })) } : null,
       draft: y.draft ? { pickLabel: `Pick ${y.draft.pickNumber}`, positionLabel: ordinal(y.draft.position) } : null,
     };
-    const { kind: _kind, titles, achievements, topDrops, ...parts } = you;
+    const { kind: _kind, art: _art, titles, achievements, topDrops, ...parts } = you;
     if (titles.length || achievements.length || topDrops.length || Object.values(parts).some((p) => p !== null)) sections.push(you);
   }
 
@@ -214,6 +217,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
     const m = data.moderator;
     const moderator: WrappedModeratorModel = {
       kind: "moderator",
+      art: art("moderator"),
       reviewedLabel: plural(m.reviewed, "Submission"),
       medianLabel: shortDuration(m.medianReviewMs),
       rejectionLabel: percent(m.rejectionRate),
@@ -227,6 +231,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
   if (myTeam) {
     const team: WrappedTeamModel = {
       kind: "team",
+      art: art("team"),
       name: myTeam.name,
       color: myTeam.color,
       placement: myTeam.placement,
@@ -247,6 +252,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
   const mod = bingo.moderation;
   const b: WrappedBingoModel = {
     kind: "bingo",
+    art: art("bingo"),
     totalSubmissions: bingo.totalSubmissions,
     totalSubmissionsLabel: bingo.totalSubmissions.toLocaleString(),
     totalGpLabel: formatGp(bingo.totalGp),
@@ -279,7 +285,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
   };
   sections.push(b);
 
-  sections.push({ kind: "outro", bingoName: bingo.bingoName });
+  sections.push({ kind: "outro", art: art("outro"), bingoName: bingo.bingoName });
 
   return {
     slug,

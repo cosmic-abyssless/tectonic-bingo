@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
+import type { WrappedArtFrames } from "@bingo/shared";
 import type { WrappedDropModel, WrappedPersonModel } from "../../headless/types";
 import { WikiIcon } from "../ui/ItemIcon";
+import { StickerArt } from "./StickerArt";
 
 // Small shared pieces of Wrapped's default sections, for any theme to reuse.
 
@@ -83,4 +85,10 @@ export function WrappedStat({ value, label, tone }: { value: ReactNode; label: R
       <div className="mt-2 text-sm text-on-surface-muted sm:text-base">{label}</div>
     </div>
   );
+}
+
+/** A section's Wrapped art, above its opening heading; nothing when the section has none (it reads finished without). */
+export function WrappedSectionArt({ art }: { art: WrappedArtFrames | null }) {
+  if (!art) return null;
+  return <StickerArt frames={art} className="mx-auto mb-8 size-44 sm:size-56" />;
 }

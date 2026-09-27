@@ -288,6 +288,13 @@
       "when": 1790510271673,
       "tag": "0040_wrapped",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1790521139029,
+      "tag": "0041_wrapped_art",
+      "breakpoints": true
     }
   ]
 }

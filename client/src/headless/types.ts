@@ -3,7 +3,7 @@
 // never a raw Tile, TeamNodeState[], SubmissionDetails[], or LeafClaimMaps.
 // See docs/headless-theming-plan.md §2.
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
-import type { AuditCategory, AuditTone, DraftState, NodeKind, NodeStatus, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus } from "@bingo/shared";
+import type { AuditCategory, AuditTone, DraftState, NodeKind, NodeStatus, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus, WrappedArtFrames } from "@bingo/shared";
 
 export interface ActivityEntryModel {
   id: number;
@@ -641,6 +641,8 @@ export interface WrappedChartModel {
 
 export interface WrappedIntroModel {
   kind: "intro";
+  /** This section's Wrapped art (its two boil frames); null without any. */
+  art: WrappedArtFrames | null;
   bingoName: string;
   /** The viewer's name when they played; null for anyone else (they get the Bingo-wide story). */
   playerName: string | null;
@@ -650,6 +652,7 @@ export interface WrappedIntroModel {
 
 export interface WrappedYouModel {
   kind: "you";
+  art: WrappedArtFrames | null;
   /**
    * Comparisons are only ever flattering: each is null unless the Player beat it, so a Player below the average (or low
    * on their Team) sees their own numbers and nothing to measure them against.
@@ -673,6 +676,7 @@ export interface WrappedYouModel {
 
 export interface WrappedModeratorModel {
   kind: "moderator";
+  art: WrappedArtFrames | null;
   /** "32 Submissions" */
   reviewedLabel: string;
   medianLabel: string;
@@ -683,6 +687,7 @@ export interface WrappedModeratorModel {
 
 export interface WrappedTeamModel {
   kind: "team";
+  art: WrappedArtFrames | null;
   name: string;
   color: string | null;
   placement: number;
@@ -701,6 +706,7 @@ export interface WrappedTeamModel {
 
 export interface WrappedBingoModel {
   kind: "bingo";
+  art: WrappedArtFrames | null;
   totalSubmissions: number;
   totalSubmissionsLabel: string;
   totalGpLabel: string;
@@ -728,6 +734,7 @@ export interface WrappedBingoModel {
 
 export interface WrappedOutroModel {
   kind: "outro";
+  art: WrappedArtFrames | null;
   bingoName: string;
 }
 

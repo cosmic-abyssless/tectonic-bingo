@@ -36,6 +36,7 @@ import { getEarnedAchievements } from "./achievementService";
 import { bossGainsOf, gainsOf, loadTimelines } from "./womReadService";
 import { effectiveStartsAt, endedAt } from "./bingoStart";
 import { getAcceptedPairs } from "./pairingService";
+import { artSet } from "./wrappedArtService";
 import { rsnsInBingo } from "./playerNames";
 import { BOSS_NAMES } from "./luck/bossSources";
 
@@ -448,7 +449,14 @@ function read(db: Db, bingo: Bingo, viewer: WrappedViewer, withPlayer: boolean):
     const stored = db.select({ dataJson: bingoWrapped.dataJson }).from(bingoWrapped).where(eq(bingoWrapped.bingoId, bingo.id)).get()!;
     const mine = withPlayer ? db.select({ dataJson: playerWrapped.dataJson }).from(playerWrapped).where(and(eq(playerWrapped.bingoId, bingo.id), eq(playerWrapped.userId, viewer.userId))).get() : undefined;
     const data = JSON.parse(stored.dataJson) as BingoWrapped;
-    return { state, preview: false, bingo: hideScreenshots(data, bingo, viewer), player: mine ? (JSON.parse(mine.dataJson) as PlayerWrapped) : null, moderator: moderatorOf(data, viewer.userId) };
+    return {
+      state,
+      preview: false,
+      bingo: hideScreenshots(data, bingo, viewer),
+      player: mine ? (JSON.parse(mine.dataJson) as PlayerWrapped) : null,
+      moderator: moderatorOf(data, viewer.userId),
+      art: artSet(db, bingo.id),
+    };
   }
   if (!viewer.isMod) notPublished();
   const computed = computeWrapped(db, bingo);
@@ -458,6 +466,7 @@ function read(db: Db, bingo: Bingo, viewer: WrappedViewer, withPlayer: boolean):
     bingo: computed.bingo,
     player: withPlayer ? (computed.players.find((p) => p.userId === viewer.userId) ?? null) : null,
     moderator: moderatorOf(computed.bingo, viewer.userId),
+    art: artSet(db, bingo.id),
   };
 }
 
@@ -467,6 +476,6 @@ export function readMyWrapped(db: Db, bingo: Bingo, viewer: WrappedViewer): MyWr
 }
 
 export function readBingoWrapped(db: Db, bingo: Bingo, viewer: WrappedViewer): BingoWrappedResponse {
-  const { state, preview, bingo: data } = read(db, bingo, viewer, false);
-  return { state, preview, bingo: data };
+  const { state, preview, bingo: data, art } = read(db, bingo, viewer, false);
+  return { state, preview, bingo: data, art };
 }
