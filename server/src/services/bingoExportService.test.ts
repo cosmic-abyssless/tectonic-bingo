@@ -325,6 +325,20 @@ describe("settings", () => {
     expect(getBingoBySlug(db, "settings-old")).toMatchObject({ cutMode: "even", warnLeftovers: false });
   });
 
+  it("carries \"Show screenshots once Finished\" over, and shows them for a file that predates it", () => {
+    const { bingo, admin } = seedFullBingo();
+    db.update(schema.bingos).set({ showScreenshotsWhenFinished: false }).where(eq(schema.bingos.id, bingo.id)).run();
+    const doc = exportBingo(db, bingo.id);
+    expect(doc.bingo.showScreenshotsWhenFinished).toBe(false);
+    importBingo(db, doc, { slug: "screenshots-off", createdByUserId: admin.id });
+    expect(getBingoBySlug(db, "screenshots-off")?.showScreenshotsWhenFinished).toBe(false);
+
+    const old = JSON.parse(JSON.stringify(doc)) as BingoExportDocument;
+    delete old.bingo.showScreenshotsWhenFinished;
+    importBingo(db, old, { slug: "screenshots-old", createdByUserId: admin.id });
+    expect(getBingoBySlug(db, "screenshots-old")?.showScreenshotsWhenFinished).toBe(true);
+  });
+
   it("reads the setting cutMode replaced, from older files", () => {
     const { bingo, admin } = seedFullBingo();
     const doc = JSON.parse(JSON.stringify(exportBingo(db, bingo.id))) as BingoExportDocument;

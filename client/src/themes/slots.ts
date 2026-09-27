@@ -85,9 +85,12 @@ export interface ThemeSlots {
   // (page.canScout) — the way into the scouting room before the draft.
   ScoutBanner: ComponentType<{ onOpen: () => void }>;
   DraftStage: ComponentType<{ draft: BingoPageModel["draft"]; milestone: StageMilestone | null; onOpenDraft: () => void }>;
-  // `selector` (mods only) lets a theme list the teams right on this screen
-  // instead of pointing at a menu.
-  NoTeamStage: ComponentType<{ isMod: boolean; selector?: TeamSelectorModel }>;
+  // No team picked yet, for whoever can pick one (page.canPickTeam: mods, and everyone once the bingo is Finished).
+  // `selector` lets a theme list the teams right on this screen instead of pointing at a menu.
+  NoTeamStage: ComponentType<{ selector: TeamSelectorModel }>;
+  // Someone who isn't part of this bingo (not a Player, Moderator or Admin) from signups closing until it's Finished.
+  // `isCut`: they signed up but were cut to keep the teams even.
+  NotPartStage: ComponentType<{ isCut: boolean }>;
   RulesDialog: ComponentType<{ isOpen: boolean; markdown: string; onClose: () => void }>;
   TeamInfoDialog: ComponentType<{ slug: string; team: TeamModel | null; onClose: () => void }>;
   // Where the team's points come from, opened from the point total on the banner. Open while `team` is set; reads its data with usePointBreakdown().

@@ -51,9 +51,19 @@ export type Stage = (typeof STAGE_ORDER)[number];
 // bingos[0] as the "default" bingo (issue #3: simpler than an env var,
 // since there's realistically only ever one active bingo at a time).
 // The list is for picking a bingo, so it never carries the rules text or the exclusive item lists (which need
-// the board revealed; see toViewerBingo).
-export function listBingos(db: Db) {
-  return db.select().from(bingos).orderBy(desc(bingos.createdAt)).all().map((b) => toViewerBingo(b, false));
+// the board revealed; see toViewerBingo). A Planning bingo is left out for anyone but its Moderators and Admins
+// (CONTEXT.md "Stage"), so nobody else is redirected to one either; every other stage is listed to every clan member.
+export function listBingos(db: Db, viewer: { id: string; isAdmin: boolean }) {
+  const modOf = viewer.isAdmin
+    ? null
+    : new Set(db.select({ bingoId: bingoModerators.bingoId }).from(bingoModerators).where(eq(bingoModerators.userId, viewer.id)).all().map((r) => r.bingoId));
+  return db
+    .select()
+    .from(bingos)
+    .orderBy(desc(bingos.createdAt))
+    .all()
+    .filter((b) => b.stage !== "planning" || !modOf || modOf.has(b.id))
+    .map((b) => toViewerBingo(b, false));
 }
 
 export function getBingoBySlug(db: Db, slug: string) {
@@ -386,6 +396,7 @@ export interface UpdateBingoSettingsParams {
   // switches live in their own table and are applied separately (see achievementService.applyAchievementSwitches).
   achievementsEnabled?: boolean;
   achievements?: Partial<Record<AchievementKey, boolean>>;
+  showScreenshotsWhenFinished?: boolean;
 }
 
 export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingoSettingsParams) {

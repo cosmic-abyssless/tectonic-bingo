@@ -1,0 +1,1 @@
+ALTER TABLE `bingos` ADD `show_screenshots_when_finished` integer DEFAULT true NOT NULL;

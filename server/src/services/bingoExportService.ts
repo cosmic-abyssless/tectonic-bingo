@@ -152,6 +152,7 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
       bonusPotAmount: bingo.bonusPotAmount,
       rulesMarkdown: bingo.rulesMarkdown,
       exclusivityRules: bingoService.parseExclusivityRules(bingo.exclusivityRulesJson),
+      showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished,
     },
     categories: categoryRows.map((c) => ({ localId: categoryLocalByReal.get(c.id)!, label: c.label, colorHex: c.colorHex, sortOrder: c.sortOrder })),
     tiles,
@@ -285,6 +286,7 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
       bonusPotAmount: doc.bingo.bonusPotAmount,
       rulesMarkdown: doc.bingo.rulesMarkdown,
       ...(doc.bingo.exclusivityRules !== undefined ? { exclusivityRules: doc.bingo.exclusivityRules } : {}),
+      ...(doc.bingo.showScreenshotsWhenFinished !== undefined ? { showScreenshotsWhenFinished: doc.bingo.showScreenshotsWhenFinished === true } : {}),
     });
 
     const categoryIdByLocal = new Map<number, string>();

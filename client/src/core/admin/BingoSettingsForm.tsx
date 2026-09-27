@@ -57,6 +57,7 @@ export function BingoSettingsForm({
     buyinAmount: bingo.buyinAmount?.toString() ?? "",
     bonusPotAmount: bingo.bonusPotAmount.toString(),
     rulesMarkdown: bingo.rulesMarkdown ?? "",
+    showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished,
     exclusivityRules: bingo.exclusivityRules as ExclusivityRule[],
     signupOpensAt: toLocalInput(bingo.signupOpensAt),
     draftScheduledAt: toLocalInput(bingo.draftScheduledAt),
@@ -112,6 +113,7 @@ export function BingoSettingsForm({
         buyinAmount: form.buyinAmount ? Number(form.buyinAmount) : null,
         bonusPotAmount: Number(form.bonusPotAmount) || 0,
         rulesMarkdown: form.rulesMarkdown || null,
+        showScreenshotsWhenFinished: form.showScreenshotsWhenFinished,
         exclusivityRules: form.exclusivityRules,
         signupOpensAt: fromLocalInput(form.signupOpensAt) as never,
         draftScheduledAt: fromLocalInput(form.draftScheduledAt) as never,
@@ -274,6 +276,22 @@ export function BingoSettingsForm({
             <Textarea aria-label="Rules (Markdown)" value={form.rulesMarkdown} onChange={(e) => setForm({ ...form, rulesMarkdown: e.target.value })} rows={6} className="font-mono" />
           )}
         </Field>
+      </Section>
+
+      <Section title="Once Finished">
+        <p className="text-sm text-on-surface-muted">
+          Once the bingo is finished, every clan member can read it: the board, stats, final teams, and every team's submissions.
+        </p>
+        <label className="flex items-center gap-2 text-sm text-on-surface">
+          <input
+            type="checkbox"
+            checked={form.showScreenshotsWhenFinished}
+            onChange={(e) => setForm({ ...form, showScreenshotsWhenFinished: e.target.checked })}
+            className="size-4 cursor-pointer accent-accent"
+          />
+          Show screenshots once Finished
+        </label>
+        <p className="text-sm text-on-surface-muted">Off, other teams' screenshots are hidden from everyone but the mods. Players still see their own team's.</p>
       </Section>
 
       <Section title="Exclusive items">

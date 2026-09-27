@@ -9,26 +9,32 @@ import { useAuth } from "../../../context/AuthContext";
 
 /**
  * Draft stage: before it starts, a countdown; while it runs, a pointer into
- * the draft room; once done, the team reveal. The draft endpoint is 403 for
- * people who didn't sign up, so the error case just shows the generic copy.
+ * the draft room; once done, the team reveal. Only shown to people who can see
+ * the bingo (anyone else gets NotPartStage), so no draft state here means the
+ * room failed to load.
  */
 export function DraftStage({ draft, milestone, onOpenDraft }: { draft: BingoPageModel["draft"]; milestone: StageMilestone | null; onOpenDraft: () => void }) {
   const { user } = useAuth();
   if (draft.isLoading) return null;
 
-  // Having draft state at all means the server let us into the room (mods,
-  // captains and signed-up players), so offer the door even before it starts.
-  if (!draft.state || !draft.state.draftStarted) {
+  if (!draft.state) {
+    return (
+      <EmptyState icon={<UsersIcon size={20} />} title="The draft room couldn't be loaded">
+        Try reloading the page.
+      </EmptyState>
+    );
+  }
+
+  // Having draft state at all means the server let us into the room, so offer the door even before it starts.
+  if (!draft.state.draftStarted) {
     return (
       <EmptyState
         icon={<UsersIcon size={20} />}
         title="The draft hasn't started yet"
         action={
-          draft.state ? (
-            <Button variant="primary" onPress={onOpenDraft}>
-              Open draft room
-            </Button>
-          ) : undefined
+          <Button variant="primary" onPress={onOpenDraft}>
+            Open draft room
+          </Button>
         }
       >
         <MilestoneCountdown milestone={milestone} className="justify-center" />

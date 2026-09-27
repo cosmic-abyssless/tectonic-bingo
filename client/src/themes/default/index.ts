@@ -27,6 +27,7 @@ import { ScoutBanner } from "./page/ScoutBanner";
 import { OnTheClockBanner } from "./draft/OnTheClockBanner";
 import { DraftStage } from "./page/DraftStage";
 import { NoTeamStage } from "./page/NoTeamStage";
+import { NotPartStage } from "./page/NotPartStage";
 import { RulesDialog } from "./page/RulesDialog";
 import { SubmissionsDrawer } from "./page/SubmissionsDrawer";
 import { TeamInfoDialog } from "../../core/teams/TeamInfoDialog";
@@ -77,6 +78,7 @@ export const defaultTheme: ThemeDefinition = {
     ScoutBanner,
     DraftStage,
     NoTeamStage,
+    NotPartStage,
     RulesDialog,
     SubmissionsDrawer,
     TeamInfoDialog,

@@ -18,21 +18,19 @@ type Bingo = typeof schema.bingos.$inferSelect;
 type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick"> & { rsn?: string | null };
 const MINIMAL_USER_COLS = { id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick };
 
-// Signup/captains scouting is captains + mods only. During draft, signed-up
-// players (and anyone already on a team) can watch.
-export function canViewDraftRoom(
-  stage: Bingo["stage"] | string,
-  viewer: { isMod: boolean; isLead: boolean; isOnTeam: boolean; isSignedUp: boolean },
-): boolean {
+// Signup/captains scouting is captains + mods only. From the draft on, whoever can see the bingo can watch
+// (bingoAccess.getBingoAccess): its Players (during the draft, every active signup that isn't cut), its mods, and
+// every clan member once it's Finished.
+export function canViewDraftRoom(stage: Bingo["stage"] | string, viewer: { isMod: boolean; isLead: boolean; canSeeBingo: boolean }): boolean {
   if (stage === "signup" || stage === "captains") return viewer.isMod || viewer.isLead;
-  return viewer.isMod || viewer.isOnTeam || viewer.isSignedUp;
+  return viewer.isMod || viewer.canSeeBingo;
 }
 
 export function draftRoomForbiddenMessage(stage: Bingo["stage"] | string): string {
   if (stage === "signup" || stage === "captains") {
     return "Scouting is only visible to captains and mods";
   }
-  return "The draft room is only visible to signed-up players and mods";
+  return "The draft room is only visible to this bingo's players and mods";
 }
 
 // Snake order: odd rounds go draftOrder ascending, even rounds descending.

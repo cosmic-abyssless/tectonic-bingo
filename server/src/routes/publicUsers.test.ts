@@ -107,6 +107,8 @@ describe("other people are sent as PublicUsers", () => {
   it("in the duo partners list", async () => {
     const { carol } = seed();
     viewerId = carol.id;
+    // The signup helpers only answer players while signups are open (#119).
+    db.update(schema.bingos).set({ stage: "signup" }).run();
     const { candidates } = await get<PartnerCandidatesResponse>("/api/bingos/b/signup/partners");
     expect(candidates.map((c) => c.discordId).sort()).toEqual(["alice-id", "bob-id"]);
     for (const c of candidates) expectPublic(c.user);
