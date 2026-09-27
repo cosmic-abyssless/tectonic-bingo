@@ -95,6 +95,7 @@ export interface AuditDetailsMap {
       sealedTiles: boolean;
       hideRules: boolean;
       showScreenshotsWhenFinished: boolean;
+      publishWrappedOnFinish: boolean;
     }>;
   };
 
@@ -165,6 +166,10 @@ export interface AuditDetailsMap {
 
   // startsAtBackfilled: only on entries written before a start date stopped being filled in by a stage change.
   "stage.changed": { from: Stage; to: Stage; startsAtBackfilled?: boolean };
+
+  // Wrapped (CONTEXT.md): a Moderator publishing it, or publishing it again, which recomputes every Player's.
+  "wrapped.published": { players: number };
+  "wrapped.republished": { players: number };
 
   "draft.started": { order: { teamId: string; name: string; draftOrder: number }[] };
   "draft.order_shuffled": { order: { teamId: string; name: string; draftOrder: number }[] };
@@ -632,6 +637,20 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "public",
     title: "Stage changed",
     label: (i) => `${actor(i)} advanced the bingo from ${i.details.from} to ${i.details.to}`,
+  },
+  "wrapped.published": {
+    category: "bingo",
+    tone: "ok",
+    visibility: "public",
+    title: "Wrapped published",
+    label: (i) => `${actor(i)} published Wrapped`,
+  },
+  "wrapped.republished": {
+    category: "bingo",
+    tone: "info",
+    visibility: "public",
+    title: "Wrapped re-published",
+    label: (i) => `${actor(i)} published Wrapped again, with the latest numbers`,
   },
   "draft.started": { category: "draft", tone: "info", visibility: "public", title: "Draft started", label: (i) => `${actor(i)} started the draft` },
   "draft.order_shuffled": { category: "draft", tone: "info", visibility: "public", title: "Pick order shuffled", label: (i) => `${actor(i)} shuffled the pick order` },

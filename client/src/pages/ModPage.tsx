@@ -9,6 +9,7 @@ import { useWebSocketEvent } from "../context/WebSocketContext";
 import { AuditLog } from "../core/mod/AuditLog";
 import { ReviewQueue } from "../core/mod/ReviewQueue";
 import { StageControls } from "../core/mod/StageControls";
+import { WrappedControls } from "../core/mod/WrappedControls";
 import { SignupRoster } from "../core/mod/SignupRoster";
 import { BingoSettingsForm } from "../core/admin/BingoSettingsForm";
 import { ModsManager } from "../core/admin/ModsManager";
@@ -146,6 +147,11 @@ export function ModPage() {
         <div className={NARROW}>
           <StageControls slug={slug} bingo={shell.bingo} canChange={isAdmin} />
         </div>
+        {shell.bingo.stage === "complete" && (
+          <div className={NARROW}>
+            <WrappedControls slug={slug} />
+          </div>
+        )}
 
         <PlayerProfileProvider slug={slug}>
           <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key))}>
