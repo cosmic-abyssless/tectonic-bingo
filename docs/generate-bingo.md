@@ -103,7 +103,9 @@ target (say `signup`), the later dates are simply scheduled in the future.
    leave the bingo at `--stage captains` and move it to the draft stage in the mod panel.)
 4. **Reveal**: teams get names and members raise hands on the parts they mean to do.
 5. **Live**: an hourly simulation (see below), then, for `complete`, the mods clear the
-   queue and an admin completes the bingo.
+   queue and an admin completes the bingo. Every player on a team is then given made-up
+   **Wise Old Man snapshots** up to the end of the run (see below), so Grinder, the luck
+   Titles (Spoon, Dry, Clutch) and the achievements that read WOM have something to judge.
 
 ### How the play is made realistic
 
@@ -135,6 +137,15 @@ target (say `signup`), the later dates are simply scheduled in the future.
   One approval is undone and re-approved a few minutes later. Occasionally a mod adjusts
   a team's points by +15.
 - Everything is stamped in date order, so the audit log reads the way a real one would.
+- **Wise Old Man snapshots** (`womSnapshots.ts`): a testdata- bingo is never read from WOM, so
+  each player's snapshots are made up after play, from their approved drops. The kills before a
+  drop are drawn from its real drop rate, capped by how much that player could kill in the time
+  since (they play part of the day), so most drops land near the odds and some come in lucky. Some
+  players keep going at a Board boss after their last drop, or at one they've had nothing from,
+  for as long as a real dry streak would last: that's Dry. EHB follows the time they play, not
+  the kills. Snapshots come every few hours plus one shortly after each drop, from a baseline
+  before the start. The simulation hands out rare drops more often than real play would, so
+  Spoon's luckiest players read luckier than a real bingo's.
 
 ## PETS and SLAYER BOSSES (pages that share their items)
 
@@ -189,10 +200,11 @@ check for it):
   server over `http://127.0.0.1:$PORT` with `X-Forwarded-Proto: https` (so the Secure session
   cookie still works on staging).
 - `POST /api/dev/users`, `GET /api/dev/bingos`, `DELETE /api/dev/bingos/:slug`,
-  `POST /api/dev/bingos/:slug/fake-stats` (`server/src/routes/dev.ts`, site admin only,
-  `testdata-` prefix enforced): make a throwaway user, list generated bingos, tear one down
-  completely (bingo, audit rows, uploaded files and their variants, and users nothing else
-  uses), and give a bingo's signups made-up player stats.
+  `POST /api/dev/bingos/:slug/fake-stats`, `POST /api/dev/bingos/:slug/fake-wom-snapshots`
+  (`server/src/routes/dev.ts`, site admin only, `testdata-` prefix enforced): make a throwaway
+  user, list generated bingos, tear one down completely (bingo, audit rows, uploaded files and
+  their variants, and users nothing else uses), give a bingo's signups made-up player stats, and
+  give its players made-up Wise Old Man snapshots (seeded by the run, replacing any it had).
 
 ## Tuning
 

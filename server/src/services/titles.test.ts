@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chipTitles, DEFAULT_TITLE_SETTINGS, oneIn, pickTitles, shortGp, TITLES, titlesHeldBy, type LuckFacts, type PlayerTitleFacts, type TitleAwardFact, type TitleContext, type TitleId } from "@bingo/shared";
+import { DEFAULT_TITLE_SETTINGS, oneIn, pickTitles, shortGp, TITLES, titlesByHolder, titlesHeldBy, type LuckFacts, type PlayerTitleFacts, type TitleAwardFact, type TitleContext, type TitleId } from "@bingo/shared";
 
 const HOUR = 60 * 60 * 1000;
 const LIVE_AT = new Date("2026-01-01T00:00:00Z");
@@ -21,6 +21,7 @@ function player(userId: string, facts: Partial<PlayerTitleFacts> = {}): PlayerTi
     wom: null,
     luck: null,
     achievements: null,
+    lastAt: { approved: null, rejected: null, posted: null, newItem: null, item: null },
     ...facts,
   };
 }
@@ -57,9 +58,19 @@ describe("pickTitles", () => {
     expect(holdersOf(pool, "carry")).toEqual(["b"]);
   });
 
-  it("lets tied Players both hold a Title", () => {
-    const pool = [player("a", { pointsShare: 20 }), player("b", { pointsShare: 20 }), player("c", { pointsShare: 5 })];
-    expect(holdersOf(pool, "carry")).toEqual(["a", "b"]);
+  it("gives a tie to the Player holding fewer Titles", () => {
+    // Tied on Carry, but "a" already holds Collector outright.
+    const pool = [player("a", { pointsShare: 20, distinctItems: 5 }), player("b", { pointsShare: 20 }), player("c", { pointsShare: 5 })];
+    expect(holdersOf(pool, "carry")).toEqual(["b"]);
+    expect(holdersOf(pool, "collector")).toEqual(["a"]);
+  });
+
+  it("gives a tie between Players holding as many Titles to whoever got there first, and counts it for the next tie", () => {
+    // Tied on Carry and on Specialist (all their points from one tile). "b" got there first, so takes Carry; then "a"
+    // holds fewer, so takes Specialist.
+    const pool = [player("a", { pointsShare: 20, awards: [award(20, 10)] }), player("b", { pointsShare: 20, awards: [award(20, 5)] })];
+    expect(holdersOf(pool, "carry")).toEqual(["b"]);
+    expect(holdersOf(pool, "specialist")).toEqual(["a"]);
   });
 
   it("shows a visible Title nobody qualifies for with no holders", () => {
@@ -103,7 +114,6 @@ describe("pickTitles", () => {
   it("leaves Players without Wise Old Man data out of its Titles", () => {
     const pool = [player("a"), player("b", { wom: { ehb: 12, ehp: 0, clues: 0, asOf: at(5).toISOString() } })];
     expect(holdersOf(pool, "grinder")).toEqual(["b"]);
-    expect(holdersOf(pool, "skiller")).toBeUndefined();
   });
 
   it("needs 3 approved Submissions for Sniper, and ranks by points per Submission", () => {
@@ -143,9 +153,9 @@ describe("luck Titles", () => {
     expect(holder.asOf).toBe(WOM.asOf);
   });
 
-  it("lets Players tied on luck share Spoon", () => {
+  it("gives a luck tie, which it can't time, to the Player listed first", () => {
     const spoon = { value: 1.5, itemName: "Ultor vestige", kills: 30 };
-    expect(holdersOf([lucky("a", { spoon }), lucky("b", { spoon })], "spoon")).toEqual(["a", "b"]);
+    expect(holdersOf([lucky("a", { spoon }), lucky("b", { spoon })], "spoon")).toEqual(["a"]);
   });
 
   it("leaves Spoon and Clutch empty, and Dry out, for Players below the floors", () => {
@@ -208,12 +218,12 @@ describe("Title settings", () => {
   });
 });
 
-describe("chipTitles and titlesHeldBy", () => {
-  it("shows a Player's highest-priority Title on the chip, and lists all of them", () => {
+describe("titlesByHolder and titlesHeldBy", () => {
+  it("lists every Title a Player holds, in priority order", () => {
     const pool = [player("a", { pointsShare: 20, distinctItems: 5, rejectedSubmissions: 3 }), player("b", { pointsShare: 10 })];
     const picked = pickTitles(pool, live(48));
-    expect(chipTitles(picked).get("a")?.id).toBe("carry");
+    expect(titlesByHolder(picked).get("a")?.map((t) => t.id)).toEqual(["carry", "butterfingers", "collector"]);
     expect(titlesHeldBy(picked, "a").map((p) => p.title.id)).toEqual(["carry", "butterfingers", "collector"]);
-    expect(chipTitles(picked).has("b")).toBe(false);
+    expect(titlesByHolder(picked).has("b")).toBe(false);
   });
 });

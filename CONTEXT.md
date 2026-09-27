@@ -14,10 +14,10 @@ A single OSRS clan bingo competition, run from start to finish across a set of l
 
 ### Stage
 The current lifecycle phase of a Bingo. Transitions move forward through a fixed sequence. The name in bold is the canonical one, used in UI copy, discussion and this glossary; the code value is engineering-only.
-1. **Planning** (`planning`) — Admin configures board, tiles, rules, signup questions. Hidden from normal players.
-2. **Signups open** (`signup`) — Players submit signups (solo or duo). Admins review and approve. Captains can already scout the signups.
+1. **Planning** (`planning`) — Admin configures board, tiles, rules, signup questions. Hidden from everyone but Moderators and Admins, and not listed.
+2. **Signups open** (`signup`) — Players submit signups (solo or duo). Captains can already scout the signups.
 3. **Signups closed** (`captains`) — The roster is final and signups are locked. Captains keep scouting until the draft starts.
-4. **Draft** (`draft`) — Captains take turns picking players/duos in structured rounds. Every signed-up player and everyone already on a team can watch.
+4. **Draft** (`draft`) — Captains take turns picking players/duos in structured rounds. Every Player can watch; Cut signups are no longer Players from this stage on.
 5. **Board revealed** (`reveal`) — Teams are set; the board is visible for prep, but submissions are not yet accepted.
 6. **Live** (`live`) — The Bingo is running. Submissions are accepted and reviewed; points accumulate.
 7. **Finished** (`complete`) — The Bingo has ended. Final scores are locked, winners declared.
@@ -56,9 +56,9 @@ A designated player who leads a Team during a Bingo.
 - **Rules:** Assigned by an Admin, from the signups as they come in, while signups are open or closed. Exactly one or two captains per team.
 
 ### Player
-Any clan member participating in a Bingo as a competitor.
+A clan member who is part of a Bingo as a competitor: until Board revealed, anyone with an active Signup, except Cut signups once the Draft stage begins; from Board revealed on, anyone on a Team. A withdrawn signup is never a Player.
 - **Capabilities:** Sign up, view the board, make Submissions for their team, view team progress.
-- **Rules:** Belongs to exactly one Team per Bingo once drafted.
+- **Rules:** Belongs to exactly one Team per Bingo once drafted. Anyone who isn't a Player, Moderator or Admin is "not part of this Bingo": they see only its name and stage, plus the signup form while Signups are open. Once the Bingo is Finished, every clan member can view it read-only.
 - **Name:** Inside a Bingo a Player is named by the RSN they signed up with, not their Discord name (rosters, submissions, stats, the audit log, the draft, the header). The server puts it on `rsn` for every user it sends within a Bingo, and `playerName` prefers it. An account with no Signup in that Bingo, like a Moderator who isn't playing, falls back to the Discord name, as do site-level lists. A Discord name is only shown where it is labelled as one (the "Discord" columns of the roster and draft room, the profile subtitle). Audit entries written before this keep the names they were stored with.
 
 ---
@@ -69,7 +69,10 @@ Any clan member participating in a Bingo as a competitor.
 A player's registration for a specific Bingo, submitted during the `signup` stage.
 - **Status:** Active or Withdrawn.
 - **Rules:** Includes answers to custom signup questions set by the Admin (e.g. timezone, gear tier, OSRS RSN).
-- **Question types:** Short text, long text, yes/no, **single choice** (radio buttons, one option) and **multiple choice** (checkboxes, any number of options). A multiple-choice answer is stored as a JSON list and shown as "Melee, Magic"; a required one needs at least one option ticked.
+- **Question types:** Short text, long text, yes/no, **single choice** (radio buttons, one option) and **multiple choice** (checkboxes, any number of options). A multiple-choice answer is stored as a JSON list and shown as "Melee, Magic"; a required one needs at least one option ticked. A yes/no answer is shown as "Yes" or "No".
+- **Member pick:** A question type whose answer is one or several clan members (for example "Who would you like to play with?"), picked by searching. The list is every clan member who has logged in, except the person answering, each named by the RSN of their latest Signup or else their Discord name. "Several" can carry a maximum. A pick stays even if that member later leaves the clan.
+  - **Avoid:** Player picker (the people picked needn't be Players).
+- **Other option:** A single- or multiple-choice question can allow **Other**: an extra choice with a short free-text box, shown as "Melee, Other: hybrid". A required question counts Other with text as answered.
 - **Question helper text:** Each signup question can carry optional plain-text helper text (up to 500 characters), shown under it on the signup form. It is exported and imported with the Bingo.
 
 ### Duo
@@ -90,7 +93,7 @@ A signup left out of the Draft so that every Team comes out the same shape. Pair
 The structured selection process during the `draft` stage where Captains take turns selecting Players (or Duos) onto their Teams.
 - **Mechanics:** Snake draft or linear, divided into rounds.
 
-- **Draft room:** The page where the Draft happens. Captains and Moderators enter it once signups are open; every signed-up Player and everyone already on a Team can watch once the Draft stage begins.
+- **Draft room:** The page where the Draft happens. Captains and Moderators enter it once signups are open; every Player can watch once the Draft stage begins (Cut signups can't).
 - **On the clock:** The Team whose Captain is picking now. Shown to everyone as who is currently picking, with the round and pick number; the Captain on the clock also gets a stronger cue that it is their turn. There is no pick timer.
 
 ### Scouting
@@ -117,6 +120,11 @@ A single visual cell on the Board.
 - **Rules:** A Tile is a presentation wrapper around one root requirement. It has a position on the grid, an optional category, an image, and optional notes.
 - **Composition:** A Tile contains one or more **Parts**.
 - **Synonyms (theme-specific):** Comic Issue, Comic Book (in the comic theme, clicking a Tile opens it as an issue/comic book).
+
+### Sealed Tiles
+A per-Bingo option under which, during Board revealed, Players and Captains see each Tile's art, name and Category but can't open it. Its Parts, Tasks, Items and points stay hidden until an Admin unseals the Tiles or the Bingo goes Live.
+- **Rules:** Moderators and Admins can always open Tiles. No Task interest can be marked while sealed. Exclusive Item lists are hidden while sealed, because they name Items. Whether the rules text is visible is a separate option.
+- **Avoid:** "locked Tiles". "Locked" already means a Task blocked by its conditions, and a Tile in its Freeze Period.
 - **Player experience:** Players click a Tile to open its details (or open the comic issue in comic theme).
 
 ### Part
@@ -154,7 +162,8 @@ A grouping label applied to Tiles (or rows/columns) to organize the Board themat
 A completed sequence of Tiles across the Board (row, column, diagonal, or custom line) that awards bonus points when every Tile in the sequence is completed.
 
 ### Freeze Period
-A mandatory delay configured on a Tile: once a team completes the Tile, other teams cannot score it (or it cannot be scored again) until the freeze duration expires.
+A delay configured on a Tile: for its duration after the Bingo starts, no Team can submit to that Tile.
+- **Rules:** It runs from the moment the Bingo counts as started, once, for every Team. It isn't tied to any Team completing the Tile.
 
 ---
 
@@ -172,7 +181,7 @@ A single proof package submitted by a player on behalf of their Team to claim co
 
 ### Reaction
 An emoji a Player leaves on a Submission of their own Team, from a fixed set of five (🔥 🎉 😂 💀 👀).
-- **Rules:** Only members of the Submission's Team can react, to a Submission in any status (their own included). Each Player can leave each emoji once per Submission, and can take it back. Seen by the Team and Moderators only.
+- **Rules:** Only members of the Submission's Team can react, to a Submission in any status (their own included). Each Player can leave each emoji once per Submission, and can take it back. Seen by the Team and Moderators only, except in Rewind, which shows them to everyone once the Bingo is Finished.
 
 ### Screenshot
 An image attached to a Submission proving in-game completion.
@@ -215,7 +224,7 @@ The Bingo's stats page: points over time, the timeline, top contributors (ranked
 
 ### Title
 A tongue-in-cheek label a Player holds on the Stats page for how they played ("Carry", "Closer", "Butterfingers"), recomputed as the stats change.
-- **Rules:** Each Title goes to the Players tied at the best value among the Players shown, once they meet its minimum. With a Team selected in the team filter it's that Team's; unfiltered, the Bingo's. Titles follow the Stats visibility rules. A Player's chip in the contributors table shows their highest-priority Title, and their profile lists every one they hold. Some Titles use their Wise Old Man gains during the Bingo (EHB, EHP, clues), read from what Wise Old Man already has (never an update request), so they lag until the Player updates, and they freeze once the Bingo is Finished. A Site admin can turn Titles off and tune each one's minimum (and the luck Titles' floors) for every Bingo at once, from Site admin > Titles; a change applies straight away.
+- **Rules:** Each Title goes to the Player with the best value among the Players shown, once they meet its minimum. A Title is never shared: a tie goes to the tied Player holding the fewest Titles, then to whoever reached that value first. With a Team selected in the team filter it's that Team's; unfiltered, the Bingo's. Titles follow the Stats visibility rules. The contributors table shows a chip for every Title a Player holds, in priority order, and their profile lists them with the number behind each. Some Titles use their Wise Old Man gains during the Bingo (EHB, boss kill counts), read from what Wise Old Man already has (never an update request), so they lag until the Player updates, and they freeze once the Bingo is Finished. A Site admin can turn Titles off and tune each one's minimum (and the luck Titles' floors) for every Bingo at once, from Site admin > Titles; a change applies straight away.
 - **Not:** A permanent award. Titles belong to one Bingo and move as it goes.
 
 ### Hidden Title
@@ -274,3 +283,32 @@ A just-for-fun milestone a Player earns during a Bingo, e.g. "Strong start: subm
 - **Should work for anyone:** Every Achievement must be earnable, in theory, by any Player. A one-off honour ("first Submission of the Bingo") or a ranking ("most Achievements") is a Title, not an Achievement.
 - **Avoid:** Badge, Trophy, Medal.
 - **Not:** Combat Achievements (the in-game OSRS ones shown in a Player's clan standing), nor the clan's own honours shown beside a Player's name (Maxed, Grandmaster, Gilded log).
+
+---
+
+## Recap
+
+### Bingo Recap
+The look back at a Finished Bingo, in the spirit of a year-in-review: a family of features (Rewind first) that retell how the Bingo went.
+- **Rules:** Only for Finished Bingos, and open to everyone who can see the Bingo.
+
+### Rewind
+Playback of a Finished Bingo on its own Board: a timeline of its Submissions that the Board, the scoreboard and popups of the drops follow as it plays or is scrubbed.
+- **Clock:** Submission time (when the drop was posted), not approval time, so a batch of approvals doesn't clump drops together. Its scoreboard can therefore differ mid-way from the Stats points chart, which goes by approval; the end totals agree.
+- **Rules:** Only approved Submissions move the Board and the scoreboard. Rejected ones can be shown, off by default, stamped "Rejected", and never change anything. Point Adjustments count from when they were made.
+- **Not:** The Stats timeline, which lists scoring events by approval time.
+
+### Significance
+How much a Submission stands out in Rewind, from its Luck, GP value, Reactions, and what it completed (a Tile, a Line, a first to complete). Missing signals are left out, not counted as zero, so a very lucky pet with no GP value can still stand out.
+- **Tiers:** minor (its Tile only flashes), notable (a small popup) and huge (a big popup that holds longer).
+
+### Wrapped
+A scrolling story of a Finished Bingo, told from one Player's point of view: You, then your Duo and your Team, then the Bingo as a whole. It ends in shareable cards to compare with others.
+- **Audience:** Every Player gets their own. Anyone else who can view the Finished Bingo (e.g. a Moderator who didn't play) gets only the Bingo-wide part. A Captain also gets a section on their Draft, and a Moderator on their reviews.
+- **Publishing:** Hidden until a Moderator publishes it, which leaves time for the wrap-up with the Players. A Bingo can be set to publish it the moment it is Finished (off by default). Publishing fixes its numbers: they don't change afterwards unless a Moderator publishes it again.
+- **Avoid:** Recap for this feature alone (Recap is the family it belongs to).
+
+### Steal
+A Draft pick who finished far higher in Points share than their pick number suggested: a late pick near the top. A Duo counts as one pick.
+- **Rules:** Wrapped names steals, never the opposite: an early pick who scored low is not singled out.
+- **Title:** The Overperformer Title goes to the Player who beat their draft position by the most, which is the Bingo's biggest Steal among eligible Players. In a Duo, only the higher scorer can hold it.

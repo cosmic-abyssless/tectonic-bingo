@@ -64,6 +64,11 @@ export interface PlayerTitleFacts {
    * them (reaching that count). Null when the Bingo has Achievements switched off.
    */
   achievements: { earned: number; lastEarnedAt: string | null } | null;
+  /**
+   * When each Submission count last went up (the Submission's time), for ties: approved and rejected Submissions,
+   * ones posted for a teammate, a new distinct item, and any item Claim. Null while it's 0.
+   */
+  lastAt: { approved: string | null; rejected: string | null; posted: string | null; newItem: string | null; item: string | null };
 }
 
 /** The luck Titles' tunable numbers (luck.ts on the server applies them). */
@@ -108,8 +113,6 @@ export type TitleId =
   | "butterfingers"
   | "dry"
   | "sniper"
-  | "clue_goblin"
-  | "skiller"
   | "collector"
   | "tourist"
   | "specialist"
@@ -117,10 +120,19 @@ export type TitleId =
   | "postman"
   | "overachiever";
 
+/** What a Title is about, for grouping and colour: scoring, luck, grinding, or a mishap. */
+export type TitleGroup = "points" | "luck" | "grind" | "mishaps";
+
+/** The groups in the order they're shown. */
+export const TITLE_GROUPS: TitleGroup[] = ["points", "luck", "grind", "mishaps"];
+
 export interface TitleDefinition {
   id: TitleId;
   name: string;
   flavour: string;
+  /** How it's judged, in a sentence or so. Shown on the stats page. */
+  explanation: string;
+  group: TitleGroup;
   /** Shown only once someone holds it: nobody knows it exists until then. */
   hidden: boolean;
   /** "wom" Titles come from Wise Old Man gains, and show how fresh those are. */
@@ -139,10 +151,10 @@ export interface TitleDefinition {
   /** The number behind a holder's Title: "42% of the team's points". */
   format: (value: number, facts: PlayerTitleFacts, ctx: TitleContext) => string;
   /**
-   * Optional: breaks a tie at the best value, lowest first, so only one Player holds the Title (e.g. who got there
-   * first). Without one, tied Players share it.
+   * When the Player reached their value (ms), for ties: of the Players tied at the best, the one holding the fewest
+   * Titles gets it, then whoever got there first. Null when it can't be told (then the pool's order decides).
    */
-  tieBreak?: (facts: PlayerTitleFacts) => number;
+  reachedAt: (facts: PlayerTitleFacts, ctx: TitleContext) => number | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -150,6 +162,25 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const num = (n: number, digits = 1) => n.toLocaleString("en-US", { maximumFractionDigits: digits });
 const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 const percent = (fraction: number) => `${Math.round(fraction * 100)}%`;
+
+/** The latest of some ISO times, in ms; null with none. */
+function latest(...times: (string | null | undefined)[]): number | null {
+  const ms = times.filter((t): t is string => !!t).map(Date.parse);
+  return ms.length ? Math.max(...ms) : null;
+}
+
+/** When the count of distinct keys among `awards` last went up: the award that brought the last new one. */
+function lastNewKey(awards: TitleAwardFact[], key: (a: TitleAwardFact) => string | null): number | null {
+  const seen = new Set<string>();
+  let at: number | null = null;
+  for (const a of [...awards].sort((x, y) => Date.parse(x.completedAt) - Date.parse(y.completedAt))) {
+    const k = key(a);
+    if (k === null || seen.has(k)) continue;
+    seen.add(k);
+    at = Date.parse(a.completedAt);
+  }
+  return at;
+}
 
 const SUPERSCRIPT = "⁰¹²³⁴⁵⁶⁷⁸⁹";
 
@@ -200,12 +231,14 @@ function topTile(facts: PlayerTitleFacts): { name: string; fraction: number } | 
   return best && { name: best.name, fraction: best.points / facts.pointsShare };
 }
 
-/** Every Title, in chip priority order: a Player holding several shows the first. Minimums are starting values. */
+/** Every Title, in priority order: a Player's chips list theirs in this order. Minimums are starting values. */
 export const TITLES: TitleDefinition[] = [
   {
     id: "on_fire",
     name: "On Fire",
     flavour: "Can't stop, won't stop.",
+    explanation: "The most points share earned in the last 24 hours. Once the bingo has finished, in its final 24 hours.",
+    group: "points",
     hidden: false,
     source: "bingo",
     measure: (f, ctx) => {
@@ -220,11 +253,17 @@ export const TITLES: TitleDefinition[] = [
     qualifies: (v, _f, min) => v >= min,
     requirement: (min) => `${num(min, 2)} points share in the last 24 hours, once the bingo has been live for a day`,
     format: (v, _f, ctx) => `+${num(v, 2)} points ${ctx.endedAt ? "in the final 24 h" : "in the last 24 h"}`,
+    reachedAt: (f, ctx) => {
+      const window = onFireWindow(ctx);
+      return window ? latest(...f.awards.filter((a) => Date.parse(a.completedAt) > window.from.getTime() && Date.parse(a.completedAt) <= window.to.getTime()).map((a) => a.completedAt)) : null;
+    },
   },
   {
     id: "carry",
     name: "Carry",
     flavour: "Put the team on their back.",
+    explanation: "The biggest part of their team's points: their points share out of every point the team was awarded, point adjustments left out.",
+    group: "points",
     hidden: false,
     source: "bingo",
     measure: (f) => (f.teamAwardPoints > 0 ? f.pointsShare / f.teamAwardPoints : null),
@@ -232,11 +271,14 @@ export const TITLES: TitleDefinition[] = [
     qualifies: (_v, f, min) => f.pointsShare >= min,
     requirement: (min) => `At least ${num(min, 2)} points share`,
     format: (v) => `${percent(v)} of the team's points`,
+    reachedAt: (f) => latest(...f.awards.map((a) => a.completedAt)),
   },
   {
     id: "closer",
     name: "Closer",
     flavour: "Always there for the last piece.",
+    explanation: "The most tasks finished off: their submission was the last one approved on the path that completed the task.",
+    group: "points",
     hidden: false,
     source: "bingo",
     measure: (f) => f.awards.filter((a) => a.kind === "task" && a.closed).length,
@@ -244,11 +286,14 @@ export const TITLES: TitleDefinition[] = [
     qualifies: (v, _f, min) => v >= min,
     requirement: (min) => `Finish off at least ${plural(min, "task")}`,
     format: (v) => `Finished off ${plural(v, "task")}`,
+    reachedAt: (f) => latest(...f.awards.filter((a) => a.kind === "task" && a.closed).map((a) => a.completedAt)),
   },
   {
     id: "clutch",
     name: "Clutch",
     flavour: "The drop the team was waiting for.",
+    explanation: "The luckiest drop a task still needed. Pricier drops count for more.",
+    group: "luck",
     hidden: false,
     source: "wom",
     // The calculator only keeps drops that were at least 1 in 10 (luck.ts).
@@ -260,11 +305,14 @@ export const TITLES: TitleDefinition[] = [
       const c = f.luck!.clutch!;
       return `Clutched ${c.itemName} (${oneIn(c.luck)})${c.gpValue ? `, ${shortGp(c.gpValue)}` : ""}`;
     },
+    reachedAt: () => null,
   },
   {
     id: "grinder",
     name: "Grinder",
     flavour: "Lives at the boss.",
+    explanation: "The most efficient hours bossed (EHB) gained during the bingo, by Wise Old Man.",
+    group: "grind",
     hidden: false,
     source: "wom",
     measure: (f) => f.wom?.ehb ?? null,
@@ -272,11 +320,14 @@ export const TITLES: TitleDefinition[] = [
     qualifies: (v, _f, min) => v >= min,
     requirement: (min) => `${num(min)} EHB gained`,
     format: (v) => `${num(v)} EHB gained`,
+    reachedAt: (f) => latest(f.wom?.asOf),
   },
   {
     id: "spoon",
     name: "Spoon",
     flavour: "Born with it.",
+    explanation: "The luckiest drops during the bingo. One rare drop beats a pile of common ones.",
+    group: "luck",
     hidden: false,
     source: "wom",
     // The calculator only keeps a total of at least 1 in 10 (luck.ts).
@@ -288,11 +339,14 @@ export const TITLES: TitleDefinition[] = [
       const best = f.luck!.spoon!;
       return `${oneIn(v)} luck (${best.itemName} at ${plural(best.kills, "kill")})`;
     },
+    reachedAt: () => null,
   },
   {
     id: "butterfingers",
     name: "Butterfingers",
     flavour: "Maybe crop the screenshot next time.",
+    explanation: "The most of their submissions the mods rejected, whether they posted them or someone posted for them.",
+    group: "mishaps",
     hidden: true,
     source: "bingo",
     measure: (f) => f.rejectedSubmissions,
@@ -300,11 +354,14 @@ export const TITLES: TitleDefinition[] = [
     qualifies: (v, _f, min) => v >= min,
     requirement: (min) => plural(min, "rejected submission"),
     format: (v) => plural(v, "rejected submission"),
+    reachedAt: (f) => latest(f.lastAt.rejected),
   },
   {
     id: "dry",
     name: "Dry",
     flavour: "It's coming. Any kill now.",
+    explanation: "The driest streak at a boss that drops something on the board, since their last board drop from it.",
+    group: "luck",
     hidden: true,
     source: "wom",
     // The calculator only keeps a streak of at least 1 in 10 (luck.ts).
@@ -316,11 +373,14 @@ export const TITLES: TitleDefinition[] = [
       const dry = f.luck!.dry!;
       return `${num(dry.kills, 0)} KC dry at ${dry.boss} (${oneIn(v)})`;
     },
+    reachedAt: () => null,
   },
   {
     id: "sniper",
     name: "Sniper",
     flavour: "Few shots, all of them count.",
+    explanation: "The most points share per approved submission they posted.",
+    group: "points",
     hidden: true,
     source: "bingo",
     measure: (f) => (f.approvedSubmissions > 0 ? f.pointsShare / f.approvedSubmissions : null),
@@ -328,35 +388,14 @@ export const TITLES: TitleDefinition[] = [
     qualifies: (_v, f, min) => f.approvedSubmissions >= min,
     requirement: (min) => plural(min, "approved submission"),
     format: (v) => `${num(v, 2)} points per submission`,
-  },
-  {
-    id: "clue_goblin",
-    name: "Clue Goblin",
-    flavour: "Just one more casket.",
-    hidden: true,
-    source: "wom",
-    measure: (f) => f.wom?.clues ?? null,
-    minimum: { default: 5, label: "Clues completed", whole: true },
-    qualifies: (v, _f, min) => v >= min,
-    requirement: (min) => `${plural(min, "clue")} completed`,
-    format: (v) => `${plural(v, "clue")} completed`,
-  },
-  {
-    id: "skiller",
-    name: "Skiller",
-    flavour: "Wrong event, friend.",
-    hidden: true,
-    source: "wom",
-    measure: (f) => f.wom?.ehp ?? null,
-    minimum: { default: 5, label: "EHP gained", whole: false },
-    qualifies: (v, _f, min) => v >= min,
-    requirement: (min) => `${num(min)} EHP gained`,
-    format: (v) => `${num(v)} EHP gained`,
+    reachedAt: (f) => latest(f.lastAt.approved, ...f.awards.map((a) => a.completedAt)),
   },
   {
     id: "collector",
     name: "Collector",
     flavour: "One of everything, please.",
+    explanation: "The most different items across their approved submissions.",
+    group: "grind",
     hidden: false,
     source: "bingo",
     measure: (f) => f.distinctItems,
@@ -364,11 +403,14 @@ export const TITLES: TitleDefinition[] = [
     qualifies: (v, _f, min) => v >= min,
     requirement: (min) => `${plural(min, "different item")} claimed`,
     format: (v) => `${plural(v, "different item")}`,
+    reachedAt: (f) => latest(f.lastAt.newItem),
   },
   {
     id: "tourist",
     name: "Tourist",
     flavour: "Been everywhere, done a bit of everything.",
+    explanation: "Points share on the most different tiles.",
+    group: "points",
     hidden: false,
     source: "bingo",
     measure: (f) => new Set(f.awards.filter((a) => a.kind !== "line" && a.tileNodeId).map((a) => a.tileNodeId)).size,
@@ -376,11 +418,14 @@ export const TITLES: TitleDefinition[] = [
     qualifies: (v, _f, min) => v >= min,
     requirement: (min) => `Points share on ${plural(min, "tile")}`,
     format: (v) => `Points share on ${plural(v, "tile")}`,
+    reachedAt: (f) => lastNewKey(f.awards, (a) => (a.kind !== "line" ? a.tileNodeId : null)),
   },
   {
     id: "specialist",
     name: "Specialist",
     flavour: "Found a tile and moved in.",
+    explanation: "The most of their points from a single tile, and at least half of them.",
+    group: "points",
     hidden: false,
     source: "bingo",
     measure: (f) => topTile(f)?.fraction ?? null,
@@ -388,11 +433,14 @@ export const TITLES: TitleDefinition[] = [
     qualifies: (v, f, min) => f.pointsShare >= min && v >= 0.5,
     requirement: (min) => `Half of at least ${num(min, 2)} points share from one tile`,
     format: (v, f) => `${percent(v)} of their points from ${topTile(f)?.name ?? "one tile"}`,
+    reachedAt: (f) => latest(...f.awards.map((a) => a.completedAt)),
   },
   {
     id: "hoarder",
     name: "Hoarder",
     flavour: "Needs a bigger bank.",
+    explanation: "The most items claimed in total across their approved submissions, counting every one of a stack.",
+    group: "grind",
     hidden: true,
     source: "bingo",
     measure: (f) => f.totalQuantity,
@@ -400,11 +448,14 @@ export const TITLES: TitleDefinition[] = [
     qualifies: (v, _f, min) => v >= min,
     requirement: (min) => `${plural(min, "item")} claimed in total`,
     format: (v) => `${plural(v, "item")} claimed`,
+    reachedAt: (f) => latest(f.lastAt.item),
   },
   {
     id: "postman",
     name: "Postman",
     flavour: "Delivering drops for the whole team.",
+    explanation: "The most approved submissions they posted for a teammate.",
+    group: "grind",
     hidden: true,
     source: "bingo",
     measure: (f) => f.postedForTeammates,
@@ -412,11 +463,14 @@ export const TITLES: TitleDefinition[] = [
     qualifies: (v, _f, min) => v >= min,
     requirement: (min) => `Post ${plural(min, "submission")} for teammates`,
     format: (v) => `Posted ${plural(v, "submission")} for teammates`,
+    reachedAt: (f) => latest(f.lastAt.posted),
   },
   {
     id: "overachiever",
     name: "Overachiever",
     flavour: "Collected them all. Well, most of them.",
+    explanation: "The most achievements earned during the bingo. A tie goes to whoever got there first.",
+    group: "grind",
     hidden: false,
     source: "bingo",
     measure: (f) => f.achievements?.earned ?? null,
@@ -424,8 +478,7 @@ export const TITLES: TitleDefinition[] = [
     qualifies: (v, _f, min) => v >= min,
     requirement: (min) => `Earn at least ${plural(min, "achievement")}`,
     format: (v) => `Earned ${plural(v, "achievement")}`,
-    // No sharing it: of the Players tied at the most, whoever reached that count first.
-    tieBreak: (f) => (f.achievements?.lastEarnedAt ? new Date(f.achievements.lastEarnedAt).getTime() : Infinity),
+    reachedAt: (f) => latest(f.achievements?.lastEarnedAt),
   },
 ];
 
@@ -442,7 +495,7 @@ export interface PickedTitle {
   title: TitleDefinition;
   /** The bar to reach, with the minimums in force. */
   requirement: string;
-  /** Everyone tied at the best qualifying value; empty when nobody qualifies. */
+  /** Who holds it (one Player; see pickTitles for ties); empty when nobody qualifies. */
   holders: TitleHolder[];
 }
 
@@ -455,34 +508,46 @@ export function titleMinimum(title: TitleDefinition, settings: TitleSettings): n
 }
 
 /**
- * Every Title's holders among `pool`, in priority order: the Players tied at the best qualifying value. A hidden
- * Title nobody holds is left out entirely, so nothing hints it exists.
+ * Every Title's holder among `pool`, in priority order: the Player with the best qualifying value. A Title is never
+ * shared: a tie goes to the tied Player holding the fewest Titles, then to whoever reached the value first
+ * (TitleDefinition.reachedAt), then to the one earlier in `pool`. A hidden Title nobody holds is left out entirely, so
+ * nothing hints it exists.
  */
 export function pickTitles(pool: PlayerTitleFacts[], ctx: TitleContext, settings: TitleSettings = DEFAULT_TITLE_SETTINGS, titles: TitleDefinition[] = TITLES): PickedTitle[] {
-  const out: PickedTitle[] = [];
+  type Candidate = { facts: PlayerTitleFacts; value: number };
+  const contested: { title: TitleDefinition; min: number; top: Candidate[] }[] = [];
   for (const title of titles) {
     if (settings.disabled.includes(title.id)) continue;
     const min = titleMinimum(title, settings);
-    const qualifying: { facts: PlayerTitleFacts; value: number }[] = [];
+    const qualifying: Candidate[] = [];
     for (const facts of pool) {
       const value = title.measure(facts, ctx);
       if (value !== null && Number.isFinite(value) && title.qualifies(value, facts, min)) qualifying.push({ facts, value });
     }
     const best = qualifying.reduce((max, q) => Math.max(max, q.value), -Infinity);
-    let top = qualifying.filter((q) => tied(q.value, best));
-    if (title.tieBreak && top.length > 1) {
-      const breakOf = new Map(top.map((q) => [q, title.tieBreak!(q.facts)]));
-      const first = Math.min(...breakOf.values());
-      top = top.filter((q) => breakOf.get(q) === first);
+    contested.push({ title, min, top: qualifying.filter((q) => tied(q.value, best)) });
+  }
+
+  // Titles won outright count first; then each tie, in priority order, goes to the tied Player holding the fewest so
+  // far, then to whoever got there first.
+  const held = new Map<string, number>();
+  const heldBy = (q: Candidate) => held.get(q.facts.userId) ?? 0;
+  const give = (q: Candidate) => held.set(q.facts.userId, heldBy(q) + 1);
+  for (const c of contested) if (c.top.length === 1) give(c.top[0]!);
+  const out: PickedTitle[] = [];
+  for (const { title, min, top } of contested) {
+    let holder = top[0];
+    if (top.length > 1) {
+      const reached = (q: Candidate) => title.reachedAt(q.facts, ctx) ?? Infinity;
+      // Not a subtraction: two Players it can't tell for are both Infinity.
+      const earlier = (a: number, b: number) => (a < b ? -1 : a > b ? 1 : 0);
+      holder = [...top].sort((a, b) => heldBy(a) - heldBy(b) || earlier(reached(a), reached(b)))[0]!;
+      give(holder);
     }
-    const holders = top
-      .map((q) => ({
-        userId: q.facts.userId,
-        value: q.value,
-        text: title.format(q.value, q.facts, ctx),
-        asOf: title.source === "wom" ? (q.facts.wom?.asOf ?? null) : null,
-      }));
-    if (title.hidden && holders.length === 0) continue;
+    if (title.hidden && !holder) continue;
+    const holders = holder
+      ? [{ userId: holder.facts.userId, value: holder.value, text: title.format(holder.value, holder.facts, ctx), asOf: title.source === "wom" ? (holder.facts.wom?.asOf ?? null) : null }]
+      : [];
     out.push({ title, requirement: title.requirement(min, settings.luck), holders });
   }
   return out;
@@ -493,9 +558,9 @@ export function titlesHeldBy(picked: PickedTitle[], userId: string): PickedTitle
   return picked.filter((p) => p.holders.some((h) => h.userId === userId));
 }
 
-/** Each holder's highest-priority Title: the one their chip shows. */
-export function chipTitles(picked: PickedTitle[]): Map<string, TitleDefinition> {
-  const out = new Map<string, TitleDefinition>();
-  for (const p of picked) for (const h of p.holders) if (!out.has(h.userId)) out.set(h.userId, p.title);
+/** Every Title each holder holds, in priority order: their chips in the contributors table. */
+export function titlesByHolder(picked: PickedTitle[]): Map<string, TitleDefinition[]> {
+  const out = new Map<string, TitleDefinition[]>();
+  for (const p of picked) for (const h of p.holders) out.set(h.userId, [...(out.get(h.userId) ?? []), p.title]);
   return out;
 }

@@ -10,10 +10,11 @@ import { headerTooltip, usefulTooltip } from "../ui/gridTooltips";
 import { displayName } from "../ui/user";
 import { PlayerName, useOpenProfile } from "../tectonic/PlayerName";
 import { FALLBACK_TEAM_COLOR } from "./PointsChart";
+import { TitleChip } from "./TitleChrome";
 import { formatShare } from "./PointsShareBreakdown";
 import { formatGp, formatGpExact } from "../ui/gp";
 
-type Row = ContributionCount & { team: Team | null; title: TitleDefinition | null };
+type Row = ContributionCount & { team: Team | null; titles: TitleDefinition[] };
 
 const PINNED = ["rank", "player"];
 const MAX_HEIGHT = 480;
@@ -26,20 +27,20 @@ const FRAME_HEIGHT = 12;
 function PlayerCell({ data }: CustomCellRendererProps<Row>) {
   if (!data) return null;
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <PlayerName userId={data.userId} badge="reserve" className="min-w-0 truncate text-on-surface">
-        {displayName(data.user)}
-      </PlayerName>
-      {data.title && <TitleChip title={data.title} />}
-    </span>
+    <PlayerName userId={data.userId} badge="reserve" className="min-w-0 truncate text-on-surface">
+      {displayName(data.user)}
+    </PlayerName>
   );
 }
 
-/** A Player's highest-priority Title, next to their name. */
-export function TitleChip({ title }: { title: TitleDefinition }) {
+// Every Title the Player holds, in priority order. The cell's tooltip names them all when some are cut off.
+function TitlesCell({ data }: CustomCellRendererProps<Row>) {
+  if (!data?.titles.length) return null;
   return (
-    <span title={title.flavour} className="shrink-0 rounded-sm border border-warn/40 px-1 text-[10px] leading-4 font-semibold text-warn">
-      {title.name}
+    <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+      {data.titles.map((t) => (
+        <TitleChip key={t.id} title={t} />
+      ))}
     </span>
   );
 }
@@ -69,7 +70,7 @@ const DEFAULT_COL_DEF: ColDef<Row> = {
  * heading to sort. Clicking a row opens the player's profile, whose "This bingo" section shows where their
  * share came from.
  */
-export function ContributorsTable({ contributions, teams, chips }: { contributions: ContributionCount[]; teams: Team[]; chips: Map<string, TitleDefinition> }) {
+export function ContributorsTable({ contributions, teams, titles }: { contributions: ContributionCount[]; teams: Team[]; titles: Map<string, TitleDefinition[]> }) {
   const gridTheme = useGridTheme();
   const isPhone = useIsPhone();
   const openProfile = useOpenProfile();
@@ -77,8 +78,8 @@ export function ContributorsTable({ contributions, teams, chips }: { contributio
 
   const rows = useMemo<Row[]>(() => {
     const teamById = new Map(teams.map((t) => [t.id, t]));
-    return contributions.map((c) => ({ ...c, team: teamById.get(c.teamId) ?? null, title: chips.get(c.userId) ?? null }));
-  }, [contributions, teams, chips]);
+    return contributions.map((c) => ({ ...c, team: teamById.get(c.teamId) ?? null, titles: titles.get(c.userId) ?? [] }));
+  }, [contributions, teams, titles]);
   const multiTeam = teams.length > 1;
 
   // Unpinned columns share the width (flex), so hiding one lets the rest take its space.
@@ -86,6 +87,20 @@ export function ContributorsTable({ contributions, teams, chips }: { contributio
     const cols: ColDef<Row>[] = [
       { colId: "rank", headerName: "#", pinned: "left", suppressMovable: true, width: 56, minWidth: 56, sortable: false, valueGetter: (p) => (p.node?.rowIndex ?? 0) + 1, cellClass: "num text-on-surface-subtle" },
       { colId: "player", headerName: "Player", pinned: "left", suppressMovable: true, initialWidth: 210, valueGetter: (p) => (p.data ? displayName(p.data.user) : ""), cellRenderer: PlayerCell },
+      {
+        colId: "titles",
+        headerName: "Titles",
+        headerTooltip: "Every title the player holds, most important first",
+        flex: 3,
+        minWidth: 120,
+        sortingOrder: ["desc", "asc"],
+        valueGetter: (p) => p.data?.titles.length ?? 0,
+        tooltip: (p: TooltipCallbackParams<Row>) => {
+          const names = p.data?.titles.map((t) => t.name) ?? [];
+          return usefulTooltip(p, names.join(", "), names);
+        },
+        cellRenderer: TitlesCell,
+      },
       { colId: "team", headerName: "Team", flex: 2, minWidth: 120, valueGetter: (p) => p.data?.team?.name ?? "", cellRenderer: TeamCell },
       {
         colId: "pointsShare",

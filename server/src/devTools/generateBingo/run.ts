@@ -176,6 +176,10 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   log(`playing ${fmt(tl.startsAt)} to ${fmt(ctx.limit)}...`);
   const summary = await sim.run();
   await sim.fillPoints();
+  const wom = await api
+    .as(adminDiscordId)
+    .post<{ players: number; snapshots: number }>(`/api/dev/bingos/${slug}/fake-wom-snapshots`, { seed: rng.fork("wom").int(0, 2 ** 31 - 1) }, { at: ctx.limit });
+  log(`made-up Wise Old Man snapshots: ${wom.snapshots} for ${wom.players} players`);
 
   log(describe(summary));
   for (const t of summary.teams) {

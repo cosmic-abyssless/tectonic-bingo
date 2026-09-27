@@ -4,6 +4,8 @@ import { PlainButton } from "../../core/ui/Button";
 import { PlainMenu, PlainMenuItem } from "../../core/ui/Menu";
 import { PlainNotice } from "../../core/ui/Card";
 import { PlainPanel } from "../../core/ui/Panel";
+import { PlainTitleChip, PlainTitleGroupBox } from "../../core/stats/TitleChrome";
+import { PlainBetaTag } from "../../core/ui/BetaTag";
 import { PlainTeamRoster } from "../../core/draft/TeamRoster";
 import { defaultTokens } from "../tokens";
 import { BoardPageLayout } from "./page/BoardPageLayout";
@@ -88,6 +90,9 @@ export const defaultTheme: ThemeDefinition = {
     MenuItem: PlainMenuItem,
     Notice: PlainNotice,
     Panel: PlainPanel,
+    TitleGroupBox: PlainTitleGroupBox,
+    TitleChip: PlainTitleChip,
+    BetaTag: PlainBetaTag,
     PageBackdrop: () => null,
     DraftTeamRoster: PlainTeamRoster,
     BoardGrid,

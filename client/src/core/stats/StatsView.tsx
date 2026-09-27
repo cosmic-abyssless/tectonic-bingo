@@ -1,9 +1,10 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { chipTitles } from "@bingo/shared";
+import { titlesByHolder } from "@bingo/shared";
 import { useBingo, useBoard, useStats } from "../../api/queries";
 import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { inclusionFilter } from "../ui/inclusionFilter";
 import { MultiSelect } from "../ui/MultiSelect";
+import { BetaTag } from "../ui/BetaTag";
 import { Panel } from "../ui/Panel";
 import { ContributorsTable } from "./ContributorsTable";
 import { GpGained } from "./GpGained";
@@ -15,8 +16,16 @@ import { TitlesSection } from "./TitlesSection";
 
 // A Panel, like the draft room's, so a theme that draws its own (the comic one) restyles the section and the
 // tables in it the same way.
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return <Panel title={title}>{children}</Panel>;
+function Section({ title, beta, children }: { title: string; beta?: boolean; children: ReactNode }) {
+  const heading = beta ? (
+    <span className="inline-flex items-center gap-2">
+      {title}
+      <BetaTag />
+    </span>
+  ) : (
+    title
+  );
+  return <Panel title={heading}>{children}</Panel>;
 }
 
 export function StatsView({ slug }: { slug: string }) {
@@ -54,7 +63,7 @@ export function StatsView({ slug }: { slug: string }) {
 
   // Titles go to the best among the Players shown: a Team's own Carry with one Team selected, the Bingo's otherwise.
   const titles = useMemo(() => (stats && filtered ? pickStatsTitles(stats, filtered.titleFacts) : []), [stats, filtered]);
-  const chips = useMemo(() => chipTitles(titles), [titles]);
+  const titlesByPlayer = useMemo(() => titlesByHolder(titles), [titles]);
 
   if (error) return <div className="py-24 text-center text-sm text-on-surface-muted">{error.message}</div>;
   if (!shell || !stats || !filtered) return <div className="py-24 text-center text-sm text-on-surface-muted">Loading…</div>;
@@ -78,12 +87,12 @@ export function StatsView({ slug }: { slug: string }) {
         <TimelineTable events={filtered.timeline} teams={filtered.teams} startsAt={shell.bingo.effectiveStartsAt} />
       </Section>
 
-      <Section title="Titles">
+      <Section title="Titles" beta>
         <TitlesSection picked={titles} contributions={filtered.contributions} womReadAt={stats.womReadAt} />
       </Section>
 
       <Section title="Top contributors">
-        <ContributorsTable contributions={filtered.contributions} teams={filtered.teams} chips={chips} />
+        <ContributorsTable contributions={filtered.contributions} teams={filtered.teams} titles={titlesByPlayer} />
       </Section>
 
       <Section title="GP gained">

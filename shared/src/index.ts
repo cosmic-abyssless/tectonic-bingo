@@ -1055,7 +1055,15 @@ export interface TileHeatmapCell {
   teamId: string;
   completedTasks: number;
   totalTasks: number;
+  /** Each Part of the Tile, in board order: done, started (some approved progress under it), or not yet. */
+  parts: TileProgress[];
+  /** The Tile itself (its tile bonus): done, or started once any Part has progress. */
+  tile: TileProgress;
+  /** A line through the Tile: done, or started once any Tile on a line through it is done. */
+  line: TileProgress;
 }
+
+export type TileProgress = "none" | "started" | "done";
 
 export interface StatsResponse {
   pointsOverTime: PointsOverTimePoint[];

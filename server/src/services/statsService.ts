@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { LuckFacts, LuckWeights, PlayerTitleFacts, TitleAwardFact, TitleSettings, ValuedAs } from "@bingo/shared";
+import type { LuckFacts, LuckWeights, PlayerTitleFacts, TileHeatmapCell, TileProgress, TitleAwardFact, TitleSettings, ValuedAs } from "@bingo/shared";
 import { valuedAsOf } from "./gpValueService";
 import * as schema from "../db/schema";
 import { bingoLines, bingos, claims, nodeEdges, nodes, stageTransitions, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
@@ -510,28 +510,50 @@ export function getTitleFacts(
   const approved = count();
   const rejected = count();
   const posted = count();
+  // When each count last went up, for Title ties (PlayerTitleFacts.lastAt).
+  const stamp = () => new Map<string, Date>();
+  const mark = (m: Map<string, Date>, userId: string, at: Date) => {
+    const prev = m.get(userId);
+    if (!prev || at > prev) m.set(userId, at);
+  };
+  const approvedAt = stamp();
+  const rejectedAt = stamp();
+  const postedAt = stamp();
   for (const sub of db.select().from(submissions).where(inArray(submissions.teamId, teamIds)).all()) {
     // The poster counts only when they're on the Team (a Moderator posting for a Team isn't one of its Players).
     const postedByTeammate = sub.postedByUserId && sub.postedByUserId !== sub.submittedByUserId && teamByUser.get(sub.postedByUserId) === sub.teamId;
     if (sub.status === "approved") {
       bump(approved, sub.submittedByUserId);
-      if (postedByTeammate) bump(posted, sub.postedByUserId!);
+      mark(approvedAt, sub.submittedByUserId, sub.submittedAt);
+      if (postedByTeammate) {
+        bump(posted, sub.postedByUserId!);
+        mark(postedAt, sub.postedByUserId!, sub.submittedAt);
+      }
     } else if (sub.status === "rejected") {
-      bump(rejected, postedByTeammate ? sub.postedByUserId! : sub.submittedByUserId);
+      const who = postedByTeammate ? sub.postedByUserId! : sub.submittedByUserId;
+      bump(rejected, who);
+      mark(rejectedAt, who, sub.submittedAt);
     }
   }
 
   const items = new Map<string, Set<string>>();
   const quantity = count();
+  const newItemAt = stamp();
+  const itemAt = stamp();
   const itemClaims = db
-    .select({ userId: submissions.submittedByUserId, itemName: claims.itemName, quantity: claims.quantity })
+    .select({ userId: submissions.submittedByUserId, itemName: claims.itemName, quantity: claims.quantity, at: submissions.submittedAt })
     .from(claims)
     .innerJoin(submissions, eq(claims.submissionId, submissions.id))
     .where(and(inArray(submissions.teamId, teamIds), eq(submissions.status, "approved"), isNotNull(claims.itemName)))
+    .orderBy(submissions.submittedAt)
     .all();
   for (const c of itemClaims) {
-    items.set(c.userId, (items.get(c.userId) ?? new Set()).add(c.itemName!.toLowerCase()));
+    const mine = items.get(c.userId) ?? new Set<string>();
+    const name = c.itemName!.toLowerCase();
+    if (!mine.has(name)) mark(newItemAt, c.userId, c.at);
+    items.set(c.userId, mine.add(name));
     bump(quantity, c.userId, c.quantity);
+    mark(itemAt, c.userId, c.at);
   }
 
   const start = effectiveStartsAt(db, bingo);
@@ -567,6 +589,13 @@ export function getTitleFacts(
       wom: start && timeline ? gainsOf(timeline, start, end) : null,
       luck: luck.get(c.userId) ?? null,
       achievements: achievementTallies ? (achievementTallies.get(c.userId) ?? { earned: 0, lastEarnedAt: null }) : null,
+      lastAt: {
+        approved: approvedAt.get(c.userId)?.toISOString() ?? null,
+        rejected: rejectedAt.get(c.userId)?.toISOString() ?? null,
+        posted: postedAt.get(c.userId)?.toISOString() ?? null,
+        newItem: newItemAt.get(c.userId)?.toISOString() ?? null,
+        item: itemAt.get(c.userId)?.toISOString() ?? null,
+      },
     };
   });
 }
@@ -641,48 +670,70 @@ export function getStatsForViewer(db: Db, bingoId: string, viewer: { isMod: bool
   return viewer.teamId ? filterStatsForTeam(visible, viewer.teamId) : visible;
 }
 
-export interface TileHeatmapCell {
-  tileId: string;
-  teamId: string;
-  completedTasks: number;
-  totalTasks: number;
-}
-
 // One cell per (team, tile) — completedTasks/totalTasks lets the client shade
 // by completion fraction rather than a binary done/not-done. "Task" again
 // means a direct child of the tile's node.
 export function getTileHeatmap(db: Db, bingoId: string): TileHeatmapCell[] {
   const teamIds = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.id);
   const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
-  const tileIds = tileRows.map((t) => t.id);
-  if (teamIds.length === 0 || tileIds.length === 0) return [];
+  if (teamIds.length === 0 || tileRows.length === 0) return [];
 
-  const tileIdByNodeId = new Map(tileRows.map((t) => [t.nodeId, t.id]));
   const tileNodeIds = tileRows.map((t) => t.nodeId);
-  const taskEdges = db.select({ parentId: nodeEdges.parentId, childId: nodeEdges.childId }).from(nodeEdges).where(inArray(nodeEdges.parentId, tileNodeIds)).all();
-  const taskIds = taskEdges.map((e) => e.childId);
-  const tileByTask = new Map(taskEdges.map((e) => [e.childId, tileIdByNodeId.get(e.parentId)!]));
-  const totalTasksByTile = new Map<string, number>();
-  for (const e of taskEdges) {
-    const tileId = tileIdByNodeId.get(e.parentId)!;
-    totalTasksByTile.set(tileId, (totalTasksByTile.get(tileId) ?? 0) + 1);
+  // Each Tile's Parts in board order, and the lines through it (a line's node has its Tiles' nodes as children).
+  const taskEdges = db.select({ parentId: nodeEdges.parentId, childId: nodeEdges.childId, sortOrder: nodeEdges.sortOrder }).from(nodeEdges).where(inArray(nodeEdges.parentId, tileNodeIds)).all();
+  const partsOf = new Map<string, string[]>();
+  for (const e of [...taskEdges].sort((a, b) => a.sortOrder - b.sortOrder)) partsOf.set(e.parentId, [...(partsOf.get(e.parentId) ?? []), e.childId]);
+  const lineNodeIds = db.select({ nodeId: bingoLines.nodeId }).from(bingoLines).where(eq(bingoLines.bingoId, bingoId)).all().map((l) => l.nodeId);
+  const lineEdges = lineNodeIds.length ? db.select({ parentId: nodeEdges.parentId, childId: nodeEdges.childId }).from(nodeEdges).where(inArray(nodeEdges.parentId, lineNodeIds)).all() : [];
+  const linesThrough = new Map<string, string[]>();
+  const tilesOnLine = new Map<string, string[]>();
+  for (const e of lineEdges) {
+    linesThrough.set(e.childId, [...(linesThrough.get(e.childId) ?? []), e.parentId]);
+    tilesOnLine.set(e.parentId, [...(tilesOnLine.get(e.parentId) ?? []), e.childId]);
   }
 
-  const progressRows = taskIds.length
-    ? db.select({ teamId: teamNodeState.teamId, nodeId: teamNodeState.nodeId }).from(teamNodeState).where(and(inArray(teamNodeState.teamId, teamIds), inArray(teamNodeState.nodeId, taskIds))).all()
-    : [];
+  // Every node under each Part, for whether it has any progress: a finished requirement, or an approved Claim.
+  const { childrenOf } = getFullGraph(db, bingoId);
+  const under = (id: string): string[] => [id, ...(childrenOf.get(id) ?? []).flatMap(under)];
+  const partIds = taskEdges.map((e) => e.childId);
+  const nodesUnder = new Map(partIds.map((id) => [id, under(id)]));
 
-  const completedByTeamTile = new Map<string, number>();
-  for (const p of progressRows) {
-    const tileId = tileByTask.get(p.nodeId)!;
-    const key = `${p.teamId}:${tileId}`;
-    completedByTeamTile.set(key, (completedByTeamTile.get(key) ?? 0) + 1);
-  }
+  const done = new Set(
+    db
+      .select({ teamId: teamNodeState.teamId, nodeId: teamNodeState.nodeId })
+      .from(teamNodeState)
+      .where(inArray(teamNodeState.teamId, teamIds))
+      .all()
+      .map((r) => `${r.teamId}:${r.nodeId}`),
+  );
+  const claimed = new Set(
+    db
+      .select({ teamId: submissions.teamId, nodeId: claims.nodeId })
+      .from(claims)
+      .innerJoin(submissions, eq(claims.submissionId, submissions.id))
+      .where(and(inArray(submissions.teamId, teamIds), eq(submissions.status, "approved")))
+      .all()
+      .map((r) => `${r.teamId}:${r.nodeId}`),
+  );
 
   const cells: TileHeatmapCell[] = [];
   for (const teamId of teamIds) {
-    for (const tileId of tileIds) {
-      cells.push({ tileId, teamId, completedTasks: completedByTeamTile.get(`${teamId}:${tileId}`) ?? 0, totalTasks: totalTasksByTile.get(tileId) ?? 0 });
+    const isDone = (nodeId: string) => done.has(`${teamId}:${nodeId}`);
+    for (const tile of tileRows) {
+      const parts: TileProgress[] = (partsOf.get(tile.nodeId) ?? []).map((id) =>
+        isDone(id) ? "done" : (nodesUnder.get(id) ?? []).some((n) => isDone(n) || claimed.has(`${teamId}:${n}`)) ? "started" : "none",
+      );
+      const lines = linesThrough.get(tile.nodeId) ?? [];
+      const completedTasks = parts.filter((p) => p === "done").length;
+      cells.push({
+        tileId: tile.id,
+        teamId,
+        completedTasks,
+        totalTasks: parts.length,
+        parts,
+        tile: isDone(tile.nodeId) ? "done" : parts.some((p) => p !== "none") ? "started" : "none",
+        line: lines.some(isDone) ? "done" : lines.some((l) => (tilesOnLine.get(l) ?? []).some(isDone)) ? "started" : "none",
+      });
     }
   }
   return cells;

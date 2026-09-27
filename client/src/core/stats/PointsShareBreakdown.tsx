@@ -1,5 +1,6 @@
 import type { ContributionAward, ContributionCount, PickedTitle } from "@bingo/shared";
 import { FALLBACK_TEAM_COLOR } from "./PointsChart";
+import { TitleChip } from "./TitleChrome";
 import { formatGp } from "../ui/gp";
 
 /** Points share to at most two decimals: 12, 12.5, 12.33. */
@@ -119,7 +120,7 @@ function HeldTitles({ userId, titles }: { userId: string; titles: PickedTitle[] 
         {titles.map(({ title, holders }) => (
           <li key={title.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2">
             <span className="min-w-0 text-sm">
-              <span className="font-semibold text-on-surface">{title.name}</span> <span className="text-xs text-on-surface-subtle italic">{title.flavour}</span>
+              <TitleChip title={title} /> <span className="text-xs text-on-surface-subtle italic">{title.flavour}</span>
             </span>
             <span className="num text-xs text-on-surface-muted">{holders.find((h) => h.userId === userId)?.text}</span>
           </li>

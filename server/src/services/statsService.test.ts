@@ -226,6 +226,50 @@ describe("getTileHeatmap", () => {
     expect(teamACell).toMatchObject({ completedTasks: 1, totalTasks: 2 });
     expect(teamBCell).toMatchObject({ completedTasks: 0, totalTasks: 2 });
   });
+
+  it("says how far each Part, the Tile and a line through it have got, in board order", () => {
+    const fx = seedFixture();
+    const bingo = db.select().from(schema.bingos).where(eq(schema.bingos.id, fx.bingoId)).get()!;
+    const tile2 = createTile(db, { bingoId: fx.bingoId, name: "Tile 2", boardRow: 0, boardCol: 1 });
+    const tile3 = createTile(db, { bingoId: fx.bingoId, name: "Tile 3", boardRow: 1, boardCol: 0 });
+    const task1 = addTask(fx.tileId, { points: 20 });
+    const task2 = addTask(tile2.id, { points: 10 });
+    addTask(tile3.id, { points: 10 });
+    const tile3Second = addTask(tile3.id, { points: 10 });
+    generateLines(db, bingo, 15);
+
+    // Team A finishes the top row (both its tiles, so its line) and the second Part of the tile below; Team B only
+    // the first tile, so its row is under way.
+    submitAndApprove(fx.teamAId, task1.id, fx.memberUserId, fx.modUserId);
+    submitAndApprove(fx.teamAId, task2.id, fx.memberUserId, fx.modUserId);
+    submitAndApprove(fx.teamAId, tile3Second.id, fx.memberUserId, fx.modUserId);
+    submitAndApprove(fx.teamBId, task1.id, fx.memberUserId, fx.modUserId);
+
+    const cells = getTileHeatmap(db, fx.bingoId);
+    const cell = (teamId: string, tileId: string) => cells.find((c) => c.teamId === teamId && c.tileId === tileId)!;
+    expect(cell(fx.teamAId, fx.tileId)).toMatchObject({ parts: ["done"], tile: "done", line: "done" });
+    expect(cell(fx.teamAId, tile3.id)).toMatchObject({ parts: ["none", "done"], tile: "started" });
+    expect(cell(fx.teamBId, tile2.id)).toMatchObject({ parts: ["none"], tile: "none", line: "started" });
+  });
+
+  it("counts a Part as started once some of it is approved", () => {
+    const fx = seedFixture();
+    // A Part needing two items: only the first is approved.
+    const task = createTask(db, fx.tileId, {
+      kind: "ALL",
+      label: "Task",
+      points: 20,
+      children: [
+        { kind: "ITEM", itemName: "Bruma torch", label: "Torch" },
+        { kind: "ITEM", itemName: "Tome of fire", label: "Tome" },
+      ],
+    });
+    const torch = db.select().from(schema.nodeEdges).where(eq(schema.nodeEdges.parentId, task.id)).orderBy(schema.nodeEdges.sortOrder).all()[0]!;
+    submitAndApprove(fx.teamAId, torch.childId, fx.memberUserId, fx.modUserId);
+
+    const teamA = getTileHeatmap(db, fx.bingoId).find((c) => c.teamId === fx.teamAId)!;
+    expect(teamA).toMatchObject({ parts: ["started"], tile: "started", completedTasks: 0 });
+  });
 });
 
 describe("filterStatsForTeam", () => {

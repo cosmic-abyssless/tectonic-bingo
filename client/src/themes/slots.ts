@@ -5,6 +5,7 @@ import type { NoticeProps } from "../core/ui/Card";
 import type { PanelProps } from "../core/ui/Panel";
 import type { TeamRosterProps } from "../core/draft/TeamRoster";
 import type { ReactionBarProps } from "../core/submissions/ReactionBar";
+import type { TitleChipProps, TitleGroupBoxProps } from "../core/stats/TitleChrome";
 import type { MyAchievement, StageMilestone } from "@bingo/shared";
 import type {
   BingoPageModel,
@@ -114,6 +115,16 @@ export interface ThemeSlots {
   // page. Read with useOptionalSlot: outside a theme they're core's.
   Notice: ComponentType<NoticeProps>;
   Panel: ComponentType<PanelProps>;
+
+  // "Beta" after the heading of a section still being tried out (core/ui/BetaTag). Read with useOptionalSlot: outside
+  // a theme it's core's.
+  BetaTag: ComponentType;
+
+  // The stats page's Titles (core/stats/TitleChrome): the box around one Title group's rows, which sets --title-ink
+  // and --title-rule for them (and --title-name-size, if it likes), and a Title's chip (the contributors table, the player's profile). Read with
+  // useOptionalSlot: outside a theme they're core's.
+  TitleGroupBox: ComponentType<TitleGroupBoxProps>;
+  TitleChip: ComponentType<TitleChipProps>;
 
   // The emoji reactions under a submission (core/submissions/ReactionBar), in the theme's own colours: a theme whose
   // cards aren't the page's surface (the comic's paper, even in dark mode) needs its own. Read with useOptionalSlot.

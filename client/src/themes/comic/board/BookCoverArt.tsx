@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import type { TileModel } from "../../../headless/types";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { getContrastTextColor, useDominantColor } from "../useDominantColor";
@@ -49,6 +49,66 @@ function coverColorSource(imageUrl: string | null | undefined, failed: boolean):
   return imageUrl && !failed ? (thumbUrl(imageUrl) ?? null) : null;
 }
 
+/**
+ * The cover's artwork at the given size. The thumb is just an <img>. The full
+ * size (the modal's copy) is laid over the thumb the board cell has already
+ * loaded, and only shown once it's in: the book flies out and opens the moment
+ * the tile's clicked, and the big image may well still be on its way then — so
+ * the cover shows the thumb meanwhile instead of a blank. The thumb stays the
+ * one in the layout (the full one is absolutely over it, the same box), so the
+ * swap doesn't move anything. A failed full image fails the cover's artwork as
+ * a whole, as it always has; a failed thumb just leaves the full one on its own.
+ *
+ * Renders the image(s) straight into the caller's box, which has to be the
+ * containing block (`relative`) for the full image to sit over the thumb;
+ * `className` sizes the thumb (or a lone image), the full one just fills the box.
+ */
+function CoverImage({
+  url,
+  variant,
+  alt,
+  onFail,
+  className,
+  style,
+}: {
+  url: string;
+  variant: "thumb" | "full";
+  alt: string;
+  onFail: () => void;
+  className: string;
+  style?: CSSProperties;
+}) {
+  const [fullLoaded, setFullLoaded] = useState(false);
+  const [thumbFailed, setThumbFailed] = useState(false);
+  if (variant === "thumb" || thumbFailed) {
+    return <img src={variant === "thumb" ? thumbUrl(url) : fullUrl(url)} alt={alt} onError={onFail} className={className} style={style} draggable={false} />;
+  }
+  return (
+    <>
+      <img
+        src={thumbUrl(url)}
+        alt=""
+        aria-hidden="true"
+        onError={() => setThumbFailed(true)}
+        className={className}
+        // Hidden, not removed, once the full one's in: it's what sizes the box —
+        // and a transparent artwork would show it through the full one otherwise.
+        style={{ ...style, visibility: fullLoaded ? "hidden" : undefined }}
+        draggable={false}
+      />
+      <img
+        src={fullUrl(url)}
+        alt={alt}
+        onLoad={() => setFullLoaded(true)}
+        onError={onFail}
+        className="absolute inset-0 h-full w-full object-contain"
+        style={{ ...style, opacity: fullLoaded ? 1 : 0 }}
+        draggable={false}
+      />
+    </>
+  );
+}
+
 export function BookCoverArt({
   tile,
   colors,
@@ -65,7 +125,7 @@ export function BookCoverArt({
   variant?: "thumb" | "full";
 }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const imageUrl = tile.imageUrl && !imgFailed ? (variant === "thumb" ? thumbUrl(tile.imageUrl) : fullUrl(tile.imageUrl)) : null;
+  const imageUrl = tile.imageUrl && !imgFailed ? tile.imageUrl : null;
   const dominantColor = useDominantColor(coverColorSource(tile.imageUrl, imgFailed));
   // The masthead row and the plain "P1" mark sit directly on the cover with
   // no fill of their own, so their color adapts to whatever the cover color
@@ -86,13 +146,9 @@ export function BookCoverArt({
           and cut off on iOS.) Percent padding is of the cover's width either way. */}
       {imageUrl ? (
         <div className="absolute inset-x-0 top-0 p-[8%] pt-[18%]">
-          <img
-            src={imageUrl}
-            alt={tile.name}
-            onError={() => setImgFailed(true)}
-            className="block h-auto w-full"
-            draggable={false}
-          />
+          <div className="relative">
+            <CoverImage key={imageUrl} url={imageUrl} variant={variant} alt={tile.name} onFail={() => setImgFailed(true)} className="block h-auto w-full" />
+          </div>
         </div>
       ) : null}
       {frozen && <FrozenWash colors={colors} />}
@@ -261,7 +317,7 @@ export function BookBackArt({
   variant?: "thumb" | "full";
 }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const imageUrl = tile.imageUrl && !imgFailed ? (variant === "thumb" ? thumbUrl(tile.imageUrl) : fullUrl(tile.imageUrl)) : null;
+  const imageUrl = tile.imageUrl && !imgFailed ? tile.imageUrl : null;
   const dominantColor = useDominantColor(coverColorSource(tile.imageUrl, imgFailed));
   const textColor = getContrastTextColor(dominantColor ?? fallbackColor);
   const names = tileContributors(tile);
@@ -298,13 +354,14 @@ export function BookBackArt({
         <div className="flex w-full shrink-0 items-center gap-[5cqw] pl-[3cqw]">
           <div className="relative h-[34cqw] w-[34cqw] shrink-0">
             {imageUrl && (
-              <img
-                src={imageUrl}
+              <CoverImage
+                key={imageUrl}
+                url={imageUrl}
+                variant={variant}
                 alt=""
-                onError={() => setImgFailed(true)}
+                onFail={() => setImgFailed(true)}
                 className="h-full w-full object-contain"
                 style={{ filter: `drop-shadow(1.2cqw 1.2cqw 0 ${colors.LINE})` }}
-                draggable={false}
               />
             )}
             <span

@@ -31,6 +31,9 @@ name: Deploy
 on:
   push:
     branches: [main]
+    # A Markdown-only merge ships nothing, so staging keeps the image it has. Run workflow still deploys any commit.
+    paths-ignore:
+      - "**.md"
   workflow_dispatch:
     inputs:
       environment:
