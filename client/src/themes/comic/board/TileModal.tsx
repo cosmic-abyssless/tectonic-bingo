@@ -1360,6 +1360,7 @@ function TileDetails({
       key="summary"
       tile={tile}
       ordered={ordered}
+      compact={single}
       colors={page}
       onGoToTask={(position) => {
         // Phone: the task at `position` is page index position + 1, and the spread IS the page
@@ -1806,10 +1807,13 @@ function SummaryPage({
   onOpenArt,
   onSubmit,
   onToggleInterest,
+  compact = false,
 }: {
   tile: TileModel;
   /** The tasks in page order (see orderTasks). */
   ordered: OrderedTask[];
+  /** A phone (the book's `single`): the Points and Parts cards go small, beside the masthead rather than under it. */
+  compact?: boolean;
   colors: ComicColors;
   /** Takes the task's position in page order, not its own number. */
   onGoToTask?: (position: number) => void;
@@ -1833,58 +1837,83 @@ function SummaryPage({
   const pointsPct = progress.totalPoints > 0 ? Math.round((progress.pointsAwarded / progress.totalPoints) * 100) : 0;
   const submitLabel = progress.allComplete ? "Complete" : freeze.isFrozen ? "Frozen" : "Submit proof";
 
+  const masthead = (
+    <div className="flex min-w-0 flex-col items-start gap-2">
+      <span
+        className="comic-logo uppercase"
+        style={{ backgroundColor: TECTONIC_LOGO.bg, color: TECTONIC_LOGO.fg, fontFamily: COMIC_LOGO_FONT, fontWeight: 800, fontSize: "1rem", letterSpacing: "0.02em" }}
+      >
+        Tectonic
+      </span>
+      <h2 className="text-3xl leading-none [overflow-wrap:anywhere]" style={{ fontFamily: COMIC_FONT }}>
+        {tile.name}
+      </h2>
+      {tile.category && (
+        <span className="text-sm uppercase tracking-wide" style={{ fontFamily: COMIC_FONT, color: tile.category.color ?? colors.INK_SUBTLE }}>
+          {tile.category.label}
+        </span>
+      )}
+    </div>
+  );
+
+  // Comic progress caption boxes: full size in a row of their own, or small beside the masthead (`compact`).
+  const cardTitle = (text: string) => (compact ? <span className="text-sm">{text}</span> : text);
+  const cardPad = compact ? "px-2! py-1.5!" : undefined;
+  const bigNum = compact ? "text-xl" : "text-2xl";
+  const smallNum = compact ? "text-xs" : "text-base";
+  const progressCards = (
+    <>
+      <CaptionBox tone="yellow" title={cardTitle("Points")} className={cardPad}>
+        <span className={`num ${bigNum}`} style={{ fontFamily: COMIC_FONT, color: progress.pointsAwarded >= progress.totalPoints && progress.totalPoints > 0 ? colors.OK : colors.INK }}>
+          {progress.pointsAwarded}
+        </span>
+        <span className={`num ${smallNum}`} style={{ color: colors.INK_SUBTLE }}>
+          {" "}/ {progress.totalPoints}
+        </span>
+      </CaptionBox>
+      <CaptionBox tone="paper" title={cardTitle("Parts")} className={cardPad}>
+        <span className={`num ${bigNum}`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+          {progress.completedTasks}
+        </span>
+        <span className={`num ${smallNum}`} style={{ color: colors.INK_SUBTLE }}>
+          {" "}/ {progress.totalTasks}
+          {compact ? "" : " done"}
+        </span>
+      </CaptionBox>
+    </>
+  );
+
+  // unlocksAt is null before the bingo starts; once the freeze is over (started, not frozen) there's nothing left to
+  // say, so no box.
+  const freezeBox = freeze.hasFreezePeriod && (freeze.isFrozen || freeze.unlocksAt === null) && (
+    <CaptionBox tone="cyan" title={freeze.isFrozen ? "Frozen" : "Freeze period"} className="col-span-2">
+      <span className="flex items-center gap-2 text-sm" style={{ color: colors.INK }}>
+        <ClockIcon size={14} />
+        {freeze.isFrozen ? `Unlocks in ${formatCountdown(freeze.remainingMs)}` : `Locked for ${freeze.durationMinutes} minutes after the start of the bingo`}
+      </span>
+    </CaptionBox>
+  );
+
   return (
     // flex-1: fills the page (BookPage's `fill`), so the artwork below can take what's left and the page never scrolls.
     <div className="flex flex-1 flex-col gap-5 p-6" style={{ color: colors.INK }}>
-      {/* Masthead header */}
-      <div className="flex flex-col items-start gap-2">
-        <span
-          className="comic-logo uppercase"
-          style={{ backgroundColor: TECTONIC_LOGO.bg, color: TECTONIC_LOGO.fg, fontFamily: COMIC_LOGO_FONT, fontWeight: 800, fontSize: "1rem", letterSpacing: "0.02em" }}
-        >
-          Tectonic
-        </span>
-        <h2 className="text-3xl leading-none" style={{ fontFamily: COMIC_FONT }}>
-          {tile.name}
-        </h2>
-        {tile.category && (
-          <span className="text-sm uppercase tracking-wide" style={{ fontFamily: COMIC_FONT, color: tile.category.color ?? colors.INK_SUBTLE }}>
-            {tile.category.label}
-          </span>
-        )}
-      </div>
-
-      {/* Comic progress caption boxes */}
-      <div className="grid grid-cols-2 gap-3">
-        <CaptionBox tone="yellow" title="Points">
-          <span className="num text-2xl" style={{ fontFamily: COMIC_FONT, color: progress.pointsAwarded >= progress.totalPoints && progress.totalPoints > 0 ? colors.OK : colors.INK }}>
-            {progress.pointsAwarded}
-          </span>
-          <span className="num text-base" style={{ color: colors.INK_SUBTLE }}>
-            {" "}/ {progress.totalPoints}
-          </span>
-        </CaptionBox>
-        <CaptionBox tone="paper" title="Parts">
-          <span className="num text-2xl" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
-            {progress.completedTasks}
-          </span>
-          <span className="num text-base" style={{ color: colors.INK_SUBTLE }}>
-            {" "}/ {progress.totalTasks} done
-          </span>
-        </CaptionBox>
-        {/* unlocksAt is null before the bingo starts; once the freeze is over
-            (started, not frozen) there's nothing left to say, so no box. */}
-        {freeze.hasFreezePeriod && (freeze.isFrozen || freeze.unlocksAt === null) && (
-          <CaptionBox tone="cyan" title={freeze.isFrozen ? "Frozen" : "Freeze period"} className="col-span-2">
-            <span className="flex items-center gap-2 text-sm" style={{ color: colors.INK }}>
-              <ClockIcon size={14} />
-              {freeze.isFrozen
-                ? `Unlocks in ${formatCountdown(freeze.remainingMs)}`
-                : `Locked for ${freeze.durationMinutes} minutes after the start of the bingo`}
-            </span>
-          </CaptionBox>
-        )}
-      </div>
+      {compact ? (
+        <>
+          <div className="flex items-start justify-between gap-3">
+            {masthead}
+            <div className="flex shrink-0 gap-2">{progressCards}</div>
+          </div>
+          {freezeBox}
+        </>
+      ) : (
+        <>
+          {masthead}
+          <div className="grid grid-cols-2 gap-3">
+            {progressCards}
+            {freezeBox}
+          </div>
+        </>
+      )}
 
       {/* Parts (table of contents) */}
       {ordered.length > 0 && (
@@ -1907,7 +1936,7 @@ function SummaryPage({
                   <button
                     type="button"
                     onClick={() => onGoToTask?.(i)}
-                    className="comic-press flex w-full items-center gap-3 border-[3px] px-3 py-2 text-left outline-none transition-transform duration-100 hover:-translate-y-0.5"
+                    className="comic-press flex w-full cursor-pointer items-center gap-3 border-[3px] px-3 py-2 text-left outline-none transition-transform duration-100 hover:-translate-y-0.5"
                     style={{
                       borderColor: colors.LINE,
                       background: colors.PAPER_RAISED,
@@ -1965,7 +1994,7 @@ function SummaryPage({
 
       {/* The Tile's artwork, pinned under the contents, in whatever height the page has left (see artRoom). */}
       {tile.imageUrl && (
-        <div ref={artBox} className="flex min-h-24 flex-1 items-center justify-center">
+        <div ref={artBox} className="flex min-h-20 flex-1 items-center justify-center">
           <PinnedArt imageUrl={tile.imageUrl} name={tile.name} colors={colors} onOpen={onOpenArt} maxHeight={artRoom} />
         </div>
       )}
