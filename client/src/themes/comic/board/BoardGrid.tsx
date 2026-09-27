@@ -149,7 +149,7 @@ export function BoardGrid({
                 if (!tile) return <EmptyCell key={`empty-${row}-${col}`} row={row} col={col} />;
                 const stops = stopsByTileId.get(tile.id);
                 return (
-                  <div key={tile.id} className="relative aspect-square w-full">
+                  <div key={tile.id} data-tile-id={tile.id} className="relative aspect-square w-full">
                     {stops && !tile.dimmed && <LineCompletionWash time={time} stops={stops} boostedUntilRef={boostedUntilRef} />}
                     <TileCell tile={tile} onOpen={onOpenTile} isSearchHighlighted={tile.id === highlightedTileId} />
                     {tileOverlay?.(tile)}
