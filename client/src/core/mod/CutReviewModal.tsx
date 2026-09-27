@@ -66,10 +66,11 @@ function CutReviewEditor({ slug, preview, onClose, onApplied }: { slug: string; 
   const rows = state.key === planKey ? state.rows : rowsFromPlan(plan.changes);
   const setRows = (next: CutReviewRow[]) => setState({ key: planKey, rows: next });
 
-  // As proposed (nothing edited), the plan's own count stands; any edit is scored by the server.
+  // As proposed (nothing edited), the plan's own count stands; any edit is scored by the server. Not while applying:
+  // the roster is changing under the edits, and the plan (and with it the rows) is about to be refetched.
   const scored = scoredChanges(rows);
   const edited = JSON.stringify(scored) !== JSON.stringify(scoredChanges(rowsFromPlan(plan.changes)));
-  const score = useCutReviewScore(slug, scored, edited);
+  const score = useCutReviewScore(slug, scored, edited && !apply.isPending);
   const cutPlayers = edited ? score.query.data?.cutPlayers : plan.cutPlayers;
 
   const toApply = appliedChanges(rows);
@@ -132,6 +133,9 @@ function singleLabel(single: CutReviewPool["singles"][number]): string {
 
 const pairLabel = (pair: CutReviewPool["pairs"][number]) => pair.members.map((m) => m.rsn).join(" & ");
 
+// Team names aren't unique (every new Team starts as "New Team"), so the Captain tells them apart.
+const teamLabel = (team: CutReviewPool["teams"][number]) => `${team.name} (Captain ${team.captainRsn})`;
+
 /** Everyone in the pool, for an added Team's Captain: a pair member brings their partner along as co-captain. */
 function captainOptions(pool: CutReviewPool): SelectOption[] {
   return [
@@ -185,8 +189,9 @@ function ChangeRow({ row, rows, pool, onChange }: { row: CutReviewRow; rows: Cut
       );
       break;
     }
-    case "addTeam":
-      summary = "Add a Team";
+    case "addTeam": {
+      const captain = captainOptions(pool).find((o) => o.value === row.captainUserId);
+      summary = captain ? `Add a Team, Captain ${captain.label}` : "Add a Team";
       controls = (
         <Select
           size="sm"
@@ -198,19 +203,22 @@ function ChangeRow({ row, rows, pool, onChange }: { row: CutReviewRow; rows: Cut
         />
       );
       break;
-    case "removeTeam":
-      summary = "Remove a Team";
+    }
+    case "removeTeam": {
+      const team = pool.teams.find((t) => t.teamId === row.teamId);
+      summary = team ? `Remove ${teamLabel(team)}` : "Remove a Team";
       controls = (
         <Select
           size="sm"
           aria-label="Team to remove"
           placeholder="Pick the Team…"
           value={row.teamId ?? ""}
-          options={pool.teams.map((t) => ({ value: t.teamId, label: `${t.name} (Captain ${t.captainRsn})` }))}
+          options={pool.teams.map((t) => ({ value: t.teamId, label: teamLabel(t) }))}
           onChange={(teamId) => onChange(setTeamPick(rows, row.id, teamId))}
         />
       );
       break;
+    }
   }
 
   const heading = { pair: "Pair two singles", split: "Split a pair", addTeam: "Add a Team", removeTeam: "Remove a Team" }[row.kind];

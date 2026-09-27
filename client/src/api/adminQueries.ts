@@ -99,7 +99,8 @@ export function useCutReviewScore(slug: string, changes: CutChange[], enabled: b
   const query = useQuery({
     queryKey: queryKeys.cutReviewScore(slug, changesJson),
     queryFn: () => api.post<ScoreCutReviewResponse>(`/api/bingos/${slug}/admin/cut-review/score`, { changes: JSON.parse(changesJson) as CutChange[] }),
-    enabled,
+    // Only once the edits have settled: not for whatever list the debounce still holds from before.
+    enabled: enabled && latestJson === changesJson,
     retry: false,
     placeholderData: keepPreviousData,
   });
@@ -113,16 +114,19 @@ export function useApplyCutReview(slug: string) {
   return useMutation({
     mutationFn: (changes: AppliedCutChange[]) => api.post<ApplyCutReviewResponse>(`/api/bingos/${slug}/admin/cut-review/apply`, { changes }),
     // Settled, not just success: a rejected plan means the roster moved underneath it, so the plan is refetched either
-    // way. The roster's key covers the cuts and the review itself; Teams live on the bingo shell.
-    onSettled: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
+    // way. The roster's key covers the cuts and the review itself; Teams live on the bingo shell. Scores of edited
+    // plans are dropped rather than refetched: they're for the old roster, where they may no longer be valid changes.
+    onSettled: () => {
+      queryClient.removeQueries({ queryKey: [...queryKeys.cutReview(slug), "score"] });
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug), predicate: (q) => q.queryKey[3] !== "score" }),
         queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.unpairedSignups(slug) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.partnerCandidates(slug) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.myPairing(slug) }),
         queryClient.invalidateQueries({ queryKey: adminQueryKeys.captainCandidates(slug) }),
-      ]),
+      ]);
+    },
   });
 }
