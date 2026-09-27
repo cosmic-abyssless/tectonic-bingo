@@ -122,6 +122,9 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   log(`${mods.length} mods${options.me ? " plus you" : ""}`);
   if (options.stage === "captains") return result;
 
+  // Moving into the Draft needs a Cut review first while any cut can be avoided (CONTEXT.md "Cut review"). The
+  // generator's Teams are already made, so it applies an empty one: the Admin keeping the cuts as they are.
+  await api.as(adminDiscordId).post(`/api/bingos/${slug}/admin/cut-review/apply`, { changes: [] }, { at: new Date(tl.draftAt.getTime() - 5 * 60_000) });
   await setStage(ctx, "draft", tl.draftAt);
   await runDraft(ctx, players, seeds, { stopAfterFraction: options.stage === "draft" ? 0.5 : undefined });
   if (options.stage === "draft") return result;
