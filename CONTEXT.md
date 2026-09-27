@@ -59,6 +59,7 @@ A designated player who leads a Team during a Bingo.
 A clan member who is part of a Bingo as a competitor: until Board revealed, anyone with an active Signup, except Cut signups once the Draft stage begins; from Board revealed on, anyone on a Team. A withdrawn signup is never a Player.
 - **Capabilities:** Sign up, view the board, make Submissions for their team, view team progress.
 - **Rules:** Belongs to exactly one Team per Bingo once drafted. Anyone who isn't a Player, Moderator or Admin is "not part of this Bingo": they see only its name and stage, plus the signup form while Signups are open. Once the Bingo is Finished, every clan member can view it read-only.
+- **Show screenshots once Finished:** A per-Bingo setting, on by default, that only Admins can change. Off, other Teams' screenshots are hidden from everyone but Moderators once the Bingo is Finished; the Submissions themselves stay visible, and a viewer's own Team's screenshots stay too.
 - **Name:** Inside a Bingo a Player is named by the RSN they signed up with, not their Discord name (rosters, submissions, stats, the audit log, the draft, the header). The server puts it on `rsn` for every user it sends within a Bingo, and `playerName` prefers it. An account with no Signup in that Bingo, like a Moderator who isn't playing, falls back to the Discord name, as do site-level lists. A Discord name is only shown where it is labelled as one (the "Discord" columns of the roster and draft room, the profile subtitle). Audit entries written before this keep the names they were stored with.
 
 ---

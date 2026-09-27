@@ -1,27 +1,17 @@
 import type { TeamSelectorModel } from "../../../headless/types";
-import { EmptyState } from "../../../core/ui/Card";
-import { UsersIcon } from "../../../core/ui/icons";
 import { COMIC_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { useComic } from "../ui/useComic";
 import { Swatch } from "./TeamSelector";
 
 /**
- * Nothing to show yet: a mod who hasn't picked a team gets every team as a
- * chip to pick from (the header no longer carries a team menu — the board's
- * team banner does, once a team's chosen); a player who wasn't drafted gets
- * the plain explanation.
+ * Nothing to show yet: whoever can pick a team (a mod, or anyone once the
+ * bingo is Finished) and hasn't gets every team as a chip to pick from (the
+ * header no longer carries a team menu — the board's team banner does, once a
+ * team's chosen).
  */
-export function NoTeamStage({ isMod, selector }: { isMod: boolean; selector?: TeamSelectorModel }) {
+export function NoTeamStage({ selector }: { selector: TeamSelectorModel }) {
   const { colors } = useComic();
-
-  if (!isMod) {
-    return (
-      <EmptyState icon={<UsersIcon size={20} />} title="You're not on a team">
-        You weren't drafted for this bingo. You can still follow along on the stats page once it's live.
-      </EmptyState>
-    );
-  }
 
   return (
     <section
@@ -32,9 +22,9 @@ export function NoTeamStage({ isMod, selector }: { isMod: boolean; selector?: Te
         Select a team to view
       </h2>
       <ul className="flex flex-wrap items-center justify-center gap-3">
-        {(selector?.teams ?? []).map((team, i) => (
+        {selector.teams.map((team, i) => (
           <li key={team.id}>
-            <ComicButton size="sm" tilt={i % 2 === 0 ? -1 : 1} onPress={() => selector!.select(team.id)}>
+            <ComicButton size="sm" tilt={i % 2 === 0 ? -1 : 1} onPress={() => selector.select(team.id)}>
               <Swatch color={team.color} />
               <span className="max-w-[14rem] truncate">{team.name}</span>
               {team.isMine && (

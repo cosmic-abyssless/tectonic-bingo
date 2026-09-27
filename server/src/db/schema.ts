@@ -104,6 +104,9 @@ export const bingos = sqliteTable('bingos', {
   // Achievements master switch (CONTEXT.md "Achievement"): off hides every Achievement from reads, counts and
   // popups, but earning keeps happening in the background — see achievementService.ts and bingoAchievementSettings.
   achievementsEnabled: integer('achievements_enabled', { mode: 'boolean' }).notNull().default(true),
+  // "Show screenshots once Finished" (CONTEXT.md "Player"): once the bingo is Finished every clan member can read
+  // every team's submissions; off, other teams' screenshot images are left out for anyone but Moderators. Admins only.
+  showScreenshotsWhenFinished: integer('show_screenshots_when_finished', { mode: 'boolean' }).notNull().default(true),
 });
 
 // Mod is per-bingo, not a global flag — fixes v1's single global isModerator.

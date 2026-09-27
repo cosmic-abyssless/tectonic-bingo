@@ -143,6 +143,8 @@ export interface Bingo {
   // Achievements master switch (CONTEXT.md "Achievement"): off hides every Achievement from reads, counts and
   // popups for this bingo, but earning keeps happening in the background (see achievementService.ts).
   achievementsEnabled: boolean;
+  /** "Show screenshots once Finished": off, other teams' screenshots are left out for anyone but Moderators. */
+  showScreenshotsWhenFinished: boolean;
 }
 
 export interface TileCategory {
@@ -487,6 +489,18 @@ export interface BingoShellResponse {
   potTotal: number;
   // True once anyone has ever signed up; the signup mode is locked from then on.
   hasSignups: boolean;
+  /** What this viewer may see (CONTEXT.md "Player"). Without `canSee` the shell is only the landing data: no teams, no categories. */
+  viewer: BingoViewerAccess;
+}
+
+/**
+ * One viewer's standing in a Bingo. `canSee`: a Player, a Moderator, an Admin, or anyone once it's Finished. `isCut`:
+ * an active Signup left out of the Draft, from the Draft stage on (only while they can't see the Bingo).
+ */
+export interface BingoViewerAccess {
+  canSee: boolean;
+  isPlayer: boolean;
+  isCut: boolean;
 }
 
 export interface BoardLine extends BingoLine {

@@ -129,6 +129,8 @@ export interface BingoExportDocument {
     rulesMarkdown: string | null;
     /** Absent in older files: no exclusivity rules. */
     exclusivityRules?: ExclusivityRule[];
+    /** Absent in older files: shown (the app's default). */
+    showScreenshotsWhenFinished?: boolean;
   };
   categories: ExportCategory[];
   tiles: ExportTile[];

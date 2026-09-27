@@ -166,7 +166,7 @@ describe("toViewerBingo", () => {
 
   it("keeps them out of the bingo list before the reveal", () => {
     withRules("signup");
-    const [listed] = listBingos(db);
+    const [listed] = listBingos(db, { id: "someone", isAdmin: true });
     expect(listed!.rulesMarkdown).toBeNull();
     expect(listed!.exclusivityRules).toEqual([]);
   });

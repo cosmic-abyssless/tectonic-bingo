@@ -92,6 +92,7 @@ export interface AuditDetailsMap {
       womGroupId: string | null;
       womGroupVerificationCode: string;
       achievementsEnabled: boolean;
+      showScreenshotsWhenFinished: boolean;
     }>;
   };
 

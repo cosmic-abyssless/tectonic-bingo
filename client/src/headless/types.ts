@@ -245,8 +245,9 @@ export interface PointBreakdownModel {
   unattributed: number;
 }
 
-// Exact branch order: signup -> planning|captains -> draft -> !viewingTeamId -> board.
-export type StageView = "signup" | "planning" | "captains" | "draft" | "noTeam" | "board";
+// Exact branch order: signup -> notPart -> planning|captains -> draft -> !viewingTeamId -> board.
+// "notPart": someone who can't see the bingo (not a Player, Moderator or Admin; CONTEXT.md "Player") once signups close.
+export type StageView = "signup" | "notPart" | "planning" | "captains" | "draft" | "noTeam" | "board";
 
 export interface TileSearchModel {
   query: string;
@@ -292,6 +293,10 @@ export interface BingoPageModel {
   teams: TeamModel[];
   categories: CategoryModel[];
   stageView: StageView;
+  /** An active signup left out of the draft (from the Draft stage on), for the "not part of this bingo" notice. */
+  isCut: boolean;
+  /** Mods, and everyone once the bingo is Finished, can switch between teams' boards. */
+  canPickTeam: boolean;
   /** Mods always; players on a team once live (own team only), everyone once complete (matches the stats endpoint). */
   canViewStats: boolean;
   /** Team leads (and mods) may browse the draft room before the draft stage to rate signups. */

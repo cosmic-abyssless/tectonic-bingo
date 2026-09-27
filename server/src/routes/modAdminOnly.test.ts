@@ -49,4 +49,14 @@ describe("site-admin-only mod routes", () => {
     expect(layer, path).toBeDefined();
     expect(layer!.route!.stack.map((l) => l.handle)).not.toContain(requireAdmin);
   });
+
+  it("keeps bingo settings (\"Show screenshots once Finished\" among them) to site admins", async () => {
+    const { default: adminRouter } = await import("./admin");
+    const { requireAdmin } = await import("../middleware/requireAdmin");
+    const stack = (adminRouter as Router).stack as unknown as (Layer & { handle: unknown })[];
+    const gate = stack.findIndex((l) => !l.route && l.handle === requireAdmin);
+    const settings = stack.findIndex((l) => l.route?.path === "/settings" && l.route.methods.patch);
+    expect(gate).toBeGreaterThanOrEqual(0);
+    expect(settings).toBeGreaterThan(gate);
+  });
 });
