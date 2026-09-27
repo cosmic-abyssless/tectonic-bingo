@@ -141,6 +141,7 @@ export interface BingoExportDocument {
     hideRules?: boolean;
     /** Absent in older files: shown (the app's default). */
     showScreenshotsWhenFinished?: boolean;
+    publishWrappedOnFinish?: boolean;
   };
   categories: ExportCategory[];
   tiles: ExportTile[];

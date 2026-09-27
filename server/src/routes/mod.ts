@@ -30,6 +30,7 @@ import { markAuditedNoop } from "../audit/record";
 import { queryAuditLog } from "../audit/query";
 import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility } from "@bingo/shared";
 import { repriceSubmission } from "../services/gpRepriceService";
+import * as wrappedService from "../services/wrappedService";
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth, requireBingo, requireBingoMod);
@@ -107,6 +108,24 @@ router.patch(
   }),
 );
 
+// Wrapped (CONTEXT.md): publish a Finished Bingo's, or publish it again with the latest numbers. Either way every
+// Player's is computed now and stored; readers only ever read what's stored.
+router.get(
+  "/wrapped",
+  asyncHandler(async (req, res) => {
+    res.json(wrappedService.getWrappedState(db, req.bingo!));
+  }),
+);
+
+router.post(
+  "/wrapped/publish",
+  asyncHandler(async (req, res) => {
+    const state = wrappedService.publishWrapped(db, req.bingo!, req.user!.id);
+    broadcast({ type: "wrapped_published", bingoId: req.bingo!.id, payload: {} });
+    res.json(state);
+  }),
+);
+
 // Prices a submission's claims again, when they were priced from the wrong thing (CONTEXT.md "GP value").
 router.post(
   "/submissions/:id/reprice",
@@ -158,6 +177,9 @@ router.post(
     if (toStage === "complete") void archiveBingoCompetition(db, bingo.id);
     // Wise Old Man snapshots for Titles: a first read (with the baseline) as it goes live, and the final one as it ends.
     if (toStage === "live" || toStage === "complete") queueBingoReads(db, getWomReadQueue(db), bingo.id);
+    // "Publish Wrapped when the Bingo finishes" (CONTEXT.md "Wrapped"); late Wise Old Man reads (queued above) need a
+    // Re-publish.
+    if (toStage === "complete" && wrappedService.publishOnFinish(db, bingo, req.user!.id)) broadcast({ type: "wrapped_published", bingoId: bingo.id, payload: {} });
     res.json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );

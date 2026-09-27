@@ -155,6 +155,8 @@ export interface Bingo {
   achievementsEnabled: boolean;
   /** "Show screenshots once Finished": off, other teams' screenshots are left out for anyone but Moderators. */
   showScreenshotsWhenFinished: boolean;
+  /** "Publish Wrapped when the Bingo finishes" (CONTEXT.md "Wrapped"): off by default. */
+  publishWrappedOnFinish: boolean;
   /** Sealed Tiles (CONTEXT.md): during Board revealed, Players and Captains can't open Tiles. See areTilesSealed. */
   sealedTiles: boolean;
   /** During Board revealed, the rules text is held back from Players and Captains. See areRulesHidden. */
@@ -1315,6 +1317,8 @@ export type BroadcastEvent =
   // Claims of this bingo that had no GP value got one (the GE price table loaded, or a Piece value was added).
   | { type: "gp_values_updated"; bingoId: string; payload: Record<string, never> }
   | { type: "stage_changed"; bingoId: string; payload: { stage: Stage } }
+  // A Moderator published Wrapped (CONTEXT.md), or published it again: readers refetch it.
+  | { type: "wrapped_published"; bingoId: string; payload: Record<string, never> }
   | { type: "draft_started"; bingoId: string; payload: Record<string, never> }
   | { type: "draft_order_shuffled"; bingoId: string; payload: { lockedUntil: string; order: { teamId: string; draftOrder: number }[] } }
   | { type: "draft_order_set"; bingoId: string; payload: { order: { teamId: string; draftOrder: number }[] } }
@@ -1359,6 +1363,7 @@ export * from "./bingoExport.ts";
 export * from "./exclusivity.ts";
 export * from "./names.ts";
 export * from "./rewind.ts";
+export * from "./wrapped.ts";
 export * from "./signupAnswers.ts";
 export * from "./testData.ts";
 export * from "./timezone.ts";

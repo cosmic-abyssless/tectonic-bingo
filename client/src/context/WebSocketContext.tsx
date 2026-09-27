@@ -35,6 +35,11 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
     case "stage_changed":
       queryClient.invalidateQueries({ queryKey: ["bingo"] });
       queryClient.invalidateQueries({ queryKey: ["board"] });
+      // Finishing can publish Wrapped (its "Publish when the Bingo finishes" setting).
+      queryClient.invalidateQueries({ queryKey: ["wrapped"] });
+      break;
+    case "wrapped_published":
+      queryClient.invalidateQueries({ queryKey: ["wrapped"] });
       break;
     case "team_updated":
       queryClient.invalidateQueries({ queryKey: ["bingo"] });

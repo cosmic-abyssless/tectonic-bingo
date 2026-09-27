@@ -10,6 +10,8 @@ import {
   bingoLines,
   bingoModerators,
   bingoTitleSettings,
+  bingoWrapped,
+  playerWrapped,
   bingos,
   claims,
   draftPicks,
@@ -342,6 +344,8 @@ export function deleteBingo(db: Db, bingoId: string): void {
     tx.delete(nodes).where(eq(nodes.bingoId, bingoId)).run();
     tx.delete(stageTransitions).where(eq(stageTransitions.bingoId, bingoId)).run();
     tx.delete(bingoTitleSettings).where(eq(bingoTitleSettings.bingoId, bingoId)).run();
+    tx.delete(playerWrapped).where(eq(playerWrapped.bingoId, bingoId)).run();
+    tx.delete(bingoWrapped).where(eq(bingoWrapped.bingoId, bingoId)).run();
     tx.delete(bingoModerators).where(eq(bingoModerators.bingoId, bingoId)).run();
     tx.delete(womSnapshots).where(eq(womSnapshots.bingoId, bingoId)).run();
     tx.delete(womReads).where(eq(womReads.bingoId, bingoId)).run();
@@ -435,6 +439,7 @@ export interface UpdateBingoSettingsParams {
   achievementsEnabled?: boolean;
   achievements?: Partial<Record<AchievementKey, boolean>>;
   showScreenshotsWhenFinished?: boolean;
+  publishWrappedOnFinish?: boolean;
 }
 
 export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingoSettingsParams) {

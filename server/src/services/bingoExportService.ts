@@ -157,6 +157,7 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
       sealedTiles: bingo.sealedTiles,
       hideRules: bingo.hideRules,
       showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished,
+      publishWrappedOnFinish: bingo.publishWrappedOnFinish,
     },
     categories: categoryRows.map((c) => ({ localId: categoryLocalByReal.get(c.id)!, label: c.label, colorHex: c.colorHex, sortOrder: c.sortOrder })),
     tiles,
@@ -296,6 +297,7 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
       ...(doc.bingo.sealedTiles !== undefined ? { sealedTiles: doc.bingo.sealedTiles } : {}),
       ...(doc.bingo.hideRules !== undefined ? { hideRules: doc.bingo.hideRules } : {}),
       ...(doc.bingo.showScreenshotsWhenFinished !== undefined ? { showScreenshotsWhenFinished: doc.bingo.showScreenshotsWhenFinished === true } : {}),
+      ...(doc.bingo.publishWrappedOnFinish !== undefined ? { publishWrappedOnFinish: doc.bingo.publishWrappedOnFinish === true } : {}),
     });
 
     const categoryIdByLocal = new Map<number, string>();

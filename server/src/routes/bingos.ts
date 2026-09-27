@@ -27,6 +27,7 @@ import * as memberPickService from "../services/memberPickService";
 import * as userService from "../services/userService";
 import * as statsService from "../services/statsService";
 import * as rewindService from "../services/rewindService";
+import * as wrappedService from "../services/wrappedService";
 import { isOcrEnabled, analyzeSubmissionScreenshot } from "../ocr";
 import { getTectonicClient, TectonicUnavailableError, type TectonicDetailedUser } from "../services/tectonicService";
 import { fetchProfiles } from "../services/tectonicProfileService";
@@ -165,6 +166,33 @@ router.get(
     const rewind = rewindService.getRewind(db, bingo);
     const myTeamId = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id)?.id ?? null;
     res.json(rewindService.hideScreenshots(rewind, { isMod: req.bingoAccess!.isMod, myTeamId, showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished }));
+  }),
+);
+
+// Wrapped (CONTEXT.md): a Finished Bingo's year-in-review. Once a Moderator publishes it, everyone who can view the
+// Bingo reads the stored copy (their own Player Wrapped, if they played, and the Bingo-wide one). Before that, only
+// Moderators get it, as a live preview; everyone else a 404 "wrapped_not_published".
+function wrappedViewer(req: Request): wrappedService.WrappedViewer {
+  return { userId: req.user!.id, isMod: req.bingoAccess!.isMod, myTeamId: teamService.getUserTeamForBingo(db, req.bingo!.id, req.user!.id)?.id ?? null };
+}
+
+router.get(
+  "/:slug/wrapped/me",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  asyncHandler(async (req, res) => {
+    res.json(wrappedService.readMyWrapped(db, req.bingo!, wrappedViewer(req)));
+  }),
+);
+
+router.get(
+  "/:slug/wrapped",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  asyncHandler(async (req, res) => {
+    res.json(wrappedService.readBingoWrapped(db, req.bingo!, wrappedViewer(req)));
   }),
 );
 

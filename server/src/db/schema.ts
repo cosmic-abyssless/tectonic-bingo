@@ -117,6 +117,8 @@ export const bingos = sqliteTable('bingos', {
   // "Show screenshots once Finished" (CONTEXT.md "Player"): once the bingo is Finished every clan member can read
   // every team's submissions; off, other teams' screenshot images are left out for anyone but Moderators. Admins only.
   showScreenshotsWhenFinished: integer('show_screenshots_when_finished', { mode: 'boolean' }).notNull().default(true),
+  // "Publish Wrapped when the Bingo finishes" (CONTEXT.md "Wrapped"): moving to Finished publishes it on its own.
+  publishWrappedOnFinish: integer('publish_wrapped_on_finish', { mode: 'boolean' }).notNull().default(false),
 });
 
 // Mod is per-bingo, not a global flag — fixes v1's single global isModerator.
@@ -712,6 +714,26 @@ export const bingoTitleSettings = sqliteTable('bingo_title_settings', {
   titleIdsJson: text('title_ids_json').notNull(),
   frozenAt: integer('frozen_at', { mode: 'timestamp' }).notNull(),
 });
+
+// Wrapped (CONTEXT.md): a Finished Bingo's published Wrapped. A row here means it's published; publishing again
+// replaces it. dataJson is the Bingo-wide part (shared BingoWrapped), computed once when published and only read
+// after that, so a flood of viewers costs a lookup each (wrappedService.ts).
+export const bingoWrapped = sqliteTable('bingo_wrapped', {
+  bingoId: text('bingo_id').primaryKey().references(() => bingos.id),
+  publishedAt: integer('published_at', { mode: 'timestamp' }).notNull(),
+  publishedByUserId: text('published_by_user_id').references(() => users.id),
+  dataJson: text('data_json').notNull(),
+});
+
+// Each Player's Wrapped (shared PlayerWrapped), stored with the Bingo's when it's published.
+export const playerWrapped = sqliteTable('player_wrapped', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  dataJson: text('data_json').notNull(),
+}, (t) => [
+  uniqueIndex('player_wrapped_bingo_user_unq').on(t.bingoId, t.userId),
+]);
 
 // Manual point adjustments applied by moderators. Also the only way to hand
 // out points outside the node graph (e.g. correcting a mistake) since nodes

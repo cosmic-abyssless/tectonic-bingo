@@ -3,7 +3,7 @@ import type {
   AccountTypesResponse, AchievementKey, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, CutReviewPreview, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
-  PickRating, PlayerProfile, RewindResponse, StatsResponse, SubmissionReaction, SubmissionReactionGroup, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
+  MyWrappedResponse, PickRating, PlayerProfile, RewindResponse, StatsResponse, WrappedState, SubmissionReaction, SubmissionReactionGroup, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
 } from "@bingo/shared";
 import { SUBMISSION_REACTIONS } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
@@ -42,6 +42,8 @@ export const queryKeys = {
   accountTypes: (slug: string) => ["accountTypes", slug] as const,
   stats: (slug: string) => ["stats", slug] as const,
   rewind: (slug: string) => ["rewind", slug] as const,
+  wrappedState: (slug: string) => ["wrapped", "state", slug] as const,
+  myWrapped: (slug: string) => ["wrapped", "me", slug] as const,
   auditLog: (slug: string, filters: AuditLogFilters) => ["auditLog", slug, filters] as const,
   teamActivity: (slug: string, teamId: string) => ["teamActivity", slug, teamId, "condensed"] as const,
   myBugReports: () => ["myBugReports"] as const,
@@ -595,6 +597,36 @@ export function useRewind(slug: string | undefined, enabled = true) {
     enabled: !!slug && enabled,
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
+  });
+}
+
+/** Wrapped (CONTEXT.md): whether it's published, for the mod panel. Moderators only. */
+export function useWrappedState(slug: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.wrappedState(slug),
+    queryFn: () => api.get<WrappedState>(`/api/bingos/${slug}/mod/wrapped`),
+    enabled: !!slug && enabled,
+  });
+}
+
+/** The viewer's Wrapped: the stored one once it's published, or (Moderators only) a live preview before that. */
+export function useMyWrapped(slug: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.myWrapped(slug),
+    queryFn: () => api.get<MyWrappedResponse>(`/api/bingos/${slug}/wrapped/me`),
+    enabled: !!slug && enabled,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+}
+
+/** Publish Wrapped, or publish it again with the latest numbers. */
+export function usePublishWrapped(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<WrappedState>(`/api/bingos/${slug}/mod/wrapped/publish`, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wrapped"] }),
   });
 }
 
