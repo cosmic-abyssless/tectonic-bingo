@@ -13,6 +13,7 @@ import { userLabelById } from "../audit/describe";
 import { rsnsInBingo } from "./playerNames";
 import * as achievementService from "./achievementService";
 import { areTilesSealed } from "./bingoService";
+import { withMemberNames } from "./memberPickService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -424,7 +425,7 @@ export function getCaptainCandidates(db: Db, bingoId: string) {
     .filter((r) => !onATeam.has(r.signup.userId));
 
   const signupIds = rows.map((r) => r.signup.id);
-  const answers = signupIds.length ? db.select().from(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).all() : [];
+  const answers = withMemberNames(db, bingoId, signupIds.length ? db.select().from(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).all() : []);
   const pairingByUserId = new Map(getAcceptedPairs(db, bingoId).flatMap(({ pairing, userIds }) => userIds.map((id) => [id, pairing] as const)));
   return rows.map((r) => ({
     ...r,

@@ -6,14 +6,57 @@
 // single choice ('{"other":"hybrid"}'), or the list's last item for multiple choice ('["Melee",{"other":"hybrid"}]').
 // An option label is plain text and a list's options are strings, so neither can be mistaken for it (the server also
 // refuses an option label that is itself such an object).
+//
+// A Member pick answer is stored as a JSON list of the picked users' ids ('["u1","u2"]'), one pick or several. Names
+// aren't stored, since they change: the server puts each member's current name on before the answer leaves it, as
+// '[{"id":"u1","name":"Zezima"}]', and that is the form the roster, draft pool, profile and signup form read.
 
-type AnswerType = "text" | "textarea" | "select" | "multiselect" | "boolean";
+type AnswerType = "text" | "textarea" | "select" | "multiselect" | "boolean" | "member";
 
 /** The most choices one multiple-choice answer can hold, and the longest a single choice can be. */
 export const MAX_MULTISELECT_CHOICES = 100;
 export const MAX_CHOICE_LENGTH = 200;
 /** The longest an Other answer's text can be. */
 export const MAX_OTHER_LENGTH = 100;
+
+/** The most members one Member pick answer can hold, whatever its maximum. */
+export const MAX_MEMBER_PICKS = 100;
+
+/** One member in a Member pick answer: their user id, and their name when the server has put it on. */
+export interface MemberPick {
+  id: string;
+  name: string | null;
+}
+
+/**
+ * The members in a Member pick answer, stored ('["u1"]') or served ('[{"id":"u1","name":"Zezima"}]'). Tolerant: a
+ * blank answer, or anything that isn't such a list, picks no one.
+ */
+export function parseMemberPicks(value: string | null | undefined): MemberPick[] {
+  const text = (value ?? "").trim();
+  if (!text.startsWith("[")) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const picks: MemberPick[] = [];
+  for (const item of parsed) {
+    if (typeof item === "string" && item.trim()) picks.push({ id: item.trim(), name: null });
+    else if (item && typeof item === "object" && typeof (item as { id?: unknown }).id === "string") {
+      const { id, name } = item as { id: string; name?: unknown };
+      picks.push({ id, name: typeof name === "string" ? name : null });
+    }
+  }
+  return picks;
+}
+
+/** The stored form of a Member pick answer: the picked user ids, in order, without repeats. */
+export function encodeMemberPicks(userIds: readonly string[]): string {
+  return JSON.stringify([...new Set(userIds)]);
+}
 
 /** A choice question's answer: the options picked, and the Other text ("" while Other is picked but not yet filled in). */
 export interface ChoiceAnswer {
@@ -84,6 +127,7 @@ export function hasBlankOther(type: AnswerType, value: string | null | undefined
 
 /** Whether an answer says nothing: empty, or (for multiple choice) an empty list. Other with no text says nothing. */
 export function isBlankAnswer(type: AnswerType, value: string | null | undefined): boolean {
+  if (type === "member") return parseMemberPicks(value).length === 0;
   if (type === "select" || type === "multiselect") {
     const { choices, other } = parseChoiceAnswer(value);
     return choices.length === 0 && (other ?? "").trim() === "";
@@ -93,9 +137,16 @@ export function isBlankAnswer(type: AnswerType, value: string | null | undefined
 
 /**
  * An answer as a person reads it: a multiple-choice list is "Melee, Other: hybrid", a single choice "Other: hybrid"
- * or the option, yes/no "Yes" or "No", and anything else as stored.
+ * or the option, yes/no "Yes" or "No", a Member pick the members' names ("Zezima, Lynx Titan"), and anything else as
+ * stored.
  */
 export function formatSignupAnswer(type: AnswerType, value: string | null | undefined): string {
+  if (type === "member") {
+    const picks = parseMemberPicks(value);
+    // Not a list of members (an answer given before the question became a Member pick): shown as it was written.
+    if (picks.length === 0) return (value ?? "").trim() === "[]" ? "" : (value ?? "");
+    return picks.map((p) => p.name ?? "Unknown member").join(", ");
+  }
   if (type === "boolean") return value === "true" ? "Yes" : value === "false" ? "No" : (value ?? "");
   if (type === "select" || type === "multiselect") {
     const { choices, other } = parseChoiceAnswer(value);

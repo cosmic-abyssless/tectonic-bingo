@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4ac0c0c8-ba2f-4012-9eb6-2b74810da892",
-  "prevId": "6bfd7b46-89cf-437e-8760-9f58743f80ba",
+  "id": "6bfd7b46-89cf-437e-8760-9f58743f80ba",
+  "prevId": "f19c84df-5eb3-4ab5-b1a3-2017f4b98738",
   "tables": {
     "achievement_activity": {
       "name": "achievement_activity",
@@ -647,58 +647,6 @@
           "tableTo": "users",
           "columnsFrom": [
             "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "bingo_title_settings": {
-      "name": "bingo_title_settings",
-      "columns": {
-        "bingo_id": {
-          "name": "bingo_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "settings_json": {
-          "name": "settings_json",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "title_ids_json": {
-          "name": "title_ids_json",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "frozen_at": {
-          "name": "frozen_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "bingo_title_settings_bingo_id_bingos_id_fk": {
-          "name": "bingo_title_settings_bingo_id_bingos_id_fk",
-          "tableFrom": "bingo_title_settings",
-          "tableTo": "bingos",
-          "columnsFrom": [
-            "bingo_id"
           ],
           "columnsTo": [
             "id"

@@ -1,8 +1,8 @@
 // What each fake player answers on the signup form. The questions come from the imported board, so whatever an
 // admin adds is answered too: every required question gets a real answer (the server refuses a signup without
 // them), and optional ones are answered about half the time and otherwise left blank, like a real form. A choice
-// question that allows Other gets an Other answer now and then.
-import { encodeChoices, encodeSingleChoice, type SignupQuestion } from "@bingo/shared";
+// question that allows Other gets an Other answer now and then, and a Member pick picks other generated members.
+import { encodeChoices, encodeMemberPicks, encodeSingleChoice, type SignupQuestion } from "@bingo/shared";
 import type { Player } from "./people";
 import { clamp, type Rng } from "./rng";
 
@@ -35,8 +35,17 @@ function textAnswer(question: SignupQuestion, player: Player, rng: Rng): string 
   return rng.pick(GENERIC_TEXT);
 }
 
-function answerOne(question: SignupQuestion, player: Player, rng: Rng): string {
+/** One member, or for several a few up to the question's maximum, from the other members already on the site. */
+function memberAnswer(question: SignupQuestion, others: readonly string[], rng: Rng): string {
+  if (others.length === 0) return "";
+  const most = Math.min(question.multiplePicks ? (question.maxPicks ?? 3) : 1, others.length);
+  return encodeMemberPicks(rng.shuffle(others).slice(0, rng.int(1, most)));
+}
+
+function answerOne(question: SignupQuestion, player: Player, rng: Rng, others: readonly string[]): string {
   switch (question.type) {
+    case "member":
+      return memberAnswer(question, others, rng);
     case "boolean":
       return String(rng.chance(0.5));
     case "select": {
@@ -58,10 +67,13 @@ function answerOne(question: SignupQuestion, player: Player, rng: Rng): string {
   }
 }
 
-/** One answer per question, in the shape the signup endpoint takes. `rng` should be this player's own stream. */
-export function answerQuestions(questions: readonly SignupQuestion[], player: Player, rng: Rng): GeneratedAnswer[] {
+/**
+ * One answer per question, in the shape the signup endpoint takes. `rng` should be this player's own stream, and
+ * `others` the user ids of the other generated members already on the site, whom a Member pick picks from.
+ */
+export function answerQuestions(questions: readonly SignupQuestion[], player: Player, rng: Rng, others: readonly string[] = []): GeneratedAnswer[] {
   return questions.map((question) => {
     const skip = !question.required && !rng.chance(OPTIONAL_ANSWER_CHANCE);
-    return { questionId: question.id, value: skip ? "" : answerOne(question, player, rng) };
+    return { questionId: question.id, value: skip ? "" : answerOne(question, player, rng, others) };
   });
 }

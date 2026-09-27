@@ -262,9 +262,16 @@
       "breakpoints": true
     },
     {
+      "idx": 37,
+      "version": "6",
+      "when": 1790485773452,
+      "tag": "0037_signup_question_member_pick",
+      "breakpoints": true
+    },
+    {
       "idx": 38,
       "version": "6",
-      "when": 1790487549154,
+      "when": 1790487858208,
       "tag": "0038_bingo_title_settings",
       "breakpoints": true
     }

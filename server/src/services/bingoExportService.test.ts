@@ -76,6 +76,7 @@ function seedFullBingo() {
 
   createQuestion(db, { bingoId: bingo.id, prompt: "Willing to captain?", helperText: "Captains lead a team of about 14.", type: "boolean", required: true, sortOrder: 0 });
   createQuestion(db, { bingoId: bingo.id, prompt: "Preferred role", type: "select", optionsJson: JSON.stringify(["dps", "support"]), allowOther: true, required: false, sortOrder: 1 });
+  createQuestion(db, { bingoId: bingo.id, prompt: "Who would you like to play with?", type: "member", multiplePicks: true, maxPicks: 3, sortOrder: 2 });
 
   return { bingo, admin, category, tileA, partA, partB, tileB, tileC, tileD, sharedLeaf, sharedBlock };
 }
@@ -114,7 +115,7 @@ describe("exportBingo", () => {
     expect(doc.categories[0]).toMatchObject({ label: "Bosses", colorHex: "#e74c3c" });
     expect(doc.tiles).toHaveLength(4);
     expect(doc.lines.find((l) => l.lineType === "row" && l.lineIndex === 0)?.points).toBe(42);
-    expect(doc.signupQuestions.map((q) => q.prompt).sort()).toEqual(["Preferred role", "Willing to captain?"]);
+    expect(doc.signupQuestions.map((q) => q.prompt).sort()).toEqual(["Preferred role", "Who would you like to play with?", "Willing to captain?"]);
   });
 });
 
@@ -202,9 +203,10 @@ describe("importBingo", () => {
     expect(row.rulesMarkdown).toContain("Do the thing");
 
     const questions = db.select().from(schema.signupQuestions).where(eq(schema.signupQuestions.bingoId, imported.id)).all();
-    expect(questions.map((q) => q.prompt).sort()).toEqual(["Preferred role", "Willing to captain?"]);
-    expect(Object.fromEntries(questions.map((q) => [q.prompt, q.helperText]))).toEqual({ "Willing to captain?": "Captains lead a team of about 14.", "Preferred role": null });
-    expect(Object.fromEntries(questions.map((q) => [q.prompt, q.allowOther]))).toEqual({ "Willing to captain?": false, "Preferred role": true });
+    expect(questions.map((q) => q.prompt).sort()).toEqual(["Preferred role", "Who would you like to play with?", "Willing to captain?"]);
+    expect(Object.fromEntries(questions.map((q) => [q.prompt, q.helperText]))).toEqual({ "Willing to captain?": "Captains lead a team of about 14.", "Preferred role": null, "Who would you like to play with?": null });
+    expect(Object.fromEntries(questions.map((q) => [q.prompt, q.allowOther]))).toEqual({ "Willing to captain?": false, "Preferred role": true, "Who would you like to play with?": false });
+    expect(questions.find((q) => q.type === "member")).toMatchObject({ multiplePicks: true, maxPicks: 3 });
   });
 
   it("imports a file exported before questions had helper text", () => {
@@ -213,8 +215,23 @@ describe("importBingo", () => {
     for (const q of doc.signupQuestions) delete (q as { helperText?: string | null }).helperText;
     const imported = importBingo(db, doc, { slug: "old-file", name: "Old", createdByUserId: admin.id });
     const questions = db.select().from(schema.signupQuestions).where(eq(schema.signupQuestions.bingoId, imported.id)).all();
-    expect(questions).toHaveLength(2);
+    expect(questions).toHaveLength(3);
     expect(questions.every((q) => q.helperText === null)).toBe(true);
+  });
+
+  it("imports a file exported before Member pick questions with one pick and no maximum", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    const doc = exportBingo(db, source.id);
+    for (const q of doc.signupQuestions) {
+      delete (q as { multiplePicks?: boolean }).multiplePicks;
+      delete (q as { maxPicks?: number | null }).maxPicks;
+    }
+    // An older file has no Member pick, so it never carried these; drop the one the fixture made.
+    doc.signupQuestions = doc.signupQuestions.filter((q) => q.type !== "member");
+    const imported = importBingo(db, doc, { slug: "pre-member-pick", name: "Old", createdByUserId: admin.id });
+    const questions = db.select().from(schema.signupQuestions).where(eq(schema.signupQuestions.bingoId, imported.id)).all();
+    expect(questions).toHaveLength(2);
+    expect(questions.every((q) => q.multiplePicks === false && q.maxPicks === null)).toBe(true);
   });
 
   it("imports a file exported before choice questions could allow Other with Other off", () => {
@@ -223,7 +240,7 @@ describe("importBingo", () => {
     for (const q of doc.signupQuestions) delete (q as { allowOther?: boolean }).allowOther;
     const imported = importBingo(db, doc, { slug: "older-file", name: "Older", createdByUserId: admin.id });
     const questions = db.select().from(schema.signupQuestions).where(eq(schema.signupQuestions.bingoId, imported.id)).all();
-    expect(questions).toHaveLength(2);
+    expect(questions).toHaveLength(3);
     expect(questions.every((q) => q.allowOther === false)).toBe(true);
   });
 

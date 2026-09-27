@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { detectTimeZone, encodeChoices, encodeSingleChoice, hasBlankOther, isBlankAnswer, MAX_OTHER_LENGTH, parseChoiceAnswer, timeZoneOptions, type CombatAchievementStats, type SignupAnswerInput, type SignupQuestion, type TimeZoneOption } from "@bingo/shared";
-import { useBingo, useCreateSignup, useMyPairing, useMySignup, useMyTectonicRsns, useSignupQuestions, useUpdateSignup, useWithdrawSignup } from "../api/queries";
+import { detectTimeZone, encodeChoices, encodeSingleChoice, hasBlankOther, isBlankAnswer, MAX_OTHER_LENGTH, parseChoiceAnswer, parseMemberPicks, timeZoneOptions, type CombatAchievementStats, type PickableMember, type SignupAnswerInput, type SignupQuestion, type TimeZoneOption } from "@bingo/shared";
+import { useBingo, useCreateSignup, useMyPairing, useMySignup, useMyTectonicRsns, usePickableMembers, useSignupQuestions, useUpdateSignup, useWithdrawSignup } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { useStatsRefreshingUserIds } from "../context/WebSocketContext";
 import { caTitle, formatCaTier } from "../core/signup/caStats";
@@ -26,6 +26,25 @@ export interface SignupOtherModel {
   missingText: boolean;
 }
 
+/** A Member pick question: a search box over the clan's members, and the members picked so far. */
+export interface SignupMemberPickModel {
+  /** Several members may be picked (shown as removable chips); otherwise one, which a new pick replaces. */
+  multiple: boolean;
+  picked: { id: string; name: string; remove: () => void }[];
+  /**
+   * What the search box offers: every pickable member not already picked (with one pick, the current pick too, so
+   * the box can show it). Labelled "RSN (Discord name)" when the two differ, so typing either finds them.
+   */
+  options: { id: string; label: string }[];
+  pick: (userId: string) => void;
+  /** Several only: the most that may be picked, or null for no limit. */
+  max: number | null;
+  /** Several only: the maximum is reached, so the box adds no more. */
+  full: boolean;
+  /** The member list is still loading. */
+  loading: boolean;
+}
+
 export interface SignupQuestionModel {
   id: string;
   prompt: string;
@@ -42,6 +61,8 @@ export interface SignupQuestionModel {
    * can be unticked). Picking it opens a text box; unpicking it throws the text away.
    */
   other: SignupOtherModel | null;
+  /** Member pick only. */
+  members: SignupMemberPickModel | null;
   /** A single-choice question that's optional and answered can be cleared. */
   clear: (() => void) | null;
 }
@@ -111,7 +132,37 @@ function parseOptions(question: SignupQuestion): string[] {
   }
 }
 
-function questionModel(question: SignupQuestion, value: string, set: (v: string) => void): SignupQuestionModel {
+function memberPickModel(question: SignupQuestion, value: string, set: (v: string) => void, members: PickableMember[] | undefined): SignupMemberPickModel {
+  const byId = new Map((members ?? []).map((m) => [m.userId, m]));
+  // The answer is kept with names on (the server sends it that way, and the chips need them); the server takes it
+  // back in that form and stores only the ids.
+  const picked = parseMemberPicks(value).map((p) => ({ id: p.id, name: p.name ?? byId.get(p.id)?.name ?? "Unknown member" }));
+  const save = (next: { id: string; name: string }[]) => set(next.length === 0 ? "" : JSON.stringify(next.map(({ id, name }) => ({ id, name }))));
+  const multiple = question.multiplePicks;
+  const max = multiple ? question.maxPicks : 1;
+  const label = (m: PickableMember) => (m.discordName && m.discordName.toLowerCase() !== m.name.toLowerCase() ? `${m.name} (${m.discordName})` : m.name);
+  const pickedIds = new Set(picked.map((p) => p.id));
+  const options = (members ?? []).filter((m) => !multiple || !pickedIds.has(m.userId)).map((m) => ({ id: m.userId, label: label(m) }));
+  // A single pick who's no longer in the list (they left the clan) still shows in the box.
+  if (!multiple) for (const p of picked) if (!byId.has(p.id)) options.unshift({ id: p.id, label: p.name });
+  return {
+    multiple,
+    picked: picked.map((p) => ({ ...p, remove: () => save(picked.filter((o) => o.id !== p.id)) })),
+    options,
+    pick: (userId) => {
+      const member = byId.get(userId);
+      if (!member) return;
+      if (!multiple) return save([{ id: userId, name: member.name }]);
+      if (pickedIds.has(userId) || (max !== null && picked.length >= max)) return;
+      save([...picked, { id: userId, name: member.name }]);
+    },
+    max: multiple ? max : null,
+    full: multiple && max !== null && picked.length >= max,
+    loading: members === undefined,
+  };
+}
+
+function questionModel(question: SignupQuestion, value: string, set: (v: string) => void, members: PickableMember[] | undefined): SignupQuestionModel {
   // A question limited to mods/admins says so, so players know who reads what they write there.
   const privacy = question.visibility === "admins" ? "Only admins see your answer." : question.visibility === "mods" ? "Only mods and admins see your answer." : null;
   const hint = [question.helperText, privacy].filter(Boolean).join(" ") || undefined;
@@ -159,7 +210,8 @@ function questionModel(question: SignupQuestion, value: string, set: (v: string)
     hint,
     choices: shown.map((option) => ({ label: option, checked: chosen.includes(option), set: (on) => toggle(option, on) })),
     other: otherModel,
-    clear: question.type === "select" && !question.required && value ? () => set("") : null,
+    members: question.type === "member" ? memberPickModel(question, value, set, members) : null,
+    clear: (question.type === "select" || (question.type === "member" && !question.multiplePicks)) && !question.required && !isBlankAnswer(question.type, value) ? () => set("") : null,
   };
 }
 
@@ -175,6 +227,7 @@ export function useSignupForm(slug: string): SignupFormModel {
   const withdrawSignup = useWithdrawSignup(slug);
 
   const questions = questionsData?.questions ?? [];
+  const { data: pickable } = usePickableMembers(slug, questions.some((q) => q.type === "member"));
   const existing = mySignup?.signup && mySignup.signup.status === "active" ? mySignup.signup : null;
   // Whether an at-risk player is unpaired (the partner panel shares this query).
   const { data: pairing } = useMyPairing(slug, shell?.bingo.signupMode === "duo" && !!existing && !!mySignup?.atRisk);
@@ -294,7 +347,7 @@ export function useSignupForm(slug: string): SignupFormModel {
       options: timezoneChoices,
       fromBrowser: !!timezoneValue && timezoneValue === detectedTimezone && timezoneValue !== existing?.timezone,
     },
-    questions: questions.map((q) => questionModel(q, answers[q.id] ?? "", (v) => setAnswers((prev) => ({ ...prev, [q.id]: v })))),
+    questions: questions.map((q) => questionModel(q, answers[q.id] ?? "", (v) => setAnswers((prev) => ({ ...prev, [q.id]: v })), pickable?.members)),
     ca: existing ? { current: caModel(mySignup?.caCurrent), peak: tectonicRsns.length > 1 ? caModel(mySignup?.caPeak) : null } : null,
     isValid,
     pending: createSignup.isPending || updateSignup.isPending,
