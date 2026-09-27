@@ -8,9 +8,10 @@ import { ServiceError } from "./errors";
 import { dissolveForUser, getAcceptedPairs, getPendingOutgoingPairs } from "./pairingService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
-import { rsnsInBingo } from "./playerNames";
+import { withRsn } from "./playerNames";
 import { parseStoredCaStats } from "./combatAchievements";
 import { parseWomSummary } from "./womService";
+import { PUBLIC_USER_COLS } from "./userService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -529,7 +530,7 @@ export function withdrawSignup(db: Db, bingo: Bingo, signupId: string, { byMod =
 /** The whole roster. `viewer` limits which questions' answers come with it (see QuestionVisibility). */
 export function getAllSignups(db: Db, bingoId: string, viewer: AnswerViewer = "admin") {
   const rows = db
-    .select({ signup: PUBLIC_SIGNUP_COLS, user: users, ...SIGNUP_CA_COLS })
+    .select({ signup: PUBLIC_SIGNUP_COLS, user: PUBLIC_USER_COLS, ...SIGNUP_CA_COLS })
     .from(signups)
     .innerJoin(users, eq(signups.userId, users.id))
     .where(eq(signups.bingoId, bingoId))
@@ -540,9 +541,8 @@ export function getAllSignups(db: Db, bingoId: string, viewer: AnswerViewer = "a
   const visible = visibleQuestionIds(db, bingoId, viewer);
 
   const collectorIds = [...new Set(rows.map((r) => r.signup.buyinCollectedByUserId).filter((id): id is string => !!id))];
-  const collectors = collectorIds.length ? db.select().from(users).where(inArray(users.id, collectorIds)).all() : [];
-  const collectorRsns = rsnsInBingo(db, bingoId, collectorIds);
-  const collectorById = new Map(collectors.map((u) => [u.id, { ...u, rsn: collectorRsns.get(u.id) ?? null }]));
+  const collectors = collectorIds.length ? withRsn(db, bingoId, db.select(PUBLIC_USER_COLS).from(users).where(inArray(users.id, collectorIds)).all()) : [];
+  const collectorById = new Map(collectors.map((u) => [u.id, u]));
 
   const pairingByUserId = new Map<string, (typeof schema.signupPairings.$inferSelect)>();
   for (const { pairing, userIds } of getAcceptedPairs(db, bingoId)) {
