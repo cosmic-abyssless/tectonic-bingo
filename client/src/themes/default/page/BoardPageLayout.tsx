@@ -17,6 +17,7 @@ export function BoardPageLayout() {
   const PlanningStage = useSlot("PlanningStage");
   const DraftStage = useSlot("DraftStage");
   const NoTeamStage = useSlot("NoTeamStage");
+  const NotPartStage = useSlot("NotPartStage");
   const TileSearch = useSlot("TileSearch");
   const TeamBanner = useSlot("TeamBanner");
   const BoardGrid = useSlot("BoardGrid");
@@ -35,12 +36,14 @@ export function BoardPageLayout() {
         {page.canScout && <ScoutBanner onOpen={page.actions.goToDraft} />}
         {page.stageView === "signup" ? (
           <SignupStage slug={page.slug} />
+        ) : page.stageView === "notPart" ? (
+          <NotPartStage isCut={page.isCut} />
         ) : page.stageView === "planning" || page.stageView === "captains" ? (
           <PlanningStage stage={page.stageView} />
         ) : page.stageView === "draft" ? (
           <DraftStage draft={page.draft} milestone={page.milestone} onOpenDraft={page.actions.goToDraft} />
         ) : page.stageView === "noTeam" ? (
-          <NoTeamStage isMod={page.isMod} />
+          <NoTeamStage selector={page.teamSelector} />
         ) : (
           <>
             {page.isMod && page.sealed.forPlayers && <SealedTilesNotice slug={page.slug} />}

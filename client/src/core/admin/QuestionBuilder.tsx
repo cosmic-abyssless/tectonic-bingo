@@ -47,6 +47,16 @@ function VisibilitySelect(props: { value: QuestionVisibility; onChange: (v: Ques
   );
 }
 
+// Choice questions only: an extra Other choice where players write their own answer.
+function AllowOtherCheckbox(props: { checked: boolean; onChange: (on: boolean) => void; "aria-label": string }) {
+  return (
+    <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-on-surface-muted" title="Adds an Other choice with a short text box for players' own answer">
+      <input type="checkbox" aria-label={props["aria-label"]} checked={props.checked} onChange={(e) => props.onChange(e.target.checked)} className="size-4 accent-accent" />
+      Allow Other
+    </label>
+  );
+}
+
 function TypeSelect(props: { value: SignupQuestionType; onChange: (t: SignupQuestionType) => void; "aria-label": string }) {
   return (
     <Select aria-label={props["aria-label"]} value={props.value} onChange={(t) => props.onChange(t as SignupQuestionType)} className="w-auto! shrink-0" options={TYPES} />
@@ -63,6 +73,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
   const [newOptions, setNewOptions] = useState("");
   const [newHelper, setNewHelper] = useState("");
   const [newRequired, setNewRequired] = useState(false);
+  const [newAllowOther, setNewAllowOther] = useState(false);
   const [newVisibility, setNewVisibility] = useState<QuestionVisibility>("captains");
   const [error, setError] = useState<string | null>(null);
   // The question waiting on "delete it and its answers?" — only asked when players have answered it.
@@ -86,12 +97,14 @@ export function QuestionBuilder({ slug }: { slug: string }) {
         type: newType,
         sortOrder: questions.length,
         optionsJson: isChoice(newType) ? JSON.stringify(options) : undefined,
+        allowOther: isChoice(newType) && newAllowOther,
         visibility: newVisibility,
       });
       setNewPrompt("");
       setNewOptions("");
       setNewHelper("");
       setNewRequired(false);
+      setNewAllowOther(false);
       setNewVisibility("captains");
       invalidate();
     } catch (e: unknown) {
@@ -168,13 +181,17 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                 <VisibilitySelect aria-label="Answers visible to" value={q.visibility} onChange={(visibility) => patch(q.id, { visibility })} />
               </div>
               {isChoice(q.type) && (
-                <Input
-                  aria-label="Choice options"
-                  defaultValue={parseOptions(q.optionsJson)}
-                  onBlur={(e) => patch(q.id, { optionsJson: JSON.stringify(e.target.value.split(",").map((s) => s.trim()).filter(Boolean)) })}
-                  placeholder="Comma-separated options"
-                  size="sm"
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    aria-label="Choice options"
+                    defaultValue={parseOptions(q.optionsJson)}
+                    onBlur={(e) => patch(q.id, { optionsJson: JSON.stringify(e.target.value.split(",").map((s) => s.trim()).filter(Boolean)) })}
+                    placeholder="Comma-separated options"
+                    size="sm"
+                    className="min-w-0 flex-1"
+                  />
+                  <AllowOtherCheckbox aria-label="Allow Other" checked={q.allowOther} onChange={(allowOther) => patch(q.id, { allowOther })} />
+                </div>
               )}
             </Card>
           ))}
@@ -213,14 +230,18 @@ export function QuestionBuilder({ slug }: { slug: string }) {
           <VisibilitySelect aria-label="New question answers visible to" value={newVisibility} onChange={setNewVisibility} />
         </div>
         {isChoice(newType) && (
-          <Input
-            aria-label="Choice options"
-            value={newOptions}
-            onChange={(e) => setNewOptions(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && add()}
-            placeholder="Comma-separated options"
-            size="sm"
-          />
+          <div className="flex items-center gap-2">
+            <Input
+              aria-label="Choice options"
+              value={newOptions}
+              onChange={(e) => setNewOptions(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && add()}
+              placeholder="Comma-separated options"
+              size="sm"
+              className="min-w-0 flex-1"
+            />
+            <AllowOtherCheckbox aria-label="New question allows Other" checked={newAllowOther} onChange={setNewAllowOther} />
+          </div>
         )}
         {error && <Notice tone="danger">{error}</Notice>}
       </Card>

@@ -130,6 +130,7 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
     helperText: q.helperText,
     type: q.type,
     optionsJson: q.optionsJson,
+    allowOther: q.allowOther,
     required: q.required,
     sortOrder: q.sortOrder,
     visibility: q.visibility,
@@ -153,6 +154,7 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
       exclusivityRules: bingoService.parseExclusivityRules(bingo.exclusivityRulesJson),
       sealedTiles: bingo.sealedTiles,
       hideRules: bingo.hideRules,
+      showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished,
     },
     categories: categoryRows.map((c) => ({ localId: categoryLocalByReal.get(c.id)!, label: c.label, colorHex: c.colorHex, sortOrder: c.sortOrder })),
     tiles,
@@ -291,6 +293,7 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
       ...(doc.bingo.exclusivityRules !== undefined ? { exclusivityRules: doc.bingo.exclusivityRules } : {}),
       ...(doc.bingo.sealedTiles !== undefined ? { sealedTiles: doc.bingo.sealedTiles } : {}),
       ...(doc.bingo.hideRules !== undefined ? { hideRules: doc.bingo.hideRules } : {}),
+      ...(doc.bingo.showScreenshotsWhenFinished !== undefined ? { showScreenshotsWhenFinished: doc.bingo.showScreenshotsWhenFinished === true } : {}),
     });
 
     const categoryIdByLocal = new Map<number, string>();
@@ -379,7 +382,7 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
     }
 
     for (const q of doc.signupQuestions) {
-      signupService.createQuestion(tx, { bingoId: bingo.id, prompt: q.prompt, helperText: q.helperText ?? null, type: q.type, optionsJson: q.optionsJson, required: q.required, sortOrder: q.sortOrder, visibility: q.visibility ?? "captains" });
+      signupService.createQuestion(tx, { bingoId: bingo.id, prompt: q.prompt, helperText: q.helperText ?? null, type: q.type, optionsJson: q.optionsJson, allowOther: q.allowOther ?? false, required: q.required, sortOrder: q.sortOrder, visibility: q.visibility ?? "captains" });
     }
 
     // Achievements (CONTEXT.md): createBingo above switched every catalogue key on (the default for a brand-new

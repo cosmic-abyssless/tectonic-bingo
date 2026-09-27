@@ -7,7 +7,7 @@ import { bingos, draftPicks, nodeEdges, nodes, pickRatings, signupAnswers, signu
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
 import { PUBLIC_SIGNUP_COLS } from "./signupService";
-import { MINIMAL_USER_COLS } from "./userService";
+import { MINIMAL_USER_COLS, PUBLIC_USER_COLS } from "./userService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 import { rsnsInBingo } from "./playerNames";
@@ -35,7 +35,7 @@ export function getTeamsWithMembers(db: Db, bingoId: string) {
   if (teamRows.length === 0) return [];
   const teamIds = teamRows.map((t) => t.id);
   const memberRows = db
-    .select({ teamId: teamMembers.teamId, isCaptain: teamMembers.isCaptain, isCoCaptain: teamMembers.isCoCaptain, user: users })
+    .select({ teamId: teamMembers.teamId, isCaptain: teamMembers.isCaptain, isCoCaptain: teamMembers.isCoCaptain, user: PUBLIC_USER_COLS })
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))
     .where(inArray(teamMembers.teamId, teamIds))
@@ -408,7 +408,7 @@ export function deleteTeam(db: Db, teamId: string): void {
 }
 
 // Active signups not already on a team for this bingo — the pool mods pick
-// captains from during the `captains` stage. Joined with the user row and
+// captains from during the `captains` stage. Joined with the (public) user and
 // every signup answer (e.g. "willing to captain?") and accepted duo pairing so
 // the admin UI can show context without a second round trip.
 export function getCaptainCandidates(db: Db, bingoId: string) {
@@ -416,7 +416,7 @@ export function getCaptainCandidates(db: Db, bingoId: string) {
   const onATeam = teamIds.length ? new Set(db.select({ userId: teamMembers.userId }).from(teamMembers).where(inArray(teamMembers.teamId, teamIds)).all().map((m) => m.userId)) : new Set<string>();
 
   const rows = db
-    .select({ signup: PUBLIC_SIGNUP_COLS, user: users })
+    .select({ signup: PUBLIC_SIGNUP_COLS, user: PUBLIC_USER_COLS })
     .from(signups)
     .innerJoin(users, eq(signups.userId, users.id))
     .where(and(eq(signups.bingoId, bingoId), eq(signups.status, "active")))

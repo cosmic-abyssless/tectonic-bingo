@@ -88,6 +88,10 @@ router.patch(
       if (code) params.womGroupVerificationCode = code;
     }
     // Achievements (CONTEXT.md "Achievement"): the master switch, and/or a partial map of per-Achievement switches.
+    if ("showScreenshotsWhenFinished" in body) {
+      if (typeof body.showScreenshotsWhenFinished !== "boolean") throw new ServiceError(400, "showScreenshotsWhenFinished must be a boolean");
+      params.showScreenshotsWhenFinished = body.showScreenshotsWhenFinished;
+    }
     if ("achievementsEnabled" in body) {
       if (typeof body.achievementsEnabled !== "boolean") throw new ServiceError(400, "achievementsEnabled must be a boolean");
       params.achievementsEnabled = body.achievementsEnabled;

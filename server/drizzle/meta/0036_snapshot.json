@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "67259a8c-b563-4a78-87be-f15870e032dc",
-  "prevId": "45c351e7-0766-42b8-aac1-8a10938c0a99",
+  "id": "f19c84df-5eb3-4ab5-b1a3-2017f4b98738",
+  "prevId": "c3c4b935-6006-400a-a8d9-0918fb2944dd",
   "tables": {
     "achievement_activity": {
       "name": "achievement_activity",
@@ -885,6 +885,30 @@
         },
         "achievements_enabled": {
           "name": "achievements_enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "sealed_tiles": {
+          "name": "sealed_tiles",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "hide_rules": {
+          "name": "hide_rules",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "show_screenshots_when_finished": {
+          "name": "show_screenshots_when_finished",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

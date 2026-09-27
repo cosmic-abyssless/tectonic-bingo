@@ -75,7 +75,7 @@ function seedFullBingo() {
   updateLinePoints(db, row0.id, 42);
 
   createQuestion(db, { bingoId: bingo.id, prompt: "Willing to captain?", helperText: "Captains lead a team of about 14.", type: "boolean", required: true, sortOrder: 0 });
-  createQuestion(db, { bingoId: bingo.id, prompt: "Preferred role", type: "select", optionsJson: JSON.stringify(["dps", "support"]), required: false, sortOrder: 1 });
+  createQuestion(db, { bingoId: bingo.id, prompt: "Preferred role", type: "select", optionsJson: JSON.stringify(["dps", "support"]), allowOther: true, required: false, sortOrder: 1 });
 
   return { bingo, admin, category, tileA, partA, partB, tileB, tileC, tileD, sharedLeaf, sharedBlock };
 }
@@ -204,6 +204,7 @@ describe("importBingo", () => {
     const questions = db.select().from(schema.signupQuestions).where(eq(schema.signupQuestions.bingoId, imported.id)).all();
     expect(questions.map((q) => q.prompt).sort()).toEqual(["Preferred role", "Willing to captain?"]);
     expect(Object.fromEntries(questions.map((q) => [q.prompt, q.helperText]))).toEqual({ "Willing to captain?": "Captains lead a team of about 14.", "Preferred role": null });
+    expect(Object.fromEntries(questions.map((q) => [q.prompt, q.allowOther]))).toEqual({ "Willing to captain?": false, "Preferred role": true });
   });
 
   it("imports a file exported before questions had helper text", () => {
@@ -214,6 +215,16 @@ describe("importBingo", () => {
     const questions = db.select().from(schema.signupQuestions).where(eq(schema.signupQuestions.bingoId, imported.id)).all();
     expect(questions).toHaveLength(2);
     expect(questions.every((q) => q.helperText === null)).toBe(true);
+  });
+
+  it("imports a file exported before choice questions could allow Other with Other off", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    const doc = exportBingo(db, source.id);
+    for (const q of doc.signupQuestions) delete (q as { allowOther?: boolean }).allowOther;
+    const imported = importBingo(db, doc, { slug: "older-file", name: "Older", createdByUserId: admin.id });
+    const questions = db.select().from(schema.signupQuestions).where(eq(schema.signupQuestions.bingoId, imported.id)).all();
+    expect(questions).toHaveLength(2);
+    expect(questions.every((q) => q.allowOther === false)).toBe(true);
   });
 
   it("records bingo.created with source: \"import\", plus per-item audit rows for the created structure", () => {
@@ -312,6 +323,20 @@ describe("settings", () => {
     delete old.bingo.warnLeftovers;
     importBingo(db, old, { slug: "settings-old", createdByUserId: admin.id });
     expect(getBingoBySlug(db, "settings-old")).toMatchObject({ cutMode: "even", warnLeftovers: false });
+  });
+
+  it("carries \"Show screenshots once Finished\" over, and shows them for a file that predates it", () => {
+    const { bingo, admin } = seedFullBingo();
+    db.update(schema.bingos).set({ showScreenshotsWhenFinished: false }).where(eq(schema.bingos.id, bingo.id)).run();
+    const doc = exportBingo(db, bingo.id);
+    expect(doc.bingo.showScreenshotsWhenFinished).toBe(false);
+    importBingo(db, doc, { slug: "screenshots-off", createdByUserId: admin.id });
+    expect(getBingoBySlug(db, "screenshots-off")?.showScreenshotsWhenFinished).toBe(false);
+
+    const old = JSON.parse(JSON.stringify(doc)) as BingoExportDocument;
+    delete old.bingo.showScreenshotsWhenFinished;
+    importBingo(db, old, { slug: "screenshots-old", createdByUserId: admin.id });
+    expect(getBingoBySlug(db, "screenshots-old")?.showScreenshotsWhenFinished).toBe(true);
   });
 
   it("reads the setting cutMode replaced, from older files", () => {
@@ -569,7 +594,7 @@ describe("importing tile images", () => {
     const imported = await importBingoWithImages(db, doc, { slug: "with-image", createdByUserId: admin.id }, dir);
 
     const tile = getBoardTiles(db, imported.id).find((t) => t.name === "Tile A")!;
-    expect(tile.imageUrl).toMatch(/^\/uploads\/tiles\/\d+-[a-z0-9]+\.png$/);
+    expect(tile.imageUrl).toMatch(/^\/uploads\/tiles\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.png$/);
     expect(tile.imageUrl).not.toBe("/uploads/tiles/tile-a.png");
     const stored = path.join(dir, tile.imageUrl!.replace("/uploads/", ""));
     expect(fs.readFileSync(stored).equals(png)).toBe(true);

@@ -87,6 +87,15 @@ export interface User {
   updatedAt: string;
 }
 
+/**
+ * Another person as a response shows them: enough for a name, an avatar and an RSN, never their account flags
+ * (isAdmin, inGuild) or timestamps. Every response that lists someone other than the viewer uses this; only the
+ * viewer's own record (/api/me) and site-admin user management send the full User.
+ */
+export type PublicUser = Pick<User, "id" | "discordId" | "discordUsername" | "discordGlobalName" | "discordGuildNick" | "discordAvatar"> & {
+  rsn: string | null;
+};
+
 export const SIGNUP_MODES = ["solo", "duo"] as const;
 export type SignupMode = (typeof SIGNUP_MODES)[number];
 
@@ -143,6 +152,8 @@ export interface Bingo {
   // Achievements master switch (CONTEXT.md "Achievement"): off hides every Achievement from reads, counts and
   // popups for this bingo, but earning keeps happening in the background (see achievementService.ts).
   achievementsEnabled: boolean;
+  /** "Show screenshots once Finished": off, other teams' screenshots are left out for anyone but Moderators. */
+  showScreenshotsWhenFinished: boolean;
   /** Sealed Tiles (CONTEXT.md): during Board revealed, Players and Captains can't open Tiles. See areTilesSealed. */
   sealedTiles: boolean;
   /** During Board revealed, the rules text is held back from Players and Captains. See areRulesHidden. */
@@ -184,7 +195,7 @@ export interface Team {
 }
 
 export interface TeamRosterEntry {
-  user: User;
+  user: PublicUser;
   isCaptain: boolean;
   isCoCaptain: boolean; // duo mode: captain's partner, shares captain permissions
   isDrafted: boolean; // joined via a draft pick, so mods can't remove them by hand
@@ -505,6 +516,18 @@ export interface BingoShellResponse {
   potTotal: number;
   // True once anyone has ever signed up; the signup mode is locked from then on.
   hasSignups: boolean;
+  /** What this viewer may see (CONTEXT.md "Player"). Without `canSee` the shell is only the landing data: no teams, no categories. */
+  viewer: BingoViewerAccess;
+}
+
+/**
+ * One viewer's standing in a Bingo. `canSee`: a Player, a Moderator, an Admin, or anyone once it's Finished. `isCut`:
+ * an active Signup left out of the Draft, from the Draft stage on (only while they can't see the Bingo).
+ */
+export interface BingoViewerAccess {
+  canSee: boolean;
+  isPlayer: boolean;
+  isCut: boolean;
 }
 
 export interface BoardLine extends BingoLine {
@@ -634,6 +657,8 @@ export interface SignupQuestion {
   helperText: string | null;
   type: SignupQuestionType;
   optionsJson: string | null;
+  /** Choice questions only: players can pick Other and write their own answer instead of (or besides) an option. */
+  allowOther: boolean;
   required: boolean;
   sortOrder: number;
   visibility: QuestionVisibility;
@@ -703,12 +728,12 @@ export interface MyTectonicRsnsResponse {
 
 export interface RosterEntry {
   signup: Signup;
-  user: User;
+  user: PublicUser;
   answers: SignupAnswer[];
   // Only populated by the mod-facing roster (GET .../mod/signups) — who
   // marked buy-in received for this signup. Absent from other RosterEntry
   // uses like the captain-candidates list.
-  collectedByUser?: User | null;
+  collectedByUser?: PublicUser | null;
   // Duo mode, mod roster only: the accepted pairing this player is in.
   pairing?: SignupPairing | null;
   // Duo mode, mod roster only: this player's own outstanding request to pair with someone, before it's been
@@ -773,7 +798,7 @@ export interface SignupPairing {
 export interface PartnerCandidate {
   discordId: string;
   rsns: string[];
-  user: MinimalUser | null;
+  user: PublicUser | null;
 }
 
 export interface PartnerCandidatesResponse {
@@ -839,7 +864,7 @@ export interface BingoModerator {
   bingoId: string;
   userId: string;
   createdAt: string;
-  user: User;
+  user: PublicUser;
 }
 
 export interface TeamMember {
