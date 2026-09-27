@@ -15,11 +15,14 @@ export function MultiSelect({
   options,
   selected,
   onChange,
+  attention,
 }: {
   label: string;
   options: MultiSelectOption[];
   selected: string[];
   onChange: (keys: string[]) => void;
+  /** Something in this filter wants looking at: a yellow dot on the button, with this as its hover and screen-reader text. */
+  attention?: string;
 }) {
   const { Picker } = usePickerParts();
   const picked = selected.filter((key) => options.some((o) => o.key === key));
@@ -35,6 +38,11 @@ export function MultiSelect({
   return (
     <Picker options={options} selectedKeys={new Set(picked)} selectionMode="multiple" onSelectionChange={onChange}>
       {label}: <span className="text-on-surface-subtle">{summary}</span>
+      {attention && (
+        <span title={attention} className="ml-1.5 inline-block size-2 shrink-0 rounded-full bg-attention">
+          <span className="sr-only">{attention}</span>
+        </span>
+      )}
     </Picker>
   );
 }

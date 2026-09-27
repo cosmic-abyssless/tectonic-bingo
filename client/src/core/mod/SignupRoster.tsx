@@ -5,7 +5,6 @@ import {
   useBingo,
   useBingoMods,
   useCutReview,
-  useDraftCuts,
   useMarkBuyin,
   useModPair,
   useModUnpair,
@@ -33,7 +32,6 @@ import { TableSearchInput, useTableSearch } from "../ui/tableSearch";
 import { formatTierName } from "../tectonic/profile";
 import { toCsv } from "../ui/csv";
 import { useOpenProfile } from "../tectonic/PlayerName";
-import { cutModeLabel, describeShares } from "../draft/cutModes";
 import { SignupRosterGrid, type GridContext, type RosterRow } from "./SignupRosterGrid";
 import { CutReviewModal } from "./CutReviewModal";
 
@@ -229,16 +227,15 @@ export function SignupRoster({ slug }: { slug: string }) {
   const cutMode = bingoData?.bingo.cutMode;
   // Who's cut only means something once there are two teams to split the players across.
   const cutsApply = !!cutMode && cutMode !== "none" && (bingoData?.teams.length ?? 0) >= 2;
-  const { data: cuts } = useDraftCuts(slug, cutsApply);
   // Before the Draft, a Cut review may avoid some of those cuts (CONTEXT.md "Avoidable cut"): the notice says so, and
   // Admins get to open it from there.
   const reviewApplies = cutsApply && cutCount > 0 && (stage === "signup" || stage === "captains");
   const { data: cutReview } = useCutReview(slug, reviewApplies);
   const someAvoidable = (cutReview?.avoidableCount ?? 0) > 0;
-  // Nothing until the plan is known, so the notice doesn't flash one message and then swap to the other. Once a
-  // review has been applied for this roster the admin has made their call: the numbers come back (with the review
-  // still a button away while something is avoidable).
-  const cutNotice = !cutsApply || cutCount === 0 || !cuts?.shares || !bingoData || (reviewApplies && !cutReview) ? null : someAvoidable && !cutReview?.reviewed ? "avoidable" : "numbers";
+  // Nothing until the plan is known, so the roster doesn't show one state and then swap to the other. While cuts can
+  // be avoided (and no review has been applied for this roster) the notice says so; any other cut — Unavoidable, or
+  // kept by a review — is a dot on the Draft filter, which is where "Will be cut" is.
+  const cutState = !cutsApply || cutCount === 0 || (reviewApplies && !cutReview) ? null : someAvoidable && !cutReview?.reviewed ? "avoidable" : "cut";
   const [reviewingCuts, setReviewingCuts] = useState(false);
   const pendingPairIds = useMemo(
     () => new Set(roster.flatMap((r) => (r.outgoingPairingRequest ? [r.user.discordId, r.outgoingPairingRequest.target.discordId] : []))),
@@ -246,7 +243,7 @@ export function SignupRoster({ slug }: { slug: string }) {
   );
   // One MultiSelect per filter. Each option's count reflects the other filters, so it shows how many rows ticking it
   // brings in.
-  const filterSelect = (key: FilterKey, label: string) => {
+  const filterSelect = (key: FilterKey, label: string, attention?: string) => {
     const options = FILTER_OPTIONS[key];
     return (
       <MultiSelect
@@ -257,6 +254,7 @@ export function SignupRoster({ slug }: { slug: string }) {
         }))}
         selected={selected[key]}
         onChange={(keys) => setSelected((s) => ({ ...s, [key]: keys }))}
+        attention={attention}
       />
     );
   };
@@ -388,9 +386,8 @@ export function SignupRoster({ slug }: { slug: string }) {
             </div>
           </div>
         )}
-        {/* While any cut is Avoidable the notice only says so (and Admins get the way to fix it); the numbers come
-            back once nothing is avoidable, or a review has been applied (CONTEXT.md "Cut review"). */}
-        {cutNotice === "avoidable" && (
+        {/* While any cut is Avoidable the notice only says so, and Admins get the way to fix it (CONTEXT.md "Cut review"). */}
+        {cutState === "avoidable" && (
           <Notice tone="warn" icon={<AlertIcon />}>
             <span className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <strong>Some cuts can be avoided.</strong>
@@ -400,30 +397,6 @@ export function SignupRoster({ slug }: { slug: string }) {
                 </Button>
               )}
             </span>
-          </Notice>
-        )}
-        {cutNotice === "numbers" && cuts?.shares && bingoData && (
-          <Notice tone="warn" icon={<AlertIcon />}>
-            As things stand, <span className="num">{cutCount}</span> signup{cutCount !== 1 ? "s" : ""} will be cut when the draft starts (
-            {cutModeLabel(bingoData.bingo.cutMode, bingoData.bingo.signupMode)}: each of the <span className="num">{cuts.teamCount}</span> teams will draft{" "}
-            {describeShares(cuts.shares, bingoData.bingo.signupMode)}). The newest signups are the ones cut.
-            {bingoData.bingo.warnLeftovers && " They can see this warning on their signup page."} Filter by Draft to see who:{" "}
-            {/* Sets the Draft filter to just "Will be cut" (the other filters stay as they are). */}
-            <button
-              type="button"
-              onClick={() => setSelected((s) => ({ ...s, draft: ["cut"] }))}
-              className="cursor-pointer font-medium text-on-surface underline underline-offset-2 hover:opacity-70"
-            >
-              Show me
-            </button>
-            {me?.isAdmin && someAvoidable && (
-              <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-                Some cuts can still be avoided.
-                <Button size="sm" onPress={() => setReviewingCuts(true)}>
-                  Review cuts
-                </Button>
-              </span>
-            )}
           </Notice>
         )}
         {me?.isAdmin && <CutReviewModal slug={slug} isOpen={reviewingCuts} onClose={() => setReviewingCuts(false)} />}
@@ -449,7 +422,7 @@ export function SignupRoster({ slug }: { slug: string }) {
               {filterSelect("buyin", "Buy-in")}
               {isDuo && filterSelect("pair", "Pairing")}
               {filterSelect("region", "Timezone")}
-              {cutsApply && filterSelect("draft", "Draft")}
+              {cutsApply && filterSelect("draft", "Draft", cutState === "cut" ? `${cutCount} signup${cutCount === 1 ? "" : "s"} will be cut` : undefined)}
               {!isDefaultFilters(selected) && (
                 <Button size="sm" variant="ghost" onPress={() => setSelected(DEFAULT_SELECTED)}>
                   Reset filters
