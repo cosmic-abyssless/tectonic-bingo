@@ -13,6 +13,7 @@ import type { ExclusivityRule } from "./exclusivity.ts";
 import type { AuditVisibility } from "./audit.ts";
 import type { AchievementCount } from "./achievements.ts";
 import type { PlayerTitleFacts, TitleSettings } from "./titles.ts";
+import type { TimeZoneRegion } from "./timezone.ts";
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
@@ -984,6 +985,19 @@ export interface CutReviewPreview {
   plan: CutReviewPlan;
   avoidableCount: number; // plan.cutPlayersNow - plan.cutPlayers
   unavoidableCount: number; // plan.cutPlayers
+  // Who the plan's ids refer to, and what the Cut review modal lets the admin pick from.
+  pool: CutReviewPool;
+}
+
+/**
+ * The undrafted pool a Cut review plans over, by name: its singles (any of whom can be paired), its pairs (any of
+ * which can be split: a Captain's pair is on a Team, never in the pool) and the Teams (any of which can be removed).
+ * Captains of an added Team are picked from the singles and pairs.
+ */
+export interface CutReviewPool {
+  singles: { userId: string; rsn: string; region: TimeZoneRegion | null }[]; // oldest signup first
+  pairs: { pairingId: string; members: { userId: string; rsn: string }[] }[]; // oldest signup first
+  teams: { teamId: string; name: string; captainRsn: string }[];
 }
 
 // POST .../admin/cut-review/score: how many players an admin-edited change list would leave cut, for the Cut

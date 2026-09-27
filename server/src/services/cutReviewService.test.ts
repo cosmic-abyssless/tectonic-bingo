@@ -75,6 +75,23 @@ describe("getCutReviewPreview / scoreCutChanges", () => {
     expect(preview.plan.changes).toEqual([{ kind: "pair", userIds: [c.id, d.id] }]);
   });
 
+  it("names the pool the plan's ids refer to: singles, pairs and Teams, oldest first", () => {
+    const { bingo, a, b, c, d } = seedAvoidableScenario();
+    db.update(schema.signups).set({ timezone: "Europe/London" }).where(eq(schema.signups.userId, c.id)).run();
+    const { pool } = getCutReviewPreview(db, bingo);
+    expect(pool.singles).toEqual([
+      { userId: c.id, rsn: "c", region: "europe" },
+      { userId: d.id, rsn: "d", region: null },
+    ]);
+    const [pairing] = getAcceptedPairs(db, bingo.id);
+    expect(pool.pairs).toEqual([{ pairingId: pairing!.pairing.id, members: expect.arrayContaining([{ userId: a.id, rsn: "a" }, { userId: b.id, rsn: "b" }]) }]);
+    // The Captains lead Teams, so they're not in the pool.
+    expect(pool.teams.map((t) => [t.name, t.captainRsn]).sort()).toEqual([
+      ["A", "c1"],
+      ["B", "c2"],
+    ]);
+  });
+
   it("scores an admin's own edit against the current pool", () => {
     const { bingo, c, d } = seedAvoidableScenario();
     expect(scoreCutChanges(db, bingo, [{ kind: "pair", userIds: [c.id, d.id] }])).toBe(0);

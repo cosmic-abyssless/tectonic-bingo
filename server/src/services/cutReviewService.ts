@@ -5,7 +5,7 @@
 import crypto from "node:crypto";
 import { eq, sql, and, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { timeZoneRegion, type AppliedCutChange, type CutChange, type CutReviewPreview } from "@bingo/shared";
+import { timeZoneRegion, type AppliedCutChange, type CutChange, type CutReviewPool, type CutReviewPreview } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingos, signups } from "../db/schema";
 import * as draftService from "./draftService";
@@ -35,6 +35,11 @@ function insertionOrderOf(db: Db, bingoId: string): Map<string, number> {
 // Builds the planner's input from the current, undrafted pool — always what a Cut review runs against (it only
 // ever offers before the Draft stage begins, so `drafted` is always {0,0}: nothing has been picked yet).
 export function buildCutReviewInput(db: Db, bingo: Bingo): CutPlannerInput {
+  return loadCutReview(db, bingo).input;
+}
+
+// The planner's input plus the same pool by name (CutReviewPool), from one getDraftState call.
+function loadCutReview(db: Db, bingo: Bingo): { input: CutPlannerInput; pool: CutReviewPool } {
   const fresh = db.select({ cutMode: bingos.cutMode, signupMode: bingos.signupMode }).from(bingos).where(eq(bingos.id, bingo.id)).get() ?? bingo;
   // includeAnswers: the pool's timezone is gated by the same visibility rule as signup answers (see
   // getDraftState) — "admin" sees every signup's, which the Cut review (Admin-only) needs for the region preference.
@@ -68,7 +73,7 @@ export function buildCutReviewInput(db: Db, bingo: Bingo): CutPlannerInput {
     const pairing = ids.length === 2 ? accepted.find((p) => ids.every((id) => p.userIds.includes(id))) : undefined;
     return { teamId: t.id, members, pairingId: pairing?.pairing.id ?? null };
   });
-  return {
+  const input: CutPlannerInput = {
     units,
     cutMode: fresh.cutMode,
     teamCount: teams.length,
@@ -76,6 +81,27 @@ export function buildCutReviewInput(db: Db, bingo: Bingo): CutPlannerInput {
     isSolo: fresh.signupMode === "solo",
     teams: teamInputs,
   };
+  const withNames = pool.map((u, i) => ({ unit: units[i]!, rsns: new Map(u.entries.map((e) => [e.signup.userId, e.signup.rsn])) }));
+  const summary: CutReviewPool = {
+    singles: withNames
+      .filter(({ unit }) => unit.entries.length === 1)
+      .sort((a, b) => byAge(a.unit, b.unit))
+      .map(({ unit, rsns }) => ({ userId: unit.entries[0]!.userId, rsn: rsns.get(unit.entries[0]!.userId) ?? "", region: unit.entries[0]!.timezoneRegion })),
+    pairs: withNames
+      .filter(({ unit }) => unit.entries.length > 1 && unit.pairingId)
+      .sort((a, b) => byAge(a.unit, b.unit))
+      .map(({ unit, rsns }) => ({ pairingId: unit.pairingId!, members: unit.entries.map((e) => ({ userId: e.userId, rsn: rsns.get(e.userId) ?? "" })) })),
+    teams: teams.map((t) => ({ teamId: t.id, name: t.name, captainRsn: t.captainRsn })),
+  };
+  return { input, pool: summary };
+}
+
+// Oldest signup first, by (signedUpAt, insertionRank) — markCuts' own order; a pair goes by its earlier member.
+function byAge(a: CutPlannerUnit, b: CutPlannerUnit): number {
+  const first = (u: CutPlannerUnit) => u.entries.reduce((x, e) => (e.signedUpAt < x.signedUpAt || (e.signedUpAt === x.signedUpAt && e.insertionRank < x.insertionRank) ? e : x));
+  const x = first(a);
+  const y = first(b);
+  return x.signedUpAt - y.signedUpAt || x.insertionRank - y.insertionRank;
 }
 
 /** A deterministic fingerprint of the pool's unit composition, Team count and cutMode — see the bingos column. */
@@ -93,8 +119,9 @@ export function currentCutReviewFingerprint(db: Db, bingo: Bingo): string {
 
 /** The plan a Cut review proposes right now, plus the Avoidable/Unavoidable split it implies. */
 export function getCutReviewPreview(db: Db, bingo: Bingo): CutReviewPreview {
-  const plan = cutPlanner.planCutChanges(buildCutReviewInput(db, bingo));
-  return { plan, avoidableCount: plan.cutPlayersNow - plan.cutPlayers, unavoidableCount: plan.cutPlayers };
+  const { input, pool } = loadCutReview(db, bingo);
+  const plan = cutPlanner.planCutChanges(input);
+  return { plan, avoidableCount: plan.cutPlayersNow - plan.cutPlayers, unavoidableCount: plan.cutPlayers, pool };
 }
 
 /** How many players an (admin-edited) change list would leave cut, validated against the current pool. */
