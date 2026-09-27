@@ -1,5 +1,5 @@
-import { memo, useEffect, type CSSProperties } from "react";
-import { motion, type Variants } from "motion/react";
+import { memo, useEffect, useRef, type CSSProperties } from "react";
+import { animate, motion, useReducedMotion, type Variants } from "motion/react";
 import { useFocusRing } from "react-aria";
 import type { TileModel } from "../../../headless/types";
 import { ClockIcon, HandIcon } from "../../../core/ui/icons";
@@ -73,6 +73,11 @@ const bookVariants = [makeBookVariants({ rotateX: 0, rotateY: CLOSED_BOOK.tilt }
 const flippedBookVariants = [makeBookVariants(BACK_VIEW, NORMAL), makeBookVariants(BACK_VIEW, FROZEN)] as const;
 const hingeVariants = [makeHingeVariants(NORMAL), makeHingeVariants(FROZEN)] as const;
 
+// A sealed tile's book (CONTEXT.md "Sealed Tiles") won't open: pressed, it rocks on its bottom edge, like a book
+// shaken to see if it gives, and settles back. A decaying swing, so it lands with the same give as the springs above.
+const SEALED_WOBBLE = { rotate: [0, -7, 6, -4, 2, 0] };
+const SEALED_WOBBLE_TIMING = { duration: 0.5, ease: "easeInOut" } as const;
+
 export const TileCell = memo(function TileCell({
   tile,
   onOpen,
@@ -93,6 +98,8 @@ export const TileCell = memo(function TileCell({
   // While this tile's book is off in the modal, the cell's own copy hides —
   // the modal's copy took off from exactly this spot, and lands back here.
   const isAway = useIsBookAway(tile.id);
+  const bookFrame = useRef<HTMLDivElement | null>(null);
+  const reduceMotion = useReducedMotion();
 
   const style = (
     tile.accentColor ? { "--tile-accent": tile.accentColor } : {}
@@ -143,6 +150,12 @@ export const TileCell = memo(function TileCell({
       onPointerEnter={warmCover}
       onPointerDown={warmCover}
       onClick={(e) => {
+        // A sealed book doesn't fly out: it wobbles in place, and onOpen shows the note saying when it opens.
+        if (tile.sealed) {
+          if (!reduceMotion && bookFrame.current) animate(bookFrame.current, SEALED_WOBBLE, SEALED_WOBBLE_TIMING);
+          onOpen(tile.id);
+          return;
+        }
         // A comic sound-effect burst where you clicked — or, for a
         // keyboard-triggered click (no pointer position), on the tile itself.
         // The Yama tile always says its own name.
@@ -199,9 +212,14 @@ export const TileCell = memo(function TileCell({
           It flips with no transition on purpose — the modal's copy takes
           over / hands back on the very same frame. */}
       <div
-        ref={(el) => registerBook(tile.id, el)}
+        ref={(el) => {
+          registerBook(tile.id, el);
+          bookFrame.current = el;
+        }}
         className="absolute inset-x-[8%] top-[9%] aspect-[2/3]"
         style={{
+          // The sealed wobble pivots on the bottom edge, where the book sits in its pocket.
+          transformOrigin: "50% 100%",
           ["--bw" as string]: "84cqw",
           perspective: bw(CLOSED_BOOK.perspective),
           clipPath: "inset(-9999px -9.52% 27.78% -9.52%)",

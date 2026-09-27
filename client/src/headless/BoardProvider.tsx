@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, useRef, type ReactNode } from "react";
 import type { BoardLine, PointAdjustment, SubmissionDetails, TeamNodeState, Tile, TileCategory, TileInterest } from "@bingo/shared";
-import { tileMatchesSearch } from "../core/board/requirementTree";
 import { buildBoard } from "./boardModel";
+import { tileSearchMatcher } from "./useTileSearch";
 import { useNowTick } from "./useNowTick";
 import type { ExclusiveLocks } from "../core/board/exclusivity";
 import type { BoardModel, TileModel } from "./types";
@@ -25,6 +25,7 @@ export function BoardProvider({
   totalPoints,
   adjustments,
   locks,
+  sealed,
   children,
 }: {
   tiles: Tile[];
@@ -43,6 +44,8 @@ export function BoardProvider({
   totalPoints: number | null;
   adjustments: PointAdjustment[];
   locks: ExclusiveLocks;
+  /** The Tiles are sealed for this viewer: `tiles` and `lines` come from sealedBoardAsTiles. */
+  sealed: boolean;
   children: ReactNode;
 }) {
   // Same tickUntil computation as the old BoardGrid.tsx effect (start +
@@ -58,7 +61,11 @@ export function BoardProvider({
   const now = useNowTick(tickUntil);
 
   const q = searchQuery.trim().toLowerCase();
-  const matchIds = useMemo(() => (q ? new Set(tiles.filter((t) => tileMatchesSearch(t, q)).map((t) => t.id)) : null), [tiles, q]);
+  const matchIds = useMemo(() => {
+    if (!q) return null;
+    const matches = tileSearchMatcher(sealed, categories);
+    return new Set(tiles.filter((t) => matches(t, q)).map((t) => t.id));
+  }, [tiles, q, sealed, categories]);
 
   // Carries the previous tick's TileModels so finalizeTileModels can
   // preserve object identity for tiles whose derived state didn't change —
@@ -87,12 +94,13 @@ export function BoardProvider({
       totalPoints,
       adjustments,
       locks,
+      sealed,
       prev: prevRef.current,
     });
     prevRef.current = built.tileById;
     return built;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, totalPoints, adjustments, locks]);
+  }, [tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, totalPoints, adjustments, locks, sealed]);
 
   return <BoardContext.Provider value={board}>{children}</BoardContext.Provider>;
 }

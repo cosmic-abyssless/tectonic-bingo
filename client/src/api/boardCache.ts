@@ -6,12 +6,12 @@
 //
 // Keyed by user as well as slug because the board depends on who is asking —
 // before the reveal stage a mod gets the full board and everyone else gets an
-// empty one — so one user's copy must never be read for another on a shared
+// empty one, and while the Tiles are sealed a player gets the sealed board — so one user's copy must never be read for another on a shared
 // browser. All storage access is best-effort: private mode, disabled storage
 // and a full quota degrade to "no cache", never to an error.
 
 /** Bump when the board response's shape changes, so old copies are ignored. */
-export const BOARD_CACHE_SCHEMA = 1;
+export const BOARD_CACHE_SCHEMA = 2;
 export const BOARD_CACHE_MAX_AGE_MS = 7 * 24 * 3600_000;
 /**
  * Most entries kept per browser, newest first. Besides each board this holds the

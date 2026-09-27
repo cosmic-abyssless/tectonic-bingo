@@ -3,7 +3,7 @@ import type {
   AccountTypesResponse, AchievementKey, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
-  PickRating, PlayerProfile, StatsResponse, SubmissionReaction, SubmissionReactionGroup, Team, TeamProgressSummary, TeamSubmissionsResponse,
+  PickRating, PlayerProfile, StatsResponse, SubmissionReaction, SubmissionReactionGroup, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
 } from "@bingo/shared";
 import { SUBMISSION_REACTIONS } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
@@ -96,14 +96,22 @@ export function useBoard(slug: string | undefined) {
   return useQuery({
     queryKey: queryKeys.board(slug ?? ""),
     queryFn: async () => {
-      const board = await api.get<BoardResponse>(`/api/bingos/${slug}/board`);
+      const board = await api.get<ViewerBoardResponse>(`/api/bingos/${slug}/board`);
       if (userId && slug) writeBoardCache(userId, slug, __BUILD_ID__, board);
       return board;
     },
     enabled: !!slug,
-    initialData: () => (userId && slug ? readBoardCache<BoardResponse>(userId, slug, __BUILD_ID__) : undefined),
+    initialData: () => (userId && slug ? readBoardCache<ViewerBoardResponse>(userId, slug, __BUILD_ID__) : undefined),
     initialDataUpdatedAt: 0,
   });
+}
+
+/**
+ * The full board, for screens only Moderators and Admins reach, or that only open once the Tiles can't be sealed
+ * (admin, stats): they never get the sealed board, so a sealed one reads as not loaded.
+ */
+export function fullBoard(board: ViewerBoardResponse | undefined): BoardResponse | undefined {
+  return board && !board.sealed ? board : undefined;
 }
 
 export function useTeamProgress(slug: string | undefined, teamId: string | undefined) {

@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingoLines, nodeEdges, nodes, tiles } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { createCategory, createTile, createTask, deleteLine, deleteTask, deleteTile, generateLines, getTeamNodeStatuses, updateCategory, updateLinePoints, updateNode, updateTile, updateTileBonusPoints } from "./boardService";
+import { createCategory, createTile, createTask, deleteLine, deleteTask, deleteTile, generateLines, getBoardForViewer, getTeamNodeStatuses, updateCategory, updateLinePoints, updateNode, updateTile, updateTileBonusPoints } from "./boardService";
 import { createSubmission } from "./submissionService";
 import { approveSubmission } from "./scoringService";
 import { getNodeTree } from "./graphService";
@@ -245,5 +245,57 @@ describe("generateLines", () => {
     const allLines = db.select().from(bingoLines).all();
     expect(allLines).toHaveLength(2 + 2 + 2);
     expect(lines.every((l) => pointsOf(l.nodeId) === 20)).toBe(true);
+  });
+});
+
+// CONTEXT.md "Sealed Tiles": while sealed, a player's board carries only what a sealed board shows.
+describe("getBoardForViewer", () => {
+  function seedBoard(overrides: Partial<typeof schema.bingos.$inferInsert> = {}) {
+    const bingo = seedBingo({ stage: "reveal", ...overrides });
+    const category = createCategory(db, { bingoId: bingo.id, label: "Bosses", colorHex: "#e74c3c", sortOrder: 0 });
+    const tile = createTile(db, { bingoId: bingo.id, name: "Zulrah", boardRow: 0, boardCol: 0, categoryId: category.id, hasFreezePeriod: true, freezeDurationMinutes: 30, notes: "Secret note" });
+    createTask(db, tile.id, { kind: "ALL", label: "Secret part", description: "Secret description", points: 10, children: [{ kind: "ITEM", itemName: "Tanzanite fang" }] });
+    const other = createTile(db, { bingoId: bingo.id, name: "Vorkath", boardRow: 0, boardCol: 1 });
+    generateLines(db, bingo, 15);
+    return { bingo: db.select().from(schema.bingos).where(eq(schema.bingos.id, bingo.id)).get()!, tile, other, category };
+  }
+
+  it("gives a player only the Tiles' art, name, Category, position and freeze, and lines without points", () => {
+    const { bingo, tile, other, category } = seedBoard({ sealedTiles: true });
+    const board = getBoardForViewer(db, bingo, false);
+
+    expect(board.sealed).toBe(true);
+    const zulrah = board.tiles.find((t) => t.id === tile.id)!;
+    expect(zulrah).toEqual({ id: tile.id, name: "Zulrah", imageUrl: null, categoryId: category.id, boardRow: 0, boardCol: 0, hasFreezePeriod: true, freezeDurationMinutes: 30 });
+    const row = board.lines.find((l) => l.lineType === "row" && l.lineIndex === 0)!;
+    expect(row).toEqual({ id: row.id, lineType: "row", lineIndex: 0, tileIds: [tile.id, other.id] });
+
+    // Nothing about what completing a Tile takes, anywhere in the response.
+    const json = JSON.stringify(board);
+    for (const secret of ["Secret part", "Secret description", "Secret note", "Tanzanite fang", "node", "points", "notes"]) expect(json).not.toContain(secret);
+  });
+
+  it("gives a mod the full board, sealed or not", () => {
+    const { bingo, tile } = seedBoard({ sealedTiles: true });
+    const board = getBoardForViewer(db, bingo, true);
+    expect(board.sealed).toBe(false);
+    if (board.sealed) return;
+    expect(board.tiles.find((t) => t.id === tile.id)!.node.children[0]!.label).toBe("Secret part");
+    expect(board.lines.every((l) => l.node.points === 15)).toBe(true);
+  });
+
+  it("gives a player the full board when the Tiles aren't sealed, and once the bingo is live whatever the setting", () => {
+    expect(getBoardForViewer(db, seedBoard().bingo, false).sealed).toBe(false);
+    sqlite.close();
+    ({ sqlite, db } = createTestDb());
+    const { bingo } = seedBoard({ sealedTiles: true, stage: "live" });
+    const board = getBoardForViewer(db, bingo, false);
+    expect(board.sealed).toBe(false);
+    expect(JSON.stringify(board)).toContain("Tanzanite fang");
+  });
+
+  it("gives a player nothing before the reveal", () => {
+    const { bingo } = seedBoard({ sealedTiles: true, stage: "draft" });
+    expect(getBoardForViewer(db, bingo, false)).toEqual({ sealed: false, tiles: [], lines: [] });
   });
 });

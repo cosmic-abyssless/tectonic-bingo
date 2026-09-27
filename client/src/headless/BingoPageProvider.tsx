@@ -1,15 +1,16 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { STAGE_LABEL, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
+import { STAGE_LABEL, areRulesHidden, areTilesSealed, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { useBingo, useBoard, useDraftState, usePendingCount, useRecordAchievementOpened, useSetSubmissionReaction, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { displayName, avatarUrl } from "../core/ui/user";
 import { useHasPassed } from "../core/ui/useHasPassed";
-import { toCategoryModel, toTeamModel, buildSubmissionModels } from "./boardModel";
+import { toCategoryModel, toTeamModel, buildSubmissionModels, sealedBoardAsTiles } from "./boardModel";
 import { lockedLeaves, type ExclusiveLocks } from "../core/board/exclusivity";
 import { useViewingTeam } from "./useViewingTeam";
 import { canViewStats as canViewStatsOf } from "./useBingoHeader";
-import { useTileSearch } from "./useTileSearch";
+import { tileSearchMatcher, useTileSearch } from "./useTileSearch";
+import { toastQueue } from "../core/ui/Toast";
 import { usePageEvents } from "./usePageEvents";
 import { BoardProvider } from "./BoardProvider";
 import type { BingoPageModel, StageView, TeamModel } from "./types";
@@ -41,6 +42,14 @@ const EMPTY_NODE_STATES: TeamNodeState[] = [];
 const EMPTY_INTERESTS: TileInterest[] = [];
 const EMPTY_SUBMISSIONS: SubmissionDetails[] = [];
 const EMPTY_ADJUSTMENTS: PointAdjustment[] = [];
+const EMPTY_CATEGORIES: TileCategory[] = [];
+
+// Clicking a sealed tile says so, once: a click on another replaces the note instead of stacking a new one.
+let sealedNoteKey: string | null = null;
+function showSealedNote() {
+  if (sealedNoteKey) toastQueue.close(sealedNoteKey);
+  sealedNoteKey = toastQueue.add({ title: "The Tiles are sealed", description: "They open at a later date." }, { timeout: 4000 });
+}
 
 export function BingoPageProvider({
   slug,
@@ -58,8 +67,13 @@ export function BingoPageProvider({
 
   const { data: shell, isLoading: shellLoading, error: shellError } = useBingo(slug);
   const { data: boardData } = useBoard(slug);
-  const tiles = boardData?.tiles ?? EMPTY_TILES;
-  const lines = boardData?.lines ?? EMPTY_LINES;
+  // Sealed Tiles (CONTEXT.md): the server decides, by sending this viewer the sealed board.
+  const sealed = !!boardData?.sealed;
+  const bingoId = shell?.bingo.id ?? "";
+  const { tiles, lines } = useMemo(
+    () => (!boardData ? { tiles: EMPTY_TILES, lines: EMPTY_LINES } : boardData.sealed ? sealedBoardAsTiles(boardData, bingoId) : boardData),
+    [boardData, bingoId],
+  );
 
   const { viewingTeamId, setViewingTeamId } = useViewingTeam(shell?.myTeam ?? null);
   const { data: progressData } = useTeamProgress(slug, viewingTeamId ?? undefined);
@@ -92,11 +106,15 @@ export function BingoPageProvider({
   const recordOpened = useRecordAchievementOpened(slug);
   const eligibleForOpens = shell?.bingo.stage === "live" && !!shell?.myTeam;
   const openTileTracked = (tileId: string | null) => {
+    // A sealed tile doesn't open: the note says when it will.
+    if (tileId && sealed) return showSealedNote();
     setOpenTileId(tileId);
     if (tileId && eligibleForOpens) recordOpened.mutate({ kind: "tile", tileId });
   };
 
-  const search = useTileSearch(tiles, openTileTracked);
+  const shellCategories = shell?.categories ?? EMPTY_CATEGORIES;
+  const matchTile = useMemo(() => tileSearchMatcher(sealed, shellCategories), [sealed, shellCategories]);
+  const search = useTileSearch(tiles, matchTile, openTileTracked);
   const exclusivityRules = shell?.bingo.exclusivityRules;
   const locks = useMemo(() => lockedLeaves(exclusivityRules ?? [], tiles, submissionsData?.submissions ?? EMPTY_SUBMISSIONS), [exclusivityRules, tiles, submissionsData]);
 
@@ -113,8 +131,9 @@ export function BingoPageProvider({
   // Mods can submit for the team they are viewing too (naming the player it is for), so this doesn't depend on whose team it is.
   const canSubmit = bingo.stage === "live" && hasStarted && !!viewingTeamId;
   // Hands go up on your own team's board only, from reveal onwards (the
-  // board isn't visible to players before that) until the bingo is over.
-  const canToggleInterest = !!myTeam && viewingTeamId === myTeam.id && (bingo.stage === "reveal" || bingo.stage === "live");
+  // board isn't visible to players before that) until the bingo is over,
+  // and not by anyone while the Tiles are sealed (the server refuses it).
+  const canToggleInterest = !!myTeam && viewingTeamId === myTeam.id && (bingo.stage === "reveal" || bingo.stage === "live") && !areTilesSealed(bingo);
   // Reactions are for teammates: on your own team's submissions, at any stage they're shown.
   const canReact = !!myTeam && viewingTeamId === myTeam.id;
   const canViewStats = canViewStatsOf(shell);
@@ -155,6 +174,7 @@ export function BingoPageProvider({
       stage: bingo.stage,
       stageLabel: STAGE_LABEL[bingo.stage],
       rulesMarkdown: bingo.rulesMarkdown,
+      rulesComeLater: !isMod && areRulesHidden(bingo),
       startsAt: bingo.effectiveStartsAt ? new Date(bingo.effectiveStartsAt).getTime() : null,
       endsAt: bingo.endsAt ? new Date(bingo.endsAt).getTime() : null,
       boardRows: bingo.boardRows,
@@ -182,6 +202,7 @@ export function BingoPageProvider({
     teamSelector: { teams: teamModels, selectedId: viewingTeamId, select: setViewingTeamId },
     search,
     openTile: { id: openTileId, open: openTileTracked, close: () => setOpenTileId(null) },
+    sealed: { forMe: sealed, forPlayers: areTilesSealed(bingo) },
     rules: {
       open: rulesOpen,
       show: () => {
@@ -251,6 +272,7 @@ export function BingoPageProvider({
           totalPoints={progressData?.totalPoints ?? null}
           adjustments={progressData?.adjustments ?? EMPTY_ADJUSTMENTS}
           locks={locks}
+          sealed={sealed}
         >
           {children}
         </BoardProvider>

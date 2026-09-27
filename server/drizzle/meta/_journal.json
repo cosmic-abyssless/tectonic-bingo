@@ -239,6 +239,13 @@
       "when": 1790368285587,
       "tag": "0033_player_achievements",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1790481941268,
+      "tag": "0034_sealed_tiles",
+      "breakpoints": true
     }
   ]
 }

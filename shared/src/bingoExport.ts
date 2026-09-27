@@ -129,6 +129,10 @@ export interface BingoExportDocument {
     rulesMarkdown: string | null;
     /** Absent in older files: no exclusivity rules. */
     exclusivityRules?: ExclusivityRule[];
+    /** Sealed Tiles (CONTEXT.md). Absent in older files: off. */
+    sealedTiles?: boolean;
+    /** Hide the rules text during Board revealed. Absent in older files: off. */
+    hideRules?: boolean;
   };
   categories: ExportCategory[];
   tiles: ExportTile[];

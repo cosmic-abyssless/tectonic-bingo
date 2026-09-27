@@ -113,11 +113,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
     const isMod = req.user ? bingoService.isBingoMod(db, bingo.id, req.user.id, req.user.isAdmin) : false;
-    const canView = bingoService.canViewTiles(bingo, isMod);
-    res.json({
-      tiles: canView ? boardService.getBoardTiles(db, bingo.id) : [],
-      lines: canView ? boardService.getBoardLines(db, bingo.id) : [],
-    });
+    res.json(boardService.getBoardForViewer(db, bingo, isMod));
   }),
 );
 
@@ -155,7 +151,7 @@ router.get(
     if (!isMod && bingo.stage !== "complete" && myTeam?.id !== teamId) {
       throw new ServiceError(403, "Other teams' progress isn't visible until the bingo is complete");
     }
-    res.json(teamService.getTeamProgress(db, teamId));
+    res.json(teamService.getTeamProgressForViewer(db, bingo, teamId, isMod));
   }),
 );
 

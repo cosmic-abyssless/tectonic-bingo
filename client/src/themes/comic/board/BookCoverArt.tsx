@@ -168,10 +168,13 @@ export function BookCoverArt({
         >
           TECTONIC
         </span>
-        <span className="leading-none whitespace-nowrap" style={{ color: priceTextColor, fontFamily: COMIC_FONT, fontSize: "7cqw" }}>
-          {pointsAwarded}/{totalPoints}
-          <span style={{ fontSize: "0.7em", marginLeft: "0.04em" }}>¢</span>
-        </span>
+        {/* A sealed tile's points are held back (CONTEXT.md "Sealed Tiles"), so its cover has no price. */}
+        {!tile.sealed && (
+          <span className="leading-none whitespace-nowrap" style={{ color: priceTextColor, fontFamily: COMIC_FONT, fontSize: "7cqw" }}>
+            {pointsAwarded}/{totalPoints}
+            <span style={{ fontSize: "0.7em", marginLeft: "0.04em" }}>¢</span>
+          </span>
+        )}
       </div>
 
       {/* Which task the cover's currently pointing to, while it's still a

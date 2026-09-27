@@ -143,6 +143,24 @@ export interface Bingo {
   // Achievements master switch (CONTEXT.md "Achievement"): off hides every Achievement from reads, counts and
   // popups for this bingo, but earning keeps happening in the background (see achievementService.ts).
   achievementsEnabled: boolean;
+  /** Sealed Tiles (CONTEXT.md): during Board revealed, Players and Captains can't open Tiles. See areTilesSealed. */
+  sealedTiles: boolean;
+  /** During Board revealed, the rules text is held back from Players and Captains. See areRulesHidden. */
+  hideRules: boolean;
+}
+
+/**
+ * Sealed Tiles (CONTEXT.md) only ever apply during Board revealed, so they end by themselves at Live. Mirrors
+ * bingoService.areTilesSealed on the server. Whether they're sealed for a given viewer also depends on the viewer
+ * (Moderators and Admins can always open Tiles).
+ */
+export function areTilesSealed(bingo: Pick<Bingo, "stage" | "sealedTiles">): boolean {
+  return bingo.sealedTiles && bingo.stage === "reveal";
+}
+
+/** Hide rules: during Board revealed only, like Sealed Tiles. Mirrors bingoService.areRulesHidden on the server. */
+export function areRulesHidden(bingo: Pick<Bingo, "stage" | "hideRules">): boolean {
+  return bingo.hideRules && bingo.stage === "reveal";
 }
 
 export interface TileCategory {
@@ -493,10 +511,44 @@ export interface BoardLine extends BingoLine {
   node: GraphNode;
 }
 
+/**
+ * A Tile as Players and Captains get it while the Tiles are sealed (CONTEXT.md "Sealed Tiles"): what the sealed
+ * board shows, and nothing about what completing it takes (no node tree, notes, item names or points).
+ */
+export interface SealedTile {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  categoryId: string | null;
+  boardRow: number;
+  boardCol: number;
+  hasFreezePeriod: boolean;
+  freezeDurationMinutes: number;
+}
+
+/** A line on a sealed board: which Tiles it runs through, without its bonus points. */
+export interface SealedLine {
+  id: string;
+  lineType: BingoLine["lineType"];
+  lineIndex: number;
+  tileIds: string[];
+}
+
+export interface SealedBoardResponse {
+  sealed: true;
+  tiles: SealedTile[];
+  lines: SealedLine[];
+}
+
+/** The full board: what Moderators and Admins always get, and everyone once the Tiles aren't sealed. */
 export interface BoardResponse {
+  sealed: false;
   tiles: Tile[];
   lines: BoardLine[];
 }
+
+/** What GET /:slug/board answers a given viewer. */
+export type ViewerBoardResponse = BoardResponse | SealedBoardResponse;
 
 export interface TeamSubmissionsResponse {
   submissions: SubmissionDetails[];
