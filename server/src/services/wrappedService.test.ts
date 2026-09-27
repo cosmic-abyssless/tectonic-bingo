@@ -10,7 +10,7 @@ import { approveSubmission, rejectSubmission } from "./scoringService";
 import { ServiceError } from "./errors";
 import * as statsService from "./statsService";
 import * as rewindService from "./rewindService";
-import { computeWrapped, getWrappedState, publishOnFinish, publishWrapped, readBingoWrapped, readMyWrapped } from "./wrappedService";
+import { computeWrapped, getWrappedState, publishWhenReady, publishWrapped, readBingoWrapped, readMyWrapped } from "./wrappedService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -113,7 +113,7 @@ describe("publishing", () => {
     const fx = seed();
     play(fx);
     const bingo = finish(fx);
-    expect(getWrappedState(db, bingo)).toEqual({ published: false, publishedAt: null, publishOnFinish: false });
+    expect(getWrappedState(db, bingo)).toEqual({ published: false, publishedAt: null, publishOnFinish: false, pendingSubmissions: 0 });
 
     try {
       readMyWrapped(db, bingo, viewer(fx.dave.id, false, fx.teamA.id));
@@ -144,18 +144,49 @@ describe("publishing", () => {
     expect(db.select({ action: auditLog.action }).from(auditLog).all().map((r) => r.action).filter((a) => a.startsWith("wrapped."))).toEqual(["wrapped.published", "wrapped.republished"]);
   });
 
-  it("publishes on finishing only when the Bingo is set to (off by default)", () => {
+  it("refuses to publish, or publish again, while any Submission is pending", () => {
     const fx = seed();
     play(fx);
+    const late = submitAt(fx.teamA.id, fx.dave.id, t(70), { nodeId: fx.fang.id, itemName: "Tanzanite fang" });
     const bingo = finish(fx);
-    expect(bingo.publishWrappedOnFinish).toBe(false);
-    expect(publishOnFinish(db, bingo, fx.mod.id)).toBe(false);
+    expect(getWrappedState(db, bingo).pendingSubmissions).toBe(1);
+    try {
+      publishWrapped(db, bingo, fx.mod.id);
+      expect.unreachable();
+    } catch (err) {
+      expect((err as ServiceError).status).toBe(409);
+      expect((err as ServiceError).code).toBe("wrapped_pending_submissions");
+    }
     expect(getWrappedState(db, bingo).published).toBe(false);
 
+    review(late, fx.mod.id, 5);
+    publishWrapped(db, bingo, fx.mod.id);
+    // A review undone after publishing puts it back in the queue: publishing again waits for it too.
+    db.update(submissions).set({ status: "pending", reviewedAt: null, reviewedByUserId: null }).where(eq(submissions.id, late.id)).run();
+    expect(() => publishWrapped(db, bingo, fx.mod.id)).toThrow(ServiceError);
+  });
+
+  it("publishes on its own only when the Bingo is set to (off by default), once nothing is pending, and only once", () => {
+    const fx = seed();
+    play(fx);
+    const late = submitAt(fx.teamA.id, fx.dave.id, t(70), { nodeId: fx.fang.id, itemName: "Tanzanite fang" });
+    const off = finish(fx);
+    expect(off.publishWrappedOnFinish).toBe(false);
+    review(late, fx.mod.id, 5);
+    expect(publishWhenReady(db, off, fx.mod.id)).toBe(false);
+    expect(getWrappedState(db, off).published).toBe(false);
+
+    // Set to: at the finish there's still a pending Submission, so it waits for the last review.
+    db.update(submissions).set({ status: "pending", reviewedAt: null, reviewedByUserId: null }).where(eq(submissions.id, late.id)).run();
     db.update(bingos).set({ publishWrappedOnFinish: true }).where(eq(bingos.id, fx.bingo.id)).run();
-    const set = db.select().from(bingos).where(eq(bingos.id, fx.bingo.id)).get()!;
-    expect(publishOnFinish(db, set, fx.mod.id)).toBe(true);
-    expect(getWrappedState(db, set)).toMatchObject({ published: true, publishOnFinish: true });
+    const on = db.select().from(bingos).where(eq(bingos.id, fx.bingo.id)).get()!;
+    expect(publishWhenReady(db, on, fx.mod.id)).toBe(false);
+    expect(getWrappedState(db, on).published).toBe(false);
+    review(late, fx.mod.id, 5);
+    expect(publishWhenReady(db, on, fx.mod.id)).toBe(true);
+    expect(getWrappedState(db, on)).toMatchObject({ published: true, publishOnFinish: true, pendingSubmissions: 0 });
+    // Publishing again is a Moderator's call.
+    expect(publishWhenReady(db, on, fx.mod.id)).toBe(false);
   });
 
   it("reads a published Wrapped without recomputing any stats", () => {

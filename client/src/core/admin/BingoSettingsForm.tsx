@@ -333,7 +333,9 @@ export function BingoSettingsForm({
           />
           Publish Wrapped when the bingo finishes
         </label>
-        <p className="text-sm text-on-surface-muted">Off, Wrapped stays hidden until a mod publishes it from the mod panel, leaving time for the wrap-up first.</p>
+        <p className="text-sm text-on-surface-muted">
+          On, Wrapped publishes itself once the bingo is finished and no submission is pending (as the last one is reviewed). Off, it stays hidden until a mod publishes it from the mod panel.
+        </p>
       </Section>
 
       <Section title="Exclusive items">

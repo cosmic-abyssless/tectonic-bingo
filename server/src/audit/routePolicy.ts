@@ -24,9 +24,9 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   // routes/mod.ts, mounted at /api/bingos/:slug/mod
   "PATCH /api/bingos/:slug/mod/submissions/:id/attribution": ["submission.attribution_changed"],
   "POST /api/bingos/:slug/mod/submissions/:id/reprice": ["submission.repriced"],
-  "PATCH /api/bingos/:slug/mod/submissions/:id": ["submission.approved", "submission.rejected", "submission.review_undone", "points.earned", "points.lost"],
+  "PATCH /api/bingos/:slug/mod/submissions/:id": ["submission.approved", "submission.rejected", "submission.review_undone", "points.earned", "points.lost", "wrapped.published"],
   "POST /api/bingos/:slug/mod/teams/:teamId/adjustments": ["points.adjusted"],
-  "POST /api/bingos/:slug/mod/stage": ["stage.changed", "wrapped.published", "wrapped.republished"],
+  "POST /api/bingos/:slug/mod/stage": ["stage.changed", "wrapped.published"],
   "POST /api/bingos/:slug/mod/wrapped/publish": ["wrapped.published", "wrapped.republished"],
   "POST /api/bingos/:slug/mod/draft/start": ["draft.started"],
   "POST /api/bingos/:slug/mod/draft/shuffle": ["draft.order_shuffled"],

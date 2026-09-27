@@ -179,8 +179,13 @@ export interface WrappedState {
   published: boolean;
   /** ISO; null until it's published. */
   publishedAt: string | null;
-  /** Finishing the Bingo publishes it on its own (a per-Bingo setting, off by default). */
+  /**
+   * The Bingo publishes it on its own once it's Finished and nothing is pending: at the finish, or as the last pending
+   * Submission is reviewed (a per-Bingo setting, off by default).
+   */
   publishOnFinish: boolean;
+  /** Submissions still waiting for review. Publishing (and publishing again) is refused until there are none. */
+  pendingSubmissions: number;
 }
 
 /**

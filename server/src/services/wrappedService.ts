@@ -3,7 +3,7 @@
 // Stats page and Rewind use, and stores them. Reading a published Wrapped only reads what was stored, so a flood of
 // viewers at launch costs a lookup each, and its numbers stay put until a Moderator publishes it again. Before it's
 // published only Moderators can load it, as a live preview that's never stored.
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import {
   achievementDef,
@@ -338,16 +338,34 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
   return { bingo: bingoData, players };
 }
 
+/** Submissions of the Bingo still waiting for review. */
+function pendingCount(db: Db, bingoId: string): number {
+  return (
+    db
+      .select({ n: count() })
+      .from(submissions)
+      .innerJoin(teams, eq(submissions.teamId, teams.id))
+      .where(and(eq(teams.bingoId, bingoId), eq(submissions.status, "pending")))
+      .get()?.n ?? 0
+  );
+}
+
 export function getWrappedState(db: Db, bingo: Bingo): WrappedState {
   const row = db.select({ publishedAt: bingoWrapped.publishedAt }).from(bingoWrapped).where(eq(bingoWrapped.bingoId, bingo.id)).get();
-  return { published: !!row, publishedAt: row?.publishedAt.toISOString() ?? null, publishOnFinish: bingo.publishWrappedOnFinish };
+  return { published: !!row, publishedAt: row?.publishedAt.toISOString() ?? null, publishOnFinish: bingo.publishWrappedOnFinish, pendingSubmissions: pendingCount(db, bingo.id) };
 }
 
 /**
  * Publishes a Finished Bingo's Wrapped, or publishes it again (after late Wise Old Man updates, say): computes it now
- * and replaces whatever was stored. Audited either way.
+ * and replaces whatever was stored. Audited either way. Refused while any Submission is pending: Wrapped would be
+ * missing them (the finish is when the review backlog is biggest, and the mods' final pass comes after).
  */
 export function publishWrapped(db: Db, bingo: Bingo, userId: string): WrappedState {
+  if (bingo.stage !== "complete") throw new ServiceError(403, "Wrapped is only available once the bingo is finished");
+  const pending = pendingCount(db, bingo.id);
+  if (pending > 0) {
+    throw new ServiceError(409, `${pending === 1 ? "1 submission is" : `${pending} submissions are`} still pending. Review them before publishing Wrapped.`, "wrapped_pending_submissions");
+  }
   const computed = computeWrapped(db, bingo);
   const at = clockNow();
   db.transaction((tx) => {
@@ -368,11 +386,14 @@ export function publishWrapped(db: Db, bingo: Bingo, userId: string): WrappedSta
 }
 
 /**
- * "Publish Wrapped when the Bingo finishes" (off by default): publishes it if `bingo`, just moved to Finished, has it
- * on. Its numbers are the ones at the finish; late Wise Old Man reads need a Re-publish. Whether it published.
+ * "Publish Wrapped when the Bingo finishes" (off by default): publishes it on its own the first time a Finished Bingo
+ * has nothing pending. Called as it moves to Finished, and after each review (the last pending one clears the way).
+ * Only once: after that, publishing again is a Moderator's call. Late Wise Old Man reads need a Re-publish. Whether it
+ * published.
  */
-export function publishOnFinish(db: Db, bingo: Bingo, userId: string): boolean {
+export function publishWhenReady(db: Db, bingo: Bingo, userId: string): boolean {
   if (bingo.stage !== "complete" || !bingo.publishWrappedOnFinish) return false;
+  if (getWrappedState(db, bingo).published || pendingCount(db, bingo.id) > 0) return false;
   publishWrapped(db, bingo, userId);
   return true;
 }

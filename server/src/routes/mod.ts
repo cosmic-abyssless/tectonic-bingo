@@ -58,24 +58,18 @@ router.patch(
 
     const { action, reviewerNotes } = req.body as { action?: "approve" | "reject" | "undo"; reviewerNotes?: string };
 
-    if (action === "approve") {
-      const result = approveSubmission(db, { submissionId, reviewedByUserId: req.user!.id, reviewerNotes });
+    if (action === "approve" || action === "reject") {
+      const result =
+        action === "approve"
+          ? approveSubmission(db, { submissionId, reviewedByUserId: req.user!.id, reviewerNotes })
+          : rejectSubmission(db, { submissionId, reviewedByUserId: req.user!.id, reviewerNotes });
       broadcast({
         type: "submission_reviewed",
         bingoId: req.bingo!.id,
         payload: { teamId: submission.teamId, nodeIds: result.nodeIds },
       });
-      res.json(result);
-      return;
-    }
-
-    if (action === "reject") {
-      const result = rejectSubmission(db, { submissionId, reviewedByUserId: req.user!.id, reviewerNotes });
-      broadcast({
-        type: "submission_reviewed",
-        bingoId: req.bingo!.id,
-        payload: { teamId: submission.teamId, nodeIds: result.nodeIds },
-      });
+      // A Finished Bingo set to publish Wrapped on its own does so once the last pending Submission is reviewed.
+      if (wrappedService.publishWhenReady(db, req.bingo!, req.user!.id)) broadcast({ type: "wrapped_published", bingoId: req.bingo!.id, payload: {} });
       res.json(result);
       return;
     }
@@ -179,7 +173,7 @@ router.post(
     if (toStage === "live" || toStage === "complete") queueBingoReads(db, getWomReadQueue(db), bingo.id);
     // "Publish Wrapped when the Bingo finishes" (CONTEXT.md "Wrapped"); late Wise Old Man reads (queued above) need a
     // Re-publish.
-    if (toStage === "complete" && wrappedService.publishOnFinish(db, bingo, req.user!.id)) broadcast({ type: "wrapped_published", bingoId: bingo.id, payload: {} });
+    if (toStage === "complete" && wrappedService.publishWhenReady(db, bingo, req.user!.id)) broadcast({ type: "wrapped_published", bingoId: bingo.id, payload: {} });
     res.json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );

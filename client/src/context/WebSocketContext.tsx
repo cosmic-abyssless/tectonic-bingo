@@ -26,6 +26,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       queryClient.invalidateQueries({ queryKey: ["teamSubmissions"] });
       queryClient.invalidateQueries({ queryKey: ["modSubmissions"] });
       queryClient.invalidateQueries({ queryKey: ["pendingCount"] });
+      // Wrapped can't be published while anything is pending, and may publish itself as the last one is reviewed.
+      queryClient.invalidateQueries({ queryKey: ["wrapped"] });
       break;
     case "gp_values_updated":
       queryClient.invalidateQueries({ queryKey: ["teamSubmissions"] });

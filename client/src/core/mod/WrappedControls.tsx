@@ -22,6 +22,7 @@ export function WrappedControls({ slug }: { slug: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const published = state.data?.published ?? false;
+  const pending = state.data?.pendingSubmissions ?? 0;
 
   async function go() {
     setError(null);
@@ -46,7 +47,7 @@ export function WrappedControls({ slug }: { slug: string }) {
           <Button size="sm" onPress={() => setPreviewing(true)}>
             Preview
           </Button>
-          <Button size="sm" variant="primary" onPress={() => setConfirming(true)}>
+          <Button size="sm" variant="primary" onPress={() => setConfirming(true)} isDisabled={pending > 0}>
             {published ? "Re-publish" : "Publish"}
           </Button>
         </div>
@@ -55,8 +56,14 @@ export function WrappedControls({ slug }: { slug: string }) {
         {published
           ? "Everyone who can see the bingo can read it. Its numbers stay as they were when published: re-publish to pick up late changes (a review undone, a point adjustment, late Wise Old Man updates)."
           : "Only mods can see it until it's published."}
-        {state.data?.publishOnFinish && !published && " This bingo is set to publish it when it finishes."}
+        {state.data?.publishOnFinish && !published && " This bingo is set to publish it on its own once nothing is pending."}
       </p>
+      {pending > 0 && (
+        <Notice tone="warn">
+          {pending === 1 ? "1 submission is" : `${pending} submissions are`} still pending. Review {pending === 1 ? "it" : "them"} before {published ? "publishing again" : "publishing"}, or Wrapped will be missing{" "}
+          {pending === 1 ? "it" : "them"}.
+        </Notice>
+      )}
       {error && !confirming && <Notice tone="danger">{error}</Notice>}
 
       <Dialog isOpen={confirming} onClose={() => setConfirming(false)}>
