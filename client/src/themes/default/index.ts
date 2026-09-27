@@ -56,6 +56,8 @@ import { RewindTimeline } from "./rewind/RewindTimeline";
 import { RewindControls } from "./rewind/RewindControls";
 import { RewindScoreboard } from "./rewind/RewindScoreboard";
 import { RewindPopup } from "./rewind/RewindPopup";
+import { RewindTileMarkers } from "./rewind/RewindTileMarkers";
+import { RewindTileTeams } from "./rewind/RewindTileTeams";
 
 // The neutral/fallback theme: eager (it's what every unknown or loading
 // theme key falls back to), and the only theme that must define every slot.
@@ -71,6 +73,8 @@ export const defaultTheme: ThemeDefinition = {
     RewindControls,
     RewindScoreboard,
     RewindPopup,
+    RewindTileMarkers,
+    RewindTileTeams,
     DraftPickBurst,
     AchievementUnlockCard,
     AchievementRow,

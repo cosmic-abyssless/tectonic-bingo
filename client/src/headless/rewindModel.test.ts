@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode, RewindResponse, RewindSubmission, SignificanceTier, Tile } from "@bingo/shared";
-import { adjustmentsAt, boardStateAt, countUpTo, formatOneIn, playbackHolds, PLAYBACK, prepareRewind, stepNext, stepPrev, teamPointsAt, visibleItems } from "./rewindModel";
+import { adjustmentsAt, boardStateAt, countUpTo, formatOneIn, playbackHolds, PLAYBACK, prepareRewind, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems } from "./rewindModel";
 import { buildTileModelsStatic } from "./boardModel";
 
 const MIN = 60_000;
 const T0 = Date.UTC(2026, 0, 1, 12);
 const iso = (minutes: number) => new Date(T0 + minutes * MIN).toISOString();
 
-function sub(id: string, minutes: number, opts: { status?: "approved" | "rejected"; tier?: SignificanceTier; claims?: { nodeId: string; quantity: number }[] } = {}): RewindSubmission {
+function sub(id: string, minutes: number, opts: { status?: "approved" | "rejected"; tier?: SignificanceTier; claims?: { nodeId: string; quantity: number }[]; teamId?: string } = {}): RewindSubmission {
   return {
     id,
-    teamId: "team",
+    teamId: opts.teamId ?? "team",
     status: opts.status ?? "approved",
     submittedAt: iso(minutes),
     player: null,
@@ -83,6 +83,49 @@ describe("boardStateAt", () => {
   });
 });
 
+// The fixture plus a second Team, "other", that finishes the same Tile in one go at minute 50.
+function twoTeams(): RewindResponse {
+  const data = fixture();
+  data.submissions.push(sub("o1", 50, { teamId: "other", claims: [{ nodeId: "scales", quantity: 5 }] }));
+  data.teams.push({
+    teamId: "other",
+    nodes: [
+      { nodeId: "sum", completedAt: iso(50), submissionId: "o1", pointsAwarded: 20, pointsAt: iso(50) },
+      { nodeId: "scales", completedAt: iso(50), submissionId: "o1", pointsAwarded: 0, pointsAt: null },
+      { nodeId: "tileNode", completedAt: iso(50), submissionId: "o1", pointsAwarded: 5, pointsAt: iso(50) },
+    ],
+    adjustments: [],
+    finalPoints: 25,
+  });
+  return data;
+}
+
+describe("All Teams", () => {
+  const data = prepareRewind(twoTeams());
+
+  it("puts every Team's Submissions on one timeline, oldest first", () => {
+    expect(data.allItems.map((i) => i.sub.id)).toEqual(["s1", "s2", "s3", "o1"]);
+  });
+
+  it("marks a Tile complete for exactly the Teams whose own Board has it complete at that moment", () => {
+    for (const minutes of [0, 15, 30, 49, 50, 100]) {
+      const at = T0 + minutes * MIN;
+      const teams = tileTeamsAt([tile], data, ["team", "other"], at).get("tile")!;
+      for (const teamId of ["team", "other"]) {
+        const state = boardStateAt(data.teams.get(teamId), data.itemsByTeam.get(teamId)!, at);
+        const [own] = buildTileModelsStatic({ tiles: [tile], categories: [], ...state, bingoStartsAt: null, interests: [], viewerUserId: "me" });
+        const mine = teams.find((t) => t.teamId === teamId)!;
+        expect(mine.complete).toBe(own!.progress.allComplete);
+        expect(mine.pointsAwarded).toBe(own!.progress.pointsAwarded);
+      }
+    }
+    const at = (minutes: number) => tileTeamsAt([tile], data, ["team", "other"], T0 + minutes * MIN).get("tile")!.filter((t) => t.complete).map((t) => t.teamId);
+    expect(at(29)).toEqual([]);
+    expect(at(30)).toEqual(["team"]);
+    expect(at(50)).toEqual(["team", "other"]);
+  });
+});
+
 describe("stepping", () => {
   const data = prepareRewind(fixture());
   const all = data.itemsByTeam.get("team")!;
@@ -135,6 +178,15 @@ describe("playbackHolds", () => {
     // A Team with a handful of huge Submissions among many minor ones used to hold each huge one for ~25s.
     const holds = playbackHolds([...Array.from({ length: 117 }, () => "minor" as const), ...Array.from({ length: 21 }, () => "notable" as const), "huge", "huge", "huge", "huge"]);
     expect(Math.max(...holds)).toBe(PLAYBACK.holdMs.huge);
+  });
+
+  it("plays every Team's Submissions together in about 7 minutes", () => {
+    // Six Teams of a typical and of a large Bingo, merged for the All Teams view.
+    for (const perTeam of [250, 400]) {
+      const total = minutes(sum(playbackHolds(bingo(6 * perTeam), PLAYBACK.allTeamsMinMinorMs)));
+      expect(total).toBeGreaterThanOrEqual(6);
+      expect(total).toBeLessThanOrEqual(8);
+    }
   });
 
   it("fits a large Bingo into 7 minutes, keeping the tiers' ratios", () => {

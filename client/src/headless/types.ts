@@ -282,6 +282,8 @@ export interface TeamSelectorModel {
   teams: TeamModel[];
   selectedId: string | null;
   select(id: string): void;
+  /** Rewind only: an "All Teams" choice above the Teams. While it's selected, selectedId is null. */
+  allTeams?: { selected: boolean; select(): void };
 }
 
 export interface BingoPageModel {
@@ -462,6 +464,8 @@ export interface RewindTickModel {
   past: boolean;
   /** The Submission being shown. */
   current: boolean;
+  /** Its Team's colour, in the All Teams view (where ticks are coloured by Team); null otherwise. */
+  teamColor: string | null;
 }
 
 export interface RewindTimelineModel {
@@ -477,7 +481,7 @@ export interface RewindTimelineModel {
   atClockLabel: string;
   startLabel: string;
   endLabel: string;
-  /** One per Submission of the viewed Team, sized by tier. */
+  /** One per Submission of the viewed Team (of every Team, in the All Teams view), sized by tier. */
   ticks: RewindTickModel[];
   /** Jump to a moment (dragging/clicking the scrubber). Pauses Play and closes any popup. */
   seek(at: number): void;
@@ -519,14 +523,33 @@ export interface RewindPopupModel {
   close(): void;
 }
 
+/** One Tile in the All Teams view: every Team's progress on it at the moment being viewed. */
+export interface RewindTileTeamsModel {
+  tileId: string;
+  tileName: string;
+  /** The Teams that have completed it by now, in scoreboard order: the Tile's markers. */
+  completedBy: { id: string; name: string; color: string | null }[];
+  /** Every Team's progress on it, in the same order. */
+  teams: { id: string; name: string; color: string | null; complete: boolean; completedTasks: number; totalTasks: number; pointsAwarded: number; totalPoints: number }[];
+  /** "Iron Fists: complete · Dragons: 1/3 parts": for a hover title. */
+  summary: string;
+}
+
 export interface RewindModel {
   slug: string;
   bingoName: string;
-  /** The Team whose Board, timeline and popups are shown. */
+  /** The Team whose Board, timeline and popups are shown. Null in the All Teams view. */
   team: TeamModel | null;
-  /** The existing Team selector, open to everyone here: every Team's Board is visible once the Bingo is Finished. */
+  /**
+   * The All Teams view: the Board is the shared layout with no one's progress on it, each Tile marked with every Team
+   * that has completed it (tileTeams), and the timeline and popups cover every Team's Submissions.
+   */
+  allTeams: boolean;
+  /** All Teams view only (null otherwise): each Tile's Teams at the moment being viewed, by Tile id. */
+  tileTeams: ReadonlyMap<string, RewindTileTeamsModel> | null;
+  /** The existing Team selector, open to everyone here: every Team's Board is visible once the Bingo is Finished. It has an All Teams choice. */
   teamSelector: TeamSelectorModel;
-  /** The viewed Team's points at the moment being viewed. */
+  /** The viewed Team's points at the moment being viewed (0 in the All Teams view: the scoreboard has every Team's). */
   teamPoints: number;
   timeline: RewindTimelineModel;
   controls: RewindControlsModel;
@@ -537,7 +560,10 @@ export interface RewindModel {
   highlightedTileId: string | null;
   /** The popup to show: during Play and when stepping, for notable-or-bigger Submissions only. */
   popup: RewindPopupModel | null;
-  /** A Tile's details at the moment being viewed (its Submissions left out: the timeline has those). */
-  openTile: { tile: TileModel | null; open(id: string): void; close(): void };
+  /**
+   * A Tile's details at the moment being viewed (its Submissions left out: the timeline has those). In the All Teams
+   * view `tile` stays null and `teams` has every Team's progress on the opened Tile instead.
+   */
+  openTile: { tile: TileModel | null; teams: RewindTileTeamsModel | null; open(id: string): void; close(): void };
   exit(): void;
 }
