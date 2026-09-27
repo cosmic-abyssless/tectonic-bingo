@@ -383,9 +383,22 @@ export function SignupRoster({ slug }: { slug: string }) {
             </div>
           </div>
         )}
-        {cutsApply && cutCount > 0 && cuts?.shares && bingoData && (
+        {/* While any cut is Avoidable the notice only says so (and Admins get the way to fix it); the numbers come
+            back once nothing is avoidable, when every cut left is an Unavoidable one (CONTEXT.md "Cut review"). */}
+        {cutsApply && cutCount > 0 && cuts?.shares && bingoData && someAvoidable && (
           <Notice tone="warn" icon={<AlertIcon />}>
-            {someAvoidable && <strong>Some cuts can be avoided. </strong>}
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <strong>Some cuts can be avoided.</strong>
+              {me?.isAdmin && (
+                <Button size="sm" onPress={() => setReviewingCuts(true)}>
+                  Review cuts
+                </Button>
+              )}
+            </span>
+          </Notice>
+        )}
+        {cutsApply && cutCount > 0 && cuts?.shares && bingoData && !someAvoidable && (
+          <Notice tone="warn" icon={<AlertIcon />}>
             As things stand, <span className="num">{cutCount}</span> signup{cutCount !== 1 ? "s" : ""} will be cut when the draft starts (
             {cutModeLabel(bingoData.bingo.cutMode, bingoData.bingo.signupMode)}: each of the <span className="num">{cuts.teamCount}</span> teams will draft{" "}
             {describeShares(cuts.shares, bingoData.bingo.signupMode)}). The newest signups are the ones cut.
@@ -398,13 +411,6 @@ export function SignupRoster({ slug }: { slug: string }) {
             >
               Show me
             </button>
-            {someAvoidable && me?.isAdmin && (
-              <div className="mt-2">
-                <Button size="sm" onPress={() => setReviewingCuts(true)}>
-                  Review cuts
-                </Button>
-              </div>
-            )}
           </Notice>
         )}
         {me?.isAdmin && <CutReviewModal slug={slug} isOpen={reviewingCuts} onClose={() => setReviewingCuts(false)} />}
