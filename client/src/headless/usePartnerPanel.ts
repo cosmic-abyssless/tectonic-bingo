@@ -1,14 +1,17 @@
 import { useState } from "react";
 import type { PartnerCandidate } from "@bingo/shared";
-import { useMyPairing, usePartnerCandidates, useRemovePairing, useRequestPairing, useRespondToPairing, useUnpairedSignups } from "../api/queries";
+import { useMyPairing, useMySignup, usePartnerCandidates, useRemovePairing, useRequestPairing, useRespondToPairing, useUnpairedSignups } from "../api/queries";
 import { displayName } from "../core/ui/user";
 
 // A duo bingo's partner step (under an active signup, in the signup stage) as a view model: what
 // core/signup/PartnerPanel (the default look) and a theme's own SignupStage draw.
 
 export interface PartnerPanelModel {
-  /** Paired: who with, and removing the pairing (asked first, since it unpairs them both). */
-  partner: { name: string; leave: { confirming: boolean; ask: () => void; cancel: () => void; confirm: () => void } } | null;
+  /**
+   * Paired: who with, and removing the pairing (asked first, since it unpairs them both). No `leave` for a pair that
+   * leads a Team: only an admin can change that (the signup form says so, see useSignupForm's teamLead).
+   */
+  partner: { name: string; leave: { confirming: boolean; ask: () => void; cancel: () => void; confirm: () => void } | null } | null;
   /** Why they're unpaired now, when a pairing ended or a request was declined; says to pick someone new. */
   lastOutcome: string | null;
   /** Requests others have made to pair with them. */
@@ -40,6 +43,7 @@ function candidateLabel(c: PartnerCandidate): string {
 /** Null while loading. */
 export function usePartnerPanel(slug: string): PartnerPanelModel | null {
   const { data: state, isLoading } = useMyPairing(slug, true);
+  const { data: mySignup } = useMySignup(slug);
   const needsPicker = !!state && !state.partner && !state.outgoing;
   const { data: candidatesData, error: candidatesError } = usePartnerCandidates(slug, needsPicker);
   const { data: unpairedData } = useUnpairedSignups(slug, needsPicker);
@@ -64,12 +68,14 @@ export function usePartnerPanel(slug: string): PartnerPanelModel | null {
     partner: partner
       ? {
           name: partner.name,
-          leave: {
-            confirming: confirmingLeave,
-            ask: () => setConfirmingLeave(true),
-            cancel: () => setConfirmingLeave(false),
-            confirm: () => run(() => remove.mutateAsync(partner.pairing.id).then(() => setConfirmingLeave(false))),
-          },
+          leave: mySignup?.leadsTeam
+            ? null
+            : {
+                confirming: confirmingLeave,
+                ask: () => setConfirmingLeave(true),
+                cancel: () => setConfirmingLeave(false),
+                confirm: () => run(() => remove.mutateAsync(partner.pairing.id).then(() => setConfirmingLeave(false))),
+              },
         }
       : null,
     lastOutcome:

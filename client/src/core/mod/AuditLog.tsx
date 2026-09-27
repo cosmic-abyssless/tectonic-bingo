@@ -71,11 +71,21 @@ export function buildCsv(entries: AuditEntry[]): string {
   return toCsv([headers, ...rows]);
 }
 
+type FieldDiff = { before: Record<string, unknown>; after: Record<string, unknown> };
+const isFieldDiff = (v: unknown): v is FieldDiff => {
+  const d = v as FieldDiff | null;
+  return !!d && typeof d === "object" && !!d.before && typeof d.before === "object" && !!d.after && typeof d.after === "object";
+};
+
 // A before/after diff for a `changes` field; every other detail key renders
-// as a plain key/value line.
+// as a plain key/value line, or a list when it's a list of text. A `changes`
+// that isn't a before/after pair (an older Cut review entry's list) is just
+// another key.
 export function DetailsView({ details }: { details: unknown }) {
   if (!details || typeof details !== "object") return null;
-  const { changes, ...rest } = details as { changes?: { before: Record<string, unknown>; after: Record<string, unknown> } };
+  const { changes: rawChanges, ...others } = details as { changes?: unknown };
+  const changes = isFieldDiff(rawChanges) ? rawChanges : undefined;
+  const rest: Record<string, unknown> = changes || rawChanges === undefined ? others : { changes: rawChanges, ...others };
 
   return (
     <div className="space-y-2 text-xs">
@@ -99,11 +109,22 @@ export function DetailsView({ details }: { details: unknown }) {
           </div>
         </div>
       )}
-      {Object.entries(rest).map(([k, v]) => (
-        <div key={k} className="text-on-surface-muted">
-          <span className="text-on-surface-subtle">{k}:</span> {typeof v === "object" ? JSON.stringify(v) : String(v)}
-        </div>
-      ))}
+      {Object.entries(rest).map(([k, v]) =>
+        Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string") ? (
+          <div key={k} className="text-on-surface-muted">
+            <span className="text-on-surface-subtle">{k}:</span>
+            <ul className="ml-4 list-disc">
+              {v.map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <div key={k} className="text-on-surface-muted">
+            <span className="text-on-surface-subtle">{k}:</span> {typeof v === "object" ? JSON.stringify(v) : String(v)}
+          </div>
+        ),
+      )}
     </div>
   );
 }

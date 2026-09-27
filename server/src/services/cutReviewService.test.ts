@@ -1,0 +1,252 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { and, eq } from "drizzle-orm";
+import type Database from "better-sqlite3";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import * as schema from "../db/schema";
+import { createTestDb } from "../testUtils/testDb";
+import { createTeam, getTeamsForBingo } from "./teamService";
+import { adminPair, getAcceptedPairs } from "./pairingService";
+import { applyCutReview, assertCutReviewSatisfied, currentCutReviewFingerprint, getCutReviewPreview, scoreCutChanges } from "./cutReviewService";
+import { ServiceError } from "./errors";
+
+let sqlite: Database.Database;
+let db: BetterSQLite3Database<typeof schema>;
+
+function seedBingo(overrides: Partial<typeof schema.bingos.$inferInsert> = {}) {
+  const [admin] = db.insert(schema.users).values({ discordId: "admin", discordUsername: "admin" }).returning().all();
+  const bingo = db
+    .insert(schema.bingos)
+    .values({ slug: "test", name: "Test", boardRows: 3, boardCols: 3, createdByUserId: admin.id, stage: "captains", signupMode: "duo", cutMode: "even", ...overrides })
+    .returning()
+    .get();
+  return { bingo, admin };
+}
+
+function seedUser(discordId: string) {
+  return db.insert(schema.users).values({ discordId, discordUsername: discordId }).returning().get();
+}
+
+// A captain needs an active signup, same as teamService.createTeam requires.
+function seedCaptain(bingoId: string, discordId: string) {
+  const user = seedUser(discordId);
+  db.insert(schema.signups).values({ bingoId, userId: user.id, rsn: discordId }).run();
+  return user;
+}
+
+// A duo Team is led by a pair: a Captain and their accepted partner (both signed up), who becomes the co-captain.
+// Leads aren't in the pool, so this doesn't change who's cut.
+function seedLeadPair(bingo: typeof schema.bingos.$inferSelect, discordId: string) {
+  const captain = seedCaptain(bingo.id, discordId);
+  const partner = seedCaptain(bingo.id, `${discordId}-partner`);
+  adminPair(db, { ...bingo, stage: "signup" }, { userIdA: captain.id, userIdB: partner.id, createdByUserId: captain.id });
+  return { captain, partner };
+}
+
+function seedTeamLedByPair(bingo: typeof schema.bingos.$inferSelect, discordId: string, name?: string) {
+  const { captain, partner } = seedLeadPair(bingo, discordId);
+  createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, coCaptainUserId: partner.id, name });
+  return captain;
+}
+
+function signUp(bingoId: string, discordId: string, at: Date) {
+  const user = seedUser(discordId);
+  db.insert(schema.signups).values({ bingoId, userId: user.id, rsn: discordId, createdAt: at }).run();
+  return user;
+}
+
+// 2 Teams (each led by a pair), one accepted pair and two singles in the pool: the same shape as the planner's
+// "1 pair + 2 singles" example — 2 Avoidable cut, 0 Unavoidable.
+function seedAvoidableScenario() {
+  const { bingo, admin } = seedBingo();
+  const signupStage = { ...bingo, stage: "signup" as const };
+  const c1 = seedTeamLedByPair(bingo, "c1", "A");
+  const c2 = seedTeamLedByPair(bingo, "c2", "B");
+  const base = new Date("2026-01-01T00:00:00Z").getTime();
+  const a = signUp(bingo.id, "a", new Date(base));
+  const b = signUp(bingo.id, "b", new Date(base + 1000));
+  adminPair(db, signupStage, { userIdA: a.id, userIdB: b.id, createdByUserId: admin.id });
+  const c = signUp(bingo.id, "c", new Date(base + 2000));
+  const d = signUp(bingo.id, "d", new Date(base + 3000));
+  return { bingo, admin, c1, c2, a, b, c, d };
+}
+
+beforeEach(() => {
+  ({ sqlite, db } = createTestDb());
+});
+afterEach(() => {
+  sqlite.close();
+});
+
+describe("getCutReviewPreview / scoreCutChanges", () => {
+  it("splits cutPlayersNow into Avoidable and Unavoidable, and proposes the fix", () => {
+    const { bingo, c, d } = seedAvoidableScenario();
+    const preview = getCutReviewPreview(db, bingo);
+    expect(preview.plan.cutPlayersNow).toBe(2);
+    expect(preview.plan.cutPlayers).toBe(0);
+    expect(preview.avoidableCount).toBe(2);
+    expect(preview.unavoidableCount).toBe(0);
+    expect(preview.plan.changes).toEqual([{ kind: "pair", userIds: [c.id, d.id] }]);
+  });
+
+  it("names the pool the plan's ids refer to: singles, pairs and Teams, oldest first", () => {
+    const { bingo, a, b, c, d } = seedAvoidableScenario();
+    db.update(schema.signups).set({ timezone: "Europe/London" }).where(eq(schema.signups.userId, c.id)).run();
+    const { pool } = getCutReviewPreview(db, bingo);
+    expect(pool.singles).toEqual([
+      { userId: c.id, rsn: "c", region: "europe" },
+      { userId: d.id, rsn: "d", region: null },
+    ]);
+    // The pool's pair, not a Team's lead pair.
+    const pairing = getAcceptedPairs(db, bingo.id).find((p) => p.userIds.includes(a.id));
+    expect(pool.pairs).toEqual([{ pairingId: pairing!.pairing.id, members: expect.arrayContaining([{ userId: a.id, rsn: "a" }, { userId: b.id, rsn: "b" }]) }]);
+    // The Captains lead Teams, so they're not in the pool.
+    expect(pool.teams.map((t) => [t.name, t.captainRsn]).sort()).toEqual([
+      ["A", "c1"],
+      ["B", "c2"],
+    ]);
+  });
+
+  it("scores an admin's own edit against the current pool", () => {
+    const { bingo, c, d } = seedAvoidableScenario();
+    expect(scoreCutChanges(db, bingo, [{ kind: "pair", userIds: [c.id, d.id] }]).cutPlayers).toBe(0);
+    expect(scoreCutChanges(db, bingo, []).cutPlayers).toBe(2);
+  });
+
+  it("rejects scoring a change that no longer fits the roster", () => {
+    const { bingo, a, c } = seedAvoidableScenario();
+    // "a" already has a partner ("b") — pairing them with "c" doesn't fit.
+    expect(() => scoreCutChanges(db, bingo, [{ kind: "pair", userIds: [a.id, c.id] }])).toThrow(ServiceError);
+  });
+
+  it("reports 0 Avoidable once nothing but an Unavoidable cut is left (2 Teams, 3 singles)", () => {
+    const { bingo } = seedBingo();
+    seedTeamLedByPair(bingo, "c1");
+    seedTeamLedByPair(bingo, "c2");
+    const base = new Date("2026-01-01T00:00:00Z").getTime();
+    signUp(bingo.id, "x", new Date(base));
+    signUp(bingo.id, "y", new Date(base + 1000));
+    signUp(bingo.id, "z", new Date(base + 2000));
+    const preview = getCutReviewPreview(db, bingo);
+    expect(preview.avoidableCount).toBe(0);
+    expect(preview.unavoidableCount).toBe(1);
+    expect(preview.plan.changes).toEqual([]);
+  });
+});
+
+describe("applyCutReview", () => {
+  it("applies every change, through the existing audited operations, and records the review", () => {
+    const { bingo, admin, c, d } = seedAvoidableScenario();
+    // seedAvoidableScenario's own setup (pairing "a" & "b", and each Team's lead pair) already recorded some.
+    const adminPaired = () => db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "pairing.admin_paired")).all().length;
+    const pairedBefore = adminPaired();
+    const result = applyCutReview(db, bingo, [{ kind: "pair", userIds: [c.id, d.id] }], admin.id);
+    expect(result.cutPlayers).toBe(0);
+
+    expect(getAcceptedPairs(db, bingo.id).some((p) => p.userIds.includes(c.id) && p.userIds.includes(d.id))).toBe(true);
+    expect(adminPaired()).toBe(pairedBefore + 1);
+    const applied = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.cut_review_applied")).get()!;
+    // By name, and not under `changes`, which the audit log reads as a before/after diff.
+    expect(JSON.parse(applied.details)).toEqual({ applied: ["Paired c & d"], cutPlayers: 0, cutPlayersNow: 2 });
+
+    const fresh = db.select({ cutReviewFingerprint: schema.bingos.cutReviewFingerprint }).from(schema.bingos).where(eq(schema.bingos.id, bingo.id)).get()!;
+    expect(fresh.cutReviewFingerprint).toBe(currentCutReviewFingerprint(db, bingo));
+  });
+
+  it("an empty change list is valid — a deliberate 'keep these cuts' — and still records the review", () => {
+    const { bingo, admin } = seedAvoidableScenario();
+    const result = applyCutReview(db, bingo, [], admin.id);
+    expect(result.cutPlayers).toBe(2); // nothing changed, so both are still cut
+    const applied = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.cut_review_applied")).get()!;
+    expect(JSON.parse(applied.details).applied).toEqual([]);
+  });
+
+  it("adds a Team, choosing the captain's own accepted partner as co-captain automatically", () => {
+    const { bingo, admin, c, d } = seedAvoidableScenario();
+    // "c" and "d" are unpaired singles; make them the new Team's captain and (via applyCutReview's own lookup) partner.
+    adminPair(db, { ...bingo, stage: "signup" }, { userIdA: c.id, userIdB: d.id, createdByUserId: admin.id });
+    applyCutReview(db, bingo, [{ kind: "addTeam", captainUserId: c.id }], admin.id);
+    const teams = getTeamsForBingo(db, bingo.id);
+    expect(teams).toHaveLength(3);
+    const newTeam = teams.find((t) => t.captainUserId === c.id)!;
+    const coCaptain = db.select().from(schema.teamMembers).where(and(eq(schema.teamMembers.teamId, newTeam.id), eq(schema.teamMembers.isCoCaptain, true))).get();
+    expect(coCaptain?.userId).toBe(d.id);
+  });
+
+  it("removes a Team with no draft history", () => {
+    const { bingo, admin, c1 } = seedAvoidableScenario();
+    const teamToRemove = getTeamsForBingo(db, bingo.id).find((t) => t.captainUserId === c1.id)!;
+    applyCutReview(db, bingo, [{ kind: "removeTeam", teamId: teamToRemove.id }], admin.id);
+    expect(getTeamsForBingo(db, bingo.id).some((t) => t.id === teamToRemove.id)).toBe(false);
+  });
+
+  it("never half-applies a stale plan: rolls back every change in the same call", () => {
+    const { bingo, admin, a, c, d } = seedAvoidableScenario();
+    const e = signUp(bingo.id, "e", new Date("2026-02-01T00:00:00Z"));
+    // In a duo bingo a new Team's Captain has to have a partner: pair "c" with "e" so the addTeam below is valid.
+    adminPair(db, { ...bingo, stage: "signup" }, { userIdA: c.id, userIdB: e.id, createdByUserId: admin.id });
+    const teamCountBefore = getTeamsForBingo(db, bingo.id).length;
+    // A valid addTeam change alongside a pairing that's already stale ("a" already has a partner).
+    expect(() =>
+      applyCutReview(
+        db,
+        bingo,
+        [
+          { kind: "addTeam", captainUserId: c.id },
+          { kind: "pair", userIds: [a.id, d.id] },
+        ],
+        admin.id,
+      ),
+    ).toThrow(ServiceError);
+    expect(getTeamsForBingo(db, bingo.id)).toHaveLength(teamCountBefore);
+    // 2, not 0: seedAvoidableScenario's own setup (Teams "A" and "B") already recorded two; the attempted 3rd
+    // Team, and its audit row, must not have survived the rollback.
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "team.created")).all()).toHaveLength(2);
+  });
+});
+
+describe("assertCutReviewSatisfied", () => {
+  it("refuses while a cut is Avoidable and no review has been applied", () => {
+    const { bingo } = seedAvoidableScenario();
+    expect(() => assertCutReviewSatisfied(db, bingo)).toThrow(ServiceError);
+    try {
+      assertCutReviewSatisfied(db, bingo);
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(ServiceError);
+      expect((err as ServiceError).code).toBe("cut_review_required");
+    }
+  });
+
+  it("allows once a review is applied, even with every change dropped", () => {
+    const { bingo, admin } = seedAvoidableScenario();
+    expect(getCutReviewPreview(db, bingo).reviewed).toBe(false);
+    applyCutReview(db, bingo, [], admin.id);
+    expect(getCutReviewPreview(db, bingo).reviewed).toBe(true);
+    expect(() => assertCutReviewSatisfied(db, bingo)).not.toThrow();
+  });
+
+  it("refuses again once the roster changes after that review", () => {
+    const { bingo, admin } = seedAvoidableScenario();
+    applyCutReview(db, bingo, [], admin.id);
+    signUp(bingo.id, "e", new Date("2026-02-01T00:00:00Z"));
+    expect(getCutReviewPreview(db, bingo).reviewed).toBe(false);
+    expect(() => assertCutReviewSatisfied(db, bingo)).toThrow(/cuts can be avoided/i);
+  });
+
+  it("allows when nothing is Avoidable, without ever applying a review", () => {
+    const { bingo } = seedBingo();
+    seedTeamLedByPair(bingo, "c1");
+    seedTeamLedByPair(bingo, "c2");
+    const base = new Date("2026-01-01T00:00:00Z").getTime();
+    signUp(bingo.id, "x", new Date(base));
+    signUp(bingo.id, "y", new Date(base + 1000));
+    signUp(bingo.id, "z", new Date(base + 2000));
+    expect(() => assertCutReviewSatisfied(db, bingo)).not.toThrow();
+  });
+
+  it('allows with cutMode "none", without ever applying a review', () => {
+    const { bingo } = seedAvoidableScenario();
+    db.update(schema.bingos).set({ cutMode: "none" }).where(eq(schema.bingos.id, bingo.id)).run();
+    expect(() => assertCutReviewSatisfied(db, { ...bingo, cutMode: "none" })).not.toThrow();
+  });
+});

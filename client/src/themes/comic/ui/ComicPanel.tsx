@@ -62,15 +62,16 @@ function gridVars(c: ComicColors): CSSProperties {
 const FILL = { neutral: "paper", info: "blue", ok: "green", warn: "yellow", danger: "red" } as const;
 
 /** The comic theme's Notice slot: a tinted caption box in the tone, its icon in the tone's own ink. */
-export function ComicNotice({ tone = "neutral", icon, children, className }: NoticeProps) {
+export function ComicNotice({ tone = "neutral", icon, iconAlign = "start", children, className }: NoticeProps) {
+  const center = iconAlign === "center";
   const { colors } = useComic();
   const ink = { neutral: colors.INK_SUBTLE, info: colors.INFO, ok: colors.OK, warn: colors.WARN, danger: colors.BAD }[tone];
   return (
     <div role={tone === "danger" ? "alert" : undefined} className={className}>
       <CaptionBox tone={FILL[tone]}>
-        <div className="flex items-start gap-2.5 text-sm">
+        <div className={`flex ${center ? "items-center" : "items-start"} gap-2.5 text-sm`}>
           {icon && (
-            <span className="mt-0.5 shrink-0" style={{ color: ink }}>
+            <span className={`${center ? "" : "mt-0.5 "}shrink-0`} style={{ color: ink }}>
               {icon}
             </span>
           )}

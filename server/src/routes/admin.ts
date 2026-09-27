@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { CUT_MODES, isAchievementKey, type AchievementKey, type CutMode, type GraphNodeInput } from "@bingo/shared";
+import { CUT_MODES, isAchievementKey, type AchievementKey, type AppliedCutChange, type CutChange, type CutMode, type GraphNodeInput } from "@bingo/shared";
 import * as achievementService from "../services/achievementService";
 import path from "path";
 import { UPLOADS_DIR } from "../config";
@@ -15,6 +15,7 @@ import * as boardService from "../services/boardService";
 import { rescoreBingo } from "../services/scoringService";
 import * as signupService from "../services/signupService";
 import * as teamService from "../services/teamService";
+import * as cutReviewService from "../services/cutReviewService";
 import * as userService from "../services/userService";
 import { checkWomGroup, syncWomCompetition } from "../services/womCompetitionService";
 import { auditSkip } from "../audit/middleware";
@@ -424,7 +425,10 @@ router.post(
 router.get(
   "/captain-candidates",
   asyncHandler(async (req, res) => {
-    res.json({ candidates: teamService.getCaptainCandidates(db, req.bingo!.id) });
+    res.json({
+      candidates: teamService.getCaptainCandidates(db, req.bingo!.id),
+      teamsNotLedByPairs: teamService.teamsNotLedByPairs(db, req.bingo!.id).map((t) => t.teamId),
+    });
   }),
 );
 router.post(
@@ -472,6 +476,43 @@ router.delete(
     teamService.removeTeamMember(db, req.params.id as string, req.params.userId as string);
     void syncWomCompetition(db, req.bingo!.id);
     res.status(204).end();
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Cut review (CONTEXT.md "Cut review") — Admin-only: propose/score/apply the plan the Signups tab and the
+// move-to-Draft confirmation point to (GET .../mod/draft/cut-review, visible to any mod).
+// ---------------------------------------------------------------------------
+
+// Read-only: scores a change list (typically the proposed plan, edited) without touching anything, for the Cut
+// review modal's live "This plan leaves N players cut" count.
+router.post(
+  "/cut-review/score",
+  auditSkip("read-only Cut review scoring — no state changes"),
+  asyncHandler(async (req, res) => {
+    const { changes } = req.body as { changes?: CutChange[] };
+    if (!Array.isArray(changes)) throw new ServiceError(400, "changes must be an array");
+    res.locals.readOnly = true;
+    res.json(cutReviewService.scoreCutChanges(db, req.bingo!, changes));
+  }),
+);
+
+router.post(
+  "/cut-review/apply",
+  asyncHandler(async (req, res) => {
+    const { changes } = req.body as { changes?: AppliedCutChange[] };
+    if (!Array.isArray(changes)) throw new ServiceError(400, "changes must be an array");
+    for (const change of changes) {
+      if (change.kind === "pair" && (!Array.isArray(change.userIds) || change.userIds.length !== 2)) {
+        throw new ServiceError(400, "A pair change needs two userIds");
+      }
+      if (change.kind === "split" && !change.pairingId) throw new ServiceError(400, "A split change needs a pairingId");
+      if (change.kind === "addTeam" && !change.captainUserId) throw new ServiceError(400, "An added Team needs a captainUserId");
+      if (change.kind === "removeTeam" && !change.teamId) throw new ServiceError(400, "A removed Team needs a teamId");
+    }
+    const result = cutReviewService.applyCutReview(db, req.bingo!, changes, req.user!.id);
+    void syncWomCompetition(db, req.bingo!.id);
+    res.json(result);
   }),
 );
 

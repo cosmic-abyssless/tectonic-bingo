@@ -175,6 +175,12 @@ export interface AuditDetailsMap {
   // carry hasNote (whether the save also had a note) instead.
   "draft.rating_set": { rsn: string; names?: string[]; hasRating: boolean; hasNote?: boolean; cleared: boolean };
   "draft.note_set": { rsn: string; names: string[]; hasNote: boolean; cleared: boolean };
+  // A Cut review was applied (CONTEXT.md "Cut review") — every individual pair/split/Team change it made is
+  // audited separately under its own existing action; this entry is the record that a review happened for the
+  // roster as it stood, including an empty `changes` (a deliberate "keep these cuts").
+  // `applied`: each change as the modal words it ("Paired A & B"). Not `changes`, which the audit log reads as a
+  // before/after diff; the earliest entries have that instead (the raw change list, ids only).
+  "draft.cut_review_applied": { applied?: string[]; changes?: unknown[]; cutPlayersNow: number; cutPlayers: number };
 
   "pairing.requested": { requesterUserId: string; targetDiscordId: string };
   "pairing.accepted": { requesterUserId: string; targetDiscordId: string; partnerUserId: string | null };
@@ -660,6 +666,18 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "team",
     title: "Pick note",
     label: (i) => `${actor(i)} ${i.details.cleared ? "cleared" : "updated"} ${teamPossessive(i)} notes for ${ratedNames(i.details)}`,
+  },
+  "draft.cut_review_applied": {
+    category: "draft",
+    tone: "info",
+    visibility: "mods",
+    title: "Cut review applied",
+    label: (i) => {
+      const count = (i.details.applied ?? i.details.changes ?? []).length;
+      return count === 0
+        ? `${actor(i)} reviewed cuts and kept them as they stand (${i.details.cutPlayersNow} cut)`
+        : `${actor(i)} applied a Cut review (${count} change${count === 1 ? "" : "s"}, ${i.details.cutPlayersNow} → ${i.details.cutPlayers} cut)`;
+    },
   },
   "pairing.requested": { category: "signup", tone: "neutral", visibility: "mods", title: "Duo pairing requested", label: (i) => `${actor(i)} requested a duo pairing` },
   "pairing.accepted": { category: "signup", tone: "ok", visibility: "mods", title: "Duo pairing accepted", label: (i) => `${actor(i)} accepted a duo pairing` },

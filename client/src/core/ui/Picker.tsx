@@ -8,6 +8,17 @@ export interface PickerOption {
   key: string;
   label: string;
   count?: number;
+  /** This option wants looking at: an AttentionDot beside it, with this as its hover and screen-reader text. */
+  attention?: string;
+}
+
+/** A small yellow "look here" dot, e.g. on a filter (and its option) with signups the admin should check. */
+export function AttentionDot({ label, className }: { label: string; className?: string }) {
+  return (
+    <span title={label} className={`inline-block size-2 shrink-0 rounded-full bg-attention ${className ?? ""}`}>
+      <span className="sr-only">{label}</span>
+    </span>
+  );
 }
 
 export const pickerTriggerClass = "!transition-[background-color,color] pressed:!scale-100";
@@ -74,6 +85,7 @@ export function Picker({
                   <span className="min-w-0 flex-1 truncate" title={option.label}>
                     {option.label}
                   </span>
+                  {option.attention && <AttentionDot label={option.attention} />}
                   {option.count != null && option.count > 0 && <span className="num text-on-surface-subtle">{option.count}</span>}
                 </>
               )}

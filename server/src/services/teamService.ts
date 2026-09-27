@@ -64,6 +64,50 @@ export function isTeamLead(db: Db, teamId: string, userId: string): boolean {
     .get();
 }
 
+/** The Team `userId` leads (as Captain or co-captain) in this bingo, if any — what the signup page tells a lead. */
+export function ledTeamName(db: Db, bingoId: string, userId: string): string | null {
+  return (
+    db
+      .select({ name: teams.name })
+      .from(teamMembers)
+      .innerJoin(teams, eq(teamMembers.teamId, teams.id))
+      .where(and(eq(teams.bingoId, bingoId), eq(teamMembers.userId, userId), or(eq(teamMembers.isCaptain, true), eq(teamMembers.isCoCaptain, true))))
+      .get()?.name ?? null
+  );
+}
+
+/**
+ * In a duo bingo every Team is led by a pair: its Captain and, as co-captain, their accepted partner. The Teams that
+ * aren't (a Captain alone, or with a co-captain who isn't their partner) — by name and Captain — so the move into the
+ * Draft can refuse them and the Captains tab can point them out. Always empty for a solo bingo.
+ */
+export function teamsNotLedByPairs(db: Db, bingoId: string): { teamId: string; name: string; captainName: string }[] {
+  const bingo = db.select({ signupMode: bingos.signupMode }).from(bingos).where(eq(bingos.id, bingoId)).get();
+  if (bingo?.signupMode !== "duo") return [];
+  const pairs = getAcceptedPairs(db, bingoId);
+  const leads = db
+    .select({ teamId: teams.id, name: teams.name, captainUserId: teams.captainUserId, userId: teamMembers.userId, isCoCaptain: teamMembers.isCoCaptain })
+    .from(teams)
+    .leftJoin(teamMembers, and(eq(teamMembers.teamId, teams.id), eq(teamMembers.isCoCaptain, true)))
+    .where(eq(teams.bingoId, bingoId))
+    .all();
+  return leads
+    .filter((t) => !t.userId || !pairs.some((p) => p.userIds.includes(t.captainUserId) && p.userIds.includes(t.userId!)))
+    .map((t) => ({ teamId: t.teamId, name: t.name, captainName: userLabelById(db, t.captainUserId, bingoId) ?? "Unknown" }));
+}
+
+/** Refuses the move into the Draft while a duo bingo has a Team not led by a pair (see teamsNotLedByPairs). */
+export function assertTeamsLedByPairs(db: Db, bingoId: string): void {
+  const offenders = teamsNotLedByPairs(db, bingoId);
+  if (offenders.length === 0) return;
+  const names = offenders.map((t) => `${t.name} (Captain ${t.captainName})`).join(", ");
+  throw new ServiceError(
+    400,
+    `In a duo bingo every Team is led by a pair. Give these Teams a Captain with their duo partner on the Captains tab first: ${names}.`,
+    "teams_not_led_by_pairs",
+  );
+}
+
 // A user belongs to at most one team per bingo (enforced by the draft flow).
 export function getUserTeamForBingo(db: Db, bingoId: string, userId: string) {
   const rows = db
@@ -256,6 +300,12 @@ export function createTeam(db: Db, params: CreateTeamParams) {
     const pairs = getAcceptedPairs(tx, params.bingoId);
     const captainPair = pairs.find((p) => p.userIds.includes(params.captainUserId));
     const coCaptainPair = coCaptainUserId ? pairs.find((p) => p.userIds.includes(coCaptainUserId)) : undefined;
+    // In a duo bingo a Team is led by a pair, so its Captain has to have a partner (who then has to be the co-captain,
+    // below). Two unpaired players get paired first, on the Signups tab.
+    const signupMode = tx.select({ signupMode: bingos.signupMode }).from(bingos).where(eq(bingos.id, params.bingoId)).get()?.signupMode;
+    if (signupMode === "duo" && !captainPair) {
+      throw new ServiceError(400, "In a duo bingo a Team is led by a pair — pair this player up first, then make them Captain");
+    }
     if (captainPair && !captainPair.userIds.includes(coCaptainUserId ?? "")) {
       throw new ServiceError(400, "This captain has a duo partner — pick them as the co-captain");
     }

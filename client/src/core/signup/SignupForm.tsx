@@ -210,7 +210,7 @@ export function SignupForm({ slug }: { slug: string }) {
         }
         description={
           form.signedUp
-            ? `${form.saved ? "Saved. " : ""}You can update your answers or withdraw while signups are open.`
+            ? `${form.saved ? "Saved. " : ""}${form.teamLead ?? "You can update your answers or withdraw while signups are open."}`
             : "Fill this out to join the bingo."
         }
       >
@@ -279,7 +279,7 @@ export function SignupForm({ slug }: { slug: string }) {
             <Button variant="primary" className="flex-1" onPress={form.submit} isDisabled={!form.isValid || form.pending}>
               {form.pending ? "Saving…" : form.signedUp ? "Save changes" : "Sign up"}
             </Button>
-            {form.signedUp && !withdraw.confirming && (
+            {form.signedUp && !withdraw.confirming && !form.teamLead && (
               <Button variant="danger" onPress={withdraw.ask}>
                 Withdraw
               </Button>
