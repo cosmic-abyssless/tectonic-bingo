@@ -169,6 +169,20 @@ describe("importBingo", () => {
     expect(toPublicBingo(getBingoBySlug(db, "no-rules")!).exclusivityRules).toEqual([]);
   });
 
+  it("carries Credits over in order, and reads an older file with none", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    updateBingoSettings(db, source.id, { wrappedCredits: [{ name: " Zezima ", role: "Board design" }, { name: "Woox", role: "" }] });
+    const doc = exportBingo(db, source.id);
+    expect(doc.bingo.wrappedCredits).toEqual([{ name: "Zezima", role: "Board design" }, { name: "Woox", role: null }]);
+
+    importBingo(db, doc, { slug: "with-credits", name: "With credits", createdByUserId: admin.id });
+    expect(toPublicBingo(getBingoBySlug(db, "with-credits")!).wrappedCredits).toEqual(doc.bingo.wrappedCredits);
+
+    const { wrappedCredits: _dropped, ...oldBingo } = doc.bingo;
+    importBingo(db, { ...doc, bingo: oldBingo }, { slug: "no-credits", name: "No credits", createdByUserId: admin.id });
+    expect(toPublicBingo(getBingoBySlug(db, "no-credits")!).wrappedCredits).toEqual([]);
+  });
+
   it("rejects a document whose exclusivity rules are malformed, leaving no partial bingo", () => {
     const { bingo: source, admin } = seedFullBingo();
     const doc = exportBingo(db, source.id);
@@ -515,8 +529,8 @@ describe("every column is accounted for", () => {
   it("bingo settings", () => {
     const { bingo } = seedFullBingo();
     const doc = exportBingo(db, bingo.id);
-    // exclusivityRules is the column exclusivityRulesJson, parsed.
-    const renamed: Record<string, string> = { exclusivityRules: "exclusivityRulesJson" };
+    // exclusivityRules and wrappedCredits are the columns exclusivityRulesJson and wrappedCreditsJson, parsed.
+    const renamed: Record<string, string> = { exclusivityRules: "exclusivityRulesJson", wrappedCredits: "wrappedCreditsJson" };
     accounted(
       schema.bingos,
       Object.keys(doc.bingo).map((k) => renamed[k] ?? k),

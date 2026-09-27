@@ -1,7 +1,7 @@
 // Wrapped (CONTEXT.md "Wrapped"): the story's sections, built from the published data (MyWrappedResponse) as it is.
 // Nothing here recomputes a stat: it picks what to say, words it, and leaves out every part (and every section) that
 // has nothing to say for this viewer. Pure, so it's tested without React.
-import type { AvatarUser, MyWrappedResponse, WrappedCaptain, WrappedDrop, WrappedPointsPoint, WrappedTeam } from "@bingo/shared";
+import type { AvatarUser, MyWrappedResponse, WrappedCaptain, WrappedCredit, WrappedDrop, WrappedPointsPoint, WrappedTeam } from "@bingo/shared";
 import { thumbUrl } from "../api/imageVariants";
 import { formatGp } from "../core/ui/gp";
 import { avatarUrl, displayName } from "../core/ui/user";
@@ -25,8 +25,10 @@ import type {
 
 export interface WrappedStoryOptions {
   viewerId: string;
-  /** The viewer's name as the Bingo shows it (their RSN), for the intro. */
+  /** The viewer's name as the Bingo shows it (their RSN, else their Discord name), for the intro and their Moderator art. */
   viewerName: string;
+  /** The Bingo's Credits (CONTEXT.md), in order, for the Outro. */
+  credits: WrappedCredit[];
   /** When the Bingo started and ended (ms), for the intro's dates and the charts' span. */
   startsAt: number | null;
   endsAt: number | null;
@@ -302,6 +304,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
     const moderator: WrappedModeratorModel = {
       kind: "moderator",
       art: art("moderator"),
+      name: opts.viewerName,
       reviewedLabel: plural(m.reviewed, "Submission"),
       medianLabel: shortDuration(m.medianReviewMs),
       rejectionLabel: percent(m.rejectionRate),
@@ -378,7 +381,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
   };
   sections.push(b);
 
-  sections.push({ kind: "outro", art: art("outro"), bingoName: bingo.bingoName });
+  sections.push({ kind: "outro", art: art("outro"), bingoName: bingo.bingoName, credits: opts.credits.map((c) => ({ name: c.name, role: c.role || null })) });
 
   return {
     slug,

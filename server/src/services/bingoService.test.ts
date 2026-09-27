@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingos } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { addModerator, advanceStage, assertBoardEditable, assertQuestionsEditable, createBingo, deleteBingo, normalizeExclusivityRules, parseExclusivityRules, listBingos, removeModerator, toPublicBingo, toViewerBingo, updateBingoSettings } from "./bingoService";
+import { addModerator, advanceStage, assertBoardEditable, assertQuestionsEditable, createBingo, deleteBingo, normalizeExclusivityRules, normalizeWrappedCredits, parseExclusivityRules, parseWrappedCredits, listBingos, removeModerator, toPublicBingo, toViewerBingo, updateBingoSettings } from "./bingoService";
 import { effectiveStartsAt } from "./bingoStart";
 import { createTask, createTile } from "./boardService";
 import { createTeam } from "./teamService";
@@ -357,6 +357,36 @@ describe("exclusivity rules", () => {
     expect(parseExclusivityRules("not json")).toEqual([]);
     expect(parseExclusivityRules("{}")).toEqual([]);
     expect(parseExclusivityRules(null)).toEqual([]);
+  });
+});
+
+describe("Credits", () => {
+  it("a new bingo has none, and the public shape exposes them parsed instead of the raw column", () => {
+    const publicBingo = toPublicBingo(seedBingo());
+    expect(publicBingo.wrappedCredits).toEqual([]);
+    expect(publicBingo).not.toHaveProperty("wrappedCreditsJson");
+  });
+
+  it("stores them in order, cleaned: trimmed, an empty role as none, blank rows dropped", () => {
+    const bingo = seedBingo();
+    const updated = updateBingoSettings(db, bingo.id, {
+      wrappedCredits: [{ name: " Zezima ", role: " Board design " }, { name: "", role: null }, { name: "Woox", role: " " }],
+    });
+    expect(toPublicBingo(updated).wrappedCredits).toEqual([{ name: "Zezima", role: "Board design" }, { name: "Woox", role: null }]);
+    expect(toPublicBingo(updateBingoSettings(db, bingo.id, { name: "Renamed" })).wrappedCredits).toHaveLength(2);
+    expect(toPublicBingo(updateBingoSettings(db, bingo.id, { wrappedCredits: [] })).wrappedCredits).toEqual([]);
+  });
+
+  it("refuses a role without a name, overlong text, too many entries, or not a list", () => {
+    expect(() => normalizeWrappedCredits([{ name: " ", role: "Art" }])).toThrow(/needs a name/);
+    expect(() => normalizeWrappedCredits([{ name: "x".repeat(61), role: null }])).toThrow(/at most 60/);
+    expect(() => normalizeWrappedCredits(Array.from({ length: 31 }, () => ({ name: "A", role: null })))).toThrow(/At most 30/);
+    expect(() => normalizeWrappedCredits("nope")).toThrow(/must be an array/);
+  });
+
+  it("reads a bad stored column as none", () => {
+    expect(parseWrappedCredits("not json")).toEqual([]);
+    expect(parseWrappedCredits(null)).toEqual([]);
   });
 });
 

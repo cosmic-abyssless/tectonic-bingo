@@ -119,6 +119,9 @@ export const bingos = sqliteTable('bingos', {
   showScreenshotsWhenFinished: integer('show_screenshots_when_finished', { mode: 'boolean' }).notNull().default(true),
   // "Publish Wrapped when the Bingo finishes" (CONTEXT.md "Wrapped"): moving to Finished publishes it on its own.
   publishWrappedOnFinish: integer('publish_wrapped_on_finish', { mode: 'boolean' }).notNull().default(false),
+  // Credits (CONTEXT.md): a JSON array of WrappedCredit, parsed by bingoService.parseWrappedCredits and exposed as
+  // `wrappedCredits`. Wrapped's Outro lists them.
+  wrappedCreditsJson: text('wrapped_credits_json').notNull().default('[]'),
 });
 
 // Mod is per-bingo, not a global flag — fixes v1's single global isModerator.
