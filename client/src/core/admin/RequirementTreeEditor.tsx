@@ -102,7 +102,7 @@ const GROUP_KINDS: { kind: NodeKind; label: string }[] = [
   { kind: "ALL", label: "Complete all of" },
   { kind: "ANY", label: "Complete any one of" },
   { kind: "COUNT", label: "Complete at least N of" },
-  { kind: "SUM", label: "Collect N in total across" },
+  { kind: "SUM", label: "N in total from" },
 ];
 
 function updateAt(root: GraphNodeInput, path: Path, fn: (node: GraphNodeInput) => GraphNodeInput): GraphNodeInput {

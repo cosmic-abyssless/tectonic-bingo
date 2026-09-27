@@ -68,3 +68,45 @@ describe("buildRequirementTree: exclusive items", () => {
     expect(tree.lockedBy).toBeNull();
   });
 });
+
+describe("buildRequirementTree: nested condition layout", () => {
+  const item = (id: string, itemName = id) => node({ id, kind: "ITEM", itemName });
+  const approved = (...nodeIds: string[]) => buildLeafClaimMaps([sub("s1", "approved", nodeIds.map((nodeId) => ({ nodeId, quantity: 1 })))]);
+
+  it("gives an ANY an OR divider, and nothing to its nested ALLs", () => {
+    const any = node({ id: "any", kind: "ANY", children: [node({ id: "all1", kind: "ALL", children: [item("a"), item("b")] }), node({ id: "all2", kind: "ALL", children: [item("c")] }), item("d")] });
+    const tree = buildRequirementTree(any, buildLeafClaimMaps([]), new Map())!;
+    expect(tree.divider).toEqual({ label: "OR", dim: false });
+    expect(tree.progress).toBeNull();
+    expect(tree.children.map((c) => c.divider)).toEqual([null, null, null]);
+  });
+
+  it("dims an ANY's dividers once it's satisfied, or an enclosing condition is", () => {
+    const any = node({ id: "any", kind: "ANY", children: [item("a"), item("b")] });
+    expect(buildRequirementTree(any, approved("a"), new Map([["any", "completed"]]))!.divider).toEqual({ label: "OR", dim: true });
+    expect(buildRequirementTree(any, buildLeafClaimMaps([]), new Map(), true)!.divider!.dim).toBe(true);
+  });
+
+  it("shows a COUNT's progress as options complete, with no divider", () => {
+    const count = node({ id: "count", kind: "COUNT", minCount: 3, children: [item("a"), item("b"), item("c"), node({ id: "all", kind: "ALL", children: [item("d")] })] });
+    const tree = buildRequirementTree(count, approved("a", "d"), new Map([["all", "completed"]]))!;
+    expect(tree.label).toBe("Complete at least 3 of");
+    expect(tree.progress).toEqual({ current: 2, target: 3 });
+    expect(tree.divider).toBeNull();
+  });
+
+  it("makes a SUM over several items a group headed with its rule and progress", () => {
+    const sum = node({ id: "sum", kind: "SUM", quantity: 5, children: [item("a", "Dragon claws"), item("b", "Dinh's bulwark")] });
+    const tree = buildRequirementTree(sum, approved("b"), new Map())!;
+    expect(tree).toMatchObject({ isLeaf: false, showHeading: true, label: "5 in total from", progress: { current: 1, target: 5 }, quantity: null, divider: null, children: [] });
+    expect(tree.items.map((i) => [i.name, i.count])).toEqual([["Dragon claws", 0], ["Dinh's bulwark", 1]]);
+  });
+
+  it("keeps a SUM over one item a single row with its quantity", () => {
+    const sum = node({ id: "sum", kind: "SUM", quantity: 2, children: [item("a", "Twisted ancestral colour kit")] });
+    const tree = buildRequirementTree(sum, buildLeafClaimMaps([]), new Map())!;
+    expect(tree).toMatchObject({ isLeaf: true, showHeading: false, label: "Twisted ancestral colour kit", quantity: 2, progress: { current: 0, target: 2 } });
+    const one = buildRequirementTree(node({ ...sum, quantity: 1 }), buildLeafClaimMaps([]), new Map())!;
+    expect(one.quantity).toBeNull();
+  });
+});

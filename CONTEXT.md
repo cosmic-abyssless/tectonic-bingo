@@ -151,7 +151,7 @@ The recursive structure inside a Part or Task defining how objectives combine:
   - `ALL` — "Complete all of"
   - `ANY` — "Complete any one of"
   - `COUNT` — "Complete at least N of" (e.g., any 2 out of 5)
-  - `SUM` — "Collect N in total across" (e.g., 500 total kill count or secondary ingredients)
+  - `SUM` — "N in total from" (e.g., 500 total kill count or secondary ingredients)
 - **Leaves:**
   - `ITEM` — An in-game item drop, tracked by OSRS item name and quantity.
   - `MANUAL` — An objective manually judged/verified by a Moderator.
