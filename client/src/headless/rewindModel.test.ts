@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode, RewindResponse, RewindSubmission, SignificanceTier, Tile } from "@bingo/shared";
-import { adjustmentsAt, boardStateAt, closingRows, countUpTo, formatOneIn, playbackHolds, PLAYBACK, prepareRewind, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems } from "./rewindModel";
+import { adjustmentsAt, boardStateAt, closingRows, countUpTo, formatOneIn, playbackHolds, PLAYBACK, prepareRewind, standoutOf, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems } from "./rewindModel";
 import { buildTileModelsStatic } from "./boardModel";
 
 const MIN = 60_000;
@@ -229,5 +229,35 @@ describe("closingRows", () => {
 
   it("keeps every row in the All Teams view", () => {
     expect(closingRows(rows, null).map((r) => r.id)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("standoutOf", () => {
+  const NOTHING = { tiles: [], lines: [], firstTiles: [], firstParts: [] };
+  const withClaim = (gpValue: number | null, luckOneIn: number | null): RewindSubmission => {
+    const s = sub("x", 1, { claims: [{ nodeId: "scales", quantity: 1 }] });
+    return { ...s, gpValue, claims: s.claims.map((c) => ({ ...c, gpValue, luckOneIn })) };
+  };
+
+  it("calls out the signal that counted most, with its value", () => {
+    expect(standoutOf(withClaim(80_000_000, 20))).toEqual({ kind: "gp", value: "80m" });
+    expect(standoutOf(withClaim(200_000, 5_000))).toEqual({ kind: "luck", value: formatOneIn(5_000) });
+    const users = Array.from({ length: 7 }, (_, i) => ({ id: `u${i}`, discordUsername: `u${i}`, discordGlobalName: null, discordGuildNick: null, rsn: null }));
+    const hyped = { ...withClaim(1_000_000, null), reactions: [{ emoji: "🔥", users }] } as RewindSubmission;
+    expect(standoutOf(hyped)).toEqual({ kind: "reactions", value: "7" });
+  });
+
+  it("says what it completed: a Line over a Tile, a first with no value", () => {
+    const base = withClaim(null, null);
+    expect(standoutOf({ ...base, completed: { ...NOTHING, tiles: ["ZULRAH"], lines: ["Row 2"] } })).toEqual({ kind: "line", value: "Row 2" });
+    expect(standoutOf({ ...base, completed: { ...NOTHING, tiles: ["ZULRAH"] } })).toEqual({ kind: "tile", value: "ZULRAH" });
+    expect(standoutOf({ ...base, completed: { ...NOTHING, tiles: ["ZULRAH"], firstTiles: ["ZULRAH"] } })).toEqual({ kind: "first", value: null });
+    expect(standoutOf({ ...base, completed: { ...NOTHING, firstParts: ["ZULRAH — Page 1"] } })).toEqual({ kind: "first", value: null });
+  });
+
+  it("never calls out a signal the Submission doesn't have", () => {
+    // A pet: no GP value, so a little Luck wins even though it's weak.
+    expect(standoutOf(withClaim(null, 12))?.kind).toBe("luck");
+    expect(standoutOf(withClaim(null, null))).toBeNull();
   });
 });

@@ -11,7 +11,7 @@ import { formatGp } from "../core/ui/gp";
 import { displayName } from "../core/ui/user";
 import { BoardModelProvider, BoardProvider, useBoardModel } from "./BoardProvider";
 import { useBingoPage, useBingoPageRaw } from "./BingoPageProvider";
-import { adjustmentsAt, ALL_TEAMS, closingRows, END_SNAP_MS, layoutOnly, boardStateAt, countUpTo, formatOneIn, isNotable, playbackHolds, PLAYBACK, prepareRewind, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems, type RewindItem } from "./rewindModel";
+import { adjustmentsAt, ALL_TEAMS, closingRows, END_SNAP_MS, layoutOnly, boardStateAt, countUpTo, formatOneIn, isNotable, standoutOf, playbackHolds, PLAYBACK, prepareRewind, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems, type RewindItem } from "./rewindModel";
 import type { RewindModel, RewindSubmissionModel, RewindTileTeamsModel, TeamModel } from "./types";
 
 const RewindContext = createContext<RewindModel | null>(null);
@@ -58,6 +58,7 @@ function toSubmissionModel(sub: RewindSubmission, at: number, start: number, tea
     gpLabel: formatGp(sub.gpValue),
     reactions: sub.reactions.map((g) => ({ emoji: g.emoji, count: g.users.length, names: g.users.map(displayName), mine: false })),
     highlights,
+    standout: standoutOf(sub),
   };
 }
 

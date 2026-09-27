@@ -2,9 +2,10 @@
 // Submission a step lands on, and how long Play holds each one. No React; RewindProvider wires these up. The server
 // (rewindService) has already replayed the scoring engine on submission time, so the Board at T is a filter over its
 // results, cheap enough to redo on every scrub.
-import type { PointAdjustment, RewindResponse, RewindSubmission, RewindTeam, SignificanceTier, SubmissionDetails, TeamNodeState, Tile } from "@bingo/shared";
+import { dominantSignal, rewindSignals, strongestCompletion, type PointAdjustment, type RewindResponse, type RewindSubmission, type RewindTeam, type SignificanceTier, type SubmissionDetails, type TeamNodeState, type Tile } from "@bingo/shared";
 import { summarizeTileProgress } from "../core/board/tileProgress";
-import type { BoardModel, TileModel } from "./types";
+import { formatGp } from "../core/ui/gp";
+import type { BoardModel, RewindStandoutModel, TileModel } from "./types";
 
 /** The ?team= value (and view id) for the All Teams view: every Team's progress on one Board. */
 export const ALL_TEAMS = "all";
@@ -221,4 +222,33 @@ export function playbackHolds(tiers: SignificanceTier[], minMinorMs: number = PL
 export function formatOneIn(oneIn: number): string {
   const rounded = oneIn >= 100 ? Math.round(oneIn / 10) * 10 : Math.round(oneIn);
   return `1 in ${rounded.toLocaleString()}`;
+}
+
+/** What made a Submission stand out, per dominantSignal, with the value to call out. */
+export function standoutOf(sub: RewindSubmission): RewindStandoutModel | null {
+  const signals = rewindSignals(sub);
+  switch (dominantSignal(signals)) {
+    case "gp":
+      return { kind: "gp", value: formatGp(signals.gpValue!) };
+    case "luck":
+      return { kind: "luck", value: formatOneIn(signals.luckOneIn!) };
+    case "reactions":
+      return { kind: "reactions", value: String(signals.reactions!) };
+    case "completed": {
+      const c = sub.completed;
+      switch (strongestCompletion(c)) {
+        case "line":
+          return { kind: "line", value: c.lines[0]! };
+        case "tile":
+          return { kind: "tile", value: c.tiles[0]! };
+        case "firstTile":
+        case "firstPart":
+          return { kind: "first", value: null };
+        default:
+          return null;
+      }
+    }
+    default:
+      return null;
+  }
 }
