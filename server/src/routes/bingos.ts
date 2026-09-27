@@ -437,7 +437,7 @@ router.get(
         .filter((r) => r.signup.status === "active")
         .map((r) => ({ discordId: r.user.discordId, rsns: [r.signup.rsn] }));
     }
-    const userByDiscordId = new Map(userService.getUsersByDiscordIds(db, candidates.map((c) => c.discordId)).map((u) => [u.discordId, u]));
+    const userByDiscordId = new Map(userService.getPublicUsersByDiscordIds(db, req.bingo!.id, candidates.map((c) => c.discordId)).map((u) => [u.discordId, u]));
     res.json({
       candidates: candidates
         .filter((c) => c.discordId !== req.user!.discordId)
