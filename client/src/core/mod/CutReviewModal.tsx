@@ -5,7 +5,8 @@ import { useApplyCutReview, useCutReviewScore } from "../../api/adminQueries";
 import { useDialogParts } from "../ui/useDialogParts";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
-import { Select, type SelectOption } from "../ui/Select";
+import { Select } from "../ui/Select";
+import { SearchableSelect } from "../ui/SearchableSelect";
 import { UndoIcon, XIcon } from "../ui/icons";
 import {
   appliedChanges,
@@ -163,13 +164,16 @@ const pairLabel = (pair: CutReviewPool["pairs"][number]) => pair.members.map((m)
 // Team names aren't unique (every new Team starts as "New Team"), so the Captain tells them apart.
 const teamLabel = (team: CutReviewPool["teams"][number]) => `${team.name} (Captain ${team.captainRsn})`;
 
-/** Everyone in the pool, for an added Team's Captain: a pair member brings their partner along as co-captain. */
-function captainOptions(pool: CutReviewPool, pickOptions: Record<string, number> | null = null): SelectOption[] {
+/**
+ * Everyone in the pool, for an added Team's Captain (searched by name, it's the whole pool): a pair member brings
+ * their partner along as co-captain.
+ */
+function captainOptions(pool: CutReviewPool, pickOptions: Record<string, number> | null = null): { id: string; label: string; group?: string }[] {
   return [
-    ...pool.singles.map((s) => ({ value: s.userId, label: withCount(s.rsn, pickOptions?.[s.userId]), group: pool.pairs.length ? "Singles" : undefined })),
+    ...pool.singles.map((s) => ({ id: s.userId, label: withCount(s.rsn, pickOptions?.[s.userId]), group: pool.pairs.length ? "Singles" : undefined })),
     ...pool.pairs.flatMap((p) =>
       p.members.map((m) => ({
-        value: m.userId,
+        id: m.userId,
         label: withCount(`${m.rsn} (with ${p.members.find((o) => o.userId !== m.userId)?.rsn ?? "partner"})`, pickOptions?.[m.userId]),
         group: "Pairs",
       })),
@@ -233,13 +237,11 @@ function ChangeRow({
       break;
     }
     case "addTeam": {
-      const captain = captainOptions(pool).find((o) => o.value === row.captainUserId);
+      const captain = captainOptions(pool).find((o) => o.id === row.captainUserId);
       summary = captain ? `Add a Team, Captain ${captain.label}` : "Add a Team";
       controls = (
-        <Select
-          size="sm"
-          aria-label="Captain of the new Team"
-          placeholder="Pick its Captain…"
+        <SearchableSelect
+          placeholder="Search for its Captain…"
           value={row.captainUserId ?? ""}
           options={captainOptions(pool, pickOptions)}
           onChange={(userId) => onChange(setTeamPick(rows, row.id, userId))}
