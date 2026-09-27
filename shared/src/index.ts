@@ -1115,9 +1115,13 @@ export interface ContributionAward {
   viaTiles?: string[];
 }
 
+/** A MinimalUser plus only what avatarUrl (client/src/core/ui/user.ts) needs to show their Discord avatar. */
+export type AvatarUser = MinimalUser & Pick<User, "discordId" | "discordAvatar">;
+
 export interface ContributionCount {
   userId: string;
-  user: MinimalUser;
+  /** Carries the avatar fields so the Titles section can show each holder's Discord avatar. */
+  user: AvatarUser;
   teamId: string;
   approvedSubmissions: number;
   /** Unrounded; shown to two decimal places. */

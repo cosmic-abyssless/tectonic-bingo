@@ -210,6 +210,16 @@ describe("getContributionCounts", () => {
     expect(member.awards[0]).toMatchObject({ label: "Test Tile — Task", awardPoints: 20, points: 20, claims: [{ label: "Bruma torch", quantity: 1 }] });
     expect(counts[0]!.userId).toBe(fx.memberUserId);
   });
+
+  it("sends only the avatar fields on top of the minimal user", () => {
+    const fx = seedFixture();
+    db.update(schema.users).set({ discordAvatar: "abc123" }).where(eq(schema.users.id, fx.memberUserId)).run();
+    const task = addTask(fx.tileId, { points: 20 });
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId);
+
+    const [count] = getContributionCounts(db, fx.bingoId);
+    expect(count!.user).toEqual({ id: fx.memberUserId, discordId: "member", discordAvatar: "abc123", discordUsername: "member", discordGlobalName: null, discordGuildNick: null, rsn: null });
+  });
 });
 
 describe("getTileHeatmap", () => {
