@@ -42,6 +42,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       break;
     case "wrapped_published":
       queryClient.invalidateQueries({ queryKey: ["wrapped"] });
+      // The shell's wrappedPublished: the Board's "Your Bingo Wrapped" banner.
+      queryClient.invalidateQueries({ queryKey: ["bingo"] });
       break;
     case "team_updated":
       queryClient.invalidateQueries({ queryKey: ["bingo"] });

@@ -12,3 +12,4 @@ export { useBingoHeader, RULES_COME_LATER } from "./useBingoHeader";
 export type { BingoHeaderModel } from "./useBingoHeader";
 export type * from "./types";
 export { useRewindModel } from "./RewindProvider";
+export { useWrappedModel } from "./WrappedProvider";

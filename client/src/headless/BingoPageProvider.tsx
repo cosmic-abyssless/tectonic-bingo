@@ -199,6 +199,7 @@ export function BingoPageProvider({
     canPickTeam,
     canViewStats,
     canRewind: bingo.stage === "complete",
+    wrapped: { canOpen: bingo.stage === "complete" && (shell.wrappedPublished || isMod), preview: !shell.wrappedPublished },
     canScout,
     draft: { state: draftState ?? null, isLoading: draftLoading },
     viewing: {
@@ -242,6 +243,7 @@ export function BingoPageProvider({
       goHome: () => navigate("/"),
       goToStats: () => navigate(`/b/${slug}/stats`),
       goToRewind: () => navigate(`/b/${slug}/rewind`),
+      goToWrapped: () => navigate(`/b/${slug}/wrapped`),
       goToMod: () => navigate(`/b/${slug}/mod`),
       goToDraft: () => navigate(`/b/${slug}/draft`),
     },

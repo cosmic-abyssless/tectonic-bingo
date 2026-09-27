@@ -58,6 +58,14 @@ import { RewindScoreboard } from "./rewind/RewindScoreboard";
 import { RewindPopup } from "./rewind/RewindPopup";
 import { RewindTileMarkers } from "./rewind/RewindTileMarkers";
 import { RewindTileTeams } from "./rewind/RewindTileTeams";
+import { WrappedPageLayout } from "./wrapped/WrappedPageLayout";
+import { WrappedBanner } from "./wrapped/WrappedBanner";
+import { WrappedIntro } from "./wrapped/WrappedIntro";
+import { WrappedYou } from "./wrapped/WrappedYou";
+import { WrappedModerator } from "./wrapped/WrappedModerator";
+import { WrappedTeam } from "./wrapped/WrappedTeam";
+import { WrappedBingo } from "./wrapped/WrappedBingo";
+import { WrappedOutro } from "./wrapped/WrappedOutro";
 
 // The neutral/fallback theme: eager (it's what every unknown or loading
 // theme key falls back to), and the only theme that must define every slot.
@@ -75,6 +83,14 @@ export const defaultTheme: ThemeDefinition = {
     RewindPopup,
     RewindTileMarkers,
     RewindTileTeams,
+    WrappedPage: WrappedPageLayout,
+    WrappedBanner,
+    WrappedIntro,
+    WrappedYou,
+    WrappedModerator,
+    WrappedTeam,
+    WrappedBingo,
+    WrappedOutro,
     DraftPickBurst,
     AchievementUnlockCard,
     AchievementRow,

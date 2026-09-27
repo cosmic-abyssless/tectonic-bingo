@@ -10,7 +10,7 @@ import { approveSubmission, rejectSubmission } from "./scoringService";
 import { ServiceError } from "./errors";
 import * as statsService from "./statsService";
 import * as rewindService from "./rewindService";
-import { computeWrapped, getWrappedState, publishWhenReady, publishWrapped, readBingoWrapped, readMyWrapped } from "./wrappedService";
+import { computeWrapped, getWrappedState, isPublished, publishWhenReady, publishWrapped, readBingoWrapped, readMyWrapped } from "./wrappedService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -135,8 +135,10 @@ describe("publishing", () => {
     const fx = seed();
     play(fx);
     const bingo = finish(fx);
+    expect(isPublished(db, bingo.id)).toBe(false);
     const state = publishWrapped(db, bingo, fx.mod.id);
     expect(state.published).toBe(true);
+    expect(isPublished(db, bingo.id)).toBe(true);
     expect(db.select().from(schema.playerWrapped).all().map((r) => r.userId).sort()).toEqual([fx.alice.id, fx.bob.id, fx.carol.id, fx.dave.id, fx.erin.id, fx.frank.id].sort());
 
     publishWrapped(db, bingo, fx.mod.id);
@@ -303,6 +305,9 @@ describe("computeWrapped", () => {
     expect(dave.teamRank).toBe(1);
     expect(dave.firstDrop?.itemName).toBe("Vorkath's head");
     expect(dave.mostActiveDay?.submissions).toBe(1);
+    // The average over every Player, whether or not they scored.
+    const shares = players.map((p) => p.you.pointsShare);
+    expect(dave.bingoAveragePointsShare).toBeCloseTo(shares.reduce((a, b) => a + b, 0) / shares.length);
     expect(of(fx.carol.id).you.coveredBuyIn).toBe(false);
     // The rejected head never counts for frank; the scales do.
     expect(of(fx.frank.id).you.submissions).toBe(1);

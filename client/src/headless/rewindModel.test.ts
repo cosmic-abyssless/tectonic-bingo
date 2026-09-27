@@ -16,7 +16,7 @@ function sub(id: string, minutes: number, opts: { status?: "approved" | "rejecte
     player: null,
     tileId: "tile",
     screenshotUrl: null,
-    claims: (opts.claims ?? []).map((c, i) => ({ id: `${id}-c${i}`, nodeId: c.nodeId, label: "Scales", itemName: "Zulrah's scales", quantity: c.quantity, gpValue: null, luckOneIn: null })),
+    claims: (opts.claims ?? []).map((c, i) => ({ id: `${id}-c${i}`, nodeId: c.nodeId, label: "Scales", itemName: "Zulrah's scales", quantity: c.quantity, gpValue: null, luckOneIn: null, luckKills: null })),
     gpValue: null,
     reactions: [],
     completed: { tiles: [], lines: [], firstTiles: [], firstParts: [] },

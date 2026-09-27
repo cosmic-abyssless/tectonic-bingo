@@ -115,6 +115,7 @@ router.get(
       potTotal: bingoService.calculatePotTotal(bingo, paidSignupCount),
       hasSignups: signupService.hasAnySignup(db, bingo.id),
       viewer,
+      wrappedPublished: bingo.stage === "complete" && wrappedService.isPublished(db, bingo.id),
     });
   }),
 );

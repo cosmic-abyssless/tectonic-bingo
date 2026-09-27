@@ -158,22 +158,33 @@ export interface TeamSeed {
   coCaptain: Player | null;
 }
 
-/** The best players who signed up lead the teams; a captain with a duo partner brings them along as co-captain. */
-export async function createTeams(ctx: Ctx, players: Player[], count: number): Promise<TeamSeed[]> {
-  const { tl, rng } = ctx;
-  const noisy = new Map(players.map((p) => [p.index, p.skill + rng.normal(0, 0.05)]));
-  const eligible = players.filter((p) => p.signupAt && !p.isMe && !p.isMod).sort((a, b) => noisy.get(b.index)! - noisy.get(a.index)!);
-  const chosen: TeamSeed[] = [];
+/**
+ * Who leads the teams: the best players who signed up (by `rating`), a captain with a duo partner bringing them along
+ * as co-captain. In a duo bingo every Team is led by a pair (CONTEXT.md "Duo"), so only players whose partner signed
+ * up too can captain there. Fewer than `count` when there aren't enough.
+ */
+export function chooseCaptains(players: Player[], count: number, duo: boolean, rating: (p: Player) => number): { captain: Player; coCaptain: Player | null }[] {
+  const eligible = players.filter((p) => p.signupAt && !p.isMe && !p.isMod).sort((a, b) => rating(b) - rating(a));
+  const chosen: { captain: Player; coCaptain: Player | null }[] = [];
   const taken = new Set<number>();
   for (const p of eligible) {
     if (chosen.length >= count) break;
     if (taken.has(p.index)) continue;
     const partner = p.partnerIndex !== null ? players[p.partnerIndex]! : null;
     if (partner && (!partner.signupAt || taken.has(partner.index))) continue;
+    if (duo && !partner) continue;
     taken.add(p.index);
     if (partner) taken.add(partner.index);
-    chosen.push({ teamId: "", captain: p, coCaptain: partner });
+    chosen.push({ captain: p, coCaptain: partner });
   }
+  return chosen;
+}
+
+export async function createTeams(ctx: Ctx, players: Player[], count: number, duo: boolean): Promise<TeamSeed[]> {
+  const { tl, rng } = ctx;
+  const noisy = new Map(players.map((p) => [p.index, p.skill + rng.normal(0, 0.05)]));
+  const chosen: TeamSeed[] = chooseCaptains(players, count, duo, (p) => noisy.get(p.index)!).map((c) => ({ teamId: "", ...c }));
+  if (chosen.length < count) ctx.log(`WARNING: only ${chosen.length} of ${count} teams: not enough ${duo ? "signed-up pairs" : "signups"} to lead them`);
   let at = plus(tl.captainsAt, rng.int(5, 30) * MINUTE);
   for (const seed of chosen) {
     const { team } = await ctx.api.as(ctx.admin).post<{ team: { id: string } }>(

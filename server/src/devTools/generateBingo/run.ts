@@ -114,7 +114,7 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   if (options.stage === "signup") return result;
 
   await setStage(ctx, "captains", tl.captainsAt);
-  const seeds = await createTeams(ctx, players, options.teams);
+  const seeds = await createTeams(ctx, players, options.teams, document.bingo.signupMode === "duo");
   const modAt = new Date(tl.captainsAt.getTime() + 4 * HOUR);
   for (const mod of [...mods, ...players.filter((p) => p.isMe)]) {
     if (mod.userId && mod.signupAt) await api.as(adminDiscordId).post(`/api/bingos/${slug}/admin/mods`, { userId: mod.userId }, { at: modAt });
