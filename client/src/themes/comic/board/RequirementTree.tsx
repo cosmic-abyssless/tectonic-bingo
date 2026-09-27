@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { RequirementNodeModel } from "../../../headless/types";
 import { CheckIcon } from "../../../core/ui/icons";
 import { ItemIcon } from "../../../core/ui/ItemIcon";
@@ -33,48 +34,67 @@ function LockedTag({ text, colors }: { text: string; colors: ComicColors }) {
   );
 }
 
+/** An ITEM, or a SUM over a single item (whose quantity and x/N progress sit on the row). */
 function LeafRow({ node, colors }: { node: RequirementNodeModel; colors: ComicColors }) {
   const iconUrl = node.iconUrl ?? (node.items.length === 1 ? node.items[0]!.iconUrl : null);
   const color = node.dim ? colors.INK_SUBTLE : node.submitted && !node.complete ? colors.WARN : colors.INK_BODY;
   return (
     // A SUM never strikes through: its items can be handed in again (duplicates
-    // count), so what's been received is shown as a count beside each instead.
+    // count), so what's been received is shown as a count instead.
     <li className={`flex items-start gap-2 text-sm leading-snug ${node.dim && !node.progress ? "line-through" : ""}`} style={{ color }}>
       <Box done={node.complete} dim={node.dim} colors={colors} />
       <span className="min-w-0 flex-1">
-        {node.items.length > 1 ? (
-          <ul className="mr-3 space-y-0.5">
-            {node.items.map((item) => (
-              <li key={item.name} style={item.lockedBy ? { color: colors.INK_SUBTLE } : undefined}>
-                <ItemIcon url={item.iconUrl} className={`${ICON_CLASS} ${node.dim || item.lockedBy ? "opacity-60" : ""}`} />
-                <WikiItemLink name={item.name} />
-                {item.count > 0 && (
-                  <span className="num ml-1.5 text-base leading-snug" style={{ fontFamily: COMIC_FONT, color: colors.OK }}>
-                    ×{item.count}
-                  </span>
-                )}
-                {item.lockedBy && <LockedTag text={item.lockedBy} colors={colors} />}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <span style={node.lockedBy ? { color: colors.INK_SUBTLE } : undefined}>
-            <ItemIcon url={iconUrl} className={`${ICON_CLASS} ${node.dim || node.lockedBy ? "opacity-60" : ""}`} />
-            {itemNameOf(node) ? <WikiItemLink name={itemNameOf(node)!} /> : node.label}
-            {node.lockedBy && <LockedTag text={node.lockedBy} colors={colors} />}
-          </span>
-        )}
+        <span style={node.lockedBy ? { color: colors.INK_SUBTLE } : undefined}>
+          <ItemIcon url={iconUrl} className={`${ICON_CLASS} ${node.dim || node.lockedBy ? "opacity-60" : ""}`} />
+          {itemNameOf(node) ? <WikiItemLink name={itemNameOf(node)!} /> : node.label}
+          {node.quantity && (
+            <span className="num ml-1.5 text-base leading-snug" style={{ fontFamily: COMIC_FONT }}>
+              ×{node.quantity}
+            </span>
+          )}
+          {node.lockedBy && <LockedTag text={node.lockedBy} colors={colors} />}
+        </span>
         {node.submitted && !node.complete && !node.dim && (
           <span className="ml-1.5 text-[10px] uppercase tracking-wider" style={{ color: colors.WARN }}>
             submitted
           </span>
         )}
       </span>
-      {node.progress && (
-        <span className="num shrink-0 text-base leading-none" style={{ fontFamily: COMIC_FONT, color: node.complete ? colors.OK : colors.WARN }}>
-          {node.progress.current}/{node.progress.target}
-        </span>
-      )}
+      {node.progress && <Progress node={node} colors={colors} />}
+    </li>
+  );
+}
+
+function Progress({ node, colors }: { node: RequirementNodeModel; colors: ComicColors }) {
+  return (
+    <span className="num shrink-0 text-base leading-none" style={{ fontFamily: COMIC_FONT, color: node.complete ? colors.OK : colors.WARN }}>
+      {node.progress!.current}/{node.progress!.target}
+    </span>
+  );
+}
+
+/** A SUM over several items: one row per item with how many have been received, and no box per item, since no single item completes it on its own. */
+function SumItemRows({ node, colors }: { node: RequirementNodeModel; colors: ComicColors }) {
+  return node.items.map((item) => (
+    <li key={item.name} className="text-sm leading-snug" style={{ color: node.dim || item.lockedBy ? colors.INK_SUBTLE : colors.INK_BODY }}>
+      <ItemIcon url={item.iconUrl} className={`${ICON_CLASS} ${node.dim || item.lockedBy ? "opacity-60" : ""}`} />
+      <WikiItemLink name={item.name} />
+      <span className="num ml-1.5 text-base leading-snug" style={{ fontFamily: COMIC_FONT, color: item.count > 0 ? colors.OK : colors.INK_SUBTLE }}>
+        ×{item.count}
+      </span>
+      {item.lockedBy && <LockedTag text={item.lockedBy} colors={colors} />}
+    </li>
+  ));
+}
+
+/** "— OR —" between an ANY's direct options, in the heading font. */
+function OrDivider({ dim, colors }: { dim: boolean; colors: ComicColors }) {
+  const color = dim ? colors.INK_SUBTLE : colors.INK;
+  return (
+    <li role="separator" className={`flex items-center gap-2 text-sm uppercase leading-none tracking-wide ${dim ? "opacity-60" : ""}`} style={{ fontFamily: COMIC_FONT, color }}>
+      <span className="h-0.5 w-5" style={{ background: color }} />
+      or
+      <span className="h-0.5 w-5" style={{ background: color }} />
     </li>
   );
 }
@@ -91,22 +111,38 @@ export function RequirementTree({ node, root }: { node: RequirementNodeModel; ro
     );
   }
   return (
-    <div className={root ? "" : "ml-1.5 border-l-[3px] pl-3"} style={root ? undefined : { borderColor: node.complete ? colors.OK : colors.LINE }}>
+    <div className={root ? "" : "ml-1.5 border-l-[3px] pl-3"} style={root ? undefined : { borderColor: node.complete ? colors.OK : node.dim ? colors.INK_SUBTLE : colors.LINE }}>
       {node.showHeading && (
-        <span className="inline-flex items-center gap-1.5 text-base uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: node.complete ? colors.OK : colors.INK }}>
+        <span
+          className="inline-flex items-center gap-1.5 text-base uppercase leading-none tracking-wide"
+          style={{ fontFamily: COMIC_FONT, color: node.complete ? colors.OK : node.dim ? colors.INK_SUBTLE : colors.INK }}
+        >
           {node.label}
+          {node.progress && (
+            <>
+              <span aria-hidden>·</span>
+              <Progress node={node} colors={colors} />
+            </>
+          )}
           {node.complete && <CheckIcon size={12} />}
         </span>
       )}
       <ul className={`space-y-1.5 ${node.showHeading ? "mt-1.5" : ""}`}>
-        {node.children.map((child) =>
-          child.isLeaf ? (
-            <LeafRow key={child.id} node={child} colors={colors} />
-          ) : (
-            <li key={child.id}>
-              <RequirementTree node={child} />
-            </li>
-          ),
+        {node.kind === "SUM" ? (
+          <SumItemRows node={node} colors={colors} />
+        ) : (
+          node.children.map((child, i) => (
+            <Fragment key={child.id}>
+              {i > 0 && node.divider && <OrDivider dim={node.divider.dim} colors={colors} />}
+              {child.isLeaf ? (
+                <LeafRow node={child} colors={colors} />
+              ) : (
+                <li>
+                  <RequirementTree node={child} />
+                </li>
+              )}
+            </Fragment>
+          ))
         )}
       </ul>
     </div>

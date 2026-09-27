@@ -55,9 +55,9 @@ export interface UserModel {
 export interface RequirementNodeModel {
   id: string;
   kind: NodeKind;
-  /** leafLabel() for leaves, conditionHeading() for composites. */
+  /** leafLabel() for leaves, conditionHeading() for composites (a SUM over several items is a composite: "5 in total from"). */
   label: string;
-  /** SUM only: the items that count toward it, for themes that list them instead of showing the joined label — each with how many the team has had approved (duplicates count), and whether the team has used the item elsewhere (`lockedBy`, e.g. "Used on DT2 ISSUE 1"; see exclusive items). */
+  /** SUM only: the items that count toward it (for a SUM over several items, the group's rows — no checkbox each, since no single item is done on its own) — each with how many the team has had approved (duplicates count), and whether the team has used the item elsewhere (`lockedBy`, e.g. "Used on DT2 ISSUE 1"; see exclusive items). */
   items: { name: string; iconUrl: string | null; count: number; lockedBy: string | null }[];
   /** ITEM leaves only: the item's wiki icon (via our cache), when it has a name to look up. */
   iconUrl: string | null;
@@ -72,10 +72,14 @@ export interface RequirementNodeModel {
   notNeeded: boolean;
   /** complete || notNeeded — the "no longer needs attention" display flag. */
   dim: boolean;
-  /** SUM only. */
+  /** SUM: items received / the total needed. COUNT: options complete / N. Drawn beside a group's heading ("Complete at least 3 of · 1/3"), or at the end of a single-item SUM's row. Null for ITEM, ALL and ANY (ALL shows progress through its ticked boxes; ANY is done or not). */
   progress: { current: number; target: number } | null;
+  /** A single-item SUM's quantity when it's more than 1, drawn after the name ("Twisted ancestral colour kit ×2"). Null otherwise. */
+  quantity: number | null;
   /** Whether the composite's own heading is rendered (always, for composites). */
   showHeading: boolean;
+  /** ANY only: draw this divider between each pair of its direct children (never before the first or after the last). `dim` once the ANY is satisfied (or an enclosing ANY/COUNT is), along with the options that are no longer needed. */
+  divider: { label: "OR"; dim: boolean } | null;
   children: RequirementNodeModel[];
 }
 
