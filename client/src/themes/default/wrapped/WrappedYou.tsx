@@ -8,7 +8,7 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
   return (
     <>
       {/* The opening screen, which carries the section's art: with art, shown even with nothing to count ("You showed up"). */}
-      {(y.submissions || y.points || y.art) && (
+      {(y.submissions || y.points || y.art.length > 0) && (
         <WrappedScene steps={3}>
           <Reveal step={0}>
             <WrappedSectionArt art={y.art} />

@@ -226,8 +226,9 @@ export interface ThemeSlots {
   // props-only, each one section's model; a section the model leaves out (nothing to say for this viewer) is never
   // drawn. Sections are built from core/wrapped's WrappedScene (one screen of the story) and Reveal (a line that fades up
   // as the viewer scrolls; just fades in with reduced motion), and must work at phone width. Each section model carries
-  // its Wrapped art (`art`: two boil frames, or null): draw it with core/wrapped's StickerArt (or WrappedSectionArt),
-  // which swaps the frames slowly and adds the CSS shadow, and make sure the section still looks finished without it.
+  // its Category images (`art`: any number, each two boil frames; empty without any): draw them with core/wrapped's
+  // WrappedSectionArt (or StickerArt), which swaps the frames slowly and adds the CSS shadow, and make sure the section
+  // still looks finished without them. The model's `sideArt` is for WrappedPage to set beside the sections.
   WrappedPage: ComponentType<Record<string, never>>;
   // The Board's way in, for a Finished Bingo once Wrapped is published, or for a Moderator before that (preview: say
   // it's a preview only Moderators can see).

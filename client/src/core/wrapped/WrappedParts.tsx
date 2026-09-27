@@ -88,8 +88,21 @@ export function WrappedStat({ value, label, tone }: { value: ReactNode; label: R
   );
 }
 
-/** A section's Wrapped art, above its opening heading; nothing when the section has none (it reads finished without). */
-export function WrappedSectionArt({ art }: { art: WrappedArtFrames | null }) {
-  if (!art) return null;
-  return <StickerArt frames={art} className="mx-auto mb-8 size-44 sm:size-56" />;
+/** Sticker heights for a row of Category images (each as wide as its art): smaller as there are more, so a row still fits a phone. */
+const ROW_SIZE = ["", "h-44 sm:h-56", "h-36 sm:h-48", "h-28 sm:h-40", "h-24 sm:h-36"];
+
+/**
+ * A section's Category images, side by side above its opening heading (a Team's three, a Duo's two); nothing when the
+ * section has none (it reads finished without). Each boils a little out of step with its neighbours.
+ */
+export function WrappedSectionArt({ art }: { art: WrappedArtFrames[] }) {
+  if (art.length === 0) return null;
+  const size = ROW_SIZE[Math.min(art.length, ROW_SIZE.length - 1)];
+  return (
+    <div className="mb-8 flex flex-wrap items-end justify-center gap-x-2 gap-y-4 sm:gap-x-4">
+      {art.map((frames, i) => (
+        <StickerArt key={frames[0]} frames={frames} className={size} phase={i / art.length} />
+      ))}
+    </div>
+  );
 }

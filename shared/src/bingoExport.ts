@@ -93,8 +93,10 @@ export interface ExportTile {
 }
 
 /**
- * A Wrapped section's art (#262): its original upload (the frames are rendered again on import), and how a
+ * One Wrapped art image (#262): its original upload (the frames are rendered again on import), and how a
  * solid-background screenshot was keyed (null for one uploaded already cut out; absent reads as the defaults).
+ * `section` is its group (shared WRAPPED_ART_GROUPS: a section's Category images, or "side"); a group's images are
+ * in the order the story shows them.
  */
 export interface ExportWrappedArt {
   section: string;
@@ -166,7 +168,7 @@ export interface BingoExportDocument {
   achievementKeys?: AchievementKey[];
   /**
    * Wrapped art, only when the export included images. Absent: the import keeps what a new Bingo starts with (a copy
-   * of the previous Bingo's); present, each section in it replaces that one's.
+   * of the previous Bingo's); present, each group in it replaces that group's images.
    */
   wrappedArt?: ExportWrappedArt[];
 }

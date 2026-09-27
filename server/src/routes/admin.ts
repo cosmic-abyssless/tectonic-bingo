@@ -288,8 +288,9 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
-// Wrapped art (#262): a cut-out per Wrapped section, as a transparent PNG or a screenshot on one solid colour (keyed
-// out on the server), drawn as a sticker. Not tied to the stage: it's only shown once the Bingo is Finished.
+// Wrapped art (#262): cut-outs in groups (a section's Category images, or the side pool), each a transparent PNG or a
+// screenshot on one solid colour (keyed out on the server), drawn as a sticker. Not tied to the stage: it's only
+// shown once the Bingo is Finished.
 // ---------------------------------------------------------------------------
 
 const wrappedArtUpload = imageUpload();
@@ -300,27 +301,42 @@ router.get(
   }),
 );
 router.post(
-  "/wrapped-art/:section",
+  "/wrapped-art/:group",
   wrappedArtUpload.single("image"),
   asyncHandler(async (req, res) => {
-    const section = wrappedArtService.parseSection(req.params.section);
+    const group = wrappedArtService.parseGroup(req.params.group);
     if (!req.file) throw new ServiceError(400, "image is required");
     const keying = wrappedArtService.parseKeying(req.body ?? {});
-    res.json({ art: await wrappedArtService.uploadArt(db, UPLOADS_DIR, req.bingo!, section, req.file.buffer, keying) });
+    res.status(201).json({ art: await wrappedArtService.addArt(db, UPLOADS_DIR, req.bingo!, group, req.file.buffer, keying) });
+  }),
+);
+router.put(
+  "/wrapped-art/:group/order",
+  asyncHandler(async (req, res) => {
+    const group = wrappedArtService.parseGroup(req.params.group);
+    res.json({ art: wrappedArtService.reorderArt(db, req.bingo!, group, (req.body as { ids?: unknown })?.ids) });
   }),
 );
 router.post(
-  "/wrapped-art/:section/recut",
+  "/wrapped-art/images/:id",
+  wrappedArtUpload.single("image"),
   asyncHandler(async (req, res) => {
-    const section = wrappedArtService.parseSection(req.params.section);
+    if (!req.file) throw new ServiceError(400, "image is required");
     const keying = wrappedArtService.parseKeying(req.body ?? {});
-    res.json({ art: await wrappedArtService.recutArt(db, UPLOADS_DIR, req.bingo!, section, keying) });
+    res.json({ art: await wrappedArtService.replaceArt(db, UPLOADS_DIR, req.bingo!, req.params.id as string, req.file.buffer, keying) });
+  }),
+);
+router.post(
+  "/wrapped-art/images/:id/recut",
+  asyncHandler(async (req, res) => {
+    const keying = wrappedArtService.parseKeying(req.body ?? {});
+    res.json({ art: await wrappedArtService.recutArt(db, UPLOADS_DIR, req.bingo!, req.params.id as string, keying) });
   }),
 );
 router.delete(
-  "/wrapped-art/:section",
+  "/wrapped-art/images/:id",
   asyncHandler(async (req, res) => {
-    wrappedArtService.removeArt(db, req.bingo!, wrappedArtService.parseSection(req.params.section));
+    wrappedArtService.removeArt(db, req.bingo!, req.params.id as string);
     res.status(204).end();
   }),
 );

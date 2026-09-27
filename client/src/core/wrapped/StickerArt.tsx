@@ -10,17 +10,25 @@ export const BOIL_MS = 650;
  * the tilt) swapped slowly. Both frames are loaded and stacked, so a swap never waits on the network. The shadow is a
  * CSS drop-shadow, which follows the torn edge. With reduced motion it shows the first frame, still.
  */
-export function StickerArt({ frames, className = "", alt = "" }: { frames: WrappedArtFrames; className?: string; alt?: string }) {
+export function StickerArt({ frames, className = "", alt = "", phase = 0 }: { frames: WrappedArtFrames; className?: string; alt?: string; phase?: number }) {
   const reduceMotion = useReducedMotion();
   const [frame, setFrame] = useState(0);
+  // `phase` (0–1) delays this sticker's swaps by that share of a frame, so stickers side by side don't boil in step.
   useEffect(() => {
     if (reduceMotion) {
       setFrame(0);
       return;
     }
-    const timer = setInterval(() => setFrame((f) => 1 - f), BOIL_MS);
-    return () => clearInterval(timer);
-  }, [reduceMotion]);
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const start = setTimeout(() => {
+      setFrame((f) => 1 - f);
+      timer = setInterval(() => setFrame((f) => 1 - f), BOIL_MS);
+    }, BOIL_MS * (1 + (phase % 1)));
+    return () => {
+      clearTimeout(start);
+      clearInterval(timer);
+    };
+  }, [reduceMotion, phase]);
 
   return (
     <div className={`relative [filter:drop-shadow(0_6px_10px_rgb(0_0_0/0.3))] ${className}`} role={alt ? "img" : undefined} aria-label={alt || undefined} aria-hidden={alt ? undefined : true}>
@@ -30,7 +38,9 @@ export function StickerArt({ frames, className = "", alt = "" }: { frames: Wrapp
           src={src}
           alt=""
           draggable={false}
-          className={`block h-full w-full object-contain ${i === 0 ? "" : "absolute inset-0"} ${frame === i ? "visible" : "invisible"}`}
+          // The first frame sizes the sticker: to the box's height with its own width (a box with only a height hugs the art),
+          // or contained in a box sized both ways. The second lies exactly over it.
+          className={`object-contain ${i === 0 ? "mx-auto block h-full w-auto max-w-full" : "absolute inset-0 size-full"} ${frame === i ? "visible" : "invisible"}`}
         />
       ))}
     </div>

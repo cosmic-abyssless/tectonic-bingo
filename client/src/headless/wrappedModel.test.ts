@@ -61,7 +61,7 @@ function bingo(): BingoWrapped {
 }
 
 function response(player: PlayerWrapped | null, extra: Partial<MyWrappedResponse> = {}): MyWrappedResponse {
-  return { state: { published: true, publishedAt: iso(48), publishOnFinish: false, pendingSubmissions: 0 }, preview: false, bingo: bingo(), player, moderator: null, art: {}, ...extra };
+  return { state: { published: true, publishedAt: iso(48), publishOnFinish: false, pendingSubmissions: 0 }, preview: false, bingo: bingo(), player, moderator: null, art: { sections: {}, side: [] }, ...extra };
 }
 
 const player = (you: Partial<WrappedYou> = {}): PlayerWrapped => ({ userId: "me", teamId: "a", you: { ...emptyYou, ...you }, duo: null, captain: null });
@@ -77,19 +77,21 @@ describe("buildWrappedStory", () => {
 
   it("gives each section its Wrapped art, and a section without any none", () => {
     const frames = (name: string): [string, string] => [`/uploads/wrapped-art/${name}-1.webp`, `/uploads/wrapped-art/${name}-2.webp`];
-    const sections = story(response(player({ submissions: 5 }), { art: { intro: frames("intro"), team: frames("team"), duo: frames("duo") } })).sections;
-    expect(sections.map((s) => [s.id, s.section.art?.[0] ?? null])).toEqual([
-      ["intro", "/uploads/wrapped-art/intro-1.webp"],
-      ["you", null],
-      ["team", "/uploads/wrapped-art/team-1.webp"],
-      ["bingo", null],
-      ["outro", null],
+    const built = story(response(player({ submissions: 5 }), { art: { sections: { intro: [frames("intro")], team: [frames("team"), frames("team2")], duo: [frames("duo")] }, side: [frames("side")] } }));
+    const sections = built.sections;
+    expect(built.sideArt.map((f) => f[0])).toEqual(["/uploads/wrapped-art/side-1.webp"]);
+    expect(sections.map((s) => [s.id, s.section.art.map((f) => f[0])])).toEqual([
+      ["intro", ["/uploads/wrapped-art/intro-1.webp"]],
+      ["you", []],
+      ["team", ["/uploads/wrapped-art/team-1.webp", "/uploads/wrapped-art/team2-1.webp"]],
+      ["bingo", []],
+      ["outro", []],
     ]);
   });
 
   it("doesn't tell You just because it has art", () => {
     const frames: [string, string] = ["/a.webp", "/b.webp"];
-    expect(kinds(response(player(), { art: { you: frames } }))).toEqual(["intro", "team", "bingo", "outro"]);
+    expect(kinds(response(player(), { art: { sections: { you: [frames] }, side: [] } }))).toEqual(["intro", "team", "bingo", "outro"]);
   });
 
   it("gives a viewer who isn't a Player the Bingo only", () => {

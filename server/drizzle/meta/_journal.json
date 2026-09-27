@@ -295,6 +295,13 @@
       "when": 1790521139029,
       "tag": "0041_wrapped_art",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "6",
+      "when": 1790525796042,
+      "tag": "0042_wrapped_art_groups",
+      "breakpoints": true
     }
   ]
 }
