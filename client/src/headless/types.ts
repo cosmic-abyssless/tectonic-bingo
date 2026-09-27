@@ -460,7 +460,17 @@ export interface RewindSubmissionModel {
   reactions: ReactionModel[];
   /** "Completed ZULRAH", "Row 2 complete", "First to complete ZULRAH"… */
   highlights: string[];
+  /** What made it stand out: the signal that counted most towards its Significance. Null when it has none. */
+  standout: RewindStandoutModel | null;
 }
+
+/**
+ * The signal that counted most towards a Submission's Significance, and the value to call out with it: the GP value
+ * ("12.5M"), the Luck ("1 in 1,230"), the Reaction count ("7"), the Tile or Line it completed, or none for a first.
+ */
+export type RewindStandoutModel =
+  | { kind: "gp" | "luck" | "reactions" | "tile" | "line"; value: string }
+  | { kind: "first"; value: null };
 
 export interface RewindTickModel {
   id: string;
