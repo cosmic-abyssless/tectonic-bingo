@@ -86,6 +86,7 @@ function dropsOf(subs: RewindSubmission[], userById: Map<string, AvatarUser>): W
         quantity: c.quantity,
         gpValue: c.gpValue,
         luckOneIn: c.luckOneIn,
+        luckKills: c.luckKills,
         at: s.submittedAt,
         screenshotUrl: s.screenshotUrl,
       })),
@@ -234,6 +235,7 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
   // Players: everyone on a Team.
   const playerIds = [...new Set(memberRows.map((m) => m.userId))];
   const averageSubmissions = playerIds.length ? playerIds.reduce((sum, id) => sum + (contributionOf.get(id)?.approvedSubmissions ?? 0), 0) / playerIds.length : 0;
+  const averagePointsShare = playerIds.length ? playerIds.reduce((sum, id) => sum + (contributionOf.get(id)?.pointsShare ?? 0), 0) / playerIds.length : 0;
   const achievements = getEarnedAchievements(db, bingo);
   const timelines = loadTimelines(db, bingoId);
   const teamOfUser = new Map(memberRows.map((m) => [m.userId, m.teamId]));
@@ -306,6 +308,7 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
       you: {
         submissions: c?.approvedSubmissions ?? 0,
         bingoAverageSubmissions: averageSubmissions,
+        bingoAveragePointsShare: averagePointsShare,
         pointsShare: c?.pointsShare ?? 0,
         teamPointsFraction: teamAwardPoints > 0 ? (c?.pointsShare ?? 0) / teamAwardPoints : 0,
         teamRank: 1 + teammates.filter((o) => beats(o.pointsShare, c?.pointsShare ?? 0)).length,
@@ -348,6 +351,11 @@ function pendingCount(db: Db, bingoId: string): number {
       .where(and(eq(teams.bingoId, bingoId), eq(submissions.status, "pending")))
       .get()?.n ?? 0
   );
+}
+
+/** Whether a Bingo's Wrapped has been published: one primary-key lookup, cheap enough for the Bingo shell. */
+export function isPublished(db: Db, bingoId: string): boolean {
+  return !!db.select({ bingoId: bingoWrapped.bingoId }).from(bingoWrapped).where(eq(bingoWrapped.bingoId, bingoId)).get();
 }
 
 export function getWrappedState(db: Db, bingo: Bingo): WrappedState {

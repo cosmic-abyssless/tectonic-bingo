@@ -92,6 +92,8 @@ export interface RewindClaim {
   gpValue: number | null;
   /** "1 in N", when Wise Old Man counts the drop's boss and the Player's kills are known. */
   luckOneIn: number | null;
+  /** The kills its Luck is judged over (since the Player's previous drop of it, or the Bingo's start); null with no Luck. */
+  luckKills: number | null;
 }
 
 /** One Submission as Rewind plays it: approved or rejected, never pending. */

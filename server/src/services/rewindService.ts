@@ -215,6 +215,7 @@ export function getRewind(db: Db, bingo: typeof schema.bingos.$inferSelect): Rew
         quantity: c.quantity,
         gpValue: c.gpValue,
         luckOneIn: lucks.get(c.id)?.oneIn ?? null,
+        luckKills: lucks.get(c.id)?.kills ?? null,
       }));
       const approved = d.submission.status === "approved";
       const completed = approved ? (completedBy.get(d.submission.id) ?? emptyCompletion()) : emptyCompletion();

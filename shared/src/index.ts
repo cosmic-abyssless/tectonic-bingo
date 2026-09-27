@@ -521,6 +521,8 @@ export interface BingoShellResponse {
   hasSignups: boolean;
   /** What this viewer may see (CONTEXT.md "Player"). Without `canSee` the shell is only the landing data: no teams, no categories. */
   viewer: BingoViewerAccess;
+  /** A Finished Bingo's Wrapped (CONTEXT.md) has been published: the Board's "Your Bingo Wrapped" banner. */
+  wrappedPublished: boolean;
 }
 
 /**

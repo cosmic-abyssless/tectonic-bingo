@@ -24,6 +24,12 @@ import type {
   TeamSelectorModel,
   TileModel,
   TileSearchModel,
+  WrappedBingoModel,
+  WrappedIntroModel,
+  WrappedModeratorModel,
+  WrappedOutroModel,
+  WrappedTeamModel,
+  WrappedYouModel,
 } from "../headless/types";
 
 export interface OnTheClockProps {
@@ -211,6 +217,27 @@ export interface ThemeSlots {
   RewindTileMarkers: ComponentType<{ tile: RewindTileTeamsModel }>;
   // All Teams view: the dialog a Tile opens, listing every Team's progress on it at the moment being viewed.
   RewindTileTeams: ComponentType<{ tile: RewindTileTeamsModel | null; isOpen: boolean; onClose: () => void }>;
+
+  // Wrapped (CONTEXT.md "Wrapped"): a Finished Bingo's story from the viewer's point of view, at /b/:slug/wrapped. The
+  // Wrapped* slots are one group. WrappedPage is whole-surface (may call useWrappedModel() directly): the page frame,
+  // the progress indicator, and each of the model's sections in order through its section slot. The section slots are
+  // props-only, each one section's model; a section the model leaves out (nothing to say for this viewer) is never
+  // drawn. Sections are built from core/wrapped's WrappedScene (one screen of the story) and Reveal (a line that fades up
+  // as the viewer scrolls; just fades in with reduced motion), and must work at phone width.
+  WrappedPage: ComponentType<Record<string, never>>;
+  // The Board's way in, for a Finished Bingo once Wrapped is published, or for a Moderator before that (preview: say
+  // it's a preview only Moderators can see).
+  WrappedBanner: ComponentType<{ preview: boolean; onOpen: () => void }>;
+  // The opening screen. preview: a Moderator's preview, computed just now and not yet published.
+  WrappedIntro: ComponentType<{ section: WrappedIntroModel; preview: boolean }>;
+  WrappedYou: ComponentType<{ section: WrappedYouModel }>;
+  // A reviewing Moderator's (or Admin's) own reviews.
+  WrappedModerator: ComponentType<{ section: WrappedModeratorModel }>;
+  WrappedTeam: ComponentType<{ section: WrappedTeamModel }>;
+  // The Bingo as a whole, moderation stats (with the rejection-rate banter) included.
+  WrappedBingo: ComponentType<{ section: WrappedBingoModel }>;
+  // The closing screen: a way on to Rewind and back to the Board. It leaves room for share cards (#232).
+  WrappedOutro: ComponentType<{ section: WrappedOutroModel; onRewind: () => void; onBoard: () => void }>;
 
   // Submission flow — mounted only while open (see BoardPageLayout).
   SubmissionModal: ComponentType<{ flow: SubmissionFlowModel }>;

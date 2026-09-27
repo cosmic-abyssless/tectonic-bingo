@@ -16,6 +16,8 @@ export interface WrappedDrop {
   gpValue: number | null;
   /** "1 in N" when it can be judged (CONTEXT.md "Luck"). */
   luckOneIn: number | null;
+  /** The kills that Luck is judged over. Missing from Wrapped published before it was stored. */
+  luckKills?: number | null;
   /** Submission time, ISO. */
   at: string;
   /** Its main screenshot. Left out on read for other Teams' drops when the Bingo hides them once Finished. */
@@ -32,6 +34,8 @@ export interface WrappedYou {
   /** Approved Submissions credited to them, and the average over every Player in the Bingo. */
   submissions: number;
   bingoAverageSubmissions: number;
+  /** The average Points share over every Player in the Bingo. Missing from Wrapped published before it was stored. */
+  bingoAveragePointsShare?: number;
   /** Points share (CONTEXT.md), unrounded; its share of the Team's awarded points (0–1); rank on the Team (1 = top). */
   pointsShare: number;
   teamPointsFraction: number;
