@@ -260,6 +260,13 @@
       "when": 1790483385640,
       "tag": "0036_sealed_tiles",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1790487549154,
+      "tag": "0038_bingo_title_settings",
+      "breakpoints": true
     }
   ]
 }

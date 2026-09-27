@@ -11,6 +11,7 @@ import { getTeamProgress } from "./teamService";
 import { getDropRates } from "./luck/dropRates";
 import { luckOf } from "./luck/luck";
 import { updateTitleSettings } from "./titleSettingsService";
+import { advanceStage } from "./bingoService";
 import { DEFAULT_LUCK_WEIGHTS } from "@bingo/shared";
 import { filterStatsForTeam, getContributionCounts, getPointsOverTime, getStats, getStatsForViewer, getTileHeatmap, getTimeline } from "./statsService";
 
@@ -545,6 +546,41 @@ describe("Luck facts", () => {
     expect(luckOfPlayer(fx.bingoId, fx.memberUserId)!.spoon).toBeNull();
     expect(getStats(db, fx.bingoId).titleSettings.luck.spoonMinLuck).toBe(3);
     expect(getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: fx.teamAId, bingoComplete: false }).titleSettings.luck.spoonMinLuck).toBe(3);
+  });
+
+  it("keeps a Finished Bingo's luck weights and Title settings when the Site admin's change (#221)", () => {
+    const fx = seedLuck();
+    const task = createTask(db, fx.tileId, { kind: "ITEM", itemName: "Ultor vestige", label: "Ultor", points: 10 });
+    timeline(fx.bingoId, fx.memberUserId, [[-2, 100], [5, 110]]);
+    drop(fx.teamAId, task.id, "Ultor vestige", fx.memberUserId, 4, fx.modUserId);
+    advanceStage(db, { bingoId: fx.bingoId, toStage: "complete", changedByUserId: fx.modUserId, now: hours(10) });
+    updateTitleSettings(db, { minimums: { grinder: 50 }, disabled: ["carry"], luck: { ...DEFAULT_LUCK_WEIGHTS, spoonMinLuck: 3 } }, fx.modUserId);
+
+    expect(luckOfPlayer(fx.bingoId, fx.memberUserId)!.spoon).not.toBeNull();
+    const { titleSettings } = getStats(db, fx.bingoId);
+    expect(titleSettings.luck.spoonMinLuck).toBe(1);
+    expect(titleSettings.minimums.grinder).toBe(10);
+    expect(titleSettings.disabled).toEqual([]);
+
+    // Reopened, it uses the Site admin's settings again.
+    advanceStage(db, { bingoId: fx.bingoId, toStage: "live", changedByUserId: fx.modUserId, now: hours(11) });
+    expect(luckOfPlayer(fx.bingoId, fx.memberUserId)!.spoon).toBeNull();
+    expect(getStats(db, fx.bingoId).titleSettings.disabled).toEqual(["carry"]);
+  });
+
+  it("still counts late reviews on a Finished Bingo (#221)", () => {
+    const fx = seedLuck();
+    const task = createTask(db, fx.tileId, { kind: "ITEM", itemName: "Ultor vestige", label: "Ultor", points: 10 });
+    const late = submit(fx.teamAId, task.id, fx.memberUserId);
+    const rejected = submit(fx.teamAId, task.id, fx.secondUserId);
+    advanceStage(db, { bingoId: fx.bingoId, toStage: "complete", changedByUserId: fx.modUserId });
+    const facts = (userId: string) => getStats(db, fx.bingoId).titleFacts.find((f) => f.userId === userId)!;
+    expect(facts(fx.memberUserId).pointsShare).toBe(0);
+
+    approveSubmission(db, { submissionId: late.id, reviewedByUserId: fx.modUserId });
+    rejectSubmission(db, { submissionId: rejected.id, reviewedByUserId: fx.modUserId, reviewerNotes: "blurry" });
+    expect(facts(fx.memberUserId).pointsShare).toBe(10);
+    expect(facts(fx.secondUserId).rejectedSubmissions).toBe(1);
   });
 
   it("gives no Clutch to a Claim that earned no Points share, but still counts it for Spoon", () => {

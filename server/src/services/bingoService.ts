@@ -9,6 +9,7 @@ import {
   bingoAchievementSettings,
   bingoLines,
   bingoModerators,
+  bingoTitleSettings,
   bingos,
   claims,
   draftPicks,
@@ -36,6 +37,7 @@ import {
   womSnapshots,
 } from "../db/schema";
 import { ServiceError } from "./errors";
+import { freezeTitleSettings, unfreezeTitleSettings } from "./titleSettingsService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 import { rsnsInBingo } from "./playerNames";
@@ -254,6 +256,9 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
     const now = params.now ?? clockNow();
 
     tx.update(bingos).set({ stage: params.toStage }).where(eq(bingos.id, bingo.id)).run();
+    // A Finished Bingo keeps the Title settings and Titles it finished with (#221); leaving Finished drops them.
+    if (params.toStage === "complete") freezeTitleSettings(tx, bingo.id, now);
+    else if (bingo.stage === "complete") unfreezeTitleSettings(tx, bingo.id);
     tx.insert(stageTransitions)
       .values({ bingoId: bingo.id, fromStage: bingo.stage as Stage, toStage: params.toStage, changedByUserId: params.changedByUserId, createdAt: now })
       .run();
@@ -325,6 +330,7 @@ export function deleteBingo(db: Db, bingoId: string): void {
     tx.delete(nodeEdges).where(inArray(nodeEdges.parentId, nodeIds)).run();
     tx.delete(nodes).where(eq(nodes.bingoId, bingoId)).run();
     tx.delete(stageTransitions).where(eq(stageTransitions.bingoId, bingoId)).run();
+    tx.delete(bingoTitleSettings).where(eq(bingoTitleSettings.bingoId, bingoId)).run();
     tx.delete(bingoModerators).where(eq(bingoModerators.bingoId, bingoId)).run();
     tx.delete(womSnapshots).where(eq(womSnapshots.bingoId, bingoId)).run();
     tx.delete(womReads).where(eq(womReads.bingoId, bingoId)).run();

@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { DEFAULT_LUCK_WEIGHTS, DEFAULT_TITLE_SETTINGS } from "@bingo/shared";
+import { DEFAULT_LUCK_WEIGHTS, DEFAULT_TITLE_SETTINGS, TITLES, pickTitles, titleMinimum } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { getTitleSettings, updateTitleSettings } from "./titleSettingsService";
+import { getBingoTitleSettings, getTitleSettings, updateTitleSettings } from "./titleSettingsService";
+import { advanceStage, deleteBingo } from "./bingoService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -74,5 +75,80 @@ describe("Title settings", () => {
   it("ignores stored values for Titles that no longer exist", () => {
     db.insert(schema.siteSettings).values({ key: "titles", valueJson: JSON.stringify({ minimums: { retired: 5, grinder: 20 }, disabled: ["retired", "dry"], luck: { spoonDecay: "x" } }), updatedByUserId: adminId, updatedAt: new Date() }).run();
     expect(getTitleSettings(db)).toEqual({ minimums: { grinder: 20 }, disabled: ["dry"], luck: DEFAULT_LUCK_WEIGHTS });
+  });
+});
+
+describe("A Finished Bingo's Title settings (#221)", () => {
+  let finishedId: string;
+  let liveId: string;
+  const bingoRow = (id: string) => db.select().from(schema.bingos).where(eq(schema.bingos.id, id)).get()!;
+  const settingsOf = (id: string) => getBingoTitleSettings(db, bingoRow(id));
+  const frozenRow = (id: string) => db.select().from(schema.bingoTitleSettings).where(eq(schema.bingoTitleSettings.bingoId, id)).get();
+  const makeBingo = (slug: string, stage: "live" | "complete") => {
+    const id = db.insert(schema.bingos).values({ slug, name: slug, boardRows: 1, boardCols: 1, createdByUserId: adminId }).returning().get().id;
+    advanceStage(db, { bingoId: id, toStage: stage, changedByUserId: adminId });
+    return id;
+  };
+
+  beforeEach(() => {
+    updateTitleSettings(db, { minimums: { grinder: 25 }, disabled: ["dry"] }, adminId);
+    finishedId = makeBingo("finished", "complete");
+    liveId = makeBingo("live", "live");
+  });
+
+  it("stores the settings in force, every default spelled out, and every Title that exists, on finishing", () => {
+    const row = frozenRow(finishedId)!;
+    const minimums = Object.fromEntries(TITLES.filter((t) => t.minimum).map((t) => [t.id, t.minimum!.default]));
+    expect(JSON.parse(row.settingsJson)).toEqual({ minimums: { ...minimums, grinder: 25 }, disabled: ["dry"], luck: DEFAULT_LUCK_WEIGHTS });
+    expect(JSON.parse(row.titleIdsJson)).toEqual(TITLES.map((t) => t.id));
+    expect(frozenRow(liveId)).toBeUndefined();
+  });
+
+  it("keeps them when the global settings change, while a Live Bingo picks the change up", () => {
+    const luck = { ...DEFAULT_LUCK_WEIGHTS, spoonMinLuck: 3 };
+    updateTitleSettings(db, { minimums: { grinder: 40, carry: 0.5 }, disabled: ["spoon"], luck }, adminId);
+
+    expect(settingsOf(finishedId)).toMatchObject({ disabled: ["dry"], luck: DEFAULT_LUCK_WEIGHTS });
+    expect(settingsOf(finishedId).minimums).toMatchObject({ grinder: 25, carry: 1 });
+    expect(settingsOf(liveId)).toEqual({ minimums: { grinder: 40, carry: 0.5 }, disabled: ["spoon"], luck });
+  });
+
+  it("keeps a default in force when it finished, even after the default changes in code", () => {
+    const hoarder = TITLES.find((t) => t.id === "hoarder")!;
+    const before = hoarder.minimum!.default;
+    hoarder.minimum!.default = 99;
+    try {
+      expect(titleMinimum(hoarder, settingsOf(finishedId))).toBe(before);
+      expect(titleMinimum(hoarder, settingsOf(liveId))).toBe(99);
+    } finally {
+      hoarder.minimum!.default = before;
+    }
+  });
+
+  it("switches off a Title added after it finished", () => {
+    const ids = TITLES.map((t) => t.id).filter((id) => id !== "overachiever");
+    db.update(schema.bingoTitleSettings).set({ titleIdsJson: JSON.stringify(ids) }).where(eq(schema.bingoTitleSettings.bingoId, finishedId)).run();
+
+    expect(settingsOf(finishedId).disabled).toEqual(["dry", "overachiever"]);
+    const picked = pickTitles([], { now: new Date(), liveAt: null, endedAt: null }, settingsOf(finishedId));
+    expect(picked.map((p) => p.title.id)).not.toContain("overachiever");
+    expect(settingsOf(liveId).disabled).toEqual(["dry"]);
+  });
+
+  it("goes back to the global settings when reopened, and takes a fresh copy when finished again", () => {
+    advanceStage(db, { bingoId: finishedId, toStage: "live", changedByUserId: adminId });
+    expect(frozenRow(finishedId)).toBeUndefined();
+    updateTitleSettings(db, { minimums: { grinder: 40 } }, adminId);
+    expect(settingsOf(finishedId)).toEqual(getTitleSettings(db));
+
+    advanceStage(db, { bingoId: finishedId, toStage: "complete", changedByUserId: adminId });
+    updateTitleSettings(db, {}, adminId);
+    expect(settingsOf(finishedId).minimums.grinder).toBe(40);
+    expect(settingsOf(finishedId).disabled).toEqual([]);
+  });
+
+  it("is deleted with its Bingo", () => {
+    deleteBingo(db, finishedId);
+    expect(frozenRow(finishedId)).toBeUndefined();
   });
 });
