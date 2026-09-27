@@ -87,6 +87,15 @@ export interface User {
   updatedAt: string;
 }
 
+/**
+ * Another person as a response shows them: enough for a name, an avatar and an RSN, never their account flags
+ * (isAdmin, inGuild) or timestamps. Every response that lists someone other than the viewer uses this; only the
+ * viewer's own record (/api/me) and site-admin user management send the full User.
+ */
+export type PublicUser = Pick<User, "id" | "discordId" | "discordUsername" | "discordGlobalName" | "discordGuildNick" | "discordAvatar"> & {
+  rsn: string | null;
+};
+
 export const SIGNUP_MODES = ["solo", "duo"] as const;
 export type SignupMode = (typeof SIGNUP_MODES)[number];
 
@@ -166,7 +175,7 @@ export interface Team {
 }
 
 export interface TeamRosterEntry {
-  user: User;
+  user: PublicUser;
   isCaptain: boolean;
   isCoCaptain: boolean; // duo mode: captain's partner, shares captain permissions
   isDrafted: boolean; // joined via a draft pick, so mods can't remove them by hand
@@ -582,6 +591,8 @@ export interface SignupQuestion {
   helperText: string | null;
   type: SignupQuestionType;
   optionsJson: string | null;
+  /** Choice questions only: players can pick Other and write their own answer instead of (or besides) an option. */
+  allowOther: boolean;
   required: boolean;
   sortOrder: number;
   visibility: QuestionVisibility;
@@ -651,12 +662,12 @@ export interface MyTectonicRsnsResponse {
 
 export interface RosterEntry {
   signup: Signup;
-  user: User;
+  user: PublicUser;
   answers: SignupAnswer[];
   // Only populated by the mod-facing roster (GET .../mod/signups) — who
   // marked buy-in received for this signup. Absent from other RosterEntry
   // uses like the captain-candidates list.
-  collectedByUser?: User | null;
+  collectedByUser?: PublicUser | null;
   // Duo mode, mod roster only: the accepted pairing this player is in.
   pairing?: SignupPairing | null;
   // Duo mode, mod roster only: this player's own outstanding request to pair with someone, before it's been
@@ -721,7 +732,7 @@ export interface SignupPairing {
 export interface PartnerCandidate {
   discordId: string;
   rsns: string[];
-  user: MinimalUser | null;
+  user: PublicUser | null;
 }
 
 export interface PartnerCandidatesResponse {
@@ -787,7 +798,7 @@ export interface BingoModerator {
   bingoId: string;
   userId: string;
   createdAt: string;
-  user: User;
+  user: PublicUser;
 }
 
 export interface TeamMember {

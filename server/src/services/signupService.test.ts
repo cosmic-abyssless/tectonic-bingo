@@ -121,6 +121,91 @@ describe("multiple-choice questions", () => {
   });
 });
 
+describe("choice questions that allow Other", () => {
+  const seed = (type: "select" | "multiselect", { allowOther = true, required = false } = {}) => {
+    const { bingo, memberId, adminId } = seedBingo();
+    const question = createQuestion(db, { bingoId: bingo.id, prompt: "Combat style?", type, optionsJson: JSON.stringify(["Melee", "Ranged", "Magic"]), allowOther, required });
+    return { bingo, memberId, adminId, question };
+  };
+  const stored = (signupId: string) => db.select().from(schema.signupAnswers).where(eq(schema.signupAnswers.signupId, signupId)).get()!.value;
+  const signUp = (bingo: typeof schema.bingos.$inferSelect, userId: string, questionId: string, value: string) =>
+    createSignup(db, bingo, { bingoId: bingo.id, userId, rsn: "Player", answers: [{ questionId, value }] });
+
+  it("can only be turned on for a single- or multiple-choice question", () => {
+    const { bingo } = seedBingo();
+    expect(() => createQuestion(db, { bingoId: bingo.id, prompt: "Why?", type: "text", allowOther: true })).toThrow(/choice question can allow Other/);
+    expect(() => createQuestion(db, { bingoId: bingo.id, prompt: "Captain?", type: "boolean", allowOther: true })).toThrow(/choice question can allow Other/);
+    const choice = createQuestion(db, { bingoId: bingo.id, prompt: "Style?", type: "select", optionsJson: JSON.stringify(["Melee"]) });
+    expect(choice.allowOther).toBe(false);
+    expect(updateQuestion(db, choice.id, { allowOther: true }).allowOther).toBe(true);
+    // Stops being a choice question: stops allowing Other with it.
+    expect(updateQuestion(db, choice.id, { type: "text" }).allowOther).toBe(false);
+    expect(() => updateQuestion(db, choice.id, { allowOther: true })).toThrow(/choice question can allow Other/);
+  });
+
+  it("refuses an option that reads as an Other answer", () => {
+    const { bingo } = seedBingo();
+    expect(() => createQuestion(db, { bingoId: bingo.id, prompt: "Style?", type: "select", optionsJson: JSON.stringify(['{"other":"x"}']) })).toThrow(/Other answer/);
+  });
+
+  it("stores a single-choice Other with its trimmed text", () => {
+    const { bingo, memberId, question } = seed("select", { required: true });
+    const signup = signUp(bingo, memberId, question.id, JSON.stringify({ other: " hybrid " }));
+    expect(stored(signup.id)).toBe('{"other":"hybrid"}');
+  });
+
+  it("stores a multiple-choice Other after the options, and takes it as the only answer to a required question", () => {
+    const { bingo, memberId, adminId, question } = seed("multiselect", { required: true });
+    const both = signUp(bingo, memberId, question.id, JSON.stringify(["Melee", { other: "hybrid" }]));
+    expect(stored(both.id)).toBe('["Melee",{"other":"hybrid"}]');
+    const alone = signUp(bingo, adminId, question.id, JSON.stringify([{ other: "hybrid" }]));
+    expect(stored(alone.id)).toBe('[{"other":"hybrid"}]');
+  });
+
+  // One single- and one multiple-choice question in the same bingo, each answered with Other `text`.
+  const bothTypes = (allowOther: boolean) => {
+    const { bingo, memberId } = seedBingo();
+    const options = JSON.stringify(["Melee", "Ranged", "Magic"]);
+    const single = createQuestion(db, { bingoId: bingo.id, prompt: "Main style?", type: "select", optionsJson: options, allowOther });
+    const multiple = createQuestion(db, { bingoId: bingo.id, prompt: "Styles?", type: "multiselect", optionsJson: options, allowOther });
+    return [
+      { type: "select", attempt: (other: string) => () => signUp(bingo, memberId, single.id, JSON.stringify({ other })) },
+      { type: "multiselect", attempt: (other: string) => () => signUp(bingo, memberId, multiple.id, JSON.stringify(["Melee", { other }])) },
+    ];
+  };
+
+  it("refuses Other with no text, or too much", () => {
+    for (const { type, attempt } of bothTypes(true)) {
+      expect(attempt("  "), type).toThrow(/Write something for Other/);
+      expect(attempt("x".repeat(101)), type).toThrow(/at most 100/);
+    }
+  });
+
+  it("refuses Other on a question that doesn't allow it", () => {
+    for (const { type, attempt } of bothTypes(false)) expect(attempt("hybrid"), type).toThrow(/doesn't take an Other answer/);
+  });
+
+  it("still refuses a choice that isn't one of the options, and more than one Other", () => {
+    const { bingo, memberId, question } = seed("multiselect");
+    expect(() => signUp(bingo, memberId, question.id, JSON.stringify(["Melee", "Hybrid"]))).toThrow(/"Hybrid" isn't one of the options/);
+    expect(() => signUp(bingo, memberId, question.id, JSON.stringify([{ other: "a" }, { other: "b" }]))).toThrow(/list of choices/);
+    const single = createQuestion(db, { bingoId: bingo.id, prompt: "Role?", type: "select", optionsJson: JSON.stringify(["dps"]) });
+    expect(() => signUp(bingo, memberId, single.id, "tank")).toThrow(/"tank" isn't one of the options/);
+  });
+
+  it("keeps a saved answer valid after the Admin edits the options or turns Other off", () => {
+    const { bingo, memberId, question } = seed("multiselect");
+    const signup = signUp(bingo, memberId, question.id, JSON.stringify(["Magic", { other: "hybrid" }]));
+    updateQuestion(db, question.id, { optionsJson: JSON.stringify(["Melee", "Ranged"]), allowOther: false });
+    // Saving the form untouched still works, and so does dropping what's gone.
+    expect(() => updateSignup(db, bingo, signup.id, { answers: [{ questionId: question.id, value: JSON.stringify(["Magic", { other: "hybrid" }]) }] })).not.toThrow();
+    expect(() => updateSignup(db, bingo, signup.id, { answers: [{ questionId: question.id, value: JSON.stringify(["Magic", { other: "something new" }]) }] })).toThrow(/doesn't take an Other answer/);
+    updateSignup(db, bingo, signup.id, { answers: [{ questionId: question.id, value: JSON.stringify(["Melee"]) }] });
+    expect(stored(signup.id)).toBe('["Melee"]');
+    expect(() => updateSignup(db, bingo, signup.id, { answers: [{ questionId: question.id, value: JSON.stringify(["Magic"]) }] })).toThrow(/isn't one of the options/);
+  });
+});
+
 describe("question helper text", () => {
   const helper = (id: string) => db.select().from(schema.signupQuestions).where(eq(schema.signupQuestions.id, id)).get()!.helperText;
 

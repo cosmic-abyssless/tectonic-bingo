@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useSignupForm, type SignupQuestionModel } from "../../headless/useSignupForm";
 import { PartnerPanel } from "./PartnerPanel";
 import { Button } from "../ui/Button";
@@ -11,6 +12,8 @@ import { AlertIcon, CheckIcon, LockIcon } from "../ui/icons";
 /** A group of radio buttons or checkboxes under one label, for the choice questions. */
 function ChoiceGroup({ question, label }: { question: SignupQuestionModel; label: React.ReactNode }) {
   const multiple = question.type === "multiselect";
+  const { other } = question;
+  const otherInput = useRef<HTMLInputElement>(null);
   return (
     <fieldset>
       <legend className="mb-1.5 block text-xs font-medium text-on-surface-muted">{label}</legend>
@@ -27,7 +30,39 @@ function ChoiceGroup({ question, label }: { question: SignupQuestionModel; label
             <span className="text-sm text-on-surface">{choice.label}</span>
           </label>
         ))}
+        {other && (
+          <div className="flex min-h-8 items-center gap-2.5">
+            <label className="flex shrink-0 cursor-pointer select-none items-center gap-2.5">
+              <input
+                type={multiple ? "checkbox" : "radio"}
+                name={multiple ? undefined : `question-${question.id}`}
+                checked={other.checked}
+                onChange={(e) => {
+                  other.set(e.target.checked);
+                  // Picking Other is for writing in it: go straight to the box.
+                  if (e.target.checked) requestAnimationFrame(() => otherInput.current?.focus());
+                }}
+                className="size-4 cursor-pointer accent-accent"
+              />
+              <span className="text-sm text-on-surface">Other</span>
+            </label>
+            {other.checked && (
+              <Input
+                ref={otherInput}
+                aria-label={`Other answer to ${question.prompt}`}
+                aria-invalid={other.missingText || undefined}
+                value={other.text}
+                onChange={(e) => other.setText(e.target.value)}
+                maxLength={other.maxLength}
+                placeholder="Your answer"
+                size="sm"
+                className="min-w-0 flex-1"
+              />
+            )}
+          </div>
+        )}
       </div>
+      {other?.missingText && <p className="mt-1.5 text-xs text-danger">Write your answer for Other, or untick it.</p>}
       {question.clear && (
         <button type="button" onClick={question.clear} className="mt-1.5 text-xs text-on-surface-subtle underline underline-offset-2 hover:text-on-surface">
           Clear
