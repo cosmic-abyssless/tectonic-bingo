@@ -3,7 +3,7 @@
 // never a raw Tile, TeamNodeState[], SubmissionDetails[], or LeafClaimMaps.
 // See docs/headless-theming-plan.md §2.
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
-import type { AuditCategory, AuditTone, DraftState, NodeKind, NodeStatus, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus, WrappedArtFrames } from "@bingo/shared";
+import type { AuditCategory, AuditTone, DraftState, NodeKind, NodeStatus, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus, WrappedArtFrames, WrappedCredit } from "@bingo/shared";
 
 export interface ActivityEntryModel {
   id: number;
@@ -300,6 +300,8 @@ export interface BingoPageModel {
     endsAt: number | null;
     boardRows: number;
     boardCols: number;
+    /** Credits (CONTEXT.md), in order, for Wrapped's Outro. */
+    wrappedCredits: WrappedCredit[];
   };
   milestone: StageMilestone | null;
   user: UserModel;
@@ -728,6 +730,8 @@ export interface WrappedCaptainModel {
 export interface WrappedModeratorModel {
   kind: "moderator";
   art: WrappedArtFrames[];
+  /** The Moderator's name as the Bingo shows it (RSN, else Discord name), captioned on their art. */
+  name: string;
   /** "32 Submissions" */
   reviewedLabel: string;
   medianLabel: string;
@@ -799,6 +803,8 @@ export interface WrappedOutroModel {
   kind: "outro";
   art: WrappedArtFrames[];
   bingoName: string;
+  /** Credits (CONTEXT.md): who put the Bingo together, in the order the Admins set; empty leaves the credits out. */
+  credits: { name: string; role: string | null }[];
 }
 
 export type WrappedSectionModel = WrappedIntroModel | WrappedYouModel | WrappedDuoModel | WrappedCaptainModel | WrappedModeratorModel | WrappedTeamModel | WrappedBingoModel | WrappedOutroModel;
