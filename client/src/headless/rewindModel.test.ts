@@ -125,26 +125,31 @@ describe("playbackHolds", () => {
   // Roughly how generated test-data Bingos come out: mostly minor, some notable, a few huge.
   const bingo = (n: number): SignificanceTier[] => Array.from({ length: n }, (_, i) => (i % 25 === 0 ? "huge" : i % 6 === 0 ? "notable" : "minor"));
 
-  it("plays a small Bingo in about 7 minutes", () => {
-    const holds = playbackHolds(bingo(40));
-    expect(Math.abs(minutes(sum(holds)) - 7)).toBeLessThanOrEqual(1);
-  });
-
-  it("plays a large Bingo in about 7 minutes", () => {
-    const holds = playbackHolds(bingo(1_200));
-    expect(Math.abs(minutes(sum(holds)) - 7)).toBeLessThanOrEqual(1);
-  });
-
-  it("holds a huge Submission 4× a notable one, and a minor one only briefly", () => {
+  it("holds each tier for its own time in a small Bingo, well under the ceiling", () => {
     const [minor, notable, huge] = playbackHolds(["minor", "notable", "huge", "minor", "notable"]);
-    expect(huge! / notable!).toBeCloseTo(4);
-    expect(minor!).toBeLessThan(notable!);
+    expect([minor, notable, huge]).toEqual([PLAYBACK.holdMs.minor, PLAYBACK.holdMs.notable, PLAYBACK.holdMs.huge]);
+    expect(minutes(sum(playbackHolds(bingo(40))))).toBeLessThan(2);
+  });
+
+  it("never holds one Submission for long, however few big ones there are", () => {
+    // A Team with a handful of huge Submissions among many minor ones used to hold each huge one for ~25s.
+    const holds = playbackHolds([...Array.from({ length: 117 }, () => "minor" as const), ...Array.from({ length: 21 }, () => "notable" as const), "huge", "huge", "huge", "huge"]);
+    expect(Math.max(...holds)).toBe(PLAYBACK.holdMs.huge);
+  });
+
+  it("fits a large Bingo into 7 minutes, keeping the tiers' ratios", () => {
+    const holds = playbackHolds(bingo(1_200));
+    expect(minutes(sum(holds))).toBeLessThanOrEqual(7.01);
+    expect(minutes(sum(holds))).toBeGreaterThan(6);
+    const [huge, , , , , , notable] = holds;
+    expect(huge! / notable!).toBeCloseTo(PLAYBACK.holdMs.huge / PLAYBACK.holdMs.notable);
   });
 
   it("gives minor Submissions the minimum hold when there are too many to share the time", () => {
     const holds = playbackHolds([...Array.from({ length: 5_000 }, () => "minor" as const), "notable", "huge"]);
     expect(holds[0]).toBe(PLAYBACK.minMinorMs);
-    expect(holds.at(-1)! / holds.at(-2)!).toBeCloseTo(4);
+    expect(holds.at(-2)).toBe(PLAYBACK.minNotableMs);
+    expect(holds.at(-1)! / holds.at(-2)!).toBeCloseTo(PLAYBACK.holdMs.huge / PLAYBACK.holdMs.notable);
   });
 
   it("is empty with nothing to play", () => {

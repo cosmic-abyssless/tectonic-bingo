@@ -198,6 +198,11 @@
   .tile-flash { animation: tile-flash 520ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 }
 
+/* A Rewind popup's countdown while playing: fills over its hold (duration set inline). It tells the viewer Play is
+   still going, so it runs even with reduced motion. */
+@keyframes rewind-hold { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.rewind-hold { transform-origin: left; animation: rewind-hold linear forwards; }
+
 /* A whole-page "Loading…" that stays invisible for its first 400ms: a load that
    quick (a cached page waiting on its theme) shouldn't flash text; a slow one still says so. */
 @keyframes delayed-in { to { opacity: 1; } }

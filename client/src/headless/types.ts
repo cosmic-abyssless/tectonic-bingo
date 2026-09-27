@@ -510,6 +510,8 @@ export interface RewindPopupModel {
   submission: RewindSubmissionModel;
   /** notable: a small popup; huge: a big one that holds longer. */
   size: "small" | "big";
+  /** While playing: how long this popup stays before Play moves on, for a countdown. Null when paused or stepping. */
+  holdMs: number | null;
   close(): void;
 }
 

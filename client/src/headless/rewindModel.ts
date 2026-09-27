@@ -124,30 +124,31 @@ export function stepPrev(items: RewindItem[], at: number, focusIndex: number, fi
 }
 
 /**
- * Play's timing: the whole Bingo in about `totalMs` (7 minutes) whatever the Submission count, shared out by tier.
- * A huge Submission holds 4× a notable one, and a minor one only a brief flash of its Tile. When there are so many
- * minor ones that their share would drop below `minMinorMs`, they get that minimum and the rest share what's left;
- * with nothing left (a very large Bingo), everything gets its minimum.
+ * Play's timing: each Submission holds for its tier's `holdMs` (a notable popup long enough to read, a huge one twice
+ * that, a minor one only a brief flash of its Tile), so a small Bingo plays in a couple of minutes. `maxTotalMs`
+ * (7 minutes) is a ceiling, not a target: a Bingo that would run longer has every hold shrunk to fit, keeping the
+ * tiers' ratios. When so many minor ones would drop below `minMinorMs`, they get that minimum and the rest share
+ * what's left, never below `minNotableMs` for a notable one (a very large Bingo can then run over the ceiling).
  */
 export const PLAYBACK = {
-  totalMs: 7 * 60_000,
-  units: { minor: 0.25, notable: 1, huge: 4 } satisfies Record<SignificanceTier, number>,
+  maxTotalMs: 7 * 60_000,
+  holdMs: { minor: 500, notable: 3_000, huge: 6_000 } satisfies Record<SignificanceTier, number>,
   minMinorMs: 150,
   minNotableMs: 600,
 } as const;
 
 export function playbackHolds(tiers: SignificanceTier[]): number[] {
-  const { totalMs, units, minMinorMs, minNotableMs } = PLAYBACK;
-  const total = tiers.reduce((sum, t) => sum + units[t], 0);
-  if (total === 0) return [];
-  const unit = totalMs / total;
-  if (unit * units.minor >= minMinorMs) return tiers.map((t) => unit * units[t]);
+  const { maxTotalMs, holdMs, minMinorMs, minNotableMs } = PLAYBACK;
+  const total = tiers.reduce((sum, t) => sum + holdMs[t], 0);
+  if (total <= maxTotalMs) return tiers.map((t) => holdMs[t]);
+  const scale = maxTotalMs / total;
+  if (holdMs.minor * scale >= minMinorMs) return tiers.map((t) => holdMs[t] * scale);
 
   const minors = tiers.filter((t) => t === "minor").length;
-  const restUnits = total - minors * units.minor;
-  const left = totalMs - minors * minMinorMs;
-  const restUnit = restUnits > 0 ? Math.max(minNotableMs, left / restUnits) : 0;
-  return tiers.map((t) => (t === "minor" ? minMinorMs : restUnit * units[t]));
+  const rest = total - minors * holdMs.minor;
+  const left = maxTotalMs - minors * minMinorMs;
+  const restScale = rest > 0 ? Math.max(minNotableMs / holdMs.notable, left / rest) : 0;
+  return tiers.map((t) => (t === "minor" ? minMinorMs : holdMs[t] * restScale));
 }
 
 /** "1 in 1,234" (rounded to something readable). */

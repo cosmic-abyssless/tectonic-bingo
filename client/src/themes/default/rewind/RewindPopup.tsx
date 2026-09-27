@@ -74,6 +74,12 @@ export function RewindPopup({ popup }: { popup: RewindPopupModel }) {
         </span>
       )}
 
+      {popup.holdMs !== null && (
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-outline">
+          <div className="rewind-hold h-full bg-accent" style={{ animationDuration: `${popup.holdMs}ms` }} />
+        </div>
+      )}
+
       <button type="button" aria-label="Close" onClick={popup.close} className="absolute right-1 top-1 rounded p-1 text-on-surface-subtle hover:bg-surface-hover hover:text-on-surface">
         <XIcon size={14} />
       </button>

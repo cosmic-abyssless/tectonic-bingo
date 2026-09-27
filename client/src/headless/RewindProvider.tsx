@@ -125,7 +125,7 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
     [items],
   );
 
-  // Play: event by event, skipping the gaps, each held for its share of the ~7 minutes (rewindModel.playbackHolds).
+  // Play: event by event, skipping the gaps, each held for its tier's time (rewindModel.playbackHolds).
   // Each hold ends at a deadline carried over from the one before, rather than "now + hold", so the time spent
   // rendering each step (and timers firing late) doesn't pile up over a thousand Submissions.
   const atRef = useRef(at);
@@ -270,6 +270,8 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
       ? {
           submission: toSubmissionModel(popupItem.sub, popupItem.at, start, teamById.get(popupItem.sub.teamId), tileName(popupItem.sub.tileId)),
           size: popupItem.sub.significance.tier === "huge" ? "big" : "small",
+          // Resuming Play starts the hold afresh (the effect above), so the countdown starts over with it.
+          holdMs: playing && popupItem === current ? (holds[focusIndex] ?? null) : null,
           close: () => setPopupId(null),
         }
       : null,
