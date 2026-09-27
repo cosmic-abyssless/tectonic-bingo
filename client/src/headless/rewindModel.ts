@@ -204,7 +204,29 @@ export const PLAYBACK = {
   minNotableMs: 600,
 } as const;
 
-export function playbackHolds(tiers: SignificanceTier[], minMinorMs: number = PLAYBACK.minMinorMs): number[] {
+/**
+ * Play's speed multipliers, 1x first (the default). A faster speed divides every hold computed above, so it changes
+ * the pace, not the ceiling. From `SKIP_MINOR_FROM_SPEED` up, Play skips minor Submissions outright (they hold 0 and
+ * get no flash), since by then their flash would be too brief to see; notable and huge ones always play.
+ */
+export const PLAYBACK_SPEEDS = [1, 2, 4, 8] as const;
+export type PlaybackSpeed = (typeof PLAYBACK_SPEEDS)[number];
+export const SKIP_MINOR_FROM_SPEED: PlaybackSpeed = 4;
+
+export function isPlaybackSpeed(value: unknown): value is PlaybackSpeed {
+  return PLAYBACK_SPEEDS.includes(value as PlaybackSpeed);
+}
+
+/** Whether Play stops on a Submission of this tier at this speed (false: it's skipped). */
+export function playsAt(tier: SignificanceTier, speed: PlaybackSpeed): boolean {
+  return tier !== "minor" || speed < SKIP_MINOR_FROM_SPEED;
+}
+
+export function playbackHolds(tiers: SignificanceTier[], minMinorMs: number = PLAYBACK.minMinorMs, speed: PlaybackSpeed = 1): number[] {
+  return baseHolds(tiers, minMinorMs).map((ms, i) => (playsAt(tiers[i]!, speed) ? ms / speed : 0));
+}
+
+function baseHolds(tiers: SignificanceTier[], minMinorMs: number): number[] {
   const { maxTotalMs, holdMs, minNotableMs } = PLAYBACK;
   const total = tiers.reduce((sum, t) => sum + holdMs[t], 0);
   if (total <= maxTotalMs) return tiers.map((t) => holdMs[t]);

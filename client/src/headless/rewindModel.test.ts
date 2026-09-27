@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode, RewindResponse, RewindSubmission, SignificanceTier, Tile } from "@bingo/shared";
-import { adjustmentsAt, boardStateAt, closingRows, countUpTo, formatOneIn, playbackHolds, PLAYBACK, prepareRewind, standoutOf, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems } from "./rewindModel";
+import { adjustmentsAt, boardStateAt, closingRows, countUpTo, formatOneIn, playbackHolds, PLAYBACK, PLAYBACK_SPEEDS, playsAt, prepareRewind, SKIP_MINOR_FROM_SPEED, standoutOf, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems } from "./rewindModel";
 import { buildTileModelsStatic } from "./boardModel";
 
 const MIN = 60_000;
@@ -202,6 +202,29 @@ describe("playbackHolds", () => {
     expect(holds[0]).toBe(PLAYBACK.minMinorMs);
     expect(holds.at(-2)).toBe(PLAYBACK.minNotableMs);
     expect(holds.at(-1)! / holds.at(-2)!).toBeCloseTo(PLAYBACK.holdMs.huge / PLAYBACK.holdMs.notable);
+  });
+
+  it("plays proportionally faster at a higher speed, on top of the ceiling's scaling", () => {
+    for (const tiers of [bingo(40), bingo(1_200)]) {
+      const base = playbackHolds(tiers);
+      expect(sum(playbackHolds(tiers, PLAYBACK.minMinorMs, 2))).toBeCloseTo(sum(base) / 2);
+      const notable = tiers.indexOf("notable");
+      expect(playbackHolds(tiers, PLAYBACK.minMinorMs, 8)[notable]).toBeCloseTo(base[notable]! / 8);
+    }
+  });
+
+  it("skips minor Submissions at the faster speeds, never notable or huge ones", () => {
+    const tiers = bingo(300);
+    expect(PLAYBACK_SPEEDS.some((s) => s >= SKIP_MINOR_FROM_SPEED)).toBe(true);
+    for (const speed of PLAYBACK_SPEEDS) {
+      const holds = playbackHolds(tiers, PLAYBACK.minMinorMs, speed);
+      tiers.forEach((tier, i) => {
+        const skipped = tier === "minor" && speed >= SKIP_MINOR_FROM_SPEED;
+        expect(playsAt(tier, speed)).toBe(!skipped);
+        if (skipped) expect(holds[i]).toBe(0);
+        else expect(holds[i]).toBeGreaterThan(0);
+      });
+    }
   });
 
   it("is empty with nothing to play", () => {
