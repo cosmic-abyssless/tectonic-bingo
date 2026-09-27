@@ -33,21 +33,34 @@ function seedCaptain(bingoId: string, discordId: string) {
   return user;
 }
 
+// A duo Team is led by a pair: a Captain and their accepted partner (both signed up), who becomes the co-captain.
+// Leads aren't in the pool, so this doesn't change who's cut.
+function seedLeadPair(bingo: typeof schema.bingos.$inferSelect, discordId: string) {
+  const captain = seedCaptain(bingo.id, discordId);
+  const partner = seedCaptain(bingo.id, `${discordId}-partner`);
+  adminPair(db, { ...bingo, stage: "signup" }, { userIdA: captain.id, userIdB: partner.id, createdByUserId: captain.id });
+  return { captain, partner };
+}
+
+function seedTeamLedByPair(bingo: typeof schema.bingos.$inferSelect, discordId: string, name?: string) {
+  const { captain, partner } = seedLeadPair(bingo, discordId);
+  createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, coCaptainUserId: partner.id, name });
+  return captain;
+}
+
 function signUp(bingoId: string, discordId: string, at: Date) {
   const user = seedUser(discordId);
   db.insert(schema.signups).values({ bingoId, userId: user.id, rsn: discordId, createdAt: at }).run();
   return user;
 }
 
-// 2 Teams (led by captains with no partner of their own), one accepted pair and two singles in the pool: the
-// same shape as the planner's "1 pair + 2 singles" example — 2 Avoidable cut, 0 Unavoidable.
+// 2 Teams (each led by a pair), one accepted pair and two singles in the pool: the same shape as the planner's
+// "1 pair + 2 singles" example — 2 Avoidable cut, 0 Unavoidable.
 function seedAvoidableScenario() {
   const { bingo, admin } = seedBingo();
   const signupStage = { ...bingo, stage: "signup" as const };
-  const c1 = seedCaptain(bingo.id, "c1");
-  const c2 = seedCaptain(bingo.id, "c2");
-  createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, name: "A" });
-  createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
+  const c1 = seedTeamLedByPair(bingo, "c1", "A");
+  const c2 = seedTeamLedByPair(bingo, "c2", "B");
   const base = new Date("2026-01-01T00:00:00Z").getTime();
   const a = signUp(bingo.id, "a", new Date(base));
   const b = signUp(bingo.id, "b", new Date(base + 1000));
@@ -83,7 +96,8 @@ describe("getCutReviewPreview / scoreCutChanges", () => {
       { userId: c.id, rsn: "c", region: "europe" },
       { userId: d.id, rsn: "d", region: null },
     ]);
-    const [pairing] = getAcceptedPairs(db, bingo.id);
+    // The pool's pair, not a Team's lead pair.
+    const pairing = getAcceptedPairs(db, bingo.id).find((p) => p.userIds.includes(a.id));
     expect(pool.pairs).toEqual([{ pairingId: pairing!.pairing.id, members: expect.arrayContaining([{ userId: a.id, rsn: "a" }, { userId: b.id, rsn: "b" }]) }]);
     // The Captains lead Teams, so they're not in the pool.
     expect(pool.teams.map((t) => [t.name, t.captainRsn]).sort()).toEqual([
@@ -106,10 +120,8 @@ describe("getCutReviewPreview / scoreCutChanges", () => {
 
   it("reports 0 Avoidable once nothing but an Unavoidable cut is left (2 Teams, 3 singles)", () => {
     const { bingo } = seedBingo();
-    const c1 = seedCaptain(bingo.id, "c1");
-    const c2 = seedCaptain(bingo.id, "c2");
-    createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
-    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
+    seedTeamLedByPair(bingo, "c1");
+    seedTeamLedByPair(bingo, "c2");
     const base = new Date("2026-01-01T00:00:00Z").getTime();
     signUp(bingo.id, "x", new Date(base));
     signUp(bingo.id, "y", new Date(base + 1000));
@@ -124,12 +136,14 @@ describe("getCutReviewPreview / scoreCutChanges", () => {
 describe("applyCutReview", () => {
   it("applies every change, through the existing audited operations, and records the review", () => {
     const { bingo, admin, c, d } = seedAvoidableScenario();
+    // seedAvoidableScenario's own setup (pairing "a" & "b", and each Team's lead pair) already recorded some.
+    const adminPaired = () => db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "pairing.admin_paired")).all().length;
+    const pairedBefore = adminPaired();
     const result = applyCutReview(db, bingo, [{ kind: "pair", userIds: [c.id, d.id] }], admin.id);
     expect(result.cutPlayers).toBe(0);
 
     expect(getAcceptedPairs(db, bingo.id).some((p) => p.userIds.includes(c.id) && p.userIds.includes(d.id))).toBe(true);
-    // 2, not 1: seedAvoidableScenario's own setup (pairing "a" & "b") already recorded one.
-    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "pairing.admin_paired")).all()).toHaveLength(2);
+    expect(adminPaired()).toBe(pairedBefore + 1);
     const applied = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "draft.cut_review_applied")).get()!;
     // By name, and not under `changes`, which the audit log reads as a before/after diff.
     expect(JSON.parse(applied.details)).toEqual({ applied: ["Paired c & d"], cutPlayers: 0, cutPlayersNow: 2 });
@@ -167,6 +181,9 @@ describe("applyCutReview", () => {
 
   it("never half-applies a stale plan: rolls back every change in the same call", () => {
     const { bingo, admin, a, c, d } = seedAvoidableScenario();
+    const e = signUp(bingo.id, "e", new Date("2026-02-01T00:00:00Z"));
+    // In a duo bingo a new Team's Captain has to have a partner: pair "c" with "e" so the addTeam below is valid.
+    adminPair(db, { ...bingo, stage: "signup" }, { userIdA: c.id, userIdB: e.id, createdByUserId: admin.id });
     const teamCountBefore = getTeamsForBingo(db, bingo.id).length;
     // A valid addTeam change alongside a pairing that's already stale ("a" already has a partner).
     expect(() =>
@@ -218,10 +235,8 @@ describe("assertCutReviewSatisfied", () => {
 
   it("allows when nothing is Avoidable, without ever applying a review", () => {
     const { bingo } = seedBingo();
-    const c1 = seedCaptain(bingo.id, "c1");
-    const c2 = seedCaptain(bingo.id, "c2");
-    createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
-    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
+    seedTeamLedByPair(bingo, "c1");
+    seedTeamLedByPair(bingo, "c2");
     const base = new Date("2026-01-01T00:00:00Z").getTime();
     signUp(bingo.id, "x", new Date(base));
     signUp(bingo.id, "y", new Date(base + 1000));

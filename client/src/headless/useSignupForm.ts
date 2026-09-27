@@ -85,6 +85,12 @@ export interface SignupFormModel {
   error: string | null;
   submit: () => void;
   withdraw: { confirming: boolean; ask: () => void; cancel: () => void; confirm: () => void; pending: boolean };
+  /**
+   * They lead a Team (Captain or co-captain), so they can't withdraw (or, in a duo bingo, unpair) themselves — an admin
+   * has to. What to tell them where the form usually says they can withdraw (and the Withdraw button goes); null for
+   * everyone else.
+   */
+  teamLead: string | null;
 }
 
 function parseOptions(question: SignupQuestion): string[] {
@@ -264,6 +270,10 @@ export function useSignupForm(slug: string): SignupFormModel {
     saved,
     error,
     submit: () => void submit(),
+    teamLead:
+      existing && mySignup?.leadsTeam
+        ? `You lead ${mySignup.leadsTeam}, so you can't ${shell?.bingo.signupMode === "duo" ? "unpair or withdraw" : "withdraw"} yourself. Contact an admin if you need to.`
+        : null,
     withdraw: {
       confirming: confirmingWithdraw,
       ask: () => setConfirmingWithdraw(true),

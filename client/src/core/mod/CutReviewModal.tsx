@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { TIME_ZONE_REGIONS, type ApplyCutReviewResponse, type CutReviewPool, type CutReviewPreview, type CutReviewScore } from "@bingo/shared";
-import { useCutReview } from "../../api/queries";
+import { useBingo, useCutReview } from "../../api/queries";
 import { useApplyCutReview, useCutReviewScore } from "../../api/adminQueries";
 import { useDialogParts } from "../ui/useDialogParts";
 import { Button } from "../ui/Button";
@@ -59,6 +59,7 @@ function CutReviewBody({ slug, onClose, onApplied }: { slug: string; onClose: ()
 function CutReviewEditor({ slug, preview, onClose, onApplied }: { slug: string; preview: CutReviewPreview; onClose: () => void; onApplied?: (result: ApplyCutReviewResponse) => void }) {
   const { plan, pool } = preview;
   const apply = useApplyCutReview(slug);
+  const isDuo = useBingo(slug).data?.bingo.signupMode === "duo";
   // The rows start over whenever the plan itself changes (the roster moved, or a rejected apply refetched it): edits
   // made against the old roster can't be trusted.
   const planKey = JSON.stringify([plan.changes, pool]);
@@ -107,7 +108,7 @@ function CutReviewEditor({ slug, preview, onClose, onApplied }: { slug: string; 
       ) : (
         <ul className="space-y-2">
           {rows.map((row) => (
-            <ChangeRow key={row.id} row={row} rows={rows} pool={pool} pickOptions={pickOptions} onChange={setRows} />
+            <ChangeRow key={row.id} row={row} rows={rows} pool={pool} isDuo={isDuo} pickOptions={pickOptions} onChange={setRows} />
           ))}
         </ul>
       )}
@@ -165,18 +166,28 @@ const pairLabel = (pair: CutReviewPool["pairs"][number]) => pair.members.map((m)
 const teamLabel = (team: CutReviewPool["teams"][number]) => `${team.name} (Captain ${team.captainRsn})`;
 
 /**
- * Everyone in the pool, for an added Team's Captain (searched by name, it's the whole pool): a pair member brings
- * their partner along as co-captain.
+ * Who can captain an added Team (searched by name). In a solo bingo, any single. In a duo one a Team is led by a pair,
+ * so half of a pair, who brings their partner along as co-captain: a pair in the pool (unless this plan splits it) or
+ * one this plan pairs up.
  */
-function captainOptions(pool: CutReviewPool, pickOptions: Record<string, number> | null = null): { id: string; label: string; group?: string }[] {
+function captainOptions(pool: CutReviewPool, rows: CutReviewRow[], isDuo: boolean, pickOptions: Record<string, number> | null = null): { id: string; label: string; group?: string }[] {
+  if (!isDuo) return pool.singles.map((s) => ({ id: s.userId, label: withCount(s.rsn, pickOptions?.[s.userId]) }));
+  const live = rows.filter((r) => !r.dropped);
+  const split = new Set(live.flatMap((r) => (r.kind === "split" ? [r.pairingId] : [])));
+  const rsn = (userId: string) => pool.singles.find((s) => s.userId === userId)?.rsn ?? "someone";
+  const pairOption = (userId: string, partnerRsn: string, ownRsn: string, group: string) => ({
+    id: userId,
+    label: withCount(`${ownRsn} (with ${partnerRsn})`, pickOptions?.[userId]),
+    group,
+  });
   return [
-    ...pool.singles.map((s) => ({ id: s.userId, label: withCount(s.rsn, pickOptions?.[s.userId]), group: pool.pairs.length ? "Singles" : undefined })),
-    ...pool.pairs.flatMap((p) =>
-      p.members.map((m) => ({
-        id: m.userId,
-        label: withCount(`${m.rsn} (with ${p.members.find((o) => o.userId !== m.userId)?.rsn ?? "partner"})`, pickOptions?.[m.userId]),
-        group: "Pairs",
-      })),
+    ...pool.pairs
+      .filter((p) => !split.has(p.pairingId))
+      .flatMap((p) => p.members.map((m) => pairOption(m.userId, p.members.find((o) => o.userId !== m.userId)?.rsn ?? "partner", m.rsn, "Pairs"))),
+    ...live.flatMap((r) =>
+      r.kind === "pair"
+        ? [pairOption(r.userIds[0], rsn(r.userIds[1]), rsn(r.userIds[0]), "Paired by this plan"), pairOption(r.userIds[1], rsn(r.userIds[0]), rsn(r.userIds[1]), "Paired by this plan")]
+        : [],
     ),
   ];
 }
@@ -186,12 +197,14 @@ function ChangeRow({
   row,
   rows,
   pool,
+  isDuo,
   pickOptions,
   onChange,
 }: {
   row: CutReviewRow;
   rows: CutReviewRow[];
   pool: CutReviewPool;
+  isDuo: boolean;
   pickOptions: Record<string, number> | null;
   onChange: (rows: CutReviewRow[]) => void;
 }) {
@@ -237,13 +250,13 @@ function ChangeRow({
       break;
     }
     case "addTeam": {
-      const captain = captainOptions(pool).find((o) => o.id === row.captainUserId);
+      const captain = captainOptions(pool, rows, isDuo).find((o) => o.id === row.captainUserId);
       summary = captain ? `Add a Team, Captain ${captain.label}` : "Add a Team";
       controls = (
         <SearchableSelect
           placeholder="Search for its Captain…"
           value={row.captainUserId ?? ""}
-          options={captainOptions(pool, pickOptions)}
+          options={captainOptions(pool, rows, isDuo, pickOptions)}
           onChange={(userId) => onChange(setTeamPick(rows, row.id, userId))}
         />
       );

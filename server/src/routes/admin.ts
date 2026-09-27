@@ -415,7 +415,10 @@ router.post(
 router.get(
   "/captain-candidates",
   asyncHandler(async (req, res) => {
-    res.json({ candidates: teamService.getCaptainCandidates(db, req.bingo!.id) });
+    res.json({
+      candidates: teamService.getCaptainCandidates(db, req.bingo!.id),
+      teamsNotLedByPairs: teamService.teamsNotLedByPairs(db, req.bingo!.id).map((t) => t.teamId),
+    });
   }),
 );
 router.post(

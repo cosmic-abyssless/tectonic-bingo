@@ -18,7 +18,7 @@ export function PartnerSheet({ slug }: { slug: string }) {
   return (
     <Sheet step={2} title="Duo partner" description="This bingo is drafted in pairs. Pick who you want to play with — they need to accept before the draft.">
       {partner &&
-        (partner.leave.confirming ? (
+        (partner.leave?.confirming ? (
           <Callout tone="danger">
             <div className="flex flex-wrap items-center gap-3">
               <span className="flex-1 font-semibold">Remove your pairing with {partner.name}? You'll both need to find a new partner.</span>
@@ -40,9 +40,11 @@ export function PartnerSheet({ slug }: { slug: string }) {
                 </div>
                 <div className="text-sm">You'll be drafted together.</div>
               </div>
-              <ComicButton size="sm" variant="ghost" isDisabled={busy} onPress={partner.leave.ask} sfx={false}>
-                Remove pairing
-              </ComicButton>
+              {partner.leave && (
+                <ComicButton size="sm" variant="ghost" isDisabled={busy} onPress={partner.leave.ask} sfx={false}>
+                  Remove pairing
+                </ComicButton>
+              )}
             </div>
           </Callout>
         ))}

@@ -53,7 +53,7 @@ A trusted clan member whose elevated permissions are scoped to a single specific
 ### Captain
 A designated player who leads a Team during a Bingo.
 - **Capabilities:** Participates in the Draft to pick players/duos for their team; represents the team in disputes.
-- **Rules:** Assigned by an Admin, from the signups as they come in, while signups are open or closed. Exactly one or two captains per team.
+- **Rules:** Assigned by an Admin, from the signups as they come in, while signups are open or closed. Exactly one or two captains per team. In a duo Bingo a Team is led by a Duo: the Captain and their partner as co-captain, so an unpaired player is paired up before they can captain. The Draft can't begin while a Team isn't. A Duo that leads a Team stays one, and its players can't unpair or withdraw themselves; an Admin has to change the Team.
 
 ### Player
 A clan member who is part of a Bingo as a competitor: until Board revealed, anyone with an active Signup, except Cut signups once the Draft stage begins; from Board revealed on, anyone on a Team. A withdrawn signup is never a Player.

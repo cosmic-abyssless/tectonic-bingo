@@ -275,10 +275,55 @@ describe("Team changes move their Captains", () => {
     expect(picked.pickOptions).toEqual({ t1: 3, t2: 3, t3: 0 });
   });
 
-  it("scores an open added Team for every possible Captain", () => {
+  it("scores an open added Team for every possible Captain: in a duo bingo, only a pair's members", () => {
     const input = baseInput([pair("p1", "a", "b"), ...singles(7)], { teamCount: 2, teams: [captainTeam("t1", "c1"), captainTeam("t2", "c2")] });
     const { pickOptions } = scoreChanges(input, [{ kind: "addTeam" }]);
-    expect(Object.keys(pickOptions ?? {}).sort()).toEqual(["a", "b", "s0", "s1", "s2", "s3", "s4", "s5", "s6"].sort());
+    // A duo Team is led by a pair, so the singles can't captain it.
+    expect(Object.keys(pickOptions ?? {}).sort()).toEqual(["a", "b"]);
     expect(pickOptions?.a).toBe(pickOptions?.b); // a pair leaves together, whichever of them captains
+  });
+
+  it("scores an open added Team for every possible Captain: in a solo bingo, every single", () => {
+    const input = baseInput(singles(7), { isSolo: true, teamCount: 2, teams: [captainTeam("t1", "c1"), captainTeam("t2", "c2")] });
+    const { pickOptions } = scoreChanges(input, [{ kind: "addTeam" }]);
+    expect(Object.keys(pickOptions ?? {}).sort()).toEqual(["s0", "s1", "s2", "s3", "s4", "s5", "s6"]);
+    expect(new Set(Object.values(pickOptions ?? {}))).toEqual(new Set([0])); // any one of them leaving: 6 over 3 Teams
+  });
+});
+
+// In a duo bingo every Team is led by a pair (CONTEXT.md), so an added Team's Captain comes out of the pool with their
+// partner: a single can't captain one, and with no pair in the pool there's no Team to add.
+describe("an added Team in a duo bingo is led by a pair", () => {
+  const captainTeams = (): CutPlannerTeam[] =>
+    ["c1", "c2"].map((c, i) => ({ teamId: `t${i + 1}`, members: [{ userId: c, signedUpAt: 0, insertionRank: nextRank++, timezoneRegion: null }], pairingId: null }));
+  const singles = (n: number) => Array.from({ length: n }, (_, i) => single(`s${i}`, { signedUpAt: i }));
+
+  it("refuses a single as the new Team's Captain, and takes a pair's member (the pair leaving together)", () => {
+    const input = baseInput([pair("p1", "a", "b"), ...singles(7)], { teamCount: 2, teams: captainTeams() });
+    expect(() => scoreChanges(input, [{ kind: "addTeam", captainUserId: "s0" }])).toThrow(/has to have a partner/);
+    const picked = scoreChanges(input, [{ kind: "addTeam", captainUserId: "a" }]);
+    // 7 singles over 3 Teams: 1 cut, the pair's partner gone with the Captain rather than left behind in the pool.
+    expect(picked).toMatchObject({ cutPlayers: 1, cutPlayersMax: 1 });
+    expect(picked.pickOptions).toEqual({ a: 1, b: 1 });
+  });
+
+  it("the same single is a fine Captain in a solo bingo", () => {
+    const input = baseInput(singles(7), { isSolo: true, teamCount: 2, teams: captainTeams() });
+    expect(scoreChanges(input, [{ kind: "addTeam", captainUserId: "s0" }]).cutPlayers).toBe(0);
+  });
+
+  it("refuses an open added Team when the pool has no pair to lead it", () => {
+    const input = baseInput(singles(7), { teamCount: 2, teams: captainTeams() });
+    expect(() => scoreChanges(input, [{ kind: "addTeam" }])).toThrow(ServiceError);
+    expect(() => scoreChanges(input, [{ kind: "addTeam" }])).toThrow(/no pair left to lead a new Team/);
+  });
+
+  it("never proposes adding a Team when there's no pair to lead it, though the same pool would in a solo bingo", () => {
+    // 2 Teams, 7 singles: 1 cut. A 3rd Team led by one of them would leave 6 over 3 (0 cut) — in a solo bingo.
+    const solo = planCutChanges(baseInput(singles(7), { isSolo: true, teamCount: 2, teams: captainTeams() }));
+    expect(solo.changes).toEqual([{ kind: "addTeam" }]);
+    const duo = planCutChanges(baseInput(singles(7), { teamCount: 2, teams: captainTeams() }));
+    expect(duo.changes.some((c) => c.kind === "addTeam")).toBe(false);
+    expect(duo.cutPlayers).toBeLessThanOrEqual(duo.cutPlayersNow);
   });
 });

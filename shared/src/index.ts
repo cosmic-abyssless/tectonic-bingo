@@ -631,6 +631,8 @@ export interface MySignupResponse {
   // Null until the fire-and-forget WOM/RuneProfile fetch stamps the row —
   // the signup form uses this to tell Looking up apart from Unknown.
   statsFetchedAt: string | null;
+  // The Team this player leads (Captain or co-captain), if any: they can't unpair or withdraw themselves, an admin has to.
+  leadsTeam: string | null;
 }
 
 // A tectonic-api-linked RSN.
@@ -772,6 +774,9 @@ export interface RosterResponse {
 
 export interface CaptainCandidatesResponse {
   candidates: RosterEntry[];
+  // A duo bingo's Teams not led by a pair (a Captain alone, or with someone other than their partner): the move into
+  // the Draft is refused until they're fixed. Always empty for a solo bingo.
+  teamsNotLedByPairs: string[];
 }
 
 // The raw bingo_lines row. Points live on the referenced node (see BoardLine).

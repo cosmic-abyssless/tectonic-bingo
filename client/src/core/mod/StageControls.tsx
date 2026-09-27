@@ -3,6 +3,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { STAGE_LABEL, STAGE_ORDER, nextMilestone, type Bingo, type Stage } from "@bingo/shared";
 import { ApiError } from "../../api/client";
 import { cutReviewQuery, useAdvanceStage, useCutReview, useDraftCuts } from "../../api/queries";
+import { adminQueryKeys } from "../../api/adminQueries";
+import * as adminApi from "../../api/adminApi";
 import { cutModeLabel, describeShares } from "../draft/cutModes";
 import { useDialogParts } from "../ui/useDialogParts";
 import { Button } from "../ui/Button";
@@ -50,6 +52,18 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
   async function request(toStage: Stage) {
     setError(null);
     if (toStage === "draft" && idx < STAGE_ORDER.indexOf("draft")) {
+      // A duo bingo's Teams have to be led by pairs before anything else (the server refuses the move otherwise): say
+      // so up front, rather than after a Cut review worked out for Teams that are about to change.
+      if (bingo.signupMode === "duo") {
+        const candidates = await queryClient
+          .fetchQuery({ queryKey: adminQueryKeys.captainCandidates(slug), queryFn: () => adminApi.getCaptainCandidates(slug) })
+          .catch(() => null);
+        const count = candidates?.teamsNotLedByPairs.length ?? 0;
+        if (count > 0) {
+          setError(`In a duo bingo every Team is led by a pair. ${count === 1 ? "1 Team isn't" : `${count} Teams aren't`}: fix ${count === 1 ? "it" : "them"} on the Captains tab first.`);
+          return;
+        }
+      }
       const preview = await queryClient.fetchQuery(cutReviewQuery(slug)).catch(() => null);
       if (preview && preview.avoidableCount > 0 && !preview.reviewed) {
         setReviewingCuts(true);

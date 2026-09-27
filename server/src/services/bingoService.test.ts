@@ -10,7 +10,7 @@ import { effectiveStartsAt } from "./bingoStart";
 import { createTask, createTile } from "./boardService";
 import { createTeam } from "./teamService";
 import { adminPair } from "./pairingService";
-import { applyCutReview } from "./cutReviewService";
+import { applyCutReview, assertCutReviewSatisfied } from "./cutReviewService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -138,10 +138,14 @@ describe("advanceStage: the Cut review guard", () => {
       db.insert(schema.signups).values({ bingoId: bingo.id, userId: user.id, rsn: discordId, createdAt: at }).run();
       return user;
     };
-    const c1 = seedCaptain("c1");
-    const c2 = seedCaptain("c2");
-    createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, name: "A" });
-    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
+    // A duo Team is led by a pair: its Captain and, as co-captain, their partner. Leads aren't in the pool.
+    const seedTeamLedByPair = (discordId: string, name: string) => {
+      const [captain, partner] = [seedCaptain(discordId), seedCaptain(`${discordId}-partner`)];
+      adminPair(db, signupStage, { userIdA: captain.id, userIdB: partner.id, createdByUserId: bingo.createdByUserId });
+      return createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, coCaptainUserId: partner.id, name });
+    };
+    seedTeamLedByPair("c1", "A");
+    seedTeamLedByPair("c2", "B");
     const base = new Date("2026-01-01T00:00:00Z").getTime();
     // 1 accepted pair + 2 singles, 2 Teams: the same "2 cut, all Avoidable" shape as cutPlanner.test.ts's example.
     const a = signUp("a", new Date(base));
@@ -149,7 +153,15 @@ describe("advanceStage: the Cut review guard", () => {
     adminPair(db, signupStage, { userIdA: a.id, userIdB: b.id, createdByUserId: bingo.createdByUserId });
     const c = signUp("c", new Date(base + 2000));
     const d = signUp("d", new Date(base + 3000));
-    return { bingo, c, d };
+    // A Team led by one player, as one made before a duo Team had to be led by a pair would be (createTeam refuses it
+    // now, so it's inserted directly).
+    const seedLoneCaptainTeam = () => {
+      const lone = seedCaptain("lone");
+      const team = db.insert(schema.teams).values({ bingoId: bingo.id, captainUserId: lone.id, name: "Lone", codeword: "lone" }).returning().get();
+      db.insert(schema.teamMembers).values({ teamId: team.id, userId: lone.id, isCaptain: true }).run();
+      return team;
+    };
+    return { bingo, c, d, seedLoneCaptainTeam };
   }
 
   it("refuses while a cut is Avoidable and no review has been applied", () => {
@@ -177,6 +189,31 @@ describe("advanceStage: the Cut review guard", () => {
     const e = db.select().from(schema.users).where(eq(schema.users.discordUsername, "e")).get()!;
     db.insert(schema.signups).values({ bingoId: bingo.id, userId: e.id, rsn: "e", createdAt: new Date("2026-02-01T00:00:00Z") }).run();
     expect(() => advanceStage(db, { bingoId: bingo.id, toStage: "draft", changedByUserId: bingo.createdByUserId })).toThrow(/cuts can be avoided/i);
+  });
+
+  it("refuses while a duo Team is led by one player, before it checks the Cut review", () => {
+    const { bingo, seedLoneCaptainTeam } = seedAvoidableBingo();
+    seedLoneCaptainTeam();
+    // The Cut review would refuse this move too; the pair-led check comes first.
+    expect(() => assertCutReviewSatisfied(db, bingo)).toThrow(expect.objectContaining({ code: "cut_review_required" }));
+    try {
+      advanceStage(db, { bingoId: bingo.id, toStage: "draft", changedByUserId: bingo.createdByUserId });
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(ServiceError);
+      expect((err as ServiceError).code).toBe("teams_not_led_by_pairs");
+      expect((err as ServiceError).message).toMatch(/Lone \(Captain lone\)/);
+    }
+    expect(db.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!.stage).toBe("captains");
+  });
+
+  it("refuses a Team led by one player even once the Cut review is satisfied", () => {
+    const { bingo, seedLoneCaptainTeam } = seedAvoidableBingo();
+    seedLoneCaptainTeam();
+    applyCutReview(db, bingo, [], bingo.createdByUserId);
+    expect(() => advanceStage(db, { bingoId: bingo.id, toStage: "draft", changedByUserId: bingo.createdByUserId })).toThrow(
+      expect.objectContaining({ code: "teams_not_led_by_pairs" }),
+    );
   });
 
   it("allows with no Avoidable cuts, without ever applying a review", () => {

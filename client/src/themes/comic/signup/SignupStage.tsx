@@ -75,7 +75,7 @@ function SignupSheet({ form }: { form: SignupFormModel }) {
       // A duo bingo's two steps are numbered: this, then picking a partner (PartnerSheet).
       step={form.isDuo ? 1 : undefined}
       title={form.signedUp ? "Edit your signup" : "Sign up!"}
-      description={form.signedUp ? "You can update your answers or withdraw while signups are open." : "Fill this out to join the bingo."}
+      description={form.signedUp ? (form.teamLead ?? "You can update your answers or withdraw while signups are open.") : "Fill this out to join the bingo."}
       badge={
         // Slammed onto the header as the form folds away, instead of a "Saved." line.
         form.saved && (
@@ -161,7 +161,7 @@ function SignupSheet({ form }: { form: SignupFormModel }) {
           <ComicButton variant="primary" className="flex-1" onPress={form.submit} isDisabled={!form.isValid || form.pending}>
             {form.pending ? "Saving…" : form.signedUp ? "Save changes" : "Sign me up!"}
           </ComicButton>
-          {form.signedUp && (
+          {form.signedUp && !form.teamLead && (
             <ComicButton variant="danger" onPress={withdraw.ask} sfx={false}>
               Withdraw
             </ComicButton>

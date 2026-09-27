@@ -315,6 +315,7 @@ router.get(
       caCurrent: result ? parseStoredCaStats(result.caCurrentJson) : null,
       caPeak: result ? parseStoredCaStats(result.caPeakJson) : null,
       statsFetchedAt: result?.statsFetchedAt ? result.statsFetchedAt.toISOString() : null,
+      leadsTeam: teamService.ledTeamName(db, req.bingo!.id, req.user!.id),
     });
   }),
 );

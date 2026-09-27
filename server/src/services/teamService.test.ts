@@ -4,7 +4,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { and, eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { addTeamMember, createPointAdjustment, createTeam, deleteTeam, getCaptainCandidates, getTeamProgress, getTeamsWithMembers, isTeamLead, removeTeamMember, setTileInterest, updateTeam } from "./teamService";
+import { addTeamMember, assertTeamsLedByPairs, createPointAdjustment, createTeam, deleteTeam, getCaptainCandidates, getTeamProgress, getTeamsWithMembers, isTeamLead, ledTeamName, removeTeamMember, setTileInterest, teamsNotLedByPairs, updateTeam } from "./teamService";
 import { createTask, createTile } from "./boardService";
 import { adminPair } from "./pairingService";
 import { ServiceError } from "./errors";
@@ -275,6 +275,119 @@ describe("createTeam with a co-captain", () => {
     expect(() => createTeam(db, { bingoId: bingo.id, captainUserId: captain.id })).toThrow(/pick them as the co-captain/);
     expect(() => createTeam(db, { bingoId: bingo.id, captainUserId: captain2.id, coCaptainUserId: member.id })).toThrow(/paired with someone else/);
     expect(() => createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, coCaptainUserId: member.id })).not.toThrow();
+  });
+});
+
+// In a duo bingo every Team is led by a pair: its Captain and, as co-captain, their accepted partner.
+describe("a duo Team is led by a pair", () => {
+  function seedDuo() {
+    const seeded = seedBingoAndUsers();
+    db.update(schema.bingos).set({ signupMode: "duo" }).where(eq(schema.bingos.id, seeded.bingo.id)).run();
+    const bingo = { ...seeded.bingo, signupMode: "duo" as const, stage: "signup" as const };
+    const pair = (a: { id: string }, b: { id: string }) => adminPair(db, bingo, { userIdA: a.id, userIdB: b.id, createdByUserId: a.id });
+    return { ...seeded, bingo, pair };
+  }
+  // A Team as one made before this rule would be: createTeam refuses it now, so it's inserted directly.
+  function insertTeam(bingoId: string, name: string, captainId: string, coCaptainId?: string) {
+    const team = db.insert(schema.teams).values({ bingoId, captainUserId: captainId, name, codeword: name.toLowerCase() }).returning().get();
+    db.insert(schema.teamMembers).values({ teamId: team.id, userId: captainId, isCaptain: true }).run();
+    if (coCaptainId) db.insert(schema.teamMembers).values({ teamId: team.id, userId: coCaptainId, isCoCaptain: true }).run();
+    return team;
+  }
+
+  it("createTeam refuses an unpaired Captain, alone or with an unpaired co-captain", () => {
+    const { bingo, captain, member } = seedDuo();
+    for (const coCaptainUserId of [undefined, member.id]) {
+      expect(() => createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, coCaptainUserId })).toThrow(
+        expect.objectContaining({ status: 400, message: "In a duo bingo a Team is led by a pair — pair this player up first, then make them Captain" }),
+      );
+    }
+    expect(db.select().from(schema.teams).all()).toHaveLength(0);
+  });
+
+  it("createTeam takes a paired Captain with their partner as co-captain", () => {
+    const { bingo, captain, member, pair } = seedDuo();
+    pair(captain, member);
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, coCaptainUserId: member.id, name: "Alpha" });
+    expect(isTeamLead(db, team.id, captain.id) && isTeamLead(db, team.id, member.id)).toBe(true);
+    expect(teamsNotLedByPairs(db, bingo.id)).toEqual([]);
+  });
+
+  it("a solo bingo still takes a lone Captain", () => {
+    const { bingo, captain } = seedBingoAndUsers();
+    expect(bingo.signupMode).toBe("solo");
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, name: "Alpha" });
+    expect(team.captainUserId).toBe(captain.id);
+    expect(teamsNotLedByPairs(db, bingo.id)).toEqual([]);
+    expect(() => assertTeamsLedByPairs(db, bingo.id)).not.toThrow();
+  });
+
+  it("teamsNotLedByPairs flags a Team led by one player, or by a co-captain who isn't the Captain's partner", () => {
+    const { bingo, captain, captain2, member, pair } = seedDuo();
+    const [p1, p2, other] = ["p1", "p2", "other"].map((d) => {
+      const user = db.insert(schema.users).values({ discordId: d, discordUsername: d }).returning().get();
+      db.insert(schema.signups).values({ bingoId: bingo.id, userId: user.id, rsn: d }).run();
+      return user;
+    });
+    pair(p1!, p2!);
+    createTeam(db, { bingoId: bingo.id, captainUserId: p1!.id, coCaptainUserId: p2!.id, name: "Paired" });
+    const lone = insertTeam(bingo.id, "Lone", captain.id);
+    pair(member, other!);
+    const mismatched = insertTeam(bingo.id, "Mismatched", captain2.id, member.id); // member's partner is "other"
+    expect(teamsNotLedByPairs(db, bingo.id).sort((a, b) => a.name.localeCompare(b.name))).toEqual([
+      { teamId: lone.id, name: "Lone", captainName: "captain" },
+      { teamId: mismatched.id, name: "Mismatched", captainName: "captain2" },
+    ]);
+    try {
+      assertTeamsLedByPairs(db, bingo.id);
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(ServiceError);
+      expect(err).toMatchObject({ status: 400, code: "teams_not_led_by_pairs" });
+      expect((err as ServiceError).message).toMatch(/Lone \(Captain captain\)/);
+      expect((err as ServiceError).message).toMatch(/Mismatched \(Captain captain2\)/);
+      expect((err as ServiceError).message).not.toMatch(/Paired/);
+    }
+  });
+
+  it("assertTeamsLedByPairs passes once every Team is led by a pair", () => {
+    const { bingo, captain, captain2, member, pair } = seedDuo();
+    const partner = db.insert(schema.users).values({ discordId: "partner", discordUsername: "partner" }).returning().get();
+    db.insert(schema.signups).values({ bingoId: bingo.id, userId: partner.id, rsn: "partner" }).run();
+    pair(captain, member);
+    pair(captain2, partner);
+    createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, coCaptainUserId: member.id, name: "A" });
+    createTeam(db, { bingoId: bingo.id, captainUserId: captain2.id, coCaptainUserId: partner.id, name: "B" });
+    expect(teamsNotLedByPairs(db, bingo.id)).toEqual([]);
+    expect(() => assertTeamsLedByPairs(db, bingo.id)).not.toThrow();
+  });
+
+  it("is always satisfied in a solo bingo, even by Teams led by one player", () => {
+    const { bingo, captain, captain2 } = seedBingoAndUsers();
+    insertTeam(bingo.id, "Lone", captain.id);
+    createTeam(db, { bingoId: bingo.id, captainUserId: captain2.id, name: "Also lone" });
+    expect(teamsNotLedByPairs(db, bingo.id)).toEqual([]);
+    expect(() => assertTeamsLedByPairs(db, bingo.id)).not.toThrow();
+  });
+});
+
+describe("ledTeamName", () => {
+  it("names the Team a player leads, as Captain or co-captain, and null for anyone else", () => {
+    const { bingo, captain, captain2, member } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, coCaptainUserId: member.id, name: "Alpha" });
+    const drafted = db.insert(schema.users).values({ discordId: "drafted", discordUsername: "drafted" }).returning().get();
+    db.insert(schema.teamMembers).values({ teamId: team.id, userId: drafted.id }).run();
+    expect(ledTeamName(db, bingo.id, captain.id)).toBe("Alpha");
+    expect(ledTeamName(db, bingo.id, member.id)).toBe("Alpha");
+    expect(ledTeamName(db, bingo.id, drafted.id)).toBeNull(); // on the Team, but doesn't lead it
+    expect(ledTeamName(db, bingo.id, captain2.id)).toBeNull();
+  });
+
+  it("only looks at this bingo", () => {
+    const { bingo, captain } = seedBingoAndUsers();
+    createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, name: "Alpha" });
+    const other = db.insert(schema.bingos).values({ slug: "other", name: "Other", boardRows: 3, boardCols: 3, createdByUserId: bingo.createdByUserId }).returning().get();
+    expect(ledTeamName(db, other.id, captain.id)).toBeNull();
   });
 });
 

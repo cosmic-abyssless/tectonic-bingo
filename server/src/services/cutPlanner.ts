@@ -124,24 +124,26 @@ interface TeamChangeOutcome {
 }
 
 /**
- * The pool after `change`, once per way it could go. An open addTeam is scored for one single and one pair only
- * unless `everyCaptain`: who leaves doesn't change how many are cut, only whether it's a single or a pair does —
- * cheap enough for the planner's search, while the modal's per-Captain breakdown asks for every one.
+ * The pool after `change`, once per way it could go (none, for an added Team nobody can captain). A new Team's
+ * Captain is a single in a solo bingo and half of a pair in a duo one, where a Team is led by a pair — the pair leaves
+ * the pool together. An open addTeam is scored for one such unit only unless `everyCaptain`: which one leaves doesn't
+ * change how many are cut — cheap enough for the planner's search, while the modal's per-Captain breakdown asks for
+ * every one.
  */
-function poolsAfterTeamChange(units: CutPlannerUnit[], change: TeamChange | null, teams: CutPlannerTeam[], everyCaptain = false): TeamChangeOutcome[] {
+function poolsAfterTeamChange(units: CutPlannerUnit[], change: TeamChange | null, teams: CutPlannerTeam[], isSolo: boolean, everyCaptain = false): TeamChangeOutcome[] {
   if (!change) return [{ pick: null, units }];
   if (change.kind === "addTeam") {
     const without = (leaving: CutPlannerUnit) => units.filter((u) => u !== leaving);
+    const canCaptain = (u: CutPlannerUnit) => (isSolo ? !isPair(u) : isPair(u));
     if (change.captainUserId) {
       const unit = units.find((u) => u.entries.some((e) => e.userId === change.captainUserId));
       if (!unit) throw new ServiceError(400, "The new Team's Captain has to be a player who isn't on a Team yet");
+      if (!canCaptain(unit)) throw new ServiceError(400, "In a duo bingo a Team is led by a pair — the new Team's Captain has to have a partner");
       return [{ pick: change.captainUserId, units: without(unit) }];
     }
-    const leavers = everyCaptain ? units : [units.find((u) => !isPair(u)), units.find(isPair)].filter((u): u is CutPlannerUnit => !!u);
-    const outcomes = leavers.flatMap((leaving) =>
-      (everyCaptain ? leaving.entries : leaving.entries.slice(0, 1)).map((e) => ({ pick: e.userId, units: without(leaving) })),
-    );
-    return outcomes.length ? outcomes : [{ pick: null, units }];
+    const eligible = units.filter(canCaptain);
+    const leavers = everyCaptain ? eligible : eligible.slice(0, 1);
+    return leavers.flatMap((leaving) => (everyCaptain ? leaving.entries : leaving.entries.slice(0, 1)).map((e) => ({ pick: e.userId, units: without(leaving) })));
   }
   const rejoin = (t: CutPlannerTeam): CutPlannerUnit[] =>
     t.pairingId && t.members.length === 2
@@ -155,16 +157,20 @@ function poolsAfterTeamChange(units: CutPlannerUnit[], change: TeamChange | null
   return teams.length ? teams.map((t) => ({ pick: t.teamId, units: [...units, ...rejoin(t)] })) : [{ pick: null, units }];
 }
 
-/** Players cut after `change` (if any) at `teamCount` Teams — the best case when the change's pick is still open. */
+/**
+ * Players cut after `change` (if any) at `teamCount` Teams — the best case when the change's pick is still open, and
+ * Infinity when it can't be made at all (nobody to captain an added Team), so the planner never picks it.
+ */
 function scoreWithTeamChange(
   units: CutPlannerUnit[],
   change: TeamChange | null,
   teams: CutPlannerTeam[],
+  isSolo: boolean,
   cutMode: CutMode,
   teamCount: number,
   drafted: { pairs: number; singles: number },
 ): number {
-  return Math.min(...poolsAfterTeamChange(units, change, teams).map((o) => scoreArrangement(o.units, cutMode, teamCount, drafted)));
+  return Math.min(...poolsAfterTeamChange(units, change, teams, isSolo).map((o) => scoreArrangement(o.units, cutMode, teamCount, drafted)));
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +279,7 @@ export function planCutChanges(input: CutPlannerInput): CutPlan {
         if (tc === teamCount && k === 0 && m === 0) continue; // already `best`'s starting point
         const provisional = applyProvisional(units, pairingCandidates.slice(0, k), splitCandidates.slice(0, m));
         const teamChange: TeamChange | null = tc > teamCount ? { kind: "addTeam" } : tc < teamCount ? { kind: "removeTeam" } : null;
-        const cutPlayers = scoreWithTeamChange(provisional, teamChange, input.teams ?? [], cutMode, tc, drafted);
+        const cutPlayers = scoreWithTeamChange(provisional, teamChange, input.teams ?? [], isSolo, cutMode, tc, drafted);
         const candidate: Candidate = { teamCount: tc, k, m, cutPlayers };
         if (better(candidate, best)) best = candidate;
       }
@@ -356,14 +362,14 @@ export function scoreChanges(input: CutPlannerInput, changes: CutChange[]): CutS
     const cutPlayers = score(units);
     return { cutPlayers, cutPlayersMax: cutPlayers, cutPlayersNow, pickOptions: null };
   }
-  const outcomes = poolsAfterTeamChange(units, { kind: teamChange.kind }, teams, true).map((o) => ({ pick: o.pick, cutPlayers: score(o.units) }));
-  const pickOptions = Object.fromEntries(outcomes.flatMap((o) => (o.pick ? [[o.pick, o.cutPlayers] as const] : [])));
   const picked = teamChange.kind === "addTeam" ? teamChange.captainUserId : teamChange.teamId;
-  if (picked) {
-    // Scored on its own too: that's what validates the pick (a Captain already on a Team, a Team from elsewhere).
-    const cutPlayers = score(poolsAfterTeamChange(units, teamChange, teams)[0]!.units);
-    return { cutPlayers, cutPlayersMax: cutPlayers, cutPlayersNow, pickOptions };
-  }
+  // A pick is scored on its own first: that's what validates it (a Captain already on a Team, or without a partner in a
+  // duo bingo; a Team from elsewhere), with its own message.
+  const pickedCut = picked ? score(poolsAfterTeamChange(units, teamChange, teams, input.isSolo)[0]!.units) : null;
+  const outcomes = poolsAfterTeamChange(units, { kind: teamChange.kind }, teams, input.isSolo, true).map((o) => ({ pick: o.pick, cutPlayers: score(o.units) }));
+  if (outcomes.length === 0) throw new ServiceError(400, input.isSolo ? "There's nobody left to captain a new Team" : "There's no pair left to lead a new Team");
+  const pickOptions = Object.fromEntries(outcomes.flatMap((o) => (o.pick ? [[o.pick, o.cutPlayers] as const] : [])));
+  if (pickedCut !== null) return { cutPlayers: pickedCut, cutPlayersMax: pickedCut, cutPlayersNow, pickOptions };
   const counts = outcomes.map((o) => o.cutPlayers);
   return { cutPlayers: Math.min(...counts), cutPlayersMax: Math.max(...counts), cutPlayersNow, pickOptions };
 }

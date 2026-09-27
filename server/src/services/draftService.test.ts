@@ -34,6 +34,15 @@ function seedCaptain(bingoId: string, discordId: string) {
   return user;
 }
 
+// In a duo bingo a Team is led by a pair: seed a Captain and a partner (both signed up), paired, to make the Team with
+// (pass `partner` as the co-captain). Leads never sit in the draft pool, so this leaves the pool and its cuts alone.
+function seedLeadPair(bingo: typeof schema.bingos.$inferSelect, discordId: string) {
+  const captain = seedCaptain(bingo.id, discordId);
+  const partner = seedCaptain(bingo.id, `${discordId}-partner`);
+  adminPair(db, { ...bingo, stage: "signup" }, { userIdA: captain.id, userIdB: partner.id, createdByUserId: captain.id });
+  return { captain, partner };
+}
+
 function beginDraft(bingo: typeof schema.bingos.$inferSelect, teamIds?: string[]) {
   const teams = db.select().from(schema.teams).where(eq(schema.teams.bingoId, bingo.id)).all();
   setDraftOrder(db, bingo, teamIds ?? teams.map((t) => t.id));
@@ -498,12 +507,12 @@ describe("duo mode", () => {
     const bingo = seedBingo({ signupMode: "duo", cutMode: "none" });
     const signupStage = { ...bingo, stage: "signup" as const };
     const c1 = seedCaptain(bingo.id, "c1");
-    const c2 = seedCaptain(bingo.id, "c2");
     const co1 = seedUser("co1");
     createSignup(db, signupStage, { bingoId: bingo.id, userId: co1.id, rsn: "co1", answers: [] });
     adminPair(db, signupStage, { userIdA: c1.id, userIdB: co1.id, createdByUserId: c1.id });
     const teamA = createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, coCaptainUserId: co1.id, name: "A" });
-    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
+    const b = seedLeadPair(bingo, "c2");
+    createTeam(db, { bingoId: bingo.id, captainUserId: b.captain.id, coCaptainUserId: b.partner.id, name: "B" });
 
     const [p1, p2, solo] = ["p1", "p2", "solo"].map((d) => seedUser(d));
     for (const p of [p1!, p2!, solo!]) createSignup(db, signupStage, { bingoId: bingo.id, userId: p.id, rsn: p.discordUsername, answers: [] });
@@ -658,14 +667,14 @@ describe("cuts", () => {
   });
 
   describe("pairs and singles (duo bingos)", () => {
-    // Two teams led by solo captains, and a pool signed up oldest to newest: `pairs` pairs, then `singles` singles.
+    // Two teams, each led by a pair, and a pool signed up oldest to newest: `pairs` pairs, then `singles` singles.
     function setupDuoPool(cutMode: "even" | "pairs_only" | "none", counts: { pairs: number; singles: number }) {
       const bingo = seedBingo({ signupMode: "duo", cutMode });
       const signupStage = { ...bingo, stage: "signup" as const };
-      const c1 = seedCaptain(bingo.id, "c1");
-      const c2 = seedCaptain(bingo.id, "c2");
-      createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, name: "A" });
-      createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
+      const [l1, l2] = [seedLeadPair(bingo, "c1"), seedLeadPair(bingo, "c2")];
+      const c1 = l1.captain;
+      createTeam(db, { bingoId: bingo.id, captainUserId: l1.captain.id, coCaptainUserId: l1.partner.id, name: "A" });
+      createTeam(db, { bingoId: bingo.id, captainUserId: l2.captain.id, coCaptainUserId: l2.partner.id, name: "B" });
       let n = 0;
       const signUp = (d: string) => {
         const user = seedUser(d);
@@ -776,10 +785,10 @@ describe("cuts", () => {
     it("hides a cut duo pair as one unit", () => {
       const bingo = seedBingo({ cutMode: "even", signupMode: "duo" });
       const signupStage = { ...bingo, stage: "signup" as const };
-      const c1 = seedCaptain(bingo.id, "c1");
-      const c2 = seedCaptain(bingo.id, "c2");
-      createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
-      createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
+      const [l1, l2] = [seedLeadPair(bingo, "c1"), seedLeadPair(bingo, "c2")];
+      const c1 = l1.captain;
+      createTeam(db, { bingoId: bingo.id, captainUserId: l1.captain.id, coCaptainUserId: l1.partner.id });
+      createTeam(db, { bingoId: bingo.id, captainUserId: l2.captain.id, coCaptainUserId: l2.partner.id });
       // Two singles split evenly; the one pair doesn't split across two teams, so it's cut.
       const [solo1, solo2, a, b] = ["solo1", "solo2", "a", "b"].map((d, i) => {
         const user = seedUser(d);
@@ -822,8 +831,8 @@ describe("pick ratings", () => {
     createSignup(db, signupStage, { bingoId: bingo.id, userId: coCaptain.id, rsn: "co-captain", answers: [] });
     adminPair(db, signupStage, { userIdA: captain.id, userIdB: coCaptain.id, createdByUserId: captain.id });
     const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, coCaptainUserId: coCaptain.id, name: "A" });
-    const otherCaptain = seedCaptain(bingo.id, "other-captain");
-    createTeam(db, { bingoId: bingo.id, captainUserId: otherCaptain.id, name: "B" });
+    const { captain: otherCaptain, partner: otherPartner } = seedLeadPair(bingo, "other-captain");
+    createTeam(db, { bingoId: bingo.id, captainUserId: otherCaptain.id, coCaptainUserId: otherPartner.id, name: "B" });
 
     const drafted = seedCaptain(bingo.id, "drafted");
     db.insert(schema.teamMembers).values({ teamId: team.id, userId: drafted.id }).run();
@@ -876,8 +885,8 @@ describe("pick ratings", () => {
 
   it("logs a note change on its own, naming the team and both halves of a pair, and nothing for a save that changes nothing", () => {
     const bingo = seedBingo({ signupMode: "duo", stage: "signup" });
-    const cap = seedCaptain(bingo.id, "cap");
-    const team = createTeam(db, { bingoId: bingo.id, captainUserId: cap.id, name: "Green team" });
+    const { captain: cap, partner } = seedLeadPair(bingo, "cap");
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: cap.id, coCaptainUserId: partner.id, name: "Green team" });
     const [a, b] = ["CrimsonSlayer", "AncientDruid"].map((d) => seedUser(d));
     const signupA = createSignup(db, bingo, { bingoId: bingo.id, userId: a!.id, rsn: "CrimsonSlayer", answers: [] });
     createSignup(db, bingo, { bingoId: bingo.id, userId: b!.id, rsn: "AncientDruid", answers: [] });
@@ -910,8 +919,8 @@ describe("pick ratings", () => {
 
   it("rates both halves of a duo pair as one unit", () => {
     const bingo = seedBingo({ signupMode: "duo", stage: "signup" });
-    const cap = seedCaptain(bingo.id, "cap");
-    const team = createTeam(db, { bingoId: bingo.id, captainUserId: cap.id });
+    const { captain: cap, partner } = seedLeadPair(bingo, "cap");
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: cap.id, coCaptainUserId: partner.id });
     const [a, b] = ["a", "b"].map((d) => seedUser(d));
     const signupA = createSignup(db, bingo, { bingoId: bingo.id, userId: a!.id, rsn: "a", answers: [] });
     const signupB = createSignup(db, bingo, { bingoId: bingo.id, userId: b!.id, rsn: "b", answers: [] });

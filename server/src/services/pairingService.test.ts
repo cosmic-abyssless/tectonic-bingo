@@ -30,6 +30,17 @@ function seed() {
   return { bingo, admin, a: player("a"), b: player("b"), c: player("c") };
 }
 
+// A duo Team is led by a pair: two fresh signups, paired, as its Captain and co-captain.
+function seedPairLedTeam(bingo: typeof schema.bingos.$inferSelect, admin: { id: string }, discordId = "lead") {
+  const [captain, partner] = [discordId, `${discordId}-partner`].map((d) => {
+    const user = db.insert(schema.users).values({ discordId: d, discordUsername: d }).returning().get();
+    createSignup(db, bingo, { bingoId: bingo.id, userId: user.id, rsn: d, answers: [] });
+    return user;
+  });
+  adminPair(db, bingo, { userIdA: captain!.id, userIdB: partner!.id, createdByUserId: admin.id });
+  return createTeam(db, { bingoId: bingo.id, captainUserId: captain!.id, coCaptainUserId: partner!.id });
+}
+
 beforeEach(() => {
   ({ sqlite, db } = createTestDb());
 });
@@ -84,8 +95,10 @@ describe("requestPairing", () => {
   });
 
   it("rejects players already on a team, in either direction", () => {
-    const { bingo, a, b, c } = seed();
-    createTeam(db, { bingoId: bingo.id, captainUserId: a.id });
+    const { bingo, admin, a, b, c } = seed();
+    // "a" on a Team as a drafted player (a duo Team's leads are a pair, so already have a partner).
+    const team = seedPairLedTeam(bingo, admin);
+    db.insert(schema.teamMembers).values({ teamId: team.id, userId: a.id }).run();
     expect(() => requestPairing(db, bingo, { requester: a, targetDiscordId: b.discordId })).toThrow(/already on a team/);
     expect(() => requestPairing(db, bingo, { requester: b, targetDiscordId: a.discordId })).toThrow(/already on a team/);
     expect(() => adminPair(db, bingo, { userIdA: a.id, userIdB: c.id, createdByUserId: a.id })).toThrow(/already on a team/);
@@ -154,6 +167,50 @@ describe("leavePairing / removePairing", () => {
     expect(() => leavePairing(db, bingo, c, ab.id)).toThrow(/not paired/i); // still pending
     respondToRequest(db, bingo, b, ab.id, true);
     expect(() => leavePairing(db, bingo, c, ab.id)).toThrow(/isn't your pairing/);
+  });
+
+  it("refuses when either half leads a Team (a duo Team is led by the pair)", () => {
+    const { bingo, a, b } = seed();
+    const ab = requestPairing(db, bingo, { requester: a, targetDiscordId: b.discordId });
+    respondToRequest(db, bingo, b, ab.id, true);
+    createTeam(db, { bingoId: bingo.id, captainUserId: b.id, coCaptainUserId: a.id }); // the target as Captain
+    for (const half of [a, b]) {
+      expect(() => leavePairing(db, bingo, half, ab.id)).toThrow(expect.objectContaining({ status: 409, message: expect.stringMatching(/lead a Team together/) }));
+      expect(() => removePairing(db, bingo, half, ab.id)).toThrow(/lead a Team together/);
+    }
+    expect(getAcceptedPairs(db, bingo.id)).toHaveLength(1);
+  });
+
+  it.each(["requester", "target"] as const)("refuses when only one half (the %s) is on a Team", (onTeam) => {
+    const { bingo, a, b } = seed();
+    const ab = requestPairing(db, bingo, { requester: a, targetDiscordId: b.discordId });
+    respondToRequest(db, bingo, b, ab.id, true);
+    // A Team from before a duo Team had to be led by a pair: one half its lone Captain (inserted directly, since
+    // createTeam refuses that now).
+    const captain = onTeam === "requester" ? a : b;
+    const team = db.insert(schema.teams).values({ bingoId: bingo.id, captainUserId: captain.id, name: "Lone", codeword: "lone" }).returning().get();
+    db.insert(schema.teamMembers).values({ teamId: team.id, userId: captain.id, isCaptain: true }).run();
+    expect(() => leavePairing(db, bingo, a, ab.id)).toThrow(/lead a Team together/);
+    expect(() => leavePairing(db, bingo, b, ab.id)).toThrow(/lead a Team together/);
+  });
+
+  it("still lets a pair that isn't on a Team leave, while another pair leads one", () => {
+    const { bingo, admin, a, b } = seed();
+    seedPairLedTeam(bingo, admin);
+    const ab = requestPairing(db, bingo, { requester: a, targetDiscordId: b.discordId });
+    respondToRequest(db, bingo, b, ab.id, true);
+    leavePairing(db, bingo, a, ab.id);
+    expect(getAcceptedPairs(db, bingo.id).some((p) => p.userIds.includes(a.id))).toBe(false);
+  });
+
+  it("lets a player an admin added to a Team by hand leave their pairing: only a Team's leads are held to it", () => {
+    const { bingo, admin, a, b } = seed();
+    const ab = requestPairing(db, bingo, { requester: a, targetDiscordId: b.discordId });
+    respondToRequest(db, bingo, b, ab.id, true);
+    const team = seedPairLedTeam(bingo, admin);
+    db.insert(schema.teamMembers).values({ teamId: team.id, userId: a.id }).run();
+    leavePairing(db, bingo, a, ab.id);
+    expect(getAcceptedPairs(db, bingo.id).some((p) => p.userIds.includes(a.id))).toBe(false);
   });
 
   it("removePairing dispatches by status: cancels a pending request (requester only), leaves an accepted one (either half)", () => {

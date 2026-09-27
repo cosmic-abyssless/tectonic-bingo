@@ -77,6 +77,15 @@ function assertNotOnATeam(db: Db, bingoId: string, userId: string, message: stri
   if (onTeam) throw new ServiceError(409, message);
 }
 
+function leadsATeam(db: Db, bingoId: string, userId: string): boolean {
+  return !!db
+    .select({ id: teamMembers.id })
+    .from(teamMembers)
+    .innerJoin(teams, eq(teamMembers.teamId, teams.id))
+    .where(and(eq(teams.bingoId, bingoId), eq(teamMembers.userId, userId), or(eq(teamMembers.isCaptain, true), eq(teamMembers.isCoCaptain, true))))
+    .get();
+}
+
 function userByDiscordId(db: Db, discordId: string): MinimalUser | null {
   return db.select(MINIMAL_USER_COLS).from(users).where(eq(users.discordId, discordId)).get() ?? null;
 }
@@ -325,6 +334,14 @@ export function leavePairing(db: Db, bingo: Bingo, participant: Participant, pai
     if (pairing.status !== "accepted") throw new ServiceError(400, "You're not paired");
     if (pairing.requesterUserId !== participant.id && pairing.targetDiscordId !== participant.discordId) {
       throw new ServiceError(403, "That isn't your pairing");
+    }
+    // A pair that leads a Team stays one (a duo Team is led by a pair): only an admin can change that Team. Leads only —
+    // a player an admin added to a Team by hand isn't leading anything.
+    const target = userByDiscordId(tx, pairing.targetDiscordId);
+    for (const userId of [pairing.requesterUserId, target?.id]) {
+      if (userId && leadsATeam(tx, bingo.id, userId)) {
+        throw new ServiceError(409, "You lead a Team together, so this pairing can't be removed. Contact an admin if you need to change it.");
+      }
     }
     tx.update(signupPairings).set({ status: "left", respondedAt: clockNow() }).where(eq(signupPairings.id, pairingId)).run();
     audit(tx, {
