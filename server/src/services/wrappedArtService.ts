@@ -1,21 +1,25 @@
-// Wrapped art (#262): one decorative cut-out per Wrapped section, uploaded by an Admin as a transparent PNG or as a
-// screenshot on one solid colour (keyed out here), and drawn as a sticker on torn paper (stickerEffect.ts), once per
-// upload. The upload is kept as it was, so it can be re-cut with other keying settings without a new screenshot.
+// Wrapped art (#262): decorative cut-outs in groups (a section's Category images, or the side pool), uploaded by an
+// Admin one at a time as a transparent PNG or as a screenshot on one solid colour (keyed out here), and drawn as a
+// sticker on torn paper (stickerEffect.ts), once per upload. The upload is kept as it was, so it can be re-cut with
+// other keying settings without a new screenshot.
 // A new Bingo starts with the previous Bingo's art: copied rows pointing at the same files, which is why replacing or
 // removing art never deletes a file (the same as tile images).
 import fs from "fs";
 import path from "path";
 import sharp from "sharp";
-import { and, desc, eq, not, like, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, not, like, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import {
+  WRAPPED_ART_GROUPS,
   WRAPPED_ART_KEYING_DEFAULTS,
-  WRAPPED_ART_SECTIONS,
+  isWrappedArtGroup,
+  isWrappedArtSection,
+  maxWrappedArt,
   type ExportImage,
+  type WrappedArtGroup,
+  type WrappedArtImage,
   type WrappedArtKeying,
-  type WrappedArtSection,
   type WrappedArtSet,
-  type WrappedArtSlot,
 } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingos, wrappedArt } from "../db/schema";
@@ -59,16 +63,17 @@ export function parseKeying(input: { tolerance?: unknown; softness?: unknown }):
   return { tolerance: read("tolerance"), softness: read("softness") };
 }
 
-export function parseSection(value: unknown): WrappedArtSection {
-  if (typeof value !== "string" || !(WRAPPED_ART_SECTIONS as readonly string[]).includes(value)) throw new ServiceError(404, "No such Wrapped section");
-  return value as WrappedArtSection;
+export function parseGroup(value: unknown): WrappedArtGroup {
+  if (!isWrappedArtGroup(value)) throw new ServiceError(404, "No such Wrapped art group");
+  return value;
 }
 
 const hex = (c: { r: number; g: number; b: number }) => `#${[c.r, c.g, c.b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 
-function toSlot(row: Row): WrappedArtSlot {
+function toImage(row: Row): WrappedArtImage {
   return {
-    section: row.section as WrappedArtSection,
+    id: row.id,
+    group: row.section as WrappedArtGroup,
     originalUrl: row.originalUrl,
     frames: [row.frame1Url, row.frame2Url],
     keying: row.keyTolerance !== null && row.keySoftness !== null ? { tolerance: row.keyTolerance, softness: row.keySoftness } : null,
@@ -77,25 +82,33 @@ function toSlot(row: Row): WrappedArtSlot {
   };
 }
 
-function rows(db: Queryable, bingoId: string): Row[] {
-  const order = (s: string) => (WRAPPED_ART_SECTIONS as readonly string[]).indexOf(s);
+/** A Bingo's images (optionally one group's), in story order: group by group, each in its own order. */
+function rows(db: Queryable, bingoId: string, group?: WrappedArtGroup): Row[] {
+  const order = (s: string) => (WRAPPED_ART_GROUPS as readonly string[]).indexOf(s);
   return db
     .select()
     .from(wrappedArt)
-    .where(eq(wrappedArt.bingoId, bingoId))
+    .where(group ? and(eq(wrappedArt.bingoId, bingoId), eq(wrappedArt.section, group)) : eq(wrappedArt.bingoId, bingoId))
+    .orderBy(asc(wrappedArt.sortOrder), asc(sql`rowid`))
     .all()
     .filter((r) => order(r.section) >= 0)
     .sort((a, b) => order(a.section) - order(b.section));
 }
 
-/** Every section's art, for the admin UI, in story order. */
-export function listArt(db: Queryable, bingoId: string): WrappedArtSlot[] {
-  return rows(db, bingoId).map(toSlot);
+/** Every image, for the admin UI, in story order. */
+export function listArt(db: Queryable, bingoId: string): WrappedArtImage[] {
+  return rows(db, bingoId).map(toImage);
 }
 
-/** The frames the story shows, by section. */
+/** The frames the story shows: each section's Category images, and the side pool. */
 export function artSet(db: Queryable, bingoId: string): WrappedArtSet {
-  return Object.fromEntries(rows(db, bingoId).map((r) => [r.section, [r.frame1Url, r.frame2Url]]));
+  const set: WrappedArtSet = { sections: {}, side: [] };
+  for (const r of rows(db, bingoId)) {
+    const frames: [string, string] = [r.frame1Url, r.frame2Url];
+    if (r.section === "side") set.side.push(frames);
+    else if (isWrappedArtSection(r.section)) (set.sections[r.section] ??= []).push(frames);
+  }
+  return set;
 }
 
 /** An upload's bytes, checked: an image of a format we accept (never SVG), not a decompression bomb. Returns its extension. */
@@ -171,9 +184,10 @@ function readStored(uploadsDir: string, url: string): Buffer {
   }
 }
 
-/** Sets (or replaces) a section's art to what renderArt made. */
-export function putArt(db: Queryable, bingoId: string, section: WrappedArtSection, art: Omit<RenderedArt, "files">, at: Date = clockNow()): Row {
-  const values = {
+type RenderedValues = Omit<RenderedArt, "files">;
+
+function values(art: RenderedValues, at: Date) {
+  return {
     originalUrl: art.originalUrl,
     frame1Url: art.frames[0],
     frame2Url: art.frames[1],
@@ -182,33 +196,38 @@ export function putArt(db: Queryable, bingoId: string, section: WrappedArtSectio
     keySoftness: art.keying?.softness ?? null,
     updatedAt: at,
   };
-  return db
-    .insert(wrappedArt)
-    .values({ bingoId, section, ...values })
-    .onConflictDoUpdate({ target: [wrappedArt.bingoId, wrappedArt.section], set: values })
-    .returning()
+}
+
+/** Adds what renderArt made to the end of a group. */
+export function appendArt(db: Queryable, bingoId: string, group: WrappedArtGroup, art: RenderedValues, at: Date = clockNow()): Row {
+  const last = db
+    .select({ n: sql<number>`coalesce(max(${wrappedArt.sortOrder}), -1)` })
+    .from(wrappedArt)
+    .where(and(eq(wrappedArt.bingoId, bingoId), eq(wrappedArt.section, group)))
     .get();
+  return db.insert(wrappedArt).values({ bingoId, section: group, sortOrder: (last?.n ?? -1) + 1, ...values(art, at) }).returning().get();
 }
 
-function existing(db: Queryable, bingoId: string, section: WrappedArtSection): Row | undefined {
-  return db.select().from(wrappedArt).where(and(eq(wrappedArt.bingoId, bingoId), eq(wrappedArt.section, section))).get();
+function image(db: Queryable, bingoId: string, id: string): Row {
+  const row = db.select().from(wrappedArt).where(and(eq(wrappedArt.bingoId, bingoId), eq(wrappedArt.id, id))).get();
+  if (!row) throw new ServiceError(404, "No such Wrapped art image");
+  return row;
 }
 
-/** An Admin's upload for a section: stored as it was, cut out, rendered, and set as the section's art. */
-export async function uploadArt(db: Db, uploadsDir: string, bingo: Bingo, section: WrappedArtSection, buffer: Buffer, keying?: WrappedArtKeying): Promise<WrappedArtSlot> {
+const entity = (bingo: Bingo) => ({ type: "bingo" as const, id: bingo.id, label: bingo.name });
+
+/** An Admin's upload, added to the end of a group: stored as it was, cut out and rendered. */
+export async function addArt(db: Db, uploadsDir: string, bingo: Bingo, group: WrappedArtGroup, buffer: Buffer, keying?: WrappedArtKeying): Promise<WrappedArtImage> {
+  const max = maxWrappedArt(group);
+  if (rows(db, bingo.id, group).length >= max) throw new ServiceError(400, `That's the most this group holds (${max}); remove one first`);
   const ext = await checkImage(buffer);
   const rendered = await renderArt(uploadsDir, { buffer, ext }, keying);
   try {
     return db.transaction((tx) => {
-      const replaced = existing(tx, bingo.id, section) !== undefined;
-      const row = putArt(tx, bingo.id, section, rendered);
-      audit(tx, {
-        action: "wrapped.art_set",
-        bingoId: bingo.id,
-        entity: { type: "bingo", id: bingo.id, label: bingo.name },
-        details: { section, keyed: rendered.keyColor !== null, replaced },
-      });
-      return toSlot(row);
+      if (rows(tx, bingo.id, group).length >= max) throw new ServiceError(400, `That's the most this group holds (${max}); remove one first`);
+      const row = appendArt(tx, bingo.id, group, rendered);
+      audit(tx, { action: "wrapped.art_set", bingoId: bingo.id, entity: entity(bingo), details: { section: group, keyed: rendered.keyColor !== null, replaced: false } });
+      return toImage(row);
     });
   } catch (err) {
     removeFiles(rendered.files);
@@ -216,22 +235,35 @@ export async function uploadArt(db: Db, uploadsDir: string, bingo: Bingo, sectio
   }
 }
 
-/** Renders a section's stored original again with other keying settings. Only for a solid-background screenshot. */
-export async function recutArt(db: Db, uploadsDir: string, bingo: Bingo, section: WrappedArtSection, keying: WrappedArtKeying): Promise<WrappedArtSlot> {
-  const row = existing(db, bingo.id, section);
-  if (!row) throw new ServiceError(404, "This section has no art");
-  if (row.keyColor === null) throw new ServiceError(400, "This art was uploaded already cut out: there's no background to key out again");
+/** An Admin's upload in place of one image, keeping its place in its group. */
+export async function replaceArt(db: Db, uploadsDir: string, bingo: Bingo, id: string, buffer: Buffer, keying?: WrappedArtKeying): Promise<WrappedArtImage> {
+  image(db, bingo.id, id);
+  const ext = await checkImage(buffer);
+  const rendered = await renderArt(uploadsDir, { buffer, ext }, keying);
+  return update(db, bingo, id, rendered, (row) => ({ action: "wrapped.art_set", details: { section: row.section, keyed: rendered.keyColor !== null, replaced: true } }));
+}
+
+/** Renders an image's stored original again with other keying settings. Only for a solid-background screenshot. */
+export async function recutArt(db: Db, uploadsDir: string, bingo: Bingo, id: string, keying: WrappedArtKeying): Promise<WrappedArtImage> {
+  const row = image(db, bingo.id, id);
+  if (row.keyColor === null) throw new ServiceError(400, "This image was uploaded already cut out: there's no background to key out again");
   const rendered = await renderArt(uploadsDir, { url: row.originalUrl }, keying);
+  return update(db, bingo, id, rendered, (r) => ({ action: "wrapped.art_recut", details: { section: r.section, tolerance: keying.tolerance, softness: keying.softness } }));
+}
+
+type UpdateAudit =
+  | { action: "wrapped.art_set"; details: { section: string; keyed: boolean; replaced: boolean } }
+  | { action: "wrapped.art_recut"; details: { section: string; tolerance: number; softness: number } };
+
+function update(db: Db, bingo: Bingo, id: string, rendered: RenderedArt, auditOf: (row: Row) => UpdateAudit): WrappedArtImage {
   try {
     return db.transaction((tx) => {
-      const updated = putArt(tx, bingo.id, section, rendered);
-      audit(tx, {
-        action: "wrapped.art_recut",
-        bingoId: bingo.id,
-        entity: { type: "bingo", id: bingo.id, label: bingo.name },
-        details: { section, tolerance: keying.tolerance, softness: keying.softness },
-      });
-      return toSlot(updated);
+      const row = image(tx, bingo.id, id);
+      const updated = tx.update(wrappedArt).set(values(rendered, clockNow())).where(eq(wrappedArt.id, row.id)).returning().get();
+      const { action, details } = auditOf(row);
+      if (action === "wrapped.art_set") audit(tx, { action, bingoId: bingo.id, entity: entity(bingo), details });
+      else audit(tx, { action, bingoId: bingo.id, entity: entity(bingo), details });
+      return toImage(updated);
     });
   } catch (err) {
     removeFiles(rendered.files);
@@ -239,12 +271,33 @@ export async function recutArt(db: Db, uploadsDir: string, bingo: Bingo, section
   }
 }
 
-export function removeArt(db: Db, bingo: Bingo, section: WrappedArtSection): void {
+export function removeArt(db: Db, bingo: Bingo, id: string): void {
   db.transaction((tx) => {
-    if (!existing(tx, bingo.id, section)) throw new ServiceError(404, "This section has no art");
-    tx.delete(wrappedArt).where(and(eq(wrappedArt.bingoId, bingo.id), eq(wrappedArt.section, section))).run();
-    audit(tx, { action: "wrapped.art_removed", bingoId: bingo.id, entity: { type: "bingo", id: bingo.id, label: bingo.name }, details: { section } });
+    const row = image(tx, bingo.id, id);
+    tx.delete(wrappedArt).where(eq(wrappedArt.id, row.id)).run();
+    audit(tx, { action: "wrapped.art_removed", bingoId: bingo.id, entity: entity(bingo), details: { section: row.section } });
   });
+}
+
+/** Puts a group's images in the given order: `ids` must be exactly the group's images. */
+export function reorderArt(db: Db, bingo: Bingo, group: WrappedArtGroup, ids: unknown): WrappedArtImage[] {
+  return db.transaction((tx) => {
+    const current = rows(tx, bingo.id, group);
+    const wanted = Array.isArray(ids) ? ids : [];
+    const same = wanted.length === current.length && new Set(wanted).size === wanted.length && current.every((r) => wanted.includes(r.id));
+    if (!same) throw new ServiceError(400, "ids must be every image of the group, once each");
+    wanted.forEach((id, sortOrder) => tx.update(wrappedArt).set({ sortOrder }).where(eq(wrappedArt.id, id as string)).run());
+    audit(tx, { action: "wrapped.art_reordered", bingoId: bingo.id, entity: entity(bingo), details: { section: group } });
+    return rows(tx, bingo.id, group).map(toImage);
+  });
+}
+
+/** An import's art: each group given replaces that group's images (those a new Bingo copied from the previous one). */
+export function replaceGroups(tx: Queryable, bingoId: string, groups: ReadonlyMap<WrappedArtGroup, RenderedValues[]>): void {
+  if (groups.size === 0) return;
+  tx.delete(wrappedArt).where(and(eq(wrappedArt.bingoId, bingoId), inArray(wrappedArt.section, [...groups.keys()]))).run();
+  const at = clockNow();
+  for (const [group, images] of groups) images.forEach((art, sortOrder) => tx.insert(wrappedArt).values({ bingoId, section: group, sortOrder, ...values(art, at) }).run());
 }
 
 /** Every row of a Bingo's art goes with the Bingo (the files stay: another Bingo may show them). */

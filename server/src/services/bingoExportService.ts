@@ -10,12 +10,12 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import {
   BINGO_EXPORT_FORMAT_VERSION,
   CUT_MODES,
-  isWrappedArtSection,
+  isWrappedArtGroup,
   type BingoExportDocument,
   type ExportNode,
   type ExportWrappedArt,
   type WrappedArtKeying,
-  type WrappedArtSection,
+  type WrappedArtGroup,
 } from "@bingo/shared";
 import type { GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
@@ -179,10 +179,10 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
 }
 
 function exportWrappedArt(db: Db, bingoId: string, uploadsDir: string): ExportWrappedArt[] {
-  return wrappedArtService.listArt(db, bingoId).flatMap((slot) => {
-    const image = wrappedArtService.readArtOriginal(uploadsDir, slot.originalUrl);
-    if (!image) log.warn("bingo export skipped Wrapped art", { section: slot.section, url: slot.originalUrl });
-    return image ? [{ section: slot.section, image, keying: slot.keying }] : [];
+  return wrappedArtService.listArt(db, bingoId).flatMap((art) => {
+    const image = wrappedArtService.readArtOriginal(uploadsDir, art.originalUrl);
+    if (!image) log.warn("bingo export skipped Wrapped art", { group: art.group, url: art.originalUrl });
+    return image ? [{ section: art.group, image, keying: art.keying }] : [];
   });
 }
 
@@ -271,12 +271,12 @@ export async function importBingoWithImages(db: Db, doc: BingoExportDocument, pa
   for (const [i, tile] of doc.tiles.entries()) {
     if (tile.image !== undefined) decoded.push([i, await decodeExportImage(tile.image, `tile "${tile.name}"`)]);
   }
-  const decodedArt: [WrappedArtSection, DecodedImage, WrappedArtKeying | null | undefined][] = [];
+  const decodedArt: [WrappedArtGroup, DecodedImage, WrappedArtKeying | null | undefined][] = [];
   for (const entry of doc.wrappedArt ?? []) {
-    const section = entry?.section;
-    if (!isWrappedArtSection(section)) throw new ServiceError(400, "Malformed import file: Wrapped art for an unknown section");
+    const group = entry?.section;
+    if (!isWrappedArtGroup(group)) throw new ServiceError(400, "Malformed import file: Wrapped art for an unknown section");
     const keying = entry.keying ? wrappedArtService.parseKeying(entry.keying) : entry.keying;
-    decodedArt.push([section, await decodeExportImage(entry.image, `the Wrapped art "${section}"`), keying]);
+    decodedArt.push([group, await decodeExportImage(entry.image, `the Wrapped art "${group}"`), keying]);
   }
   if (decoded.length === 0 && decodedArt.length === 0) return importBingo(db, doc, params);
 
@@ -288,13 +288,13 @@ export async function importBingoWithImages(db: Db, doc: BingoExportDocument, pa
       written.push(...stored.files);
       imageUrls.set(i, stored.url);
     }
-    const art = new Map<WrappedArtSection, wrappedArtService.RenderedArt>();
-    for (const [section, image, keying] of decodedArt) {
+    const art = new Map<WrappedArtGroup, wrappedArtService.RenderedArt[]>();
+    for (const [group, image, keying] of decodedArt) {
       const rendered = await wrappedArtService.renderArt(uploadsDir, image, keying ?? undefined).catch((err: unknown) => {
-        throw err instanceof ServiceError ? new ServiceError(400, `Malformed import file: the Wrapped art "${section}": ${err.message}`) : err;
+        throw err instanceof ServiceError ? new ServiceError(400, `Malformed import file: the Wrapped art "${group}": ${err.message}`) : err;
       });
       written.push(...rendered.files);
-      art.set(section, rendered);
+      art.set(group, [...(art.get(group) ?? []), rendered]);
     }
     return importBingo(db, doc, params, imageUrls, art);
   } catch (err) {
@@ -312,7 +312,7 @@ export function importBingo(
   doc: BingoExportDocument,
   params: ImportBingoParams,
   imageUrls?: ReadonlyMap<number, string>,
-  art?: ReadonlyMap<WrappedArtSection, Omit<wrappedArtService.RenderedArt, "files">>,
+  art?: ReadonlyMap<WrappedArtGroup, Omit<wrappedArtService.RenderedArt, "files">[]>,
 ) {
   assertValidDocument(doc);
 
@@ -438,7 +438,7 @@ export function importBingo(
     // Achievements (CONTEXT.md): createBingo above switched every catalogue key on (the default for a brand-new
     // bingo); a document with an explicit list restricts it to exactly those. Absent means "all on", already true.
     if (doc.achievementKeys !== undefined) achievementService.restrictAchievementSettingsTo(tx, bingo.id, doc.achievementKeys);
-    for (const [section, rendered] of art ?? []) wrappedArtService.putArt(tx, bingo.id, section, rendered);
+    if (art) wrappedArtService.replaceGroups(tx, bingo.id, art);
 
     return bingo;
   });

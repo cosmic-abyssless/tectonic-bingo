@@ -1,68 +1,100 @@
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { WRAPPED_ART_KEYING_DEFAULTS, WRAPPED_ART_SECTIONS, type WrappedArtKeying, type WrappedArtSection, type WrappedArtSlot } from "@bingo/shared";
+import {
+  WRAPPED_ART_KEYING_DEFAULTS,
+  WRAPPED_ART_SECTIONS,
+  maxWrappedArt,
+  type WrappedArtGroup,
+  type WrappedArtImage,
+  type WrappedArtKeying,
+  type WrappedArtSection,
+} from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { adminQueryKeys, useWrappedArt } from "../../api/adminQueries";
-import { Button } from "../ui/Button";
+import { Button, IconButton } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
-import { ImageIcon } from "../ui/icons";
+import { ArrowLeftIcon, ArrowRightIcon, PlusIcon, TrashIcon } from "../ui/icons";
+import { Tab, TabList, TabPanel, Tabs } from "../ui/Tabs";
 import { StickerArt } from "../wrapped/StickerArt";
 
-const SECTIONS: Record<WrappedArtSection, { label: string; hint: string; unused?: boolean }> = {
+const SECTIONS: Record<WrappedArtSection, { label: string; hint: string }> = {
   intro: { label: "Intro", hint: "The opening screen" },
   you: { label: "You", hint: "The Player's own numbers" },
-  duo: { label: "Duo", hint: "The Player and their Duo partner", unused: true },
-  captain: { label: "Captain", hint: "A Captain's Draft", unused: true },
+  duo: { label: "Duo", hint: "The Player and their Duo partner: two works well" },
+  captain: { label: "Captain", hint: "A Captain's Draft: two works well" },
   moderator: { label: "Moderator", hint: "A Moderator's reviews" },
-  team: { label: "Team", hint: "The Player's Team" },
+  team: { label: "Team", hint: "The Player's Team: three works well" },
   bingo: { label: "The Bingo", hint: "Everyone, together" },
   outro: { label: "Outro", hint: "The closing screen" },
 };
 
 /**
- * The mod panel's Wrapped art tab (admins only, #262): one slot per Wrapped section, where an Admin uploads a
- * cut-out (a transparent PNG, or a RuneLite Blindfold screenshot the server keys out), watches its two sticker frames
- * boil, replaces or removes it, and re-cuts a keyed screenshot with other settings when the keying left a fringe.
+ * The mod panel's Wrapped art tab (admins only, #262), in two parts. Category images: any number per section, shown
+ * side by side above its heading. Side images: one pool, shown large beside the story's sections in turn (wide screens
+ * only). Each image is a cut-out (a transparent PNG, or a RuneLite Blindfold screenshot the server keys out) an Admin
+ * adds, reorders, replaces, re-cuts or removes, watching its two sticker frames boil.
  */
 export function WrappedArtManager({ slug }: { slug: string }) {
   const { data, isLoading, error } = useWrappedArt(slug);
-  const bySection = new Map((data?.art ?? []).map((a) => [a.section, a]));
+  const inGroup = (group: WrappedArtGroup) => (data?.art ?? []).filter((a) => a.group === group);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4">
         <p className="text-sm text-on-surface-muted">
-          A decorative character cut-out for each section of Wrapped, drawn as a sticker on torn paper. A new bingo starts with the previous bingo's art; replace what you want. A section
-          without art still looks finished.
+          Decorative character cut-outs for Wrapped, drawn as stickers on torn paper. A new bingo starts with the previous bingo's art; change what you want. The story looks finished without
+          any.
         </p>
         {error && <Notice tone="danger">{error instanceof Error ? error.message : "Couldn't load the Wrapped art"}</Notice>}
-        <div className="grid gap-4 sm:grid-cols-2">
-          {WRAPPED_ART_SECTIONS.map((section) => (
-            <ArtSlot key={section} slug={slug} section={section} slot={bySection.get(section) ?? null} loading={isLoading} />
-          ))}
-        </div>
+        <Tabs defaultSelectedKey="category">
+          <TabList>
+            <Tab id="category">Category images</Tab>
+            <Tab id="side">Side images</Tab>
+          </TabList>
+          <TabPanel id="category">
+            <p className="mb-4 text-sm text-on-surface-muted">Shown side by side above each section's heading, in this order. The more there are, the smaller each one.</p>
+            <div className="grid gap-4 xl:grid-cols-2">
+              {WRAPPED_ART_SECTIONS.map((section) => (
+                <Card key={section} className="space-y-3 p-4">
+                  <div>
+                    <p className="font-semibold text-on-surface">{SECTIONS[section].label}</p>
+                    <p className="text-xs text-on-surface-subtle">{SECTIONS[section].hint}</p>
+                  </div>
+                  <ArtGroup slug={slug} group={section} images={inGroup(section)} loading={isLoading} />
+                </Card>
+              ))}
+            </div>
+          </TabPanel>
+          <TabPanel id="side">
+            <p className="mb-4 text-sm text-on-surface-muted">
+              Shown large beside the story, one per section in turn, alternating left and right (wide screens only). Taller, full-body cut-outs suit it best.
+            </p>
+            <Card className="p-4">
+              <ArtGroup slug={slug} group="side" images={inGroup("side")} loading={isLoading} large />
+            </Card>
+          </TabPanel>
+        </Tabs>
       </div>
       <HowToMakeOne />
     </div>
   );
 }
 
-function ArtSlot({ slug, section, slot, loading }: { slug: string; section: WrappedArtSection; slot: WrappedArtSlot | null; loading: boolean }) {
+/** One group's images in order, each with its controls, and an "Add" tile while there's room. */
+function ArtGroup({ slug, group, images, loading, large = false }: { slug: string; group: WrappedArtGroup; images: WrappedArtImage[]; loading: boolean; large?: boolean }) {
   const queryClient = useQueryClient();
-  const fileInput = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState<"upload" | "recut" | "remove" | null>(null);
+  const addInput = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [keying, setKeying] = useState<WrappedArtKeying | null>(null);
-  const current = slot?.keying ?? null;
-  const draft = keying ?? current ?? WRAPPED_ART_KEYING_DEFAULTS;
-  const { label, hint, unused } = SECTIONS[section];
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = images.find((a) => a.id === selectedId) ?? null;
+  const max = maxWrappedArt(group);
 
-  async function run(kind: "upload" | "recut" | "remove", action: () => Promise<unknown>) {
-    setBusy(kind);
+  async function run(what: string, action: () => Promise<unknown>) {
+    setBusy(what);
     setError(null);
     try {
       await action();
-      setKeying(null);
       await queryClient.invalidateQueries({ queryKey: adminQueryKeys.wrappedArt(slug) });
       await queryClient.invalidateQueries({ queryKey: ["wrapped"] });
     } catch (e) {
@@ -72,70 +104,103 @@ function ArtSlot({ slug, section, slot, loading }: { slug: string; section: Wrap
     }
   }
 
-  const upload = (file: File) => run("upload", () => adminApi.uploadWrappedArt(slug, section, file, keying ?? undefined));
-  const changed = current !== null && (draft.tolerance !== current.tolerance || draft.softness !== current.softness);
+  const move = (index: number, by: -1 | 1) => {
+    const ids = images.map((a) => a.id);
+    [ids[index], ids[index + by]] = [ids[index + by]!, ids[index]!];
+    return run("order", () => adminApi.reorderWrappedArt(slug, group, ids));
+  };
+  const tile = large ? "h-56 w-40" : "h-28 w-20";
 
   return (
-    <Card className="flex flex-col gap-3 p-4">
-      <div>
-        <p className="font-semibold text-on-surface">{label}</p>
-        <p className="text-xs text-on-surface-subtle">
-          {hint}
-          {unused && " · not in the story yet, kept for when it is"}
-        </p>
-      </div>
-
-      <div className="flex h-56 items-center justify-center rounded-md border border-outline bg-surface-raised p-3">
-        {slot ? (
-          <StickerArt frames={slot.frames} className="size-full" alt={`${label} art`} />
-        ) : (
-          <span className="flex flex-col items-center gap-1 text-xs text-on-surface-subtle">
-            <ImageIcon size={20} />
-            {loading ? "…" : busy === "upload" ? "Cutting it out…" : "No art"}
-          </span>
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-3">
+        {images.map((a, i) => (
+          <div key={a.id} className={`flex flex-col items-center gap-1 rounded-md border p-2 ${selectedId === a.id ? "border-on-surface" : "border-outline"}`}>
+            <button type="button" onClick={() => setSelectedId(selectedId === a.id ? null : a.id)} className={`${tile} rounded bg-surface-raised p-1`} aria-label={`Image ${i + 1}: show its details`}>
+              <StickerArt frames={a.frames} className="size-full" phase={i / Math.max(1, images.length)} />
+            </button>
+            <div className="flex items-center">
+              <IconButton size="sm" label="Move earlier" onPress={() => move(i, -1)} isDisabled={busy !== null || i === 0}>
+                <ArrowLeftIcon size={14} />
+              </IconButton>
+              <IconButton size="sm" label="Move later" onPress={() => move(i, 1)} isDisabled={busy !== null || i === images.length - 1}>
+                <ArrowRightIcon size={14} />
+              </IconButton>
+              <IconButton size="sm" label="Remove" onPress={() => run(`remove:${a.id}`, () => adminApi.removeWrappedArt(slug, a.id))} isDisabled={busy !== null}>
+                <TrashIcon size={14} />
+              </IconButton>
+            </div>
+          </div>
+        ))}
+        {images.length < max && (
+          <button
+            type="button"
+            onClick={() => addInput.current?.click()}
+            disabled={busy !== null}
+            className={`${tile} flex flex-col items-center justify-center gap-1 self-start rounded-md border border-dashed border-outline-strong text-xs text-on-surface-subtle transition-colors hover:border-on-surface/60 hover:text-on-surface-muted disabled:cursor-wait`}
+          >
+            <PlusIcon size={18} />
+            {loading ? "…" : busy === "add" ? "Cutting it out…" : "Add image"}
+          </button>
         )}
       </div>
+      <FileInput inputRef={addInput} onFile={(file) => run("add", () => adminApi.addWrappedArt(slug, group, file))} />
 
-      {slot?.keying && (
-        <div className="space-y-2 text-xs text-on-surface-muted">
-          <p className="flex items-center gap-1.5">
-            <span className="size-3 rounded-sm border border-outline" style={{ backgroundColor: slot.keyColor ?? undefined }} />
-            Background {slot.keyColor} keyed out. A fringe left around the outline? Raise the tolerance or softness and re-cut.
-          </p>
-          <KeyingSlider label="Tolerance" hint="what counts as background" min={0} max={200} value={draft.tolerance} onChange={(tolerance) => setKeying({ ...draft, tolerance })} />
-          <KeyingSlider label="Softness" hint="how wide the soft edge is" min={1} max={300} value={draft.softness} onChange={(softness) => setKeying({ ...draft, softness })} />
-        </div>
-      )}
-
+      {selected && <ImageDetails key={selected.id} slug={slug} image={selected} busy={busy} run={run} />}
       {error && <Notice tone="danger">{error}</Notice>}
+      {images.length >= max && <p className="text-xs text-on-surface-subtle">That's the most this holds ({max}).</p>}
+    </div>
+  );
+}
 
-      <div className="mt-auto flex flex-wrap gap-2">
-        <Button size="sm" variant={slot ? "secondary" : "primary"} onPress={() => fileInput.current?.click()} isDisabled={busy !== null}>
-          {busy === "upload" ? "Uploading…" : slot ? "Replace" : "Upload"}
+/** The selected image: replace it, and for a keyed screenshot, re-cut it with other settings. */
+function ImageDetails({ slug, image, busy, run }: { slug: string; image: WrappedArtImage; busy: string | null; run: (what: string, action: () => Promise<unknown>) => Promise<void> }) {
+  const replaceInput = useRef<HTMLInputElement>(null);
+  const [keying, setKeying] = useState<WrappedArtKeying>(image.keying ?? WRAPPED_ART_KEYING_DEFAULTS);
+  const changed = image.keying !== null && (keying.tolerance !== image.keying.tolerance || keying.softness !== image.keying.softness);
+
+  return (
+    <div className="space-y-2 rounded-md bg-surface-raised p-3 text-xs text-on-surface-muted">
+      {image.keying ? (
+        <>
+          <p className="flex items-center gap-1.5">
+            <span className="size-3 shrink-0 rounded-sm border border-outline" style={{ backgroundColor: image.keyColor ?? undefined }} />
+            Background {image.keyColor} keyed out. A fringe left around the outline? Raise the tolerance or softness and re-cut.
+          </p>
+          <KeyingSlider label="Tolerance" hint="what counts as background" min={0} max={200} value={keying.tolerance} onChange={(tolerance) => setKeying({ ...keying, tolerance })} />
+          <KeyingSlider label="Softness" hint="how wide the soft edge is" min={1} max={300} value={keying.softness} onChange={(softness) => setKeying({ ...keying, softness })} />
+        </>
+      ) : (
+        <p>Uploaded already cut out (a transparent PNG).</p>
+      )}
+      <div className="flex flex-wrap gap-2 pt-1">
+        <Button size="sm" onPress={() => replaceInput.current?.click()} isDisabled={busy !== null}>
+          {busy === `replace:${image.id}` ? "Replacing…" : "Replace"}
         </Button>
-        {slot?.keying && (
-          <Button size="sm" onPress={() => run("recut", () => adminApi.recutWrappedArt(slug, section, draft))} isDisabled={busy !== null || !changed}>
-            {busy === "recut" ? "Re-cutting…" : "Re-cut"}
-          </Button>
-        )}
-        {slot && (
-          <Button size="sm" variant="ghost" onPress={() => run("remove", () => adminApi.removeWrappedArt(slug, section))} isDisabled={busy !== null}>
-            {busy === "remove" ? "Removing…" : "Remove"}
+        {image.keying && (
+          <Button size="sm" onPress={() => run(`recut:${image.id}`, () => adminApi.recutWrappedArt(slug, image.id, keying))} isDisabled={busy !== null || !changed}>
+            {busy === `recut:${image.id}` ? "Re-cutting…" : "Re-cut"}
           </Button>
         )}
       </div>
-      <input
-        ref={fileInput}
-        type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          if (file) upload(file);
-        }}
-      />
-    </Card>
+      <FileInput inputRef={replaceInput} onFile={(file) => run(`replace:${image.id}`, () => adminApi.replaceWrappedArt(slug, image.id, file))} />
+    </div>
+  );
+}
+
+function FileInput({ inputRef, onFile }: { inputRef: React.RefObject<HTMLInputElement | null>; onFile: (file: File) => void }) {
+  return (
+    <input
+      ref={inputRef}
+      type="file"
+      accept="image/png,image/jpeg,image/webp,image/gif"
+      className="hidden"
+      onChange={(e) => {
+        const file = e.target.files?.[0];
+        e.target.value = "";
+        if (file) onFile(file);
+      }}
+    />
   );
 }
 
@@ -173,7 +238,7 @@ function HowToMakeOne() {
         <li>Add raster mask (layers panel), then Ctrl + I to invert it, so the character stays.</li>
         <li>File → Export as → PNG (PNG keeps the transparency; JPG doesn't).</li>
       </ol>
-      <p>No need to crop tightly, add a border or a shadow: the sticker effect trims, sizes and adds the paper itself.</p>
+      <p>No need to crop tightly, add a border or a shadow: the sticker effect trims, sizes and adds the paper itself. One character per image.</p>
     </Card>
   );
 }

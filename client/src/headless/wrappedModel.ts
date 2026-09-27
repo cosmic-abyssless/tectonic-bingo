@@ -183,7 +183,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
   };
 
   const sections: WrappedSectionModel[] = [];
-  const art = (kind: WrappedSectionModel["kind"]) => data.art?.[kind] ?? null;
+  const art = (kind: WrappedSectionModel["kind"]) => data.art?.sections?.[kind] ?? [];
 
   // Intro.
   const intro: WrappedIntroModel = {
@@ -374,6 +374,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
     slug,
     bingoName: bingo.bingoName,
     preview: data.preview,
+    sideArt: data.art?.side ?? [],
     publishedLabel: !data.preview && data.state.publishedAt ? `Published ${dateLabel(Date.parse(data.state.publishedAt), false)}` : null,
     sections: sections.map((section) => ({ id: section.kind, label: SECTION_LABEL[section.kind], section })),
     actions,

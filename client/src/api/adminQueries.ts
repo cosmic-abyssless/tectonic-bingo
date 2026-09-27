@@ -132,7 +132,7 @@ export function useApplyCutReview(slug: string) {
   });
 }
 
-/** A Bingo's Wrapped art, one slot per section that has some (site admins only). */
+/** A Bingo's Wrapped art images, every group (site admins only). */
 export function useWrappedArt(slug: string) {
   return useQuery({ queryKey: adminQueryKeys.wrappedArt(slug), queryFn: () => adminApi.getWrappedArt(slug) });
 }

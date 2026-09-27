@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import { motion, useScroll } from "motion/react";
+import type { WrappedArtFrames } from "@bingo/shared";
 import { useWrappedModel } from "../../../headless";
 import type { WrappedSectionModel } from "../../../headless/types";
 import { AppHeader } from "../../../core/ui/AppHeader";
 import { Badge } from "../../../core/ui/Card";
+import { StickerArt } from "../../../core/wrapped/StickerArt";
 import { useSlot } from "../../context";
 
 /**
  * Wrapped's page: the story's sections one after another, each through its own slot, under a thin bar that fills as
- * the viewer scrolls. On a wider screen a column of dots down the side names each section and jumps to it.
+ * the viewer scrolls. On a wider screen a column of dots down the side names each section and jumps to it, and the
+ * side images take turns beside the sections, alternating left and right.
  */
 export function WrappedPageLayout() {
   const wrapped = useWrappedModel();
@@ -62,8 +65,9 @@ export function WrappedPageLayout() {
       </nav>
 
       <main>
-        {wrapped.sections.map((s) => (
-          <div key={s.id} id={`wrapped-${s.id}`} data-wrapped-section={s.id} className="scroll-mt-16">
+        {wrapped.sections.map((s, i) => (
+          <div key={s.id} id={`wrapped-${s.id}`} data-wrapped-section={s.id} className="relative scroll-mt-16">
+            {wrapped.sideArt.length > 0 && <SideArt frames={wrapped.sideArt[i % wrapped.sideArt.length]!} side={i % 2 === 0 ? "left" : "right"} />}
             {render(s.section)}
           </div>
         ))}
@@ -87,4 +91,18 @@ function useActiveSection(ids: string[]): string | null {
     return () => observer.disconnect();
   }, [key]);
   return active;
+}
+
+/**
+ * One side image beside a section: large, in the margin the story's centred column leaves, and stuck in view while
+ * the section scrolls past. Wide screens only: a phone has no margin to spare.
+ */
+function SideArt({ frames, side }: { frames: WrappedArtFrames; side: "left" | "right" }) {
+  return (
+    <div aria-hidden className={`pointer-events-none absolute inset-y-0 hidden w-[calc((100vw-48rem)/2-3rem)] max-w-sm xl:block ${side === "left" ? "left-4" : "right-12"}`}>
+      <motion.div className="sticky top-[15vh] h-[70vh]" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ amount: 0.3 }} transition={{ duration: 0.5 }}>
+        <StickerArt frames={frames} className="size-full" phase={side === "left" ? 0 : 0.5} />
+      </motion.div>
+    </div>
+  );
 }

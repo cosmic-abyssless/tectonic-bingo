@@ -641,8 +641,8 @@ export interface WrappedChartModel {
 
 export interface WrappedIntroModel {
   kind: "intro";
-  /** This section's Wrapped art (its two boil frames); null without any. */
-  art: WrappedArtFrames | null;
+  /** This section's Category images, side by side (each its two boil frames); empty without any. */
+  art: WrappedArtFrames[];
   bingoName: string;
   /** The viewer's name when they played; null for anyone else (they get the Bingo-wide story). */
   playerName: string | null;
@@ -652,7 +652,7 @@ export interface WrappedIntroModel {
 
 export interface WrappedYouModel {
   kind: "you";
-  art: WrappedArtFrames | null;
+  art: WrappedArtFrames[];
   /**
    * Comparisons are only ever flattering: each is null unless the Player beat it, so a Player below the average (or low
    * on their Team) sees their own numbers and nothing to measure them against.
@@ -677,7 +677,7 @@ export interface WrappedYouModel {
 /** Your Duo: only for a Player in a Duo. Worded as friendly teasing, never as a verdict on either half. */
 export interface WrappedDuoModel {
   kind: "duo";
-  art: WrappedArtFrames | null;
+  art: WrappedArtFrames[];
   partner: WrappedPersonModel;
   combinedShareLabel: string;
   /** "1st of 4 Duos"; null when theirs was the only Duo. */
@@ -696,7 +696,7 @@ export interface WrappedDuoModel {
 /** Your Draft: only for Captains (and co-Captains). No pick is ever labelled a bust. */
 export interface WrappedCaptainModel {
   kind: "captain";
-  art: WrappedArtFrames | null;
+  art: WrappedArtFrames[];
   /** Every pick, in pick order: a Duo is one pick with both halves. */
   picks: {
     key: string;
@@ -717,7 +717,7 @@ export interface WrappedCaptainModel {
 
 export interface WrappedModeratorModel {
   kind: "moderator";
-  art: WrappedArtFrames | null;
+  art: WrappedArtFrames[];
   /** "32 Submissions" */
   reviewedLabel: string;
   medianLabel: string;
@@ -728,7 +728,7 @@ export interface WrappedModeratorModel {
 
 export interface WrappedTeamModel {
   kind: "team";
-  art: WrappedArtFrames | null;
+  art: WrappedArtFrames[];
   name: string;
   color: string | null;
   placement: number;
@@ -747,7 +747,7 @@ export interface WrappedTeamModel {
 
 export interface WrappedBingoModel {
   kind: "bingo";
-  art: WrappedArtFrames | null;
+  art: WrappedArtFrames[];
   totalSubmissions: number;
   totalSubmissionsLabel: string;
   totalGpLabel: string;
@@ -775,7 +775,7 @@ export interface WrappedBingoModel {
 
 export interface WrappedOutroModel {
   kind: "outro";
-  art: WrappedArtFrames | null;
+  art: WrappedArtFrames[];
   bingoName: string;
 }
 
@@ -789,6 +789,8 @@ export interface WrappedModel {
   preview: boolean;
   /** "Published 17 Jan"; null for a preview. */
   publishedLabel: string | null;
+  /** The side images: shown large beside the story's sections in turn, on wide screens only. */
+  sideArt: WrappedArtFrames[];
   /** The story in order, with every section that has nothing to say left out. `label` names it in the progress indicator. */
   sections: { id: WrappedSectionKind; label: string; section: WrappedSectionModel }[];
   actions: { goToBoard(): void; goToRewind(): void };

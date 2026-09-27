@@ -815,15 +815,17 @@ export const achievementEarned = sqliteTable('achievement_earned', {
   uniqueIndex('achievement_earned_bingo_user_key_unq').on(t.bingoId, t.userId, t.achievementKey),
 ]);
 
-// Wrapped art (#262): one decorative cut-out per Wrapped section (shared WRAPPED_ART_SECTIONS), drawn as a sticker on
-// torn paper. originalUrl is the upload as it was (so it can be re-cut later with other keying settings, without a
-// new screenshot); frame1Url/frame2Url are the two rendered "boil" frames. keyTolerance/keySoftness are how a
+// Wrapped art (#262): decorative cut-outs drawn as stickers on torn paper, in groups (shared WRAPPED_ART_GROUPS): a
+// section's Category images, or the "side" pool. `section` is the group; sortOrder orders a group's images.
+// originalUrl is the upload as it was (so it can be re-cut later with other keying settings, without a new
+// screenshot); frame1Url/frame2Url are the two rendered "boil" frames. keyTolerance/keySoftness are how a
 // solid-background screenshot was keyed, null for an upload that was already transparent. A new Bingo starts with
 // copies of the previous Bingo's rows, pointing at the same files, so files are never deleted along with a row.
 export const wrappedArt = sqliteTable('wrapped_art', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
   section: text('section').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
   originalUrl: text('original_url').notNull(),
   frame1Url: text('frame1_url').notNull(),
   frame2Url: text('frame2_url').notNull(),
@@ -832,5 +834,5 @@ export const wrappedArt = sqliteTable('wrapped_art', {
   keySoftness: integer('key_softness'),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 }, (t) => [
-  uniqueIndex('wrapped_art_bingo_section_unq').on(t.bingoId, t.section),
+  index('wrapped_art_bingo_section_idx').on(t.bingoId, t.section),
 ]);

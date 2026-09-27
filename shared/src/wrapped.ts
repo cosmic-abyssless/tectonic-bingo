@@ -239,25 +239,42 @@ export interface BingoWrappedResponse {
 }
 
 /**
- * Wrapped art: a decorative in-game character cut-out for a section of the story, drawn as a sticker on torn paper.
- * Admins upload them per Bingo (a new Bingo starts with a copy of the previous one's). Duo and Captain are kept for
- * the sections of those names.
+ * Wrapped art: decorative in-game character cut-outs, drawn as stickers on torn paper. Admins upload them per Bingo
+ * (a new Bingo starts with a copy of the previous one's), in groups:
+ * - Category images: any number per section of the story, shown side by side above its opening heading (a Team's
+ *   three, a Duo's two). Duo and Captain are the sections of those names.
+ * - Side images ("side"): one pool, shown large beside the story's sections in turn (wide screens only).
  */
 export const WRAPPED_ART_SECTIONS = ["intro", "you", "duo", "captain", "moderator", "team", "bingo", "outro"] as const;
 export type WrappedArtSection = (typeof WRAPPED_ART_SECTIONS)[number];
+
+export const WRAPPED_ART_GROUPS = [...WRAPPED_ART_SECTIONS, "side"] as const;
+export type WrappedArtGroup = (typeof WRAPPED_ART_GROUPS)[number];
+
+/** How many images a group holds at most: a row above a heading gets crowded quickly; the side pool less so. */
+export function maxWrappedArt(group: WrappedArtGroup): number {
+  return group === "side" ? 12 : 6;
+}
 
 export function isWrappedArtSection(value: unknown): value is WrappedArtSection {
   return typeof value === "string" && (WRAPPED_ART_SECTIONS as readonly string[]).includes(value);
 }
 
+export function isWrappedArtGroup(value: unknown): value is WrappedArtGroup {
+  return typeof value === "string" && (WRAPPED_ART_GROUPS as readonly string[]).includes(value);
+}
+
 /**
- * The two "boil" frames of a section's sticker (transparent WebP, same size), which the page swaps slowly. The shadow
- * isn't in them: the page adds it with CSS drop-shadow, which follows the torn edge.
+ * One sticker's two "boil" frames (transparent WebP, same size), which the page swaps slowly. The shadow isn't in
+ * them: the page adds it with CSS drop-shadow, which follows the torn edge.
  */
 export type WrappedArtFrames = [string, string];
 
-/** The art the story shows, by section; a section without art is missing. */
-export type WrappedArtSet = Partial<Record<WrappedArtSection, WrappedArtFrames>>;
+/** The art the story shows, in order: each section's Category images (a section without any is missing), and the side pool. */
+export interface WrappedArtSet {
+  sections: Partial<Record<WrappedArtSection, WrappedArtFrames[]>>;
+  side: WrappedArtFrames[];
+}
 
 /**
  * How a solid-background screenshot was keyed (RGB distances, 0–441): within `tolerance` of the key colour is
@@ -270,9 +287,10 @@ export interface WrappedArtKeying {
 
 export const WRAPPED_ART_KEYING_DEFAULTS: WrappedArtKeying = { tolerance: 30, softness: 150 };
 
-/** One section's art, as the admin UI shows it. */
-export interface WrappedArtSlot {
-  section: WrappedArtSection;
+/** One image, as the admin UI shows it. */
+export interface WrappedArtImage {
+  id: string;
+  group: WrappedArtGroup;
   /** The upload as it was: a transparent PNG, or the solid-background screenshot it was keyed from. */
   originalUrl: string;
   frames: WrappedArtFrames;

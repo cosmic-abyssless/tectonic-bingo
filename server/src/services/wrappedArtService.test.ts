@@ -5,12 +5,12 @@ import path from "path";
 import sharp from "sharp";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { WRAPPED_ART_KEYING_DEFAULTS } from "@bingo/shared";
+import { WRAPPED_ART_KEYING_DEFAULTS, maxWrappedArt } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createBingo, deleteBingo } from "./bingoService";
 import { exportBingo, importBingoWithImages } from "./bingoExportService";
-import { artSet, listArt, recutArt, removeArt, uploadArt, WRAPPED_ART_DIR } from "./wrappedArtService";
+import { addArt, artSet, listArt, recutArt, removeArt, reorderArt, replaceArt, WRAPPED_ART_DIR } from "./wrappedArtService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -51,131 +51,159 @@ function greenScreenshot(): Promise<Buffer> {
 const onDisk = (url: string) => fs.existsSync(path.join(uploadsDir, url.replace(/^\/uploads\//, "")));
 const filesIn = () => (fs.existsSync(path.join(uploadsDir, WRAPPED_ART_DIR)) ? fs.readdirSync(path.join(uploadsDir, WRAPPED_ART_DIR)) : []);
 
-describe("uploadArt", () => {
+describe("addArt", () => {
   it("renders a transparent PNG's two frames and keeps the original", async () => {
     const bingo = newBingo("b1");
-    const slot = await uploadArt(db, uploadsDir, bingo, "intro", await transparentPng());
-    expect(slot.keying).toBeNull();
-    expect(slot.keyColor).toBeNull();
-    expect(onDisk(slot.originalUrl)).toBe(true);
-    for (const frame of slot.frames) {
+    const art = await addArt(db, uploadsDir, bingo, "intro", await transparentPng());
+    expect(art.group).toBe("intro");
+    expect(art.keying).toBeNull();
+    expect(art.keyColor).toBeNull();
+    expect(onDisk(art.originalUrl)).toBe(true);
+    for (const frame of art.frames) {
       expect(onDisk(frame)).toBe(true);
       expect((await sharp(path.join(uploadsDir, frame.replace(/^\/uploads\//, ""))).metadata()).format).toBe("webp");
     }
-    expect(artSet(db, bingo.id)).toEqual({ intro: slot.frames });
+    expect(artSet(db, bingo.id)).toEqual({ sections: { intro: [art.frames] }, side: [] });
   });
 
   it("keys out a solid-background screenshot", async () => {
     const bingo = newBingo("b1");
-    const slot = await uploadArt(db, uploadsDir, bingo, "team", await greenScreenshot());
-    expect(slot.keyColor).toBe("#00ff00");
-    expect(slot.keying).toEqual(WRAPPED_ART_KEYING_DEFAULTS);
+    const art = await addArt(db, uploadsDir, bingo, "team", await greenScreenshot());
+    expect(art.keyColor).toBe("#00ff00");
+    expect(art.keying).toEqual(WRAPPED_ART_KEYING_DEFAULTS);
   });
 
   it("refuses an opaque image whose edge isn't one colour, and writes nothing", async () => {
     const bingo = newBingo("b1");
     const noisy = await sharp(Buffer.from(Array.from({ length: 60 * 60 * 3 }, (_, i) => (i * 97) % 256)), { raw: { width: 60, height: 60, channels: 3 } }).png().toBuffer();
-    await expect(uploadArt(db, uploadsDir, bingo, "intro", noisy)).rejects.toThrow(/Blindfold/);
+    await expect(addArt(db, uploadsDir, bingo, "intro", noisy)).rejects.toThrow(/Blindfold/);
     expect(filesIn()).toEqual([]);
     expect(listArt(db, bingo.id)).toEqual([]);
   });
 
   it("refuses a file that isn't an image", async () => {
     const bingo = newBingo("b1");
-    await expect(uploadArt(db, uploadsDir, bingo, "intro", Buffer.from("<svg></svg>"))).rejects.toBeInstanceOf(ServiceError);
+    await expect(addArt(db, uploadsDir, bingo, "intro", Buffer.from("<svg></svg>"))).rejects.toBeInstanceOf(ServiceError);
   });
 
-  it("replaces a section's art", async () => {
+  it("adds several images to a group, in order, and the side pool separately", async () => {
     const bingo = newBingo("b1");
-    const first = await uploadArt(db, uploadsDir, bingo, "intro", await transparentPng());
-    const second = await uploadArt(db, uploadsDir, bingo, "intro", await greenScreenshot());
-    expect(second.frames).not.toEqual(first.frames);
-    expect(listArt(db, bingo.id)).toHaveLength(1);
+    const first = await addArt(db, uploadsDir, bingo, "team", await transparentPng());
+    const second = await addArt(db, uploadsDir, bingo, "team", await greenScreenshot());
+    const side = await addArt(db, uploadsDir, bingo, "side", await transparentPng());
+    expect(artSet(db, bingo.id)).toEqual({ sections: { team: [first.frames, second.frames] }, side: [side.frames] });
+  });
+
+  it("stops at the most a group holds", async () => {
+    const bingo = newBingo("b1");
+    const png = await transparentPng();
+    for (let i = 0; i < maxWrappedArt("duo"); i++) await addArt(db, uploadsDir, bingo, "duo", png);
+    await expect(addArt(db, uploadsDir, bingo, "duo", png)).rejects.toThrow(/the most this group holds/);
   });
 });
 
-describe("recutArt", () => {
-  it("renders the stored screenshot again with other keying settings", async () => {
+describe("replaceArt, recutArt, removeArt, reorderArt", () => {
+  it("replaces one image in its place", async () => {
     const bingo = newBingo("b1");
-    const slot = await uploadArt(db, uploadsDir, bingo, "you", await greenScreenshot());
-    const recut = await recutArt(db, uploadsDir, bingo, "you", { tolerance: 60, softness: 40 });
+    const a = await addArt(db, uploadsDir, bingo, "team", await transparentPng());
+    const b = await addArt(db, uploadsDir, bingo, "team", await transparentPng());
+    const replaced = await replaceArt(db, uploadsDir, bingo, a.id, await greenScreenshot());
+    expect(replaced.id).toBe(a.id);
+    expect(replaced.keyColor).toBe("#00ff00");
+    expect(listArt(db, bingo.id).map((x) => x.id)).toEqual([a.id, b.id]);
+  });
+
+  it("re-cuts a stored screenshot with other keying settings, and refuses one uploaded already cut out", async () => {
+    const bingo = newBingo("b1");
+    const keyed = await addArt(db, uploadsDir, bingo, "you", await greenScreenshot());
+    const recut = await recutArt(db, uploadsDir, bingo, keyed.id, { tolerance: 60, softness: 40 });
     expect(recut.keying).toEqual({ tolerance: 60, softness: 40 });
-    expect(recut.originalUrl).toBe(slot.originalUrl);
-    expect(recut.frames).not.toEqual(slot.frames);
+    expect(recut.originalUrl).toBe(keyed.originalUrl);
+    expect(recut.frames).not.toEqual(keyed.frames);
+    const cut = await addArt(db, uploadsDir, bingo, "you", await transparentPng());
+    await expect(recutArt(db, uploadsDir, bingo, cut.id, WRAPPED_ART_KEYING_DEFAULTS)).rejects.toThrow(/already cut out/);
   });
 
-  it("refuses art that was uploaded already cut out", async () => {
+  it("removes one image", async () => {
     const bingo = newBingo("b1");
-    await uploadArt(db, uploadsDir, bingo, "you", await transparentPng());
-    await expect(recutArt(db, uploadsDir, bingo, "you", WRAPPED_ART_KEYING_DEFAULTS)).rejects.toThrow(/already cut out/);
+    const a = await addArt(db, uploadsDir, bingo, "outro", await transparentPng());
+    removeArt(db, bingo, a.id);
+    expect(artSet(db, bingo.id)).toEqual({ sections: {}, side: [] });
+    expect(() => removeArt(db, bingo, a.id)).toThrow(/No such/);
   });
-});
 
-describe("removeArt", () => {
-  it("removes a section's art", async () => {
+  it("reorders a group, given exactly its images", async () => {
     const bingo = newBingo("b1");
-    await uploadArt(db, uploadsDir, bingo, "outro", await transparentPng());
-    removeArt(db, bingo, "outro");
-    expect(artSet(db, bingo.id)).toEqual({});
-    expect(() => removeArt(db, bingo, "outro")).toThrow(/no art/);
+    const [a, b, c] = [await addArt(db, uploadsDir, bingo, "side", await transparentPng()), await addArt(db, uploadsDir, bingo, "side", await transparentPng()), await addArt(db, uploadsDir, bingo, "side", await transparentPng())];
+    expect(reorderArt(db, bingo, "side", [c!.id, a!.id, b!.id]).map((x) => x.id)).toEqual([c!.id, a!.id, b!.id]);
+    expect(() => reorderArt(db, bingo, "side", [a!.id, b!.id])).toThrow(/every image/);
+  });
+
+  it("never touches another Bingo's image", async () => {
+    const mine = newBingo("mine");
+    const theirs = newBingo("theirs");
+    const a = await addArt(db, uploadsDir, theirs, "intro", await transparentPng());
+    expect(() => removeArt(db, mine, a.id)).toThrow(/No such/);
   });
 });
 
 describe("a new Bingo", () => {
-  it("starts with a copy of the previous Bingo's art, which it can change on its own", async () => {
+  it("starts with a copy of the previous Bingo's art, in order, which it can change on its own", async () => {
     const previous = newBingo("spring");
-    const slot = await uploadArt(db, uploadsDir, previous, "intro", await transparentPng());
+    const a = await addArt(db, uploadsDir, previous, "team", await transparentPng());
+    const b = await addArt(db, uploadsDir, previous, "team", await greenScreenshot());
+    const side = await addArt(db, uploadsDir, previous, "side", await transparentPng());
     const next = newBingo("autumn");
-    expect(artSet(db, next.id)).toEqual({ intro: slot.frames });
+    expect(artSet(db, next.id)).toEqual({ sections: { team: [a.frames, b.frames] }, side: [side.frames] });
 
-    removeArt(db, next, "intro");
-    expect(artSet(db, previous.id)).toEqual({ intro: slot.frames });
-    for (const frame of slot.frames) expect(onDisk(frame)).toBe(true);
+    removeArt(db, next, listArt(db, next.id)[0]!.id);
+    expect(artSet(db, previous.id).sections.team).toHaveLength(2);
+    for (const frame of a.frames) expect(onDisk(frame)).toBe(true);
   });
 
   it("never copies from a generated test Bingo", async () => {
     const test = newBingo("testdata-qa");
-    await uploadArt(db, uploadsDir, test, "intro", await transparentPng());
-    expect(artSet(db, newBingo("real").id)).toEqual({});
+    await addArt(db, uploadsDir, test, "intro", await transparentPng());
+    expect(artSet(db, newBingo("real").id)).toEqual({ sections: {}, side: [] });
   });
 
   it("loses its art rows when deleted", async () => {
     const bingo = newBingo("b1");
-    await uploadArt(db, uploadsDir, bingo, "intro", await transparentPng());
+    await addArt(db, uploadsDir, bingo, "intro", await transparentPng());
     deleteBingo(db, bingo.id);
     expect(db.select().from(schema.wrappedArt).all()).toEqual([]);
   });
 });
 
 describe("export and import", () => {
-  it("carries the originals and keying, and renders the frames again on import", async () => {
+  it("carries each group's originals in order with their keying, and renders the frames again on import", async () => {
     const source = newBingo("source");
-    await uploadArt(db, uploadsDir, source, "intro", await transparentPng());
-    await uploadArt(db, uploadsDir, source, "team", await greenScreenshot());
-    await recutArt(db, uploadsDir, source, "team", { tolerance: 50, softness: 90 });
+    await addArt(db, uploadsDir, source, "intro", await transparentPng());
+    const team = await addArt(db, uploadsDir, source, "team", await greenScreenshot());
+    await recutArt(db, uploadsDir, source, team.id, { tolerance: 50, softness: 90 });
+    await addArt(db, uploadsDir, source, "team", await transparentPng());
+    await addArt(db, uploadsDir, source, "side", await transparentPng());
 
     const doc = exportBingo(db, source.id, { uploadsDir });
-    expect(doc.wrappedArt?.map((a) => [a.section, a.keying])).toEqual([
+    const expected = [
       ["intro", null],
       ["team", { tolerance: 50, softness: 90 }],
-    ]);
+      ["team", null],
+      ["side", null],
+    ];
+    expect(doc.wrappedArt?.map((a) => [a.section, a.keying])).toEqual(expected);
     expect(exportBingo(db, source.id).wrappedArt).toBeUndefined();
 
-    // Somewhere else: the art is gone from the source, so only the document can bring it.
-    removeArt(db, source, "intro");
-    removeArt(db, source, "team");
+    // The new Bingo first copies the source's art; the document's groups replace it, not add to it.
     const imported = await importBingoWithImages(db, doc, { slug: "copy", createdByUserId: adminId }, uploadsDir);
     const art = listArt(db, imported.id);
-    expect(art.map((a) => [a.section, a.keying])).toEqual([
-      ["intro", null],
-      ["team", { tolerance: 50, softness: 90 }],
-    ]);
+    expect(art.map((a) => [a.group, a.keying])).toEqual(expected);
     for (const a of art) for (const url of [a.originalUrl, ...a.frames]) expect(onDisk(url)).toBe(true);
   });
 
-  it("refuses Wrapped art for a section that doesn't exist", async () => {
+  it("refuses Wrapped art for a group that doesn't exist", async () => {
     const source = newBingo("source");
-    await uploadArt(db, uploadsDir, source, "intro", await transparentPng());
+    await addArt(db, uploadsDir, source, "intro", await transparentPng());
     const doc = exportBingo(db, source.id, { uploadsDir });
     doc.wrappedArt![0]!.section = "credits";
     await expect(importBingoWithImages(db, doc, { slug: "copy", createdByUserId: adminId }, uploadsDir)).rejects.toThrow(/unknown section/);
