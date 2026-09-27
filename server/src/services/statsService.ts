@@ -24,6 +24,9 @@ type Db = BetterSQLite3Database<typeof schema>;
 
 type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick"> & { rsn?: string | null };
 const MINIMAL_USER_COLS = { id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick };
+// Contributions also carry what the client needs for a Discord avatar (Titles section), and nothing more.
+type AvatarUser = MinimalUser & Pick<typeof users.$inferSelect, "discordId" | "discordAvatar">;
+const AVATAR_USER_COLS = { ...MINIMAL_USER_COLS, discordId: users.discordId, discordAvatar: users.discordAvatar };
 
 export interface PointsOverTimePoint {
   at: Date;
@@ -186,7 +189,7 @@ export interface ContributionAward {
 
 export interface ContributionCount {
   userId: string;
-  user: MinimalUser;
+  user: AvatarUser;
   teamId: string;
   approvedSubmissions: number;
   /** Points share (CONTEXT.md), unrounded. */
@@ -304,7 +307,7 @@ export function getContributionCounts(db: Db, bingoId: string, shares = getPoint
       .sort((a, b) => b.points - a.points);
 
   const userIds = [...teamByUser.keys()];
-  const userRows = userIds.length ? db.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, userIds)).all() : [];
+  const userRows = userIds.length ? db.select(AVATAR_USER_COLS).from(users).where(inArray(users.id, userIds)).all() : [];
   const rsns = rsnsInBingo(db, bingoId, userIds);
   const userById = new Map(userRows.map((u) => [u.id, { ...u, rsn: rsns.get(u.id) ?? null }]));
 
