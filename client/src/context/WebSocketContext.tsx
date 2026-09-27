@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { BroadcastEvent } from "@bingo/shared";
+import { useAuth } from "./AuthContext";
 
 type Listener = (event: BroadcastEvent) => void;
 
@@ -100,9 +101,9 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
 }
 
 // One WebSocket connection for the whole app (v1 opened a separate one per
-// component that used it). Drives query-cache invalidation on every
-// broadcast; useWebSocketEvent lets a component also react directly (e.g.
-// the mod page's browser-notification prompt).
+// component that used it), while someone is logged in. Drives query-cache
+// invalidation on every broadcast; useWebSocketEvent lets a component also
+// react directly (e.g. the mod page's browser-notification prompt).
 export function WebSocketProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const listenersRef = useRef<Set<Listener>>(new Set());
@@ -162,7 +163,13 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     }
   }, [markStatsResult]);
 
+  const { user } = useAuth();
+  // The server only lets a logged-in clan member open the socket, so nobody else tries: it connects on login and is
+  // closed for good on logout.
+  const socketUserId = user && (user.inGuild || user.isAdmin) ? user.id : null;
+
   useEffect(() => {
+    if (!socketUserId) return;
     let closed = false;
     // True once a connection has been open. Events broadcast while the socket was
     // down are gone for good, so on every RE-connect the page's data is refetched;
@@ -201,7 +208,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       wsRef.current?.close();
     };
-  }, [queryClient, applyStatsRefreshing]);
+  }, [queryClient, applyStatsRefreshing, socketUserId]);
 
   const subscribe = (fn: Listener) => {
     listenersRef.current.add(fn);
