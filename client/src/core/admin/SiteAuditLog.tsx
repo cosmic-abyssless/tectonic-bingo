@@ -12,7 +12,6 @@ import { Button } from "../ui/Button";
 import { Card, EmptyState, Notice } from "../ui/Card";
 import { ChevronDownIcon, ChevronRightIcon, ListIcon } from "../ui/icons";
 import { MultiSelect } from "../ui/MultiSelect";
-import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { SingleSelect } from "../ui/SingleSelect";
 import { DateTimeRangeFilter } from "../ui/DateTimeRangeFilter";
 import { isRangeSet, type TimeRange } from "../ui/timeRange";
@@ -23,8 +22,8 @@ type BingoScope = string | null | "all";
 // Site admin's counterpart to core/mod/AuditLog.tsx — every bingo (or just
 // site-level entries, or one bingo), not one bingo's own log.
 export function SiteAuditLog() {
-  const [excludedCategories, setExcludedCategories] = useState<Set<string>>(() => new Set());
-  const [excludedActors, setExcludedActors] = useState<Set<string>>(() => new Set());
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(() => new Set());
+  const [selectedActors, setSelectedActors] = useState<Set<string>>(() => new Set());
   const [bingoScope, setBingoScope] = useState<BingoScope>("all");
   const [range, setRange] = useState<TimeRange>({});
   const [search, setSearch] = useState("");
@@ -37,11 +36,11 @@ export function SiteAuditLog() {
   const bingoById = useMemo(() => new Map(bingos.map((b) => [b.id, b])), [bingos]);
   const bingoScopeOptions = useMemo(() => [{ key: "all", label: "All bingos" }, { key: "null", label: "Site-wide only" }, ...bingos.map((b) => ({ key: b.id, label: b.name }))], [bingos]);
   const [actorNames, rememberActors] = useActorCatalog("site");
-  const categories = inclusionFilter(excludedCategories, CATEGORIES);
+  const categories = inclusionFilter(selectedCategories, CATEGORIES);
   // Alphabetical, matching actorOptionsFrom's sort below — see the same line in core/mod/AuditLog.tsx for why an
   // order mismatch between `selected` and the rendered options confuses the picker dropdown's initial focus/scroll.
   const actorKeys = useMemo(() => [...actorNames.keys()].sort((a, b) => (actorNames.get(a) ?? "").localeCompare(actorNames.get(b) ?? "")), [actorNames]);
-  const actors = inclusionFilter(excludedActors, actorKeys.map((key) => ({ key })));
+  const actors = inclusionFilter(selectedActors, actorKeys.map((key) => ({ key })));
 
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useSiteAuditLog(bingoScope, {
     category: categories.query as AuditCategory[] | undefined,
@@ -51,7 +50,6 @@ export function SiteAuditLog() {
     q: debouncedSearch || undefined,
   });
   const filtered = categories.narrowed || actors.narrowed || bingoScope !== "all" || isRangeSet(range) || debouncedSearch !== "";
-  const blocked = categories.none || actors.none;
 
   const entries = useMemo(() => data?.pages.flatMap((p) => p.entries) ?? [], [data]);
   useEffect(() => {
@@ -72,14 +70,14 @@ export function SiteAuditLog() {
           label="Category"
           options={CATEGORIES}
           selected={categories.checked}
-          onChange={(visible) => setExcludedCategories(applyColumnVisibility(excludedCategories, CATEGORIES.map((c) => c.key), visible))}
+          onChange={(visible) => setSelectedCategories(new Set(visible))}
         />
         {actorOptions.length > 0 && (
           <MultiSelect
             label="User"
             options={actorOptions}
             selected={actors.checked}
-            onChange={(visible) => setExcludedActors(applyColumnVisibility(excludedActors, actorOptions.map((a) => a.key), visible))}
+            onChange={(visible) => setSelectedActors(new Set(visible))}
           />
         )}
         <SingleSelect
@@ -91,7 +89,7 @@ export function SiteAuditLog() {
         <DateTimeRangeFilter value={range} onChange={setRange} />
         <TableSearchInput value={search} onChange={setSearch} placeholder="Search…" />
         <div className="ml-auto">
-          <Button size="sm" onPress={copyCsv} isDisabled={blocked || entries.length === 0}>
+          <Button size="sm" onPress={copyCsv} isDisabled={entries.length === 0}>
             {copied ? "Copied" : "Copy as CSV"}
           </Button>
         </div>
@@ -99,9 +97,9 @@ export function SiteAuditLog() {
 
       {isError ? (
         <Notice tone="danger">{error instanceof Error ? error.message : "Failed to load the audit log"}</Notice>
-      ) : isLoading && !blocked ? (
+      ) : isLoading ? (
         <p className="py-20 text-center text-sm text-on-surface-muted">Loading…</p>
-      ) : blocked || entries.length === 0 ? (
+      ) : entries.length === 0 ? (
         <EmptyState icon={<ListIcon />} title={filtered ? "No matching activity" : "No activity yet"}>
           {filtered ? "Nothing in the log matches these filters. Try widening them." : "Actions taken across the site will show up here as they happen."}
         </EmptyState>

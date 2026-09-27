@@ -11,7 +11,6 @@ import { Card, EmptyState, Notice } from "../ui/Card";
 import { ChevronDownIcon, ChevronRightIcon, ListIcon } from "../ui/icons";
 import { MultiSelect } from "../ui/MultiSelect";
 import { inclusionFilter } from "../ui/inclusionFilter";
-import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { DateTimeRangeFilter } from "../ui/DateTimeRangeFilter";
 import { isRangeSet, type TimeRange } from "../ui/timeRange";
 import { toCsv } from "../ui/csv";
@@ -31,6 +30,7 @@ export const CATEGORIES: { key: AuditCategory; label: string }[] = [
   { key: "moderation", label: "Moderation" },
   { key: "system", label: "System" },
   { key: "bug_report", label: "Bug reports" },
+  { key: "achievement", label: "Achievements" },
   { key: "http", label: "Unaudited" },
 ];
 
@@ -109,9 +109,9 @@ export function DetailsView({ details }: { details: unknown }) {
 }
 
 export function AuditLog({ slug }: { slug: string }) {
-  const [excludedCategories, setExcludedCategories] = useState<Set<string>>(() => new Set());
-  const [excludedTeams, setExcludedTeams] = useState<Set<string>>(() => new Set());
-  const [excludedActors, setExcludedActors] = useState<Set<string>>(() => new Set());
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(() => new Set());
+  const [selectedTeams, setSelectedTeams] = useState<Set<string>>(() => new Set());
+  const [selectedActors, setSelectedActors] = useState<Set<string>>(() => new Set());
   const [range, setRange] = useState<TimeRange>({});
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300).trim();
@@ -121,8 +121,8 @@ export function AuditLog({ slug }: { slug: string }) {
   const { data: shell } = useBingo(slug);
   const [actorNames, rememberActors] = useActorCatalog(slug);
   const teamOptions = useMemo(() => (shell?.teams ?? []).map((t) => ({ key: t.id, label: t.name })), [shell]);
-  const categories = inclusionFilter(excludedCategories, CATEGORIES);
-  const teams = inclusionFilter(excludedTeams, teamOptions);
+  const categories = inclusionFilter(selectedCategories, CATEGORIES);
+  const teams = inclusionFilter(selectedTeams, teamOptions);
   // Alphabetical, not `actorNames`' own insertion order (which is recency — whichever actor's entry was scanned
   // first) — this has to match actorOptionsFrom's sort below, since it's what `selected` derives its key order
   // from. A mismatch there doesn't affect filtering (a Set), but it does confuse the picker's dropdown: react-aria
@@ -130,7 +130,7 @@ export function AuditLog({ slug }: { slug: string }) {
   // ordered `selected` had the dropdown opening focused (and auto-scrolled) to some arbitrary actor instead of the
   // alphabetically-first one actually shown at the top.
   const actorKeys = useMemo(() => [...actorNames.keys()].sort((a, b) => (actorNames.get(a) ?? "").localeCompare(actorNames.get(b) ?? "")), [actorNames]);
-  const actors = inclusionFilter(excludedActors, actorKeys.map((key) => ({ key })));
+  const actors = inclusionFilter(selectedActors, actorKeys.map((key) => ({ key })));
 
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useAuditLog(slug, {
     category: categories.query as AuditCategory[] | undefined,
@@ -146,7 +146,6 @@ export function AuditLog({ slug }: { slug: string }) {
   }, [entries, rememberActors]);
   const actorOptions = useMemo(() => actorOptionsFrom(actorNames, entries), [actorNames, entries]);
   const filtered = categories.narrowed || teams.narrowed || actors.narrowed || isRangeSet(range) || debouncedSearch !== "";
-  const blocked = categories.none || teams.none || actors.none;
 
   async function copyCsv() {
     await navigator.clipboard.writeText(buildCsv(entries));
@@ -161,14 +160,14 @@ export function AuditLog({ slug }: { slug: string }) {
           label="Category"
           options={CATEGORIES}
           selected={categories.checked}
-          onChange={(visible) => setExcludedCategories(applyColumnVisibility(excludedCategories, CATEGORIES.map((c) => c.key), visible))}
+          onChange={(visible) => setSelectedCategories(new Set(visible))}
         />
         {teamOptions.length > 0 && (
           <MultiSelect
             label="Team"
             options={teamOptions}
             selected={teams.checked}
-            onChange={(visible) => setExcludedTeams(applyColumnVisibility(excludedTeams, teamOptions.map((t) => t.key), visible))}
+            onChange={(visible) => setSelectedTeams(new Set(visible))}
           />
         )}
         {actorOptions.length > 0 && (
@@ -176,13 +175,13 @@ export function AuditLog({ slug }: { slug: string }) {
             label="User"
             options={actorOptions}
             selected={actors.checked}
-            onChange={(visible) => setExcludedActors(applyColumnVisibility(excludedActors, actorOptions.map((a) => a.key), visible))}
+            onChange={(visible) => setSelectedActors(new Set(visible))}
           />
         )}
         <DateTimeRangeFilter value={range} onChange={setRange} />
         <TableSearchInput value={search} onChange={setSearch} placeholder="Search…" />
         <div className="ml-auto">
-          <Button size="sm" onPress={copyCsv} isDisabled={blocked || entries.length === 0}>
+          <Button size="sm" onPress={copyCsv} isDisabled={entries.length === 0}>
             {copied ? "Copied" : "Copy as CSV"}
           </Button>
         </div>
@@ -190,9 +189,9 @@ export function AuditLog({ slug }: { slug: string }) {
 
       {isError ? (
         <Notice tone="danger">{error instanceof Error ? error.message : "Failed to load the audit log"}</Notice>
-      ) : isLoading && !blocked ? (
+      ) : isLoading ? (
         <p className="py-20 text-center text-sm text-on-surface-muted">Loading…</p>
-      ) : blocked || entries.length === 0 ? (
+      ) : entries.length === 0 ? (
         <EmptyState icon={<ListIcon />} title={filtered ? "No matching activity" : "No activity yet"}>
           {filtered ? "Nothing in the log matches these filters. Try widening them." : "Actions taken on this bingo will show up here as they happen."}
         </EmptyState>

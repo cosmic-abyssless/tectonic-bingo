@@ -5,7 +5,6 @@ import type { Team, TimelineEvent, TimelineEventType } from "@bingo/shared";
 import { useGridTheme } from "../ui/agGrid";
 import { useIsPhone } from "../ui/useMediaQuery";
 import { ColumnPicker } from "../ui/ColumnPicker";
-import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { usePersistedGridState } from "../ui/gridState";
 import { headerTooltip, usefulTooltip } from "../ui/gridTooltips";
 import { inclusionFilter } from "../ui/inclusionFilter";
@@ -75,19 +74,20 @@ export function TimelineTable({ events, teams, startsAt }: { events: TimelineEve
   const isPhone = useIsPhone();
   const [format, setFormat] = usePreference("statsTimeFormat");
   const { gridProps, hidden, setHidden } = usePersistedGridState<Row>("statsTimeline", PINNED);
-  const [excludedKinds, setExcludedKinds] = useState<Set<string>>(() => new Set());
+  const [selectedKinds, setSelectedKinds] = useState<Set<string>>(() => new Set());
   const [search, setSearch] = useState("");
 
   const presentKinds = useMemo(() => KINDS.filter((k) => events.some((e) => e.type === k.key)), [events]);
-  const kinds = inclusionFilter(excludedKinds, presentKinds);
+  const kinds = inclusionFilter(selectedKinds, presentKinds);
 
   const rows = useMemo<Row[]>(() => {
     const teamById = new Map(teams.map((t) => [t.id, t]));
+    const pick = inclusionFilter(selectedKinds, presentKinds);
     return events
-      .filter((e) => !excludedKinds.has(e.type))
+      .filter((e) => pick.matches(e.type))
       .map((e) => ({ ...e, team: e.teamId ? (teamById.get(e.teamId) ?? null) : null }))
       .filter((r) => matchesSearch([r.what, r.team?.name, kindLabel(r.type)], search));
-  }, [events, teams, excludedKinds, search]);
+  }, [events, teams, selectedKinds, presentKinds, search]);
 
   // Every column but the pinned time shares the width (flex), so hiding one lets the rest take its space.
   const columnDefs = useMemo<ColDef<Row>[]>(
@@ -124,7 +124,7 @@ export function TimelineTable({ events, teams, startsAt }: { events: TimelineEve
             label="Kind"
             options={presentKinds}
             selected={kinds.checked}
-            onChange={(visible) => setExcludedKinds(applyColumnVisibility(excludedKinds, presentKinds.map((k) => k.key), visible))}
+            onChange={(visible) => setSelectedKinds(new Set(visible))}
           />
         )}
         <ColumnPicker columns={COLUMNS} hidden={hidden} onHiddenChange={setHidden} />
