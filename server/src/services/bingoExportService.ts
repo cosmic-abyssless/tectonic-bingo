@@ -7,7 +7,16 @@
 // Import always creates a brand-new bingo — never overwrites an existing one.
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { BINGO_EXPORT_FORMAT_VERSION, CUT_MODES, type BingoExportDocument, type ExportNode } from "@bingo/shared";
+import {
+  BINGO_EXPORT_FORMAT_VERSION,
+  CUT_MODES,
+  isWrappedArtSection,
+  type BingoExportDocument,
+  type ExportNode,
+  type ExportWrappedArt,
+  type WrappedArtKeying,
+  type WrappedArtSection,
+} from "@bingo/shared";
 import type { GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingos, nodeEdges } from "../db/schema";
@@ -16,6 +25,7 @@ import * as bingoService from "./bingoService";
 import * as boardService from "./boardService";
 import * as signupService from "./signupService";
 import * as achievementService from "./achievementService";
+import * as wrappedArtService from "./wrappedArtService";
 import { setNodeGates } from "./graphService";
 import { decodeExportImage, readTileImage, removeFiles, storeTileImage, type DecodedImage } from "./exportImages";
 import { log } from "../log";
@@ -41,7 +51,7 @@ function resolveGateLocal(realId: string | null, localIdByRealNodeId: Map<string
 }
 
 export interface ExportOptions {
-  /** Embed each tile's image, read from `<uploadsDir>/tiles`. Without it, no images are exported. */
+  /** Embed each tile's image and the Wrapped art, read from `<uploadsDir>`. Without it, no images are exported. */
   uploadsDir?: string;
 }
 
@@ -164,7 +174,16 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
     lines,
     signupQuestions,
     achievementKeys: achievementService.getEnabledAchievementKeys(db, bingoId),
+    ...(options.uploadsDir ? { wrappedArt: exportWrappedArt(db, bingoId, options.uploadsDir) } : {}),
   };
+}
+
+function exportWrappedArt(db: Db, bingoId: string, uploadsDir: string): ExportWrappedArt[] {
+  return wrappedArtService.listArt(db, bingoId).flatMap((slot) => {
+    const image = wrappedArtService.readArtOriginal(uploadsDir, slot.originalUrl);
+    if (!image) log.warn("bingo export skipped Wrapped art", { section: slot.section, url: slot.originalUrl });
+    return image ? [{ section: slot.section, image, keying: slot.keying }] : [];
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -193,6 +212,9 @@ function assertValidDocument(doc: BingoExportDocument): void {
   }
   if (doc.achievementKeys !== undefined && !Array.isArray(doc.achievementKeys)) {
     throw new ServiceError(400, "Malformed import file: achievementKeys must be an array");
+  }
+  if (doc.wrappedArt !== undefined && !Array.isArray(doc.wrappedArt)) {
+    throw new ServiceError(400, "Malformed import file: wrappedArt must be an array");
   }
   for (const t of doc.tiles) {
     if (t.bonusPoints !== undefined && (!Number.isInteger(t.bonusPoints) || t.bonusPoints < 0)) {
@@ -247,9 +269,16 @@ export async function importBingoWithImages(db: Db, doc: BingoExportDocument, pa
   assertValidDocument(doc);
   const decoded: [number, DecodedImage][] = [];
   for (const [i, tile] of doc.tiles.entries()) {
-    if (tile.image !== undefined) decoded.push([i, await decodeExportImage(tile.image, tile.name)]);
+    if (tile.image !== undefined) decoded.push([i, await decodeExportImage(tile.image, `tile "${tile.name}"`)]);
   }
-  if (decoded.length === 0) return importBingo(db, doc, params);
+  const decodedArt: [WrappedArtSection, DecodedImage, WrappedArtKeying | null | undefined][] = [];
+  for (const entry of doc.wrappedArt ?? []) {
+    const section = entry?.section;
+    if (!isWrappedArtSection(section)) throw new ServiceError(400, "Malformed import file: Wrapped art for an unknown section");
+    const keying = entry.keying ? wrappedArtService.parseKeying(entry.keying) : entry.keying;
+    decodedArt.push([section, await decodeExportImage(entry.image, `the Wrapped art "${section}"`), keying]);
+  }
+  if (decoded.length === 0 && decodedArt.length === 0) return importBingo(db, doc, params);
 
   const written: string[] = [];
   try {
@@ -259,15 +288,32 @@ export async function importBingoWithImages(db: Db, doc: BingoExportDocument, pa
       written.push(...stored.files);
       imageUrls.set(i, stored.url);
     }
-    return importBingo(db, doc, params, imageUrls);
+    const art = new Map<WrappedArtSection, wrappedArtService.RenderedArt>();
+    for (const [section, image, keying] of decodedArt) {
+      const rendered = await wrappedArtService.renderArt(uploadsDir, image, keying ?? undefined).catch((err: unknown) => {
+        throw err instanceof ServiceError ? new ServiceError(400, `Malformed import file: the Wrapped art "${section}": ${err.message}`) : err;
+      });
+      written.push(...rendered.files);
+      art.set(section, rendered);
+    }
+    return importBingo(db, doc, params, imageUrls, art);
   } catch (err) {
     removeFiles(written);
     throw err;
   }
 }
 
-/** `imageUrls`: the stored image for a tile, by its index in `doc.tiles` (see importBingoWithImages). */
-export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBingoParams, imageUrls?: ReadonlyMap<number, string>) {
+/**
+ * `imageUrls`: the stored image for a tile, by its index in `doc.tiles`; `art`: the Wrapped art rendered from
+ * `doc.wrappedArt` (see importBingoWithImages).
+ */
+export function importBingo(
+  db: Db,
+  doc: BingoExportDocument,
+  params: ImportBingoParams,
+  imageUrls?: ReadonlyMap<number, string>,
+  art?: ReadonlyMap<WrappedArtSection, Omit<wrappedArtService.RenderedArt, "files">>,
+) {
   assertValidDocument(doc);
 
   return db.transaction((tx) => {
@@ -392,6 +438,7 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
     // Achievements (CONTEXT.md): createBingo above switched every catalogue key on (the default for a brand-new
     // bingo); a document with an explicit list restricts it to exactly those. Absent means "all on", already true.
     if (doc.achievementKeys !== undefined) achievementService.restrictAchievementSettingsTo(tx, bingo.id, doc.achievementKeys);
+    for (const [section, rendered] of art ?? []) wrappedArtService.putArt(tx, bingo.id, section, rendered);
 
     return bingo;
   });

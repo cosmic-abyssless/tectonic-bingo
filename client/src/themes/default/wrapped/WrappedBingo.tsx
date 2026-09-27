@@ -1,7 +1,7 @@
 import type { WrappedBingoModel } from "../../../headless/types";
 import { Reveal, WrappedScene } from "../../../core/wrapped/Scene";
 import { PointsChart } from "../../../core/wrapped/PointsChart";
-import { WrappedDropCard, WrappedHeading, WrappedPerson, WrappedStat } from "../../../core/wrapped/WrappedParts";
+import { WrappedDropCard, WrappedHeading, WrappedPerson, WrappedSectionArt, WrappedStat } from "../../../core/wrapped/WrappedParts";
 
 const MEDAL = ["text-gold", "text-silver", "text-bronze"];
 
@@ -11,6 +11,7 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
     <>
       <WrappedScene steps={2}>
         <Reveal step={0}>
+          <WrappedSectionArt art={b.art} />
           <WrappedHeading kicker="The Bingo">Everyone, together</WrappedHeading>
         </Reveal>
         <Reveal step={1} className="mt-12 grid grid-cols-2 gap-8 sm:gap-16">

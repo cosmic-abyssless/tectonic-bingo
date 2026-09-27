@@ -48,9 +48,12 @@ export interface DecodedImage {
   ext: string;
 }
 
-/** Checks one document image and returns its bytes, or throws a 400 saying what's wrong with it. */
-export async function decodeExportImage(image: unknown, tileName: string): Promise<DecodedImage> {
-  const fail = (why: string) => new ServiceError(400, `Malformed import file: the image for tile "${tileName}" ${why}`);
+/**
+ * Checks one document image and returns its bytes, or throws a 400 saying what's wrong with it. `owner` names what
+ * the image is for, for that message: `tile "Zulrah"`.
+ */
+export async function decodeExportImage(image: unknown, owner: string): Promise<DecodedImage> {
+  const fail = (why: string) => new ServiceError(400, `Malformed import file: the image for ${owner} ${why}`);
   const data = (image as { data?: unknown } | null)?.data;
   if (typeof data !== "string") throw fail("isn't an image object");
   // Reject on the encoded length first: don't decode something that can't be under the limit.

@@ -20,6 +20,7 @@
 import type { CutMode, LeftoverMode, NodeKind, QuestionVisibility, SignupMode, SignupQuestionType } from "./index.ts";
 import type { ExclusivityRule } from "./exclusivity.ts";
 import type { AchievementKey } from "./achievements.ts";
+import type { WrappedArtKeying } from "./wrapped.ts";
 
 export const BINGO_EXPORT_FORMAT_VERSION = 1;
 
@@ -91,6 +92,16 @@ export interface ExportTile {
   tasks: ExportNode[];
 }
 
+/**
+ * A Wrapped section's art (#262): its original upload (the frames are rendered again on import), and how a
+ * solid-background screenshot was keyed (null for one uploaded already cut out; absent reads as the defaults).
+ */
+export interface ExportWrappedArt {
+  section: string;
+  image: ExportImage;
+  keying?: WrappedArtKeying | null;
+}
+
 export interface ExportLine {
   lineType: "row" | "column" | "diagonal";
   lineIndex: number;
@@ -153,4 +164,9 @@ export interface BingoExportDocument {
    * The master switch itself isn't carried: an import always starts with it on.
    */
   achievementKeys?: AchievementKey[];
+  /**
+   * Wrapped art, only when the export included images. Absent: the import keeps what a new Bingo starts with (a copy
+   * of the previous Bingo's); present, each section in it replaces that one's.
+   */
+  wrappedArt?: ExportWrappedArt[];
 }

@@ -12,6 +12,7 @@ import { db } from "../db";
 import * as bingoService from "../services/bingoService";
 import * as bingoExportService from "../services/bingoExportService";
 import * as boardService from "../services/boardService";
+import * as wrappedArtService from "../services/wrappedArtService";
 import { rescoreBingo } from "../services/scoringService";
 import * as signupService from "../services/signupService";
 import * as teamService from "../services/teamService";
@@ -283,6 +284,44 @@ router.post(
     if (!req.file) throw new ServiceError(400, "image is required");
     const tile = boardService.updateTile(db, req.params.id as string, { imageUrl: `/uploads/tiles/${req.file.filename}` });
     res.json({ tile });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Wrapped art (#262): a cut-out per Wrapped section, as a transparent PNG or a screenshot on one solid colour (keyed
+// out on the server), drawn as a sticker. Not tied to the stage: it's only shown once the Bingo is Finished.
+// ---------------------------------------------------------------------------
+
+const wrappedArtUpload = imageUpload();
+router.get(
+  "/wrapped-art",
+  asyncHandler(async (req, res) => {
+    res.json({ art: wrappedArtService.listArt(db, req.bingo!.id) });
+  }),
+);
+router.post(
+  "/wrapped-art/:section",
+  wrappedArtUpload.single("image"),
+  asyncHandler(async (req, res) => {
+    const section = wrappedArtService.parseSection(req.params.section);
+    if (!req.file) throw new ServiceError(400, "image is required");
+    const keying = wrappedArtService.parseKeying(req.body ?? {});
+    res.json({ art: await wrappedArtService.uploadArt(db, UPLOADS_DIR, req.bingo!, section, req.file.buffer, keying) });
+  }),
+);
+router.post(
+  "/wrapped-art/:section/recut",
+  asyncHandler(async (req, res) => {
+    const section = wrappedArtService.parseSection(req.params.section);
+    const keying = wrappedArtService.parseKeying(req.body ?? {});
+    res.json({ art: await wrappedArtService.recutArt(db, UPLOADS_DIR, req.bingo!, section, keying) });
+  }),
+);
+router.delete(
+  "/wrapped-art/:section",
+  asyncHandler(async (req, res) => {
+    wrappedArtService.removeArt(db, req.bingo!, wrappedArtService.parseSection(req.params.section));
+    res.status(204).end();
   }),
 );
 

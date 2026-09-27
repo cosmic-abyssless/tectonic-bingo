@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AvatarUser, BingoWrapped, MyWrappedResponse, PlayerWrapped, WrappedDrop, WrappedYou } from "@bingo/shared";
-import { aboveAverage, buildWrappedStory, dropLuck, ordinal, rateLabel, rejectionBanter, shortDuration } from "./wrappedModel";
+import type { AvatarUser, BingoWrapped, MyWrappedResponse, PlayerWrapped, WrappedCaptain, WrappedDrop, WrappedDuo, WrappedYou } from "@bingo/shared";
+import { aboveAverage, buildWrappedStory, carriedBanter, draftGrade, dropLuck, ordinal, rateLabel, rejectionBanter, shortDuration } from "./wrappedModel";
 
 const T0 = Date.UTC(2026, 0, 3, 12);
 const HOUR = 3_600_000;
@@ -61,7 +61,7 @@ function bingo(): BingoWrapped {
 }
 
 function response(player: PlayerWrapped | null, extra: Partial<MyWrappedResponse> = {}): MyWrappedResponse {
-  return { state: { published: true, publishedAt: iso(48), publishOnFinish: false, pendingSubmissions: 0 }, preview: false, bingo: bingo(), player, moderator: null, ...extra };
+  return { state: { published: true, publishedAt: iso(48), publishOnFinish: false, pendingSubmissions: 0 }, preview: false, bingo: bingo(), player, moderator: null, art: {}, ...extra };
 }
 
 const player = (you: Partial<WrappedYou> = {}): PlayerWrapped => ({ userId: "me", teamId: "a", you: { ...emptyYou, ...you }, duo: null, captain: null });
@@ -73,6 +73,23 @@ const kinds = (data: MyWrappedResponse) => story(data).sections.map((s) => s.id)
 describe("buildWrappedStory", () => {
   it("tells a Player intro → You → Team → Bingo → outro", () => {
     expect(kinds(response(player({ submissions: 5, pointsShare: 12 })))).toEqual(["intro", "you", "team", "bingo", "outro"]);
+  });
+
+  it("gives each section its Wrapped art, and a section without any none", () => {
+    const frames = (name: string): [string, string] => [`/uploads/wrapped-art/${name}-1.webp`, `/uploads/wrapped-art/${name}-2.webp`];
+    const sections = story(response(player({ submissions: 5 }), { art: { intro: frames("intro"), team: frames("team"), duo: frames("duo") } })).sections;
+    expect(sections.map((s) => [s.id, s.section.art?.[0] ?? null])).toEqual([
+      ["intro", "/uploads/wrapped-art/intro-1.webp"],
+      ["you", null],
+      ["team", "/uploads/wrapped-art/team-1.webp"],
+      ["bingo", null],
+      ["outro", null],
+    ]);
+  });
+
+  it("doesn't tell You just because it has art", () => {
+    const frames: [string, string] = ["/a.webp", "/b.webp"];
+    expect(kinds(response(player(), { art: { you: frames } }))).toEqual(["intro", "team", "bingo", "outro"]);
   });
 
   it("gives a viewer who isn't a Player the Bingo only", () => {
@@ -171,5 +188,81 @@ describe("labels", () => {
 
   it("rejection banter climbs with the rate", () => {
     expect(new Set([0, 0.01, 0.1, 0.2, 0.5].map(rejectionBanter)).size).toBe(5);
+  });
+});
+
+describe("Your Duo and Your Draft", () => {
+  const duo = (over: Partial<WrappedDuo> = {}): WrappedDuo => ({
+    partner: u("pal"), combinedPointsShare: 40, myPointsShare: 30, partnerPointsShare: 10, rank: 2, duoCount: 5, pickNumber: 4, ...over,
+  });
+  const captain = (picks: [number, number, number][], drafted = 20): WrappedCaptain => ({
+    teamId: "a",
+    drafted,
+    picks: picks.map(([pickNumber, position, rank]) => ({ players: [u(`p${pickNumber}`)], pickNumber, position, rank })),
+  });
+  const sectionOf = (data: MyWrappedResponse, id: string) => story(data).sections.find((s) => s.id === id)?.section;
+
+  it("tells a Duo after You, and a Captain's Draft after that, only to those who had one", () => {
+    const both = { ...player({ submissions: 3 }), duo: duo(), captain: captain([[1, 1, 3]]) };
+    expect(kinds(response(both))).toEqual(["intro", "you", "duo", "captain", "team", "bingo", "outro"]);
+    expect(kinds(response(player({ submissions: 3 })))).toEqual(["intro", "you", "team", "bingo", "outro"]);
+    expect(kinds(response({ ...player({ submissions: 3 }), captain: captain([]) }))).not.toContain("captain");
+  });
+
+  it("words the Duo: combined share and rank, the split and who carried whom, and their moments", () => {
+    const moment = { kind: "tile" as const, tileName: "Zulrah", date: "2026-01-03", mine: drop("s1"), theirs: drop("s2", { player: u("pal") }) };
+    const d = sectionOf(response({ ...player({ submissions: 3 }), duo: duo({ moments: [moment] }) }), "duo")!;
+    if (d.kind !== "duo") throw new Error("not the Duo");
+    expect(d.combinedShareLabel).toBe("40");
+    expect(d.rankLabel).toBe("2nd of 5 Duos");
+    expect(d.split).toEqual({ myPercent: 75, partnerPercent: 25, myShareLabel: "30", partnerShareLabel: "10" });
+    expect(d.carried).toBe("You carried pal rsn. They owe you one.");
+    expect(d.pickLabel).toBe("Pick 4");
+    expect(d.moments.map((m) => m.label)).toEqual(["Both on Zulrah"]);
+    // Published before moments were stored, and a Duo where neither scored.
+    const bare = sectionOf(response({ ...player({ submissions: 3 }), duo: duo({ combinedPointsShare: 0, myPointsShare: 0, partnerPointsShare: 0, duoCount: 1 }) }), "duo")!;
+    if (bare.kind !== "duo") throw new Error("not the Duo");
+    expect([bare.split, bare.carried, bare.rankLabel, bare.moments]).toEqual([null, null, null, []]);
+  });
+
+  it("teases whoever carried, either way", () => {
+    expect(carriedBanter(0.2, "Pal")).toBe("Pal carried you. Buy them something nice.");
+    expect(carriedBanter(0.5, "Pal")).toMatch(/down the middle/);
+  });
+
+  it("lists every pick against where it finished, names the best Steal, and never a bust", () => {
+    const c = sectionOf(response({ ...player({ submissions: 3 }), captain: captain([[1, 1, 12], [8, 8, 2], [9, 9, 6], [12, 12, 0]]) }), "captain")!;
+    if (c.kind !== "captain") throw new Error("not the Draft");
+    expect(c.picks.map((p) => [p.pickLabel, p.positionLabel, p.rankLabel, p.beat])).toEqual([
+      ["Pick 1", "Drafted 1st", "Finished 12th", false],
+      ["Pick 8", "Drafted 8th", "Finished 2nd", true],
+      ["Pick 9", "Drafted 9th", "Finished 6th", true],
+      ["Pick 12", "Drafted 12th", null, false],
+    ]);
+    expect(c.steal).toMatchObject({ pickLabel: "Pick 8", positionLabel: "8th", rankLabel: "2nd", placesBeatenLabel: "6 places" });
+    expect(JSON.stringify(c)).not.toMatch(/bust/i);
+  });
+
+  it("never makes a pick that scored nothing the Steal, however low the tied rank for 0 sits", () => {
+    const zero = captain([[1, 1, 3], [52, 70, 49]]);
+    zero.picks[0]!.pointsShare = 20;
+    zero.picks[1]!.pointsShare = 0;
+    const c = sectionOf(response({ ...player({ submissions: 3 }), captain: zero }), "captain")!;
+    if (c.kind !== "captain") throw new Error("not the Draft");
+    expect(c.steal).toBeNull();
+    expect(c.picks[1]).toMatchObject({ rankLabel: null, beat: false });
+  });
+
+  it("grades a draft on how picks did against their draft positions, gently at the bottom", () => {
+    expect(draftGrade(captain([[5, 5, 1], [10, 10, 3]]))?.letter).toBe("A+");
+    expect(draftGrade(captain([[5, 5, 5]]))?.letter).toBe("B+");
+    expect(draftGrade(captain([[1, 1, 20]]))).toEqual({ letter: "C", line: "The draft is a lottery anyway." });
+    expect(draftGrade(captain([[1, 1, 0]]))).toBeNull();
+    // Published before `drafted` was stored: the widest position or rank stands in.
+    expect(draftGrade({ ...captain([[5, 5, 1]]), drafted: undefined })?.letter).toBe("A+");
+    // No pick ever beat its spot: no Steal.
+    const c = sectionOf(response({ ...player({ submissions: 3 }), captain: captain([[1, 1, 4]]) }), "captain")!;
+    if (c.kind !== "captain") throw new Error("not the Draft");
+    expect(c.steal).toBeNull();
   });
 });

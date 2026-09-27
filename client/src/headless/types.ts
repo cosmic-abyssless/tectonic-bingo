@@ -3,7 +3,7 @@
 // never a raw Tile, TeamNodeState[], SubmissionDetails[], or LeafClaimMaps.
 // See docs/headless-theming-plan.md §2.
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
-import type { AuditCategory, AuditTone, DraftState, NodeKind, NodeStatus, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus } from "@bingo/shared";
+import type { AuditCategory, AuditTone, DraftState, NodeKind, NodeStatus, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus, WrappedArtFrames } from "@bingo/shared";
 
 export interface ActivityEntryModel {
   id: number;
@@ -641,6 +641,8 @@ export interface WrappedChartModel {
 
 export interface WrappedIntroModel {
   kind: "intro";
+  /** This section's Wrapped art (its two boil frames); null without any. */
+  art: WrappedArtFrames | null;
   bingoName: string;
   /** The viewer's name when they played; null for anyone else (they get the Bingo-wide story). */
   playerName: string | null;
@@ -650,6 +652,7 @@ export interface WrappedIntroModel {
 
 export interface WrappedYouModel {
   kind: "you";
+  art: WrappedArtFrames | null;
   /**
    * Comparisons are only ever flattering: each is null unless the Player beat it, so a Player below the average (or low
    * on their Team) sees their own numbers and nothing to measure them against.
@@ -671,8 +674,50 @@ export interface WrappedYouModel {
   draft: { pickLabel: string; positionLabel: string } | null;
 }
 
+/** Your Duo: only for a Player in a Duo. Worded as friendly teasing, never as a verdict on either half. */
+export interface WrappedDuoModel {
+  kind: "duo";
+  art: WrappedArtFrames | null;
+  partner: WrappedPersonModel;
+  combinedShareLabel: string;
+  /** "1st of 4 Duos"; null when theirs was the only Duo. */
+  rankLabel: string | null;
+  isTop: boolean;
+  /** How the Points share split between them (percentages add up to 100); null when neither scored. */
+  split: { myPercent: number; partnerPercent: number; myShareLabel: string; partnerShareLabel: string } | null;
+  /** "Who carried whom", as banter; null when neither scored. */
+  carried: string | null;
+  /** "Pick 7"; null when the Duo wasn't drafted. */
+  pickLabel: string | null;
+  /** Their best moments together: a Submission each on the same Tile, or on the same day. */
+  moments: { key: string; label: string; mine: WrappedDropModel; theirs: WrappedDropModel }[];
+}
+
+/** Your Draft: only for Captains (and co-Captains). No pick is ever labelled a bust. */
+export interface WrappedCaptainModel {
+  kind: "captain";
+  art: WrappedArtFrames | null;
+  /** Every pick, in pick order: a Duo is one pick with both halves. */
+  picks: {
+    key: string;
+    pickLabel: string;
+    people: WrappedPersonModel[];
+    /** "Drafted 3rd". */
+    positionLabel: string;
+    /** "Finished 5th"; null when it can't be ranked. */
+    rankLabel: string | null;
+    /** Finished above where they were drafted: the only comparison ever highlighted. */
+    beat: boolean;
+  }[];
+  /** Their best Steal (CONTEXT.md); null when no pick beat its draft position. */
+  steal: { people: WrappedPersonModel[]; pickLabel: string; positionLabel: string; rankLabel: string; placesBeatenLabel: string } | null;
+  /** An overall draft grade, from how the picks did against their draft positions; null with nothing to grade. */
+  grade: { letter: string; line: string } | null;
+}
+
 export interface WrappedModeratorModel {
   kind: "moderator";
+  art: WrappedArtFrames | null;
   /** "32 Submissions" */
   reviewedLabel: string;
   medianLabel: string;
@@ -683,6 +728,7 @@ export interface WrappedModeratorModel {
 
 export interface WrappedTeamModel {
   kind: "team";
+  art: WrappedArtFrames | null;
   name: string;
   color: string | null;
   placement: number;
@@ -701,6 +747,7 @@ export interface WrappedTeamModel {
 
 export interface WrappedBingoModel {
   kind: "bingo";
+  art: WrappedArtFrames | null;
   totalSubmissions: number;
   totalSubmissionsLabel: string;
   totalGpLabel: string;
@@ -728,10 +775,11 @@ export interface WrappedBingoModel {
 
 export interface WrappedOutroModel {
   kind: "outro";
+  art: WrappedArtFrames | null;
   bingoName: string;
 }
 
-export type WrappedSectionModel = WrappedIntroModel | WrappedYouModel | WrappedModeratorModel | WrappedTeamModel | WrappedBingoModel | WrappedOutroModel;
+export type WrappedSectionModel = WrappedIntroModel | WrappedYouModel | WrappedDuoModel | WrappedCaptainModel | WrappedModeratorModel | WrappedTeamModel | WrappedBingoModel | WrappedOutroModel;
 export type WrappedSectionKind = WrappedSectionModel["kind"];
 
 export interface WrappedModel {

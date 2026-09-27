@@ -1,6 +1,6 @@
 import type {
   AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, PieceValue, SignupQuestion, UnvaluedItem, Team,
-  TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition,
+  TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtKeying, WrappedArtSection, WrappedArtSlot,
 } from "@bingo/shared";
 import { api } from "./client";
 
@@ -142,6 +142,26 @@ export async function uploadTileImage(slug: string, id: string, file: File) {
   const fd = new FormData();
   fd.append("image", file);
   return api.postForm<{ tile: Tile }>(`${base(slug)}/tiles/${id}/image`, fd);
+}
+
+// Wrapped art (#262): one cut-out per Wrapped section.
+export function getWrappedArt(slug: string) {
+  return api.get<{ art: WrappedArtSlot[] }>(`${base(slug)}/wrapped-art`);
+}
+export function uploadWrappedArt(slug: string, section: WrappedArtSection, file: File, keying?: WrappedArtKeying) {
+  const fd = new FormData();
+  fd.append("image", file);
+  if (keying) {
+    fd.append("tolerance", String(keying.tolerance));
+    fd.append("softness", String(keying.softness));
+  }
+  return api.postForm<{ art: WrappedArtSlot }>(`${base(slug)}/wrapped-art/${section}`, fd);
+}
+export function recutWrappedArt(slug: string, section: WrappedArtSection, keying: WrappedArtKeying) {
+  return api.post<{ art: WrappedArtSlot }>(`${base(slug)}/wrapped-art/${section}/recut`, keying);
+}
+export function removeWrappedArt(slug: string, section: WrappedArtSection) {
+  return api.delete(`${base(slug)}/wrapped-art/${section}`);
 }
 
 // A task is just a node that's a direct child of its tile's node.

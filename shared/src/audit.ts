@@ -170,6 +170,11 @@ export interface AuditDetailsMap {
   // Wrapped (CONTEXT.md): a Moderator publishing it, or publishing it again, which recomputes every Player's.
   "wrapped.published": { players: number };
   "wrapped.republished": { players: number };
+  // Wrapped art (#262): an Admin setting, re-cutting or removing a section's cut-out. keyed: it was a solid-background
+  // screenshot, keyed out.
+  "wrapped.art_set": { section: string; keyed: boolean; replaced: boolean };
+  "wrapped.art_recut": { section: string; tolerance: number; softness: number };
+  "wrapped.art_removed": { section: string };
 
   "draft.started": { order: { teamId: string; name: string; draftOrder: number }[] };
   "draft.order_shuffled": { order: { teamId: string; name: string; draftOrder: number }[] };
@@ -651,6 +656,27 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "public",
     title: "Wrapped re-published",
     label: (i) => `${actor(i)} published Wrapped again, with the latest numbers`,
+  },
+  "wrapped.art_set": {
+    category: "settings",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Wrapped art set",
+    label: (i) => `${actor(i)} ${i.details.replaced ? "replaced" : "added"} the Wrapped art for "${i.details.section}"`,
+  },
+  "wrapped.art_recut": {
+    category: "settings",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Wrapped art re-cut",
+    label: (i) => `${actor(i)} re-cut the Wrapped art for "${i.details.section}"`,
+  },
+  "wrapped.art_removed": {
+    category: "settings",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Wrapped art removed",
+    label: (i) => `${actor(i)} removed the Wrapped art for "${i.details.section}"`,
   },
   "draft.started": { category: "draft", tone: "info", visibility: "public", title: "Draft started", label: (i) => `${actor(i)} started the draft` },
   "draft.order_shuffled": { category: "draft", tone: "info", visibility: "public", title: "Pick order shuffled", label: (i) => `${actor(i)} shuffled the pick order` },

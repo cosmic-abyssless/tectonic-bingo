@@ -18,6 +18,7 @@ export const adminQueryKeys = {
   bugReports: ["adminBugReports"] as const,
   siteAuditLog: (bingoScope: string | null | "all", filters: AuditLogFilters) => ["siteAuditLog", bingoScope, filters] as const,
   achievementSettings: (slug: string) => ["adminAchievements", slug] as const,
+  wrappedArt: (slug: string) => ["adminWrappedArt", slug] as const,
 };
 
 // The site-wide audit log — every bingo, or just site-level entries
@@ -129,4 +130,9 @@ export function useApplyCutReview(slug: string) {
       ]);
     },
   });
+}
+
+/** A Bingo's Wrapped art, one slot per section that has some (site admins only). */
+export function useWrappedArt(slug: string) {
+  return useQuery({ queryKey: adminQueryKeys.wrappedArt(slug), queryFn: () => adminApi.getWrappedArt(slug) });
 }

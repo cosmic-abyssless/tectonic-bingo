@@ -18,6 +18,7 @@ import { BoardEditor } from "../core/admin/BoardEditor";
 import { LineEditor } from "../core/admin/LineEditor";
 import { QuestionBuilder } from "../core/admin/QuestionBuilder";
 import { TeamManager } from "../core/admin/TeamManager";
+import { WrappedArtManager } from "../core/admin/WrappedArtManager";
 import { AppHeader } from "../core/ui/AppHeader";
 import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { Button } from "../core/ui/Button";
@@ -48,6 +49,7 @@ const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; unti
   { key: "questions", label: "Signup questions", adminOnly: true, until: "signup" },
   { key: "teams", label: "Captains", adminOnly: true, from: "signup" },
   { key: "mods", label: "Moderators", adminOnly: true },
+  { key: "wrapped-art", label: "Wrapped art", adminOnly: true },
 ];
 type TabDef = (typeof TABS)[number];
 
@@ -212,6 +214,11 @@ export function ModPage() {
                 <TabPanel id="mods">
                   <div className={NARROW}>
                     <ModsManager slug={slug} />
+                  </div>
+                </TabPanel>
+                <TabPanel id="wrapped-art">
+                  <div className={NARROW}>
+                    <WrappedArtManager slug={slug} />
                   </div>
                 </TabPanel>
               </>
