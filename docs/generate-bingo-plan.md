@@ -370,6 +370,8 @@ teams created (no draft); `draft` mid-draft with about half the picks made;
 
 - Captains stage: pick `--teams` captains: the highest-skill unpaired
   players, or a paired player with their partner as co-captain (mix both).
+  In a duo bingo every Team is led by a pair, so only paired players
+  captain there (and at least `--teams` pairs are made).
   `POST .../admin/teams` for each (no name yet). Teams get names in the
   reveal stage from the captain (`PATCH /teams/:id { name }`), from a
   list of comic-flavoured names.

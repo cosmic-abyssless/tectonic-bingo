@@ -55,11 +55,11 @@ export function makePlayers(rng: Rng, count: number, idPrefix: string): Player[]
   }));
 }
 
-/** Pairs off about `fraction` of the players as duo partners. */
-export function pairUp(players: Player[], rng: Rng, fraction: number): [Player, Player][] {
+/** Pairs off about `fraction` of the players as duo partners, and at least `atLeast` pairs (one to lead each duo Team). */
+export function pairUp(players: Player[], rng: Rng, fraction: number, atLeast = 0): [Player, Player][] {
   const candidates = rng.shuffle(players.filter((p) => !p.isMe));
   const pairs: [Player, Player][] = [];
-  const target = Math.floor((candidates.length * fraction) / 2);
+  const target = Math.min(Math.max(Math.floor((candidates.length * fraction) / 2), atLeast), Math.floor(candidates.length / 2));
   for (let i = 0; i < target; i++) {
     const a = candidates[2 * i]!;
     const b = candidates[2 * i + 1]!;
