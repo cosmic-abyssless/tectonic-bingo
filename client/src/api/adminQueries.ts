@@ -1,7 +1,8 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import type { AuditLogFilters, AuditLogResponse } from "@bingo/shared";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { AppliedCutChange, ApplyCutReviewResponse, AuditLogFilters, AuditLogResponse, CutChange, ScoreCutReviewResponse } from "@bingo/shared";
+import { useDebouncedValue } from "../headless/useDebouncedValue";
 import { api } from "./client";
-import { auditLogQueryString } from "./queries";
+import { auditLogQueryString, queryKeys } from "./queries";
 import * as adminApi from "./adminApi";
 
 export const adminQueryKeys = {
@@ -84,5 +85,41 @@ export function useUserSearch(scope: string, q: string) {
     queryKey: adminQueryKeys.userSearch(scope, q),
     queryFn: () => (scope === "site" ? adminApi.searchAllUsers(q) : adminApi.searchBingoUsers(scope, q)),
     enabled: q.trim().length > 0,
+  });
+}
+
+/**
+ * How many players an edited Cut review plan leaves cut (POST /admin/cut-review/score), for the modal's live count.
+ * Keyed by the change list and debounced, so a run of edits scores once; the last count stays up while the next
+ * one loads. An invalid change comes back as the query's error.
+ */
+export function useCutReviewScore(slug: string, changes: CutChange[], enabled: boolean) {
+  const changesJson = useDebouncedValue(JSON.stringify(changes), 250);
+  return useQuery({
+    queryKey: queryKeys.cutReviewScore(slug, changesJson),
+    queryFn: () => api.post<ScoreCutReviewResponse>(`/api/bingos/${slug}/admin/cut-review/score`, { changes: JSON.parse(changesJson) as CutChange[] }),
+    enabled,
+    retry: false,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Applies a Cut review (POST /admin/cut-review/apply): pairings, splits and a Team change, all at once. */
+export function useApplyCutReview(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (changes: AppliedCutChange[]) => api.post<ApplyCutReviewResponse>(`/api/bingos/${slug}/admin/cut-review/apply`, { changes }),
+    // Settled, not just success: a rejected plan means the roster moved underneath it, so the plan is refetched either
+    // way. The roster's key covers the cuts and the review itself; Teams live on the bingo shell.
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.draftState(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.unpairedSignups(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.partnerCandidates(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.myPairing(slug) }),
+        queryClient.invalidateQueries({ queryKey: adminQueryKeys.captainCandidates(slug) }),
+      ]),
   });
 }
