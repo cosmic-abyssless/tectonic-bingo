@@ -30,6 +30,7 @@ export const CATEGORIES: { key: AuditCategory; label: string }[] = [
   { key: "moderation", label: "Moderation" },
   { key: "system", label: "System" },
   { key: "bug_report", label: "Bug reports" },
+  { key: "achievement", label: "Achievements" },
   { key: "http", label: "Unaudited" },
 ];
 

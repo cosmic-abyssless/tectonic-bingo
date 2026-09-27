@@ -17,6 +17,12 @@ describe("inclusionFilter", () => {
     expect(f.matches("a")).toBe(false);
   });
 
+  it("treats everything ticked (All) like Any, so an unlisted or new key still matches", () => {
+    const f = inclusionFilter(new Set(["a", "b", "c"]), OPTIONS);
+    expect(f).toMatchObject({ checked: ["a", "b", "c"], query: undefined, narrowed: false });
+    expect(f.matches("new")).toBe(true);
+  });
+
   it("ignores ticks for options that are no longer there, and is Any again if none are left", () => {
     expect(inclusionFilter(new Set(["b", "gone"]), OPTIONS).checked).toEqual(["b"]);
     expect(inclusionFilter(new Set(["gone"]), OPTIONS).narrowed).toBe(false);

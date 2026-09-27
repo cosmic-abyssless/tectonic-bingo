@@ -18,7 +18,6 @@ export function Picker({
   onSelectionChange,
   selectionMode,
   active,
-  bulk = "toggleAll",
   children,
 }: {
   options: PickerOption[];
@@ -26,12 +25,6 @@ export function Picker({
   onSelectionChange: (keys: string[]) => void;
   selectionMode: "multiple" | "single";
   active?: boolean;
-  /**
-   * The row above a multi-select's options: "toggleAll" (Select all / Deselect all, for a column picker, where
-   * nothing ticked means nothing shown) or "clear" (for a filter, where nothing ticked means Any: shown only once
-   * something is ticked).
-   */
-  bulk?: "toggleAll" | "clear";
   children: ReactNode;
 }) {
   const multiple = selectionMode === "multiple";
@@ -59,7 +52,7 @@ export function Picker({
         {/* Acts on the list, isn't one of its options — own row/action (onAction, not a checkbox in
             selectedKeys), visually set apart (variant="action", a divider) so it doesn't read as just one
             more thing to pick. Multi-select only: for a single choice, "select all" makes no sense. */}
-        {multiple && options.length > 0 && bulk === "toggleAll" && (
+        {multiple && options.length > 0 && (
           <>
             <MenuItem
               variant="action"
@@ -68,14 +61,6 @@ export function Picker({
               onAction={() => onSelectionChange(allSelected ? [] : options.map((o) => o.key))}
             >
               {allSelected ? "Deselect all" : "Select all"}
-            </MenuItem>
-            <Separator className="my-1 h-px border-none bg-outline" />
-          </>
-        )}
-        {multiple && bulk === "clear" && selectedKeys.size > 0 && (
-          <>
-            <MenuItem variant="action" textValue="Clear" shouldCloseOnSelect={false} onAction={() => onSelectionChange([])}>
-              Clear
             </MenuItem>
             <Separator className="my-1 h-px border-none bg-outline" />
           </>
