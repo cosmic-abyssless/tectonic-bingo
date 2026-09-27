@@ -243,7 +243,8 @@ export function SignupRoster({ slug }: { slug: string }) {
   );
   // One MultiSelect per filter. Each option's count reflects the other filters, so it shows how many rows ticking it
   // brings in.
-  const filterSelect = (key: FilterKey, label: string, attention?: string) => {
+  // `attention`: a yellow dot on the filter, and on its `optionKey` option, saying `text`.
+  const filterSelect = (key: FilterKey, label: string, attention?: { text: string; optionKey: string }) => {
     const options = FILTER_OPTIONS[key];
     return (
       <MultiSelect
@@ -251,10 +252,11 @@ export function SignupRoster({ slug }: { slug: string }) {
         options={options.map((o) => ({
           ...o,
           count: roster.filter((r) => filterValue(r, key, pendingPairIds) === o.key && matchesFilters(r, selected, pendingPairIds, key)).length,
+          attention: attention?.optionKey === o.key ? attention.text : undefined,
         }))}
         selected={selected[key]}
         onChange={(keys) => setSelected((s) => ({ ...s, [key]: keys }))}
-        attention={attention}
+        attention={attention?.text}
       />
     );
   };
@@ -422,7 +424,7 @@ export function SignupRoster({ slug }: { slug: string }) {
               {filterSelect("buyin", "Buy-in")}
               {isDuo && filterSelect("pair", "Pairing")}
               {filterSelect("region", "Timezone")}
-              {cutsApply && filterSelect("draft", "Draft", cutState === "cut" ? `${cutCount} signup${cutCount === 1 ? "" : "s"} will be cut` : undefined)}
+              {cutsApply && filterSelect("draft", "Draft", cutState === "cut" ? { text: `${cutCount} signup${cutCount === 1 ? "" : "s"} will be cut`, optionKey: "cut" } : undefined)}
               {!isDefaultFilters(selected) && (
                 <Button size="sm" variant="ghost" onPress={() => setSelected(DEFAULT_SELECTED)}>
                   Reset filters

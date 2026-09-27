@@ -1,9 +1,11 @@
+import { AttentionDot } from "./Picker";
 import { usePickerParts } from "./usePickerParts";
 
 export interface MultiSelectOption {
   key: string;
   label: string;
   count?: number;
+  attention?: string; // see PickerOption
 }
 
 /**
@@ -38,11 +40,7 @@ export function MultiSelect({
   return (
     <Picker options={options} selectedKeys={new Set(picked)} selectionMode="multiple" onSelectionChange={onChange}>
       {label}: <span className="text-on-surface-subtle">{summary}</span>
-      {attention && (
-        <span title={attention} className="ml-1.5 inline-block size-2 shrink-0 rounded-full bg-attention">
-          <span className="sr-only">{attention}</span>
-        </span>
-      )}
+      {attention && <AttentionDot label={attention} className="ml-1.5" />}
     </Picker>
   );
 }
