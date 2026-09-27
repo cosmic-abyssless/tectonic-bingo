@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Bingo, CutMode, ExclusivityRule, SignupMode } from "@bingo/shared";
+import { STAGE_LABEL, areTilesSealed, isBoardLocked, type Bingo, type CutMode, type ExclusivityRule, type SignupMode } from "@bingo/shared";
 import { cutModeOptions } from "../draft/cutModes";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
@@ -58,6 +58,8 @@ export function BingoSettingsForm({
     bonusPotAmount: bingo.bonusPotAmount.toString(),
     rulesMarkdown: bingo.rulesMarkdown ?? "",
     showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished,
+    sealedTiles: bingo.sealedTiles,
+    hideRules: bingo.hideRules,
     exclusivityRules: bingo.exclusivityRules as ExclusivityRule[],
     signupOpensAt: toLocalInput(bingo.signupOpensAt),
     draftScheduledAt: toLocalInput(bingo.draftScheduledAt),
@@ -114,6 +116,8 @@ export function BingoSettingsForm({
         bonusPotAmount: Number(form.bonusPotAmount) || 0,
         rulesMarkdown: form.rulesMarkdown || null,
         showScreenshotsWhenFinished: form.showScreenshotsWhenFinished,
+        sealedTiles: form.sealedTiles,
+        hideRules: form.hideRules,
         exclusivityRules: form.exclusivityRules,
         signupOpensAt: fromLocalInput(form.signupOpensAt) as never,
         draftScheduledAt: fromLocalInput(form.draftScheduledAt) as never,
@@ -255,6 +259,32 @@ export function BingoSettingsForm({
         )}
         {bingo.womSyncError && <Notice tone="warn">Last WOM sync failed: {bingo.womSyncError}</Notice>}
       </WomSection>
+
+      {/* What players get during Board revealed (CONTEXT.md "Sealed Tiles"). Both end by themselves at Live, so they're
+          offered up to then. */}
+      {!isBoardLocked(bingo.stage) && (
+        <Section title={STAGE_LABEL.reveal}>
+          <p className="text-sm text-on-surface-muted">Only while the bingo is in {STAGE_LABEL.reveal}: both end by themselves when it goes {STAGE_LABEL.live}.</p>
+          <div className="space-y-1">
+            <label className="flex items-center gap-2 text-sm text-on-surface">
+              <input type="checkbox" checked={form.sealedTiles} onChange={(e) => setForm({ ...form, sealedTiles: e.target.checked })} className="size-4 cursor-pointer accent-accent" />
+              Seal the Tiles
+            </label>
+            <p className="text-sm text-on-surface-muted">
+              Players and Captains see each Tile's art, name and Category, but can't open it, see its points or mark interest. Moderators can still open
+              everything.
+              {bingo.stage === "reveal" && (areTilesSealed(bingo) ? " The Tiles are sealed now." : " The Tiles are open now.")}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <label className="flex items-center gap-2 text-sm text-on-surface">
+              <input type="checkbox" checked={form.hideRules} onChange={(e) => setForm({ ...form, hideRules: e.target.checked })} className="size-4 cursor-pointer accent-accent" />
+              Hide the rules
+            </label>
+            <p className="text-sm text-on-surface-muted">Players and Captains are told the rules come later.</p>
+          </div>
+        </Section>
+      )}
 
       <Section title="Rules">
         <Field
