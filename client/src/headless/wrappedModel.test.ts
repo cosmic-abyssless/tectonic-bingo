@@ -65,7 +65,7 @@ function response(player: PlayerWrapped | null, extra: Partial<MyWrappedResponse
 }
 
 const player = (you: Partial<WrappedYou> = {}): PlayerWrapped => ({ userId: "me", teamId: "a", you: { ...emptyYou, ...you }, duo: null, captain: null });
-const opts = { viewerId: "me", viewerName: "me rsn", startsAt: T0, endsAt: T0 + 24 * HOUR };
+const opts = { viewerId: "me", viewerName: "me rsn", credits: [], startsAt: T0, endsAt: T0 + 24 * HOUR };
 const actions = { goToBoard: () => {}, goToRewind: () => {} };
 const story = (data: MyWrappedResponse) => buildWrappedStory(data, opts, actions, "winter");
 const kinds = (data: MyWrappedResponse) => story(data).sections.map((s) => s.id);
@@ -103,6 +103,18 @@ describe("buildWrappedStory", () => {
     expect(kinds(response(player({ submissions: 2 }), { moderator }))).toEqual(["intro", "you", "moderator", "team", "bingo", "outro"]);
     expect(kinds(response(null, { moderator }))).toEqual(["intro", "moderator", "bingo", "outro"]);
     expect(kinds(response(null, { moderator: { ...moderator, reviewed: 0 } }))).toEqual(["intro", "bingo", "outro"]);
+  });
+
+  it("names the Moderator on their slide, and lists the Credits in the Outro in order", () => {
+    const moderator = { reviewed: 30, medianReviewMs: 20 * 60_000, rejectionRate: 0.1 };
+    const credits = [{ name: "Zezima", role: "Board design" }, { name: "Woox", role: null }];
+    const model = buildWrappedStory(response(null, { moderator }), { ...opts, credits }, actions, "winter");
+    const mod = model.sections.find((s) => s.id === "moderator")!.section;
+    expect(mod.kind === "moderator" && mod.name).toBe("me rsn");
+    const outro = model.sections.find((s) => s.id === "outro")!.section;
+    expect(outro.kind === "outro" && outro.credits).toEqual(credits);
+    const none = story(response(null)).sections.find((s) => s.id === "outro")!.section;
+    expect(none.kind === "outro" && none.credits).toEqual([]);
   });
 
   it("skips the You section when it has nothing to say, and each part of it that has nothing", () => {

@@ -1,0 +1,1 @@
+ALTER TABLE `bingos` ADD `wrapped_credits_json` text DEFAULT '[]' NOT NULL;
