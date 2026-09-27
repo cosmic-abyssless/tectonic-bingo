@@ -17,6 +17,8 @@ export function WrappedPageLayout() {
 
   const WrappedIntro = useSlot("WrappedIntro");
   const WrappedYou = useSlot("WrappedYou");
+  const WrappedDuo = useSlot("WrappedDuo");
+  const WrappedCaptain = useSlot("WrappedCaptain");
   const WrappedModerator = useSlot("WrappedModerator");
   const WrappedTeam = useSlot("WrappedTeam");
   const WrappedBingo = useSlot("WrappedBingo");
@@ -28,6 +30,10 @@ export function WrappedPageLayout() {
         return <WrappedIntro section={section} preview={wrapped.preview} />;
       case "you":
         return <WrappedYou section={section} />;
+      case "duo":
+        return <WrappedDuo section={section} />;
+      case "captain":
+        return <WrappedCaptain section={section} />;
       case "moderator":
         return <WrappedModerator section={section} />;
       case "team":

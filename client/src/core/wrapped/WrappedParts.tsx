@@ -28,9 +28,10 @@ export function WrappedPerson({ person, size = "md", detail }: { person: Wrapped
 
 /**
  * One drop: its screenshot (when the data has one: it opens full size), the item with its icon, GP value and Luck, and
- * who got it when. `showPlayer` for drops that aren't the viewer's own.
+ * who got it when. `showPlayer` for drops that aren't the viewer's own; `showTeam` (on with showPlayer unless turned off)
+ * for their Team too.
  */
-export function WrappedDropCard({ drop, showPlayer = false, className = "" }: { drop: WrappedDropModel; showPlayer?: boolean; className?: string }) {
+export function WrappedDropCard({ drop, showPlayer = false, showTeam = showPlayer, className = "" }: { drop: WrappedDropModel; showPlayer?: boolean; showTeam?: boolean; className?: string }) {
   return (
     <div className={`flex w-full items-center gap-3 rounded-xl border border-outline bg-surface p-3 text-left ${className}`}>
       {drop.thumbnailUrl && drop.screenshotUrl ? (
@@ -54,7 +55,7 @@ export function WrappedDropCard({ drop, showPlayer = false, className = "" }: { 
         </div>
         <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-on-surface-subtle">
           {showPlayer && drop.player && <WrappedPerson person={drop.player} size="sm" />}
-          {showPlayer && drop.team && (
+          {showTeam && drop.team && (
             <span className="inline-flex shrink-0 items-center gap-1">
               {drop.team.color && <span className="size-2 rounded-full" style={{ backgroundColor: drop.team.color }} />}
               {drop.team.name}

@@ -76,6 +76,22 @@ export interface WrappedDuo {
   duoCount: number;
   /** The Duo's pick (null when it wasn't drafted, e.g. a Captain pair). */
   pickNumber: number | null;
+  /**
+   * Their best moments together, best first (up to 3): a Submission by each half on the same Tile, then on the same
+   * day. Missing from Wrapped published before it was stored.
+   */
+  moments?: WrappedDuoMoment[];
+}
+
+/** Two Submissions of a Duo, one by each half: on the same Tile (`tileName`), or else on the same UTC day. */
+export interface WrappedDuoMoment {
+  kind: "tile" | "day";
+  tileName: string | null;
+  /** The day (UTC, YYYY-MM-DD) of the earlier one. */
+  date: string;
+  /** Each half's drop: the most valuable of its Submission. */
+  mine: WrappedDrop;
+  theirs: WrappedDrop;
 }
 
 export interface WrappedCaptainPick {
@@ -86,12 +102,19 @@ export interface WrappedCaptainPick {
   position: number;
   /** Final Points share rank among every drafted Player (the pick's best half for a Duo). */
   rank: number;
+  /**
+   * The pick's Points share (its best half's, for a Duo). Everyone on 0 ties for a rank, so a pick that scored
+   * nothing is never a Steal. Missing from Wrapped published before it was stored.
+   */
+  pointsShare?: number;
 }
 
 export interface WrappedCaptain {
   teamId: string;
   /** Every pick their Team made, in pick order. */
   picks: WrappedCaptainPick[];
+  /** Players drafted in the whole Bingo: the range of positions and ranks. Missing from Wrapped published before it was stored. */
+  drafted?: number;
 }
 
 export interface WrappedModerator {

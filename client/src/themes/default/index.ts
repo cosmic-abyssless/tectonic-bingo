@@ -62,6 +62,8 @@ import { WrappedPageLayout } from "./wrapped/WrappedPageLayout";
 import { WrappedBanner } from "./wrapped/WrappedBanner";
 import { WrappedIntro } from "./wrapped/WrappedIntro";
 import { WrappedYou } from "./wrapped/WrappedYou";
+import { WrappedDuo } from "./wrapped/WrappedDuo";
+import { WrappedCaptain } from "./wrapped/WrappedCaptain";
 import { WrappedModerator } from "./wrapped/WrappedModerator";
 import { WrappedTeam } from "./wrapped/WrappedTeam";
 import { WrappedBingo } from "./wrapped/WrappedBingo";
@@ -87,6 +89,8 @@ export const defaultTheme: ThemeDefinition = {
     WrappedBanner,
     WrappedIntro,
     WrappedYou,
+    WrappedDuo,
+    WrappedCaptain,
     WrappedModerator,
     WrappedTeam,
     WrappedBingo,

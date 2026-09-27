@@ -25,6 +25,8 @@ import type {
   TileModel,
   TileSearchModel,
   WrappedBingoModel,
+  WrappedCaptainModel,
+  WrappedDuoModel,
   WrappedIntroModel,
   WrappedModeratorModel,
   WrappedOutroModel,
@@ -233,6 +235,10 @@ export interface ThemeSlots {
   // The opening screen. preview: a Moderator's preview, computed just now and not yet published.
   WrappedIntro: ComponentType<{ section: WrappedIntroModel; preview: boolean }>;
   WrappedYou: ComponentType<{ section: WrappedYouModel }>;
+  // A Player's Duo (only for one in a Duo): who carried whom is friendly teasing, never a verdict.
+  WrappedDuo: ComponentType<{ section: WrappedDuoModel }>;
+  // A Captain's Draft: every pick against where it finished, the best Steal, a grade. Never label a pick a bust.
+  WrappedCaptain: ComponentType<{ section: WrappedCaptainModel }>;
   // A reviewing Moderator's (or Admin's) own reviews.
   WrappedModerator: ComponentType<{ section: WrappedModeratorModel }>;
   WrappedTeam: ComponentType<{ section: WrappedTeamModel }>;

@@ -1,15 +1,17 @@
 // Wrapped (CONTEXT.md "Wrapped"): the story's sections, built from the published data (MyWrappedResponse) as it is.
 // Nothing here recomputes a stat: it picks what to say, words it, and leaves out every part (and every section) that
 // has nothing to say for this viewer. Pure, so it's tested without React.
-import type { AvatarUser, MyWrappedResponse, WrappedDrop, WrappedPointsPoint, WrappedTeam } from "@bingo/shared";
+import type { AvatarUser, MyWrappedResponse, WrappedCaptain, WrappedDrop, WrappedPointsPoint, WrappedTeam } from "@bingo/shared";
 import { thumbUrl } from "../api/imageVariants";
 import { formatGp } from "../core/ui/gp";
 import { avatarUrl, displayName } from "../core/ui/user";
 import { formatOneIn } from "./rewindModel";
 import type {
   WrappedBingoModel,
+  WrappedCaptainModel,
   WrappedChartModel,
   WrappedDropModel,
+  WrappedDuoModel,
   WrappedIntroModel,
   WrappedLuckModel,
   WrappedModel,
@@ -32,6 +34,8 @@ export interface WrappedStoryOptions {
 const SECTION_LABEL: Record<WrappedSectionModel["kind"], string> = {
   intro: "Intro",
   you: "You",
+  duo: "Your Duo",
+  captain: "Your Draft",
   moderator: "Your reviews",
   team: "Your Team",
   bingo: "The Bingo",
@@ -63,6 +67,7 @@ const share = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 
 const whenLabel = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const localDayLabel = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
 const dayLabel = (ymd: string) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
 const dateLabel = (ms: number, withYear: boolean) => new Date(ms).toLocaleDateString(undefined, { day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {}) });
 
@@ -110,6 +115,32 @@ export function dropLuck(oneIn: number | null, kills: number | null | undefined)
   const rate = rateLabel(-Math.log1p(-1 / oneIn) / kills);
   const killsLabel = plural(kills, "kill");
   return { chanceLabel, rateLabel: rate, killsLabel, shortLabel: `${rate} in ${killsLabel}`, sentence: `A ${rate} drop in ${killsLabel}. ${rarity.charAt(0).toUpperCase() + rarity.slice(1)}` };
+}
+
+/**
+ * Banter on how a Duo's Points share split (`mine`: the viewer's share of it, 0–1): who carried whom, as friendly
+ * teasing either way.
+ */
+export function carriedBanter(mine: number, partnerName: string): string {
+  if (mine >= 0.6) return `You carried ${partnerName}. They owe you one.`;
+  if (mine <= 0.4) return `${partnerName} carried you. Buy them something nice.`;
+  return "Split near enough down the middle: a real team effort.";
+}
+
+/**
+ * A Captain's draft grade: how far their picks finished above (or below) where they were drafted, on average, as a
+ * share of everyone drafted. Kind at the bottom end: a draft is half luck, and Wrapped never scolds.
+ */
+export function draftGrade(captain: WrappedCaptain): { letter: string; line: string } | null {
+  const ranked = captain.picks.filter((p) => p.rank > 0);
+  if (ranked.length === 0) return null;
+  const drafted = captain.drafted ?? Math.max(...captain.picks.flatMap((p) => [p.position, p.rank]));
+  const score = ranked.reduce((sum, p) => sum + (p.position - p.rank), 0) / ranked.length / Math.max(1, drafted);
+  if (score >= 0.15) return { letter: "A+", line: "Robbed the draft blind." };
+  if (score >= 0.05) return { letter: "A", line: "Picked like a seasoned scout." };
+  if (score >= -0.05) return { letter: "B+", line: "Solid picks, no regrets." };
+  if (score >= -0.15) return { letter: "B", line: "Some picks went better than others. That's drafting." };
+  return { letter: "C", line: "The draft is a lottery anyway." };
 }
 
 /** Builds the whole story. `actions` come from the page (navigation). */
@@ -210,6 +241,58 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
     };
     const { kind: _kind, art: _art, titles, achievements, topDrops, ...parts } = you;
     if (titles.length || achievements.length || topDrops.length || Object.values(parts).some((p) => p !== null)) sections.push(you);
+  }
+
+  // Your Duo: only for a Player in a Duo.
+  if (player?.duo) {
+    const d = player.duo;
+    const partner = person(d.partner);
+    const mine = d.combinedPointsShare > 0 ? d.myPointsShare / d.combinedPointsShare : null;
+    const myPercent = mine === null ? 0 : Math.round(mine * 100);
+    const duo: WrappedDuoModel = {
+      kind: "duo",
+      art: art("duo"),
+      partner,
+      combinedShareLabel: share(d.combinedPointsShare),
+      rankLabel: d.duoCount > 1 ? `${ordinal(d.rank)} of ${d.duoCount} Duos` : null,
+      isTop: d.duoCount > 1 && d.rank === 1,
+      split: mine === null ? null : { myPercent, partnerPercent: 100 - myPercent, myShareLabel: share(d.myPointsShare), partnerShareLabel: share(d.partnerPointsShare) },
+      carried: mine === null ? null : carriedBanter(mine, partner.name),
+      pickLabel: d.pickNumber !== null ? `Pick ${d.pickNumber}` : null,
+      moments: (d.moments ?? []).map((m, i) => ({
+        key: `${m.mine.submissionId}:${m.theirs.submissionId}`,
+        // The day in the viewer's time zone, like the drops' own times under it (m.date is the UTC day they were paired on).
+        label: m.kind === "tile" && m.tileName ? `Both on ${m.tileName}` : `Both on ${localDayLabel(m.mine.at < m.theirs.at ? m.mine.at : m.theirs.at)}`,
+        mine: drop(m.mine, 10 + i),
+        theirs: drop(m.theirs, 20 + i),
+      })),
+    };
+    sections.push(duo);
+  }
+
+  // Your Draft: only for Captains.
+  if (player?.captain && player.captain.picks.length > 0) {
+    const c = player.captain;
+    // A pick that scored nothing shares a tied rank with everyone else on 0: never a Steal, never highlighted, no rank shown.
+    const scored = (p: WrappedCaptain["picks"][number]) => p.rank > 0 && (p.pointsShare === undefined || p.pointsShare > 0);
+    const best = [...c.picks].filter((p) => scored(p) && p.position > p.rank).sort((a, b) => b.position - b.rank - (a.position - a.rank) || a.pickNumber - b.pickNumber)[0];
+    const captain: WrappedCaptainModel = {
+      kind: "captain",
+      art: art("captain"),
+      picks: c.picks.map((p) => ({
+        key: String(p.pickNumber),
+        pickLabel: `Pick ${p.pickNumber}`,
+        people: p.players.map(person),
+        positionLabel: `Drafted ${ordinal(p.position)}`,
+        rankLabel: scored(p) ? `Finished ${ordinal(p.rank)}` : null,
+        beat: scored(p) && p.rank < p.position,
+      })),
+      steal: best
+        ? { people: best.players.map(person), pickLabel: `Pick ${best.pickNumber}`, positionLabel: ordinal(best.position), rankLabel: ordinal(best.rank), placesBeatenLabel: plural(best.position - best.rank, "place") }
+        : null,
+      grade: draftGrade(c),
+    };
+    sections.push(captain);
   }
 
   // Moderator: a reviewer's own slide, whether or not they played.

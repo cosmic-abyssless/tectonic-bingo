@@ -18,6 +18,7 @@ import {
   type WrappedCaptain,
   type WrappedDrop,
   type WrappedDuo,
+  type WrappedDuoMoment,
   type WrappedModerator,
   type WrappedReviewStats,
   type WrappedState,
@@ -97,6 +98,46 @@ function dropsOf(subs: RewindSubmission[], userById: Map<string, AvatarUser>): W
 const byGp = (a: WrappedDrop, b: WrappedDrop) => (b.gpValue ?? 0) - (a.gpValue ?? 0);
 const byLuck = (a: WrappedDrop, b: WrappedDrop) => (b.luckOneIn ?? 0) - (a.luckOneIn ?? 0);
 const byTime = (a: WrappedDrop, b: WrappedDrop) => Date.parse(a.at) - Date.parse(b.at);
+
+/** How many best moments together a Duo's section gets. */
+const DUO_MOMENTS = 3;
+
+/**
+ * A Duo's best moments together (WrappedDuo.moments): a Submission by each half on the same Tile, most valuable pair
+ * first, each Tile and Submission used once; then, up to the limit, pairs on the same UTC day, one per day. Each
+ * Submission shows as its most valuable drop.
+ */
+export function duoMoments(mine: WrappedDrop[], theirs: WrappedDrop[], tileOf: (submissionId: string) => { id: string; name: string } | null): WrappedDuoMoment[] {
+  const bestPerSubmission = (drops: WrappedDrop[]) => {
+    const best = new Map<string, WrappedDrop>();
+    for (const d of drops) {
+      const prev = best.get(d.submissionId);
+      if (!prev || byGp(d, prev) < 0) best.set(d.submissionId, d);
+    }
+    return [...best.values()];
+  };
+  const a = bestPerSubmission(mine);
+  const b = bestPerSubmission(theirs);
+  const pairs = a.flatMap((m) => b.map((t) => ({ mine: m, theirs: t, value: (m.gpValue ?? 0) + (t.gpValue ?? 0), apart: Math.abs(Date.parse(m.at) - Date.parse(t.at)) })));
+  const best = (x: (typeof pairs)[number], y: (typeof pairs)[number]) => y.value - x.value || x.apart - y.apart || Date.parse(x.mine.at) - Date.parse(y.mine.at);
+  const day = (p: (typeof pairs)[number]) => (Date.parse(p.mine.at) <= Date.parse(p.theirs.at) ? p.mine.at : p.theirs.at).slice(0, 10);
+
+  const used = new Set<string>();
+  const seen = new Set<string>();
+  const moments: WrappedDuoMoment[] = [];
+  const take = (p: (typeof pairs)[number], kind: "tile" | "day", key: string, tileName: string | null) => {
+    if (moments.length >= DUO_MOMENTS || used.has(p.mine.submissionId) || used.has(p.theirs.submissionId) || seen.has(key)) return;
+    used.add(p.mine.submissionId).add(p.theirs.submissionId);
+    seen.add(key);
+    moments.push({ kind, tileName, date: day(p), mine: p.mine, theirs: p.theirs });
+  };
+  for (const p of pairs.filter((p) => tileOf(p.mine.submissionId) && tileOf(p.mine.submissionId)!.id === tileOf(p.theirs.submissionId)?.id).sort(best)) {
+    const tile = tileOf(p.mine.submissionId)!;
+    take(p, "tile", `tile:${tile.id}`, tile.name);
+  }
+  for (const p of pairs.filter((p) => p.mine.at.slice(0, 10) === p.theirs.at.slice(0, 10)).sort(best)) take(p, "day", `day:${day(p)}`, null);
+  return moments;
+}
 
 /** Review stats over some reviewed Submissions (approved or rejected, with who reviewed them and when). */
 function reviewStats(reviews: { reviewerId: string; status: string; submittedAt: Date; reviewedAt: Date }[], userById: Map<string, AvatarUser>): WrappedReviewStats {
@@ -179,7 +220,14 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
 
   // Teams: placement by final score (the scoreboard's), then what they completed and who stood out.
   const finalPoints = new Map(rewind.teams.map((t) => [t.teamId, t.finalPoints]));
-  const tileNodeIds = new Set(db.select({ nodeId: tiles.nodeId }).from(tiles).where(eq(tiles.bingoId, bingoId)).all().map((t) => t.nodeId));
+  const tileRows = db.select({ id: tiles.id, name: tiles.name, nodeId: tiles.nodeId }).from(tiles).where(eq(tiles.bingoId, bingoId)).all();
+  const tileNodeIds = new Set(tileRows.map((t) => t.nodeId));
+  const tileById = new Map(tileRows.map((t) => [t.id, t]));
+  const tileOfSubmission = new Map(rewind.submissions.map((sub) => [sub.id, sub.tileId]));
+  const tileOf = (submissionId: string) => {
+    const tile = tileById.get(tileOfSubmission.get(submissionId) ?? "");
+    return tile ? { id: tile.id, name: tile.name } : null;
+  };
   const lineNodeIds = new Set(db.select({ nodeId: bingoLines.nodeId }).from(bingoLines).where(eq(bingoLines.bingoId, bingoId)).all().map((l) => l.nodeId));
   const stateRows = teamRows.length ? db.select({ teamId: teamNodeState.teamId, nodeId: teamNodeState.nodeId }).from(teamNodeState).where(inArray(teamNodeState.teamId, teamRows.map((t) => t.id))).all() : [];
   const pointsOverTime = statsService.getPointsOverTime(db, bingoId);
@@ -279,6 +327,7 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
         rank: 1 + duoTotals.filter((t) => beats(t, combined)).length,
         duoCount: pairs.length,
         pickNumber: pickOf.get(userId)?.pickNumber ?? pickOf.get(partnerId)?.pickNumber ?? null,
+        moments: duoMoments(dropsBy.get(userId) ?? [], dropsBy.get(partnerId) ?? [], tileOf),
       };
     }
 
@@ -289,6 +338,7 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
       for (const p of picks.filter((p) => p.teamId === teamId)) byPick.set(p.pickNumber, [...(byPick.get(p.pickNumber) ?? []), p.userId]);
       captain = {
         teamId,
+        drafted: picks.length,
         picks: [...byPick]
           .sort((a, b) => a[0] - b[0])
           .map(([pickNumber, ids]) => {
@@ -298,6 +348,7 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
               pickNumber,
               position: draft[0]?.position ?? picks.filter((p) => p.pickNumber < pickNumber).length + 1,
               rank: draft.length ? Math.min(...draft.map((d) => d.rank)) : 0,
+              pointsShare: Math.max(0, ...ids.map(shareOf)),
             };
           }),
       };

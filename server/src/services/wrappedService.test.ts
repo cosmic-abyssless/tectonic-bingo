@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type { WrappedDrop } from "@bingo/shared";
 import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { auditLog, bingos, claims, stageTransitions, submissions } from "../db/schema";
@@ -10,7 +11,7 @@ import { approveSubmission, rejectSubmission } from "./scoringService";
 import { ServiceError } from "./errors";
 import * as statsService from "./statsService";
 import * as rewindService from "./rewindService";
-import { computeWrapped, getWrappedState, isPublished, publishWhenReady, publishWrapped, readBingoWrapped, readMyWrapped } from "./wrappedService";
+import { computeWrapped, duoMoments, getWrappedState, isPublished, publishWhenReady, publishWrapped, readBingoWrapped, readMyWrapped } from "./wrappedService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -272,6 +273,8 @@ describe("computeWrapped", () => {
     expect(picks).toHaveLength(1);
     expect(picks[0]!.players.map((p) => p.id).sort()).toEqual([fx.erin.id, fx.frank.id].sort());
     expect(of(fx.carol.id).captain).toBeNull();
+    expect(of(fx.bob.id).captain!.drafted).toBe(4);
+    expect(picks[0]!.pointsShare).toBe(Math.max(of(fx.erin.id).you.pointsShare, of(fx.frank.id).you.pointsShare));
   });
 
   it("computes the moderation stats", () => {
@@ -314,6 +317,7 @@ describe("computeWrapped", () => {
     expect(of(fx.frank.id).you.firstDrop?.itemName).toBe("Zulrah's scales");
 
     expect(of(fx.erin.id).duo).toMatchObject({ partner: { id: fx.frank.id }, rank: 1, duoCount: 1, pickNumber: 2 });
+    expect(Array.isArray(of(fx.erin.id).duo!.moments)).toBe(true);
     expect(of(fx.dave.id).duo).toBeNull();
 
     expect(bingo.totalSubmissions).toBe(4);
@@ -323,5 +327,35 @@ describe("computeWrapped", () => {
     expect(first!.biggestDrop?.itemName).toBe("Vorkath's head");
     expect(second!.teamId).toBe(fx.teamB.id);
     expect(first!.pointsOverTime.at(-1)!.points).toBe(first!.points);
+  });
+});
+
+describe("duoMoments", () => {
+  const drop = (submissionId: string, at: string, gpValue: number | null, itemName = submissionId): WrappedDrop => ({
+    submissionId, teamId: "t", player: null, itemName, quantity: 1, gpValue, luckOneIn: null, at, screenshotUrl: null,
+  });
+  const tiles: Record<string, { id: string; name: string }> = {
+    m1: { id: "zul", name: "Zulrah" }, t1: { id: "zul", name: "Zulrah" },
+    m2: { id: "zul", name: "Zulrah" }, t2: { id: "zul", name: "Zulrah" },
+    m3: { id: "vork", name: "Vorkath" }, t3: { id: "cox", name: "Chambers" },
+    m4: { id: "a", name: "A" }, t4: { id: "b", name: "B" },
+  };
+  const tileOf = (id: string) => tiles[id] ?? null;
+
+  it("pairs Submissions on the same Tile first, most valuable first, each Tile once, then the same day", () => {
+    const mine = [drop("m1", "2026-01-03T10:00:00Z", 5), drop("m2", "2026-01-04T10:00:00Z", 50), drop("m3", "2026-01-05T09:00:00Z", 1)];
+    const theirs = [drop("t1", "2026-01-03T11:00:00Z", 5), drop("t2", "2026-01-06T10:00:00Z", 100), drop("t3", "2026-01-05T20:00:00Z", 2)];
+    const moments = duoMoments(mine, theirs, tileOf);
+    expect(moments.map((m) => [m.kind, m.tileName, m.mine.submissionId, m.theirs.submissionId, m.date])).toEqual([
+      ["tile", "Zulrah", "m2", "t2", "2026-01-04"],
+      ["day", null, "m1", "t1", "2026-01-03"],
+      ["day", null, "m3", "t3", "2026-01-05"],
+    ]);
+  });
+
+  it("shows each Submission as its most valuable drop, and has nothing without a shared Tile or day", () => {
+    const moments = duoMoments([drop("m1", "2026-01-03T10:00:00Z", 1, "Scales"), drop("m1", "2026-01-03T10:00:00Z", 9, "Onyx")], [drop("t1", "2026-01-03T12:00:00Z", 5)], tileOf);
+    expect(moments[0]!.mine.itemName).toBe("Onyx");
+    expect(duoMoments([drop("m4", "2026-01-03T10:00:00Z", 1)], [drop("t4", "2026-01-09T10:00:00Z", 1)], tileOf)).toEqual([]);
   });
 });
