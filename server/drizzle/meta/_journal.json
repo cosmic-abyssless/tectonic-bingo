@@ -239,6 +239,13 @@
       "when": 1790368285587,
       "tag": "0033_player_achievements",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1790481619589,
+      "tag": "0034_signup_question_allow_other",
+      "breakpoints": true
     }
   ]
 }

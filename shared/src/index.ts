@@ -591,6 +591,8 @@ export interface SignupQuestion {
   helperText: string | null;
   type: SignupQuestionType;
   optionsJson: string | null;
+  /** Choice questions only: players can pick Other and write their own answer instead of (or besides) an option. */
+  allowOther: boolean;
   required: boolean;
   sortOrder: number;
   visibility: QuestionVisibility;

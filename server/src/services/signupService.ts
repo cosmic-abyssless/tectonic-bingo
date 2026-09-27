@@ -1,6 +1,6 @@
 import { now as clockNow } from "../clock";
 import { and, count, eq, inArray, isNotNull, ne, or } from "drizzle-orm";
-import { canSeeAnswers, formatSignupAnswer, isBlankAnswer, isValidTimeZone, QUESTION_VISIBILITIES, MAX_CHOICE_LENGTH, MAX_MULTISELECT_CHOICES, MAX_QUESTION_HELPER_TEXT, type AnswerViewer, type QuestionVisibility, type SignupQuestionType, type Stage } from "@bingo/shared";
+import { canSeeAnswers, encodeChoices, formatSignupAnswer, isBlankAnswer, isValidTimeZone, otherText, parseChoiceAnswer, QUESTION_VISIBILITIES, MAX_CHOICE_LENGTH, MAX_MULTISELECT_CHOICES, MAX_OTHER_LENGTH, MAX_QUESTION_HELPER_TEXT, type AnswerViewer, type QuestionVisibility, type SignupQuestionType, type Stage } from "@bingo/shared";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
@@ -55,10 +55,35 @@ export interface CreateQuestionParams {
   helperText?: string | null;
   type: SignupQuestionType;
   optionsJson?: string | null;
+  /** Choice questions only: offer an Other choice with a free-text box. */
+  allowOther?: boolean;
   required?: boolean;
   sortOrder?: number;
   visibility?: QuestionVisibility;
 }
+
+const isChoiceType = (type: SignupQuestionType) => type === "select" || type === "multiselect";
+
+/** A question's options, or none when they're missing or malformed. */
+function optionsOf(optionsJson: string | null | undefined): string[] {
+  try {
+    const parsed: unknown = JSON.parse(optionsJson ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((o): o is string => typeof o === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Checks the allow-Other flag against the question's type (only a choice question can have it), and that no option
+ * reads as an Other answer, which would make the two impossible to tell apart.
+ */
+function assertChoiceSettings(type: SignupQuestionType, allowOther: unknown, optionsJson: string | null | undefined): void {
+  if (allowOther !== undefined && typeof allowOther !== "boolean") throw new ServiceError(400, "allowOther must be true or false");
+  if (allowOther && !isChoiceType(type)) throw new ServiceError(400, "Only a single- or multiple-choice question can allow Other");
+  if (isChoiceType(type) && optionsOf(optionsJson).some((o) => otherText(o) !== null)) throw new ServiceError(400, "An option can't be written as an Other answer");
+}
+
 /** Trims the helper text; blank (or absent) is none. */
 function normalizeHelperText(value: unknown): string | null {
   if (value === undefined || value === null) return null;
@@ -97,6 +122,7 @@ export function createQuestion(db: Db, params: CreateQuestionParams) {
   if ((params.type === "select" || params.type === "multiselect") && !params.optionsJson) {
     throw new ServiceError(400, "optionsJson is required for a choice question");
   }
+  assertChoiceSettings(params.type, params.allowOther, params.optionsJson);
   assertVisibility(params.visibility);
   const values = { ...params, helperText: normalizeHelperText(params.helperText) };
   return db.transaction((tx) => {
@@ -115,8 +141,12 @@ export function updateQuestion(db: Db, id: string, params: Partial<Omit<CreateQu
   return db.transaction((tx) => {
     const existing = tx.select().from(signupQuestions).where(eq(signupQuestions.id, id)).get();
     if (!existing) throw new ServiceError(404, "Question not found");
+    const type = params.type ?? existing.type;
+    assertChoiceSettings(type, params.allowOther, params.optionsJson ?? existing.optionsJson);
     assertVisibility(params.visibility);
-    const set = "helperText" in params ? { ...params, helperText: normalizeHelperText(params.helperText) } : params;
+    const set = "helperText" in params ? { ...params, helperText: normalizeHelperText(params.helperText) } : { ...params };
+    // Other goes with the choices: a question that stops being a choice question stops allowing it.
+    if (!isChoiceType(type) && existing.allowOther) set.allowOther = false;
     const updated = tx.update(signupQuestions).set(set).where(eq(signupQuestions.id, id)).returning().get();
 
     const changes = diffFields(existing, updated, { only: Object.keys(set) as (keyof typeof existing)[] });
@@ -234,27 +264,66 @@ export interface CreateSignupParams {
   rsnVerified?: boolean;
 }
 
+type AnsweredQuestion = { id: string; type: SignupQuestionType; optionsJson: string | null; allowOther: boolean };
+
 /**
- * Checks each answer against its question. A multiple-choice answer has to be a list of choices; it is stored as a
- * cleaned JSON list (trimmed, no blanks or repeats). Answers to other questions are stored as given.
+ * Checks each answer against its question and returns it in its stored form. A choice has to be one of the options,
+ * and Other (with its text) is only taken where the question allows it. `previous` is the signup's saved answers, if
+ * any: what a player already has stays valid (the form keeps showing it until they untick it) even once the Admin
+ * has edited the options or turned Other off. A multiple-choice answer is stored as a cleaned JSON list (trimmed, no
+ * blanks or repeats); text and yes/no answers are stored as given.
  */
-function normalizeAnswers<T extends { questionId: string; value: string }>(questions: { id: string; type: SignupQuestionType }[], answers: T[]): T[] {
-  const typeById = new Map(questions.map((q) => [q.id, q.type]));
+function normalizeAnswers<T extends { questionId: string; value: string }>(questions: AnsweredQuestion[], answers: T[], previous: ReadonlyMap<string, string> = new Map()): T[] {
+  const questionById = new Map(questions.map((q) => [q.id, q]));
   return answers.map((a) => {
-    if (typeById.get(a.questionId) !== "multiselect") return a;
-    let choices: unknown = [];
-    if (typeof a.value === "string" && a.value.trim() !== "") {
+    const question = questionById.get(a.questionId);
+    if (!question || !isChoiceType(question.type)) return a;
+    const multiple = question.type === "multiselect";
+    const text = typeof a.value === "string" ? a.value.trim() : "";
+    if (!text) return { ...a, value: multiple ? "[]" : "" };
+
+    let choices: string[];
+    let other: string | null;
+    if (multiple) {
+      let items: unknown = null;
       try {
-        choices = JSON.parse(a.value);
+        items = JSON.parse(text);
       } catch {
-        choices = null;
+        // not a list: refused below
       }
+      const others = Array.isArray(items) ? items.filter((c) => typeof c !== "string") : [];
+      if (!Array.isArray(items) || others.length > 1 || others.some((c) => otherText(c) === null)) {
+        throw new ServiceError(400, "A multiple-choice answer must be a list of choices");
+      }
+      choices = [...new Set((items.filter((c) => typeof c === "string") as string[]).map((c) => c.trim()).filter(Boolean))];
+      other = others.length ? otherText(others[0]) : null;
+      if (choices.length > MAX_MULTISELECT_CHOICES || choices.some((c) => c.length > MAX_CHOICE_LENGTH)) throw new ServiceError(400, "Too many choices, or a choice is too long");
+    } else {
+      other = otherText(text);
+      choices = other === null ? [text] : [];
     }
-    if (!Array.isArray(choices) || choices.some((c) => typeof c !== "string")) throw new ServiceError(400, "A multiple-choice answer must be a list of choices");
-    const cleaned = [...new Set((choices as string[]).map((c) => c.trim()).filter(Boolean))];
-    if (cleaned.length > MAX_MULTISELECT_CHOICES || cleaned.some((c) => c.length > MAX_CHOICE_LENGTH)) throw new ServiceError(400, "Too many choices, or a choice is too long");
-    return { ...a, value: JSON.stringify(cleaned) };
+
+    const before = parseChoiceAnswer(previous.get(a.questionId));
+    const kept = new Set([...optionsOf(question.optionsJson), ...before.choices, ...(multiple ? [] : [(previous.get(a.questionId) ?? "").trim()])]);
+    const stray = choices.find((c) => !kept.has(c));
+    if (stray !== undefined) throw new ServiceError(400, `"${stray}" isn't one of the options`);
+
+    if (other !== null) {
+      other = other.trim();
+      if (!question.allowOther && other !== (before.other ?? "").trim()) throw new ServiceError(400, "This question doesn't take an Other answer");
+      if (!other) throw new ServiceError(400, "Write something for Other, or untick it");
+      if (other.length > MAX_OTHER_LENGTH) throw new ServiceError(400, `Other can be at most ${MAX_OTHER_LENGTH} characters`);
+    }
+
+    const value = multiple ? encodeChoices(choices, other) : other !== null ? JSON.stringify({ other }) : choices[0]!;
+    return { ...a, value };
   });
+}
+
+/** A signup's saved answers by question, the `previous` normalizeAnswers keeps valid. */
+function savedAnswers(db: Db, signupId: string | undefined): Map<string, string> {
+  if (!signupId) return new Map();
+  return new Map(db.select().from(signupAnswers).where(eq(signupAnswers.signupId, signupId)).all().map((a) => [a.questionId, a.value]));
 }
 
 export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
@@ -266,7 +335,7 @@ export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
     if (existing?.status === "active") throw new ServiceError(409, "You've already signed up for this bingo");
 
     const questions = tx.select().from(signupQuestions).where(eq(signupQuestions.bingoId, params.bingoId)).all();
-    const answers = normalizeAnswers(questions, params.answers);
+    const answers = normalizeAnswers(questions, params.answers, savedAnswers(tx, existing?.id));
     const answerById = new Map(answers.map((a) => [a.questionId, a.value]));
     const missingRequired = questions.some((q) => q.required && isBlankAnswer(q.type, answerById.get(q.id)));
     if (missingRequired) throw new ServiceError(400, "Please answer every required question");
@@ -355,7 +424,7 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
     const questions = tx.select().from(signupQuestions).where(eq(signupQuestions.bingoId, bingo.id)).all();
     const questionById = new Map(questions.map((q) => [q.id, q]));
     const shown = (type: SignupQuestionType, value: string) => formatSignupAnswer(type, value) || "—";
-    for (const a of normalizeAnswers(questions, params.answers ?? [])) {
+    for (const a of normalizeAnswers(questions, params.answers ?? [], savedAnswers(tx, signupId))) {
       const existingAnswer = tx
         .select()
         .from(signupAnswers)
