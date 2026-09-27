@@ -104,6 +104,35 @@ function ArtGroup({ slug, group, images, loading, large = false }: { slug: strin
     }
   }
 
+  // Several files at once: uploaded one at a time, in the order picked (each is keyed and rendered on its own, and
+  // shows up as it lands), as many as the group has room for. One that fails is named; the rest still go.
+  const [progress, setProgress] = useState<string | null>(null);
+  async function addMany(files: File[]) {
+    const room = Math.max(0, max - images.length);
+    const taken = files.slice(0, room);
+    const problems: string[] = [];
+    setBusy("add");
+    setError(null);
+    try {
+      for (const [i, file] of taken.entries()) {
+        setProgress(taken.length > 1 ? `Cutting out ${i + 1} of ${taken.length}…` : "Cutting it out…");
+        try {
+          await adminApi.addWrappedArt(slug, group, file);
+        } catch (e) {
+          problems.push(`${file.name}: ${e instanceof Error ? e.message : "couldn't be added"}`);
+        }
+        await queryClient.invalidateQueries({ queryKey: adminQueryKeys.wrappedArt(slug) });
+      }
+      await queryClient.invalidateQueries({ queryKey: ["wrapped"] });
+    } finally {
+      setBusy(null);
+      setProgress(null);
+    }
+    const left = files.length - taken.length;
+    if (left > 0) problems.push(`${left === 1 ? "1 file wasn't" : `${left} files weren't`} added: this holds at most ${max}.`);
+    if (problems.length > 0) setError(problems.join("\n"));
+  }
+
   const move = (index: number, by: -1 | 1) => {
     const ids = images.map((a) => a.id);
     [ids[index], ids[index + by]] = [ids[index + by]!, ids[index]!];
@@ -140,14 +169,18 @@ function ArtGroup({ slug, group, images, loading, large = false }: { slug: strin
             className={`${tile} flex flex-col items-center justify-center gap-1 self-start rounded-md border border-dashed border-outline-strong text-xs text-on-surface-subtle transition-colors hover:border-on-surface/60 hover:text-on-surface-muted disabled:cursor-wait`}
           >
             <PlusIcon size={18} />
-            {loading ? "…" : busy === "add" ? "Cutting it out…" : "Add image"}
+            {loading ? "…" : busy === "add" ? progress : "Add images"}
           </button>
         )}
       </div>
-      <FileInput inputRef={addInput} onFile={(file) => run("add", () => adminApi.addWrappedArt(slug, group, file))} />
+      <FileInput inputRef={addInput} multiple onFiles={addMany} />
 
       {selected && <ImageDetails key={selected.id} slug={slug} image={selected} busy={busy} run={run} />}
-      {error && <Notice tone="danger">{error}</Notice>}
+      {error && (
+        <Notice tone="danger">
+          <span className="whitespace-pre-line">{error}</span>
+        </Notice>
+      )}
       {images.length >= max && <p className="text-xs text-on-surface-subtle">That's the most this holds ({max}).</p>}
     </div>
   );
@@ -183,22 +216,24 @@ function ImageDetails({ slug, image, busy, run }: { slug: string; image: Wrapped
           </Button>
         )}
       </div>
-      <FileInput inputRef={replaceInput} onFile={(file) => run(`replace:${image.id}`, () => adminApi.replaceWrappedArt(slug, image.id, file))} />
+      <FileInput inputRef={replaceInput} onFiles={([file]) => file && run(`replace:${image.id}`, () => adminApi.replaceWrappedArt(slug, image.id, file))} />
     </div>
   );
 }
 
-function FileInput({ inputRef, onFile }: { inputRef: React.RefObject<HTMLInputElement | null>; onFile: (file: File) => void }) {
+/** A hidden file picker for images; `multiple` lets several be picked at once, handed over in the order picked. */
+function FileInput({ inputRef, multiple = false, onFiles }: { inputRef: React.RefObject<HTMLInputElement | null>; multiple?: boolean; onFiles: (files: File[]) => void }) {
   return (
     <input
       ref={inputRef}
       type="file"
+      multiple={multiple}
       accept="image/png,image/jpeg,image/webp,image/gif"
       className="hidden"
       onChange={(e) => {
-        const file = e.target.files?.[0];
+        const files = [...(e.target.files ?? [])];
         e.target.value = "";
-        if (file) onFile(file);
+        if (files.length > 0) onFiles(files);
       }}
     />
   );
