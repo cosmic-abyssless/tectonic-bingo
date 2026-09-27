@@ -24,6 +24,7 @@ import { ServiceError } from "./errors";
 import * as bingoService from "./bingoService";
 import * as boardService from "./boardService";
 import * as signupService from "./signupService";
+import * as superlativeService from "./superlativeService";
 import * as achievementService from "./achievementService";
 import * as wrappedArtService from "./wrappedArtService";
 import { setNodeGates } from "./graphService";
@@ -148,6 +149,8 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
     visibility: q.visibility,
   }));
 
+  const superlativeCategories = superlativeService.getCategories(db, bingoId).map((c) => ({ name: c.name, sortOrder: c.sortOrder }));
+
   return {
     formatVersion: BINGO_EXPORT_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
@@ -173,6 +176,7 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
     tiles,
     lines,
     signupQuestions,
+    superlativeCategories,
     achievementKeys: achievementService.getEnabledAchievementKeys(db, bingoId),
     ...(options.uploadsDir ? { wrappedArt: exportWrappedArt(db, bingoId, options.uploadsDir) } : {}),
   };
@@ -433,6 +437,11 @@ export function importBingo(
 
     for (const q of doc.signupQuestions) {
       signupService.createQuestion(tx, { bingoId: bingo.id, prompt: q.prompt, helperText: q.helperText ?? null, type: q.type, optionsJson: q.optionsJson, allowOther: q.allowOther ?? false, multiplePicks: q.multiplePicks ?? false, maxPicks: q.maxPicks ?? null, required: q.required, sortOrder: q.sortOrder, visibility: q.visibility ?? "captains" });
+    }
+
+    // Superlative categories (CONTEXT.md): absent in older files, none to create. Votes never travel with an export.
+    for (const c of doc.superlativeCategories ?? []) {
+      superlativeService.createCategory(tx, { bingoId: bingo.id, name: c.name });
     }
 
     // Achievements (CONTEXT.md): createBingo above switched every catalogue key on (the default for a brand-new

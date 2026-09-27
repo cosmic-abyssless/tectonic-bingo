@@ -31,6 +31,7 @@ import { queryAuditLog } from "../audit/query";
 import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility } from "@bingo/shared";
 import { repriceSubmission } from "../services/gpRepriceService";
 import * as wrappedService from "../services/wrappedService";
+import * as superlativeService from "../services/superlativeService";
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth, requireBingo, requireBingoMod);
@@ -117,6 +118,16 @@ router.post(
     const state = wrappedService.publishWrapped(db, req.bingo!, req.user!.id);
     broadcast({ type: "wrapped_published", bingoId: req.bingo!.id, payload: {} });
     res.json(state);
+  }),
+);
+
+// Superlative (CONTEXT.md) vote counts per category per Team: an Admin's call only, and only once voting has
+// closed (the bingo is Finished) — nobody, Moderators included, sees a tally while it's still Live.
+router.get(
+  "/superlatives/tally",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    res.json({ teams: superlativeService.getTallies(db, req.bingo!) });
   }),
 );
 

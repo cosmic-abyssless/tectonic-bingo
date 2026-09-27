@@ -33,6 +33,7 @@ import { ComicMenu, ComicMenuItem } from "./ui/ComicMenu";
 import { ComicNotice, ComicPanel } from "./ui/ComicPanel";
 import { ComicReactionBar } from "./ui/ComicReactionBar";
 import { ComicTitleChip, ComicTitleGroupBox } from "./ui/ComicTitles";
+import { ComicSuperlativeGroupBox } from "./ui/ComicSuperlatives";
 import { ComicBetaTag } from "./ui/ComicBetaTag";
 import { Halftone } from "./fx/Halftone";
 import { SignupStage } from "./signup/SignupStage";
@@ -164,6 +165,7 @@ const comicTheme: ThemeDefinition = {
     Panel: ComicPanel,
     TitleGroupBox: ComicTitleGroupBox,
     TitleChip: ComicTitleChip,
+    SuperlativeGroupBox: ComicSuperlativeGroupBox,
     BetaTag: ComicBetaTag,
     PageBackdrop: Halftone,
     DialogFrame: ComicDialog,

@@ -17,7 +17,7 @@ export type AuditActorRole = "admin" | "mod" | "player" | "system";
 // Matches client/src/core/ui/Card.tsx's Badge TONE keys.
 export type AuditTone = "neutral" | "info" | "ok" | "warn" | "danger";
 
-export type AuditCategory = "bingo" | "settings" | "board" | "signup" | "draft" | "team" | "submission" | "points" | "moderation" | "system" | "http" | "bug_report" | "achievement";
+export type AuditCategory = "bingo" | "settings" | "board" | "signup" | "draft" | "team" | "submission" | "points" | "moderation" | "system" | "http" | "bug_report" | "achievement" | "superlative";
 
 export type AuditEntityType =
   | "bingo"
@@ -31,6 +31,7 @@ export type AuditEntityType =
   | "node"
   | "line"
   | "question"
+  | "superlative_category"
   | "team"
   | "submission"
   | "adjustment"
@@ -124,6 +125,12 @@ export interface AuditDetailsMap {
   /** `answersDeleted`: how many players' (non-blank) answers went with it. Absent on entries from before answers could be deleted along with it. */
   "question.deleted": { prompt: string; type: string; required: boolean; answersDeleted?: number };
   "question.reordered": { order: string[] };
+
+  "superlative.category_created": { name: string };
+  "superlative.category_updated": { changes: FieldChanges<{ name: string }> };
+  /** `votesDeleted`: how many votes (across every Team) went with it. */
+  "superlative.category_deleted": { name: string; votesDeleted: number };
+  "superlative.category_reordered": { order: string[] };
 
   "team.created": { name: string; captainUserId: string; captainName: string; coCaptainUserId: string | null; coCaptainName: string | null; color: string | null };
   "team.updated": { changes: FieldChanges<{ name: string; color: string | null }>; codeword?: { changed: true } };
@@ -511,6 +518,10 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
   "question.updated": { category: "signup", tone: "neutral", visibility: "mods", title: "Signup question updated", label: (i) => `${actor(i)} updated the signup question "${i.entityLabel ?? ""}"` },
   "question.deleted": { category: "signup", tone: "danger", visibility: "mods", title: "Signup question deleted", label: (i) => `${actor(i)} deleted the signup question "${i.details.prompt}"${i.details.answersDeleted ? ` and ${i.details.answersDeleted} answer${i.details.answersDeleted === 1 ? "" : "s"} to it` : ""}` },
   "question.reordered": { category: "signup", tone: "neutral", visibility: "mods", title: "Signup questions reordered", label: (i) => `${actor(i)} reordered the signup questions` },
+  "superlative.category_created": { category: "superlative", tone: "ok", visibility: "mods", title: "Superlative category added", label: (i) => `${actor(i)} added the superlative category "${i.details.name}"` },
+  "superlative.category_updated": { category: "superlative", tone: "neutral", visibility: "mods", title: "Superlative category updated", label: (i) => `${actor(i)} renamed the superlative category "${i.entityLabel ?? ""}" to "${i.details.changes.after.name ?? ""}"` },
+  "superlative.category_deleted": { category: "superlative", tone: "danger", visibility: "mods", title: "Superlative category deleted", label: (i) => `${actor(i)} deleted the superlative category "${i.details.name}"${i.details.votesDeleted ? ` and ${i.details.votesDeleted} vote${i.details.votesDeleted === 1 ? "" : "s"} in it` : ""}` },
+  "superlative.category_reordered": { category: "superlative", tone: "neutral", visibility: "mods", title: "Superlative categories reordered", label: (i) => `${actor(i)} reordered the superlative categories` },
   "team.created": { category: "team", tone: "ok", visibility: "team", title: "Team created", label: (i) => `${actor(i)} created the team "${i.details.name}"` },
   "team.updated": {
     category: "team",

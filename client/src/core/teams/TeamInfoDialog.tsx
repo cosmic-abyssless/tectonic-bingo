@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { Stage } from "@bingo/shared";
 import { useRenameTeam } from "../../api/queries";
 import { useTeamActivityModel } from "../../headless/useTeamActivity";
 import type { TeamModel } from "../../headless/types";
@@ -8,17 +9,18 @@ import { Dialog, DialogHeader } from "../ui/Dialog";
 import { Field, Input } from "../ui/Field";
 import { CaptainEmblem } from "../ui/CaptainEmblem";
 import { PlayerName } from "../tectonic/PlayerName";
+import { TeamSuperlativesSection } from "../superlatives/TeamSuperlativesSection";
 
 /** Who's on a team. The captain can also rename it from here. */
-export function TeamInfoDialog({ slug, team, onClose }: { slug: string; team: TeamModel | null; onClose: () => void }) {
+export function TeamInfoDialog({ slug, team, stage, onClose }: { slug: string; team: TeamModel | null; stage: Stage; onClose: () => void }) {
   return (
     <Dialog isOpen={team !== null} onClose={onClose}>
-      {team && <TeamInfo slug={slug} team={team} onClose={onClose} />}
+      {team && <TeamInfo slug={slug} team={team} stage={stage} onClose={onClose} />}
     </Dialog>
   );
 }
 
-function TeamInfo({ slug, team, onClose }: { slug: string; team: TeamModel; onClose: () => void }) {
+function TeamInfo({ slug, team, stage, onClose }: { slug: string; team: TeamModel; stage: Stage; onClose: () => void }) {
   const rename = useRenameTeam(slug);
   const [name, setName] = useState(team.name);
   const trimmed = name.trim();
@@ -59,6 +61,8 @@ function TeamInfo({ slug, team, onClose }: { slug: string; team: TeamModel; onCl
             </li>
           ))}
         </ul>
+
+        <TeamSuperlativesSection slug={slug} enabled={team.isMine && stage === "live"} />
 
         {activity.length > 0 && (
           <div>

@@ -298,6 +298,32 @@ export const teamMembers = sqliteTable('team_members', {
   uniqueIndex('team_members_team_user_unq').on(t.teamId, t.userId),
 ]);
 
+// Superlative (CONTEXT.md): a per-Bingo award category, admin-managed, e.g. "Team MVP". Not locked to any stage — can
+// be added, renamed, reordered or deleted any time, including during Live with votes cast (a rename keeps its votes,
+// a delete drops them). No default list.
+export const superlativeCategories = sqliteTable('superlative_categories', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  name: text('name').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+});
+
+// One Player's pick for one category: teamId is redundant with a join through teamMembers, kept here so a vote can
+// still be tallied and dropped by Team even after the voter (or the nominee) leaves it. Votes are secret — nobody,
+// Moderators and Admins included, ever reads who voted for whom; the server keeps the voter only to enforce one vote
+// per category and let it change. Unique per (categoryId, voterUserId): one pick each, updated in place to change it.
+export const superlativeVotes = sqliteTable('superlative_votes', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  categoryId: text('category_id').notNull().references(() => superlativeCategories.id),
+  teamId: text('team_id').notNull().references(() => teams.id),
+  voterUserId: text('voter_user_id').notNull().references(() => users.id),
+  nomineeUserId: text('nominee_user_id').notNull().references(() => users.id),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => [
+  uniqueIndex('superlative_votes_category_voter_unq').on(t.categoryId, t.voterUserId),
+]);
+
 // One row per drafted player. pickedByUserId is normally the captain, but
 // mods may pick on a captain's behalf. In duo mode a pick drafts a pair, so
 // two rows share the same pickNumber.

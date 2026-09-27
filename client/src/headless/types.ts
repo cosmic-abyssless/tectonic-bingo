@@ -743,6 +743,16 @@ export interface WrappedTeamModel {
   biggestDrop: WrappedDropModel | null;
   /** Their points over time; null with fewer than two points to draw. */
   chart: WrappedChartModel | null;
+  /** Superlative (CONTEXT.md) winners, a category with no votes left out. */
+  superlatives: { category: string; winners: WrappedPersonModel[] }[];
+}
+
+/** One Team's Superlative winners, for The Bingo section's "every Team's winners" (CONTEXT.md). */
+export interface WrappedTeamSuperlativesModel {
+  teamId: string;
+  teamName: string;
+  color: string | null;
+  superlatives: { category: string; winners: WrappedPersonModel[] }[];
 }
 
 export interface WrappedBingoModel {
@@ -771,6 +781,8 @@ export interface WrappedBingoModel {
     reviewers: { person: WrappedPersonModel; rejectionLabel: string; reviewedLabel: string }[];
     banter: string | null;
   } | null;
+  /** Every Team's Superlative winners; a Team with none is left out. */
+  teamSuperlatives: WrappedTeamSuperlativesModel[];
 }
 
 export interface WrappedOutroModel {

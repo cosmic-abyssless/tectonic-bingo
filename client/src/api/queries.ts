@@ -3,7 +3,7 @@ import type {
   AccountTypesResponse, AchievementKey, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, CutReviewPreview, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
-  MyWrappedResponse, PickRating, PlayerProfile, RewindResponse, StatsResponse, WrappedState, SubmissionReaction, SubmissionReactionGroup, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
+  MyWrappedResponse, PickRating, PlayerProfile, RewindResponse, StatsResponse, WrappedState, SubmissionReaction, SubmissionReactionGroup, SuperlativeBallotResponse, SuperlativeTeamTally, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
 } from "@bingo/shared";
 import { SUBMISSION_REACTIONS } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
@@ -44,6 +44,8 @@ export const queryKeys = {
   rewind: (slug: string) => ["rewind", slug] as const,
   wrappedState: (slug: string) => ["wrapped", "state", slug] as const,
   myWrapped: (slug: string) => ["wrapped", "me", slug] as const,
+  mySuperlativeBallot: (slug: string) => ["superlatives", "me", slug] as const,
+  superlativeTally: (slug: string) => ["superlatives", "tally", slug] as const,
   auditLog: (slug: string, filters: AuditLogFilters) => ["auditLog", slug, filters] as const,
   teamActivity: (slug: string, teamId: string) => ["teamActivity", slug, teamId, "condensed"] as const,
   myBugReports: () => ["myBugReports"] as const,
@@ -627,6 +629,42 @@ export function usePublishWrapped(slug: string) {
   return useMutation({
     mutationFn: () => api.post<WrappedState>(`/api/bingos/${slug}/mod/wrapped/publish`, {}),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wrapped"] }),
+  });
+}
+
+/** Superlative (CONTEXT.md): the caller's own Team's ballot — every category, their pick, and a participation count. */
+export function useMySuperlativeBallot(slug: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.mySuperlativeBallot(slug ?? ""),
+    queryFn: () => api.get<SuperlativeBallotResponse>(`/api/bingos/${slug}/superlatives/me`),
+    enabled: !!slug && enabled,
+  });
+}
+
+/** Casts or changes the caller's pick for a Superlative category. Refused outside Live. */
+export function useSetSuperlativeVote(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { categoryId: string; nomineeUserId: string }) => api.put<SuperlativeBallotResponse>(`/api/bingos/${slug}/superlatives/${params.categoryId}`, { nomineeUserId: params.nomineeUserId }),
+    onSuccess: (data) => queryClient.setQueryData(queryKeys.mySuperlativeBallot(slug), data),
+  });
+}
+
+/** Clears the caller's pick for a Superlative category. Refused outside Live. */
+export function useClearSuperlativeVote(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (categoryId: string) => api.delete<SuperlativeBallotResponse>(`/api/bingos/${slug}/superlatives/${categoryId}`),
+    onSuccess: (data) => queryClient.setQueryData(queryKeys.mySuperlativeBallot(slug), data),
+  });
+}
+
+/** Every Team's Superlative vote counts per category. Admin-only, and refused before the bingo is finished. */
+export function useSuperlativeTally(slug: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.superlativeTally(slug),
+    queryFn: () => api.get<{ teams: SuperlativeTeamTally[] }>(`/api/bingos/${slug}/mod/superlatives/tally`),
+    enabled: !!slug && enabled,
   });
 }
 

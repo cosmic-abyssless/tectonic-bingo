@@ -69,7 +69,7 @@ export function BoardPageLayout() {
 
       <RulesDialog isOpen={page.rules.open} markdown={page.bingo.rulesComeLater ? RULES_COME_LATER : (page.bingo.rulesMarkdown ?? "")} onClose={page.rules.hide} />
 
-      <TeamInfoDialog slug={page.slug} team={page.teamInfo.open ? page.viewing.team : null} onClose={page.teamInfo.hide} />
+      <TeamInfoDialog slug={page.slug} team={page.teamInfo.open ? page.viewing.team : null} stage={page.bingo.stage} onClose={page.teamInfo.hide} />
 
       <PointBreakdownDialog team={page.pointBreakdown.open ? page.viewing.team : null} onClose={page.pointBreakdown.hide} />
 

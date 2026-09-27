@@ -19,6 +19,7 @@ import type {
   WrappedPersonModel,
   WrappedSectionModel,
   WrappedTeamModel,
+  WrappedTeamSuperlativesModel,
   WrappedYouModel,
 } from "./types";
 
@@ -327,6 +328,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
       topGpEarner: myTeam.topGpEarner ? { person: person(myTeam.topGpEarner.player), gpLabel: formatGp(myTeam.topGpEarner.gpGained) } : null,
       biggestDrop: myTeam.biggestDrop ? drop(myTeam.biggestDrop) : null,
       chart: chartOf([myTeam]),
+      superlatives: (myTeam.superlatives ?? []).map((s) => ({ category: s.category, winners: s.winners.map(person) })),
     };
     sections.push(team);
   }
@@ -365,6 +367,14 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
             banter: mod.reviewers.length > 1 ? rejectionBanter(mod.reviewers[0]!.rejectionRate) : null,
           }
         : null,
+    teamSuperlatives: bingo.teams
+      .filter((t) => (t.superlatives ?? []).length > 0)
+      .map((t): WrappedTeamSuperlativesModel => ({
+        teamId: t.teamId,
+        teamName: t.name,
+        color: t.color,
+        superlatives: t.superlatives!.map((s) => ({ category: s.category, winners: s.winners.map(person) })),
+      })),
   };
   sections.push(b);
 

@@ -74,6 +74,26 @@ export function WrappedTeam({ section: t }: { section: WrappedTeamModel }) {
           </div>
         </WrappedScene>
       )}
+
+      {t.superlatives.length > 0 && (
+        <WrappedScene steps={1} className="text-center">
+          <Reveal step={0}>
+            <WrappedHeading kicker="Superlatives">Your Team decided</WrappedHeading>
+            <ul className="mx-auto mt-8 max-w-md space-y-4">
+              {t.superlatives.map((s) => (
+                <li key={s.category}>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-muted">{s.category}</p>
+                  <div className="mt-2 flex flex-wrap justify-center gap-4">
+                    {s.winners.map((w) => (
+                      <WrappedPerson key={w.id} person={w} />
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Reveal>
+        </WrappedScene>
+      )}
     </>
   );
 }
