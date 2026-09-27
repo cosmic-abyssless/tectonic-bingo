@@ -523,7 +523,10 @@ export function Page({
         style={{ direction: side === "right" ? "rtl" : "ltr", overscrollBehavior: "contain", touchAction: dragScroll ? "none" : undefined }}
         {...scroll.handlers}
       >
-        <div style={{ direction: "ltr", [side === "right" ? "paddingRight" : "paddingLeft"]: bw(0.035) }}>{children}</div>
+        {/* A column at least the page's height, so a page's content can grow to fill it (the Tile modal's summary). */}
+        <div className="flex min-h-full flex-col" style={{ direction: "ltr", [side === "right" ? "paddingRight" : "paddingLeft"]: bw(0.035) }}>
+          {children}
+        </div>
       </div>
     </div>
   );

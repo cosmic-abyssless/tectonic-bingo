@@ -45,11 +45,26 @@ export function hidePin(root: Element) {
  * The artwork on the page: a slightly crooked, paper-framed print with a tack
  * through its top edge. A button, since it opens the full-size view.
  */
-export function PinnedArt({ imageUrl, name, colors, onOpen }: { imageUrl: string; name: string; colors: ComicColors; onOpen: (trigger: HTMLElement) => void }) {
+export function PinnedArt({
+  imageUrl,
+  name,
+  colors,
+  onOpen,
+  maxHeight = null,
+}: {
+  imageUrl: string;
+  name: string;
+  colors: ComicColors;
+  onOpen: (trigger: HTMLElement) => void;
+  /** The height it may take, when that's less than its full size would need: it shrinks to fit. */
+  maxHeight?: number | null;
+}) {
   return (
     // The tilt lives here (CSS `rotate`), apart from the `transform` Motion
     // animates below, so the landing can't disturb it.
-    <div className="relative mx-auto -rotate-3 pt-2" style={{ width: bw(0.42) }}>
+    // Its full size, or smaller to fit `maxHeight` (the frame, the tack's room and the tilt add about a rem to the
+    // square picture's width).
+    <div className="relative mx-auto -rotate-3 pt-2" style={{ width: maxHeight === null ? bw(0.42) : `min(${bw(0.42)}, ${Math.max(0, maxHeight - 16)}px)` }}>
       <AriaButton
         data-pin-art
         aria-label={`${name}: open the artwork full size`}

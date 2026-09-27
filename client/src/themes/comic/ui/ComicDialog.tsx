@@ -98,29 +98,49 @@ export function ComicDialog({
   );
 }
 
-/** Caption-box header with a Bangers title and a round close button. */
-export function ComicDialogHeader({ title, subtitle, onClose, action, tone = "yellow" }: { title: ReactNode; subtitle?: ReactNode; onClose: () => void; action?: ReactNode; tone?: "yellow" | "red" | "blue" }) {
+/**
+ * Caption-box header with a Bangers title and a round close button. It stays pinned to the top of the dialog as it
+ * scrolls, along with `below` (e.g. a row of filter tabs) if given.
+ */
+export function ComicDialogHeader({
+  title,
+  subtitle,
+  onClose,
+  action,
+  tone = "yellow",
+  below,
+}: {
+  title: ReactNode;
+  subtitle?: ReactNode;
+  onClose: () => void;
+  action?: ReactNode;
+  tone?: "yellow" | "red" | "blue";
+  below?: ReactNode;
+}) {
   const { colors } = useComic();
   const fill = { yellow: colors.YELLOW, red: colors.RED, blue: colors.BLUE }[tone];
   const fg = tone === "yellow" ? colors.ON_YELLOW : colors.ON_LOUD;
   return (
-    <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b-[3px] px-5 py-3" style={{ background: fill, borderColor: colors.LINE, color: fg }}>
-      <div className="min-w-0">
-        <Heading slot="title" className="truncate text-3xl uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: fg }}>
-          {title}
-        </Heading>
-        {subtitle && (
-          <p className="mt-1 text-sm" style={{ color: fg, opacity: 0.85 }}>
-            {subtitle}
-          </p>
-        )}
+    <div className="sticky top-0 z-10">
+      <div className="flex items-start justify-between gap-4 border-b-[3px] px-5 py-3" style={{ background: fill, borderColor: colors.LINE, color: fg }}>
+        <div className="min-w-0">
+          <Heading slot="title" className="truncate text-3xl uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: fg }}>
+            {title}
+          </Heading>
+          {subtitle && (
+            <p className="mt-1 text-sm" style={{ color: fg, opacity: 0.85 }}>
+              {subtitle}
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {action}
+          <ComicIconButton label="Close" onPress={onClose} className="size-9">
+            <XIcon />
+          </ComicIconButton>
+        </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {action}
-        <ComicIconButton label="Close" onPress={onClose} className="size-9">
-          <XIcon />
-        </ComicIconButton>
-      </div>
+      {below}
     </div>
   );
 }
