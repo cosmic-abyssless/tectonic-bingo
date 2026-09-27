@@ -171,6 +171,7 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
       hideRules: bingo.hideRules,
       showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished,
       publishWrappedOnFinish: bingo.publishWrappedOnFinish,
+      wrappedCredits: bingoService.parseWrappedCredits(bingo.wrappedCreditsJson),
     },
     categories: categoryRows.map((c) => ({ localId: categoryLocalByReal.get(c.id)!, label: c.label, colorHex: c.colorHex, sortOrder: c.sortOrder })),
     tiles,
@@ -211,6 +212,7 @@ function assertValidDocument(doc: BingoExportDocument): void {
     throw new ServiceError(400, "Malformed import file: unknown leftover mode");
   }
   if (doc.bingo.exclusivityRules !== undefined) bingoService.normalizeExclusivityRules(doc.bingo.exclusivityRules);
+  if (doc.bingo.wrappedCredits !== undefined) bingoService.normalizeWrappedCredits(doc.bingo.wrappedCredits);
   for (const key of ["sealedTiles", "hideRules"] as const) {
     if (doc.bingo[key] !== undefined && typeof doc.bingo[key] !== "boolean") throw new ServiceError(400, `Malformed import file: ${key} must be true or false`);
   }
@@ -348,6 +350,7 @@ export function importBingo(
       ...(doc.bingo.hideRules !== undefined ? { hideRules: doc.bingo.hideRules } : {}),
       ...(doc.bingo.showScreenshotsWhenFinished !== undefined ? { showScreenshotsWhenFinished: doc.bingo.showScreenshotsWhenFinished === true } : {}),
       ...(doc.bingo.publishWrappedOnFinish !== undefined ? { publishWrappedOnFinish: doc.bingo.publishWrappedOnFinish === true } : {}),
+      ...(doc.bingo.wrappedCredits !== undefined ? { wrappedCredits: doc.bingo.wrappedCredits } : {}),
     });
 
     const categoryIdByLocal = new Map<number, string>();

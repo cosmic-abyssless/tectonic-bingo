@@ -247,6 +247,19 @@ export interface BingoWrappedResponse {
 }
 
 /**
+ * A Credits entry (CONTEXT.md "Credits"): someone an Admin names as having put the Bingo together, with an optional
+ * role ("Board design"). Free text, in the order the Admin set; independent of the Admin and Moderator roles. The Outro
+ * of Wrapped lists them.
+ */
+export interface WrappedCredit {
+  name: string;
+  role: string | null;
+}
+
+export const MAX_WRAPPED_CREDITS = 30;
+export const MAX_WRAPPED_CREDIT_LENGTH = 60;
+
+/**
  * Wrapped art: decorative in-game character cut-outs, drawn as stickers on torn paper. Admins upload them per Bingo
  * (a new Bingo starts with a copy of the previous one's), in groups:
  * - Category images: any number per section of the story, shown side by side above its opening heading (a Team's

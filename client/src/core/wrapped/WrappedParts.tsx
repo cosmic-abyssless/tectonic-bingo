@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { WrappedArtFrames } from "@bingo/shared";
 import type { WrappedDropModel, WrappedPersonModel } from "../../headless/types";
 import { WikiIcon } from "../ui/ItemIcon";
+import { OsrsCaption } from "./OsrsCaption";
 import { StickerArt } from "./StickerArt";
 
 // Small shared pieces of Wrapped's default sections, for any theme to reuse.
@@ -91,18 +92,33 @@ export function WrappedStat({ value, label, tone }: { value: ReactNode; label: R
 /** Sticker heights for a row of Category images (each as wide as its art): smaller as there are more, so a row still fits a phone. */
 const ROW_SIZE = ["", "h-44 sm:h-56", "h-36 sm:h-48", "h-28 sm:h-40", "h-24 sm:h-36"];
 
+/** One of a section's Category images with a name captioned on it, in OSRS's font (#270). */
+export interface CaptionedArt {
+  art: WrappedArtFrames;
+  name?: string | null;
+}
+
 /**
  * A section's Category images, side by side above its opening heading (a Team's three, a Duo's two); nothing when the
- * section has none (it reads finished without). Each boils a little out of step with its neighbours.
+ * section has none (it reads finished without). Each boils a little out of step with its neighbours. An image given
+ * with a `name` has it captioned over its foot.
  */
-export function WrappedSectionArt({ art }: { art: WrappedArtFrames[] }) {
+export function WrappedSectionArt({ art }: { art: (WrappedArtFrames | CaptionedArt)[] }) {
   if (art.length === 0) return null;
   const size = ROW_SIZE[Math.min(art.length, ROW_SIZE.length - 1)];
+  const items = art.map((a): CaptionedArt => (Array.isArray(a) ? { art: a } : a));
   return (
     <div className="mb-8 flex flex-wrap items-end justify-center gap-x-2 gap-y-4 sm:gap-x-4">
-      {art.map((frames, i) => (
-        <StickerArt key={frames[0]} frames={frames} className={size} phase={i / art.length} />
-      ))}
+      {items.map(({ art: frames, name }, i) =>
+        name ? (
+          <div key={frames[0]} className="relative flex min-w-0 flex-col items-center">
+            <StickerArt frames={frames} className={size} phase={i / art.length} />
+            <OsrsCaption className="-mt-4 relative">{name}</OsrsCaption>
+          </div>
+        ) : (
+          <StickerArt key={frames[0]} frames={frames} className={size} phase={i / art.length} />
+        ),
+      )}
     </div>
   );
 }

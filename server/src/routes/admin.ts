@@ -73,6 +73,8 @@ router.patch(
     }
     // Validated and cleaned by the service (label, scope, names).
     if ("exclusivityRules" in body) params.exclusivityRules = body.exclusivityRules as never;
+    // Credits (CONTEXT.md): validated and cleaned by the service.
+    if ("wrappedCredits" in body) params.wrappedCredits = body.wrappedCredits as never;
     for (const key of dateFields) {
       if (key in body) (params as Record<string, unknown>)[key] = body[key] ? new Date(body[key] as string) : null;
     }

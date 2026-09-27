@@ -20,7 +20,7 @@
 import type { CutMode, LeftoverMode, NodeKind, QuestionVisibility, SignupMode, SignupQuestionType } from "./index.ts";
 import type { ExclusivityRule } from "./exclusivity.ts";
 import type { AchievementKey } from "./achievements.ts";
-import type { WrappedArtKeying } from "./wrapped.ts";
+import type { WrappedArtKeying, WrappedCredit } from "./wrapped.ts";
 
 export const BINGO_EXPORT_FORMAT_VERSION = 1;
 
@@ -161,6 +161,8 @@ export interface BingoExportDocument {
     /** Absent in older files: shown (the app's default). */
     showScreenshotsWhenFinished?: boolean;
     publishWrappedOnFinish?: boolean;
+    /** Credits (CONTEXT.md), in order. Absent in older files: none. */
+    wrappedCredits?: WrappedCredit[];
   };
   categories: ExportCategory[];
   tiles: ExportTile[];
