@@ -12,7 +12,7 @@ import { Button, IconButton } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
 import { Disclosure } from "../ui/Disclosure";
 import { Field, Input } from "../ui/Field";
-import { Select } from "../ui/Select";
+import { SearchableSelect } from "../ui/SearchableSelect";
 import { CaptainEmblem } from "../ui/CaptainEmblem";
 import { TrashIcon, XIcon } from "../ui/icons";
 
@@ -233,22 +233,24 @@ export function TeamManager({ slug }: { slug: string }) {
         ) : (
           <div className="space-y-3">
             <Field label="Captain">
-              <Select
+              <SearchableSelect
                 value={selectedCaptainId}
                 onChange={selectCaptain}
-                placeholder="Select a signed-up player…"
-                options={candidates.map((c) => ({ value: c.user.id, label: candidateLabel(c) }))}
+                placeholder="Search signed-up players…"
+                options={candidates.map((c) => ({ id: c.user.id, label: candidateLabel(c) }))}
               />
             </Field>
             <Field label="Co-captain" hint={isDuo ? "Shares the captain's draft and rename powers. Paired captains bring their partner." : "Optional. Shares the captain's draft and rename powers."}>
-              <Select
+              {/* Locked to a paired Captain's partner; otherwise optional, and "None" clears a pick. */}
+              <SearchableSelect
                 value={coCaptainId}
                 onChange={setSelectedCoCaptainId}
-                disabled={!!partner}
+                readOnly={!!partner}
+                placeholder="None — search to add one…"
                 options={
                   partner
-                    ? [{ value: partner.user.id, label: candidateLabel(partner) }]
-                    : [{ value: "", label: "None" }, ...coCaptainOptions.map((c) => ({ value: c.user.id, label: candidateLabel(c) }))]
+                    ? [{ id: partner.user.id, label: candidateLabel(partner) }]
+                    : [{ id: "", label: "None" }, ...coCaptainOptions.map((c) => ({ id: c.user.id, label: candidateLabel(c) }))]
                 }
               />
             </Field>
