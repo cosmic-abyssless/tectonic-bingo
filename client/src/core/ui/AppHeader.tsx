@@ -1,5 +1,6 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useMatch } from "react-router-dom";
+import { RadioButton, RadioField, RadioGroup } from "react-aria-components";
 import { useBingo, useMyBugReports } from "../../api/queries";
 import { useBugReports } from "../../api/adminQueries";
 import { useAuth } from "../../context/AuthContext";
@@ -13,7 +14,7 @@ import { useIsPhone } from "./useMediaQuery";
 import { Button } from "./Button";
 import { PulseDot } from "./Card";
 import { Menu, MenuItem, MenuTrigger } from "./Menu";
-import { ArrowLeftIcon, CheckIcon, MonitorIcon, MoonIcon, PhoneIcon, SunIcon } from "./icons";
+import { ArrowLeftIcon, MonitorIcon, MoonIcon, PhoneIcon, SunIcon } from "./icons";
 import { useOptionalSlot } from "../../themes/context";
 import { avatarUrl, displayName } from "./user";
 
@@ -22,6 +23,45 @@ const COLOR_SCHEME_OPTIONS = [
   { value: "dark", label: "Dark", icon: MoonIcon },
   { value: "system", label: "System", icon: MonitorIcon },
 ] as const;
+
+/**
+ * The Light/Dark/System choice as one inline segmented control (rather than three separate menu rows), wrapped in a
+ * single MenuItem so it reads as one row. It's a horizontal RadioGroup so its own Left/Right navigation doesn't fight
+ * the enclosing Menu's Up/Down navigation. The Menu's own item navigation only ever focuses the row's outer element
+ * (its roving tabindex has no notion of what's inside), so arriving there by ArrowUp/ArrowDown hands real keyboard
+ * focus straight to the selected segment — otherwise Left/Right would land on a plain div with nothing to move
+ * between. A click already focuses a segment directly and never triggers this.
+ */
+function ColorSchemeMenuRow({ value, onChange }: { value: "light" | "dark" | "system"; onChange: (value: "light" | "dark" | "system") => void }) {
+  const groupRef = useRef<HTMLDivElement>(null);
+  return (
+    <MenuItem
+      id="color-scheme"
+      shouldCloseOnSelect={false}
+      onFocus={(e) => {
+        if (e.target !== e.currentTarget) return;
+        groupRef.current?.querySelector<HTMLInputElement>('input[type="radio"]:checked')?.focus();
+      }}
+    >
+      <RadioGroup
+        ref={groupRef}
+        aria-label="Color scheme"
+        orientation="horizontal"
+        value={value}
+        onChange={(v) => onChange(v as typeof value)}
+        className="flex w-full gap-0.5 rounded-md border border-outline bg-surface p-0.5"
+      >
+        {COLOR_SCHEME_OPTIONS.map(({ value: optionValue, label, icon: Icon }) => (
+          <RadioField key={optionValue} value={optionValue} aria-label={label} className="flex-1">
+            <RadioButton className="flex cursor-default items-center justify-center rounded-sm py-1 text-on-surface-muted outline-none transition-opacity hovered:opacity-70 focus-visible:ring-2 focus-visible:ring-accent selected:bg-accent selected:text-on-accent">
+              <Icon size={14} />
+            </RadioButton>
+          </RadioField>
+        ))}
+      </RadioGroup>
+    </MenuItem>
+  );
+}
 
 /**
  * Top bar shared by every page: optional back link, title/subtitle, page
@@ -125,15 +165,7 @@ export function AppHeader({
                 </span>
               </MenuItem>
             )}
-            {COLOR_SCHEME_OPTIONS.map(({ value, label, icon: Icon }) => (
-              <MenuItem key={value} id={`color-scheme-${value}`} className="justify-between" onAction={() => setColorScheme(value)}>
-                <span className="flex items-center gap-2">
-                  <Icon size={14} />
-                  {label}
-                </span>
-                {colorScheme === value && <CheckIcon size={14} />}
-              </MenuItem>
-            ))}
+            <ColorSchemeMenuRow value={colorScheme} onChange={setColorScheme} />
             <MenuItem id="logout" onAction={logout}>
               Log out
             </MenuItem>
