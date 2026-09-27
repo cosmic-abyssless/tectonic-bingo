@@ -65,6 +65,13 @@ export interface PlayerTitleFacts {
    */
   achievements: { earned: number; lastEarnedAt: string | null } | null;
   /**
+   * Where they were drafted and where they finished (Steal, CONTEXT.md). `position` is the number of Players drafted
+   * before them + 1, so both halves of a Duo share their pick's. `rank` is their Points share rank among every drafted
+   * Player in the Bingo (1 + how many scored more), whatever the team filter shows. Null when they weren't drafted
+   * (Captains, or a Bingo with no Draft).
+   */
+  draft: { position: number; rank: number } | null;
+  /**
    * When each Submission count last went up (the Submission's time), for ties: approved and rejected Submissions,
    * ones posted for a teammate, a new distinct item, and any item Claim. Null while it's 0.
    */
@@ -118,7 +125,8 @@ export type TitleId =
   | "specialist"
   | "hoarder"
   | "postman"
-  | "overachiever";
+  | "overachiever"
+  | "overperformer";
 
 /** What a Title is about, for grouping and colour: scoring, luck, grinding, or a mishap. */
 export type TitleGroup = "points" | "luck" | "grind" | "mishaps";
@@ -162,6 +170,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const num = (n: number, digits = 1) => n.toLocaleString("en-US", { maximumFractionDigits: digits });
 const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 const percent = (fraction: number) => `${Math.round(fraction * 100)}%`;
+
+/** 1st, 2nd, 3rd, 11th, 22nd. */
+export function ordinal(n: number): string {
+  const tens = n % 100;
+  const suffix = tens >= 11 && tens <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th");
+  return `${n}${suffix}`;
+}
 
 /** The latest of some ISO times, in ms; null with none. */
 function latest(...times: (string | null | undefined)[]): number | null {
@@ -433,6 +448,22 @@ export const TITLES: TitleDefinition[] = [
     qualifies: (v, f, min) => f.pointsShare >= min && v >= 0.5,
     requirement: (min) => `Half of at least ${num(min, 2)} points share from one tile`,
     format: (v, f) => `${percent(v)} of their points from ${topTile(f)?.name ?? "one tile"}`,
+    reachedAt: (f) => latest(...f.awards.map((a) => a.completedAt)),
+  },
+  {
+    id: "overperformer",
+    name: "Overperformer",
+    flavour: "The captains will be thinking about this one.",
+    explanation: "Beat their draft position by the most: how many places higher they finished in points share, among every drafted player in the bingo, than they were picked. A duo shares its pick.",
+    group: "points",
+    hidden: false,
+    source: "bingo",
+    // Captains and undrafted Players have no position; a Player with no points share hasn't finished anywhere.
+    measure: (f) => (f.draft && f.pointsShare > 0 ? f.draft.position - f.draft.rank : null),
+    minimum: { default: 3, label: "Places beaten", whole: true },
+    qualifies: (v, _f, min) => v >= min,
+    requirement: (min) => `Finish at least ${plural(min, "place")} higher in points share than their draft pick`,
+    format: (_v, f) => `Picked ${ordinal(f.draft!.position)}, finished ${ordinal(f.draft!.rank)}`,
     reachedAt: (f) => latest(...f.awards.map((a) => a.completedAt)),
   },
   {

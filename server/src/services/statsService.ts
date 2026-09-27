@@ -3,7 +3,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { LuckFacts, LuckWeights, PlayerTitleFacts, TileHeatmapCell, TileProgress, TitleAwardFact, TitleSettings, ValuedAs } from "@bingo/shared";
 import { valuedAsOf } from "./gpValueService";
 import * as schema from "../db/schema";
-import { bingoLines, bingos, claims, nodeEdges, nodes, stageTransitions, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
+import { bingoLines, bingos, claims, draftPicks, nodeEdges, nodes, stageTransitions, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
 import { findAncestorIds, getFullGraph } from "./graphService";
 import { applyExclusivity } from "./exclusivityService";
 import { creditAwards, type AwardCredit, type CreditClaim } from "./pointsShare";
@@ -565,6 +565,7 @@ export function getTitleFacts(
   const timelines: Map<string, WomSnapshot[]> = start ? loadTimelines(db, bingoId) : new Map();
   const luck = start ? luckFacts(graph, teamCredits, timelines, teamByUser, start, end, luckWeights) : new Map<string, LuckFacts>();
   const achievementTallies = getAchievementTallies(db, bingo);
+  const draft = draftFacts(db, bingoId, contributions);
 
   return contributions.map((c) => {
     const awards: TitleAwardFact[] = (shares.get(c.userId)?.credits ?? []).map((credit) => {
@@ -593,6 +594,7 @@ export function getTitleFacts(
       wom: start && timeline ? gainsOf(timeline, start, end) : null,
       luck: luck.get(c.userId) ?? null,
       achievements: achievementTallies ? (achievementTallies.get(c.userId) ?? { earned: 0, lastEarnedAt: null }) : null,
+      draft: draft.get(c.userId) ?? null,
       lastAt: {
         approved: approvedAt.get(c.userId)?.toISOString() ?? null,
         rejected: rejectedAt.get(c.userId)?.toISOString() ?? null,
@@ -602,6 +604,29 @@ export function getTitleFacts(
       },
     };
   });
+}
+
+/**
+ * Each drafted Player's draft position and Points share rank (PlayerTitleFacts.draft), for Overperformer. The position
+ * counts Players, not picks: a Duo's pick drafts two, so both halves share it and the next pick is two further on. The
+ * rank is among every drafted Player with a `contributions` entry; one without has no Points share, so leaving them out
+ * changes nobody's rank ahead of theirs.
+ */
+export function draftFacts(db: Db, bingoId: string, contributions: Pick<ContributionCount, "userId" | "pointsShare">[]): Map<string, { position: number; rank: number }> {
+  const picks = db.select({ userId: draftPicks.userId, pickNumber: draftPicks.pickNumber }).from(draftPicks).where(eq(draftPicks.bingoId, bingoId)).all();
+  const pickOf = new Map(picks.map((p) => [p.userId, p.pickNumber]));
+  const drafted = contributions.filter((c) => pickOf.has(c.userId));
+  // Points shares that differ only by floating-point noise (a Duo's halves) are the same rank.
+  const beats = (a: number, b: number) => a - b > 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+  const out = new Map<string, { position: number; rank: number }>();
+  for (const c of drafted) {
+    const pick = pickOf.get(c.userId)!;
+    out.set(c.userId, {
+      position: picks.filter((p) => p.pickNumber < pick).length + 1,
+      rank: drafted.filter((o) => beats(o.pointsShare, c.pointsShare)).length + 1,
+    });
+  }
+  return out;
 }
 
 export interface Stats {
