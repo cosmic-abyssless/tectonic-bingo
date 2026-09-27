@@ -9,6 +9,12 @@ import { generateVariants } from "../services/imageService";
 export const MAX_UPLOAD_MB = 5;
 export const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
+// A stored upload's file name: random, so one file's URL says nothing about any other file's (a timestamp name could be
+// stepped through). Files stored under the older `${Date.now()}-${random}` scheme keep their names.
+export function newUploadName(ext: string): string {
+  return `${crypto.randomUUID()}${ext}`;
+}
+
 export interface ImageUploadOptions {
   // When true, writes `-thumb` and `-full` WebP display variants beside the
   // original (issue #61). The original is always kept for OCR + full-size.
@@ -26,8 +32,7 @@ export function imageUpload(dir?: string, options: ImageUploadOptions = {}) {
     ? multer.diskStorage({
         destination: (_req, _file, cb) => cb(null, dir),
         filename: (_req, file, cb) => {
-          const ext = path.extname(file.originalname).toLowerCase();
-          cb(null, `${Date.now()}-${Math.random().toString(36).substring(2, 11)}${ext}`);
+          cb(null, newUploadName(path.extname(file.originalname).toLowerCase()));
         },
       })
     : multer.memoryStorage();

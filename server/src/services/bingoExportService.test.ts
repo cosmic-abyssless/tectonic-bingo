@@ -547,7 +547,7 @@ describe("importing tile images", () => {
     const imported = await importBingoWithImages(db, doc, { slug: "with-image", createdByUserId: admin.id }, dir);
 
     const tile = getBoardTiles(db, imported.id).find((t) => t.name === "Tile A")!;
-    expect(tile.imageUrl).toMatch(/^\/uploads\/tiles\/\d+-[a-z0-9]+\.png$/);
+    expect(tile.imageUrl).toMatch(/^\/uploads\/tiles\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.png$/);
     expect(tile.imageUrl).not.toBe("/uploads/tiles/tile-a.png");
     const stored = path.join(dir, tile.imageUrl!.replace("/uploads/", ""));
     expect(fs.readFileSync(stored).equals(png)).toBe(true);
