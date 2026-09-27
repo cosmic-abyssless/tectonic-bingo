@@ -44,13 +44,14 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
   // Stages strictly between the current one and the target, in travel order.
   const skipped = confirming ? STAGE_ORDER.slice(Math.min(idx, STAGE_ORDER.indexOf(confirming)) + 1, Math.max(idx, STAGE_ORDER.indexOf(confirming))) : [];
 
-  // Asking to move into the Draft with Avoidable cuts goes through the Cut review first; anything else, straight to
-  // the confirmation. If the plan can't be worked out, the confirmation still opens (the server guards the move).
+  // Asking to move into the Draft with Avoidable cuts, and no review applied since the roster last changed, goes
+  // through the Cut review first; anything else, straight to the confirmation. If the plan can't be worked out, the
+  // confirmation still opens (the server guards the move).
   async function request(toStage: Stage) {
     setError(null);
     if (toStage === "draft" && idx < STAGE_ORDER.indexOf("draft")) {
       const preview = await queryClient.fetchQuery(cutReviewQuery(slug)).catch(() => null);
-      if (preview && preview.avoidableCount > 0) {
+      if (preview && preview.avoidableCount > 0 && !preview.reviewed) {
         setReviewingCuts(true);
         return;
       }

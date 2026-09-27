@@ -121,7 +121,14 @@ export function currentCutReviewFingerprint(db: Db, bingo: Bingo): string {
 export function getCutReviewPreview(db: Db, bingo: Bingo): CutReviewPreview {
   const { input, pool } = loadCutReview(db, bingo);
   const plan = cutPlanner.planCutChanges(input);
-  return { plan, avoidableCount: plan.cutPlayersNow - plan.cutPlayers, unavoidableCount: plan.cutPlayers, pool };
+  const stored = db.select({ cutReviewFingerprint: bingos.cutReviewFingerprint }).from(bingos).where(eq(bingos.id, bingo.id)).get()?.cutReviewFingerprint;
+  return {
+    plan,
+    avoidableCount: plan.cutPlayersNow - plan.cutPlayers,
+    unavoidableCount: plan.cutPlayers,
+    reviewed: !!stored && stored === fingerprintOf(input),
+    pool,
+  };
 }
 
 /** How many players an (admin-edited) change list would leave cut, validated against the current pool. */
@@ -197,8 +204,6 @@ export function applyCutReview(db: Db, bingo: Bingo, changes: AppliedCutChange[]
  */
 export function assertCutReviewSatisfied(db: Db, bingo: Bingo): void {
   const preview = getCutReviewPreview(db, bingo);
-  if (preview.avoidableCount <= 0) return;
-  const fresh = db.select({ cutReviewFingerprint: bingos.cutReviewFingerprint }).from(bingos).where(eq(bingos.id, bingo.id)).get();
-  if (fresh?.cutReviewFingerprint && fresh.cutReviewFingerprint === currentCutReviewFingerprint(db, bingo)) return;
+  if (preview.avoidableCount <= 0 || preview.reviewed) return;
   throw new ServiceError(400, "Some cuts can be avoided. Review cuts before moving into the Draft.", "cut_review_required");
 }

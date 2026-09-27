@@ -985,6 +985,8 @@ export interface CutReviewPreview {
   plan: CutReviewPlan;
   avoidableCount: number; // plan.cutPlayersNow - plan.cutPlayers
   unavoidableCount: number; // plan.cutPlayers
+  // A review has been applied since the roster last changed, so the move into the Draft needn't go through another.
+  reviewed: boolean;
   // Who the plan's ids refer to, and what the Cut review modal lets the admin pick from.
   pool: CutReviewPool;
 }

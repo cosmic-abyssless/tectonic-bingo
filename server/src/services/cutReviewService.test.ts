@@ -201,7 +201,9 @@ describe("assertCutReviewSatisfied", () => {
 
   it("allows once a review is applied, even with every change dropped", () => {
     const { bingo, admin } = seedAvoidableScenario();
+    expect(getCutReviewPreview(db, bingo).reviewed).toBe(false);
     applyCutReview(db, bingo, [], admin.id);
+    expect(getCutReviewPreview(db, bingo).reviewed).toBe(true);
     expect(() => assertCutReviewSatisfied(db, bingo)).not.toThrow();
   });
 
@@ -209,6 +211,7 @@ describe("assertCutReviewSatisfied", () => {
     const { bingo, admin } = seedAvoidableScenario();
     applyCutReview(db, bingo, [], admin.id);
     signUp(bingo.id, "e", new Date("2026-02-01T00:00:00Z"));
+    expect(getCutReviewPreview(db, bingo).reviewed).toBe(false);
     expect(() => assertCutReviewSatisfied(db, bingo)).toThrow(/cuts can be avoided/i);
   });
 
