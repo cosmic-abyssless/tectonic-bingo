@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { eq } from "drizzle-orm";
-import { significanceScore, significanceTier, type RewindCompletion, type RewindResponse } from "@bingo/shared";
+import { dominantSignal, significanceScore, significanceTier, type RewindCompletion, type RewindResponse } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingos, claims, stageTransitions, submissions, teamNodeState, teamPointAdjustments } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
@@ -161,6 +161,25 @@ describe("significance", () => {
     expect(significanceTier(significanceScore({ gpValue: 10_000_000 }))).toBe("notable");
     expect(significanceTier(significanceScore({ completed: { ...NOTHING, lines: ["Row 1"] } }))).toBe("huge");
     expect(significanceTier(significanceScore({ gpValue: 1_500_000_000 }))).toBe("huge");
+  });
+
+  it("names the signal that counted most as the dominant one", () => {
+    expect(dominantSignal({ luckOneIn: 5_000, gpValue: 200_000, reactions: 1 })).toBe("luck");
+    expect(dominantSignal({ luckOneIn: 20, gpValue: 80_000_000 })).toBe("gp");
+    expect(dominantSignal({ gpValue: 1_000_000, reactions: 7 })).toBe("reactions");
+    expect(dominantSignal({ gpValue: 1_000_000, completed: { ...NOTHING, lines: ["Row 1"] } })).toBe("completed");
+    // Whatever mix it's in, the dominant signal is the one that scores highest on its own.
+    const signals = { luckOneIn: 300, gpValue: 2_000_000, reactions: 3, completed: { ...NOTHING, tiles: ["ZULRAH"] } };
+    const keyOf = { luck: "luckOneIn", gp: "gpValue", reactions: "reactions", completed: "completed" } as const;
+    const key = keyOf[dominantSignal(signals)!];
+    expect(significanceScore({ [key]: signals[key] })).toBe(Math.max(...Object.entries(signals).map(([k, v]) => significanceScore({ [k]: v }))));
+  });
+
+  it("never picks a missing signal as the dominant one", () => {
+    // A pet with no GP value: GP value can't win, however weak the rest is.
+    expect(dominantSignal({ luckOneIn: 11 })).toBe("luck");
+    expect(dominantSignal({ reactions: 1, gpValue: undefined })).toBe("reactions");
+    expect(dominantSignal({})).toBeNull();
   });
 });
 
