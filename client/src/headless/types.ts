@@ -3,7 +3,7 @@
 // never a raw Tile, TeamNodeState[], SubmissionDetails[], or LeafClaimMaps.
 // See docs/headless-theming-plan.md §2.
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
-import type { AuditCategory, AuditTone, DraftState, NodeKind, NodeStatus, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus, WrappedArtFrames } from "@bingo/shared";
+import type { AuditCategory, AuditTone, ContributionCount, DraftState, NodeKind, NodeStatus, PickedTitle, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus, WrappedArtFrames } from "@bingo/shared";
 
 export interface ActivityEntryModel {
   id: number;
@@ -528,6 +528,22 @@ export interface RewindPopupModel {
   close(): void;
 }
 
+/**
+ * The closing card at the very end of Rewind: the Bingo's final Titles, picked as the Stats page picks them (its
+ * frozen Title settings, its visibility rules) from the viewed Team's Players, or every Player's in the All Teams view.
+ */
+export interface RewindClosingModel {
+  /** Every Title the Stats page would list for the same Team filter, holders and the value behind each included. */
+  titles: PickedTitle[];
+  /** The Players the Titles are picked from, for their names and avatars. */
+  contributions: ContributionCount[];
+  /** When Wise Old Man was last read, for the WOM-sourced Titles. */
+  womReadAt: string | null;
+  /** Whose Titles these are: the viewed Team, or null for the whole Bingo (the All Teams view). */
+  team: { name: string; color: string | null } | null;
+  close(): void;
+}
+
 /** One Tile in the All Teams view: every Team's progress on it at the moment being viewed. */
 export interface RewindTileTeamsModel {
   tileId: string;
@@ -565,6 +581,8 @@ export interface RewindModel {
   highlightedTileId: string | null;
   /** The popup to show: during Play and when stepping, for notable-or-bigger Submissions only. */
   popup: RewindPopupModel | null;
+  /** The closing card: shown once the moment reaches the Bingo's end (Play running out, a scrub or a step there). */
+  closing: RewindClosingModel | null;
   /**
    * A Tile's details at the moment being viewed (its Submissions left out: the timeline has those). In the All Teams
    * view `tile` stays null and `teams` has every Team's progress on the opened Tile instead.

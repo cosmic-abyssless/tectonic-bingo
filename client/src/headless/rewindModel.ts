@@ -150,6 +150,20 @@ export function teamPointsAt(team: RewindTeam | undefined, at: number): number {
 }
 
 /** Notable or bigger: what the "notable" steps stop on. */
+/**
+ * The scrubber moves in whole seconds from the start, so its far end can stop just short of the Bingo's end. A seek
+ * this close to the end counts as the end (where the closing card shows).
+ */
+export const END_SNAP_MS = 1_000;
+
+/**
+ * The rows Rewind's closing card picks Titles from, the way the Stats page's Team filter would with that one Team
+ * picked: the viewed Team's (and rows with no Team), or every row in the All Teams view (teamId null).
+ */
+export function closingRows<T extends { teamId: string | null }>(rows: T[], teamId: string | null): T[] {
+  return teamId === null ? rows : rows.filter((r) => r.teamId === null || r.teamId === teamId);
+}
+
 export const isNotable = (tier: SignificanceTier) => tier !== "minor";
 
 /**

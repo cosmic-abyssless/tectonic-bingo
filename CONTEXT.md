@@ -313,6 +313,7 @@ Playback of a Finished Bingo on its own Board: a timeline of its Submissions tha
 - **Clock:** Submission time (when the drop was posted), not approval time, so a batch of approvals doesn't clump drops together. Its scoreboard can therefore differ mid-way from the Stats points chart, which goes by approval; the end totals agree.
 - **Rules:** Only approved Submissions move the Board and the scoreboard. Rejected ones can be shown, off by default, stamped "Rejected", and never change anything. Point Adjustments count from when they were made.
 - **All Teams:** A Rewind view of every Team at once: the shared Board, each Tile marked with every Team that has completed it by then, and every Team's Submissions on the timeline (coloured by Team) and in the popups.
+- **Closing card:** At the very end (Play running out, or a scrub or step there), the final Titles with their holders, as the Stats page shows them for the viewed Team, or for the whole Bingo in the All Teams view. Titles aren't replayed along the way.
 - **Not:** The Stats timeline, which lists scoring events by approval time.
 
 ### Significance

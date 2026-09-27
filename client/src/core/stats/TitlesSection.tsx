@@ -13,13 +13,24 @@ import { TitleGroupBox } from "./TitleChrome";
  * holds it, so a group can be empty and is then left out. Within a group, held visible Titles come first, then unheld
  * ones, then the hidden ones, each in pickTitles' priority order.
  */
-export function TitlesSection({ picked, contributions, womReadAt }: { picked: PickedTitle[]; contributions: ContributionCount[]; womReadAt: string | null }) {
+export function TitlesSection({
+  picked,
+  contributions,
+  womReadAt,
+  note = true,
+}: {
+  picked: PickedTitle[];
+  contributions: ContributionCount[];
+  womReadAt: string | null;
+  /** The line saying how Titles are picked (off where the Titles are the final ones, as on Rewind's closing card). */
+  note?: boolean;
+}) {
   const userById = new Map(contributions.map((c) => [c.userId, c.user]));
   const order = ({ title, holders }: PickedTitle) => (title.hidden ? 2 : holders.length ? 0 : 1);
   const groups = TITLE_GROUPS.map((group) => ({ group, titles: picked.filter((p) => p.title.group === group).sort((a, b) => order(a) - order(b)) })).filter((g) => g.titles.length > 0);
   return (
     <div className="space-y-3">
-      <p className="text-xs text-on-surface-subtle">Picked from the players shown, and updated as submissions are approved. Some titles are hidden until someone earns one.</p>
+      {note && <p className="text-xs text-on-surface-subtle">Picked from the players shown, and updated as submissions are approved. Some titles are hidden until someone earns one.</p>}
       {groups.map(({ group, titles }) => (
           <TitleGroupBox key={group} group={group}>
             <ul className="divide-y divide-[var(--title-rule)]">
