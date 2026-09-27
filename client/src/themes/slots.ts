@@ -148,6 +148,7 @@ export interface ThemeSlots {
     onSelectionChange: (keys: string[]) => void;
     selectionMode: "multiple" | "single";
     active?: boolean;
+    bulk?: "toggleAll" | "clear";
     children: ReactNode;
   }>;
 

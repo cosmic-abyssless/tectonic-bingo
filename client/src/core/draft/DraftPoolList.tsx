@@ -53,7 +53,8 @@ export function DraftPoolList({
   takes: Takes;
 }) {
   const [search, setSearch] = useTableSearch();
-  const [excludedRegions, setExcludedRegions] = useState<string[]>([]);
+  // The regions ticked in the Timezone filter; none ticked is Any.
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const statsRefreshing = useStatsRefreshingSignupIds();
   const entries = useMemo(() => pool.flatMap((u) => u.entries), [pool]);
   const showAnswers = entries.some((e) => e.answers !== null);
@@ -62,8 +63,8 @@ export function DraftPoolList({
   const [sortKey, setSortKey] = useState(() => (ratings ? "rating" : "caCurrent"));
   const sort = sorts.find((s) => s.key === sortKey) ?? sorts[0]!;
 
-  const entryMatches = (e: DraftPoolEntry) => !excludedRegions.includes(regionOf(e.signup.timezone)) && matchesSearch(poolSearchValues(e, questions), search);
-  const filtering = !!search || excludedRegions.length > 0;
+  const entryMatches = (e: DraftPoolEntry) => (selectedRegions.length === 0 || selectedRegions.includes(regionOf(e.signup.timezone))) && matchesSearch(poolSearchValues(e, questions), search);
+  const filtering = !!search || selectedRegions.length > 0;
   // A duo pair stays if either half matches; the half that doesn't is dimmed, as in the table.
   const units = useMemo(() => {
     const shown = pool.filter((u) => u.entries.some(entryMatches));
@@ -72,8 +73,8 @@ export function DraftPoolList({
       const order = compareSortValues(unitSortValue(a, sort.key, r, sort.descending), unitSortValue(b, sort.key, r, sort.descending));
       return sort.descending ? -order : order;
     });
-    // entryMatches reads search/excludedRegions/questions, listed instead.
-  }, [pool, search, excludedRegions, questions, ratings, sort.key, sort.descending]);
+    // entryMatches reads search/selectedRegions/questions, listed instead.
+  }, [pool, search, selectedRegions, questions, ratings, sort.key, sort.descending]);
   const matchingCount = entries.filter(entryMatches).length;
 
   if (pool.length === 0) return <p className="text-sm text-on-surface-subtle">No one left to draft.</p>;
@@ -89,8 +90,8 @@ export function DraftPoolList({
           <MultiSelect
             label="Timezone"
             options={REGION_OPTIONS.map((o) => ({ ...o, count: entries.filter((e) => regionOf(e.signup.timezone) === o.key && matchesSearch(poolSearchValues(e, questions), search)).length }))}
-            selected={REGION_OPTIONS.map((o) => o.key).filter((k) => !excludedRegions.includes(k))}
-            onChange={(visible) => setExcludedRegions(REGION_OPTIONS.map((o) => o.key).filter((k) => !visible.includes(k)))}
+            selected={selectedRegions}
+            onChange={setSelectedRegions}
           />
         )}
       </div>

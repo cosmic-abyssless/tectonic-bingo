@@ -6,7 +6,10 @@ export interface MultiSelectOption {
   count?: number;
 }
 
-/** Popover checklist filter — replaces a chip row once there are too many options to scan at a glance. */
+/**
+ * Popover checklist filter — replaces a chip row once there are too many options to scan at a glance. Nothing ticked
+ * means Any (no filtering); ticking options narrows to just those, and Clear goes back to Any.
+ */
 export function MultiSelect({
   label,
   options,
@@ -19,17 +22,12 @@ export function MultiSelect({
   onChange: (keys: string[]) => void;
 }) {
   const { Picker } = usePickerParts();
+  const picked = selected.filter((key) => options.some((o) => o.key === key));
   const summary =
-    selected.length === options.length
-      ? "All"
-      : selected.length === 0
-        ? "None"
-        : selected.length === 1
-          ? (options.find((o) => o.key === selected[0])?.label ?? selected[0])
-          : `${selected.length} selected`;
+    picked.length === 0 ? "Any" : picked.length === 1 ? (options.find((o) => o.key === picked[0])?.label ?? picked[0]) : `${picked.length} selected`;
 
   return (
-    <Picker options={options} selectedKeys={new Set(selected)} selectionMode="multiple" onSelectionChange={onChange}>
+    <Picker options={options} selectedKeys={new Set(picked)} selectionMode="multiple" bulk="clear" active={picked.length > 0} onSelectionChange={onChange}>
       {label}: <span className="text-on-surface-subtle">{summary}</span>
     </Picker>
   );

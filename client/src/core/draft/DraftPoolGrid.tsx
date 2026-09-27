@@ -409,7 +409,8 @@ export function DraftPoolGrid({
   });
   const [search, setSearch] = useTableSearch();
   // Unticked regions (MultiSelect), so every region shows by default.
-  const [excludedRegions, setExcludedRegions] = useState<string[]>([]);
+  // The regions ticked in the Timezone filter; none ticked is Any.
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   // The wrapper that actually changes width is DraftRoom's — this just renders the switch for it in the toolbar.
   const [poolWidth, setPoolWidth] = usePreference("draftPoolWidth");
   const statsRefreshing = useStatsRefreshingSignupIds();
@@ -423,10 +424,10 @@ export function DraftPoolGrid({
 
   const entries = useMemo(() => pool.flatMap((u) => u.entries), [pool]);
   const entryMatches = useCallback(
-    (e: DraftPoolEntry) => !excludedRegions.includes(regionOf(e.signup.timezone)) && matchesSearch(poolSearchValues(e, questions), search),
-    [questions, search, excludedRegions],
+    (e: DraftPoolEntry) => (selectedRegions.length === 0 || selectedRegions.includes(regionOf(e.signup.timezone))) && matchesSearch(poolSearchValues(e, questions), search),
+    [questions, search, selectedRegions],
   );
-  const filtering = !!search || excludedRegions.length > 0;
+  const filtering = !!search || selectedRegions.length > 0;
   const matchingEntries = useMemo(() => entries.filter(entryMatches), [entries, entryMatches]);
   // Answers are only sent to mods/captains — everyone else's pool entries have answers: null, so skip those
   // columns entirely rather than render a table full of "—". Same reasoning for WOM/CA (unused integration) and
@@ -784,8 +785,8 @@ export function DraftPoolGrid({
           <MultiSelect
             label="Timezone"
             options={REGION_OPTIONS.map((o) => ({ ...o, count: entries.filter((e) => regionOf(e.signup.timezone) === o.key && matchesSearch(poolSearchValues(e, questions), search)).length }))}
-            selected={REGION_OPTIONS.map((o) => o.key).filter((k) => !excludedRegions.includes(k))}
-            onChange={(visible) => setExcludedRegions(REGION_OPTIONS.map((o) => o.key).filter((k) => !visible.includes(k)))}
+            selected={selectedRegions}
+            onChange={setSelectedRegions}
           />
         )}
         <TableSearchInput value={search} onChange={setSearch} matchCount={matchingEntries.length} totalCount={entries.length} />

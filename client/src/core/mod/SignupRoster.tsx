@@ -113,14 +113,14 @@ function buildCsv(roster: RosterEntry[], questionPrompts: { id: string; prompt: 
   return toCsv([headers, ...rows]);
 }
 
-// The filters above the grid, each a MultiSelect checklist. What's stored is what's *un*ticked (like the audit log),
-// so a new option shows by default. The one default that isn't "everything": withdrawn signups start hidden.
+// The filters above the grid, each a MultiSelect checklist of what's ticked (like the audit log): nothing ticked is
+// Any. The one that doesn't start on Any: Status starts on Active, so withdrawn signups start hidden.
 type FilterKey = "status" | "buyin" | "pair" | "region" | "draft";
-type Excluded = Record<FilterKey, string[]>;
-const DEFAULT_EXCLUDED: Excluded = { status: ["withdrawn"], buyin: [], pair: [], region: [], draft: [] };
+type Selected = Record<FilterKey, string[]>;
+const DEFAULT_SELECTED: Selected = { status: ["active"], buyin: [], pair: [], region: [], draft: [] };
 
-function isDefaultFilters(excluded: Excluded): boolean {
-  return (Object.keys(DEFAULT_EXCLUDED) as FilterKey[]).every((key) => [...excluded[key]].sort().join() === [...DEFAULT_EXCLUDED[key]].sort().join());
+function isDefaultFilters(selected: Selected): boolean {
+  return (Object.keys(DEFAULT_SELECTED) as FilterKey[]).every((key) => [...selected[key]].sort().join() === [...DEFAULT_SELECTED[key]].sort().join());
 }
 
 // ~10 rows plus the header before the min-height floor kicks in. A row runs ~2.25rem (py-2 + text-sm) up to ~3rem
@@ -168,8 +168,8 @@ function filterValue(entry: RosterEntry, key: FilterKey, pending: ReadonlySet<st
 }
 
 /** Whether `entry` passes every filter (but `skip`, for counting that filter's own options). */
-function matchesFilters(entry: RosterEntry, excluded: Excluded, pending: ReadonlySet<string>, skip?: FilterKey): boolean {
-  return (Object.keys(excluded) as FilterKey[]).every((key) => key === skip || !excluded[key].includes(filterValue(entry, key, pending)));
+function matchesFilters(entry: RosterEntry, selected: Selected, pending: ReadonlySet<string>, skip?: FilterKey): boolean {
+  return (Object.keys(selected) as FilterKey[]).every((key) => key === skip || selected[key].length === 0 || selected[key].includes(filterValue(entry, key, pending)));
 }
 
 export function SignupRoster({ slug }: { slug: string }) {
@@ -196,7 +196,7 @@ export function SignupRoster({ slug }: { slug: string }) {
   // Clan standing column only when tectonic-api knows at least one player.
   const showTier = roster.some((r) => r.tectonicProfile);
   const [copied, setCopied] = useState(false);
-  const [excluded, setExcluded] = useState<Excluded>(DEFAULT_EXCLUDED);
+  const [selected, setSelected] = useState<Selected>(DEFAULT_SELECTED);
   const [search, setSearch] = useTableSearch();
   // AG Grid (docs/ag-grid-tables-plan.md) replaces the hand-rolled <table> —
   // sticky header, striping, virtualisation and column sort/resize/reorder
@@ -241,19 +241,19 @@ export function SignupRoster({ slug }: { slug: string }) {
         label={label}
         options={options.map((o) => ({
           ...o,
-          count: roster.filter((r) => filterValue(r, key, pendingPairIds) === o.key && matchesFilters(r, excluded, pendingPairIds, key)).length,
+          count: roster.filter((r) => filterValue(r, key, pendingPairIds) === o.key && matchesFilters(r, selected, pendingPairIds, key)).length,
         }))}
-        selected={options.map((o) => o.key).filter((k) => !excluded[key].includes(k))}
-        onChange={(visible) => setExcluded((e) => ({ ...e, [key]: options.map((o) => o.key).filter((k) => !visible.includes(k)) }))}
+        selected={selected[key]}
+        onChange={(keys) => setSelected((s) => ({ ...s, [key]: keys }))}
       />
     );
   };
   // The dropdowns, as the grid's external filter (docs/ag-grid-tables-plan.md phase 2) — search itself is the grid's
   // own quickFilterText, bound directly to `search` below.
-  const doesRowPassFilters = useCallback((row: RosterRow) => matchesFilters(row, excluded, pendingPairIds), [excluded, pendingPairIds]);
+  const doesRowPassFilters = useCallback((row: RosterRow) => matchesFilters(row, selected, pendingPairIds), [selected, pendingPairIds]);
   // Independent of the grid (for the search box's "of N" total) — cheap, and avoids a render round-trip through
   // the grid just to know how many rows the filters alone leave.
-  const totalCount = roster.filter((r) => matchesFilters(r, excluded, pendingPairIds)).length;
+  const totalCount = roster.filter((r) => matchesFilters(r, selected, pendingPairIds)).length;
   const rows = useMemo<RosterRow[]>(() => roster.map((entry, i) => ({ ...entry, order: i + 1 })), [roster]);
 
   // O(n), built once per roster rather than once per row — see buildPartnerRsnMap's own comment.
@@ -385,7 +385,7 @@ export function SignupRoster({ slug }: { slug: string }) {
             {/* Sets the Draft filter to just "Will be cut" (the other filters stay as they are). */}
             <button
               type="button"
-              onClick={() => setExcluded((e) => ({ ...e, draft: ["in"] }))}
+              onClick={() => setSelected((s) => ({ ...s, draft: ["cut"] }))}
               className="cursor-pointer font-medium text-on-surface underline underline-offset-2 hover:opacity-70"
             >
               Show me
@@ -415,8 +415,8 @@ export function SignupRoster({ slug }: { slug: string }) {
               {isDuo && filterSelect("pair", "Pairing")}
               {filterSelect("region", "Timezone")}
               {cutsApply && filterSelect("draft", "Draft")}
-              {!isDefaultFilters(excluded) && (
-                <Button size="sm" variant="ghost" onPress={() => setExcluded(DEFAULT_EXCLUDED)}>
+              {!isDefaultFilters(selected) && (
+                <Button size="sm" variant="ghost" onPress={() => setSelected(DEFAULT_SELECTED)}>
                   Reset filters
                 </Button>
               )}

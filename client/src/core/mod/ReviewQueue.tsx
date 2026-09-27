@@ -11,7 +11,6 @@ import { Field, Input, Textarea } from "../ui/Field";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { MultiSelect } from "../ui/MultiSelect";
-import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { inclusionFilter } from "../ui/inclusionFilter";
 import { ScreenshotThumb } from "../submissions/ScreenshotThumb";
 import { claimsGpBreakdown, claimsGpValue } from "../submissions/claimsSummary";
@@ -29,10 +28,10 @@ function KeyCap({ children }: { children: React.ReactNode }) {
 }
 
 // Both filters are checklists now (issue #121) — status used to be buttons, but "commonly-used-view" only really
-// meant Pending, which the default (excludedStatuses below) still lands on directly. Team was one button per
-// team, unbounded. inclusionFilter/applyColumnVisibility are AuditLog.tsx's own pattern for this same shape of
-// checklist filter (everything checked = "All", stored as what's excluded rather than what's checked so a newly
-// appearing team defaults to included) — reused here rather than reinvented.
+// meant Pending, which the default (selectedStatuses below) still lands on directly. Team was one button per
+// team, unbounded. inclusionFilter is AuditLog.tsx's own pattern for this same shape of checklist filter (nothing
+// ticked = Any, so a newly appearing team is included until something's picked) — reused here rather than
+// reinvented.
 const STATUS_OPTIONS: { key: SubmissionStatus; label: string }[] = [
   { key: "pending", label: "Pending" },
   { key: "approved", label: "Approved" },
@@ -92,11 +91,10 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const { data: shell } = useBingo(slug);
   const submissions = data?.submissions ?? [];
 
-  // Excluded, not checked — a newly-seen team (or, in principle, a new status) then defaults to included rather
-  // than needing to be explicitly opted into. Approved/rejected start excluded so the view still lands on
-  // "Pending only" by default, same as before.
-  const [excludedStatuses, setExcludedStatuses] = useState<Set<string>>(() => new Set(["approved", "rejected"]));
-  const [excludedTeams, setExcludedTeams] = useState<Set<string>>(() => new Set());
+  // Nothing ticked is Any. Status starts on Pending so the view still lands on "Pending only" by default, same as
+  // before; Team starts on Any.
+  const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(() => new Set(["pending"]));
+  const [selectedTeams, setSelectedTeams] = useState<Set<string>>(() => new Set());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -124,15 +122,14 @@ export function ReviewQueue({ slug }: { slug: string }) {
     approved: submissions.filter((s) => s.submission.status === "approved").length,
     rejected: submissions.filter((s) => s.submission.status === "rejected").length,
   };
-  const statuses = inclusionFilter(excludedStatuses, STATUS_OPTIONS);
-  const teams = inclusionFilter(excludedTeams, teamOptions);
-  const blocked = statuses.none || teams.none;
+  const statuses = inclusionFilter(selectedStatuses, STATUS_OPTIONS);
+  const teams = inclusionFilter(selectedTeams, teamOptions);
   const byStatus = statuses.query ? submissions.filter((s) => statuses.query!.includes(s.submission.status)) : submissions;
   const byTeam = teams.query ? byStatus.filter((s) => teams.query!.includes(s.team.name)) : byStatus;
   // "Pending only" (the default) reads newest-first; any other mix of statuses reads however the server ordered
   // them, same as before.
   const onlyPending = statuses.checked.length === 1 && statuses.checked[0] === "pending";
-  const visible = blocked ? [] : onlyPending ? [...byTeam].reverse() : byTeam;
+  const visible = onlyPending ? [...byTeam].reverse() : byTeam;
 
   async function submitReview(row: ModSubmissionRow, action: "approve" | "reject") {
     setError(null);
@@ -233,14 +230,14 @@ export function ReviewQueue({ slug }: { slug: string }) {
             label="Status"
             options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.key] }))}
             selected={statuses.checked}
-            onChange={(visibleKeys) => setExcludedStatuses(applyColumnVisibility(excludedStatuses, STATUS_OPTIONS.map((o) => o.key), visibleKeys))}
+            onChange={(visibleKeys) => setSelectedStatuses(new Set(visibleKeys))}
           />
           {allTeams.length > 0 && (
             <MultiSelect
               label="Team"
               options={teamOptions}
               selected={teams.checked}
-              onChange={(visibleKeys) => setExcludedTeams(applyColumnVisibility(excludedTeams, teamOptions.map((t) => t.key), visibleKeys))}
+              onChange={(visibleKeys) => setSelectedTeams(new Set(visibleKeys))}
             />
           )}
         </div>
@@ -263,7 +260,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
         <p className="py-20 text-center text-sm text-on-surface-muted">Loading…</p>
       ) : visible.length === 0 ? (
         <EmptyState icon={<CheckIcon />} title="Nothing to review">
-          {blocked ? "No statuses or teams are checked — nothing can match." : onlyPending ? "New submissions show up here as they come in." : "No submissions match this filter."}
+          {onlyPending ? "New submissions show up here as they come in." : "No submissions match this filter."}
         </EmptyState>
       ) : (
         <div className="space-y-2">

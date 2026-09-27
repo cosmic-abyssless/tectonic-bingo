@@ -1,7 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { titlesByHolder } from "@bingo/shared";
 import { useBingo, useBoard, useStats } from "../../api/queries";
-import { applyColumnVisibility } from "../ui/hiddenColumns";
 import { inclusionFilter } from "../ui/inclusionFilter";
 import { MultiSelect } from "../ui/MultiSelect";
 import { BetaTag } from "../ui/BetaTag";
@@ -32,7 +31,7 @@ export function StatsView({ slug }: { slug: string }) {
   const { data: shell } = useBingo(slug);
   const { data: stats, error } = useStats(slug);
   const { data: boardData } = useBoard(slug);
-  const [excludedTeams, setExcludedTeams] = useState<Set<string>>(() => new Set());
+  const [selectedTeams, setSelectedTeams] = useState<Set<string>>(() => new Set());
 
   // While the bingo is live the server only returns the viewer's own team, so the team list is whatever
   // actually has rows. The team filter then narrows every panel; it only shows when there's a choice to make.
@@ -42,11 +41,12 @@ export function StatsView({ slug }: { slug: string }) {
     return shell.teams.filter((t) => ids.has(t.id));
   }, [shell, stats]);
   const teamOptions = useMemo(() => visibleTeams.map((t) => ({ key: t.id, label: t.name })), [visibleTeams]);
-  const teamFilter = inclusionFilter(excludedTeams, teamOptions);
+  const teamFilter = inclusionFilter(selectedTeams, teamOptions);
 
   const filtered = useMemo(() => {
     if (!stats) return null;
-    const keep = new Set(visibleTeams.filter((t) => !excludedTeams.has(t.id)).map((t) => t.id));
+    const pick = inclusionFilter(selectedTeams, visibleTeams.map((t) => ({ key: t.id })));
+    const keep = new Set(visibleTeams.filter((t) => pick.matches(t.id)).map((t) => t.id));
     // Events with no team (the bingo going live or ending) belong to everyone, so they always stay.
     const ours = <T extends { teamId: string | null }>(rows: T[]) => rows.filter((r) => r.teamId === null || keep.has(r.teamId));
     return {
@@ -59,7 +59,7 @@ export function StatsView({ slug }: { slug: string }) {
       drops: ours(stats.drops),
       titleFacts: ours(stats.titleFacts),
     };
-  }, [stats, visibleTeams, excludedTeams]);
+  }, [stats, visibleTeams, selectedTeams]);
 
   // Titles go to the best among the Players shown: a Team's own Carry with one Team selected, the Bingo's otherwise.
   const titles = useMemo(() => (stats && filtered ? pickStatsTitles(stats, filtered.titleFacts) : []), [stats, filtered]);
@@ -75,7 +75,7 @@ export function StatsView({ slug }: { slug: string }) {
           label="Teams"
           options={teamOptions}
           selected={teamFilter.checked}
-          onChange={(visible) => setExcludedTeams(applyColumnVisibility(excludedTeams, teamOptions.map((t) => t.key), visible))}
+          onChange={(visible) => setSelectedTeams(new Set(visible))}
         />
       )}
 
