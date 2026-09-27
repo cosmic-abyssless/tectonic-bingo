@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode, RewindResponse, RewindSubmission, SignificanceTier, Tile } from "@bingo/shared";
-import { adjustmentsAt, boardStateAt, countUpTo, formatOneIn, playbackHolds, PLAYBACK, PLAYBACK_SPEEDS, playsAt, prepareRewind, SKIP_MINOR_FROM_SPEED, standoutOf, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems } from "./rewindModel";
+import { adjustmentsAt, boardStateAt, closingRows, countUpTo, formatOneIn, playbackHolds, PLAYBACK, PLAYBACK_SPEEDS, playsAt, prepareRewind, SKIP_MINOR_FROM_SPEED, standoutOf, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems } from "./rewindModel";
 import { buildTileModelsStatic } from "./boardModel";
 
 const MIN = 60_000;
@@ -236,6 +236,22 @@ describe("formatOneIn", () => {
   it("reads as 1 in N, rounded", () => {
     expect(formatOneIn(7.4)).toBe("1 in 7");
     expect(formatOneIn(1234)).toBe(`1 in ${(1230).toLocaleString()}`);
+  });
+});
+
+describe("closingRows", () => {
+  const rows = [
+    { id: "a", teamId: "t1" },
+    { id: "b", teamId: "t2" },
+    { id: "c", teamId: null },
+  ];
+
+  it("keeps the viewed Team's rows and the ones with no Team, like the Stats page's filter with that Team picked", () => {
+    expect(closingRows(rows, "t1").map((r) => r.id)).toEqual(["a", "c"]);
+  });
+
+  it("keeps every row in the All Teams view", () => {
+    expect(closingRows(rows, null).map((r) => r.id)).toEqual(["a", "b", "c"]);
   });
 });
 

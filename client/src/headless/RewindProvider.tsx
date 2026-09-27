@@ -1,16 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { BoardLine, RewindSubmission, TileInterest } from "@bingo/shared";
-import { fullBoard, useBoard, useRewind } from "../api/queries";
+import { fullBoard, useBoard, useRewind, useStats } from "../api/queries";
 import { thumbUrl } from "../api/imageVariants";
 import { useAuth } from "../context/AuthContext";
 import { NO_LOCKS } from "../core/board/exclusivity";
+import { pickStatsTitles } from "../core/stats/titles";
 import { sinceStart } from "../core/stats/timeFormat";
 import { formatGp } from "../core/ui/gp";
 import { displayName } from "../core/ui/user";
 import { BoardModelProvider, BoardProvider, useBoardModel } from "./BoardProvider";
 import { useBingoPage, useBingoPageRaw } from "./BingoPageProvider";
-import { adjustmentsAt, ALL_TEAMS, layoutOnly, boardStateAt, countUpTo, formatOneIn, isNotable, standoutOf, playbackHolds, PLAYBACK, PLAYBACK_SPEEDS, playsAt, prepareRewind, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems, type RewindItem } from "./rewindModel";
+import { adjustmentsAt, ALL_TEAMS, closingRows, END_SNAP_MS, layoutOnly, boardStateAt, countUpTo, formatOneIn, isNotable, standoutOf, playbackHolds, PLAYBACK, PLAYBACK_SPEEDS, playsAt, prepareRewind, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems, type RewindItem } from "./rewindModel";
 import { readRewindSpeed, writeRewindSpeed } from "./rewindSpeedStore";
 import type { RewindModel, RewindSubmissionModel, RewindTileTeamsModel, TeamModel } from "./types";
 
@@ -78,6 +79,8 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
   const { data: boardData } = useBoard(slug);
   const { data, error, isLoading } = useRewind(slug, page.bingo.stage === "complete");
   const prepared = useMemo(() => (data ? prepareRewind(data) : null), [data]);
+  // The Stats page's own data, for the closing card's Titles.
+  const { data: stats } = useStats(slug, page.bingo.stage === "complete");
 
   const [atState, setAtState] = useState<number | null>(null);
   const [teamState, setTeamState] = useState<string | null>(null);
@@ -87,6 +90,7 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
   const [speed, setSpeed] = useState(readRewindSpeed);
   const [showRejected, setShowRejected] = useState(false);
   const [openTileId, setOpenTileId] = useState<string | null>(null);
+  const [closingDismissed, setClosingDismissed] = useState(false);
 
   const start = prepared?.start ?? 0;
   const end = prepared?.end ?? 0;
@@ -100,6 +104,16 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
   const allTeams = viewId === ALL_TEAMS;
   const teamId = allTeams ? null : viewId;
   const teamModel = page.teams.find((t) => t.id === teamId) ?? null;
+
+  // The closing card is up whenever the moment is the end; closing it only lasts until the moment leaves the end.
+  const atEnd = prepared !== null && at >= end;
+  useEffect(() => {
+    if (!atEnd) setClosingDismissed(false);
+  }, [atEnd]);
+  const closingTitles = useMemo(() => {
+    if (!stats) return null;
+    return { titles: pickStatsTitles(stats, closingRows(stats.titleFacts, teamId)), contributions: closingRows(stats.contributions, teamId) };
+  }, [stats, teamId]);
 
   const allItems = (allTeams ? prepared?.allItems : teamId && prepared?.itemsByTeam.get(teamId)) || EMPTY_ITEMS;
   const items = useMemo(() => visibleItems(allItems, showRejected), [allItems, showRejected]);
@@ -230,7 +244,7 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
   };
   const seek = (ms: number) => {
     pause();
-    setAtState(clamp(ms));
+    setAtState(ms >= end - END_SNAP_MS ? end : clamp(ms));
     setFocusId(null);
     setPopupId(null);
   };
@@ -288,11 +302,16 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
         setPlaying(true);
       },
       canPrev: stepPrev(items, at, focusIndex) >= 0,
-      canNext: stepNext(items, at, focusIndex) >= 0,
+      // After the last Submission, "next" goes on to the end (the closing card).
+      canNext: stepNext(items, at, focusIndex) >= 0 || at < end,
       canPrevNotable: stepPrev(items, at, focusIndex, notable) >= 0,
       canNextNotable: stepNext(items, at, focusIndex, notable) >= 0,
       prev: () => step(stepPrev(items, at, focusIndex)),
-      next: () => step(stepNext(items, at, focusIndex)),
+      next: () => {
+        const index = stepNext(items, at, focusIndex);
+        if (index >= 0) step(index);
+        else seek(end);
+      },
       prevNotable: () => step(stepPrev(items, at, focusIndex, notable)),
       nextNotable: () => step(stepNext(items, at, focusIndex, notable)),
       showRejected,
@@ -323,6 +342,15 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
           close: () => setPopupId(null),
         }
       : null,
+    closing:
+      atEnd && !popupItem && !closingDismissed && stats && closingTitles
+        ? {
+            ...closingTitles,
+            womReadAt: stats.womReadAt,
+            team: teamModel ? { name: teamModel.name, color: teamModel.color } : null,
+            close: () => setClosingDismissed(true),
+          }
+        : null,
     exit: () => navigate(`/b/${slug}`),
     openTileId,
     openTileActions: { open: setOpenTileId, close: () => setOpenTileId(null) },

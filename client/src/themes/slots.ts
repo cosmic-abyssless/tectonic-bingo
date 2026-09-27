@@ -13,6 +13,7 @@ import type {
   BoardModel,
   CategoryModel,
   RequirementNodeModel,
+  RewindClosingModel,
   RewindControlsModel,
   RewindPopupModel,
   RewindScoreboardModel,
@@ -220,6 +221,10 @@ export interface ThemeSlots {
   // "small" (a notable one). A rejected one is greyed out and stamped "Rejected". The theme draws only the card (its
   // own width, no positioning); the page places it and plays it in and out.
   RewindPopup: ComponentType<{ popup: RewindPopupModel }>;
+  // The closing card at the very end: every final Title with its holder and the value behind it, for the viewed Team
+  // (closing.team) or the whole Bingo. Built like the Stats page's Titles (core/stats TitlesSection draws them the same
+  // way). Like RewindPopup, only the card: the page places it, over the Board, and it scrolls within its own height.
+  RewindClosing: ComponentType<{ closing: RewindClosingModel }>;
   // All Teams view: the marks on one Tile for each Team that has completed it by the moment being viewed (in
   // scoreboard order; possibly none). Drawn over the Tile's cell, filling it; it takes no clicks.
   RewindTileMarkers: ComponentType<{ tile: RewindTileTeamsModel }>;
