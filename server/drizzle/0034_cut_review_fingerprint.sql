@@ -1,0 +1,1 @@
+ALTER TABLE `bingos` ADD `cut_review_fingerprint` text;

@@ -444,7 +444,7 @@ describe("every column is accounted for", () => {
         "id", "slug", "stage", "createdByUserId", "createdAt", // identity of this one bingo
         "signupOpensAt", "draftScheduledAt", "revealScheduledAt", "startsAt", "endsAt", // the schedule of one event
         "womEnabled", "womGroupId", "womGroupVerificationCode", "womCompetitionId", "womSyncError", // Wise Old Man: ids, a secret, sync state
-        "draftStarted", "draftOrderLockedUntil", // live draft ceremony — not a template setting
+        "draftStarted", "draftOrderLockedUntil", "cutReviewFingerprint", // live draft ceremony — not a template setting
         "leftoverMode", // replaced by cutMode, kept only until the column is dropped
         "achievementsEnabled", // the master switch isn't carried — an import always starts with it on (achievementKeys carries the per-key switches instead)
       ],
