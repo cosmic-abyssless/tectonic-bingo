@@ -1,6 +1,6 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTime } from "motion/react";
-import type { BoardModel } from "../../../headless/types";
+import type { BoardModel, TileModel } from "../../../headless/types";
 import { useSlot } from "../../context";
 import { LineCompletionWash } from "./LineCompletionWash";
 import { BOOST_MS, buildStopsByTileId } from "./linePulse";
@@ -58,10 +58,12 @@ export function BoardGrid({
   board,
   onOpenTile,
   highlightedTileId,
+  tileOverlay,
 }: {
   board: BoardModel;
   onOpenTile: (tileId: string) => void;
   highlightedTileId?: string | null;
+  tileOverlay?: (tile: TileModel) => ReactNode;
 }) {
   const RowLabel = useSlot("RowLabel");
   const TileCell = useSlot("TileCell");
@@ -150,6 +152,7 @@ export function BoardGrid({
                   <div key={tile.id} className="relative aspect-square w-full">
                     {stops && !tile.dimmed && <LineCompletionWash time={time} stops={stops} boostedUntilRef={boostedUntilRef} />}
                     <TileCell tile={tile} onOpen={onOpenTile} isSearchHighlighted={tile.id === highlightedTileId} />
+                    {tileOverlay?.(tile)}
                   </div>
                 );
               })}

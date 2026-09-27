@@ -19,10 +19,16 @@ export function Swatch({ color, size = 12 }: { color: string | null | undefined;
  * trigger button (the team banner anchors it under the whole strip). The
  * popover portals to body, so the theme vars are re-applied on it.
  */
+// The All Teams choice's menu key; never a Team's id.
+const ALL_KEY = "__all-teams__";
+
 export function TeamMenu({ selector, triggerRef }: { selector: TeamSelectorModel; triggerRef?: RefObject<Element | null> }) {
   const { colors } = useComic();
   const portalVars = useThemeVarsInPortal();
   const selected = selector.teams.find((t) => t.id === selector.selectedId) ?? null;
+  const all = selector.allTeams;
+  const itemClass =
+    "flex cursor-pointer items-center gap-2 px-3 py-2 text-sm outline-none focus:bg-[var(--comic-yellow)] hovered:bg-[var(--comic-yellow)] focus:text-[var(--comic-on-yellow)] hovered:text-[var(--comic-on-yellow)]";
 
   return (
     <Popover
@@ -33,16 +39,27 @@ export function TeamMenu({ selector, triggerRef }: { selector: TeamSelectorModel
       className="comic-panel-pop z-[60] min-w-52 overflow-hidden rounded-md border-[3px] outline-none"
     >
       <AriaMenu
-        onAction={(key) => selector.select(String(key))}
+        onAction={(key) => (key === ALL_KEY ? all?.select() : selector.select(String(key)))}
         className="divide-y-2 outline-none"
         style={{ borderColor: colors.RULE }}
       >
+        {all && (
+          <AriaMenuItem key={ALL_KEY} id={ALL_KEY} textValue="All Teams" className={itemClass} style={{ color: colors.INK, borderColor: colors.RULE }}>
+            <UsersIcon size={14} />
+            <span className="truncate font-medium">All Teams</span>
+            {all.selected && (
+              <span className="ml-auto text-base leading-none" style={{ fontFamily: COMIC_FONT }}>
+                Viewing
+              </span>
+            )}
+          </AriaMenuItem>
+        )}
         {selector.teams.map((team) => (
           <AriaMenuItem
             key={team.id}
             id={team.id}
             textValue={team.name}
-            className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm outline-none focus:bg-[var(--comic-yellow)] hovered:bg-[var(--comic-yellow)] focus:text-[var(--comic-on-yellow)] hovered:text-[var(--comic-on-yellow)]"
+            className={itemClass}
             style={{ color: colors.INK, borderColor: colors.RULE }}
           >
             <Swatch color={team.color} />
@@ -74,8 +91,8 @@ export function TeamSelector({ selector }: { selector: TeamSelectorModel }) {
   return (
     <MenuTrigger>
       <ComicButton size="sm" className="max-w-[16rem]">
-        <Swatch color={selected?.color} />
-        <span className="truncate">{selected?.name ?? "Select team"}</span>
+        {selector.allTeams?.selected ? <UsersIcon /> : <Swatch color={selected?.color} />}
+        <span className="truncate">{selector.allTeams?.selected ? "All Teams" : (selected?.name ?? "Select team")}</span>
         <ChevronDownIcon />
       </ComicButton>
       <TeamMenu selector={selector} />
