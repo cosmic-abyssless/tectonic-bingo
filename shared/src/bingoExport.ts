@@ -105,6 +105,10 @@ export interface ExportSignupQuestion {
   optionsJson: string | null;
   /** Absent in files exported before choice questions could allow Other; imports as off. */
   allowOther?: boolean;
+  /** Absent in files exported before Member pick questions; imports as one pick. */
+  multiplePicks?: boolean;
+  /** Absent in files exported before Member pick questions; imports as no limit. */
+  maxPicks?: number | null;
   required: boolean;
   sortOrder: number;
   /** Absent in files exported before answers could be limited to mods/admins; imports as "captains". */

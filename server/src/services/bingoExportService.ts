@@ -131,6 +131,8 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
     type: q.type,
     optionsJson: q.optionsJson,
     allowOther: q.allowOther,
+    multiplePicks: q.multiplePicks,
+    maxPicks: q.maxPicks,
     required: q.required,
     sortOrder: q.sortOrder,
     visibility: q.visibility,
@@ -382,7 +384,7 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
     }
 
     for (const q of doc.signupQuestions) {
-      signupService.createQuestion(tx, { bingoId: bingo.id, prompt: q.prompt, helperText: q.helperText ?? null, type: q.type, optionsJson: q.optionsJson, allowOther: q.allowOther ?? false, required: q.required, sortOrder: q.sortOrder, visibility: q.visibility ?? "captains" });
+      signupService.createQuestion(tx, { bingoId: bingo.id, prompt: q.prompt, helperText: q.helperText ?? null, type: q.type, optionsJson: q.optionsJson, allowOther: q.allowOther ?? false, multiplePicks: q.multiplePicks ?? false, maxPicks: q.maxPicks ?? null, required: q.required, sortOrder: q.sortOrder, visibility: q.visibility ?? "captains" });
     }
 
     // Achievements (CONTEXT.md): createBingo above switched every catalogue key on (the default for a brand-new

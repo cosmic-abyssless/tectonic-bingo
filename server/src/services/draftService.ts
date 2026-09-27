@@ -11,6 +11,7 @@ import { rsnsInBingo } from "./playerNames";
 import { getUserTeamForBingo, isTeamLead } from "./teamService";
 import { audit, markAuditedNoop } from "../audit/record";
 import { log } from "../log";
+import { withMemberNames } from "./memberPickService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -249,7 +250,7 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
   const poolUserById = new Map(poolUserRows.map((u) => [u.id, u]));
   const poolAnswers =
     opts.includeAnswers && poolSignups.length
-      ? db.select().from(signupAnswers).where(inArray(signupAnswers.signupId, poolSignups.map((s) => s.id))).all()
+      ? withMemberNames(db, bingoId, db.select().from(signupAnswers).where(inArray(signupAnswers.signupId, poolSignups.map((s) => s.id))).all())
       : [];
 
   const visibleQuestions = opts.includeAnswers ? visibleQuestionIds(db, bingo.id, opts.answerViewer ?? "admin") : new Set<string>();

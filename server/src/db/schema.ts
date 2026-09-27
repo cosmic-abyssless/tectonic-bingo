@@ -181,10 +181,13 @@ export const signupQuestions = sqliteTable('signup_questions', {
   prompt: text('prompt').notNull(),
   // Optional plain-text note shown under the question on the signup form.
   helperText: text('helper_text'),
-  type: text('type', { enum: ['text', 'textarea', 'select', 'multiselect', 'boolean'] }).notNull(), // select = one choice, multiselect = several
+  type: text('type', { enum: ['text', 'textarea', 'select', 'multiselect', 'boolean', 'member'] }).notNull(), // select = one choice, multiselect = several, member = Member pick
   optionsJson: text('options_json'), // JSON string array; only for type = 'select' or 'multiselect'
   // Choice questions only: an extra Other choice with the player's own text (see shared/src/signupAnswers.ts).
   allowOther: integer('allow_other', { mode: 'boolean' }).notNull().default(false),
+  // Member pick only: several members may be picked (else one), and with several the most that may be (null: no limit).
+  multiplePicks: integer('multiple_picks', { mode: 'boolean' }).notNull().default(false),
+  maxPicks: integer('max_picks'),
   required: integer('required', { mode: 'boolean' }).notNull().default(false),
   sortOrder: integer('sort_order').notNull().default(0),
   // Who besides the answerer sees the answers: 'captains' (and up), 'mods' (and site admins), or 'admins' only.

@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AccountTypesResponse, AchievementKey, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
-  MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, UnpairedSignupsResponse, PendingCountResponse,
+  MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   PickRating, PlayerProfile, RewindResponse, StatsResponse, SubmissionReaction, SubmissionReactionGroup, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
 } from "@bingo/shared";
@@ -31,6 +31,7 @@ export const queryKeys = {
   myTectonicRsns: (slug: string) => ["myTectonicRsns", slug] as const,
   myPairing: (slug: string) => ["myPairing", slug] as const,
   partnerCandidates: (slug: string) => ["partnerCandidates", slug] as const,
+  pickableMembers: (slug: string) => ["pickableMembers", slug] as const,
   unpairedSignups: (slug: string) => ["unpairedSignups", slug] as const,
   draftState: (slug: string) => ["draftState", slug] as const,
   playerProfile: (slug: string, userId: string) => ["playerProfile", slug, userId] as const,
@@ -412,6 +413,15 @@ export function usePartnerCandidates(slug: string | undefined, enabled: boolean)
   return useQuery({
     queryKey: queryKeys.partnerCandidates(slug ?? ""),
     queryFn: () => api.get<PartnerCandidatesResponse>(`/api/bingos/${slug}/signup/partners`),
+    enabled: !!slug && enabled,
+  });
+}
+
+/** Who a Member pick question on the signup form can pick: every clan member who has logged in, except the viewer. */
+export function usePickableMembers(slug: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.pickableMembers(slug ?? ""),
+    queryFn: () => api.get<PickableMembersResponse>(`/api/bingos/${slug}/signup/members`),
     enabled: !!slug && enabled,
   });
 }
