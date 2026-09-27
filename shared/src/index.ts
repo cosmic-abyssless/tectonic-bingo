@@ -947,6 +947,61 @@ export interface DraftCutPreview {
   cut: { names: string[]; pair: boolean }[];
 }
 
+// ---------------------------------------------------------------------------
+// Cut review (CONTEXT.md "Cut review", "Avoidable cut", "Unavoidable cut")
+// ---------------------------------------------------------------------------
+
+/**
+ * One change a Cut review plan may propose, in order of preference: pair two singles, split a pair, or add/remove
+ * one Team. Never switches the Draft cuts setting (CutMode) — see server/src/services/cutPlanner.ts.
+ */
+export type CutChange =
+  | { kind: "pair"; signupIds: [string, string] }
+  | { kind: "split"; pairingId: string }
+  | { kind: "addTeam" }
+  | { kind: "removeTeam" };
+
+/** A CutChange as actually applied: an added Team needs its Captain chosen, a removed Team needs which one. */
+export type AppliedCutChange =
+  | { kind: "pair"; signupIds: [string, string] }
+  | { kind: "split"; pairingId: string }
+  | { kind: "addTeam"; captainUserId: string }
+  | { kind: "removeTeam"; teamId: string };
+
+/** The fewest-cut-players plan a Cut review proposes, or the result of scoring an admin-edited change list against the current roster. */
+export interface CutReviewPlan {
+  changes: CutChange[];
+  cutPlayers: number; // players cut once every change in `changes` is applied
+  cutPlayersNow: number; // players cut as things stand, before any change
+}
+
+// GET /mod/draft/cut-review: the plan a Cut review proposes, plus the Avoidable/Unavoidable split it implies — for
+// the Signups tab notice ("Some cuts can be avoided. Review cuts") and the move-to-Draft confirmation. Visible to
+// any mod; only Admins get the "Review cuts" button (see cutReviewService.ts).
+export interface CutReviewPreview {
+  plan: CutReviewPlan;
+  avoidableCount: number; // plan.cutPlayersNow - plan.cutPlayers
+  unavoidableCount: number; // plan.cutPlayers
+}
+
+// POST .../admin/cut-review/score: how many players an admin-edited change list would leave cut, for the Cut
+// review modal's live "This plan leaves N players cut" count.
+export interface ScoreCutReviewRequest {
+  changes: CutChange[];
+}
+export interface ScoreCutReviewResponse {
+  cutPlayers: number;
+}
+
+// POST .../admin/cut-review/apply: applies the (possibly edited) plan in one transaction through the existing
+// pairing and Captain/Team operations, and records that a review was applied for the roster as it now stands.
+export interface ApplyCutReviewRequest {
+  changes: AppliedCutChange[];
+}
+export interface ApplyCutReviewResponse {
+  cutPlayers: number;
+}
+
 // A team's private scouting note on a signup. Shared by captain and
 // co-captain, never shown to other teams.
 export interface PickRating {
