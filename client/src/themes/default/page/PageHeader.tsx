@@ -6,7 +6,7 @@ import { Button } from "../../../core/ui/Button";
 import { Badge } from "../../../core/ui/Card";
 import { CountdownTimer } from "../../../core/ui/CountdownTimer";
 import { MenuItem } from "../../../core/ui/Menu";
-import { UsersIcon } from "../../../core/ui/icons";
+import { RewindIcon, UsersIcon } from "../../../core/ui/icons";
 import { useSlot } from "../../context";
 
 export function PageHeader({ page }: { page: BingoPageModel }) {
@@ -53,6 +53,12 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
       {page.canViewStats && (
         <Button size="sm" variant="ghost" onPress={page.actions.goToStats}>
           Stats
+        </Button>
+      )}
+      {page.canRewind && (
+        <Button size="sm" variant="ghost" onPress={page.actions.goToRewind}>
+          <RewindIcon />
+          Rewind
         </Button>
       )}
       {page.isMod && (

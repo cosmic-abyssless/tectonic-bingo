@@ -12,6 +12,8 @@ export interface BingoHeaderModel {
   stageLabel: string;
   isMod: boolean;
   canViewStats: boolean;
+  /** Rewind (CONTEXT.md) exists only once the bingo is Finished. */
+  canRewind: boolean;
   /** Submissions waiting for a mod (mods only; 0 otherwise). */
   pendingCount: number;
   /** The bingo's rules, or "" when it has none (then there's no Rules button). */
@@ -40,6 +42,7 @@ export function useBingoHeader(slug: string): BingoHeaderModel | null {
     stageLabel: STAGE_LABEL[shell.bingo.stage],
     isMod: shell.isMod,
     canViewStats: canViewStats(shell),
+    canRewind: shell.bingo.stage === "complete",
     pendingCount: pending?.count ?? 0,
     rulesMarkdown: shell.bingo.rulesMarkdown ?? "",
     canSeeAllBingos: !!user?.isAdmin || devMode,

@@ -168,6 +168,7 @@ export function BingoPageProvider({
     categories: categoriesRaw.map(toCategoryModel),
     stageView,
     canViewStats,
+    canRewind: bingo.stage === "complete",
     canScout,
     draft: { state: draftState ?? null, isLoading: draftLoading },
     viewing: {
@@ -209,6 +210,7 @@ export function BingoPageProvider({
     actions: {
       goHome: () => navigate("/"),
       goToStats: () => navigate(`/b/${slug}/stats`),
+      goToRewind: () => navigate(`/b/${slug}/rewind`),
       goToMod: () => navigate(`/b/${slug}/mod`),
       goToDraft: () => navigate(`/b/${slug}/draft`),
     },

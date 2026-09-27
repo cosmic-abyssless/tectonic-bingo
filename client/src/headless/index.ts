@@ -11,3 +11,4 @@ export type { PartnerPanelModel } from "./usePartnerPanel";
 export { useBingoHeader } from "./useBingoHeader";
 export type { BingoHeaderModel } from "./useBingoHeader";
 export type * from "./types";
+export { useRewindModel } from "./RewindProvider";
