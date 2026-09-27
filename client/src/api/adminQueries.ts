@@ -94,14 +94,17 @@ export function useUserSearch(scope: string, q: string) {
  * one loads. An invalid change comes back as the query's error.
  */
 export function useCutReviewScore(slug: string, changes: CutChange[], enabled: boolean) {
-  const changesJson = useDebouncedValue(JSON.stringify(changes), 250);
-  return useQuery({
+  const latestJson = JSON.stringify(changes);
+  const changesJson = useDebouncedValue(latestJson, 250);
+  const query = useQuery({
     queryKey: queryKeys.cutReviewScore(slug, changesJson),
     queryFn: () => api.post<ScoreCutReviewResponse>(`/api/bingos/${slug}/admin/cut-review/score`, { changes: JSON.parse(changesJson) as CutChange[] }),
     enabled,
     retry: false,
     placeholderData: keepPreviousData,
   });
+  // `updating`: the count on show isn't for the latest edit yet (still debouncing, or its request is in flight).
+  return { query, updating: enabled && (latestJson !== changesJson || query.isFetching || query.isPlaceholderData) };
 }
 
 /** Applies a Cut review (POST /admin/cut-review/apply): pairings, splits and a Team change, all at once. */

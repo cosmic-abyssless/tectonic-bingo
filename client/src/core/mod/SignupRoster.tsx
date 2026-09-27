@@ -4,6 +4,7 @@ import { formatSignupAnswer, type RosterEntry, type SignupQuestionType } from "@
 import {
   useBingo,
   useBingoMods,
+  useCutReview,
   useDraftCuts,
   useMarkBuyin,
   useModPair,
@@ -34,6 +35,7 @@ import { toCsv } from "../ui/csv";
 import { useOpenProfile } from "../tectonic/PlayerName";
 import { cutModeLabel, describeShares } from "../draft/cutModes";
 import { SignupRosterGrid, type GridContext, type RosterRow } from "./SignupRosterGrid";
+import { CutReviewModal } from "./CutReviewModal";
 
 // GP totals here are buy-in multiples, always in the millions for this event — "30M GP" reads faster than
 // "30,000,000 GP". Decimals only show up if the amount isn't a clean multiple of a million.
@@ -228,6 +230,11 @@ export function SignupRoster({ slug }: { slug: string }) {
   // Who's cut only means something once there are two teams to split the players across.
   const cutsApply = !!cutMode && cutMode !== "none" && (bingoData?.teams.length ?? 0) >= 2;
   const { data: cuts } = useDraftCuts(slug, cutsApply);
+  // Before the Draft, a Cut review may avoid some of those cuts (CONTEXT.md "Avoidable cut"): the notice says so, and
+  // Admins get to open it from there.
+  const { data: cutReview } = useCutReview(slug, cutsApply && cutCount > 0 && (stage === "signup" || stage === "captains"));
+  const someAvoidable = (cutReview?.avoidableCount ?? 0) > 0;
+  const [reviewingCuts, setReviewingCuts] = useState(false);
   const pendingPairIds = useMemo(
     () => new Set(roster.flatMap((r) => (r.outgoingPairingRequest ? [r.user.discordId, r.outgoingPairingRequest.target.discordId] : []))),
     [roster],
@@ -378,6 +385,7 @@ export function SignupRoster({ slug }: { slug: string }) {
         )}
         {cutsApply && cutCount > 0 && cuts?.shares && bingoData && (
           <Notice tone="warn" icon={<AlertIcon />}>
+            {someAvoidable && <strong>Some cuts can be avoided. </strong>}
             As things stand, <span className="num">{cutCount}</span> signup{cutCount !== 1 ? "s" : ""} will be cut when the draft starts (
             {cutModeLabel(bingoData.bingo.cutMode, bingoData.bingo.signupMode)}: each of the <span className="num">{cuts.teamCount}</span> teams will draft{" "}
             {describeShares(cuts.shares, bingoData.bingo.signupMode)}). The newest signups are the ones cut.
@@ -390,8 +398,16 @@ export function SignupRoster({ slug }: { slug: string }) {
             >
               Show me
             </button>
+            {someAvoidable && me?.isAdmin && (
+              <div className="mt-2">
+                <Button size="sm" onPress={() => setReviewingCuts(true)}>
+                  Review cuts
+                </Button>
+              </div>
+            )}
           </Notice>
         )}
+        {me?.isAdmin && <CutReviewModal slug={slug} isOpen={reviewingCuts} onClose={() => setReviewingCuts(false)} />}
         <p className="text-sm text-on-surface-muted">
           <span className="num text-on-surface">{activeCount}</span> active signup{activeCount !== 1 ? "s" : ""}
           {withdrawnCount > 0 && (

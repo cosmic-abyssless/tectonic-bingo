@@ -1,12 +1,15 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { STAGE_LABEL, STAGE_ORDER, nextMilestone, type Bingo, type Stage } from "@bingo/shared";
-import { useAdvanceStage, useDraftCuts } from "../../api/queries";
+import { ApiError } from "../../api/client";
+import { cutReviewQuery, useAdvanceStage, useCutReview, useDraftCuts } from "../../api/queries";
 import { cutModeLabel, describeShares } from "../draft/cutModes";
 import { useDialogParts } from "../ui/useDialogParts";
 import { Button } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
 import { MilestoneCountdown, StageStepper } from "../ui/StageStepper";
 import { ArrowLeftIcon, ArrowRightIcon } from "../ui/icons";
+import { CutReviewModal } from "./CutReviewModal";
 
 // What advancing *into* each stage does, so a mod knows before confirming.
 const ENTER_EFFECT: Record<Stage, string> = {
@@ -26,6 +29,11 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
   const [confirming, setConfirming] = useState<Stage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const cuts = useDraftCuts(slug, confirming === "draft");
+  const queryClient = useQueryClient();
+  // The Cut review (CONTEXT.md "Cut review") stands between an Admin and the Draft while any cut is avoidable: it
+  // opens first, and once it's applied (even as "keep these cuts") the confirmation below follows.
+  const [reviewingCuts, setReviewingCuts] = useState(false);
+  const cutReview = useCutReview(slug, confirming === "draft");
   // Moving into the draft with anyone to cut: the button says so.
   const cutPlayers = confirming === "draft" && cuts.data?.shares ? cuts.data.cut.reduce((n, c) => n + c.names.length, 0) : 0;
 
@@ -36,12 +44,32 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
   // Stages strictly between the current one and the target, in travel order.
   const skipped = confirming ? STAGE_ORDER.slice(Math.min(idx, STAGE_ORDER.indexOf(confirming)) + 1, Math.max(idx, STAGE_ORDER.indexOf(confirming))) : [];
 
+  // Asking to move into the Draft with Avoidable cuts goes through the Cut review first; anything else, straight to
+  // the confirmation. If the plan can't be worked out, the confirmation still opens (the server guards the move).
+  async function request(toStage: Stage) {
+    setError(null);
+    if (toStage === "draft" && idx < STAGE_ORDER.indexOf("draft")) {
+      const preview = await queryClient.fetchQuery(cutReviewQuery(slug)).catch(() => null);
+      if (preview && preview.avoidableCount > 0) {
+        setReviewingCuts(true);
+        return;
+      }
+    }
+    setConfirming(toStage);
+  }
+
   async function go(toStage: Stage) {
     setError(null);
     try {
       await advanceStage.mutateAsync(toStage);
       setConfirming(null);
     } catch (e: unknown) {
+      // The roster changed since the last review (or none was applied): review the cuts, then confirm again.
+      if (e instanceof ApiError && e.code === "cut_review_required") {
+        setConfirming(null);
+        setReviewingCuts(true);
+        return;
+      }
       setError(e instanceof Error ? e.message : "Failed to change stage");
     }
   }
@@ -55,13 +83,13 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
         </div>
         <div className="flex gap-2">
           {canChange && prevStage && (
-            <Button size="sm" onPress={() => setConfirming(prevStage)}>
+            <Button size="sm" onPress={() => request(prevStage)}>
               <ArrowLeftIcon />
               Back to {STAGE_LABEL[prevStage]}
             </Button>
           )}
           {canChange && nextStage && (
-            <Button size="sm" variant="primary" onPress={() => setConfirming(nextStage)}>
+            <Button size="sm" variant="primary" onPress={() => request(nextStage)}>
               Advance to {STAGE_LABEL[nextStage]}
               <ArrowRightIcon />
             </Button>
@@ -70,7 +98,7 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <StageStepper stage={bingo.stage} onSelect={canChange ? setConfirming : undefined} />
+        <StageStepper stage={bingo.stage} onSelect={canChange ? request : undefined} />
         <MilestoneCountdown milestone={nextMilestone(bingo)} />
       </div>
 
@@ -90,7 +118,17 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
             <div className="space-y-3 p-5 text-sm">
               <p className="text-on-surface-muted">{ENTER_EFFECT[confirming]}</p>
               {skipped.length > 0 && <p className="text-on-surface-muted">Skips {skipped.map((s) => STAGE_LABEL[s]).join(", ")}.</p>}
-              {confirming === "draft" && <DraftCutsPreview cuts={cuts} bingo={bingo} />}
+              {confirming === "draft" && (
+                <DraftCutsPreview
+                  cuts={cuts}
+                  bingo={bingo}
+                  someAvoidable={(cutReview.data?.avoidableCount ?? 0) > 0}
+                  onReviewCuts={() => {
+                    setConfirming(null);
+                    setReviewingCuts(true);
+                  }}
+                />
+              )}
               {error && <Notice tone="danger">{error}</Notice>}
               <div className="flex justify-end gap-2 pt-1">
                 <Button size="sm" variant="ghost" onPress={() => setConfirming(null)}>
@@ -104,6 +142,18 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
           </>
         )}
       </Dialog>
+
+      {canChange && (
+        <CutReviewModal
+          slug={slug}
+          isOpen={reviewingCuts}
+          onClose={() => setReviewingCuts(false)}
+          onApplied={() => {
+            setReviewingCuts(false);
+            setConfirming("draft");
+          }}
+        />
+      )}
     </Card>
   );
 }
@@ -113,7 +163,17 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
  * draft cuts setting. Unlike everywhere else (where mods still have time to change it), said plainly: this is the step
  * that cuts them.
  */
-function DraftCutsPreview({ cuts, bingo }: { cuts: ReturnType<typeof useDraftCuts>; bingo: Bingo }) {
+function DraftCutsPreview({
+  cuts,
+  bingo,
+  someAvoidable,
+  onReviewCuts,
+}: {
+  cuts: ReturnType<typeof useDraftCuts>;
+  bingo: Bingo;
+  someAvoidable: boolean;
+  onReviewCuts: () => void;
+}) {
   const { data, isLoading, error } = cuts;
   if (isLoading) return <p className="text-on-surface-subtle">Working out who's cut…</p>;
   if (error || !data) return <Notice tone="danger">Couldn't work out who's cut.</Notice>;
@@ -146,6 +206,15 @@ function DraftCutsPreview({ cuts, bingo }: { cuts: ReturnType<typeof useDraftCut
               </li>
             ))}
           </ul>
+          {/* Still avoidable after a review that kept these cuts: the review can be run again from here. */}
+          {someAvoidable && (
+            <p className="mt-2">
+              <strong>Some cuts can be avoided.</strong>{" "}
+              <button type="button" onClick={onReviewCuts} className="cursor-pointer font-medium text-on-surface underline underline-offset-2 hover:opacity-70">
+                Review cuts
+              </button>
+            </p>
+          )}
         </Notice>
       )}
     </div>
