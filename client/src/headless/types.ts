@@ -4,6 +4,7 @@
 // See docs/headless-theming-plan.md §2.
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
 import type { AuditCategory, AuditTone, DraftState, NodeKind, NodeStatus, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus, WrappedArtFrames } from "@bingo/shared";
+import type { PlaybackSpeed } from "./rewindModel";
 
 export interface ActivityEntryModel {
   id: number;
@@ -508,6 +509,11 @@ export interface RewindControlsModel {
   /** Rejected Submissions on the timeline (off by default). */
   showRejected: boolean;
   setShowRejected(on: boolean): void;
+  /** Play's speed multiplier (1x by default, remembered per viewer). Only Play's pace: stepping and scrubbing ignore it. */
+  speed: PlaybackSpeed;
+  /** The speeds to choose from, slowest first. From 4x up Play skips minor Submissions. */
+  speeds: readonly PlaybackSpeed[];
+  setSpeed(speed: PlaybackSpeed): void;
   /** Where Play is, as "12 / 340". */
   positionLabel: string;
 }

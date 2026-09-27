@@ -10,7 +10,8 @@ import { formatGp } from "../core/ui/gp";
 import { displayName } from "../core/ui/user";
 import { BoardModelProvider, BoardProvider, useBoardModel } from "./BoardProvider";
 import { useBingoPage, useBingoPageRaw } from "./BingoPageProvider";
-import { adjustmentsAt, ALL_TEAMS, layoutOnly, boardStateAt, countUpTo, formatOneIn, isNotable, playbackHolds, PLAYBACK, prepareRewind, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems, type RewindItem } from "./rewindModel";
+import { adjustmentsAt, ALL_TEAMS, layoutOnly, boardStateAt, countUpTo, formatOneIn, isNotable, playbackHolds, PLAYBACK, PLAYBACK_SPEEDS, playsAt, prepareRewind, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems, type RewindItem } from "./rewindModel";
+import { readRewindSpeed, writeRewindSpeed } from "./rewindSpeedStore";
 import type { RewindModel, RewindSubmissionModel, RewindTileTeamsModel, TeamModel } from "./types";
 
 const RewindContext = createContext<RewindModel | null>(null);
@@ -82,6 +83,7 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [popupId, setPopupId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(readRewindSpeed);
   const [showRejected, setShowRejected] = useState(false);
   const [openTileId, setOpenTileId] = useState<string | null>(null);
 
@@ -100,7 +102,9 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
 
   const allItems = (allTeams ? prepared?.allItems : teamId && prepared?.itemsByTeam.get(teamId)) || EMPTY_ITEMS;
   const items = useMemo(() => visibleItems(allItems, showRejected), [allItems, showRejected]);
-  const holds = useMemo(() => playbackHolds(items.map((i) => i.sub.significance.tier), allTeams ? PLAYBACK.allTeamsMinMinorMs : PLAYBACK.minMinorMs), [items, allTeams]);
+  const holds = useMemo(() => playbackHolds(items.map((i) => i.sub.significance.tier), allTeams ? PLAYBACK.allTeamsMinMinorMs : PLAYBACK.minMinorMs, speed), [items, allTeams, speed]);
+  // What Play stops on at this speed: a fast one skips minor Submissions (rewindModel.playsAt).
+  const playable = useCallback((i: RewindItem) => playsAt(i.sub.significance.tier, speed), [speed]);
   const focusIndex = focusId ? items.findIndex((i) => i.sub.id === focusId) : -1;
 
   // The moment into the URL once it settles, so a link (or a reload) opens Rewind right there.
@@ -131,7 +135,8 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
     [items],
   );
 
-  // Play: event by event, skipping the gaps, each held for its tier's time (rewindModel.playbackHolds).
+  // Play: event by event, skipping the gaps, each held for its tier's time at the chosen speed (rewindModel.playbackHolds).
+  // Changing the speed mid-hold keeps the hold's start, so only the time left changes.
   // Each hold ends at a deadline carried over from the one before, rather than "now + hold", so the time spent
   // rendering each step (and timers firing late) doesn't pile up over a thousand Submissions.
   const atRef = useRef(at);
@@ -143,7 +148,7 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
       return;
     }
     if (focusIndex < 0) {
-      const first = stepNext(items, atRef.current, -1);
+      const first = stepNext(items, atRef.current, -1, playable);
       if (first < 0) setPlaying(false);
       else show(first, true);
       return;
@@ -155,7 +160,8 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
     const deadline = holdStart + holds[focusIndex]!;
     const timer = setTimeout(() => {
       holdStartRef.current = deadline;
-      if (focusIndex + 1 < items.length) show(focusIndex + 1, true);
+      const next = stepNext(items, atRef.current, focusIndex, playable);
+      if (next >= 0) show(next, true);
       else {
         // The end: the Finished Board, with anything made after the last drop (a late Point Adjustment) counted too.
         setPlaying(false);
@@ -165,7 +171,7 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
       }
     }, Math.max(0, deadline - now));
     return () => clearTimeout(timer);
-  }, [playing, prepared, focusIndex, items, holds, show]);
+  }, [playing, prepared, focusIndex, items, holds, playable, show]);
 
   // The viewed Team's Board at `at`. Only approved Submissions move it, and every change it has comes at one of their
   // times, so it's rebuilt only when one more (or one fewer) of them is on it. In the All Teams view the Board itself
@@ -273,7 +279,7 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
       togglePlay: () => {
         if (playing) return pause();
         // At the end there's nothing left to play: start over.
-        if (stepNext(items, at, focusIndex) < 0) {
+        if (stepNext(items, at, focusIndex, playable) < 0) {
           setAtState(start);
           setFocusId(null);
           setPopupId(null);
@@ -295,6 +301,12 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
           setFocusId(null);
           setPopupId(null);
         }
+      },
+      speed,
+      speeds: PLAYBACK_SPEEDS,
+      setSpeed: (s) => {
+        setSpeed(s);
+        writeRewindSpeed(s);
       },
       positionLabel: `${focusIndex >= 0 ? focusIndex + 1 : countUpTo(items, at)} / ${items.length}`,
     },
