@@ -491,8 +491,8 @@ router.post(
     const { changes } = req.body as { changes?: AppliedCutChange[] };
     if (!Array.isArray(changes)) throw new ServiceError(400, "changes must be an array");
     for (const change of changes) {
-      if (change.kind === "pair" && (!Array.isArray(change.signupIds) || change.signupIds.length !== 2)) {
-        throw new ServiceError(400, "A pair change needs two signupIds");
+      if (change.kind === "pair" && (!Array.isArray(change.userIds) || change.userIds.length !== 2)) {
+        throw new ServiceError(400, "A pair change needs two userIds");
       }
       if (change.kind === "split" && !change.pairingId) throw new ServiceError(400, "A split change needs a pairingId");
       if (change.kind === "addTeam" && !change.captainUserId) throw new ServiceError(400, "An added Team needs a captainUserId");

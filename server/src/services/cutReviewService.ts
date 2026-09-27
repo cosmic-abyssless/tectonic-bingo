@@ -3,7 +3,7 @@
 // scores an admin-edited change list, applies one, and guards the move into the Draft stage. cutPlanner.ts does
 // the actual (DB-free) planning and scoring; this file is the only place that talks to the database.
 import crypto from "node:crypto";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql, and, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { timeZoneRegion, type AppliedCutChange, type CutChange, type CutReviewPreview } from "@bingo/shared";
 import * as schema from "../db/schema";
@@ -12,7 +12,7 @@ import * as draftService from "./draftService";
 import * as pairingService from "./pairingService";
 import * as teamService from "./teamService";
 import * as cutPlanner from "./cutPlanner";
-import type { CutPlannerInput, CutPlannerUnit } from "./cutPlanner";
+import type { CutPlannerEntry, CutPlannerInput, CutPlannerTeam, CutPlannerUnit } from "./cutPlanner";
 import { ServiceError } from "./errors";
 import { audit } from "../audit/record";
 
@@ -40,18 +40,42 @@ export function buildCutReviewInput(db: Db, bingo: Bingo): CutPlannerInput {
   // getDraftState) — "admin" sees every signup's, which the Cut review (Admin-only) needs for the region preference.
   const { pool, teams } = draftService.getDraftState(db, bingo, { includeAnswers: true, answerViewer: "admin" });
   const insertionOrder = insertionOrderOf(db, bingo.id);
+  const entryOf = (signup: { userId: string; createdAt: Date; timezone: string | null }): CutPlannerEntry => ({
+    userId: signup.userId,
+    signedUpAt: signup.createdAt.getTime(),
+    insertionRank: insertionOrder.get(signup.userId) ?? -1,
+    timezoneRegion: signup.timezone ? timeZoneRegion(signup.timezone) : null,
+  });
   const units: CutPlannerUnit[] = pool.map((u) => ({
     pairingId: u.pairingId,
     // The real pool never contains a Captain's pair (they're on a team before the Draft) — see cutPlanner.ts.
     isCaptainPair: false,
-    entries: u.entries.map((e) => ({
-      userId: e.signup.userId,
-      signedUpAt: e.signup.createdAt.getTime(),
-      insertionRank: insertionOrder.get(e.signup.userId) ?? -1,
-      timezoneRegion: e.signup.timezone ? timeZoneRegion(e.signup.timezone) : null,
-    })),
+    entries: u.entries.map((e) => entryOf(e.signup)),
   }));
-  return { units, cutMode: fresh.cutMode, teamCount: teams.length, drafted: { pairs: 0, singles: 0 }, isSolo: fresh.signupMode === "solo" };
+  // The Teams' own members (Captain, co-captain): a Team change moves them in or out of the pool (see cutPlanner.ts).
+  const memberIds = teams.flatMap((t) => [t.captainUserId, ...(t.coCaptain ? [t.coCaptain.userId] : [])]);
+  const memberSignups = memberIds.length
+    ? db.select().from(signups).where(and(eq(signups.bingoId, bingo.id), inArray(signups.userId, memberIds))).all()
+    : [];
+  const signupOf = new Map(memberSignups.map((s) => [s.userId, s]));
+  const accepted = pairingService.getAcceptedPairs(db, bingo.id);
+  const teamInputs: CutPlannerTeam[] = teams.map((t) => {
+    const ids = [t.captainUserId, ...(t.coCaptain ? [t.coCaptain.userId] : [])];
+    const members = ids.flatMap((id) => {
+      const s = signupOf.get(id);
+      return s ? [entryOf(s)] : [];
+    });
+    const pairing = ids.length === 2 ? accepted.find((p) => ids.every((id) => p.userIds.includes(id))) : undefined;
+    return { teamId: t.id, members, pairingId: pairing?.pairing.id ?? null };
+  });
+  return {
+    units,
+    cutMode: fresh.cutMode,
+    teamCount: teams.length,
+    drafted: { pairs: 0, singles: 0 },
+    isSolo: fresh.signupMode === "solo",
+    teams: teamInputs,
+  };
 }
 
 /** A deterministic fingerprint of the pool's unit composition, Team count and cutMode — see the bingos column. */
@@ -100,9 +124,12 @@ export function applyCutReview(db: Db, bingo: Bingo, changes: AppliedCutChange[]
     // hypothetical optimum, the roster's actual count as it stood.
     const cutPlayersBefore = getCutReviewPreview(tx, bingo).plan.cutPlayersNow;
     let teamChanges = 0;
-    for (const change of changes) {
+    // Pairings and splits first, the Team change last — the order they're scored in (cutPlanner.resolveChanges), so a
+    // Captain the plan also pairs up leads the new Team with their new partner.
+    const ordered = [...changes.filter((c) => c.kind === "pair" || c.kind === "split"), ...changes.filter((c) => c.kind === "addTeam" || c.kind === "removeTeam")];
+    for (const change of ordered) {
       if (change.kind === "pair") {
-        pairingService.adminPair(tx, bingo, { userIdA: change.signupIds[0], userIdB: change.signupIds[1], createdByUserId: actingUserId });
+        pairingService.adminPair(tx, bingo, { userIdA: change.userIds[0], userIdB: change.userIds[1], createdByUserId: actingUserId });
       } else if (change.kind === "split") {
         pairingService.unpair(tx, bingo, change.pairingId);
       } else if (change.kind === "addTeam") {

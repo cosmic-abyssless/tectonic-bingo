@@ -956,14 +956,16 @@ export interface DraftCutPreview {
  * one Team. Never switches the Draft cuts setting (CutMode) — see server/src/services/cutPlanner.ts.
  */
 export type CutChange =
-  | { kind: "pair"; signupIds: [string, string] }
+  | { kind: "pair"; userIds: [string, string] }
   | { kind: "split"; pairingId: string }
-  | { kind: "addTeam" }
-  | { kind: "removeTeam" };
+  // A plan never names who captains an added Team or which Team goes; an admin-edited list being scored may, and
+  // then the score is exact (the Captain, and their partner, leave the pool; a removed Team's members rejoin it).
+  | { kind: "addTeam"; captainUserId?: string }
+  | { kind: "removeTeam"; teamId?: string };
 
 /** A CutChange as actually applied: an added Team needs its Captain chosen, a removed Team needs which one. */
 export type AppliedCutChange =
-  | { kind: "pair"; signupIds: [string, string] }
+  | { kind: "pair"; userIds: [string, string] }
   | { kind: "split"; pairingId: string }
   | { kind: "addTeam"; captainUserId: string }
   | { kind: "removeTeam"; teamId: string };

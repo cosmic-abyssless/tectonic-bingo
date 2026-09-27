@@ -28,12 +28,24 @@ export interface CutPlannerUnit {
   entries: CutPlannerEntry[];
 }
 
+/**
+ * A Team as it stands before the Draft: its Captain and co-captain, who are on the Team rather than in the pool.
+ * Removing the Team puts them back in the pool (as a pair, when they're one); adding a Team takes its Captain (and
+ * their partner, as co-captain) out of it — so a Team change moves players as well as changing the Team count.
+ */
+export interface CutPlannerTeam {
+  teamId: string;
+  members: CutPlannerEntry[];
+  pairingId: string | null; // set when the two members are an accepted pair
+}
+
 export interface CutPlannerInput {
   units: CutPlannerUnit[]; // the undrafted pool, as things stand
   cutMode: CutMode;
   teamCount: number; // current Team count
   drafted: { pairs: number; singles: number }; // already drafted (see markCuts) — always {0,0} pre-Draft
   isSolo: boolean; // signupMode === "solo": there is no such thing as pairing or splitting
+  teams?: CutPlannerTeam[]; // the current Teams' members (Captains); omitted = none known, e.g. in a unit test
 }
 
 export interface CutPlan {
@@ -53,8 +65,13 @@ export function minTeamSize(totalPlayers: number): number {
 }
 
 const isPair = (u: CutPlannerUnit) => u.entries.length > 1;
+// Everyone: the pool, whoever's been drafted, and the Teams' own members (their Captains) — what "average Team size"
+// is measured against.
 const totalPlayersOf = (input: CutPlannerInput): number =>
-  input.drafted.pairs * 2 + input.drafted.singles + input.units.reduce((n, u) => n + u.entries.length, 0);
+  input.drafted.pairs * 2 +
+  input.drafted.singles +
+  input.units.reduce((n, u) => n + u.entries.length, 0) +
+  (input.teams ?? []).reduce((n, t) => n + t.members.length, 0);
 
 // ---------------------------------------------------------------------------
 // Scoring — builds the real DraftUnit shape markCuts expects and asks it who's cut, so the arithmetic never drifts
@@ -81,6 +98,50 @@ function scoreArrangement(units: CutPlannerUnit[], cutMode: CutMode, teamCount: 
   const insertionOrder = new Map(units.flatMap((u) => u.entries.map((e) => [e.userId, e.insertionRank] as const)));
   markCuts(draftUnits, cutMode, teamCount, drafted, insertionOrder);
   return draftUnits.filter((u) => u.cut).reduce((n, u) => n + u.entries.length, 0);
+}
+
+// ---------------------------------------------------------------------------
+// Team changes move players: an added Team's Captain (and their partner) leave the pool, a removed Team's members
+// rejoin it. With the Captain / Team already picked (an admin-edited list) that's exact; a plan never picks, so
+// then every way it could go is scored and the best kept — the admin's actual pick is scored exactly once made.
+// ---------------------------------------------------------------------------
+
+type TeamChange = { kind: "addTeam"; captainUserId?: string } | { kind: "removeTeam"; teamId?: string };
+
+function poolsAfterTeamChange(units: CutPlannerUnit[], change: TeamChange | null, teams: CutPlannerTeam[]): CutPlannerUnit[][] {
+  if (!change) return [units];
+  if (change.kind === "addTeam") {
+    if (change.captainUserId) {
+      const unit = units.find((u) => u.entries.some((e) => e.userId === change.captainUserId));
+      if (!unit) throw new ServiceError(400, "The new Team's Captain has to be a player who isn't on a Team yet");
+      return [units.filter((u) => u !== unit)];
+    }
+    // Which single (or which pair) doesn't change how many are cut — only whether it's a single or a pair does.
+    const options = [units.find((u) => !isPair(u)), units.find(isPair)].filter((u): u is CutPlannerUnit => !!u);
+    return options.length ? options.map((leaving) => units.filter((u) => u !== leaving)) : [units];
+  }
+  const rejoin = (t: CutPlannerTeam): CutPlannerUnit[] =>
+    t.pairingId && t.members.length === 2
+      ? [{ pairingId: t.pairingId, isCaptainPair: false, entries: t.members }]
+      : t.members.map((m) => ({ pairingId: null, isCaptainPair: false, entries: [m] }));
+  if (change.teamId) {
+    const team = teams.find((t) => t.teamId === change.teamId);
+    if (!team) throw new ServiceError(400, "That Team isn't in this bingo");
+    return [[...units, ...rejoin(team)]];
+  }
+  return teams.length ? teams.map((t) => [...units, ...rejoin(t)]) : [units];
+}
+
+/** Players cut after `change` (if any) at `teamCount` Teams — the best case when the change's pick is still open. */
+function scoreWithTeamChange(
+  units: CutPlannerUnit[],
+  change: TeamChange | null,
+  teams: CutPlannerTeam[],
+  cutMode: CutMode,
+  teamCount: number,
+  drafted: { pairs: number; singles: number },
+): number {
+  return Math.min(...poolsAfterTeamChange(units, change, teams).map((pool) => scoreArrangement(pool, cutMode, teamCount, drafted)));
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +249,8 @@ export function planCutChanges(input: CutPlannerInput): CutPlan {
       for (let m = 0; m <= maxM; m++) {
         if (tc === teamCount && k === 0 && m === 0) continue; // already `best`'s starting point
         const provisional = applyProvisional(units, pairingCandidates.slice(0, k), splitCandidates.slice(0, m));
-        const cutPlayers = scoreArrangement(provisional, cutMode, tc, drafted);
+        const teamChange: TeamChange | null = tc > teamCount ? { kind: "addTeam" } : tc < teamCount ? { kind: "removeTeam" } : null;
+        const cutPlayers = scoreWithTeamChange(provisional, teamChange, input.teams ?? [], cutMode, tc, drafted);
         const candidate: Candidate = { teamCount: tc, k, m, cutPlayers };
         if (better(candidate, best)) best = candidate;
       }
@@ -196,7 +258,7 @@ export function planCutChanges(input: CutPlannerInput): CutPlan {
   }
 
   const changes: CutChange[] = [
-    ...pairingCandidates.slice(0, best.k).map(([a, b]): CutChange => ({ kind: "pair", signupIds: [a.entries[0]!.userId, b.entries[0]!.userId] })),
+    ...pairingCandidates.slice(0, best.k).map(([a, b]): CutChange => ({ kind: "pair", userIds: [a.entries[0]!.userId, b.entries[0]!.userId] })),
     ...splitCandidates.slice(0, best.m).map((p): CutChange => ({ kind: "split", pairingId: p.pairingId! })),
     ...(best.teamCount > teamCount ? [{ kind: "addTeam" } as const] : []),
     ...(best.teamCount < teamCount ? [{ kind: "removeTeam" } as const] : []),
@@ -215,14 +277,15 @@ export function planCutChanges(input: CutPlannerInput): CutPlan {
  * ServiceError for a change that doesn't fit: an unknown or already-spoken-for signup/pairing, a Captain's pair,
  * more than one Team change, or a Team change outside ±1 / the size tiers.
  */
-export function resolveChanges(input: CutPlannerInput, changes: CutChange[]): { units: CutPlannerUnit[]; teamCount: number } {
+export function resolveChanges(input: CutPlannerInput, changes: CutChange[]): { units: CutPlannerUnit[]; teamCount: number; teamChange: TeamChange | null } {
   let singles = input.units.filter((u) => !isPair(u));
   let pairs = input.units.filter(isPair);
   let teamDelta = 0;
+  let teamChange: TeamChange | null = null;
 
   for (const change of changes) {
     if (change.kind === "pair") {
-      const [aId, bId] = change.signupIds;
+      const [aId, bId] = change.userIds;
       if (aId === bId) throw new ServiceError(400, "Pick two different players to pair");
       const a = singles.find((u) => u.entries[0]!.userId === aId);
       const b = singles.find((u) => u.entries[0]!.userId === bId);
@@ -238,6 +301,7 @@ export function resolveChanges(input: CutPlannerInput, changes: CutChange[]): { 
     } else {
       if (teamDelta !== 0) throw new ServiceError(400, "A plan can change the Team count by at most one Team");
       teamDelta = change.kind === "addTeam" ? 1 : -1;
+      teamChange = change;
     }
   }
 
@@ -250,14 +314,14 @@ export function resolveChanges(input: CutPlannerInput, changes: CutChange[]): { 
     }
   }
 
-  return { units: [...singles, ...pairs], teamCount };
+  return { units: [...singles, ...pairs], teamCount, teamChange };
 }
 
 /** How many players `changes` would leave cut, validated against the current pool (see resolveChanges). */
 export function scoreChanges(input: CutPlannerInput, changes: CutChange[]): { cutPlayers: number; cutPlayersNow: number } {
   const cutPlayersNow = scoreArrangement(input.units, input.cutMode, input.teamCount, input.drafted);
   if (input.cutMode === "none") return { cutPlayers: 0, cutPlayersNow: 0 };
-  const { units, teamCount } = resolveChanges(input, changes);
-  const cutPlayers = scoreArrangement(units, input.cutMode, teamCount, input.drafted);
+  const { units, teamCount, teamChange } = resolveChanges(input, changes);
+  const cutPlayers = scoreWithTeamChange(units, teamChange, input.teams ?? [], input.cutMode, teamCount, input.drafted);
   return { cutPlayers, cutPlayersNow };
 }

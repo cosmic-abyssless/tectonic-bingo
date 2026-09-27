@@ -2,7 +2,7 @@
 // no createTestDb needed. CONTEXT.md "Cut review" has the vocabulary these tests are named after.
 import { describe, expect, it } from "vitest";
 import type { TimeZoneRegion } from "@bingo/shared";
-import { minTeamSize, planCutChanges, resolveChanges, scoreChanges, type CutPlannerInput, type CutPlannerUnit } from "./cutPlanner";
+import { minTeamSize, planCutChanges, resolveChanges, scoreChanges, type CutPlannerInput, type CutPlannerTeam, type CutPlannerUnit } from "./cutPlanner";
 import { ServiceError } from "./errors";
 
 let nextRank = 0;
@@ -51,7 +51,7 @@ describe("planCutChanges", () => {
     expect(plan.cutPlayersNow).toBe(2);
     expect(plan.cutPlayers).toBe(0);
     // Splitting "p1" would also reach 0 cut in one change — a tie broken by preferring pairing over splitting.
-    expect(plan.changes).toEqual([{ kind: "pair", signupIds: ["c", "d"] }]);
+    expect(plan.changes).toEqual([{ kind: "pair", userIds: ["c", "d"] }]);
   });
 
   it("2 Teams, 3 singles: nothing helps — pairing two of them would leave a cut pair, worse than the 1 Unavoidable cut", () => {
@@ -76,7 +76,7 @@ describe("planCutChanges", () => {
     const plan = planCutChanges(baseInput(units, { teamCount: 2 }));
     expect(plan.cutPlayersNow).toBe(2);
     expect(plan.cutPlayers).toBe(0);
-    expect(plan.changes).toEqual([{ kind: "pair", signupIds: ["europe-early", "europe-late"] }]);
+    expect(plan.changes).toEqual([{ kind: "pair", userIds: ["europe-early", "europe-late"] }]);
   });
 
   it("never proposes splitting a pair a Captain belongs to, even when splitting would otherwise be the only fix", () => {
@@ -142,7 +142,7 @@ describe("resolveChanges / scoreChanges", () => {
   });
 
   it("scores the admin's own edit the same way the planner would", () => {
-    const result = scoreChanges(scenario(), [{ kind: "pair", signupIds: ["c", "d"] }]);
+    const result = scoreChanges(scenario(), [{ kind: "pair", userIds: ["c", "d"] }]);
     expect(result).toEqual({ cutPlayers: 0, cutPlayersNow: 2 });
   });
 
@@ -151,7 +151,7 @@ describe("resolveChanges / scoreChanges", () => {
     // Splitting p1 first frees "a" and "b" up to be re-paired with "c" — order matters.
     const { units, teamCount } = resolveChanges(input, [
       { kind: "split", pairingId: "p1" },
-      { kind: "pair", signupIds: ["a", "c"] },
+      { kind: "pair", userIds: ["a", "c"] },
     ]);
     expect(teamCount).toBe(2);
     expect(units).toHaveLength(2); // one pair (a & c), one single (b)
@@ -160,7 +160,7 @@ describe("resolveChanges / scoreChanges", () => {
   });
 
   it("rejects a pairing referencing a signup that's no longer unpaired", () => {
-    expect(() => resolveChanges(scenario(), [{ kind: "pair", signupIds: ["a", "c"] }])).toThrow(ServiceError);
+    expect(() => resolveChanges(scenario(), [{ kind: "pair", userIds: ["a", "c"] }])).toThrow(ServiceError);
   });
 
   it("rejects splitting a pairing that no longer exists", () => {
@@ -185,5 +185,70 @@ describe("resolveChanges / scoreChanges", () => {
     const units = Array.from({ length: 21 }, (_, i) => single(`s${i}`));
     const input = baseInput(units, { teamCount: 6 });
     expect(() => resolveChanges(input, [{ kind: "addTeam" }])).toThrow(/fewer than 4 players/i);
+  });
+});
+
+// A Team change moves players, not just the count: an added Team's Captain leaves the pool, a removed Team's
+// Captains rejoin it (see cutPlanner.ts's CutPlannerTeam).
+describe("Team changes move their Captains", () => {
+  const captainTeam = (teamId: string, captainId: string): CutPlannerTeam => ({
+    teamId,
+    members: [{ userId: captainId, signedUpAt: 0, insertionRank: nextRank++, timezoneRegion: null }],
+    pairingId: null,
+  });
+  const singles = (n: number, prefix = "s") => Array.from({ length: n }, (_, i) => single(`${prefix}${i}`, { signedUpAt: i }));
+
+  it("doesn't add a Team when its Captain leaving the pool would cut more (2 Teams, 9 singles: 1 cut; 3 Teams of the 8 left: 2 cut)", () => {
+    const input = baseInput(singles(9), { isSolo: true, teamCount: 2, teams: [captainTeam("t1", "c1"), captainTeam("t2", "c2")] });
+    const plan = planCutChanges(input);
+    expect(plan.cutPlayersNow).toBe(1);
+    expect(plan.changes).toEqual([]);
+    expect(plan.cutPlayers).toBe(1);
+  });
+
+  it("adds a Team when that saves players even with its Captain leaving the pool (2 Teams, 7 singles: 1 cut; 3 Teams of the 6 left: 0)", () => {
+    const input = baseInput(singles(7), { isSolo: true, teamCount: 2, teams: [captainTeam("t1", "c1"), captainTeam("t2", "c2")] });
+    const plan = planCutChanges(input);
+    expect(plan.cutPlayersNow).toBe(1);
+    expect(plan.changes).toEqual([{ kind: "addTeam" }]);
+    expect(plan.cutPlayers).toBe(0);
+  });
+
+  it("removes a Team when its Captain rejoining the pool saves players (3 Teams, 5 singles: 2 cut; 2 Teams of 6: 0)", () => {
+    const teams = [captainTeam("t1", "c1"), captainTeam("t2", "c2"), captainTeam("t3", "c3")];
+    const plan = planCutChanges(baseInput(singles(5), { isSolo: true, teamCount: 3, teams }));
+    expect(plan.cutPlayersNow).toBe(2);
+    expect(plan.changes).toEqual([{ kind: "removeTeam" }]);
+    expect(plan.cutPlayers).toBe(0);
+  });
+
+  it("counts the Teams' Captains in the average Team size the tiers check", () => {
+    // 4 singles + 2 Captains = 6 players: 3 Teams would average 2, under the minimum of 3 — no Team is added.
+    const input = baseInput(singles(4), { isSolo: true, teamCount: 2, teams: [captainTeam("t1", "c1"), captainTeam("t2", "c2")] });
+    expect(() => resolveChanges(input, [{ kind: "addTeam" }])).toThrow(/fewer than 3 players/i);
+  });
+
+  it("scores an added Team exactly once its Captain is picked, and refuses a Captain who isn't in the pool", () => {
+    const input = baseInput(singles(7), { isSolo: true, teamCount: 2, teams: [captainTeam("t1", "c1"), captainTeam("t2", "c2")] });
+    expect(scoreChanges(input, [{ kind: "addTeam", captainUserId: "s3" }]).cutPlayers).toBe(0);
+    expect(() => scoreChanges(input, [{ kind: "addTeam", captainUserId: "c1" }])).toThrow(ServiceError);
+  });
+
+  it("puts a removed Team's two Captains back as the pair they are", () => {
+    const pairTeam: CutPlannerTeam = {
+      teamId: "t3",
+      members: [
+        { userId: "x", signedUpAt: 0, insertionRank: nextRank++, timezoneRegion: null },
+        { userId: "y", signedUpAt: 0, insertionRank: nextRank++, timezoneRegion: null },
+      ],
+      pairingId: "pxy",
+    };
+    // 3 Teams, 2 pairs in the pool: 2 pairs over 3 Teams is 0 each, so both pairs (4 players) are cut.
+    const units = [pair("p1", "a", "b"), pair("p2", "c", "d")];
+    const teams = [captainTeam("t1", "c1"), captainTeam("t2", "c2"), pairTeam];
+    const input = baseInput(units, { teamCount: 3, teams });
+    // Removing the pair's Team: 3 pairs over 2 Teams = 1 each, 1 pair (2 players) cut.
+    expect(scoreChanges(input, [{ kind: "removeTeam", teamId: "t3" }]).cutPlayers).toBe(2);
+    expect(() => scoreChanges(input, [{ kind: "removeTeam", teamId: "nope" }])).toThrow(ServiceError);
   });
 });

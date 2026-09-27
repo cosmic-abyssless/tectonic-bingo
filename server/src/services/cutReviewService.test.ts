@@ -72,19 +72,19 @@ describe("getCutReviewPreview / scoreCutChanges", () => {
     expect(preview.plan.cutPlayers).toBe(0);
     expect(preview.avoidableCount).toBe(2);
     expect(preview.unavoidableCount).toBe(0);
-    expect(preview.plan.changes).toEqual([{ kind: "pair", signupIds: [c.id, d.id] }]);
+    expect(preview.plan.changes).toEqual([{ kind: "pair", userIds: [c.id, d.id] }]);
   });
 
   it("scores an admin's own edit against the current pool", () => {
     const { bingo, c, d } = seedAvoidableScenario();
-    expect(scoreCutChanges(db, bingo, [{ kind: "pair", signupIds: [c.id, d.id] }])).toBe(0);
+    expect(scoreCutChanges(db, bingo, [{ kind: "pair", userIds: [c.id, d.id] }])).toBe(0);
     expect(scoreCutChanges(db, bingo, [])).toBe(2);
   });
 
   it("rejects scoring a change that no longer fits the roster", () => {
     const { bingo, a, c } = seedAvoidableScenario();
     // "a" already has a partner ("b") — pairing them with "c" doesn't fit.
-    expect(() => scoreCutChanges(db, bingo, [{ kind: "pair", signupIds: [a.id, c.id] }])).toThrow(ServiceError);
+    expect(() => scoreCutChanges(db, bingo, [{ kind: "pair", userIds: [a.id, c.id] }])).toThrow(ServiceError);
   });
 
   it("reports 0 Avoidable once nothing but an Unavoidable cut is left (2 Teams, 3 singles)", () => {
@@ -107,7 +107,7 @@ describe("getCutReviewPreview / scoreCutChanges", () => {
 describe("applyCutReview", () => {
   it("applies every change, through the existing audited operations, and records the review", () => {
     const { bingo, admin, c, d } = seedAvoidableScenario();
-    const result = applyCutReview(db, bingo, [{ kind: "pair", signupIds: [c.id, d.id] }], admin.id);
+    const result = applyCutReview(db, bingo, [{ kind: "pair", userIds: [c.id, d.id] }], admin.id);
     expect(result.cutPlayers).toBe(0);
 
     expect(getAcceptedPairs(db, bingo.id).some((p) => p.userIds.includes(c.id) && p.userIds.includes(d.id))).toBe(true);
@@ -157,7 +157,7 @@ describe("applyCutReview", () => {
         bingo,
         [
           { kind: "addTeam", captainUserId: c.id },
-          { kind: "pair", signupIds: [a.id, d.id] },
+          { kind: "pair", userIds: [a.id, d.id] },
         ],
         admin.id,
       ),
