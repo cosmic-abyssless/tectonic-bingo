@@ -552,7 +552,11 @@ export function SignupRosterGrid({
       {
         colId: "status",
         headerName: "Status",
-        valueGetter: (p) => p.data?.signup.status,
+        // Everything the cell shows, "will be cut" included: the grid only redraws a cell whose value changed, so with
+        // the status alone a refetch that only changes who's cut (a Cut review applied, a Team added) left the badge
+        // stale. Search still matches the status alone.
+        valueGetter: (p) => (p.data ? `${p.data.signup.status}${p.data.cut ? " (will be cut)" : ""}` : undefined),
+        getQuickFilterText: (p) => p.data?.signup.status ?? "",
         cellRenderer: StatusCell,
         cellClass: (p) => (p.data?.signup.status === "active" && p.context.canWithdraw ? "cursor-pointer" : ""),
         editable: (p) => p.data?.signup.status === "active" && !!p.context.canWithdraw,
@@ -738,6 +742,11 @@ export function SignupRosterGrid({
   useEffect(() => {
     gridApiRef.current?.refreshCells({ force: true, columns: ["rsn", "partner"] });
   }, [context.search]);
+  // Likewise the Partner cell shows a pending request (and "—" once withdrawn), which isn't its value (the sort and the
+  // picker read that): a refetch that only changes those would otherwise leave the cell as it was.
+  useEffect(() => {
+    gridApiRef.current?.refreshCells({ force: true, columns: ["partner"] });
+  }, [rows]);
 
   const onCellEditRequest = useCallback((e: CellEditRequestEvent<RosterRow>) => {
     const { colDef, data, newValue } = e;
