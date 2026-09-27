@@ -1403,7 +1403,7 @@ function TileDetails({
   };
   const face = (i: number, side: Side): ReactNode => (
     <PageColorsContext.Provider value={page}>
-      <BookPage colors={page} side={side === "front" ? "right" : "left"} no={i + 1} role={roleOf(i)} dragScroll={single}>
+      <BookPage colors={page} side={side === "front" ? "right" : "left"} no={i + 1} role={roleOf(i)} dragScroll={single} fill={i === 0}>
         {pages[i]}
       </BookPage>
     </PageColorsContext.Provider>
@@ -1634,13 +1634,17 @@ function NavButton({
 }
 
 // A page on a face: the scrollable content, and a footer strip under it —
-// PAGE n on the outer edge, what the page is at the spine.
+// PAGE n on the outer edge, what the page is at the spine. `fill`: the content
+// is a column at least the page's height, for a page (the summary) that lays
+// itself out to fit rather than scroll, and it keeps clear of just the footer
+// (bw(0.06), PageFooter) where other pages leave twice that.
 function BookPage({
   colors,
   side,
   no,
   role,
   dragScroll = false,
+  fill = false,
   children,
 }: {
   colors: ComicColors;
@@ -1648,12 +1652,15 @@ function BookPage({
   no: number;
   role: string;
   dragScroll?: boolean;
+  fill?: boolean;
   children: ReactNode;
 }) {
   return (
     <>
       <Page colors={colors} side={side} dragScroll={dragScroll}>
-        <div style={{ paddingBottom: bw(0.12) }}>{children}</div>
+        <div className={fill ? "flex flex-1 flex-col" : undefined} style={{ paddingBottom: bw(fill ? 0.06 : 0.12) }}>
+          {children}
+        </div>
       </Page>
       <PageFooter colors={colors} side={side} no={no} role={role} />
     </>
@@ -1812,11 +1819,23 @@ function SummaryPage({
   onToggleInterest?: () => void;
 }) {
   const { progress, freeze } = tile;
+  // The height left for the artwork between the contents and the button (its box is flex-1 on a page that fills the
+  // leaf, so this doesn't depend on the picture), which it scales itself down to fit rather than make the page scroll.
+  const artBox = useRef<HTMLDivElement>(null);
+  const [artRoom, setArtRoom] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = artBox.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setArtRoom(el.clientHeight));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const pointsPct = progress.totalPoints > 0 ? Math.round((progress.pointsAwarded / progress.totalPoints) * 100) : 0;
   const submitLabel = progress.allComplete ? "Complete" : freeze.isFrozen ? "Frozen" : "Submit proof";
 
   return (
-    <div className="flex flex-col gap-5 p-6" style={{ color: colors.INK }}>
+    // flex-1: fills the page (BookPage's `fill`), so the artwork below can take what's left and the page never scrolls.
+    <div className="flex flex-1 flex-col gap-5 p-6" style={{ color: colors.INK }}>
       {/* Masthead header */}
       <div className="flex flex-col items-start gap-2">
         <span
@@ -1944,8 +1963,12 @@ function SummaryPage({
         </section>
       )}
 
-      {/* The Tile's artwork, pinned under the contents. */}
-      {tile.imageUrl && <PinnedArt imageUrl={tile.imageUrl} name={tile.name} colors={colors} onOpen={onOpenArt} />}
+      {/* The Tile's artwork, pinned under the contents, in whatever height the page has left (see artRoom). */}
+      {tile.imageUrl && (
+        <div ref={artBox} className="flex min-h-24 flex-1 items-center justify-center">
+          <PinnedArt imageUrl={tile.imageUrl} name={tile.name} colors={colors} onOpen={onOpenArt} maxHeight={artRoom} />
+        </div>
+      )}
 
       {onSubmit && (
         <ComicButton
