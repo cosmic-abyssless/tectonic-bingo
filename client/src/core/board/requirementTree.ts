@@ -145,7 +145,7 @@ export function conditionHeading(node: { kind: NodeKind; minCount?: number | nul
     case "COUNT":
       return `Complete at least ${node.minCount ?? 1} of`;
     case "SUM":
-      return `Collect ${node.quantity ?? 1} in total across`;
+      return `${node.quantity ?? 1} in total from`;
     default:
       return "";
   }
@@ -163,4 +163,9 @@ export function tileMatchesSearch(tile: Tile, q: string): boolean {
   return tile.node.children.some(
     (task) => (task.description ?? "").toLowerCase().includes(q) || collectItemNames(task).some((n) => n.toLowerCase().includes(q)),
   );
+}
+
+// While the Tiles are sealed (CONTEXT.md "Sealed Tiles") a tile can only be found by its name and its Category.
+export function sealedTileMatchesSearch(tile: Pick<Tile, "name">, categoryLabel: string | null, q: string): boolean {
+  return tile.name.toLowerCase().includes(q) || (categoryLabel ?? "").toLowerCase().includes(q);
 }

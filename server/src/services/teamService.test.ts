@@ -4,7 +4,23 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { and, eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { addTeamMember, assertTeamsLedByPairs, createPointAdjustment, createTeam, deleteTeam, getCaptainCandidates, getTeamProgress, getTeamsWithMembers, isTeamLead, ledTeamName, removeTeamMember, setTileInterest, teamsNotLedByPairs, updateTeam } from "./teamService";
+import {
+  addTeamMember,
+  assertTeamsLedByPairs,
+  createPointAdjustment,
+  createTeam,
+  deleteTeam,
+  getCaptainCandidates,
+  getTeamProgress,
+  getTeamProgressForViewer,
+  getTeamsWithMembers,
+  isTeamLead,
+  ledTeamName,
+  removeTeamMember,
+  setTileInterest,
+  teamsNotLedByPairs,
+  updateTeam,
+} from "./teamService";
 import { createTask, createTile } from "./boardService";
 import { adminPair } from "./pairingService";
 import { ServiceError } from "./errors";
@@ -440,6 +456,34 @@ describe("tile interests", () => {
     // Right bingo, wrong tile: the task must hang off the tile it's claimed for.
     const sibling = createTile(db, { bingoId: bingo.id, name: "Sibling", boardRow: 0, boardCol: 1 });
     expect(() => setTileInterest(db, team.id, captain.id, sibling.id, taskA.id, true)).toThrow(ServiceError);
+  });
+
+  // CONTEXT.md "Sealed Tiles": no interest can be marked while sealed; what was marked before is kept, hidden
+  // from players, and comes back unchanged once the Tiles are unsealed.
+  it("refuses changes while the Tiles are sealed, and keeps the existing hands for after", () => {
+    const { bingo, team, tile, taskA, taskB, captain, member } = seedTeamAndTile();
+    db.update(schema.bingos).set({ stage: "reveal" }).where(eq(schema.bingos.id, bingo.id)).run();
+    setTileInterest(db, team.id, captain.id, tile.id, taskA.id, true);
+    const before = getTeamProgress(db, team.id).interests;
+
+    const sealed = db.update(schema.bingos).set({ sealedTiles: true }).where(eq(schema.bingos.id, bingo.id)).returning().get();
+    expect(() => setTileInterest(db, team.id, captain.id, tile.id, taskA.id, false)).toThrow(ServiceError);
+    expect(() => setTileInterest(db, team.id, member.id, tile.id, taskB.id, true)).toThrow(ServiceError);
+    expect(getTeamProgress(db, team.id).interests).toEqual(before);
+    expect(getTeamProgressForViewer(db, sealed, team.id, false).interests).toEqual([]);
+    expect(getTeamProgressForViewer(db, sealed, team.id, true).interests).toEqual(before);
+
+    const unsealed = db.update(schema.bingos).set({ sealedTiles: false }).where(eq(schema.bingos.id, bingo.id)).returning().get();
+    expect(getTeamProgressForViewer(db, unsealed, team.id, false).interests).toEqual(before);
+    setTileInterest(db, team.id, member.id, tile.id, taskB.id, true);
+    expect(getTeamProgress(db, team.id).interests).toHaveLength(2);
+  });
+
+  it("allows changes again once the bingo is live, whatever the setting says", () => {
+    const { bingo, team, tile, taskA, captain } = seedTeamAndTile();
+    const live = db.update(schema.bingos).set({ stage: "live", sealedTiles: true }).where(eq(schema.bingos.id, bingo.id)).returning().get();
+    setTileInterest(db, team.id, captain.id, tile.id, taskA.id, true);
+    expect(getTeamProgressForViewer(db, live, team.id, false).interests).toHaveLength(1);
   });
 
   it("drops a member's hands when they leave the team", () => {

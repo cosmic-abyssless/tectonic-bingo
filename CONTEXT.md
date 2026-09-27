@@ -59,6 +59,7 @@ A designated player who leads a Team during a Bingo.
 A clan member who is part of a Bingo as a competitor: until Board revealed, anyone with an active Signup, except Cut signups once the Draft stage begins; from Board revealed on, anyone on a Team. A withdrawn signup is never a Player.
 - **Capabilities:** Sign up, view the board, make Submissions for their team, view team progress.
 - **Rules:** Belongs to exactly one Team per Bingo once drafted. Anyone who isn't a Player, Moderator or Admin is "not part of this Bingo": they see only its name and stage, plus the signup form while Signups are open. Once the Bingo is Finished, every clan member can view it read-only.
+- **Show screenshots once Finished:** A per-Bingo setting, on by default, that only Admins can change. Off, other Teams' screenshots are hidden from everyone but Moderators once the Bingo is Finished; the Submissions themselves stay visible, and a viewer's own Team's screenshots stay too.
 - **Name:** Inside a Bingo a Player is named by the RSN they signed up with, not their Discord name (rosters, submissions, stats, the audit log, the draft, the header). The server puts it on `rsn` for every user it sends within a Bingo, and `playerName` prefers it. An account with no Signup in that Bingo, like a Moderator who isn't playing, falls back to the Discord name, as do site-level lists. A Discord name is only shown where it is labelled as one (the "Discord" columns of the roster and draft room, the profile subtitle). Audit entries written before this keep the names they were stored with.
 
 ---
@@ -70,9 +71,9 @@ A player's registration for a specific Bingo, submitted during the `signup` stag
 - **Status:** Active or Withdrawn.
 - **Rules:** Includes answers to custom signup questions set by the Admin (e.g. timezone, gear tier, OSRS RSN).
 - **Question types:** Short text, long text, yes/no, **single choice** (radio buttons, one option) and **multiple choice** (checkboxes, any number of options). A multiple-choice answer is stored as a JSON list and shown as "Melee, Magic"; a required one needs at least one option ticked. A yes/no answer is shown as "Yes" or "No".
-- **Member pick:** A question type whose answer is one or several clan members (for example "Who would you like to play with?"), picked by searching. The list is every clan member who has logged in, except the person answering, each named by the RSN of their latest Signup or else their Discord name. "Several" can carry a maximum. A pick stays even if that member later leaves the clan.
+- **Member pick:** A question type whose answer is one or several clan members (for example "Who would you like to play with?"), picked by searching. The list is every clan member who has logged in, except the person answering, each named by the RSN of their latest Signup or else their Discord name. "Several" can carry a maximum. The answer is stored as the picked users, not their names, and shown by their current names in Bingo naming ("Zezima, Lynx Titan"). A pick stays, and keeps its name, even if that member later leaves the clan. One/several and the maximum are exported and imported with the Bingo.
   - **Avoid:** Player picker (the people picked needn't be Players).
-- **Other option:** A single- or multiple-choice question can allow **Other**: an extra choice with a short free-text box, shown as "Melee, Other: hybrid". A required question counts Other with text as answered.
+- **Other option:** A single- or multiple-choice question can allow **Other**: an extra choice with a short free-text box (up to 100 characters), shown as "Melee, Other: hybrid". Other can't be picked without text, and a required question counts Other with text as answered. The setting is exported and imported with the Bingo.
 - **Question helper text:** Each signup question can carry optional plain-text helper text (up to 500 characters), shown under it on the signup form. It is exported and imported with the Bingo.
 
 ### Duo
@@ -158,7 +159,7 @@ The recursive structure inside a Part or Task defining how objectives combine:
   - `ALL` — "Complete all of"
   - `ANY` — "Complete any one of"
   - `COUNT` — "Complete at least N of" (e.g., any 2 out of 5)
-  - `SUM` — "Collect N in total across" (e.g., 500 total kill count or secondary ingredients)
+  - `SUM` — "N in total from" (e.g., 500 total kill count or secondary ingredients)
 - **Leaves:**
   - `ITEM` — An in-game item drop, tracked by OSRS item name and quantity.
   - `MANUAL` — An objective manually judged/verified by a Moderator.
@@ -232,8 +233,8 @@ The Bingo's stats page: points over time, the timeline, top contributors (ranked
 
 ### Title
 A tongue-in-cheek label a Player holds on the Stats page for how they played ("Carry", "Closer", "Butterfingers"), recomputed as the stats change.
-- **Rules:** Each Title goes to the Player with the best value among the Players shown, once they meet its minimum. A Title is never shared: a tie goes to the tied Player holding the fewest Titles, then to whoever reached that value first. With a Team selected in the team filter it's that Team's; unfiltered, the Bingo's. Titles follow the Stats visibility rules. The contributors table shows a chip for every Title a Player holds, in priority order, and their profile lists them with the number behind each. Some Titles use their Wise Old Man gains during the Bingo (EHB, boss kill counts), read from what Wise Old Man already has (never an update request), so they lag until the Player updates, and they freeze once the Bingo is Finished. A Site admin can turn Titles off and tune each one's minimum (and the luck Titles' floors) for every Bingo at once, from Site admin > Titles; a change applies straight away.
-- **Not:** A permanent award. Titles belong to one Bingo and move as it goes.
+- **Rules:** Each Title goes to the Player with the best value among the Players shown, once they meet its minimum. A Title is never shared: a tie goes to the tied Player holding the fewest Titles, then to whoever reached that value first. With a Team selected in the team filter it's that Team's; unfiltered, the Bingo's. Titles follow the Stats visibility rules. The contributors table shows a chip for every Title a Player holds, in priority order, and their profile lists them with the number behind each. Some Titles use their Wise Old Man gains during the Bingo (EHB, boss kill counts), read from what Wise Old Man already has (never an update request), so they lag until the Player updates, and they freeze once the Bingo is Finished. A Site admin can turn Titles off and tune each one's minimum (and the luck Titles' floors) from Site admin > Titles; a change applies straight away to every Bingo that isn't Finished. A Finished Bingo keeps the settings, and the set of Titles, it finished with, so later tuning or a new Title doesn't reach it; it gets a fresh copy if it's reopened and finished again.
+- **Not:** A permanent award. Titles belong to one Bingo and move as it goes, and can still move after it's Finished when a Submission is reviewed late.
 
 ### Hidden Title
 A Title nobody knows exists until someone holds it: it shows up only then, marked as a hidden Title unlocked, and there's no hint of it before.

@@ -108,6 +108,15 @@ export const bingos = sqliteTable('bingos', {
   // Achievements master switch (CONTEXT.md "Achievement"): off hides every Achievement from reads, counts and
   // popups, but earning keeps happening in the background — see achievementService.ts and bingoAchievementSettings.
   achievementsEnabled: integer('achievements_enabled', { mode: 'boolean' }).notNull().default(true),
+  // Sealed Tiles (CONTEXT.md): during Board revealed, Players and Captains see each Tile's art, name and Category
+  // only and can't open it. No effect in any other stage. See bingoService.areTilesSealed.
+  sealedTiles: integer('sealed_tiles', { mode: 'boolean' }).notNull().default(false),
+  // During Board revealed, the rules text is held back from Players and Captains. Independent of sealedTiles.
+  // See bingoService.areRulesHidden.
+  hideRules: integer('hide_rules', { mode: 'boolean' }).notNull().default(false),
+  // "Show screenshots once Finished" (CONTEXT.md "Player"): once the bingo is Finished every clan member can read
+  // every team's submissions; off, other teams' screenshot images are left out for anyone but Moderators. Admins only.
+  showScreenshotsWhenFinished: integer('show_screenshots_when_finished', { mode: 'boolean' }).notNull().default(true),
 });
 
 // Mod is per-bingo, not a global flag — fixes v1's single global isModerator.
@@ -176,8 +185,13 @@ export const signupQuestions = sqliteTable('signup_questions', {
   prompt: text('prompt').notNull(),
   // Optional plain-text note shown under the question on the signup form.
   helperText: text('helper_text'),
-  type: text('type', { enum: ['text', 'textarea', 'select', 'multiselect', 'boolean'] }).notNull(), // select = one choice, multiselect = several
+  type: text('type', { enum: ['text', 'textarea', 'select', 'multiselect', 'boolean', 'member'] }).notNull(), // select = one choice, multiselect = several, member = Member pick
   optionsJson: text('options_json'), // JSON string array; only for type = 'select' or 'multiselect'
+  // Choice questions only: an extra Other choice with the player's own text (see shared/src/signupAnswers.ts).
+  allowOther: integer('allow_other', { mode: 'boolean' }).notNull().default(false),
+  // Member pick only: several members may be picked (else one), and with several the most that may be (null: no limit).
+  multiplePicks: integer('multiple_picks', { mode: 'boolean' }).notNull().default(false),
+  maxPicks: integer('max_picks'),
   required: integer('required', { mode: 'boolean' }).notNull().default(false),
   sortOrder: integer('sort_order').notNull().default(0),
   // Who besides the answerer sees the answers: 'captains' (and up), 'mods' (and site admins), or 'admins' only.
@@ -686,6 +700,17 @@ export const siteSettings = sqliteTable('site_settings', {
   valueJson: text('value_json').notNull(),
   updatedByUserId: text('updated_by_user_id').notNull().references(() => users.id),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+// A Finished Bingo's own copy of the Title settings (#221, CONTEXT.md "Title"), taken when it moved to Finished so
+// later Site admin changes and new Titles don't reach it. settingsJson is the fully resolved TitleSettings (every
+// minimum and luck weight, defaults included); titleIdsJson is every Title id that existed then. Replaced on every
+// move into Finished, deleted on any move out of it. See titleSettingsService.
+export const bingoTitleSettings = sqliteTable('bingo_title_settings', {
+  bingoId: text('bingo_id').primaryKey().references(() => bingos.id),
+  settingsJson: text('settings_json').notNull(),
+  titleIdsJson: text('title_ids_json').notNull(),
+  frozenAt: integer('frozen_at', { mode: 'timestamp' }).notNull(),
 });
 
 // Manual point adjustments applied by moderators. Also the only way to hand

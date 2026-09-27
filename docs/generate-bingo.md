@@ -91,7 +91,9 @@ target (say `signup`), the later dates are simply scheduled in the future.
    about 60% of players pairing up as duos (request, then accept). Each player fills in the
    board's signup questions (read from the imported bingo, so whatever is added is answered):
    required ones always, optional ones about half the time, an exact "yes" where a question asks for
-   one, their own UTC offset for a time zone, and more boss choices for stronger players. Without
+   one, their own UTC offset for a time zone, more boss choices for stronger players, and now and then
+   an Other answer where a choice question allows one, and for a Member pick one or a few of the
+   generated players already on the site (up to the question's maximum). Without
    this a required question makes the server refuse every signup. Then every signup is
    given made-up WOM, RuneProfile and combat achievement stats (the ones the signup seed
    tool uses, random, not seeded), because signing up with the integrations off leaves

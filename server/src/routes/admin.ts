@@ -63,6 +63,12 @@ router.patch(
       params.cutMode = body.cutMode as CutMode;
     }
     if ("warnLeftovers" in body) params.warnLeftovers = !!body.warnLeftovers;
+    // Sealed Tiles and Hide rules (CONTEXT.md "Sealed Tiles"): only take effect during Board revealed.
+    for (const key of ["sealedTiles", "hideRules"] as const) {
+      if (!(key in body)) continue;
+      if (typeof body[key] !== "boolean") throw new ServiceError(400, `${key} must be a boolean`);
+      params[key] = body[key];
+    }
     // Validated and cleaned by the service (label, scope, names).
     if ("exclusivityRules" in body) params.exclusivityRules = body.exclusivityRules as never;
     for (const key of dateFields) {
@@ -83,6 +89,10 @@ router.patch(
       if (code) params.womGroupVerificationCode = code;
     }
     // Achievements (CONTEXT.md "Achievement"): the master switch, and/or a partial map of per-Achievement switches.
+    if ("showScreenshotsWhenFinished" in body) {
+      if (typeof body.showScreenshotsWhenFinished !== "boolean") throw new ServiceError(400, "showScreenshotsWhenFinished must be a boolean");
+      params.showScreenshotsWhenFinished = body.showScreenshotsWhenFinished;
+    }
     if ("achievementsEnabled" in body) {
       if (typeof body.achievementsEnabled !== "boolean") throw new ServiceError(400, "achievementsEnabled must be a boolean");
       params.achievementsEnabled = body.achievementsEnabled;

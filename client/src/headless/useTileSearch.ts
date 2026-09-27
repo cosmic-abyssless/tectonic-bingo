@@ -1,14 +1,23 @@
 import { useRef, useState, type KeyboardEvent } from "react";
-import type { Tile } from "@bingo/shared";
-import { tileMatchesSearch } from "../core/board/requirementTree";
+import type { Tile, TileCategory } from "@bingo/shared";
+import { sealedTileMatchesSearch, tileMatchesSearch } from "../core/board/requirementTree";
 import type { TileSearchModel } from "./types";
 
 const SUGGESTION_CAP = 8;
 
+export type TileMatcher = (tile: Tile, q: string) => boolean;
+
+/** How the board's search finds a tile: by its name, Parts and Items, or while sealed by its name and Category only. */
+export function tileSearchMatcher(sealed: boolean, categories: TileCategory[]): TileMatcher {
+  if (!sealed) return tileMatchesSearch;
+  const labelById = new Map(categories.map((c) => [c.id, c.label]));
+  return (tile, q) => sealedTileMatchesSearch(tile, tile.categoryId ? (labelById.get(tile.categoryId) ?? null) : null, q);
+}
+
 // Ports the old local TileSearch component's state machine (query, focus,
 // highlight, keyboard nav, the 150ms blur-close timeout) out of
 // pages/BingoPage.tsx. `onChoose` is called with the picked tile's id.
-export function useTileSearch(tiles: Tile[], onChoose: (tileId: string) => void): TileSearchModel {
+export function useTileSearch(tiles: Tile[], matches: TileMatcher, onChoose: (tileId: string) => void): TileSearchModel {
   const [query, setQueryState] = useState("");
   const [focused, setFocusedState] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -34,7 +43,7 @@ export function useTileSearch(tiles: Tile[], onChoose: (tileId: string) => void)
   }
 
   const sq = query.trim().toLowerCase();
-  const allMatching = sq ? tiles.filter((t) => tileMatchesSearch(t, sq)) : [];
+  const allMatching = sq ? tiles.filter((t) => matches(t, sq)) : [];
   const matching = allMatching.slice(0, SUGGESTION_CAP);
   const showDropdown = focused && sq.length > 0 && matching.length > 0;
 

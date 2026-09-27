@@ -120,6 +120,11 @@ probe_half() {
   grep -q '^OCR_THREADS=1$' <<<"$ocr_env" || fail "the screenshot service did not receive OCR_THREADS"
   echo "the screenshot service received SENTRY_DSN and OCR_THREADS from the env file"
 
+  # The live-update socket needs a logged-in clan member, and a fresh database has nobody to log in as: seed the user the
+  # probe logs in as (through the dev login). A new user is a clan member by default.
+  docker exec "$(service_id api-blue)" node -e 'require("better-sqlite3")(process.env.DB_PATH).prepare("INSERT OR IGNORE INTO users (id, discord_id, discord_username) VALUES (?, ?, ?)").run("zero-downtime-probe", "zero-downtime-probe", "zero-downtime-probe")' \
+    || fail "could not seed the probe's user"
+
   step "Starting the probe (a stand-in for users) and deploying under load"
   node "$here_n/zero-downtime-probe.js" "http://localhost:$port" "$stop_file" "$result_file" &
   probe_pid=$!
@@ -176,7 +181,7 @@ probe_half() {
   // retrying; a deploy that resets many is dropping traffic.
   if (r.retried > 10) problems.push(`${r.retried} requests needed a retry after a connection reset: a deploy should not reset connections`);
   if (!colours.includes("staging-blue") || !colours.includes("staging-green")) problems.push(`traffic was not served by both colours: ${JSON.stringify(r.servedBy)}`);
-  if (r.websocket.opened < 1) problems.push("the WebSocket never connected");
+  if (r.websocket.opened < 1) problems.push(`the WebSocket never connected${r.websocket.lastLoginError ? ` (last login error: ${r.websocket.lastLoginError})` : ""}`);
   if (problems.length) { console.error(problems.join("\n")); process.exit(1); }
   console.log(`\n${r.requests} requests, 0 failed (${r.retried} retried once after a connection reset, as a browser would). Served by: ${JSON.stringify(r.servedBy)}. WebSocket: ${r.websocket.opened} connections, ${r.websocket.closed} closes (its clients reconnect on their own).`);
   ' "$result_file" || fail "users would have noticed"

@@ -6,7 +6,7 @@ import { Button } from "../../../core/ui/Button";
 import { Badge } from "../../../core/ui/Card";
 import { CountdownTimer } from "../../../core/ui/CountdownTimer";
 import { MenuItem } from "../../../core/ui/Menu";
-import { UsersIcon } from "../../../core/ui/icons";
+import { RewindIcon, UsersIcon } from "../../../core/ui/icons";
 import { useSlot } from "../../context";
 
 export function PageHeader({ page }: { page: BingoPageModel }) {
@@ -34,7 +34,7 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
       }
       menuItems={achievementsEligible && openAchievements ? <MenuItem id="achievements" onAction={openAchievements}>Achievements</MenuItem> : undefined}
     >
-      {page.isMod && page.teams.length > 0 && (
+      {page.canPickTeam && page.teams.length > 0 && (
         <>
           <TeamSelector selector={page.teamSelector} />
           {page.viewing.team && (
@@ -44,8 +44,8 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
           )}
         </>
       )}
-      {!page.isMod && page.myTeam && <TeamBadge team={page.myTeam} onPress={page.teamInfo.show} />}
-      {page.bingo.rulesMarkdown && (
+      {!page.canPickTeam && page.myTeam && <TeamBadge team={page.myTeam} onPress={page.teamInfo.show} />}
+      {(page.bingo.rulesMarkdown || page.bingo.rulesComeLater) && (
         <Button size="sm" variant="ghost" onPress={page.rules.show}>
           Rules
         </Button>
@@ -53,6 +53,12 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
       {page.canViewStats && (
         <Button size="sm" variant="ghost" onPress={page.actions.goToStats}>
           Stats
+        </Button>
+      )}
+      {page.canRewind && (
+        <Button size="sm" variant="ghost" onPress={page.actions.goToRewind}>
+          <RewindIcon />
+          Rewind
         </Button>
       )}
       {page.isMod && (

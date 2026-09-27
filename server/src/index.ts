@@ -26,18 +26,17 @@ import bugReportsRouter from "./routes/bugReports";
 import { errorHandler } from "./middleware/errorHandler";
 import { requireGuildMember } from "./middleware/requireGuildMember";
 import { auditContext } from "./audit/middleware";
-import { closeWebSocketServer, initWebSocketServer } from "./ws";
+import { authorizeWithSession, closeWebSocketServer, initWebSocketServer } from "./ws";
 import { DB_PATH, db, sqlite } from "./db";
 import { refreshPricesAndFill } from "./services/gpValueService";
 import { startWomReads } from "./services/womReadService";
 import { UPLOADS_DIR, WIKI_ICONS_DIR, getAdminDiscordIds, sessionCookieSecure } from "./config";
 import { warmOcr } from "./ocr";
 import { shouldWarmOcr } from "./ocrConfig";
-import { serveImageVariants } from "./middleware/imageVariants";
 import { serveWikiIcons } from "./middleware/wikiIcons";
 import { getKnownItemNames } from "./services/itemNames";
 import { isOsrsItemSearchEnabled } from "./routes/osrsItems";
-import { uploadsStaticOptions } from "./middleware/staticCaching";
+import { serveUploads } from "./middleware/staticCaching";
 import { mountClientApp } from "./middleware/clientApp";
 import { readRuntimeConfig } from "./runtimeConfig";
 import { getTectonicConfig } from "./services/tectonicService";
@@ -128,27 +127,27 @@ type SessionStoreWithCleanup = InstanceType<typeof SqliteStore> & {
   this._sessionCleanup = id;
 };
 const sessionStore = new SqliteStore({ client: sqlite }) as SessionStoreWithCleanup;
-app.use(
-  session({
-    store: sessionStore,
-    secret: process.env.SESSION_SECRET!,
-    resave: false,
-    saveUninitialized: false,
-    // Every response pushes the cookie's expiry out again, so a login lasts 30 days from the last visit, not from the
-    // login: a bingo runs longer than a week, and nobody should be sent back to Discord's login partway through.
-    rolling: true,
-    cookie: {
-      secure: sessionCookieSecure(),
-      httpOnly: true,
-      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
-    },
-  })
-);
+const sessionMiddleware = session({
+  store: sessionStore,
+  secret: process.env.SESSION_SECRET!,
+  resave: false,
+  saveUninitialized: false,
+  // Every response pushes the cookie's expiry out again, so a login lasts 30 days from the last visit, not from the
+  // login: a bingo runs longer than a week, and nobody should be sent back to Discord's login partway through.
+  rolling: true,
+  cookie: {
+    secure: sessionCookieSecure(),
+    httpOnly: true,
+    maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
+  },
+});
+app.use(sessionMiddleware);
 
 // Passport
 configurePassport();
-app.use(passport.initialize());
-app.use(passport.session());
+// Also run by hand on WebSocket upgrades (see initWebSocketServer below), which never pass through Express.
+const sessionAuth = [sessionMiddleware, passport.initialize(), passport.session()];
+app.use(...sessionAuth);
 // Which account hit an error, by internal id only (no name or Discord details).
 app.use((req, _res, next) => {
   if (req.user) Sentry.setUser({ id: req.user.id });
@@ -160,9 +159,9 @@ app.use((req, _res, next) => {
 app.use(auditContext);
 app.use(requestLog);
 
-// Uploads — serve screenshots and tile images stored locally.
+// Uploads — serve screenshots and tile images stored locally, to logged-in clan members only.
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-app.use("/uploads", serveImageVariants(UPLOADS_DIR), express.static(UPLOADS_DIR, uploadsStaticOptions));
+app.use("/uploads", ...serveUploads(UPLOADS_DIR));
 
 // OSRS wiki item icons, fetched once and served from disk (players never hit the
 // wiki). Public reference data, so it lives outside /api and is cached publicly.
@@ -198,7 +197,8 @@ Sentry.setupExpressErrorHandler(app, { shouldHandleError: shouldReportError });
 app.use(errorHandler);
 
 const server = http.createServer(app);
-initWebSocketServer(server);
+// A socket needs a logged-in clan member, checked against the same session store and Passport user as HTTP requests.
+initWebSocketServer(server, authorizeWithSession(sessionAuth));
 
 server.listen(PORT, () => {
   log.info("server listening", {

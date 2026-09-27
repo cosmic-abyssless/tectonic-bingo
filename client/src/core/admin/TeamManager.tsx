@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import type { BingoShellResponse, RosterEntry, Team, TeamWithMembers, User } from "@bingo/shared";
+import type { BingoShellResponse, PublicUser, RosterEntry, Team, TeamWithMembers, User } from "@bingo/shared";
 import { useBingo, queryKeys } from "../../api/queries";
 import { adminQueryKeys, useCaptainCandidates } from "../../api/adminQueries";
 import * as adminApi from "../../api/adminApi";
@@ -64,7 +64,7 @@ function TeamCard({ slug, team, notLedByPair, onDelete }: { slug: string; team: 
   }
   const update = (patch: Partial<Team>) => run(() => adminApi.updateTeam(slug, team.id, patch));
   const addMember = (user: User) => run(() => adminApi.addTeamMember(slug, team.id, user.id));
-  const removeMember = (user: User) =>
+  const removeMember = (user: PublicUser) =>
     run(() =>
       optimisticTeams(
         queryClient,

@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { STAGE_LABEL, STAGE_ORDER, nextMilestone, type Bingo, type Stage } from "@bingo/shared";
+import { STAGE_LABEL, STAGE_ORDER, areTilesSealed, isBoardLocked, nextMilestone, type Bingo, type Stage } from "@bingo/shared";
 import { ApiError } from "../../api/client";
-import { cutReviewQuery, useAdvanceStage, useCutReview, useDraftCuts } from "../../api/queries";
-import { adminQueryKeys } from "../../api/adminQueries";
 import * as adminApi from "../../api/adminApi";
+import { adminQueryKeys } from "../../api/adminQueries";
+import { cutReviewQuery, queryKeys, useAdvanceStage, useCutReview, useDraftCuts } from "../../api/queries";
 import { cutModeLabel, describeShares } from "../draft/cutModes";
 import { useDialogParts } from "../ui/useDialogParts";
 import { Button } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
 import { MilestoneCountdown, StageStepper } from "../ui/StageStepper";
+import { Switch } from "../ui/Switch";
 import { ArrowLeftIcon, ArrowRightIcon } from "../ui/icons";
 import { CutReviewModal } from "./CutReviewModal";
 
@@ -119,6 +120,8 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
 
       {error && !confirming && <Notice tone="danger">{error}</Notice>}
 
+      <RevealOptions slug={slug} bingo={bingo} canChange={canChange} />
+
       {/* A stage change asks first, in a dialog: what the new stage does, and (into the draft) exactly who's cut. */}
       <Dialog
         isOpen={canChange && !!confirming}
@@ -170,6 +173,58 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
         />
       )}
     </Card>
+  );
+}
+
+/** Where the board's sealed notice links to (see BoardPageLayout): the switches below, at the top of the mod panel. */
+export const REVEAL_OPTIONS_ID = "reveal-options";
+
+/**
+ * What players get during Board revealed: Sealed Tiles and Hide rules (CONTEXT.md "Sealed Tiles"). Both only apply
+ * during Board revealed and end by themselves at Live, so they're offered up to then. A switch saves at once and
+ * connected viewers pick it up through the settings broadcast.
+ */
+function RevealOptions({ slug, bingo, canChange }: { slug: string; bingo: Bingo; canChange: boolean }) {
+  const queryClient = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (isBoardLocked(bingo.stage)) return null;
+
+  async function save(change: Pick<Partial<Bingo>, "sealedTiles" | "hideRules">) {
+    setSaving(true);
+    setError(null);
+    try {
+      await adminApi.updateBingoSettings(slug, change);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inReveal = bingo.stage === "reveal";
+  return (
+    <div id={REVEAL_OPTIONS_ID} className="space-y-2 border-t border-outline pt-3">
+      <p className="text-xs uppercase tracking-wide text-on-surface-subtle">During {STAGE_LABEL.reveal}</p>
+      <div className="space-y-1">
+        <Switch isSelected={bingo.sealedTiles} onChange={(sealedTiles) => save({ sealedTiles })} isDisabled={!canChange || saving}>
+          Seal the Tiles
+        </Switch>
+        <p className="pl-11 text-xs text-on-surface-subtle">
+          Players and Captains see each Tile's art, name and Category, but can't open it, see its points or mark interest, until you unseal the Tiles or the bingo goes {STAGE_LABEL.live}.
+          Moderators can still open everything.
+          {inReveal && (areTilesSealed(bingo) ? " The Tiles are sealed now." : " The Tiles are open now.")}
+        </p>
+      </div>
+      <div className="space-y-1">
+        <Switch isSelected={bingo.hideRules} onChange={(hideRules) => save({ hideRules })} isDisabled={!canChange || saving}>
+          Hide the rules
+        </Switch>
+        <p className="pl-11 text-xs text-on-surface-subtle">Players and Captains are told the rules come later, until you show them or the bingo goes {STAGE_LABEL.live}.</p>
+      </div>
+      {error && <Notice tone="danger">{error}</Notice>}
+    </div>
   );
 }
 

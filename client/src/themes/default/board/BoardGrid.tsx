@@ -1,7 +1,7 @@
 import type { BoardModel } from "../../../headless/types";
 import { useSlot } from "../../context";
 
-export function BoardGrid({ board, onOpenTile }: { board: BoardModel; onOpenTile: (tileId: string) => void }) {
+export function BoardGrid({ board, onOpenTile, highlightedTileId }: { board: BoardModel; onOpenTile: (tileId: string) => void; highlightedTileId?: string | null }) {
   const RowLabel = useSlot("RowLabel");
   const TileCell = useSlot("TileCell");
   const EmptyCell = useSlot("EmptyCell");
@@ -21,7 +21,7 @@ export function BoardGrid({ board, onOpenTile }: { board: BoardModel; onOpenTile
                 {Array.from({ length: board.cols }, (_, col) => {
                   const tile = board.grid[row]?.[col];
                   if (!tile) return <EmptyCell key={`empty-${row}-${col}`} row={row} col={col} />;
-                  return <TileCell key={tile.id} tile={tile} onOpen={onOpenTile} />;
+                  return <TileCell key={tile.id} tile={tile} onOpen={onOpenTile} isSearchHighlighted={tile.id === highlightedTileId} />;
                 })}
               </div>
             );

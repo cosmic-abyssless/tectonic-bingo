@@ -130,6 +130,9 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
     helperText: q.helperText,
     type: q.type,
     optionsJson: q.optionsJson,
+    allowOther: q.allowOther,
+    multiplePicks: q.multiplePicks,
+    maxPicks: q.maxPicks,
     required: q.required,
     sortOrder: q.sortOrder,
     visibility: q.visibility,
@@ -151,6 +154,9 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
       bonusPotAmount: bingo.bonusPotAmount,
       rulesMarkdown: bingo.rulesMarkdown,
       exclusivityRules: bingoService.parseExclusivityRules(bingo.exclusivityRulesJson),
+      sealedTiles: bingo.sealedTiles,
+      hideRules: bingo.hideRules,
+      showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished,
     },
     categories: categoryRows.map((c) => ({ localId: categoryLocalByReal.get(c.id)!, label: c.label, colorHex: c.colorHex, sortOrder: c.sortOrder })),
     tiles,
@@ -181,6 +187,9 @@ function assertValidDocument(doc: BingoExportDocument): void {
     throw new ServiceError(400, "Malformed import file: unknown leftover mode");
   }
   if (doc.bingo.exclusivityRules !== undefined) bingoService.normalizeExclusivityRules(doc.bingo.exclusivityRules);
+  for (const key of ["sealedTiles", "hideRules"] as const) {
+    if (doc.bingo[key] !== undefined && typeof doc.bingo[key] !== "boolean") throw new ServiceError(400, `Malformed import file: ${key} must be true or false`);
+  }
   if (doc.achievementKeys !== undefined && !Array.isArray(doc.achievementKeys)) {
     throw new ServiceError(400, "Malformed import file: achievementKeys must be an array");
   }
@@ -284,6 +293,9 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
       bonusPotAmount: doc.bingo.bonusPotAmount,
       rulesMarkdown: doc.bingo.rulesMarkdown,
       ...(doc.bingo.exclusivityRules !== undefined ? { exclusivityRules: doc.bingo.exclusivityRules } : {}),
+      ...(doc.bingo.sealedTiles !== undefined ? { sealedTiles: doc.bingo.sealedTiles } : {}),
+      ...(doc.bingo.hideRules !== undefined ? { hideRules: doc.bingo.hideRules } : {}),
+      ...(doc.bingo.showScreenshotsWhenFinished !== undefined ? { showScreenshotsWhenFinished: doc.bingo.showScreenshotsWhenFinished === true } : {}),
     });
 
     const categoryIdByLocal = new Map<number, string>();
@@ -372,7 +384,7 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
     }
 
     for (const q of doc.signupQuestions) {
-      signupService.createQuestion(tx, { bingoId: bingo.id, prompt: q.prompt, helperText: q.helperText ?? null, type: q.type, optionsJson: q.optionsJson, required: q.required, sortOrder: q.sortOrder, visibility: q.visibility ?? "captains" });
+      signupService.createQuestion(tx, { bingoId: bingo.id, prompt: q.prompt, helperText: q.helperText ?? null, type: q.type, optionsJson: q.optionsJson, allowOther: q.allowOther ?? false, multiplePicks: q.multiplePicks ?? false, maxPicks: q.maxPicks ?? null, required: q.required, sortOrder: q.sortOrder, visibility: q.visibility ?? "captains" });
     }
 
     // Achievements (CONTEXT.md): createBingo above switched every catalogue key on (the default for a brand-new

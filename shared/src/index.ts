@@ -88,6 +88,15 @@ export interface User {
   updatedAt: string;
 }
 
+/**
+ * Another person as a response shows them: enough for a name, an avatar and an RSN, never their account flags
+ * (isAdmin, inGuild) or timestamps. Every response that lists someone other than the viewer uses this; only the
+ * viewer's own record (/api/me) and site-admin user management send the full User.
+ */
+export type PublicUser = Pick<User, "id" | "discordId" | "discordUsername" | "discordGlobalName" | "discordGuildNick" | "discordAvatar"> & {
+  rsn: string | null;
+};
+
 export const SIGNUP_MODES = ["solo", "duo"] as const;
 export type SignupMode = (typeof SIGNUP_MODES)[number];
 
@@ -144,6 +153,26 @@ export interface Bingo {
   // Achievements master switch (CONTEXT.md "Achievement"): off hides every Achievement from reads, counts and
   // popups for this bingo, but earning keeps happening in the background (see achievementService.ts).
   achievementsEnabled: boolean;
+  /** "Show screenshots once Finished": off, other teams' screenshots are left out for anyone but Moderators. */
+  showScreenshotsWhenFinished: boolean;
+  /** Sealed Tiles (CONTEXT.md): during Board revealed, Players and Captains can't open Tiles. See areTilesSealed. */
+  sealedTiles: boolean;
+  /** During Board revealed, the rules text is held back from Players and Captains. See areRulesHidden. */
+  hideRules: boolean;
+}
+
+/**
+ * Sealed Tiles (CONTEXT.md) only ever apply during Board revealed, so they end by themselves at Live. Mirrors
+ * bingoService.areTilesSealed on the server. Whether they're sealed for a given viewer also depends on the viewer
+ * (Moderators and Admins can always open Tiles).
+ */
+export function areTilesSealed(bingo: Pick<Bingo, "stage" | "sealedTiles">): boolean {
+  return bingo.sealedTiles && bingo.stage === "reveal";
+}
+
+/** Hide rules: during Board revealed only, like Sealed Tiles. Mirrors bingoService.areRulesHidden on the server. */
+export function areRulesHidden(bingo: Pick<Bingo, "stage" | "hideRules">): boolean {
+  return bingo.hideRules && bingo.stage === "reveal";
 }
 
 export interface TileCategory {
@@ -167,7 +196,7 @@ export interface Team {
 }
 
 export interface TeamRosterEntry {
-  user: User;
+  user: PublicUser;
   isCaptain: boolean;
   isCoCaptain: boolean; // duo mode: captain's partner, shares captain permissions
   isDrafted: boolean; // joined via a draft pick, so mods can't remove them by hand
@@ -488,16 +517,62 @@ export interface BingoShellResponse {
   potTotal: number;
   // True once anyone has ever signed up; the signup mode is locked from then on.
   hasSignups: boolean;
+  /** What this viewer may see (CONTEXT.md "Player"). Without `canSee` the shell is only the landing data: no teams, no categories. */
+  viewer: BingoViewerAccess;
+}
+
+/**
+ * One viewer's standing in a Bingo. `canSee`: a Player, a Moderator, an Admin, or anyone once it's Finished. `isCut`:
+ * an active Signup left out of the Draft, from the Draft stage on (only while they can't see the Bingo).
+ */
+export interface BingoViewerAccess {
+  canSee: boolean;
+  isPlayer: boolean;
+  isCut: boolean;
 }
 
 export interface BoardLine extends BingoLine {
   node: GraphNode;
 }
 
+/**
+ * A Tile as Players and Captains get it while the Tiles are sealed (CONTEXT.md "Sealed Tiles"): what the sealed
+ * board shows, and nothing about what completing it takes (no node tree, notes, item names or points).
+ */
+export interface SealedTile {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  categoryId: string | null;
+  boardRow: number;
+  boardCol: number;
+  hasFreezePeriod: boolean;
+  freezeDurationMinutes: number;
+}
+
+/** A line on a sealed board: which Tiles it runs through, without its bonus points. */
+export interface SealedLine {
+  id: string;
+  lineType: BingoLine["lineType"];
+  lineIndex: number;
+  tileIds: string[];
+}
+
+export interface SealedBoardResponse {
+  sealed: true;
+  tiles: SealedTile[];
+  lines: SealedLine[];
+}
+
+/** The full board: what Moderators and Admins always get, and everyone once the Tiles aren't sealed. */
 export interface BoardResponse {
+  sealed: false;
   tiles: Tile[];
   lines: BoardLine[];
 }
+
+/** What GET /:slug/board answers a given viewer. */
+export type ViewerBoardResponse = BoardResponse | SealedBoardResponse;
 
 export interface TeamSubmissionsResponse {
   submissions: SubmissionDetails[];
@@ -554,9 +629,10 @@ export interface ReviewSubmissionResponse {
 
 /**
  * "select" is a single choice (shown as radio buttons) and "multiselect" is any number of choices (checkboxes), both
- * from `optionsJson`. A multiselect answer is stored as a JSON list (see signupAnswers.ts).
+ * from `optionsJson`. A multiselect answer is stored as a JSON list (see signupAnswers.ts). "member" is a Member pick:
+ * one or several clan members, stored as a JSON list of their user ids (see signupAnswers.ts).
  */
-export type SignupQuestionType = "text" | "textarea" | "select" | "multiselect" | "boolean";
+export type SignupQuestionType = "text" | "textarea" | "select" | "multiselect" | "boolean" | "member";
 
 /**
  * Who, besides the player who answered, can see a question's answers: that level and up (captains < mods < admins).
@@ -583,6 +659,12 @@ export interface SignupQuestion {
   helperText: string | null;
   type: SignupQuestionType;
   optionsJson: string | null;
+  /** Choice questions only: players can pick Other and write their own answer instead of (or besides) an option. */
+  allowOther: boolean;
+  /** Member pick only: several members may be picked (otherwise one). */
+  multiplePicks: boolean;
+  /** Member pick with several only: the most that may be picked, or null for no limit. */
+  maxPicks: number | null;
   required: boolean;
   sortOrder: number;
   visibility: QuestionVisibility;
@@ -654,12 +736,12 @@ export interface MyTectonicRsnsResponse {
 
 export interface RosterEntry {
   signup: Signup;
-  user: User;
+  user: PublicUser;
   answers: SignupAnswer[];
   // Only populated by the mod-facing roster (GET .../mod/signups) — who
   // marked buy-in received for this signup. Absent from other RosterEntry
   // uses like the captain-candidates list.
-  collectedByUser?: User | null;
+  collectedByUser?: PublicUser | null;
   // Duo mode, mod roster only: the accepted pairing this player is in.
   pairing?: SignupPairing | null;
   // Duo mode, mod roster only: this player's own outstanding request to pair with someone, before it's been
@@ -724,7 +806,21 @@ export interface SignupPairing {
 export interface PartnerCandidate {
   discordId: string;
   rsns: string[];
-  user: MinimalUser | null;
+  user: PublicUser | null;
+}
+
+/**
+ * Someone a Member pick question can pick: a clan member who has logged in. `name` is the RSN of their latest signup
+ * (in any bingo), or their Discord name if they've never signed up; search matches either.
+ */
+export interface PickableMember {
+  userId: string;
+  name: string;
+  discordName: string;
+}
+
+export interface PickableMembersResponse {
+  members: PickableMember[];
 }
 
 export interface PartnerCandidatesResponse {
@@ -793,7 +889,7 @@ export interface BingoModerator {
   bingoId: string;
   userId: string;
   createdAt: string;
-  user: User;
+  user: PublicUser;
 }
 
 export interface TeamMember {
@@ -1105,9 +1201,13 @@ export interface ContributionAward {
   viaTiles?: string[];
 }
 
+/** A MinimalUser plus only what avatarUrl (client/src/core/ui/user.ts) needs to show their Discord avatar. */
+export type AvatarUser = MinimalUser & Pick<User, "discordId" | "discordAvatar">;
+
 export interface ContributionCount {
   userId: string;
-  user: MinimalUser;
+  /** Carries the avatar fields so the Titles section can show each holder's Discord avatar. */
+  user: AvatarUser;
   teamId: string;
   approvedSubmissions: number;
   /** Unrounded; shown to two decimal places. */
@@ -1258,6 +1358,7 @@ export * from "./auditCondense.ts";
 export * from "./bingoExport.ts";
 export * from "./exclusivity.ts";
 export * from "./names.ts";
+export * from "./rewind.ts";
 export * from "./signupAnswers.ts";
 export * from "./testData.ts";
 export * from "./timezone.ts";

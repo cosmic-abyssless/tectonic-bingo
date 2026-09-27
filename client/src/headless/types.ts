@@ -3,7 +3,7 @@
 // never a raw Tile, TeamNodeState[], SubmissionDetails[], or LeafClaimMaps.
 // See docs/headless-theming-plan.md §2.
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
-import type { AuditCategory, AuditTone, DraftState, NodeKind, NodeStatus, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus } from "@bingo/shared";
+import type { AuditCategory, AuditTone, DraftState, NodeKind, NodeStatus, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus } from "@bingo/shared";
 
 export interface ActivityEntryModel {
   id: number;
@@ -55,9 +55,9 @@ export interface UserModel {
 export interface RequirementNodeModel {
   id: string;
   kind: NodeKind;
-  /** leafLabel() for leaves, conditionHeading() for composites. */
+  /** leafLabel() for leaves, conditionHeading() for composites (a SUM over several items is a composite: "5 in total from"). */
   label: string;
-  /** SUM only: the items that count toward it, for themes that list them instead of showing the joined label — each with how many the team has had approved (duplicates count), and whether the team has used the item elsewhere (`lockedBy`, e.g. "Used on DT2 ISSUE 1"; see exclusive items). */
+  /** SUM only: the items that count toward it (for a SUM over several items, the group's rows — no checkbox each, since no single item is done on its own) — each with how many the team has had approved (duplicates count), and whether the team has used the item elsewhere (`lockedBy`, e.g. "Used on DT2 ISSUE 1"; see exclusive items). */
   items: { name: string; iconUrl: string | null; count: number; lockedBy: string | null }[];
   /** ITEM leaves only: the item's wiki icon (via our cache), when it has a name to look up. */
   iconUrl: string | null;
@@ -72,10 +72,14 @@ export interface RequirementNodeModel {
   notNeeded: boolean;
   /** complete || notNeeded — the "no longer needs attention" display flag. */
   dim: boolean;
-  /** SUM only. */
+  /** SUM: items received / the total needed. COUNT: options complete / N. Drawn beside a group's heading ("Complete at least 3 of · 1/3"), or at the end of a single-item SUM's row. Null for ITEM, ALL and ANY (ALL shows progress through its ticked boxes; ANY is done or not). */
   progress: { current: number; target: number } | null;
+  /** A single-item SUM's quantity when it's more than 1, drawn after the name ("Twisted ancestral colour kit ×2"). Null otherwise. */
+  quantity: number | null;
   /** Whether the composite's own heading is rendered (always, for composites). */
   showHeading: boolean;
+  /** ANY only: draw this divider between each pair of its direct children (never before the first or after the last). `dim` once the ANY is satisfied (or an enclosing ANY/COUNT is), along with the options that are no longer needed. */
+  divider: { label: "OR"; dim: boolean } | null;
   children: RequirementNodeModel[];
 }
 
@@ -145,6 +149,11 @@ export interface TileModel {
   imageUrl: string | null;
   row: number;
   col: number;
+  /**
+   * Sealed for this viewer (CONTEXT.md "Sealed Tiles"): only the name, art, Category and freeze are real. It has no
+   * tasks, progress or points to show, and opening it shows a note instead (page.openTile.open).
+   */
+  sealed: boolean;
   category: CategoryModel | null;
   /** Category colour; the slot falls back to the --tile-accent token when null. */
   accentColor: string | null;
@@ -203,6 +212,8 @@ export interface LineModel {
 export interface BoardModel {
   rows: number;
   cols: number;
+  /** The Tiles are sealed for this viewer (see TileModel.sealed); lines carry no points. */
+  sealed: boolean;
   /** [row][col]. */
   grid: (TileModel | null)[][];
   tiles: TileModel[];
@@ -245,8 +256,9 @@ export interface PointBreakdownModel {
   unattributed: number;
 }
 
-// Exact branch order: signup -> planning|captains -> draft -> !viewingTeamId -> board.
-export type StageView = "signup" | "planning" | "captains" | "draft" | "noTeam" | "board";
+// Exact branch order: signup -> notPart -> planning|captains -> draft -> !viewingTeamId -> board.
+// "notPart": someone who can't see the bingo (not a Player, Moderator or Admin; CONTEXT.md "Player") once signups close.
+export type StageView = "signup" | "notPart" | "planning" | "captains" | "draft" | "noTeam" | "board";
 
 export interface TileSearchModel {
   query: string;
@@ -280,6 +292,8 @@ export interface BingoPageModel {
     stage: Stage;
     stageLabel: string;
     rulesMarkdown: string | null;
+    /** The rules are held back from this viewer for now (Hide rules, during Board revealed): the Rules entry point says they come later. */
+    rulesComeLater: boolean;
     startsAt: number | null;
     endsAt: number | null;
     boardRows: number;
@@ -292,8 +306,14 @@ export interface BingoPageModel {
   teams: TeamModel[];
   categories: CategoryModel[];
   stageView: StageView;
+  /** An active signup left out of the draft (from the Draft stage on), for the "not part of this bingo" notice. */
+  isCut: boolean;
+  /** Mods, and everyone once the bingo is Finished, can switch between teams' boards. */
+  canPickTeam: boolean;
   /** Mods always; players on a team once live (own team only), everyone once complete (matches the stats endpoint). */
   canViewStats: boolean;
+  /** Rewind (CONTEXT.md) exists only for a Finished Bingo, for everyone who can view it. */
+  canRewind: boolean;
   /** Team leads (and mods) may browse the draft room before the draft stage to rate signups. */
   canScout: boolean;
   /** For the draft-stage slot; DraftState is the shared draft response type. */
@@ -308,8 +328,13 @@ export interface BingoPageModel {
   submissions: SubmissionModel[];
   teamSelector: TeamSelectorModel;
   search: TileSearchModel;
-  /** Replaces both the old openTileId state and BoardGrid's own `selected` state. */
+  /** Replaces both the old openTileId state and BoardGrid's own `selected` state. While the Tiles are sealed for this viewer, open() shows a note instead. */
   openTile: { id: string | null; open(id: string): void; close(): void };
+  /**
+   * Sealed Tiles (CONTEXT.md). forMe: this viewer can't open Tiles (see TileModel.sealed). forPlayers: they're sealed
+   * for Players and Captains, which a Moderator's board points out.
+   */
+  sealed: { forMe: boolean; forPlayers: boolean };
   rules: { open: boolean; show(): void; hide(): void };
   /** Roster of `viewing.team` (TeamBadge press for players, roster button beside TeamSelector for mods → TeamInfoDialog). */
   teamInfo: { open: boolean; show(): void; hide(): void };
@@ -319,7 +344,7 @@ export interface BingoPageModel {
   /** show() also hides the drawer. initialFile seeds/replaces the flow's screenshot (drag-drop/paste-to-submit) — re-passing a new File while already open feeds it into the still-mounted flow. initialTaskId preselects a part of that tile (per-part Submit buttons). */
   submit: { open: boolean; initialTileId: string | undefined; initialTaskId: string | undefined; initialFile: File | undefined; show(tileId?: string, file?: File, taskId?: string): void; hide(): void };
   /** logout lives in core AppHeader's own user menu, not here. */
-  actions: { goHome(): void; goToStats(): void; goToMod(): void; goToDraft(): void };
+  actions: { goHome(): void; goToStats(): void; goToRewind(): void; goToMod(): void; goToDraft(): void };
   /** Raise/lower the viewer's hand for one part (task) of a tile on their own team. No-op unless task.interest.canToggle. */
   tileInterest: { toggle(tileId: string, taskId: string): void };
   /** Emoji reactions on the viewed team's submissions: canReact when it's the viewer's own team. toggle() puts the viewer's on or takes it off. */
@@ -389,4 +414,130 @@ export interface SubmissionFlowModel {
   staged: { items: { label: string }[]; remove(index: number): void; canStageCurrent: boolean; stageCurrent(): void };
   submit: { isValid: boolean; isSubmitting: boolean; isAnalyzing: boolean; error: string | null; run(): Promise<void> };
   close(): void;
+}
+
+// ---------------------------------------------------------------------------
+// Rewind (CONTEXT.md "Rewind"): a Finished Bingo played back on its Board. RewindProvider builds these; the Board
+// itself is the ordinary BoardModel (useBoardModel), at the moment being viewed.
+// ---------------------------------------------------------------------------
+
+/** One Submission as a Rewind popup shows it. */
+export interface RewindSubmissionModel {
+  id: string;
+  /** Submission time, ms. */
+  at: number;
+  /** "Sat 14:32". */
+  timeLabel: string;
+  /** "D2 +5h12m" into the Bingo. */
+  sinceStartLabel: string;
+  tier: SignificanceTier;
+  /** Shown greyed out and stamped "Rejected"; it never changed the Board. */
+  rejected: boolean;
+  /** The Player it's credited to. */
+  playerName: string | null;
+  team: { id: string; name: string; color: string | null };
+  tileId: string | null;
+  tileName: string | null;
+  /** Main screenshot's thumbnail. */
+  thumbnailUrl: string | null;
+  /** The full-size screenshot. */
+  screenshotUrl: string | null;
+  items: { label: string; quantity: number; gpValue: number | null; gpLabel: string; luckLabel: string | null }[];
+  /** Total GP value, or null (shown as "—") when no item has one. */
+  gpValue: number | null;
+  gpLabel: string;
+  /** Visible to every viewer in Rewind. Read-only. */
+  reactions: ReactionModel[];
+  /** "Completed ZULRAH", "Row 2 complete", "First to complete ZULRAH"… */
+  highlights: string[];
+}
+
+export interface RewindTickModel {
+  id: string;
+  /** 0 (went Live) to 1 (Finished), in real time. */
+  position: number;
+  tier: SignificanceTier;
+  rejected: boolean;
+  /** Made at or before the moment being viewed. */
+  past: boolean;
+  /** The Submission being shown. */
+  current: boolean;
+}
+
+export interface RewindTimelineModel {
+  /** ms: when the Bingo went Live and was Finished. */
+  start: number;
+  end: number;
+  /** The moment being viewed, ms. */
+  at: number;
+  /** 0–1 along the timeline. */
+  position: number;
+  /** "D2 +5h12m" and the clock time of `at`. */
+  atLabel: string;
+  atClockLabel: string;
+  startLabel: string;
+  endLabel: string;
+  /** One per Submission of the viewed Team, sized by tier. */
+  ticks: RewindTickModel[];
+  /** Jump to a moment (dragging/clicking the scrubber). Pauses Play and closes any popup. */
+  seek(at: number): void;
+  /** Jump to a Submission and show it, like stepping. */
+  jumpTo(id: string): void;
+}
+
+export interface RewindControlsModel {
+  playing: boolean;
+  togglePlay(): void;
+  canPrev: boolean;
+  canNext: boolean;
+  canPrevNotable: boolean;
+  canNextNotable: boolean;
+  prev(): void;
+  next(): void;
+  prevNotable(): void;
+  nextNotable(): void;
+  /** Rejected Submissions on the timeline (off by default). */
+  showRejected: boolean;
+  setShowRejected(on: boolean): void;
+  /** Where Play is, as "12 / 340". */
+  positionLabel: string;
+}
+
+export interface RewindScoreboardModel {
+  /** Every Team at the moment being viewed, most points first. */
+  teams: { id: string; name: string; color: string | null; points: number; rank: number; isViewed: boolean; isMine: boolean }[];
+  /** Show that Team's Board. */
+  select(teamId: string): void;
+}
+
+export interface RewindPopupModel {
+  submission: RewindSubmissionModel;
+  /** notable: a small popup; huge: a big one that holds longer. */
+  size: "small" | "big";
+  /** While playing: how long this popup stays before Play moves on, for a countdown. Null when paused or stepping. */
+  holdMs: number | null;
+  close(): void;
+}
+
+export interface RewindModel {
+  slug: string;
+  bingoName: string;
+  /** The Team whose Board, timeline and popups are shown. */
+  team: TeamModel | null;
+  /** The existing Team selector, open to everyone here: every Team's Board is visible once the Bingo is Finished. */
+  teamSelector: TeamSelectorModel;
+  /** The viewed Team's points at the moment being viewed. */
+  teamPoints: number;
+  timeline: RewindTimelineModel;
+  controls: RewindControlsModel;
+  scoreboard: RewindScoreboardModel;
+  /** The Submission in focus (Play or a step): its Tile is highlighted. Null after a scrub. */
+  current: RewindSubmissionModel | null;
+  /** The Tile to highlight: the one the current Submission landed on. */
+  highlightedTileId: string | null;
+  /** The popup to show: during Play and when stepping, for notable-or-bigger Submissions only. */
+  popup: RewindPopupModel | null;
+  /** A Tile's details at the moment being viewed (its Submissions left out: the timeline has those). */
+  openTile: { tile: TileModel | null; open(id: string): void; close(): void };
+  exit(): void;
 }

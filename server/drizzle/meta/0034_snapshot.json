@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6bdae096-7b20-4739-9c50-7b5c075f9542",
+  "id": "67259a8c-b563-4a78-87be-f15870e032dc",
   "prevId": "45c351e7-0766-42b8-aac1-8a10938c0a99",
   "tables": {
     "achievement_activity": {
@@ -864,13 +864,6 @@
         "draft_order_locked_until": {
           "name": "draft_order_locked_until",
           "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "cut_review_fingerprint": {
-          "name": "cut_review_fingerprint",
-          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -2108,6 +2101,14 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "allow_other": {
+          "name": "allow_other",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         },
         "required": {
           "name": "required",

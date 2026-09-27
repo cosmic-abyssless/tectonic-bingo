@@ -3,7 +3,7 @@ import { PlayerName } from "../tectonic/PlayerName";
 import { HEADING_FONT } from "../ui/Card";
 import { EyeOffIcon, InfoIcon } from "../ui/icons";
 import { TextTooltip } from "../ui/Tooltip";
-import { displayName } from "../ui/user";
+import { avatarUrl, displayName } from "../ui/user";
 import { timeAgo } from "../ui/time";
 import { TitleGroupBox } from "./TitleChrome";
 
@@ -57,10 +57,13 @@ export function TitlesSection({ picked, contributions, womReadAt }: { picked: Pi
                         {holders.map((h) => {
                           const user = userById.get(h.userId);
                           return (
-                            <li key={h.userId} className="flex min-w-0 items-baseline justify-between gap-x-3 text-sm">
-                              <PlayerName userId={h.userId} badge="none" className="min-w-0 truncate font-medium text-on-surface">
-                                {user ? displayName(user) : "A player"}
-                              </PlayerName>
+                            <li key={h.userId} className="flex min-w-0 items-center justify-between gap-x-3 text-sm">
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                {user && <img src={avatarUrl(user)} alt="" loading="lazy" className="size-5 shrink-0 rounded-full" />}
+                                <PlayerName userId={h.userId} badge="none" className="min-w-0 truncate font-medium text-on-surface">
+                                  {user ? displayName(user) : "A player"}
+                                </PlayerName>
+                              </span>
                               <span className="num shrink-0 text-xs text-on-surface-muted">{h.text}</span>
                             </li>
                           );

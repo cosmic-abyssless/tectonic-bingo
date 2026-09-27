@@ -110,7 +110,7 @@ function TitleRow({ title, draft, setDraft }: { title: TitleDefinition; draft: D
   );
 }
 
-/** Site admin > Titles: turn Titles on and off and tune their minimums, for every Bingo at once. */
+/** Site admin > Titles: turn Titles on and off and tune their minimums, for every Bingo that isn't Finished. */
 export function TitleSettingsPanel() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useTitleSettings();
@@ -151,8 +151,9 @@ export function TitleSettingsPanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-on-surface-muted">
-        Titles are worked out afresh every time a Stats page loads, so a change here applies straight away to every bingo's Titles, live or finished. A Title turned off
-        disappears from Stats pages and profiles. The luck Titles' floors are "1 in N": 10 means only 1 in 10 players would be that lucky (or that dry).
+        Titles are worked out afresh every time a Stats page loads, so a change here applies straight away to every bingo that isn't finished yet. A finished
+        bingo keeps the settings and Titles it finished with, and takes a fresh copy if it's reopened and finished again. A Title turned off disappears from those
+        bingos' Stats pages and profiles. The luck Titles' floors are "1 in N": 10 means only 1 in 10 players would be that lucky (or that dry).
       </p>
       <ul className="divide-y divide-outline rounded-md border border-outline">
         {TITLES.map((title) => (

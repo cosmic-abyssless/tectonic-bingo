@@ -40,15 +40,21 @@ export interface CreateSubmissionParams {
   now?: Date; // injectable for tests
 }
 
+// Submissions (and the screenshot analysis that helps write one) only happen while the bingo is live. Analysis
+// matches against every item on the board, so outside live it would reveal which tile holds what.
+export function assertSubmissionsOpen(bingo: Pick<Bingo, "stage">): void {
+  if (bingo.stage !== "live") {
+    throw new ServiceError(400, "Submissions are only open while the bingo is live");
+  }
+}
+
 // All submission-time gating lives here — the client mirrors these checks
 // for UX, but this is the enforcement.
 export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionParams) {
   const { submission, achievementHook } = db.transaction((tx) => {
     const now = params.now ?? clockNow();
 
-    if (bingo.stage !== "live") {
-      throw new ServiceError(400, "Submissions are only open while the bingo is live");
-    }
+    assertSubmissionsOpen(bingo);
     const startsAt = effectiveStartsAt(tx, bingo);
     if (!startsAt || now < startsAt) {
       throw new ServiceError(400, "The bingo has not started yet");

@@ -243,8 +243,43 @@
     {
       "idx": 34,
       "version": "6",
-      "when": 1790481914870,
-      "tag": "0034_cut_review_fingerprint",
+      "when": 1790481619589,
+      "tag": "0034_signup_question_allow_other",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1790483007414,
+      "tag": "0035_finished_screenshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1790483385640,
+      "tag": "0036_sealed_tiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1790485773452,
+      "tag": "0037_signup_question_member_pick",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1790487858208,
+      "tag": "0038_bingo_title_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1790490075459,
+      "tag": "0039_cut_review_fingerprint",
       "breakpoints": true
     }
   ]

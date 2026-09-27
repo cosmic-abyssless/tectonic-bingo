@@ -114,18 +114,44 @@ export function playerLuck(input: LuckInput): Map<string, PlayerLuck> {
   return out;
 }
 
-function spoon(input: LuckInput, timeline: WomSnapshot[], mine: LuckClaim[]): PlayerLuck["spoon"] {
+/**
+ * Each of one Player's drops judged on its own, oldest first: over the kills since their previous drop of the same
+ * Item (or the Bingo's start). A drop that doesn't `count` (a rejected one) is judged the same way but doesn't start
+ * a new stretch for the drops after it. Drops of Items no counted boss drops are left out.
+ */
+function judgeDrops(rates: DropRateTable, bingoStart: Date, timeline: WomSnapshot[], mine: (LuckClaim & { counts?: boolean })[]): DropLuck[] {
   const drops: DropLuck[] = [];
   const lastOfItem = new Map<string, Date>();
   for (const claim of mine) {
     const key = claim.itemName.toLowerCase();
-    const from = later(input.bingoStart, lastOfItem.get(key) ?? input.bingoStart);
-    lastOfItem.set(key, claim.at);
-    const rateByMetric = ratesOf(input.rates, [claim.itemName]);
+    const from = later(bingoStart, lastOfItem.get(key) ?? bingoStart);
+    if (claim.counts !== false) lastOfItem.set(key, claim.at);
+    const rateByMetric = ratesOf(rates, [claim.itemName]);
     if (rateByMetric.size === 0) continue;
     const expected = expectedDrops(timeline, rateByMetric, from, claim.at);
     if (expected) drops.push(dropLuck(claim, expected));
   }
+  return drops;
+}
+
+/**
+ * Every drop's own Luck, by Claim id, the way Spoon judges them (Rewind's Significance). Claims with `counts: false`
+ * (rejected ones) get a Luck too, without shortening the stretch of the Player's next drop. A Claim with no Luck (no
+ * WOM timeline, an Item no counted boss drops, unknown kills) is missing from the map.
+ */
+export function dropLucks(input: { rates: DropRateTable; bingoStart: Date; claims: (LuckClaim & { counts?: boolean })[]; timelines: Map<string, WomSnapshot[]> }): Map<string, DropLuck> {
+  const out = new Map<string, DropLuck>();
+  const byTime = [...input.claims].sort((a, b) => a.at.getTime() - b.at.getTime());
+  for (const [userId, timeline] of input.timelines) {
+    if (timeline.length === 0) continue;
+    const mine = byTime.filter((c) => c.userId === userId);
+    for (const drop of judgeDrops(input.rates, input.bingoStart, timeline, mine)) out.set(drop.claimId, drop);
+  }
+  return out;
+}
+
+function spoon(input: LuckInput, timeline: WomSnapshot[], mine: LuckClaim[]): PlayerLuck["spoon"] {
+  const drops = judgeDrops(input.rates, input.bingoStart, timeline, mine);
   if (drops.length === 0) return null;
   drops.sort((a, b) => b.luck - a.luck);
   // Decaying, so repeat luck adds up to at most 1 / (1 − decay) times the best drop: frequency never beats rarity.

@@ -26,6 +26,15 @@ afterEach(() => {
 const tables = (db: Database.Database) =>
   (db.prepare("select name, sql from sqlite_master where type = 'table' and name not like 'sqlite_%' and name != '__drizzle_migrations' order by name").all() as { name: string; sql: string }[]).map((t) => t.name);
 
+// Applies every migration before `tag`: a database from before it.
+function migrateBefore(db: ReturnType<typeof drizzle>, tag: string) {
+  const older = path.join(dir, "older");
+  fs.cpSync(migrationsFolder, older, { recursive: true });
+  const upTo = journal.entries.findIndex((e) => e.tag === tag);
+  fs.writeFileSync(path.join(older, "meta/_journal.json"), JSON.stringify({ ...journal, entries: journal.entries.slice(0, upTo) }));
+  runMigrations(db, older);
+}
+
 describe("runMigrations", () => {
   it("builds the same schema the tests use, from an empty database", () => {
     runMigrations(drizzle(sqlite), migrationsFolder);
@@ -66,5 +75,39 @@ describe("runMigrations", () => {
     sqlite.prepare("insert into users (id, discord_id, discord_username, created_at, updated_at) values ('u1', 'd1', 'name', 0, 0)").run();
     runMigrations(db, migrationsFolder);
     expect((sqlite.prepare("select count(*) n from users").get() as { n: number }).n).toBe(1);
+  });
+
+  it("backfills a frozen copy of the Title settings onto every Bingo already Finished (#221)", () => {
+    const db = drizzle(sqlite);
+    migrateBefore(db, "0038_bingo_title_settings");
+    sqlite.prepare("insert into users (id, discord_id, discord_username, created_at, updated_at) values ('u1', 'd1', 'name', 0, 0)").run();
+    const bingo = sqlite.prepare("insert into bingos (id, slug, name, board_rows, board_cols, stage, created_by_user_id) values (?, ?, ?, 1, 1, ?, 'u1')");
+    bingo.run("done", "done", "Done", "complete");
+    bingo.run("live", "live", "Live", "live");
+    const overrides = { minimums: { grinder: 25 }, disabled: ["dry"], luck: { spoonMinLuck: 2 } };
+    sqlite.prepare("insert into site_settings (key, value_json, updated_by_user_id, updated_at) values ('titles', ?, 'u1', 0)").run(JSON.stringify(overrides));
+
+    runMigrations(db, migrationsFolder);
+    const rows = sqlite.prepare("select bingo_id, settings_json, title_ids_json from bingo_title_settings").all() as { bingo_id: string; settings_json: string; title_ids_json: string }[];
+    expect(rows.map((r) => r.bingo_id)).toEqual(["done"]);
+    // The defaults and Titles as they were when the migration was written.
+    expect(JSON.parse(rows[0]!.settings_json)).toEqual({
+      minimums: { on_fire: 10, carry: 1, closer: 1, grinder: 25, butterfingers: 2, sniper: 3, collector: 3, tourist: 3, specialist: 3, hoarder: 10, postman: 2, overachiever: 5 },
+      disabled: ["dry"],
+      luck: { spoonDecay: 0.5, spoonMinLuck: 2, dryMinLuck: 1, clutchMinLuck: 1 },
+    });
+    expect(JSON.parse(rows[0]!.title_ids_json)).toEqual(["on_fire", "carry", "closer", "clutch", "grinder", "spoon", "butterfingers", "dry", "sniper", "collector", "tourist", "specialist", "hoarder", "postman", "overachiever"]);
+  });
+
+  it("backfills the defaults when no Title settings were ever saved (#221)", () => {
+    const db = drizzle(sqlite);
+    migrateBefore(db, "0038_bingo_title_settings");
+    sqlite.prepare("insert into users (id, discord_id, discord_username, created_at, updated_at) values ('u1', 'd1', 'name', 0, 0)").run();
+    sqlite.prepare("insert into bingos (id, slug, name, board_rows, board_cols, stage, created_by_user_id) values ('done', 'done', 'Done', 1, 1, 'complete', 'u1')").run();
+
+    runMigrations(db, migrationsFolder);
+    const row = sqlite.prepare("select settings_json from bingo_title_settings").get() as { settings_json: string };
+    expect(JSON.parse(row.settings_json)).toMatchObject({ disabled: [], luck: { spoonDecay: 0.5, spoonMinLuck: 1, dryMinLuck: 1, clutchMinLuck: 1 } });
+    expect(JSON.parse(row.settings_json).minimums.grinder).toBe(10);
   });
 });

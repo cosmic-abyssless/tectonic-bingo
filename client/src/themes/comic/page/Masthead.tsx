@@ -43,11 +43,12 @@ export function Masthead({
 }) {
   const { colors } = useComic();
   const navigate = useNavigate();
-  const hasRules = !!header.rulesMarkdown;
+  const hasRules = !!header.rulesMarkdown || header.rulesComeLater;
 
   // The same entries the inline buttons show, for the narrow-screen hamburger.
   const menuEntries: HeaderMenuEntry[] = [
     ...(header.canViewStats ? [{ id: "stats", text: "Stats", label: "Stats", onAction: () => navigate(`/b/${slug}/stats`) }] : []),
+    ...(header.canRewind ? [{ id: "rewind", text: "Rewind", label: "Rewind", onAction: () => navigate(`/b/${slug}/rewind`) }] : []),
     ...(header.isMod
       ? [
           {
@@ -97,13 +98,18 @@ export function Masthead({
       menuItems={menuItems}
       {...comicHeaderProps()}
     >
-      {/* The two route changes are links; everything after them acts on the page and stays a button. The mod panel
+      {/* The route changes are links; everything after them acts on the page and stays a button. The mod panel
           gets an icon and sits well away from Submit so it isn't hit by accident. Below `md` the whole group collapses
           into the hamburger. */}
       <div className="hidden items-center gap-2 md:flex">
         {header.canViewStats && (
           <ComicButton size="sm" href={`/b/${slug}/stats`}>
             Stats
+          </ComicButton>
+        )}
+        {header.canRewind && (
+          <ComicButton size="sm" href={`/b/${slug}/rewind`}>
+            Rewind
           </ComicButton>
         )}
         {header.isMod && (

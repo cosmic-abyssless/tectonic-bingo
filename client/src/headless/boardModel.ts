@@ -1,7 +1,7 @@
 // Pure builders that turn raw server shapes into the view models in
 // ./types.ts. No React, no hooks — safe to call from anywhere, including
 // providers and (if ever wanted) tests. See docs/headless-theming-plan.md §2.
-import { isBoardLocked, type BoardLine, type GraphNode, type NodeStatus, type PointAdjustment, type Stage, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
+import { isBoardLocked, type BoardLine, type GraphNode, type NodeStatus, type PointAdjustment, type SealedBoardResponse, type Stage, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { summarizeTileProgress, getFreezeUnlockAt, groupSubmissionsByTile, type TileProgressSummary } from "../core/board/tileProgress";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete, type LeafClaimMaps } from "../core/board/taskClaims";
 import { collectLeaves, conditionHeading } from "../core/board/requirementTree";
@@ -19,6 +19,37 @@ export function getRowCategory(tiles: Tile[], categories: TileCategory[], row: n
   const catIds = new Set(rowTiles.map((t) => t.categoryId).filter((id): id is string => id !== null));
   if (catIds.size !== 1) return null;
   return categories.find((c) => c.id === [...catIds][0]) ?? null;
+}
+
+// A sealed board (CONTEXT.md "Sealed Tiles") in the shape the builders below take. Each Tile gets an empty root node
+// of its own, so it reads as a Tile with no Parts and no points, and each line runs through those nodes with no
+// bonus. Nothing here stands in for what the server held back: the sealed board is laid out from the Tile's
+// position, art, name and Category only.
+export function sealedBoardAsTiles(board: SealedBoardResponse, bingoId: string): { tiles: Tile[]; lines: BoardLine[] } {
+  const emptyNode = (id: string): GraphNode => ({
+    id,
+    bingoId,
+    kind: "ALL",
+    label: null,
+    description: null,
+    notes: null,
+    points: 0,
+    minCount: null,
+    quantity: null,
+    itemName: null,
+    pointsGateNodeId: null,
+    submitGateNodeId: null,
+    allowsPreLoad: false,
+    valuedAs: null,
+    children: [],
+  });
+  const nodeIdOf = (tileId: string) => `sealed:${tileId}`;
+  const tiles = board.tiles.map((t) => ({ ...t, bingoId, nodeId: nodeIdOf(t.id), notes: null, createdAt: "", node: emptyNode(nodeIdOf(t.id)) }));
+  const lines = board.lines.map((l) => {
+    const node = emptyNode(`sealed:${l.id}`);
+    return { id: l.id, bingoId, nodeId: node.id, lineType: l.lineType, lineIndex: l.lineIndex, node: { ...node, children: l.tileIds.map((id) => emptyNode(nodeIdOf(id))) } };
+  });
+  return { tiles, lines };
 }
 
 export function toCategoryModel(category: TileCategory): CategoryModel {
@@ -73,7 +104,9 @@ export function buildRequirementTree(
       notNeeded: ancestorSatisfied,
       dim: complete || ancestorSatisfied,
       progress: null,
+      quantity: null,
       showHeading: false,
+      divider: null,
       children: [],
     };
   }
@@ -82,23 +115,28 @@ export function buildRequirementTree(
     const target = node.quantity ?? 1;
     const progress = node.children.reduce((sum, child) => sum + itemLeafValue(child.id, maps), 0);
     const complete = progress >= target;
+    const items = node.children
+      .filter((child) => !!child.itemName)
+      .map((child) => ({ name: child.itemName!, iconUrl: wikiIconUrl(child.itemName!) ?? null, count: itemLeafValue(child.id, maps), lockedBy: lockOf(child.id) }));
+    // Over several items it's a group ("5 in total from", one row per item); over one it stays a single row.
+    const isGroup = items.length > 1;
     return {
       id: node.id,
       kind: node.kind,
-      label: leafLabel(node),
-      items: node.children
-        .filter((child) => !!child.itemName)
-        .map((child) => ({ name: child.itemName!, iconUrl: wikiIconUrl(child.itemName!) ?? null, count: itemLeafValue(child.id, maps), lockedBy: lockOf(child.id) })),
+      label: isGroup ? conditionHeading(node) : leafLabel(node),
+      items,
       iconUrl: null,
       lockedBy: null,
-      isLeaf: true,
+      isLeaf: !isGroup,
       status: statusByNodeId.get(node.id) ?? "not_started",
       complete,
       submitted: node.children.some((child) => maps.submittedNodeIds.has(child.id)),
       notNeeded: ancestorSatisfied,
       dim: complete || ancestorSatisfied,
       progress: { current: progress, target },
-      showHeading: false,
+      quantity: !isGroup && target > 1 ? target : null,
+      showHeading: isGroup,
+      divider: null,
       children: [],
     };
   }
@@ -123,8 +161,10 @@ export function buildRequirementTree(
     submitted: false,
     notNeeded: ancestorSatisfied,
     dim: false,
-    progress: null,
+    progress: node.kind === "COUNT" ? { current: children.filter((c) => c.complete).length, target: node.minCount ?? 1 } : null,
+    quantity: null,
     showHeading: true,
+    divider: node.kind === "ANY" ? { label: "OR", dim: childAncestorSatisfied } : null,
     children,
   };
 }
@@ -245,8 +285,9 @@ export function buildTileModelsStatic(args: {
   interests: TileInterest[];
   viewerUserId: string;
   locks?: ExclusiveLocks;
+  sealed?: boolean;
 }): StaticTileModel[] {
-  const { tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId, locks = NO_LOCKS } = args;
+  const { tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId, locks = NO_LOCKS, sealed = false } = args;
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const claimMaps = buildLeafClaimMaps(teamSubmissions);
 
@@ -275,6 +316,7 @@ export function buildTileModelsStatic(args: {
       imageUrl: tile.imageUrl,
       row: tile.boardRow,
       col: tile.boardCol,
+      sealed,
       category,
       accentColor: category?.color ?? null,
       progress: {
@@ -367,11 +409,12 @@ export function buildBoard(args: {
   totalPoints: number | null;
   adjustments: PointAdjustment[];
   locks?: ExclusiveLocks;
+  sealed?: boolean;
   prev: ReadonlyMap<string, TileModel>;
 }): BoardModel {
-  const { tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, totalPoints, adjustments, locks, prev } = args;
+  const { tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, totalPoints, adjustments, locks, sealed = false, prev } = args;
 
-  const staticTiles = buildTileModelsStatic({ tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId, locks });
+  const staticTiles = buildTileModelsStatic({ tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId, locks, sealed });
   const finalized = finalizeTileModels(staticTiles, now, matchIds, canSubmit, canToggleInterest, prev);
 
   const grid: (TileModel | null)[][] = Array.from({ length: bingoRows }, () => Array.from({ length: bingoCols }, () => null));
@@ -392,6 +435,7 @@ export function buildBoard(args: {
   return {
     rows: bingoRows,
     cols: bingoCols,
+    sealed,
     grid,
     tiles: finalized,
     tileById,

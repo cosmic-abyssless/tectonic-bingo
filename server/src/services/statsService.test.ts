@@ -11,8 +11,9 @@ import { getTeamProgress } from "./teamService";
 import { getDropRates } from "./luck/dropRates";
 import { luckOf } from "./luck/luck";
 import { updateTitleSettings } from "./titleSettingsService";
+import { advanceStage } from "./bingoService";
 import { DEFAULT_LUCK_WEIGHTS } from "@bingo/shared";
-import { filterStatsForTeam, getContributionCounts, getPointsOverTime, getStats, getStatsForViewer, getTileHeatmap, getTimeline } from "./statsService";
+import { draftFacts, filterStatsForTeam, getContributionCounts, getPointsOverTime, getStats, getStatsForViewer, getTileHeatmap, getTimeline } from "./statsService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -209,6 +210,16 @@ describe("getContributionCounts", () => {
     expect(member.pointsShare).toBe(20);
     expect(member.awards[0]).toMatchObject({ label: "Test Tile — Task", awardPoints: 20, points: 20, claims: [{ label: "Bruma torch", quantity: 1 }] });
     expect(counts[0]!.userId).toBe(fx.memberUserId);
+  });
+
+  it("sends only the avatar fields on top of the minimal user", () => {
+    const fx = seedFixture();
+    db.update(schema.users).set({ discordAvatar: "abc123" }).where(eq(schema.users.id, fx.memberUserId)).run();
+    const task = addTask(fx.tileId, { points: 20 });
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId);
+
+    const [count] = getContributionCounts(db, fx.bingoId);
+    expect(count!.user).toEqual({ id: fx.memberUserId, discordId: "member", discordAvatar: "abc123", discordUsername: "member", discordGlobalName: null, discordGuildNick: null, rsn: null });
   });
 });
 
@@ -537,6 +548,41 @@ describe("Luck facts", () => {
     expect(getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: fx.teamAId, bingoComplete: false }).titleSettings.luck.spoonMinLuck).toBe(3);
   });
 
+  it("keeps a Finished Bingo's luck weights and Title settings when the Site admin's change (#221)", () => {
+    const fx = seedLuck();
+    const task = createTask(db, fx.tileId, { kind: "ITEM", itemName: "Ultor vestige", label: "Ultor", points: 10 });
+    timeline(fx.bingoId, fx.memberUserId, [[-2, 100], [5, 110]]);
+    drop(fx.teamAId, task.id, "Ultor vestige", fx.memberUserId, 4, fx.modUserId);
+    advanceStage(db, { bingoId: fx.bingoId, toStage: "complete", changedByUserId: fx.modUserId, now: hours(10) });
+    updateTitleSettings(db, { minimums: { grinder: 50 }, disabled: ["carry"], luck: { ...DEFAULT_LUCK_WEIGHTS, spoonMinLuck: 3 } }, fx.modUserId);
+
+    expect(luckOfPlayer(fx.bingoId, fx.memberUserId)!.spoon).not.toBeNull();
+    const { titleSettings } = getStats(db, fx.bingoId);
+    expect(titleSettings.luck.spoonMinLuck).toBe(1);
+    expect(titleSettings.minimums.grinder).toBe(10);
+    expect(titleSettings.disabled).toEqual([]);
+
+    // Reopened, it uses the Site admin's settings again.
+    advanceStage(db, { bingoId: fx.bingoId, toStage: "live", changedByUserId: fx.modUserId, now: hours(11) });
+    expect(luckOfPlayer(fx.bingoId, fx.memberUserId)!.spoon).toBeNull();
+    expect(getStats(db, fx.bingoId).titleSettings.disabled).toEqual(["carry"]);
+  });
+
+  it("still counts late reviews on a Finished Bingo (#221)", () => {
+    const fx = seedLuck();
+    const task = createTask(db, fx.tileId, { kind: "ITEM", itemName: "Ultor vestige", label: "Ultor", points: 10 });
+    const late = submit(fx.teamAId, task.id, fx.memberUserId);
+    const rejected = submit(fx.teamAId, task.id, fx.secondUserId);
+    advanceStage(db, { bingoId: fx.bingoId, toStage: "complete", changedByUserId: fx.modUserId });
+    const facts = (userId: string) => getStats(db, fx.bingoId).titleFacts.find((f) => f.userId === userId)!;
+    expect(facts(fx.memberUserId).pointsShare).toBe(0);
+
+    approveSubmission(db, { submissionId: late.id, reviewedByUserId: fx.modUserId });
+    rejectSubmission(db, { submissionId: rejected.id, reviewedByUserId: fx.modUserId, reviewerNotes: "blurry" });
+    expect(facts(fx.memberUserId).pointsShare).toBe(10);
+    expect(facts(fx.secondUserId).rejectedSubmissions).toBe(1);
+  });
+
   it("gives no Clutch to a Claim that earned no Points share, but still counts it for Spoon", () => {
     const fx = seedLuck();
     const task = createTask(db, fx.tileId, { kind: "ITEM", itemName: "Ultor vestige", label: "Ultor", points: 10 });
@@ -568,5 +614,47 @@ describe("Luck facts", () => {
     expect(luckOfPlayer(fx.bingoId, fx.rivalUserId)!.dry).toMatchObject({ boss: "Vardorvis", kills: 3000 });
     const own = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: fx.teamAId, bingoComplete: false }).titleFacts;
     expect(own.some((f) => f.userId === fx.rivalUserId)).toBe(false);
+  });
+});
+
+describe("draftFacts (for the Overperformer Title)", () => {
+  function draft(fx: Fixture, picks: [pickNumber: number, name: string, teamId: string][]) {
+    const ids: Record<string, string> = {};
+    for (const [pickNumber, name, teamId] of picks) {
+      const [user] = db.insert(schema.users).values({ discordId: name, discordUsername: name }).returning().all();
+      ids[name] = user.id;
+      db.insert(schema.draftPicks).values({ bingoId: fx.bingoId, pickNumber, teamId, userId: user.id, pickedByUserId: fx.modUserId }).run();
+    }
+    return ids;
+  }
+
+  it("counts Players drafted before them, so a Duo's halves share a position and the next pick comes two later", () => {
+    const fx = seedFixture();
+    const ids = draft(fx, [[1, "solo", fx.teamAId], [2, "duo1", fx.teamBId], [2, "duo2", fx.teamBId], [3, "late", fx.teamAId]]);
+    const facts = draftFacts(db, fx.bingoId, Object.values(ids).map((userId) => ({ userId, pointsShare: 1 })));
+    expect([ids.solo, ids.duo1, ids.duo2, ids.late].map((id) => facts.get(id!)?.position)).toEqual([1, 2, 2, 4]);
+  });
+
+  it("ranks by Points share among drafted Players only, ties sharing a rank; Captains and undrafted Players get nothing", () => {
+    const fx = seedFixture();
+    const ids = draft(fx, [[1, "first", fx.teamAId], [2, "second", fx.teamBId], [3, "third", fx.teamAId]]);
+    const captain = db.select().from(schema.teams).where(eq(schema.teams.id, fx.teamAId)).get()!.captainUserId;
+    const facts = draftFacts(db, fx.bingoId, [
+      { userId: captain, pointsShare: 99 }, // a Captain outscoring everyone doesn't push anyone down
+      { userId: ids.first!, pointsShare: 5 },
+      { userId: ids.second!, pointsShare: 0.1 + 0.2 },
+      { userId: ids.third!, pointsShare: 0.3 },
+      { userId: fx.memberUserId, pointsShare: 50 }, // on a Team but never drafted
+    ]);
+    expect(facts.get(ids.first!)).toEqual({ position: 1, rank: 1 });
+    expect(facts.get(ids.second!)).toEqual({ position: 2, rank: 2 });
+    expect(facts.get(ids.third!)).toEqual({ position: 3, rank: 2 });
+    expect(facts.has(captain)).toBe(false);
+    expect(facts.has(fx.memberUserId)).toBe(false);
+  });
+
+  it("is empty for a Bingo with no Draft", () => {
+    const fx = seedFixture();
+    expect(draftFacts(db, fx.bingoId, [{ userId: fx.memberUserId, pointsShare: 3 }]).size).toBe(0);
   });
 });

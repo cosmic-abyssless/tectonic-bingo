@@ -13,7 +13,7 @@ import { thumbUrl } from "../../../api/imageVariants";
  * TileModel object for tiles whose freeze/dim/canSubmit actually changed
  * this tick, so non-frozen cells skip re-render entirely.
  */
-export const TileCell = memo(function TileCell({ tile, onOpen }: { tile: TileModel; onOpen: (tileId: string) => void }) {
+export const TileCell = memo(function TileCell({ tile, onOpen, isSearchHighlighted }: { tile: TileModel; onOpen: (tileId: string) => void; isSearchHighlighted?: boolean }) {
   const [imgFailed, setImgFailed] = useState(false);
 
   const style = (tile.accentColor ? { "--tile-accent": tile.accentColor } : {}) as CSSProperties;
@@ -26,7 +26,7 @@ export const TileCell = memo(function TileCell({ tile, onOpen }: { tile: TileMod
       style={{ ...style, borderColor }}
       className={`group relative aspect-square w-full cursor-pointer overflow-hidden rounded-md border-2 border-[var(--tile-border)] bg-[var(--tile-bg)] transition-[border-color,opacity] duration-150 hover:border-[var(--tile-accent)] ${
         tile.dimmed ? "pointer-events-none opacity-20 saturate-0" : ""
-      }`}
+      } ${isSearchHighlighted ? "tile-flash" : ""}`}
     >
       {tile.imageUrl && !imgFailed ? (
         <img

@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useSignupForm, type SignupQuestionModel } from "../../headless/useSignupForm";
 import { PartnerPanel } from "./PartnerPanel";
 import { Button } from "../ui/Button";
@@ -6,11 +7,13 @@ import { Disclosure } from "../ui/Disclosure";
 import { Field, Input, Textarea } from "../ui/Field";
 import { Select } from "../ui/Select";
 import { SearchableSelect } from "../ui/SearchableSelect";
-import { AlertIcon, CheckIcon, LockIcon } from "../ui/icons";
+import { AlertIcon, CheckIcon, LockIcon, XIcon } from "../ui/icons";
 
 /** A group of radio buttons or checkboxes under one label, for the choice questions. */
 function ChoiceGroup({ question, label }: { question: SignupQuestionModel; label: React.ReactNode }) {
   const multiple = question.type === "multiselect";
+  const { other } = question;
+  const otherInput = useRef<HTMLInputElement>(null);
   return (
     <fieldset>
       <legend className="mb-1.5 block text-xs font-medium text-on-surface-muted">{label}</legend>
@@ -27,7 +30,39 @@ function ChoiceGroup({ question, label }: { question: SignupQuestionModel; label
             <span className="text-sm text-on-surface">{choice.label}</span>
           </label>
         ))}
+        {other && (
+          <div className="flex min-h-8 items-center gap-2.5">
+            <label className="flex shrink-0 cursor-pointer select-none items-center gap-2.5">
+              <input
+                type={multiple ? "checkbox" : "radio"}
+                name={multiple ? undefined : `question-${question.id}`}
+                checked={other.checked}
+                onChange={(e) => {
+                  other.set(e.target.checked);
+                  // Picking Other is for writing in it: go straight to the box.
+                  if (e.target.checked) requestAnimationFrame(() => otherInput.current?.focus());
+                }}
+                className="size-4 cursor-pointer accent-accent"
+              />
+              <span className="text-sm text-on-surface">Other</span>
+            </label>
+            {other.checked && (
+              <Input
+                ref={otherInput}
+                aria-label={`Other answer to ${question.prompt}`}
+                aria-invalid={other.missingText || undefined}
+                value={other.text}
+                onChange={(e) => other.setText(e.target.value)}
+                maxLength={other.maxLength}
+                placeholder="Your answer"
+                size="sm"
+                className="min-w-0 flex-1"
+              />
+            )}
+          </div>
+        )}
       </div>
+      {other?.missingText && <p className="mt-1.5 text-xs text-danger">Write your answer for Other, or untick it.</p>}
       {question.clear && (
         <button type="button" onClick={question.clear} className="mt-1.5 text-xs text-on-surface-subtle underline underline-offset-2 hover:text-on-surface">
           Clear
@@ -35,6 +70,45 @@ function ChoiceGroup({ question, label }: { question: SignupQuestionModel; label
       )}
       {question.hint && <p className="mt-1.5 text-xs text-on-surface-subtle">{question.hint}</p>}
     </fieldset>
+  );
+}
+
+/**
+ * A Member pick: a search box over the clan's members. With one pick the box shows the pick and a new one replaces
+ * it; with several each pick becomes a removable chip under it, until the maximum.
+ */
+function MemberPickField({ question, label }: { question: SignupQuestionModel; label: React.ReactNode }) {
+  const members = question.members!;
+  const limit = members.max !== null ? `Pick up to ${members.max}.` : null;
+  const hint = [limit, question.hint].filter(Boolean).join(" ") || undefined;
+  const placeholder = members.loading ? "Loading members…" : members.full ? "That's the most you can pick" : "Search by RSN or Discord name…";
+  return (
+    <Field as="div" label={label} hint={hint}>
+      <SearchableSelect
+        value={members.multiple ? "" : (members.picked[0]?.id ?? "")}
+        options={members.options}
+        placeholder={placeholder}
+        onChange={members.pick}
+        readOnly={members.loading || members.full}
+      />
+      {members.multiple && members.picked.length > 0 && (
+        <ul aria-label={`Picked for ${question.prompt}`} className="mt-2 flex flex-wrap gap-1.5">
+          {members.picked.map((p) => (
+            <li key={p.id} className="flex items-center gap-1 rounded-full border border-outline bg-surface-raised py-0.5 pr-1 pl-2.5 text-sm text-on-surface">
+              {p.name}
+              <button type="button" aria-label={`Remove ${p.name}`} onClick={p.remove} className="rounded-full p-0.5 text-on-surface-subtle hover:text-danger">
+                <XIcon size={12} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {question.clear && (
+        <button type="button" onClick={question.clear} className="mt-1.5 text-xs text-on-surface-subtle underline underline-offset-2 hover:text-on-surface">
+          Clear
+        </button>
+      )}
+    </Field>
   );
 }
 
@@ -70,6 +144,9 @@ function QuestionField({ question }: { question: SignupQuestionModel }) {
   }
   if (question.type === "select" || question.type === "multiselect") {
     return <ChoiceGroup question={question} label={label} />;
+  }
+  if (question.type === "member") {
+    return <MemberPickField question={question} label={label} />;
   }
   return (
     <Field label={label} hint={question.hint}>

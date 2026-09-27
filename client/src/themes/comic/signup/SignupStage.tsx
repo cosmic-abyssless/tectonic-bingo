@@ -1,9 +1,9 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { useSignupForm, type SignupFormModel, type SignupQuestionModel } from "../../../headless";
 import { Input, Textarea } from "../../../core/ui/Field";
 import { Select } from "../../../core/ui/Select";
 import { SearchableSelect } from "../../../core/ui/SearchableSelect";
-import { AlertIcon, CheckIcon, LockIcon } from "../../../core/ui/icons";
+import { AlertIcon, CheckIcon, LockIcon, XIcon } from "../../../core/ui/icons";
 import { COMIC_FONT } from "../font";
 import { ComicField } from "../submission/ComicField";
 import { ComicButton } from "../ui/ComicButton";
@@ -191,7 +191,6 @@ function Hint({ children, className }: { children: ReactNode; className?: string
 }
 
 function Question({ question }: { question: SignupQuestionModel }) {
-  const { colors } = useComic();
   const label = <RequiredLabel required={question.required}>{question.prompt}</RequiredLabel>;
 
   if (question.type === "boolean") {
@@ -206,25 +205,11 @@ function Question({ question }: { question: SignupQuestionModel }) {
   }
 
   if (question.type === "select" || question.type === "multiselect") {
-    const multiple = question.type === "multiselect";
-    return (
-      <fieldset>
-        <TabLegend>{label}</TabLegend>
-        <div className="flex flex-wrap gap-2">
-          {question.choices.map((choice) => (
-            <ChoiceChip key={choice.label} type={multiple ? "checkbox" : "radio"} name={multiple ? undefined : `question-${question.id}`} checked={choice.checked} onChange={choice.set}>
-              {choice.label}
-            </ChoiceChip>
-          ))}
-          {question.clear && (
-            <button type="button" onClick={question.clear} className="px-1 text-xs underline underline-offset-2 hover:opacity-70" style={{ color: colors.INK_SUBTLE }}>
-              Clear
-            </button>
-          )}
-        </div>
-        {question.hint && <Hint className="mt-1.5">{question.hint}</Hint>}
-      </fieldset>
-    );
+    return <ChoiceQuestion question={question} label={label} />;
+  }
+
+  if (question.type === "member") {
+    return <MemberPickQuestion question={question} label={label} />;
   }
 
   return (
@@ -235,5 +220,92 @@ function Question({ question }: { question: SignupQuestionModel }) {
         <Input value={question.value} onChange={(e) => question.set(e.target.value)} />
       )}
     </ComicField>
+  );
+}
+
+/** A Member pick: a search box over the clan's members, with several picks as yellow chips that can be taken off. */
+function MemberPickQuestion({ question, label }: { question: SignupQuestionModel; label: ReactNode }) {
+  const { colors } = useComic();
+  const members = question.members!;
+  const limit = members.max !== null ? `Pick up to ${members.max}.` : null;
+  const hint = [limit, question.hint].filter(Boolean).join(" ") || undefined;
+  const placeholder = members.loading ? "Loading members…" : members.full ? "That's the most you can pick" : "Search by RSN or Discord name…";
+  return (
+    <ComicField as="div" label={label} hint={hint}>
+      <SearchableSelect value={members.multiple ? "" : (members.picked[0]?.id ?? "")} options={members.options} placeholder={placeholder} onChange={members.pick} readOnly={members.loading || members.full} />
+      {members.multiple && members.picked.length > 0 && (
+        <ul aria-label={`Picked for ${question.prompt}`} className="mt-2 flex flex-wrap gap-2">
+          {members.picked.map((p) => (
+            <li
+              key={p.id}
+              className="inline-flex items-center gap-1.5 rounded-md border-[3px] py-1 pr-1.5 pl-2.5 text-sm font-semibold"
+              style={{ borderColor: colors.LINE, background: colors.YELLOW, color: colors.ON_YELLOW, boxShadow: `2px 2px 0 ${colors.LINE}` }}
+            >
+              {p.name}
+              <button type="button" aria-label={`Remove ${p.name}`} onClick={p.remove} className="rounded-sm p-0.5 hover:opacity-70">
+                <XIcon size={12} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {question.clear && (
+        <button type="button" onClick={question.clear} className="mt-1.5 px-1 text-xs underline underline-offset-2 hover:opacity-70" style={{ color: colors.INK_SUBTLE }}>
+          Clear
+        </button>
+      )}
+    </ComicField>
+  );
+}
+
+function ChoiceQuestion({ question, label }: { question: SignupQuestionModel; label: ReactNode }) {
+  const { colors } = useComic();
+  const multiple = question.type === "multiselect";
+  const { other } = question;
+  const otherInput = useRef<HTMLInputElement>(null);
+  return (
+    <fieldset>
+      <TabLegend>{label}</TabLegend>
+      <div className="flex flex-wrap gap-2">
+        {question.choices.map((choice) => (
+          <ChoiceChip key={choice.label} type={multiple ? "checkbox" : "radio"} name={multiple ? undefined : `question-${question.id}`} checked={choice.checked} onChange={choice.set}>
+            {choice.label}
+          </ChoiceChip>
+        ))}
+        {other && (
+          <ChoiceChip
+            type={multiple ? "checkbox" : "radio"}
+            name={multiple ? undefined : `question-${question.id}`}
+            checked={other.checked}
+            onChange={(on) => {
+              other.set(on);
+              // Picking Other is for writing in it: go straight to the box.
+              if (on) requestAnimationFrame(() => otherInput.current?.focus());
+            }}
+          >
+            Other
+          </ChoiceChip>
+        )}
+        {question.clear && (
+          <button type="button" onClick={question.clear} className="px-1 text-xs underline underline-offset-2 hover:opacity-70" style={{ color: colors.INK_SUBTLE }}>
+            Clear
+          </button>
+        )}
+      </div>
+      {other?.checked && (
+        <Input
+          ref={otherInput}
+          aria-label={`Other answer to ${question.prompt}`}
+          aria-invalid={other.missingText || undefined}
+          value={other.text}
+          onChange={(e) => other.setText(e.target.value)}
+          maxLength={other.maxLength}
+          placeholder="Your answer"
+          className="mt-2"
+        />
+      )}
+      {other?.missingText && <Hint className="mt-1.5">Write your answer for Other, or untick it.</Hint>}
+      {question.hint && <Hint className="mt-1.5">{question.hint}</Hint>}
+    </fieldset>
   );
 }

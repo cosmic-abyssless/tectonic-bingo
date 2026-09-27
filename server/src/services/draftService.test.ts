@@ -57,23 +57,24 @@ afterEach(() => {
 });
 
 describe("canViewDraftRoom", () => {
-  const signedUpPlayer = { isMod: false, isLead: false, isOnTeam: false, isSignedUp: true };
-  const lead = { isMod: false, isLead: true, isOnTeam: true, isSignedUp: true };
-  const mod = { isMod: true, isLead: false, isOnTeam: false, isSignedUp: false };
-  const outsider = { isMod: false, isLead: false, isOnTeam: false, isSignedUp: false };
+  const player = { isMod: false, isLead: false, canSeeBingo: true };
+  const lead = { isMod: false, isLead: true, canSeeBingo: true };
+  const mod = { isMod: true, isLead: false, canSeeBingo: true };
+  const outsider = { isMod: false, isLead: false, canSeeBingo: false };
 
-  it("blocks signed-up non-leads during signup and captains", () => {
-    expect(canViewDraftRoom("signup", signedUpPlayer)).toBe(false);
-    expect(canViewDraftRoom("captains", signedUpPlayer)).toBe(false);
+  it("blocks non-leads during signup and captains", () => {
+    expect(canViewDraftRoom("signup", player)).toBe(false);
+    expect(canViewDraftRoom("captains", player)).toBe(false);
     expect(canViewDraftRoom("signup", lead)).toBe(true);
     expect(canViewDraftRoom("captains", mod)).toBe(true);
   });
 
-  it("lets signed-up non-leads watch during draft", () => {
-    expect(canViewDraftRoom("draft", signedUpPlayer)).toBe(true);
+  it("lets whoever can see the bingo watch from the draft on", () => {
+    expect(canViewDraftRoom("draft", player)).toBe(true);
     expect(canViewDraftRoom("draft", outsider)).toBe(false);
     expect(canViewDraftRoom("draft", lead)).toBe(true);
     expect(canViewDraftRoom("draft", mod)).toBe(true);
+    expect(canViewDraftRoom("live", outsider)).toBe(false);
   });
 
   it("uses scouting copy before draft and draft-room copy after", () => {

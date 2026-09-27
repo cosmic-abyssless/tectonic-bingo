@@ -7,7 +7,7 @@ import sharp from "sharp";
 import type { ExportImage } from "@bingo/shared";
 import { ServiceError } from "./errors";
 import { generateVariants } from "./imageService";
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "../middleware/upload";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, newUploadName } from "../middleware/upload";
 import { log } from "../log";
 
 const TILES_DIR = "tiles";
@@ -76,7 +76,7 @@ export async function decodeExportImage(image: unknown, tileName: string): Promi
 export async function storeTileImage(uploadsDir: string, image: DecodedImage): Promise<{ url: string; files: string[] }> {
   const dir = path.join(uploadsDir, TILES_DIR);
   fs.mkdirSync(dir, { recursive: true });
-  const name = `${Date.now()}-${Math.random().toString(36).substring(2, 11)}${image.ext}`;
+  const name = newUploadName(image.ext);
   const file = path.join(dir, name);
   fs.writeFileSync(file, image.buffer, { flag: "wx" });
   const variants = await generateVariants(file);

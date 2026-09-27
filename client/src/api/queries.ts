@@ -1,9 +1,9 @@
 import { queryOptions, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AccountTypesResponse, AchievementKey, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
-  MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, UnpairedSignupsResponse, PendingCountResponse,
+  MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, CutReviewPreview, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
-  PickRating, PlayerProfile, StatsResponse, SubmissionReaction, SubmissionReactionGroup, Team, TeamProgressSummary, TeamSubmissionsResponse,
+  PickRating, PlayerProfile, RewindResponse, StatsResponse, SubmissionReaction, SubmissionReactionGroup, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
 } from "@bingo/shared";
 import { SUBMISSION_REACTIONS } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
@@ -35,11 +35,13 @@ export const queryKeys = {
   myTectonicRsns: (slug: string) => ["myTectonicRsns", slug] as const,
   myPairing: (slug: string) => ["myPairing", slug] as const,
   partnerCandidates: (slug: string) => ["partnerCandidates", slug] as const,
+  pickableMembers: (slug: string) => ["pickableMembers", slug] as const,
   unpairedSignups: (slug: string) => ["unpairedSignups", slug] as const,
   draftState: (slug: string) => ["draftState", slug] as const,
   playerProfile: (slug: string, userId: string) => ["playerProfile", slug, userId] as const,
   accountTypes: (slug: string) => ["accountTypes", slug] as const,
   stats: (slug: string) => ["stats", slug] as const,
+  rewind: (slug: string) => ["rewind", slug] as const,
   auditLog: (slug: string, filters: AuditLogFilters) => ["auditLog", slug, filters] as const,
   teamActivity: (slug: string, teamId: string) => ["teamActivity", slug, teamId, "condensed"] as const,
   myBugReports: () => ["myBugReports"] as const,
@@ -100,14 +102,22 @@ export function useBoard(slug: string | undefined) {
   return useQuery({
     queryKey: queryKeys.board(slug ?? ""),
     queryFn: async () => {
-      const board = await api.get<BoardResponse>(`/api/bingos/${slug}/board`);
+      const board = await api.get<ViewerBoardResponse>(`/api/bingos/${slug}/board`);
       if (userId && slug) writeBoardCache(userId, slug, __BUILD_ID__, board);
       return board;
     },
     enabled: !!slug,
-    initialData: () => (userId && slug ? readBoardCache<BoardResponse>(userId, slug, __BUILD_ID__) : undefined),
+    initialData: () => (userId && slug ? readBoardCache<ViewerBoardResponse>(userId, slug, __BUILD_ID__) : undefined),
     initialDataUpdatedAt: 0,
   });
+}
+
+/**
+ * The full board, for screens only Moderators and Admins reach, or that only open once the Tiles can't be sealed
+ * (admin, stats): they never get the sealed board, so a sealed one reads as not loaded.
+ */
+export function fullBoard(board: ViewerBoardResponse | undefined): BoardResponse | undefined {
+  return board && !board.sealed ? board : undefined;
 }
 
 export function useTeamProgress(slug: string | undefined, teamId: string | undefined) {
@@ -423,6 +433,15 @@ export function usePartnerCandidates(slug: string | undefined, enabled: boolean)
   });
 }
 
+/** Who a Member pick question on the signup form can pick: every clan member who has logged in, except the viewer. */
+export function usePickableMembers(slug: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.pickableMembers(slug ?? ""),
+    queryFn: () => api.get<PickableMembersResponse>(`/api/bingos/${slug}/signup/members`),
+    enabled: !!slug && enabled,
+  });
+}
+
 /** Everyone else signed up without a partner yet (duo bingos): who a player choosing a partner can still ask. */
 export function useUnpairedSignups(slug: string | undefined, enabled: boolean) {
   return useQuery({
@@ -564,6 +583,18 @@ export function useStats(slug: string | undefined, enabled = true) {
     queryKey: queryKeys.stats(slug ?? ""),
     queryFn: () => api.get<StatsResponse>(`/api/bingos/${slug}/stats`),
     enabled: !!slug && enabled,
+  });
+}
+
+// Rewind (CONTEXT.md): a Finished Bingo's whole history in one go, played back on the client so scrubbing is instant.
+// A Finished Bingo barely changes, so it isn't refetched on focus.
+export function useRewind(slug: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.rewind(slug ?? ""),
+    queryFn: () => api.get<RewindResponse>(`/api/bingos/${slug}/rewind`),
+    enabled: !!slug && enabled,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
 }
 

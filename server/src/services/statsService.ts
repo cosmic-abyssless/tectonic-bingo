@@ -3,7 +3,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { LuckFacts, LuckWeights, PlayerTitleFacts, TileHeatmapCell, TileProgress, TitleAwardFact, TitleSettings, ValuedAs } from "@bingo/shared";
 import { valuedAsOf } from "./gpValueService";
 import * as schema from "../db/schema";
-import { bingoLines, bingos, claims, nodeEdges, nodes, stageTransitions, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
+import { bingoLines, bingos, claims, draftPicks, nodeEdges, nodes, stageTransitions, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
 import { findAncestorIds, getFullGraph } from "./graphService";
 import { applyExclusivity } from "./exclusivityService";
 import { creditAwards, type AwardCredit, type CreditClaim } from "./pointsShare";
@@ -18,12 +18,15 @@ import { getDropRates } from "./luck/dropRates";
 import { BOSS_NAMES } from "./luck/bossSources";
 import type { WomSnapshot } from "./womService";
 import { now } from "../clock";
-import { getTitleSettings } from "./titleSettingsService";
+import { getBingoTitleSettings } from "./titleSettingsService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
 type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick"> & { rsn?: string | null };
 const MINIMAL_USER_COLS = { id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick };
+// Contributions also carry what the client needs for a Discord avatar (Titles section), and nothing more.
+type AvatarUser = MinimalUser & Pick<typeof users.$inferSelect, "discordId" | "discordAvatar">;
+const AVATAR_USER_COLS = { ...MINIMAL_USER_COLS, discordId: users.discordId, discordAvatar: users.discordAvatar };
 
 export interface PointsOverTimePoint {
   at: Date;
@@ -186,7 +189,7 @@ export interface ContributionAward {
 
 export interface ContributionCount {
   userId: string;
-  user: MinimalUser;
+  user: AvatarUser;
   teamId: string;
   approvedSubmissions: number;
   /** Points share (CONTEXT.md), unrounded. */
@@ -304,7 +307,7 @@ export function getContributionCounts(db: Db, bingoId: string, shares = getPoint
       .sort((a, b) => b.points - a.points);
 
   const userIds = [...teamByUser.keys()];
-  const userRows = userIds.length ? db.select(MINIMAL_USER_COLS).from(users).where(inArray(users.id, userIds)).all() : [];
+  const userRows = userIds.length ? db.select(AVATAR_USER_COLS).from(users).where(inArray(users.id, userIds)).all() : [];
   const rsns = rsnsInBingo(db, bingoId, userIds);
   const userById = new Map(userRows.map((u) => [u.id, { ...u, rsn: rsns.get(u.id) ?? null }]));
 
@@ -488,11 +491,12 @@ export function getTitleFacts(
   contributions: ContributionCount[],
   teamCredits: TeamCredits[],
   shares = getPointsShares(db, bingoId, teamCredits),
-  luckWeights = getTitleSettings(db).luck,
+  luckWeights?: LuckWeights,
 ): PlayerTitleFacts[] {
   const teamIds = [...new Set(contributions.map((c) => c.teamId))];
   if (teamIds.length === 0) return [];
   const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get()!;
+  luckWeights ??= getBingoTitleSettings(db, bingo).luck;
 
   const stateRows = db.select().from(teamNodeState).where(inArray(teamNodeState.teamId, teamIds)).all();
   const completedAt = new Map(stateRows.map((r) => [`${r.teamId}:${r.nodeId}`, r.completedAt]));
@@ -561,6 +565,7 @@ export function getTitleFacts(
   const timelines: Map<string, WomSnapshot[]> = start ? loadTimelines(db, bingoId) : new Map();
   const luck = start ? luckFacts(graph, teamCredits, timelines, teamByUser, start, end, luckWeights) : new Map<string, LuckFacts>();
   const achievementTallies = getAchievementTallies(db, bingo);
+  const draft = draftFacts(db, bingoId, contributions);
 
   return contributions.map((c) => {
     const awards: TitleAwardFact[] = (shares.get(c.userId)?.credits ?? []).map((credit) => {
@@ -589,6 +594,7 @@ export function getTitleFacts(
       wom: start && timeline ? gainsOf(timeline, start, end) : null,
       luck: luck.get(c.userId) ?? null,
       achievements: achievementTallies ? (achievementTallies.get(c.userId) ?? { earned: 0, lastEarnedAt: null }) : null,
+      draft: draft.get(c.userId) ?? null,
       lastAt: {
         approved: approvedAt.get(c.userId)?.toISOString() ?? null,
         rejected: rejectedAt.get(c.userId)?.toISOString() ?? null,
@@ -600,6 +606,29 @@ export function getTitleFacts(
   });
 }
 
+/**
+ * Each drafted Player's draft position and Points share rank (PlayerTitleFacts.draft), for Overperformer. The position
+ * counts Players, not picks: a Duo's pick drafts two, so both halves share it and the next pick is two further on. The
+ * rank is among every drafted Player with a `contributions` entry; one without has no Points share, so leaving them out
+ * changes nobody's rank ahead of theirs.
+ */
+export function draftFacts(db: Db, bingoId: string, contributions: Pick<ContributionCount, "userId" | "pointsShare">[]): Map<string, { position: number; rank: number }> {
+  const picks = db.select({ userId: draftPicks.userId, pickNumber: draftPicks.pickNumber }).from(draftPicks).where(eq(draftPicks.bingoId, bingoId)).all();
+  const pickOf = new Map(picks.map((p) => [p.userId, p.pickNumber]));
+  const drafted = contributions.filter((c) => pickOf.has(c.userId));
+  // Points shares that differ only by floating-point noise (a Duo's halves) are the same rank.
+  const beats = (a: number, b: number) => a - b > 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+  const out = new Map<string, { position: number; rank: number }>();
+  for (const c of drafted) {
+    const pick = pickOf.get(c.userId)!;
+    out.set(c.userId, {
+      position: picks.filter((p) => p.pickNumber < pick).length + 1,
+      rank: drafted.filter((o) => beats(o.pointsShare, c.pointsShare)).length + 1,
+    });
+  }
+  return out;
+}
+
 export interface Stats {
   pointsOverTime: PointsOverTimePoint[];
   timeline: TimelineEvent[];
@@ -609,7 +638,7 @@ export interface Stats {
   drops: GpDrop[];
   titleFacts: PlayerTitleFacts[];
   titleContext: { liveAt: Date | null; endedAt: Date | null };
-  /** The Site admin's Title settings: which Titles are on and their minimums, for picking holders. */
+  /** The Title settings for picking holders: which Titles are on and their minimums. A Finished Bingo's frozen copy (#221). */
   titleSettings: TitleSettings;
   womReadAt: Date | null;
 }
@@ -619,7 +648,7 @@ export function getStats(db: Db, bingoId: string): Stats {
   const shares = getPointsShares(db, bingoId, teamCredits);
   const contributions = getContributionCounts(db, bingoId, shares);
   const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get()!;
-  const titleSettings = getTitleSettings(db);
+  const titleSettings = getBingoTitleSettings(db, bingo);
   return {
     pointsOverTime: getPointsOverTime(db, bingoId),
     timeline: getTimeline(db, bingoId),
