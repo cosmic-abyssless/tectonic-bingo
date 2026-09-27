@@ -874,6 +874,15 @@ function FlyingBook({
   const poses = useRef<Map<number, LeafPose>>(new Map());
   // Which page the curl layer is showing the other side of, if any.
   const [curlCopy, setCurlCopy] = useState<{ leaf: number; side: Side } | null>(null);
+  // True while the book is still flying out: until it has landed open, nothing in it responds (a hover would start
+  // a page curl mid-flight, and the curl layer then fights the flight for the overlay's scrollbar). Only clicking off
+  // it, to cancel, works. The ref is for handlers that must see it synchronously.
+  const [opening, setOpening] = useState(true);
+  const openingRef = useRef(true);
+  const opened = useCallback(() => {
+    openingRef.current = false;
+    setOpening(false);
+  }, []);
 
   const flipTo = useCallback(
     (next: number) => {
@@ -903,6 +912,7 @@ function FlyingBook({
     // stacked on the right.
     for (let k = 0; k < leafCount; k++) poses.current.set(k, { angle: k === 0 ? OPEN_ANGLE : 0, z: leafDepth(k, 1) });
     if (!root || !frame || !flyer || !cover || !page || !base || !backdrop || !burst) {
+      opened();
       setBookAway(tileId);
       return;
     }
@@ -917,7 +927,7 @@ function FlyingBook({
       if (back) back.style.transform = `translateZ(${-BACK_DEPTH}px) rotateY(180deg)`;
       if (mark) mark.style.opacity = "0";
       setBookAway(tileId);
-      animate(reducedEnterSequence(backdrop, burst));
+      animate(reducedEnterSequence(backdrop, burst)).then(opened, opened);
       return;
     }
     // Measure the cell's book BEFORE hiding it, pose our copy over it
@@ -944,7 +954,8 @@ function FlyingBook({
       // tile's crop); open, nothing's cut, so a fold-back swung past the
       // book's bottom isn't either. The fly-home puts clipOpen back.
       frame.style.clipPath = "none";
-    });
+      opened();
+    }, opened);
     // Runs once, on mount: the flight is from wherever the tile was then.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -983,7 +994,7 @@ function FlyingBook({
     (leaf: number, side: Side, at: Point | null) => {
       const root = scope.current;
       const frame = root?.querySelector<HTMLElement>(FRAME);
-      if (!root || !frame || turning.current) return;
+      if (!root || !frame || turning.current || openingRef.current) return;
       const current = curling.current;
       if (at) {
         current?.anim?.stop();
@@ -1233,6 +1244,7 @@ function FlyingBook({
     if (!isPresent) return;
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      if (openingRef.current) return;
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       // Nor behind the artwork's full-size view.
@@ -1269,22 +1281,26 @@ function FlyingBook({
             viewport's height too — an open comic should fit on screen. */}
         <AriaModal className="w-full outline-none" style={{ maxWidth: single ? PHONE_BOOK_MAX_WIDTH : BOOK_MAX_WIDTH }}>
           <AriaDialog aria-label={tile.name} className="outline-none">
-            <TileDetails
-              ref={scope}
-              tile={tile}
-              colors={colors}
-              spread={spread}
-              lastSpread={lastSpread}
-              curlCopy={curlCopy}
-              single={single}
-              onFlipTo={flipTo}
-              onStep={step}
-              onCurl={curl}
-              swipe={swipe}
-              onClose={onClose}
-              onSubmit={onSubmit}
-              onToggleInterest={onToggleInterest}
-            />
+            {/* Inert to the pointer while the book is still flying out (see `opening`). A click on its spot lands on
+                the modal around it, so it doesn't count as clicking off; only the backdrop cancels. */}
+            <div style={{ pointerEvents: opening ? "none" : undefined }}>
+              <TileDetails
+                ref={scope}
+                tile={tile}
+                colors={colors}
+                spread={spread}
+                lastSpread={lastSpread}
+                curlCopy={curlCopy}
+                single={single}
+                onFlipTo={flipTo}
+                onStep={step}
+                onCurl={curl}
+                swipe={swipe}
+                onClose={onClose}
+                onSubmit={onSubmit}
+                onToggleInterest={onToggleInterest}
+              />
+            </div>
           </AriaDialog>
         </AriaModal>
       </div>
@@ -1344,6 +1360,7 @@ function TileDetails({
       key="summary"
       tile={tile}
       ordered={ordered}
+      compact={single}
       colors={page}
       onGoToTask={(position) => {
         // Phone: the task at `position` is page index position + 1, and the spread IS the page
@@ -1387,7 +1404,7 @@ function TileDetails({
   };
   const face = (i: number, side: Side): ReactNode => (
     <PageColorsContext.Provider value={page}>
-      <BookPage colors={page} side={side === "front" ? "right" : "left"} no={i + 1} role={roleOf(i)} dragScroll={single}>
+      <BookPage colors={page} side={side === "front" ? "right" : "left"} no={i + 1} role={roleOf(i)} dragScroll={single} fill={i === 0}>
         {pages[i]}
       </BookPage>
     </PageColorsContext.Provider>
@@ -1618,13 +1635,17 @@ function NavButton({
 }
 
 // A page on a face: the scrollable content, and a footer strip under it —
-// PAGE n on the outer edge, what the page is at the spine.
+// PAGE n on the outer edge, what the page is at the spine. `fill`: the content
+// is a column at least the page's height, for a page (the summary) that lays
+// itself out to fit rather than scroll, and it keeps clear of just the footer
+// (bw(0.06), PageFooter) where other pages leave twice that.
 function BookPage({
   colors,
   side,
   no,
   role,
   dragScroll = false,
+  fill = false,
   children,
 }: {
   colors: ComicColors;
@@ -1632,12 +1653,15 @@ function BookPage({
   no: number;
   role: string;
   dragScroll?: boolean;
+  fill?: boolean;
   children: ReactNode;
 }) {
   return (
     <>
       <Page colors={colors} side={side} dragScroll={dragScroll}>
-        <div style={{ paddingBottom: bw(0.12) }}>{children}</div>
+        <div className={fill ? "flex flex-1 flex-col" : undefined} style={{ paddingBottom: bw(fill ? 0.06 : 0.12) }}>
+          {children}
+        </div>
       </Page>
       <PageFooter colors={colors} side={side} no={no} role={role} />
     </>
@@ -1783,10 +1807,13 @@ function SummaryPage({
   onOpenArt,
   onSubmit,
   onToggleInterest,
+  compact = false,
 }: {
   tile: TileModel;
   /** The tasks in page order (see orderTasks). */
   ordered: OrderedTask[];
+  /** A phone (the book's `single`): the Points and Parts cards go small, beside the masthead rather than under it. */
+  compact?: boolean;
   colors: ComicColors;
   /** Takes the task's position in page order, not its own number. */
   onGoToTask?: (position: number) => void;
@@ -1796,60 +1823,97 @@ function SummaryPage({
   onToggleInterest?: () => void;
 }) {
   const { progress, freeze } = tile;
+  // The height left for the artwork between the contents and the button (its box is flex-1 on a page that fills the
+  // leaf, so this doesn't depend on the picture), which it scales itself down to fit rather than make the page scroll.
+  const artBox = useRef<HTMLDivElement>(null);
+  const [artRoom, setArtRoom] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = artBox.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setArtRoom(el.clientHeight));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const pointsPct = progress.totalPoints > 0 ? Math.round((progress.pointsAwarded / progress.totalPoints) * 100) : 0;
   const submitLabel = progress.allComplete ? "Complete" : freeze.isFrozen ? "Frozen" : "Submit proof";
 
-  return (
-    <div className="flex flex-col gap-5 p-6" style={{ color: colors.INK }}>
-      {/* Masthead header */}
-      <div className="flex flex-col items-start gap-2">
-        <span
-          className="comic-logo uppercase"
-          style={{ backgroundColor: TECTONIC_LOGO.bg, color: TECTONIC_LOGO.fg, fontFamily: COMIC_LOGO_FONT, fontWeight: 800, fontSize: "1rem", letterSpacing: "0.02em" }}
-        >
-          Tectonic
+  const masthead = (
+    <div className="flex min-w-0 flex-col items-start gap-2">
+      <span
+        className="comic-logo uppercase"
+        style={{ backgroundColor: TECTONIC_LOGO.bg, color: TECTONIC_LOGO.fg, fontFamily: COMIC_LOGO_FONT, fontWeight: 800, fontSize: "1rem", letterSpacing: "0.02em" }}
+      >
+        Tectonic
+      </span>
+      <h2 className="text-3xl leading-none [overflow-wrap:anywhere]" style={{ fontFamily: COMIC_FONT }}>
+        {tile.name}
+      </h2>
+      {tile.category && (
+        <span className="text-sm uppercase tracking-wide" style={{ fontFamily: COMIC_FONT, color: tile.category.color ?? colors.INK_SUBTLE }}>
+          {tile.category.label}
         </span>
-        <h2 className="text-3xl leading-none" style={{ fontFamily: COMIC_FONT }}>
-          {tile.name}
-        </h2>
-        {tile.category && (
-          <span className="text-sm uppercase tracking-wide" style={{ fontFamily: COMIC_FONT, color: tile.category.color ?? colors.INK_SUBTLE }}>
-            {tile.category.label}
-          </span>
-        )}
-      </div>
+      )}
+    </div>
+  );
 
-      {/* Comic progress caption boxes */}
-      <div className="grid grid-cols-2 gap-3">
-        <CaptionBox tone="yellow" title="Points">
-          <span className="num text-2xl" style={{ fontFamily: COMIC_FONT, color: progress.pointsAwarded >= progress.totalPoints && progress.totalPoints > 0 ? colors.OK : colors.INK }}>
-            {progress.pointsAwarded}
-          </span>
-          <span className="num text-base" style={{ color: colors.INK_SUBTLE }}>
-            {" "}/ {progress.totalPoints}
-          </span>
-        </CaptionBox>
-        <CaptionBox tone="paper" title="Parts">
-          <span className="num text-2xl" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
-            {progress.completedTasks}
-          </span>
-          <span className="num text-base" style={{ color: colors.INK_SUBTLE }}>
-            {" "}/ {progress.totalTasks} done
-          </span>
-        </CaptionBox>
-        {/* unlocksAt is null before the bingo starts; once the freeze is over
-            (started, not frozen) there's nothing left to say, so no box. */}
-        {freeze.hasFreezePeriod && (freeze.isFrozen || freeze.unlocksAt === null) && (
-          <CaptionBox tone="cyan" title={freeze.isFrozen ? "Frozen" : "Freeze period"} className="col-span-2">
-            <span className="flex items-center gap-2 text-sm" style={{ color: colors.INK }}>
-              <ClockIcon size={14} />
-              {freeze.isFrozen
-                ? `Unlocks in ${formatCountdown(freeze.remainingMs)}`
-                : `Locked for ${freeze.durationMinutes} minutes after the start of the bingo`}
-            </span>
-          </CaptionBox>
-        )}
-      </div>
+  // Comic progress caption boxes: full size in a row of their own, or small beside the masthead (`compact`).
+  const cardTitle = (text: string) => (compact ? <span className="text-sm">{text}</span> : text);
+  const cardPad = compact ? "px-2! py-1.5!" : undefined;
+  const bigNum = compact ? "text-xl" : "text-2xl";
+  const smallNum = compact ? "text-xs" : "text-base";
+  const progressCards = (
+    <>
+      <CaptionBox tone="yellow" title={cardTitle("Points")} className={cardPad}>
+        <span className={`num ${bigNum}`} style={{ fontFamily: COMIC_FONT, color: progress.pointsAwarded >= progress.totalPoints && progress.totalPoints > 0 ? colors.OK : colors.INK }}>
+          {progress.pointsAwarded}
+        </span>
+        <span className={`num ${smallNum}`} style={{ color: colors.INK_SUBTLE }}>
+          {" "}/ {progress.totalPoints}
+        </span>
+      </CaptionBox>
+      <CaptionBox tone="paper" title={cardTitle("Parts")} className={cardPad}>
+        <span className={`num ${bigNum}`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+          {progress.completedTasks}
+        </span>
+        <span className={`num ${smallNum}`} style={{ color: colors.INK_SUBTLE }}>
+          {" "}/ {progress.totalTasks}
+          {compact ? "" : " done"}
+        </span>
+      </CaptionBox>
+    </>
+  );
+
+  // unlocksAt is null before the bingo starts; once the freeze is over (started, not frozen) there's nothing left to
+  // say, so no box.
+  const freezeBox = freeze.hasFreezePeriod && (freeze.isFrozen || freeze.unlocksAt === null) && (
+    <CaptionBox tone="cyan" title={freeze.isFrozen ? "Frozen" : "Freeze period"} className="col-span-2">
+      <span className="flex items-center gap-2 text-sm" style={{ color: colors.INK }}>
+        <ClockIcon size={14} />
+        {freeze.isFrozen ? `Unlocks in ${formatCountdown(freeze.remainingMs)}` : `Locked for ${freeze.durationMinutes} minutes after the start of the bingo`}
+      </span>
+    </CaptionBox>
+  );
+
+  return (
+    // flex-1: fills the page (BookPage's `fill`), so the artwork below can take what's left and the page never scrolls.
+    <div className="flex flex-1 flex-col gap-5 p-6" style={{ color: colors.INK }}>
+      {compact ? (
+        <>
+          <div className="flex items-start justify-between gap-3">
+            {masthead}
+            <div className="flex shrink-0 gap-2">{progressCards}</div>
+          </div>
+          {freezeBox}
+        </>
+      ) : (
+        <>
+          {masthead}
+          <div className="grid grid-cols-2 gap-3">
+            {progressCards}
+            {freezeBox}
+          </div>
+        </>
+      )}
 
       {/* Parts (table of contents) */}
       {ordered.length > 0 && (
@@ -1872,7 +1936,7 @@ function SummaryPage({
                   <button
                     type="button"
                     onClick={() => onGoToTask?.(i)}
-                    className="comic-press flex w-full items-center gap-3 border-[3px] px-3 py-2 text-left outline-none transition-transform duration-100 hover:-translate-y-0.5"
+                    className="comic-press flex w-full cursor-pointer items-center gap-3 border-[3px] px-3 py-2 text-left outline-none transition-transform duration-100 hover:-translate-y-0.5"
                     style={{
                       borderColor: colors.LINE,
                       background: colors.PAPER_RAISED,
@@ -1928,8 +1992,12 @@ function SummaryPage({
         </section>
       )}
 
-      {/* The Tile's artwork, pinned under the contents. */}
-      {tile.imageUrl && <PinnedArt imageUrl={tile.imageUrl} name={tile.name} colors={colors} onOpen={onOpenArt} />}
+      {/* The Tile's artwork, pinned under the contents, in whatever height the page has left (see artRoom). */}
+      {tile.imageUrl && (
+        <div ref={artBox} className="flex min-h-20 flex-1 items-center justify-center">
+          <PinnedArt imageUrl={tile.imageUrl} name={tile.name} colors={colors} onOpen={onOpenArt} maxHeight={artRoom} />
+        </div>
+      )}
 
       {onSubmit && (
         <ComicButton
