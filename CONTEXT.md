@@ -88,6 +88,14 @@ A signup left out of the Draft so that every Team comes out the same shape. Pair
   - **Pairs only** (`pairs_only`, duo Bingos only) — only pairs are drafted, split evenly; every single is cut. Mods can pair singles up by hand to keep them in.
   - **No cuts** (`none`) — everyone is drafted, in any order; Teams may end up different sizes.
 - **Share:** What every Team drafts under the setting, e.g. "1 pair and 1 single". Captains pick in any order, but a Team that has its share of pairs can't take another pair (likewise singles).
+- **Avoidable cut:** A Player who is cut as things stand but wouldn't be if the changes a Cut review proposes were made.
+- **Unavoidable cut:** A Player who would still be cut after every change a Cut review can propose. The cut warnings count only these; while any cut is avoidable they say "Some cuts can be avoided" and point to the Cut review.
+
+### Cut review
+A plan for cutting as few Players as possible before the Draft, which an admin looks over, edits and applies.
+- **Changes it proposes,** in order of preference: pair two singles (same timezone region first, then by signup date), split a pair (never one a Captain belongs to), and add or remove one Team (never below a minimum Team size, which grows with the number of Players). It never switches the Draft cuts setting.
+- **Rules:** Run by Admins. The admin sees the whole plan and can edit it before applying, e.g. pair people differently from what's proposed, since they know the players. The players don't get a say: an admin's change applies straight away, like pairing singles by hand. While any cut is avoidable, moving into the Draft stage goes through a Cut review first; dropping every proposed change is a deliberate way through.
+- **Not:** Switching to "No cuts". That removes cuts by definition, it doesn't minimise them.
 
 ### Draft
 The structured selection process during the `draft` stage where Captains take turns selecting Players (or Duos) onto their Teams.
