@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { detectTimeZone, encodeChoices, isBlankAnswer, parseChoices, timeZoneOptions, type CombatAchievementStats, type SignupAnswerInput, type SignupQuestion, type TimeZoneOption } from "@bingo/shared";
+import { detectTimeZone, encodeChoices, encodeSingleChoice, hasBlankOther, isBlankAnswer, MAX_OTHER_LENGTH, parseChoiceAnswer, timeZoneOptions, type CombatAchievementStats, type SignupAnswerInput, type SignupQuestion, type TimeZoneOption } from "@bingo/shared";
 import { useBingo, useCreateSignup, useMyPairing, useMySignup, useMyTectonicRsns, useSignupQuestions, useUpdateSignup, useWithdrawSignup } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { useStatsRefreshingUserIds } from "../context/WebSocketContext";
@@ -16,6 +16,16 @@ export interface SignupChoiceModel {
   set: (on: boolean) => void;
 }
 
+export interface SignupOtherModel {
+  checked: boolean;
+  set: (on: boolean) => void;
+  text: string;
+  setText: (text: string) => void;
+  maxLength: number;
+  /** Picked with nothing written: the form can't be sent like this. */
+  missingText: boolean;
+}
+
 export interface SignupQuestionModel {
   id: string;
   prompt: string;
@@ -27,6 +37,11 @@ export interface SignupQuestionModel {
   hint?: string;
   /** Select and multiselect only: the options, plus a saved answer that's no longer one (so it can be unticked). */
   choices: SignupChoiceModel[];
+  /**
+   * The Other choice, after the options, on a choice question that allows it (or whose saved answer has one, so it
+   * can be unticked). Picking it opens a text box; unpicking it throws the text away.
+   */
+  other: SignupOtherModel | null;
   /** A single-choice question that's optional and answered can be cleared. */
   clear: (() => void) | null;
 }
@@ -104,15 +119,35 @@ function questionModel(question: SignupQuestion, value: string, set: (v: string)
   const isChoice = question.type === "select" || question.type === "multiselect";
   const multiple = question.type === "multiselect";
   const options = isChoice ? parseOptions(question) : [];
-  const chosen = multiple ? parseChoices(value) : value ? [value] : [];
+  const parsed = isChoice ? parseChoiceAnswer(value) : { choices: [], other: null };
+  const other = parsed.other;
+  const chosen = multiple ? parsed.choices : value && other === null ? [value] : [];
   // An answer that is no longer one of the options (the options were edited) stays visible so it can be unticked.
   const shown = isChoice ? [...options, ...chosen.filter((c) => !options.includes(c))] : [];
 
-  function toggle(option: string, on: boolean) {
-    if (!multiple) return set(option);
-    const next = on ? [...chosen, option] : chosen.filter((c) => c !== option);
-    set(next.length === 0 ? "" : encodeChoices(shown.filter((o) => next.includes(o))));
+  // The answer as stored, from what's picked: a multiple-choice list in the options' order, or the one single choice.
+  function save(picked: string[], otherText: string | null) {
+    if (!multiple) return set(encodeSingleChoice({ choices: picked, other: otherText }));
+    set(picked.length === 0 && otherText === null ? "" : encodeChoices(shown.filter((o) => picked.includes(o)), otherText));
   }
+
+  function toggle(option: string, on: boolean) {
+    if (!multiple) return save([option], null);
+    save(on ? [...chosen, option] : chosen.filter((c) => c !== option), other);
+  }
+
+  const otherModel: SignupOtherModel | null =
+    isChoice && (question.allowOther || other !== null)
+      ? {
+          checked: other !== null,
+          // A single choice is either an option or Other, so picking Other drops the option.
+          set: (on) => save(multiple ? chosen : [], on ? (other ?? "") : null),
+          text: other ?? "",
+          setText: (text) => save(multiple ? chosen : [], text),
+          maxLength: MAX_OTHER_LENGTH,
+          missingText: other !== null && other.trim() === "",
+        }
+      : null;
 
   return {
     id: question.id,
@@ -123,6 +158,7 @@ function questionModel(question: SignupQuestion, value: string, set: (v: string)
     set,
     hint,
     choices: shown.map((option) => ({ label: option, checked: chosen.includes(option), set: (on) => toggle(option, on) })),
+    other: otherModel,
     clear: question.type === "select" && !question.required && value ? () => set("") : null,
   };
 }
@@ -198,7 +234,8 @@ export function useSignupForm(slug: string): SignupFormModel {
 
   const answerList: SignupAnswerInput[] = questions.map((q) => ({ questionId: q.id, value: answers[q.id] ?? "" }));
   const missingRequired = questions.some((q) => q.required && isBlankAnswer(q.type, answers[q.id]));
-  const isValid = !!rsnValue.trim() && !!timezoneValue && !missingRequired;
+  const blankOther = questions.some((q) => hasBlankOther(q.type, answers[q.id]));
+  const isValid = !!rsnValue.trim() && !!timezoneValue && !missingRequired && !blankOther;
 
   async function submit() {
     setError(null);
