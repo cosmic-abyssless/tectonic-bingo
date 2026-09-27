@@ -9,6 +9,8 @@ import { addModerator, advanceStage, assertBoardEditable, assertQuestionsEditabl
 import { effectiveStartsAt } from "./bingoStart";
 import { createTask, createTile } from "./boardService";
 import { createTeam } from "./teamService";
+import { adminPair } from "./pairingService";
+import { applyCutReview } from "./cutReviewService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -115,6 +117,73 @@ describe("advanceStage", () => {
     const bingo = seedBingo({ startsAt: null });
     advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: bingo.createdByUserId });
     expect(db.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!.stage).toBe("live");
+  });
+});
+
+// Cut review (CONTEXT.md): moving into the Draft stage is refused while any cut is Avoidable and no review has
+// been applied since the roster last changed. The planner's own behavior is covered exhaustively in
+// cutPlanner.test.ts and cutReviewService.test.ts — this only proves advanceStage actually wires the guard in.
+describe("advanceStage: the Cut review guard", () => {
+  function seedAvoidableBingo() {
+    const bingo = seedBingo({ stage: "captains", signupMode: "duo", cutMode: "even" });
+    const signupStage = { ...bingo, stage: "signup" as const };
+    const seedUser = (discordId: string) => db.insert(schema.users).values({ discordId, discordUsername: discordId }).returning().get();
+    const seedCaptain = (discordId: string) => {
+      const user = seedUser(discordId);
+      db.insert(schema.signups).values({ bingoId: bingo.id, userId: user.id, rsn: discordId }).run();
+      return user;
+    };
+    const signUp = (discordId: string, at: Date) => {
+      const user = seedUser(discordId);
+      db.insert(schema.signups).values({ bingoId: bingo.id, userId: user.id, rsn: discordId, createdAt: at }).run();
+      return user;
+    };
+    const c1 = seedCaptain("c1");
+    const c2 = seedCaptain("c2");
+    createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, name: "A" });
+    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
+    const base = new Date("2026-01-01T00:00:00Z").getTime();
+    // 1 accepted pair + 2 singles, 2 Teams: the same "2 cut, all Avoidable" shape as cutPlanner.test.ts's example.
+    const a = signUp("a", new Date(base));
+    const b = signUp("b", new Date(base + 1000));
+    adminPair(db, signupStage, { userIdA: a.id, userIdB: b.id, createdByUserId: bingo.createdByUserId });
+    const c = signUp("c", new Date(base + 2000));
+    const d = signUp("d", new Date(base + 3000));
+    return { bingo, c, d };
+  }
+
+  it("refuses while a cut is Avoidable and no review has been applied", () => {
+    const { bingo } = seedAvoidableBingo();
+    try {
+      advanceStage(db, { bingoId: bingo.id, toStage: "draft", changedByUserId: bingo.createdByUserId });
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(ServiceError);
+      expect((err as ServiceError).code).toBe("cut_review_required");
+    }
+    expect(db.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!.stage).toBe("captains");
+  });
+
+  it("allows once a review is applied, even with every change dropped", () => {
+    const { bingo } = seedAvoidableBingo();
+    applyCutReview(db, bingo, [], bingo.createdByUserId);
+    expect(advanceStage(db, { bingoId: bingo.id, toStage: "draft", changedByUserId: bingo.createdByUserId }).stage).toBe("draft");
+  });
+
+  it("refuses again once a later roster change invalidates that review", () => {
+    const { bingo } = seedAvoidableBingo();
+    applyCutReview(db, bingo, [], bingo.createdByUserId);
+    db.insert(schema.users).values({ discordId: "e", discordUsername: "e" }).returning().get();
+    const e = db.select().from(schema.users).where(eq(schema.users.discordUsername, "e")).get()!;
+    db.insert(schema.signups).values({ bingoId: bingo.id, userId: e.id, rsn: "e", createdAt: new Date("2026-02-01T00:00:00Z") }).run();
+    expect(() => advanceStage(db, { bingoId: bingo.id, toStage: "draft", changedByUserId: bingo.createdByUserId })).toThrow(/cuts can be avoided/i);
+  });
+
+  it("allows with no Avoidable cuts, without ever applying a review", () => {
+    const { bingo, c, d } = seedAvoidableBingo();
+    // Pairing "c" & "d" by hand (not through a Cut review) leaves nothing Avoidable.
+    adminPair(db, { ...bingo, stage: "signup" }, { userIdA: c.id, userIdB: d.id, createdByUserId: bingo.createdByUserId });
+    expect(advanceStage(db, { bingoId: bingo.id, toStage: "draft", changedByUserId: bingo.createdByUserId }).stage).toBe("draft");
   });
 });
 

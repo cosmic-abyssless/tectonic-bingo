@@ -10,7 +10,7 @@ function single(signupId: string, opts: { signedUpAt?: number; region?: TimeZone
   return {
     pairingId: null,
     isCaptainPair: false,
-    entries: [{ signupId, signedUpAt: opts.signedUpAt ?? 0, insertionRank: nextRank++, timezoneRegion: opts.region ?? null }],
+    entries: [{ userId: signupId, signedUpAt: opts.signedUpAt ?? 0, insertionRank: nextRank++, timezoneRegion: opts.region ?? null }],
   };
 }
 function pair(pairingId: string, aId: string, bId: string, opts: { signedUpAt?: [number, number]; isCaptainPair?: boolean } = {}): CutPlannerUnit {
@@ -19,8 +19,8 @@ function pair(pairingId: string, aId: string, bId: string, opts: { signedUpAt?: 
     pairingId,
     isCaptainPair: opts.isCaptainPair ?? false,
     entries: [
-      { signupId: aId, signedUpAt: at1, insertionRank: nextRank++, timezoneRegion: null },
-      { signupId: bId, signedUpAt: at2, insertionRank: nextRank++, timezoneRegion: null },
+      { userId: aId, signedUpAt: at1, insertionRank: nextRank++, timezoneRegion: null },
+      { userId: bId, signedUpAt: at2, insertionRank: nextRank++, timezoneRegion: null },
     ],
   };
 }
@@ -155,8 +155,8 @@ describe("resolveChanges / scoreChanges", () => {
     ]);
     expect(teamCount).toBe(2);
     expect(units).toHaveLength(2); // one pair (a & c), one single (b)
-    expect(units.some((u) => u.entries.length === 2 && u.entries.map((e) => e.signupId).sort().join() === "a,c")).toBe(true);
-    expect(units.some((u) => u.entries.length === 1 && u.entries[0]!.signupId === "b")).toBe(true);
+    expect(units.some((u) => u.entries.length === 2 && u.entries.map((e) => e.userId).sort().join() === "a,c")).toBe(true);
+    expect(units.some((u) => u.entries.length === 1 && u.entries[0]!.userId === "b")).toBe(true);
   });
 
   it("rejects a pairing referencing a signup that's no longer unpaired", () => {

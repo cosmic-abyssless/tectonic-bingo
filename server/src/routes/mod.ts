@@ -16,6 +16,7 @@ import { fetchProfiles } from "../services/tectonicProfileService";
 import { applyRosterNames } from "../services/pairingNames";
 import * as pairingService from "../services/pairingService";
 import * as teamService from "../services/teamService";
+import * as cutReviewService from "../services/cutReviewService";
 import { syncWomCompetition, syncWomCompetitionAfterDraft } from "../services/womCompetitionService";
 import { getWomReadQueue, queueBingoReads } from "../services/womReadService";
 import { archiveBingoCompetition } from "../services/pastWomCompetitionService";
@@ -224,6 +225,16 @@ router.get(
   "/draft/cuts",
   asyncHandler(async (req, res) => {
     res.json(draftService.getCutPreview(db, req.bingo!));
+  }),
+);
+
+// The Cut review's proposed plan plus the Avoidable/Unavoidable split it implies (CONTEXT.md "Cut review"): the
+// Signups tab notice and the move-to-Draft confirmation. Visible to any mod; only Admins get to act on it (the
+// score/apply endpoints, under /admin).
+router.get(
+  "/draft/cut-review",
+  asyncHandler(async (req, res) => {
+    res.json(cutReviewService.getCutReviewPreview(db, req.bingo!));
   }),
 );
 

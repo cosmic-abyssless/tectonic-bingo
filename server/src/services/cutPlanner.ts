@@ -7,9 +7,9 @@ import { CutMode, TIME_ZONE_REGIONS, type CutChange, type TimeZoneRegion } from 
 import { markCuts, type DraftPoolEntry, type DraftUnit } from "./draftService";
 import { ServiceError } from "./errors";
 
-/** One signup inside a planner unit — a single has one, a pair has two. */
+/** One player inside a planner unit — a single has one, a pair has two. */
 export interface CutPlannerEntry {
-  signupId: string;
+  userId: string;
   signedUpAt: number; // ms epoch, matches signup.createdAt — see markCuts' newest-first tie-break
   insertionRank: number; // true DB insertion order; breaks a signedUpAt tie the same way markCuts does
   timezoneRegion: TimeZoneRegion | null; // null = no timezone set
@@ -68,7 +68,7 @@ function toDraftUnit(u: CutPlannerUnit): DraftUnit {
     cut: false,
     entries: u.entries.map(
       (e): DraftPoolEntry => ({
-        signup: { id: e.signupId, createdAt: new Date(e.signedUpAt) } as unknown as DraftPoolEntry["signup"],
+        signup: { id: e.userId, createdAt: new Date(e.signedUpAt) } as unknown as DraftPoolEntry["signup"],
         user: {} as unknown as DraftPoolEntry["user"],
         answers: null,
       }),
@@ -78,7 +78,7 @@ function toDraftUnit(u: CutPlannerUnit): DraftUnit {
 
 function scoreArrangement(units: CutPlannerUnit[], cutMode: CutMode, teamCount: number, drafted: { pairs: number; singles: number }): number {
   const draftUnits = units.map(toDraftUnit);
-  const insertionOrder = new Map(units.flatMap((u) => u.entries.map((e) => [e.signupId, e.insertionRank] as const)));
+  const insertionOrder = new Map(units.flatMap((u) => u.entries.map((e) => [e.userId, e.insertionRank] as const)));
   markCuts(draftUnits, cutMode, teamCount, drafted, insertionOrder);
   return draftUnits.filter((u) => u.cut).reduce((n, u) => n + u.entries.length, 0);
 }
@@ -196,7 +196,7 @@ export function planCutChanges(input: CutPlannerInput): CutPlan {
   }
 
   const changes: CutChange[] = [
-    ...pairingCandidates.slice(0, best.k).map(([a, b]): CutChange => ({ kind: "pair", signupIds: [a.entries[0]!.signupId, b.entries[0]!.signupId] })),
+    ...pairingCandidates.slice(0, best.k).map(([a, b]): CutChange => ({ kind: "pair", signupIds: [a.entries[0]!.userId, b.entries[0]!.userId] })),
     ...splitCandidates.slice(0, best.m).map((p): CutChange => ({ kind: "split", pairingId: p.pairingId! })),
     ...(best.teamCount > teamCount ? [{ kind: "addTeam" } as const] : []),
     ...(best.teamCount < teamCount ? [{ kind: "removeTeam" } as const] : []),
@@ -224,8 +224,8 @@ export function resolveChanges(input: CutPlannerInput, changes: CutChange[]): { 
     if (change.kind === "pair") {
       const [aId, bId] = change.signupIds;
       if (aId === bId) throw new ServiceError(400, "Pick two different players to pair");
-      const a = singles.find((u) => u.entries[0]!.signupId === aId);
-      const b = singles.find((u) => u.entries[0]!.signupId === bId);
+      const a = singles.find((u) => u.entries[0]!.userId === aId);
+      const b = singles.find((u) => u.entries[0]!.userId === bId);
       if (!a || !b) throw new ServiceError(400, "That pairing needs two players who are currently unpaired");
       singles = singles.filter((u) => u !== a && u !== b);
       pairs = [...pairs, { pairingId: null, isCaptainPair: false, entries: [...a.entries, ...b.entries] }];

@@ -40,6 +40,7 @@ import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 import { rsnsInBingo } from "./playerNames";
 import * as achievementService from "./achievementService";
+import { assertCutReviewSatisfied } from "./cutReviewService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -215,6 +216,11 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
     if (params.toStage === bingo.stage) {
       throw new ServiceError(400, `Bingo is already in the "${bingo.stage}" stage`);
     }
+
+    // Cut review (CONTEXT.md): can't move into the Draft while any cut is Avoidable and no review has been
+    // applied since the roster last changed. Checked here (not just in the client) so the guard holds regardless
+    // of how the request got made.
+    if (params.toStage === "draft") assertCutReviewSatisfied(tx, bingo);
 
     // `startsAt` is only ever what an admin set in the settings; it is not written here. Tile freezes
     // and the submission gate run from the effective start (bingoStart.ts): that date if there is
