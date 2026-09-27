@@ -351,6 +351,28 @@ describe("settings", () => {
     expect(getBingoBySlug(db, "settings-cut")).toMatchObject({ cutMode: "even" });
   });
 
+  it("carries Sealed Tiles and Hide rules over, and reads an older file without them as off", () => {
+    const { bingo, admin } = seedFullBingo();
+    updateBingoSettings(db, bingo.id, { sealedTiles: true, hideRules: true });
+    const doc = exportBingo(db, bingo.id);
+    expect(doc.bingo).toMatchObject({ sealedTiles: true, hideRules: true });
+    importBingo(db, doc, { slug: "sealed-target", createdByUserId: admin.id });
+    expect(getBingoBySlug(db, "sealed-target")).toMatchObject({ sealedTiles: true, hideRules: true });
+
+    const old = JSON.parse(JSON.stringify(doc)) as BingoExportDocument;
+    delete old.bingo.sealedTiles;
+    delete old.bingo.hideRules;
+    importBingo(db, old, { slug: "sealed-old", createdByUserId: admin.id });
+    expect(getBingoBySlug(db, "sealed-old")).toMatchObject({ sealedTiles: false, hideRules: false });
+  });
+
+  it("rejects a document whose Sealed Tiles setting isn't true or false", () => {
+    const { bingo, admin } = seedFullBingo();
+    const doc = JSON.parse(JSON.stringify(exportBingo(db, bingo.id))) as BingoExportDocument;
+    (doc.bingo as { sealedTiles?: unknown }).sealedTiles = "yes";
+    expect(() => importBingo(db, doc, { slug: "bad-sealed", createdByUserId: admin.id })).toThrow(ServiceError);
+  });
+
   it("rejects a cut mode it doesn't know", () => {
     const { bingo, admin } = seedFullBingo();
     const doc = JSON.parse(JSON.stringify(exportBingo(db, bingo.id))) as BingoExportDocument;

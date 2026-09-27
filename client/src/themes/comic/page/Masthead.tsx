@@ -43,7 +43,7 @@ export function Masthead({
 }) {
   const { colors } = useComic();
   const navigate = useNavigate();
-  const hasRules = !!header.rulesMarkdown;
+  const hasRules = !!header.rulesMarkdown || header.rulesComeLater;
 
   // The same entries the inline buttons show, for the narrow-screen hamburger.
   const menuEntries: HeaderMenuEntry[] = [

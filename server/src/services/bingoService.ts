@@ -85,12 +85,18 @@ export function toPublicBingo<T extends { womGroupVerificationCode: string | nul
 /**
  * A bingo as one viewer may see it. The rules text and the exclusive item lists describe the board (which items
  * are on it), so a player gets neither until the board is revealed, the same point tiles become visible. Mods
- * always see them.
+ * always see them. During Board revealed, Sealed Tiles keeps back the exclusive item lists (they name Items) and
+ * Hide rules keeps back the rules text (CONTEXT.md "Sealed Tiles").
  */
 export function toViewerBingo<T extends typeof bingos.$inferSelect>(bingo: T, isMod: boolean) {
   const publicBingo = toPublicBingo(bingo);
-  if (isMod || isBoardRevealed(bingo)) return publicBingo;
-  return { ...publicBingo, rulesMarkdown: null, exclusivityRules: [] as ExclusivityRule[] };
+  if (isMod) return publicBingo;
+  if (!isBoardRevealed(bingo)) return { ...publicBingo, rulesMarkdown: null, exclusivityRules: [] as ExclusivityRule[] };
+  return {
+    ...publicBingo,
+    ...(areRulesHidden(bingo) ? { rulesMarkdown: null } : {}),
+    ...(areTilesSealed(bingo) ? { exclusivityRules: [] as ExclusivityRule[] } : {}),
+  };
 }
 
 const MAX_EXCLUSIVITY_RULES = 50;
@@ -175,6 +181,19 @@ export function isBoardRevealed(bingo: typeof bingos.$inferSelect): boolean {
 // can always see them (for building/testing the board before reveal).
 export function canViewTiles(bingo: typeof bingos.$inferSelect, isMod: boolean): boolean {
   return isMod || isBoardRevealed(bingo);
+}
+
+// Sealed Tiles (CONTEXT.md): only ever during Board revealed, so it ends by itself at Live. While sealed, Players
+// and Captains get only a Tile's art, name and Category (boardService.getSealedBoard), no exclusive item lists,
+// and nobody can mark Task interest. Mods see everything. Mirrors areTilesSealed in @bingo/shared.
+export function areTilesSealed(bingo: Pick<typeof bingos.$inferSelect, "stage" | "sealedTiles">): boolean {
+  return bingo.sealedTiles && bingo.stage === "reveal";
+}
+
+// Hide rules: during Board revealed, the rules text is held back from Players and Captains. Independent of
+// Sealed Tiles. Mirrors areRulesHidden in @bingo/shared.
+export function areRulesHidden(bingo: Pick<typeof bingos.$inferSelect, "stage" | "hideRules">): boolean {
+  return bingo.hideRules && bingo.stage === "reveal";
 }
 
 export interface CreateBingoParams {
@@ -384,6 +403,8 @@ export interface UpdateBingoSettingsParams {
   bonusPotAmount?: number;
   rulesMarkdown?: string | null;
   exclusivityRules?: ExclusivityRule[];
+  sealedTiles?: boolean;
+  hideRules?: boolean;
   signupOpensAt?: Date | null;
   draftScheduledAt?: Date | null;
   revealScheduledAt?: Date | null;

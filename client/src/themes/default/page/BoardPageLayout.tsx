@@ -1,7 +1,8 @@
-import { useBingoPage, useBoardModel, useTileModel } from "../../../headless";
+import { RULES_COME_LATER, useBingoPage, useBoardModel, useTileModel } from "../../../headless";
 import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
 import { useScreenshotCapture } from "../../../headless/useScreenshotCapture";
 import { ScreenshotDropOverlay } from "../../../core/ui/ScreenshotDropOverlay";
+import { SealedTilesNotice } from "../../../core/board/SealedTilesNotice";
 import { useSlot } from "../../context";
 
 export function BoardPageLayout() {
@@ -45,6 +46,7 @@ export function BoardPageLayout() {
           <NoTeamStage selector={page.teamSelector} />
         ) : (
           <>
+            {page.isMod && page.sealed.forPlayers && <SealedTilesNotice slug={page.slug} />}
             <div className="mb-4 flex flex-wrap justify-between gap-4">
               <TileSearch search={page.search} />
               {page.viewing.team && <TeamBanner team={page.viewing.team} isOtherTeam={page.viewing.isOtherTeam} totalPoints={board.totalPoints} onOpenPoints={page.pointBreakdown.show} />}
@@ -63,7 +65,7 @@ export function BoardPageLayout() {
         </SubmissionFlowHost>
       )}
 
-      <RulesDialog isOpen={page.rules.open} markdown={page.bingo.rulesMarkdown ?? ""} onClose={page.rules.hide} />
+      <RulesDialog isOpen={page.rules.open} markdown={page.bingo.rulesComeLater ? RULES_COME_LATER : (page.bingo.rulesMarkdown ?? "")} onClose={page.rules.hide} />
 
       <TeamInfoDialog slug={page.slug} team={page.teamInfo.open ? page.viewing.team : null} onClose={page.teamInfo.hide} />
 

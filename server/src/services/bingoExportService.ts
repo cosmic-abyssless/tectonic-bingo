@@ -152,6 +152,8 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
       bonusPotAmount: bingo.bonusPotAmount,
       rulesMarkdown: bingo.rulesMarkdown,
       exclusivityRules: bingoService.parseExclusivityRules(bingo.exclusivityRulesJson),
+      sealedTiles: bingo.sealedTiles,
+      hideRules: bingo.hideRules,
       showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished,
     },
     categories: categoryRows.map((c) => ({ localId: categoryLocalByReal.get(c.id)!, label: c.label, colorHex: c.colorHex, sortOrder: c.sortOrder })),
@@ -183,6 +185,9 @@ function assertValidDocument(doc: BingoExportDocument): void {
     throw new ServiceError(400, "Malformed import file: unknown leftover mode");
   }
   if (doc.bingo.exclusivityRules !== undefined) bingoService.normalizeExclusivityRules(doc.bingo.exclusivityRules);
+  for (const key of ["sealedTiles", "hideRules"] as const) {
+    if (doc.bingo[key] !== undefined && typeof doc.bingo[key] !== "boolean") throw new ServiceError(400, `Malformed import file: ${key} must be true or false`);
+  }
   if (doc.achievementKeys !== undefined && !Array.isArray(doc.achievementKeys)) {
     throw new ServiceError(400, "Malformed import file: achievementKeys must be an array");
   }
@@ -286,6 +291,8 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
       bonusPotAmount: doc.bingo.bonusPotAmount,
       rulesMarkdown: doc.bingo.rulesMarkdown,
       ...(doc.bingo.exclusivityRules !== undefined ? { exclusivityRules: doc.bingo.exclusivityRules } : {}),
+      ...(doc.bingo.sealedTiles !== undefined ? { sealedTiles: doc.bingo.sealedTiles } : {}),
+      ...(doc.bingo.hideRules !== undefined ? { hideRules: doc.bingo.hideRules } : {}),
       ...(doc.bingo.showScreenshotsWhenFinished !== undefined ? { showScreenshotsWhenFinished: doc.bingo.showScreenshotsWhenFinished === true } : {}),
     });
 

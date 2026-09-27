@@ -253,6 +253,13 @@
       "when": 1790483007414,
       "tag": "0035_finished_screenshots",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1790483385640,
+      "tag": "0036_sealed_tiles",
+      "breakpoints": true
     }
   ]
 }

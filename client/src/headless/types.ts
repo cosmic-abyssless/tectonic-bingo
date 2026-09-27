@@ -145,6 +145,11 @@ export interface TileModel {
   imageUrl: string | null;
   row: number;
   col: number;
+  /**
+   * Sealed for this viewer (CONTEXT.md "Sealed Tiles"): only the name, art, Category and freeze are real. It has no
+   * tasks, progress or points to show, and opening it shows a note instead (page.openTile.open).
+   */
+  sealed: boolean;
   category: CategoryModel | null;
   /** Category colour; the slot falls back to the --tile-accent token when null. */
   accentColor: string | null;
@@ -203,6 +208,8 @@ export interface LineModel {
 export interface BoardModel {
   rows: number;
   cols: number;
+  /** The Tiles are sealed for this viewer (see TileModel.sealed); lines carry no points. */
+  sealed: boolean;
   /** [row][col]. */
   grid: (TileModel | null)[][];
   tiles: TileModel[];
@@ -281,6 +288,8 @@ export interface BingoPageModel {
     stage: Stage;
     stageLabel: string;
     rulesMarkdown: string | null;
+    /** The rules are held back from this viewer for now (Hide rules, during Board revealed): the Rules entry point says they come later. */
+    rulesComeLater: boolean;
     startsAt: number | null;
     endsAt: number | null;
     boardRows: number;
@@ -313,8 +322,13 @@ export interface BingoPageModel {
   submissions: SubmissionModel[];
   teamSelector: TeamSelectorModel;
   search: TileSearchModel;
-  /** Replaces both the old openTileId state and BoardGrid's own `selected` state. */
+  /** Replaces both the old openTileId state and BoardGrid's own `selected` state. While the Tiles are sealed for this viewer, open() shows a note instead. */
   openTile: { id: string | null; open(id: string): void; close(): void };
+  /**
+   * Sealed Tiles (CONTEXT.md). forMe: this viewer can't open Tiles (see TileModel.sealed). forPlayers: they're sealed
+   * for Players and Captains, which a Moderator's board points out.
+   */
+  sealed: { forMe: boolean; forPlayers: boolean };
   rules: { open: boolean; show(): void; hide(): void };
   /** Roster of `viewing.team` (TeamBadge press for players, roster button beside TeamSelector for mods → TeamInfoDialog). */
   teamInfo: { open: boolean; show(): void; hide(): void };

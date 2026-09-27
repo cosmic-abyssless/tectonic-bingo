@@ -1,7 +1,8 @@
-import { useBingoPage, useBoardModel, useTileModel } from "../../../headless";
+import { RULES_COME_LATER, useBingoPage, useBoardModel, useTileModel } from "../../../headless";
 import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
 import { useScreenshotCapture } from "../../../headless/useScreenshotCapture";
 import { ScreenshotDropOverlay } from "../../../core/ui/ScreenshotDropOverlay";
+import { SealedTilesNotice } from "../../../core/board/SealedTilesNotice";
 import { useSlot } from "../../context";
 import { ComicPage } from "../fx/ComicPage";
 import { SubmitButton } from "./SubmitButton";
@@ -55,6 +56,7 @@ export function BoardPageLayout() {
           <NoTeamStage selector={page.teamSelector} />
         ) : (
           <>
+            {page.isMod && page.sealed.forPlayers && <SealedTilesNotice slug={page.slug} />}
             <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
               <TileSearch search={page.search} />
               {/* One control for the team: identity, score, the team dialog,
@@ -102,7 +104,7 @@ export function BoardPageLayout() {
 
       <RulesDialog
         isOpen={page.rules.open}
-        markdown={page.bingo.rulesMarkdown ?? ""}
+        markdown={page.bingo.rulesComeLater ? RULES_COME_LATER : (page.bingo.rulesMarkdown ?? "")}
         onClose={page.rules.hide}
       />
 

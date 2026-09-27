@@ -2,7 +2,7 @@ import { ExclusiveItemsProvider } from "./exclusiveItems";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { isBoardEditingLocked, type Bingo, type BoardResponse, type Tile, type TileCategory } from "@bingo/shared";
-import { useBoard, queryKeys } from "../../api/queries";
+import { fullBoard, useBoard, queryKeys } from "../../api/queries";
 import * as adminApi from "../../api/adminApi";
 import { optimisticUpdate } from "../../api/optimistic";
 import { previewGraphNode } from "../board/requirementTree";
@@ -13,8 +13,7 @@ import { thumbUrl } from "../../api/imageVariants";
 import { TileEditorPanel } from "./TileEditorPanel";
 
 export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: Bingo; categories: TileCategory[] }) {
-  const { data } = useBoard(slug);
-  const tiles = data?.tiles ?? [];
+  const tiles = fullBoard(useBoard(slug).data)?.tiles ?? [];
   const queryClient = useQueryClient();
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

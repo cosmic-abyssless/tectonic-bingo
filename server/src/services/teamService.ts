@@ -12,6 +12,7 @@ import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 import { rsnsInBingo } from "./playerNames";
 import * as achievementService from "./achievementService";
+import { areTilesSealed } from "./bingoService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -99,14 +100,24 @@ export function getTeamProgress(db: Db, teamId: string): TeamProgressSummary {
   return { nodeStates, adjustments, totalPoints: nodePoints + adjustmentPoints, interests };
 }
 
+// A team's progress as one viewer may see it. While the Tiles are sealed (CONTEXT.md "Sealed Tiles") a player
+// doesn't get the interest markers: they're kept in storage and come back unchanged once the Tiles are unsealed.
+export function getTeamProgressForViewer(db: Db, bingo: typeof bingos.$inferSelect, teamId: string, isMod: boolean): TeamProgressSummary {
+  const progress = getTeamProgress(db, teamId);
+  return !isMod && areTilesSealed(bingo) ? { ...progress, interests: [] } : progress;
+}
+
 // A member raises (or lowers) their hand for one part (task) of a tile.
 // Team-scoped so leaving a team takes the hand down with it; the task must be
 // a direct child of the tile's root and the tile must belong to the team's bingo.
+// No interest can be marked or cleared while the Tiles are sealed (CONTEXT.md "Sealed Tiles").
 export function setTileInterest(db: Db, teamId: string, userId: string, tileId: string, taskId: string, interested: boolean): void {
   const achievementHook = db.transaction((tx) => {
     const team = tx.select({ bingoId: teams.bingoId }).from(teams).where(eq(teams.id, teamId)).get();
     const tile = tx.select({ id: tiles.id, bingoId: tiles.bingoId, name: tiles.name, nodeId: tiles.nodeId }).from(tiles).where(eq(tiles.id, tileId)).get();
     if (!team || !tile || tile.bingoId !== team.bingoId) throw new ServiceError(404, "Tile not found");
+    const bingo = tx.select({ stage: bingos.stage, sealedTiles: bingos.sealedTiles }).from(bingos).where(eq(bingos.id, team.bingoId)).get();
+    if (bingo && areTilesSealed(bingo)) throw new ServiceError(403, "The Tiles are sealed, so interest can't be marked until they open");
     const task = tx
       .select({ label: nodes.label })
       .from(nodeEdges)

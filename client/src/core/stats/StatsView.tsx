@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { titlesByHolder } from "@bingo/shared";
-import { useBingo, useBoard, useStats } from "../../api/queries";
+import { fullBoard, useBingo, useBoard, useStats } from "../../api/queries";
 import { inclusionFilter } from "../ui/inclusionFilter";
 import { MultiSelect } from "../ui/MultiSelect";
 import { BetaTag } from "../ui/BetaTag";
@@ -30,7 +30,7 @@ function Section({ title, beta, children }: { title: string; beta?: boolean; chi
 export function StatsView({ slug }: { slug: string }) {
   const { data: shell } = useBingo(slug);
   const { data: stats, error } = useStats(slug);
-  const { data: boardData } = useBoard(slug);
+  const boardData = fullBoard(useBoard(slug).data);
   const [selectedTeams, setSelectedTeams] = useState<Set<string>>(() => new Set());
 
   // While the bingo is live the server only returns the viewer's own team, so the team list is whatever

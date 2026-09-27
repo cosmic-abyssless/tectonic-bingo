@@ -1,12 +1,13 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { GraphNodeInput, NodeStatus } from "@bingo/shared";
+import type { GraphNodeInput, NodeStatus, SealedBoardResponse } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingoLines, claims, nodeEdges, submissions, teamNodeState, tileCategories, tileInterests, tiles } from "../db/schema";
 import { ServiceError } from "./errors";
 import { deleteNode, deleteSubtree, getFullGraph, getNodeTree, getNodeTrees, insertSubtree, replaceSubtree } from "./graphService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { describeTaskNode } from "../audit/describe";
+import { areTilesSealed, canViewTiles } from "./bingoService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -37,6 +38,52 @@ export function getBoardLines(db: Db, bingoId: string) {
   const lineRows = db.select().from(bingoLines).where(eq(bingoLines.bingoId, bingoId)).all();
   const trees = getNodeTrees(db, lineRows.map((l) => l.nodeId));
   return lineRows.map((line) => ({ ...line, node: trees.get(line.nodeId)! }));
+}
+
+// GET /:slug/board: the board as one viewer may see it. Nothing before the reveal for a player; while the Tiles
+// are sealed, only the sealed board; otherwise the full board. Mods always get the full board.
+export function getBoardForViewer(db: Db, bingo: Bingo, isMod: boolean) {
+  if (!canViewTiles(bingo, isMod)) return { sealed: false as const, tiles: [], lines: [] };
+  if (!isMod && areTilesSealed(bingo)) return getSealedBoard(db, bingo.id);
+  return { sealed: false as const, tiles: getBoardTiles(db, bingo.id), lines: getBoardLines(db, bingo.id) };
+}
+
+// The board as Players and Captains get it while the Tiles are sealed (CONTEXT.md "Sealed Tiles"): only what a
+// sealed board shows. Each field is picked, never left over from deleting the rest, so a field added to tiles or
+// lines later can't leak into it: no node trees, notes, item names or points, and a line is just the tiles it
+// runs through.
+export function getSealedBoard(db: Db, bingoId: string): SealedBoardResponse {
+  const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
+  const tileIdByNodeId = new Map(tileRows.map((t) => [t.nodeId, t.id]));
+  const lineRows = db.select().from(bingoLines).where(eq(bingoLines.bingoId, bingoId)).all();
+  // A line's node children are its tiles' root nodes.
+  const edges = lineRows.length
+    ? db
+        .select({ parentId: nodeEdges.parentId, childId: nodeEdges.childId })
+        .from(nodeEdges)
+        .where(inArray(nodeEdges.parentId, lineRows.map((l) => l.nodeId)))
+        .orderBy(nodeEdges.sortOrder)
+        .all()
+    : [];
+  const lineTileIds = (lineNodeId: string) =>
+    edges
+      .filter((e) => e.parentId === lineNodeId)
+      .map((e) => tileIdByNodeId.get(e.childId))
+      .filter((id): id is string => !!id);
+  return {
+    sealed: true,
+    tiles: tileRows.map((t) => ({
+      id: t.id,
+      name: t.name,
+      imageUrl: t.imageUrl,
+      categoryId: t.categoryId,
+      boardRow: t.boardRow,
+      boardCol: t.boardCol,
+      hasFreezePeriod: t.hasFreezePeriod,
+      freezeDurationMinutes: t.freezeDurationMinutes,
+    })),
+    lines: lineRows.map((l) => ({ id: l.id, lineType: l.lineType, lineIndex: l.lineIndex, tileIds: lineTileIds(l.nodeId) })),
+  };
 }
 
 export function getTileById(db: Db, tileId: string) {

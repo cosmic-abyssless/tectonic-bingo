@@ -104,6 +104,12 @@ export const bingos = sqliteTable('bingos', {
   // Achievements master switch (CONTEXT.md "Achievement"): off hides every Achievement from reads, counts and
   // popups, but earning keeps happening in the background — see achievementService.ts and bingoAchievementSettings.
   achievementsEnabled: integer('achievements_enabled', { mode: 'boolean' }).notNull().default(true),
+  // Sealed Tiles (CONTEXT.md): during Board revealed, Players and Captains see each Tile's art, name and Category
+  // only and can't open it. No effect in any other stage. See bingoService.areTilesSealed.
+  sealedTiles: integer('sealed_tiles', { mode: 'boolean' }).notNull().default(false),
+  // During Board revealed, the rules text is held back from Players and Captains. Independent of sealedTiles.
+  // See bingoService.areRulesHidden.
+  hideRules: integer('hide_rules', { mode: 'boolean' }).notNull().default(false),
   // "Show screenshots once Finished" (CONTEXT.md "Player"): once the bingo is Finished every clan member can read
   // every team's submissions; off, other teams' screenshot images are left out for anyone but Moderators. Admins only.
   showScreenshotsWhenFinished: integer('show_screenshots_when_finished', { mode: 'boolean' }).notNull().default(true),

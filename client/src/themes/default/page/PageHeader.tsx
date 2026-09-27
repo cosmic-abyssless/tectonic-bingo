@@ -45,7 +45,7 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
         </>
       )}
       {!page.canPickTeam && page.myTeam && <TeamBadge team={page.myTeam} onPress={page.teamInfo.show} />}
-      {page.bingo.rulesMarkdown && (
+      {(page.bingo.rulesMarkdown || page.bingo.rulesComeLater) && (
         <Button size="sm" variant="ghost" onPress={page.rules.show}>
           Rules
         </Button>

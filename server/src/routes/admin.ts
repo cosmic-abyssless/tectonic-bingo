@@ -62,6 +62,12 @@ router.patch(
       params.cutMode = body.cutMode as CutMode;
     }
     if ("warnLeftovers" in body) params.warnLeftovers = !!body.warnLeftovers;
+    // Sealed Tiles and Hide rules (CONTEXT.md "Sealed Tiles"): only take effect during Board revealed.
+    for (const key of ["sealedTiles", "hideRules"] as const) {
+      if (!(key in body)) continue;
+      if (typeof body[key] !== "boolean") throw new ServiceError(400, `${key} must be a boolean`);
+      params[key] = body[key];
+    }
     // Validated and cleaned by the service (label, scope, names).
     if ("exclusivityRules" in body) params.exclusivityRules = body.exclusivityRules as never;
     for (const key of dateFields) {

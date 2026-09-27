@@ -1,4 +1,4 @@
-import { STAGE_LABEL, type BingoShellResponse } from "@bingo/shared";
+import { STAGE_LABEL, areRulesHidden, type BingoShellResponse } from "@bingo/shared";
 import { useBingo, usePendingCount } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 
@@ -14,11 +14,16 @@ export interface BingoHeaderModel {
   canViewStats: boolean;
   /** Submissions waiting for a mod (mods only; 0 otherwise). */
   pendingCount: number;
-  /** The bingo's rules, or "" when it has none (then there's no Rules button). */
+  /** The bingo's rules, or "" when it has none (then there's no Rules button, unless rulesComeLater). */
   rulesMarkdown: string;
+  /** Hide rules is holding the rules back from this viewer for now: the Rules button stays, and says they come later (RULES_COME_LATER). */
+  rulesComeLater: boolean;
   /** A site admin (or a dev-mode session) gets a way back to the list of every bingo. */
   canSeeAllBingos: boolean;
 }
+
+/** What the Rules dialog says while the rules are held back (Hide rules, during Board revealed). */
+export const RULES_COME_LATER = "The rules will be posted at a later date.";
 
 /**
  * Players see their own team's stats while the bingo is live and everyone's once it's over (the stats endpoint 403s
@@ -42,6 +47,7 @@ export function useBingoHeader(slug: string): BingoHeaderModel | null {
     canViewStats: canViewStats(shell),
     pendingCount: pending?.count ?? 0,
     rulesMarkdown: shell.bingo.rulesMarkdown ?? "",
+    rulesComeLater: !shell.isMod && areRulesHidden(shell.bingo),
     canSeeAllBingos: !!user?.isAdmin || devMode,
   };
 }
