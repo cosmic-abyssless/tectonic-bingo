@@ -417,8 +417,17 @@ describe("share cards", () => {
   it("leaves out each part of the Player card without data, and the card itself with nothing to show", () => {
     const c = card(response(player({ gpGained: 3_000_000, wom: { ehb: 0, bosses: [], asOf: iso(30) } })), "player")!;
     expect(c).toMatchObject({ partnerLabel: null, draftLabel: null, pointsShare: null, submissions: null, achievementsLabel: null, ehbLabel: null, titles: [], topDrop: null, luckiestDrop: null, driestStreak: null, dropValueLabel: "3m" });
-    expect(playerCard({ submissions: 4, bingoAverageSubmissions: 4 }).submissions).toEqual({ countLabel: "4", comparisonLabel: null });
+
     expect(cardsOf(response(player())).map((c) => c.kind)).toEqual(["team"]);
+  });
+
+  it("compares the Player card's Submissions with the Bingo average whether above or below it", () => {
+    const vs = (submissions: number, bingoAverageSubmissions: number) => playerCard({ submissions, bingoAverageSubmissions }).submissions;
+    expect(vs(12, 4)).toEqual({ countLabel: "12", comparisonLabel: "3× avg" });
+    expect(vs(4, 4)).toEqual({ countLabel: "4", comparisonLabel: "1× avg" });
+    expect(vs(2, 4)).toEqual({ countLabel: "2", comparisonLabel: "0.5× avg" });
+    expect(vs(1, 40)).toEqual({ countLabel: "1", comparisonLabel: "<0.1× avg" });
+    expect(vs(3, 0)).toEqual({ countLabel: "3", comparisonLabel: null });
   });
 
   it("fills the Team card with its placement, points, Tiles and lines, Drop value, MVP with its part of the Team, and biggest drop", () => {

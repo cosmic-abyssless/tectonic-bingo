@@ -109,7 +109,12 @@ export function aboveAverage(value: number, average: number | undefined): string
 /** "2.3×", only when they clearly beat the average (by a fifth); else null. */
 function timesAverage(value: number, average: number | undefined): string | null {
   if (!average || average <= 0 || value < average * 1.2) return null;
-  return `${(value / average).toLocaleString(undefined, { maximumFractionDigits: 1 })}×`;
+  return timesLabel(value / average);
+}
+
+/** A ratio to an average: "2.3×", "0.4×", and "<0.1×" for a sliver that would round to "0×". */
+function timesLabel(ratio: number): string {
+  return ratio > 0 && ratio < 0.05 ? "<0.1×" : `${ratio.toLocaleString(undefined, { maximumFractionDigits: 1 })}×`;
 }
 
 /** A part of a whole (0–1) as a whole percent, "<1%" for a sliver that would round to "0%"; null at none. */
@@ -241,7 +246,8 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
     const you: WrappedYouModel = {
       kind: "you",
       art: art("you"),
-      submissions: y.submissions > 0 ? { countLabel: plural(y.submissions, "Submission"), comparison: aboveAverage(y.submissions, y.bingoAverageSubmissions) } : null,
+      // Against the average either way: below it just says they had a slow Bingo.
+    submissions: y.submissions > 0 ? { countLabel: plural(y.submissions, "Submission"), comparison: aboveAverage(y.submissions, y.bingoAverageSubmissions) } : null,
       points:
         y.pointsShare > 0
           ? {
@@ -494,7 +500,8 @@ export function shareCards(data: MyWrappedResponse, opts: WrappedStoryOptions, s
           }
         : null,
     dropValueLabel: y.gpGained > 0 ? formatGp(y.gpGained) : null,
-    submissions: y.submissions > 0 ? { countLabel: y.submissions.toLocaleString(), comparisonLabel: timesAverage(y.submissions, y.bingoAverageSubmissions)?.concat(" avg") ?? null } : null,
+    // Against the average either way: below it just says they had a slow Bingo.
+    submissions: y.submissions > 0 ? { countLabel: y.submissions.toLocaleString(), comparisonLabel: y.bingoAverageSubmissions > 0 ? `${timesLabel(y.submissions / y.bingoAverageSubmissions)} avg` : null } : null,
     achievementsLabel: y.achievements.length > 0 ? y.achievements.length.toLocaleString() : null,
     ehbLabel: y.wom && ehb > 0 ? ehb.toLocaleString(undefined, { maximumFractionDigits: 1 }) : null,
     titles: y.titles.slice(0, CARD_TITLES).map((t) => ({ id: t.id, name: t.name })),

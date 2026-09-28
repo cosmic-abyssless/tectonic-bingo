@@ -909,7 +909,7 @@ export interface WrappedPlayerCardModel extends WrappedShareCardBase {
   pointsShare: { shareLabel: string; teamPercentLabel: string | null; teamRankLabel: string; bingoRankLabel: string | null } | null;
   /** Their Total drop value ("1.2b"), labelled just "Drop value" on the card; null for none. */
   dropValueLabel: string | null;
-  /** Approved Submissions ("48") and, only when they beat it, against the Bingo average ("2.1× avg"). Null at none. */
+  /** Approved Submissions ("48") against the Bingo average, above or below it ("2.1× avg", "0.5× avg"). Null at none. */
   submissions: { countLabel: string; comparisonLabel: string | null } | null;
   /** How many Achievements they earned; null for none. */
   achievementsLabel: string | null;
