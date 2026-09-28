@@ -44,6 +44,7 @@ import { installProcessLogHandlers, log, requestLog } from "./log";
 import clientErrorsRouter from "./routes/clientErrors";
 import { shouldReportError } from "./errorReporting";
 import { createMcpRouter } from "./mcp/router";
+import { startReplicaJob } from "./mcp/sql/replica";
 
 const REQUIRED_ENV = [
   "DISCORD_CLIENT_ID",
@@ -177,8 +178,10 @@ app.use(
 app.use("/auth", authRouter);
 // The admin MCP server for Claude: OAuth endpoints and documents at the root, the MCP endpoint at /mcp.
 // Built at startup; the SDK refuses a plain-HTTP issuer other than localhost, which only costs this feature.
+let mcpEnabled = false;
 try {
   app.use(createMcpRouter(db));
+  mcpEnabled = true;
 } catch (err) {
   log.warn("admin MCP server disabled", { err });
 }
@@ -223,6 +226,8 @@ server.listen(PORT, () => {
   void refreshPricesAndFill(db);
   // Hourly Wise Old Man snapshot reads for Titles, paced within WOM's rate limit.
   startWomReads(db);
+  // The admin MCP server's SQL tool reads a copy of the database with secrets removed, rebuilt every 5 minutes.
+  if (mcpEnabled) startReplicaJob(DB_PATH);
 });
 
 // SQLite cannot be shared by overlapping replicas. On SIGTERM (Railway

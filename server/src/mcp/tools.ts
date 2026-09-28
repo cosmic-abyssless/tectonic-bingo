@@ -9,13 +9,15 @@ import { oauthClients, users } from "../db/schema";
 import { audit } from "../audit/record";
 import { McpToolError, type McpTool, type McpToolContext } from "./tool";
 import { bingoSummary } from "./tools/bingoSummary";
+import { describeSchema } from "./tools/describeSchema";
 import { listBingos } from "./tools/listBingos";
 import { playerContributions } from "./tools/playerContributions";
+import { runSql } from "./tools/runSql";
 import { tileStats } from "./tools/tileStats";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
-export const MCP_TOOLS: McpTool[] = [listBingos, bingoSummary, tileStats, playerContributions] as unknown as McpTool[];
+export const MCP_TOOLS: McpTool[] = [listBingos, bingoSummary, tileStats, playerContributions, describeSchema, runSql] as unknown as McpTool[];
 
 export const RATE_LIMIT = { calls: 60, windowMs: 60_000 };
 
@@ -48,7 +50,7 @@ function errorResult(message: string): CallToolResult {
 export function buildMcpServer(db: Db, authInfo: AuthInfo | undefined, tools: McpTool[] = MCP_TOOLS): McpServer {
   const server = new McpServer(
     { name: "tectonic-bingo", title: "Tectonic Bingo", version: "1.0.0" },
-    { instructions: "Read-only data about Tectonic Bingo's Bingos, for site admins balancing future Bingos. Start with list_bingos, then ask about one Bingo by its slug with bingo_summary, tile_stats or player_contributions." },
+    { instructions: "Read-only data about Tectonic Bingo's Bingos, for site admins balancing future Bingos. Start with list_bingos, then ask about one Bingo by its slug with bingo_summary, tile_stats or player_contributions. For anything they don't answer, describe_schema and run_sql query a copy of the database (points still come from the curated tools)." },
   );
   const { userId, connectionId } = (authInfo?.extra ?? {}) as { userId?: string; connectionId?: string };
 
@@ -73,21 +75,30 @@ export function buildMcpServer(db: Db, authInfo: AuthInfo | undefined, tools: Mc
           const row = db.select({ metadataJson: oauthClients.metadataJson }).from(oauthClients).where(eq(oauthClients.clientId, authInfo.clientId)).get();
           return row ? ((JSON.parse(row.metadataJson) as { client_name?: string }).client_name ?? null) : null;
         })();
-        audit(db, {
-          action: "mcp.tool_called",
-          bingoId: tool.bingoIdFor?.(args, ctx) ?? null,
-          entity: { type: "mcp_tool", id: tool.name, label: tool.name },
-          details: { tool: tool.name, arguments: args, clientId: authInfo.clientId, clientName },
-          actor: { userId: user.id, type: "user", role: "admin" },
-        });
-
+        // Audited once the call is answered, so the entry can say what came back (or that it failed).
         let result: unknown;
+        let failure: string | null = null;
         try {
           result = await tool.run(args, ctx);
         } catch (err) {
-          if (err instanceof McpToolError) return errorResult(err.message);
-          throw err;
+          if (!(err instanceof McpToolError)) throw err;
+          failure = err.message;
+        } finally {
+          audit(db, {
+            action: "mcp.tool_called",
+            bingoId: tool.bingoIdFor?.(args, ctx) ?? null,
+            entity: { type: "mcp_tool", id: tool.name, label: tool.name },
+            details: {
+              tool: tool.name,
+              arguments: args,
+              clientId: authInfo.clientId,
+              clientName,
+              ...(failure !== null ? { error: failure } : result !== undefined && tool.auditDetails ? tool.auditDetails(result) : {}),
+            },
+            actor: { userId: user.id, type: "user", role: "admin" },
+          });
         }
+        if (failure !== null) return errorResult(failure);
         const structured = (Array.isArray(result) ? { items: result } : result) as Record<string, unknown>;
         return { content: [{ type: "text", text: JSON.stringify(structured) }], structuredContent: structured };
       },

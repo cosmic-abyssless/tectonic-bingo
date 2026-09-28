@@ -251,7 +251,7 @@ export interface AuditDetailsMap {
   // Fallback-only: written by the server's finish-middleware for any
   // successful non-GET /api/* mutation that recorded nothing itself.
   /** A site admin's Claude app called a tool on the admin MCP server (server/src/mcp). */
-  "mcp.tool_called": { tool: string; arguments: Record<string, unknown>; clientId: string; clientName: string | null };
+  "mcp.tool_called": { tool: string; arguments: Record<string, unknown>; clientId: string; clientName: string | null; rowCount?: number; error?: string };
   "http.mutation": { method: string; originalUrl: string; routePath: string | null; params: Record<string, unknown>; body: unknown; file: string | null };
 
   "bug_report.created": { description: string; pageUrl: string | null; palette: string | null };
