@@ -62,10 +62,17 @@ describe("canViewDraftRoom", () => {
   const mod = { isMod: true, isLead: false, canSeeBingo: true };
   const outsider = { isMod: false, isLead: false, canSeeBingo: false };
 
-  it("blocks non-leads during signup and captains", () => {
+  it("keeps Signups open scouting to leads and mods", () => {
     expect(canViewDraftRoom("signup", player)).toBe(false);
-    expect(canViewDraftRoom("captains", player)).toBe(false);
+    expect(canViewDraftRoom("signup", outsider)).toBe(false);
     expect(canViewDraftRoom("signup", lead)).toBe(true);
+    expect(canViewDraftRoom("signup", mod)).toBe(true);
+  });
+
+  it("lets every Player scout once Signups are closed", () => {
+    expect(canViewDraftRoom("captains", player)).toBe(true);
+    expect(canViewDraftRoom("captains", outsider)).toBe(false);
+    expect(canViewDraftRoom("captains", lead)).toBe(true);
     expect(canViewDraftRoom("captains", mod)).toBe(true);
   });
 
@@ -78,7 +85,8 @@ describe("canViewDraftRoom", () => {
   });
 
   it("uses scouting copy before draft and draft-room copy after", () => {
-    expect(draftRoomForbiddenMessage("captains")).toMatch(/scouting/i);
+    expect(draftRoomForbiddenMessage("signup")).toMatch(/captains and mods/i);
+    expect(draftRoomForbiddenMessage("captains")).toMatch(/scouting.*players and mods/i);
     expect(draftRoomForbiddenMessage("draft")).toMatch(/draft room/i);
   });
 });

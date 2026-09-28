@@ -34,7 +34,7 @@ export function BoardPageLayout() {
       <PageHeader page={page} />
 
       <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
-        {page.canScout && <ScoutBanner onOpen={page.actions.goToDraft} />}
+        {page.canScout && <ScoutBanner onOpen={page.actions.goToDraft} isLead={!!page.myTeam?.isLead} />}
         {page.wrapped.canOpen && <WrappedBanner preview={page.wrapped.preview} onOpen={page.actions.goToWrapped} />}
         {page.stageView === "signup" ? (
           <SignupStage slug={page.slug} />

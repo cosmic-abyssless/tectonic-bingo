@@ -97,9 +97,10 @@ export interface ThemeSlots {
   TeamBanner: ComponentType<{ team: TeamModel; isOtherTeam: boolean; totalPoints: number | null; onOpenPoints?: () => void }>;
   PlanningStage: ComponentType<{ stage: "planning" | "captains" }>;
   SignupStage: ComponentType<{ slug: string }>;
-  // Shown above the signup/closed stage content to mods and team leads
-  // (page.canScout) — the way into the scouting room before the draft.
-  ScoutBanner: ComponentType<{ onOpen: () => void }>;
+  // Shown above the signup/closed stage content to whoever may scout (page.canScout: mods and team leads, and every
+  // Player once signups are closed) — the way into the scouting room before the draft. `isLead`: the viewer leads a
+  // team, so rates players there; everyone else only looks.
+  ScoutBanner: ComponentType<{ onOpen: () => void; isLead: boolean }>;
   DraftStage: ComponentType<{ draft: BingoPageModel["draft"]; milestone: StageMilestone | null; onOpenDraft: () => void }>;
   // No team picked yet, for whoever can pick one (page.canPickTeam: mods, and everyone once the bingo is Finished).
   // `selector` lets a theme list the teams right on this screen instead of pointing at a menu.

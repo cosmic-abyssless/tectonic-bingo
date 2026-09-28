@@ -172,6 +172,45 @@ describe("while signups are open", () => {
   });
 });
 
+describe("scouting", () => {
+  type Pool = { entries: { signup: { id: string; userId: string }; answers: unknown[] | null }[] }[];
+  const entries = (body: Record<string, unknown>) => (body.pool as Pool).flatMap((unit) => unit.entries);
+
+  beforeEach(() => {
+    const signupId = db.select({ id: schema.signups.id }).from(schema.signups).where(eq(schema.signups.userId, people.signedUp.id)).get()!.id;
+    db.insert(schema.pickRatings).values({ teamId: teamA.id, signupId, stars: 3, note: "Great" }).run();
+  });
+
+  it("is for leads and mods only while Signups are open", async () => {
+    const { status, body } = await get("signedUp", "/b1/draft");
+    expect(status).toBe(403);
+    expect(body.error).toMatch(/captains and mods/);
+    for (const p of ["captainA", "mod"] as const) expect((await get(p, "/b1/draft")).status, p).toBe(200);
+  });
+
+  it("opens to every Player once Signups are closed, without answers or ratings", async () => {
+    setStage("captains");
+    const { status, body } = await get("signedUp", "/b1/draft");
+    expect(status).toBe(200);
+    expect(entries(body).length).toBeGreaterThan(0);
+    expect(entries(body).every((e) => e.answers === null)).toBe(true);
+    expect(body.ratings).toEqual({});
+  });
+
+  it("still gives a Captain answers and their Team's ratings once Signups are closed", async () => {
+    setStage("captains");
+    const { status, body } = await get("captainA", "/b1/draft");
+    expect(status).toBe(200);
+    expect(entries(body).every((e) => Array.isArray(e.answers))).toBe(true);
+    expect(Object.values(body.ratings as object)).toEqual([{ stars: 3, note: "Great" }]);
+  });
+
+  it("stays closed to someone without an active Signup once Signups are closed", async () => {
+    setStage("captains");
+    for (const p of ["stranger", "withdrawn"] as const) expect((await get(p, "/b1/draft")).status, p).toBe(403);
+  });
+});
+
 describe.each(["captains", "draft", "reveal", "live"] as const)("at %s", (stage) => {
   beforeEach(() => setStage(stage));
 

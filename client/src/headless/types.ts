@@ -324,7 +324,10 @@ export interface BingoPageModel {
    * that as a preview (the banner says so).
    */
   wrapped: { canOpen: boolean; preview: boolean };
-  /** Team leads (and mods) may browse the draft room before the draft stage to rate signups. */
+  /**
+   * Scouting (CONTEXT.md): Team leads and mods may browse the draft room before the draft stage, and every Player may
+   * once Signups are closed. Only leads rate signups (myTeam.isLead).
+   */
   canScout: boolean;
   /** For the draft-stage slot; DraftState is the shared draft response type. */
   draft: { state: DraftState | null; isLoading: boolean };

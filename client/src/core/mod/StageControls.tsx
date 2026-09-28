@@ -17,7 +17,7 @@ import { CutReviewModal } from "./CutReviewModal";
 const ENTER_EFFECT: Record<Stage, string> = {
   planning: "Signups close; the board becomes editable again.",
   signup: "Players can sign up and edit their answers. New signups are gated on clan membership. Captains can be picked from the Captains tab as signups come in.",
-  captains: "Signups close and the roster is final. Captains can keep scouting until the draft starts.",
+  captains: "Signups close and the roster is final. Captains keep scouting, and every player can look through the signups, until the draft starts.",
   draft: "Captains can enter the draft room. Start the draft from there once everyone is present.",
   reveal: "Teams and the board become visible to players. The board locks for editing.",
   live: "Submissions open. If no start time is set, the bingo starts now.",

@@ -162,8 +162,10 @@ export function BingoPageProvider({
   const teamModels = teams.map((t) => toTeamModel(t, myTeam?.id ?? null, user.id, bingo.stage));
   // shell.myTeam is the bare row; the roster lives on the matching entry in shell.teams.
   const myTeamModel = teamModels.find((t) => t.isMine) ?? null;
-  // Captains get picked while signups are open (#39), so leads scout ahead.
-  const canScout = (bingo.stage === "signup" || bingo.stage === "captains") && (isMod || !!myTeamModel?.isLead);
+  // Captains get picked while signups are open (#39), so leads scout ahead; once Signups are closed every Player can
+  // look through them too (CONTEXT.md "Scouting").
+  const canScout =
+    (bingo.stage === "signup" && (isMod || !!myTeamModel?.isLead)) || (bingo.stage === "captains" && (isMod || !!myTeamModel?.isLead || shell.viewer.canSee));
   const viewingTeamModel = teamModels.find((t) => t.id === viewingTeamId) ?? null;
 
   const openSubmit = (tileId?: string, file?: File, taskId?: string) => {
