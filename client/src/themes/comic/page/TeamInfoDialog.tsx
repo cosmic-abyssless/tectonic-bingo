@@ -1,10 +1,12 @@
 import { useState } from "react";
+import type { Stage } from "@bingo/shared";
 import { useRenameTeam } from "../../../api/queries";
 import { useTeamActivityModel } from "../../../headless/useTeamActivity";
 import type { TeamModel } from "../../../headless/types";
 import { Input } from "../../../core/ui/Field";
 import { CaptainEmblem } from "../../../core/ui/CaptainEmblem";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
+import { TeamSuperlativesSection } from "../../../core/superlatives/TeamSuperlativesSection";
 import { COMIC_FONT } from "../font";
 import { ComicDialog, ComicDialogHeader } from "../ui/ComicDialog";
 import { ComicButton } from "../ui/ComicButton";
@@ -13,15 +15,15 @@ import { useComic } from "../ui/useComic";
 import { ComicField } from "../submission/ComicField";
 
 /** The team roster and recent activity, plus the captain's rename field. */
-export function TeamInfoDialog({ slug, team, onClose }: { slug: string; team: TeamModel | null; onClose: () => void }) {
+export function TeamInfoDialog({ slug, team, stage, onClose }: { slug: string; team: TeamModel | null; stage: Stage; onClose: () => void }) {
   return (
     <ComicDialog isOpen={team !== null} onClose={onClose}>
-      {team && <TeamDetails slug={slug} team={team} onClose={onClose} />}
+      {team && <TeamDetails slug={slug} team={team} stage={stage} onClose={onClose} />}
     </ComicDialog>
   );
 }
 
-function TeamDetails({ slug, team, onClose }: { slug: string; team: TeamModel; onClose: () => void }) {
+function TeamDetails({ slug, team, stage, onClose }: { slug: string; team: TeamModel; stage: Stage; onClose: () => void }) {
   const { colors } = useComic();
   const rename = useRenameTeam(slug);
   const [name, setName] = useState(team.name);
@@ -86,6 +88,8 @@ function TeamDetails({ slug, team, onClose }: { slug: string; team: TeamModel; o
             </li>
           ))}
         </ul>
+
+        <TeamSuperlativesSection slug={slug} enabled={team.isMine && stage === "live"} />
 
         {activity.length > 0 && (
           <CaptionBox tone="paper" title="Recent activity">

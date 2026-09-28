@@ -293,6 +293,13 @@ A just-for-fun milestone a Player earns during a Bingo, e.g. "Strong start: subm
 - **Avoid:** Badge, Trophy, Medal.
 - **Not:** Combat Achievements (the in-game OSRS ones shown in a Player's clan standing), nor the clan's own honours shown beside a Player's name (Maxed, Grandmaster, Gilded log).
 
+### Superlative
+An award within a Team, voted by its Players, e.g. "Team MVP", "Team Spirit", "The Grinder".
+- **Rules:** Each Team votes on its own members and gets its own winners. The categories are set per Bingo by an Admin. Only Players on the Team vote, never for themselves; Duo partners and Captains can be voted for like anyone else. Votes are secret: nobody, Moderators and Admins included, sees who voted for whom.
+- **Voting:** Open for the whole of Live, closing when the Bingo is Finished. A Player picks one teammate per category, can skip a category, and can change their votes until voting closes, so the votes can follow how the Bingo goes. Players added to the Team mid-Live can vote and be voted for from then on; a Player removed from it loses their votes and the votes cast for them. The categories can be added, renamed or deleted at any time; renaming keeps the votes, deleting removes them. A Bingo with no categories has no Superlatives.
+- **Results:** Only the winners are shown, never vote counts or runners-up; Admins alone can see the counts, once voting has closed. A tie is shared by everyone tied; a category with no votes has no winner. Hidden from everyone until Wrapped is published, then revealed there: a Player's Team section shows their Team's Superlatives, and the Bingo-wide part lists every Team's winners.
+- **Not:** A Title. Titles are computed from stats; Superlatives are voted.
+
 ---
 
 ## Recap
@@ -305,6 +312,9 @@ The look back at a Finished Bingo, in the spirit of a year-in-review: a family o
 Playback of a Finished Bingo on its own Board: a timeline of its Submissions that the Board, the scoreboard and popups of the drops follow as it plays or is scrubbed.
 - **Clock:** Submission time (when the drop was posted), not approval time, so a batch of approvals doesn't clump drops together. Its scoreboard can therefore differ mid-way from the Stats points chart, which goes by approval; the end totals agree.
 - **Rules:** Only approved Submissions move the Board and the scoreboard. Rejected ones can be shown, off by default, stamped "Rejected", and never change anything. Point Adjustments count from when they were made.
+- **All Teams:** A Rewind view of every Team at once: the shared Board, each Tile marked with every Team that has completed it by then, and every Team's Submissions on the timeline (coloured by Team) and in the popups.
+- **Speed:** Play runs at 1x, 2x, 4x or 8x, remembered per viewer across Bingos. From 4x it skips minor Submissions (they still count on the Board and the timeline); notable and huge ones always play. Stepping and scrubbing ignore it.
+- **Closing card:** At the very end (Play running out, or a scrub or step there), the final Titles with their holders, as the Stats page shows them for the viewed Team, or for the whole Bingo in the All Teams view. Titles aren't replayed along the way.
 - **Not:** The Stats timeline, which lists scoring events by approval time.
 
 ### Significance
@@ -314,7 +324,9 @@ How much a Submission stands out in Rewind, from its Luck, GP value, Reactions, 
 ### Wrapped
 A scrolling story of a Finished Bingo, told from one Player's point of view: You, then your Duo and your Team, then the Bingo as a whole. It ends in shareable cards to compare with others.
 - **Audience:** Every Player gets their own. Anyone else who can view the Finished Bingo (e.g. a Moderator who didn't play) gets only the Bingo-wide part. A Captain also gets a section on their Draft, and a Moderator on their reviews.
-- **Publishing:** Hidden until a Moderator publishes it, which leaves time for the wrap-up with the Players. A Bingo can be set to publish it the moment it is Finished (off by default). Publishing fixes its numbers: they don't change afterwards unless a Moderator publishes it again.
+- **Publishing:** Hidden until a Moderator publishes it, which leaves time for the wrap-up with the Players. Refused while any Submission is pending, so it's never missing drops still in the review queue. A Bingo can be set to publish it on its own once it is Finished and nothing is pending (off by default). Publishing fixes its numbers: they don't change afterwards unless a Moderator publishes it again.
+- **Wrapped art:** Decorative in-game character cut-outs, drawn as stickers on torn paper. They don't represent the Players; they just suit the story. **Category images** are any number per section, side by side above its heading (a Team's three, a Duo's two); **side images** are one pool, shown large beside the sections in turn on wide screens. Admins upload them per Bingo, one character per image, as a transparent PNG or a screenshot on one solid colour (keyed out on upload), and a new Bingo starts with a copy of the previous Bingo's. Unlike the numbers, publishing doesn't fix them.
+- **Credits:** The people an Admin names as having put the Bingo together (board design, art and so on), each a name with an optional role, in the order the Admin sets. Free text, independent of who holds the Admin or Moderator role; exported with the Bingo. The Outro lists them, each name in OSRS's in-game font, and a Moderator's own section captions their art with their name the same way. Like the art, publishing doesn't fix them.
 - **Avoid:** Recap for this feature alone (Recap is the family it belongs to).
 
 ### Steal

@@ -27,6 +27,8 @@ import * as memberPickService from "../services/memberPickService";
 import * as userService from "../services/userService";
 import * as statsService from "../services/statsService";
 import * as rewindService from "../services/rewindService";
+import * as wrappedService from "../services/wrappedService";
+import * as superlativeService from "../services/superlativeService";
 import { isOcrEnabled, analyzeSubmissionScreenshot } from "../ocr";
 import { getTectonicClient, TectonicUnavailableError, type TectonicDetailedUser } from "../services/tectonicService";
 import { fetchProfiles } from "../services/tectonicProfileService";
@@ -114,6 +116,7 @@ router.get(
       potTotal: bingoService.calculatePotTotal(bingo, paidSignupCount),
       hasSignups: signupService.hasAnySignup(db, bingo.id),
       viewer,
+      wrappedPublished: bingo.stage === "complete" && wrappedService.isPublished(db, bingo.id),
     });
   }),
 );
@@ -165,6 +168,80 @@ router.get(
     const rewind = rewindService.getRewind(db, bingo);
     const myTeamId = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id)?.id ?? null;
     res.json(rewindService.hideScreenshots(rewind, { isMod: req.bingoAccess!.isMod, myTeamId, showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished }));
+  }),
+);
+
+// Wrapped (CONTEXT.md): a Finished Bingo's year-in-review. Once a Moderator publishes it, everyone who can view the
+// Bingo reads the stored copy (their own Player Wrapped, if they played, and the Bingo-wide one). Before that, only
+// Moderators get it, as a live preview; everyone else a 404 "wrapped_not_published".
+function wrappedViewer(req: Request): wrappedService.WrappedViewer {
+  return { userId: req.user!.id, isMod: req.bingoAccess!.isMod, myTeamId: teamService.getUserTeamForBingo(db, req.bingo!.id, req.user!.id)?.id ?? null };
+}
+
+router.get(
+  "/:slug/wrapped/me",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  asyncHandler(async (req, res) => {
+    res.json(wrappedService.readMyWrapped(db, req.bingo!, wrappedViewer(req)));
+  }),
+);
+
+router.get(
+  "/:slug/wrapped",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  asyncHandler(async (req, res) => {
+    res.json(wrappedService.readBingoWrapped(db, req.bingo!, wrappedViewer(req)));
+  }),
+);
+
+// Superlative (CONTEXT.md) voting: the caller's own Team only — there's no reading or voting for another Team's
+// ballot, and no endpoint anywhere returns another voter's pick or a tally while the bingo is live.
+function myTeamOrThrow(req: Request) {
+  const team = teamService.getUserTeamForBingo(db, req.bingo!.id, req.user!.id);
+  if (!team) throw new ServiceError(403, "You're not on a Team in this bingo");
+  return team;
+}
+
+router.get(
+  "/:slug/superlatives/me",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  asyncHandler(async (req, res) => {
+    const team = myTeamOrThrow(req);
+    res.json(superlativeService.getBallot(db, req.bingo!, team.id, req.user!.id));
+  }),
+);
+
+router.put(
+  "/:slug/superlatives/:categoryId",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  auditSkip("superlative votes are secret — no entry records who voted for whom"),
+  asyncHandler(async (req, res) => {
+    const team = myTeamOrThrow(req);
+    const { nomineeUserId } = req.body as { nomineeUserId?: string };
+    if (!nomineeUserId) throw new ServiceError(400, "nomineeUserId is required");
+    superlativeService.setVote(db, req.bingo!, { categoryId: req.params.categoryId as string, teamId: team.id, voterUserId: req.user!.id, nomineeUserId });
+    res.json(superlativeService.getBallot(db, req.bingo!, team.id, req.user!.id));
+  }),
+);
+
+router.delete(
+  "/:slug/superlatives/:categoryId",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  auditSkip("superlative votes are secret — no entry records who voted for whom"),
+  asyncHandler(async (req, res) => {
+    const team = myTeamOrThrow(req);
+    superlativeService.clearVote(db, req.bingo!, { categoryId: req.params.categoryId as string, voterUserId: req.user!.id });
+    res.json(superlativeService.getBallot(db, req.bingo!, team.id, req.user!.id));
   }),
 );
 

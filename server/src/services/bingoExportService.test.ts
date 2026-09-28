@@ -11,6 +11,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { exportBingo, importBingo, importBingoWithImages } from "./bingoExportService";
 import { createCategory, createTask, createTile, deleteLine, generateLines, getBoardLines, getBoardTiles, updateLinePoints, updateTileBonusPoints } from "./boardService";
 import { createQuestion } from "./signupService";
+import { createCategory as createSuperlativeCategory, getCategories as getSuperlativeCategories } from "./superlativeService";
 import { getBingoBySlug, toPublicBingo, updateBingoSettings } from "./bingoService";
 import * as achievementService from "./achievementService";
 import { ServiceError } from "./errors";
@@ -78,6 +79,9 @@ function seedFullBingo() {
   createQuestion(db, { bingoId: bingo.id, prompt: "Preferred role", type: "select", optionsJson: JSON.stringify(["dps", "support"]), allowOther: true, required: false, sortOrder: 1 });
   createQuestion(db, { bingoId: bingo.id, prompt: "Who would you like to play with?", type: "member", multiplePicks: true, maxPicks: 3, sortOrder: 2 });
 
+  createSuperlativeCategory(db, { bingoId: bingo.id, name: "Team MVP" });
+  createSuperlativeCategory(db, { bingoId: bingo.id, name: "Team Spirit" });
+
   return { bingo, admin, category, tileA, partA, partB, tileB, tileC, tileD, sharedLeaf, sharedBlock };
 }
 
@@ -116,6 +120,7 @@ describe("exportBingo", () => {
     expect(doc.tiles).toHaveLength(4);
     expect(doc.lines.find((l) => l.lineType === "row" && l.lineIndex === 0)?.points).toBe(42);
     expect(doc.signupQuestions.map((q) => q.prompt).sort()).toEqual(["Preferred role", "Who would you like to play with?", "Willing to captain?"]);
+    expect(doc.superlativeCategories?.map((c) => c.name)).toEqual(["Team MVP", "Team Spirit"]);
   });
 });
 
@@ -164,6 +169,20 @@ describe("importBingo", () => {
     expect(toPublicBingo(getBingoBySlug(db, "no-rules")!).exclusivityRules).toEqual([]);
   });
 
+  it("carries Credits over in order, and reads an older file with none", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    updateBingoSettings(db, source.id, { wrappedCredits: [{ name: " Zezima ", role: "Board design" }, { name: "Woox", role: "" }] });
+    const doc = exportBingo(db, source.id);
+    expect(doc.bingo.wrappedCredits).toEqual([{ name: "Zezima", role: "Board design" }, { name: "Woox", role: null }]);
+
+    importBingo(db, doc, { slug: "with-credits", name: "With credits", createdByUserId: admin.id });
+    expect(toPublicBingo(getBingoBySlug(db, "with-credits")!).wrappedCredits).toEqual(doc.bingo.wrappedCredits);
+
+    const { wrappedCredits: _dropped, ...oldBingo } = doc.bingo;
+    importBingo(db, { ...doc, bingo: oldBingo }, { slug: "no-credits", name: "No credits", createdByUserId: admin.id });
+    expect(toPublicBingo(getBingoBySlug(db, "no-credits")!).wrappedCredits).toEqual([]);
+  });
+
   it("rejects a document whose exclusivity rules are malformed, leaving no partial bingo", () => {
     const { bingo: source, admin } = seedFullBingo();
     const doc = exportBingo(db, source.id);
@@ -207,6 +226,17 @@ describe("importBingo", () => {
     expect(Object.fromEntries(questions.map((q) => [q.prompt, q.helperText]))).toEqual({ "Willing to captain?": "Captains lead a team of about 14.", "Preferred role": null, "Who would you like to play with?": null });
     expect(Object.fromEntries(questions.map((q) => [q.prompt, q.allowOther]))).toEqual({ "Willing to captain?": false, "Preferred role": true, "Who would you like to play with?": false });
     expect(questions.find((q) => q.type === "member")).toMatchObject({ multiplePicks: true, maxPicks: 3 });
+
+    const superlatives = getSuperlativeCategories(db, imported.id);
+    expect(superlatives.map((c) => c.name)).toEqual(["Team MVP", "Team Spirit"]);
+  });
+
+  it("imports a file exported before Superlative categories existed", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    const doc = exportBingo(db, source.id);
+    delete (doc as { superlativeCategories?: unknown }).superlativeCategories;
+    const imported = importBingo(db, doc, { slug: "old-file-2", name: "Old", createdByUserId: admin.id });
+    expect(getSuperlativeCategories(db, imported.id)).toEqual([]);
   });
 
   it("imports a file exported before questions had helper text", () => {
@@ -499,8 +529,8 @@ describe("every column is accounted for", () => {
   it("bingo settings", () => {
     const { bingo } = seedFullBingo();
     const doc = exportBingo(db, bingo.id);
-    // exclusivityRules is the column exclusivityRulesJson, parsed.
-    const renamed: Record<string, string> = { exclusivityRules: "exclusivityRulesJson" };
+    // exclusivityRules and wrappedCredits are the columns exclusivityRulesJson and wrappedCreditsJson, parsed.
+    const renamed: Record<string, string> = { exclusivityRules: "exclusivityRulesJson", wrappedCredits: "wrappedCreditsJson" };
     accounted(
       schema.bingos,
       Object.keys(doc.bingo).map((k) => renamed[k] ?? k),
@@ -541,6 +571,7 @@ describe("every column is accounted for", () => {
     const doc = exportBingo(db, bingo.id);
     accounted(schema.tileCategories, Object.keys(doc.categories[0]!), ["id", "bingoId"], ["localId"]);
     accounted(schema.signupQuestions, Object.keys(doc.signupQuestions[0]!), ["id", "bingoId"]);
+    accounted(schema.superlativeCategories, Object.keys(doc.superlativeCategories![0]!), ["id", "bingoId"]);
   });
 });
 

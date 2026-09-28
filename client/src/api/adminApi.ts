@@ -1,6 +1,6 @@
 import type {
-  AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, PieceValue, SignupQuestion, UnvaluedItem, Team,
-  TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition,
+  AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, PieceValue, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
+  TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtGroup, WrappedArtImage, WrappedArtKeying,
 } from "@bingo/shared";
 import { api } from "./client";
 
@@ -144,6 +144,35 @@ export async function uploadTileImage(slug: string, id: string, file: File) {
   return api.postForm<{ tile: Tile }>(`${base(slug)}/tiles/${id}/image`, fd);
 }
 
+// Wrapped art (#262): cut-outs in groups (a section's Category images, or the side pool).
+export function getWrappedArt(slug: string) {
+  return api.get<{ art: WrappedArtImage[] }>(`${base(slug)}/wrapped-art`);
+}
+function imageForm(file: File, keying?: WrappedArtKeying) {
+  const fd = new FormData();
+  fd.append("image", file);
+  if (keying) {
+    fd.append("tolerance", String(keying.tolerance));
+    fd.append("softness", String(keying.softness));
+  }
+  return fd;
+}
+export function addWrappedArt(slug: string, group: WrappedArtGroup, file: File, keying?: WrappedArtKeying) {
+  return api.postForm<{ art: WrappedArtImage }>(`${base(slug)}/wrapped-art/${group}`, imageForm(file, keying));
+}
+export function replaceWrappedArt(slug: string, id: string, file: File, keying?: WrappedArtKeying) {
+  return api.postForm<{ art: WrappedArtImage }>(`${base(slug)}/wrapped-art/images/${id}`, imageForm(file, keying));
+}
+export function recutWrappedArt(slug: string, id: string, keying: WrappedArtKeying) {
+  return api.post<{ art: WrappedArtImage }>(`${base(slug)}/wrapped-art/images/${id}/recut`, keying);
+}
+export function removeWrappedArt(slug: string, id: string) {
+  return api.delete(`${base(slug)}/wrapped-art/images/${id}`);
+}
+export function reorderWrappedArt(slug: string, group: WrappedArtGroup, ids: string[]) {
+  return api.put<{ art: WrappedArtImage[] }>(`${base(slug)}/wrapped-art/${group}/order`, { ids });
+}
+
 // A task is just a node that's a direct child of its tile's node.
 export function createTask(slug: string, tileId: string, input: GraphNodeInput, sortOrder?: number) {
   return api.post<{ task: GraphNode }>(`${base(slug)}/tiles/${tileId}/tasks`, { ...input, sortOrder });
@@ -190,6 +219,22 @@ export function deleteQuestion(slug: string, id: string) {
 }
 export function reorderQuestions(slug: string, orderedIds: string[]) {
   return api.post<{ questions: SignupQuestion[] }>(`${base(slug)}/questions/reorder`, { orderedIds });
+}
+
+export function getSuperlativeCategories(slug: string) {
+  return api.get<{ categories: SuperlativeCategory[] }>(`${base(slug)}/superlatives`);
+}
+export function createSuperlativeCategory(slug: string, name: string) {
+  return api.post<{ category: SuperlativeCategory }>(`${base(slug)}/superlatives`, { name });
+}
+export function renameSuperlativeCategory(slug: string, id: string, name: string) {
+  return api.patch<{ category: SuperlativeCategory }>(`${base(slug)}/superlatives/${id}`, { name });
+}
+export function deleteSuperlativeCategory(slug: string, id: string) {
+  return api.delete(`${base(slug)}/superlatives/${id}`);
+}
+export function reorderSuperlativeCategories(slug: string, orderedIds: string[]) {
+  return api.post<{ categories: SuperlativeCategory[] }>(`${base(slug)}/superlatives/reorder`, { orderedIds });
 }
 
 export function getCaptainCandidates(slug: string) {

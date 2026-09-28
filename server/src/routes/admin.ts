@@ -12,8 +12,10 @@ import { db } from "../db";
 import * as bingoService from "../services/bingoService";
 import * as bingoExportService from "../services/bingoExportService";
 import * as boardService from "../services/boardService";
+import * as wrappedArtService from "../services/wrappedArtService";
 import { rescoreBingo } from "../services/scoringService";
 import * as signupService from "../services/signupService";
+import * as superlativeService from "../services/superlativeService";
 import * as teamService from "../services/teamService";
 import * as cutReviewService from "../services/cutReviewService";
 import * as userService from "../services/userService";
@@ -71,6 +73,8 @@ router.patch(
     }
     // Validated and cleaned by the service (label, scope, names).
     if ("exclusivityRules" in body) params.exclusivityRules = body.exclusivityRules as never;
+    // Credits (CONTEXT.md): validated and cleaned by the service.
+    if ("wrappedCredits" in body) params.wrappedCredits = body.wrappedCredits as never;
     for (const key of dateFields) {
       if (key in body) (params as Record<string, unknown>)[key] = body[key] ? new Date(body[key] as string) : null;
     }
@@ -92,6 +96,10 @@ router.patch(
     if ("showScreenshotsWhenFinished" in body) {
       if (typeof body.showScreenshotsWhenFinished !== "boolean") throw new ServiceError(400, "showScreenshotsWhenFinished must be a boolean");
       params.showScreenshotsWhenFinished = body.showScreenshotsWhenFinished;
+    }
+    if ("publishWrappedOnFinish" in body) {
+      if (typeof body.publishWrappedOnFinish !== "boolean") throw new ServiceError(400, "publishWrappedOnFinish must be a boolean");
+      params.publishWrappedOnFinish = body.publishWrappedOnFinish;
     }
     if ("achievementsEnabled" in body) {
       if (typeof body.achievementsEnabled !== "boolean") throw new ServiceError(400, "achievementsEnabled must be a boolean");
@@ -283,6 +291,60 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
+// Wrapped art (#262): cut-outs in groups (a section's Category images, or the side pool), each a transparent PNG or a
+// screenshot on one solid colour (keyed out on the server), drawn as a sticker. Not tied to the stage: it's only
+// shown once the Bingo is Finished.
+// ---------------------------------------------------------------------------
+
+const wrappedArtUpload = imageUpload();
+router.get(
+  "/wrapped-art",
+  asyncHandler(async (req, res) => {
+    res.json({ art: wrappedArtService.listArt(db, req.bingo!.id) });
+  }),
+);
+router.post(
+  "/wrapped-art/:group",
+  wrappedArtUpload.single("image"),
+  asyncHandler(async (req, res) => {
+    const group = wrappedArtService.parseGroup(req.params.group);
+    if (!req.file) throw new ServiceError(400, "image is required");
+    const keying = wrappedArtService.parseKeying(req.body ?? {});
+    res.status(201).json({ art: await wrappedArtService.addArt(db, UPLOADS_DIR, req.bingo!, group, req.file.buffer, keying) });
+  }),
+);
+router.put(
+  "/wrapped-art/:group/order",
+  asyncHandler(async (req, res) => {
+    const group = wrappedArtService.parseGroup(req.params.group);
+    res.json({ art: wrappedArtService.reorderArt(db, req.bingo!, group, (req.body as { ids?: unknown })?.ids) });
+  }),
+);
+router.post(
+  "/wrapped-art/images/:id",
+  wrappedArtUpload.single("image"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw new ServiceError(400, "image is required");
+    const keying = wrappedArtService.parseKeying(req.body ?? {});
+    res.json({ art: await wrappedArtService.replaceArt(db, UPLOADS_DIR, req.bingo!, req.params.id as string, req.file.buffer, keying) });
+  }),
+);
+router.post(
+  "/wrapped-art/images/:id/recut",
+  asyncHandler(async (req, res) => {
+    const keying = wrappedArtService.parseKeying(req.body ?? {});
+    res.json({ art: await wrappedArtService.recutArt(db, UPLOADS_DIR, req.bingo!, req.params.id as string, keying) });
+  }),
+);
+router.delete(
+  "/wrapped-art/images/:id",
+  asyncHandler(async (req, res) => {
+    wrappedArtService.removeArt(db, req.bingo!, req.params.id as string);
+    res.status(204).end();
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Tasks
 // ---------------------------------------------------------------------------
 
@@ -415,6 +477,51 @@ router.post(
     if (!Array.isArray(orderedIds)) throw new ServiceError(400, "orderedIds must be an array");
     signupService.reorderQuestions(db, req.bingo!.id, orderedIds);
     res.json({ questions: signupService.getQuestions(db, req.bingo!.id) });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Superlative categories (CONTEXT.md "Superlative") — not locked to any stage
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/superlatives",
+  asyncHandler(async (req, res) => {
+    res.json({ categories: superlativeService.getCategories(db, req.bingo!.id) });
+  }),
+);
+router.post(
+  "/superlatives",
+  asyncHandler(async (req, res) => {
+    const { name } = req.body as { name?: string };
+    if (!name) throw new ServiceError(400, "name is required");
+    const category = superlativeService.createCategory(db, { bingoId: req.bingo!.id, name });
+    res.status(201).json({ category });
+  }),
+);
+router.patch(
+  "/superlatives/:id",
+  asyncHandler(async (req, res) => {
+    const { name } = req.body as { name?: string };
+    if (!name) throw new ServiceError(400, "name is required");
+    const category = superlativeService.renameCategory(db, req.params.id as string, name);
+    res.json({ category });
+  }),
+);
+router.delete(
+  "/superlatives/:id",
+  asyncHandler(async (req, res) => {
+    superlativeService.deleteCategory(db, req.params.id as string);
+    res.status(204).end();
+  }),
+);
+router.post(
+  "/superlatives/reorder",
+  asyncHandler(async (req, res) => {
+    const { orderedIds } = req.body as { orderedIds?: string[] };
+    if (!Array.isArray(orderedIds)) throw new ServiceError(400, "orderedIds must be an array");
+    superlativeService.reorderCategories(db, req.bingo!.id, orderedIds);
+    res.json({ categories: superlativeService.getCategories(db, req.bingo!.id) });
   }),
 );
 

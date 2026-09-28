@@ -20,6 +20,7 @@
 import type { CutMode, LeftoverMode, NodeKind, QuestionVisibility, SignupMode, SignupQuestionType } from "./index.ts";
 import type { ExclusivityRule } from "./exclusivity.ts";
 import type { AchievementKey } from "./achievements.ts";
+import type { WrappedArtKeying, WrappedCredit } from "./wrapped.ts";
 
 export const BINGO_EXPORT_FORMAT_VERSION = 1;
 
@@ -91,6 +92,18 @@ export interface ExportTile {
   tasks: ExportNode[];
 }
 
+/**
+ * One Wrapped art image (#262): its original upload (the frames are rendered again on import), and how a
+ * solid-background screenshot was keyed (null for one uploaded already cut out; absent reads as the defaults).
+ * `section` is its group (shared WRAPPED_ART_GROUPS: a section's Category images, or "side"); a group's images are
+ * in the order the story shows them.
+ */
+export interface ExportWrappedArt {
+  section: string;
+  image: ExportImage;
+  keying?: WrappedArtKeying | null;
+}
+
 export interface ExportLine {
   lineType: "row" | "column" | "diagonal";
   lineIndex: number;
@@ -113,6 +126,12 @@ export interface ExportSignupQuestion {
   sortOrder: number;
   /** Absent in files exported before answers could be limited to mods/admins; imports as "captains". */
   visibility?: QuestionVisibility;
+}
+
+/** A Superlative category (CONTEXT.md); votes themselves never travel with an export. */
+export interface ExportSuperlativeCategory {
+  name: string;
+  sortOrder: number;
 }
 
 export interface BingoExportDocument {
@@ -141,15 +160,25 @@ export interface BingoExportDocument {
     hideRules?: boolean;
     /** Absent in older files: shown (the app's default). */
     showScreenshotsWhenFinished?: boolean;
+    publishWrappedOnFinish?: boolean;
+    /** Credits (CONTEXT.md), in order. Absent in older files: none. */
+    wrappedCredits?: WrappedCredit[];
   };
   categories: ExportCategory[];
   tiles: ExportTile[];
   lines: ExportLine[];
   signupQuestions: ExportSignupQuestion[];
+  /** Absent in older files: no Superlative categories. */
+  superlativeCategories?: ExportSuperlativeCategory[];
   /**
    * Which Achievements (CONTEXT.md) are switched on. Absent means every current catalogue key (a file from before
    * Achievements existed, or an export that didn't change any switch, imports as "all on" — createBingo's default).
    * The master switch itself isn't carried: an import always starts with it on.
    */
   achievementKeys?: AchievementKey[];
+  /**
+   * Wrapped art, only when the export included images. Absent: the import keeps what a new Bingo starts with (a copy
+   * of the previous Bingo's); present, each group in it replaces that group's images.
+   */
+  wrappedArt?: ExportWrappedArt[];
 }

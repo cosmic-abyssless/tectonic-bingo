@@ -52,19 +52,48 @@ function logStrength(value: number, scale: { from: number; huge: number }): numb
   return Math.log10(value / scale.from) / Math.log10(scale.huge / scale.from);
 }
 
+/** The kinds of completion, strongest first; what a Submission completed counts as the strongest it has. */
+export type CompletionKind = "line" | "firstTile" | "tile" | "firstPart";
+
+/** The strongest thing a Submission completed, or null when it completed nothing. */
+export function strongestCompletion(c: RewindCompletion): CompletionKind | null {
+  if (c.lines.length) return "line";
+  if (c.firstTiles.length) return "firstTile";
+  if (c.tiles.length) return "tile";
+  if (c.firstParts.length) return "firstPart";
+  return null;
+}
+
 function completionStrength(c: RewindCompletion): number {
-  const w = SIGNIFICANCE.completion;
-  return Math.max(0, c.lines.length ? w.line : 0, c.firstTiles.length ? w.firstTile : 0, c.tiles.length ? w.tile : 0, c.firstParts.length ? w.firstPart : 0);
+  const kind = strongestCompletion(c);
+  return kind ? SIGNIFICANCE.completion[kind] : 0;
+}
+
+export type SignificanceSignal = "luck" | "gp" | "reactions" | "completed";
+
+function signalStrengths(s: SignificanceSignals): { signal: SignificanceSignal; strength: number }[] {
+  const out: { signal: SignificanceSignal; strength: number }[] = [];
+  if (s.luckOneIn !== undefined) out.push({ signal: "luck", strength: logStrength(s.luckOneIn, SIGNIFICANCE.luck) });
+  if (s.gpValue !== undefined) out.push({ signal: "gp", strength: logStrength(s.gpValue, SIGNIFICANCE.gp) });
+  if (s.reactions !== undefined) out.push({ signal: "reactions", strength: Math.max(0, s.reactions) / SIGNIFICANCE.reactions.huge });
+  if (s.completed) out.push({ signal: "completed", strength: completionStrength(s.completed) });
+  return out;
 }
 
 /** Each signal the Submission has, as a strength. Missing signals aren't in the list. */
 export function significanceStrengths(s: SignificanceSignals): number[] {
-  const out: number[] = [];
-  if (s.luckOneIn !== undefined) out.push(logStrength(s.luckOneIn, SIGNIFICANCE.luck));
-  if (s.gpValue !== undefined) out.push(logStrength(s.gpValue, SIGNIFICANCE.gp));
-  if (s.reactions !== undefined) out.push(Math.max(0, s.reactions) / SIGNIFICANCE.reactions.huge);
-  if (s.completed) out.push(completionStrength(s.completed));
-  return out;
+  return signalStrengths(s).map((x) => x.strength);
+}
+
+/**
+ * The signal that counted most towards the score (the `top` of significanceScore): what made the Submission stand
+ * out. A missing signal is never it; ties go to the earlier of Luck, GP value, Reactions, what it completed. Null with
+ * no signals at all.
+ */
+export function dominantSignal(s: SignificanceSignals): SignificanceSignal | null {
+  let best: { signal: SignificanceSignal; strength: number } | null = null;
+  for (const x of signalStrengths(s)) if (!best || x.strength > best.strength) best = x;
+  return best?.signal ?? null;
 }
 
 /** The strongest signal, plus a share of each of the others. 0 for a Submission with no signals at all. */
@@ -92,6 +121,8 @@ export interface RewindClaim {
   gpValue: number | null;
   /** "1 in N", when Wise Old Man counts the drop's boss and the Player's kills are known. */
   luckOneIn: number | null;
+  /** The kills its Luck is judged over (since the Player's previous drop of it, or the Bingo's start); null with no Luck. */
+  luckKills: number | null;
 }
 
 /** One Submission as Rewind plays it: approved or rejected, never pending. */
@@ -115,6 +146,19 @@ export interface RewindSubmission {
   /** Empty for a rejected Submission: it never changed anything. */
   completed: RewindCompletion;
   significance: { score: number; tier: SignificanceTier };
+}
+
+/** The signals a Rewind Submission's Significance is built from: its best Luck, total GP value, Reaction count, and
+ * what it completed. Anything it doesn't have is left out. */
+export function rewindSignals(sub: Pick<RewindSubmission, "claims" | "gpValue" | "reactions" | "completed">): SignificanceSignals {
+  const lucks = sub.claims.map((c) => c.luckOneIn).filter((v): v is number => v !== null);
+  const reactionCount = sub.reactions.reduce((sum, g) => sum + g.users.length, 0);
+  return {
+    luckOneIn: lucks.length ? Math.max(...lucks) : undefined,
+    gpValue: sub.gpValue ?? undefined,
+    reactions: reactionCount > 0 ? reactionCount : undefined,
+    completed: strongestCompletion(sub.completed) ? sub.completed : undefined,
+  };
 }
 
 /** A node a Team completed, keyed on submission time. */

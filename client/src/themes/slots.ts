@@ -6,15 +6,18 @@ import type { PanelProps } from "../core/ui/Panel";
 import type { TeamRosterProps } from "../core/draft/TeamRoster";
 import type { ReactionBarProps } from "../core/submissions/ReactionBar";
 import type { TitleChipProps, TitleGroupBoxProps } from "../core/stats/TitleChrome";
-import type { MyAchievement, StageMilestone } from "@bingo/shared";
+import type { SuperlativeGroupBoxProps } from "../core/superlatives/SuperlativeChrome";
+import type { MyAchievement, Stage, StageMilestone } from "@bingo/shared";
 import type {
   BingoPageModel,
   BoardModel,
   CategoryModel,
   RequirementNodeModel,
+  RewindClosingModel,
   RewindControlsModel,
   RewindPopupModel,
   RewindScoreboardModel,
+  RewindTileTeamsModel,
   RewindTimelineModel,
   SubmissionFlowModel,
   SubmissionModel,
@@ -23,6 +26,14 @@ import type {
   TeamSelectorModel,
   TileModel,
   TileSearchModel,
+  WrappedBingoModel,
+  WrappedCaptainModel,
+  WrappedDuoModel,
+  WrappedIntroModel,
+  WrappedModeratorModel,
+  WrappedOutroModel,
+  WrappedTeamModel,
+  WrappedYouModel,
 } from "../headless/types";
 
 export interface OnTheClockProps {
@@ -96,7 +107,8 @@ export interface ThemeSlots {
   // `isCut`: they signed up but were cut to keep the teams even.
   NotPartStage: ComponentType<{ isCut: boolean }>;
   RulesDialog: ComponentType<{ isOpen: boolean; markdown: string; onClose: () => void }>;
-  TeamInfoDialog: ComponentType<{ slug: string; team: TeamModel | null; onClose: () => void }>;
+  // `stage`: whether the Team's Superlative voting section (CONTEXT.md "Superlative") shows and is live.
+  TeamInfoDialog: ComponentType<{ slug: string; team: TeamModel | null; stage: Stage; onClose: () => void }>;
   // Where the team's points come from, opened from the point total on the banner. Open while `team` is set; reads its data with usePointBreakdown().
   PointBreakdownDialog: ComponentType<{ team: TeamModel | null; onClose: () => void }>;
   SubmissionsDrawer: ComponentType<{ isOpen: boolean; submissions: SubmissionModel[]; onClose: () => void; onSubmit?: () => void }>;
@@ -133,6 +145,10 @@ export interface ThemeSlots {
   TitleGroupBox: ComponentType<TitleGroupBoxProps>;
   TitleChip: ComponentType<TitleChipProps>;
 
+  // One Superlative category (core/superlatives/SuperlativeChrome), in the Team info dialog: a banner styled like a
+  // TitleGroupBox row. Read with useOptionalSlot: outside a theme it's core's.
+  SuperlativeGroupBox: ComponentType<SuperlativeGroupBoxProps>;
+
   // The emoji reactions under a submission (core/submissions/ReactionBar), in the theme's own colours: a theme whose
   // cards aren't the page's surface (the comic's paper, even in dark mode) needs its own. Read with useOptionalSlot.
   ReactionBar: ComponentType<ReactionBarProps>;
@@ -164,7 +180,9 @@ export interface ThemeSlots {
   // default theme's BoardGrid/TileCell just ignore it) — it's the id of
   // whichever tile the search dropdown currently has highlighted, if any,
   // so a theme can visually tie the two together.
-  BoardGrid: ComponentType<{ board: BoardModel; onOpenTile: (tileId: string) => void; highlightedTileId?: string | null }>;
+  // tileOverlay (Rewind's All Teams view) draws something over a Tile's cell, above TileCell, in the same box; a
+  // BoardGrid must render it when it's given.
+  BoardGrid: ComponentType<{ board: BoardModel; onOpenTile: (tileId: string) => void; highlightedTileId?: string | null; tileOverlay?: (tile: TileModel) => ReactNode }>;
   RowLabel: ComponentType<{ category: CategoryModel | null }>;
   EmptyCell: ComponentType<{ row: number; col: number }>;
   // onOpen takes the tile id (rather than being pre-bound) so the default
@@ -203,6 +221,43 @@ export interface ThemeSlots {
   // "small" (a notable one). A rejected one is greyed out and stamped "Rejected". The theme draws only the card (its
   // own width, no positioning); the page places it and plays it in and out.
   RewindPopup: ComponentType<{ popup: RewindPopupModel }>;
+  // The closing card at the very end: every final Title with its holder and the value behind it, for the viewed Team
+  // (closing.team) or the whole Bingo. Built like the Stats page's Titles (core/stats TitlesSection draws them the same
+  // way). Like RewindPopup, only the card: the page places it, over the Board, and it scrolls within its own height.
+  RewindClosing: ComponentType<{ closing: RewindClosingModel }>;
+  // All Teams view: the marks on one Tile for each Team that has completed it by the moment being viewed (in
+  // scoreboard order; possibly none). Drawn over the Tile's cell, filling it; it takes no clicks.
+  RewindTileMarkers: ComponentType<{ tile: RewindTileTeamsModel }>;
+  // All Teams view: the dialog a Tile opens, listing every Team's progress on it at the moment being viewed.
+  RewindTileTeams: ComponentType<{ tile: RewindTileTeamsModel | null; isOpen: boolean; onClose: () => void }>;
+
+  // Wrapped (CONTEXT.md "Wrapped"): a Finished Bingo's story from the viewer's point of view, at /b/:slug/wrapped. The
+  // Wrapped* slots are one group. WrappedPage is whole-surface (may call useWrappedModel() directly): the page frame,
+  // the progress indicator, and each of the model's sections in order through its section slot. The section slots are
+  // props-only, each one section's model; a section the model leaves out (nothing to say for this viewer) is never
+  // drawn. Sections are built from core/wrapped's WrappedScene (one screen of the story) and Reveal (a line that fades up
+  // as the viewer scrolls; just fades in with reduced motion), and must work at phone width. Each section model carries
+  // its Category images (`art`: any number, each two boil frames; empty without any): draw them with core/wrapped's
+  // WrappedSectionArt (or StickerArt), which swaps the frames slowly and adds the CSS shadow, and make sure the section
+  // still looks finished without them. The model's `sideArt` is for WrappedPage to set beside the sections.
+  WrappedPage: ComponentType<Record<string, never>>;
+  // The Board's way in, for a Finished Bingo once Wrapped is published, or for a Moderator before that (preview: say
+  // it's a preview only Moderators can see).
+  WrappedBanner: ComponentType<{ preview: boolean; onOpen: () => void }>;
+  // The opening screen. preview: a Moderator's preview, computed just now and not yet published.
+  WrappedIntro: ComponentType<{ section: WrappedIntroModel; preview: boolean }>;
+  WrappedYou: ComponentType<{ section: WrappedYouModel }>;
+  // A Player's Duo (only for one in a Duo): who carried whom is friendly teasing, never a verdict.
+  WrappedDuo: ComponentType<{ section: WrappedDuoModel }>;
+  // A Captain's Draft: every pick against where it finished, the best Steal, a grade. Never label a pick a bust.
+  WrappedCaptain: ComponentType<{ section: WrappedCaptainModel }>;
+  // A reviewing Moderator's (or Admin's) own reviews.
+  WrappedModerator: ComponentType<{ section: WrappedModeratorModel }>;
+  WrappedTeam: ComponentType<{ section: WrappedTeamModel }>;
+  // The Bingo as a whole, moderation stats (with the rejection-rate banter) included.
+  WrappedBingo: ComponentType<{ section: WrappedBingoModel }>;
+  // The closing screen: a way on to Rewind and back to the Board. It leaves room for share cards (#232).
+  WrappedOutro: ComponentType<{ section: WrappedOutroModel; onRewind: () => void; onBoard: () => void }>;
 
   // Submission flow — mounted only while open (see BoardPageLayout).
   SubmissionModal: ComponentType<{ flow: SubmissionFlowModel }>;

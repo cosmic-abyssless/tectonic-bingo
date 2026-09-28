@@ -1,6 +1,6 @@
 // Everything before the bingo goes live, driven through the real endpoints at spoofed times: the import, the
 // users and their signups, duo pairings, captains, the draft, team names and raised hands.
-import type { AppliedCutChange, ApplyCutReviewResponse, BingoExportDocument, BoardResponse, CutReviewPreview, DraftState, DraftUnit, ExclusivityRule, SignupQuestion, TeamWithMembers } from "@bingo/shared";
+import type { BingoExportDocument, BoardResponse, DraftState, DraftUnit, ExclusivityRule, SignupQuestion, TeamWithMembers } from "@bingo/shared";
 import { answerQuestions } from "./answers";
 import type { Api } from "./client";
 import type { BoardInfo, PartModel } from "./board";
@@ -159,26 +159,32 @@ export interface TeamSeed {
 }
 
 /**
- * The best players who signed up lead the teams; a captain with a duo partner brings them along as co-captain. In a
- * duo bingo every Team is led by a pair, so only paired players captain there.
+ * Who leads the teams: the best players who signed up (by `rating`), a captain with a duo partner bringing them along
+ * as co-captain. In a duo bingo every Team is led by a pair (CONTEXT.md "Duo"), so only players whose partner signed
+ * up too can captain there. Fewer than `count` when there aren't enough.
  */
-export async function createTeams(ctx: Ctx, players: Player[], count: number, opts: { duo: boolean }): Promise<TeamSeed[]> {
-  const { tl, rng } = ctx;
-  const noisy = new Map(players.map((p) => [p.index, p.skill + rng.normal(0, 0.05)]));
-  const eligible = players.filter((p) => p.signupAt && !p.isMe && !p.isMod).sort((a, b) => noisy.get(b.index)! - noisy.get(a.index)!);
-  const chosen: TeamSeed[] = [];
+export function chooseCaptains(players: Player[], count: number, duo: boolean, rating: (p: Player) => number): { captain: Player; coCaptain: Player | null }[] {
+  const eligible = players.filter((p) => p.signupAt && !p.isMe && !p.isMod).sort((a, b) => rating(b) - rating(a));
+  const chosen: { captain: Player; coCaptain: Player | null }[] = [];
   const taken = new Set<number>();
   for (const p of eligible) {
     if (chosen.length >= count) break;
     if (taken.has(p.index)) continue;
     const partner = p.partnerIndex !== null ? players[p.partnerIndex]! : null;
-    if (opts.duo && !partner) continue;
     if (partner && (!partner.signupAt || taken.has(partner.index))) continue;
+    if (duo && !partner) continue;
     taken.add(p.index);
     if (partner) taken.add(partner.index);
-    chosen.push({ teamId: "", captain: p, coCaptain: partner });
+    chosen.push({ captain: p, coCaptain: partner });
   }
-  if (chosen.length < count) throw new Error(`Only ${chosen.length} of ${count} teams could be given captains (${opts.duo ? "a duo Team needs a signed-up pair to lead it" : "too few players signed up"})`);
+  return chosen;
+}
+
+export async function createTeams(ctx: Ctx, players: Player[], count: number, duo: boolean): Promise<TeamSeed[]> {
+  const { tl, rng } = ctx;
+  const noisy = new Map(players.map((p) => [p.index, p.skill + rng.normal(0, 0.05)]));
+  const chosen: TeamSeed[] = chooseCaptains(players, count, duo, (p) => noisy.get(p.index)!).map((c) => ({ teamId: "", ...c }));
+  if (chosen.length < count) ctx.log(`WARNING: only ${chosen.length} of ${count} teams: not enough ${duo ? "signed-up pairs" : "signups"} to lead them`);
   let at = plus(tl.captainsAt, rng.int(5, 30) * MINUTE);
   for (const seed of chosen) {
     const { team } = await ctx.api.as(ctx.admin).post<{ team: { id: string } }>(
@@ -196,20 +202,6 @@ export async function createTeams(ctx: Ctx, players: Player[], count: number, op
 // ---------------------------------------------------------------------------
 // Draft
 // ---------------------------------------------------------------------------
-
-/**
- * The admin's Cut review, just before the Draft: the move into it is refused while any cut is Avoidable and no review
- * has been applied. They take the plan's pairings and splits but keep the Team count the run was asked for.
- */
-export async function reviewCuts(ctx: Ctx): Promise<void> {
-  const at = plus(ctx.tl.draftAt, -ctx.rng.fork("cut-review").int(10, 60) * MINUTE);
-  const admin = ctx.api.as(ctx.admin);
-  const preview = await admin.get<CutReviewPreview>(path(ctx, "/mod/draft/cut-review"), { at });
-  if (preview.avoidableCount <= 0 || preview.reviewed) return;
-  const changes = preview.plan.changes.filter((c): c is AppliedCutChange => c.kind === "pair" || c.kind === "split");
-  const { cutPlayers } = await admin.post<ApplyCutReviewResponse>(path(ctx, "/admin/cut-review/apply"), { changes }, { at });
-  ctx.log(`cut review: applied ${changes.length} of ${preview.plan.changes.length} proposed changes, ${preview.plan.cutPlayersNow} -> ${cutPlayers} players cut`);
-}
 
 /**
  * Captains pick in turn, a minute or so apart, preferring the better players (they can't see skill, so it is

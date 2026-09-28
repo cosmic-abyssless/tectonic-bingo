@@ -187,6 +187,7 @@ export function BingoPageProvider({
       endsAt: bingo.endsAt ? new Date(bingo.endsAt).getTime() : null,
       boardRows: bingo.boardRows,
       boardCols: bingo.boardCols,
+      wrappedCredits: bingo.wrappedCredits ?? [],
     },
     milestone: nextMilestone(bingo),
     user: { displayName: myTeamModel?.members.find((m) => m.id === user.id)?.displayName ?? displayName(user), avatarUrl: avatarUrl(user) },
@@ -199,6 +200,7 @@ export function BingoPageProvider({
     canPickTeam,
     canViewStats,
     canRewind: bingo.stage === "complete",
+    wrapped: { canOpen: bingo.stage === "complete" && (shell.wrappedPublished || isMod), preview: !shell.wrappedPublished },
     canScout,
     draft: { state: draftState ?? null, isLoading: draftLoading },
     viewing: {
@@ -242,6 +244,7 @@ export function BingoPageProvider({
       goHome: () => navigate("/"),
       goToStats: () => navigate(`/b/${slug}/stats`),
       goToRewind: () => navigate(`/b/${slug}/rewind`),
+      goToWrapped: () => navigate(`/b/${slug}/wrapped`),
       goToMod: () => navigate(`/b/${slug}/mod`),
       goToDraft: () => navigate(`/b/${slug}/draft`),
     },

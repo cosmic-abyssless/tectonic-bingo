@@ -7,7 +7,16 @@
 // Import always creates a brand-new bingo — never overwrites an existing one.
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { BINGO_EXPORT_FORMAT_VERSION, CUT_MODES, type BingoExportDocument, type ExportNode } from "@bingo/shared";
+import {
+  BINGO_EXPORT_FORMAT_VERSION,
+  CUT_MODES,
+  isWrappedArtGroup,
+  type BingoExportDocument,
+  type ExportNode,
+  type ExportWrappedArt,
+  type WrappedArtKeying,
+  type WrappedArtGroup,
+} from "@bingo/shared";
 import type { GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingos, nodeEdges } from "../db/schema";
@@ -15,7 +24,9 @@ import { ServiceError } from "./errors";
 import * as bingoService from "./bingoService";
 import * as boardService from "./boardService";
 import * as signupService from "./signupService";
+import * as superlativeService from "./superlativeService";
 import * as achievementService from "./achievementService";
+import * as wrappedArtService from "./wrappedArtService";
 import { setNodeGates } from "./graphService";
 import { decodeExportImage, readTileImage, removeFiles, storeTileImage, type DecodedImage } from "./exportImages";
 import { log } from "../log";
@@ -41,7 +52,7 @@ function resolveGateLocal(realId: string | null, localIdByRealNodeId: Map<string
 }
 
 export interface ExportOptions {
-  /** Embed each tile's image, read from `<uploadsDir>/tiles`. Without it, no images are exported. */
+  /** Embed each tile's image and the Wrapped art, read from `<uploadsDir>`. Without it, no images are exported. */
   uploadsDir?: string;
 }
 
@@ -138,6 +149,8 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
     visibility: q.visibility,
   }));
 
+  const superlativeCategories = superlativeService.getCategories(db, bingoId).map((c) => ({ name: c.name, sortOrder: c.sortOrder }));
+
   return {
     formatVersion: BINGO_EXPORT_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
@@ -157,13 +170,25 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
       sealedTiles: bingo.sealedTiles,
       hideRules: bingo.hideRules,
       showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished,
+      publishWrappedOnFinish: bingo.publishWrappedOnFinish,
+      wrappedCredits: bingoService.parseWrappedCredits(bingo.wrappedCreditsJson),
     },
     categories: categoryRows.map((c) => ({ localId: categoryLocalByReal.get(c.id)!, label: c.label, colorHex: c.colorHex, sortOrder: c.sortOrder })),
     tiles,
     lines,
     signupQuestions,
+    superlativeCategories,
     achievementKeys: achievementService.getEnabledAchievementKeys(db, bingoId),
+    ...(options.uploadsDir ? { wrappedArt: exportWrappedArt(db, bingoId, options.uploadsDir) } : {}),
   };
+}
+
+function exportWrappedArt(db: Db, bingoId: string, uploadsDir: string): ExportWrappedArt[] {
+  return wrappedArtService.listArt(db, bingoId).flatMap((art) => {
+    const image = wrappedArtService.readArtOriginal(uploadsDir, art.originalUrl);
+    if (!image) log.warn("bingo export skipped Wrapped art", { group: art.group, url: art.originalUrl });
+    return image ? [{ section: art.group, image, keying: art.keying }] : [];
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -187,11 +212,15 @@ function assertValidDocument(doc: BingoExportDocument): void {
     throw new ServiceError(400, "Malformed import file: unknown leftover mode");
   }
   if (doc.bingo.exclusivityRules !== undefined) bingoService.normalizeExclusivityRules(doc.bingo.exclusivityRules);
+  if (doc.bingo.wrappedCredits !== undefined) bingoService.normalizeWrappedCredits(doc.bingo.wrappedCredits);
   for (const key of ["sealedTiles", "hideRules"] as const) {
     if (doc.bingo[key] !== undefined && typeof doc.bingo[key] !== "boolean") throw new ServiceError(400, `Malformed import file: ${key} must be true or false`);
   }
   if (doc.achievementKeys !== undefined && !Array.isArray(doc.achievementKeys)) {
     throw new ServiceError(400, "Malformed import file: achievementKeys must be an array");
+  }
+  if (doc.wrappedArt !== undefined && !Array.isArray(doc.wrappedArt)) {
+    throw new ServiceError(400, "Malformed import file: wrappedArt must be an array");
   }
   for (const t of doc.tiles) {
     if (t.bonusPoints !== undefined && (!Number.isInteger(t.bonusPoints) || t.bonusPoints < 0)) {
@@ -246,9 +275,16 @@ export async function importBingoWithImages(db: Db, doc: BingoExportDocument, pa
   assertValidDocument(doc);
   const decoded: [number, DecodedImage][] = [];
   for (const [i, tile] of doc.tiles.entries()) {
-    if (tile.image !== undefined) decoded.push([i, await decodeExportImage(tile.image, tile.name)]);
+    if (tile.image !== undefined) decoded.push([i, await decodeExportImage(tile.image, `tile "${tile.name}"`)]);
   }
-  if (decoded.length === 0) return importBingo(db, doc, params);
+  const decodedArt: [WrappedArtGroup, DecodedImage, WrappedArtKeying | null | undefined][] = [];
+  for (const entry of doc.wrappedArt ?? []) {
+    const group = entry?.section;
+    if (!isWrappedArtGroup(group)) throw new ServiceError(400, "Malformed import file: Wrapped art for an unknown section");
+    const keying = entry.keying ? wrappedArtService.parseKeying(entry.keying) : entry.keying;
+    decodedArt.push([group, await decodeExportImage(entry.image, `the Wrapped art "${group}"`), keying]);
+  }
+  if (decoded.length === 0 && decodedArt.length === 0) return importBingo(db, doc, params);
 
   const written: string[] = [];
   try {
@@ -258,15 +294,32 @@ export async function importBingoWithImages(db: Db, doc: BingoExportDocument, pa
       written.push(...stored.files);
       imageUrls.set(i, stored.url);
     }
-    return importBingo(db, doc, params, imageUrls);
+    const art = new Map<WrappedArtGroup, wrappedArtService.RenderedArt[]>();
+    for (const [group, image, keying] of decodedArt) {
+      const rendered = await wrappedArtService.renderArt(uploadsDir, image, keying ?? undefined).catch((err: unknown) => {
+        throw err instanceof ServiceError ? new ServiceError(400, `Malformed import file: the Wrapped art "${group}": ${err.message}`) : err;
+      });
+      written.push(...rendered.files);
+      art.set(group, [...(art.get(group) ?? []), rendered]);
+    }
+    return importBingo(db, doc, params, imageUrls, art);
   } catch (err) {
     removeFiles(written);
     throw err;
   }
 }
 
-/** `imageUrls`: the stored image for a tile, by its index in `doc.tiles` (see importBingoWithImages). */
-export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBingoParams, imageUrls?: ReadonlyMap<number, string>) {
+/**
+ * `imageUrls`: the stored image for a tile, by its index in `doc.tiles`; `art`: the Wrapped art rendered from
+ * `doc.wrappedArt` (see importBingoWithImages).
+ */
+export function importBingo(
+  db: Db,
+  doc: BingoExportDocument,
+  params: ImportBingoParams,
+  imageUrls?: ReadonlyMap<number, string>,
+  art?: ReadonlyMap<WrappedArtGroup, Omit<wrappedArtService.RenderedArt, "files">[]>,
+) {
   assertValidDocument(doc);
 
   return db.transaction((tx) => {
@@ -296,6 +349,8 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
       ...(doc.bingo.sealedTiles !== undefined ? { sealedTiles: doc.bingo.sealedTiles } : {}),
       ...(doc.bingo.hideRules !== undefined ? { hideRules: doc.bingo.hideRules } : {}),
       ...(doc.bingo.showScreenshotsWhenFinished !== undefined ? { showScreenshotsWhenFinished: doc.bingo.showScreenshotsWhenFinished === true } : {}),
+      ...(doc.bingo.publishWrappedOnFinish !== undefined ? { publishWrappedOnFinish: doc.bingo.publishWrappedOnFinish === true } : {}),
+      ...(doc.bingo.wrappedCredits !== undefined ? { wrappedCredits: doc.bingo.wrappedCredits } : {}),
     });
 
     const categoryIdByLocal = new Map<number, string>();
@@ -387,9 +442,15 @@ export function importBingo(db: Db, doc: BingoExportDocument, params: ImportBing
       signupService.createQuestion(tx, { bingoId: bingo.id, prompt: q.prompt, helperText: q.helperText ?? null, type: q.type, optionsJson: q.optionsJson, allowOther: q.allowOther ?? false, multiplePicks: q.multiplePicks ?? false, maxPicks: q.maxPicks ?? null, required: q.required, sortOrder: q.sortOrder, visibility: q.visibility ?? "captains" });
     }
 
+    // Superlative categories (CONTEXT.md): absent in older files, none to create. Votes never travel with an export.
+    for (const c of doc.superlativeCategories ?? []) {
+      superlativeService.createCategory(tx, { bingoId: bingo.id, name: c.name });
+    }
+
     // Achievements (CONTEXT.md): createBingo above switched every catalogue key on (the default for a brand-new
     // bingo); a document with an explicit list restricts it to exactly those. Absent means "all on", already true.
     if (doc.achievementKeys !== undefined) achievementService.restrictAchievementSettingsTo(tx, bingo.id, doc.achievementKeys);
+    if (art) wrappedArtService.replaceGroups(tx, bingo.id, art);
 
     return bingo;
   });

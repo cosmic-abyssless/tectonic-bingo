@@ -1,4 +1,4 @@
-import type { AchievementKey, CutMode, ExclusivityRule } from "@bingo/shared";
+import { MAX_WRAPPED_CREDITS, MAX_WRAPPED_CREDIT_LENGTH, type AchievementKey, type CutMode, type ExclusivityRule, type WrappedCredit } from "@bingo/shared";
 import { now as clockNow } from "../clock";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -10,6 +10,8 @@ import {
   bingoLines,
   bingoModerators,
   bingoTitleSettings,
+  bingoWrapped,
+  playerWrapped,
   bingos,
   claims,
   draftPicks,
@@ -43,6 +45,7 @@ import { userLabelById } from "../audit/describe";
 import { rsnsInBingo } from "./playerNames";
 import { PUBLIC_USER_COLS } from "./userService";
 import * as achievementService from "./achievementService";
+import * as wrappedArtService from "./wrappedArtService";
 import { assertCutReviewSatisfied } from "./cutReviewService";
 import { assertTeamsLedByPairs } from "./teamService";
 
@@ -79,11 +82,11 @@ export function getBingoBySlug(db: Db, slug: string) {
 // sends a bingo (or a list of them) to a client goes through this first;
 // routes that only need the row server-side (requireBingo, stage/board
 // checks, the WOM sync itself) use the raw row from getBingoBySlug instead.
-export function toPublicBingo<T extends { womGroupVerificationCode: string | null; exclusivityRulesJson: string; draftOrderLockedUntil?: Date | null }>(
+export function toPublicBingo<T extends { womGroupVerificationCode: string | null; exclusivityRulesJson: string; wrappedCreditsJson: string; draftOrderLockedUntil?: Date | null }>(
   bingo: T,
-): Omit<T, "womGroupVerificationCode" | "exclusivityRulesJson" | "draftOrderLockedUntil"> & { exclusivityRules: ExclusivityRule[] } {
-  const { womGroupVerificationCode: _womGroupVerificationCode, draftOrderLockedUntil: _draftOrderLockedUntil, exclusivityRulesJson, ...rest } = bingo;
-  return { ...rest, exclusivityRules: parseExclusivityRules(exclusivityRulesJson) };
+): Omit<T, "womGroupVerificationCode" | "exclusivityRulesJson" | "wrappedCreditsJson" | "draftOrderLockedUntil"> & { exclusivityRules: ExclusivityRule[]; wrappedCredits: WrappedCredit[] } {
+  const { womGroupVerificationCode: _womGroupVerificationCode, draftOrderLockedUntil: _draftOrderLockedUntil, exclusivityRulesJson, wrappedCreditsJson, ...rest } = bingo;
+  return { ...rest, exclusivityRules: parseExclusivityRules(exclusivityRulesJson), wrappedCredits: parseWrappedCredits(wrappedCreditsJson) };
 }
 
 /**
@@ -141,6 +144,34 @@ export function normalizeExclusivityRules(input: unknown): ExclusivityRule[] {
     const id = typeof rule.id === "string" && rule.id.trim() ? rule.id.trim() : crypto.randomUUID();
     return { id, label, itemNames, scope: rule.scope };
   });
+}
+
+/** The Credits a bingo row holds (CONTEXT.md). Tolerant like parseExclusivityRules: a bad column reads as none. */
+export function parseWrappedCredits(json: string | null | undefined): WrappedCredit[] {
+  if (!json) return [];
+  try {
+    const value: unknown = JSON.parse(json);
+    return Array.isArray(value) ? (value as WrappedCredit[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Validates and cleans Credits from a client or an import: trims, drops blank rows, an empty role reads as none. Order is kept. */
+export function normalizeWrappedCredits(input: unknown): WrappedCredit[] {
+  if (!Array.isArray(input)) throw new ServiceError(400, "wrappedCredits must be an array");
+  const credits: WrappedCredit[] = [];
+  for (const raw of input as unknown[]) {
+    const entry = (raw ?? {}) as Partial<Record<keyof WrappedCredit, unknown>>;
+    const name = typeof entry.name === "string" ? entry.name.trim() : "";
+    const role = typeof entry.role === "string" ? entry.role.trim() : "";
+    if (!name && !role) continue;
+    if (!name) throw new ServiceError(400, `Credits entry "${role}" needs a name`);
+    if (name.length > MAX_WRAPPED_CREDIT_LENGTH || role.length > MAX_WRAPPED_CREDIT_LENGTH) throw new ServiceError(400, `Credits names and roles are at most ${MAX_WRAPPED_CREDIT_LENGTH} characters`);
+    credits.push({ name, role: role || null });
+  }
+  if (credits.length > MAX_WRAPPED_CREDITS) throw new ServiceError(400, `At most ${MAX_WRAPPED_CREDITS} Credits entries`);
+  return credits;
 }
 
 // "Play has started": what team names and player ratings lock on. Mirrors isBoardLocked
@@ -221,6 +252,8 @@ export function createBingo(db: Db, params: CreateBingoParams) {
     tx.insert(bingoModerators).values({ bingoId: bingo.id, userId: row.createdByUserId, createdAt: clockNow() }).run();
     // Every Achievement starts switched on for a new bingo (CONTEXT.md "Achievement").
     achievementService.initializeAchievementSettings(tx, bingo.id, clockNow());
+    // Wrapped art (#262) carries over from the previous Bingo; Admins replace what they want.
+    wrappedArtService.copyFromPreviousBingo(tx, bingo.id);
     audit(tx, {
       action: "bingo.created",
       bingoId: bingo.id,
@@ -342,6 +375,9 @@ export function deleteBingo(db: Db, bingoId: string): void {
     tx.delete(nodes).where(eq(nodes.bingoId, bingoId)).run();
     tx.delete(stageTransitions).where(eq(stageTransitions.bingoId, bingoId)).run();
     tx.delete(bingoTitleSettings).where(eq(bingoTitleSettings.bingoId, bingoId)).run();
+    tx.delete(playerWrapped).where(eq(playerWrapped.bingoId, bingoId)).run();
+    tx.delete(bingoWrapped).where(eq(bingoWrapped.bingoId, bingoId)).run();
+    wrappedArtService.deleteBingoArt(tx, bingoId);
     tx.delete(bingoModerators).where(eq(bingoModerators.bingoId, bingoId)).run();
     tx.delete(womSnapshots).where(eq(womSnapshots.bingoId, bingoId)).run();
     tx.delete(womReads).where(eq(womReads.bingoId, bingoId)).run();
@@ -420,6 +456,7 @@ export interface UpdateBingoSettingsParams {
   bonusPotAmount?: number;
   rulesMarkdown?: string | null;
   exclusivityRules?: ExclusivityRule[];
+  wrappedCredits?: WrappedCredit[];
   sealedTiles?: boolean;
   hideRules?: boolean;
   signupOpensAt?: Date | null;
@@ -435,6 +472,7 @@ export interface UpdateBingoSettingsParams {
   achievementsEnabled?: boolean;
   achievements?: Partial<Record<AchievementKey, boolean>>;
   showScreenshotsWhenFinished?: boolean;
+  publishWrappedOnFinish?: boolean;
 }
 
 export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingoSettingsParams) {
@@ -455,9 +493,10 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
     if (params.womGroupId != null && !/^\d+$/.test(params.womGroupId)) {
       throw new ServiceError(400, "WOM group ID must be a number");
     }
-    const { exclusivityRules, achievements: _achievements, ...columns } = params;
+    const { exclusivityRules, wrappedCredits, achievements: _achievements, ...columns } = params;
     const set: Partial<typeof bingos.$inferInsert> = { ...columns };
     if (exclusivityRules !== undefined) set.exclusivityRulesJson = JSON.stringify(normalizeExclusivityRules(exclusivityRules));
+    if (wrappedCredits !== undefined) set.wrappedCreditsJson = JSON.stringify(normalizeWrappedCredits(wrappedCredits));
     const updated = tx.update(bingos).set(set).where(eq(bingos.id, bingoId)).returning().get();
 
     const changes = diffFields(existing, updated, { only: Object.keys(set) as (keyof typeof existing)[], redact: ["womGroupVerificationCode"] });

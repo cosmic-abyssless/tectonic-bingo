@@ -1,22 +1,22 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode, RewindResponse, RewindSubmission, SignificanceTier, Tile } from "@bingo/shared";
-import { adjustmentsAt, boardStateAt, countUpTo, formatOneIn, playbackHolds, PLAYBACK, prepareRewind, stepNext, stepPrev, teamPointsAt, visibleItems } from "./rewindModel";
+import { adjustmentsAt, boardStateAt, closingRows, countUpTo, formatOneIn, playbackHolds, PLAYBACK, PLAYBACK_SPEEDS, playsAt, prepareRewind, SKIP_MINOR_FROM_SPEED, standoutOf, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems } from "./rewindModel";
 import { buildTileModelsStatic } from "./boardModel";
 
 const MIN = 60_000;
 const T0 = Date.UTC(2026, 0, 1, 12);
 const iso = (minutes: number) => new Date(T0 + minutes * MIN).toISOString();
 
-function sub(id: string, minutes: number, opts: { status?: "approved" | "rejected"; tier?: SignificanceTier; claims?: { nodeId: string; quantity: number }[] } = {}): RewindSubmission {
+function sub(id: string, minutes: number, opts: { status?: "approved" | "rejected"; tier?: SignificanceTier; claims?: { nodeId: string; quantity: number }[]; teamId?: string } = {}): RewindSubmission {
   return {
     id,
-    teamId: "team",
+    teamId: opts.teamId ?? "team",
     status: opts.status ?? "approved",
     submittedAt: iso(minutes),
     player: null,
     tileId: "tile",
     screenshotUrl: null,
-    claims: (opts.claims ?? []).map((c, i) => ({ id: `${id}-c${i}`, nodeId: c.nodeId, label: "Scales", itemName: "Zulrah's scales", quantity: c.quantity, gpValue: null, luckOneIn: null })),
+    claims: (opts.claims ?? []).map((c, i) => ({ id: `${id}-c${i}`, nodeId: c.nodeId, label: "Scales", itemName: "Zulrah's scales", quantity: c.quantity, gpValue: null, luckOneIn: null, luckKills: null })),
     gpValue: null,
     reactions: [],
     completed: { tiles: [], lines: [], firstTiles: [], firstParts: [] },
@@ -83,6 +83,49 @@ describe("boardStateAt", () => {
   });
 });
 
+// The fixture plus a second Team, "other", that finishes the same Tile in one go at minute 50.
+function twoTeams(): RewindResponse {
+  const data = fixture();
+  data.submissions.push(sub("o1", 50, { teamId: "other", claims: [{ nodeId: "scales", quantity: 5 }] }));
+  data.teams.push({
+    teamId: "other",
+    nodes: [
+      { nodeId: "sum", completedAt: iso(50), submissionId: "o1", pointsAwarded: 20, pointsAt: iso(50) },
+      { nodeId: "scales", completedAt: iso(50), submissionId: "o1", pointsAwarded: 0, pointsAt: null },
+      { nodeId: "tileNode", completedAt: iso(50), submissionId: "o1", pointsAwarded: 5, pointsAt: iso(50) },
+    ],
+    adjustments: [],
+    finalPoints: 25,
+  });
+  return data;
+}
+
+describe("All Teams", () => {
+  const data = prepareRewind(twoTeams());
+
+  it("puts every Team's Submissions on one timeline, oldest first", () => {
+    expect(data.allItems.map((i) => i.sub.id)).toEqual(["s1", "s2", "s3", "o1"]);
+  });
+
+  it("marks a Tile complete for exactly the Teams whose own Board has it complete at that moment", () => {
+    for (const minutes of [0, 15, 30, 49, 50, 100]) {
+      const at = T0 + minutes * MIN;
+      const teams = tileTeamsAt([tile], data, ["team", "other"], at).get("tile")!;
+      for (const teamId of ["team", "other"]) {
+        const state = boardStateAt(data.teams.get(teamId), data.itemsByTeam.get(teamId)!, at);
+        const [own] = buildTileModelsStatic({ tiles: [tile], categories: [], ...state, bingoStartsAt: null, interests: [], viewerUserId: "me" });
+        const mine = teams.find((t) => t.teamId === teamId)!;
+        expect(mine.complete).toBe(own!.progress.allComplete);
+        expect(mine.pointsAwarded).toBe(own!.progress.pointsAwarded);
+      }
+    }
+    const at = (minutes: number) => tileTeamsAt([tile], data, ["team", "other"], T0 + minutes * MIN).get("tile")!.filter((t) => t.complete).map((t) => t.teamId);
+    expect(at(29)).toEqual([]);
+    expect(at(30)).toEqual(["team"]);
+    expect(at(50)).toEqual(["team", "other"]);
+  });
+});
+
 describe("stepping", () => {
   const data = prepareRewind(fixture());
   const all = data.itemsByTeam.get("team")!;
@@ -137,6 +180,15 @@ describe("playbackHolds", () => {
     expect(Math.max(...holds)).toBe(PLAYBACK.holdMs.huge);
   });
 
+  it("plays every Team's Submissions together in about 7 minutes", () => {
+    // Six Teams of a typical and of a large Bingo, merged for the All Teams view.
+    for (const perTeam of [250, 400]) {
+      const total = minutes(sum(playbackHolds(bingo(6 * perTeam), PLAYBACK.allTeamsMinMinorMs)));
+      expect(total).toBeGreaterThanOrEqual(6);
+      expect(total).toBeLessThanOrEqual(8);
+    }
+  });
+
   it("fits a large Bingo into 7 minutes, keeping the tiers' ratios", () => {
     const holds = playbackHolds(bingo(1_200));
     expect(minutes(sum(holds))).toBeLessThanOrEqual(7.01);
@@ -152,6 +204,29 @@ describe("playbackHolds", () => {
     expect(holds.at(-1)! / holds.at(-2)!).toBeCloseTo(PLAYBACK.holdMs.huge / PLAYBACK.holdMs.notable);
   });
 
+  it("plays proportionally faster at a higher speed, on top of the ceiling's scaling", () => {
+    for (const tiers of [bingo(40), bingo(1_200)]) {
+      const base = playbackHolds(tiers);
+      expect(sum(playbackHolds(tiers, PLAYBACK.minMinorMs, 2))).toBeCloseTo(sum(base) / 2);
+      const notable = tiers.indexOf("notable");
+      expect(playbackHolds(tiers, PLAYBACK.minMinorMs, 8)[notable]).toBeCloseTo(base[notable]! / 8);
+    }
+  });
+
+  it("skips minor Submissions at the faster speeds, never notable or huge ones", () => {
+    const tiers = bingo(300);
+    expect(PLAYBACK_SPEEDS.some((s) => s >= SKIP_MINOR_FROM_SPEED)).toBe(true);
+    for (const speed of PLAYBACK_SPEEDS) {
+      const holds = playbackHolds(tiers, PLAYBACK.minMinorMs, speed);
+      tiers.forEach((tier, i) => {
+        const skipped = tier === "minor" && speed >= SKIP_MINOR_FROM_SPEED;
+        expect(playsAt(tier, speed)).toBe(!skipped);
+        if (skipped) expect(holds[i]).toBe(0);
+        else expect(holds[i]).toBeGreaterThan(0);
+      });
+    }
+  });
+
   it("is empty with nothing to play", () => {
     expect(playbackHolds([])).toEqual([]);
   });
@@ -161,5 +236,51 @@ describe("formatOneIn", () => {
   it("reads as 1 in N, rounded", () => {
     expect(formatOneIn(7.4)).toBe("1 in 7");
     expect(formatOneIn(1234)).toBe(`1 in ${(1230).toLocaleString()}`);
+  });
+});
+
+describe("closingRows", () => {
+  const rows = [
+    { id: "a", teamId: "t1" },
+    { id: "b", teamId: "t2" },
+    { id: "c", teamId: null },
+  ];
+
+  it("keeps the viewed Team's rows and the ones with no Team, like the Stats page's filter with that Team picked", () => {
+    expect(closingRows(rows, "t1").map((r) => r.id)).toEqual(["a", "c"]);
+  });
+
+  it("keeps every row in the All Teams view", () => {
+    expect(closingRows(rows, null).map((r) => r.id)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("standoutOf", () => {
+  const NOTHING = { tiles: [], lines: [], firstTiles: [], firstParts: [] };
+  const withClaim = (gpValue: number | null, luckOneIn: number | null): RewindSubmission => {
+    const s = sub("x", 1, { claims: [{ nodeId: "scales", quantity: 1 }] });
+    return { ...s, gpValue, claims: s.claims.map((c) => ({ ...c, gpValue, luckOneIn })) };
+  };
+
+  it("calls out the signal that counted most, with its value", () => {
+    expect(standoutOf(withClaim(80_000_000, 20))).toEqual({ kind: "gp", value: "80m" });
+    expect(standoutOf(withClaim(200_000, 5_000))).toEqual({ kind: "luck", value: formatOneIn(5_000) });
+    const users = Array.from({ length: 7 }, (_, i) => ({ id: `u${i}`, discordUsername: `u${i}`, discordGlobalName: null, discordGuildNick: null, rsn: null }));
+    const hyped = { ...withClaim(1_000_000, null), reactions: [{ emoji: "🔥", users }] } as RewindSubmission;
+    expect(standoutOf(hyped)).toEqual({ kind: "reactions", value: "7" });
+  });
+
+  it("says what it completed: a Line over a Tile, a first with no value", () => {
+    const base = withClaim(null, null);
+    expect(standoutOf({ ...base, completed: { ...NOTHING, tiles: ["ZULRAH"], lines: ["Row 2"] } })).toEqual({ kind: "line", value: "Row 2" });
+    expect(standoutOf({ ...base, completed: { ...NOTHING, tiles: ["ZULRAH"] } })).toEqual({ kind: "tile", value: "ZULRAH" });
+    expect(standoutOf({ ...base, completed: { ...NOTHING, tiles: ["ZULRAH"], firstTiles: ["ZULRAH"] } })).toEqual({ kind: "first", value: null });
+    expect(standoutOf({ ...base, completed: { ...NOTHING, firstParts: ["ZULRAH — Page 1"] } })).toEqual({ kind: "first", value: null });
+  });
+
+  it("never calls out a signal the Submission doesn't have", () => {
+    // A pet: no GP value, so a little Luck wins even though it's weak.
+    expect(standoutOf(withClaim(null, 12))?.kind).toBe("luck");
+    expect(standoutOf(withClaim(null, null))).toBeNull();
   });
 });

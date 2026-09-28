@@ -9,6 +9,7 @@ import { useWebSocketEvent } from "../context/WebSocketContext";
 import { AuditLog } from "../core/mod/AuditLog";
 import { ReviewQueue } from "../core/mod/ReviewQueue";
 import { StageControls } from "../core/mod/StageControls";
+import { WrappedControls } from "../core/mod/WrappedControls";
 import { SignupRoster } from "../core/mod/SignupRoster";
 import { BingoSettingsForm } from "../core/admin/BingoSettingsForm";
 import { ModsManager } from "../core/admin/ModsManager";
@@ -16,7 +17,10 @@ import { AchievementsManager } from "../core/admin/AchievementsManager";
 import { BoardEditor } from "../core/admin/BoardEditor";
 import { LineEditor } from "../core/admin/LineEditor";
 import { QuestionBuilder } from "../core/admin/QuestionBuilder";
+import { SuperlativesManager } from "../core/admin/SuperlativesManager";
 import { TeamManager } from "../core/admin/TeamManager";
+import { WrappedArtManager } from "../core/admin/WrappedArtManager";
+import { WrappedCreditsManager } from "../core/admin/WrappedCreditsManager";
 import { AppHeader } from "../core/ui/AppHeader";
 import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { Button } from "../core/ui/Button";
@@ -45,8 +49,10 @@ const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; unti
   { key: "board", label: "Board", adminOnly: true, until: "reveal" },
   { key: "lines", label: "Lines", adminOnly: true, until: "reveal" },
   { key: "questions", label: "Signup questions", adminOnly: true, until: "signup" },
+  { key: "superlatives", label: "Superlatives", adminOnly: true },
   { key: "teams", label: "Captains", adminOnly: true, from: "signup" },
   { key: "mods", label: "Moderators", adminOnly: true },
+  { key: "wrapped-art", label: "Wrapped", adminOnly: true },
 ];
 type TabDef = (typeof TABS)[number];
 
@@ -146,6 +152,11 @@ export function ModPage() {
         <div className={NARROW}>
           <StageControls slug={slug} bingo={shell.bingo} canChange={isAdmin} />
         </div>
+        {shell.bingo.stage === "complete" && (
+          <div className={NARROW}>
+            <WrappedControls slug={slug} />
+          </div>
+        )}
 
         <PlayerProfileProvider slug={slug}>
           <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key))}>
@@ -198,6 +209,11 @@ export function ModPage() {
                     <QuestionBuilder slug={slug} />
                   </div>
                 </TabPanel>
+                <TabPanel id="superlatives">
+                  <div className={NARROW}>
+                    <SuperlativesManager slug={slug} bingo={shell.bingo} />
+                  </div>
+                </TabPanel>
                 <TabPanel id="teams">
                   <div className={NARROW}>
                     <TeamManager slug={slug} />
@@ -206,6 +222,12 @@ export function ModPage() {
                 <TabPanel id="mods">
                   <div className={NARROW}>
                     <ModsManager slug={slug} />
+                  </div>
+                </TabPanel>
+                <TabPanel id="wrapped-art">
+                  <div className={`${NARROW} space-y-8`}>
+                    <WrappedArtManager slug={slug} />
+                    <WrappedCreditsManager slug={slug} bingo={shell.bingo} />
                   </div>
                 </TabPanel>
               </>

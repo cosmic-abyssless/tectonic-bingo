@@ -120,6 +120,21 @@ export function gainsOf(timeline: WomSnapshot[], start: Date, end: Date | null):
   return { ehb: gained((s) => s.ehb), ehp: gained((s) => s.ehp), clues: gained((s) => s.clues), asOf: latest.at.toISOString() };
 }
 
+/**
+ * Boss kills a Player gained over the Bingo, measured like gainsOf (same baseline and latest snapshot), most first.
+ * Bosses they didn't gain on are left out.
+ */
+export function bossGainsOf(timeline: WomSnapshot[], start: Date, end: Date | null): { metric: string; kills: number }[] {
+  const upToEnd = end ? timeline.filter((s) => s.at <= end) : timeline;
+  const latest = upToEnd.at(-1);
+  if (!latest) return [];
+  const baseline = upToEnd.filter((s) => s.at <= start).at(-1) ?? upToEnd[0]!;
+  return Object.entries(latest.bossKills)
+    .map(([metric, kills]) => ({ metric, kills: Math.max(0, (kills ?? 0) - (baseline.bossKills[metric] ?? 0)) }))
+    .filter((b) => b.kills > 0)
+    .sort((a, b) => b.kills - a.kills || a.metric.localeCompare(b.metric));
+}
+
 /** When Wise Old Man was last read for any Player of the Bingo, or null if it hasn't been. */
 export function lastReadAt(db: Db, bingoId: string): Date | null {
   return db.select({ at: max(womReads.readAt) }).from(womReads).where(eq(womReads.bingoId, bingoId)).get()?.at ?? null;

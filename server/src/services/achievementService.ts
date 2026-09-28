@@ -689,6 +689,25 @@ export function getAchievementTallies(db: Db, bingo: Bingo): Map<string, { earne
   return out;
 }
 
+/**
+ * Every Player's earned Achievements that are switched on in this Bingo, oldest first (Wrapped). Null when the Bingo
+ * has Achievements switched off.
+ */
+export function getEarnedAchievements(db: Db, bingo: Bingo): Map<string, { key: AchievementKey; earnedAt: Date }[]> | null {
+  if (!bingo.achievementsEnabled) return null;
+  const switched = switchedOnFor(db, bingo);
+  const out = new Map<string, { key: AchievementKey; earnedAt: Date }[]>();
+  if (switched.size === 0) return out;
+  const rows = db
+    .select({ userId: achievementEarned.userId, key: achievementEarned.achievementKey, earnedAt: achievementEarned.earnedAt })
+    .from(achievementEarned)
+    .where(and(eq(achievementEarned.bingoId, bingo.id), inArray(achievementEarned.achievementKey, [...switched.keys()])))
+    .orderBy(achievementEarned.earnedAt)
+    .all();
+  for (const r of rows) out.set(r.userId, [...(out.get(r.userId) ?? []), { key: r.key as AchievementKey, earnedAt: r.earnedAt }]);
+  return out;
+}
+
 /** Earned / total switched-on (Hidden ones included) for a player card. Null when the feature is switched off. */
 export function getAchievementCount(db: Db, bingo: Bingo, userId: string): AchievementCount | null {
   if (!bingo.achievementsEnabled) return null;

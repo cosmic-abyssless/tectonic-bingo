@@ -3,7 +3,8 @@
 // never a raw Tile, TeamNodeState[], SubmissionDetails[], or LeafClaimMaps.
 // See docs/headless-theming-plan.md §2.
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
-import type { AuditCategory, AuditTone, DraftState, NodeKind, NodeStatus, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus } from "@bingo/shared";
+import type { AuditCategory, AuditTone, ContributionCount, DraftState, NodeKind, NodeStatus, PickedTitle, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus, WrappedArtFrames, WrappedCredit } from "@bingo/shared";
+import type { PlaybackSpeed } from "./rewindModel";
 
 export interface ActivityEntryModel {
   id: number;
@@ -282,6 +283,8 @@ export interface TeamSelectorModel {
   teams: TeamModel[];
   selectedId: string | null;
   select(id: string): void;
+  /** Rewind only: an "All Teams" choice above the Teams. While it's selected, selectedId is null. */
+  allTeams?: { selected: boolean; select(): void };
 }
 
 export interface BingoPageModel {
@@ -298,6 +301,8 @@ export interface BingoPageModel {
     endsAt: number | null;
     boardRows: number;
     boardCols: number;
+    /** Credits (CONTEXT.md), in order, for Wrapped's Outro. */
+    wrappedCredits: WrappedCredit[];
   };
   milestone: StageMilestone | null;
   user: UserModel;
@@ -314,6 +319,11 @@ export interface BingoPageModel {
   canViewStats: boolean;
   /** Rewind (CONTEXT.md) exists only for a Finished Bingo, for everyone who can view it. */
   canRewind: boolean;
+  /**
+   * Wrapped (CONTEXT.md), for a Finished Bingo: open to everyone once a Moderator publishes it, and to Moderators before
+   * that as a preview (the banner says so).
+   */
+  wrapped: { canOpen: boolean; preview: boolean };
   /** Team leads (and mods) may browse the draft room before the draft stage to rate signups. */
   canScout: boolean;
   /** For the draft-stage slot; DraftState is the shared draft response type. */
@@ -344,7 +354,7 @@ export interface BingoPageModel {
   /** show() also hides the drawer. initialFile seeds/replaces the flow's screenshot (drag-drop/paste-to-submit) — re-passing a new File while already open feeds it into the still-mounted flow. initialTaskId preselects a part of that tile (per-part Submit buttons). */
   submit: { open: boolean; initialTileId: string | undefined; initialTaskId: string | undefined; initialFile: File | undefined; show(tileId?: string, file?: File, taskId?: string): void; hide(): void };
   /** logout lives in core AppHeader's own user menu, not here. */
-  actions: { goHome(): void; goToStats(): void; goToRewind(): void; goToMod(): void; goToDraft(): void };
+  actions: { goHome(): void; goToStats(): void; goToRewind(): void; goToWrapped(): void; goToMod(): void; goToDraft(): void };
   /** Raise/lower the viewer's hand for one part (task) of a tile on their own team. No-op unless task.interest.canToggle. */
   tileInterest: { toggle(tileId: string, taskId: string): void };
   /** Emoji reactions on the viewed team's submissions: canReact when it's the viewer's own team. toggle() puts the viewer's on or takes it off. */
@@ -450,7 +460,17 @@ export interface RewindSubmissionModel {
   reactions: ReactionModel[];
   /** "Completed ZULRAH", "Row 2 complete", "First to complete ZULRAH"… */
   highlights: string[];
+  /** What made it stand out: the signal that counted most towards its Significance. Null when it has none. */
+  standout: RewindStandoutModel | null;
 }
+
+/**
+ * The signal that counted most towards a Submission's Significance, and the value to call out with it: the GP value
+ * ("12.5M"), the Luck ("1 in 1,230"), the Reaction count ("7"), the Tile or Line it completed, or none for a first.
+ */
+export type RewindStandoutModel =
+  | { kind: "gp" | "luck" | "reactions" | "tile" | "line"; value: string }
+  | { kind: "first"; value: null };
 
 export interface RewindTickModel {
   id: string;
@@ -462,6 +482,8 @@ export interface RewindTickModel {
   past: boolean;
   /** The Submission being shown. */
   current: boolean;
+  /** Its Team's colour, in the All Teams view (where ticks are coloured by Team); null otherwise. */
+  teamColor: string | null;
 }
 
 export interface RewindTimelineModel {
@@ -477,7 +499,7 @@ export interface RewindTimelineModel {
   atClockLabel: string;
   startLabel: string;
   endLabel: string;
-  /** One per Submission of the viewed Team, sized by tier. */
+  /** One per Submission of the viewed Team (of every Team, in the All Teams view), sized by tier. */
   ticks: RewindTickModel[];
   /** Jump to a moment (dragging/clicking the scrubber). Pauses Play and closes any popup. */
   seek(at: number): void;
@@ -499,6 +521,11 @@ export interface RewindControlsModel {
   /** Rejected Submissions on the timeline (off by default). */
   showRejected: boolean;
   setShowRejected(on: boolean): void;
+  /** Play's speed multiplier (1x by default, remembered per viewer). Only Play's pace: stepping and scrubbing ignore it. */
+  speed: PlaybackSpeed;
+  /** The speeds to choose from, slowest first. From 4x up Play skips minor Submissions. */
+  speeds: readonly PlaybackSpeed[];
+  setSpeed(speed: PlaybackSpeed): void;
   /** Where Play is, as "12 / 340". */
   positionLabel: string;
 }
@@ -519,14 +546,49 @@ export interface RewindPopupModel {
   close(): void;
 }
 
+/**
+ * The closing card at the very end of Rewind: the Bingo's final Titles, picked as the Stats page picks them (its
+ * frozen Title settings, its visibility rules) from the viewed Team's Players, or every Player's in the All Teams view.
+ */
+export interface RewindClosingModel {
+  /** Every Title the Stats page would list for the same Team filter, holders and the value behind each included. */
+  titles: PickedTitle[];
+  /** The Players the Titles are picked from, for their names and avatars. */
+  contributions: ContributionCount[];
+  /** When Wise Old Man was last read, for the WOM-sourced Titles. */
+  womReadAt: string | null;
+  /** Whose Titles these are: the viewed Team, or null for the whole Bingo (the All Teams view). */
+  team: { name: string; color: string | null } | null;
+  close(): void;
+}
+
+/** One Tile in the All Teams view: every Team's progress on it at the moment being viewed. */
+export interface RewindTileTeamsModel {
+  tileId: string;
+  tileName: string;
+  /** The Teams that have completed it by now, in scoreboard order: the Tile's markers. */
+  completedBy: { id: string; name: string; color: string | null }[];
+  /** Every Team's progress on it, in the same order. */
+  teams: { id: string; name: string; color: string | null; complete: boolean; completedTasks: number; totalTasks: number; pointsAwarded: number; totalPoints: number }[];
+  /** "Iron Fists: complete · Dragons: 1/3 parts": for a hover title. */
+  summary: string;
+}
+
 export interface RewindModel {
   slug: string;
   bingoName: string;
-  /** The Team whose Board, timeline and popups are shown. */
+  /** The Team whose Board, timeline and popups are shown. Null in the All Teams view. */
   team: TeamModel | null;
-  /** The existing Team selector, open to everyone here: every Team's Board is visible once the Bingo is Finished. */
+  /**
+   * The All Teams view: the Board is the shared layout with no one's progress on it, each Tile marked with every Team
+   * that has completed it (tileTeams), and the timeline and popups cover every Team's Submissions.
+   */
+  allTeams: boolean;
+  /** All Teams view only (null otherwise): each Tile's Teams at the moment being viewed, by Tile id. */
+  tileTeams: ReadonlyMap<string, RewindTileTeamsModel> | null;
+  /** The existing Team selector, open to everyone here: every Team's Board is visible once the Bingo is Finished. It has an All Teams choice. */
   teamSelector: TeamSelectorModel;
-  /** The viewed Team's points at the moment being viewed. */
+  /** The viewed Team's points at the moment being viewed (0 in the All Teams view: the scoreboard has every Team's). */
   teamPoints: number;
   timeline: RewindTimelineModel;
   controls: RewindControlsModel;
@@ -537,7 +599,251 @@ export interface RewindModel {
   highlightedTileId: string | null;
   /** The popup to show: during Play and when stepping, for notable-or-bigger Submissions only. */
   popup: RewindPopupModel | null;
-  /** A Tile's details at the moment being viewed (its Submissions left out: the timeline has those). */
-  openTile: { tile: TileModel | null; open(id: string): void; close(): void };
+  /** The closing card: shown once the moment reaches the Bingo's end (Play running out, a scrub or a step there). */
+  closing: RewindClosingModel | null;
+  /**
+   * A Tile's details at the moment being viewed (its Submissions left out: the timeline has those). In the All Teams
+   * view `tile` stays null and `teams` has every Team's progress on the opened Tile instead.
+   */
+  openTile: { tile: TileModel | null; teams: RewindTileTeamsModel | null; open(id: string): void; close(): void };
   exit(): void;
+}
+
+// ---------------------------------------------------------------------------
+// Wrapped (CONTEXT.md "Wrapped"): a Finished Bingo's story from the viewer's point of view, built from the published
+// (stored) data by headless/wrappedModel.ts. Every label is ready to print; a part with nothing to say is null (or an
+// empty list), and a section with nothing to say is left out of `sections` altogether.
+// ---------------------------------------------------------------------------
+
+export interface WrappedPersonModel {
+  id: string;
+  name: string;
+  avatarUrl: string;
+  /** The viewer. */
+  isYou: boolean;
+}
+
+/**
+ * A drop's Luck the way Players think about it: the Item's drop rate and the kills it took ("A 1/512 drop in 37 kills"),
+ * then how rare that is ("Only 1 in 14 get it that fast").
+ */
+export interface WrappedLuckModel {
+  /** "1 in 14": how few Players would have had it within those kills. */
+  chanceLabel: string;
+  /** "1/512", the per-kill drop rate (over every boss that drops it); null without the kills. */
+  rateLabel: string | null;
+  /** "37 kills"; null without them. */
+  killsLabel: string | null;
+  /** One short line for a drop card: "1/512 in 37 kills" (or "1 in 14 luck" without the kills). */
+  shortLabel: string;
+  /** The full sentence: "A 1/512 drop in 37 kills. Only 1 in 14 get it that fast." */
+  sentence: string;
+}
+
+export interface WrappedDropModel {
+  /** Unique within the story. */
+  key: string;
+  itemName: string;
+  /** "×3" for more than one, else null. */
+  quantityLabel: string | null;
+  /** "12.3m"; null for an item with no GP value. */
+  gpLabel: string | null;
+  /** Its Luck (CONTEXT.md), worded for Players; null when it can't be judged or wasn't lucky at all. */
+  luck: WrappedLuckModel | null;
+  player: WrappedPersonModel | null;
+  team: { name: string; color: string | null } | null;
+  /** "Sat 14 Mar, 21:04", in the viewer's time zone. */
+  whenLabel: string;
+  /** The screenshot's thumbnail and full image; null when the data leaves it out. */
+  thumbnailUrl: string | null;
+  screenshotUrl: string | null;
+}
+
+/** A Team's (or every Team's) points over time, for a chart: ms timestamps, running totals, starting from 0. */
+export interface WrappedSeriesModel {
+  teamId: string;
+  name: string;
+  color: string | null;
+  isMine: boolean;
+  points: { t: number; points: number }[];
+}
+
+export interface WrappedChartModel {
+  start: number;
+  end: number;
+  maxPoints: number;
+  series: WrappedSeriesModel[];
+}
+
+export interface WrappedIntroModel {
+  kind: "intro";
+  /** This section's Category images, side by side (each its two boil frames); empty without any. */
+  art: WrappedArtFrames[];
+  bingoName: string;
+  /** The viewer's name when they played; null for anyone else (they get the Bingo-wide story). */
+  playerName: string | null;
+  /** "3 Jan – 17 Jan 2026"; null without both dates. */
+  datesLabel: string | null;
+}
+
+export interface WrappedYouModel {
+  kind: "you";
+  art: WrappedArtFrames[];
+  /**
+   * Comparisons are only ever flattering: each is null unless the Player beat it, so a Player below the average (or low
+   * on their Team) sees their own numbers and nothing to measure them against.
+   */
+  submissions: { countLabel: string; comparison: string | null } | null;
+  points: { shareLabel: string; comparison: string | null; teamPercentLabel: string | null; rankLabel: string | null; isTop: boolean } | null;
+  gp: { gainedLabel: string; buyInLabel: string | null; coveredBuyIn: boolean | null } | null;
+  /** Their most valuable drops (GP value only), highest first. */
+  topDrops: WrappedDropModel[];
+  luckiestDrop: WrappedDropModel | null;
+  /** "191 kills" of a boss without a Board drop; "1/127" the Board drops' combined rate there; "1 in 30" how rare that dry is. */
+  driestStreak: { boss: string; killsLabel: string; rateLabel: string; chanceLabel: string } | null;
+  /** Their first and last drop (last is null when they had only one). */
+  firstLast: { first: WrappedDropModel; last: WrappedDropModel | null } | null;
+  mostActiveDay: { dateLabel: string; submissionsLabel: string; drops: WrappedDropModel[] } | null;
+  titles: { id: string; name: string; text: string }[];
+  achievements: { key: string; name: string; itemName: string; earnedLabel: string }[];
+  wom: { ehbLabel: string; bosses: { name: string; killsLabel: string }[] } | null;
+  draft: { pickLabel: string; positionLabel: string } | null;
+}
+
+/** Your Duo: only for a Player in a Duo. Worded as friendly teasing, never as a verdict on either half. */
+export interface WrappedDuoModel {
+  kind: "duo";
+  art: WrappedArtFrames[];
+  partner: WrappedPersonModel;
+  combinedShareLabel: string;
+  /** "1st of 4 Duos"; null when theirs was the only Duo. */
+  rankLabel: string | null;
+  isTop: boolean;
+  /** How the Points share split between them (percentages add up to 100); null when neither scored. */
+  split: { myPercent: number; partnerPercent: number; myShareLabel: string; partnerShareLabel: string } | null;
+  /** "Who carried whom", as banter; null when neither scored. */
+  carried: string | null;
+  /** "Pick 7"; null when the Duo wasn't drafted. */
+  pickLabel: string | null;
+  /** Their best moments together: a Submission each on the same Tile, or on the same day. */
+  moments: { key: string; label: string; mine: WrappedDropModel; theirs: WrappedDropModel }[];
+}
+
+/** Your Draft: only for Captains (and co-Captains). No pick is ever labelled a bust. */
+export interface WrappedCaptainModel {
+  kind: "captain";
+  art: WrappedArtFrames[];
+  /** Every pick, in pick order: a Duo is one pick with both halves. */
+  picks: {
+    key: string;
+    pickLabel: string;
+    people: WrappedPersonModel[];
+    /** "Drafted 3rd". */
+    positionLabel: string;
+    /** "Finished 5th"; null when it can't be ranked. */
+    rankLabel: string | null;
+    /** Finished above where they were drafted: the only comparison ever highlighted. */
+    beat: boolean;
+  }[];
+  /** Their best Steal (CONTEXT.md); null when no pick beat its draft position. */
+  steal: { people: WrappedPersonModel[]; pickLabel: string; positionLabel: string; rankLabel: string; placesBeatenLabel: string } | null;
+  /** An overall draft grade, from how the picks did against their draft positions; null with nothing to grade. */
+  grade: { letter: string; line: string } | null;
+}
+
+export interface WrappedModeratorModel {
+  kind: "moderator";
+  art: WrappedArtFrames[];
+  /** The Moderator's name as the Bingo shows it (RSN, else Discord name), captioned on their art. */
+  name: string;
+  /** "32 Submissions" */
+  reviewedLabel: string;
+  medianLabel: string;
+  rejectionLabel: string;
+  /** A line of banter about their rejection rate. */
+  banter: string;
+}
+
+export interface WrappedTeamModel {
+  kind: "team";
+  art: WrappedArtFrames[];
+  name: string;
+  color: string | null;
+  placement: number;
+  /** "1st of 4" (ties share a placement). */
+  placementLabel: string;
+  teamCount: number;
+  pointsLabel: string;
+  tilesCompleted: number;
+  linesCompleted: number;
+  mvp: { person: WrappedPersonModel; shareLabel: string } | null;
+  topGpEarner: { person: WrappedPersonModel; gpLabel: string } | null;
+  biggestDrop: WrappedDropModel | null;
+  /** Their points over time; null with fewer than two points to draw. */
+  chart: WrappedChartModel | null;
+  /** Superlative (CONTEXT.md) winners, a category with no votes left out. */
+  superlatives: { category: string; winners: WrappedPersonModel[] }[];
+}
+
+/** One Team's Superlative winners, for The Bingo section's "every Team's winners" (CONTEXT.md). */
+export interface WrappedTeamSuperlativesModel {
+  teamId: string;
+  teamName: string;
+  color: string | null;
+  superlatives: { category: string; winners: WrappedPersonModel[] }[];
+}
+
+export interface WrappedBingoModel {
+  kind: "bingo";
+  art: WrappedArtFrames[];
+  totalSubmissions: number;
+  totalSubmissionsLabel: string;
+  totalGpLabel: string;
+  rarestDrop: WrappedDropModel | null;
+  mostReacted: { drop: WrappedDropModel; reactionsLabel: string } | null;
+  leaderboard: { teamId: string; name: string; color: string | null; placement: number; placementLabel: string; pointsLabel: string; isMine: boolean }[];
+  /** Every Team's points over time; null with nothing to draw. */
+  race: WrappedChartModel | null;
+  /** The draft's biggest Steal (CONTEXT.md); null without one. */
+  steal: { person: WrappedPersonModel; teamName: string | null; pickLabel: string; rankLabel: string; placesBeatenLabel: string } | null;
+  /** Null when nothing was reviewed. */
+  moderation: {
+    /** "89 reviews" */
+    reviewedLabel: string;
+    medianLabel: string | null;
+    fastestLabel: string | null;
+    withinHourLabel: string | null;
+    busiestHourLabel: string | null;
+    topReviewer: { person: WrappedPersonModel; reviewedLabel: string } | null;
+    /** Highest rejection rate first: "who had to deal with the most nonsense". */
+    reviewers: { person: WrappedPersonModel; rejectionLabel: string; reviewedLabel: string }[];
+    banter: string | null;
+  } | null;
+  /** Every Team's Superlative winners; a Team with none is left out. */
+  teamSuperlatives: WrappedTeamSuperlativesModel[];
+}
+
+export interface WrappedOutroModel {
+  kind: "outro";
+  art: WrappedArtFrames[];
+  bingoName: string;
+  /** Credits (CONTEXT.md): who put the Bingo together, in the order the Admins set; empty leaves the credits out. */
+  credits: { name: string; role: string | null }[];
+}
+
+export type WrappedSectionModel = WrappedIntroModel | WrappedYouModel | WrappedDuoModel | WrappedCaptainModel | WrappedModeratorModel | WrappedTeamModel | WrappedBingoModel | WrappedOutroModel;
+export type WrappedSectionKind = WrappedSectionModel["kind"];
+
+export interface WrappedModel {
+  slug: string;
+  bingoName: string;
+  /** A Moderator's preview before it's published: computed just now, and nobody else can see it yet. */
+  preview: boolean;
+  /** "Published 17 Jan"; null for a preview. */
+  publishedLabel: string | null;
+  /** The side images: shown large beside the story's sections in turn, on wide screens only. */
+  sideArt: WrappedArtFrames[];
+  /** The story in order, with every section that has nothing to say left out. `label` names it in the progress indicator. */
+  sections: { id: WrappedSectionKind; label: string; section: WrappedSectionModel }[];
+  actions: { goToBoard(): void; goToRewind(): void };
 }

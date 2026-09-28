@@ -117,6 +117,11 @@ export const bingos = sqliteTable('bingos', {
   // "Show screenshots once Finished" (CONTEXT.md "Player"): once the bingo is Finished every clan member can read
   // every team's submissions; off, other teams' screenshot images are left out for anyone but Moderators. Admins only.
   showScreenshotsWhenFinished: integer('show_screenshots_when_finished', { mode: 'boolean' }).notNull().default(true),
+  // "Publish Wrapped when the Bingo finishes" (CONTEXT.md "Wrapped"): moving to Finished publishes it on its own.
+  publishWrappedOnFinish: integer('publish_wrapped_on_finish', { mode: 'boolean' }).notNull().default(false),
+  // Credits (CONTEXT.md): a JSON array of WrappedCredit, parsed by bingoService.parseWrappedCredits and exposed as
+  // `wrappedCredits`. Wrapped's Outro lists them.
+  wrappedCreditsJson: text('wrapped_credits_json').notNull().default('[]'),
 });
 
 // Mod is per-bingo, not a global flag — fixes v1's single global isModerator.
@@ -294,6 +299,32 @@ export const teamMembers = sqliteTable('team_members', {
   joinedAt: integer('joined_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 }, (t) => [
   uniqueIndex('team_members_team_user_unq').on(t.teamId, t.userId),
+]);
+
+// Superlative (CONTEXT.md): a per-Bingo award category, admin-managed, e.g. "Team MVP". Not locked to any stage — can
+// be added, renamed, reordered or deleted any time, including during Live with votes cast (a rename keeps its votes,
+// a delete drops them). No default list.
+export const superlativeCategories = sqliteTable('superlative_categories', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  name: text('name').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+});
+
+// One Player's pick for one category: teamId is redundant with a join through teamMembers, kept here so a vote can
+// still be tallied and dropped by Team even after the voter (or the nominee) leaves it. Votes are secret — nobody,
+// Moderators and Admins included, ever reads who voted for whom; the server keeps the voter only to enforce one vote
+// per category and let it change. Unique per (categoryId, voterUserId): one pick each, updated in place to change it.
+export const superlativeVotes = sqliteTable('superlative_votes', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  categoryId: text('category_id').notNull().references(() => superlativeCategories.id),
+  teamId: text('team_id').notNull().references(() => teams.id),
+  voterUserId: text('voter_user_id').notNull().references(() => users.id),
+  nomineeUserId: text('nominee_user_id').notNull().references(() => users.id),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => [
+  uniqueIndex('superlative_votes_category_voter_unq').on(t.categoryId, t.voterUserId),
 ]);
 
 // One row per drafted player. pickedByUserId is normally the captain, but
@@ -713,6 +744,26 @@ export const bingoTitleSettings = sqliteTable('bingo_title_settings', {
   frozenAt: integer('frozen_at', { mode: 'timestamp' }).notNull(),
 });
 
+// Wrapped (CONTEXT.md): a Finished Bingo's published Wrapped. A row here means it's published; publishing again
+// replaces it. dataJson is the Bingo-wide part (shared BingoWrapped), computed once when published and only read
+// after that, so a flood of viewers costs a lookup each (wrappedService.ts).
+export const bingoWrapped = sqliteTable('bingo_wrapped', {
+  bingoId: text('bingo_id').primaryKey().references(() => bingos.id),
+  publishedAt: integer('published_at', { mode: 'timestamp' }).notNull(),
+  publishedByUserId: text('published_by_user_id').references(() => users.id),
+  dataJson: text('data_json').notNull(),
+});
+
+// Each Player's Wrapped (shared PlayerWrapped), stored with the Bingo's when it's published.
+export const playerWrapped = sqliteTable('player_wrapped', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  dataJson: text('data_json').notNull(),
+}, (t) => [
+  uniqueIndex('player_wrapped_bingo_user_unq').on(t.bingoId, t.userId),
+]);
+
 // Manual point adjustments applied by moderators. Also the only way to hand
 // out points outside the node graph (e.g. correcting a mistake) since nodes
 // no longer accept a per-submission points override.
@@ -791,4 +842,26 @@ export const achievementEarned = sqliteTable('achievement_earned', {
   popupShownAt: integer('popup_shown_at', { mode: 'timestamp' }),
 }, (t) => [
   uniqueIndex('achievement_earned_bingo_user_key_unq').on(t.bingoId, t.userId, t.achievementKey),
+]);
+
+// Wrapped art (#262): decorative cut-outs drawn as stickers on torn paper, in groups (shared WRAPPED_ART_GROUPS): a
+// section's Category images, or the "side" pool. `section` is the group; sortOrder orders a group's images.
+// originalUrl is the upload as it was (so it can be re-cut later with other keying settings, without a new
+// screenshot); frame1Url/frame2Url are the two rendered "boil" frames. keyTolerance/keySoftness are how a
+// solid-background screenshot was keyed, null for an upload that was already transparent. A new Bingo starts with
+// copies of the previous Bingo's rows, pointing at the same files, so files are never deleted along with a row.
+export const wrappedArt = sqliteTable('wrapped_art', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  section: text('section').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  originalUrl: text('original_url').notNull(),
+  frame1Url: text('frame1_url').notNull(),
+  frame2Url: text('frame2_url').notNull(),
+  keyColor: text('key_color'),
+  keyTolerance: integer('key_tolerance'),
+  keySoftness: integer('key_softness'),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (t) => [
+  index('wrapped_art_bingo_section_idx').on(t.bingoId, t.section),
 ]);

@@ -33,6 +33,7 @@ describe("site-admin-only mod routes", () => {
     ["post", "/draft/shuffle"],
     ["put", "/draft/order"],
     ["post", "/draft/start"],
+    ["get", "/superlatives/tally"],
   ])("%s %s needs a site admin", async (method, path) => {
     const { default: modRouter } = await import("./mod");
     const { requireAdmin } = await import("../middleware/requireAdmin");
@@ -42,6 +43,7 @@ describe("site-admin-only mod routes", () => {
   it.each([
     ["the review route", "/submissions/:id"],
     ["the route that changes who a submission is credited to", "/submissions/:id/attribution"],
+    ["publishing Wrapped", "/wrapped/publish"],
   ])("leaves %s to any mod", async (_name, path) => {
     const { default: modRouter } = await import("./mod");
     const { requireAdmin } = await import("../middleware/requireAdmin");

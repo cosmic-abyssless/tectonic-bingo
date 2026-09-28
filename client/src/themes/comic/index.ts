@@ -33,6 +33,7 @@ import { ComicMenu, ComicMenuItem } from "./ui/ComicMenu";
 import { ComicNotice, ComicPanel } from "./ui/ComicPanel";
 import { ComicReactionBar } from "./ui/ComicReactionBar";
 import { ComicTitleChip, ComicTitleGroupBox } from "./ui/ComicTitles";
+import { ComicSuperlativeGroupBox } from "./ui/ComicSuperlatives";
 import { ComicBetaTag } from "./ui/ComicBetaTag";
 import { Halftone } from "./fx/Halftone";
 import { SignupStage } from "./signup/SignupStage";
@@ -43,6 +44,7 @@ import { AnalysisPanel } from "./submission/AnalysisPanel";
 import { TilePicker, RequirementPicker, SubmitterPicker } from "./submission/Pickers";
 import { TaskPicker } from "./submission/TaskPicker";
 import { StagedClaimsList } from "./submission/StagedClaimsList";
+import { RewindPopup } from "./rewind/RewindPopup";
 // The theme's shared classes (comic-press, comic-rays, comic-halftone, the
 // dialog keyframes…). Was imported on feat/mico-work but dropped when that
 // work landed on main, leaving every one of them unstyled.
@@ -164,6 +166,7 @@ const comicTheme: ThemeDefinition = {
     Panel: ComicPanel,
     TitleGroupBox: ComicTitleGroupBox,
     TitleChip: ComicTitleChip,
+    SuperlativeGroupBox: ComicSuperlativeGroupBox,
     BetaTag: ComicBetaTag,
     PageBackdrop: Halftone,
     DialogFrame: ComicDialog,
@@ -176,6 +179,7 @@ const comicTheme: ThemeDefinition = {
     TaskPicker,
     RequirementPicker,
     StagedClaimsList,
+    RewindPopup,
   },
 };
 

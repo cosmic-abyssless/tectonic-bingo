@@ -21,6 +21,7 @@ export function BoardPageLayout() {
   const PageHeader = useSlot("PageHeader");
   const SignupStage = useSlot("SignupStage");
   const ScoutBanner = useSlot("ScoutBanner");
+  const WrappedBanner = useSlot("WrappedBanner");
   const PlanningStage = useSlot("PlanningStage");
   const DraftStage = useSlot("DraftStage");
   const NoTeamStage = useSlot("NoTeamStage");
@@ -40,6 +41,7 @@ export function BoardPageLayout() {
 
       <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
         {page.canScout && <ScoutBanner onOpen={page.actions.goToDraft} />}
+        {page.wrapped.canOpen && <WrappedBanner preview={page.wrapped.preview} onOpen={page.actions.goToWrapped} />}
         {page.stageView === "signup" ? (
           <SignupStage slug={page.slug} />
         ) : page.stageView === "notPart" ? (
@@ -111,6 +113,7 @@ export function BoardPageLayout() {
       <TeamInfoDialog
         slug={page.slug}
         team={page.teamInfo.open ? page.viewing.team : null}
+        stage={page.bingo.stage}
         onClose={page.teamInfo.hide}
       />
 

@@ -7,7 +7,7 @@ import { DIFFICULTY, buildBoard, deadlockedParts, difficultyOf, planSubmissions,
 import { OptionsError, defaultSlug, normalizeOptions } from "./options";
 import { chooseMods, makePlayers, pairUp, playingProbability } from "./people";
 import { Rng } from "./rng";
-import { runInOrder } from "./setup";
+import { chooseCaptains, runInOrder } from "./setup";
 import { DAY, HOUR, TARGET_STAGES, buildTimeline, runLimit } from "./timeline";
 
 describe("Rng", () => {
@@ -111,6 +111,30 @@ describe("people", () => {
     const players = makePlayers(new Rng(9), 28, "testdata-x");
     expect(pairUp(players, new Rng(1), 0.6, 12)).toHaveLength(12);
     expect(pairUp(makePlayers(new Rng(9), 7, "testdata-x"), new Rng(1), 0.6, 12)).toHaveLength(3);
+  });
+
+  it("leads a duo bingo's teams with pairs only, both halves signed up", () => {
+    const players = makePlayers(new Rng(9), 88, "testdata-x");
+    pairUp(players, new Rng(1), 0.6);
+    for (const p of players) p.signupAt = new Date(0);
+    // One pair where only one half signed up: never a captain there.
+    const half = players.find((p) => p.partnerIndex !== null)!;
+    players[half.partnerIndex!]!.signupAt = null;
+    const bySkill = (p: (typeof players)[number]) => p.skill;
+
+    const duo = chooseCaptains(players, 6, true, bySkill);
+    expect(duo).toHaveLength(6);
+    for (const { captain, coCaptain } of duo) {
+      expect(coCaptain?.index).toBe(captain.partnerIndex);
+      expect(coCaptain!.signupAt).not.toBeNull();
+    }
+    expect(duo.some((c) => c.captain === half || c.coCaptain === half)).toBe(false);
+
+    // A solo bingo takes the best signups, paired or not.
+    const solo = chooseCaptains(players, 6, false, bySkill);
+    expect(solo.some((c) => c.coCaptain === null)).toBe(true);
+    // Not enough pairs: fewer teams, never an unpaired captain.
+    expect(chooseCaptains(players, 60, true, bySkill).every((c) => c.coCaptain !== null)).toBe(true);
   });
 
   it("is more active in the evening than overnight, and adds up to their hours a day", () => {

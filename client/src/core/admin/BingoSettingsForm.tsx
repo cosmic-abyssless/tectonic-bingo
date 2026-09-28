@@ -14,6 +14,7 @@ import { Switch } from "../ui/Switch";
 import { ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { THEME_KEYS } from "../../themes/keys";
 import { ExclusiveItemsSection } from "./ExclusiveItemsSection";
+import { WrappedCreditsSection } from "./WrappedCreditsSection";
 
 function toLocalInput(iso: string | null): string {
   if (!iso) return "";
@@ -58,9 +59,11 @@ export function BingoSettingsForm({
     bonusPotAmount: bingo.bonusPotAmount.toString(),
     rulesMarkdown: bingo.rulesMarkdown ?? "",
     showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished,
+    publishWrappedOnFinish: bingo.publishWrappedOnFinish,
     sealedTiles: bingo.sealedTiles,
     hideRules: bingo.hideRules,
     exclusivityRules: bingo.exclusivityRules as ExclusivityRule[],
+    wrappedCredits: bingo.wrappedCredits ?? [],
     signupOpensAt: toLocalInput(bingo.signupOpensAt),
     draftScheduledAt: toLocalInput(bingo.draftScheduledAt),
     revealScheduledAt: toLocalInput(bingo.revealScheduledAt),
@@ -116,9 +119,11 @@ export function BingoSettingsForm({
         bonusPotAmount: Number(form.bonusPotAmount) || 0,
         rulesMarkdown: form.rulesMarkdown || null,
         showScreenshotsWhenFinished: form.showScreenshotsWhenFinished,
+        publishWrappedOnFinish: form.publishWrappedOnFinish,
         sealedTiles: form.sealedTiles,
         hideRules: form.hideRules,
         exclusivityRules: form.exclusivityRules,
+        wrappedCredits: form.wrappedCredits,
         signupOpensAt: fromLocalInput(form.signupOpensAt) as never,
         draftScheduledAt: fromLocalInput(form.draftScheduledAt) as never,
         revealScheduledAt: fromLocalInput(form.revealScheduledAt) as never,
@@ -322,6 +327,22 @@ export function BingoSettingsForm({
           Show screenshots once Finished
         </label>
         <p className="text-sm text-on-surface-muted">Off, other teams' screenshots are hidden from everyone but the mods. Players still see their own team's.</p>
+        <label className="flex items-center gap-2 text-sm text-on-surface">
+          <input
+            type="checkbox"
+            checked={form.publishWrappedOnFinish}
+            onChange={(e) => setForm({ ...form, publishWrappedOnFinish: e.target.checked })}
+            className="size-4 cursor-pointer accent-accent"
+          />
+          Publish Wrapped when the bingo finishes
+        </label>
+        <p className="text-sm text-on-surface-muted">
+          On, Wrapped publishes itself once the bingo is finished and no submission is pending (as the last one is reviewed). Off, it stays hidden until a mod publishes it from the mod panel.
+        </p>
+      </Section>
+
+      <Section title="Wrapped credits">
+        <WrappedCreditsSection credits={form.wrappedCredits} onChange={(wrappedCredits) => setForm({ ...form, wrappedCredits })} />
       </Section>
 
       <Section title="Exclusive items">

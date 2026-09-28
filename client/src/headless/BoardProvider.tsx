@@ -105,6 +105,11 @@ export function BoardProvider({
   return <BoardContext.Provider value={board}>{children}</BoardContext.Provider>;
 }
 
+/** Provides an already-built Board, for a view that reshapes the one BoardProvider built (Rewind's All Teams view). */
+export function BoardModelProvider({ value, children }: { value: BoardModel; children: ReactNode }) {
+  return <BoardContext.Provider value={value}>{children}</BoardContext.Provider>;
+}
+
 export function useBoardModel(): BoardModel {
   const ctx = useContext(BoardContext);
   if (!ctx) throw new Error("useBoardModel must be used within BoardProvider");

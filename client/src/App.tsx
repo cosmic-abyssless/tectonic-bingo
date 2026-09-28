@@ -12,6 +12,7 @@ import { ModPage } from "./pages/ModPage";
 import { DraftPage } from "./pages/DraftPage";
 import { StatsPage } from "./pages/StatsPage";
 import { RewindPage } from "./pages/RewindPage";
+import { WrappedPage } from "./pages/WrappedPage";
 import { SiteAdminPage } from "./pages/SiteAdminPage";
 import { ErrorBoundary } from "./core/ui/ErrorBoundary";
 import { PrivacyPage, TermsPage } from "./pages/legal/LegalPage";
@@ -84,6 +85,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <RewindPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/b/:slug/wrapped"
+              element={
+                <ProtectedRoute>
+                  <WrappedPage />
                 </ProtectedRoute>
               }
             />

@@ -9,6 +9,7 @@ export const adminQueryKeys = {
   mods: (slug: string) => ["adminMods", slug] as const,
   lines: (slug: string) => ["adminLines", slug] as const,
   questions: (slug: string) => ["adminQuestions", slug] as const,
+  superlatives: (slug: string) => ["adminSuperlatives", slug] as const,
   userSearch: (scope: string, q: string) => ["adminUserSearch", scope, q] as const,
   captainCandidates: (slug: string) => ["adminCaptainCandidates", slug] as const,
   itemGroups: ["adminItemGroups"] as const,
@@ -18,6 +19,7 @@ export const adminQueryKeys = {
   bugReports: ["adminBugReports"] as const,
   siteAuditLog: (bingoScope: string | null | "all", filters: AuditLogFilters) => ["siteAuditLog", bingoScope, filters] as const,
   achievementSettings: (slug: string) => ["adminAchievements", slug] as const,
+  wrappedArt: (slug: string) => ["adminWrappedArt", slug] as const,
 };
 
 // The site-wide audit log — every bingo, or just site-level entries
@@ -67,6 +69,10 @@ export function useLines(slug: string) {
 
 export function useQuestions(slug: string) {
   return useQuery({ queryKey: adminQueryKeys.questions(slug), queryFn: () => adminApi.getQuestions(slug) });
+}
+
+export function useSuperlativeCategories(slug: string) {
+  return useQuery({ queryKey: adminQueryKeys.superlatives(slug), queryFn: () => adminApi.getSuperlativeCategories(slug) });
 }
 
 export function useCaptainCandidates(slug: string) {
@@ -129,4 +135,9 @@ export function useApplyCutReview(slug: string) {
       ]);
     },
   });
+}
+
+/** A Bingo's Wrapped art images, every group (site admins only). */
+export function useWrappedArt(slug: string) {
+  return useQuery({ queryKey: adminQueryKeys.wrappedArt(slug), queryFn: () => adminApi.getWrappedArt(slug) });
 }

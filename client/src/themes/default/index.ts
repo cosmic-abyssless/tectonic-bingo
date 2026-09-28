@@ -5,6 +5,7 @@ import { PlainMenu, PlainMenuItem } from "../../core/ui/Menu";
 import { PlainNotice } from "../../core/ui/Card";
 import { PlainPanel } from "../../core/ui/Panel";
 import { PlainTitleChip, PlainTitleGroupBox } from "../../core/stats/TitleChrome";
+import { PlainSuperlativeGroupBox } from "../../core/superlatives/SuperlativeChrome";
 import { PlainBetaTag } from "../../core/ui/BetaTag";
 import { PlainTeamRoster } from "../../core/draft/TeamRoster";
 import { defaultTokens } from "../tokens";
@@ -56,6 +57,19 @@ import { RewindTimeline } from "./rewind/RewindTimeline";
 import { RewindControls } from "./rewind/RewindControls";
 import { RewindScoreboard } from "./rewind/RewindScoreboard";
 import { RewindPopup } from "./rewind/RewindPopup";
+import { RewindClosing } from "./rewind/RewindClosing";
+import { RewindTileMarkers } from "./rewind/RewindTileMarkers";
+import { RewindTileTeams } from "./rewind/RewindTileTeams";
+import { WrappedPageLayout } from "./wrapped/WrappedPageLayout";
+import { WrappedBanner } from "./wrapped/WrappedBanner";
+import { WrappedIntro } from "./wrapped/WrappedIntro";
+import { WrappedYou } from "./wrapped/WrappedYou";
+import { WrappedDuo } from "./wrapped/WrappedDuo";
+import { WrappedCaptain } from "./wrapped/WrappedCaptain";
+import { WrappedModerator } from "./wrapped/WrappedModerator";
+import { WrappedTeam } from "./wrapped/WrappedTeam";
+import { WrappedBingo } from "./wrapped/WrappedBingo";
+import { WrappedOutro } from "./wrapped/WrappedOutro";
 
 // The neutral/fallback theme: eager (it's what every unknown or loading
 // theme key falls back to), and the only theme that must define every slot.
@@ -71,6 +85,19 @@ export const defaultTheme: ThemeDefinition = {
     RewindControls,
     RewindScoreboard,
     RewindPopup,
+    RewindClosing,
+    RewindTileMarkers,
+    RewindTileTeams,
+    WrappedPage: WrappedPageLayout,
+    WrappedBanner,
+    WrappedIntro,
+    WrappedYou,
+    WrappedDuo,
+    WrappedCaptain,
+    WrappedModerator,
+    WrappedTeam,
+    WrappedBingo,
+    WrappedOutro,
     DraftPickBurst,
     AchievementUnlockCard,
     AchievementRow,
@@ -104,6 +131,7 @@ export const defaultTheme: ThemeDefinition = {
     Panel: PlainPanel,
     TitleGroupBox: PlainTitleGroupBox,
     TitleChip: PlainTitleChip,
+    SuperlativeGroupBox: PlainSuperlativeGroupBox,
     BetaTag: PlainBetaTag,
     PageBackdrop: () => null,
     DraftTeamRoster: PlainTeamRoster,

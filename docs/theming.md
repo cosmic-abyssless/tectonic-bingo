@@ -146,7 +146,22 @@ of truth and will drift less than a doc copy. Broadly:
   `RewindPopup`. `RewindPopup` draws only the card; the page places it and plays
   it in and out. While playing, the popup's `holdMs` says how long it stays, for
   a countdown (null when paused or stepping). `BoardGrid`'s `highlightedTileId` marks the Tile the current
-  Submission landed on.
+  Submission landed on. The Team selector (`teamSelector.allTeams`) adds an **All Teams** view (`?team=all`):
+  `useBoardModel()` is then the shared layout with no one's progress, `rewind.tileTeams` holds every Team's
+  progress per Tile, and the page draws it through `BoardGrid`'s `tileOverlay` prop (which every `BoardGrid`
+  must render over the cell) with the props-only `RewindTileMarkers` (the marks for the Teams that completed a
+  Tile) and `RewindTileTeams` (the dialog a Tile opens, every Team's progress on it). Ticks carry `teamColor`
+  in that view.
+- **Wrapped** (`/b/:slug/wrapped`, a Finished Bingo's story, once published or as a
+  Moderator's preview): the `Wrapped*` slots are one group. `WrappedPage` is whole-surface
+  (calls `useWrappedModel()`): the frame, the scroll progress indicator, and each section in
+  order through its props-only slot: `WrappedIntro`, `WrappedYou`, `WrappedModerator`,
+  `WrappedTeam`, `WrappedBingo`, `WrappedOutro`. The model leaves out a section (or a part of
+  one) that has nothing to say for this viewer, so a slot only draws what it's given. Build
+  sections from `core/wrapped`'s `WrappedScene` (one screen) and `Reveal` (a line that fades up
+  with the scroll, and just fades in under reduced motion); `WrappedParts` and `PointsChart`
+  are there to reuse. `WrappedBanner` is the Board's way in: every `BoardPage` must draw it when
+  `page.wrapped.canOpen`.
 - **Submission flow**: `SubmissionModal`, `ScreenshotDropzone`,
   `AnalysisPanel`, `TilePicker`, `TaskPicker`, `RequirementPicker`,
   `StagedClaimsList`.

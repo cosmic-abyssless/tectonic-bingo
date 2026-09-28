@@ -8,7 +8,7 @@ import type { Api } from "./client";
 import type { GenerateOptions } from "./options";
 import { chooseMods, makePlayers, pairUp, type Player } from "./people";
 import { Rng, clamp } from "./rng";
-import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, handEvents, importBingo, nameTeamEvents, reviewCuts, runDraft, runInOrder, runSignups, setStage, type Ctx } from "./setup";
+import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, handEvents, importBingo, nameTeamEvents, runDraft, runInOrder, runSignups, setStage, type Ctx } from "./setup";
 import { Simulation, describe, newPartState, type SimTeam } from "./simulate";
 import { HOUR, buildTimeline, fmt, runLimit, type Timeline } from "./timeline";
 
@@ -115,7 +115,7 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   if (options.stage === "signup") return result;
 
   await setStage(ctx, "captains", tl.captainsAt);
-  const seeds = await createTeams(ctx, players, options.teams, { duo });
+  const seeds = await createTeams(ctx, players, options.teams, duo);
   const modAt = new Date(tl.captainsAt.getTime() + 4 * HOUR);
   for (const mod of [...mods, ...players.filter((p) => p.isMe)]) {
     if (mod.userId && mod.signupAt) await api.as(adminDiscordId).post(`/api/bingos/${slug}/admin/mods`, { userId: mod.userId }, { at: modAt });
@@ -123,7 +123,9 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   log(`${mods.length} mods${options.me ? " plus you" : ""}`);
   if (options.stage === "captains") return result;
 
-  await reviewCuts(ctx);
+  // Moving into the Draft needs a Cut review first while any cut can be avoided (CONTEXT.md "Cut review"). The
+  // generator's Teams are already made, so it applies an empty one: the Admin keeping the cuts as they are.
+  await api.as(adminDiscordId).post(`/api/bingos/${slug}/admin/cut-review/apply`, { changes: [] }, { at: new Date(tl.draftAt.getTime() - 5 * 60_000) });
   await setStage(ctx, "draft", tl.draftAt);
   await runDraft(ctx, players, seeds, { stopAfterFraction: options.stage === "draft" ? 0.5 : undefined });
   if (options.stage === "draft") return result;

@@ -4,6 +4,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import {
+  rewindSignals,
   significanceScore,
   significanceTier,
   type RewindClaim,
@@ -12,7 +13,6 @@ import {
   type RewindResponse,
   type RewindSubmission,
   type RewindTeam,
-  type SignificanceSignals,
 } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingoLines, nodes, teamPointAdjustments, teams, tiles } from "../db/schema";
@@ -215,20 +215,13 @@ export function getRewind(db: Db, bingo: typeof schema.bingos.$inferSelect): Rew
         quantity: c.quantity,
         gpValue: c.gpValue,
         luckOneIn: lucks.get(c.id)?.oneIn ?? null,
+        luckKills: lucks.get(c.id)?.kills ?? null,
       }));
       const approved = d.submission.status === "approved";
       const completed = approved ? (completedBy.get(d.submission.id) ?? emptyCompletion()) : emptyCompletion();
       const gpValues = claims.map((c) => c.gpValue).filter((v): v is number => v !== null);
-      const lucksOf = claims.map((c) => c.luckOneIn).filter((v): v is number => v !== null);
       const reactions = d.reactions ?? [];
-      const reactionCount = reactions.reduce((sum, g) => sum + g.users.length, 0);
-      const didComplete = completed.tiles.length + completed.lines.length + completed.firstTiles.length + completed.firstParts.length > 0;
-      const signals: SignificanceSignals = {
-        luckOneIn: lucksOf.length ? Math.max(...lucksOf) : undefined,
-        gpValue: gpValues.length ? gpValues.reduce((a, b) => a + b, 0) : undefined,
-        reactions: reactionCount > 0 ? reactionCount : undefined,
-        completed: didComplete ? completed : undefined,
-      };
+      const signals = rewindSignals({ claims, gpValue: gpValues.length ? gpValues.reduce((a, b) => a + b, 0) : null, reactions, completed });
       const score = significanceScore(signals);
       const firstLeaf = d.claims[0]?.nodeId;
       submissions.push({

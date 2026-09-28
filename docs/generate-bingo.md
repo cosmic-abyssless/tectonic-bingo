@@ -100,8 +100,8 @@ target (say `signup`), the later dates are simply scheduled in the future.
    them empty and the roster's stats columns would be blank.
 3. **Captains** (the best players; a duo captain brings their partner as co-captain, and
    in a duo bingo only paired players captain, since every Team is led by a pair) create
-   the teams. Before the draft the admin runs the **Cut review** when any cut is avoidable,
-   applying its proposed pairings and splits but keeping the Team count. Then the
+   the teams. Before the draft the admin applies an empty **Cut review** (keeping the cuts
+   as they are), which the move into the draft needs while any cut is avoidable. Then the
    **real draft** runs: the admin sets the pick order, starts
    the draft, and captains pick in turn a minute or so apart, favouring better players,
    with the admin stepping in for a few picks. (To try the pick-order ceremony yourself,

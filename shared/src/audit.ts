@@ -17,7 +17,7 @@ export type AuditActorRole = "admin" | "mod" | "player" | "system";
 // Matches client/src/core/ui/Card.tsx's Badge TONE keys.
 export type AuditTone = "neutral" | "info" | "ok" | "warn" | "danger";
 
-export type AuditCategory = "bingo" | "settings" | "board" | "signup" | "draft" | "team" | "submission" | "points" | "moderation" | "system" | "http" | "bug_report" | "achievement";
+export type AuditCategory = "bingo" | "settings" | "board" | "signup" | "draft" | "team" | "submission" | "points" | "moderation" | "system" | "http" | "bug_report" | "achievement" | "superlative";
 
 export type AuditEntityType =
   | "bingo"
@@ -31,6 +31,7 @@ export type AuditEntityType =
   | "node"
   | "line"
   | "question"
+  | "superlative_category"
   | "team"
   | "submission"
   | "adjustment"
@@ -83,6 +84,7 @@ export interface AuditDetailsMap {
       bonusPotAmount: number;
       rulesMarkdown: string | null;
       exclusivityRulesJson: string;
+      wrappedCreditsJson: string;
       signupOpensAt: string | null;
       draftScheduledAt: string | null;
       revealScheduledAt: string | null;
@@ -95,6 +97,7 @@ export interface AuditDetailsMap {
       sealedTiles: boolean;
       hideRules: boolean;
       showScreenshotsWhenFinished: boolean;
+      publishWrappedOnFinish: boolean;
     }>;
   };
 
@@ -123,6 +126,12 @@ export interface AuditDetailsMap {
   /** `answersDeleted`: how many players' (non-blank) answers went with it. Absent on entries from before answers could be deleted along with it. */
   "question.deleted": { prompt: string; type: string; required: boolean; answersDeleted?: number };
   "question.reordered": { order: string[] };
+
+  "superlative.category_created": { name: string };
+  "superlative.category_updated": { changes: FieldChanges<{ name: string }> };
+  /** `votesDeleted`: how many votes (across every Team) went with it. */
+  "superlative.category_deleted": { name: string; votesDeleted: number };
+  "superlative.category_reordered": { order: string[] };
 
   "team.created": { name: string; captainUserId: string; captainName: string; coCaptainUserId: string | null; coCaptainName: string | null; color: string | null };
   "team.updated": { changes: FieldChanges<{ name: string; color: string | null }>; codeword?: { changed: true } };
@@ -165,6 +174,16 @@ export interface AuditDetailsMap {
 
   // startsAtBackfilled: only on entries written before a start date stopped being filled in by a stage change.
   "stage.changed": { from: Stage; to: Stage; startsAtBackfilled?: boolean };
+
+  // Wrapped (CONTEXT.md): a Moderator publishing it, or publishing it again, which recomputes every Player's.
+  "wrapped.published": { players: number };
+  "wrapped.republished": { players: number };
+  // Wrapped art (#262): an Admin adding or replacing, re-cutting, removing or reordering a cut-out. section: its group
+  // (a section's Category images, or "side"). keyed: it was a solid-background screenshot, keyed out.
+  "wrapped.art_set": { section: string; keyed: boolean; replaced: boolean };
+  "wrapped.art_recut": { section: string; tolerance: number; softness: number };
+  "wrapped.art_removed": { section: string };
+  "wrapped.art_reordered": { section: string };
 
   "draft.started": { order: { teamId: string; name: string; draftOrder: number }[] };
   "draft.order_shuffled": { order: { teamId: string; name: string; draftOrder: number }[] };
@@ -457,7 +476,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Settings updated",
     label: (i) =>
-      `${actor(i)} updated bingo settings (${Object.keys(i.details.changes.after).map((k) => (k === "exclusivityRulesJson" ? "exclusive items" : k)).join(", ") || "no changes"})`,
+      `${actor(i)} updated bingo settings (${Object.keys(i.details.changes.after).map((k) => (k === "exclusivityRulesJson" ? "exclusive items" : k === "wrappedCreditsJson" ? "credits" : k)).join(", ") || "no changes"})`,
   },
   "moderator.added": {
     category: "moderation",
@@ -500,6 +519,10 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
   "question.updated": { category: "signup", tone: "neutral", visibility: "mods", title: "Signup question updated", label: (i) => `${actor(i)} updated the signup question "${i.entityLabel ?? ""}"` },
   "question.deleted": { category: "signup", tone: "danger", visibility: "mods", title: "Signup question deleted", label: (i) => `${actor(i)} deleted the signup question "${i.details.prompt}"${i.details.answersDeleted ? ` and ${i.details.answersDeleted} answer${i.details.answersDeleted === 1 ? "" : "s"} to it` : ""}` },
   "question.reordered": { category: "signup", tone: "neutral", visibility: "mods", title: "Signup questions reordered", label: (i) => `${actor(i)} reordered the signup questions` },
+  "superlative.category_created": { category: "superlative", tone: "ok", visibility: "mods", title: "Superlative category added", label: (i) => `${actor(i)} added the superlative category "${i.details.name}"` },
+  "superlative.category_updated": { category: "superlative", tone: "neutral", visibility: "mods", title: "Superlative category updated", label: (i) => `${actor(i)} renamed the superlative category "${i.entityLabel ?? ""}" to "${i.details.changes.after.name ?? ""}"` },
+  "superlative.category_deleted": { category: "superlative", tone: "danger", visibility: "mods", title: "Superlative category deleted", label: (i) => `${actor(i)} deleted the superlative category "${i.details.name}"${i.details.votesDeleted ? ` and ${i.details.votesDeleted} vote${i.details.votesDeleted === 1 ? "" : "s"} in it` : ""}` },
+  "superlative.category_reordered": { category: "superlative", tone: "neutral", visibility: "mods", title: "Superlative categories reordered", label: (i) => `${actor(i)} reordered the superlative categories` },
   "team.created": { category: "team", tone: "ok", visibility: "team", title: "Team created", label: (i) => `${actor(i)} created the team "${i.details.name}"` },
   "team.updated": {
     category: "team",
@@ -632,6 +655,48 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "public",
     title: "Stage changed",
     label: (i) => `${actor(i)} advanced the bingo from ${i.details.from} to ${i.details.to}`,
+  },
+  "wrapped.published": {
+    category: "bingo",
+    tone: "ok",
+    visibility: "public",
+    title: "Wrapped published",
+    label: (i) => `${actor(i)} published Wrapped`,
+  },
+  "wrapped.republished": {
+    category: "bingo",
+    tone: "info",
+    visibility: "public",
+    title: "Wrapped re-published",
+    label: (i) => `${actor(i)} published Wrapped again, with the latest numbers`,
+  },
+  "wrapped.art_set": {
+    category: "settings",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Wrapped art set",
+    label: (i) => `${actor(i)} ${i.details.replaced ? "replaced" : "added"} a Wrapped art image in "${i.details.section}"`,
+  },
+  "wrapped.art_recut": {
+    category: "settings",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Wrapped art re-cut",
+    label: (i) => `${actor(i)} re-cut a Wrapped art image in "${i.details.section}"`,
+  },
+  "wrapped.art_removed": {
+    category: "settings",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Wrapped art removed",
+    label: (i) => `${actor(i)} removed a Wrapped art image from "${i.details.section}"`,
+  },
+  "wrapped.art_reordered": {
+    category: "settings",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Wrapped art reordered",
+    label: (i) => `${actor(i)} reordered the Wrapped art in "${i.details.section}"`,
   },
   "draft.started": { category: "draft", tone: "info", visibility: "public", title: "Draft started", label: (i) => `${actor(i)} started the draft` },
   "draft.order_shuffled": { category: "draft", tone: "info", visibility: "public", title: "Pick order shuffled", label: (i) => `${actor(i)} shuffled the pick order` },
