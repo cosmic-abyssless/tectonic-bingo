@@ -7,6 +7,7 @@ import {
   boardCacheKey,
   clearBoardCache,
   readBoardCache,
+  removeBoardCacheForSlug,
   writeBoardCache,
   type StorageLike,
 } from "./boardCache";
@@ -37,6 +38,15 @@ const BOARD = { tiles: [{ id: "t1" }], lines: [] };
 const NOW = 1_000_000_000_000;
 
 describe("boardCache", () => {
+  it("removes one bingo's board and parts for one user, and nothing else", () => {
+    const storage = memoryStorage();
+    for (const [user, key] of [["u1", "gone"], ["u1", "gone:shell"], ["u1", "gone:progress:t1"], ["u1", "gone-too"], ["u1", "kept"], ["u2", "gone"]]) {
+      writeBoardCache(user!, key!, "b", BOARD, NOW, storage);
+    }
+    removeBoardCacheForSlug("u1", "gone", storage);
+    expect([...storage.data.keys()].sort()).toEqual([boardCacheKey("u1", "gone-too"), boardCacheKey("u1", "kept"), boardCacheKey("u2", "gone")].sort());
+  });
+
   it("round-trips a board", () => {
     const s = memoryStorage();
     writeBoardCache("u1", "bingo", "b1", BOARD, NOW, s);
