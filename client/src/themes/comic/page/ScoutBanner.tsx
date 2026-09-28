@@ -5,13 +5,13 @@ import { PrintedShade } from "../ui/tones";
 import { useComic } from "../ui/useComic";
 
 /**
- * The nudge a team lead gets while signups are open (or captains are being picked): scout the players before the
- * draft. Loud on purpose, so it reads as a call to action rather than another panel of the form under it (which is
+ * The nudge to scout the players before the draft: a team lead (or mod) gets it while signups are open, and every
+ * Player once they're closed. Only a lead is told to star and note players; everyone else just looks. Loud on purpose, so it reads as a call to action rather than another panel of the form under it (which is
  * printed on the book-page paper): a process-blue caption, knocked askew, with outlined cover lettering, a halftone
  * shading and a red button. Blue stands out from both the light palette's yellow page and the dark palettes' papyrus
  * sheets.
  */
-export function ScoutBanner({ onOpen }: { onOpen: () => void }) {
+export function ScoutBanner({ onOpen, isLead }: { onOpen: () => void; isLead: boolean }) {
   const { colors } = useComic();
   return (
     <div className="mx-auto mb-8 mt-2 max-w-lg">
@@ -37,7 +37,9 @@ export function ScoutBanner({ onOpen }: { onOpen: () => void }) {
                 Scout the signups!
               </span>
             </div>
-            <p className="mt-1.5 text-sm font-semibold">Star and note players now, so your picks are ready when the draft starts.</p>
+            <p className="mt-1.5 text-sm font-semibold">
+              {isLead ? "Star and note players now, so your picks are ready when the draft starts." : "See who's signed up before the draft starts."}
+            </p>
           </div>
           {/* Outlined in the dark ink the palettes keep for lettering on bright fills, not the line colour: in a dark
               palette the line is light grey, which barely shows against the blue. --comic-line and --comic-shadow cover

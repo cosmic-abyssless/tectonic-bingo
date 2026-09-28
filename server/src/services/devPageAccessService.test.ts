@@ -14,7 +14,7 @@ function user(discordId: string, extra: Partial<SessionUser> = {}): SessionUser 
   return db.insert(schema.users).values({ discordId, discordUsername: discordId, ...extra }).returning().get();
 }
 
-function bingoIn(stage: "planning" | "signup" | "draft" | "live") {
+function bingoIn(stage: "planning" | "signup" | "captains" | "draft" | "live") {
   db.update(schema.bingos).set({ stage }).run();
 }
 
@@ -58,6 +58,8 @@ describe("devPageAccess", () => {
   });
 
   it("follows the draft room's rule for the stage", () => {
+    expect(allowed("/b/b1/draft")).toEqual(["admin", "mod", "captain", "member", "signedUp"]);
+    bingoIn("captains");
     expect(allowed("/b/b1/draft")).toEqual(["admin", "mod", "captain", "member", "signedUp"]);
     bingoIn("signup");
     expect(allowed("/b/b1/draft")).toEqual(["admin", "mod", "captain"]);
