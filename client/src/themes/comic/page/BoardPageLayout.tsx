@@ -97,6 +97,7 @@ export function BoardPageLayout() {
           initialTileId={page.submit.initialTileId}
           initialTaskId={page.submit.initialTaskId}
           initialFile={page.submit.initialFile}
+          initialKind={page.submit.initialKind}
           onClose={page.submit.hide}
           onSuccess={() => {}}
         >
@@ -136,6 +137,7 @@ export function BoardPageLayout() {
             ? (taskId) => page.submit.show(page.openTile.id ?? undefined, undefined, taskId)
             : undefined
         }
+        onPostProof={page.canSubmit && modalTile ? (taskId) => page.submit.showProof(modalTile.id, taskId) : undefined}
       />
     </ComicPage>
   );

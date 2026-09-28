@@ -4,7 +4,7 @@
 // exists purely so local dev/testing has data to work against.
 import { copyFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { GraphNode, GraphNodeInput } from '@bingo/shared';
+import type { ClaimInput, GraphNode, GraphNodeInput } from '@bingo/shared';
 import { db } from './index';
 import {
   users, bingos, bingoModerators, tileCategories,
@@ -87,6 +87,8 @@ async function main() {
     submitRequiresPrevious?: boolean;
     pointsRequirePrevious?: boolean;
     allowsPreLoad?: boolean;
+    /** A per-Task Proof screenshot (CONTEXT.md), with what to show. */
+    proofNote?: string;
     requirement?: GraphNodeInput;
   }
 
@@ -95,6 +97,8 @@ async function main() {
   const tileDefs: Array<{
     row: number; col: number; categoryIndex: number; name: string;
     hasFreezePeriod?: boolean; freezeDurationMinutes?: number;
+    /** A Tile-wide Proof screenshot (CONTEXT.md), with what to show. */
+    proofNote?: string;
     tasks: TaskDef[];
   }> = [
     {
@@ -116,7 +120,7 @@ async function main() {
       tasks: [
         // "Any one unique" = SUM(1) over one leaf per name — the jar is just
         // one more leaf, no wildcard needed (see docs/item-quantity-model.md §7).
-        { label: 'Part A', points: 25, description: 'Obtain your first Cerberus unique.', requirement: sum(1, CERB_UNIQUES) },
+        { label: 'Part A', points: 25, description: 'Obtain your first Cerberus unique.', proofNote: 'your empty loot key chest', requirement: sum(1, CERB_UNIQUES) },
         { label: 'Part B', points: 40, description: 'Obtain another Cerberus unique.', submitRequiresPrevious: true, requirement: sum(1, CERB_UNIQUES) },
       ],
     },
@@ -161,7 +165,7 @@ async function main() {
       ],
     },
     {
-      row: 2, col: 1, categoryIndex: 2, name: 'Wintertodt',
+      row: 2, col: 1, categoryIndex: 2, name: 'Wintertodt', proofNote: 'an empty supply crate',
       tasks: [{
         label: 'Part A', points: 20, description: 'Obtain any two of: Bruma torch, Pyromancer hood, Warm gloves.',
         requirement: { kind: 'COUNT', minCount: 2, children: ['Bruma torch', 'Pyromancer hood', 'Warm gloves'].map((n) => item(n)) },
@@ -191,6 +195,8 @@ async function main() {
       boardCol: def.col,
       hasFreezePeriod: def.hasFreezePeriod ?? false,
       freezeDurationMinutes: def.freezeDurationMinutes ?? 0,
+      requiresProof: !!def.proofNote,
+      proofNote: def.proofNote ?? null,
     });
 
     // submitRequiresPrevious/pointsRequirePrevious resolve to the previous
@@ -205,6 +211,8 @@ async function main() {
         description: taskDef.description,
         points: taskDef.points,
         allowsPreLoad: taskDef.allowsPreLoad ?? false,
+        requiresProof: !!taskDef.proofNote,
+        proofNote: taskDef.proofNote ?? null,
         submitGateNodeId: taskDef.submitRequiresPrevious ? prevTaskNodeId : undefined,
         pointsGateNodeId: taskDef.pointsRequirePrevious ? prevTaskNodeId : undefined,
       };
@@ -264,7 +272,7 @@ async function main() {
   }
   // Leaf ids of a task in tree order; single-leaf tasks use leaves(...)[0].
   const leaves = (key: string) => collectLeaves(getNodeTree(db, taskIdByKey[key]!)!).map((n) => n.id);
-  const submit = (teamId: string, submittedByUserId: string, claims: Parameters<typeof createSubmission>[2]['claims']) =>
+  const submit = (teamId: string, submittedByUserId: string, claims: ClaimInput[]) =>
     createSubmission(db, bingo, { teamId, submittedByUserId, claims, screenshotUrl });
 
   // Alpha: Vorkath A approved (complete), Vorkath B pending, Zulrah one of two

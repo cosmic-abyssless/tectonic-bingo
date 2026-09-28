@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { STAGE_LABEL, areRulesHidden, areTilesSealed, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
+import { STAGE_LABEL, areRulesHidden, areTilesSealed, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type SubmissionKind, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { useBingo, useBoard, useDraftState, usePendingCount, useRecordAchievementOpened, useSetSubmissionReaction, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { displayName, avatarUrl } from "../core/ui/user";
@@ -101,6 +101,7 @@ export function BingoPageProvider({
   const [submitInitialTileId, setSubmitInitialTileId] = useState<string | undefined>(undefined);
   const [submitInitialTaskId, setSubmitInitialTaskId] = useState<string | undefined>(undefined);
   const [submitInitialFile, setSubmitInitialFile] = useState<File | undefined>(undefined);
+  const [submitInitialKind, setSubmitInitialKind] = useState<SubmissionKind | undefined>(undefined);
 
   // Achievements' "Tile opened" / "Rules opened" signal (CONTEXT.md "Achievement"): fire-and-forget, and only while
   // the bingo is Live and the viewer is on a team — the server ignores an ineligible caller anyway, but there's no
@@ -172,8 +173,13 @@ export function BingoPageProvider({
     setSubmitInitialTileId(tileId);
     setSubmitInitialTaskId(tileId ? taskId : undefined);
     setSubmitInitialFile(file);
+    setSubmitInitialKind(undefined);
     setDrawerOpen(false);
     setSubmitOpen(true);
+  };
+  const openProof = (tileId: string, taskId?: string) => {
+    openSubmit(tileId, undefined, taskId);
+    setSubmitInitialKind("proof");
   };
 
   const pageModel: BingoPageModel = {
@@ -234,12 +240,15 @@ export function BingoPageProvider({
       initialTileId: submitInitialTileId,
       initialTaskId: submitInitialTaskId,
       initialFile: submitInitialFile,
+      initialKind: submitInitialKind,
       show: openSubmit,
+      showProof: openProof,
       hide: () => {
         setSubmitOpen(false);
         setSubmitInitialTileId(undefined);
         setSubmitInitialTaskId(undefined);
         setSubmitInitialFile(undefined);
+        setSubmitInitialKind(undefined);
       },
     },
     actions: {
@@ -286,6 +295,7 @@ export function BingoPageProvider({
           canToggleInterest={canToggleInterest}
           interests={interests}
           viewerUserId={user.id}
+          viewerOnTeam={!!viewingTeamModel?.members.some((m) => m.id === user.id)}
           totalPoints={progressData?.totalPoints ?? null}
           adjustments={progressData?.adjustments ?? EMPTY_ADJUSTMENTS}
           locks={locks}

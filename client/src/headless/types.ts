@@ -3,7 +3,24 @@
 // never a raw Tile, TeamNodeState[], SubmissionDetails[], or LeafClaimMaps.
 // See docs/headless-theming-plan.md §2.
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
-import type { AuditCategory, AuditTone, ContributionCount, DraftState, NodeKind, NodeStatus, PickedTitle, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus, WrappedArtFrames } from "@bingo/shared";
+import type {
+  AuditCategory,
+  AuditTone,
+  ContributionCount,
+  DraftState,
+  NodeKind,
+  NodeStatus,
+  PickedTitle,
+  ProofStatus,
+  SignificanceTier,
+  Stage,
+  StageMilestone,
+  SubmissionDetails,
+  SubmissionKind,
+  SubmissionReaction,
+  SubmissionStatus,
+  WrappedArtFrames,
+} from "@bingo/shared";
 import type { PlaybackSpeed } from "./rewindModel";
 
 export interface ActivityEntryModel {
@@ -84,6 +101,14 @@ export interface RequirementNodeModel {
   children: RequirementNodeModel[];
 }
 
+/** A Proof screenshot requirement (CONTEXT.md): on a whole Tile (TileModel.proof) or one Task (TaskModel.proof). */
+export interface ProofModel {
+  /** What to show ("an empty supply cart"), when the Admin wrote one. */
+  note: string | null;
+  /** The viewer's own standing: any approved one counts. Null when the viewer isn't on the viewed team. */
+  status: ProofStatus | null;
+}
+
 export interface TaskModel {
   id: string;
   label: string | null;
@@ -95,6 +120,8 @@ export interface TaskModel {
   kind: NodeKind;
   isManual: boolean;
   allowsPreLoad: boolean;
+  /** This Task's own Proof screenshot requirement; null when it has none (or the Tile's is Tile-wide). */
+  proof: ProofModel | null;
   status: NodeStatus;
   complete: boolean;
   locked: boolean;
@@ -122,8 +149,10 @@ export interface SubmissionModel {
   timeAgo: string;
   /** The first screenshot's original URL — views derive the thumb/full variant they need (api/imageVariants). */
   thumbnailUrl: string | null;
-  /** claimsSummary() — e.g. "2× Bruma torch, Vorki". */
+  /** claimsSummary() — e.g. "2× Bruma torch, Vorki"; "Proof screenshot" for a proof one. */
   summary: string;
+  /** A Proof screenshot (CONTEXT.md), not a drop: it can't be reacted to. */
+  isProof: boolean;
   submittedBy: string | null;
   reviewerNotes: string | null;
   tileId: string | null;
@@ -177,6 +206,8 @@ export interface TileModel {
     remainingMs: number;
   };
   tasks: TaskModel[];
+  /** The Tile-wide Proof screenshot requirement; null when there is none (a Task may still have its own). */
+  proof: ProofModel | null;
   /** groupSubmissionsByTile() output for this tile, newest first. */
   submissions: SubmissionModel[];
   /** Search miss. */
@@ -355,7 +386,18 @@ export interface BingoPageModel {
   pointBreakdown: { open: boolean; show(): void; hide(): void };
   drawer: { open: boolean; show(): void; hide(): void };
   /** show() also hides the drawer. initialFile seeds/replaces the flow's screenshot (drag-drop/paste-to-submit) — re-passing a new File while already open feeds it into the still-mounted flow. initialTaskId preselects a part of that tile (per-part Submit buttons). */
-  submit: { open: boolean; initialTileId: string | undefined; initialTaskId: string | undefined; initialFile: File | undefined; show(tileId?: string, file?: File, taskId?: string): void; hide(): void };
+  submit: {
+    open: boolean;
+    initialTileId: string | undefined;
+    initialTaskId: string | undefined;
+    initialFile: File | undefined;
+    /** "proof" when opened to post a Proof screenshot (showProof). */
+    initialKind: SubmissionKind | undefined;
+    show(tileId?: string, file?: File, taskId?: string): void;
+    /** Opens the flow on this Tile (and Task, for a per-Task requirement) with "Proof screenshot" already chosen. */
+    showProof(tileId: string, taskId?: string): void;
+    hide(): void;
+  };
   /** logout lives in core AppHeader's own user menu, not here. */
   actions: { goHome(): void; goToStats(): void; goToRewind(): void; goToWrapped(): void; goToMod(): void; goToDraft(): void };
   /** Raise/lower the viewer's hand for one part (task) of a tile on their own team. No-op unless task.interest.canToggle. */
@@ -424,6 +466,24 @@ export interface SubmissionFlowModel {
     pickerKey: string;
   };
   quantity: { visible: boolean; value: number; max: number; needed: number; set(n: number): void };
+  /**
+   * Drop or Proof screenshot (CONTEXT.md). "proof" is offered only where the picked Tile (or Task, when the requirement
+   * is per-Task) needs one; choosing it hides the item picking, since a proof has no claims.
+   */
+  kind: {
+    value: SubmissionKind;
+    available: boolean;
+    select(kind: SubmissionKind): void;
+    /** What the proof is for: the Tile's name, or the Task's label for a per-Task requirement. */
+    label: string | null;
+    /** What to show ("an empty supply cart"). */
+    note: string | null;
+  };
+  /**
+   * A drop on a Tile/Task whose requirement the picked Player has no Proof screenshot for (none, or only rejected
+   * ones): "You haven't posted a Proof screenshot for this tile yet". It still submits; post() switches to posting one.
+   */
+  proofWarning: { message: string; post(): void } | null;
   staged: { items: { label: string }[]; remove(index: number): void; canStageCurrent: boolean; stageCurrent(): void };
   submit: { isValid: boolean; isSubmitting: boolean; isAnalyzing: boolean; error: string | null; run(): Promise<void> };
   close(): void;

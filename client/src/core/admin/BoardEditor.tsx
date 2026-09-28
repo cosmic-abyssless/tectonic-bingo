@@ -41,6 +41,8 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
       hasFreezePeriod: false,
       freezeDurationMinutes: 0,
       notes: null,
+      requiresProof: false,
+      proofNote: null,
       createdAt: new Date().toISOString(),
       node: previewGraphNode(bingo.id, { kind: "ALL" }),
     };

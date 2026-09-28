@@ -147,12 +147,14 @@ export interface AuditDetailsMap {
   "team.deleted": { name: string; captainName: string; memberCount: number };
   "team.tile_interest_set": { tileName: string; taskLabel: string; interested: boolean };
 
-  "submission.created": { tileId: string; tileName: string; taskLabels: string[]; claims: { nodeId: string; itemName: string | null; quantity: number }[]; screenshotUrl: string };
+  // kind: "proof" for a Proof screenshot (no claims; taskLabels names its Task when the requirement is per-Task). Absent for a drop.
+  "submission.created": { kind?: "proof"; tileId: string; tileName: string; taskLabels: string[]; claims: { nodeId: string; itemName: string | null; quantity: number }[]; screenshotUrl: string };
   // reaction: the emoji's name in words (SUBMISSION_REACTION_NAMES). ownSubmission: the reactor is who it belongs to.
   "submission.reaction_set": { emoji: string; reaction: string; reacted: boolean; tileName: string | null; submitterName: string | null; ownSubmission: boolean };
-  "submission.approved": { tileName: string | null; taskLabels: string[]; nodeIds: string[]; newlyCompletedNodeIds: string[]; pointsDelta: number; reviewerNotes: string | null; submittedByUserId: string };
-  "submission.rejected": { tileName: string | null; taskLabels: string[]; nodeIds: string[]; reviewerNotes: string | null; submittedByUserId: string };
+  "submission.approved": { kind?: "proof"; tileName: string | null; taskLabels: string[]; nodeIds: string[]; newlyCompletedNodeIds: string[]; pointsDelta: number; reviewerNotes: string | null; submittedByUserId: string };
+  "submission.rejected": { kind?: "proof"; tileName: string | null; taskLabels: string[]; nodeIds: string[]; reviewerNotes: string | null; submittedByUserId: string };
   "submission.review_undone": {
+    kind?: "proof";
     tileName: string | null;
     taskLabels: string[];
     nodeIds: string[];
@@ -166,7 +168,7 @@ export interface AuditDetailsMap {
     submittedByUserId: string;
   };
   /** A mod changed which player a submission is credited to (someone forgot to pick the player they posted for). */
-  "submission.attribution_changed": { tileName: string | null; taskLabels: string[]; fromUserId: string; fromName: string; toUserId: string; toName: string };
+  "submission.attribution_changed": { kind?: "proof"; tileName: string | null; taskLabels: string[]; fromUserId: string; fromName: string; toUserId: string; toName: string };
   /** A Moderator priced the submission's claims again (only the claims whose Drop value changed). */
   "submission.repriced": { tileName: string | null; taskLabels: string[]; claims: { itemName: string; before: number | null; after: number | null }[] };
   "submission.screenshot_analyzed": { codewordVerified: boolean; detectedItemName: string | null; textLength: number };
@@ -336,6 +338,13 @@ const ratedNames = (d: { rsn: string; names?: string[] }) => joinList(d.names ??
 function joinList(parts: string[]): string {
   return parts.length <= 1 ? (parts[0] ?? "") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
+
+/** "a submission", or "a Proof screenshot" (CONTEXT.md) for a proof one. */
+const aSubmission = (details: { kind?: "proof" }) => (details.kind === "proof" ? "a Proof screenshot" : "a submission");
+/** "N submissions", or "N Proof screenshots" when every entry is a proof one. */
+const nSubmissions = (inputs: { details: { kind?: "proof" } }[]) => `${inputs.length} ${inputs.every((i) => i.details.kind === "proof") ? "Proof screenshots" : "submissions"}`;
+/** ` (Wintertodt)`: a per-Task Proof screenshot's Task. */
+const proofTask = (details: { taskLabels: string[] }) => (details.taskLabels.length ? ` (${details.taskLabels.join(", ")})` : "");
 
 /** The tiles a group of entries touched: `"A" and "B"`, or a count once there are more than three. */
 function describeTiles(inputs: { details: { tileName: string | null } }[]): string {
@@ -587,8 +596,12 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "team",
     title: "Submission created",
     // The audit entry's own "on behalf of" is the player the drop belongs to, when someone else posted it.
-    label: (i) => `${actor(i)} submitted ${describeClaims(i.details)} for "${i.details.tileName}"${onBehalf(i)}`,
+    label: (i) =>
+      i.details.kind === "proof"
+        ? `${actor(i)} posted a Proof screenshot for "${i.details.tileName}"${proofTask(i.details)}${onBehalf(i)}`
+        : `${actor(i)} submitted ${describeClaims(i.details)} for "${i.details.tileName}"${onBehalf(i)}`,
     condense: (inputs) => {
+      if (inputs.every((i) => i.details.kind === "proof")) return `${actor(inputs[0]!)} posted ${nSubmissions(inputs)} for ${describeTiles(inputs)}`;
       const sameOwner = new Set(inputs.map((i) => i.onBehalfOfName ?? "")).size === 1; // only when they were all for the same player
       return `${actor(inputs[0]!)} submitted ${describeClaims({ claims: inputs.flatMap((i) => i.details.claims), taskLabels: inputs.flatMap((i) => i.details.taskLabels) })} for ${describeTiles(inputs)}${sameOwner ? onBehalf(inputs[0]!) : ""}`;
     },
@@ -610,16 +623,16 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     tone: "ok",
     visibility: "team",
     title: "Submission approved",
-    label: (i) => `${actor(i)} approved a submission for "${i.details.tileName ?? "a tile"}"`,
-    condense: (inputs) => `${actor(inputs[0]!)} approved ${inputs.length} submissions for ${describeTiles(inputs)}`,
+    label: (i) => `${actor(i)} approved ${aSubmission(i.details)} for "${i.details.tileName ?? "a tile"}"`,
+    condense: (inputs) => `${actor(inputs[0]!)} approved ${nSubmissions(inputs)} for ${describeTiles(inputs)}`,
   },
   "submission.rejected": {
     category: "submission",
     tone: "danger",
     visibility: "team",
     title: "Submission rejected",
-    label: (i) => `${actor(i)} rejected a submission for "${i.details.tileName ?? "a tile"}"`,
-    condense: (inputs) => `${actor(inputs[0]!)} rejected ${inputs.length} submissions for ${describeTiles(inputs)}`,
+    label: (i) => `${actor(i)} rejected ${aSubmission(i.details)} for "${i.details.tileName ?? "a tile"}"`,
+    condense: (inputs) => `${actor(inputs[0]!)} rejected ${nSubmissions(inputs)} for ${describeTiles(inputs)}`,
   },
   "submission.review_undone": {
     category: "submission",
@@ -627,14 +640,14 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "team",
     title: "Review undone",
     label: (i) =>
-      `${actor(i)} sent a${i.details.previousStatus === "approved" ? "n approved" : " rejected"} submission for "${i.details.tileName ?? "a tile"}" back to pending`,
+      `${actor(i)} sent a${i.details.previousStatus === "approved" ? "n approved" : " rejected"} ${i.details.kind === "proof" ? "Proof screenshot" : "submission"} for "${i.details.tileName ?? "a tile"}" back to pending`,
   },
   "submission.attribution_changed": {
     category: "submission",
     tone: "warn",
     visibility: "team",
     title: "Submission credit changed",
-    label: (i) => `${actor(i)} changed who a submission for "${i.details.tileName ?? "a tile"}" is credited to, from ${i.details.fromName} to ${i.details.toName}`,
+    label: (i) => `${actor(i)} changed who ${aSubmission(i.details)} for "${i.details.tileName ?? "a tile"}" is credited to, from ${i.details.fromName} to ${i.details.toName}`,
   },
   "submission.repriced": {
     category: "submission",

@@ -38,11 +38,14 @@ export function TaskEditor({
   existingLeaves,
   existingConditions,
   sharedNodeIds,
+  tileRequiresProof,
   onDelete,
 }: {
   slug: string;
   tileId: string;
   task: GraphNode;
+  /** The Tile requires a Proof screenshot Tile-wide, so no Task has its own (the setting is hidden). */
+  tileRequiresProof: boolean;
   previousTaskId?: string;
   existingLeaves?: ExistingLeaf[];
   existingConditions?: ExistingCondition[];
@@ -151,11 +154,23 @@ export function TaskEditor({
               <input type="checkbox" checked={withholdsPoints} disabled={!previousTaskId} onChange={(e) => patch({ pointsGateNodeId: e.target.checked ? previousTaskId : null })} className={CHECKBOX} />
               Withhold points until previous
             </label>
-            <label title="Player may submit an empty-state screenshot beforehand" className="flex items-center gap-2 text-xs text-on-surface-muted">
+            <label title="Players may prepare it before the bingo is live, e.g. pre-load a chest" className="flex items-center gap-2 text-xs text-on-surface-muted">
               <input type="checkbox" checked={task.allowsPreLoad} onChange={(e) => patch({ allowsPreLoad: e.target.checked })} className={CHECKBOX} />
-              Allows pre-load screenshot
+              Allows pre-load
             </label>
+            {!tileRequiresProof && (
+              <label title="Each player posts a screenshot of the starting state before their drops on this task count" className="flex items-center gap-2 text-xs text-on-surface-muted">
+                <input type="checkbox" checked={task.requiresProof} onChange={(e) => patch({ requiresProof: e.target.checked, proofNote: e.target.checked ? task.proofNote : null })} className={CHECKBOX} />
+                Needs a Proof screenshot
+              </label>
+            )}
           </div>
+
+          {!tileRequiresProof && task.requiresProof && (
+            <Field label="Proof screenshot: what to show" hint="Optional, e.g. an empty pool">
+              <Input key={`proof-note-${task.id}`} defaultValue={task.proofNote ?? ""} maxLength={200} onBlur={(e) => patch({ proofNote: e.target.value || null })} />
+            </Field>
+          )}
 
           {!isManual && (
             <Field label="Requirement" as="div">

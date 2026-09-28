@@ -14,6 +14,7 @@ export function SubmissionModal({ flow }: { flow: SubmissionFlowModel }) {
   const SubmitterPicker = useSlot("SubmitterPicker");
   const TilePicker = useSlot("TilePicker");
   const TaskPicker = useSlot("TaskPicker");
+  const ProofPicker = useSlot("ProofPicker");
   const RequirementPicker = useSlot("RequirementPicker");
   const StagedClaimsList = useSlot("StagedClaimsList");
 
@@ -22,7 +23,11 @@ export function SubmissionModal({ flow }: { flow: SubmissionFlowModel }) {
 
   return (
     <ComicDialog isOpen onClose={flow.close} isDismissable={!flow.submit.isSubmitting}>
-      <ComicDialogHeader title="Submit completion" subtitle="Attach a screenshot and pick what it proves." onClose={flow.close} />
+      <ComicDialogHeader
+        title={flow.kind.value === "proof" ? "Proof screenshot" : "Submit completion"}
+        subtitle={flow.kind.value === "proof" ? "Attach a screenshot of the starting state." : "Attach a screenshot and pick what it proves."}
+        onClose={flow.close}
+      />
 
       <div className="relative space-y-5 p-5">
         <ScreenshotDropzone screenshot={flow.screenshot} />
@@ -31,6 +36,7 @@ export function SubmissionModal({ flow }: { flow: SubmissionFlowModel }) {
         <SubmitterPicker submitter={flow.submitter} />
         <TilePicker tile={flow.tile} />
         <TaskPicker task={flow.task} />
+        <ProofPicker kind={flow.kind} warning={flow.proofWarning} />
         <RequirementPicker requirement={flow.requirement} quantity={flow.quantity} />
         <StagedClaimsList staged={flow.staged} />
 

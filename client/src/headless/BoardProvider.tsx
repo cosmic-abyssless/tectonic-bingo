@@ -22,6 +22,7 @@ export function BoardProvider({
   canToggleInterest,
   interests,
   viewerUserId,
+  viewerOnTeam = false,
   totalPoints,
   adjustments,
   locks,
@@ -41,6 +42,8 @@ export function BoardProvider({
   canToggleInterest: boolean;
   interests: TileInterest[];
   viewerUserId: string;
+  /** The viewer is on the team whose board this is (their Proof screenshot status is shown). */
+  viewerOnTeam?: boolean;
   totalPoints: number | null;
   adjustments: PointAdjustment[];
   locks: ExclusiveLocks;
@@ -91,6 +94,7 @@ export function BoardProvider({
       canToggleInterest,
       interests,
       viewerUserId,
+      viewerOnTeam,
       totalPoints,
       adjustments,
       locks,
@@ -100,7 +104,7 @@ export function BoardProvider({
     prevRef.current = built.tileById;
     return built;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, totalPoints, adjustments, locks, sealed]);
+  }, [tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, viewerOnTeam, totalPoints, adjustments, locks, sealed]);
 
   return <BoardContext.Provider value={board}>{children}</BoardContext.Provider>;
 }

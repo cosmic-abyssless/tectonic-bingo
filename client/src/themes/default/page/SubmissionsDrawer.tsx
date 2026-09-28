@@ -102,7 +102,7 @@ export function SubmissionsDrawer({
                   ))}
                 </div>
                 <p className="truncate text-sm text-on-surface-muted">
-                  <LinkedClaimsSummary claims={s.detail.claims} />
+                  <LinkedClaimsSummary claims={s.detail.claims} isProof={s.isProof} />
                 </p>
                 {s.detail.submittedByUser && (
                   <p className="mt-0.5 text-xs text-on-surface-subtle">
@@ -111,7 +111,7 @@ export function SubmissionsDrawer({
                   </p>
                 )}
                 {s.reviewerNotes && <p className="mt-0.5 truncate text-xs text-warn">{s.reviewerNotes}</p>}
-                <ReactionBar className="mt-1.5" reactions={s.reactions} canReact={reactions.canReact} onToggle={(emoji) => reactions.toggle(s.id, emoji)} />
+                {!s.isProof && <ReactionBar className="mt-1.5" reactions={s.reactions} canReact={reactions.canReact} onToggle={(emoji) => reactions.toggle(s.id, emoji)} />}
               </div>
 
               <div className="flex shrink-0 flex-col items-end gap-1 text-right">

@@ -7,6 +7,7 @@ import { ClockIcon, HandIcon, XIcon } from "../../../core/ui/icons";
 import { TaskInterestPeople } from "../../../core/ui/TaskInterestPeople";
 import { useSlot } from "../../context";
 import { thumbUrl } from "../../../api/imageVariants";
+import { ProofNeeded } from "./ProofNeeded";
 
 /** `tile` null while `isOpen` transitions closed (kept mounted so it can animate out). */
 export function TileModal({
@@ -15,16 +16,18 @@ export function TileModal({
   onClose,
   onSubmit,
   onToggleInterest,
+  onPostProof,
 }: {
   tile: TileModel | null;
   isOpen: boolean;
   onClose: () => void;
   onSubmit?: (taskId?: string) => void;
   onToggleInterest?: (taskId: string) => void;
+  onPostProof?: (taskId?: string) => void;
 }) {
   return (
     <Dialog isOpen={isOpen} onClose={onClose} size="lg">
-      {tile && <TileDetails tile={tile} onClose={onClose} onSubmit={onSubmit} onToggleInterest={onToggleInterest} />}
+      {tile && <TileDetails tile={tile} onClose={onClose} onSubmit={onSubmit} onToggleInterest={onToggleInterest} onPostProof={onPostProof} />}
     </Dialog>
   );
 }
@@ -34,16 +37,20 @@ function TileDetails({
   onClose,
   onSubmit,
   onToggleInterest,
+  onPostProof,
 }: {
   tile: TileModel;
   onClose: () => void;
   onSubmit?: (taskId?: string) => void;
   onToggleInterest?: (taskId: string) => void;
+  onPostProof?: (taskId?: string) => void;
 }) {
   const TaskPanel = useSlot("TaskPanel");
   const TileSubmissions = useSlot("TileSubmissions");
   const submitDisabled = tile.progress.allComplete || tile.freeze.isFrozen;
   const showInterestRow = !!onToggleInterest || tile.tasks.some((t) => t.interest.people.length > 0);
+  // Posting a Proof screenshot follows the Submit button: not on a finished or frozen Tile.
+  const postProof = onPostProof && !submitDisabled ? onPostProof : undefined;
 
   return (
     <>
@@ -85,6 +92,12 @@ function TileDetails({
         </div>
       </div>
 
+      {tile.proof && (
+        <div className="border-b border-outline px-5 py-3">
+          <ProofNeeded proof={tile.proof} onPost={postProof ? () => postProof() : undefined} />
+        </div>
+      )}
+
       {showInterestRow && (
         <ul className="divide-y divide-outline border-b border-outline text-sm">
           {tile.tasks.map((task) => (
@@ -104,7 +117,7 @@ function TileDetails({
 
       <div className="grid grid-cols-1 divide-y divide-outline md:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] md:divide-y-0 md:divide-x">
         {tile.tasks.map((task) => (
-          <TaskPanel key={task.id} task={task} />
+          <TaskPanel key={task.id} task={task} onPostProof={postProof && task.proof ? () => postProof(task.id) : undefined} />
         ))}
       </div>
 

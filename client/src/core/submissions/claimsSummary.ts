@@ -1,4 +1,4 @@
-import { describeValuedAs, type Claim, type ValuedAs } from "@bingo/shared";
+import { describeValuedAs, type Claim, type SubmissionDetails, type ValuedAs } from "@bingo/shared";
 
 // Human-readable summary of a submission's claims, e.g. "2× Bruma torch, Vorki".
 export function claimsSummary(claims: Claim[]): string {
@@ -6,6 +6,11 @@ export function claimsSummary(claims: Claim[]): string {
     .filter((c) => c.itemName !== null)
     .map((c) => `${c.quantity > 1 ? `${c.quantity}× ` : ""}${c.itemName}`);
   return parts.length > 0 ? parts.join(", ") : "(no items claimed — judged manually)";
+}
+
+/** What a submission is, in a list: its claims (claimsSummary), or "Proof screenshot" (CONTEXT.md) for a proof one. */
+export function submissionSummary(detail: Pick<SubmissionDetails, "submission" | "claims">): string {
+  return detail.submission.kind === "proof" ? "Proof screenshot" : claimsSummary(detail.claims);
 }
 
 /** A submission's Drop value: the sum of its claims' Drop values, or null when none of them has one. */

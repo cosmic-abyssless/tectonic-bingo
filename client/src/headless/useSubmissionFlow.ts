@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, type ClaimInput, type GraphNode, type ScreenshotAnalysis } from "@bingo/shared";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, proofRequirementFor, proofStatus, type ClaimInput, type GraphNode, type ScreenshotAnalysis, type SubmissionKind } from "@bingo/shared";
 import { useAnalyzeScreenshot, useCreateSubmission } from "../api/queries";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete } from "../core/board/taskClaims";
 import { collectLeaves, collectLeavesWithAncestors } from "../core/board/requirementTree";
@@ -25,6 +25,7 @@ export function useSubmissionFlow({
   initialTileId,
   initialTaskId,
   initialFile,
+  initialKind,
   onClose,
   onSuccess,
 }: {
@@ -32,6 +33,8 @@ export function useSubmissionFlow({
   /** Pre-picks a part of `initialTileId`; ignored without a tile. */
   initialTaskId?: string;
   initialFile?: File;
+  /** "proof": start on posting a Proof screenshot (CONTEXT.md) for `initialTileId` (and `initialTaskId`). */
+  initialKind?: SubmissionKind;
   onClose: () => void;
   onSuccess: () => void;
 }): SubmissionFlowModel {
@@ -51,6 +54,7 @@ export function useSubmissionFlow({
   const [selectedTaskId, setSelectedTaskId] = useState(initialTileId ? (initialTaskId ?? "") : "");
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [stagedClaims, setStagedClaims] = useState<StagedClaim[]>([]);
+  const [chosenKind, setChosenKind] = useState<SubmissionKind>(initialKind ?? "drop");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -73,6 +77,14 @@ export function useSubmissionFlow({
   const currentTask = selectedTile?.node.children.find((t) => t.id === selectedTaskId);
 
   const claimMaps = useMemo(() => buildLeafClaimMaps(teamSubmissions), [teamSubmissions]);
+
+  // Proof screenshots (CONTEXT.md): the requirement the picked Tile (or Task, when per-Task) falls under. "Proof
+  // screenshot" is only on offer where there is one; a Tile-wide one needs no Task picked.
+  const proofRequirement = selectedTile ? proofRequirementFor(selectedTile, selectedTaskId || null) : null;
+  const kind: SubmissionKind = proofRequirement ? chosenKind : "drop";
+  const isProof = kind === "proof";
+  const proofTileWide = isProof && proofRequirement?.taskId === null;
+
   const isManualTask = currentTask?.kind === "MANUAL";
 
   // Leaves of the current task, paired with every enclosing composite so a
@@ -135,10 +147,10 @@ export function useSubmissionFlow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTaskId, currentTask]);
 
-  // Auto-fill from AI detection — only if the user hasn't already chosen.
+  // Auto-fill from AI detection — only if the user hasn't already chosen. Not for a Proof screenshot: it shows no drop.
   useEffect(() => {
     const match = analysis?.detectedMatch;
-    if (!match) return;
+    if (!match || isProof) return;
     const matchedTile = tiles.find((t) => t.id === match.tileId);
     if (!matchedTile) return;
     const freezeUnlocksAt = getFreezeUnlockAt(bingo.effectiveStartsAt, matchedTile);
@@ -258,7 +270,20 @@ export function useSubmissionFlow({
     };
   })();
   const pickerEmpty = !selectedNodeId && !isManualTask;
-  const isValid = !!imageFile && !!selectedTileId && !!submitterId && (currentClaim !== null || (stagedClaims.length > 0 && pickerEmpty));
+  const isValid =
+    !!imageFile && !!selectedTileId && !!submitterId && (isProof ? !!proofRequirement : currentClaim !== null || (stagedClaims.length > 0 && pickerEmpty));
+
+  // A drop where its Player has no Proof screenshot for the requirement yet (none, or only rejected ones): warn, but
+  // still let it through. It's flagged in review.
+  const submitterStatus = proofRequirement && submitterId ? proofStatus(teamSubmissions.map((d) => d.submission), submitterId, proofRequirement) : null;
+  const submitterName = submitterOptions.find((o) => o.id === submitterId)?.label.replace(/ \(me\)$/, "") ?? "They";
+  const proofWarning =
+    !isProof && proofRequirement && (submitterStatus === "none" || submitterStatus === "rejected")
+      ? {
+          message: `${submitterId === viewerId ? "You haven't" : `${submitterName} hasn't`} posted a Proof screenshot for this ${proofRequirement.taskId ? "task" : "tile"} yet`,
+          post: () => setChosenKind("proof"),
+        }
+      : null;
 
   const resetPicker = () => {
     setSelectedNodeId("");
@@ -277,8 +302,14 @@ export function useSubmissionFlow({
 
     const formData = new FormData();
     formData.append("screenshot", imageFile);
-    const claims = [...stagedClaims, ...(currentClaim ? [currentClaim] : [])].map((s) => s.claim);
-    formData.append("claims", JSON.stringify(claims));
+    if (isProof && proofRequirement) {
+      formData.append("kind", "proof");
+      formData.append("tileId", proofRequirement.tileId);
+      if (proofRequirement.taskId) formData.append("taskId", proofRequirement.taskId);
+    } else {
+      const claims = [...stagedClaims, ...(currentClaim ? [currentClaim] : [])].map((s) => s.claim);
+      formData.append("claims", JSON.stringify(claims));
+    }
     if (targetTeamId) formData.append("teamId", targetTeamId);
     if (forUserId) formData.append("forUserId", forUserId);
 
@@ -357,16 +388,17 @@ export function useSubmissionFlow({
     },
     task: {
       selectedId: selectedTaskId,
-      options: availableTasks.map((t) => ({ id: t.id, label: t.label ?? "" })),
+      // A Tile-wide Proof screenshot is for the whole Tile: no Task to pick.
+      options: proofTileWide ? [] : availableTasks.map((t) => ({ id: t.id, label: t.label ?? "" })),
       select: (id) => {
         setSelectedTaskId(id);
         resetPicker();
       },
-      current: currentTask ? { id: currentTask.id, label: currentTask.label ?? "", isManual: isManualTask ?? false } : null,
-      autoSelected: availableTasks.length === 1,
+      current: currentTask && !proofTileWide ? { id: currentTask.id, label: currentTask.label ?? "", isManual: (isManualTask && !isProof) ?? false } : null,
+      autoSelected: availableTasks.length === 1 && !proofTileWide,
     },
     requirement: {
-      visible: !!selectedTile && !!currentTask && !isManualTask,
+      visible: !!selectedTile && !!currentTask && !isManualTask && !isProof,
       selectedId: selectedNodeId,
       options: openLeaves.map((leaf) => ({ id: leaf.id, label: leafLabel(leaf) })),
       locked: lockedLeaves,
@@ -378,16 +410,24 @@ export function useSubmissionFlow({
       pickerKey: `${selectedTileId}-${selectedTaskId}`,
     },
     quantity: {
-      visible: !!selectedLeaf && !!enclosingSum,
+      visible: !!selectedLeaf && !!enclosingSum && !isProof,
       value: submissionQty,
       max: enclosingSum?.quantity ?? 1,
       needed: enclosingSum?.quantity ?? 1,
       set: (n) => setSubmissionQty(Math.max(1, n)),
     },
+    kind: {
+      value: kind,
+      available: !!proofRequirement,
+      select: setChosenKind,
+      label: proofRequirement?.label ?? null,
+      note: proofRequirement?.note ?? null,
+    },
+    proofWarning,
     staged: {
-      items: stagedClaims.map((s) => ({ label: s.label })),
+      items: isProof ? [] : stagedClaims.map((s) => ({ label: s.label })),
       remove: (index) => setStagedClaims((prev) => prev.filter((_, j) => j !== index)),
-      canStageCurrent: !!currentClaim && !manualLeaf,
+      canStageCurrent: !!currentClaim && !manualLeaf && !isProof,
       stageCurrent: stageCurrentClaim,
     },
     submit: {

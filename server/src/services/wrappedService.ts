@@ -32,6 +32,7 @@ import { now as clockNow } from "../clock";
 import { ServiceError } from "./errors";
 import * as statsService from "./statsService";
 import * as rewindService from "./rewindService";
+import { dropsOnly } from "./submissionKinds";
 import { getBingoTitleSettings } from "./titleSettingsService";
 import { getEarnedAchievements } from "./achievementService";
 import { bossGainsOf, gainsOf, loadTimelines } from "./womReadService";
@@ -199,12 +200,13 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
   const picked = pickTitles(titleFacts, { now: finishedAt ?? clockNow(), liveAt, endedAt: finishedAt }, titleSettings);
   const rewind = rewindService.getRewind(db, bingo);
 
-  // Every review of the Bingo's Submissions (approved or rejected), by whoever made it: a Moderator or an Admin.
+  // Every review of the Bingo's drop Submissions (approved or rejected), by whoever made it: a Moderator or an Admin.
+  // Proof screenshots are left out of Wrapped, reviews included.
   const reviews = teamRows.length
     ? db
         .select({ reviewerId: submissions.reviewedByUserId, status: submissions.status, submittedAt: submissions.submittedAt, reviewedAt: submissions.reviewedAt })
         .from(submissions)
-        .where(and(inArray(submissions.teamId, teamRows.map((t) => t.id)), inArray(submissions.status, ["approved", "rejected"]), isNotNull(submissions.reviewedByUserId), isNotNull(submissions.reviewedAt)))
+        .where(and(inArray(submissions.teamId, teamRows.map((t) => t.id)), inArray(submissions.status, ["approved", "rejected"]), isNotNull(submissions.reviewedByUserId), isNotNull(submissions.reviewedAt), dropsOnly))
         .all()
         .map((r) => ({ reviewerId: r.reviewerId!, status: r.status, submittedAt: r.submittedAt, reviewedAt: r.reviewedAt! }))
     : [];
@@ -402,14 +404,14 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
   return { bingo: bingoData, players };
 }
 
-/** Submissions of the Bingo still waiting for review. */
+/** Drop Submissions of the Bingo still waiting for review. A pending Proof screenshot changes nothing in Wrapped. */
 function pendingCount(db: Db, bingoId: string): number {
   return (
     db
       .select({ n: count() })
       .from(submissions)
       .innerJoin(teams, eq(submissions.teamId, teams.id))
-      .where(and(eq(teams.bingoId, bingoId), eq(submissions.status, "pending")))
+      .where(and(eq(teams.bingoId, bingoId), eq(submissions.status, "pending"), dropsOnly))
       .get()?.n ?? 0
   );
 }

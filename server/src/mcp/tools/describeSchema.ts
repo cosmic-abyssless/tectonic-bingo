@@ -23,7 +23,7 @@ const NOTES = [
   "Scores aren't a column anywhere. A Team's points come from completing nodes of the Requirement Tree (team_node_state) under rules such as gates and Exclusive Items, plus Point Adjustments, and a Player's Points share is computed from the Claims that completed each award. For points use bingo_summary, tile_stats and player_contributions, not SQL.",
   "Timestamps are unix seconds (datetime(col, 'unixepoch')), except audit_log.created_at, which is milliseconds. Booleans are 0/1. ids are UUID text.",
   "Inside a Bingo a Player is named by the RSN they signed up with: join signups on (bingo_id, user_id) for signups.rsn.",
-  "A Submission's Team is submissions.team_id, its Bingo teams.bingo_id. Claims hang off submissions; nodes of kind ITEM/MANUAL are the leaves they claim.",
+  "A Submission's Team is submissions.team_id, its Bingo teams.bingo_id. Claims hang off submissions; nodes of kind ITEM/MANUAL are the leaves they claim. A submission of kind 'proof' is a Proof screenshot, not a drop: filter to kind = 'drop' when counting drops.",
 ];
 
 export const describeSchema = defineTool({

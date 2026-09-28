@@ -6,7 +6,7 @@ import { tileSearchMatcher } from "./useTileSearch";
 // CONTEXT.md "Sealed Tiles": the board a Player gets while the Tiles are sealed, and how it's searched.
 
 const node = (over: Partial<GraphNode> & Pick<GraphNode, "id" | "kind">): GraphNode =>
-  ({ bingoId: "b", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName: null, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, children: [], ...over }) as GraphNode;
+  ({ bingoId: "b", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName: null, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: [], ...over }) as GraphNode;
 
 const categories: TileCategory[] = [{ id: "cat", bingoId: "b", label: "Raids", colorHex: "#123456", sortOrder: 0 }];
 
@@ -73,6 +73,8 @@ describe("tileSearchMatcher", () => {
     hasFreezePeriod: false,
     freezeDurationMinutes: 0,
     notes: null,
+    requiresProof: false,
+    proofNote: null,
     createdAt: "",
     node: node({ id: "n", kind: "ALL", children: [node({ id: "p", kind: "ITEM", description: "Kill the snake", itemName: "Tanzanite fang" })] }),
   };
