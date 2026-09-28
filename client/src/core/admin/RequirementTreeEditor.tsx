@@ -408,6 +408,9 @@ function GroupNode(props: NodeProps) {
     await onSaveAsGroup!(names);
   }
 
+  // A total ("N in total from") only adds up Items, so it offers no conditions to add (the server refuses them too).
+  const holdsConditions = node.kind !== "SUM";
+
   // Heading row (the rule, with its number), then the children inside the left bar, then the add row: the same order
   // at every level, the task's own included.
   return (
@@ -426,7 +429,7 @@ function GroupNode(props: NodeProps) {
       </div>
       {children.length === 0 ? (
         <DropGap parent={path} index={0} label={`Into ${conditionName}`}>
-          <p className="text-xs text-on-surface-subtle">No requirements yet — add an item or a condition.</p>
+          <p className="text-xs text-on-surface-subtle">No requirements yet — add {holdsConditions ? "an item or a condition" : "an item"}.</p>
         </DropGap>
       ) : (
         // A drop spot before, between and after the rows; between an ANY's options it's also the "OR".
@@ -451,14 +454,16 @@ function GroupNode(props: NodeProps) {
           options={[
             ...(itemGroups.length > 0 ? [{ label: "Item group", onClick: () => setPickingGroup((v) => !v) }] : []),
             ...(pickableLeaves.length > 0 ? [{ label: "Existing item", onClick: () => setPickingExisting((v) => !v) }] : []),
-            ...(pickableConditions.length > 0 ? [{ label: "Existing condition", onClick: () => setPickingExistingCondition((v) => !v) }] : []),
+            ...(holdsConditions && pickableConditions.length > 0 ? [{ label: "Existing condition", onClick: () => setPickingExistingCondition((v) => !v) }] : []),
           ]}
         />
-        <div className="inline-flex shrink-0 overflow-hidden rounded-md border border-outline-strong">
-          <Button variant="ghost" size="sm" onPress={() => add(path, NEW_GROUP)} aria-label={`Add a condition to ${conditionName}`} className="rounded-none border-0">
-            <PlusIcon size={12} /> Condition
-          </Button>
-        </div>
+        {holdsConditions && (
+          <div className="inline-flex shrink-0 overflow-hidden rounded-md border border-outline-strong">
+            <Button variant="ghost" size="sm" onPress={() => add(path, NEW_GROUP)} aria-label={`Add a condition to ${conditionName}`} className="rounded-none border-0">
+              <PlusIcon size={12} /> Condition
+            </Button>
+          </div>
+        )}
         {canSaveAsGroup && (
           <Button variant="ghost" size="sm" onPress={saveAsGroup}>
             Save these names as a new group…
@@ -543,7 +548,12 @@ function RuleControls({ node, path, update }: Pick<NodeProps, "node" | "path" | 
       }}
       size="sm"
       className="w-auto!"
-      options={GROUP_KINDS.map((k) => ({ value: k.kind, label: k.label, selectedLabel: k.selectedLabel }))}
+      // A total only adds up Items: a condition holding other conditions can't become one until they're taken out.
+      options={GROUP_KINDS.map((k) =>
+        k.kind === "SUM" && node.kind !== "SUM" && (node.children ?? []).some((c) => c.kind !== "ITEM")
+          ? { value: k.kind, label: `${k.label} (Items only)`, selectedLabel: k.selectedLabel, disabled: true }
+          : { value: k.kind, label: k.label, selectedLabel: k.selectedLabel },
+      )}
     />
   );
   if (node.kind === "SUM") {
