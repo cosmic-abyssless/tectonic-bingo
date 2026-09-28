@@ -98,8 +98,11 @@ target (say `signup`), the later dates are simply scheduled in the future.
    given made-up WOM, RuneProfile and combat achievement stats (the ones the signup seed
    tool uses, random, not seeded), because signing up with the integrations off leaves
    them empty and the roster's stats columns would be blank.
-3. **Captains** (the best players; a duo captain brings their partner as co-captain)
-   create the teams, then the **real draft** runs: the admin sets the pick order, starts
+3. **Captains** (the best players; a duo captain brings their partner as co-captain, and
+   in a duo bingo only paired players captain, since every Team is led by a pair) create
+   the teams. Before the draft the admin applies an empty **Cut review** (keeping the cuts
+   as they are), which the move into the draft needs while any cut is avoidable. Then the
+   **real draft** runs: the admin sets the pick order, starts
    the draft, and captains pick in turn a minute or so apart, favouring better players,
    with the admin stepping in for a few picks. (To try the pick-order ceremony yourself,
    leave the bingo at `--stage captains` and move it to the draft stage in the mod panel.)

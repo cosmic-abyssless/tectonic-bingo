@@ -107,6 +107,12 @@ describe("people", () => {
     expect(mods.every((m) => m.isMod && m.partnerIndex === null && m.reviewWindows.length === 3)).toBe(true);
   });
 
+  it("pairs off at least one pair per duo Team, however few players there are", () => {
+    const players = makePlayers(new Rng(9), 28, "testdata-x");
+    expect(pairUp(players, new Rng(1), 0.6, 12)).toHaveLength(12);
+    expect(pairUp(makePlayers(new Rng(9), 7, "testdata-x"), new Rng(1), 0.6, 12)).toHaveLength(3);
+  });
+
   it("leads a duo bingo's teams with pairs only, both halves signed up", () => {
     const players = makePlayers(new Rng(9), 88, "testdata-x");
     pairUp(players, new Rng(1), 0.6);

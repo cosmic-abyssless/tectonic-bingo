@@ -87,8 +87,9 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
       isMe: true, isMod: false, reviewWindows: [], partnerIndex: null, signupAt: null,
     });
   }
-  // A solo bingo refuses pairing requests, so its players sign up alone.
-  const pairs = document.bingo.signupMode === "duo" ? pairUp(players, rng.fork("pairs"), 0.6) : [];
+  // A solo bingo refuses pairing requests, so its players sign up alone. A duo bingo's Teams are each led by a pair.
+  const duo = document.bingo.signupMode === "duo";
+  const pairs = duo ? pairUp(players, rng.fork("pairs"), 0.6, options.teams) : [];
   const mods = chooseMods(players, rng.fork("mods"), options.mods);
 
   const capableRng = rng.fork("capable");
@@ -114,7 +115,7 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   if (options.stage === "signup") return result;
 
   await setStage(ctx, "captains", tl.captainsAt);
-  const seeds = await createTeams(ctx, players, options.teams, document.bingo.signupMode === "duo");
+  const seeds = await createTeams(ctx, players, options.teams, duo);
   const modAt = new Date(tl.captainsAt.getTime() + 4 * HOUR);
   for (const mod of [...mods, ...players.filter((p) => p.isMe)]) {
     if (mod.userId && mod.signupAt) await api.as(adminDiscordId).post(`/api/bingos/${slug}/admin/mods`, { userId: mod.userId }, { at: modAt });
