@@ -253,7 +253,7 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
         mvp: mvp ? { player: mvp.user, pointsShare: mvp.pointsShare } : null,
         topGpEarner: gp ? { player: gp.user, gpGained: gp.gpGained } : null,
         biggestDrop: biggest ?? null,
-        pointsOverTime: pointsOverTime.filter((p) => p.teamId === team.id).map((p) => ({ at: p.at.toISOString(), points: p.cumulativePoints })),
+        pointsOverTime: pointsOverTime.filter((p) => p.teamId === team.id).map((p) => ({ at: p.at.toISOString(), points: p.cumulativePoints, source: p.source, label: p.label, delta: p.delta })),
         superlatives,
       };
     })

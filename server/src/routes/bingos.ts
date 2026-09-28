@@ -202,6 +202,7 @@ router.put(
     const { nomineeUserId } = req.body as { nomineeUserId?: string };
     if (!nomineeUserId) throw new ServiceError(400, "nomineeUserId is required");
     superlativeService.setVote(db, req.bingo!, { categoryId: req.params.categoryId as string, teamId: team.id, voterUserId: req.user!.id, nomineeUserId });
+    broadcast({ type: "superlative_votes_changed", bingoId: req.bingo!.id, payload: {} });
     res.json(superlativeService.getBallot(db, req.bingo!, team.id, req.user!.id));
   }),
 );
@@ -215,6 +216,7 @@ router.delete(
   asyncHandler(async (req, res) => {
     const team = myTeamOrThrow(req);
     superlativeService.clearVote(db, req.bingo!, { categoryId: req.params.categoryId as string, voterUserId: req.user!.id });
+    broadcast({ type: "superlative_votes_changed", bingoId: req.bingo!.id, payload: {} });
     res.json(superlativeService.getBallot(db, req.bingo!, team.id, req.user!.id));
   }),
 );

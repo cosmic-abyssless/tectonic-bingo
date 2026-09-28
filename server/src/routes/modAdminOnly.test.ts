@@ -34,6 +34,7 @@ describe("site-admin-only mod routes", () => {
     ["put", "/draft/order"],
     ["post", "/draft/start"],
     ["get", "/superlatives/tally"],
+    ["get", "/superlatives/turnout"],
   ])("%s %s needs a site admin", async (method, path) => {
     const { default: modRouter } = await import("./mod");
     const { requireAdmin } = await import("../middleware/requireAdmin");

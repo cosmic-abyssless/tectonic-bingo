@@ -2,7 +2,7 @@
 // (e.g. "Team MVP"). Categories aren't locked to any stage; voting is open for the whole of Live and secret
 // throughout — the server keeps the voter only to enforce one pick per category and let it change.
 import { and, eq, inArray } from "drizzle-orm";
-import type { AvatarUser } from "@bingo/shared";
+import type { AvatarUser, SuperlativeTeamTurnout } from "@bingo/shared";
 import { now as clockNow } from "../clock";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -214,6 +214,41 @@ export function computeWinners(db: Db, bingoId: string, teamId: string): Categor
     if (max <= 0) return [];
     const winnerUserIds = [...counts].filter(([, n]) => n === max).map(([userId]) => userId);
     return [{ categoryId: c.id, categoryName: c.name, winnerUserIds }];
+  });
+}
+
+/**
+ * How many of each Team's Players have voted so far: in any category, in every one, and per category. Counts only,
+ * never who, so it's readable at any stage. Only current members count, as a removed Player's votes are gone.
+ */
+export function getTurnout(db: Db, bingo: Bingo): SuperlativeTeamTurnout[] {
+  const categories = getCategories(db, bingo.id);
+  const teamRows = db.select().from(schema.teams).where(eq(schema.teams.bingoId, bingo.id)).all();
+  if (teamRows.length === 0) return [];
+  const teamIds = teamRows.map((t) => t.id);
+  const memberRows = db.select({ teamId: teamMembers.teamId, userId: teamMembers.userId }).from(teamMembers).where(inArray(teamMembers.teamId, teamIds)).all();
+  const votes = categories.length
+    ? db
+        .select({ teamId: superlativeVotes.teamId, categoryId: superlativeVotes.categoryId, voterUserId: superlativeVotes.voterUserId })
+        .from(superlativeVotes)
+        .where(and(inArray(superlativeVotes.teamId, teamIds), inArray(superlativeVotes.categoryId, categories.map((c) => c.id))))
+        .all()
+    : [];
+
+  return teamRows.map((team) => {
+    const members = new Set(memberRows.filter((m) => m.teamId === team.id).map((m) => m.userId));
+    const mine = votes.filter((v) => v.teamId === team.id && members.has(v.voterUserId));
+    const categoriesOf = new Map<string, Set<string>>();
+    for (const v of mine) categoriesOf.set(v.voterUserId, (categoriesOf.get(v.voterUserId) ?? new Set()).add(v.categoryId));
+    return {
+      teamId: team.id,
+      teamName: team.name,
+      color: team.color,
+      players: members.size,
+      votedAny: categoriesOf.size,
+      votedAll: categories.length ? [...categoriesOf.values()].filter((c) => c.size === categories.length).length : 0,
+      categories: categories.map((c) => ({ categoryId: c.id, categoryName: c.name, voted: new Set(mine.filter((v) => v.categoryId === c.id).map((v) => v.voterUserId)).size })),
+    };
   });
 }
 

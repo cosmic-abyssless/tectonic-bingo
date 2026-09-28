@@ -4,14 +4,17 @@ import type { Bingo, SuperlativeCategory } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { optimisticUpdate } from "../../api/optimistic";
 import { adminQueryKeys, useSuperlativeCategories } from "../../api/adminQueries";
-import { useSuperlativeTally } from "../../api/queries";
+import { useSuperlativeTally, useSuperlativeTurnout } from "../../api/queries";
 import { Button, IconButton } from "../ui/Button";
 import { Card, EmptyState, Notice } from "../ui/Card";
 import { Input } from "../ui/Field";
 import { ChevronDownIcon, ChevronUpIcon, ListIcon, XIcon } from "../ui/icons";
 import { avatarUrl, displayName } from "../ui/user";
 
-/** Admin management of a Bingo's Superlative categories (CONTEXT.md "Superlative"), plus, once it's Finished, every Team's vote counts. */
+/**
+ * Admin management of a Bingo's Superlative categories (CONTEXT.md "Superlative"), with how many of each Team have
+ * voted from Live on, and, once it's Finished, every Team's vote counts.
+ */
 export function SuperlativesManager({ slug, bingo }: { slug: string; bingo: Bingo }) {
   const { data } = useSuperlativeCategories(slug);
   const categories = data?.categories ?? [];
@@ -98,15 +101,73 @@ export function SuperlativesManager({ slug, bingo }: { slug: string; bingo: Bing
       </Card>
       {error && <Notice tone="danger">{error}</Notice>}
 
-      {bingo.stage === "complete" && categories.length > 0 && <SuperlativeTallies slug={slug} />}
+      {categories.length > 0 && (bingo.stage === "live" || bingo.stage === "complete") && <SuperlativeTurnout slug={slug} />}
+
+      {categories.length > 0 &&
+        (bingo.stage === "complete" ? (
+          <SuperlativeTallies slug={slug} />
+        ) : (
+          <p className="text-xs text-on-surface-subtle">Vote counts show here once the Bingo is Finished and voting has closed.</p>
+        ))}
+    </div>
+  );
+}
+
+/** How many of each Team's Players have voted, live over the websocket: counts only, never who (votes are secret). */
+function SuperlativeTurnout({ slug }: { slug: string }) {
+  const { data, isLoading, error } = useSuperlativeTurnout(slug);
+  if (isLoading) return null;
+  if (error) return <Notice tone="danger">Couldn't load who has voted: {error.message}</Notice>;
+  const teams = data?.teams ?? [];
+  const players = teams.reduce((n, t) => n + t.players, 0);
+  const voted = teams.reduce((n, t) => n + t.votedAny, 0);
+
+  return (
+    <div className="space-y-3 pt-2">
+      <h3 className="flex items-baseline justify-between gap-3 text-xs font-semibold uppercase tracking-wide text-on-surface-subtle">
+        Turnout
+        <span className="num normal-case tracking-normal">
+          {voted} of {players} voted
+        </span>
+      </h3>
+      {teams.map((team) => (
+        <Card key={team.teamId} className="space-y-2 p-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <h4 className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-on-surface">
+              {team.color && <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: team.color }} />}
+              <span className="truncate">{team.teamName}</span>
+            </h4>
+            <span className="num shrink-0 text-sm text-on-surface">
+              {team.votedAny}/{team.players} voted
+            </span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-surface-raised" role="img" aria-label={`${team.votedAny} of ${team.players} voted`}>
+            <div className="h-full rounded-full bg-accent" style={{ width: `${team.players ? (team.votedAny / team.players) * 100 : 0}%` }} />
+          </div>
+          <p className="text-xs text-on-surface-muted">
+            {team.players - team.votedAny} not voted yet · {team.votedAll} voted in every category
+          </p>
+          <ul className="space-y-0.5">
+            {team.categories.map((c) => (
+              <li key={c.categoryId} className="flex items-center justify-between gap-3 text-xs">
+                <span className="truncate text-on-surface-subtle">{c.categoryName}</span>
+                <span className="num shrink-0 text-on-surface-muted">
+                  {c.voted}/{team.players}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ))}
     </div>
   );
 }
 
 /** Every Team's vote counts per category, once voting has closed (Admin-only; the server refuses this before Finished). */
 function SuperlativeTallies({ slug }: { slug: string }) {
-  const { data, isLoading } = useSuperlativeTally(slug);
+  const { data, isLoading, error } = useSuperlativeTally(slug);
   if (isLoading) return null;
+  if (error) return <Notice tone="danger">Couldn't load the vote counts: {error.message}</Notice>;
   const teams = data?.teams ?? [];
 
   return (
