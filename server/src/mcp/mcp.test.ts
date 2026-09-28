@@ -442,7 +442,7 @@ describe("/mcp", () => {
     const { access } = await connect();
     const { result } = await rpcResult(await callMcp(access, { jsonrpc: "2.0", id: 1, method: "tools/list" }));
     const tools = result!.tools as { name: string; annotations: Record<string, unknown> }[];
-    expect(tools.map((t) => t.name)).toEqual(["list_bingos"]);
+    expect(tools.map((t) => t.name)).toEqual(["list_bingos", "bingo_summary", "tile_stats", "player_contributions"]);
     for (const tool of tools) expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
   });
 
@@ -461,6 +461,21 @@ describe("/mcp", () => {
     const entry = db.select().from(auditLog).where(eq(auditLog.action, "mcp.tool_called")).get()!;
     expect(entry).toMatchObject({ bingoId: null, actorUserId: adminId, actorRole: "admin", entityType: "mcp_tool", entityId: "list_bingos" });
     expect(JSON.parse(entry.details)).toEqual({ tool: "list_bingos", arguments: {}, clientId, clientName: "Claude" });
+  });
+
+  it("scopes a Bingo tool's audit entry to its Bingo, and answers an unknown slug with a tool error", async () => {
+    const bingo = db.insert(bingos).values({ slug: "summer", name: "Summer Bingo", boardRows: 5, boardCols: 5, createdByUserId: adminId }).returning().get();
+    const { access } = await connect();
+
+    const ok = await rpcResult(await callMcp(access, { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "bingo_summary", arguments: { slug: "summer" } } }));
+    expect(ok.result!.isError).toBeFalsy();
+    expect(ok.result!.structuredContent).toMatchObject({ bingo: { slug: "summer" }, standings: [] });
+
+    const missing = await rpcResult(await callMcp(access, { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "tile_stats", arguments: { slug: "nope" } } }));
+    expect(missing.result).toMatchObject({ isError: true, content: [{ type: "text", text: expect.stringContaining('No Bingo has the slug "nope"') }] });
+
+    const entries = db.select().from(auditLog).where(eq(auditLog.action, "mcp.tool_called")).all();
+    expect(entries.map((e) => [e.entityId, e.bingoId])).toEqual([["bingo_summary", bingo.id], ["tile_stats", null]]);
   });
 
   it("only accepts its own host name", async () => {

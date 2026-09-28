@@ -7,12 +7,15 @@ import { McpServer, type AuthInfo, type CallToolResult } from "@modelcontextprot
 import * as schema from "../db/schema";
 import { oauthClients, users } from "../db/schema";
 import { audit } from "../audit/record";
-import { type McpTool, type McpToolContext } from "./tool";
+import { McpToolError, type McpTool, type McpToolContext } from "./tool";
+import { bingoSummary } from "./tools/bingoSummary";
 import { listBingos } from "./tools/listBingos";
+import { playerContributions } from "./tools/playerContributions";
+import { tileStats } from "./tools/tileStats";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
-export const MCP_TOOLS: McpTool[] = [listBingos as unknown as McpTool];
+export const MCP_TOOLS: McpTool[] = [listBingos, bingoSummary, tileStats, playerContributions] as unknown as McpTool[];
 
 export const RATE_LIMIT = { calls: 60, windowMs: 60_000 };
 
@@ -45,7 +48,7 @@ function errorResult(message: string): CallToolResult {
 export function buildMcpServer(db: Db, authInfo: AuthInfo | undefined, tools: McpTool[] = MCP_TOOLS): McpServer {
   const server = new McpServer(
     { name: "tectonic-bingo", title: "Tectonic Bingo", version: "1.0.0" },
-    { instructions: "Read-only data about Tectonic Bingo's Bingos, for site admins balancing future Bingos. Start with list_bingos." },
+    { instructions: "Read-only data about Tectonic Bingo's Bingos, for site admins balancing future Bingos. Start with list_bingos, then ask about one Bingo by its slug with bingo_summary, tile_stats or player_contributions." },
   );
   const { userId, connectionId } = (authInfo?.extra ?? {}) as { userId?: string; connectionId?: string };
 
@@ -78,7 +81,13 @@ export function buildMcpServer(db: Db, authInfo: AuthInfo | undefined, tools: Mc
           actor: { userId: user.id, type: "user", role: "admin" },
         });
 
-        const result = await tool.run(args, ctx);
+        let result: unknown;
+        try {
+          result = await tool.run(args, ctx);
+        } catch (err) {
+          if (err instanceof McpToolError) return errorResult(err.message);
+          throw err;
+        }
         const structured = (Array.isArray(result) ? { items: result } : result) as Record<string, unknown>;
         return { content: [{ type: "text", text: JSON.stringify(structured) }], structuredContent: structured };
       },
