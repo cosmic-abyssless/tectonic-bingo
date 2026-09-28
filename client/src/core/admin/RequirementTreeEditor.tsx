@@ -196,7 +196,17 @@ function DragHandle({ path, label }: { path: Path; label: string }) {
 // so it doesn't take pixel-perfect aim. With `children` (an empty condition's "no requirements yet"), that's the spot.
 // With `or` (between an ANY's options), the gap holds the player checklist's "OR" divider and is still a drop spot.
 // Focusable (though never in the tab order): a keyboard drag moves focus from spot to spot, and `label` says where each is.
-function DropGap({ parent, index, label, or, children }: { parent: Path; index: number; label: string; or?: boolean; children?: ReactNode }) {
+// The tree line (see GroupNode): it runs 6px in from the heading's start, children sit 20px right of it, and each branch
+// meets its child's first row (32px tall) at its middle. The line is drawn per child (the part beside it) and per drop
+// spot between children, so it stops at the last child's branch rather than running on past it.
+const TREE_LINE_OFFSET = "ml-1.5";
+const TREE_INDENT = "ml-1.5 pl-5";
+const TREE_BRANCH =
+  "relative pl-5 before:absolute before:left-0 before:top-0 before:w-0 before:border-l-2 before:border-outline after:absolute after:left-0 after:top-[15px] after:w-4 after:border-t-2 after:border-outline";
+const TREE_BRANCH_THROUGH = "before:bottom-0";
+const TREE_BRANCH_LAST = "before:h-[17px]";
+
+function DropGap({ parent, index, label, or, onTreeLine, children }: { parent: Path; index: number; label: string; or?: boolean; onTreeLine?: boolean; children?: ReactNode }) {
   const [current, moves] = useMoves();
   const ref = useRef<HTMLDivElement>(null);
   const { dropProps, isDropTarget } = useDrop({
@@ -226,7 +236,7 @@ function DropGap({ parent, index, label, or, children }: { parent: Path; index: 
       role="button"
       tabIndex={-1}
       aria-label={label}
-      className={`relative outline-none ${or ? "flex items-center gap-2 py-1 text-[11px] uppercase tracking-wide text-on-surface-muted" : "h-1.5"} ${open ? "z-10 before:absolute before:inset-x-0 before:-inset-y-2 before:content-['']" : ""}`}
+      className={`relative outline-none ${onTreeLine ? "border-l-2 border-outline" : ""} ${or ? `flex items-center gap-2 py-1 text-[11px] uppercase tracking-wide text-on-surface-muted ${onTreeLine ? "pl-3" : ""}` : "h-1.5"} ${open ? "z-10 before:absolute before:inset-x-0 before:-inset-y-2 before:content-['']" : ""}`}
     >
       {or && (
         <>
@@ -411,10 +421,10 @@ function GroupNode(props: NodeProps) {
   // A total ("N in total from") only adds up Items, so it offers no conditions to add (the server refuses them too).
   const holdsConditions = node.kind !== "SUM";
 
-  // Heading row (the rule, with its number), then the children inside the left bar, then the add row: the same order
-  // at every level, the task's own included.
+  // Heading row (the rule, with its number), then its children on a tree line (a branch to each, the line stopping at
+  // the last), then the add row, indented with the children: the same order at every level, the task's own included.
   return (
-    <div className={`${isRoot ? "" : "border-l-2 border-outline pl-3"} ${dragging ? "opacity-40" : ""}`}>
+    <div className={dragging ? "opacity-40" : undefined}>
       <div className="flex min-h-8 flex-wrap items-center gap-2">
         {!isRoot && <DragHandle path={path} label={conditionName} />}
         {ownLabel && (
@@ -428,18 +438,21 @@ function GroupNode(props: NodeProps) {
         {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${conditionName}` : `Remove ${conditionName}`} what="condition" onPress={() => remove(path)} className="ml-auto" />}
       </div>
       {children.length === 0 ? (
-        <DropGap parent={path} index={0} label={`Into ${conditionName}`}>
-          <p className="text-xs text-on-surface-subtle">No requirements yet — add {holdsConditions ? "an item or a condition" : "an item"}.</p>
-        </DropGap>
+        <div className={TREE_INDENT}>
+          <DropGap parent={path} index={0} label={`Into ${conditionName}`}>
+            <p className="text-xs text-on-surface-subtle">No requirements yet — add {holdsConditions ? "an item or a condition" : "an item"}.</p>
+          </DropGap>
+        </div>
       ) : (
-        // A drop spot before, between and after the rows; between an ANY's options it's also the "OR".
-        <div role="list">
+        // A drop spot before, between and after the rows; between an ANY's options it's also the "OR". The tree line
+        // runs down the list's left edge: through the drop spots before each child, and into each child as its branch.
+        <div role="list" className={TREE_LINE_OFFSET}>
           {children.map((child, i) => (
             // Keyed by id where there is one, so a row's own state (an open picker, an unsaved number) moves with it.
             // Inputs are uncontrolled (save on blur); a new row's key includes length so removing a sibling remounts the rest.
             <Fragment key={child.id ?? `new-${i}-${children.length}`}>
-              <DropGap parent={path} index={i} label={`Before ${rowName(child, conditionLabels)}`} or={node.kind === "ANY" && i > 0} />
-              <div role="listitem">
+              <DropGap parent={path} index={i} label={`Before ${rowName(child, conditionLabels)}`} or={node.kind === "ANY" && i > 0} onTreeLine />
+              <div role="listitem" className={`${TREE_BRANCH} ${i === children.length - 1 ? TREE_BRANCH_LAST : TREE_BRANCH_THROUGH}`}>
                 {child.kind === "ITEM" ? <ItemLeafRow {...props} node={child} path={[...path, i]} /> : <GroupNode {...props} node={child} path={[...path, i]} />}
               </div>
             </Fragment>
@@ -447,7 +460,7 @@ function GroupNode(props: NodeProps) {
           <DropGap parent={path} index={children.length} label={`At the end of ${conditionName}`} />
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className={`flex flex-wrap items-center gap-2 ${TREE_INDENT}`}>
         <SplitAddButton
           primaryLabel="Item"
           onPrimary={() => setAddingItem((v) => !v)}
