@@ -675,7 +675,16 @@ export interface WrappedSeriesModel {
   name: string;
   color: string | null;
   isMine: boolean;
-  points: { t: number; points: number }[];
+  /** `event` is what moved it there (null on the added start and end, and in Wrapped published before it was stored). */
+  points: { t: number; points: number; event: WrappedPointsEventModel | null }[];
+}
+
+/** An award or Point Adjustment on the chart, worded as the stats chart does: "+50 ZULRAH — Page 1". */
+export interface WrappedPointsEventModel {
+  deltaLabel: string;
+  label: string;
+  /** "Sat 14 Mar, 21:04", in the viewer's time zone. */
+  whenLabel: string;
 }
 
 export interface WrappedChartModel {
@@ -715,7 +724,8 @@ export interface WrappedYouModel {
   firstLast: { first: WrappedDropModel; last: WrappedDropModel | null } | null;
   mostActiveDay: { dateLabel: string; submissionsLabel: string; drops: WrappedDropModel[] } | null;
   titles: { id: string; name: string; text: string }[];
-  achievements: { key: string; name: string; itemName: string; earnedLabel: string }[];
+  /** `description` is how it was earned; null for one no longer in the catalogue. */
+  achievements: { key: string; name: string; itemName: string; description: string | null; earnedLabel: string }[];
   wom: { ehbLabel: string; bosses: { name: string; killsLabel: string }[] } | null;
   draft: { pickLabel: string; positionLabel: string } | null;
 }
@@ -814,8 +824,11 @@ export interface WrappedBingoModel {
   leaderboard: { teamId: string; name: string; color: string | null; placement: number; placementLabel: string; pointsLabel: string; isMine: boolean }[];
   /** Every Team's points over time; null with nothing to draw. */
   race: WrappedChartModel | null;
-  /** The draft's biggest Steal (CONTEXT.md); null without one. */
-  steal: { person: WrappedPersonModel; teamName: string | null; pickLabel: string; rankLabel: string; placesBeatenLabel: string } | null;
+  /**
+   * The draft's biggest Steal (CONTEXT.md); null without one. `positionLabel` counts Players, like `rankLabel`, so a Duo's
+   * half reads the same as a single ("8th"): their pick drafted two.
+   */
+  steal: { person: WrappedPersonModel; teamName: string | null; positionLabel: string; rankLabel: string; placesBeatenLabel: string } | null;
   /** Null when nothing was reviewed. */
   moderation: {
     /** "89 reviews" */

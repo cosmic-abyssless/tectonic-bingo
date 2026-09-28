@@ -1,7 +1,7 @@
 // Wrapped (CONTEXT.md "Wrapped"): the story's sections, built from the published data (MyWrappedResponse) as it is.
 // Nothing here recomputes a stat: it picks what to say, words it, and leaves out every part (and every section) that
 // has nothing to say for this viewer. Pure, so it's tested without React.
-import type { AvatarUser, MyWrappedResponse, WrappedArtSection, WrappedCaptain, WrappedDrop, WrappedPointsPoint, WrappedTeam } from "@bingo/shared";
+import { achievementDef, isAchievementKey, type AvatarUser, type MyWrappedResponse, type WrappedArtSection, type WrappedCaptain, type WrappedDrop, type WrappedPointsPoint, type WrappedTeam } from "@bingo/shared";
 import { thumbUrl } from "../api/imageVariants";
 import { formatGp } from "../core/ui/gp";
 import { avatarUrl, displayName } from "../core/ui/user";
@@ -169,7 +169,15 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
   };
 
   const chartOf = (teams: WrappedTeam[]): WrappedChartModel | null => {
-    const toPoints = (pts: WrappedPointsPoint[]) => pts.map((p) => ({ t: Date.parse(p.at), points: p.points }));
+    const toPoints = (pts: WrappedPointsPoint[]) =>
+      pts.map((p) => ({
+        t: Date.parse(p.at),
+        points: p.points,
+        event:
+          p.label !== undefined && p.delta !== undefined
+            ? { deltaLabel: `${p.delta > 0 ? "+" : ""}${p.delta.toLocaleString()}`, label: p.source === "adjustment" ? `Moderator adjustment: ${p.label}` : p.label, whenLabel: whenLabel(p.at) }
+            : null,
+      }));
     const all = teams.flatMap((t) => toPoints(t.pointsOverTime));
     if (all.length === 0) return null;
     const start = Math.min(opts.startsAt ?? Infinity, ...all.map((p) => p.t));
@@ -179,7 +187,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
       const pts = toPoints(t.pointsOverTime);
       // From 0 at the start, flat to the end after the last award.
       const last = pts.at(-1)?.points ?? 0;
-      return { teamId: t.teamId, name: t.name, color: t.color, isMine: t.teamId === myTeamId, points: [{ t: start, points: 0 }, ...pts, { t: end, points: last }] };
+      return { teamId: t.teamId, name: t.name, color: t.color, isMine: t.teamId === myTeamId, points: [{ t: start, points: 0, event: null }, ...pts, { t: end, points: last, event: null }] };
     });
     return { start, end, maxPoints: Math.max(1, ...all.map((p) => p.points)), series };
   };
@@ -241,7 +249,14 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
       firstLast: y.firstDrop ? { first: drop(y.firstDrop), last: y.lastDrop && y.lastDrop.submissionId !== y.firstDrop.submissionId ? drop(y.lastDrop, 1) : null } : null,
       mostActiveDay: y.mostActiveDay && y.mostActiveDay.submissions > 1 ? { dateLabel: dayLabel(y.mostActiveDay.date), submissionsLabel: plural(y.mostActiveDay.submissions, "Submission"), drops: y.mostActiveDay.drops.map(drop) } : null,
       titles: y.titles,
-      achievements: y.achievements.map((a) => ({ key: a.key, name: a.name, itemName: a.itemName, earnedLabel: achievedAt(a.earnedAt) })),
+      achievements: y.achievements.map((a) => ({
+        key: a.key,
+        name: a.name,
+        itemName: a.itemName,
+        // From the catalogue, so Wrapped published before it was stored says it too.
+        description: isAchievementKey(a.key) ? achievementDef(a.key).description : null,
+        earnedLabel: achievedAt(a.earnedAt),
+      })),
       wom: y.wom && (y.wom.ehb > 0 || bosses.length > 0) ? { ehbLabel: y.wom.ehb.toLocaleString(undefined, { maximumFractionDigits: 1 }), bosses: bosses.map((b) => ({ name: b.name, killsLabel: plural(b.kills, "kill") })) } : null,
       draft: y.draft ? { pickLabel: `Pick ${y.draft.pickNumber}`, positionLabel: ordinal(y.draft.position) } : null,
     };
@@ -355,7 +370,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
       ? {
           person: person(bingo.biggestSteal.player),
           teamName: teamById.get(bingo.biggestSteal.teamId)?.name ?? null,
-          pickLabel: `Pick ${bingo.biggestSteal.pickNumber}`,
+          positionLabel: ordinal(bingo.biggestSteal.position),
           rankLabel: ordinal(bingo.biggestSteal.rank),
           placesBeatenLabel: plural(bingo.biggestSteal.placesBeaten, "place"),
         }

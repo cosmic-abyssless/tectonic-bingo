@@ -175,3 +175,37 @@ describe("tallies", () => {
     expect(teamTally?.tallies).toEqual([{ categoryId: mvp.id, categoryName: "Team MVP", counts: [{ user: expect.objectContaining({ id: bob.id }), votes: 2 }] }]);
   });
 });
+
+describe("turnout", () => {
+  it("counts who has voted per Team and per category while Live, never who", () => {
+    const { bingo, team, otherTeam, captain, alice, bob } = seed("live");
+    const mvp = superlativeService.createCategory(db, { bingoId: bingo.id, name: "Team MVP" });
+    const spirit = superlativeService.createCategory(db, { bingoId: bingo.id, name: "Team Spirit" });
+    superlativeService.setVote(db, bingo, { categoryId: mvp.id, teamId: team.id, voterUserId: alice.id, nomineeUserId: bob.id });
+    superlativeService.setVote(db, bingo, { categoryId: spirit.id, teamId: team.id, voterUserId: alice.id, nomineeUserId: bob.id });
+    superlativeService.setVote(db, bingo, { categoryId: mvp.id, teamId: team.id, voterUserId: captain.id, nomineeUserId: alice.id });
+
+    const turnout = superlativeService.getTurnout(db, bingo);
+    expect(turnout.find((t) => t.teamId === team.id)).toEqual({
+      teamId: team.id,
+      teamName: "Team A",
+      color: null,
+      players: 3,
+      votedAny: 2,
+      votedAll: 1,
+      categories: [
+        { categoryId: mvp.id, categoryName: "Team MVP", voted: 2 },
+        { categoryId: spirit.id, categoryName: "Team Spirit", voted: 1 },
+      ],
+    });
+    expect(turnout.find((t) => t.teamId === otherTeam.id)).toMatchObject({ players: 1, votedAny: 0, votedAll: 0 });
+  });
+
+  it("stops counting a Player once they're removed from the Team", () => {
+    const { bingo, team, alice, bob } = seed("live");
+    const mvp = superlativeService.createCategory(db, { bingoId: bingo.id, name: "Team MVP" });
+    superlativeService.setVote(db, bingo, { categoryId: mvp.id, teamId: team.id, voterUserId: alice.id, nomineeUserId: bob.id });
+    removeTeamMember(db, team.id, alice.id);
+    expect(superlativeService.getTurnout(db, bingo).find((t) => t.teamId === team.id)).toMatchObject({ players: 2, votedAny: 0 });
+  });
+});

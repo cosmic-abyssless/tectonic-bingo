@@ -131,6 +131,16 @@ router.get(
   }),
 );
 
+// Superlative turnout: how many of each Team's Players have voted, as counts only (never who, or for whom), so it's
+// readable at any stage. Admin-only, like the rest of the Superlatives tab.
+router.get(
+  "/superlatives/turnout",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    res.json({ teams: superlativeService.getTurnout(db, req.bingo!) });
+  }),
+);
+
 // Prices a submission's claims again, when they were priced from the wrong thing (CONTEXT.md "Drop value").
 router.post(
   "/submissions/:id/reprice",

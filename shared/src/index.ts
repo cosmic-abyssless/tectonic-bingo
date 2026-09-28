@@ -1374,7 +1374,10 @@ export type BroadcastEvent =
   // A player earned (or unlocked, on switching an Achievement back on) an Achievement, or a Big spender popup
   // finished pricing. Id only, per the unauthenticated-broadcast rule above — the client refetches "my
   // Achievements" only when the userId is its own signed-in user.
-  | { type: "achievements_changed"; bingoId: string; payload: { userId: string } };
+  | { type: "achievements_changed"; bingoId: string; payload: { userId: string } }
+  // A Superlative vote was cast, changed or cleared. Nothing else, not even the Team, per the unauthenticated-broadcast
+  // rule above (votes are secret): Admins refetch the turnout, and Players their own Team's ballot counts.
+  | { type: "superlative_votes_changed"; bingoId: string; payload: Record<string, never> };
 
 export * from "./achievements.ts";
 export * from "./audit.ts";

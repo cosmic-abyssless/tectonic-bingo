@@ -1,13 +1,17 @@
 import { useId, useMemo, useState, type PointerEvent } from "react";
 import type { WrappedChartModel, WrappedSeriesModel } from "../../headless/types";
+import { nearestDot } from "../stats/chartMath";
 
 // Points over time for Wrapped: one Team's climb, or every Team's race. Team colours are the Teams' own; the viewer's
-// Team is drawn heavier and the rest recede. Hover (or touch) for every Team's points at that moment.
+// Team is drawn heavier and the rest recede. Hover (or touch) for every Team's points at that moment, or near a dot for
+// the award or Point Adjustment that moved it, as the stats chart does.
 
 const W = 640;
 const H = 260;
 const PAD = { top: 12, right: 12, bottom: 24, left: 40 };
 const FALLBACK_COLOR = "var(--color-on-surface-muted)";
+/** How near a dot the pointer must be to pick it, in screen pixels. */
+const HOVER_REACH = 16;
 
 /** A step line: points only change at an award, so the total holds flat until the next one. */
 function stepPath(points: { t: number; points: number }[], x: (t: number) => number, y: (p: number) => number): string {
@@ -45,21 +49,31 @@ const momentLabel = (ms: number) => new Date(ms).toLocaleString(undefined, { wee
 export function PointsChart({ chart, label }: { chart: WrappedChartModel; label: string }) {
   const titleId = useId();
   const [hoverT, setHoverT] = useState<number | null>(null);
+  const [hoverDot, setHoverDot] = useState<number | null>(null);
   const x = (t: number) => PAD.left + ((t - chart.start) / (chart.end - chart.start)) * (W - PAD.left - PAD.right);
   const y = (p: number) => H - PAD.bottom - (p / chart.maxPoints) * (H - PAD.top - PAD.bottom);
   const hasMine = chart.series.some((s) => s.isMine);
   // The viewer's Team last, so it's drawn on top.
   const ordered = useMemo(() => [...chart.series].sort((a, b) => Number(a.isMine) - Number(b.isMine)), [chart.series]);
   const grid = useMemo(() => ticks(chart.maxPoints), [chart.maxPoints]);
+  // Every award's dot, in drawing order so a tie goes to the one on top.
+  const dots = ordered.flatMap((s) => s.points.flatMap((p) => (p.event ? [{ s, points: p.points, event: p.event, x: x(p.t), y: y(p.points) }] : [])));
 
   const onMove = (e: PointerEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const px = ((e.clientX - rect.left) / rect.width) * W;
+    const scale = W / rect.width;
+    const px = (e.clientX - rect.left) * scale;
     const frac = Math.min(1, Math.max(0, (px - PAD.left) / (W - PAD.left - PAD.right)));
     setHoverT(chart.start + frac * (chart.end - chart.start));
+    setHoverDot(nearestDot(dots, px, (e.clientY - rect.top) * scale, HOVER_REACH * scale));
   };
+  const onLeave = () => {
+    setHoverT(null);
+    setHoverDot(null);
+  };
+  const dot = hoverDot === null ? null : dots[hoverDot] ?? null;
 
-  const hovered = hoverT === null ? null : [...chart.series].map((s) => ({ s, points: pointsAt(s, hoverT) })).sort((a, b) => b.points - a.points);
+  const hovered = hoverT === null || dot ? null : [...chart.series].map((s) => ({ s, points: pointsAt(s, hoverT) })).sort((a, b) => b.points - a.points);
   const hoverLeft = hoverT === null ? 0 : (x(hoverT) / W) * 100;
 
   return (
@@ -72,7 +86,7 @@ export function PointsChart({ chart, label }: { chart: WrappedChartModel; label:
           aria-labelledby={titleId}
           onPointerMove={onMove}
           onPointerDown={onMove}
-          onPointerLeave={() => setHoverT(null)}
+          onPointerLeave={onLeave}
         >
           <title id={titleId}>{label}</title>
           {grid.map((v) => (
@@ -101,8 +115,42 @@ export function PointsChart({ chart, label }: { chart: WrappedChartModel; label:
               strokeLinecap="round"
             />
           ))}
-          {hoverT !== null && <line x1={x(hoverT)} x2={x(hoverT)} y1={PAD.top} y2={H - PAD.bottom} stroke="var(--color-outline-strong)" strokeWidth={1} />}
+          {dots.map((d, i) => (
+            <circle
+              key={i}
+              cx={d.x}
+              cy={d.y}
+              r={d === dot ? 5 : 3}
+              fill={d.s.color ?? FALLBACK_COLOR}
+              fillOpacity={hasMine && !d.s.isMine && d !== dot ? 0.45 : 1}
+              stroke={d === dot ? "var(--color-on-surface)" : "none"}
+              strokeWidth={2}
+            />
+          ))}
+          {hoverT !== null && !dot && <line x1={x(hoverT)} x2={x(hoverT)} y1={PAD.top} y2={H - PAD.bottom} stroke="var(--color-outline-strong)" strokeWidth={1} />}
         </svg>
+        {dot && (
+          <div
+            role="tooltip"
+            className="pointer-events-none absolute z-10 w-56 max-w-[calc(100%-1rem)] rounded-lg border border-outline bg-surface px-3 py-2 text-xs shadow-lg"
+            style={{
+              ...(dot.x > W / 2 ? { right: `${100 - (dot.x / W) * 100 + 2}%` } : { left: `${(dot.x / W) * 100 + 2}%` }),
+              // Above the dot, or below it when the dot is near the top.
+              ...(dot.y < H / 3 ? { top: `${(dot.y / H) * 100 + 4}%` } : { bottom: `${100 - (dot.y / H) * 100 + 4}%` }),
+            }}
+          >
+            <p className="flex items-center gap-1.5 font-semibold">
+              <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: dot.s.color ?? FALLBACK_COLOR }} />
+              <span className="truncate">{dot.s.name}</span>
+            </p>
+            <p className="mt-1">
+              <span className="num font-semibold">{dot.event.deltaLabel}</span> {dot.event.label}
+            </p>
+            <p className="mt-0.5 text-on-surface-muted">
+              Total <span className="num">{dot.points.toLocaleString()}</span> · {dot.event.whenLabel}
+            </p>
+          </div>
+        )}
         {hovered && hoverT !== null && (
           <div
             className="pointer-events-none absolute top-0 z-10 min-w-40 rounded-lg border border-outline bg-surface px-3 py-2 text-xs shadow-lg"

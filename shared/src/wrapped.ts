@@ -28,6 +28,10 @@ export interface WrappedDrop {
 export interface WrappedPointsPoint {
   at: string;
   points: number;
+  /** What moved it, as the stats chart words it: the task, tile or line bonus, or the Point Adjustment's reason. Missing from Wrapped published before it was stored. */
+  source?: "node" | "adjustment";
+  label?: string;
+  delta?: number;
 }
 
 export interface WrappedYou {

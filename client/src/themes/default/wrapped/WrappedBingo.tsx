@@ -74,8 +74,7 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
             </WrappedHeading>
           </Reveal>
           <Reveal step={1} className="mt-6 max-w-md text-lg text-on-surface-muted">
-            Drafted with {b.steal.pickLabel.toLowerCase()}
-            {b.steal.teamName && ` by ${b.steal.teamName}`}, finished {b.steal.rankLabel} in Points share. {b.steal.placesBeatenLabel} better than their draft spot.
+            The {b.steal.positionLabel} Player drafted{b.steal.teamName && ` (by ${b.steal.teamName})`}, finished {b.steal.rankLabel} in Points share. {b.steal.placesBeatenLabel} better than their draft spot.
           </Reveal>
         </WrappedScene>
       )}

@@ -132,10 +132,13 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
               <ul className="mt-4 grid gap-2 sm:grid-cols-2">
                 {y.achievements.map((a) => (
                   <li key={a.key} className="flex items-center gap-3 rounded-xl border border-outline bg-surface px-3 py-2">
-                    <WikiIcon name={a.itemName} className="size-8 [image-rendering:pixelated]" />
+                    <WikiIcon name={a.itemName} className="size-8 shrink-0 [image-rendering:pixelated]" />
                     <span className="min-w-0">
-                      <span className="block truncate font-semibold">{a.name}</span>
-                      <span className="block text-xs text-on-surface-subtle">{a.earnedLabel}</span>
+                      <span className="flex items-baseline justify-between gap-2">
+                        <span className="truncate font-semibold">{a.name}</span>
+                        <span className="shrink-0 text-xs text-on-surface-subtle">{a.earnedLabel}</span>
+                      </span>
+                      {a.description && <span className="block text-xs text-on-surface-muted">{a.description}</span>}
                     </span>
                   </li>
                 ))}
