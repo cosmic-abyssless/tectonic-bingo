@@ -73,7 +73,7 @@ export function PinnedArt({
         style={{
           backgroundColor: colors.PAPER_RAISED,
           borderColor: colors.LINE,
-          boxShadow: `4px 4px 0 ${colors.LINE}`,
+          boxShadow: `4px 4px 0 ${colors.SHADOW}`,
           outlineColor: colors.BLUE,
         }}
       >
@@ -122,7 +122,7 @@ export function ArtViewer({ imageUrl, name, isOpen, onClose, colors }: { imageUr
             src={fullUrl(imageUrl)}
             alt={name}
             className="block max-h-[calc(100dvh-4rem)] max-w-[calc(100vw-2rem)] border-[3px] object-contain"
-            style={{ backgroundColor: colors.PAPER_RAISED, borderColor: colors.LINE, boxShadow: `6px 6px 0 ${colors.LINE}` }}
+            style={{ backgroundColor: colors.PAPER_RAISED, borderColor: colors.LINE, boxShadow: `6px 6px 0 ${colors.SHADOW}` }}
           />
           <ComicIconButton label="Close" onPress={onClose} className="absolute -right-3 -top-3 size-11">
             <XIcon size={22} />

@@ -25,7 +25,7 @@ export function RewindPopup({ popup }: { popup: RewindPopupModel }) {
         role="status"
         aria-label={`${s.playerName ?? "Someone"}'s submission${s.rejected ? ", rejected" : ""}`}
         className={`relative mb-5 rounded-2xl border-[3px] ${big ? "w-[min(26rem,calc(100vw-2rem))]" : "w-[min(19rem,calc(100vw-2rem))]"} ${s.rejected ? "grayscale" : ""}`}
-        style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK_BODY, boxShadow: `4px 4px 0 ${colors.LINE}` }}
+        style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK_BODY, boxShadow: `4px 4px 0 ${colors.SHADOW}` }}
       >
         {/* The tail, pointing down at the Board; its open top sits over the bubble's border. */}
         <svg aria-hidden viewBox="0 0 28 22" className="absolute -bottom-[19px] left-10 h-[22px] w-7 overflow-visible">
@@ -55,7 +55,7 @@ export function RewindPopup({ popup }: { popup: RewindPopupModel }) {
               target="_blank"
               rel="noreferrer"
               className="mx-3 block -rotate-1 border-[3px] p-0.5"
-              style={{ borderColor: colors.LINE, background: colors.PAPER, boxShadow: `2px 2px 0 ${colors.LINE}` }}
+              style={{ borderColor: colors.LINE, background: colors.PAPER, boxShadow: `2px 2px 0 ${colors.SHADOW}` }}
             >
               <img src={s.thumbnailUrl} alt="Screenshot" className={`w-full object-contain ${big ? "max-h-52" : "max-h-28"}`} />
             </a>

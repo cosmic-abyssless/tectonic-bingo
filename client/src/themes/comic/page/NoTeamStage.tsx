@@ -16,7 +16,7 @@ export function NoTeamStage({ selector }: { selector: TeamSelectorModel }) {
   return (
     <section
       className="mx-auto flex max-w-2xl flex-col items-center gap-4 border-[3px] px-5 py-6 text-center"
-      style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `4px 4px 0 ${colors.LINE}`, color: colors.INK }}
+      style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `4px 4px 0 ${colors.SHADOW}`, color: colors.INK }}
     >
       <h2 className="text-3xl uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em" }}>
         Select a team to view

@@ -150,7 +150,7 @@ function EmptySubmissions({ hasSubmit }: { hasSubmit: boolean }) {
       <div className="relative">
         <div
           className="flex h-28 w-40 items-center justify-center border-[3px] text-2xl uppercase"
-          style={{ fontFamily: COMIC_FONT, borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK_SUBTLE, boxShadow: `5px 5px 0 ${colors.LINE}` }}
+          style={{ fontFamily: COMIC_FONT, borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK_SUBTLE, boxShadow: `5px 5px 0 ${colors.SHADOW}` }}
         >
           Empty
         </div>

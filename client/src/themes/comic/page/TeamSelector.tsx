@@ -35,7 +35,7 @@ export function TeamMenu({ selector, triggerRef }: { selector: TeamSelectorModel
       placement="bottom end"
       offset={8}
       triggerRef={triggerRef}
-      style={{ ...portalVars, background: colors.PAPER_RAISED, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.LINE}` }}
+      style={{ ...portalVars, background: colors.PAPER_RAISED, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.SHADOW}` }}
       className="comic-panel-pop z-[60] min-w-52 overflow-hidden rounded-md border-[3px] outline-none"
     >
       <AriaMenu

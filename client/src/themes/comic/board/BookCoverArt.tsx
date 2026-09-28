@@ -364,12 +364,12 @@ export function BookBackArt({
                 alt=""
                 onFail={() => setImgFailed(true)}
                 className="h-full w-full object-contain"
-                style={{ filter: `drop-shadow(1.2cqw 1.2cqw 0 ${colors.LINE})` }}
+                style={{ filter: `drop-shadow(1.2cqw 1.2cqw 0 ${colors.SHADOW})` }}
               />
             )}
             <span
               className="absolute -left-[5cqw] -top-[4cqw] flex h-[14cqw] w-[14cqw] -rotate-[8deg] items-center justify-center rounded-full"
-              style={{ background: colors.GREEN, border: `1cqw solid ${colors.LINE}`, boxShadow: `1.2cqw 1.2cqw 0 ${colors.LINE}`, color: colors.ON_LOUD }}
+              style={{ background: colors.GREEN, border: `1cqw solid ${colors.LINE}`, boxShadow: `1.2cqw 1.2cqw 0 ${colors.SHADOW}`, color: colors.ON_LOUD }}
             >
               <svg viewBox="0 0 16 16" className="h-[8.5cqw] w-[8.5cqw]" fill="none" stroke="currentColor" strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round" aria-label="Complete">
                 <path d="M3 8.5l3 3 7-7" />
@@ -389,7 +389,7 @@ export function BookBackArt({
         </div>
         <div
           className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-[0.9cqw] px-[4cqw] py-[3.5cqw]"
-          style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK, boxShadow: `1.6cqw 1.6cqw 0 ${colors.LINE}` }}
+          style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK, boxShadow: `1.6cqw 1.6cqw 0 ${colors.SHADOW}` }}
         >
           <span className="mb-[2cqw] uppercase leading-none" style={{ fontFamily: COMIC_FONT, fontSize: "6.6cqw", letterSpacing: "0.04em", color: colors.INK_SUBTLE }}>
             Completed by

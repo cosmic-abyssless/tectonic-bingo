@@ -33,7 +33,13 @@ function TeamDetails({ slug, team, stage, onClose }: { slug: string; team: TeamM
 
   return (
     <>
-      <ComicDialogHeader title={team.name} subtitle={`Team · ${team.members.length} ${team.members.length === 1 ? "member" : "members"}`} onClose={onClose} />
+      <ComicDialogHeader
+        title={team.name}
+        subtitle={`Team · ${team.members.length} ${team.members.length === 1 ? "member" : "members"}`}
+        // The team's own colour, as its swatch and banner stripe are; yellow for a team without one.
+        tone={team.color ? { color: team.color } : "yellow"}
+        onClose={onClose}
+      />
       <div className="space-y-5 p-5">
         {team.canRename && (
           <form
@@ -70,7 +76,7 @@ function TeamDetails({ slug, team, stage, onClose }: { slug: string; team: TeamM
               style={{
                 borderColor: colors.LINE,
                 background: colors.PAPER_RAISED,
-                boxShadow: `3px 3px 0 ${colors.LINE}`,
+                boxShadow: `3px 3px 0 ${colors.SHADOW}`,
                 transform: `rotate(${i % 2 === 0 ? -0.6 : 0.6}deg)`,
               }}
             >

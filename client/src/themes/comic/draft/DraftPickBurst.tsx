@@ -25,7 +25,7 @@ export function DraftPickBurst({ names, teamName, teamColor }: { names: string[]
       {/* Positioned so it paints over the burst (a positioned, transformed sibling would otherwise cover it). */}
       <div
         className="relative z-10 -mt-6 flex max-w-[min(86vw,26rem)] items-center gap-2 rounded-sm border-[3px] px-4 py-1.5"
-        style={{ fontFamily: COMIC_FONT, fontSize: `${teamSize}rem`, lineHeight: 1.1, background: colors.PAPER, color: colors.INK, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.INK}` }}
+        style={{ fontFamily: COMIC_FONT, fontSize: `${teamSize}rem`, lineHeight: 1.1, background: colors.PAPER, color: colors.INK, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.SHADOW}` }}
       >
         {teamColor && <span className="size-4 shrink-0 rounded-full border-2" style={{ backgroundColor: teamColor, borderColor: colors.LINE }} />}
         <span className="text-center [overflow-wrap:anywhere]">{teamName}</span>

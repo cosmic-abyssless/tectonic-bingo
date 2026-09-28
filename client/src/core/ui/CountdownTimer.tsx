@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { formatCountdown, formatDuration } from "./time";
+import { formatCountdown, formatDuration, formatShortDuration } from "./time";
 
 /** Ticks every second until `target` (epoch ms) passes, then stops. */
-export function CountdownTimer({ target, format = "duration", className }: { target: number; format?: "duration" | "clock"; className?: string }) {
+export function CountdownTimer({ target, format = "duration", className }: { target: number; format?: "duration" | "short" | "clock"; className?: string }) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -18,7 +18,7 @@ export function CountdownTimer({ target, format = "duration", className }: { tar
   const remaining = Math.max(0, target - now);
   return (
     <time dateTime={new Date(target).toISOString()} className={`num ${className ?? ""}`}>
-      {format === "clock" ? formatCountdown(remaining) : formatDuration(remaining)}
+      {format === "clock" ? formatCountdown(remaining) : format === "short" ? formatShortDuration(remaining) : formatDuration(remaining)}
     </time>
   );
 }

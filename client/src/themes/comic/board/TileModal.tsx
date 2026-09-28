@@ -1220,7 +1220,7 @@ function FlyingBook({
     // Bring the base sheet's shadow back before it's closed again — it's
     // occluded under the cover regardless of exactly when in the close it
     // returns.
-    base.style.filter = baseShadow(colors, tile.progress.allComplete);
+    base.style.filter = baseShadow();
     if (reduceMotion) {
       animate(reducedExitSequence(backdrop, burst)).then(finish, finish);
       return;
@@ -1572,7 +1572,7 @@ function TileDetails({
           backgroundColor: page.PAPER_RAISED,
           color: page.INK,
           borderColor: page.LINE,
-          boxShadow: `3px 3px 0 ${page.LINE}`,
+          boxShadow: `3px 3px 0 ${page.SHADOW}`,
           opacity: 0,
         }}
       >
@@ -1586,7 +1586,7 @@ function TileDetails({
             a phone, which page. */}
         <span
           className="min-w-32 -rotate-1 border-[3px] px-3 py-1 text-center text-base uppercase leading-none tabular-nums"
-          style={{ background: page.YELLOW, borderColor: page.LINE, color: page.ON_YELLOW, boxShadow: `2px 2px 0 ${page.LINE}` }}
+          style={{ background: page.YELLOW, borderColor: page.LINE, color: page.ON_YELLOW, boxShadow: `2px 2px 0 ${page.SHADOW}` }}
         >
           {single ? `Page ${spread + 1} / ${pageCount}` : `Spread ${spread + 1} / ${lastSpread + 1}`}
         </span>
@@ -1627,7 +1627,7 @@ function NavButton({
       onPress={onPress}
       isDisabled={disabled}
       className="flex size-10 cursor-pointer items-center justify-center rounded-full border-[3px] transition-transform duration-100 pressed:scale-95 hover:-translate-y-0.5 disabled:cursor-default disabled:opacity-35 disabled:hover:translate-y-0"
-      style={{ backgroundColor: colors.PAPER_RAISED, color: colors.INK, borderColor: colors.LINE, boxShadow: `2px 2px 0 ${colors.LINE}` }}
+      style={{ backgroundColor: colors.PAPER_RAISED, color: colors.INK, borderColor: colors.LINE, boxShadow: `2px 2px 0 ${colors.SHADOW}` }}
     >
       {children}
     </AriaButton>
@@ -1940,7 +1940,7 @@ function SummaryPage({
                     style={{
                       borderColor: colors.LINE,
                       background: colors.PAPER_RAISED,
-                      boxShadow: `2px 2px 0 ${colors.LINE}`,
+                      boxShadow: `2px 2px 0 ${colors.SHADOW}`,
                       color: colors.INK,
                     }}
                   >
@@ -2051,7 +2051,7 @@ function TaskPage({
           borderColor: colors.LINE,
           background: colors.YELLOW,
           color: colors.ON_YELLOW,
-          boxShadow: `3px 3px 0 ${colors.LINE}`,
+          boxShadow: `3px 3px 0 ${colors.SHADOW}`,
           transform: "rotate(6deg)",
         }}
         aria-hidden

@@ -123,7 +123,7 @@
 /* Thick ink frame with a hard offset shadow. */
 .comic-ink-panel {
   border: 3px solid var(--comic-line, #0b0b0d);
-  box-shadow: var(--comic-shadow-x, 5px) var(--comic-shadow-y, 5px) 0 var(--comic-line, #0b0b0d);
+  box-shadow: var(--comic-shadow-x, 5px) var(--comic-shadow-y, 5px) 0 var(--comic-shadow, var(--comic-line, #0b0b0d));
 }
 
 /* Pushable: translates into its shadow while pressed. */
@@ -137,7 +137,7 @@
  * survives; !important on the shadow because the shadow is set inline. */
 .comic-lift:hover:not(:disabled):not([data-pressed]) {
   translate: -1px -1px;
-  box-shadow: 5px 5px 0 var(--comic-line, #0b0b0d) !important;
+  box-shadow: 5px 5px 0 var(--comic-shadow, var(--comic-line, #0b0b0d)) !important;
   filter: brightness(0.96);
 }
 .comic-ghost:hover:not(:disabled) {
@@ -145,7 +145,9 @@
   color: var(--comic-on-yellow, #0b0b0d) !important;
 }
 
-/* Navigation: a link, not a button — underlined ink lettering, no frame. */
+/* Navigation: a link, not a button — underlined ink lettering, no frame. On
+ * hover it only changes colour: a filled box would make it look like the
+ * buttons beside it. */
 .comic-link {
   color: var(--comic-ink, #0b0b0d);
   text-decoration: underline;
@@ -153,18 +155,20 @@
   text-underline-offset: 3px;
   cursor: pointer;
   padding-inline: 0.5rem;
-  border-radius: 0.25rem;
-  transition: background-color 90ms ease-out;
+  transition: color 120ms ease-out;
 }
 .comic-link:hover,
 .comic-link:focus-visible {
-  background: var(--comic-yellow, #f5d63d);
-  color: var(--comic-on-yellow, #0b0b0d);
+  color: var(--comic-link-hover, #1f4fd8);
+}
+.comic-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 .comic-press[data-pressed],
 .comic-press:active {
   transform: translate(3px, 3px);
-  box-shadow: 1px 1px 0 var(--comic-line, #0b0b0d) !important;
+  box-shadow: 1px 1px 0 var(--comic-shadow, var(--comic-line, #0b0b0d)) !important;
 }
 
 /* ---- Keyframes ------------------------------------------------------ */
@@ -275,17 +279,17 @@
    shadow of the board's tile search, which grows when the field has focus. */
 .comic-fields :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea, [data-select-trigger]) {
   border-width: 3px;
-  box-shadow: 3px 3px 0 var(--comic-line);
+  box-shadow: 3px 3px 0 var(--comic-shadow, var(--comic-line));
   transition: box-shadow 150ms ease;
 }
 .comic-fields :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea, [data-select-trigger]):focus {
   outline: none;
   border-color: var(--comic-line);
-  box-shadow: 5px 5px 0 var(--comic-line);
+  box-shadow: 5px 5px 0 var(--comic-shadow, var(--comic-line));
 }
 .comic-fields :is([data-select-list], [data-popover-panel]) {
   border-width: 3px;
-  box-shadow: 4px 4px 0 var(--comic-line);
+  box-shadow: 4px 4px 0 var(--comic-shadow, var(--comic-line));
 }
 /* Rules between the rows of a sheet's list (signup/parts.tsx RowList). */
 .comic-rows > li + li {
@@ -326,11 +330,11 @@
 }
 .comic-fields [data-cell-button="primary"] {
   border-color: var(--comic-line);
-  box-shadow: 2px 2px 0 var(--comic-line);
+  box-shadow: 2px 2px 0 var(--comic-shadow, var(--comic-line));
 }
 .comic-fields [data-cell-button="primary"]:hover:not(:disabled) {
   translate: -1px -1px;
-  box-shadow: 3px 3px 0 var(--comic-line);
+  box-shadow: 3px 3px 0 var(--comic-shadow, var(--comic-line));
   background: var(--color-button);
 }
 .comic-fields [data-cell-button="primary"]:active:not(:disabled) {

@@ -21,6 +21,11 @@ export interface ComicColors {
    *  light palette; dark palettes split them so a page can have, say, black
    *  or neon-cyan panel lines under cream lettering. */
   LINE: string;
+  /** Hard offset drop shadows. Same as LINE in the light palette, where the
+   *  line is black ink. A dark palette's line is light, and a light shadow
+   *  under a light border reads as a second, smeared border rather than
+   *  depth, so its shadows are cast in near-black instead. */
+  SHADOW: string;
   /** Body copy — a hair softer than INK so paragraphs don't shout. */
   INK_BODY: string;
   /** Captions, metadata, disabled. */
@@ -47,6 +52,7 @@ export interface ComicColors {
 
   /** Tints (for fills behind text set in the matching primary). */
   YELLOW_TINT: string;
+  ORANGE_TINT: string;
   BLUE_TINT: string;
   RED_TINT: string;
   GREEN_TINT: string;
@@ -70,6 +76,9 @@ export interface ComicColors {
   /** Halftone dot ink for the page background. */
   HALFTONE: string;
 
+  /** A hovered or focused link's lettering (the masthead's page links). A link
+   *  only changes colour, where a button lifts or fills, so the two read apart. */
+  LINK_HOVER: string;
   /** Lettering on a saturated fill (primary button, stamps, coloured tags, dialog headers). */
   ON_LOUD: string;
   /** Lettering on the YELLOW fill (score tab, yellow buttons, hovered menu rows). */
@@ -97,6 +106,7 @@ export interface ComicColors {
 const LIGHT: ComicColors = {
   INK: "#0b0b0d",
   LINE: "#0b0b0d",
+  SHADOW: "#0b0b0d",
   INK_BODY: "#1d1b18",
   INK_SUBTLE: "#6b6259",
   RULE: "rgba(11,11,13,0.22)",
@@ -115,6 +125,7 @@ const LIGHT: ComicColors = {
   PURPLE: "#6d2fb5",
 
   YELLOW_TINT: "#fff1a8",
+  ORANGE_TINT: "#ffdfc4",
   BLUE_TINT: "#cfe0ff",
   RED_TINT: "#ffd6d3",
   GREEN_TINT: "#c9f2d8",
@@ -134,6 +145,7 @@ const LIGHT: ComicColors = {
 
   HALFTONE: "#0b0b0d",
 
+  LINK_HOVER: "#1f4fd8",
   ON_LOUD: "#fffaf0",
   ON_YELLOW: "#0b0b0d",
   TITLE_FILL: "#ffffff",
