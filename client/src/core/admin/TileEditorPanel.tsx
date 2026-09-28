@@ -48,15 +48,30 @@ function existingConditionsExcluding(tasks: GraphNode[], excludeTaskIndex: numbe
     );
 }
 
-export function TileEditorPanel({ slug, tile, categories, locked, onClose }: { slug: string; tile: Tile | null; categories: TileCategory[]; locked: boolean; onClose: () => void }) {
+// `themeKey` is the bingo's own theme, for its tasks' "Preview for Players".
+export function TileEditorPanel({
+  slug,
+  themeKey,
+  tile,
+  categories,
+  locked,
+  onClose,
+}: {
+  slug: string;
+  themeKey: string;
+  tile: Tile | null;
+  categories: TileCategory[];
+  locked: boolean;
+  onClose: () => void;
+}) {
   return (
     <Dialog isOpen={tile !== null} onClose={onClose} size="lg">
-      {tile && <TileEditor slug={slug} tile={tile} categories={categories} locked={locked} onClose={onClose} />}
+      {tile && <TileEditor slug={slug} themeKey={themeKey} tile={tile} categories={categories} locked={locked} onClose={onClose} />}
     </Dialog>
   );
 }
 
-function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string; tile: Tile; categories: TileCategory[]; locked: boolean; onClose: () => void }) {
+function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slug: string; themeKey: string; tile: Tile; categories: TileCategory[]; locked: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -204,6 +219,7 @@ function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string;
               <TaskEditor
                 key={task.id}
                 slug={slug}
+                themeKey={themeKey}
                 tileId={tile.id}
                 task={task}
                 previousTaskId={tile.node.children[i - 1]?.id}
