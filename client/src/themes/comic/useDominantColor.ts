@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { SAMPLE_SIZE, artSourceRect, extractDominantColor } from "./dominantColor";
 import { persistColors, readPersistedColors } from "./dominantColorStore";
 
 // Per-URL cache — the same tile image is drawn by every board that shows
@@ -20,43 +21,6 @@ function remember(url: string, color: string | null) {
   }, 500);
 }
 
-const SAMPLE_SIZE = 24;
-// Coarser buckets than the raw 0-255 channel range group "basically the
-// same color" pixels together (anti-aliased edges, slightly different
-// shades of the same red, etc.) so the most common CLUSTER wins, rather
-// than the single most common exact RGB triple.
-const BUCKET = 32;
-
-function extractDominantColor(ctx: CanvasRenderingContext2D): string | null {
-  const { data } = ctx.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-  const buckets = new Map<string, { r: number; g: number; b: number; count: number }>();
-
-  for (let i = 0; i < data.length; i += 4) {
-    const a = data[i + 3];
-    if (a < 200) continue; // skip transparent/near-transparent background pixels
-    const r = data[i]!;
-    const g = data[i + 1]!;
-    const b = data[i + 2]!;
-    const key = `${r >> 5}-${g >> 5}-${b >> 5}`; // >>5 ~= /32, i.e. BUCKET-wide bins
-    const bucket = buckets.get(key);
-    if (bucket) {
-      bucket.r += r;
-      bucket.g += g;
-      bucket.b += b;
-      bucket.count++;
-    } else {
-      buckets.set(key, { r, g, b, count: 1 });
-    }
-  }
-
-  let best: { r: number; g: number; b: number; count: number } | null = null;
-  for (const bucket of buckets.values()) {
-    if (!best || bucket.count > best.count) best = bucket;
-  }
-  if (!best) return null;
-  return `rgb(${Math.round(best.r / best.count)}, ${Math.round(best.g / best.count)}, ${Math.round(best.b / best.count)})`;
-}
-
 // Picks black or white — whichever reads better — against a color this
 // hook returned (`rgb(r, g, b)`) or a 6-digit hex fallback; anything else
 // (a `var(--…)`, null) defaults to black.
@@ -73,7 +37,8 @@ export function getContrastTextColor(color: string | null): string {
 }
 
 // Extracts a representative color from an image — the most common cluster
-// of (non-transparent) pixel colors, sampled at a small size since we only
+// of (non-transparent) pixel colors in the art above the caption panel
+// (dominantColor.ts), sampled at a small size since we only
 // need a rough swatch, not per-pixel accuracy. Tile images are same-origin
 // (server/src/routes/admin.ts serves them from /uploads/tiles/), so this
 // never hits a tainted-canvas CORS error; if it ever did, or the image
@@ -104,8 +69,9 @@ export function useDominantColor(imageUrl: string | null | undefined): string | 
         canvas.height = SAMPLE_SIZE;
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
         if (ctx) {
-          ctx.drawImage(img, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-          result = extractDominantColor(ctx);
+          const { sx, sy, sw, sh } = artSourceRect(img.naturalWidth, img.naturalHeight);
+          ctx.drawImage(img, sx, sy, sw, sh, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
+          result = extractDominantColor(ctx.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data);
         }
       } catch {
         result = null;
