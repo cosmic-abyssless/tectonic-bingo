@@ -257,6 +257,14 @@ describe("importBingo", () => {
     expect(getSuperlativeCategories(db, imported.id)).toEqual([]);
   });
 
+  it("imports only the first 3 Superlative categories of a file exported before the cap", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    const doc = exportBingo(db, source.id);
+    doc.superlativeCategories = ["Four", "Two", "One", "Three"].map((name) => ({ name, sortOrder: ["One", "Two", "Three", "Four"].indexOf(name) }));
+    const imported = importBingo(db, doc, { slug: "over-cap", name: "Over", createdByUserId: admin.id });
+    expect(getSuperlativeCategories(db, imported.id).map((c) => c.name)).toEqual(["One", "Two", "Three"]);
+  });
+
   it("imports a file exported before questions had helper text", () => {
     const { bingo: source, admin } = seedFullBingo();
     const doc = exportBingo(db, source.id);

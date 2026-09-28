@@ -2,7 +2,7 @@
 // (e.g. "Team MVP"). Categories aren't locked to any stage; voting is open for the whole of Live and secret
 // throughout — the server keeps the voter only to enforce one pick per category and let it change.
 import { and, eq, inArray } from "drizzle-orm";
-import type { AvatarUser, SuperlativeTeamTurnout } from "@bingo/shared";
+import { MAX_SUPERLATIVE_CATEGORIES, type AvatarUser, type SuperlativeTeamTurnout } from "@bingo/shared";
 import { now as clockNow } from "../clock";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -16,7 +16,6 @@ import { getAcceptedPairs } from "./pairingService";
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
 
-const MAX_CATEGORIES = 30;
 const MAX_NAME_LENGTH = 60;
 
 // ---------------------------------------------------------------------------
@@ -39,7 +38,10 @@ export function createCategory(db: Db, params: { bingoId: string; name: string }
   const name = normalizeName(params.name);
   return db.transaction((tx) => {
     const existing = tx.select({ id: superlativeCategories.id }).from(superlativeCategories).where(eq(superlativeCategories.bingoId, params.bingoId)).all();
-    if (existing.length >= MAX_CATEGORIES) throw new ServiceError(400, `At most ${MAX_CATEGORIES} superlative categories`);
+    // A Bingo that already has more (from before the cap) keeps them; it just can't add another.
+    if (existing.length >= MAX_SUPERLATIVE_CATEGORIES) {
+      throw new ServiceError(400, `A bingo can have at most ${MAX_SUPERLATIVE_CATEGORIES} superlative categories: each Team's share card fits ${MAX_SUPERLATIVE_CATEGORIES}`);
+    }
     const category = tx.insert(superlativeCategories).values({ bingoId: params.bingoId, name, sortOrder: existing.length }).returning().get();
     audit(tx, {
       action: "superlative.category_created",

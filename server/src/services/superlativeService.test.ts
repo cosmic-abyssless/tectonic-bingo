@@ -67,6 +67,28 @@ describe("categories", () => {
     expect(superlativeService.computeWinners(db, bingo.id, team.id)).toEqual([]);
   });
 
+  it("refuses a 4th category, since each Team's share card fits 3", () => {
+    const { bingo } = seed("signup");
+    for (const name of ["One", "Two", "Three"]) superlativeService.createCategory(db, { bingoId: bingo.id, name });
+    expect(() => superlativeService.createCategory(db, { bingoId: bingo.id, name: "Four" })).toThrow(/at most 3 superlative categories/);
+    expect(superlativeService.getCategories(db, bingo.id)).toHaveLength(3);
+  });
+
+  it("lets a Bingo that already has more than 3 keep, rename and delete them, but not add another", () => {
+    const { bingo } = seed("signup");
+    db.insert(schema.superlativeCategories)
+      .values(["One", "Two", "Three", "Four"].map((name, sortOrder) => ({ bingoId: bingo.id, name, sortOrder })))
+      .run();
+    const [first] = superlativeService.getCategories(db, bingo.id);
+    expect(superlativeService.renameCategory(db, first!.id, "First").name).toBe("First");
+    expect(() => superlativeService.createCategory(db, { bingoId: bingo.id, name: "Five" })).toThrow(ServiceError);
+
+    superlativeService.deleteCategory(db, first!.id);
+    expect(() => superlativeService.createCategory(db, { bingoId: bingo.id, name: "Five" })).toThrow(ServiceError);
+    superlativeService.deleteCategory(db, superlativeService.getCategories(db, bingo.id)[0]!.id);
+    expect(superlativeService.createCategory(db, { bingoId: bingo.id, name: "Five" }).name).toBe("Five");
+  });
+
   it("rejects a blank name", () => {
     const { bingo } = seed("signup");
     expect(() => superlativeService.createCategory(db, { bingoId: bingo.id, name: "  " })).toThrow(ServiceError);

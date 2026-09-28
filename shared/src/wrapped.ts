@@ -167,9 +167,14 @@ export interface WrappedTeam {
   points: number;
   tilesCompleted: number;
   linesCompleted: number;
-  /** The Player with the biggest Points share. */
-  mvp: { player: AvatarUser; pointsShare: number } | null;
+  /**
+   * The Player with the biggest Points share, and its share of the Team's awarded points (0–1, as a Player's own
+   * `teamPointsFraction`; missing from Wrapped published before it was stored).
+   */
+  mvp: { player: AvatarUser; pointsShare: number; teamPointsFraction?: number } | null;
   topGpEarner: { player: AvatarUser; gpGained: number } | null;
+  /** Drop value (CONTEXT.md): the total of its Players' Total drop value. Missing from Wrapped published before it was stored. */
+  dropValue?: number;
   biggestDrop: WrappedDrop | null;
   pointsOverTime: WrappedPointsPoint[];
   /** Superlative winners (CONTEXT.md), a category with no votes left out. Missing from Wrapped published before it was stored. */
