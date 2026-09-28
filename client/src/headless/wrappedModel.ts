@@ -187,7 +187,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
   const sections: WrappedSectionModel[] = [];
   // A category's images, each captioned with who it credits, and its additional credits (CONTEXT.md "Credits").
   const art = (section: WrappedArtSection): WrappedSectionArtModel => ({
-    images: (data.art?.sections?.[section] ?? []).map((piece) => ({ frames: piece.frames, name: piece.credit?.name ?? null })),
+    images: (data.art?.sections?.[section] ?? []).map((piece) => ({ frames: piece.frames, name: piece.credit?.name ?? null, role: piece.credit?.role || null })),
     credits: (data.art?.additionalCredits?.[section] ?? []).map((c) => ({ name: c.name, role: c.role || null })),
   });
 
