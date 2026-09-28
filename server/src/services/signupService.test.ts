@@ -313,7 +313,7 @@ describe("updateSignup / withdrawSignup", () => {
     const captainsStage = { ...bingo, stage: "captains" as const };
     expect(() => withdrawSignup(db, captainsStage, signup.id)).toThrow(/signup stage/);
     expect(withdrawSignup(db, captainsStage, signup.id, { byMod: true }).status).toBe("withdrawn");
-    expect(() => withdrawSignup(db, { ...bingo, stage: "draft" }, signup.id, { byMod: true })).toThrow(/draft has started/);
+    expect(() => withdrawSignup(db, { ...bingo, stage: "reveal" }, signup.id, { byMod: true })).toThrow(/Remove from Team/);
   });
 });
 

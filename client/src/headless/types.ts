@@ -311,6 +311,8 @@ export interface BingoPageModel {
   stageView: StageView;
   /** An active signup left out of the draft (from the Draft stage on), for the "not part of this bingo" notice. */
   isCut: boolean;
+  /** The Team an Admin took the viewer off (Remove from Team), for the same notice; null otherwise. */
+  removedFromTeam: string | null;
   /** Mods, and everyone once the bingo is Finished, can switch between teams' boards. */
   canPickTeam: boolean;
   /** Mods always; players on a team once live (own team only), everyone once complete (matches the stats endpoint). */

@@ -5,7 +5,7 @@ import * as schema from "../db/schema";
 import { signups } from "../db/schema";
 import { isBingoMod } from "./bingoService";
 import { getCutUserIds } from "./draftService";
-import { getUserTeamForBingo } from "./teamService";
+import { getUserTeamForBingo, removedFromTeamName } from "./teamService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -57,8 +57,9 @@ export function getBingoAccess(db: Db, bingo: Bingo, user: { id: string; isAdmin
   const isMod = isBingoMod(db, bingo.id, user.id, user.isAdmin);
   const { isPlayer, isCut } = playerStanding(db, bingo, user.id);
   const canSee = isMod || bingo.stage === "complete" || (bingo.stage !== "planning" && isPlayer);
-  // The Cut notice is for someone who can't see the Bingo; at Finished everyone can.
-  return { isMod, isPlayer, isCut: isCut && !canSee, canSee };
+  // The Cut notice is for someone who can't see the Bingo; at Finished everyone can. So is the note that they were
+  // taken off a Team (Remove from Team).
+  return { isMod, isPlayer, isCut: isCut && !canSee, canSee, removedFromTeam: canSee ? null : removedFromTeamName(db, bingo.id, user.id) };
 }
 
 /** Whether `userId` is in the Bingo at all, for whose player card may be opened: an active Signup, or on a Team. */

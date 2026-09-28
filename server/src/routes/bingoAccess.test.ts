@@ -159,7 +159,7 @@ describe("while signups are open", () => {
     expect(shell.bingo.name).toBe("B1");
     expect(shell.teams).toEqual([]);
     expect(shell.categories).toEqual([]);
-    expect(shell.viewer).toEqual({ canSee: false, isPlayer: false, isCut: false });
+    expect(shell.viewer).toEqual({ canSee: false, isPlayer: false, isCut: false, removedFromTeam: null });
     expect((await get("stranger", "/b1/signup/questions")).status).toBe(200);
     expect((await get("stranger", "/b1/signup/partners")).status).toBe(200);
     for (const path of contentRoutes()) expect((await get("stranger", path)).status, path).toBe(403);
@@ -178,7 +178,7 @@ describe.each(["captains", "draft", "reveal", "live"] as const)("at %s", (stage)
   it("refuses every content route to a member with no signup, and to a withdrawn signup", async () => {
     for (const p of ["stranger", "withdrawn"] as const) {
       const shell = (await get(p, "/b1")).body as unknown as BingoShellResponse;
-      expect(shell.viewer, p).toEqual({ canSee: false, isPlayer: false, isCut: false });
+      expect(shell.viewer, p).toEqual({ canSee: false, isPlayer: false, isCut: false, removedFromTeam: null });
       expect(shell.teams).toEqual([]);
       expect(shell.bingo.rulesMarkdown).toBeNull();
       for (const path of [...contentRoutes(), "/b1/signup/questions"]) expect((await get(p, path)).status, `${p} ${path}`).toBe(403);
@@ -212,7 +212,7 @@ describe("the draft", () => {
 
   it("is closed to a Cut signup, who is told so", async () => {
     const shell = (await get("cutMe", "/b1")).body as unknown as BingoShellResponse;
-    expect(shell.viewer).toEqual({ canSee: false, isPlayer: false, isCut: true });
+    expect(shell.viewer).toEqual({ canSee: false, isPlayer: false, isCut: true, removedFromTeam: null });
     expect((await get("cutMe", "/b1/draft")).status).toBe(403);
     expect((await get("cutMe", "/b1/board")).status).toBe(403);
   });
@@ -227,7 +227,23 @@ describe("from Board revealed on", () => {
 
   it("an active signup left off every team is Cut", async () => {
     const shell = (await get("signedUp", "/b1")).body as unknown as BingoShellResponse;
-    expect(shell.viewer).toEqual({ canSee: false, isPlayer: false, isCut: true });
+    expect(shell.viewer).toEqual({ canSee: false, isPlayer: false, isCut: true, removedFromTeam: null });
+  });
+
+  it("tells a Player an Admin removed from their Team so, until a Late signup brings them back", async () => {
+    const { removeTeamMember } = await import("../services/teamService");
+    const { createLateSignup } = await import("../services/signupService");
+    removeTeamMember(db, teamA.id, people.memberA.id, { reason: "Had to leave" });
+    const shell = (await get("memberA", "/b1")).body as unknown as BingoShellResponse;
+    expect(shell.viewer).toEqual({ canSee: false, isPlayer: false, isCut: false, removedFromTeam: "Team A" });
+    expect((await get("memberA", "/b1/board")).status).toBe(403);
+    // Someone who withdrew in another way isn't told they were removed.
+    expect(((await get("withdrawn", "/b1")).body as unknown as BingoShellResponse).viewer.removedFromTeam).toBeNull();
+
+    const live = db.select().from(schema.bingos).where(eq(schema.bingos.id, bingo.id)).get()!;
+    createLateSignup(db, live, { userId: people.memberA.id, rsn: "memberA", teamId: teamB.id });
+    const back = (await get("memberA", "/b1")).body as unknown as BingoShellResponse;
+    expect(back.viewer).toMatchObject({ canSee: true, removedFromTeam: null });
   });
 });
 

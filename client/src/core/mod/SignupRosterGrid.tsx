@@ -76,7 +76,10 @@ function getRowId(params: GetRowIdParams<RosterRow>): string {
 export interface GridContext {
   search: string;
   partnerRsnMap: Map<string, string>;
+  /** Signups can be withdrawn at this stage: until the Draft ends (and during the Draft, only someone not on a Team). */
   canWithdraw: boolean;
+  /** Who's on a Team: during the Draft they can't be withdrawn (a drafted Player waits for Remove from Team). */
+  onTeam: ReadonlySet<string>;
   /** Pairings can change (mods pair or unpair from the Partner cell): any stage before the draft. */
   canPair: boolean;
   statsRefreshing: ReadonlySet<string>;
@@ -202,17 +205,23 @@ const EhpCell = memo(function EhpCell({ data, context }: CustomCellRendererProps
   return <WomCell stats={data.womStats} field="ehp" loading={context.statsRefreshing.has(data.signup.id)} />;
 });
 
+/** Whether a row's signup can be withdrawn on the player's behalf right now. */
+function withdrawable(context: GridContext, data: RosterRow | undefined): boolean {
+  return !!data && data.signup.status === "active" && context.canWithdraw && !context.onTeam.has(data.user.id);
+}
+
 // The status badge (and "will be cut"). While the roster can still change, an active signup's cell edits: a click or
 // Enter opens WithdrawEditor, a confirmation, to withdraw a no-show on the player's behalf. The X says it's there.
 const StatusCell = memo(function StatusCell({ data, context }: CustomCellRendererProps<RosterRow, string, GridContext>) {
   if (!data) return null;
   const active = data.signup.status === "active";
+  const canWithdraw = withdrawable(context, data);
   const busy = context.withdrawSignup.isPending && context.withdrawSignup.variables === data.signup.id;
   return (
-    <div className="flex h-full items-center gap-1" title={active && context.canWithdraw ? `Click (or press Enter) to withdraw ${data.signup.rsn}` : undefined}>
+    <div className="flex h-full items-center gap-1" title={canWithdraw ? `Click (or press Enter) to withdraw ${data.signup.rsn}` : undefined}>
       <Badge tone={active ? "ok" : "neutral"}>{busy ? "withdrawing…" : data.signup.status}</Badge>
       {data.cut && <Badge tone="warn">will be cut</Badge>}
-      {active && context.canWithdraw && <XIcon size={12} className="ml-auto shrink-0 text-on-surface-subtle" aria-hidden />}
+      {canWithdraw && <XIcon size={12} className="ml-auto shrink-0 text-on-surface-subtle" aria-hidden />}
     </div>
   );
 });
@@ -558,8 +567,8 @@ export function SignupRosterGrid({
         valueGetter: (p) => (p.data ? `${p.data.signup.status}${p.data.cut ? " (will be cut)" : ""}` : undefined),
         getQuickFilterText: (p) => p.data?.signup.status ?? "",
         cellRenderer: StatusCell,
-        cellClass: (p) => (p.data?.signup.status === "active" && p.context.canWithdraw ? "cursor-pointer" : ""),
-        editable: (p) => p.data?.signup.status === "active" && !!p.context.canWithdraw,
+        cellClass: (p) => (withdrawable(p.context, p.data) ? "cursor-pointer" : ""),
+        editable: (p) => withdrawable(p.context, p.data),
         cellEditor: WithdrawEditor,
         cellEditorPopup: true,
         cellEditorPopupPosition: "under",

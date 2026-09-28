@@ -433,6 +433,79 @@ export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
   });
 }
 
+export interface CreateLateSignupParams {
+  userId: string;
+  rsn: string;
+  /** The Team they join: required from the Draft on, and refused while Signups are closed (they go into the pool). */
+  teamId?: string | null;
+  // Route-computed from tectonic-api, never client-trusted (as CreateSignupParams).
+  womId?: string | null;
+  rsnVerified?: boolean;
+}
+
+const LATE_SIGNUP_STAGES: Bingo["stage"][] = ["captains", "draft", "reveal", "live"];
+
+/**
+ * A Late signup (CONTEXT.md "Signup"): an Admin signs a clan member up on their behalf, from Signups closed until the
+ * Bingo is Finished. While Signups are closed they go into the draft pool; from the Draft on they go straight onto the
+ * Team given, outside the pick order (not a pick, so the Shares and who's Cut don't change). It's a real Signup: an
+ * RSN, a buy-in to collect, the signup questions unanswered. A Withdrawn Signup is reactivated with its answers; an
+ * active one is refused (Add member is for that). Joins as a single in a duo bingo.
+ */
+export function createLateSignup(db: Db, bingo: Bingo, params: CreateLateSignupParams) {
+  if (bingo.stage === "complete") throw new ServiceError(400, "This bingo is finished, so its Teams and signups are locked. Move it back to Live to change them.", "bingo_finished");
+  if (!LATE_SIGNUP_STAGES.includes(bingo.stage)) throw new ServiceError(400, "A late signup can only be added once signups have closed");
+  const rsn = params.rsn.trim();
+  if (!rsn) throw new ServiceError(400, "RSN is required");
+  const needsTeam = bingo.stage !== "captains";
+  if (needsTeam && !params.teamId) throw new ServiceError(400, "Pick the Team they join");
+  if (!needsTeam && params.teamId) throw new ServiceError(400, "Until the Draft begins a late signup goes into the draft pool, not onto a Team");
+
+  return db.transaction((tx) => {
+    const user = tx.select({ id: users.id }).from(users).where(eq(users.id, params.userId)).get();
+    if (!user) throw new ServiceError(404, "User not found");
+    const team = params.teamId ? tx.select({ id: teams.id, bingoId: teams.bingoId, name: teams.name }).from(teams).where(eq(teams.id, params.teamId)).get() : undefined;
+    if (params.teamId && (!team || team.bingoId !== bingo.id)) throw new ServiceError(404, "Team not found");
+    const onATeam = tx
+      .select({ id: teamMembers.id })
+      .from(teamMembers)
+      .innerJoin(teams, eq(teamMembers.teamId, teams.id))
+      .where(and(eq(teams.bingoId, bingo.id), eq(teamMembers.userId, params.userId)))
+      .get();
+    if (onATeam) throw new ServiceError(409, "This player is already on a Team in this bingo");
+    const existing = tx.select().from(signups).where(and(eq(signups.bingoId, bingo.id), eq(signups.userId, params.userId))).get();
+    if (existing?.status === "active") {
+      throw new ServiceError(409, "This player is already signed up. Put them on a Team with Add member on the Captains tab.", "already_signed_up");
+    }
+
+    const values = { rsn, womId: params.womId ?? null, rsnVerified: params.rsnVerified ?? false, status: "active" as const, createdAt: clockNow() };
+    // A Withdrawn Signup comes back with its answers (and its buy-in, as createSignup keeps it).
+    const signup = existing
+      ? tx.update(signups).set(values).where(eq(signups.id, existing.id)).returning(PUBLIC_SIGNUP_COLS).get()!
+      : tx.insert(signups).values({ bingoId: bingo.id, userId: params.userId, ...values }).returning(PUBLIC_SIGNUP_COLS).get();
+    audit(tx, {
+      action: "signup.created",
+      bingoId: bingo.id,
+      entity: { type: "signup", id: signup.id, label: signup.rsn },
+      details: { rsn: signup.rsn, rsnVerified: signup.rsnVerified, answerCount: 0, reactivated: !!existing, late: true },
+      onBehalfOfUserId: params.userId,
+    });
+    if (team) {
+      tx.insert(teamMembers).values({ teamId: team.id, userId: params.userId, isCaptain: false, joinedAt: clockNow() }).run();
+      const displayName = userLabelById(tx, params.userId, bingo.id);
+      audit(tx, {
+        action: "team.member_added",
+        bingoId: bingo.id,
+        entity: { type: "user", id: params.userId, label: displayName },
+        teamId: team.id,
+        details: { userId: params.userId, displayName: displayName ?? "Unknown" },
+        onBehalfOfUserId: params.userId,
+      });
+    }
+    return signup;
+  });
+}
+
 export interface UpdateSignupParams {
   rsn?: string;
   timezone?: string;
@@ -545,11 +618,14 @@ export function setSignupTimezone(db: Db, bingo: Bingo, signupId: string, timezo
 }
 
 // Players withdraw themselves only while signups are open; mods can also trim
-// the roster during the captains stage, right up until the draft begins.
+// the roster during the captains stage, and during the Draft an undrafted
+// signup (one not on a Team). A drafted Player waits for the Draft to end, when
+// Remove from Team applies. A Finished bingo's signups are locked.
 export function withdrawSignup(db: Db, bingo: Bingo, signupId: string, { byMod = false } = {}) {
   if (byMod) {
-    if (bingo.stage !== "signup" && bingo.stage !== "captains") {
-      throw new ServiceError(400, `Signups can't be removed once the draft has started (current stage: ${bingo.stage})`);
+    if (bingo.stage === "complete") throw new ServiceError(400, "This bingo is finished, so its Teams and signups are locked. Move it back to Live to change them.", "bingo_finished");
+    if (bingo.stage !== "signup" && bingo.stage !== "captains" && bingo.stage !== "draft") {
+      throw new ServiceError(400, `Signups can't be withdrawn once the Draft is over — use Remove from Team on the Captains tab (current stage: ${bingo.stage})`);
     }
   } else {
     assertSignupOpen(bingo);
@@ -577,6 +653,15 @@ export function withdrawSignup(db: Db, bingo: Bingo, signupId: string, { byMod =
           ? "This player leads a team — remove or delete the team before withdrawing the signup"
           : "You lead a Team, so you can't withdraw yourself. Contact an admin if you need to.",
       );
+    }
+    if (bingo.stage === "draft") {
+      const onATeam = tx
+        .select({ id: teamMembers.id })
+        .from(teamMembers)
+        .innerJoin(teams, eq(teamMembers.teamId, teams.id))
+        .where(and(eq(teams.bingoId, bingo.id), eq(teamMembers.userId, existing.userId)))
+        .get();
+      if (onATeam) throw new ServiceError(400, "This player is on a Team, so they can't be withdrawn until the Draft ends");
     }
     dissolveForUser(tx, bingo.id, { id: existing.userId, discordId: existing.discordId });
     const updated = tx.update(signups).set({ status: "withdrawn" }).where(eq(signups.id, signupId)).returning(PUBLIC_SIGNUP_COLS).get();

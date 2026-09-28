@@ -34,6 +34,7 @@ import { toCsv } from "../ui/csv";
 import { useOpenProfile } from "../tectonic/PlayerName";
 import { SignupRosterGrid, type GridContext, type RosterRow } from "./SignupRosterGrid";
 import { CutReviewModal } from "./CutReviewModal";
+import { LateSignupDialog } from "./LateSignupDialog";
 
 // GP totals here are buy-in multiples, always in the millions for this event — "30M GP" reads faster than
 // "30,000,000 GP". Decimals only show up if the amount isn't a clean multiple of a million.
@@ -192,7 +193,12 @@ export function SignupRoster({ slug }: { slug: string }) {
   const mods = useMemo(() => modsData?.mods ?? [], [modsData]);
   const isDuo = bingoData?.bingo.signupMode === "duo";
   const stage = bingoData?.bingo.stage;
-  const canWithdraw = stage === "signup" || stage === "captains";
+  // Until the Draft ends; during it only someone not on a Team (the grid checks onTeam per row).
+  const canWithdraw = stage === "signup" || stage === "captains" || stage === "draft";
+  const onTeam = useMemo(() => new Set((bingoData?.teams ?? []).flatMap((t) => t.members.map((m) => m.user.id))), [bingoData?.teams]);
+  // A Late signup (CONTEXT.md "Signup"): Admins, from Signups closed until Finished.
+  const canAddLateSignup = !!me?.isAdmin && (stage === "captains" || stage === "draft" || stage === "reveal" || stage === "live");
+  const [addingLateSignup, setAddingLateSignup] = useState(false);
   // Clan standing column only when tectonic-api knows at least one player.
   const showTier = roster.some((r) => r.tectonicProfile);
   const [copied, setCopied] = useState(false);
@@ -310,8 +316,8 @@ export function SignupRoster({ slug }: { slug: string }) {
   const refreshStats = useRefreshSignupStats(slug);
   const setTimezone = useSetSignupTimezone(slug);
   const gridContext = useMemo<GridContext>(
-    () => ({ search, partnerRsnMap, canWithdraw, canPair: stage === "planning" || stage === "signup" || stage === "captains", statsRefreshing, statsResults, currentUserId: me?.id ?? null, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, openProfile }),
-    [search, partnerRsnMap, canWithdraw, stage, statsRefreshing, statsResults, me, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, openProfile],
+    () => ({ search, partnerRsnMap, canWithdraw, onTeam, canPair: stage === "planning" || stage === "signup" || stage === "captains", statsRefreshing, statsResults, currentUserId: me?.id ?? null, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, openProfile }),
+    [search, partnerRsnMap, canWithdraw, onTeam, stage, statsRefreshing, statsResults, me, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, openProfile],
   );
 
   // ColumnPicker's own option list — every colId the grid can show except # and RSN, neither of which is
@@ -405,14 +411,22 @@ export function SignupRoster({ slug }: { slug: string }) {
           </Notice>
         )}
         {me?.isAdmin && <CutReviewModal slug={slug} isOpen={reviewingCuts} onClose={() => setReviewingCuts(false)} />}
-        <p className="text-sm text-on-surface-muted">
-          <span className="num text-on-surface">{activeCount}</span> active signup{activeCount !== 1 ? "s" : ""}
-          {withdrawnCount > 0 && (
-            <>
-              , <span className="num">{withdrawnCount}</span> withdrawn
-            </>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-on-surface-muted">
+            <span className="num text-on-surface">{activeCount}</span> active signup{activeCount !== 1 ? "s" : ""}
+            {withdrawnCount > 0 && (
+              <>
+                , <span className="num">{withdrawnCount}</span> withdrawn
+              </>
+            )}
+          </p>
+          {canAddLateSignup && (
+            <Button size="sm" onPress={() => setAddingLateSignup(true)}>
+              Add a late signup
+            </Button>
           )}
-        </p>
+        </div>
+        {canAddLateSignup && <LateSignupDialog slug={slug} isOpen={addingLateSignup} onClose={() => setAddingLateSignup(false)} />}
 
         {roster.length === 0 ? (
           <EmptyState icon={<UsersIcon />} title="No signups yet">

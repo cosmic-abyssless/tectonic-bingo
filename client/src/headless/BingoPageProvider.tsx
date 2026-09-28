@@ -196,6 +196,7 @@ export function BingoPageProvider({
     categories: categoriesRaw.map(toCategoryModel),
     stageView,
     isCut: shell.viewer.isCut,
+    removedFromTeam: shell.viewer.removedFromTeam ?? null,
     canPickTeam,
     canViewStats,
     canRewind: bingo.stage === "complete",

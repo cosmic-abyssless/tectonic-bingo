@@ -31,8 +31,12 @@ function latestRsns(db: Db | Tx, userIds?: readonly string[]): Map<string, strin
  * except the person answering. Named by the RSN of their latest signup, or their Discord name if they've never
  * signed up. Only names go out: nothing about the account itself (admin flags, timestamps, Discord ids).
  */
-export function getPickableMembers(db: Db, answererUserId: string): PickableMember[] {
-  const rows = db.select(NAME_COLS).from(users).where(and(eq(users.inGuild, true), ne(users.id, answererUserId))).all();
+export function getPickableMembers(db: Db, answererUserId?: string): PickableMember[] {
+  const rows = db
+    .select(NAME_COLS)
+    .from(users)
+    .where(answererUserId ? and(eq(users.inGuild, true), ne(users.id, answererUserId)) : eq(users.inGuild, true))
+    .all();
   const rsns = latestRsns(db);
   return rows
     .map((u) => ({ userId: u.id, name: rsns.get(u.id) ?? discordName(u), discordName: discordName(u) }))

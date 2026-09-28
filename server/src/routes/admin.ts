@@ -19,6 +19,9 @@ import * as superlativeService from "../services/superlativeService";
 import * as teamService from "../services/teamService";
 import * as cutReviewService from "../services/cutReviewService";
 import * as userService from "../services/userService";
+import * as memberPickService from "../services/memberPickService";
+import { getTectonicMembership, matchRsn } from "../services/tectonicMembership";
+import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
 import { checkWomGroup, syncWomCompetition } from "../services/womCompetitionService";
 import { auditSkip } from "../audit/middleware";
 import { ServiceError } from "../services/errors";
@@ -577,7 +580,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const { userId } = req.body as { userId?: string };
     if (!userId) throw new ServiceError(400, "userId is required");
-    const member = teamService.addTeamMember(db, req.params.id as string, userId);
+    const member = teamService.addTeamMember(db, req.params.id as string, userId, req.bingo!.id);
     void syncWomCompetition(db, req.bingo!.id);
     res.status(201).json({ member });
   }),
@@ -590,12 +593,59 @@ router.delete(
     res.status(204).end();
   }),
 );
+// From Board revealed on this is Remove from Team (CONTEXT.md "Team"): an optional reason, and for a Captain or
+// co-captain the member who takes over their role. It also withdraws their Signup, so the roster changes too.
 router.delete(
   "/teams/:id/members/:userId",
   asyncHandler(async (req, res) => {
-    teamService.removeTeamMember(db, req.params.id as string, req.params.userId as string);
+    const { reason, replacementUserId } = (req.body ?? {}) as { reason?: unknown; replacementUserId?: unknown };
+    if (reason !== undefined && reason !== null && typeof reason !== "string") throw new ServiceError(400, "reason must be a string");
+    if (replacementUserId !== undefined && replacementUserId !== null && typeof replacementUserId !== "string") throw new ServiceError(400, "replacementUserId must be a string");
+    teamService.removeTeamMember(db, req.params.id as string, req.params.userId as string, { bingoId: req.bingo!.id, reason, replacementUserId });
     void syncWomCompetition(db, req.bingo!.id);
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.status(204).end();
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Late signup (CONTEXT.md "Signup") — an Admin signs a clan member up on their behalf once Signups are closed.
+// ---------------------------------------------------------------------------
+
+// Who can be signed up late: every clan member who has logged in, as the Member pick question offers them.
+router.get(
+  "/late-signup/members",
+  asyncHandler(async (_req, res) => {
+    res.json({ members: memberPickService.getPickableMembers(db) });
+  }),
+);
+
+// One member's clan RSNs, for the late signup's RSN (the first is the default).
+router.get(
+  "/late-signup/rsns/:userId",
+  asyncHandler(async (req, res) => {
+    const user = userService.getUserById(db, req.params.userId as string);
+    if (!user) throw new ServiceError(404, "User not found");
+    const { member } = await getTectonicMembership(user.discordId);
+    res.json({ rsns: (member?.rsns ?? []).map((r) => r.rsn) });
+  }),
+);
+
+router.post(
+  "/late-signups",
+  asyncHandler(async (req, res) => {
+    const { userId, rsn, teamId } = req.body as { userId?: unknown; rsn?: unknown; teamId?: unknown };
+    if (typeof userId !== "string" || !userId) throw new ServiceError(400, "userId is required");
+    if (typeof rsn !== "string" || !rsn.trim()) throw new ServiceError(400, "rsn is required");
+    if (teamId !== undefined && teamId !== null && typeof teamId !== "string") throw new ServiceError(400, "teamId must be a string");
+    const user = userService.getUserById(db, userId);
+    if (!user) throw new ServiceError(404, "User not found");
+    const { member } = await getTectonicMembership(user.discordId);
+    const signup = signupService.createLateSignup(db, req.bingo!, { userId, rsn, teamId: teamId || null, ...matchRsn(member, rsn) });
+    void fetchAndPersistPlayerStats(db, signup.id, signup.rsn, { discordId: user.discordId, linkedRsns: (member?.rsns ?? []).map((r) => r.rsn) });
+    if (teamId) void syncWomCompetition(db, req.bingo!.id);
+    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    res.status(201).json({ signup });
   }),
 );
 
