@@ -155,13 +155,25 @@ of truth and will drift less than a doc copy. Broadly:
 - **Wrapped** (`/b/:slug/wrapped`, a Finished Bingo's story, once published or as a
   Moderator's preview): the `Wrapped*` slots are one group. `WrappedPage` is whole-surface
   (calls `useWrappedModel()`): the frame, the scroll progress indicator, and each section in
-  order through its props-only slot: `WrappedIntro`, `WrappedYou`, `WrappedModerator`,
-  `WrappedTeam`, `WrappedBingo`, `WrappedOutro`. The model leaves out a section (or a part of
-  one) that has nothing to say for this viewer, so a slot only draws what it's given. Build
-  sections from `core/wrapped`'s `WrappedScene` (one screen) and `Reveal` (a line that fades up
-  with the scroll, and just fades in under reduced motion); `WrappedParts` and `PointsChart`
-  are there to reuse. `WrappedBanner` is the Board's way in: every `BoardPage` must draw it when
-  `page.wrapped.canOpen`.
+  order through its props-only slot: `WrappedIntro`, `WrappedYou`, `WrappedDuo`,
+  `WrappedCaptain`, `WrappedModerator`, `WrappedTeam`, `WrappedBingo`, `WrappedOutro`. The
+  model leaves out a section (or a part of one) that has nothing to say for this viewer, so a
+  slot only draws what it's given. Build sections from `core/wrapped`'s `WrappedScene` (one
+  screen) and `Reveal` (a line that fades up with the scroll, and just fades in under reduced
+  motion); `WrappedParts` and `PointsChart` are there to reuse. `WrappedBanner` is the Board's
+  way in: every `BoardPage` must draw it when `page.wrapped.canOpen`.
+- **Wrapped share cards** (#232): `WrappedOutro` ends in the viewer's cards (`section.cards`),
+  drawn with `core/wrapped`'s `WrappedShareCards`, which previews each one scaled to fit and
+  adds Copy image, Download and Share, and the "Preview" watermark in a Moderator's preview.
+  Each card is drawn by the `WrappedShareCard` slot at exactly 540×675 CSS px and turned into
+  a 1080×1350 PNG in the viewer's browser (never on the server) by redrawing that DOM, so the
+  slot must stand on its own: its own background, the Bingo's name and the site in its
+  footer, no animation, system fonts only (web fonts aren't carried into the image), and every
+  image through `core/wrapped`'s `CardImage` (loaded with CORS and copied into a data URL, so
+  drawing the card fetches nothing; a missing item icon falls back cleanly). `WrappedPage`
+  calls `actions.outroReached()` once the viewer gets to the Outro and, when
+  `outroReachedBefore` and the Outro has cards, offers a jump to them (`WRAPPED_CARDS_ID`).
+  Only the default theme draws cards; others fall back to it.
 - **Submission flow**: `SubmissionModal`, `ScreenshotDropzone`,
   `AnalysisPanel`, `TilePicker`, `TaskPicker`, `RequirementPicker`,
   `StagedClaimsList`.

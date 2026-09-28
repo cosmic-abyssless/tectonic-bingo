@@ -3,8 +3,11 @@ import { Button } from "../../../core/ui/Button";
 import { RewindIcon } from "../../../core/ui/icons";
 import { Reveal, WrappedScene } from "../../../core/wrapped/Scene";
 import { WrappedCategoryArt } from "../../../core/wrapped/WrappedParts";
+import { WrappedShareCards } from "../../../core/wrapped/ShareCards";
+import { useSlot } from "../../context";
 
-export function WrappedOutro({ section, onRewind, onBoard }: { section: WrappedOutroModel; onRewind: () => void; onBoard: () => void }) {
+export function WrappedOutro({ section, preview, onRewind, onBoard }: { section: WrappedOutroModel; preview: boolean; onRewind: () => void; onBoard: () => void }) {
+  const ShareCard = useSlot("WrappedShareCard");
   const hasCredits = section.art.credits.length > 0 || section.art.images.some((image) => image.name);
   return (
     <WrappedScene steps={3} className="text-center">
@@ -27,8 +30,8 @@ export function WrappedOutro({ section, onRewind, onBoard }: { section: WrappedO
           </Button>
         </div>
       </Reveal>
-      {/* Share cards (#232) go here. */}
-      <div data-wrapped-share-cards className="w-full" />
+      {/* Not a Reveal: the jump to the cards lands here, and they should never be caught half faded in. */}
+      <WrappedShareCards cards={section.cards} preview={preview} Card={ShareCard} />
     </WrappedScene>
   );
 }
