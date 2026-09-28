@@ -187,7 +187,6 @@ export function BingoPageProvider({
       endsAt: bingo.endsAt ? new Date(bingo.endsAt).getTime() : null,
       boardRows: bingo.boardRows,
       boardCols: bingo.boardCols,
-      wrappedCredits: bingo.wrappedCredits ?? [],
     },
     milestone: nextMilestone(bingo),
     user: { displayName: myTeamModel?.members.find((m) => m.id === user.id)?.displayName ?? displayName(user), avatarUrl: avatarUrl(user) },

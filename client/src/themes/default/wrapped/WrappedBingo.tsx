@@ -1,7 +1,7 @@
 import type { WrappedBingoModel } from "../../../headless/types";
 import { Reveal, WrappedScene } from "../../../core/wrapped/Scene";
 import { PointsChart } from "../../../core/wrapped/PointsChart";
-import { WrappedDropCard, WrappedHeading, WrappedPerson, WrappedSectionArt, WrappedStat } from "../../../core/wrapped/WrappedParts";
+import { WrappedCategoryArt, WrappedDropCard, WrappedHeading, WrappedPerson, WrappedStat } from "../../../core/wrapped/WrappedParts";
 
 const MEDAL = ["text-gold", "text-silver", "text-bronze"];
 
@@ -11,7 +11,7 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
     <>
       <WrappedScene steps={2}>
         <Reveal step={0}>
-          <WrappedSectionArt art={b.art} />
+          <WrappedCategoryArt art={b.art} />
           <WrappedHeading kicker="The Bingo">Everyone, together</WrappedHeading>
         </Reveal>
         <Reveal step={1} className="mt-12 grid grid-cols-2 gap-8 sm:gap-16">
@@ -84,6 +84,7 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
         <WrappedScene steps={3}>
           <div className="w-full max-w-2xl">
             <Reveal step={0}>
+              <WrappedCategoryArt art={m.art} />
               <WrappedHeading kicker="Behind the scenes">{m.reviewedLabel}</WrappedHeading>
             </Reveal>
             <Reveal step={1} className="mt-10 grid grid-cols-2 gap-6 sm:grid-cols-4">

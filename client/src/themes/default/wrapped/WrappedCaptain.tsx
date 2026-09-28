@@ -1,6 +1,6 @@
 import type { WrappedCaptainModel } from "../../../headless/types";
 import { Reveal, WrappedScene } from "../../../core/wrapped/Scene";
-import { WrappedHeading, WrappedPerson, WrappedSectionArt, WrappedStat } from "../../../core/wrapped/WrappedParts";
+import { WrappedCategoryArt, WrappedHeading, WrappedPerson, WrappedStat } from "../../../core/wrapped/WrappedParts";
 
 /** Your Draft: every pick against where it finished, the best Steal, and a grade. Only a pick that beat its spot is highlighted. */
 export function WrappedCaptain({ section: c }: { section: WrappedCaptainModel }) {
@@ -9,7 +9,7 @@ export function WrappedCaptain({ section: c }: { section: WrappedCaptainModel })
       <WrappedScene steps={2}>
         <div className="w-full max-w-2xl">
           <Reveal step={0}>
-            <WrappedSectionArt art={c.art} />
+            <WrappedCategoryArt art={c.art} />
             <WrappedHeading kicker="Your Draft">Your picks</WrappedHeading>
           </Reveal>
           <Reveal step={1}>

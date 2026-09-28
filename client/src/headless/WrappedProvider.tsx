@@ -24,12 +24,12 @@ export function WrappedProvider({ slug, children, renderLoading, renderError }: 
       data && user
         ? buildWrappedStory(
             data,
-            { viewerId: user.id, viewerName: page.user.displayName, credits: page.bingo.wrappedCredits, startsAt: page.bingo.startsAt, endsAt: page.bingo.endsAt },
+            { viewerId: user.id, viewerName: page.user.displayName, startsAt: page.bingo.startsAt, endsAt: page.bingo.endsAt },
             { goToBoard: () => navigate(`/b/${slug}`), goToRewind: () => navigate(`/b/${slug}/rewind`) },
             slug,
           )
         : null,
-    [data, user, page.user.displayName, page.bingo.wrappedCredits, page.bingo.startsAt, page.bingo.endsAt, navigate, slug],
+    [data, user, page.user.displayName, page.bingo.startsAt, page.bingo.endsAt, navigate, slug],
   );
 
   if (error) return <>{renderError(error instanceof Error ? error.message : "Couldn't load Wrapped")}</>;

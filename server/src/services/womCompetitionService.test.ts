@@ -4,7 +4,7 @@ import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { WomCompetitionClient, WomCompetitionError, checkWomGroup, syncWomCompetition, syncWomCompetitionAfterDraft } from "./womCompetitionService";
+import { WomCompetitionClient, WomCompetitionError, checkWomGroup, sendDueWomBulkUpdates, syncWomCompetition, syncWomCompetitionAfterDraft } from "./womCompetitionService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -438,5 +438,85 @@ describe("checkWomGroup", () => {
   it("never throws when WOM is down", async () => {
     const fetchImpl = mockFetch([{ status: 502 }]);
     expect(await checkWomGroup("123", "abc", new WomCompetitionClient(fetchImpl))).toMatchObject({ ok: false, problem: "unreachable" });
+  });
+});
+
+describe("sendDueWomBulkUpdates", () => {
+  const START = new Date("2026-01-10T00:00:00Z");
+  const at = (hours: number) => new Date(START.getTime() + hours * 60 * 60 * 1000);
+  const liveBingo = (overrides: Partial<typeof schema.bingos.$inferInsert> = {}) => seedBingoWithTeam({ stage: "live", startsAt: START, womCompetitionId: 555, ...overrides }).bingo;
+  const calls = (fetchImpl: typeof fetch) => (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls;
+
+  it("asks WOM to update every participant once, at start + 6h, with the group's code", async () => {
+    const bingo = liveBingo();
+    const fetchImpl = mockFetch([{ body: { message: "ok" } }]);
+    const client = new WomCompetitionClient(fetchImpl);
+
+    await sendDueWomBulkUpdates(db, at(5.9), client);
+    expect(calls(fetchImpl)).toHaveLength(0);
+
+    await sendDueWomBulkUpdates(db, at(6), client);
+    expect(calls(fetchImpl)).toHaveLength(1);
+    const [url, init] = calls(fetchImpl)[0]!;
+    expect(String(url)).toBe("https://api.wiseoldman.net/v2/competitions/555/update-all");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({ verificationCode: "secret-code" });
+    expect(db.select().from(schema.bingos).where(eq(schema.bingos.id, bingo.id)).get()!.womBulkUpdateSentAt).toEqual(at(6));
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "wom.participants_updated")).get()).toBeDefined();
+
+    // The next round (or one after a restart) doesn't send it again.
+    await sendDueWomBulkUpdates(db, at(7), client);
+    expect(calls(fetchImpl)).toHaveLength(1);
+  });
+
+  it("still sends it on the first round after start + 6h, however late (e.g. after a restart)", async () => {
+    liveBingo();
+    const fetchImpl = mockFetch([{ body: {} }]);
+    await sendDueWomBulkUpdates(db, at(30), new WomCompetitionClient(fetchImpl));
+    expect(calls(fetchImpl)).toHaveLength(1);
+  });
+
+  it("never sends it for a test data bingo, one without a competition, or one that isn't Live", async () => {
+    liveBingo({ slug: "testdata-abc" });
+    const fetchImpl = mockFetch([{ body: {} }]);
+    const client = new WomCompetitionClient(fetchImpl);
+    await sendDueWomBulkUpdates(db, at(10), client);
+
+    sqlite.close();
+    ({ sqlite, db } = createTestDb());
+    liveBingo({ womCompetitionId: null });
+    await sendDueWomBulkUpdates(db, at(10), client);
+
+    sqlite.close();
+    ({ sqlite, db } = createTestDb());
+    liveBingo({ stage: "complete" });
+    await sendDueWomBulkUpdates(db, at(10), client);
+
+    sqlite.close();
+    ({ sqlite, db } = createTestDb());
+    liveBingo({ womEnabled: false });
+    await sendDueWomBulkUpdates(db, at(10), client);
+
+    expect(calls(fetchImpl)).toHaveLength(0);
+  });
+
+  it("logs a failure without throwing, and doesn't retry it", async () => {
+    liveBingo();
+    const fetchImpl = mockFetch([{ status: 403, body: { message: "Incorrect verification code." } }]);
+    const client = new WomCompetitionClient(fetchImpl);
+    await expect(sendDueWomBulkUpdates(db, at(6), client)).resolves.toBeUndefined();
+    const failed = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "wom.sync_failed")).get()!;
+    expect(JSON.parse(failed.details)).toMatchObject({ operation: "update" });
+
+    await sendDueWomBulkUpdates(db, at(7), client);
+    expect(calls(fetchImpl)).toHaveLength(1);
+  });
+
+  it("skips the WOM call entirely when WOM_COMPETITION_SYNC_DISABLED=true (E2E test hook)", async () => {
+    vi.stubEnv("WOM_COMPETITION_SYNC_DISABLED", "true");
+    liveBingo();
+    const fetchImpl = mockFetch([{ body: {} }]);
+    await sendDueWomBulkUpdates(db, at(6), new WomCompetitionClient(fetchImpl));
+    expect(calls(fetchImpl)).toHaveLength(0);
   });
 });

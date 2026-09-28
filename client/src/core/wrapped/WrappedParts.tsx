@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { WrappedArtFrames } from "@bingo/shared";
-import type { WrappedDropModel, WrappedPersonModel } from "../../headless/types";
+import type { WrappedDropModel, WrappedPersonModel, WrappedSectionArtModel } from "../../headless/types";
 import { WikiIcon } from "../ui/ItemIcon";
 import { OsrsCaption } from "./OsrsCaption";
 import { StickerArt } from "./StickerArt";
@@ -89,8 +89,11 @@ export function WrappedStat({ value, label, tone }: { value: ReactNode; label: R
   );
 }
 
-/** Sticker heights for a row of Category images (each as wide as its art): smaller as there are more, so a row still fits a phone. */
-const ROW_SIZE = ["", "h-44 sm:h-56", "h-36 sm:h-48", "h-28 sm:h-40", "h-24 sm:h-36"];
+/**
+ * How wide each of a row's Category images may be on a phone: past three they go two rows (two and two, or three and
+ * two/three) rather than one row of slivers. From the sm breakpoint they all share one row.
+ */
+const PHONE_BASIS = ["", "", "", "", "basis-[calc(50%-0.5rem)]", "basis-[calc(33.333%-0.5rem)]"];
 
 /** One of a section's Category images with a name captioned on it, in OSRS's font (#270). */
 export interface CaptionedArt {
@@ -102,19 +105,46 @@ export interface CaptionedArt {
  * A section's Category images, side by side above its opening heading (a Team's three, a Duo's two); nothing when the
  * section has none (it reads finished without). Each boils a little out of step with its neighbours. An image given
  * with a `name` has it embedded right on the art, low over its foot, rather than sitting beside it.
+ *
+ * Every image aims for the height a lone one gets, so a row of several grows sideways instead of shrinking (#279):
+ * they only shrink, together, once the row runs out of width. A caption wraps rather than truncating.
  */
 export function WrappedSectionArt({ art }: { art: (WrappedArtFrames | CaptionedArt)[] }) {
   if (art.length === 0) return null;
-  const size = ROW_SIZE[Math.min(art.length, ROW_SIZE.length - 1)];
+  const basis = PHONE_BASIS[Math.min(art.length, PHONE_BASIS.length - 1)];
+  const wrap = basis ? "flex-wrap sm:flex-nowrap" : "flex-nowrap";
   const items = art.map((a): CaptionedArt => (Array.isArray(a) ? { art: a } : a));
   return (
-    <div className="mb-8 flex flex-wrap items-end justify-center gap-x-2 gap-y-4 sm:gap-x-4">
+    <div className={`mb-8 flex ${wrap} items-end justify-center gap-x-2 gap-y-4 sm:gap-x-4`}>
       {items.map(({ art: frames, name }, i) => (
-        <div key={frames[0]} className="relative flex min-w-0 flex-col items-center">
-          <StickerArt frames={frames} className={size} phase={i / art.length} />
-          {name && <OsrsCaption className="absolute inset-x-0 bottom-1 text-center">{name}</OsrsCaption>}
+        <div key={frames[0]} className={`relative flex min-w-0 flex-col items-center ${basis} sm:basis-auto`}>
+          <StickerArt frames={frames} className="max-w-full" frameClassName="max-h-48 max-w-full sm:max-h-64" phase={i / art.length} />
+          {name && <OsrsCaption className="absolute inset-x-1 bottom-1 text-center">{name}</OsrsCaption>}
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * A category's art and credits (CONTEXT.md "Credits"), the same for every section: its Category images (each with the
+ * name it credits captioned on it, as WrappedSectionArt) and, under them, its additional credits (ones with no image),
+ * each a name in OSRS's font with its role over it. Nothing when the category has neither.
+ */
+export function WrappedCategoryArt({ art }: { art: WrappedSectionArtModel }) {
+  return (
+    <>
+      <WrappedSectionArt art={art.images.map(({ frames, name }) => (name ? { art: frames, name } : frames))} />
+      {art.credits.length > 0 && (
+        <ul aria-label="Credits" className="mb-8 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+          {art.credits.map((credit, i) => (
+            <li key={i} className="flex flex-col items-center gap-1">
+              {credit.role && <span className="text-xs text-on-surface-subtle">{credit.role}</span>}
+              <OsrsCaption size="md">{credit.name}</OsrsCaption>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }

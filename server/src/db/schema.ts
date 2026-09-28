@@ -94,6 +94,9 @@ export const bingos = sqliteTable('bingos', {
   // Last WOM sync failure (create or edit), surfaced in the admin settings
   // panel. Cleared on the next successful sync.
   womSyncError: text('wom_sync_error'),
+  // When the one bulk "update all participants" request was sent to the competition, at start + 6h
+  // (womCompetitionService.sendDueWomBulkUpdates): set once, so a restart neither repeats nor skips it.
+  womBulkUpdateSentAt: integer('wom_bulk_update_sent_at', { mode: 'timestamp' }),
   // Set by Site Admin Start draft. Writing draftOrder is not starting —
   // captains cannot pick until this is true and the shuffle reveal lock
   // (draftOrderLockedUntil) has expired.
@@ -119,9 +122,13 @@ export const bingos = sqliteTable('bingos', {
   showScreenshotsWhenFinished: integer('show_screenshots_when_finished', { mode: 'boolean' }).notNull().default(true),
   // "Publish Wrapped when the Bingo finishes" (CONTEXT.md "Wrapped"): moving to Finished publishes it on its own.
   publishWrappedOnFinish: integer('publish_wrapped_on_finish', { mode: 'boolean' }).notNull().default(false),
-  // Credits (CONTEXT.md): a JSON array of WrappedCredit, parsed by bingoService.parseWrappedCredits and exposed as
-  // `wrappedCredits`. Wrapped's Outro lists them.
+  // Replaced by per-image credits on wrapped_art and wrappedArtCreditsJson (#281; migration 0048 moved its entries onto
+  // the Outro's art). Kept only so the column can be dropped in a later deploy, per the additive-migration rule in
+  // docs/zero-downtime-deploy-plan.md. Nothing reads or writes it.
   wrappedCreditsJson: text('wrapped_credits_json').notNull().default('[]'),
+  // Credits (CONTEXT.md): each Wrapped art category's additional credits (ones with no image), a JSON object of
+  // WrappedCredit arrays keyed by section. Parsed by wrappedArtService.parseAdditionalCredits.
+  wrappedArtCreditsJson: text('wrapped_art_credits_json').notNull().default('{}'),
 });
 
 // Mod is per-bingo, not a global flag — fixes v1's single global isModerator.
@@ -861,6 +868,9 @@ export const wrappedArt = sqliteTable('wrapped_art', {
   keyColor: text('key_color'),
   keyTolerance: integer('key_tolerance'),
   keySoftness: integer('key_softness'),
+  // Credits (CONTEXT.md, #281): who this image credits, captioned on it. Null name: no credit (role is then null too).
+  creditName: text('credit_name'),
+  creditRole: text('credit_role'),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 }, (t) => [
   index('wrapped_art_bingo_section_idx').on(t.bingoId, t.section),

@@ -84,7 +84,8 @@ export interface AuditDetailsMap {
       bonusPotAmount: number;
       rulesMarkdown: string | null;
       exclusivityRulesJson: string;
-      wrappedCreditsJson: string;
+      /** Only on entries written before Credits moved onto the Wrapped art (#281). */
+      wrappedCreditsJson?: string;
       signupOpensAt: string | null;
       draftScheduledAt: string | null;
       revealScheduledAt: string | null;
@@ -188,6 +189,9 @@ export interface AuditDetailsMap {
   "wrapped.art_recut": { section: string; tolerance: number; softness: number };
   "wrapped.art_removed": { section: string };
   "wrapped.art_reordered": { section: string };
+  // Credits (CONTEXT.md, #281): an Admin setting or clearing one image's credit, or a category's additional credits.
+  "wrapped.art_credit_set": { section: string; name: string | null };
+  "wrapped.credits_set": { section: string; count: number };
 
   "draft.started": { order: { teamId: string; name: string; draftOrder: number }[] };
   "draft.order_shuffled": { order: { teamId: string; name: string; draftOrder: number }[] };
@@ -239,7 +243,9 @@ export interface AuditDetailsMap {
   "wom.competition_created": { competitionId: number };
   // changed: what the sync sent (older entries, from team renames only, have none).
   "wom.roster_synced": { changed?: ("title" | "startsAt" | "endsAt" | "teams")[] };
-  "wom.sync_failed": { operation: "create" | "rename" | "sync"; message: string };
+  /** The bulk update at start + 6h: WOM was asked to update every participant of the competition. */
+  "wom.participants_updated": { competitionId: number };
+  "wom.sync_failed": { operation: "create" | "rename" | "sync" | "update"; message: string };
 
   // Fallback-only: written by the server's finish-middleware for any
   // successful non-GET /api/* mutation that recorded nothing itself.
@@ -713,6 +719,20 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     title: "Wrapped art reordered",
     label: (i) => `${actor(i)} reordered the Wrapped art in "${i.details.section}"`,
   },
+  "wrapped.art_credit_set": {
+    category: "settings",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Wrapped art credit set",
+    label: (i) => (i.details.name ? `${actor(i)} credited a Wrapped art image in "${i.details.section}" to ${i.details.name}` : `${actor(i)} cleared a Wrapped art image's credit in "${i.details.section}"`),
+  },
+  "wrapped.credits_set": {
+    category: "settings",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Wrapped credits set",
+    label: (i) => `${actor(i)} set the additional credits in "${i.details.section}" (${i.details.count})`,
+  },
   "draft.started": { category: "draft", tone: "info", visibility: "public", title: "Draft started", label: (i) => `${actor(i)} started the draft` },
   "draft.order_shuffled": { category: "draft", tone: "info", visibility: "public", title: "Pick order shuffled", label: (i) => `${actor(i)} shuffled the pick order` },
   "draft.order_set": { category: "draft", tone: "info", visibility: "public", title: "Pick order set", label: (i) => `${actor(i)} set the pick order` },
@@ -832,6 +852,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
         ? `Updated the Wise Old Man competition's ${joinList(i.details.changed.map((c) => what[c]))}`
         : "Synced the Wise Old Man competition roster";
     },
+  },
+  "wom.participants_updated": {
+    category: "system",
+    tone: "neutral",
+    visibility: "mods",
+    title: "WOM players updated",
+    label: () => "Asked Wise Old Man to update every player in the competition",
   },
   "wom.sync_failed": { category: "system", tone: "warn", visibility: "mods", title: "WOM sync failed", label: (i) => `Wise Old Man ${i.details.operation} failed: ${i.details.message}` },
   "http.mutation": {

@@ -247,15 +247,16 @@ export interface BingoWrappedResponse {
 }
 
 /**
- * A Credits entry (CONTEXT.md "Credits"): someone an Admin names as having put the Bingo together, with an optional
- * role ("Board design"). Free text, in the order the Admin set; independent of the Admin and Moderator roles. The Outro
- * of Wrapped lists them.
+ * A Credits entry (CONTEXT.md "Credits"): someone an Admin names in Wrapped, with an optional role ("Board design").
+ * Free text, independent of the Admin and Moderator roles. Either attached to one Category image (its name captioned
+ * on the art) or one of a category's additional credits (no image), listed under that category's images.
  */
 export interface WrappedCredit {
   name: string;
   role: string | null;
 }
 
+/** Most additional credits one category holds, and the longest a name or role can be. */
 export const MAX_WRAPPED_CREDITS = 30;
 export const MAX_WRAPPED_CREDIT_LENGTH = 60;
 
@@ -263,10 +264,15 @@ export const MAX_WRAPPED_CREDIT_LENGTH = 60;
  * Wrapped art: decorative in-game character cut-outs, drawn as stickers on torn paper. Admins upload them per Bingo
  * (a new Bingo starts with a copy of the previous one's), in groups:
  * - Category images: any number per section of the story, shown side by side above its opening heading (a Team's
- *   three, a Duo's two). Duo and Captain are the sections of those names.
+ *   three, a Duo's two). Duo and Captain are the sections of those names. Each can carry a credit, and each category
+ *   can also hold additional credits with no image.
  * - Side images ("side"): one pool, shown large beside the story's sections in turn (wide screens only).
  */
-export const WRAPPED_ART_SECTIONS = ["intro", "you", "duo", "captain", "moderator", "team", "bingo", "outro"] as const;
+/**
+ * `moderator` is a reviewing Moderator's own section (captioned with their name); `moderators` is the Bingo-wide
+ * "Behind the scenes" moderation roundup in The Bingo section, crediting who moderated it.
+ */
+export const WRAPPED_ART_SECTIONS = ["intro", "you", "duo", "captain", "moderator", "team", "bingo", "moderators", "outro"] as const;
 export type WrappedArtSection = (typeof WRAPPED_ART_SECTIONS)[number];
 
 export const WRAPPED_ART_GROUPS = [...WRAPPED_ART_SECTIONS, "side"] as const;
@@ -291,9 +297,22 @@ export function isWrappedArtGroup(value: unknown): value is WrappedArtGroup {
  */
 export type WrappedArtFrames = [string, string];
 
-/** The art the story shows, in order: each section's Category images (a section without any is missing), and the side pool. */
+/** One Category image as the story shows it: its frames, and the credit attached to it (null for none). */
+export interface WrappedArtPiece {
+  frames: WrappedArtFrames;
+  credit: WrappedCredit | null;
+}
+
+/** A category's additional credits (no image), in the order the Admin set; a category with none is missing. */
+export type WrappedArtCredits = Partial<Record<WrappedArtSection, WrappedCredit[]>>;
+
+/**
+ * The art the story shows, in order: each section's Category images (a section without any is missing), each
+ * category's additional credits, and the side pool.
+ */
 export interface WrappedArtSet {
-  sections: Partial<Record<WrappedArtSection, WrappedArtFrames[]>>;
+  sections: Partial<Record<WrappedArtSection, WrappedArtPiece[]>>;
+  additionalCredits: WrappedArtCredits;
   side: WrappedArtFrames[];
 }
 
@@ -319,5 +338,7 @@ export interface WrappedArtImage {
   keying: WrappedArtKeying | null;
   /** The background colour that was keyed out, "#rrggbb"; null when nothing was. */
   keyColor: string | null;
+  /** Who it credits (CONTEXT.md "Credits"), captioned on it. Always null for a side image. */
+  credit: WrappedCredit | null;
   updatedAt: string;
 }

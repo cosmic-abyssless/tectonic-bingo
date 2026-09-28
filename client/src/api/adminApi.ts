@@ -1,6 +1,6 @@
 import type {
   AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, PieceValue, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
-  PickableMembersResponse, Signup, TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtGroup, WrappedArtImage, WrappedArtKeying,
+  PickableMembersResponse, Signup, TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtCredits, WrappedArtGroup, WrappedArtImage, WrappedArtKeying, WrappedArtSection, WrappedCredit,
 } from "@bingo/shared";
 import { api } from "./client";
 
@@ -146,7 +146,7 @@ export async function uploadTileImage(slug: string, id: string, file: File) {
 
 // Wrapped art (#262): cut-outs in groups (a section's Category images, or the side pool).
 export function getWrappedArt(slug: string) {
-  return api.get<{ art: WrappedArtImage[] }>(`${base(slug)}/wrapped-art`);
+  return api.get<{ art: WrappedArtImage[]; additionalCredits: WrappedArtCredits }>(`${base(slug)}/wrapped-art`);
 }
 function imageForm(file: File, keying?: WrappedArtKeying) {
   const fd = new FormData();
@@ -168,6 +168,14 @@ export function recutWrappedArt(slug: string, id: string, keying: WrappedArtKeyi
 }
 export function removeWrappedArt(slug: string, id: string) {
   return api.delete(`${base(slug)}/wrapped-art/images/${id}`);
+}
+/** Sets one image's credit; null clears it. */
+export function setWrappedArtCredit(slug: string, id: string, credit: WrappedCredit | null) {
+  return api.put<{ art: WrappedArtImage }>(`${base(slug)}/wrapped-art/images/${id}/credit`, { credit });
+}
+/** Replaces a category's additional credits (ones with no image). */
+export function setWrappedArtCredits(slug: string, section: WrappedArtSection, credits: WrappedCredit[]) {
+  return api.put<{ additionalCredits: WrappedArtCredits }>(`${base(slug)}/wrapped-art/${section}/credits`, { credits });
 }
 export function reorderWrappedArt(slug: string, group: WrappedArtGroup, ids: string[]) {
   return api.put<{ art: WrappedArtImage[] }>(`${base(slug)}/wrapped-art/${group}/order`, { ids });

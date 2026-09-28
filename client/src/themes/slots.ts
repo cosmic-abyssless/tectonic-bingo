@@ -238,9 +238,10 @@ export interface ThemeSlots {
   // props-only, each one section's model; a section the model leaves out (nothing to say for this viewer) is never
   // drawn. Sections are built from core/wrapped's WrappedScene (one screen of the story) and Reveal (a line that fades up
   // as the viewer scrolls; just fades in with reduced motion), and must work at phone width. Each section model carries
-  // its Category images (`art`: any number, each two boil frames; empty without any): draw them with core/wrapped's
-  // WrappedSectionArt (or StickerArt), which swaps the frames slowly and adds the CSS shadow, and make sure the section
-  // still looks finished without them. The model's `sideArt` is for WrappedPage to set beside the sections.
+  // its category's art (`art`: any number of Category images, each two boil frames and maybe a credited name, and
+  // the category's additional credits; both empty without any): draw it with core/wrapped's WrappedCategoryArt (or
+  // WrappedSectionArt / StickerArt), which swaps the frames slowly and adds the CSS shadow, and make sure the section
+  // still looks finished without it. The model's `sideArt` is for WrappedPage to set beside the sections.
   WrappedPage: ComponentType<Record<string, never>>;
   // The Board's way in, for a Finished Bingo once Wrapped is published, or for a Moderator before that (preview: say
   // it's a preview only Moderators can see).
@@ -255,7 +256,7 @@ export interface ThemeSlots {
   // A reviewing Moderator's (or Admin's) own reviews.
   WrappedModerator: ComponentType<{ section: WrappedModeratorModel }>;
   WrappedTeam: ComponentType<{ section: WrappedTeamModel }>;
-  // The Bingo as a whole, moderation stats (with the rejection-rate banter) included.
+  // The Bingo as a whole, moderation stats (with the rejection-rate banter and the "moderators" category's art) included.
   WrappedBingo: ComponentType<{ section: WrappedBingoModel }>;
   // The closing screen: a way on to Rewind and back to the Board. It leaves room for share cards (#232).
   WrappedOutro: ComponentType<{ section: WrappedOutroModel; onRewind: () => void; onBoard: () => void }>;

@@ -1,6 +1,6 @@
 import type { WrappedDuoModel } from "../../../headless/types";
 import { Reveal, WrappedScene } from "../../../core/wrapped/Scene";
-import { WrappedDropCard, WrappedHeading, WrappedPerson, WrappedSectionArt, WrappedStat } from "../../../core/wrapped/WrappedParts";
+import { WrappedCategoryArt, WrappedDropCard, WrappedHeading, WrappedPerson, WrappedStat } from "../../../core/wrapped/WrappedParts";
 
 /** Your Duo: the pair's combined Points share and rank, who carried whom, and their best moments together. */
 export function WrappedDuo({ section: d }: { section: WrappedDuoModel }) {
@@ -8,7 +8,7 @@ export function WrappedDuo({ section: d }: { section: WrappedDuoModel }) {
     <>
       <WrappedScene steps={4}>
         <Reveal step={0}>
-          <WrappedSectionArt art={d.art} />
+          <WrappedCategoryArt art={d.art} />
           <WrappedHeading kicker="Your Duo">
             You & <WrappedPerson person={d.partner} size="lg" />
           </WrappedHeading>
