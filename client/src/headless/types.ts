@@ -616,11 +616,12 @@ export interface RewindModel {
 // ---------------------------------------------------------------------------
 
 /**
- * A section's Category images, each captioned with the name of who it credits (null for none), and its category's
- * additional credits (ones with no image), in the Admins' order (CONTEXT.md "Credits"). Both empty without any.
+ * A section's Category images, each captioned with the name (and optional role) of who it credits (both null for
+ * none), and its category's additional credits (ones with no image), in the Admins' order (CONTEXT.md "Credits").
+ * Both empty without any.
  */
 export interface WrappedSectionArtModel {
-  images: { frames: WrappedArtFrames; name: string | null }[];
+  images: { frames: WrappedArtFrames; name: string | null; role: string | null }[];
   credits: { name: string; role: string | null }[];
 }
 

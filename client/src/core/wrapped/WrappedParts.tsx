@@ -95,19 +95,22 @@ export function WrappedStat({ value, label, tone }: { value: ReactNode; label: R
  */
 const PHONE_BASIS = ["", "", "", "", "basis-[calc(50%-0.5rem)]", "basis-[calc(33.333%-0.5rem)]"];
 
-/** One of a section's Category images with a name captioned on it, in OSRS's font (#270). */
+/** One of a section's Category images with a name (and optional role) captioned on it, in OSRS's font (#270). */
 export interface CaptionedArt {
   art: WrappedArtFrames;
   name?: string | null;
+  role?: string | null;
 }
 
 /**
  * A section's Category images, side by side above its opening heading (a Team's three, a Duo's two); nothing when the
  * section has none (it reads finished without). Each boils a little out of step with its neighbours. An image given
- * with a `name` has it embedded right on the art, low over its foot, rather than sitting beside it.
+ * with a `name` has it embedded right on the art, low over its foot, rather than sitting beside it; a `role`, if any,
+ * sits quietly under that, below the art rather than over it so it never collides with the sticker.
  *
  * Every image aims for the height a lone one gets, so a row of several grows sideways instead of shrinking (#279):
- * they only shrink, together, once the row runs out of width. A caption wraps rather than truncating.
+ * they only shrink, together, once the row runs out of width. A caption wraps rather than truncating. These are the
+ * Category's main credits, so their name reads bigger than an additional credit's (#279 follow-up).
  */
 export function WrappedSectionArt({ art }: { art: (WrappedArtFrames | CaptionedArt)[] }) {
   if (art.length === 0) return null;
@@ -116,10 +119,13 @@ export function WrappedSectionArt({ art }: { art: (WrappedArtFrames | CaptionedA
   const items = art.map((a): CaptionedArt => (Array.isArray(a) ? { art: a } : a));
   return (
     <div className={`mb-8 flex ${wrap} items-end justify-center gap-x-2 gap-y-4 sm:gap-x-4`}>
-      {items.map(({ art: frames, name }, i) => (
-        <div key={frames[0]} className={`relative flex min-w-0 flex-col items-center ${basis} sm:basis-auto`}>
-          <StickerArt frames={frames} className="max-w-full" frameClassName="max-h-48 max-w-full sm:max-h-64" phase={i / art.length} />
-          {name && <OsrsCaption className="absolute inset-x-1 bottom-1 text-center">{name}</OsrsCaption>}
+      {items.map(({ art: frames, name, role }, i) => (
+        <div key={frames[0]} className={`flex min-w-0 flex-col items-center ${basis} sm:basis-auto`}>
+          <div className="relative max-w-full">
+            <StickerArt frames={frames} className="max-w-full" frameClassName="max-h-48 max-w-full sm:max-h-64" phase={i / art.length} />
+            {name && <OsrsCaption size="md" className="absolute inset-x-1 bottom-1 text-center">{name}</OsrsCaption>}
+          </div>
+          {role && <span className="mt-1 max-w-full truncate text-xs text-on-surface-subtle">{role}</span>}
         </div>
       ))}
     </div>
@@ -134,13 +140,13 @@ export function WrappedSectionArt({ art }: { art: (WrappedArtFrames | CaptionedA
 export function WrappedCategoryArt({ art }: { art: WrappedSectionArtModel }) {
   return (
     <>
-      <WrappedSectionArt art={art.images.map(({ frames, name }) => (name ? { art: frames, name } : frames))} />
+      <WrappedSectionArt art={art.images.map(({ frames, name, role }) => (name ? { art: frames, name, role } : frames))} />
       {art.credits.length > 0 && (
         <ul aria-label="Credits" className="mb-8 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
           {art.credits.map((credit, i) => (
             <li key={i} className="flex flex-col items-center gap-1">
               {credit.role && <span className="text-xs text-on-surface-subtle">{credit.role}</span>}
-              <OsrsCaption size="md">{credit.name}</OsrsCaption>
+              <OsrsCaption>{credit.name}</OsrsCaption>
             </li>
           ))}
         </ul>

@@ -129,14 +129,14 @@ describe("buildWrappedStory", () => {
     const section = (id: string) => model.sections.find((s) => s.id === id)!.section;
     expect(section("outro").art).toEqual({
       images: [
-        { frames: frames("o1"), name: "Zezima" },
-        { frames: frames("o2"), name: null },
+        { frames: frames("o1"), name: "Zezima", role: "Board design" },
+        { frames: frames("o2"), name: null, role: null },
       ],
       credits: [{ name: "Lynx", role: "Art" }],
     });
     expect(section("team").art).toEqual({ images: [], credits: [{ name: "B0aty", role: null }] });
     const b = section("bingo");
-    expect(b.kind === "bingo" && b.moderation?.art).toEqual({ images: [{ frames: frames("m1"), name: "Woox" }], credits: [] });
+    expect(b.kind === "bingo" && b.moderation?.art).toEqual({ images: [{ frames: frames("m1"), name: "Woox", role: null }], credits: [] });
     expect(b.art).toEqual({ images: [], credits: [] });
   });
 
