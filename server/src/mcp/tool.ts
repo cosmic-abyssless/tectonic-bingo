@@ -25,3 +25,6 @@ export interface McpTool<S extends z.ZodObject = z.ZodObject> {
 export function defineTool<S extends z.ZodObject>(tool: McpTool<S>): McpTool<S> {
   return tool;
 }
+
+/** Thrown by a tool for an answer the caller should see as a tool error (an unknown slug), not a server fault. */
+export class McpToolError extends Error {}

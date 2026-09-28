@@ -37,11 +37,11 @@ export interface PointsOverTimePoint {
   cumulativePoints: number;
 }
 
-type NodeLabel = { kind: "line" | "tile" | "task"; label: string };
+export type NodeLabel = { kind: "line" | "tile" | "task"; label: string };
 
 // A human name for each scoring node: a line bonus ("row 2 line bonus"), a tile's own bonus (the tile's name), or a
 // task under a tile ("ZULRAH — Page 1"). Shared by the points chart and the timeline so they read the same.
-function labelNodes(db: Db, bingoId: string, nodeIds: string[]): Map<string, NodeLabel> {
+export function labelNodes(db: Db, bingoId: string, nodeIds: string[]): Map<string, NodeLabel> {
   const nodeRows = nodeIds.length ? db.select().from(nodes).where(inArray(nodes.id, nodeIds)).all() : [];
   const nodeById = new Map(nodeRows.map((n) => [n.id, n]));
   const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
