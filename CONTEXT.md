@@ -75,6 +75,7 @@ A player's registration for a specific Bingo, submitted during the `signup` stag
   - **Avoid:** Player picker (the people picked needn't be Players).
 - **Other option:** A single- or multiple-choice question can allow **Other**: an extra choice with a short free-text box (up to 100 characters), shown as "Melee, Other: hybrid". Other can't be picked without text, and a required question counts Other with text as answered. The setting is exported and imported with the Bingo.
 - **Question helper text:** Each signup question can carry optional plain-text helper text (up to 500 characters), shown under it on the signup form. It is exported and imported with the Bingo.
+- **Late signup:** A Signup an Admin makes on a player's behalf once Signups are closed, for someone joining late. It is a real Signup (an RSN, a buy-in to collect, unanswered questions), made from Signups closed until the Bingo is Finished. Players can only sign themselves up while Signups are open.
 
 ### Duo
 Two players who register to enter the Bingo together and must be drafted onto the same team as a single unit.
@@ -115,6 +116,8 @@ A Team's private note on a signup while scouting: 1 to 3 stars and a short note.
 
 ### Team
 The group of Players a Captain leads, formed by the Draft. Has a name, a color, and one or two Captains.
+- **Rules:** Once the Draft has set the Teams, an Admin can still change them for what nobody planned for: **Remove from Team** (a Player who has to leave, for an emergency or a ban; an optional reason goes in the audit log) and a Late signup. A removed Player's Signup is Withdrawn, so they are no longer a Player, but their Submissions and points stay with the Team, still credited to them. They keep their place in the Stats, Titles and Wrapped for what they did, and are told they were removed. A Captain or co-captain can only be removed by naming another Player on the Team to take that role. Once the Bingo is Finished its Teams and signups are locked; an Admin who has to fix something moves it back to Live first.
+- **Not:** A ban with its own consequences. Voiding a removed Player's drops is done Submission by Submission, through review.
 
 ---
 
