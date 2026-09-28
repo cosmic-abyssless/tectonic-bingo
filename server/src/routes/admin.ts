@@ -384,7 +384,7 @@ router.patch(
     res.json({ task });
   }),
 );
-// Changing a Task's Valued as mid-bingo: how many submissions already have a GP value from it, and re-pricing them.
+// Changing a Task's Valued as mid-bingo: how many submissions already have a Drop value from it, and re-pricing them.
 router.get(
   "/nodes/:nodeId/priced-submissions",
   asyncHandler(async (req, res) => {

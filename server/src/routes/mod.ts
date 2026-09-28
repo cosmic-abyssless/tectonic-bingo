@@ -131,7 +131,7 @@ router.get(
   }),
 );
 
-// Prices a submission's claims again, when they were priced from the wrong thing (CONTEXT.md "GP value").
+// Prices a submission's claims again, when they were priced from the wrong thing (CONTEXT.md "Drop value").
 router.post(
   "/submissions/:id/reprice",
   asyncHandler(async (req, res) => {

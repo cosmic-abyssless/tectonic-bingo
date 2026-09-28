@@ -323,7 +323,7 @@ export interface GraphNodeInput {
   children?: GraphNodeInput[];
 }
 
-/** A Task's "Valued as" (CONTEXT.md): its claims' GP value comes from `itemName` ÷ `divisor`. */
+/** A Task's "Valued as" (CONTEXT.md): its claims' Drop value comes from `itemName` ÷ `divisor`. */
 export interface ValuedAs {
   itemName: string;
   divisor: number;
@@ -392,7 +392,7 @@ export interface Claim {
   nodeId: string;
   itemName: string | null;
   quantity: number;
-  /** What the drop was worth in GP when submitted (CONTEXT.md "GP value"); null when it has none (yet). */
+  /** What the drop was worth in GP when submitted (CONTEXT.md "Drop value"); null when it has none (yet). */
   gpValue: number | null;
 }
 
@@ -457,7 +457,7 @@ export interface ClaimedLeaf {
   id: string;
   kind: NodeKind;
   label: string | null;
-  /** Why an item claimed here has the GP value it does, when the Task has a Valued as. */
+  /** Why an item claimed here has the Drop value it does, when the Task has a Valued as. */
   valuedAs: ValuedAs | null;
 }
 
@@ -1234,7 +1234,7 @@ export interface ContributionCount {
   approvedSubmissions: number;
   /** Unrounded; shown to two decimal places. */
   pointsShare: number;
-  /** GP gained (CONTEXT.md): GP values of this player's approved claims. */
+  /** Total drop value (CONTEXT.md): Drop values of this player's approved claims. */
   gpGained: number;
   awards: ContributionAward[];
 }
@@ -1244,7 +1244,7 @@ export interface TeamGpGained {
   gpGained: number;
 }
 
-/** An approved claim with a GP value. */
+/** An approved claim with a Drop value. */
 export interface GpDrop {
   claimId: string;
   submissionId: string;
@@ -1280,7 +1280,7 @@ export interface StatsResponse {
   heatmap: TileHeatmapCell[];
   /** Highest first. */
   teamGpGained: TeamGpGained[];
-  /** Every approved claim with a GP value, most valuable first. */
+  /** Every approved claim with a Drop value, most valuable first. */
   drops: GpDrop[];
   /** What Titles (titles.ts) are picked from: one entry per Player, filtered like contributions. */
   titleFacts: PlayerTitleFacts[];
@@ -1319,7 +1319,7 @@ export interface PieceValue {
   unitPrice: number | null;
 }
 
-/** An item name on claims that have no GP value. */
+/** An item name on claims that have no Drop value. */
 export interface UnvaluedItem {
   itemName: string;
   claimCount: number;
@@ -1334,7 +1334,7 @@ export interface UnvaluedItem {
 export type BroadcastEvent =
   | { type: "submission_created"; bingoId: string; payload: { teamId: string } }
   | { type: "submission_reviewed"; bingoId: string; payload: { teamId: string; nodeIds: string[] } }
-  // Claims of this bingo that had no GP value got one (the GE price table loaded, or a Piece value was added).
+  // Claims of this bingo that had no Drop value got one (the GE price table loaded, or a Piece value was added).
   | { type: "gp_values_updated"; bingoId: string; payload: Record<string, never> }
   | { type: "stage_changed"; bingoId: string; payload: { stage: Stage } }
   // A Moderator published Wrapped (CONTEXT.md), or published it again: readers refetch it.

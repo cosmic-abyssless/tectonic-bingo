@@ -359,14 +359,14 @@ export const SQL_TABLES: Record<string, TableClass> = {
   },
   claims: {
     note: "Claims: one drop allocated to one leaf (ITEM or MANUAL node) within a Submission.",
-    columns: { id: "", submission_id: "", node_id: "The leaf", item_name: "", quantity: "", gp_value: "GP value when submitted (unit price × quantity); never used for scoring" },
+    columns: { id: "", submission_id: "", node_id: "The leaf", item_name: "", quantity: "", gp_value: "Drop value when submitted (unit price × quantity); never used for scoring" },
   },
   piece_values: {
     note: "Piece values: an item piece priced as its whole item ÷ divisor.",
     columns: { id: "", piece_item_name: "", whole_item_name: "", whole_quantity: "", divisor: "", created_by_user_id: "", created_at: TS, updated_at: TS },
   },
   piece_value_other_pieces: { note: "A Piece value's Other pieces.", columns: { id: "", piece_value_id: "", item_name: "", quantity: "" } },
-  unvalued_item_dismissals: { note: "Items an Admin chose to leave without a GP value.", columns: { item_name: "", dismissed_by_user_id: "", created_at: TS } },
+  unvalued_item_dismissals: { note: "Items an Admin chose to leave without a Drop value.", columns: { item_name: "", dismissed_by_user_id: "", created_at: TS } },
   site_settings: { note: "Site-wide settings, one JSON value per key (e.g. titles).", columns: { key: "", value_json: "", updated_by_user_id: "", updated_at: TS } },
   bingo_title_settings: { note: "A Finished Bingo's frozen Title settings.", columns: { bingo_id: "", settings_json: "", title_ids_json: "", frozen_at: TS } },
   bingo_wrapped: { note: "A Bingo's published Wrapped.", columns: { bingo_id: "", published_at: TS, published_by_user_id: "", data_json: "Large" } },

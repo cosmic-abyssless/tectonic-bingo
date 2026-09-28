@@ -10,7 +10,7 @@ export const playerContributions = defineTool({
   title: "Player contributions",
   description:
     "Every Player on a Team in one Bingo, highest Points share first: RSN, Discord name, Team, Points share (their part of the points their Team was awarded, Point adjustments left out), " +
-    "approved Submissions, GP gained, and Wise Old Man gains (EHB, EHP, clues completed) from the Bingo's start to its end, measured as the Titles measure them " +
+    "approved Submissions, Total drop value (gpGained), and Wise Old Man gains (EHB, EHP, clues completed) from the Bingo's start to its end, measured as the Titles measure them " +
     "(womGains is null with no Wise Old Man snapshot; asOf is the latest snapshot the gains run up to).",
   input: z.object({
     slug: slugInput,

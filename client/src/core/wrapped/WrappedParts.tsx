@@ -28,7 +28,7 @@ export function WrappedPerson({ person, size = "md", detail }: { person: Wrapped
 }
 
 /**
- * One drop: its screenshot (when the data has one: it opens full size), the item with its icon, GP value and Luck, and
+ * One drop: its screenshot (when the data has one: it opens full size), the item with its icon, Drop value and Luck, and
  * who got it when. `showPlayer` for drops that aren't the viewer's own; `showTeam` (on with showPlayer unless turned off)
  * for their Team too.
  */

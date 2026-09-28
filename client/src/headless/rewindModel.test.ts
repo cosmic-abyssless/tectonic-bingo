@@ -279,7 +279,7 @@ describe("standoutOf", () => {
   });
 
   it("never calls out a signal the Submission doesn't have", () => {
-    // A pet: no GP value, so a little Luck wins even though it's weak.
+    // A pet: no Drop value, so a little Luck wins even though it's weak.
     expect(standoutOf(withClaim(null, 12))?.kind).toBe("luck");
     expect(standoutOf(withClaim(null, null))).toBeNull();
   });

@@ -107,7 +107,7 @@ function PreviewSummary({ data }: { data: MyWrappedResponse }) {
   const m = b.moderation;
   const rows: [string, string][] = [
     ["Approved submissions", b.totalSubmissions.toLocaleString()],
-    ["GP value", formatGp(b.totalGp)],
+    ["Drop value", formatGp(b.totalGp)],
     ["Rarest drop", b.rarestDrop ? `${b.rarestDrop.itemName} (1 in ${Math.round(b.rarestDrop.luckOneIn!).toLocaleString()})` : "—"],
     ["Most reacted", b.mostReacted ? `${b.mostReacted.drop.itemName} (${b.mostReacted.reactions})` : "—"],
     ["Biggest steal", b.biggestSteal ? `${playerName(b.biggestSteal.player)}: picked ${b.biggestSteal.position}, finished ${b.biggestSteal.rank}` : "—"],

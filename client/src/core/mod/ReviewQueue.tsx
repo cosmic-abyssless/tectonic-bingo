@@ -294,7 +294,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
                         <>
                           <span className="num" title={claimsGpBreakdown(row.claims, formatGp, new Map(row.leaves.flatMap((l) => (l.valuedAs ? [[l.id, l.valuedAs] as const] : []))))}>
                             {" · "}
-                            {claimsGpValue(row.claims) === null ? "— GP value" : `${formatGp(claimsGpValue(row.claims))} GP`}
+                            {claimsGpValue(row.claims) === null ? "— drop value" : `${formatGp(claimsGpValue(row.claims))} GP`}
                           </span>{" "}
                           <RepriceGpButton slug={slug} submissionId={row.submission.id} />
                         </>

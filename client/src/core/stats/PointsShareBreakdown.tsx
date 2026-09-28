@@ -67,8 +67,8 @@ export function PointsShareBreakdown({ contribution, teamColor, rank, titles }: 
         <Figure label="Points share" value={formatShare(contribution.pointsShare)} />
         <Figure label="Submissions" value={String(contribution.approvedSubmissions)} />
         <Figure label="On the team" value={`#${rank.place} of ${rank.of}`} />
-        {/* GP gained (CONTEXT.md): what their approved drops were worth. */}
-        <Figure label="GP gained" value={formatGp(contribution.gpGained)} />
+        {/* Total drop value (CONTEXT.md): what their approved drops were worth. */}
+        <Figure label="Total drop value" value={formatGp(contribution.gpGained)} />
       </div>
       {contribution.awards.length === 0 ? (
         <p className="text-sm text-on-surface-subtle">None of their claims have completed anything yet.</p>

@@ -222,7 +222,7 @@ server.listen(PORT, () => {
   });
   // After the server is up and taking requests, so a slow model download never delays a deploy going healthy.
   if (shouldWarmOcr()) void warmOcr();
-  // Loads the GE price table and prices any claims still missing a GP value (including ones made before GP values existed).
+  // Loads the GE price table and prices any claims still missing a Drop value (including ones made before Drop values existed).
   void refreshPricesAndFill(db);
   // Hourly Wise Old Man snapshot reads for Titles, paced within WOM's rate limit.
   startWomReads(db);

@@ -1,4 +1,4 @@
-// Re-pricing (CONTEXT.md "GP value"): the one exception to a GP value never changing once set. For fixing values
+// Re-pricing (CONTEXT.md "Drop value"): the one exception to a Drop value never changing once set. For fixing values
 // that were priced from the wrong thing (a Task given a Valued as, or an item a Piece value, after its claims came
 // in), not for bringing values up to today's prices. A Moderator re-prices one submission; an Admin changing a
 // Task's Valued as can re-price every submission with a claim on it.
@@ -30,7 +30,7 @@ async function loadedTable(table: GePriceTable): Promise<GePriceTable> {
 
 /**
  * Prices one submission's item claims again (only those on `onlyNodeId`, when given), writing and auditing the ones
- * whose GP value changed. A claim that can't be priced right now keeps what it had.
+ * whose Drop value changed. A claim that can't be priced right now keeps what it had.
  */
 function repriceInTx(tx: Tx, bingoId: string, submissionId: string, price: Pricer, onlyNodeId?: string): RepricedClaim[] {
   const submission = tx
@@ -68,7 +68,7 @@ function repriceInTx(tx: Tx, bingoId: string, submissionId: string, price: Price
   return changes;
 }
 
-/** Re-prices every item claim of one submission. Returns the claims whose GP value changed. */
+/** Re-prices every item claim of one submission. Returns the claims whose Drop value changed. */
 export async function repriceSubmission(db: Db, bingoId: string, submissionId: string, table: GePriceTable = getGePriceTable()): Promise<RepricedClaim[]> {
   const loaded = await loadedTable(table);
   const changed = db.transaction((tx) => repriceInTx(tx, bingoId, submissionId, pricer(tx, loaded)));
@@ -77,7 +77,7 @@ export async function repriceSubmission(db: Db, bingoId: string, submissionId: s
   return changed;
 }
 
-/** The submissions of this bingo with a claim on `nodeId`: only those whose claim already has a GP value, if `priced`. */
+/** The submissions of this bingo with a claim on `nodeId`: only those whose claim already has a Drop value, if `priced`. */
 function submissionIdsOn(db: Db | Tx, bingoId: string, nodeId: string, priced: boolean): string[] {
   const rows = db
     .selectDistinct({ submissionId: claims.submissionId })
@@ -89,14 +89,14 @@ function submissionIdsOn(db: Db | Tx, bingoId: string, nodeId: string, priced: b
   return rows.map((r) => r.submissionId);
 }
 
-/** How many submissions already have a GP value from this Task, so changing its Valued as can offer to re-price them. */
+/** How many submissions already have a Drop value from this Task, so changing its Valued as can offer to re-price them. */
 export function countPricedSubmissions(db: Db, bingoId: string, nodeId: string): number {
   return submissionIdsOn(db, bingoId, nodeId, true).length;
 }
 
 /**
  * Re-prices this Task's claims in every submission that has one (after its Valued as changed), including any with no
- * GP value yet. Other claims in those submissions are left alone. Returns how many submissions changed.
+ * Drop value yet. Other claims in those submissions are left alone. Returns how many submissions changed.
  */
 export async function repriceNodeClaims(db: Db, bingoId: string, nodeId: string, table: GePriceTable = getGePriceTable()): Promise<number> {
   const loaded = await loadedTable(table);

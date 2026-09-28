@@ -579,7 +579,7 @@ export const nodes = sqliteTable('nodes', {
   pointsGateNodeId: text('points_gate_node_id'), // this node's points stay 0 until the gate node completes too
   submitGateNodeId: text('submit_gate_node_id'), // submissions targeting a leaf under this node are rejected until the gate node completes
   allowsPreLoad: integer('allows_pre_load', { mode: 'boolean' }).notNull().default(false),
-  // ITEM only, optional (CONTEXT.md "Valued as"): claims on this leaf get their GP value from this item ÷ divisor
+  // ITEM only, optional (CONTEXT.md "Valued as"): claims on this leaf get their Drop value from this item ÷ divisor
   // instead of their own item's price, e.g. a DT2 page's Gold ring valued as Magus vestige ÷ 3. Both set or both null.
   valuedAsItemName: text('valued_as_item_name'),
   valuedAsDivisor: integer('valued_as_divisor'),
@@ -732,7 +732,7 @@ export const claims = sqliteTable('claims', {
   nodeId: text('node_id').notNull().references(() => nodes.id),
   itemName: text('item_name'),
   quantity: integer('quantity').notNull().default(1),
-  // What the drop was worth in GP when submitted (CONTEXT.md "GP value"): unit price × quantity. Null for MANUAL
+  // What the drop was worth in GP when submitted (CONTEXT.md "Drop value"): unit price × quantity. Null for MANUAL
   // claims, items with no GE price or Piece value, or until the price table loads (gpValueService fills it in).
   // Never changed once set, and never used for scoring.
   gpValue: integer('gp_value'),
@@ -765,7 +765,7 @@ export const pieceValueOtherPieces = sqliteTable('piece_value_other_pieces', {
   uniqueIndex('piece_value_other_pieces_value_item_unq').on(t.pieceValueId, t.itemName),
 ]);
 
-// Item names an Admin chose to leave without a GP value (pets and the like), hidden from the Piece values page's
+// Item names an Admin chose to leave without a Drop value (pets and the like), hidden from the Piece values page's
 // list of unvalued items.
 export const unvaluedItemDismissals = sqliteTable('unvalued_item_dismissals', {
   itemName: text('item_name').primaryKey(),

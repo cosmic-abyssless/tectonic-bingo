@@ -337,7 +337,7 @@ router.post(
     broadcast({ type: "submission_created", bingoId: bingo.id, payload: { teamId: team.id } });
     res.status(201).json({ submission });
 
-    // After responding: refreshes the GE price table if it's due and prices any claims that came in without a GP value.
+    // After responding: refreshes the GE price table if it's due and prices any claims that came in without a Drop value.
     void refreshPricesAndFill(db);
 
     // Runs after responding — OCR (~1.6s+) shouldn't hold up submission

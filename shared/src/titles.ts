@@ -34,7 +34,7 @@ export interface LuckFacts {
   spoon: { value: number; itemName: string; kills: number } | null;
   /** Their most unlikely current dry streak: `kills` at `boss` without a Board drop from it. */
   dry: { value: number; boss: string; kills: number } | null;
-  /** Their luckiest Useful drop. `value` is weighted by GP value; `luck` is the drop's own. */
+  /** Their luckiest Useful drop. `value` is weighted by Drop value; `luck` is the drop's own. */
   clutch: { value: number; luck: number; itemName: string; gpValue: number | null } | null;
 }
 

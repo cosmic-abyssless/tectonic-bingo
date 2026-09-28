@@ -137,7 +137,7 @@ describe("replayTeam", () => {
 const NOTHING: RewindCompletion = { tiles: [], lines: [], firstTiles: [], firstParts: [] };
 
 describe("significance", () => {
-  it("lets a very lucky pet with no GP value reach the huge tier", () => {
+  it("lets a very lucky pet with no Drop value reach the huge tier", () => {
     expect(significanceTier(significanceScore({ luckOneIn: 5_000 }))).toBe("huge");
     expect(significanceTier(significanceScore({ luckOneIn: 5_000, reactions: 1 }))).toBe("huge");
   });
@@ -176,7 +176,7 @@ describe("significance", () => {
   });
 
   it("never picks a missing signal as the dominant one", () => {
-    // A pet with no GP value: GP value can't win, however weak the rest is.
+    // A pet with no Drop value: Drop value can't win, however weak the rest is.
     expect(dominantSignal({ luckOneIn: 11 })).toBe("luck");
     expect(dominantSignal({ reactions: 1, gpValue: undefined })).toBe("reactions");
     expect(dominantSignal({})).toBeNull();

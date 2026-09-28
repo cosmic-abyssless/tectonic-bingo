@@ -338,15 +338,15 @@ describe("getStatsForViewer", () => {
   });
 });
 
-describe("GP gained", () => {
-  // A claim with a GP value, approved or left in `status`.
+describe("Total drop value", () => {
+  // A claim with a Drop value, approved or left in `status`.
   function valuedClaim(fx: Fixture, teamId: string, userId: string, gpValue: number, status: "approved" | "pending" | "rejected" = "approved") {
     const task = addTask(fx.tileId, { points: 1 });
     const [submission] = db.insert(submissions).values({ teamId, submittedByUserId: userId, status, reviewedAt: status === "pending" ? null : new Date() }).returning().all();
     db.insert(claims).values({ submissionId: submission.id, nodeId: task.id, itemName: "Bruma torch", gpValue }).run();
   }
 
-  it("sums only approved claims' GP values, per player and per team", () => {
+  it("sums only approved claims' Drop values, per player and per team", () => {
     const fx = seedFixture();
     valuedClaim(fx, fx.teamAId, fx.memberUserId, 1_000);
     valuedClaim(fx, fx.teamAId, fx.memberUserId, 500);

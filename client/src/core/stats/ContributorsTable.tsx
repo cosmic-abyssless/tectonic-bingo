@@ -117,7 +117,7 @@ export function ContributorsTable({ contributions, teams, titles }: { contributi
       { colId: "approvedSubmissions", headerName: "Submissions", headerTooltip: "Approved submissions", field: "approvedSubmissions", sortingOrder: ["desc", "asc"], flex: 1, minWidth: 110, cellClass: "num" },
       {
         colId: "gpGained",
-        headerName: "GP gained",
+        headerName: "Total drop value",
         headerTooltip: "What the player's approved drops were worth when submitted (Grand Exchange prices)",
         field: "gpGained",
         sortingOrder: ["desc", "asc"],

@@ -10,7 +10,7 @@ import { usePreference } from "../ui/preferences";
 const RESULT_MS = 3000;
 
 /**
- * Re-prices a submission's GP value (CONTEXT.md "GP value"): prices its claims again at today's prices and rules.
+ * Re-prices a submission's Drop value (CONTEXT.md "Drop value"): prices its claims again at today's prices and rules.
  * For values priced from the wrong thing, not for updating prices, so the first use in a browser says so and asks.
  * Looks and behaves like the signup roster's stats refresh: the icon spins, then a tick or a cross for a few seconds.
  */
@@ -30,13 +30,13 @@ export function RepriceGpButton({ slug, submissionId }: { slug: string; submissi
     setResult(null);
     try {
       const { claims } = await reprice.mutateAsync(submissionId);
-      setResult({ ok: true, detail: claims.length === 0 ? "GP value unchanged" : `Re-priced ${claims.map((c) => `${c.itemName}: ${formatGp(c.before)} → ${formatGp(c.after)}`).join(", ")}` });
+      setResult({ ok: true, detail: claims.length === 0 ? "Drop value unchanged" : `Re-priced ${claims.map((c) => `${c.itemName}: ${formatGp(c.before)} → ${formatGp(c.after)}`).join(", ")}` });
     } catch (e: unknown) {
       setResult({ ok: false, detail: e instanceof Error ? e.message : "Couldn't re-price" });
     }
   }
 
-  const title = reprice.isPending ? "Re-pricing…" : (result?.detail ?? "Re-price GP value (only to fix a wrong value)");
+  const title = reprice.isPending ? "Re-pricing…" : (result?.detail ?? "Re-price drop value (only to fix a wrong value)");
   // The dialog is portalled, but React still bubbles its clicks here: keep them away from the mod queue card, which
   // opens and closes on click.
   return (
@@ -64,10 +64,10 @@ export function RepriceGpButton({ slug, submissionId }: { slug: string; submissi
       </button>
 
       <Dialog isOpen={confirming} onClose={() => setConfirming(false)}>
-        <DialogHeader title="Re-price this submission's GP value?" onClose={() => setConfirming(false)} />
+        <DialogHeader title="Re-price this submission's drop value?" onClose={() => setConfirming(false)} />
         <div className="space-y-3 p-5 text-sm text-on-surface-muted">
           <p>
-            A GP value is fixed when a submission is made, so GP gained shows what drops were worth at the time. Re-price only when a value is <strong>wrong</strong>: it
+            A drop value is fixed when a submission is made, so total drop value shows what drops were worth at the time. Re-price only when a value is <strong>wrong</strong>: it
             was priced from the wrong thing, for example before a Task got its <em>Valued as</em> or before an item had a Piece value.
           </p>
           <p>Don't use it to bring values up to today's prices. The change is recorded in the audit log.</p>

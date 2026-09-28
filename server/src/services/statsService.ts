@@ -194,7 +194,7 @@ export interface ContributionCount {
   approvedSubmissions: number;
   /** Points share (CONTEXT.md), unrounded. */
   pointsShare: number;
-  /** GP gained (CONTEXT.md): GP values of this player's approved claims. */
+  /** Total drop value (CONTEXT.md): Drop values of this player's approved claims. */
   gpGained: number;
   awards: ContributionAward[];
 }
@@ -327,7 +327,7 @@ export function getContributionCounts(db: Db, bingoId: string, shares = getPoint
     .sort((a, b) => b.pointsShare - a.pointsShare || b.approvedSubmissions - a.approvedSubmissions);
 }
 
-// The approved claims that have a GP value, with whose drop and which team. What GP gained is summed from.
+// The approved claims that have a Drop value, with whose drop and which team. What Total drop value is summed from.
 function approvedGpRows(db: Db, teamIds: string[]) {
   if (teamIds.length === 0) return [];
   return db
@@ -369,7 +369,7 @@ export interface GpDrop {
   valuedAs: ValuedAs | null;
 }
 
-/** GP gained per team, every team included (at 0 when nothing valued is approved yet). */
+/** Total drop value per team, every team included (at 0 when nothing valued is approved yet). */
 export function getTeamGpGained(db: Db, bingoId: string): TeamGpGained[] {
   const teamIds = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.id);
   const gp = new Map(teamIds.map((id) => [id, 0]));
@@ -377,7 +377,7 @@ export function getTeamGpGained(db: Db, bingoId: string): TeamGpGained[] {
   return teamIds.map((teamId) => ({ teamId, gpGained: gp.get(teamId)! })).sort((a, b) => b.gpGained - a.gpGained);
 }
 
-/** Every approved claim with a GP value, most valuable first. */
+/** Every approved claim with a Drop value, most valuable first. */
 export function getGpDrops(db: Db, bingoId: string): GpDrop[] {
   const teamIds = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.id);
   const rows = approvedGpRows(db, teamIds).sort((a, b) => b.gpValue! - a.gpValue!);

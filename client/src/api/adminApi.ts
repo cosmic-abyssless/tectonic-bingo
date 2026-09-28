@@ -195,7 +195,7 @@ export function createTask(slug: string, tileId: string, input: GraphNodeInput, 
 export function updateTask(slug: string, id: string, input: GraphNodeInput) {
   return api.patch<{ task: GraphNode }>(`${base(slug)}/tasks/${id}`, input);
 }
-// A Task's Valued as changed mid-bingo: how many submissions already have a GP value from it, and re-pricing them.
+// A Task's Valued as changed mid-bingo: how many submissions already have a Drop value from it, and re-pricing them.
 export function countPricedSubmissions(slug: string, nodeId: string) {
   return api.get<{ count: number }>(`${base(slug)}/nodes/${nodeId}/priced-submissions`);
 }

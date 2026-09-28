@@ -261,7 +261,7 @@ export function useChangeSubmissionAttribution(slug: string) {
   });
 }
 
-// Prices a submission's claims again when they were priced from the wrong thing (CONTEXT.md "GP value").
+// Prices a submission's claims again when they were priced from the wrong thing (CONTEXT.md "Drop value").
 export function useRepriceSubmission(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({

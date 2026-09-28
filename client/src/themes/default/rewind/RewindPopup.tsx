@@ -5,7 +5,7 @@ import { XIcon } from "../../../core/ui/icons";
 const noop = () => {};
 
 /**
- * One Submission's popup, plain: who, which Team, when; its screenshot; its items with GP value (and Luck, when
+ * One Submission's popup, plain: who, which Team, when; its screenshot; its items with Drop value (and Luck, when
  * known); what it completed; its Reactions. A huge Submission gets the big card. A rejected one is greyed out and
  * stamped "Rejected". Only the card: the page positions it.
  */

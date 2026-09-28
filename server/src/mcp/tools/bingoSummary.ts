@@ -16,7 +16,7 @@ export const bingoSummary = defineTool({
   name: "bingo_summary",
   title: "Bingo summary",
   description:
-    "One Bingo at a glance. standings: each Team's points (final once the Bingo is Finished, else current), ranked, with its GP gained. " +
+    "One Bingo at a glance. standings: each Team's points (final once the Bingo is Finished, else current), ranked, with its Total drop value (gpGained). " +
     "pointsOverTime: each Team's cumulative points at the end of each bucket of bucketHours from the start (the last bucket ends at the Bingo's end, or now while it's Live). " +
     "lines: every Line completed, by which Team, when (hours from the start) and each Player's Points share of its bonus. " +
     "stages: every Stage change with its time, and when the Bingo started and ended. Points include Point adjustments, as the scoreboard does.",
