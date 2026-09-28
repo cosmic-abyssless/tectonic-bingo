@@ -11,6 +11,8 @@ export interface SelectOption {
   disabled?: boolean;
   /** Options with a group are listed under its heading (like an <optgroup>), in the order the groups first appear. */
   group?: string;
+  /** Shown on the closed dropdown in place of `label` once chosen, e.g. a shorter wording that reads on with the controls beside it. */
+  selectedLabel?: string;
 }
 
 // react-aria doesn't take "" as an item's key, but plenty of selects here have a "None"/"Select…" option whose value
@@ -47,7 +49,8 @@ export function Select({
 }) {
   const labelledBy = useContext(FieldLabelContext);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const selected = options.some((o) => o.value === value) ? toKey(value) : null;
+  const selectedOption = options.find((o) => o.value === value);
+  const selected = selectedOption ? toKey(value) : null;
   return (
     <AriaSelect
       selectedKey={selected}
@@ -62,7 +65,7 @@ export function Select({
       <Button ref={triggerRef} data-select-trigger="" className={`${controlClass(size)} flex cursor-pointer items-center gap-2 text-left outline-none focus-visible:border-on-surface/60`}>
         {/* Just the text: by default it repeats the chosen option's whole list row, check mark's box and all. */}
         <SelectValue className="min-w-0 flex-1 truncate data-[placeholder]:text-on-surface-subtle">
-          {({ selectedText, isPlaceholder, defaultChildren }) => (isPlaceholder ? defaultChildren : selectedText)}
+          {({ selectedText, isPlaceholder, defaultChildren }) => (isPlaceholder ? defaultChildren : (selectedOption?.selectedLabel ?? selectedText))}
         </SelectValue>
         <ChevronDownIcon size={size === "sm" ? 12 : 14} className="shrink-0 text-on-surface-subtle" />
       </Button>

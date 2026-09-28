@@ -6,6 +6,10 @@ import { optimisticUpdate } from "../../api/optimistic";
 import { queryKeys } from "../../api/queries";
 import { adminQueryKeys, useItemGroups } from "../../api/adminQueries";
 import { previewGraphNode, toGraphNodeInput as toInput } from "../board/requirementTree";
+import { buildLeafClaimMaps } from "../board/taskClaims";
+import { buildRequirementTree } from "../../headless/boardModel";
+import { ThemeProvider } from "../../themes/ThemeProvider";
+import { useSlot } from "../../themes/context";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
 import { Field, Input, Textarea } from "../ui/Field";
@@ -32,6 +36,7 @@ export function optimisticTasks(queryClient: QueryClient, slug: string, tileId: 
 // node id, per docs/node-graph-model.md §6.
 export function TaskEditor({
   slug,
+  themeKey,
   tileId,
   task,
   previousTaskId,
@@ -41,6 +46,8 @@ export function TaskEditor({
   onDelete,
 }: {
   slug: string;
+  /** The bingo's own theme, for the "Preview for Players". */
+  themeKey: string;
   tileId: string;
   task: GraphNode;
   previousTaskId?: string;
@@ -169,6 +176,7 @@ export function TaskEditor({
                 existingConditions={existingConditions}
                 sharedNodeIds={sharedNodeIds}
               />
+              <PlayerPreview task={task} themeKey={themeKey} />
             </Field>
           )}
 
@@ -183,6 +191,43 @@ export function TaskEditor({
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+// "Preview for Players": the task as a player's checklist draws it, in the bingo's own theme, before any progress (every
+// row reads as not done). `task` already carries each tree edit (optimisticTasks), so this follows the editor as it's
+// changed. Collapsed by default; the theme only loads once it's opened.
+function PlayerPreview({ task, themeKey }: { task: GraphNode; themeKey: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1 text-xs font-medium text-on-surface-muted transition-colors hover:text-on-surface"
+      >
+        {open ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
+        Preview for Players
+      </button>
+      {open && (
+        <ThemeProvider themeKey={themeKey} fallback={<p className="mt-2 text-xs text-on-surface-subtle">Loading the bingo's theme…</p>}>
+          <PreviewTree task={task} />
+        </ThemeProvider>
+      )}
+    </div>
+  );
+}
+
+const NO_CLAIMS = buildLeafClaimMaps([]);
+
+function PreviewTree({ task }: { task: GraphNode }) {
+  const RequirementTree = useSlot("RequirementTree");
+  const tree = buildRequirementTree(task, NO_CLAIMS, new Map());
+  return (
+    <div className="mt-2 rounded-md border border-outline bg-surface p-3 text-on-surface">
+      {tree ? <RequirementTree node={tree} root /> : <p className="text-xs text-on-surface-subtle">Nothing to preview.</p>}
     </div>
   );
 }

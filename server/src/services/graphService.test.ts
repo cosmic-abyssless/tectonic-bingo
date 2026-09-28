@@ -137,6 +137,36 @@ describe("replaceSubtree", () => {
   });
 });
 
+describe("a SUM holds only Items", () => {
+  const sumWithCondition: GraphNodeInput = {
+    kind: "SUM",
+    label: "Page 1",
+    quantity: 3,
+    children: [{ kind: "ITEM", itemName: "Magic fang" }, { kind: "ALL", children: [{ kind: "ITEM", itemName: "Virtus mask" }] }],
+  };
+
+  it("refuses a condition inside a SUM when a tree is created, and writes nothing", () => {
+    const bingo = seedBingo();
+    expect(() => db.transaction((tx) => insertSubtree(tx, bingo.id, sumWithCondition))).toThrow(/"Page 1" \("N in total from"\) can only be made of Items/);
+    expect(db.select().from(nodes).all()).toHaveLength(0);
+  });
+
+  it("refuses one when a tree is edited, keeping the old tree", () => {
+    const bingo = seedBingo();
+    const rootId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "SUM", quantity: 3, children: [{ kind: "ITEM", itemName: "Magic fang" }] }));
+    expect(() => db.transaction((tx) => replaceSubtree(tx, rootId, bingo.id, sumWithCondition))).toThrow(/can only be made of Items/);
+    expect(getNodeTree(db, rootId)!.children.map((c) => c.kind)).toEqual(["ITEM"]);
+  });
+
+  it("still allows a SUM of Items, including one nested in another condition", () => {
+    const bingo = seedBingo();
+    const rootId = db.transaction((tx) =>
+      insertSubtree(tx, bingo.id, { kind: "ANY", children: [{ kind: "SUM", quantity: 2, children: [{ kind: "ITEM", itemName: "Magic fang" }, { kind: "ITEM", itemName: "Tanzanite fang" }] }] }),
+    );
+    expect(getNodeTree(db, rootId)!.children[0]!.kind).toBe("SUM");
+  });
+});
+
 describe("deleteSubtree / deleteNode", () => {
   it("deleteSubtree removes every descendant not shared elsewhere", () => {
     const bingo = seedBingo();
