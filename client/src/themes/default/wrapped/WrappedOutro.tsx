@@ -19,19 +19,20 @@ export function WrappedOutro({ section, preview, onRewind, onBoard }: { section:
       <Reveal step={1}>
         <p className="mt-4 text-lg text-on-surface-muted">Thanks for playing {section.bingoName}. See you at the next one.</p>
       </Reveal>
+      {/* Not a Reveal: the jump to the cards lands here, and they should never be caught half faded in. */}
+      <WrappedShareCards cards={section.cards} preview={preview} Card={ShareCard} />
+      {/* Last, so the page ends with the way out. */}
       <Reveal step={2}>
-        <div className="mt-10 flex flex-wrap justify-center gap-3">
+        <div className="mt-12 flex flex-wrap justify-center gap-3">
           <Button variant="primary" onPress={onRewind}>
             <RewindIcon />
-            Watch it again in Rewind
+            Watch the replay
           </Button>
           <Button variant="secondary" onPress={onBoard}>
             Back to the Board
           </Button>
         </div>
       </Reveal>
-      {/* Not a Reveal: the jump to the cards lands here, and they should never be caught half faded in. */}
-      <WrappedShareCards cards={section.cards} preview={preview} Card={ShareCard} />
     </WrappedScene>
   );
 }
