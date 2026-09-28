@@ -43,6 +43,7 @@ import { getTectonicConfig } from "./services/tectonicService";
 import { installProcessLogHandlers, log, requestLog } from "./log";
 import clientErrorsRouter from "./routes/clientErrors";
 import { shouldReportError } from "./errorReporting";
+import { createMcpRouter } from "./mcp/router";
 
 const REQUIRED_ENV = [
   "DISCORD_CLIENT_ID",
@@ -174,6 +175,13 @@ app.use(
 
 // Routes
 app.use("/auth", authRouter);
+// The admin MCP server for Claude: OAuth endpoints and documents at the root, the MCP endpoint at /mcp.
+// Built at startup; the SDK refuses a plain-HTTP issuer other than localhost, which only costs this feature.
+try {
+  app.use(createMcpRouter(db));
+} catch (err) {
+  log.warn("admin MCP server disabled", { err });
+}
 app.use("/api/me", meRouter);
 app.use("/api/admin", siteAdminRouter);
 app.use("/api/bingos", requireGuildMember, bingosRouter);

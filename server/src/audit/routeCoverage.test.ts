@@ -54,9 +54,12 @@ describe("route coverage", () => {
     const { default: bugReportsRouter } = await import("../routes/bugReports");
     const { default: devRouter } = await import("../routes/dev");
     const { default: clientErrorsRouter } = await import("../routes/clientErrors");
+    const { createMcpRouter } = await import("../mcp/router");
+    const { db } = await import("../db");
     const { AUDITED_ROUTES } = await import("./routePolicy");
 
     const routes = [
+      ...routesFor(createMcpRouter(db, { issuer: new URL("http://localhost/"), resource: new URL("http://localhost/mcp") }), ""),
       ...routesFor(bingosRouter, "/api/bingos"),
       ...routesFor(modRouter, "/api/bingos/:slug/mod"),
       ...routesFor(adminRouter, "/api/bingos/:slug/admin"),

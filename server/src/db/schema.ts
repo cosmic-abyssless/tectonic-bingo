@@ -36,6 +36,48 @@ export const phoneLoginLinks = sqliteTable('phone_login_links', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 }, (t) => [index('phone_login_links_user_idx').on(t.userId)]);
 
+// The admin MCP server's OAuth authorization server (server/src/mcp, docs in #289/#290). Claude's apps register
+// themselves here (Dynamic Client Registration), an Admin approves one, and it gets tokens for /mcp.
+
+// A registered app. `client_secret` is kept as issued because the SDK's token endpoint compares it directly; public
+// clients (Claude Code) have none. Registrations nobody finishes signing in with are pruned (oauthProvider.ts).
+export const oauthClients = sqliteTable('oauth_clients', {
+  clientId: text('client_id').primaryKey(),
+  clientSecret: text('client_secret'),
+  // The registration as the app sent it plus what we issued (RFC 7591 client information), as JSON.
+  metadataJson: text('metadata_json').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+});
+
+// An authorization code between an Admin's approval and the app's token request: single-use, 10 minutes, hash only.
+export const oauthCodes = sqliteTable('oauth_codes', {
+  codeHash: text('code_hash').primaryKey(),
+  clientId: text('client_id').notNull().references(() => oauthClients.clientId, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  codeChallenge: text('code_challenge').notNull(),
+  redirectUri: text('redirect_uri').notNull(),
+  resource: text('resource').notNull(),
+  scope: text('scope').notNull(),
+  expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => [index('oauth_codes_client_idx').on(t.clientId)]);
+
+// One connection: an Admin's approval of one app. Its access token (1 hour) and refresh token are replaced together on
+// every refresh, so only hashes of the current pair are kept; the connection lapses 30 days after it was last used.
+export const oauthTokens = sqliteTable('oauth_tokens', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  accessTokenHash: text('access_token_hash').notNull().unique(),
+  refreshTokenHash: text('refresh_token_hash').notNull().unique(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  clientId: text('client_id').notNull().references(() => oauthClients.clientId, { onDelete: 'cascade' }),
+  scope: text('scope').notNull(),
+  resource: text('resource').notNull(),
+  accessExpiresAt: integer('access_expires_at', { mode: 'timestamp' }).notNull(),
+  lastUsedAt: integer('last_used_at', { mode: 'timestamp' }).notNull(),
+  revokedAt: integer('revoked_at', { mode: 'timestamp' }),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => [index('oauth_tokens_user_idx').on(t.userId), index('oauth_tokens_client_idx').on(t.clientId)]);
+
 // A single bingo instance. Everything below is scoped to one bingoId so the
 // platform can run (or have run) many bingos concurrently/historically.
 export const bingos = sqliteTable('bingos', {

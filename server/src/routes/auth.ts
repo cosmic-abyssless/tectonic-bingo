@@ -8,6 +8,7 @@ import { devPageAccess } from "../services/devPageAccessService";
 import { requireAuth } from "../middleware/requireAuth";
 import { noStore } from "../middleware/cacheControl";
 import { closeSocketsForSession } from "../ws";
+import { RETURN_COOKIE, authorizeReturnPath } from "../mcp/oauthProvider";
 import { LINK_TTL_MS, createPhoneLoginLink, getPhoneLoginLinkStatus, previewPhoneLoginLink, redeemPhoneLoginLink } from "../services/phoneLoginService";
 
 const router = Router();
@@ -19,7 +20,14 @@ router.get("/discord", passport.authenticate("discord"));
 router.get(
   "/discord/callback",
   passport.authenticate("discord", { failureRedirect: `${process.env.CLIENT_URL}/login?error=auth_failed` }),
-  (_req: Request, res: Response) => {
+  (req: Request, res: Response) => {
+    // Signing in to connect Claude (mcp/oauthProvider.ts) goes back to the authorize request that sent them here.
+    const resume = authorizeReturnPath(req.headers.cookie);
+    if (resume) {
+      res.clearCookie(RETURN_COOKIE, { path: "/" });
+      res.redirect(resume);
+      return;
+    }
     res.redirect(`${process.env.CLIENT_URL}/`);
   }
 );
