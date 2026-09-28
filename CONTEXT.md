@@ -107,8 +107,8 @@ The structured selection process during the `draft` stage where Captains take tu
 - **On the clock:** The Team whose Captain is picking now. Shown to everyone as who is currently picking, with the round and pick number; the Captain on the clock also gets a stronger cue that it is their turn. There is no pick timer.
 
 ### Scouting
-Captains (and Moderators) looking through the signups before the Draft, during Signups open and Signups closed.
-- **Rules:** Not visible to ordinary Players until the Draft stage.
+Looking through the signups before the Draft. Captains (and Moderators) can scout from Signups open; every Player can once Signups are closed, when the roster is final.
+- **Rules:** Players only look: they don't see signup answers, and only a Team's Captains rate and note players (Pick Ratings, private to that Team).
 
 ### Pick Rating
 A Team's private note on a signup while scouting: 1 to 3 stars and a short note.
