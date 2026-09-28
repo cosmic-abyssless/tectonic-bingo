@@ -9,6 +9,7 @@ import App from "./App";
 import { preloadTheme } from "./themes/registry";
 import { rememberedThemeForPath } from "./themes/rememberedTheme";
 import { installClientErrorListeners } from "./core/logging/reportClientError";
+import { ApiError } from "./api/client";
 
 // Start fetching this bingo's theme now rather than after its shell request returns.
 preloadTheme(rememberedThemeForPath(window.location.pathname));
@@ -19,6 +20,8 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 10_000,
       refetchOnWindowFocus: false,
+      // A 404 won't turn up on a second try (a deleted bingo, a removed Team): fail at once, the rest up to 3 times.
+      retry: (failureCount, error) => !(error instanceof ApiError && error.status === 404) && failureCount < 3,
     },
   },
 });
