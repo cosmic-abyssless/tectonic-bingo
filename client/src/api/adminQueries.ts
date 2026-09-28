@@ -19,6 +19,7 @@ export const adminQueryKeys = {
   pieceValues: ["adminPieceValues"] as const,
   titleSettings: ["adminTitleSettings"] as const,
   bugReports: ["adminBugReports"] as const,
+  mcpConnections: (scope: "mine" | "all") => ["adminMcpConnections", scope] as const,
   siteAuditLog: (bingoScope: string | null | "all", filters: AuditLogFilters) => ["siteAuditLog", bingoScope, filters] as const,
   achievementSettings: (slug: string) => ["adminAchievements", slug] as const,
   wrappedArt: (slug: string) => ["adminWrappedArt", slug] as const,
@@ -50,6 +51,10 @@ export function usePieceValues() {
 
 export function useTitleSettings() {
   return useQuery({ queryKey: adminQueryKeys.titleSettings, queryFn: () => adminApi.getTitleSettings() });
+}
+
+export function useMcpConnections(scope: "mine" | "all") {
+  return useQuery({ queryKey: adminQueryKeys.mcpConnections(scope), queryFn: () => adminApi.getMcpConnections(scope) });
 }
 
 export function usePastWomCompetitions() {

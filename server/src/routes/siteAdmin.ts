@@ -12,6 +12,7 @@ import * as titleSettingsService from "../services/titleSettingsService";
 import * as bugReportService from "../services/bugReportService";
 import * as pastWomCompetitionService from "../services/pastWomCompetitionService";
 import * as userService from "../services/userService";
+import * as mcpConnections from "../mcp/connections";
 import { ServiceError } from "../services/errors";
 import { queryAuditLog } from "../audit/query";
 import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility, BingoExportDocument } from "@bingo/shared";
@@ -90,6 +91,31 @@ router.get(
   asyncHandler(async (req, res) => {
     const q = (req.query.q as string) ?? "";
     res.json({ users: q ? userService.searchUsers(db, q) : [] });
+  }),
+);
+
+// Claude connections to the admin MCP server (#293). Every Admin sees and revokes their own ("Connected apps" in the
+// account menu); Site Admins (ADMIN_DISCORD_IDS) see and revoke everyone's.
+router.get(
+  "/mcp-connections/mine",
+  asyncHandler(async (req, res) => {
+    res.json({ connections: mcpConnections.listConnections(db, req.user!.id) });
+  }),
+);
+
+router.get(
+  "/mcp-connections",
+  asyncHandler(async (req, res) => {
+    if (!isAdminDiscordId(req.user!.discordId)) throw new ServiceError(403, "Only admins listed in ADMIN_DISCORD_IDS can see everyone's connections");
+    res.json({ connections: mcpConnections.listConnections(db) });
+  }),
+);
+
+router.delete(
+  "/mcp-connections/:id",
+  asyncHandler(async (req, res) => {
+    mcpConnections.revokeConnection(db, req.params.id as string, { id: req.user!.id, isSiteAdmin: isAdminDiscordId(req.user!.discordId) });
+    res.status(204).end();
   }),
 );
 

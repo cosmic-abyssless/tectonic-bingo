@@ -16,6 +16,7 @@ import { PastWomCompetitionsPanel } from "../core/admin/PastWomCompetitionsPanel
 import { TestDataPanel } from "../core/admin/TestDataPanel";
 import { BugReportsPanel } from "../core/admin/BugReportsPanel";
 import { SiteAuditLog } from "../core/admin/SiteAuditLog";
+import { McpConnectionsList } from "../core/admin/McpConnectionsList";
 import { displayName } from "../core/ui/user";
 import { AppHeader } from "../core/ui/AppHeader";
 import { ADMIN_BUG_REPORTS_SEEN_KEY, useBugReportsUnseen } from "../core/ui/bugReportsUnseen";
@@ -311,7 +312,7 @@ const NARROW = "mx-auto w-full max-w-6xl px-6";
 export function SiteAdminPage() {
   const { user, canGrantAdmin, devMode } = useAuth();
   // In the URL (?tab=...), so a link opens the same tab. Only tabs this admin has are honoured.
-  const tabs = ["bugs", "bingos", "audit", "item-groups", "piece-values", "titles", "past-wom", ...(canGrantAdmin ? ["grant-admin"] : []), ...(devMode ? ["test-data"] : [])];
+  const tabs = ["bugs", "bingos", "audit", "item-groups", "piece-values", "titles", "past-wom", ...(canGrantAdmin ? ["grant-admin", "claude"] : []), ...(devMode ? ["test-data"] : [])];
   const [tab, setTab] = useUrlTab("tab", tabs, "bugs");
   // Fetched here (not just inside BugReportsPanel) so the tab shows a pulse dot for changes even while
   // another tab is active; both calls share the same cached query.
@@ -349,6 +350,7 @@ export function SiteAdminPage() {
               <Tab id="titles">Titles</Tab>
               <Tab id="past-wom">Past WOM competitions</Tab>
               {canGrantAdmin && <Tab id="grant-admin">Grant site admin</Tab>}
+              {canGrantAdmin && <Tab id="claude">Claude connections</Tab>}
               {/* Dev mode only (local servers and staging): the server has no test data routes otherwise. */}
               {devMode && <Tab id="test-data">Test data</Tab>}
             </TabList>
@@ -393,6 +395,16 @@ export function SiteAdminPage() {
             <TabPanel id="grant-admin">
               <div className={NARROW}>
                 <GrantAdminPanel />
+              </div>
+            </TabPanel>
+          )}
+          {canGrantAdmin && (
+            <TabPanel id="claude">
+              <div className={NARROW}>
+                <div className="max-w-2xl space-y-3">
+                  <p className="text-sm text-on-surface-muted">Every admin's Claude connections to the admin MCP server. Revoking one cuts it off straight away. Removing someone's site admin revokes all of theirs.</p>
+                  <McpConnectionsList scope="all" />
+                </div>
               </div>
             </TabPanel>
           )}

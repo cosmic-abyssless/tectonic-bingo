@@ -231,6 +231,22 @@ export interface WomPastCompetition {
   addedByUserId: string | null;
 }
 
+/**
+ * One Claude connection to the admin MCP server (#293): an Admin's approval of one app, i.e. its refresh-token chain.
+ * Lists only live ones (not revoked, not lapsed).
+ */
+export interface McpConnection {
+  id: string;
+  /** The name the app registered with, e.g. "Claude". */
+  clientName: string;
+  /** Where the app's sign-in came back to: claude.ai for Claude's apps, localhost:<port> for Claude Code. */
+  redirectHost: string | null;
+  connectedAt: string;
+  lastUsedAt: string;
+  /** Whose connection it is (named by Discord: a connection isn't in any bingo). */
+  user: Omit<PublicUser, "rsn">;
+}
+
 /** One stored past competition's result for a single player, matched by RSN (issue #128). */
 export interface PastBingoParticipation {
   competitionId: string;

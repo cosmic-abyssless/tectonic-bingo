@@ -1,5 +1,5 @@
 import type {
-  AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, PieceValue, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
+  AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, McpConnection, PieceValue, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
   PickableMembersResponse, Signup, TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtCredits, WrappedArtGroup, WrappedArtImage, WrappedArtKeying, WrappedArtSection, WrappedCredit,
 } from "@bingo/shared";
 import { api } from "./client";
@@ -64,6 +64,13 @@ export function setUnvaluedItemDismissed(itemName: string, dismissed: boolean) {
   return api.put("/api/admin/unvalued-items/dismissed", { itemName, dismissed });
 }
 
+// Claude connections to the admin MCP server (#293): your own, or (Site Admins) everyone's.
+export function getMcpConnections(scope: "mine" | "all") {
+  return api.get<{ connections: McpConnection[] }>(scope === "mine" ? "/api/admin/mcp-connections/mine" : "/api/admin/mcp-connections");
+}
+export function revokeMcpConnection(id: string) {
+  return api.delete(`/api/admin/mcp-connections/${id}`);
+}
 export function getPastWomCompetitions() {
   return api.get<{ competitions: WomPastCompetition[] }>("/api/admin/wom-competitions");
 }

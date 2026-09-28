@@ -39,6 +39,7 @@ export type AuditEntityType =
   | "pairing"
   | "http"
   | "mcp_tool"
+  | "mcp_connection"
   | "bug_report"
   | "achievement";
 
@@ -252,6 +253,11 @@ export interface AuditDetailsMap {
   // successful non-GET /api/* mutation that recorded nothing itself.
   /** A site admin's Claude app called a tool on the admin MCP server (server/src/mcp). */
   "mcp.tool_called": { tool: string; arguments: Record<string, unknown>; clientId: string; clientName: string | null; rowCount?: number; error?: string };
+  /**
+   * A Claude connection's tokens were revoked: by an Admin from Connected apps or Site admin ("revoked"), or because its
+   * Admin lost the Admin role ("admin_removed"). The entry's entity is the connection; ownerUserId is whose it was.
+   */
+  "mcp.connection_revoked": { clientName: string; redirectHost: string | null; ownerUserId: string; ownerName: string; byOwner: boolean; reason: "revoked" | "admin_removed" };
   "http.mutation": { method: string; originalUrl: string; routePath: string | null; params: Record<string, unknown>; body: unknown; file: string | null };
 
   "bug_report.created": { description: string; pageUrl: string | null; palette: string | null };
@@ -870,6 +876,18 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Claude tool used",
     label: (i) => `${actor(i)} used ${i.details.tool} through ${i.details.clientName ?? "Claude"}`,
+  },
+  "mcp.connection_revoked": {
+    category: "system",
+    tone: "warn",
+    visibility: "mods",
+    title: "Claude connection revoked",
+    label: (i) =>
+      i.details.reason === "admin_removed"
+        ? `Revoked ${i.details.ownerName}'s ${i.details.clientName} connection: they're no longer a site admin`
+        : i.details.byOwner
+          ? `${actor(i)} revoked their ${i.details.clientName} connection`
+          : `${actor(i)} revoked ${i.details.ownerName}'s ${i.details.clientName} connection`,
   },
   "http.mutation": {
     category: "http",
