@@ -1,6 +1,7 @@
 // The admin MCP server end to end over real HTTP: OAuth discovery, registration, the admin's sign-in and approval,
 // the token endpoint (PKCE, single-use codes, refresh rotation, expiry), and /mcp's bearer checks and list_bingos.
 import { createHash, randomBytes } from "crypto";
+import path from "path";
 import type { AddressInfo } from "net";
 import http, { type Server } from "http";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,6 +17,8 @@ import { auditContext } from "../audit/middleware";
 import { createMcpRouter } from "./router";
 import { authorizeReturnPath, isAllowedRedirectUri, RETURN_COOKIE } from "./oauthProvider";
 import { RATE_LIMIT, resetRateLimits, takeRateLimit } from "./tools";
+import { buildReplica, resetReplica } from "./sql/replica";
+import { saveTo, tempDir } from "../testUtils/mcpSql";
 
 // Each test gets a fresh in-memory DB; modules that import "../db" (the audit middleware) see the current one.
 let sqlite: Database.Database;
@@ -442,7 +445,7 @@ describe("/mcp", () => {
     const { access } = await connect();
     const { result } = await rpcResult(await callMcp(access, { jsonrpc: "2.0", id: 1, method: "tools/list" }));
     const tools = result!.tools as { name: string; annotations: Record<string, unknown> }[];
-    expect(tools.map((t) => t.name)).toEqual(["list_bingos", "bingo_summary", "tile_stats", "player_contributions"]);
+    expect(tools.map((t) => t.name)).toEqual(["list_bingos", "bingo_summary", "tile_stats", "player_contributions", "describe_schema", "run_sql"]);
     for (const tool of tools) expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
   });
 
@@ -476,6 +479,30 @@ describe("/mcp", () => {
 
     const entries = db.select().from(auditLog).where(eq(auditLog.action, "mcp.tool_called")).all();
     expect(entries.map((e) => [e.entityId, e.bingoId])).toEqual([["bingo_summary", bingo.id], ["tile_stats", null]]);
+  });
+
+  it("answers run_sql from the replica and audits the query and its row count", async () => {
+    db.insert(bingos).values({ slug: "summer", name: "Summer Bingo", boardRows: 5, boardCols: 5, createdByUserId: adminId }).returning().get();
+    const { clientId, access } = await connect();
+    const dir = tempDir();
+    try {
+      await buildReplica(saveTo(sqlite, path.join(dir.dir, "bingo.db")), path.join(dir.dir, "replica.db"));
+      const query = "SELECT slug FROM bingos";
+      const { result } = await rpcResult(await callMcp(access, { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "run_sql", arguments: { query } } }));
+      expect(result!.structuredContent).toMatchObject({ columns: ["slug"], rows: [["summer"]], rowCount: 1, dataAge: "data as of less than a minute ago" });
+
+      const refused = await rpcResult(await callMcp(access, { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "run_sql", arguments: { query: "DELETE FROM bingos" } } }));
+      expect(refused.result).toMatchObject({ isError: true });
+
+      const entries = db.select().from(auditLog).where(eq(auditLog.action, "mcp.tool_called")).all().map((e) => JSON.parse(e.details));
+      expect(entries).toEqual([
+        { tool: "run_sql", arguments: { query }, clientId, clientName: "Claude", rowCount: 1 },
+        { tool: "run_sql", arguments: { query: "DELETE FROM bingos" }, clientId, clientName: "Claude", error: expect.stringContaining("read-only") },
+      ]);
+    } finally {
+      resetReplica();
+      dir.cleanup();
+    }
   });
 
   it("only accepts its own host name", async () => {

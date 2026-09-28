@@ -5,6 +5,7 @@ dist/
 server/data/*.db
 server/data/*.db-shm
 server/data/*.db-wal
+server/data/*.building
 server/uploads/
 server/*.sqlite.bak
 .db-backups
