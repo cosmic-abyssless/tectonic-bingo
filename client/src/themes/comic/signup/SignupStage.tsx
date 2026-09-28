@@ -51,7 +51,7 @@ function Blocked({ form }: { form: SignupFormModel }) {
         ? { title: "Not in the clan's Discord", body: "Your Discord account isn't in the Tectonic Discord server, so you can't sign up. Join the server, then log out and back in.", stamp: "Locked" }
         : { title: "Clan members only", body: "You're in the Discord server, but the clan bot doesn't have you registered as a member. Ask a moderator to check your clan registration.", stamp: "Locked" };
   return (
-    <section className="mx-auto flex max-w-lg flex-col items-center gap-3 border-[3px] px-5 py-7 text-center" style={{ background: colors.PAPER, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.LINE}` }}>
+    <section className="mx-auto flex max-w-lg flex-col items-center gap-3 border-[3px] px-5 py-7 text-center" style={{ background: colors.PAPER, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.SHADOW}` }}>
       <Stamp kind="custom" rotate={-6} size="md">
         {block.reason === "unavailable" ? <AlertIcon size={16} className="mr-1.5" /> : <LockIcon size={16} className="mr-1.5" />}
         {stamp}
@@ -239,7 +239,7 @@ function MemberPickQuestion({ question, label }: { question: SignupQuestionModel
             <li
               key={p.id}
               className="inline-flex items-center gap-1.5 rounded-md border-[3px] py-1 pr-1.5 pl-2.5 text-sm font-semibold"
-              style={{ borderColor: colors.LINE, background: colors.YELLOW, color: colors.ON_YELLOW, boxShadow: `2px 2px 0 ${colors.LINE}` }}
+              style={{ borderColor: colors.LINE, background: colors.YELLOW, color: colors.ON_YELLOW, boxShadow: `2px 2px 0 ${colors.SHADOW}` }}
             >
               {p.name}
               <button type="button" aria-label={`Remove ${p.name}`} onClick={p.remove} className="rounded-sm p-0.5 hover:opacity-70">

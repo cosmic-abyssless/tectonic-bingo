@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
-import { motion, useScroll } from "motion/react";
+import { motion, useReducedMotion, useScroll } from "motion/react";
 import type { WrappedArtFrames } from "@bingo/shared";
 import { useWrappedModel } from "../../../headless";
 import type { WrappedSectionModel } from "../../../headless/types";
 import { AppHeader } from "../../../core/ui/AppHeader";
 import { Badge } from "../../../core/ui/Card";
+import { Button } from "../../../core/ui/Button";
+import { ChevronDownIcon } from "../../../core/ui/icons";
+import { WRAPPED_CARDS_ID } from "../../../core/wrapped/ShareCards";
 import { StickerArt } from "../../../core/wrapped/StickerArt";
 import { useSlot } from "../../context";
 
@@ -17,6 +20,14 @@ export function WrappedPageLayout() {
   const wrapped = useWrappedModel();
   const { scrollYProgress } = useScroll();
   const active = useActiveSection(wrapped.sections.map((s) => s.id));
+  const reduceMotion = useReducedMotion();
+  const { outroReached } = wrapped.actions;
+  useEffect(() => {
+    if (active === "outro") outroReached();
+  }, [active, outroReached]);
+  // Back again, having seen it all: offer a way straight to the share cards, until they're on screen.
+  const outro = wrapped.sections.find((s) => s.section.kind === "outro")?.section;
+  const offerJump = wrapped.outroReachedBefore && outro?.kind === "outro" && outro.cards.length > 0 && active !== "outro";
 
   const WrappedIntro = useSlot("WrappedIntro");
   const WrappedYou = useSlot("WrappedYou");
@@ -44,7 +55,7 @@ export function WrappedPageLayout() {
       case "bingo":
         return <WrappedBingo section={section} />;
       case "outro":
-        return <WrappedOutro section={section} onRewind={wrapped.actions.goToRewind} onBoard={wrapped.actions.goToBoard} />;
+        return <WrappedOutro section={section} preview={wrapped.preview} onRewind={wrapped.actions.goToRewind} onBoard={wrapped.actions.goToBoard} />;
     }
   };
 
@@ -63,6 +74,19 @@ export function WrappedPageLayout() {
           </a>
         ))}
       </nav>
+
+      {offerJump && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+          <Button
+            variant="primary"
+            className="pointer-events-auto shadow-lg"
+            onPress={() => document.getElementById(WRAPPED_CARDS_ID)?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" })}
+          >
+            Jump to the share cards
+            <ChevronDownIcon />
+          </Button>
+        </div>
+      )}
 
       <main>
         {wrapped.sections.map((s, i) => (

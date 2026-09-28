@@ -51,7 +51,7 @@ export function TaskPanel({ task }: { task: TaskModel }) {
             <Tooltip
               offset={6}
               className="z-[80] max-w-56 border-[3px] px-3 py-2 text-xs leading-relaxed"
-              style={{ borderColor: colors.LINE, backgroundColor: colors.PAPER_RAISED, color: colors.INK, boxShadow: `3px 3px 0 ${colors.LINE}` }}
+              style={{ borderColor: colors.LINE, backgroundColor: colors.PAPER_RAISED, color: colors.INK, boxShadow: `3px 3px 0 ${colors.SHADOW}` }}
             >
               {task.lockedReason ?? "This part depends on a previous part."}
             </Tooltip>

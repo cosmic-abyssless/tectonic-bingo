@@ -32,6 +32,7 @@ import type {
   WrappedIntroModel,
   WrappedModeratorModel,
   WrappedOutroModel,
+  WrappedShareCardModel,
   WrappedTeamModel,
   WrappedYouModel,
 } from "../headless/types";
@@ -241,7 +242,9 @@ export interface ThemeSlots {
   // its category's art (`art`: any number of Category images, each two boil frames and maybe a credited name, and
   // the category's additional credits; both empty without any): draw it with core/wrapped's WrappedCategoryArt (or
   // WrappedSectionArt / StickerArt), which swaps the frames slowly and adds the CSS shadow, and make sure the section
-  // still looks finished without it. The model's `sideArt` is for WrappedPage to set beside the sections.
+  // still looks finished without it. The model's `sideArt` is for WrappedPage to set beside the sections. WrappedPage
+  // also calls `actions.outroReached()` once the viewer gets to the Outro, and, when `outroReachedBefore` and the Outro
+  // has share cards, offers a jump to them (core/wrapped's WRAPPED_CARDS_ID).
   WrappedPage: ComponentType<Record<string, never>>;
   // The Board's way in, for a Finished Bingo once Wrapped is published, or for a Moderator before that (preview: say
   // it's a preview only Moderators can see).
@@ -258,8 +261,17 @@ export interface ThemeSlots {
   WrappedTeam: ComponentType<{ section: WrappedTeamModel }>;
   // The Bingo as a whole, moderation stats (with the rejection-rate banter and the "moderators" category's art) included.
   WrappedBingo: ComponentType<{ section: WrappedBingoModel }>;
-  // The closing screen: a way on to Rewind and back to the Board. It leaves room for share cards (#232).
-  WrappedOutro: ComponentType<{ section: WrappedOutroModel; onRewind: () => void; onBoard: () => void }>;
+  // The closing screen: a way on to Rewind and back to the Board, then the viewer's share cards (section.cards), drawn
+  // with core/wrapped's WrappedShareCards and the WrappedShareCard slot. WrappedShareCards previews each card, adds
+  // Copy image, Download and Share, and (preview) the "Preview" watermark every card carries in a Moderator's preview.
+  WrappedOutro: ComponentType<{ section: WrappedOutroModel; preview: boolean; onRewind: () => void; onBoard: () => void }>;
+  // One share card, the image a Player shares (CONTEXT.md "Wrapped"): drawn at exactly 540×675 CSS px (4:5; made into a
+  // 1080×1350 PNG in the viewer's browser, never on the server, by redrawing this DOM, so what's drawn is what's shared).
+  // It must stand on its own: its own background, the Bingo's name and the site in its footer, nothing outside its box,
+  // no animation. Draw only the fields the model gives (a field without data is null: leave no gap for it). Draw
+  // images with core/wrapped's CardImage (eager, CORS-safe for Discord avatars, and a fallback when an item has no
+  // icon), and use system fonts: web fonts aren't carried into the image.
+  WrappedShareCard: ComponentType<{ card: WrappedShareCardModel }>;
 
   // Submission flow — mounted only while open (see BoardPageLayout).
   SubmissionModal: ComponentType<{ flow: SubmissionFlowModel }>;

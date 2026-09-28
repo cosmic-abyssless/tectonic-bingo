@@ -1,9 +1,10 @@
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMyWrapped } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { useBingoPage } from "./BingoPageProvider";
 import { buildWrappedStory } from "./wrappedModel";
+import { hasReachedOutro, rememberOutroReached } from "./wrappedOutroStore";
 import type { WrappedModel } from "./types";
 
 const WrappedContext = createContext<WrappedModel | null>(null);
@@ -18,18 +19,28 @@ export function WrappedProvider({ slug, children, renderLoading, renderError }: 
   const { user } = useAuth();
   const navigate = useNavigate();
   const { data, error, isLoading } = useMyWrapped(slug, page.wrapped.canOpen);
+  // Read once, as the page opens: reaching the Outro on this visit doesn't bring the jump in under the viewer.
+  const [outroReachedBefore] = useState(() => hasReachedOutro(slug));
 
   const model = useMemo(
     () =>
       data && user
         ? buildWrappedStory(
             data,
-            { viewerId: user.id, viewerName: page.user.displayName, startsAt: page.bingo.startsAt, endsAt: page.bingo.endsAt },
-            { goToBoard: () => navigate(`/b/${slug}`), goToRewind: () => navigate(`/b/${slug}/rewind`) },
+            {
+              viewerId: user.id,
+              viewerName: page.user.displayName,
+              viewerAvatarUrl: page.user.avatarUrl,
+              startsAt: page.bingo.startsAt,
+              endsAt: page.bingo.endsAt,
+              siteLabel: window.location.host,
+              outroReachedBefore,
+            },
+            { goToBoard: () => navigate(`/b/${slug}`), goToRewind: () => navigate(`/b/${slug}/rewind`), outroReached: () => rememberOutroReached(slug) },
             slug,
           )
         : null,
-    [data, user, page.user.displayName, page.bingo.startsAt, page.bingo.endsAt, navigate, slug],
+    [data, user, page.user.displayName, page.user.avatarUrl, page.bingo.startsAt, page.bingo.endsAt, navigate, slug, outroReachedBefore],
   );
 
   if (error) return <>{renderError(error instanceof Error ? error.message : "Couldn't load Wrapped")}</>;

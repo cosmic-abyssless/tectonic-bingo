@@ -34,14 +34,15 @@ function BubbleTail({ outline, fill }: { outline: string; fill: string }) {
  */
 export function TileSearch({ search }: { search: TileSearchModel }) {
   const { colors } = useComic();
-  const line = search.focused ? colors.YELLOW : colors.INK;
+  const line = search.focused ? colors.YELLOW : colors.LINE;
+  const shadow = search.focused ? colors.YELLOW : colors.SHADOW;
   const lift = search.focused ? 5 : 3;
 
   return (
     <div className="relative h-fit min-w-1/2 flex-1 pb-3">
       <div
         className="relative flex h-10 items-center gap-2 rounded-md border-[3px] px-3 transition-[box-shadow,border-color] duration-150"
-        style={{ borderColor: line, background: colors.PAPER_RAISED, color: colors.INK, boxShadow: `${lift}px ${lift}px 0 ${line}` }}
+        style={{ borderColor: line, background: colors.PAPER_RAISED, color: colors.INK, boxShadow: `${lift}px ${lift}px 0 ${shadow}` }}
       >
         <SearchIcon className="pointer-events-none shrink-0" style={{ color: colors.INK_SUBTLE }} />
         <Input
@@ -75,7 +76,7 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
       {search.showDropdown && (
         <div
           className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-md border-[3px]"
-          style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `4px 4px 0 ${colors.LINE}`, color: colors.INK }}
+          style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `4px 4px 0 ${colors.SHADOW}`, color: colors.INK }}
         >
           {search.results.map((tile, i) => {
             const active = i === search.highlightedIndex;

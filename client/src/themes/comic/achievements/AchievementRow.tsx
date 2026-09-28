@@ -24,7 +24,7 @@ export function AchievementRow({ achievement }: { achievement: MyAchievement }) 
       style={{
         background: earned ? colors.PAPER_RAISED : masked ? colors.PAPER_ALT : colors.PAPER,
         borderColor: colors.LINE,
-        boxShadow: earned ? `3px 3px 0 ${colors.LINE}` : undefined,
+        boxShadow: earned ? `3px 3px 0 ${colors.SHADOW}` : undefined,
         color: colors.INK_BODY,
       }}
     >
