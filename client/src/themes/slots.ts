@@ -104,8 +104,9 @@ export interface ThemeSlots {
   // `selector` lets a theme list the teams right on this screen instead of pointing at a menu.
   NoTeamStage: ComponentType<{ selector: TeamSelectorModel }>;
   // Someone who isn't part of this bingo (not a Player, Moderator or Admin) from signups closing until it's Finished.
-  // `isCut`: they signed up but were cut to keep the teams even.
-  NotPartStage: ComponentType<{ isCut: boolean }>;
+  // `isCut`: they signed up but were cut to keep the teams even. `removedFromTeam`: the Team an Admin took them off
+  // (Remove from Team), to tell them so.
+  NotPartStage: ComponentType<{ isCut: boolean; removedFromTeam: string | null }>;
   RulesDialog: ComponentType<{ isOpen: boolean; markdown: string; onClose: () => void }>;
   // `stage`: whether the Team's Superlative voting section (CONTEXT.md "Superlative") shows and is live.
   TeamInfoDialog: ComponentType<{ slug: string; team: TeamModel | null; stage: Stage; onClose: () => void }>;

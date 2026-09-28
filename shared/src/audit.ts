@@ -136,7 +136,11 @@ export interface AuditDetailsMap {
   "team.created": { name: string; captainUserId: string; captainName: string; coCaptainUserId: string | null; coCaptainName: string | null; color: string | null };
   "team.updated": { changes: FieldChanges<{ name: string; color: string | null }>; codeword?: { changed: true } };
   "team.member_added": { userId: string; displayName: string };
-  "team.member_removed": { userId: string; displayName: string };
+  /**
+   * `removedFromTeam`: Remove from Team (from Board revealed on), which also withdrew their Signup; `reason` is the
+   * Admin's optional note. `newCaptainName`/`newCoCaptainName`: who took over a removed Captain's or co-captain's role.
+   */
+  "team.member_removed": { userId: string; displayName: string; removedFromTeam?: true; reason?: string | null; newCaptainName?: string; newCoCaptainName?: string };
   "team.deleted": { name: string; captainName: string; memberCount: number };
   "team.tile_interest_set": { tileName: string; taskLabel: string; interested: boolean };
 
@@ -210,7 +214,8 @@ export interface AuditDetailsMap {
   "pairing.admin_paired": { userIds: string[]; displayNames: string[] };
   "pairing.unpaired": { userIds: string[]; displayNames: string[] };
 
-  "signup.created": { rsn: string; rsnVerified: boolean; answerCount: number; reactivated: boolean };
+  /** `late`: a Late signup, made by an Admin on the player's behalf after Signups closed. */
+  "signup.created": { rsn: string; rsnVerified: boolean; answerCount: number; reactivated: boolean; late?: boolean };
   /**
    * `changes`: what changed, RSN and answers alike, keyed by "RSN" or the question's prompt, shown as before/after in
    * the log. Entries from before it carry `rsn` and `answersChanged` (question ids) instead; an unchanged save records
@@ -542,7 +547,17 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     label: (i) => `${actor(i)} added ${i.details.displayName} to ${i.teamName ?? "the team"}`,
     condense: (inputs) => `${actor(inputs[0]!)} added ${joinList([...inputs].reverse().map((i) => i.details.displayName))} to ${inputs[0]!.teamName ?? "the team"}`,
   },
-  "team.member_removed": { category: "team", tone: "warn", visibility: "team", title: "Team member removed", label: (i) => `${actor(i)} removed ${i.details.displayName} from ${i.teamName ?? "the team"}` },
+  "team.member_removed": {
+    category: "team",
+    tone: "warn",
+    visibility: "team",
+    title: "Team member removed",
+    label: (i) => {
+      const handover = i.details.newCaptainName ? `; ${i.details.newCaptainName} is now Captain` : i.details.newCoCaptainName ? `; ${i.details.newCoCaptainName} is now co-captain` : "";
+      const reason = i.details.reason ? ` (${i.details.reason})` : "";
+      return `${actor(i)} removed ${i.details.displayName} from ${i.teamName ?? "the team"}${reason}${handover}`;
+    },
+  },
   "team.deleted": { category: "team", tone: "danger", visibility: "mods", title: "Team deleted", label: (i) => `${actor(i)} deleted the team "${i.details.name}"` },
   "team.tile_interest_set": {
     category: "team",
@@ -758,7 +773,11 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
   "pairing.left": { category: "signup", tone: "warn", visibility: "mods", title: "Duo pairing left", label: (i) => `${actor(i)} left a duo pairing` },
   "pairing.admin_paired": { category: "signup", tone: "ok", visibility: "mods", title: "Duo pairing created by a mod", label: (i) => `${actor(i)} paired ${i.details.displayNames.join(" & ")}` },
   "pairing.unpaired": { category: "signup", tone: "warn", visibility: "mods", title: "Duo pairing split by a mod", label: (i) => `${actor(i)} split up ${i.details.displayNames.join(" & ")}` },
-  "signup.created": { category: "signup", tone: "ok", visibility: "mods", title: "Signup created", label: (i) => `${actor(i)} signed up as ${i.details.rsn}${i.details.reactivated ? " (re-signup)" : ""}` },
+  "signup.created": { category: "signup", tone: "ok", visibility: "mods", title: "Signup created", label: (i) =>
+      i.onBehalfOfName
+        ? `${actor(i)} signed ${i.onBehalfOfName} up late as ${i.details.rsn}${i.details.reactivated ? " (re-signup)" : ""}`
+        : `${actor(i)} signed up as ${i.details.rsn}${i.details.reactivated ? " (re-signup)" : ""}`,
+  },
   "signup.updated": {
     category: "signup",
     tone: "neutral",

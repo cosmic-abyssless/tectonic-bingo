@@ -4,9 +4,10 @@ import { useComic } from "../ui/useComic";
 
 /**
  * For someone who isn't part of this bingo (CONTEXT.md "Player"), from signups closing until it's Finished: a panel
- * with the news stamped on it, like PlanningStage. A Cut signup is told why.
+ * with the news stamped on it, like PlanningStage. A Cut signup is told why, and so is a Player an Admin removed from
+ * their Team.
  */
-export function NotPartStage({ isCut }: { isCut: boolean }) {
+export function NotPartStage({ isCut, removedFromTeam }: { isCut: boolean; removedFromTeam: string | null }) {
   const { colors } = useComic();
   return (
     <section
@@ -20,7 +21,9 @@ export function NotPartStage({ isCut }: { isCut: boolean }) {
         {isCut ? "You were cut from the draft" : "You're not part of this bingo"}
       </h2>
       <p className="max-w-md text-sm" style={{ color: colors.INK_BODY }}>
-        {isCut
+        {removedFromTeam
+          ? `You were removed from ${removedFromTeam}. Contact an admin if this is a mistake.`
+          : isCut
           ? "Not every signup fits on a team, so the newest were cut to keep the teams even. You can read the whole bingo once it's finished."
           : "Only its players and mods can follow it while it runs. You can read the whole bingo once it's finished."}
       </p>

@@ -64,6 +64,6 @@ export const api = {
   post: <T>(path: string, body?: unknown): Promise<T> => request<T>(path, jsonInit("POST", body)),
   patch: <T>(path: string, body?: unknown): Promise<T> => request<T>(path, jsonInit("PATCH", body)),
   put: <T>(path: string, body?: unknown): Promise<T> => request<T>(path, jsonInit("PUT", body)),
-  delete: <T = void>(path: string): Promise<T> => request<T>(path, { method: "DELETE" }),
+  delete: <T = void>(path: string, body?: unknown): Promise<T> => request<T>(path, body === undefined ? { method: "DELETE" } : jsonInit("DELETE", body)),
   postForm: <T>(path: string, formData: FormData): Promise<T> => request<T>(path, { method: "POST", body: formData }),
 };

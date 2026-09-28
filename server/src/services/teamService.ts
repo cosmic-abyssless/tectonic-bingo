@@ -1,11 +1,11 @@
 import { now as clockNow } from "../clock";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { FieldChanges } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { bingos, draftPicks, nodeEdges, nodes, pickRatings, signupAnswers, signups, submissions, superlativeVotes, teamMembers, teamNodeState, teamPointAdjustments, teams, tileInterests, tiles, users } from "../db/schema";
+import { auditLog, bingos, draftPicks, nodeEdges, nodes, pickRatings, signupAnswers, signups, submissions, superlativeVotes, teamMembers, teamNodeState, teamPointAdjustments, teams, tileInterests, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
-import { getAcceptedPairs } from "./pairingService";
+import { dissolveForUser, getAcceptedPairs } from "./pairingService";
 import { PUBLIC_SIGNUP_COLS } from "./signupService";
 import { MINIMAL_USER_COLS, PUBLIC_USER_COLS } from "./userService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
@@ -79,11 +79,15 @@ export function ledTeamName(db: Db, bingoId: string, userId: string): string | n
 /**
  * In a duo bingo every Team is led by a pair: its Captain and, as co-captain, their accepted partner. The Teams that
  * aren't (a Captain alone, or with a co-captain who isn't their partner) — by name and Captain — so the move into the
- * Draft can refuse them and the Captains tab can point them out. Always empty for a solo bingo.
+ * Draft can refuse them and the Captains tab can point them out. Always empty for a solo bingo, and once the Draft
+ * stage has begun.
  */
 export function teamsNotLedByPairs(db: Db, bingoId: string): { teamId: string; name: string; captainName: string }[] {
-  const bingo = db.select({ signupMode: bingos.signupMode }).from(bingos).where(eq(bingos.id, bingoId)).get();
+  const bingo = db.select({ signupMode: bingos.signupMode, stage: bingos.stage }).from(bingos).where(eq(bingos.id, bingoId)).get();
   if (bingo?.signupMode !== "duo") return [];
+  // Only the move into the Draft needs it: after that a Team needs one or two Captains (a Remove from Team can leave
+  // one on their own), not a pair.
+  if (bingo.stage !== "planning" && bingo.stage !== "signup" && bingo.stage !== "captains") return [];
   const pairs = getAcceptedPairs(db, bingoId);
   const leads = db
     .select({ teamId: teams.id, name: teams.name, captainUserId: teams.captainUserId, userId: teamMembers.userId, isCoCaptain: teamMembers.isCoCaptain })
@@ -392,10 +396,38 @@ export function updateTeam(db: Db, teamId: string, params: UpdateTeamParams) {
   });
 }
 
-export function addTeamMember(db: Db, teamId: string, userId: string) {
+/**
+ * A Finished Bingo's Teams and signups are locked (CONTEXT.md "Team"): no Late signup, Remove from Team, Add member or
+ * withdrawal. An Admin who has to fix something moves it back to Live first.
+ */
+export function assertTeamsUnlocked(bingo: { stage: string }): void {
+  if (bingo.stage === "complete") {
+    throw new ServiceError(400, "This bingo is finished, so its Teams and signups are locked. Move it back to Live to change them.", "bingo_finished");
+  }
+}
+
+function teamInBingo(tx: Db, teamId: string, bingoId: string | undefined) {
+  const team = tx.select().from(teams).where(eq(teams.id, teamId)).get();
+  if (!team || (bingoId !== undefined && team.bingoId !== bingoId)) throw new ServiceError(404, "Team not found");
+  const bingo = tx.select().from(bingos).where(eq(bingos.id, team.bingoId)).get()!;
+  return { team, bingo };
+}
+
+/**
+ * Add member: someone with an active Signup in this Bingo who isn't on a Team (after the Draft, a Cut signup). Anyone
+ * without a Signup joins through a Late signup instead. `bingoId`, when given, is the Bingo the request is for: a Team
+ * from another one is refused.
+ */
+export function addTeamMember(db: Db, teamId: string, userId: string, bingoId?: string) {
   return db.transaction((tx) => {
-    const team = tx.select().from(teams).where(eq(teams.id, teamId)).get();
-    if (!team) throw new ServiceError(404, "Team not found");
+    const { team, bingo } = teamInBingo(tx, teamId, bingoId);
+    assertTeamsUnlocked(bingo);
+    const signup = tx
+      .select({ id: signups.id })
+      .from(signups)
+      .where(and(eq(signups.bingoId, team.bingoId), eq(signups.userId, userId), eq(signups.status, "active")))
+      .get();
+    if (!signup) throw new ServiceError(400, "Only someone with an active signup for this bingo can be added. Add anyone else as a late signup on the Signups tab.");
     assertUserNotOnATeam(tx, team.bingoId, userId);
     const member = tx.insert(teamMembers).values({ teamId, userId, isCaptain: false, joinedAt: clockNow() }).returning().get();
     audit(tx, {
@@ -409,18 +441,82 @@ export function addTeamMember(db: Db, teamId: string, userId: string) {
   });
 }
 
-// Drafted players stay put: dropping only the membership would return them
-// to the pool while their pick still shows on the roster, and dropping the
-// pick would shift the snake order for everyone after it.
-export function removeTeamMember(db: Db, teamId: string, userId: string): void {
+export interface RemoveTeamMemberOptions {
+  /** The Bingo the request is for: a Team from another one is refused. */
+  bingoId?: string;
+  /** Remove from Team only: why, for the audit log. */
+  reason?: string | null;
+  /** Remove from Team only: who takes the Captain's or co-captain's role (another member of the Team). */
+  replacementUserId?: string | null;
+}
+
+// Stages at which the Teams are set: from Board revealed until Finished, removing a member is Remove from Team.
+const TEAMS_SET_STAGES = new Set(["reveal", "live"]);
+
+/**
+ * Takes a member off a Team.
+ *
+ * Until Board revealed it only undoes a membership: drafted Players stay put (dropping only the membership would return
+ * them to the pool while their pick still shows on the roster, and dropping the pick would shift the snake order for
+ * everyone after it), and Captains and co-captains can't be removed.
+ *
+ * From Board revealed until Finished it's Remove from Team (CONTEXT.md "Team"), for any member: their Signup is
+ * Withdrawn too, so they're no longer a Player, and an accepted pairing is dissolved. Their Submissions and points stay
+ * with the Team. A Captain or co-captain names another member to take their role; naming the co-captain as the new
+ * Captain leaves the co-captain role empty.
+ */
+export function removeTeamMember(db: Db, teamId: string, userId: string, opts: RemoveTeamMemberOptions = {}): void {
   db.transaction((tx) => {
-    const team = tx.select().from(teams).where(eq(teams.id, teamId)).get();
-    if (!team) throw new ServiceError(404, "Team not found");
-    if (team.captainUserId === userId) throw new ServiceError(400, "Cannot remove the captain — reassign the captaincy or delete the team instead");
-    const member = tx.select({ isCoCaptain: teamMembers.isCoCaptain }).from(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).get();
-    if (member?.isCoCaptain) throw new ServiceError(400, "Cannot remove the co-captain — delete the team instead");
-    const pick = tx.select({ id: draftPicks.id }).from(draftPicks).where(and(eq(draftPicks.teamId, teamId), eq(draftPicks.userId, userId))).get();
-    if (pick) throw new ServiceError(409, "This player was drafted onto the team and can't be removed");
+    const { team, bingo } = teamInBingo(tx, teamId, opts.bingoId);
+    assertTeamsUnlocked(bingo);
+    const member = tx
+      .select({ isCaptain: teamMembers.isCaptain, isCoCaptain: teamMembers.isCoCaptain })
+      .from(teamMembers)
+      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)))
+      .get();
+    if (!member) throw new ServiceError(404, "This player isn't on the team");
+    const isCaptain = team.captainUserId === userId;
+    const teamsSet = TEAMS_SET_STAGES.has(bingo.stage);
+    const reason = opts.reason?.trim() || null;
+    if (reason && reason.length > 500) throw new ServiceError(400, "The reason can be at most 500 characters");
+
+    let newCaptainUserId: string | null = null;
+    let newCoCaptainUserId: string | null = null;
+    if (!teamsSet) {
+      if (isCaptain) throw new ServiceError(400, "Cannot remove the captain — reassign the captaincy or delete the team instead");
+      if (member.isCoCaptain) throw new ServiceError(400, "Cannot remove the co-captain — delete the team instead");
+      const pick = tx.select({ id: draftPicks.id }).from(draftPicks).where(and(eq(draftPicks.teamId, teamId), eq(draftPicks.userId, userId))).get();
+      if (pick) {
+        throw new ServiceError(
+          409,
+          bingo.stage === "draft"
+            ? "This player was drafted onto the team and can't be removed until the Draft ends"
+            : "This player was drafted onto the team and can't be removed",
+        );
+      }
+    } else if (isCaptain || member.isCoCaptain) {
+      const role = isCaptain ? "Captain" : "co-captain";
+      const replacementId = opts.replacementUserId;
+      if (!replacementId) throw new ServiceError(400, `Name another member of the team to take over as ${role} first`, "replacement_required");
+      if (replacementId === userId) throw new ServiceError(400, `Name another member of the team to take over as ${role}`);
+      const replacement = tx
+        .select({ isCaptain: teamMembers.isCaptain, isCoCaptain: teamMembers.isCoCaptain })
+        .from(teamMembers)
+        .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, replacementId)))
+        .get();
+      if (!replacement) throw new ServiceError(400, `The new ${role} has to be a member of the team`);
+      if (isCaptain) {
+        // The co-captain moving up leaves the co-captain role empty: after the Draft a Team has one or two Captains.
+        tx.update(teams).set({ captainUserId: replacementId, updatedAt: clockNow() }).where(eq(teams.id, teamId)).run();
+        tx.update(teamMembers).set({ isCaptain: true, isCoCaptain: false }).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, replacementId))).run();
+        newCaptainUserId = replacementId;
+      } else {
+        if (replacement.isCaptain || team.captainUserId === replacementId) throw new ServiceError(400, "That player is already the Captain");
+        tx.update(teamMembers).set({ isCoCaptain: true }).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, replacementId))).run();
+        newCoCaptainUserId = replacementId;
+      }
+    }
+
     const displayName = userLabelById(tx, userId, team.bingoId);
     tx.delete(tileInterests).where(and(eq(tileInterests.teamId, teamId), eq(tileInterests.userId, userId))).run();
     // Superlatives (CONTEXT.md): a Player removed from a Team drops their own votes and every vote cast for them in
@@ -428,14 +524,63 @@ export function removeTeamMember(db: Db, teamId: string, userId: string): void {
     tx.delete(superlativeVotes).where(and(eq(superlativeVotes.teamId, teamId), eq(superlativeVotes.voterUserId, userId))).run();
     tx.delete(superlativeVotes).where(and(eq(superlativeVotes.teamId, teamId), eq(superlativeVotes.nomineeUserId, userId))).run();
     tx.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).run();
+
+    if (teamsSet) {
+      // Remove from Team: their Signup is Withdrawn, so they're no longer a Player, and one half of a duo leaves the
+      // other on the Team with the pairing dissolved. Their Submissions and draft pick stay, as the Team's record.
+      const user = tx.select({ id: users.id, discordId: users.discordId }).from(users).where(eq(users.id, userId)).get();
+      if (user) dissolveForUser(tx, team.bingoId, user);
+      const signup = tx.select({ id: signups.id, rsn: signups.rsn, status: signups.status }).from(signups).where(and(eq(signups.bingoId, team.bingoId), eq(signups.userId, userId))).get();
+      if (signup?.status === "active") {
+        tx.update(signups).set({ status: "withdrawn" }).where(eq(signups.id, signup.id)).run();
+        audit(tx, {
+          action: "signup.withdrawn",
+          bingoId: team.bingoId,
+          entity: { type: "signup", id: signup.id, label: signup.rsn },
+          details: { rsn: signup.rsn },
+          onBehalfOfUserId: userId,
+        });
+      }
+    }
     audit(tx, {
       action: "team.member_removed",
       bingoId: team.bingoId,
       entity: { type: "user", id: userId, label: displayName },
       teamId,
-      details: { userId, displayName: displayName ?? "Unknown" },
+      details: {
+        userId,
+        displayName: displayName ?? "Unknown",
+        ...(teamsSet ? { removedFromTeam: true as const, reason } : {}),
+        ...(newCaptainUserId ? { newCaptainName: userLabelById(tx, newCaptainUserId, team.bingoId) ?? "Unknown" } : {}),
+        ...(newCoCaptainUserId ? { newCoCaptainName: userLabelById(tx, newCoCaptainUserId, team.bingoId) ?? "Unknown" } : {}),
+      },
     });
   });
+}
+
+/**
+ * The Team a viewer was taken off by Remove from Team, while that still stands: their Signup is still Withdrawn and
+ * hasn't been made again since (a Late signup brings them back). What the "not part of this Bingo" page tells them.
+ */
+export function removedFromTeamName(db: Db, bingoId: string, userId: string): string | null {
+  const signup = db.select({ status: signups.status, createdAt: signups.createdAt }).from(signups).where(and(eq(signups.bingoId, bingoId), eq(signups.userId, userId))).get();
+  if (signup?.status !== "withdrawn") return null;
+  const removal = db
+    .select({ teamId: auditLog.teamId, createdAt: auditLog.createdAt })
+    .from(auditLog)
+    .where(
+      and(
+        eq(auditLog.bingoId, bingoId),
+        eq(auditLog.action, "team.member_removed"),
+        eq(auditLog.entityType, "user"),
+        eq(auditLog.entityId, userId),
+        sql`json_extract(${auditLog.details}, '$.removedFromTeam') = 1`,
+      ),
+    )
+    .orderBy(desc(auditLog.id))
+    .get();
+  if (!removal?.teamId || removal.createdAt.getTime() < signup.createdAt.getTime()) return null;
+  return db.select({ name: teams.name }).from(teams).where(eq(teams.id, removal.teamId)).get()?.name ?? null;
 }
 
 // Only teams without game history can go: once a team has draft picks,

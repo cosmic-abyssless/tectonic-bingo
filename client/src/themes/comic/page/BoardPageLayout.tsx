@@ -45,7 +45,7 @@ export function BoardPageLayout() {
         {page.stageView === "signup" ? (
           <SignupStage slug={page.slug} />
         ) : page.stageView === "notPart" ? (
-          <NotPartStage isCut={page.isCut} />
+          <NotPartStage isCut={page.isCut} removedFromTeam={page.removedFromTeam} />
         ) : page.stageView === "planning" || page.stageView === "captains" ? (
           <PlanningStage stage={page.stageView} />
         ) : page.stageView === "draft" ? (

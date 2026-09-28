@@ -536,6 +536,8 @@ export interface BingoViewerAccess {
   canSee: boolean;
   isPlayer: boolean;
   isCut: boolean;
+  /** The Team the viewer was taken off by Remove from Team (CONTEXT.md "Team"), when that's why they can't see it. */
+  removedFromTeam: string | null;
 }
 
 export interface BoardLine extends BingoLine {

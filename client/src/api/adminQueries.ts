@@ -12,6 +12,8 @@ export const adminQueryKeys = {
   superlatives: (slug: string) => ["adminSuperlatives", slug] as const,
   userSearch: (scope: string, q: string) => ["adminUserSearch", scope, q] as const,
   captainCandidates: (slug: string) => ["adminCaptainCandidates", slug] as const,
+  lateSignupMembers: (slug: string) => ["adminLateSignupMembers", slug] as const,
+  lateSignupRsns: (slug: string, userId: string) => ["adminLateSignupRsns", slug, userId] as const,
   itemGroups: ["adminItemGroups"] as const,
   pastWomCompetitions: ["adminPastWomCompetitions"] as const,
   pieceValues: ["adminPieceValues"] as const,
@@ -77,6 +79,16 @@ export function useSuperlativeCategories(slug: string) {
 
 export function useCaptainCandidates(slug: string) {
   return useQuery({ queryKey: adminQueryKeys.captainCandidates(slug), queryFn: () => adminApi.getCaptainCandidates(slug) });
+}
+
+/** Late signup: every clan member who has logged in, to pick who's joining. */
+export function useLateSignupMembers(slug: string, enabled: boolean) {
+  return useQuery({ queryKey: adminQueryKeys.lateSignupMembers(slug), queryFn: () => adminApi.getLateSignupMembers(slug), enabled });
+}
+
+/** Late signup: the picked member's clan RSNs (the first is the default RSN). */
+export function useLateSignupRsns(slug: string, userId: string) {
+  return useQuery({ queryKey: adminQueryKeys.lateSignupRsns(slug, userId), queryFn: () => adminApi.getLateSignupRsns(slug, userId), enabled: !!userId });
 }
 
 /** The Achievements settings section's per-catalogue-entry switch state (CONTEXT.md "Achievement"). */

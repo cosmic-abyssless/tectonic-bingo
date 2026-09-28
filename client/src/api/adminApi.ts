@@ -1,6 +1,6 @@
 import type {
   AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, PieceValue, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
-  TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtGroup, WrappedArtImage, WrappedArtKeying,
+  PickableMembersResponse, Signup, TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtGroup, WrappedArtImage, WrappedArtKeying,
 } from "@bingo/shared";
 import { api } from "./client";
 
@@ -252,8 +252,20 @@ export function deleteTeam(slug: string, id: string) {
 export function addTeamMember(slug: string, teamId: string, userId: string) {
   return api.post<{ member: TeamMember }>(`${base(slug)}/teams/${teamId}/members`, { userId });
 }
-export function removeTeamMember(slug: string, teamId: string, userId: string) {
-  return api.delete(`${base(slug)}/teams/${teamId}/members/${userId}`);
+/** From Board revealed on this is Remove from Team: `reason` goes in the audit log, `replacementUserId` takes a Captain's or co-captain's role. */
+export function removeTeamMember(slug: string, teamId: string, userId: string, options?: { reason?: string | null; replacementUserId?: string | null }) {
+  return api.delete(`${base(slug)}/teams/${teamId}/members/${userId}`, options);
+}
+
+// Late signup (CONTEXT.md "Signup"): who can be signed up, their clan RSNs, and the signup itself.
+export function getLateSignupMembers(slug: string) {
+  return api.get<PickableMembersResponse>(`${base(slug)}/late-signup/members`);
+}
+export function getLateSignupRsns(slug: string, userId: string) {
+  return api.get<{ rsns: string[] }>(`${base(slug)}/late-signup/rsns/${userId}`);
+}
+export function createLateSignup(slug: string, payload: { userId: string; rsn: string; teamId?: string | null }) {
+  return api.post<{ signup: Signup }>(`${base(slug)}/late-signups`, payload);
 }
 
 // Every catalogue Achievement's current switch state for this bingo (CONTEXT.md "Achievement"), for the settings

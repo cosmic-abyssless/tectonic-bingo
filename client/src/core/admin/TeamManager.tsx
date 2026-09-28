@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import type { BingoShellResponse, PublicUser, RosterEntry, Team, TeamWithMembers, User } from "@bingo/shared";
+import type { BingoShellResponse, PublicUser, RosterEntry, Stage, Team, TeamWithMembers } from "@bingo/shared";
 import { useBingo, queryKeys } from "../../api/queries";
 import { adminQueryKeys, useCaptainCandidates } from "../../api/adminQueries";
 import * as adminApi from "../../api/adminApi";
 import { optimisticUpdate } from "../../api/optimistic";
-import { UserSearchInput } from "./UserSearchInput";
 import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { Button, IconButton } from "../ui/Button";
@@ -13,6 +12,7 @@ import { Badge, Card, Notice } from "../ui/Card";
 import { Disclosure } from "../ui/Disclosure";
 import { Field, Input } from "../ui/Field";
 import { SearchableSelect } from "../ui/SearchableSelect";
+import { Select } from "../ui/Select";
 import { CaptainEmblem } from "../ui/CaptainEmblem";
 import { TrashIcon, XIcon } from "../ui/icons";
 
@@ -41,10 +41,102 @@ function optimisticTeams(queryClient: QueryClient, slug: string, update: (teams:
   return optimisticUpdate<BingoShellResponse>(queryClient, queryKeys.bingo(slug), (shell) => ({ ...shell, teams: update(shell.teams) }), request);
 }
 
-function TeamCard({ slug, team, notLedByPair, onDelete }: { slug: string; team: TeamWithMembers; notLedByPair: boolean; onDelete: () => void }) {
+type Member = TeamWithMembers["members"][number];
+
+/**
+ * Remove from Team's confirmation (CONTEXT.md "Team"): their Signup is Withdrawn, their Submissions and points stay with
+ * the Team. A Captain or co-captain can only go once another member is named to take their role.
+ */
+function RemovalConfirm({
+  team,
+  member,
+  reason,
+  onReason,
+  replacementId,
+  onReplacement,
+  onCancel,
+  onConfirm,
+}: {
+  team: TeamWithMembers;
+  member: Member;
+  reason: string;
+  onReason: (reason: string) => void;
+  replacementId: string;
+  onReplacement: (id: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const name = displayName(member.user);
+  const role = member.isCaptain ? "Captain" : member.isCoCaptain ? "co-captain" : null;
+  // A new co-captain can't be the Captain; a new Captain can be anyone else, the co-captain included (which leaves the
+  // co-captain role empty).
+  const replacements = team.members.filter((m) => m.user.id !== member.user.id && !(member.isCoCaptain && m.isCaptain));
+  return (
+    <Notice tone="warn">
+      <div className="space-y-3">
+        <p>
+          Remove <strong>{name}</strong> from {team.name}? Their signup is withdrawn and they&apos;re told they were removed. Their submissions and
+          points stay with the team.
+        </p>
+        {role && (
+          <Field label={`New ${role}`} hint={member.isCaptain ? "Picking the co-captain leaves the co-captain role empty." : undefined} as="div">
+            {replacements.length ? (
+              <Select
+                aria-label={`New ${role}`}
+                value={replacementId}
+                onChange={onReplacement}
+                placeholder="Pick a member…"
+                options={replacements.map((m) => ({ value: m.user.id, label: displayName(m.user) }))}
+              />
+            ) : (
+              <p className="text-sm">Nobody else is on the team to take over, so {name} can&apos;t be removed yet.</p>
+            )}
+          </Field>
+        )}
+        <Field label="Reason (optional)" hint="Goes in the audit log.">
+          <Input value={reason} onChange={(e) => onReason(e.target.value)} maxLength={500} />
+        </Field>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" size="sm" onPress={onCancel}>
+            Cancel
+          </Button>
+          <Button variant="danger" size="sm" onPress={onConfirm} isDisabled={!!role && !replacementId}>
+            Remove from team
+          </Button>
+        </div>
+      </div>
+    </Notice>
+  );
+}
+
+function TeamCard({
+  slug,
+  team,
+  stage,
+  candidates,
+  notLedByPair,
+  onDelete,
+}: {
+  slug: string;
+  team: TeamWithMembers;
+  stage: Stage | undefined;
+  candidates: RosterEntry[];
+  notLedByPair: boolean;
+  onDelete: () => void;
+}) {
   const queryClient = useQueryClient();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Remove from Team (from Board revealed on) asks first: who's going, an optional reason, and for a Captain or
+  // co-captain who takes over.
+  const [removing, setRemoving] = useState<Member | null>(null);
+  const [reason, setReason] = useState("");
+  const [replacementId, setReplacementId] = useState("");
+  const locked = stage === "complete";
+  const teamsSet = stage === "reveal" || stage === "live";
+  // Before Board revealed only a membership can be undone (no Captain, co-captain or drafted Player); from then on
+  // Remove from Team takes anyone. Nothing changes once the bingo is Finished.
+  const canRemove = (m: Member) => !locked && (teamsSet || (!m.isCaptain && !m.isCoCaptain && !m.isDrafted));
 
   // Every mutation here funnels through this so a failure (409 already on a
   // team, 400 empty password, ...) lands in the card instead of the console.
@@ -63,7 +155,22 @@ function TeamCard({ slug, team, notLedByPair, onDelete }: { slug: string; team: 
     }
   }
   const update = (patch: Partial<Team>) => run(() => adminApi.updateTeam(slug, team.id, patch));
-  const addMember = (user: User) => run(() => adminApi.addTeamMember(slug, team.id, user.id));
+  const addMember = (userId: string) => run(() => adminApi.addTeamMember(slug, team.id, userId));
+  function startRemoving(member: Member) {
+    if (!teamsSet) {
+      removeMember(member.user);
+      return;
+    }
+    setRemoving(member);
+    setReason("");
+    setReplacementId("");
+  }
+  async function confirmRemoval() {
+    if (!removing) return;
+    const member = removing;
+    setRemoving(null);
+    await run(() => adminApi.removeTeamMember(slug, team.id, member.user.id, { reason: reason.trim() || null, replacementUserId: replacementId || null }));
+  }
   const removeMember = (user: PublicUser) =>
     run(() =>
       optimisticTeams(
@@ -125,8 +232,8 @@ function TeamCard({ slug, team, notLedByPair, onDelete }: { slug: string; team: 
                     {displayName(user)}
                   </PlayerName>
                   {isDrafted && <span className="text-xs text-on-surface-subtle">drafted</span>}
-                  {!isCaptain && !isCoCaptain && !isDrafted && (
-                    <IconButton label={`Remove ${displayName(user)}`} size="sm" onPress={() => removeMember(user)}>
+                  {canRemove({ user, isCaptain, isCoCaptain, isDrafted }) && (
+                    <IconButton label={`Remove ${displayName(user)}`} size="sm" onPress={() => startRemoving({ user, isCaptain, isCoCaptain, isDrafted })}>
                       <XIcon size={12} />
                     </IconButton>
                   )}
@@ -134,9 +241,18 @@ function TeamCard({ slug, team, notLedByPair, onDelete }: { slug: string; team: 
               ))}
             </ul>
           </Field>
-          <Field label="Add member" as="div">
-            <UserSearchInput scope={slug} onSelect={addMember} />
-          </Field>
+          {removing && <RemovalConfirm team={team} member={removing} reason={reason} onReason={setReason} replacementId={replacementId} onReplacement={setReplacementId} onCancel={() => setRemoving(null)} onConfirm={confirmRemoval} />}
+          {!locked && (
+            <Field label="Add member" hint="Someone signed up who isn't on a Team. Anyone else joins as a late signup, from the Signups tab." as="div">
+              <SearchableSelect
+                value=""
+                onChange={(id) => id && addMember(id)}
+                placeholder={candidates.length ? "Search signed-up players…" : "Everyone signed up is on a Team"}
+                readOnly={candidates.length === 0}
+                options={candidates.map((c) => ({ id: c.user.id, label: candidateLabel(c) }))}
+              />
+            </Field>
+          )}
           {error && <Notice tone="danger">{error}</Notice>}
           {confirmingDelete ? (
             <Notice tone="danger">
@@ -233,6 +349,7 @@ export function TeamManager({ slug }: { slug: string }) {
 
   return (
     <div className="max-w-2xl space-y-4">
+      {data?.bingo.stage === "complete" && <Notice tone="info">This bingo is finished, so its Teams are locked. Move it back to Live to change them.</Notice>}
       <Card className="space-y-3 p-4">
         <div>
           <p className="text-sm font-medium text-on-surface">Create a team</p>
@@ -278,7 +395,15 @@ export function TeamManager({ slug }: { slug: string }) {
 
       <div className="space-y-3">
         {data?.teams.map((team) => (
-          <TeamCard key={team.id} slug={slug} team={team} notLedByPair={notLedByPairs.has(team.id)} onDelete={() => deleteTeam(team)} />
+          <TeamCard
+            key={team.id}
+            slug={slug}
+            team={team}
+            stage={data?.bingo.stage}
+            candidates={candidates}
+            notLedByPair={notLedByPairs.has(team.id)}
+            onDelete={() => deleteTeam(team)}
+          />
         ))}
       </div>
     </div>
