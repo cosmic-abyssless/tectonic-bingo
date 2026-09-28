@@ -234,7 +234,9 @@ export interface AuditDetailsMap {
   "wom.competition_created": { competitionId: number };
   // changed: what the sync sent (older entries, from team renames only, have none).
   "wom.roster_synced": { changed?: ("title" | "startsAt" | "endsAt" | "teams")[] };
-  "wom.sync_failed": { operation: "create" | "rename" | "sync"; message: string };
+  /** The bulk update at start + 6h: WOM was asked to update every participant of the competition. */
+  "wom.participants_updated": { competitionId: number };
+  "wom.sync_failed": { operation: "create" | "rename" | "sync" | "update"; message: string };
 
   // Fallback-only: written by the server's finish-middleware for any
   // successful non-GET /api/* mutation that recorded nothing itself.
@@ -813,6 +815,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
         ? `Updated the Wise Old Man competition's ${joinList(i.details.changed.map((c) => what[c]))}`
         : "Synced the Wise Old Man competition roster";
     },
+  },
+  "wom.participants_updated": {
+    category: "system",
+    tone: "neutral",
+    visibility: "mods",
+    title: "WOM players updated",
+    label: () => "Asked Wise Old Man to update every player in the competition",
   },
   "wom.sync_failed": { category: "system", tone: "warn", visibility: "mods", title: "WOM sync failed", label: (i) => `Wise Old Man ${i.details.operation} failed: ${i.details.message}` },
   "http.mutation": {

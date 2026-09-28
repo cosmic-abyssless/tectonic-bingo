@@ -1,0 +1,1 @@
+ALTER TABLE `bingos` ADD `wom_bulk_update_sent_at` integer;

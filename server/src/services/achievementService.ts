@@ -497,15 +497,22 @@ interface WomPoint {
 }
 
 /**
+ * How long after the Bingo's start (or the Achievement's switch-on, if later) its Wise Old Man Achievements start
+ * counting play (CONTEXT.md "Achievement"). The hiscores only update when a player logs out and no session lasts longer
+ * than 6 hours, so until then a snapshot can still hold play from before the start; the extra hour lets the bulk update
+ * sent at start + 6h (womCompetitionService.sendDueWomBulkUpdates) land. Titles and Luck still count from the start.
+ */
+export const WOM_ACHIEVEMENT_DELAY_MS = 7 * 60 * 60 * 1000;
+
+/**
  * A Player's Wise Old Man snapshots bracketing their play during the Bingo: their latest one taken by its end, and a
- * baseline — their last snapshot from before it started (or from before the Achievement was switched on, if that's
- * later), else their first one since — the same baseline the Titles' gains use. Null until there's a snapshot after
- * that cutoff.
+ * baseline — their last snapshot at or before WOM_ACHIEVEMENT_DELAY_MS after it started (or after the Achievement was
+ * switched on, if that's later), else their first one since. Null until there's a snapshot after that cutoff.
  */
 function womWindow(q: Queryable, bingo: Bingo, userId: string, firstSwitchedOnAt: Date): { baseline: WomPoint; latest: WomPoint } | null {
   const start = effectiveStartsAt(q, bingo);
   if (!start) return null;
-  const cutoff = firstSwitchedOnAt > start ? firstSwitchedOnAt : start;
+  const cutoff = new Date(Math.max(firstSwitchedOnAt.getTime(), start.getTime()) + WOM_ACHIEVEMENT_DELAY_MS);
   const end = endedAt(q, bingo);
   const snapshots = q
     .select({ at: womSnapshots.takenAt, clues: womSnapshots.clues, ehb: womSnapshots.ehb, ehp: womSnapshots.ehp, bossKillsJson: womSnapshots.bossKillsJson })
@@ -531,7 +538,7 @@ const bossesKilled = (w: { baseline: WomPoint; latest: WomPoint }) =>
 /**
  * A Player's Wise Old Man snapshots were just stored (womReadService.readPlayer): Leech (a clue casket opened during the
  * Bingo: any clue gain), Long weekend (20 EHB gained during it), Diversification (10 different bosses killed during it)
- * and Skiller (3 EHP gained during it), from womWindow. Checked on every read, the final one after the Bingo is Finished too, since that read is still
+ * and Skiller (3 EHP gained during it), from womWindow (so from 7 hours after the start). Checked on every read, the final one after the Bingo is Finished too, since that read is still
  * about play while it was Live; snapshots after its end don't count.
  */
 export function recordWomSnapshotsRead(db: Db, bingoId: string, userId: string): void {

@@ -94,6 +94,9 @@ export const bingos = sqliteTable('bingos', {
   // Last WOM sync failure (create or edit), surfaced in the admin settings
   // panel. Cleared on the next successful sync.
   womSyncError: text('wom_sync_error'),
+  // When the one bulk "update all participants" request was sent to the competition, at start + 6h
+  // (womCompetitionService.sendDueWomBulkUpdates): set once, so a restart neither repeats nor skips it.
+  womBulkUpdateSentAt: integer('wom_bulk_update_sent_at', { mode: 'timestamp' }),
   // Set by Site Admin Start draft. Writing draftOrder is not starting —
   // captains cannot pick until this is true and the shuffle reveal lock
   // (draftOrderLockedUntil) has expired.
