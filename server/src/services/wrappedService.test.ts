@@ -366,6 +366,22 @@ describe("computeWrapped", () => {
     expect(second!.teamId).toBe(fx.teamB.id);
     expect(first!.pointsOverTime.at(-1)!.points).toBe(first!.points);
   });
+
+  it("gives each Team its Drop value and its MVP's share of the Team's points", () => {
+    const fx = seed();
+    play(fx);
+    const { bingo, players } = computeWrapped(db, finish(fx));
+    const [teamA, teamB] = bingo.teams;
+    // Every Player's Total drop value, added up; the rejected head never counts.
+    expect(teamA!.dropValue).toBe(8_000_100);
+    expect(teamB!.dropValue).toBe(2_000_000);
+    const sum = (teamId: string) => players.filter((p) => p.teamId === teamId).reduce((n, p) => n + p.you.gpGained, 0);
+    expect(teamA!.dropValue).toBe(sum(fx.teamA.id));
+    // The same fraction the MVP's own Player Wrapped carries.
+    const dave = players.find((p) => p.userId === fx.dave.id)!.you;
+    expect(teamA!.mvp?.teamPointsFraction).toBeGreaterThan(0);
+    expect(teamA!.mvp?.teamPointsFraction).toBeCloseTo(dave.teamPointsFraction);
+  });
 });
 
 describe("duoMoments", () => {

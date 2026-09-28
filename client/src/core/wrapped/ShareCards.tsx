@@ -4,9 +4,10 @@ import { Button } from "../ui/Button";
 import { CheckIcon, CopyIcon, DownloadIcon, ShareIcon } from "../ui/icons";
 import { canCopyImage, canShareImage, copyImage, downloadImage, renderShareCard, shareImage, SHARE_CARD_HEIGHT, SHARE_CARD_WIDTH } from "./shareCardImage";
 
-// Wrapped's share cards (CONTEXT.md "Wrapped"), at the end of the Outro: each card drawn by the theme's WrappedShareCard
-// slot, previewed scaled to fit, with Copy image, Download and (where the browser can share files) Share. The image is
-// made in the browser from the card's own DOM (shareCardImage.ts), so what's previewed is what's shared.
+// Wrapped's share cards (CONTEXT.md "Wrapped"), in the Outro before its way out: each card drawn by the theme's
+// WrappedShareCard slot, previewed scaled to fit, with Copy image, Download and (where the browser can share files)
+// Share. The image is made in the browser from the card's own DOM (shareCardImage.ts), so what's previewed is what's
+// shared.
 
 /** The id the Wrapped page's jump-to-cards button scrolls to. */
 export const WRAPPED_CARDS_ID = "wrapped-cards";
@@ -23,7 +24,7 @@ export function WrappedShareCards({ cards, preview, Card }: { cards: WrappedShar
   return (
     <div id={WRAPPED_CARDS_ID} className="mt-16 w-full max-w-5xl scroll-mt-20">
       <p className="mb-6 text-center text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-muted">Share your Wrapped</p>
-      <ul className={`mx-auto grid gap-8 ${cards.length === 1 ? "max-w-sm" : cards.length === 2 ? "max-w-2xl sm:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
+      <ul className={`mx-auto grid gap-8 ${cards.length === 1 ? "max-w-sm" : "max-w-2xl sm:grid-cols-2"}`}>
         {cards.map((card) => (
           <li key={card.key}>
             <ShareCard card={card} preview={preview} Card={Card} supports={supports} />
