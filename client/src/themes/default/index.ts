@@ -70,6 +70,7 @@ import { WrappedModerator } from "./wrapped/WrappedModerator";
 import { WrappedTeam } from "./wrapped/WrappedTeam";
 import { WrappedBingo } from "./wrapped/WrappedBingo";
 import { WrappedOutro } from "./wrapped/WrappedOutro";
+import { WrappedShareCard } from "./wrapped/WrappedShareCard";
 
 // The neutral/fallback theme: eager (it's what every unknown or loading
 // theme key falls back to), and the only theme that must define every slot.
@@ -98,6 +99,7 @@ export const defaultTheme: ThemeDefinition = {
     WrappedTeam,
     WrappedBingo,
     WrappedOutro,
+    WrappedShareCard,
     DraftPickBurst,
     AchievementUnlockCard,
     AchievementRow,
