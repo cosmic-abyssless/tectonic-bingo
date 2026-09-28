@@ -78,9 +78,8 @@
   /* OSRS's in-game bold font, for Wrapped's name captions only (#270; see assets/fonts/README.md). */
   --font-osrs: "RuneScape Bold 12", ui-monospace, monospace;
 
-  /* Wrapped's OSRS name captions: yellow on a dark plate, like the game's own overhead text, in both schemes. */
+  /* Wrapped's OSRS name captions: yellow with a hard drop shadow, like the game's own overhead text, in both schemes. */
   --color-osrs-name: #ffff00;
-  --color-osrs-plate: rgb(0 0 0 / 0.72);
 }
 
 @font-face {
