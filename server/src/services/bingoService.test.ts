@@ -448,13 +448,15 @@ describe("deleteBingo", () => {
     const submission = db.insert(schema.submissions).values({ teamId: team.id, submittedByUserId: player.id }).returning().get();
     db.insert(schema.submissionScreenshots).values({ submissionId: submission.id, storageUrl: "/x.png" }).run();
     db.insert(schema.claims).values({ submissionId: submission.id, nodeId: task.id }).run();
+    const superlative = db.insert(schema.superlativeCategories).values({ bingoId: bingo.id, name: "Team MVP" }).returning().get();
+    db.insert(schema.superlativeVotes).values({ categoryId: superlative.id, teamId: team.id, voterUserId: player.id, nomineeUserId: player.id }).run();
 
     deleteBingo(db, bingo.id);
 
     const tables = [
       schema.bingoModerators, schema.stageTransitions, schema.signupQuestions, schema.signups, schema.signupAnswers, schema.teams, schema.teamMembers,
       schema.draftPicks, schema.nodes, schema.nodeEdges, schema.tileCategories, schema.tiles, schema.bingoLines, schema.teamNodeState, schema.submissions,
-      schema.submissionScreenshots, schema.claims, schema.teamPointAdjustments,
+      schema.submissionScreenshots, schema.claims, schema.teamPointAdjustments, schema.superlativeCategories, schema.superlativeVotes,
     ];
     for (const table of tables) expect(db.select().from(table).all()).toEqual([]);
     expect(db.select().from(bingos).all().map((b) => b.id)).toEqual([other.id]);
