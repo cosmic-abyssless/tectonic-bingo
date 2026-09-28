@@ -20,6 +20,7 @@ import { QuestionBuilder } from "../core/admin/QuestionBuilder";
 import { SuperlativesManager } from "../core/admin/SuperlativesManager";
 import { TeamManager } from "../core/admin/TeamManager";
 import { WrappedArtManager } from "../core/admin/WrappedArtManager";
+import { WrappedCreditsManager } from "../core/admin/WrappedCreditsManager";
 import { AppHeader } from "../core/ui/AppHeader";
 import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { Button } from "../core/ui/Button";
@@ -51,7 +52,7 @@ const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; unti
   { key: "superlatives", label: "Superlatives", adminOnly: true },
   { key: "teams", label: "Captains", adminOnly: true, from: "signup" },
   { key: "mods", label: "Moderators", adminOnly: true },
-  { key: "wrapped-art", label: "Wrapped art", adminOnly: true },
+  { key: "wrapped-art", label: "Wrapped", adminOnly: true },
 ];
 type TabDef = (typeof TABS)[number];
 
@@ -224,8 +225,9 @@ export function ModPage() {
                   </div>
                 </TabPanel>
                 <TabPanel id="wrapped-art">
-                  <div className={NARROW}>
+                  <div className={`${NARROW} space-y-8`}>
                     <WrappedArtManager slug={slug} />
+                    <WrappedCreditsManager slug={slug} bingo={shell.bingo} />
                   </div>
                 </TabPanel>
               </>

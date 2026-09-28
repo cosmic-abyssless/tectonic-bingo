@@ -101,7 +101,7 @@ export interface CaptionedArt {
 /**
  * A section's Category images, side by side above its opening heading (a Team's three, a Duo's two); nothing when the
  * section has none (it reads finished without). Each boils a little out of step with its neighbours. An image given
- * with a `name` has it captioned over its foot.
+ * with a `name` has it embedded right on the art, low over its foot, rather than sitting beside it.
  */
 export function WrappedSectionArt({ art }: { art: (WrappedArtFrames | CaptionedArt)[] }) {
   if (art.length === 0) return null;
@@ -109,16 +109,12 @@ export function WrappedSectionArt({ art }: { art: (WrappedArtFrames | CaptionedA
   const items = art.map((a): CaptionedArt => (Array.isArray(a) ? { art: a } : a));
   return (
     <div className="mb-8 flex flex-wrap items-end justify-center gap-x-2 gap-y-4 sm:gap-x-4">
-      {items.map(({ art: frames, name }, i) =>
-        name ? (
-          <div key={frames[0]} className="relative flex min-w-0 flex-col items-center">
-            <StickerArt frames={frames} className={size} phase={i / art.length} />
-            <OsrsCaption className="-mt-4 relative">{name}</OsrsCaption>
-          </div>
-        ) : (
-          <StickerArt key={frames[0]} frames={frames} className={size} phase={i / art.length} />
-        ),
-      )}
+      {items.map(({ art: frames, name }, i) => (
+        <div key={frames[0]} className="relative flex min-w-0 flex-col items-center">
+          <StickerArt frames={frames} className={size} phase={i / art.length} />
+          {name && <OsrsCaption className="absolute inset-x-0 bottom-1 text-center">{name}</OsrsCaption>}
+        </div>
+      ))}
     </div>
   );
 }

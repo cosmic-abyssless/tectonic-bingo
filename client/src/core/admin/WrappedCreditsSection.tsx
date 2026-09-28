@@ -6,7 +6,8 @@ import { ChevronDownIcon, ChevronUpIcon, PlusIcon, XIcon } from "../ui/icons";
 
 /**
  * Credits (CONTEXT.md): who put the Bingo together, a name and an optional role each, in order. Free text, not tied to
- * the Admin or Moderator roles. Edited in the settings form and saved with it; Wrapped's Outro lists them.
+ * the Admin or Moderator roles. Edited in the Wrapped tab, alongside the Wrapped art each name gets embedded on;
+ * Wrapped's Outro shows them.
  */
 export function WrappedCreditsSection({ credits, onChange }: { credits: WrappedCredit[]; onChange: (credits: WrappedCredit[]) => void }) {
   // Rows have no id of their own, so each keeps a local key through moves and removals (inputs keep focus).
@@ -32,8 +33,8 @@ export function WrappedCreditsSection({ credits, onChange }: { credits: WrappedC
   return (
     <div className="space-y-3">
       <p className="text-sm text-on-surface-muted">
-        The people who put this bingo together (board design, art, anything else), shown at the end of Wrapped in the order below. Anyone can go here:
-        it isn't tied to who's an admin or a mod.
+        The people who put this bingo together (board design, art, anything else), each embedded on a piece of the Outro's Wrapped art in the order below (the first name on the first image, and
+        so on); one with no image left for it shows as plain text instead. Anyone can go here: it isn't tied to who's an admin or a mod.
       </p>
       {credits.length > 0 && (
         <div role="list" aria-label="Credits" className="space-y-2">
