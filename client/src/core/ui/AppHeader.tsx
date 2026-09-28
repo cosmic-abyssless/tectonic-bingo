@@ -10,6 +10,7 @@ import { BugReportButton } from "./BugReportButton";
 import { BugReportDialog } from "./BugReportDialog";
 import { DevAccountSwitcher } from "./DevAccountSwitcher";
 import { PhoneLoginDialog } from "./PhoneLoginDialog";
+import { ConnectedAppsDialog } from "./ConnectedAppsDialog";
 import { useIsPhone } from "./useMediaQuery";
 import { Button } from "./Button";
 import { PulseDot } from "./Card";
@@ -106,6 +107,8 @@ export function AppHeader({
   const [bugReportOpen, setBugReportOpen] = useState(false);
   // "Log in on your phone" (a QR code): offered on a computer, where it's the way onto the phone.
   const [phoneLoginOpen, setPhoneLoginOpen] = useState(false);
+  // Admins: the Claude apps they've connected to the admin MCP server (#293).
+  const [connectedAppsOpen, setConnectedAppsOpen] = useState(false);
   const phone = useIsPhone();
   const [colorScheme, setColorScheme] = useColorSchemePreference();
   const compact = !!mobileMenu;
@@ -156,6 +159,11 @@ export function AppHeader({
                 </span>
               </MenuItem>
             )}
+            {user.isAdmin && (
+              <MenuItem id="connected-apps" onAction={() => setConnectedAppsOpen(true)}>
+                Connected apps
+              </MenuItem>
+            )}
             {menuItems}
             {!phone && (
               <MenuItem id="phone-login" onAction={() => setPhoneLoginOpen(true)}>
@@ -173,6 +181,7 @@ export function AppHeader({
         </MenuTrigger>
       )}
       {user && <PhoneLoginDialog isOpen={phoneLoginOpen} onClose={() => setPhoneLoginOpen(false)} />}
+      {user?.isAdmin && <ConnectedAppsDialog isOpen={connectedAppsOpen} onClose={() => setConnectedAppsOpen(false)} />}
     </>
   );
 

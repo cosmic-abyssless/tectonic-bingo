@@ -6,6 +6,8 @@ import { ServiceError } from "./errors";
 import { audit, markAuditedNoop } from "../audit/record";
 import { userLabel } from "../audit/describe";
 import { withRsn } from "./playerNames";
+import { revokeAllForUser } from "../mcp/connections";
+import { getAuditContext } from "../audit/context";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -69,6 +71,8 @@ export function setUserAdmin(db: Db, userId: string, isAdmin: boolean) {
       entity: { type: "user", id: userId, label: userLabel(user) },
       details: { isAdmin: { before: user.isAdmin, after: isAdmin }, source: "admin_panel" },
     });
+    // Losing the role ends every Claude connection with it (#293); getting it back means connecting again.
+    if (!isAdmin) revokeAllForUser(tx, userId, getAuditContext()?.actorUserId ?? null);
     return updated;
   });
 }

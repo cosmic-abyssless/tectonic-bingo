@@ -17,6 +17,8 @@ import { auditContext } from "../audit/middleware";
 import { createMcpRouter } from "./router";
 import { authorizeReturnPath, isAllowedRedirectUri, RETURN_COOKIE } from "./oauthProvider";
 import { RATE_LIMIT, resetRateLimits, takeRateLimit } from "./tools";
+import { listConnections, revokeConnection } from "./connections";
+import { setUserAdmin } from "../services/userService";
 import { buildReplica, resetReplica } from "./sql/replica";
 import { saveTo, tempDir } from "../testUtils/mcpSql";
 
@@ -172,10 +174,10 @@ async function token(params: Record<string, string>): Promise<{ status: number; 
 }
 
 /** A registered client, an approving admin, and the tokens it got. */
-async function connect(): Promise<{ clientId: string; access: string; refresh: string }> {
+async function connect(userId = adminId): Promise<{ clientId: string; access: string; refresh: string }> {
   const clientId = ((await (await register()).json()) as { client_id: string }).client_id;
   const browser = new Browser();
-  await browser.login(adminId);
+  await browser.login(userId);
   const { verifier, challenge } = pkce();
   const code = (await approve(browser, clientId, challenge)).searchParams.get("code")!;
   const { body } = await token({ grant_type: "authorization_code", client_id: clientId, code, code_verifier: verifier, redirect_uri: CALLBACK, resource: `${base}/mcp` });
@@ -527,5 +529,60 @@ describe("rate limit", () => {
     expect(takeRateLimit("a", start + 1000)).toEqual({ ok: false, retryAfterSeconds: 59 });
     expect(takeRateLimit("b", start + 1000).ok).toBe(true);
     expect(takeRateLimit("a", start + RATE_LIMIT.windowMs).ok).toBe(true);
+  });
+});
+
+describe("connections", () => {
+  const tools = { jsonrpc: "2.0", id: 1, method: "tools/list" };
+
+  it("lists an Admin's live connections with the app's name and redirect host", async () => {
+    await connect();
+    const otherAdmin = db.insert(users).values({ discordId: "3", discordUsername: "other", isAdmin: true }).returning().get().id;
+    await connect(otherAdmin);
+    const mine = listConnections(db, adminId);
+    expect(mine).toEqual([expect.objectContaining({ clientName: "Claude", redirectHost: "claude.ai", user: expect.objectContaining({ id: adminId, discordUsername: "admin" }) })]);
+    expect(listConnections(db).map((c) => c.user.id).sort()).toEqual([adminId, otherAdmin].sort());
+  });
+
+  it("revoking your own connection stops its access and refresh tokens at once, and is audited", async () => {
+    const { clientId, access, refresh } = await connect();
+    const [conn] = listConnections(db, adminId);
+    revokeConnection(db, conn.id, { id: adminId, isSiteAdmin: false });
+
+    expect((await callMcp(access, tools)).status).toBe(401);
+    expect(await token({ grant_type: "refresh_token", client_id: clientId, refresh_token: refresh })).toMatchObject({ status: 400, body: { error: "invalid_grant" } });
+    expect(listConnections(db, adminId)).toEqual([]);
+    const entry = db.select().from(auditLog).where(eq(auditLog.action, "mcp.connection_revoked")).get()!;
+    expect(entry).toMatchObject({ bingoId: null, entityType: "mcp_connection", entityId: conn.id });
+    expect(JSON.parse(entry.details)).toEqual({ clientName: "Claude", redirectHost: "claude.ai", ownerUserId: adminId, ownerName: "admin", byOwner: true, reason: "revoked" });
+  });
+
+  it("only lets a Site Admin revoke someone else's connection", async () => {
+    const { access } = await connect();
+    const [conn] = listConnections(db, adminId);
+    const otherAdmin = db.insert(users).values({ discordId: "3", discordUsername: "other", isAdmin: true }).returning().get().id;
+
+    expect(() => revokeConnection(db, conn.id, { id: otherAdmin, isSiteAdmin: false })).toThrow("Connection not found");
+    expect((await callMcp(access, tools)).status).toBe(200);
+
+    revokeConnection(db, conn.id, { id: otherAdmin, isSiteAdmin: true });
+    expect((await callMcp(access, tools)).status).toBe(401);
+    expect(JSON.parse(db.select().from(auditLog).where(eq(auditLog.action, "mcp.connection_revoked")).get()!.details)).toMatchObject({ ownerUserId: adminId, byOwner: false });
+    // Already revoked: nothing left to revoke.
+    expect(() => revokeConnection(db, conn.id, { id: otherAdmin, isSiteAdmin: true })).toThrow("Connection not found");
+  });
+
+  it("revokes every token when the Admin role is removed, in the same change, and doesn't bring them back with the role", async () => {
+    const first = await connect();
+    const second = await connect();
+    setUserAdmin(db, adminId, false);
+
+    expect(db.select().from(oauthTokens).all().every((t) => t.revokedAt !== null)).toBe(true);
+    const entries = db.select().from(auditLog).where(eq(auditLog.action, "mcp.connection_revoked")).all().map((e) => JSON.parse(e.details));
+    expect(entries).toEqual([expect.objectContaining({ reason: "admin_removed", ownerUserId: adminId }), expect.objectContaining({ reason: "admin_removed", ownerUserId: adminId })]);
+
+    setUserAdmin(db, adminId, true);
+    expect((await callMcp(first.access, tools)).status).toBe(401);
+    expect((await token({ grant_type: "refresh_token", client_id: second.clientId, refresh_token: second.refresh })).body).toMatchObject({ error: "invalid_grant" });
   });
 });
