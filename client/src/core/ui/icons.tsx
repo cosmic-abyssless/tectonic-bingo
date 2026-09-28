@@ -355,3 +355,26 @@ export const FastForwardIcon = (p: IconProps) => (
     <path d="M8 3.5v9L14 8zM1.5 3.5v9L7.5 8z" fill="currentColor" />
   </Svg>
 );
+
+/** Two overlapping sheets: copy to the clipboard. */
+export const CopyIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+    <path d="M10.5 3.5V3A1.5 1.5 0 0 0 9 1.5H3A1.5 1.5 0 0 0 1.5 3v6A1.5 1.5 0 0 0 3 10.5h.5" />
+  </Svg>
+);
+
+export const DownloadIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 2v8.5M4.75 7.25 8 10.5l3.25-3.25" />
+    <path d="M2.5 11.5v1A1.5 1.5 0 0 0 4 14h8a1.5 1.5 0 0 0 1.5-1.5v-1" />
+  </Svg>
+);
+
+/** An arrow up out of a tray: the system share sheet. */
+export const ShareIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 10V1.75M5 4.5l3-2.75 3 2.75" />
+    <path d="M5.5 7H4A1.5 1.5 0 0 0 2.5 8.5v4A1.5 1.5 0 0 0 4 14h8a1.5 1.5 0 0 0 1.5-1.5v-4A1.5 1.5 0 0 0 12 7h-1.5" />
+  </Svg>
+);

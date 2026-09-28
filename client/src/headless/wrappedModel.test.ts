@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { achievementDef } from "@bingo/shared";
 import type { AvatarUser, BingoWrapped, MyWrappedResponse, PlayerWrapped, WrappedCaptain, WrappedDrop, WrappedDuo, WrappedYou } from "@bingo/shared";
+import type { WrappedOutroModel, WrappedShareCardModel } from "./types";
 import { aboveAverage, buildWrappedStory, carriedBanter, draftGrade, dropLuck, ordinal, rateLabel, rejectionBanter, shortDuration } from "./wrappedModel";
 
 const T0 = Date.UTC(2026, 0, 3, 12);
@@ -66,8 +67,8 @@ function response(player: PlayerWrapped | null, extra: Partial<MyWrappedResponse
 }
 
 const player = (you: Partial<WrappedYou> = {}): PlayerWrapped => ({ userId: "me", teamId: "a", you: { ...emptyYou, ...you }, duo: null, captain: null });
-const opts = { viewerId: "me", viewerName: "me rsn", startsAt: T0, endsAt: T0 + 24 * HOUR };
-const actions = { goToBoard: () => {}, goToRewind: () => {} };
+const opts = { viewerId: "me", viewerName: "me rsn", viewerAvatarUrl: "https://cdn.discordapp.com/embed/avatars/0.png", startsAt: T0, endsAt: T0 + 24 * HOUR, siteLabel: "tectonic.bingo" };
+const actions = { goToBoard: () => {}, goToRewind: () => {}, outroReached: () => {} };
 const story = (data: MyWrappedResponse) => buildWrappedStory(data, opts, actions, "winter");
 const kinds = (data: MyWrappedResponse) => story(data).sections.map((s) => s.id);
 
@@ -341,5 +342,97 @@ describe("Your Duo and Your Draft", () => {
     const c = sectionOf(response({ ...player({ submissions: 3 }), captain: captain([[1, 1, 4]]) }), "captain")!;
     if (c.kind !== "captain") throw new Error("not the Draft");
     expect(c.steal).toBeNull();
+  });
+});
+
+describe("share cards", () => {
+  const cardsOf = (data: MyWrappedResponse) => (story(data).sections.find((s) => s.id === "outro")!.section as WrappedOutroModel).cards;
+  const card = <K extends WrappedShareCardModel["kind"]>(data: MyWrappedResponse, kind: K) => cardsOf(data).find((c): c is Extract<WrappedShareCardModel, { kind: K }> => c.kind === kind);
+  const scored = (you: Partial<WrappedYou> = {}) => player({ submissions: 3, pointsShare: 42.125, teamRank: 1, teamSize: 8, bingoRank: 3, bingoPlayers: 42, gpGained: 1_500_000_000, ...you });
+
+  it("gives a Player their Player, Team and Bingo cards, and anyone else the Bingo card only", () => {
+    expect(cardsOf(response(scored())).map((c) => c.kind)).toEqual(["player", "team", "bingo"]);
+    expect(cardsOf(response(null)).map((c) => c.kind)).toEqual(["bingo"]);
+  });
+
+  it("footers every card with the Bingo and the site, and names its file", () => {
+    for (const c of cardsOf(response(scored()))) {
+      expect(c.bingoName).toBe("Winter Bingo");
+      expect(c.siteLabel).toBe("tectonic.bingo");
+      expect(c.fileName).toBe(`winter-wrapped-${c.kind}.png`);
+    }
+  });
+
+  it("reads a Player's ranks as the Bingo's then the Team's, and only the Team's in Wrapped published before the Bingo's was stored", () => {
+    expect(card(response(scored()), "player")!.pointsShare).toEqual({ shareLabel: "42.13", rankLabel: "#3 of 42 · #1 of 8 on Team" });
+    expect(card(response(scored({ bingoRank: undefined, bingoPlayers: undefined })), "player")!.pointsShare!.rankLabel).toBe("#1 of 8 on Team");
+  });
+
+  it("fills the Player card: name, avatar, Team, Duo partner, pick, Drop value, up to 3 Titles and top drops", () => {
+    const titles = ["Carry", "Closer", "Spoon", "Dry"].map((name) => ({ id: name.toLowerCase(), name, text: "x" }));
+    const drops = [drop("s1"), drop("s2", { itemName: "Elysian sigil", quantity: 2, gpValue: 700_000_000 }), drop("s3", { gpValue: 5_000_000 }), drop("s4", { gpValue: 1_000_000 })];
+    const data = response({
+      ...scored({ titles, topDrops: drops, draft: { pickNumber: 7, position: 9 }, driestStreak: { boss: "Vorkath", kills: 191, oneIn: 30 } }),
+      duo: { partner: u("pal"), combinedPointsShare: 50, myPointsShare: 42, partnerPointsShare: 8, rank: 1, duoCount: 2, pickNumber: 7 },
+    });
+    const c = card(data, "player")!;
+    expect(c).toMatchObject({ name: "me rsn", avatarUrl: opts.viewerAvatarUrl, team: { name: "Red", color: "#f00" }, partnerLabel: "with pal rsn", pickLabel: "Pick #7", dropValueLabel: "1.5b" });
+    expect(c.titles.map((t) => t.name)).toEqual(["Carry", "Closer", "Spoon"]);
+    expect(c.topDrops.map((d) => [d.itemName, d.quantityLabel, d.gpLabel, d.iconUrl])).toEqual([
+      ["Twisted bow", null, "1.2b", "/wiki-icons/Twisted%20bow.png"],
+      ["Elysian sigil", "×2", "700m", "/wiki-icons/Elysian%20sigil.png"],
+      ["Twisted bow", null, "5m", "/wiki-icons/Twisted%20bow.png"],
+    ]);
+    expect(c.driestStreak).toEqual({ boss: "Vorkath", killsLabel: "191 kills", chanceLabel: "1 in 30" });
+  });
+
+  it("leaves out each part of the Player card without data, and the card itself with nothing to show", () => {
+    const c = card(response(player({ gpGained: 3_000_000 })), "player")!;
+    expect(c).toMatchObject({ partnerLabel: null, pickLabel: null, pointsShare: null, titles: [], topDrops: [], driestStreak: null, dropValueLabel: "3m" });
+    expect(cardsOf(response(player())).map((c) => c.kind)).toEqual(["team", "bingo"]);
+  });
+
+  it("fills the Team card with its placement, points, Tiles and lines, MVP and biggest drop", () => {
+    const data = response(scored());
+    data.bingo.teams[1]!.biggestDrop = drop("s5", { player: u("pal"), itemName: "Tumeken's shadow (uncharged)" });
+    expect(card(data, "team")).toMatchObject({
+      name: "Red",
+      color: "#f00",
+      placement: 2,
+      placementLabel: "2nd of 2",
+      pointsLabel: "200",
+      tilesCompleted: 4,
+      linesCompleted: 1,
+      mvp: { person: { name: "me rsn", isYou: true }, shareLabel: "40.5" },
+      biggestDrop: { itemName: "Tumeken's shadow (uncharged)", gpLabel: "1.2b", player: { name: "pal rsn" } },
+    });
+  });
+
+  it("fills the Bingo card: the winner (every Team tied for first), totals, rarest drop with its Player, and the biggest Steal", () => {
+    const data = response(null);
+    data.bingo.biggestSteal = { player: u("pal"), teamId: "a", pickNumber: 9, position: 12, rank: 2, placesBeaten: 10 };
+    expect(card(data, "bingo")).toMatchObject({
+      winners: [{ name: "Blue", color: "#f00" }],
+      winnerPointsLabel: "300",
+      totalGpLabel: "5b",
+      submissionsLabel: "120",
+      rarestDrop: { itemName: "Twisted bow", chanceLabel: "1 in 90,000", player: { name: "me rsn" } },
+      steal: { person: { name: "pal rsn" }, pickLabel: "Pick #9", rankLabel: "2nd", placesBeatenLabel: "10 places" },
+    });
+    data.bingo.teams[1]!.placement = 1;
+    expect(card(data, "bingo")!.winners.map((w) => w.name)).toEqual(["Blue", "Red"]);
+  });
+
+  it("leaves out the Bingo card's parts without data, and the card with nothing at all", () => {
+    const data = response(null);
+    data.bingo.rarestDrop = drop("s9", { luckOneIn: null });
+    expect(card(data, "bingo")).toMatchObject({ rarestDrop: null, steal: null });
+    const empty = response(null, { bingo: { ...bingo(), teams: [], totalGp: 0, totalSubmissions: 0, rarestDrop: null } });
+    expect(cardsOf(empty)).toEqual([]);
+  });
+
+  it("offers the jump to the cards only when the Outro was reached on an earlier visit", () => {
+    expect(story(response(null)).outroReachedBefore).toBe(false);
+    expect(buildWrappedStory(response(null), { ...opts, outroReachedBefore: true }, actions, "winter").outroReachedBefore).toBe(true);
   });
 });

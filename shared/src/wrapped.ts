@@ -45,6 +45,13 @@ export interface WrappedYou {
   teamPointsFraction: number;
   teamRank: number;
   teamSize: number;
+  /**
+   * Rank of their Points share among every Player in the Bingo (1 = top; a Duo's halves ranked separately, tied Players
+   * sharing a rank, as Teams on the same points share a placement), and how many Players were ranked. For the share
+   * cards' "#3 of 42". Missing from Wrapped published before it was stored.
+   */
+  bingoRank?: number;
+  bingoPlayers?: number;
   /** Total drop value (CONTEXT.md), and the Buy-in it's compared with (null when the Bingo had none). */
   gpGained: number;
   buyIn: number | null;

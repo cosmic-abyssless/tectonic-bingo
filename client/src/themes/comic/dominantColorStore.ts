@@ -6,8 +6,11 @@
 //
 // Best-effort throughout: unavailable or full storage just means no persistence.
 // Only found colours are stored (a failed load may be transient).
+//
+// Bump the key version whenever the extraction changes: uploads are immutable, so
+// stale colours would otherwise never be recomputed (v2: caption panel cropped, #301).
 
-export const DOMINANT_COLOR_STORAGE_KEY = "dominant:v1";
+export const DOMINANT_COLOR_STORAGE_KEY = "dominant:v2";
 export const DOMINANT_COLOR_MAX_ENTRIES = 300;
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;

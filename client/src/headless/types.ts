@@ -852,7 +852,95 @@ export interface WrappedOutroModel {
   kind: "outro";
   art: WrappedSectionArtModel;
   bingoName: string;
+  /**
+   * The share cards to end on, in order (CONTEXT.md "Wrapped"): a Player gets their Player, Team and Bingo cards,
+   * anyone else the Bingo card only. A card with nothing to show is left out, so this can be empty.
+   */
+  cards: WrappedShareCardModel[];
 }
+
+// Wrapped's share cards: images made in the viewer's browser (never on the server) from these display-ready values,
+// through the WrappedShareCard slot. Every card is portrait 4:5 and has the Bingo's name and the site in its footer.
+// Their contents are fixed: a Player can't pick what goes on one. A field without data is null (or an empty list).
+
+/** A drop on a share card: shown with its item's wiki icon, never a Submission screenshot. */
+export interface WrappedShareCardDropModel {
+  key: string;
+  itemName: string;
+  /** The item's wiki icon (through the site's own cache); not every item has one, so draw it with a fallback. */
+  iconUrl: string | null;
+  /** "×3" for more than one, else null. */
+  quantityLabel: string | null;
+  /** "12.3m"; null for an item with no Drop value. */
+  gpLabel: string | null;
+}
+
+interface WrappedShareCardBase {
+  /** Unique among the viewer's cards. */
+  key: string;
+  /** "Player card": the card's name, for its buttons and the image's alt text. */
+  label: string;
+  /** The Bingo's name and the site ("tectonic.bingo"), for every card's footer. */
+  bingoName: string;
+  siteLabel: string;
+  /** What the downloaded (or shared) PNG is called. */
+  fileName: string;
+}
+
+/** The viewer's own card, titled with their name. */
+export interface WrappedPlayerCardModel extends WrappedShareCardBase {
+  kind: "player";
+  name: string;
+  avatarUrl: string;
+  team: { name: string; color: string | null } | null;
+  /** "with Zezima", for a Duo; else null. */
+  partnerLabel: string | null;
+  /** "Pick #7" when they were drafted; null otherwise (not drafted, or no Draft). */
+  pickLabel: string | null;
+  /**
+   * Their Points share and its ranks: "#3 of 42 · #1 of 8 on Team" (tied Players share a rank). Only the Team rank for
+   * Wrapped published before the Bingo-wide one was stored. Null when they scored nothing.
+   */
+  pointsShare: { shareLabel: string; rankLabel: string } | null;
+  /** Their Total drop value ("1.2b"), labelled just "Drop value" on the card; null for none. */
+  dropValueLabel: string | null;
+  /** Titles they held, at most 3. */
+  titles: { id: string; name: string }[];
+  /** Their most valuable drops, at most 3, highest first. */
+  topDrops: WrappedShareCardDropModel[];
+  /** Their driest streak, for a card with room for it. */
+  driestStreak: { boss: string; killsLabel: string; chanceLabel: string } | null;
+}
+
+export interface WrappedTeamCardModel extends WrappedShareCardBase {
+  kind: "team";
+  name: string;
+  color: string | null;
+  /** 1 = first (ties share one), for a medal colour; "1st of 4". */
+  placement: number;
+  placementLabel: string;
+  pointsLabel: string;
+  tilesCompleted: number;
+  linesCompleted: number;
+  mvp: { person: WrappedPersonModel; shareLabel: string } | null;
+  biggestDrop: (WrappedShareCardDropModel & { player: WrappedPersonModel | null }) | null;
+}
+
+export interface WrappedBingoCardModel extends WrappedShareCardBase {
+  kind: "bingo";
+  /** The winning Team, or every Team tied for first (and their points); empty (and null) without any Teams. */
+  winners: { name: string; color: string | null }[];
+  winnerPointsLabel: string | null;
+  /** The Drop value of every approved Claim ("5.2b"), and how many approved Submissions; each null at nothing. */
+  totalGpLabel: string | null;
+  submissionsLabel: string | null;
+  /** The drop with the best Luck, and who got it: "1 in 90,000". */
+  rarestDrop: (WrappedShareCardDropModel & { player: WrappedPersonModel | null; chanceLabel: string }) | null;
+  /** The draft's biggest Steal (CONTEXT.md), if there was one. */
+  steal: { person: WrappedPersonModel; pickLabel: string; rankLabel: string; placesBeatenLabel: string } | null;
+}
+
+export type WrappedShareCardModel = WrappedPlayerCardModel | WrappedTeamCardModel | WrappedBingoCardModel;
 
 export type WrappedSectionModel = WrappedIntroModel | WrappedYouModel | WrappedDuoModel | WrappedCaptainModel | WrappedModeratorModel | WrappedTeamModel | WrappedBingoModel | WrappedOutroModel;
 export type WrappedSectionKind = WrappedSectionModel["kind"];
@@ -868,5 +956,11 @@ export interface WrappedModel {
   sideArt: WrappedArtFrames[];
   /** The story in order, with every section that has nothing to say left out. `label` names it in the progress indicator. */
   sections: { id: WrappedSectionKind; label: string; section: WrappedSectionModel }[];
-  actions: { goToBoard(): void; goToRewind(): void };
+  /**
+   * The viewer reached the Outro on an earlier visit (remembered in their browser, per Bingo), so the page offers a
+   * jump straight to the share cards. False on a first visit, and whenever the browser couldn't remember.
+   */
+  outroReachedBefore: boolean;
+  /** `outroReached` remembers, for next time, that the viewer got to the Outro. */
+  actions: { goToBoard(): void; goToRewind(): void; outroReached(): void };
 }

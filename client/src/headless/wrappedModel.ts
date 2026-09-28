@@ -3,6 +3,7 @@
 // has nothing to say for this viewer. Pure, so it's tested without React.
 import { achievementDef, isAchievementKey, type AvatarUser, type MyWrappedResponse, type WrappedArtSection, type WrappedCaptain, type WrappedDrop, type WrappedPointsPoint, type WrappedTeam } from "@bingo/shared";
 import { thumbUrl } from "../api/imageVariants";
+import { wikiIconUrl } from "../api/wikiIcons";
 import { formatGp } from "../core/ui/gp";
 import { avatarUrl, displayName } from "../core/ui/user";
 import { formatOneIn } from "./rewindModel";
@@ -19,6 +20,8 @@ import type {
   WrappedPersonModel,
   WrappedSectionArtModel,
   WrappedSectionModel,
+  WrappedShareCardDropModel,
+  WrappedShareCardModel,
   WrappedTeamModel,
   WrappedTeamSuperlativesModel,
   WrappedYouModel,
@@ -28,9 +31,15 @@ export interface WrappedStoryOptions {
   viewerId: string;
   /** The viewer's name as the Bingo shows it (their RSN, else their Discord name), for the intro and their Moderator art. */
   viewerName: string;
+  /** Their avatar, for their Player card. */
+  viewerAvatarUrl: string;
   /** When the Bingo started and ended (ms), for the intro's dates and the charts' span. */
   startsAt: number | null;
   endsAt: number | null;
+  /** The site as the share cards' footer names it ("tectonic.bingo"). */
+  siteLabel: string;
+  /** Whether the viewer reached the Outro on an earlier visit (WrappedModel.outroReachedBefore). */
+  outroReachedBefore?: boolean;
 }
 
 const SECTION_LABEL: Record<WrappedSectionModel["kind"], string> = {
@@ -400,7 +409,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
   };
   sections.push(b);
 
-  sections.push({ kind: "outro", art: art("outro"), bingoName: bingo.bingoName });
+  sections.push({ kind: "outro", art: art("outro"), bingoName: bingo.bingoName, cards: shareCards(data, opts, slug, person) });
 
   return {
     slug,
@@ -409,6 +418,87 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
     sideArt: data.art?.side ?? [],
     publishedLabel: !data.preview && data.state.publishedAt ? `Published ${dateLabel(Date.parse(data.state.publishedAt), false)}` : null,
     sections: sections.map((section) => ({ id: section.kind, label: SECTION_LABEL[section.kind], section })),
+    outroReachedBefore: opts.outroReachedBefore ?? false,
     actions,
   };
+}
+
+/** Most Titles, and top drops, a Player card shows. */
+const CARD_TITLES = 3;
+const CARD_DROPS = 3;
+
+/**
+ * The share cards the story ends on (WrappedOutroModel.cards): a Player's Player, Team and Bingo cards, anyone else's
+ * Bingo card only, each left out when it has nothing to show. Drops are shown with their item's wiki icon, never a
+ * screenshot, so a card never needs one the viewer isn't allowed to see.
+ */
+export function shareCards(data: MyWrappedResponse, opts: WrappedStoryOptions, slug: string, person: (u: AvatarUser) => WrappedPersonModel): WrappedShareCardModel[] {
+  const { bingo, player } = data;
+  const base = (kind: WrappedShareCardModel["kind"], label: string) => ({ key: kind, label, bingoName: bingo.bingoName, siteLabel: opts.siteLabel, fileName: `${slug}-wrapped-${kind}.png` });
+  const cardDrop = (d: WrappedDrop, i = 0): WrappedShareCardDropModel => ({
+    key: `${d.submissionId}:${d.itemName}:${i}`,
+    itemName: d.itemName,
+    iconUrl: wikiIconUrl(d.itemName) ?? null,
+    quantityLabel: d.quantity > 1 ? `×${d.quantity.toLocaleString()}` : null,
+    gpLabel: d.gpValue !== null && d.gpValue > 0 ? formatGp(d.gpValue) : null,
+  });
+  const cards: WrappedShareCardModel[] = [];
+  const myTeam = player ? bingo.teams.find((t) => t.teamId === player.teamId) : undefined;
+
+  if (player) {
+    const y = player.you;
+    const teamRank = `#${y.teamRank} of ${y.teamSize} on Team`;
+    const card: WrappedShareCardModel = {
+      ...base("player", "Player card"),
+      kind: "player",
+      name: opts.viewerName,
+      avatarUrl: opts.viewerAvatarUrl,
+      team: myTeam ? { name: myTeam.name, color: myTeam.color } : null,
+      partnerLabel: player.duo ? `with ${displayName(player.duo.partner)}` : null,
+      pickLabel: y.draft ? `Pick #${y.draft.pickNumber}` : null,
+      pointsShare:
+        y.pointsShare > 0
+          ? { shareLabel: share(y.pointsShare), rankLabel: y.bingoRank && y.bingoPlayers ? `#${y.bingoRank} of ${y.bingoPlayers} · ${teamRank}` : teamRank }
+          : null,
+      dropValueLabel: y.gpGained > 0 ? formatGp(y.gpGained) : null,
+      titles: y.titles.slice(0, CARD_TITLES).map((t) => ({ id: t.id, name: t.name })),
+      topDrops: y.topDrops.filter((d) => d.gpValue !== null && d.gpValue > 0).slice(0, CARD_DROPS).map((d, i) => cardDrop(d, i)),
+      driestStreak: y.driestStreak && y.driestStreak.kills > 0 ? { boss: y.driestStreak.boss, killsLabel: plural(y.driestStreak.kills, "kill"), chanceLabel: formatOneIn(y.driestStreak.oneIn) } : null,
+    };
+    const { pointsShare, dropValueLabel, titles, pickLabel, topDrops, driestStreak } = card;
+    if (pointsShare || dropValueLabel || titles.length || pickLabel || topDrops.length || driestStreak) cards.push(card);
+  }
+
+  if (myTeam) {
+    cards.push({
+      ...base("team", "Team card"),
+      kind: "team",
+      name: myTeam.name,
+      color: myTeam.color,
+      placement: myTeam.placement,
+      placementLabel: `${ordinal(myTeam.placement)} of ${bingo.teams.length}`,
+      pointsLabel: myTeam.points.toLocaleString(),
+      tilesCompleted: myTeam.tilesCompleted,
+      linesCompleted: myTeam.linesCompleted,
+      mvp: myTeam.mvp ? { person: person(myTeam.mvp.player), shareLabel: share(myTeam.mvp.pointsShare) } : null,
+      biggestDrop: myTeam.biggestDrop ? { ...cardDrop(myTeam.biggestDrop), player: myTeam.biggestDrop.player ? person(myTeam.biggestDrop.player) : null } : null,
+    });
+  }
+
+  const winners = bingo.teams.filter((t) => t.placement === 1);
+  const rarest = bingo.rarestDrop && dropLuck(bingo.rarestDrop.luckOneIn, bingo.rarestDrop.luckKills);
+  const steal = bingo.biggestSteal;
+  const bingoCard: WrappedShareCardModel = {
+    ...base("bingo", "Bingo card"),
+    kind: "bingo",
+    winners: winners.map((t) => ({ name: t.name, color: t.color })),
+    winnerPointsLabel: winners[0] ? winners[0].points.toLocaleString() : null,
+    totalGpLabel: bingo.totalGp > 0 ? formatGp(bingo.totalGp) : null,
+    submissionsLabel: bingo.totalSubmissions > 0 ? bingo.totalSubmissions.toLocaleString() : null,
+    rarestDrop:
+      bingo.rarestDrop && rarest ? { ...cardDrop(bingo.rarestDrop), player: bingo.rarestDrop.player ? person(bingo.rarestDrop.player) : null, chanceLabel: rarest.chanceLabel } : null,
+    steal: steal ? { person: person(steal.player), pickLabel: `Pick #${steal.pickNumber}`, rankLabel: ordinal(steal.rank), placesBeatenLabel: plural(steal.placesBeaten, "place") } : null,
+  };
+  if (bingoCard.winners.length || bingoCard.totalGpLabel || bingoCard.submissionsLabel || bingoCard.rarestDrop || bingoCard.steal) cards.push(bingoCard);
+  return cards;
 }

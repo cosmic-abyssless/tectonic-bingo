@@ -311,6 +311,27 @@ describe("computeWrapped", () => {
     expect(moderation.busiestHour!.reviews).toBeGreaterThanOrEqual(1);
   });
 
+  it("ranks every Player's Points share across the whole Bingo, ties sharing a rank and a Duo's halves ranked apart", () => {
+    const fx = seed();
+    play(fx);
+    const { players } = computeWrapped(db, finish(fx));
+    const rank = (id: string) => {
+      const you = players.find((p) => p.userId === id)!.you;
+      return [you.bingoRank, you.bingoPlayers];
+    };
+    // Points share: dave 30 (the head), erin 10 (the fang), carol and frank 2 each (scales), alice and bob nothing.
+    expect(rank(fx.dave.id)).toEqual([1, 6]);
+    // The Duo's halves are two Players, each with their own rank.
+    expect(rank(fx.erin.id)).toEqual([2, 6]);
+    expect(rank(fx.frank.id)).toEqual([3, 6]);
+    // Tied Players share a rank, and the next one down skips past them.
+    expect(rank(fx.carol.id)).toEqual([3, 6]);
+    expect(rank(fx.alice.id)).toEqual([5, 6]);
+    expect(rank(fx.bob.id)).toEqual([5, 6]);
+    // The Team rank is still counted within the Team.
+    expect(players.find((p) => p.userId === fx.carol.id)!.you.teamRank).toBe(2);
+  });
+
   it("builds each Player's You, Duo and Team facts from approved Submissions only", () => {
     const fx = seed();
     play(fx);

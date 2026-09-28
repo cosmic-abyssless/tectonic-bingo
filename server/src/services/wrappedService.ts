@@ -370,6 +370,8 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
         teamPointsFraction: teamAwardPoints > 0 ? (c?.pointsShare ?? 0) / teamAwardPoints : 0,
         teamRank: 1 + teammates.filter((o) => beats(o.pointsShare, c?.pointsShare ?? 0)).length,
         teamSize: memberRows.filter((m) => m.teamId === teamId).length,
+        bingoRank: 1 + playerIds.filter((id) => beats(shareOf(id), shareOf(userId))).length,
+        bingoPlayers: playerIds.length,
         gpGained,
         buyIn: bingo.buyinAmount ?? null,
         coveredBuyIn: bingo.buyinAmount ? gpGained >= bingo.buyinAmount : null,
