@@ -33,7 +33,6 @@ export function WrappedProvider({ slug, children, renderLoading, renderError }: 
               viewerAvatarUrl: page.user.avatarUrl,
               startsAt: page.bingo.startsAt,
               endsAt: page.bingo.endsAt,
-              siteLabel: window.location.host,
               outroReachedBefore,
             },
             { goToBoard: () => navigate(`/b/${slug}`), goToRewind: () => navigate(`/b/${slug}/rewind`), outroReached: () => rememberOutroReached(slug) },

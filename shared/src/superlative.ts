@@ -3,6 +3,9 @@
 
 import type { AvatarUser } from "./index.ts";
 
+/** Most categories a Bingo can have: each Team's share card fits 3 (CONTEXT.md "Wrapped"). */
+export const MAX_SUPERLATIVE_CATEGORIES = 3;
+
 export interface SuperlativeCategory {
   id: string;
   bingoId: string;

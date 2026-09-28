@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Bingo, SuperlativeCategory } from "@bingo/shared";
+import { MAX_SUPERLATIVE_CATEGORIES, type Bingo, type SuperlativeCategory } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { optimisticUpdate } from "../../api/optimistic";
 import { adminQueryKeys, useSuperlativeCategories } from "../../api/adminQueries";
@@ -21,6 +21,8 @@ export function SuperlativesManager({ slug, bingo }: { slug: string; bingo: Bing
   const queryClient = useQueryClient();
   const [newName, setNewName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Each Team's share card fits 3; a Bingo from before the cap keeps its extras but can't add more.
+  const full = categories.length >= MAX_SUPERLATIVE_CATEGORIES;
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.superlatives(slug) });
 
@@ -63,7 +65,7 @@ export function SuperlativesManager({ slug, bingo }: { slug: string; bingo: Bing
     <div className="max-w-2xl space-y-4">
       {categories.length === 0 ? (
         <EmptyState icon={<ListIcon />} title="No superlative categories">
-          Add categories below (e.g. "Team MVP", "Team Spirit") for each Team to vote on during Live. With none, no Superlatives show anywhere.
+          Add up to {MAX_SUPERLATIVE_CATEGORIES} categories below (e.g. "Team MVP", "Team Spirit") for each Team to vote on during Live. With none, no Superlatives show anywhere.
         </EmptyState>
       ) : (
         <div role="list" aria-label="Superlative categories" className="space-y-2">
@@ -86,19 +88,27 @@ export function SuperlativesManager({ slug, bingo }: { slug: string; bingo: Bing
         </div>
       )}
 
-      <Card className="flex items-center gap-2 p-3">
-        <Input
-          aria-label="New category"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && add()}
-          placeholder="New category…"
-          className="min-w-0 flex-1"
-        />
-        <Button onPress={add} isDisabled={!newName.trim()} className="shrink-0">
-          Add
-        </Button>
-      </Card>
+      {full ? (
+        <p className="text-xs text-on-surface-muted">
+          {categories.length > MAX_SUPERLATIVE_CATEGORIES
+            ? `A Bingo can have at most ${MAX_SUPERLATIVE_CATEGORIES} categories, since each Team's share card fits ${MAX_SUPERLATIVE_CATEGORIES}. This one has more from before the limit: they all still work and show in Wrapped, but the Team card shows the first ${MAX_SUPERLATIVE_CATEGORIES}.`
+            : `That's the most a Bingo can have: each Team's share card fits ${MAX_SUPERLATIVE_CATEGORIES}. Delete one to add another.`}
+        </p>
+      ) : (
+        <Card className="flex items-center gap-2 p-3">
+          <Input
+            aria-label="New category"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && add()}
+            placeholder="New category…"
+            className="min-w-0 flex-1"
+          />
+          <Button onPress={add} isDisabled={!newName.trim()} className="shrink-0">
+            Add
+          </Button>
+        </Card>
+      )}
       {error && <Notice tone="danger">{error}</Notice>}
 
       {categories.length > 0 && (bingo.stage === "live" || bingo.stage === "complete") && <SuperlativeTurnout slug={slug} />}

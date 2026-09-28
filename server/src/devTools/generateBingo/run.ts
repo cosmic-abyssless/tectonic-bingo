@@ -10,6 +10,7 @@ import { chooseMods, makePlayers, pairUp, type Player } from "./people";
 import { Rng, clamp } from "./rng";
 import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, handEvents, importBingo, nameTeamEvents, runDraft, runInOrder, runSignups, setStage, type Ctx } from "./setup";
 import { Simulation, describe, newPartState, type SimTeam } from "./simulate";
+import { ensureCategories, planVotes } from "./superlatives";
 import { HOUR, buildTimeline, fmt, runLimit, type Timeline } from "./timeline";
 
 /** The board to build the bingo from: another bingo on the same server (exported through the real endpoint), or a document. */
@@ -147,6 +148,8 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   const raised = hands.raised;
   const nameById = new Map((await fetchTeams(ctx)).map((t) => [t.id, t.name]));
   log(`${seeds.length} teams named, ${raised.length} hands raised`);
+  const categories = await ensureCategories(api, adminDiscordId, slug, new Date(tl.revealAt.getTime() + 30 * 60_000));
+  log(`superlative categories: ${categories.map((c) => c.name).join(", ")}`);
   if (options.stage === "reveal") return result;
 
   await setStage(ctx, "live", tl.startsAt);
@@ -177,6 +180,21 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
     });
   }
 
+  // Superlative votes, through Live (voting closes when the Bingo is Finished); any past the run's limit never happen.
+  const votes = planVotes(teamRows.map((t) => ({ members: t.players })), categories, new Date(tl.startsAt.getTime() + 2 * HOUR), new Date(tl.endsAt.getTime() - 5 * 60_000), rng.fork("superlatives"));
+  const voting = { cast: 0, voters: new Set<number>(), refused: 0 };
+  for (const vote of votes) {
+    sim.at(vote.at, async () => {
+      try {
+        await api.as(vote.voter.discordId).put(`/api/bingos/${slug}/superlatives/${vote.categoryId}`, { nomineeUserId: vote.nomineeUserId }, { at: vote.at });
+        voting.cast++;
+        voting.voters.add(vote.voter.index);
+      } catch {
+        voting.refused++;
+      }
+    });
+  }
+
   log(`playing ${fmt(tl.startsAt)} to ${fmt(ctx.limit)}...`);
   const summary = await sim.run();
   await sim.fillPoints();
@@ -184,6 +202,8 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
     .as(adminDiscordId)
     .post<{ players: number; snapshots: number }>(`/api/dev/bingos/${slug}/fake-wom-snapshots`, { seed: rng.fork("wom").int(0, 2 ** 31 - 1) }, { at: ctx.limit });
   log(`made-up Wise Old Man snapshots: ${wom.snapshots} for ${wom.players} players`);
+  log(`superlative votes: ${voting.cast} cast by ${voting.voters.size} players${voting.refused ? `, ${voting.refused} refused` : ""}`);
+  if (voting.refused > 0) result.problems.push(`${voting.refused} superlative votes were refused`);
 
   log(describe(summary));
   for (const t of summary.teams) {

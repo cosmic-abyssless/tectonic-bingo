@@ -12,6 +12,7 @@ import {
   CUT_MODES,
   isWrappedArtGroup,
   isWrappedArtSection,
+  MAX_SUPERLATIVE_CATEGORIES,
   type BingoExportDocument,
   type ExportNode,
   type ExportWrappedArt,
@@ -473,8 +474,9 @@ export function importBingo(
       signupService.createQuestion(tx, { bingoId: bingo.id, prompt: q.prompt, helperText: q.helperText ?? null, type: q.type, optionsJson: q.optionsJson, allowOther: q.allowOther ?? false, multiplePicks: q.multiplePicks ?? false, maxPicks: q.maxPicks ?? null, required: q.required, sortOrder: q.sortOrder, visibility: q.visibility ?? "captains" });
     }
 
-    // Superlative categories (CONTEXT.md): absent in older files, none to create. Votes never travel with an export.
-    for (const c of doc.superlativeCategories ?? []) {
+    // Superlative categories (CONTEXT.md): absent in older files, none to create. Votes never travel with an export. A
+    // file from before the cap of 3 brings only its first 3, in their order.
+    for (const c of [...(doc.superlativeCategories ?? [])].sort((a, b) => a.sortOrder - b.sortOrder).slice(0, MAX_SUPERLATIVE_CATEGORIES)) {
       superlativeService.createCategory(tx, { bingoId: bingo.id, name: c.name });
     }
 
