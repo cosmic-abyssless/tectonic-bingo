@@ -6,7 +6,7 @@ export function AchievementTotal({ earned, total }: { earned: number; total: num
   const { colors } = useComic();
   const fraction = total > 0 ? earned / total : 0;
   return (
-    <div className="border-[3px] px-3 py-2.5" style={{ background: colors.YELLOW, color: colors.ON_YELLOW, borderColor: colors.LINE, boxShadow: `3px 3px 0 ${colors.LINE}` }}>
+    <div className="border-[3px] px-3 py-2.5" style={{ background: colors.YELLOW, color: colors.ON_YELLOW, borderColor: colors.LINE, boxShadow: `3px 3px 0 ${colors.SHADOW}` }}>
       <div className="flex items-baseline justify-between gap-3 uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT }}>
         <span className="text-xl">Unlocked</span>
         <span className="num text-2xl">

@@ -14,6 +14,24 @@ export function formatDuration(ms: number): string {
   return parts.join(" ");
 }
 
+/** "6d 23h" style duration: the two largest units, for a countdown with little room (a phone header). */
+export function formatShortDuration(ms: number): string {
+  if (ms <= 0) return "0s";
+  const totalSeconds = Math.floor(ms / 1000);
+  const units: [number, string][] = [
+    [Math.floor(totalSeconds / 86400), "d"],
+    [Math.floor((totalSeconds % 86400) / 3600), "h"],
+    [Math.floor((totalSeconds % 3600) / 60), "m"],
+    [totalSeconds % 60, "s"],
+  ];
+  const first = units.findIndex(([n]) => n > 0);
+  return units
+    .slice(first, first + 2)
+    .filter(([n]) => n > 0)
+    .map(([n, u]) => `${n}${u}`)
+    .join(" ");
+}
+
 /** "H:MM:SS" style countdown, for freeze timers. */
 export function formatCountdown(ms: number): string {
   if (ms <= 0) return "0:00:00";

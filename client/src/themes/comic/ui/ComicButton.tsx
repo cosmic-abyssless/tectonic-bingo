@@ -42,7 +42,7 @@ export function ComicButton({ variant = "secondary", size = "md", tilt = 0, sfx,
       <Link
         to={href}
         className={`comic-link inline-flex items-center justify-center gap-2 whitespace-nowrap uppercase leading-none ${SIZE[size]} ${className ?? ""}`}
-        style={{ fontFamily: COMIC_FONT, letterSpacing: "0.04em", ["--comic-ink" as string]: colors.INK, ["--comic-line" as string]: colors.LINE, ["--comic-yellow" as string]: colors.YELLOW, ["--comic-on-yellow" as string]: colors.ON_YELLOW, ...style }}
+        style={{ fontFamily: COMIC_FONT, letterSpacing: "0.04em", ["--comic-ink" as string]: colors.INK, ["--comic-line" as string]: colors.LINE, ["--comic-shadow" as string]: colors.SHADOW, ["--comic-link-hover" as string]: colors.LINK_HOVER, ...style }}
       >
         {props.children}
       </Link>
@@ -64,11 +64,11 @@ export function ComicButton({ variant = "secondary", size = "md", tilt = 0, sfx,
     background: f.bg,
     color: f.fg,
     borderColor: f.border,
-    boxShadow: raised ? `3px 3px 0 ${colors.LINE}` : undefined,
+    boxShadow: raised ? `3px 3px 0 ${colors.SHADOW}` : undefined,
     // Light-on-red needs the same hard drop the cover lettering has.
     textShadow: variant === "primary" ? `0.06em 0.06em 0 ${colors.TITLE_STROKE}` : undefined,
     transform: tilt ? `rotate(${tilt}deg)` : undefined,
-    ["--comic-ink" as string]: colors.INK, ["--comic-line" as string]: colors.LINE,
+    ["--comic-ink" as string]: colors.INK, ["--comic-line" as string]: colors.LINE, ["--comic-shadow" as string]: colors.SHADOW,
     ["--comic-yellow" as string]: colors.YELLOW, ["--comic-on-yellow" as string]: colors.ON_YELLOW,
     ...style,
   };
@@ -108,7 +108,7 @@ export function ComicIconButton({ label, sfx, className, style, onPress, ...prop
       aria-label={label}
       {...props}
       onPress={handlePress}
-      style={{ background: colors.PAPER_RAISED, color: colors.INK, borderColor: colors.LINE, boxShadow: `3px 3px 0 ${colors.LINE}`, ["--comic-ink" as string]: colors.INK, ["--comic-line" as string]: colors.LINE, ...style }}
+      style={{ background: colors.PAPER_RAISED, color: colors.INK, borderColor: colors.LINE, boxShadow: `3px 3px 0 ${colors.SHADOW}`, ["--comic-ink" as string]: colors.INK, ["--comic-line" as string]: colors.LINE, ["--comic-shadow" as string]: colors.SHADOW, ...style }}
       className={`comic-press comic-lift inline-flex size-10 cursor-pointer items-center justify-center rounded-full border-[3px] disabled:cursor-not-allowed disabled:opacity-40 ${className ?? ""}`}
     />
   );

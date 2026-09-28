@@ -23,7 +23,7 @@ export function ScreenshotDropzone({ screenshot }: { screenshot: SubmissionFlowM
           borderColor: colors.LINE,
           borderStyle: has ? "solid" : "dashed",
           background: screenshot.dragOver ? colors.YELLOW_TINT : has ? colors.PAPER_RAISED : colors.PAPER_ALT,
-          boxShadow: `4px 4px 0 ${colors.LINE}`,
+          boxShadow: `4px 4px 0 ${colors.SHADOW}`,
         }}
       >
         {has ? (

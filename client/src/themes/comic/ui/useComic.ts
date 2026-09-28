@@ -22,7 +22,9 @@ export function comicVars(c: ComicColors): CSSProperties {
   return {
     "--comic-ink": c.INK,
     "--comic-line": c.LINE,
+    "--comic-shadow": c.SHADOW,
     "--comic-on-yellow": c.ON_YELLOW,
+    "--comic-link-hover": c.LINK_HOVER,
     "--comic-title-fill": c.TITLE_FILL,
     "--comic-title-stroke": c.TITLE_STROKE,
     "--comic-paper": c.PAPER,

@@ -12,7 +12,7 @@ export function NotPartStage({ isCut, removedFromTeam }: { isCut: boolean; remov
   return (
     <section
       className="mx-auto flex max-w-lg flex-col items-center gap-3 border-[3px] px-5 py-8 text-center"
-      style={{ background: colors.PAPER, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.LINE}` }}
+      style={{ background: colors.PAPER, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.SHADOW}` }}
     >
       <Stamp kind="custom" rotate={-6} size="md">
         {isCut ? "Cut" : "Members only"}

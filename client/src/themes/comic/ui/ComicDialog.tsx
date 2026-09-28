@@ -7,6 +7,7 @@ import { XIcon } from "../../../core/ui/icons";
 import { COMIC_FONT } from "../font";
 import { ComicBurstRays } from "./ComicBurst";
 import { ComicIconButton } from "./ComicButton";
+import { isDarkPaper, PrintedShade, toneColors, type ToneOrColor } from "./tones";
 import { useComic } from "./useComic";
 import { useModalDepth } from "./modalStack";
 
@@ -89,7 +90,7 @@ export function ComicDialog({
       <AriaModal className={`comic-panel-pop relative w-full ${MAX_WIDTH[size]} ${className ?? ""}`}>
         <div
           className="relative max-h-[90vh] overflow-y-auto border-[3px]"
-          style={{ background: colors.PAPER, borderColor: colors.LINE, boxShadow: `8px 8px 0 ${colors.LINE}, 8px 8px 0 3px ${colors.YELLOW}` }}
+          style={{ background: colors.PAPER, borderColor: colors.LINE, boxShadow: `8px 8px 0 ${colors.SHADOW}, 8px 8px 0 3px ${colors.YELLOW}` }}
         >
           <AriaDialog className="outline-none">{children}</AriaDialog>
         </div>
@@ -114,16 +115,22 @@ export function ComicDialogHeader({
   subtitle?: ReactNode;
   onClose: () => void;
   action?: ReactNode;
-  tone?: "yellow" | "red" | "blue";
+  /** A named tone, or a colour of its own (a team's). */
+  tone?: ToneOrColor;
   below?: ReactNode;
 }) {
   const { colors } = useComic();
-  const fill = { yellow: colors.YELLOW, red: colors.RED, blue: colors.BLUE }[tone];
-  const fg = tone === "yellow" ? colors.ON_YELLOW : colors.ON_LOUD;
+  const { loud, tint, onLoud } = toneColors(colors, tone);
+  // A loud slab on light paper; on a dark palette's charcoal a slab of bright yellow or blue that size glares, so it's
+  // the tone's tint and shading instead, lettered in the palette's own ink (as a ToneBox is).
+  const dark = isDarkPaper(colors);
+  const fill = dark ? tint : loud;
+  const fg = dark ? colors.INK : onLoud;
   return (
     <div className="sticky top-0 z-10">
-      <div className="flex items-start justify-between gap-4 border-b-[3px] px-5 py-3" style={{ background: fill, borderColor: colors.LINE, color: fg }}>
-        <div className="min-w-0">
+      <div className="relative flex items-start justify-between gap-4 border-b-[3px] px-5 py-3" style={{ background: fill, borderColor: colors.LINE, color: fg }}>
+        {dark && <PrintedShade ink={loud} />}
+        <div className="relative min-w-0">
           <Heading slot="title" className="truncate text-3xl uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: fg }}>
             {title}
           </Heading>
@@ -133,7 +140,7 @@ export function ComicDialogHeader({
             </p>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="relative flex shrink-0 items-center gap-2">
           {action}
           <ComicIconButton label="Close" onPress={onClose} className="size-9">
             <XIcon />

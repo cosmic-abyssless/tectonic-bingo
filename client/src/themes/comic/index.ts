@@ -16,6 +16,7 @@ import { TileCell } from "./board/TileCell";
 import { TileModal } from "./board/TileModal";
 import { TaskPanel } from "./board/TaskPanel";
 import { RequirementTree } from "./board/RequirementTree";
+import { RowLabel } from "./board/RowLabel";
 import { TeamBanner } from "./page/TeamBanner";
 import { TeamSelector, TeamBadge } from "./page/TeamSelector";
 import { PageHeader } from "./page/PageHeader";
@@ -45,6 +46,7 @@ import { TilePicker, RequirementPicker, SubmitterPicker } from "./submission/Pic
 import { TaskPicker } from "./submission/TaskPicker";
 import { StagedClaimsList } from "./submission/StagedClaimsList";
 import { RewindPopup } from "./rewind/RewindPopup";
+import { WrappedBanner } from "./wrapped/WrappedBanner";
 // The theme's shared classes (comic-press, comic-rays, comic-halftone, the
 // dialog keyframes…). Was imported on feat/mico-work but dropped when that
 // work landed on main, leaving every one of them unstyled.
@@ -141,6 +143,7 @@ const comicTheme: ThemeDefinition = {
     BoardGrid,
     TaskPanel,
     RequirementTree,
+    RowLabel,
     TeamBanner,
     TeamSelector,
     TeamBadge,
@@ -180,6 +183,7 @@ const comicTheme: ThemeDefinition = {
     RequirementPicker,
     StagedClaimsList,
     RewindPopup,
+    WrappedBanner,
   },
 };
 

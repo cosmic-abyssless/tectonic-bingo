@@ -1,10 +1,12 @@
 import type { CSSProperties, ReactNode } from "react";
 import { COMIC_FONT } from "../font";
+import { PrintedShade, toneColors, type Tone } from "./tones";
 import { useComic } from "./useComic";
 
 /**
- * Rectangular narration caption: yellow (or any) fill, thick ink border,
- * Bangers heading. Used for section headers, notes and metadata blocks.
+ * Rectangular narration caption: a tone's tint (or plain raised paper), thick
+ * ink border, Bangers heading, and on a tint the tone's halftone shading (see
+ * tones.tsx). Used for section headers, notes and metadata blocks.
  */
 export function CaptionBox({
   children,
@@ -16,31 +18,28 @@ export function CaptionBox({
 }: {
   children?: ReactNode;
   title?: ReactNode;
-  tone?: "yellow" | "paper" | "blue" | "red" | "green" | "cyan";
+  tone?: Tone | "paper";
   tilt?: number;
   className?: string;
   style?: CSSProperties;
 }) {
   const { colors } = useComic();
-  const fill = {
-    yellow: colors.YELLOW_TINT,
-    paper: colors.PAPER_RAISED,
-    blue: colors.BLUE_TINT,
-    red: colors.RED_TINT,
-    green: colors.GREEN_TINT,
-    cyan: colors.CYAN_TINT,
-  }[tone];
+  const toned = tone === "paper" ? null : toneColors(colors, tone);
+  const fill = toned?.tint ?? colors.PAPER_RAISED;
   return (
     <div
       className={`relative border-[3px] px-3 py-2 ${className ?? ""}`}
-      style={{ background: fill, borderColor: colors.LINE, color: colors.INK_BODY, boxShadow: `3px 3px 0 ${colors.LINE}`, transform: tilt ? `rotate(${tilt}deg)` : undefined, ...style }}
+      style={{ background: fill, borderColor: colors.LINE, color: colors.INK_BODY, boxShadow: `3px 3px 0 ${colors.SHADOW}`, transform: tilt ? `rotate(${tilt}deg)` : undefined, ...style }}
     >
-      {title !== undefined && (
-        <div className="mb-1 text-lg uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
-          {title}
-        </div>
-      )}
-      {children}
+      {toned && <PrintedShade ink={toned.loud} />}
+      <div className="relative">
+        {title !== undefined && (
+          <div className="mb-1 text-lg uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+            {title}
+          </div>
+        )}
+        {children}
+      </div>
     </div>
   );
 }

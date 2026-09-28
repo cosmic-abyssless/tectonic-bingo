@@ -15,7 +15,7 @@ export function ComicMenu<T extends object>({ instant, popoverClassName = "", ..
       offset={8}
       shouldSkipAnimation={instant}
       className={`${instant ? "" : "overlay-panel"} flex min-w-44 flex-col rounded-md border-[3px] p-1 outline-none ${popoverClassName}`}
-      style={{ background: colors.PAPER_RAISED, borderColor: colors.LINE, color: colors.INK, boxShadow: `4px 4px 0 ${colors.LINE}` }}
+      style={{ background: colors.PAPER_RAISED, borderColor: colors.LINE, color: colors.INK, boxShadow: `4px 4px 0 ${colors.SHADOW}` }}
     >
       {/* max-h/min-h-0: a list too long for the popover scrolls instead of being clipped (see PlainMenu). */}
       <AriaMenu ref={listRef} autoFocus="first" {...props} className="max-h-120 min-h-0 overflow-y-auto outline-none" />

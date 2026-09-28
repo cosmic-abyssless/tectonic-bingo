@@ -42,7 +42,7 @@ export function TeamBanner({
     <div
       ref={stripRef}
       className="flex h-10 w-full items-stretch overflow-hidden rounded-md border-[3px] md:w-auto"
-      style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.LINE}`, color: colors.INK }}
+      style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.SHADOW}`, color: colors.INK }}
     >
       {/* Team swatch — a vertical ink-edged color bar, like a spine stripe. */}
       <span className="w-3 shrink-0 border-r-[3px]" style={{ background: swatch, borderColor: colors.LINE }} aria-hidden />
