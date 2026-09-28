@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { achievementDef } from "@bingo/shared";
 import type { AvatarUser, BingoWrapped, MyWrappedResponse, PlayerWrapped, WrappedCaptain, WrappedDrop, WrappedDuo, WrappedYou } from "@bingo/shared";
 import type { WrappedOutroModel, WrappedShareCardModel } from "./types";
 import { aboveAverage, buildWrappedStory, carriedBanter, draftGrade, dropLuck, ordinal, rateLabel, rejectionBanter, shortDuration } from "./wrappedModel";
@@ -194,8 +195,46 @@ describe("buildWrappedStory", () => {
     expect(b.leaderboard.map((t) => [t.name, t.placementLabel, t.isMine])).toEqual([["Blue", "1st", false], ["Red", "2nd", true]]);
     expect(b.moderation).toBeNull();
     expect(b.race?.maxPoints).toBe(300);
-    expect(b.race?.series[0]!.points[0]).toEqual({ t: T0, points: 0 });
-    expect(b.race?.series[0]!.points.at(-1)).toEqual({ t: T0 + 24 * HOUR, points: 300 });
+    expect(b.race?.series[0]!.points[0]).toEqual({ t: T0, points: 0, event: null });
+    expect(b.race?.series[0]!.points.at(-1)).toEqual({ t: T0 + 24 * HOUR, points: 300, event: null });
+  });
+
+  it("says how each Achievement was earned, from the catalogue", () => {
+    const achievements = [
+      { key: "night_owl", name: "Night Owl", itemName: "Owl", earnedAt: iso(3) },
+      { key: "retired", name: "Retired", itemName: "Bones", earnedAt: iso(4) },
+    ];
+    const you = story(response(player({ submissions: 1, achievements }))).sections.find((s) => s.id === "you")!.section;
+    if (you.kind !== "you") throw new Error("not you");
+    expect(you.achievements[0]!.description).toBe(achievementDef("night_owl").description);
+    expect(you.achievements[1]!.description).toBeNull();
+  });
+
+  it("places the biggest Steal by Players drafted, the same way as their rank", () => {
+    const steal = { player: u("x"), teamId: "b", pickNumber: 7, position: 9, rank: 2, placesBeaten: 7 };
+    const b = story(response(null, { bingo: { ...bingo(), biggestSteal: steal } })).sections.find((s) => s.id === "bingo")!.section;
+    if (b.kind !== "bingo") throw new Error("not bingo");
+    expect(b.steal).toMatchObject({ teamName: "Blue", positionLabel: "9th", rankLabel: "2nd", placesBeatenLabel: "7 places" });
+  });
+
+  it("words each award on the chart as the stats chart does, and leaves it out of older Wrapped", () => {
+    const withEvents = { ...bingo() };
+    withEvents.teams = withEvents.teams.map((t) => ({
+      ...t,
+      pointsOverTime: [
+        { at: iso(2), points: 50, source: "node" as const, label: "ZULRAH — Page 1", delta: 50 },
+        { at: iso(3), points: 40, source: "adjustment" as const, label: "Duplicate", delta: -10 },
+      ],
+    }));
+    const b = story(response(null, { bingo: withEvents })).sections.find((s) => s.id === "bingo")!.section;
+    if (b.kind !== "bingo") throw new Error("not bingo");
+    expect(b.race?.series[0]!.points.slice(1, 3).map((p) => p.event && [p.event.deltaLabel, p.event.label])).toEqual([
+      ["+50", "ZULRAH — Page 1"],
+      ["-10", "Moderator adjustment: Duplicate"],
+    ]);
+    const old = story(response(null)).sections.find((s) => s.id === "bingo")!.section;
+    if (old.kind !== "bingo") throw new Error("not bingo");
+    expect(old.race?.series[0]!.points.every((p) => p.event === null)).toBe(true);
   });
 
   it("labels a Moderator's preview", () => {

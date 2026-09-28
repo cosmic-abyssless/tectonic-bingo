@@ -16,7 +16,7 @@ export function WrappedDuo({ section: d }: { section: WrappedDuoModel }) {
         <Reveal step={1} className="mt-12">
           <WrappedStat value={d.combinedShareLabel} label="Points share, together" tone={d.isTop ? "gold" : undefined} />
           {(d.rankLabel || d.pickLabel) && (
-            <p className="mt-3 text-center text-on-surface-muted">{d.pickLabel ? `Drafted with ${d.pickLabel.toLowerCase()}${d.rankLabel ? `, finished ${d.rankLabel}` : ""}` : `Finished ${d.rankLabel}`}</p>
+            <p className="mt-3 text-center text-on-surface-muted">{d.pickLabel ? `Drafted together at ${d.pickLabel}${d.rankLabel ? `, finished ${d.rankLabel}` : ""}` : `Finished ${d.rankLabel}`}</p>
           )}
         </Reveal>
         {d.split && (

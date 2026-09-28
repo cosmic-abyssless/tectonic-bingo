@@ -39,6 +39,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       queryClient.invalidateQueries({ queryKey: ["board"] });
       // Finishing can publish Wrapped (its "Publish when the Bingo finishes" setting).
       queryClient.invalidateQueries({ queryKey: ["wrapped"] });
+      // Voting opens with Live and closes on Finishing.
+      queryClient.invalidateQueries({ queryKey: ["superlatives"] });
       break;
     case "wrapped_published":
       queryClient.invalidateQueries({ queryKey: ["wrapped"] });
@@ -49,6 +51,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       queryClient.invalidateQueries({ queryKey: ["bingo"] });
       // The scouting/draft room lists teams from draft state.
       queryClient.invalidateQueries({ queryKey: ["draftState"] });
+      // Who can vote, and a removed Player's votes, change with the Team.
+      queryClient.invalidateQueries({ queryKey: ["superlatives"] });
       break;
     case "bingo_changed":
       queryClient.invalidateQueries({ queryKey: ["bingo"] });
@@ -65,6 +69,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       queryClient.invalidateQueries({ queryKey: ["mySignup"] });
       queryClient.invalidateQueries({ queryKey: ["signupRoster"] });
       queryClient.invalidateQueries({ queryKey: ["draftState"] });
+      // Superlative categories added, renamed or deleted (deleting drops its votes), or a Player removed from a Team.
+      queryClient.invalidateQueries({ queryKey: ["superlatives"] });
       break;
     case "draft_started":
     case "draft_order_shuffled":
@@ -101,6 +107,9 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
     case "audit_appended":
       queryClient.invalidateQueries({ queryKey: ["auditLog"] });
       queryClient.invalidateQueries({ queryKey: ["teamActivity"] });
+      break;
+    case "superlative_votes_changed":
+      queryClient.invalidateQueries({ queryKey: ["superlatives"] });
       break;
     case "bug_report_changed":
       queryClient.invalidateQueries({ queryKey: ["adminBugReports"] });

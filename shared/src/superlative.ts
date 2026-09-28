@@ -51,3 +51,19 @@ export interface SuperlativeTeamTally {
   teamName: string;
   tallies: SuperlativeTally[];
 }
+
+/**
+ * GET .../mod/superlatives/turnout: how many of a Team's Players have voted so far, admin-only, at any stage. Counts
+ * only, never who voted or for whom (votes are secret), kept live by `superlative_votes_changed`.
+ */
+export interface SuperlativeTeamTurnout {
+  teamId: string;
+  teamName: string;
+  color: string | null;
+  /** The Team's Players: everyone who can vote. */
+  players: number;
+  /** Players who have voted in at least one category, and in every category. */
+  votedAny: number;
+  votedAll: number;
+  categories: { categoryId: string; categoryName: string; voted: number }[];
+}

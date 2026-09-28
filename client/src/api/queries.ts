@@ -3,7 +3,7 @@ import type {
   AccountTypesResponse, AchievementKey, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, CutReviewPreview, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
-  MyWrappedResponse, PickRating, PlayerProfile, RewindResponse, StatsResponse, WrappedState, SubmissionReaction, SubmissionReactionGroup, SuperlativeBallotResponse, SuperlativeTeamTally, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
+  MyWrappedResponse, PickRating, PlayerProfile, RewindResponse, StatsResponse, WrappedState, SubmissionReaction, SubmissionReactionGroup, SuperlativeBallotResponse, SuperlativeTeamTally, SuperlativeTeamTurnout, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
 } from "@bingo/shared";
 import { SUBMISSION_REACTIONS } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
@@ -46,6 +46,7 @@ export const queryKeys = {
   myWrapped: (slug: string) => ["wrapped", "me", slug] as const,
   mySuperlativeBallot: (slug: string) => ["superlatives", "me", slug] as const,
   superlativeTally: (slug: string) => ["superlatives", "tally", slug] as const,
+  superlativeTurnout: (slug: string) => ["superlatives", "turnout", slug] as const,
   auditLog: (slug: string, filters: AuditLogFilters) => ["auditLog", slug, filters] as const,
   teamActivity: (slug: string, teamId: string) => ["teamActivity", slug, teamId, "condensed"] as const,
   myBugReports: () => ["myBugReports"] as const,
@@ -664,6 +665,15 @@ export function useSuperlativeTally(slug: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.superlativeTally(slug),
     queryFn: () => api.get<{ teams: SuperlativeTeamTally[] }>(`/api/bingos/${slug}/mod/superlatives/tally`),
+    enabled: !!slug && enabled,
+  });
+}
+
+/** How many of each Team's Players have voted so far (Admin-only, any stage), kept live by `superlative_votes_changed`. */
+export function useSuperlativeTurnout(slug: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.superlativeTurnout(slug),
+    queryFn: () => api.get<{ teams: SuperlativeTeamTurnout[] }>(`/api/bingos/${slug}/mod/superlatives/turnout`),
     enabled: !!slug && enabled,
   });
 }
