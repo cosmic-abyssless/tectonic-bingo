@@ -16,6 +16,7 @@ import { TESTDATA_PREFIX } from "./devTestDataService";
 import { rsnsInBingo } from "./playerNames";
 import { getWomClient, parseSnapshots, type WomClient, type WomSnapshot } from "./womService";
 import * as achievementService from "./achievementService";
+import { sendDueWomBulkUpdates } from "./womCompetitionService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -260,7 +261,10 @@ export function startWomReads(db: Db): void {
   const queue = getWomReadQueue(db);
   const round = () => {
     try {
-      queueDueReads(db, queue, new Date());
+      const now = new Date();
+      queueDueReads(db, queue, now);
+      // The bulk update at start + 6h rides the same round: its snapshots are picked up by the next reads.
+      void sendDueWomBulkUpdates(db, now).catch((err: unknown) => log.warn("wom bulk update round failed", { err }));
     } catch (err) {
       log.warn("wom snapshot round failed", { err });
     }
