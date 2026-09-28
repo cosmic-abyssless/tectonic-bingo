@@ -63,6 +63,11 @@ export default defineConfig({
         target: apiTarget,
         changeOrigin: true,
       },
+      // The admin MCP server and its OAuth endpoints (server/src/mcp), so a Claude app can connect to the dev site.
+      "^/(mcp|authorize|token|register|revoke|\\.well-known/oauth-[a-z-]+)([/?]|$)": {
+        target: apiTarget,
+        changeOrigin: true,
+      },
       "/uploads": {
         target: apiTarget,
         changeOrigin: true,

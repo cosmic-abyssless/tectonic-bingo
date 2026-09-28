@@ -38,6 +38,7 @@ export type AuditEntityType =
   | "signup"
   | "pairing"
   | "http"
+  | "mcp_tool"
   | "bug_report"
   | "achievement";
 
@@ -249,6 +250,8 @@ export interface AuditDetailsMap {
 
   // Fallback-only: written by the server's finish-middleware for any
   // successful non-GET /api/* mutation that recorded nothing itself.
+  /** A site admin's Claude app called a tool on the admin MCP server (server/src/mcp). */
+  "mcp.tool_called": { tool: string; arguments: Record<string, unknown>; clientId: string; clientName: string | null };
   "http.mutation": { method: string; originalUrl: string; routePath: string | null; params: Record<string, unknown>; body: unknown; file: string | null };
 
   "bug_report.created": { description: string; pageUrl: string | null; palette: string | null };
@@ -861,6 +864,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     label: () => "Asked Wise Old Man to update every player in the competition",
   },
   "wom.sync_failed": { category: "system", tone: "warn", visibility: "mods", title: "WOM sync failed", label: (i) => `Wise Old Man ${i.details.operation} failed: ${i.details.message}` },
+  "mcp.tool_called": {
+    category: "system",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Claude tool used",
+    label: (i) => `${actor(i)} used ${i.details.tool} through ${i.details.clientName ?? "Claude"}`,
+  },
   "http.mutation": {
     category: "http",
     tone: "warn",

@@ -330,6 +330,13 @@
       "when": 1790567170646,
       "tag": "0048_wrapped_art_credits",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1790568322472,
+      "tag": "0049_admin_mcp_oauth",
+      "breakpoints": true
     }
   ]
 }

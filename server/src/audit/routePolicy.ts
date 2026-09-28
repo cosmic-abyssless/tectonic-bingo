@@ -6,6 +6,9 @@
 import type { AuditAction } from "@bingo/shared";
 
 export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
+  // mcp/router.ts, mounted at the site root. Each tool call is audited; the OAuth endpoints are auditSkip()'d there.
+  "POST /mcp": ["mcp.tool_called"],
+
   // routes/bingos.ts, mounted at /api/bingos
   "POST /api/bingos/:slug/submissions": ["submission.created"],
   "POST /api/bingos/:slug/signup": ["signup.created"],
