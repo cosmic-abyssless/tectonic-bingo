@@ -167,7 +167,7 @@ export interface AuditDetailsMap {
   };
   /** A mod changed which player a submission is credited to (someone forgot to pick the player they posted for). */
   "submission.attribution_changed": { tileName: string | null; taskLabels: string[]; fromUserId: string; fromName: string; toUserId: string; toName: string };
-  /** A Moderator priced the submission's claims again (only the claims whose GP value changed). */
+  /** A Moderator priced the submission's claims again (only the claims whose Drop value changed). */
   "submission.repriced": { tileName: string | null; taskLabels: string[]; claims: { itemName: string; before: number | null; after: number | null }[] };
   "submission.screenshot_analyzed": { codewordVerified: boolean; detectedItemName: string | null; textLength: number };
   "submission.screenshot_analysis_failed": Record<string, never>;
@@ -460,7 +460,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     tone: "neutral",
     visibility: "mods",
     title: "Unvalued item dismissed",
-    label: (i) => `${actor(i)} left ${i.details.itemName} without a GP value`,
+    label: (i) => `${actor(i)} left ${i.details.itemName} without a drop value`,
   },
   "piece_value.item_restored": {
     category: "system",
@@ -641,7 +641,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     tone: "warn",
     visibility: "mods",
     title: "Submission re-priced",
-    label: (i) => `${actor(i)} re-priced the GP value of a submission for "${i.details.tileName ?? "a tile"}" (${i.details.claims.map((c) => c.itemName).join(", ")})`,
+    label: (i) => `${actor(i)} re-priced the drop value of a submission for "${i.details.tileName ?? "a tile"}" (${i.details.claims.map((c) => c.itemName).join(", ")})`,
   },
   "submission.screenshot_analyzed": {
     category: "submission",

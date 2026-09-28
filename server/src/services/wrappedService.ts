@@ -178,7 +178,7 @@ function reviewStats(reviews: { reviewerId: string; status: string; submittedAt:
 
 /**
  * Every Player's Wrapped and the Bingo-wide one, computed now. Only a Finished Bingo has one. Everything comes from
- * the existing services: Points share and GP gained (statsService), Titles (statsService's facts, picked with the
+ * the existing services: Points share and Total drop value (statsService), Titles (statsService's facts, picked with the
  * Bingo's frozen Title settings, the whole Bingo as the pool), drops with their Luck and screenshots (Rewind's replay).
  */
 export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; players: PlayerWrapped[] } {

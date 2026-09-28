@@ -90,7 +90,7 @@ export class GePriceTable {
 
   /**
    * Refetches whatever is out of date. Concurrent callers share one refresh. Resolves true when new prices were
-   * loaded, false when nothing was due or the fetch failed. Never throws — a flaky wiki means missing GP values
+   * loaded, false when nothing was due or the fetch failed. Never throws — a flaky wiki means missing Drop values
    * for a while, not a broken submission.
    */
   refreshIfStale(): Promise<boolean> {

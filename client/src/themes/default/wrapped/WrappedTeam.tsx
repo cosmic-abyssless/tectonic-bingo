@@ -49,9 +49,9 @@ export function WrappedTeam({ section: t }: { section: WrappedTeamModel }) {
                 )}
                 {t.topGpEarner && (
                   <div className="rounded-xl border border-outline bg-surface p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-muted">Top GP earner</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-muted">Top drop value</p>
                     <div className="mt-2">
-                      <WrappedPerson person={t.topGpEarner.person} detail={`${t.topGpEarner.gpLabel} GP gained`} />
+                      <WrappedPerson person={t.topGpEarner.person} detail={`${t.topGpEarner.gpLabel} drop value`} />
                     </div>
                   </div>
                 )}

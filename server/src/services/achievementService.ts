@@ -235,9 +235,9 @@ function partsContaining(tx: Tx, tileNodeId: string, leafIds: string[]): Set<str
 }
 
 /**
- * A Submission's claims were (fully or partially) priced — at creation, or by the GP value fill running later
+ * A Submission's claims were (fully or partially) priced — at creation, or by the Drop value fill running later
  * (gpValueService.fillMissingGpValuesAndNotify). Evaluated against the CURRENT sum of the submission's known claim
- * GP values each time, so whichever call finds the total already over the threshold earns it; a re-price
+ * Drop values each time, so whichever call finds the total already over the threshold earns it; a re-price
  * (gpRepriceService) never calls this. Eligibility's "Live" check is skipped: createSubmission only ever creates a
  * submission while the bingo is live, so any submission that exists proves it.
  */

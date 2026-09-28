@@ -95,7 +95,7 @@ export function StatsView({ slug }: { slug: string }) {
         <ContributorsTable contributions={filtered.contributions} teams={filtered.teams} titles={titlesByPlayer} />
       </Section>
 
-      <Section title="GP gained">
+      <Section title="Total drop value">
         <GpGained slug={slug} teamGpGained={filtered.teamGpGained} drops={filtered.drops} teams={filtered.teams} canReprice={shell.isMod} />
       </Section>
 

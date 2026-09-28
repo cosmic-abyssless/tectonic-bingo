@@ -216,7 +216,7 @@ describe("Clutch", () => {
     expect(luck(claims, timeline, { openItemsAt: () => new Set(["Bandos boots"]) })!.clutch).toBeNull();
   });
 
-  it("weights the drop by its GP value and keeps the single best", () => {
+  it("weights the drop by its Drop value and keeps the single best", () => {
     const timeline = [snap(-1, { vardorvis: 0, general_graardor: 0 }), snap(15, { vardorvis: 100, general_graardor: 100 })];
     const claims = [
       claim("Ultor vestige", 10, { taskNodeId: "ultor", gpValue: 100_000_000 }),

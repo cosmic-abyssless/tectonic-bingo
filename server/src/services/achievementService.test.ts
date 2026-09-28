@@ -457,7 +457,7 @@ describe("Ragequit", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Big spender / GP value fill
+// Big spender / Drop value fill
 // ---------------------------------------------------------------------------
 
 async function loadedTable(price: number): Promise<GePriceTable> {
@@ -470,10 +470,10 @@ async function loadedTable(price: number): Promise<GePriceTable> {
 }
 
 describe("Big spender", () => {
-  it("is earned once the GP value fill prices a claim at 25m or more — checked against the submission's creation time", async () => {
+  it("is earned once the Drop value fill prices a claim at 25m or more — checked against the submission's creation time", async () => {
     const { bingo, team, alice } = seed();
     const { leafId } = tileWithLeaf(bingo.id, 0, 0, "Twisted bow");
-    const sub = submit(bingo, team.id, alice.id, leafId, "Twisted bow"); // the global price table is cold in tests, so this claim starts with no GP value
+    const sub = submit(bingo, team.id, alice.id, leafId, "Twisted bow"); // the global price table is cold in tests, so this claim starts with no Drop value
     expect(earned(bingo, alice.id, "big_spender")).toBe(false);
 
     const table = await loadedTable(30_000_000);

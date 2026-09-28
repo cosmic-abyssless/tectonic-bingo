@@ -158,7 +158,7 @@ function PieceValueRow({ pieceValue }: { pieceValue: PieceValue }) {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.pieceValues });
 
   async function remove() {
-    if (!confirm(`Remove the piece value of "${pieceValue.pieceItemName}"? Claims already valued by it keep their GP value.`)) return;
+    if (!confirm(`Remove the piece value of "${pieceValue.pieceItemName}"? Claims already valued by it keep their drop value.`)) return;
     setError(null);
     try {
       await adminApi.deletePieceValue(pieceValue.id);
@@ -191,7 +191,7 @@ function PieceValueRow({ pieceValue }: { pieceValue: PieceValue }) {
               <Formula pieceValue={pieceValue} />
             </div>
             {pieceValue.unitPrice === null ? (
-              <p className="text-xs text-warn">No value right now: an item in it has no price, or it works out to zero or less. Claims of it get no GP value until it does.</p>
+              <p className="text-xs text-warn">No value right now: an item in it has no price, or it works out to zero or less. Claims of it get no drop value until it does.</p>
             ) : (
               <p className="num text-xs text-on-surface-muted" title={formatGpExact(pieceValue.unitPrice)}>
                 {formatGp(pieceValue.unitPrice)} each
@@ -271,9 +271,9 @@ export function PieceValuesPanel() {
   return (
     <div className="space-y-6">
       <p className="text-sm text-on-surface-muted">
-        Submissions get a GP value from the item's Grand Exchange price. A piece with no price of its own (an untradeable part of a tradeable item) can be valued as a
+        Submissions get a drop value from the item's Grand Exchange price. A piece with no price of its own (an untradeable part of a tradeable item) can be valued as a
         share of its whole item instead: Bludgeon axon = Abyssal bludgeon ÷ 3, or Ultor vestige = Ultor ring − Berserker ring − 3× Chromium ingot. Adding one
-        prices the claims that have no GP value yet; values already set don't change.
+        prices the claims that have no drop value yet; values already set don't change.
       </p>
 
       <PieceValueForm
@@ -301,9 +301,9 @@ export function PieceValuesPanel() {
 
       <section className="space-y-2">
         <h3 className="text-sm font-semibold text-on-surface">Unvalued items</h3>
-        <p className="text-xs text-on-surface-muted">Items on claims that have no GP value. Dismiss the ones that should stay without one, like pets.</p>
+        <p className="text-xs text-on-surface-muted">Items on claims that have no drop value. Dismiss the ones that should stay without one, like pets.</p>
         {unvalued.length === 0 ? (
-          <p className="text-sm text-on-surface-subtle">Every claimed item has a GP value.</p>
+          <p className="text-sm text-on-surface-subtle">Every claimed item has a drop value.</p>
         ) : (
           <ul className="divide-y divide-outline rounded-md border border-outline">
             {unvalued.map((item) => (

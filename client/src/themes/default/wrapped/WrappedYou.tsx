@@ -35,7 +35,7 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
         <WrappedScene steps={1 + y.topDrops.length}>
           {y.gp && (
             <Reveal step={0}>
-              <WrappedStat value={y.gp.gainedLabel} label="GP gained" />
+              <WrappedStat value={y.gp.gainedLabel} label="Total drop value" />
               {y.gp.buyInLabel && y.gp.coveredBuyIn !== null && (
                 <p className="mt-3 text-center text-on-surface-muted">{y.gp.coveredBuyIn ? `That's your ${y.gp.buyInLabel} buy-in covered.` : `Not quite the ${y.gp.buyInLabel} buy-in. There's always next Bingo.`}</p>
               )}

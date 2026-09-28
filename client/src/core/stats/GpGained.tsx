@@ -83,7 +83,7 @@ const DEFAULT_COL_DEF: ColDef<Row> = {
 };
 
 /**
- * GP gained (CONTEXT.md): each team's total, and every approved drop with a GP value of the teams shown, most
+ * Total drop value (CONTEXT.md): each team's total, and every approved drop with a Drop value of the teams shown, most
  * valuable first. For show only: GP never scores.
  */
 export function GpGained({
@@ -97,7 +97,7 @@ export function GpGained({
   teamGpGained: TeamGpGained[];
   drops: GpDrop[];
   teams: Team[];
-  /** Moderators can re-price a drop's GP value from here, to fix one that's wrong. */
+  /** Moderators can re-price a drop's Drop value from here, to fix one that's wrong. */
   canReprice: boolean;
 }) {
   const gridTheme = useGridTheme();
@@ -138,7 +138,7 @@ export function GpGained({
       },
       {
         colId: "gpValue",
-        headerName: "GP value",
+        headerName: "Drop value",
         headerTooltip: "What the drop was worth when submitted (Grand Exchange price)",
         field: "gpValue",
         initialSort: "desc",
@@ -185,11 +185,11 @@ export function GpGained({
         <TableSearchInput value={search} onChange={setSearch} placeholder="Search drops, players…" matchCount={rows.length} totalCount={drops.length} />
         <ColumnPicker columns={pickable} hidden={hidden} onHiddenChange={setHidden} />
         <p className="text-xs text-on-surface-subtle">
-          {drops.length} approved {drops.length === 1 ? "drop" : "drops"} with a GP value.
+          {drops.length} approved {drops.length === 1 ? "drop" : "drops"} with a drop value.
         </p>
       </div>
       {rows.length === 0 ? (
-        <p className="text-sm text-on-surface-subtle">{drops.length === 0 ? "No approved drops with a GP value yet." : "No drops match your search."}</p>
+        <p className="text-sm text-on-surface-subtle">{drops.length === 0 ? "No approved drops with a drop value yet." : "No drops match your search."}</p>
       ) : (
         <div style={{ height }}>
           <AgGridReact<Row>

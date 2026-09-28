@@ -244,35 +244,38 @@ A Title nobody knows exists until someone holds it: it shows up only then, marke
 
 ### Luck
 How unlikely a drop, or a dry streak, was: "1 in N". Judged against the Item's real drop rate and the kills the Player gained at its bosses during the Bingo, as counted by Wise Old Man.
-- **Rules:** A drop is judged over the kills since the Player's previous drop of the same Item (or the Bingo's start), up to the drop, so grinding on afterwards doesn't lessen it. The kills are never understated: a count missing from Wise Old Man makes a drop look less lucky, never more. A dry streak is judged against every Item on the Board the boss drops, and ends at the Player's last drop of one of them. Only Items from bosses Wise Old Man counts have luck (not Slayer monsters, minigames or skilling). A raid counts one completion as one kill, at a typical run's rates. The luck Titles need at least 1 in 10: Spoon over a Player's drops (the luckiest in full, each further one counting half as much as the one before), Dry over a streak, and Clutch on the drop itself, before its GP value weighs in.
-- **Not:** Points share, or GP value. A 1-in-1,000 pet is very lucky and worth nothing.
+- **Rules:** A drop is judged over the kills since the Player's previous drop of the same Item (or the Bingo's start), up to the drop, so grinding on afterwards doesn't lessen it. The kills are never understated: a count missing from Wise Old Man makes a drop look less lucky, never more. A dry streak is judged against every Item on the Board the boss drops, and ends at the Player's last drop of one of them. Only Items from bosses Wise Old Man counts have luck (not Slayer monsters, minigames or skilling). A raid counts one completion as one kill, at a typical run's rates. The luck Titles need at least 1 in 10: Spoon over a Player's drops (the luckiest in full, each further one counting half as much as the one before), Dry over a streak, and Clutch on the drop itself, before its Drop value weighs in.
+- **Not:** Points share, or Drop value. A 1-in-1,000 pet is very lucky and worth nothing.
 
 ### Useful drop
 A drop that still moved its Task forward when it came, judged by the Items that were still open on the Task (the last missing piece of a set is rarer than the first, when any of them would do).
 - **Rules:** A drop that earned no Points share is not useful. When it earned Points share on both a Task and the Part around it, it's judged on the outermost one, where the most Items could still have helped.
 
-### GP value
+### Drop value
 What a Claim's drop is worth in GP (gold pieces, the game's currency): the item's Grand Exchange price times its quantity, fixed when the Submission is made.
-- **Rules:** Priced at the midpoint of the item's latest buy and sell prices. A charged item that isn't sold on the Grand Exchange is priced as its uncharged version (Craw's bow as Craw's bow (u), Tumeken's shadow as its (uncharged) version). It may arrive shortly after the Submission is made and is never changed once set. A Claim with no item (a MANUAL task), or an item with no Grand Exchange price and no Piece value (e.g. a pet), has no GP value, shown as "—".
-- **Not:** A scoring source. GP value never earns or costs points.
+- **Rules:** Priced at the midpoint of the item's latest buy and sell prices. A charged item that isn't sold on the Grand Exchange is priced as its uncharged version (Craw's bow as Craw's bow (u), Tumeken's shadow as its (uncharged) version). It may arrive shortly after the Submission is made and is never changed once set. A Claim with no item (a MANUAL task), or an item with no Grand Exchange price and no Piece value (e.g. a pet), has no Drop value, shown as "—".
+- **Not:** A scoring source. Drop value never earns or costs points.
+- **Avoid:** GP value.
 - **Re-price:** A Moderator can price a Submission's Claims again, when a value is wrong because it was priced from the wrong thing (before its Task got a Valued as, or before its item had a Piece value). Not for bringing values up to today's prices. A Claim that can't be priced right now keeps its value. Recorded in the audit log.
-- **Re-pricing a Task:** Changing a Task's Valued as once Submissions have a GP value from it asks whether to re-price them too (only that Task's Claims, at today's prices) or leave them and apply it to new Submissions only.
+- **Re-pricing a Task:** Changing a Task's Valued as once Submissions have a Drop value from it asks whether to re-price them too (only that Task's Claims, at today's prices) or leave them and apply it to new Submissions only.
 
 ### Valued as
-An optional setting on an item Task: Claims on that Task get their GP value from another item ÷ N instead of their own item's price.
+An optional setting on an item Task: Claims on that Task get their Drop value from another item ÷ N instead of their own item's price.
 - **Example:** On a DT2 boss's page, the Gold ring Task is valued as that boss's vestige ÷ 3. A gold ring is an ordinary tradeable item (~160 GP), but from these bosses it counts as a third of the vestige, and which vestige depends on the boss. The page's vestige Task is valued the same way (its own vestige ÷ 3), so on that tile a vestige counts like a ring roll, while its Piece value (the whole vestige) still applies everywhere else.
-- **Source:** An optional short name for where these Claims come from ("Vardorvis"), shown dimmed next to the item wherever its GP value is listed, with the valuation on hover, so players see why an ordinary-looking item is worth so much. Without a Source, the valuation itself is shown.
+- **Source:** An optional short name for where these Claims come from ("Vardorvis"), shown dimmed next to the item wherever its Drop value is listed, with the valuation on hover, so players see why an ordinary-looking item is worth so much. Without a Source, the valuation itself is shown.
 - **Rules:** Set per Task in the board editor, saved with the board (exported and imported with the Bingo). The named item is priced like any other, including its Piece value. One value per Task, so a Task that could be claimed from several sources worth different amounts has to be split into one Task per source (issue #189).
 - **Not:** A Piece value. A Piece value prices an item the same everywhere; Valued as prices one Task, for an item whose worth depends on where it's claimed.
 
-### GP gained
-The sum of GP values of a Player's or Team's approved Submissions. Pending and rejected Submissions show their GP value to Moderators but don't count.
+### Total drop value
+The sum of the Drop values of a Player's or Team's approved Submissions: what the drops they brought in were worth, not what they kept (much of it is split with teammates or goes into the Pot). Pending and rejected Submissions show their Drop value to Moderators but don't count.
+- **Synonyms (tolerated, not canonical):** GP gained.
+- **Rules:** Where the label already reads as a total (a stat tile, a share card), it may say just "Drop value".
 
 ### Piece value
 A site-wide rule, set by an Admin, that values an item piece as a share of its **Whole item**: the Whole item's price (times how many of it, usually 1), minus its **Other pieces**, divided by N.
 - **Examples:** Bludgeon axon = Abyssal bludgeon ÷ 3. Ultor vestige = Ultor ring − Berserker ring − 3× Chromium ingot. Dizana's quiver = 4000× Sunfire splinters.
 - **Other pieces:** The other items that go into the Whole item, each with a quantity, subtracted before dividing. Optional. Equal pieces covered by ÷ N (the bludgeon's other two pieces) are not listed as Other pieces.
-- **Rules:** The Whole item and every Other piece must have a Grand Exchange price and can't themselves be a piece. One Piece value per piece; it overrides the piece's own price. When a Piece value works out to nothing (an Other piece has no price right now, or the result is zero or less) the Claim gets no GP value until it works out again. Adding or changing one prices only Claims that have no GP value yet.
+- **Rules:** The Whole item and every Other piece must have a Grand Exchange price and can't themselves be a piece. One Piece value per piece; it overrides the piece's own price. When a Piece value works out to nothing (an Other piece has no price right now, or the result is zero or less) the Claim gets no Drop value until it works out again. Adding or changing one prices only Claims that have no Drop value yet.
 
 ### Pot
 The total GP reward pool for a Bingo, computed from the per-player Buy-in amount plus an optional bonus pot contributed by the clan or sponsors.
@@ -321,7 +324,7 @@ Playback of a Finished Bingo on its own Board: a timeline of its Submissions tha
 - **Not:** The Stats timeline, which lists scoring events by approval time.
 
 ### Significance
-How much a Submission stands out in Rewind, from its Luck, GP value, Reactions, and what it completed (a Tile, a Line, a first to complete). Missing signals are left out, not counted as zero, so a very lucky pet with no GP value can still stand out.
+How much a Submission stands out in Rewind, from its Luck, Drop value, Reactions, and what it completed (a Tile, a Line, a first to complete). Missing signals are left out, not counted as zero, so a very lucky pet with no Drop value can still stand out.
 - **Tiers:** minor (its Tile only flashes), notable (a small popup) and huge (a big popup that holds longer).
 
 ### Wrapped

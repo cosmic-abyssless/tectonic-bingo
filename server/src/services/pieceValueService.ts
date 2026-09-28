@@ -1,5 +1,5 @@
 // Site-wide Piece values (CONTEXT.md): an item piece priced as (its whole item − the whole item's Other pieces) ÷ N.
-// Adding or changing one prices the claims that have no GP value yet (fillMissingGpValues); values already set stay
+// Adding or changing one prices the claims that have no Drop value yet (fillMissingGpValues); values already set stay
 // as they were when submitted.
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -156,7 +156,7 @@ export async function updatePieceValue(db: Db, id: string, input: Partial<PieceV
   return getPieceValue(db, id, table);
 }
 
-/** Claims already valued by it keep their GP value; only future claims lose the rule. Its other pieces go with it. */
+/** Claims already valued by it keep their Drop value; only future claims lose the rule. Its other pieces go with it. */
 export function deletePieceValue(db: Db, id: string): void {
   db.transaction((tx) => {
     const existing = tx.select().from(pieceValues).where(eq(pieceValues.id, id)).get();
@@ -176,7 +176,7 @@ export function deletePieceValue(db: Db, id: string): void {
 }
 
 /**
- * Item names of claims that have no GP value, most claimed first, with the dismissed ones marked. Items that already
+ * Item names of claims that have no Drop value, most claimed first, with the dismissed ones marked. Items that already
  * have a Piece value are left out: their claims are priced on the next fill, or their rule shows why it can't be.
  */
 export function getUnvaluedItems(db: Db): UnvaluedItem[] {

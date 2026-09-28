@@ -217,7 +217,7 @@ export interface ThemeSlots {
   RewindControls: ComponentType<{ controls: RewindControlsModel }>;
   // Every Team's points at the moment being viewed (whatever Team's Board is shown); pressing one shows its Board.
   RewindScoreboard: ComponentType<{ scoreboard: RewindScoreboardModel }>;
-  // One Submission's popup: the Player it's credited to, their Team, its items with GP value (and Luck when known),
+  // One Submission's popup: the Player it's credited to, their Team, its items with Drop value (and Luck when known),
   // a thumbnail of its main screenshot, its Reactions and what it completed. size "big" (a huge Submission) or
   // "small" (a notable one). A rejected one is greyed out and stamped "Rejected". The theme draws only the card (its
   // own width, no positioning); the page places it and plays it in and out.

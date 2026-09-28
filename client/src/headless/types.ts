@@ -453,7 +453,7 @@ export interface RewindSubmissionModel {
   /** The full-size screenshot. */
   screenshotUrl: string | null;
   items: { label: string; quantity: number; gpValue: number | null; gpLabel: string; luckLabel: string | null }[];
-  /** Total GP value, or null (shown as "—") when no item has one. */
+  /** Total Drop value, or null (shown as "—") when no item has one. */
   gpValue: number | null;
   gpLabel: string;
   /** Visible to every viewer in Rewind. Read-only. */
@@ -465,7 +465,7 @@ export interface RewindSubmissionModel {
 }
 
 /**
- * The signal that counted most towards a Submission's Significance, and the value to call out with it: the GP value
+ * The signal that counted most towards a Submission's Significance, and the value to call out with it: the Drop value
  * ("12.5M"), the Luck ("1 in 1,230"), the Reaction count ("7"), the Tile or Line it completed, or none for a first.
  */
 export type RewindStandoutModel =
@@ -656,7 +656,7 @@ export interface WrappedDropModel {
   itemName: string;
   /** "×3" for more than one, else null. */
   quantityLabel: string | null;
-  /** "12.3m"; null for an item with no GP value. */
+  /** "12.3m"; null for an item with no Drop value. */
   gpLabel: string | null;
   /** Its Luck (CONTEXT.md), worded for Players; null when it can't be judged or wasn't lucky at all. */
   luck: WrappedLuckModel | null;
@@ -706,7 +706,7 @@ export interface WrappedYouModel {
   submissions: { countLabel: string; comparison: string | null } | null;
   points: { shareLabel: string; comparison: string | null; teamPercentLabel: string | null; rankLabel: string | null; isTop: boolean } | null;
   gp: { gainedLabel: string; buyInLabel: string | null; coveredBuyIn: boolean | null } | null;
-  /** Their most valuable drops (GP value only), highest first. */
+  /** Their most valuable drops (Drop value only), highest first. */
   topDrops: WrappedDropModel[];
   luckiestDrop: WrappedDropModel | null;
   /** "191 kills" of a boss without a Board drop; "1/127" the Board drops' combined rate there; "1 in 30" how rare that dry is. */

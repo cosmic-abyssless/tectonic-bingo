@@ -1,4 +1,4 @@
-/** A GP amount the way players shorten it: 1.5b, 12.3m, 450k, 900. Null (no GP value) is "—". */
+/** A GP amount the way players shorten it: 1.5b, 12.3m, 450k, 900. Null (no Drop value) is "—". */
 export function formatGp(gp: number | null | undefined): string {
   if (gp === null || gp === undefined) return "—";
   const abs = Math.abs(gp);

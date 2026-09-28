@@ -1,4 +1,4 @@
-// GP values of Claims (CONTEXT.md "GP value"): unit price × quantity, fixed when the claim is made and never
+// Drop values of Claims (CONTEXT.md "Drop value"): unit price × quantity, fixed when the claim is made and never
 // changed after. Prices come from the in-memory GE price table (gePriceService.ts) or a site-wide Piece value, so
 // pricing a claim never waits on the wiki. A claim made while the table is cold, or on an item with no price yet,
 // is left null and filled in by fillMissingGpValues once there is a price for it. Never used for scoring.
@@ -17,7 +17,7 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export interface Pricer {
   /**
-   * GP value of `quantity` of `itemName`, or null when there's no price for it. `valuedAs` is the claimed Task's
+   * Drop value of `quantity` of `itemName`, or null when there's no price for it. `valuedAs` is the claimed Task's
    * Valued as (CONTEXT.md), which prices the claim as that item ÷ divisor instead.
    */
   gpValue(itemName: string | null, quantity: number, valuedAs?: ValuedAs | null): number | null;
@@ -33,7 +33,7 @@ export interface PieceValueRule {
 /**
  * What one piece is worth at today's prices: (quantity × whole item − other pieces) ÷ divisor. Null when it works out to
  * nothing: the whole item or an other piece has no price right now, or the result is zero or less. Such claims stay
- * without a GP value until it works out again, rather than being frozen at a wrong one.
+ * without a Drop value until it works out again, rather than being frozen at a wrong one.
  */
 export function pieceUnitPrice(table: GePriceTable, rule: PieceValueRule): number | null {
   const whole = table.unitPrice(rule.wholeItemName);
@@ -87,12 +87,12 @@ export function valuedAsOf(row: { valuedAsItemName: string | null; valuedAsDivis
 
 export interface GpValueFillResult {
   bingoIds: string[];
-  /** Submissions with at least one claim that just got its first GP value — for Achievements' Big spender (CONTEXT.md). */
+  /** Submissions with at least one claim that just got its first Drop value — for Achievements' Big spender (CONTEXT.md). */
   submissionIds: string[];
 }
 
 /**
- * Prices every item claim that has no GP value yet, at today's prices. Only ever fills nulls, so a value once set
+ * Prices every item claim that has no Drop value yet, at today's prices. Only ever fills nulls, so a value once set
  * stays what it was when submitted. Returns the bingos and submissions whose claims changed.
  */
 export function fillMissingGpValues(db: Db, table: GePriceTable = getGePriceTable()): GpValueFillResult {
@@ -127,7 +127,7 @@ export function fillMissingGpValues(db: Db, table: GePriceTable = getGePriceTabl
   return { bingoIds: [...bingoIds], submissionIds: [...submissionIds] };
 }
 
-/** Fills missing GP values, tells the bingos' clients to refetch, and notifies Achievements' Big spender for whichever submissions just got a claim first-priced. */
+/** Fills missing Drop values, tells the bingos' clients to refetch, and notifies Achievements' Big spender for whichever submissions just got a claim first-priced. */
 export function fillMissingGpValuesAndNotify(db: Db, table: GePriceTable = getGePriceTable()): void {
   const { bingoIds, submissionIds } = fillMissingGpValues(db, table);
   if (bingoIds.length) log.info("gp values filled", { bingoIds });
@@ -137,7 +137,7 @@ export function fillMissingGpValuesAndNotify(db: Db, table: GePriceTable = getGe
 
 /**
  * Refreshes the price table if it's due and, when new prices came in, prices whatever claims are still missing a
- * GP value. Called after a submission is made (after the response), and on startup. Never throws.
+ * Drop value. Called after a submission is made (after the response), and on startup. Never throws.
  */
 export async function refreshPricesAndFill(db: Db, table: GePriceTable = getGePriceTable()): Promise<void> {
   if (!(await table.refreshIfStale())) return;

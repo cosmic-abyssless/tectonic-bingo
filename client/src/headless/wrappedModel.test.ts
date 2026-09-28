@@ -146,7 +146,7 @@ describe("buildWrappedStory", () => {
     const petOnly = drop("s1", { itemName: "Pet", gpValue: null, luckOneIn: 1.2 });
     const you = story(response(player({ submissions: 1, topDrops: [petOnly], luckiestDrop: petOnly, firstDrop: petOnly, lastDrop: petOnly, wom: { ehb: 0, bosses: [{ metric: "zulrah", name: "Zulrah", kills: 0 }], asOf: iso(24) } }))).sections.find((s) => s.id === "you")!.section;
     if (you.kind !== "you") throw new Error("not you");
-    // A drop with no GP value isn't a "top drop"; below 1 in 2 isn't lucky; no WOM gains; one drop has no "last".
+    // A drop with no Drop value isn't a "top drop"; below 1 in 2 isn't lucky; no WOM gains; one drop has no "last".
     expect(you.topDrops).toEqual([]);
     expect(you.luckiestDrop).toBeNull();
     expect(you.wom).toBeNull();

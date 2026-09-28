@@ -11,7 +11,7 @@ const noop = () => {};
 
 /**
  * One Submission's popup as two comic bubbles (#225). A speech bubble carries who, which Team and Tile, when; its
- * screenshot; its items with GP value (and Luck, when known); what it completed; its Reactions; and the Rejected
+ * screenshot; its items with Drop value (and Luck, when known); what it completed; its Reactions; and the Rejected
  * stamp. A separate SFX bubble over the Tile shouts what made it stand out. The page places the speech bubble and
  * plays both in and out together.
  */

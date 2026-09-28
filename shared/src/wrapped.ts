@@ -5,14 +5,14 @@
 
 import type { AvatarUser } from "./index.ts";
 
-/** One Submission's drop, as Wrapped shows it: an item with its GP value and when, and the screenshot to show. */
+/** One Submission's drop, as Wrapped shows it: an item with its Drop value and when, and the screenshot to show. */
 export interface WrappedDrop {
   submissionId: string;
   teamId: string;
   player: AvatarUser | null;
   itemName: string;
   quantity: number;
-  /** Null for an item with no GP value (a pet). */
+  /** Null for an item with no Drop value (a pet). */
   gpValue: number | null;
   /** "1 in N" when it can be judged (CONTEXT.md "Luck"). */
   luckOneIn: number | null;
@@ -41,7 +41,7 @@ export interface WrappedYou {
   teamPointsFraction: number;
   teamRank: number;
   teamSize: number;
-  /** GP gained (CONTEXT.md), and the Buy-in it's compared with (null when the Bingo had none). */
+  /** Total drop value (CONTEXT.md), and the Buy-in it's compared with (null when the Bingo had none). */
   gpGained: number;
   buyIn: number | null;
   coveredBuyIn: boolean | null;
@@ -196,7 +196,7 @@ export interface WrappedSteal {
 
 export interface BingoWrapped {
   bingoName: string;
-  /** Approved Submissions, and the GP value of every approved Claim. */
+  /** Approved Submissions, and the Drop value of every approved Claim. */
   totalSubmissions: number;
   totalGp: number;
   /** The drop with the best Luck in the Bingo. */

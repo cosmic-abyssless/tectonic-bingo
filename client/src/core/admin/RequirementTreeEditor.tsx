@@ -607,7 +607,7 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
           onClick={() => setEditingValue((open) => !open)}
           title={
             valuedAs
-              ? `Claims here get their GP value from ${describeValuedAs(valuedAs)}, not from ${name}'s own price`
+              ? `Claims here get their drop value from ${describeValuedAs(valuedAs)}, not from ${name}'s own price`
               : `Price claims here as another item instead of ${name} (e.g. a gold ring from a DT2 boss as a third of its vestige)`
           }
           // Outlined either way, so the way to add one reads as a button before any Valued as exists.
@@ -624,7 +624,7 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
         <DialogHeader title="Re-price the submissions already made?" onClose={() => setPending(null)} />
         <div className="space-y-3 p-5 text-sm text-on-surface-muted">
           <p>
-            {pending?.count} submission{pending?.count === 1 ? " already has" : "s already have"} a GP value from {name} on this Task. Re-pricing prices{" "}
+            {pending?.count} submission{pending?.count === 1 ? " already has" : "s already have"} a drop value from {name} on this Task. Re-pricing prices{" "}
             {pending?.count === 1 ? "it" : "them"} again with the new value at today's prices (only this Task's items); saving only leaves{" "}
             {pending?.count === 1 ? "it" : "them"} as {pending?.count === 1 ? "it is" : "they are"} and applies the new value to new submissions.
           </p>

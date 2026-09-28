@@ -214,7 +214,7 @@ describe("luck Titles", () => {
     expect(TITLE_BY_ID("dry").hidden).toBe(true);
   });
 
-  it("gives Clutch to the best weighted drop, with its own odds and GP value", () => {
+  it("gives Clutch to the best weighted drop, with its own odds and Drop value", () => {
     const pool = [
       lucky("a", { clutch: { value: 2.8, luck: 1.4, itemName: "Bandos tassets", gpValue: 12_000_000 } }),
       lucky("b", { clutch: { value: 2, luck: 2, itemName: "Pet general graardor", gpValue: null } }),

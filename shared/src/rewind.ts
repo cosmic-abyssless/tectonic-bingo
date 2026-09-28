@@ -20,12 +20,12 @@ export interface RewindCompletion {
 
 /**
  * The signals a Submission's Significance is built from. A signal it doesn't have is left out (undefined), never
- * counted as zero: a pet with no GP value, or a drop Wise Old Man doesn't count for Luck, is judged on the rest.
+ * counted as zero: a pet with no Drop value, or a drop Wise Old Man doesn't count for Luck, is judged on the rest.
  */
 export interface SignificanceSignals {
   /** The best Luck ("1 in N") among its Claims. */
   luckOneIn?: number;
-  /** The total GP value of its Claims. */
+  /** The total Drop value of its Claims. */
   gpValue?: number;
   /** How many Reactions it got. */
   reactions?: number;
@@ -34,7 +34,7 @@ export interface SignificanceSignals {
 }
 
 /**
- * The knobs. Each signal is turned into a strength, where 1 on its own makes a Submission huge. Luck and GP value
+ * The knobs. Each signal is turned into a strength, where 1 on its own makes a Submission huge. Luck and Drop value
  * grow on a log scale between `from` (strength 0) and `huge` (strength 1); Reactions grow linearly. A Submission's
  * score is its strongest signal plus `others` times each of the rest, so a signal can only ever add to a score.
  */
@@ -87,7 +87,7 @@ export function significanceStrengths(s: SignificanceSignals): number[] {
 
 /**
  * The signal that counted most towards the score (the `top` of significanceScore): what made the Submission stand
- * out. A missing signal is never it; ties go to the earlier of Luck, GP value, Reactions, what it completed. Null with
+ * out. A missing signal is never it; ties go to the earlier of Luck, Drop value, Reactions, what it completed. Null with
  * no signals at all.
  */
 export function dominantSignal(s: SignificanceSignals): SignificanceSignal | null {
@@ -139,7 +139,7 @@ export interface RewindSubmission {
   /** Its main screenshot. */
   screenshotUrl: string | null;
   claims: RewindClaim[];
-  /** Total GP value of its Claims; null when none has one. */
+  /** Total Drop value of its Claims; null when none has one. */
   gpValue: number | null;
   /** Shown to every viewer in Rewind. */
   reactions: SubmissionReactionGroup[];
@@ -148,7 +148,7 @@ export interface RewindSubmission {
   significance: { score: number; tier: SignificanceTier };
 }
 
-/** The signals a Rewind Submission's Significance is built from: its best Luck, total GP value, Reaction count, and
+/** The signals a Rewind Submission's Significance is built from: its best Luck, total Drop value, Reaction count, and
  * what it completed. Anything it doesn't have is left out. */
 export function rewindSignals(sub: Pick<RewindSubmission, "claims" | "gpValue" | "reactions" | "completed">): SignificanceSignals {
   const lucks = sub.claims.map((c) => c.luckOneIn).filter((v): v is number => v !== null);

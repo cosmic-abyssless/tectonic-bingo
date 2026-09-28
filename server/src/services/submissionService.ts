@@ -121,7 +121,7 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
 
     tx.insert(submissionScreenshots).values({ submissionId: submission.id, storageUrl: params.screenshotUrl, uploadedAt: now }).run();
 
-    // GP values from the in-memory price table, so this never waits on the wiki; any it can't price yet are filled
+    // Drop values from the in-memory price table, so this never waits on the wiki; any it can't price yet are filled
     // in after a refresh (gpValueService.refreshPricesAndFill, run by the route after responding).
     const price = pricer(tx);
     for (const claim of params.claims) {
@@ -362,7 +362,7 @@ export interface ClaimedLeaf {
   id: string;
   kind: NodeKind;
   label: string | null;
-  /** Why an item claimed here has the GP value it does, when the Task has a Valued as. */
+  /** Why an item claimed here has the Drop value it does, when the Task has a Valued as. */
   valuedAs: ValuedAs | null;
 }
 

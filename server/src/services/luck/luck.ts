@@ -55,7 +55,7 @@ export interface PlayerLuck {
   spoon: { value: number; best: DropLuck } | null;
   /** The most unlikely current dry streak, over every Board Item the boss drops. */
   dry: { value: number; oneIn: number; metric: BossMetric; kills: number } | null;
-  /** The luckiest useful drop, weighted by its GP value. */
+  /** The luckiest useful drop, weighted by its Drop value. */
   clutch: { value: number; drop: DropLuck; gpValue: number | null } | null;
 }
 
