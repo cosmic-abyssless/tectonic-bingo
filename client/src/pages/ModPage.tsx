@@ -20,7 +20,6 @@ import { QuestionBuilder } from "../core/admin/QuestionBuilder";
 import { SuperlativesManager } from "../core/admin/SuperlativesManager";
 import { TeamManager } from "../core/admin/TeamManager";
 import { WrappedArtManager } from "../core/admin/WrappedArtManager";
-import { WrappedCreditsManager } from "../core/admin/WrappedCreditsManager";
 import { AppHeader } from "../core/ui/AppHeader";
 import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { Button } from "../core/ui/Button";
@@ -227,7 +226,6 @@ export function ModPage() {
                 <TabPanel id="wrapped-art">
                   <div className={`${NARROW} space-y-8`}>
                     <WrappedArtManager slug={slug} />
-                    <WrappedCreditsManager slug={slug} bingo={shell.bingo} />
                   </div>
                 </TabPanel>
               </>

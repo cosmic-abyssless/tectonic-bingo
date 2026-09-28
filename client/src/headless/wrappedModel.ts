@@ -1,7 +1,7 @@
 // Wrapped (CONTEXT.md "Wrapped"): the story's sections, built from the published data (MyWrappedResponse) as it is.
 // Nothing here recomputes a stat: it picks what to say, words it, and leaves out every part (and every section) that
 // has nothing to say for this viewer. Pure, so it's tested without React.
-import type { AvatarUser, MyWrappedResponse, WrappedCaptain, WrappedCredit, WrappedDrop, WrappedPointsPoint, WrappedTeam } from "@bingo/shared";
+import type { AvatarUser, MyWrappedResponse, WrappedArtSection, WrappedCaptain, WrappedDrop, WrappedPointsPoint, WrappedTeam } from "@bingo/shared";
 import { thumbUrl } from "../api/imageVariants";
 import { formatGp } from "../core/ui/gp";
 import { avatarUrl, displayName } from "../core/ui/user";
@@ -17,6 +17,7 @@ import type {
   WrappedModel,
   WrappedModeratorModel,
   WrappedPersonModel,
+  WrappedSectionArtModel,
   WrappedSectionModel,
   WrappedTeamModel,
   WrappedTeamSuperlativesModel,
@@ -27,8 +28,6 @@ export interface WrappedStoryOptions {
   viewerId: string;
   /** The viewer's name as the Bingo shows it (their RSN, else their Discord name), for the intro and their Moderator art. */
   viewerName: string;
-  /** The Bingo's Credits (CONTEXT.md), in order, for the Outro. */
-  credits: WrappedCredit[];
   /** When the Bingo started and ended (ms), for the intro's dates and the charts' span. */
   startsAt: number | null;
   endsAt: number | null;
@@ -84,7 +83,7 @@ function hourLabel(utcHour: number): string {
 /** Banter on a rejection rate (0–1), for "who had to deal with the most nonsense". */
 export function rejectionBanter(rate: number): string {
   if (rate === 0) return "Not a single rejection. Too soft, or was everyone just that honest?";
-  if (rate < 0.05) return "Barely a rejection in sight. The clan behaved.";
+  if (rate < 0.05) return "Barely a rejection in sight. Turns out people can read the rules.";
   if (rate < 0.15) return "Firm but fair.";
   if (rate < 0.3) return "Somebody had to deal with the nonsense.";
   return "Dealt with more nonsense than anyone should have to.";
@@ -186,7 +185,11 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
   };
 
   const sections: WrappedSectionModel[] = [];
-  const art = (kind: WrappedSectionModel["kind"]) => data.art?.sections?.[kind] ?? [];
+  // A category's images, each captioned with who it credits, and its additional credits (CONTEXT.md "Credits").
+  const art = (section: WrappedArtSection): WrappedSectionArtModel => ({
+    images: (data.art?.sections?.[section] ?? []).map((piece) => ({ frames: piece.frames, name: piece.credit?.name ?? null })),
+    credits: (data.art?.additionalCredits?.[section] ?? []).map((c) => ({ name: c.name, role: c.role || null })),
+  });
 
   // Intro.
   const intro: WrappedIntroModel = {
@@ -368,6 +371,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
             topReviewer: mod.topReviewer ? { person: person(mod.topReviewer.user), reviewedLabel: plural(mod.topReviewer.reviewed, "review") } : null,
             reviewers: mod.reviewers.map((r) => ({ person: person(r.user), rejectionLabel: percent(r.rejectionRate), reviewedLabel: plural(r.reviewed, "review") })),
             banter: mod.reviewers.length > 1 ? rejectionBanter(mod.reviewers[0]!.rejectionRate) : null,
+            art: art("moderators"),
           }
         : null,
     teamSuperlatives: bingo.teams
@@ -381,7 +385,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
   };
   sections.push(b);
 
-  sections.push({ kind: "outro", art: art("outro"), bingoName: bingo.bingoName, credits: opts.credits.map((c) => ({ name: c.name, role: c.role || null })) });
+  sections.push({ kind: "outro", art: art("outro"), bingoName: bingo.bingoName });
 
   return {
     slug,

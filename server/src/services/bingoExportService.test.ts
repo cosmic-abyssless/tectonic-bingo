@@ -14,6 +14,7 @@ import { createQuestion } from "./signupService";
 import { createCategory as createSuperlativeCategory, getCategories as getSuperlativeCategories } from "./superlativeService";
 import { getBingoBySlug, toPublicBingo, updateBingoSettings } from "./bingoService";
 import * as achievementService from "./achievementService";
+import { additionalCredits, setAdditionalCredits } from "./wrappedArtService";
 import { ServiceError } from "./errors";
 import { ACHIEVEMENT_KEYS, type BingoExportDocument } from "@bingo/shared";
 
@@ -169,18 +170,35 @@ describe("importBingo", () => {
     expect(toPublicBingo(getBingoBySlug(db, "no-rules")!).exclusivityRules).toEqual([]);
   });
 
-  it("carries Credits over in order, and reads an older file with none", () => {
+  it("carries each category's additional credits over, and an older file without them keeps what a new bingo starts with (#281)", () => {
     const { bingo: source, admin } = seedFullBingo();
-    updateBingoSettings(db, source.id, { wrappedCredits: [{ name: " Zezima ", role: "Board design" }, { name: "Woox", role: "" }] });
+    setAdditionalCredits(db, source, "moderators", [{ name: " Zezima ", role: "Head mod" }, { name: "Woox", role: "" }]);
     const doc = exportBingo(db, source.id);
-    expect(doc.bingo.wrappedCredits).toEqual([{ name: "Zezima", role: "Board design" }, { name: "Woox", role: null }]);
+    expect(doc.wrappedArtCredits).toEqual({ moderators: [{ name: "Zezima", role: "Head mod" }, { name: "Woox", role: null }] });
+    expect(doc.bingo).not.toHaveProperty("wrappedCredits");
 
-    importBingo(db, doc, { slug: "with-credits", name: "With credits", createdByUserId: admin.id });
-    expect(toPublicBingo(getBingoBySlug(db, "with-credits")!).wrappedCredits).toEqual(doc.bingo.wrappedCredits);
+    const imported = importBingo(db, doc, { slug: "with-credits", name: "With credits", createdByUserId: admin.id });
+    expect(additionalCredits(db, imported.id)).toEqual(doc.wrappedArtCredits);
 
-    const { wrappedCredits: _dropped, ...oldBingo } = doc.bingo;
-    importBingo(db, { ...doc, bingo: oldBingo }, { slug: "no-credits", name: "No credits", createdByUserId: admin.id });
-    expect(toPublicBingo(getBingoBySlug(db, "no-credits")!).wrappedCredits).toEqual([]);
+    // A new bingo copies the newest one's credits; a file without any leaves that copy alone.
+    const { wrappedArtCredits: _dropped, ...older } = doc;
+    const plain = importBingo(db, older, { slug: "no-credits", name: "No credits", createdByUserId: admin.id });
+    expect(additionalCredits(db, plain.id)).toEqual(doc.wrappedArtCredits);
+  });
+
+  it("reads an older file's Bingo-wide Credits as the Outro's additional credits (#281)", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    const doc = exportBingo(db, source.id);
+    const older = { ...doc, bingo: { ...doc.bingo, wrappedCredits: [{ name: "Zezima", role: "Board design" }, { name: " ", role: null }] } };
+    const imported = importBingo(db, older, { slug: "old-credits", name: "Old credits", createdByUserId: admin.id });
+    expect(additionalCredits(db, imported.id)).toEqual({ outro: [{ name: "Zezima", role: "Board design" }] });
+  });
+
+  it("rejects additional credits for an unknown category, or a credit without a name", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    const doc = exportBingo(db, source.id);
+    expect(() => importBingo(db, { ...doc, wrappedArtCredits: { nope: [] } as never }, { slug: "bad-1", name: "Bad", createdByUserId: admin.id })).toThrow(/unknown Wrapped art category/);
+    expect(() => importBingo(db, { ...doc, wrappedArtCredits: { outro: [{ name: "", role: "Art" }] } }, { slug: "bad-2", name: "Bad", createdByUserId: admin.id })).toThrow(/needs a name/);
   });
 
   it("rejects a document whose exclusivity rules are malformed, leaving no partial bingo", () => {
@@ -529,8 +547,8 @@ describe("every column is accounted for", () => {
   it("bingo settings", () => {
     const { bingo } = seedFullBingo();
     const doc = exportBingo(db, bingo.id);
-    // exclusivityRules and wrappedCredits are the columns exclusivityRulesJson and wrappedCreditsJson, parsed.
-    const renamed: Record<string, string> = { exclusivityRules: "exclusivityRulesJson", wrappedCredits: "wrappedCreditsJson" };
+    // exclusivityRules is the column exclusivityRulesJson, parsed.
+    const renamed: Record<string, string> = { exclusivityRules: "exclusivityRulesJson" };
     accounted(
       schema.bingos,
       Object.keys(doc.bingo).map((k) => renamed[k] ?? k),
@@ -540,6 +558,8 @@ describe("every column is accounted for", () => {
         "womEnabled", "womGroupId", "womGroupVerificationCode", "womCompetitionId", "womSyncError", // Wise Old Man: ids, a secret, sync state
         "draftStarted", "draftOrderLockedUntil", "cutReviewFingerprint", // live draft ceremony — not a template setting
         "leftoverMode", // replaced by cutMode, kept only until the column is dropped
+        "wrappedCreditsJson", // replaced by per-image and per-category credits (#281), kept only until the column is dropped
+        "wrappedArtCreditsJson", // exported beside the Wrapped art, as the document's wrappedArtCredits
         "achievementsEnabled", // the master switch isn't carried — an import always starts with it on (achievementKeys carries the per-key switches instead)
       ],
     );

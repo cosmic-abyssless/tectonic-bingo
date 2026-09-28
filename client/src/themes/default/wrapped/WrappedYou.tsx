@@ -1,6 +1,6 @@
 import type { WrappedYouModel } from "../../../headless/types";
 import { Reveal, WrappedScene } from "../../../core/wrapped/Scene";
-import { WrappedDropCard, WrappedHeading, WrappedSectionArt, WrappedStat } from "../../../core/wrapped/WrappedParts";
+import { WrappedCategoryArt, WrappedDropCard, WrappedHeading, WrappedStat } from "../../../core/wrapped/WrappedParts";
 import { WikiIcon } from "../../../core/ui/ItemIcon";
 
 /** You: a screen per group of facts, each left out when it has nothing to say. */
@@ -8,10 +8,10 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
   return (
     <>
       {/* The opening screen, which carries the section's art: with art, shown even with nothing to count ("You showed up"). */}
-      {(y.submissions || y.points || y.art.length > 0) && (
+      {(y.submissions || y.points || y.art.images.length > 0) && (
         <WrappedScene steps={3}>
           <Reveal step={0}>
-            <WrappedSectionArt art={y.art} />
+            <WrappedCategoryArt art={y.art} />
             <WrappedHeading kicker="You">{y.submissions ? y.submissions.countLabel : "You showed up"}</WrappedHeading>
           </Reveal>
           {y.submissions?.comparison && (

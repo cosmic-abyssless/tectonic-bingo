@@ -119,9 +119,13 @@ export const bingos = sqliteTable('bingos', {
   showScreenshotsWhenFinished: integer('show_screenshots_when_finished', { mode: 'boolean' }).notNull().default(true),
   // "Publish Wrapped when the Bingo finishes" (CONTEXT.md "Wrapped"): moving to Finished publishes it on its own.
   publishWrappedOnFinish: integer('publish_wrapped_on_finish', { mode: 'boolean' }).notNull().default(false),
-  // Credits (CONTEXT.md): a JSON array of WrappedCredit, parsed by bingoService.parseWrappedCredits and exposed as
-  // `wrappedCredits`. Wrapped's Outro lists them.
+  // Replaced by per-image credits on wrapped_art and wrappedArtCreditsJson (#281; migration 0046 moved its entries onto
+  // the Outro's art). Kept only so the column can be dropped in a later deploy, per the additive-migration rule in
+  // docs/zero-downtime-deploy-plan.md. Nothing reads or writes it.
   wrappedCreditsJson: text('wrapped_credits_json').notNull().default('[]'),
+  // Credits (CONTEXT.md): each Wrapped art category's additional credits (ones with no image), a JSON object of
+  // WrappedCredit arrays keyed by section. Parsed by wrappedArtService.parseAdditionalCredits.
+  wrappedArtCreditsJson: text('wrapped_art_credits_json').notNull().default('{}'),
 });
 
 // Mod is per-bingo, not a global flag — fixes v1's single global isModerator.
@@ -861,6 +865,9 @@ export const wrappedArt = sqliteTable('wrapped_art', {
   keyColor: text('key_color'),
   keyTolerance: integer('key_tolerance'),
   keySoftness: integer('key_softness'),
+  // Credits (CONTEXT.md, #281): who this image credits, captioned on it. Null name: no credit (role is then null too).
+  creditName: text('credit_name'),
+  creditRole: text('credit_role'),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 }, (t) => [
   index('wrapped_art_bingo_section_idx').on(t.bingoId, t.section),

@@ -11,11 +11,14 @@ import {
   BINGO_EXPORT_FORMAT_VERSION,
   CUT_MODES,
   isWrappedArtGroup,
+  isWrappedArtSection,
   type BingoExportDocument,
   type ExportNode,
   type ExportWrappedArt,
+  type WrappedArtCredits,
   type WrappedArtKeying,
   type WrappedArtGroup,
+  type WrappedCredit,
 } from "@bingo/shared";
 import type { GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
@@ -171,7 +174,6 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
       hideRules: bingo.hideRules,
       showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished,
       publishWrappedOnFinish: bingo.publishWrappedOnFinish,
-      wrappedCredits: bingoService.parseWrappedCredits(bingo.wrappedCreditsJson),
     },
     categories: categoryRows.map((c) => ({ localId: categoryLocalByReal.get(c.id)!, label: c.label, colorHex: c.colorHex, sortOrder: c.sortOrder })),
     tiles,
@@ -180,6 +182,7 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
     superlativeCategories,
     achievementKeys: achievementService.getEnabledAchievementKeys(db, bingoId),
     ...(options.uploadsDir ? { wrappedArt: exportWrappedArt(db, bingoId, options.uploadsDir) } : {}),
+    wrappedArtCredits: wrappedArtService.parseAdditionalCredits(bingo.wrappedArtCreditsJson),
   };
 }
 
@@ -187,7 +190,7 @@ function exportWrappedArt(db: Db, bingoId: string, uploadsDir: string): ExportWr
   return wrappedArtService.listArt(db, bingoId).flatMap((art) => {
     const image = wrappedArtService.readArtOriginal(uploadsDir, art.originalUrl);
     if (!image) log.warn("bingo export skipped Wrapped art", { group: art.group, url: art.originalUrl });
-    return image ? [{ section: art.group, image, keying: art.keying }] : [];
+    return image ? [{ section: art.group, image, keying: art.keying, ...(art.credit ? { credit: art.credit } : {}) }] : [];
   });
 }
 
@@ -212,7 +215,9 @@ function assertValidDocument(doc: BingoExportDocument): void {
     throw new ServiceError(400, "Malformed import file: unknown leftover mode");
   }
   if (doc.bingo.exclusivityRules !== undefined) bingoService.normalizeExclusivityRules(doc.bingo.exclusivityRules);
-  if (doc.bingo.wrappedCredits !== undefined) bingoService.normalizeWrappedCredits(doc.bingo.wrappedCredits);
+  if (doc.bingo.wrappedCredits !== undefined) wrappedArtService.normalizeCredits(doc.bingo.wrappedCredits);
+  for (const entry of Array.isArray(doc.wrappedArt) ? doc.wrappedArt : []) wrappedArtService.normalizeCredit(entry?.credit);
+  if (doc.wrappedArtCredits !== undefined) importedAdditionalCredits(doc.wrappedArtCredits);
   for (const key of ["sealedTiles", "hideRules"] as const) {
     if (doc.bingo[key] !== undefined && typeof doc.bingo[key] !== "boolean") throw new ServiceError(400, `Malformed import file: ${key} must be true or false`);
   }
@@ -230,6 +235,33 @@ function assertValidDocument(doc: BingoExportDocument): void {
       throw new ServiceError(400, `Malformed import file: tile "${t.name}" is positioned outside the declared board dimensions`);
     }
   }
+}
+
+/** A file's additional credits (CONTEXT.md "Credits"), by category, checked. */
+function importedAdditionalCredits(input: unknown): WrappedArtCredits {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new ServiceError(400, "Malformed import file: wrappedArtCredits must be an object");
+  const credits: WrappedArtCredits = {};
+  for (const [section, list] of Object.entries(input)) {
+    if (!isWrappedArtSection(section)) throw new ServiceError(400, "Malformed import file: credits for an unknown Wrapped art category");
+    credits[section] = wrappedArtService.normalizeCredits(list);
+  }
+  return credits;
+}
+
+/**
+ * An older file's Bingo-wide Credits (before #281), the way the Outro showed them: the first ones caption the Outro's
+ * imported art in order, and the rest (all of them, without imported Outro art) become its additional credits.
+ */
+function withLegacyCredits(
+  credits: WrappedCredit[] | undefined,
+  art: ReadonlyMap<WrappedArtGroup, wrappedArtService.ImportedArt[]> | undefined,
+): { art: ReadonlyMap<WrappedArtGroup, wrappedArtService.ImportedArt[]> | undefined; additional: WrappedArtCredits } {
+  const legacy = credits ? wrappedArtService.normalizeCredits(credits) : [];
+  if (legacy.length === 0) return { art, additional: {} };
+  const outro = art?.get("outro") ?? [];
+  const captioned = outro.map((image, i) => ({ ...image, credit: image.credit ?? legacy[i] ?? null }));
+  const rest = legacy.slice(outro.length);
+  return { art: art && outro.length > 0 ? new Map(art).set("outro", captioned) : art, additional: rest.length > 0 ? { outro: rest } : {} };
 }
 
 function toGraphNodeInput(node: ExportNode): GraphNodeInput {
@@ -277,12 +309,12 @@ export async function importBingoWithImages(db: Db, doc: BingoExportDocument, pa
   for (const [i, tile] of doc.tiles.entries()) {
     if (tile.image !== undefined) decoded.push([i, await decodeExportImage(tile.image, `tile "${tile.name}"`)]);
   }
-  const decodedArt: [WrappedArtGroup, DecodedImage, WrappedArtKeying | null | undefined][] = [];
+  const decodedArt: [WrappedArtGroup, DecodedImage, WrappedArtKeying | null | undefined, WrappedCredit | null][] = [];
   for (const entry of doc.wrappedArt ?? []) {
     const group = entry?.section;
     if (!isWrappedArtGroup(group)) throw new ServiceError(400, "Malformed import file: Wrapped art for an unknown section");
     const keying = entry.keying ? wrappedArtService.parseKeying(entry.keying) : entry.keying;
-    decodedArt.push([group, await decodeExportImage(entry.image, `the Wrapped art "${group}"`), keying]);
+    decodedArt.push([group, await decodeExportImage(entry.image, `the Wrapped art "${group}"`), keying, wrappedArtService.normalizeCredit(entry.credit)]);
   }
   if (decoded.length === 0 && decodedArt.length === 0) return importBingo(db, doc, params);
 
@@ -294,13 +326,13 @@ export async function importBingoWithImages(db: Db, doc: BingoExportDocument, pa
       written.push(...stored.files);
       imageUrls.set(i, stored.url);
     }
-    const art = new Map<WrappedArtGroup, wrappedArtService.RenderedArt[]>();
-    for (const [group, image, keying] of decodedArt) {
+    const art = new Map<WrappedArtGroup, (wrappedArtService.RenderedArt & { credit: WrappedCredit | null })[]>();
+    for (const [group, image, keying, credit] of decodedArt) {
       const rendered = await wrappedArtService.renderArt(uploadsDir, image, keying ?? undefined).catch((err: unknown) => {
         throw err instanceof ServiceError ? new ServiceError(400, `Malformed import file: the Wrapped art "${group}": ${err.message}`) : err;
       });
       written.push(...rendered.files);
-      art.set(group, [...(art.get(group) ?? []), rendered]);
+      art.set(group, [...(art.get(group) ?? []), { ...rendered, credit }]);
     }
     return importBingo(db, doc, params, imageUrls, art);
   } catch (err) {
@@ -318,7 +350,7 @@ export function importBingo(
   doc: BingoExportDocument,
   params: ImportBingoParams,
   imageUrls?: ReadonlyMap<number, string>,
-  art?: ReadonlyMap<WrappedArtGroup, Omit<wrappedArtService.RenderedArt, "files">[]>,
+  art?: ReadonlyMap<WrappedArtGroup, wrappedArtService.ImportedArt[]>,
 ) {
   assertValidDocument(doc);
 
@@ -350,7 +382,6 @@ export function importBingo(
       ...(doc.bingo.hideRules !== undefined ? { hideRules: doc.bingo.hideRules } : {}),
       ...(doc.bingo.showScreenshotsWhenFinished !== undefined ? { showScreenshotsWhenFinished: doc.bingo.showScreenshotsWhenFinished === true } : {}),
       ...(doc.bingo.publishWrappedOnFinish !== undefined ? { publishWrappedOnFinish: doc.bingo.publishWrappedOnFinish === true } : {}),
-      ...(doc.bingo.wrappedCredits !== undefined ? { wrappedCredits: doc.bingo.wrappedCredits } : {}),
     });
 
     const categoryIdByLocal = new Map<number, string>();
@@ -450,7 +481,11 @@ export function importBingo(
     // Achievements (CONTEXT.md): createBingo above switched every catalogue key on (the default for a brand-new
     // bingo); a document with an explicit list restricts it to exactly those. Absent means "all on", already true.
     if (doc.achievementKeys !== undefined) achievementService.restrictAchievementSettingsTo(tx, bingo.id, doc.achievementKeys);
-    if (art) wrappedArtService.replaceGroups(tx, bingo.id, art);
+    // Wrapped art and Credits (CONTEXT.md): what the file has replaces what the new Bingo copied from the previous one.
+    const legacy = withLegacyCredits(doc.bingo.wrappedCredits, art);
+    if (legacy.art) wrappedArtService.replaceGroups(tx, bingo.id, legacy.art);
+    const additional = { ...legacy.additional, ...(doc.wrappedArtCredits !== undefined ? importedAdditionalCredits(doc.wrappedArtCredits) : {}) };
+    if (Object.keys(additional).length > 0) wrappedArtService.replaceAdditionalCredits(tx, bingo.id, additional);
 
     return bingo;
   });

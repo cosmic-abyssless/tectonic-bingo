@@ -3,7 +3,7 @@
 // never a raw Tile, TeamNodeState[], SubmissionDetails[], or LeafClaimMaps.
 // See docs/headless-theming-plan.md §2.
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
-import type { AuditCategory, AuditTone, ContributionCount, DraftState, NodeKind, NodeStatus, PickedTitle, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus, WrappedArtFrames, WrappedCredit } from "@bingo/shared";
+import type { AuditCategory, AuditTone, ContributionCount, DraftState, NodeKind, NodeStatus, PickedTitle, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus, WrappedArtFrames } from "@bingo/shared";
 import type { PlaybackSpeed } from "./rewindModel";
 
 export interface ActivityEntryModel {
@@ -301,8 +301,6 @@ export interface BingoPageModel {
     endsAt: number | null;
     boardRows: number;
     boardCols: number;
-    /** Credits (CONTEXT.md), in order, for Wrapped's Outro. */
-    wrappedCredits: WrappedCredit[];
   };
   milestone: StageMilestone | null;
   user: UserModel;
@@ -615,6 +613,15 @@ export interface RewindModel {
 // empty list), and a section with nothing to say is left out of `sections` altogether.
 // ---------------------------------------------------------------------------
 
+/**
+ * A section's Category images, each captioned with the name of who it credits (null for none), and its category's
+ * additional credits (ones with no image), in the Admins' order (CONTEXT.md "Credits"). Both empty without any.
+ */
+export interface WrappedSectionArtModel {
+  images: { frames: WrappedArtFrames; name: string | null }[];
+  credits: { name: string; role: string | null }[];
+}
+
 export interface WrappedPersonModel {
   id: string;
   name: string;
@@ -678,7 +685,7 @@ export interface WrappedChartModel {
 export interface WrappedIntroModel {
   kind: "intro";
   /** This section's Category images, side by side (each its two boil frames); empty without any. */
-  art: WrappedArtFrames[];
+  art: WrappedSectionArtModel;
   bingoName: string;
   /** The viewer's name when they played; null for anyone else (they get the Bingo-wide story). */
   playerName: string | null;
@@ -688,7 +695,7 @@ export interface WrappedIntroModel {
 
 export interface WrappedYouModel {
   kind: "you";
-  art: WrappedArtFrames[];
+  art: WrappedSectionArtModel;
   /**
    * Comparisons are only ever flattering: each is null unless the Player beat it, so a Player below the average (or low
    * on their Team) sees their own numbers and nothing to measure them against.
@@ -713,7 +720,7 @@ export interface WrappedYouModel {
 /** Your Duo: only for a Player in a Duo. Worded as friendly teasing, never as a verdict on either half. */
 export interface WrappedDuoModel {
   kind: "duo";
-  art: WrappedArtFrames[];
+  art: WrappedSectionArtModel;
   partner: WrappedPersonModel;
   combinedShareLabel: string;
   /** "1st of 4 Duos"; null when theirs was the only Duo. */
@@ -732,7 +739,7 @@ export interface WrappedDuoModel {
 /** Your Draft: only for Captains (and co-Captains). No pick is ever labelled a bust. */
 export interface WrappedCaptainModel {
   kind: "captain";
-  art: WrappedArtFrames[];
+  art: WrappedSectionArtModel;
   /** Every pick, in pick order: a Duo is one pick with both halves. */
   picks: {
     key: string;
@@ -753,7 +760,7 @@ export interface WrappedCaptainModel {
 
 export interface WrappedModeratorModel {
   kind: "moderator";
-  art: WrappedArtFrames[];
+  art: WrappedSectionArtModel;
   /** The Moderator's name as the Bingo shows it (RSN, else Discord name), captioned on their art. */
   name: string;
   /** "32 Submissions" */
@@ -766,7 +773,7 @@ export interface WrappedModeratorModel {
 
 export interface WrappedTeamModel {
   kind: "team";
-  art: WrappedArtFrames[];
+  art: WrappedSectionArtModel;
   name: string;
   color: string | null;
   placement: number;
@@ -795,7 +802,7 @@ export interface WrappedTeamSuperlativesModel {
 
 export interface WrappedBingoModel {
   kind: "bingo";
-  art: WrappedArtFrames[];
+  art: WrappedSectionArtModel;
   totalSubmissions: number;
   totalSubmissionsLabel: string;
   totalGpLabel: string;
@@ -818,6 +825,8 @@ export interface WrappedBingoModel {
     /** Highest rejection rate first: "who had to deal with the most nonsense". */
     reviewers: { person: WrappedPersonModel; rejectionLabel: string; reviewedLabel: string }[];
     banter: string | null;
+    /** The "moderators" category's art and credits (CONTEXT.md "Credits"): who moderated the Bingo. */
+    art: WrappedSectionArtModel;
   } | null;
   /** Every Team's Superlative winners; a Team with none is left out. */
   teamSuperlatives: WrappedTeamSuperlativesModel[];
@@ -825,10 +834,8 @@ export interface WrappedBingoModel {
 
 export interface WrappedOutroModel {
   kind: "outro";
-  art: WrappedArtFrames[];
+  art: WrappedSectionArtModel;
   bingoName: string;
-  /** Credits (CONTEXT.md): who put the Bingo together, in the order the Admins set; empty leaves the credits out. */
-  credits: { name: string; role: string | null }[];
 }
 
 export type WrappedSectionModel = WrappedIntroModel | WrappedYouModel | WrappedDuoModel | WrappedCaptainModel | WrappedModeratorModel | WrappedTeamModel | WrappedBingoModel | WrappedOutroModel;

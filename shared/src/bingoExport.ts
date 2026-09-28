@@ -20,7 +20,7 @@
 import type { CutMode, LeftoverMode, NodeKind, QuestionVisibility, SignupMode, SignupQuestionType } from "./index.ts";
 import type { ExclusivityRule } from "./exclusivity.ts";
 import type { AchievementKey } from "./achievements.ts";
-import type { WrappedArtKeying, WrappedCredit } from "./wrapped.ts";
+import type { WrappedArtCredits, WrappedArtKeying, WrappedCredit } from "./wrapped.ts";
 
 export const BINGO_EXPORT_FORMAT_VERSION = 1;
 
@@ -96,12 +96,13 @@ export interface ExportTile {
  * One Wrapped art image (#262): its original upload (the frames are rendered again on import), and how a
  * solid-background screenshot was keyed (null for one uploaded already cut out; absent reads as the defaults).
  * `section` is its group (shared WRAPPED_ART_GROUPS: a section's Category images, or "side"); a group's images are
- * in the order the story shows them.
+ * in the order the story shows them. `credit`: who it credits (CONTEXT.md "Credits"); absent in older files: none.
  */
 export interface ExportWrappedArt {
   section: string;
   image: ExportImage;
   keying?: WrappedArtKeying | null;
+  credit?: WrappedCredit | null;
 }
 
 export interface ExportLine {
@@ -161,7 +162,10 @@ export interface BingoExportDocument {
     /** Absent in older files: shown (the app's default). */
     showScreenshotsWhenFinished?: boolean;
     publishWrappedOnFinish?: boolean;
-    /** Credits (CONTEXT.md), in order. Absent in older files: none. */
+    /**
+     * Older files only (before #281): the Bingo-wide Credits, in order. The first ones caption the Outro's imported
+     * art in order; the rest (all of them, without imported art) become the Outro's additional credits.
+     */
     wrappedCredits?: WrappedCredit[];
   };
   categories: ExportCategory[];
@@ -181,4 +185,10 @@ export interface BingoExportDocument {
    * of the previous Bingo's); present, each group in it replaces that group's images.
    */
   wrappedArt?: ExportWrappedArt[];
+  /**
+   * Each Wrapped art category's additional credits (CONTEXT.md "Credits": ones with no image), always exported.
+   * Absent in older files: the import keeps what a new Bingo starts with; present, each category in it replaces that
+   * category's.
+   */
+  wrappedArtCredits?: WrappedArtCredits;
 }

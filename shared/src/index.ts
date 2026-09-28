@@ -14,7 +14,6 @@ import type { AuditVisibility } from "./audit.ts";
 import type { AchievementCount } from "./achievements.ts";
 import type { PlayerTitleFacts, TitleSettings } from "./titles.ts";
 import type { TimeZoneRegion } from "./timezone.ts";
-import type { WrappedCredit } from "./wrapped.ts";
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
@@ -135,8 +134,6 @@ export interface Bingo {
   rulesMarkdown: string | null;
   /** Items a team may use in one place only (see exclusivity.ts). */
   exclusivityRules: ExclusivityRule[];
-  /** Credits (CONTEXT.md): who put the Bingo together, in order, for Wrapped's Outro. */
-  wrappedCredits: WrappedCredit[];
   signupOpensAt: string | null;
   draftScheduledAt: string | null;
   revealScheduledAt: string | null;

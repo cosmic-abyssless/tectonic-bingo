@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  MAX_WRAPPED_CREDITS,
+  MAX_WRAPPED_CREDIT_LENGTH,
   WRAPPED_ART_KEYING_DEFAULTS,
   WRAPPED_ART_SECTIONS,
   maxWrappedArt,
@@ -8,12 +10,14 @@ import {
   type WrappedArtImage,
   type WrappedArtKeying,
   type WrappedArtSection,
+  type WrappedCredit,
 } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { adminQueryKeys, useWrappedArt } from "../../api/adminQueries";
 import { Button, IconButton } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
-import { ArrowLeftIcon, ArrowRightIcon, PlusIcon, TrashIcon } from "../ui/icons";
+import { Input } from "../ui/Field";
+import { ArrowLeftIcon, ArrowRightIcon, ChevronDownIcon, ChevronUpIcon, PlusIcon, TrashIcon, XIcon } from "../ui/icons";
 import { Tab, TabList, TabPanel, Tabs } from "../ui/Tabs";
 import { StickerArt } from "../wrapped/StickerArt";
 
@@ -22,9 +26,10 @@ const SECTIONS: Record<WrappedArtSection, { label: string; hint: string }> = {
   you: { label: "You", hint: "The Player's own numbers" },
   duo: { label: "Duo", hint: "The Player and their Duo partner: two works well" },
   captain: { label: "Captain", hint: "A Captain's Draft: two works well" },
-  moderator: { label: "Moderator", hint: "A Moderator's reviews" },
+  moderator: { label: "Moderator", hint: "A Moderator's own reviews: the middle image gets their name" },
   team: { label: "Team", hint: "The Player's Team: three works well" },
   bingo: { label: "The Bingo", hint: "Everyone, together" },
+  moderators: { label: "Moderators", hint: "Behind the scenes: credit who moderated the bingo" },
   outro: { label: "Outro", hint: "The closing screen" },
 };
 
@@ -33,6 +38,8 @@ const SECTIONS: Record<WrappedArtSection, { label: string; hint: string }> = {
  * side by side above its heading. Side images: one pool, shown large beside the story's sections in turn (wide screens
  * only). Each image is a cut-out (a transparent PNG, or a RuneLite Blindfold screenshot the server keys out) an Admin
  * adds, reorders, replaces, re-cuts or removes, watching its two sticker frames boil.
+ * Credits (CONTEXT.md) are edited here too: a Category image can credit someone (their name captioned on it), and each
+ * category can hold additional credits with no image, listed under its images.
  */
 export function WrappedArtManager({ slug }: { slug: string }) {
   const { data, isLoading, error } = useWrappedArt(slug);
@@ -52,7 +59,10 @@ export function WrappedArtManager({ slug }: { slug: string }) {
             <Tab id="side">Side images</Tab>
           </TabList>
           <TabPanel id="category">
-            <p className="mb-4 text-sm text-on-surface-muted">Shown side by side above each section's heading, in this order. The more there are, the smaller each one.</p>
+            <p className="mb-4 text-sm text-on-surface-muted">
+              Shown side by side above each section's heading, in this order. The more there are, the smaller each one. Pick an image to credit someone on it (their name is shown on the art),
+              or add credits with no image under a category's images. Credits aren't tied to who's an admin or a mod.
+            </p>
             <div className="grid gap-4 xl:grid-cols-2">
               {WRAPPED_ART_SECTIONS.map((section) => (
                 <Card key={section} className="space-y-3 p-4">
@@ -61,6 +71,8 @@ export function WrappedArtManager({ slug }: { slug: string }) {
                     <p className="text-xs text-on-surface-subtle">{SECTIONS[section].hint}</p>
                   </div>
                   <ArtGroup slug={slug} group={section} images={inGroup(section)} loading={isLoading} />
+                  {/* Keyed by what's stored, so a save (or another Admin's, on refetch) starts the list over from it. */}
+                  {data && <AdditionalCredits key={JSON.stringify(data.additionalCredits?.[section] ?? [])} slug={slug} section={section} saved={data.additionalCredits?.[section] ?? []} />}
                 </Card>
               ))}
             </div>
@@ -148,6 +160,7 @@ function ArtGroup({ slug, group, images, loading, large = false }: { slug: strin
             <button type="button" onClick={() => setSelectedId(selectedId === a.id ? null : a.id)} className={`${tile} rounded bg-surface-raised p-1`} aria-label={`Image ${i + 1}: show its details`}>
               <StickerArt frames={a.frames} className="size-full" phase={i / Math.max(1, images.length)} />
             </button>
+            {a.credit && <span className="max-w-20 truncate text-xs text-on-surface-muted">{a.credit.name}</span>}
             <div className="flex items-center">
               <IconButton size="sm" label="Move earlier" onPress={() => move(i, -1)} isDisabled={busy !== null || i === 0}>
                 <ArrowLeftIcon size={14} />
@@ -194,6 +207,7 @@ function ImageDetails({ slug, image, busy, run }: { slug: string; image: Wrapped
 
   return (
     <div className="space-y-2 rounded-md bg-surface-raised p-3 text-xs text-on-surface-muted">
+      {image.group !== "side" && <ImageCredit slug={slug} image={image} busy={busy} run={run} />}
       {image.keying ? (
         <>
           <p className="flex items-center gap-1.5">
@@ -217,6 +231,120 @@ function ImageDetails({ slug, image, busy, run }: { slug: string; image: Wrapped
         )}
       </div>
       <FileInput inputRef={replaceInput} onFiles={([file]) => file && run(`replace:${image.id}`, () => adminApi.replaceWrappedArt(slug, image.id, file))} />
+    </div>
+  );
+}
+
+/** The selected Category image's credit: a name captioned on the art, and an optional role. */
+function ImageCredit({ slug, image, busy, run }: { slug: string; image: WrappedArtImage; busy: string | null; run: (what: string, action: () => Promise<unknown>) => Promise<void> }) {
+  const [name, setName] = useState(image.credit?.name ?? "");
+  const [role, setRole] = useState(image.credit?.role ?? "");
+  const changed = name.trim() !== (image.credit?.name ?? "") || role.trim() !== (image.credit?.role ?? "");
+  const credit = name.trim() ? { name: name.trim(), role: role.trim() || null } : null;
+
+  return (
+    <div className="space-y-2 border-b border-outline pb-3">
+      <p>Credit: who this image credits. Their name is shown on the art.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input size="sm" aria-label="Credited name" placeholder="Name" value={name} maxLength={MAX_WRAPPED_CREDIT_LENGTH} onChange={(e) => setName(e.target.value)} className="min-w-0 flex-1" />
+        <Input size="sm" aria-label="Credited role" placeholder="Role (optional)" value={role} maxLength={MAX_WRAPPED_CREDIT_LENGTH} onChange={(e) => setRole(e.target.value)} className="min-w-0 flex-1" />
+        <Button size="sm" onPress={() => run(`credit:${image.id}`, () => adminApi.setWrappedArtCredit(slug, image.id, credit))} isDisabled={busy !== null || !changed || (!name.trim() && !!role.trim())}>
+          {busy === `credit:${image.id}` ? "Saving…" : credit || !image.credit ? "Save credit" : "Clear credit"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A category's additional credits (CONTEXT.md "Credits"): names with no image, each with an optional role, in order,
+ * listed under the category's images. Saved as a whole list.
+ */
+function AdditionalCredits({ slug, section, saved }: { slug: string; section: WrappedArtSection; saved: WrappedCredit[] }) {
+  const queryClient = useQueryClient();
+  const [credits, setCredits] = useState(saved);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const changed = JSON.stringify(credits) !== JSON.stringify(saved);
+
+  // Rows have no id of their own, so each keeps a local key through moves and removals (inputs keep focus).
+  const nextKey = useRef(0);
+  const keys = useRef<number[]>([]);
+  while (keys.current.length < credits.length) keys.current.push(nextKey.current++);
+
+  const update = (i: number, patch: Partial<WrappedCredit>) => setCredits(credits.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  const remove = (i: number) => {
+    keys.current.splice(i, 1);
+    setCredits(credits.filter((_, j) => j !== i));
+  };
+  const move = (i: number, dir: -1 | 1) => {
+    const swap = <T,>(list: T[]) => {
+      const next = [...list];
+      [next[i], next[i + dir]] = [next[i + dir]!, next[i]!];
+      return next;
+    };
+    keys.current = swap(keys.current);
+    setCredits(swap(credits));
+  };
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      await adminApi.setWrappedArtCredits(slug, section, credits);
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.wrappedArt(slug) });
+      await queryClient.invalidateQueries({ queryKey: ["wrapped"] });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 border-t border-outline pt-3">
+      <p className="text-xs text-on-surface-subtle">Additional credits: names with no image, listed under the images.</p>
+      {credits.length > 0 && (
+        <div role="list" aria-label={`${SECTIONS[section].label} additional credits`} className="space-y-2">
+          {credits.map((c, i) => (
+            <div key={keys.current[i]} role="listitem" className="flex items-center gap-2">
+              <div className="flex shrink-0 flex-col">
+                <IconButton label="Move up" size="sm" isDisabled={i === 0} onPress={() => move(i, -1)} className="size-5">
+                  <ChevronUpIcon size={12} />
+                </IconButton>
+                <IconButton label="Move down" size="sm" isDisabled={i === credits.length - 1} onPress={() => move(i, 1)} className="size-5">
+                  <ChevronDownIcon size={12} />
+                </IconButton>
+              </div>
+              <Input size="sm" aria-label="Name" placeholder="Name" value={c.name} maxLength={MAX_WRAPPED_CREDIT_LENGTH} onChange={(e) => update(i, { name: e.target.value })} className="min-w-0 flex-1" />
+              <Input
+                size="sm"
+                aria-label="Role"
+                placeholder="Role (optional)"
+                value={c.role ?? ""}
+                maxLength={MAX_WRAPPED_CREDIT_LENGTH}
+                onChange={(e) => update(i, { role: e.target.value || null })}
+                className="min-w-0 flex-1"
+              />
+              <IconButton label="Remove from credits" size="sm" onPress={() => remove(i)} className="hover:text-danger">
+                <XIcon size={12} />
+              </IconButton>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" onPress={() => setCredits([...credits, { name: "", role: null }])} isDisabled={credits.length >= MAX_WRAPPED_CREDITS}>
+          <PlusIcon />
+          Add a name
+        </Button>
+        {changed && (
+          <Button size="sm" variant="primary" onPress={save} isDisabled={saving}>
+            {saving ? "Saving…" : "Save credits"}
+          </Button>
+        )}
+      </div>
+      {error && <Notice tone="danger">{error}</Notice>}
     </div>
   );
 }

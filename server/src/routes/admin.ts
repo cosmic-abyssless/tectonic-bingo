@@ -73,8 +73,6 @@ router.patch(
     }
     // Validated and cleaned by the service (label, scope, names).
     if ("exclusivityRules" in body) params.exclusivityRules = body.exclusivityRules as never;
-    // Credits (CONTEXT.md): validated and cleaned by the service.
-    if ("wrappedCredits" in body) params.wrappedCredits = body.wrappedCredits as never;
     for (const key of dateFields) {
       if (key in body) (params as Record<string, unknown>)[key] = body[key] ? new Date(body[key] as string) : null;
     }
@@ -300,7 +298,7 @@ const wrappedArtUpload = imageUpload();
 router.get(
   "/wrapped-art",
   asyncHandler(async (req, res) => {
-    res.json({ art: wrappedArtService.listArt(db, req.bingo!.id) });
+    res.json({ art: wrappedArtService.listArt(db, req.bingo!.id), additionalCredits: wrappedArtService.additionalCredits(db, req.bingo!.id) });
   }),
 );
 router.post(
@@ -320,6 +318,14 @@ router.put(
     res.json({ art: wrappedArtService.reorderArt(db, req.bingo!, group, (req.body as { ids?: unknown })?.ids) });
   }),
 );
+// Credits (CONTEXT.md): a category's additional credits (no image), replaced as a whole list.
+router.put(
+  "/wrapped-art/:group/credits",
+  asyncHandler(async (req, res) => {
+    const section = wrappedArtService.parseSection(req.params.group);
+    res.json({ additionalCredits: wrappedArtService.setAdditionalCredits(db, req.bingo!, section, (req.body as { credits?: unknown })?.credits) });
+  }),
+);
 router.post(
   "/wrapped-art/images/:id",
   wrappedArtUpload.single("image"),
@@ -334,6 +340,13 @@ router.post(
   asyncHandler(async (req, res) => {
     const keying = wrappedArtService.parseKeying(req.body ?? {});
     res.json({ art: await wrappedArtService.recutArt(db, UPLOADS_DIR, req.bingo!, req.params.id as string, keying) });
+  }),
+);
+// Credits (CONTEXT.md): one image's credit; null (or a blank name) clears it.
+router.put(
+  "/wrapped-art/images/:id/credit",
+  asyncHandler(async (req, res) => {
+    res.json({ art: wrappedArtService.setArtCredit(db, req.bingo!, req.params.id as string, (req.body as { credit?: unknown })?.credit ?? null) });
   }),
 );
 router.delete(
