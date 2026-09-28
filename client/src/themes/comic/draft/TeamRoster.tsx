@@ -32,7 +32,7 @@ export function TeamRoster({ team, picks, isCurrent, showOrder, hiddenPickNumber
           // A shade lighter than the pick slips under it, so the team's card stands apart from its picks.
           background: isCurrent ? colors.YELLOW : colors.PAPER_RAISED,
           color: isCurrent ? colors.ON_YELLOW : colors.INK,
-          boxShadow: `${isCurrent ? 4 : 2}px ${isCurrent ? 4 : 2}px 0 ${colors.LINE}`,
+          boxShadow: `${isCurrent ? 4 : 2}px ${isCurrent ? 4 : 2}px 0 ${colors.SHADOW}`,
           transform: isCurrent ? "translate(-1px, -2px)" : undefined,
         }}
       >
@@ -66,7 +66,7 @@ export function TeamRoster({ team, picks, isCurrent, showOrder, hiddenPickNumber
             data-team-id={team.id}
             data-pick-number={group[0].pickNumber}
             className={`flex items-center gap-1 rounded-sm border-2 px-2 py-1 text-sm font-semibold ${group.length === 1 && pairRows?.[i] ? "min-h-[52px]" : ""} ${hiddenPickNumbers?.has(group[0].pickNumber) ? "invisible" : ""}`}
-            style={{ borderColor: colors.LINE, background: colors.PAPER, color: colors.INK, boxShadow: `2px 2px 0 ${colors.LINE}` }}
+            style={{ borderColor: colors.LINE, background: colors.PAPER, color: colors.INK, boxShadow: `2px 2px 0 ${colors.SHADOW}` }}
           >
             <div className="flex min-w-0 flex-1 flex-col justify-center">
               {group.map((p, j) => (

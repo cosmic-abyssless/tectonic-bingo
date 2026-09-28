@@ -10,7 +10,7 @@ export function AchievementUnlockCard({ achievement, onViewAchievements }: { ach
   return (
     <div
       className="w-[min(30rem,calc(100vw-32px))] border-[3px] px-4 py-3"
-      style={{ background: colors.YELLOW, color: colors.ON_YELLOW, borderColor: colors.LINE, boxShadow: `5px 5px 0 ${colors.LINE}` }}
+      style={{ background: colors.YELLOW, color: colors.ON_YELLOW, borderColor: colors.LINE, boxShadow: `5px 5px 0 ${colors.SHADOW}` }}
     >
       <div className="flex items-center gap-4">
         <div className="grid size-16 shrink-0 place-items-center border-[3px]" style={{ background: colors.PAPER_RAISED, borderColor: colors.LINE }}>

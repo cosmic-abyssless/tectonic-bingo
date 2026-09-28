@@ -111,8 +111,8 @@ export const TileCell = memo(function TileCell({
   // just marks the bingo cell's bounds. Keyboard focus (same "you're
   // interacting with this right now" idea as the search bubble's blue
   // outline) gets an accent outline and the comic offset shadow; frozen tiles
-  // get a hairline in their color. (A finished tile's mark is its book's green
-  // drop shadow — see ClosedBook's baseShadow — not an outline.)
+  // get a hairline in their color. (A finished tile's mark is its book turned
+  // over to the COMPLETED back cover, not an outline.)
   const stateColor = isFocusVisible
     ? "var(--color-accent)"
     : tile.freeze.isFrozen

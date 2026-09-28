@@ -18,7 +18,9 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
       status={
         page.showEndCountdown && page.bingo.endsAt ? (
           <>
-            <CountdownTimer target={page.bingo.endsAt} />
+            {/* On a phone the caption box has room for "6d 23h", not "6 days 23 hours 55 minutes". */}
+            <CountdownTimer target={page.bingo.endsAt} className="max-md:hidden" />
+            <CountdownTimer target={page.bingo.endsAt} format="short" className="md:hidden" />
             &nbsp;left
           </>
         ) : undefined

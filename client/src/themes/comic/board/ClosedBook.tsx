@@ -117,10 +117,11 @@ export const BACK_STAGGER_CSS = "translateX(2.5%) translateY(0.6%) scaleX(1.025)
  * above — while the base is still occluded under the cover either way, so
  * there's nothing to fade.
  */
-export function baseShadow(colors: ComicColors, complete: boolean): string {
-  // A finished book casts a green shadow instead of a black one.
-  const color = complete ? `color-mix(in srgb, ${colors.OK} 75%, transparent)` : "rgba(0,0,0,0.45)";
-  return `drop-shadow(${bw(0.0375)} ${bw(0.125)} ${bw(0.1)} ${color})`;
+export function baseShadow(): string {
+  // The same for a finished book: it used to cast a green glow, which piled a
+  // second, blurred green on top of the completed line's wash (LineCompletionWash)
+  // in a different shade. The turned-over back cover, stamped COMPLETED, marks it.
+  return `drop-shadow(${bw(0.0375)} ${bw(0.125)} ${bw(0.1)} rgba(0,0,0,0.45))`;
 }
 
 export interface LeafFaces {
@@ -183,7 +184,7 @@ export function ClosedBook({
         style={{
           backgroundColor: page.PAPER_ALT,
           border: pageBorder,
-          filter: baseShadow(colors, tile.progress.allComplete),
+          filter: baseShadow(),
           transformOrigin: "left top",
           transform: `${BASE_STAGGER_CSS} translateZ(${-BASE_DEPTH}px)`,
         }}

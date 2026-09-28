@@ -10,8 +10,9 @@ import type { ComicColors } from "./board/colors";
  * Each covers everything dark mode colours: the chrome tokens (page
  * background, header/search/banner surfaces, buttons), the tile tokens, and
  * the ComicColors the book/dialog components draw with. They differ in
- * structure, not just hue: LINE (panel borders and hard shadows) is white,
- * black, neon or cream; surfaces are charcoal or mid-tone "coloured paper";
+ * structure, not just hue: LINE (panel borders) is white, black, neon or
+ * cream, and SHADOW (the hard offset shadows) is a near-black wherever the
+ * line is light, so a shadow reads as depth rather than a second border; surfaces are charcoal or mid-tone "coloured paper";
  * lettering is white, cream or mint. (The TECTONIC logo is not themed — it is
  * always white on red.)
  */
@@ -58,6 +59,7 @@ export const DARK_PALETTES: DarkPalette[] = [
     colors: {
       INK: "#f7ecd2",
       LINE: "#f7ecd2",
+      SHADOW: "#07081a",
       INK_BODY: "#ede0c4",
       INK_SUBTLE: "#a89c86",
       RULE: "rgba(247,236,210,0.22)",
@@ -73,6 +75,7 @@ export const DARK_PALETTES: DarkPalette[] = [
       ORANGE: "#ff8c2e",
       PURPLE: "#a06cff",
       YELLOW_TINT: "#4a3d00",
+      ORANGE_TINT: "#4c3849",
       BLUE_TINT: "#1a2a66",
       RED_TINT: "#5a1a18",
       GREEN_TINT: "#153f2a",
@@ -88,6 +91,7 @@ export const DARK_PALETTES: DarkPalette[] = [
       ON_ICE: "#0a3550",
       ORANGE_LINE: "#ff8c2e",
       HALFTONE: "#7f8bff",
+      LINK_HOVER: "#ffd400",
       ON_LOUD: "#fffaf0",
       ON_YELLOW: "#0b0b0d",
       TITLE_FILL: "#ffffff",
@@ -130,6 +134,7 @@ export const DARK_PALETTES: DarkPalette[] = [
     colors: {
       INK: "#f0f0f3",
       LINE: "#a3a3ad",
+      SHADOW: "#000000",
       INK_BODY: "#e2e2e6",
       INK_SUBTLE: "#a4a4ad",
       RULE: "rgba(163,163,173,0.30)",
@@ -144,11 +149,15 @@ export const DARK_PALETTES: DarkPalette[] = [
       GREEN: "#3cf07a",
       ORANGE: "#ff9a2e",
       PURPLE: "#b48cff",
-      YELLOW_TINT: "#3d3700",
-      BLUE_TINT: "#14295c",
-      RED_TINT: "#4d1414",
-      GREEN_TINT: "#0f3d22",
-      CYAN_TINT: "#0b3844",
+      // Tints: 20% of the loud colour on the raised paper, the same recipe for every
+      // hue, so a tinted caption reads as coloured paper rather than a murky
+      // saturated dark (a straight dark yellow is olive).
+      YELLOW_TINT: "#544b2e",
+      ORANGE_TINT: "#574332",
+      BLUE_TINT: "#33405c",
+      RED_TINT: "#4e292e",
+      GREEN_TINT: "#305441",
+      CYAN_TINT: "#2e4f5c",
       OK: "#3cf07a",
       WARN: "#ffb02e",
       BAD: "#ff5c5c",
@@ -160,12 +169,15 @@ export const DARK_PALETTES: DarkPalette[] = [
       ON_ICE: "#0a3550",
       ORANGE_LINE: "#ff9a2e",
       HALFTONE: "#a3a3ad",
+      LINK_HOVER: "#f2c418",
       ON_LOUD: "#f5f5f7",
       ON_YELLOW: "#000000",
       TITLE_FILL: "#f2c418",
       TITLE_STROKE: "#0e0e10",
       SCRIM: "#0e0e10",
-      BURST: "#e6e6ea",
+      // The rays behind an open modal: a dimmed version of the yellow, so they read as
+      // the same sunburst the light palette has rather than a glaring grey.
+      BURST: "#9c8a3c",
       RAY: "rgba(163,163,173,0.09)",
       SHADE: "rgba(163,163,173,0.22)",
       // The comic book's pages: dark papyrus stock with sepia ink and lines,
@@ -178,6 +190,7 @@ export const DARK_PALETTES: DarkPalette[] = [
       page: {
         INK: "#2a1f12",
         LINE: "#2a1f12",
+        SHADOW: "#2a1f12",
         INK_BODY: "#33271a",
         INK_SUBTLE: "#473925",
         RULE: "rgba(42,31,18,0.30)",
@@ -188,6 +201,7 @@ export const DARK_PALETTES: DarkPalette[] = [
         BLUE: "#2c58c8",
         RED: "#c8201a",
         YELLOW_TINT: "#ecd681",
+        ORANGE_TINT: "#dab277",
         BLUE_TINT: "#b8c7e8",
         RED_TINT: "#e3b0a4",
         GREEN_TINT: "#b3d8b1",
@@ -197,6 +211,7 @@ export const DARK_PALETTES: DarkPalette[] = [
         BAD: "#821017",
         INFO: "#132e81",
         FROZEN: "#054f6e",
+        LINK_HOVER: "#132e81",
         ON_LOUD: "#fffaf0",
         ON_YELLOW: "#2a1f12",
         SHADE: "rgba(42,31,18,0.25)",
@@ -235,6 +250,7 @@ export const DARK_PALETTES: DarkPalette[] = [
     colors: {
       INK: "#fff1d6",
       LINE: "#0b0b0d",
+      SHADOW: "#0b0b0d",
       INK_BODY: "#f3e4c6",
       INK_SUBTLE: "#ecdcbd",
       RULE: "rgba(11,11,13,0.35)",
@@ -250,6 +266,7 @@ export const DARK_PALETTES: DarkPalette[] = [
       ORANGE: "#ec8a2f",
       PURPLE: "#9a72d1",
       YELLOW_TINT: "#5e4810",
+      ORANGE_TINT: "#85603c",
       BLUE_TINT: "#243a7a",
       RED_TINT: "#6e1f1a",
       GREEN_TINT: "#2a5a34",
@@ -265,6 +282,7 @@ export const DARK_PALETTES: DarkPalette[] = [
       ON_ICE: "#0a3550",
       ORANGE_LINE: "#ec8a2f",
       HALFTONE: "#0b0b0d",
+      LINK_HOVER: "#f2c94c",
       ON_LOUD: "#fff1d6",
       ON_YELLOW: "#0b0b0d",
       TITLE_FILL: "#f2c94c",
@@ -307,6 +325,7 @@ export const DARK_PALETTES: DarkPalette[] = [
     colors: {
       INK: "#ffffff",
       LINE: "#27e1ff",
+      SHADOW: "#27e1ff",
       INK_BODY: "#e9ecff",
       INK_SUBTLE: "#9fb0ff",
       RULE: "rgba(39,225,255,0.35)",
@@ -322,6 +341,7 @@ export const DARK_PALETTES: DarkPalette[] = [
       ORANGE: "#ff8c2e",
       PURPLE: "#b28cff",
       YELLOW_TINT: "#4a4300",
+      ORANGE_TINT: "#463750",
       BLUE_TINT: "#1b2f80",
       RED_TINT: "#5a1430",
       GREEN_TINT: "#0f4a30",
@@ -337,6 +357,7 @@ export const DARK_PALETTES: DarkPalette[] = [
       ON_ICE: "#0a3550",
       ORANGE_LINE: "#ff8c2e",
       HALFTONE: "#ff2ea6",
+      LINK_HOVER: "#ffee3a",
       ON_LOUD: "#ffffff",
       ON_YELLOW: "#0a0f30",
       TITLE_FILL: "#ffffff",
@@ -379,6 +400,7 @@ export const DARK_PALETTES: DarkPalette[] = [
     colors: {
       INK: "#eafff3",
       LINE: "#ff7a1a",
+      SHADOW: "#03110e",
       INK_BODY: "#d8f2e3",
       INK_SUBTLE: "#8fc9b3",
       RULE: "rgba(255,122,26,0.35)",
@@ -394,6 +416,7 @@ export const DARK_PALETTES: DarkPalette[] = [
       ORANGE: "#ff7a1a",
       PURPLE: "#b593ff",
       YELLOW_TINT: "#4a3c08",
+      ORANGE_TINT: "#454c34",
       BLUE_TINT: "#173a66",
       RED_TINT: "#571c1a",
       GREEN_TINT: "#114a33",
@@ -409,6 +432,7 @@ export const DARK_PALETTES: DarkPalette[] = [
       ON_ICE: "#0a3550",
       ORANGE_LINE: "#ff7a1a",
       HALFTONE: "#ff7a1a",
+      LINK_HOVER: "#ffd23f",
       ON_LOUD: "#fff6ea",
       ON_YELLOW: "#1a1204",
       TITLE_FILL: "#ffd23f",
@@ -451,6 +475,7 @@ export const DARK_PALETTES: DarkPalette[] = [
     colors: {
       INK: "#fff8f0",
       LINE: "#fff1e0",
+      SHADOW: "#140307",
       INK_BODY: "#ffeedd",
       INK_SUBTLE: "#f0c9ce",
       RULE: "rgba(255,241,224,0.30)",
@@ -466,6 +491,7 @@ export const DARK_PALETTES: DarkPalette[] = [
       ORANGE: "#ff8a2e",
       PURPLE: "#a988ff",
       YELLOW_TINT: "#5c4600",
+      ORANGE_TINT: "#8e3833",
       BLUE_TINT: "#253a80",
       RED_TINT: "#7a1f1f",
       GREEN_TINT: "#1a5a36",
@@ -481,6 +507,7 @@ export const DARK_PALETTES: DarkPalette[] = [
       ON_ICE: "#0a3550",
       ORANGE_LINE: "#ff8a2e",
       HALFTONE: "#fff1e0",
+      LINK_HOVER: "#ffd400",
       ON_LOUD: "#fff8f0",
       ON_YELLOW: "#2e0a12",
       TITLE_FILL: "#ffd400",

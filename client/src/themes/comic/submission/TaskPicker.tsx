@@ -27,7 +27,7 @@ export function TaskPicker({ task }: { task: SubmissionFlowModel["task"] }) {
                     borderColor: colors.LINE,
                     background: active ? colors.YELLOW : colors.PAPER_RAISED,
                     color: active ? colors.ON_YELLOW : colors.INK_SUBTLE,
-                    boxShadow: active ? `3px 3px 0 ${colors.LINE}` : "none",
+                    boxShadow: active ? `3px 3px 0 ${colors.SHADOW}` : "none",
                     transform: active ? undefined : "translate(2px,2px)",
                   }}
                 >

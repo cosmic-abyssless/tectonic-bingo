@@ -46,7 +46,7 @@ function StepRoundel({ step }: { step: number }) {
     <span
       aria-hidden
       className="flex size-10 shrink-0 items-center justify-center rounded-full border-[3px] text-2xl leading-none"
-      style={{ fontFamily: COMIC_FONT, background: colors.YELLOW, color: colors.ON_YELLOW, borderColor: colors.LINE, boxShadow: `2px 2px 0 ${colors.LINE}`, transform: "rotate(-8deg)" }}
+      style={{ fontFamily: COMIC_FONT, background: colors.YELLOW, color: colors.ON_YELLOW, borderColor: colors.LINE, boxShadow: `2px 2px 0 ${colors.SHADOW}`, transform: "rotate(-8deg)" }}
     >
       {step}
     </span>
@@ -76,7 +76,7 @@ function SheetTitle({ step, title, description }: { step?: number; title: ReactN
 // Not tilted, unlike the caption boxes: a transformed ancestor would become the containing block of a
 // SearchableSelect's fixed-position list, and pull the list away from its field.
 function sheetStyle(colors: ComicColors): CSSProperties {
-  return { background: colors.PAPER, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.LINE}`, color: colors.INK_BODY };
+  return { background: colors.PAPER, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.SHADOW}`, color: colors.INK_BODY };
 }
 
 /** A panel of the signup stage: paper, an ink border and a hard shadow, with a lettered header. */
@@ -203,7 +203,7 @@ export function ChoiceChip({ type, name, checked, onChange, children }: { type: 
         outlineColor: colors.BLUE,
         background: checked ? colors.YELLOW : colors.PAPER_RAISED,
         color: checked ? colors.ON_YELLOW : colors.INK,
-        boxShadow: `${checked ? 3 : 1}px ${checked ? 3 : 1}px 0 ${colors.LINE}`,
+        boxShadow: `${checked ? 3 : 1}px ${checked ? 3 : 1}px 0 ${colors.SHADOW}`,
       }}
     >
       <input type={type} name={name} checked={checked} onChange={(e) => onChange(e.target.checked)} className="sr-only" />
@@ -223,7 +223,7 @@ export function ChoiceChip({ type, name, checked, onChange, children }: { type: 
 export function StatBox({ label, value, note, loading }: { label: string; value: string; note?: string; loading?: boolean }) {
   const { colors } = useComic();
   return (
-    <div className="min-w-0 border-[3px] px-3 py-2" style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.LINE}` }}>
+    <div className="min-w-0 border-[3px] px-3 py-2" style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.SHADOW}` }}>
       <div className="text-sm uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
         {label}
       </div>
@@ -261,7 +261,7 @@ export function RowList({ children, scroll }: { children: ReactNode; scroll?: bo
   return (
     <ul
       className={`comic-rows border-[3px] ${scroll ? "max-h-64 overflow-y-auto" : ""}`}
-      style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.LINE}`, ["--comic-rule" as string]: colors.RULE }}
+      style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.SHADOW}`, ["--comic-rule" as string]: colors.RULE }}
     >
       {children}
     </ul>
