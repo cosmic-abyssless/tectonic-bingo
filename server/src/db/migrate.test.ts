@@ -112,7 +112,7 @@ describe("runMigrations", () => {
   });
   it("moves the Bingo-wide Credits onto the Outro's art in order, the rest becoming its additional credits (#281)", () => {
     const db = drizzle(sqlite);
-    migrateBefore(db, "0046_wrapped_art_credits");
+    migrateBefore(db, "0048_wrapped_art_credits");
     sqlite.prepare("insert into users (id, discord_id, discord_username, created_at, updated_at) values ('u1', 'd1', 'name', 0, 0)").run();
     const bingo = sqlite.prepare("insert into bingos (id, slug, name, board_rows, board_cols, created_by_user_id, wrapped_credits_json) values (?, ?, ?, 1, 1, 'u1', ?)");
     const credits = [{ name: "Zezima", role: "Board design" }, { name: "Woox", role: null }, { name: "Lynx", role: " Art " }];

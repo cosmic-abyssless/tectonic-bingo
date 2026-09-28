@@ -555,7 +555,7 @@ describe("every column is accounted for", () => {
       [
         "id", "slug", "stage", "createdByUserId", "createdAt", // identity of this one bingo
         "signupOpensAt", "draftScheduledAt", "revealScheduledAt", "startsAt", "endsAt", // the schedule of one event
-        "womEnabled", "womGroupId", "womGroupVerificationCode", "womCompetitionId", "womSyncError", // Wise Old Man: ids, a secret, sync state
+        "womEnabled", "womGroupId", "womGroupVerificationCode", "womCompetitionId", "womSyncError", "womBulkUpdateSentAt", // Wise Old Man: ids, a secret, sync state
         "draftStarted", "draftOrderLockedUntil", "cutReviewFingerprint", // live draft ceremony — not a template setting
         "leftoverMode", // replaced by cutMode, kept only until the column is dropped
         "wrappedCreditsJson", // replaced by per-image and per-category credits (#281), kept only until the column is dropped

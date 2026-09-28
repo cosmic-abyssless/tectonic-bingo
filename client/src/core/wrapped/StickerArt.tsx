@@ -10,7 +10,20 @@ export const BOIL_MS = 650;
  * the tilt) swapped slowly. Both frames are loaded and stacked, so a swap never waits on the network. The shadow is a
  * CSS drop-shadow, which follows the torn edge. With reduced motion it shows the first frame, still.
  */
-export function StickerArt({ frames, className = "", alt = "", phase = 0 }: { frames: WrappedArtFrames; className?: string; alt?: string; phase?: number }) {
+export function StickerArt({
+  frames,
+  className = "",
+  frameClassName = "h-full w-auto max-w-full",
+  alt = "",
+  phase = 0,
+}: {
+  frames: WrappedArtFrames;
+  className?: string;
+  /** Sizes the first frame, which sizes the sticker; by default it fills the box's height. */
+  frameClassName?: string;
+  alt?: string;
+  phase?: number;
+}) {
   const reduceMotion = useReducedMotion();
   const [frame, setFrame] = useState(0);
   // `phase` (0–1) delays this sticker's swaps by that share of a frame, so stickers side by side don't boil in step.
@@ -39,8 +52,9 @@ export function StickerArt({ frames, className = "", alt = "", phase = 0 }: { fr
           alt=""
           draggable={false}
           // The first frame sizes the sticker: to the box's height with its own width (a box with only a height hugs the art),
-          // or contained in a box sized both ways. The second lies exactly over it.
-          className={`object-contain ${i === 0 ? "mx-auto block h-full w-auto max-w-full" : "absolute inset-0 size-full"} ${frame === i ? "visible" : "invisible"}`}
+          // contained in a box sized both ways, or by `frameClassName` (e.g. only max sizes: as big as fits, up to its
+          // own size). The second lies exactly over it.
+          className={`object-contain ${i === 0 ? `mx-auto block ${frameClassName}` : "absolute inset-0 size-full"} ${frame === i ? "visible" : "invisible"}`}
         />
       ))}
     </div>

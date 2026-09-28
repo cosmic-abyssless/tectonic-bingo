@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ea20cc0d-c7ae-44f5-b4e0-f856a322eb15",
-  "prevId": "69dc01ea-de83-4f07-8dcc-8e928693a0b5",
+  "id": "8ea7166a-1519-4b04-9744-b89802abb0a7",
+  "prevId": "e7b076be-5bde-4c79-be6b-cbdc9b75ed4c",
   "tables": {
     "achievement_activity": {
       "name": "achievement_activity",
@@ -966,6 +966,13 @@
         "wom_sync_error": {
           "name": "wom_sync_error",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "wom_bulk_update_sent_at": {
+          "name": "wom_bulk_update_sent_at",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
