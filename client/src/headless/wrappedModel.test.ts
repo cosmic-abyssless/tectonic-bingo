@@ -61,11 +61,11 @@ function bingo(): BingoWrapped {
 }
 
 function response(player: PlayerWrapped | null, extra: Partial<MyWrappedResponse> = {}): MyWrappedResponse {
-  return { state: { published: true, publishedAt: iso(48), publishOnFinish: false, pendingSubmissions: 0 }, preview: false, bingo: bingo(), player, moderator: null, art: { sections: {}, side: [] }, ...extra };
+  return { state: { published: true, publishedAt: iso(48), publishOnFinish: false, pendingSubmissions: 0 }, preview: false, bingo: bingo(), player, moderator: null, art: { sections: {}, additionalCredits: {}, side: [] }, ...extra };
 }
 
 const player = (you: Partial<WrappedYou> = {}): PlayerWrapped => ({ userId: "me", teamId: "a", you: { ...emptyYou, ...you }, duo: null, captain: null });
-const opts = { viewerId: "me", viewerName: "me rsn", credits: [], startsAt: T0, endsAt: T0 + 24 * HOUR };
+const opts = { viewerId: "me", viewerName: "me rsn", startsAt: T0, endsAt: T0 + 24 * HOUR };
 const actions = { goToBoard: () => {}, goToRewind: () => {} };
 const story = (data: MyWrappedResponse) => buildWrappedStory(data, opts, actions, "winter");
 const kinds = (data: MyWrappedResponse) => story(data).sections.map((s) => s.id);
@@ -77,10 +77,13 @@ describe("buildWrappedStory", () => {
 
   it("gives each section its Wrapped art, and a section without any none", () => {
     const frames = (name: string): [string, string] => [`/uploads/wrapped-art/${name}-1.webp`, `/uploads/wrapped-art/${name}-2.webp`];
-    const built = story(response(player({ submissions: 5 }), { art: { sections: { intro: [frames("intro")], team: [frames("team"), frames("team2")], duo: [frames("duo")] }, side: [frames("side")] } }));
+    const piece = (name: string) => ({ frames: frames(name), credit: null });
+    const built = story(
+      response(player({ submissions: 5 }), { art: { sections: { intro: [piece("intro")], team: [piece("team"), piece("team2")], duo: [piece("duo")] }, additionalCredits: {}, side: [frames("side")] } }),
+    );
     const sections = built.sections;
     expect(built.sideArt.map((f) => f[0])).toEqual(["/uploads/wrapped-art/side-1.webp"]);
-    expect(sections.map((s) => [s.id, s.section.art.map((f) => f[0])])).toEqual([
+    expect(sections.map((s) => [s.id, s.section.art.images.map((i) => i.frames[0])])).toEqual([
       ["intro", ["/uploads/wrapped-art/intro-1.webp"]],
       ["you", []],
       ["team", ["/uploads/wrapped-art/team-1.webp", "/uploads/wrapped-art/team2-1.webp"]],
@@ -91,7 +94,7 @@ describe("buildWrappedStory", () => {
 
   it("doesn't tell You just because it has art", () => {
     const frames: [string, string] = ["/a.webp", "/b.webp"];
-    expect(kinds(response(player(), { art: { sections: { you: [frames] }, side: [] } }))).toEqual(["intro", "team", "bingo", "outro"]);
+    expect(kinds(response(player(), { art: { sections: { you: [{ frames, credit: null }] }, additionalCredits: {}, side: [] } }))).toEqual(["intro", "team", "bingo", "outro"]);
   });
 
   it("gives a viewer who isn't a Player the Bingo only", () => {
@@ -105,16 +108,36 @@ describe("buildWrappedStory", () => {
     expect(kinds(response(null, { moderator: { ...moderator, reviewed: 0 } }))).toEqual(["intro", "bingo", "outro"]);
   });
 
-  it("names the Moderator on their slide, and lists the Credits in the Outro in order", () => {
+  it("names the Moderator on their slide", () => {
     const moderator = { reviewed: 30, medianReviewMs: 20 * 60_000, rejectionRate: 0.1 };
-    const credits = [{ name: "Zezima", role: "Board design" }, { name: "Woox", role: null }];
-    const model = buildWrappedStory(response(null, { moderator }), { ...opts, credits }, actions, "winter");
-    const mod = model.sections.find((s) => s.id === "moderator")!.section;
+    const mod = story(response(null, { moderator })).sections.find((s) => s.id === "moderator")!.section;
     expect(mod.kind === "moderator" && mod.name).toBe("me rsn");
-    const outro = model.sections.find((s) => s.id === "outro")!.section;
-    expect(outro.kind === "outro" && outro.credits).toEqual(credits);
-    const none = story(response(null)).sections.find((s) => s.id === "outro")!.section;
-    expect(none.kind === "outro" && none.credits).toEqual([]);
+  });
+
+  it("captions each image with its own credit and lists each category's additional credits, the same for every category (#281)", () => {
+    const frames = (name: string): [string, string] => [`/${name}-1.webp`, `/${name}-2.webp`];
+    const art = {
+      sections: {
+        outro: [{ frames: frames("o1"), credit: { name: "Zezima", role: "Board design" } }, { frames: frames("o2"), credit: null }],
+        moderators: [{ frames: frames("m1"), credit: { name: "Woox", role: null } }],
+      },
+      additionalCredits: { outro: [{ name: "Lynx", role: "Art" }], team: [{ name: "B0aty", role: "" }] },
+      side: [],
+    };
+    const moderation = { ...bingo().moderation, reviewed: 12 };
+    const model = story(response(player({ submissions: 1 }), { art, bingo: { ...bingo(), moderation } }));
+    const section = (id: string) => model.sections.find((s) => s.id === id)!.section;
+    expect(section("outro").art).toEqual({
+      images: [
+        { frames: frames("o1"), name: "Zezima" },
+        { frames: frames("o2"), name: null },
+      ],
+      credits: [{ name: "Lynx", role: "Art" }],
+    });
+    expect(section("team").art).toEqual({ images: [], credits: [{ name: "B0aty", role: null }] });
+    const b = section("bingo");
+    expect(b.kind === "bingo" && b.moderation?.art).toEqual({ images: [{ frames: frames("m1"), name: "Woox" }], credits: [] });
+    expect(b.art).toEqual({ images: [], credits: [] });
   });
 
   it("skips the You section when it has nothing to say, and each part of it that has nothing", () => {
@@ -202,6 +225,7 @@ describe("labels", () => {
 
   it("rejection banter climbs with the rate", () => {
     expect(new Set([0, 0.01, 0.1, 0.2, 0.5].map(rejectionBanter)).size).toBe(5);
+    expect(rejectionBanter(0.01)).not.toMatch(/behaved/);
   });
 });
 

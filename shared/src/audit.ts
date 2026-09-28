@@ -84,7 +84,8 @@ export interface AuditDetailsMap {
       bonusPotAmount: number;
       rulesMarkdown: string | null;
       exclusivityRulesJson: string;
-      wrappedCreditsJson: string;
+      /** Only on entries written before Credits moved onto the Wrapped art (#281). */
+      wrappedCreditsJson?: string;
       signupOpensAt: string | null;
       draftScheduledAt: string | null;
       revealScheduledAt: string | null;
@@ -184,6 +185,9 @@ export interface AuditDetailsMap {
   "wrapped.art_recut": { section: string; tolerance: number; softness: number };
   "wrapped.art_removed": { section: string };
   "wrapped.art_reordered": { section: string };
+  // Credits (CONTEXT.md, #281): an Admin setting or clearing one image's credit, or a category's additional credits.
+  "wrapped.art_credit_set": { section: string; name: string | null };
+  "wrapped.credits_set": { section: string; count: number };
 
   "draft.started": { order: { teamId: string; name: string; draftOrder: number }[] };
   "draft.order_shuffled": { order: { teamId: string; name: string; draftOrder: number }[] };
@@ -699,6 +703,20 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Wrapped art reordered",
     label: (i) => `${actor(i)} reordered the Wrapped art in "${i.details.section}"`,
+  },
+  "wrapped.art_credit_set": {
+    category: "settings",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Wrapped art credit set",
+    label: (i) => (i.details.name ? `${actor(i)} credited a Wrapped art image in "${i.details.section}" to ${i.details.name}` : `${actor(i)} cleared a Wrapped art image's credit in "${i.details.section}"`),
+  },
+  "wrapped.credits_set": {
+    category: "settings",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Wrapped credits set",
+    label: (i) => `${actor(i)} set the additional credits in "${i.details.section}" (${i.details.count})`,
   },
   "draft.started": { category: "draft", tone: "info", visibility: "public", title: "Draft started", label: (i) => `${actor(i)} started the draft` },
   "draft.order_shuffled": { category: "draft", tone: "info", visibility: "public", title: "Pick order shuffled", label: (i) => `${actor(i)} shuffled the pick order` },

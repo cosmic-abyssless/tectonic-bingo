@@ -323,6 +323,13 @@
       "when": 1790565803163,
       "tag": "0047_wom_bulk_update",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "6",
+      "when": 1790567170646,
+      "tag": "0048_wrapped_art_credits",
+      "breakpoints": true
     }
   ]
 }

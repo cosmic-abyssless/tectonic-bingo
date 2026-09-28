@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { WrappedArtFrames } from "@bingo/shared";
-import type { WrappedDropModel, WrappedPersonModel } from "../../headless/types";
+import type { WrappedDropModel, WrappedPersonModel, WrappedSectionArtModel } from "../../headless/types";
 import { WikiIcon } from "../ui/ItemIcon";
 import { OsrsCaption } from "./OsrsCaption";
 import { StickerArt } from "./StickerArt";
@@ -123,5 +123,28 @@ export function WrappedSectionArt({ art }: { art: (WrappedArtFrames | CaptionedA
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * A category's art and credits (CONTEXT.md "Credits"), the same for every section: its Category images (each with the
+ * name it credits captioned on it, as WrappedSectionArt) and, under them, its additional credits (ones with no image),
+ * each a name in OSRS's font with its role over it. Nothing when the category has neither.
+ */
+export function WrappedCategoryArt({ art }: { art: WrappedSectionArtModel }) {
+  return (
+    <>
+      <WrappedSectionArt art={art.images.map(({ frames, name }) => (name ? { art: frames, name } : frames))} />
+      {art.credits.length > 0 && (
+        <ul aria-label="Credits" className="mb-8 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+          {art.credits.map((credit, i) => (
+            <li key={i} className="flex flex-col items-center gap-1">
+              {credit.role && <span className="text-xs text-on-surface-subtle">{credit.role}</span>}
+              <OsrsCaption size="md">{credit.name}</OsrsCaption>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }

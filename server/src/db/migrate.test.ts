@@ -110,4 +110,34 @@ describe("runMigrations", () => {
     expect(JSON.parse(row.settings_json)).toMatchObject({ disabled: [], luck: { spoonDecay: 0.5, spoonMinLuck: 1, dryMinLuck: 1, clutchMinLuck: 1 } });
     expect(JSON.parse(row.settings_json).minimums.grinder).toBe(10);
   });
+  it("moves the Bingo-wide Credits onto the Outro's art in order, the rest becoming its additional credits (#281)", () => {
+    const db = drizzle(sqlite);
+    migrateBefore(db, "0048_wrapped_art_credits");
+    sqlite.prepare("insert into users (id, discord_id, discord_username, created_at, updated_at) values ('u1', 'd1', 'name', 0, 0)").run();
+    const bingo = sqlite.prepare("insert into bingos (id, slug, name, board_rows, board_cols, created_by_user_id, wrapped_credits_json) values (?, ?, ?, 1, 1, 'u1', ?)");
+    const credits = [{ name: "Zezima", role: "Board design" }, { name: "Woox", role: null }, { name: "Lynx", role: " Art " }];
+    bingo.run("many", "many", "Many", JSON.stringify(credits));
+    bingo.run("few", "few", "Few", JSON.stringify(credits.slice(0, 1)));
+    bingo.run("none", "none", "None", "[]");
+    const art = sqlite.prepare("insert into wrapped_art (id, bingo_id, section, sort_order, original_url, frame1_url, frame2_url, updated_at) values (?, ?, ?, ?, 'o', 'a', 'b', 0)");
+    art.run("m2", "many", "outro", 1);
+    art.run("m1", "many", "outro", 0);
+    art.run("mt", "many", "team", 0);
+    art.run("f1", "few", "outro", 0);
+    art.run("f2", "few", "outro", 1);
+    art.run("n1", "none", "outro", 0);
+
+    runMigrations(db, migrationsFolder);
+    const credit = (id: string) => sqlite.prepare("select credit_name name, credit_role role from wrapped_art where id = ?").get(id);
+    expect(credit("m1")).toEqual({ name: "Zezima", role: "Board design" });
+    expect(credit("m2")).toEqual({ name: "Woox", role: null });
+    expect(credit("mt")).toEqual({ name: null, role: null });
+    expect(credit("f1")).toEqual({ name: "Zezima", role: "Board design" });
+    expect(credit("f2")).toEqual({ name: null, role: null });
+    expect(credit("n1")).toEqual({ name: null, role: null });
+    const additional = (id: string) => JSON.parse((sqlite.prepare("select wrapped_art_credits_json j from bingos where id = ?").get(id) as { j: string }).j);
+    expect(additional("many")).toEqual({ outro: [{ name: "Lynx", role: "Art" }] });
+    expect(additional("few")).toEqual({});
+    expect(additional("none")).toEqual({});
+  });
 });

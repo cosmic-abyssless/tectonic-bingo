@@ -10,7 +10,7 @@ import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createBingo, deleteBingo } from "./bingoService";
 import { exportBingo, importBingoWithImages } from "./bingoExportService";
-import { addArt, artSet, listArt, recutArt, removeArt, reorderArt, replaceArt, WRAPPED_ART_DIR } from "./wrappedArtService";
+import { addArt, additionalCredits, artSet, listArt, recutArt, removeArt, reorderArt, replaceArt, setAdditionalCredits, setArtCredit, WRAPPED_ART_DIR } from "./wrappedArtService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -48,6 +48,9 @@ function greenScreenshot(): Promise<Buffer> {
     .toBuffer();
 }
 
+/** A Category image as the story shows it, with no credit. */
+const piece = (frames: [string, string]) => ({ frames, credit: null });
+
 const onDisk = (url: string) => fs.existsSync(path.join(uploadsDir, url.replace(/^\/uploads\//, "")));
 const filesIn = () => (fs.existsSync(path.join(uploadsDir, WRAPPED_ART_DIR)) ? fs.readdirSync(path.join(uploadsDir, WRAPPED_ART_DIR)) : []);
 
@@ -63,7 +66,7 @@ describe("addArt", () => {
       expect(onDisk(frame)).toBe(true);
       expect((await sharp(path.join(uploadsDir, frame.replace(/^\/uploads\//, ""))).metadata()).format).toBe("webp");
     }
-    expect(artSet(db, bingo.id)).toEqual({ sections: { intro: [art.frames] }, side: [] });
+    expect(artSet(db, bingo.id)).toEqual({ sections: { intro: [piece(art.frames)] }, additionalCredits: {}, side: [] });
   });
 
   it("keys out a solid-background screenshot", async () => {
@@ -91,7 +94,7 @@ describe("addArt", () => {
     const first = await addArt(db, uploadsDir, bingo, "team", await transparentPng());
     const second = await addArt(db, uploadsDir, bingo, "team", await greenScreenshot());
     const side = await addArt(db, uploadsDir, bingo, "side", await transparentPng());
-    expect(artSet(db, bingo.id)).toEqual({ sections: { team: [first.frames, second.frames] }, side: [side.frames] });
+    expect(artSet(db, bingo.id)).toEqual({ sections: { team: [piece(first.frames), piece(second.frames)] }, additionalCredits: {}, side: [side.frames] });
   });
 
   it("stops at the most a group holds", async () => {
@@ -128,7 +131,7 @@ describe("replaceArt, recutArt, removeArt, reorderArt", () => {
     const bingo = newBingo("b1");
     const a = await addArt(db, uploadsDir, bingo, "outro", await transparentPng());
     removeArt(db, bingo, a.id);
-    expect(artSet(db, bingo.id)).toEqual({ sections: {}, side: [] });
+    expect(artSet(db, bingo.id)).toEqual({ sections: {}, additionalCredits: {}, side: [] });
     expect(() => removeArt(db, bingo, a.id)).toThrow(/No such/);
   });
 
@@ -147,14 +150,55 @@ describe("replaceArt, recutArt, removeArt, reorderArt", () => {
   });
 });
 
+describe("credits (#281)", () => {
+  it("attaches a credit to one image, kept through a re-cut and a reorder, and cleared again", async () => {
+    const bingo = newBingo("b1");
+    const a = await addArt(db, uploadsDir, bingo, "moderators", await greenScreenshot());
+    const b = await addArt(db, uploadsDir, bingo, "moderators", await transparentPng());
+    expect(setArtCredit(db, bingo, b.id, { name: " Zezima ", role: " Head mod " }).credit).toEqual({ name: "Zezima", role: "Head mod" });
+    await recutArt(db, uploadsDir, bingo, a.id, { tolerance: 50, softness: 90 });
+    reorderArt(db, bingo, "moderators", [b.id, a.id]);
+    expect(artSet(db, bingo.id).sections.moderators?.map((p) => p.credit)).toEqual([{ name: "Zezima", role: "Head mod" }, null]);
+    expect(setArtCredit(db, bingo, b.id, { name: "", role: "" }).credit).toBeNull();
+    expect(setArtCredit(db, bingo, a.id, { name: "Woox", role: "" }).credit).toEqual({ name: "Woox", role: null });
+    expect(setArtCredit(db, bingo, a.id, null).credit).toBeNull();
+  });
+
+  it("refuses a credit on a side image, a role without a name, or overlong text", async () => {
+    const bingo = newBingo("b1");
+    const side = await addArt(db, uploadsDir, bingo, "side", await transparentPng());
+    const outro = await addArt(db, uploadsDir, bingo, "outro", await transparentPng());
+    expect(() => setArtCredit(db, bingo, side.id, { name: "Zezima", role: null })).toThrow(/Side images/);
+    expect(() => setArtCredit(db, bingo, outro.id, { name: " ", role: "Art" })).toThrow(/needs a name/);
+    expect(() => setArtCredit(db, bingo, outro.id, { name: "x".repeat(61), role: null })).toThrow(/at most 60/);
+  });
+
+  it("keeps each category's additional credits apart, in order, cleaned; an empty list removes the category's", () => {
+    const bingo = newBingo("b1");
+    setAdditionalCredits(db, bingo, "outro", [{ name: " Zezima ", role: " Board design " }, { name: "", role: null }, { name: "Woox", role: " " }]);
+    setAdditionalCredits(db, bingo, "moderators", [{ name: "Lynx", role: null }]);
+    expect(additionalCredits(db, bingo.id)).toEqual({ outro: [{ name: "Zezima", role: "Board design" }, { name: "Woox", role: null }], moderators: [{ name: "Lynx", role: null }] });
+    setAdditionalCredits(db, bingo, "outro", []);
+    expect(artSet(db, bingo.id).additionalCredits).toEqual({ moderators: [{ name: "Lynx", role: null }] });
+    expect(() => setAdditionalCredits(db, bingo, "outro", Array.from({ length: 31 }, () => ({ name: "A", role: null })))).toThrow(/At most 30/);
+    expect(() => setAdditionalCredits(db, bingo, "outro", "nope")).toThrow(/must be an array/);
+  });
+});
+
 describe("a new Bingo", () => {
   it("starts with a copy of the previous Bingo's art, in order, which it can change on its own", async () => {
     const previous = newBingo("spring");
     const a = await addArt(db, uploadsDir, previous, "team", await transparentPng());
     const b = await addArt(db, uploadsDir, previous, "team", await greenScreenshot());
     const side = await addArt(db, uploadsDir, previous, "side", await transparentPng());
+    setArtCredit(db, previous, a.id, { name: "Zezima", role: null });
+    setAdditionalCredits(db, previous, "team", [{ name: "Woox", role: "Art" }]);
     const next = newBingo("autumn");
-    expect(artSet(db, next.id)).toEqual({ sections: { team: [a.frames, b.frames] }, side: [side.frames] });
+    expect(artSet(db, next.id)).toEqual({
+      sections: { team: [{ frames: a.frames, credit: { name: "Zezima", role: null } }, piece(b.frames)] },
+      additionalCredits: { team: [{ name: "Woox", role: "Art" }] },
+      side: [side.frames],
+    });
 
     removeArt(db, next, listArt(db, next.id)[0]!.id);
     expect(artSet(db, previous.id).sections.team).toHaveLength(2);
@@ -164,7 +208,7 @@ describe("a new Bingo", () => {
   it("never copies from a generated test Bingo", async () => {
     const test = newBingo("testdata-qa");
     await addArt(db, uploadsDir, test, "intro", await transparentPng());
-    expect(artSet(db, newBingo("real").id)).toEqual({ sections: {}, side: [] });
+    expect(artSet(db, newBingo("real").id)).toEqual({ sections: {}, additionalCredits: {}, side: [] });
   });
 
   it("loses its art rows when deleted", async () => {
@@ -183,6 +227,7 @@ describe("export and import", () => {
     await recutArt(db, uploadsDir, source, team.id, { tolerance: 50, softness: 90 });
     await addArt(db, uploadsDir, source, "team", await transparentPng());
     await addArt(db, uploadsDir, source, "side", await transparentPng());
+    setArtCredit(db, source, team.id, { name: "Zezima", role: "Art" });
 
     const doc = exportBingo(db, source.id, { uploadsDir });
     const expected = [
@@ -198,7 +243,19 @@ describe("export and import", () => {
     const imported = await importBingoWithImages(db, doc, { slug: "copy", createdByUserId: adminId }, uploadsDir);
     const art = listArt(db, imported.id);
     expect(art.map((a) => [a.group, a.keying])).toEqual(expected);
+    expect(art.map((a) => a.credit)).toEqual([null, { name: "Zezima", role: "Art" }, null, null]);
     for (const a of art) for (const url of [a.originalUrl, ...a.frames]) expect(onDisk(url)).toBe(true);
+  });
+
+  it("captions an older file's imported Outro art with its Bingo-wide Credits in order, the rest becoming additional credits (#281)", async () => {
+    const source = newBingo("source");
+    await addArt(db, uploadsDir, source, "outro", await transparentPng());
+    const doc = exportBingo(db, source.id, { uploadsDir });
+    const { wrappedArtCredits: _none, ...older } = doc;
+    older.bingo = { ...doc.bingo, wrappedCredits: [{ name: "Zezima", role: "Board design" }, { name: "Woox", role: null }] };
+    const imported = await importBingoWithImages(db, older, { slug: "old", createdByUserId: adminId }, uploadsDir);
+    expect(listArt(db, imported.id).map((a) => a.credit)).toEqual([{ name: "Zezima", role: "Board design" }]);
+    expect(additionalCredits(db, imported.id)).toEqual({ outro: [{ name: "Woox", role: null }] });
   });
 
   it("refuses Wrapped art for a group that doesn't exist", async () => {

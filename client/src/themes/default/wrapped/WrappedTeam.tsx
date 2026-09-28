@@ -1,7 +1,7 @@
 import type { WrappedTeamModel } from "../../../headless/types";
 import { Reveal, WrappedScene } from "../../../core/wrapped/Scene";
 import { PointsChart } from "../../../core/wrapped/PointsChart";
-import { WrappedDropCard, WrappedHeading, WrappedPerson, WrappedSectionArt } from "../../../core/wrapped/WrappedParts";
+import { WrappedCategoryArt, WrappedDropCard, WrappedHeading, WrappedPerson } from "../../../core/wrapped/WrappedParts";
 
 export function WrappedTeam({ section: t }: { section: WrappedTeamModel }) {
   const medal = t.placement === 1 ? "text-gold" : t.placement === 2 ? "text-silver" : t.placement === 3 ? "text-bronze" : "";
@@ -9,7 +9,7 @@ export function WrappedTeam({ section: t }: { section: WrappedTeamModel }) {
     <>
       <WrappedScene steps={3}>
         <Reveal step={0}>
-          <WrappedSectionArt art={t.art} />
+          <WrappedCategoryArt art={t.art} />
           <p className="flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-muted">
             {t.color && <span className="size-2.5 rounded-full" style={{ backgroundColor: t.color }} />}
             Your Team

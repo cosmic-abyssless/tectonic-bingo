@@ -4,14 +4,19 @@
 // other keying settings without a new screenshot.
 // A new Bingo starts with the previous Bingo's art: copied rows pointing at the same files, which is why replacing or
 // removing art never deletes a file (the same as tile images).
+// Credits (CONTEXT.md, #281) live here too: each Category image can credit someone (captioned on it), and each category
+// can hold additional credits with no image (bingos.wrapped_art_credits_json). Side images carry no credits.
 import fs from "fs";
 import path from "path";
 import sharp from "sharp";
 import { and, asc, desc, eq, inArray, not, like, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import {
+  MAX_WRAPPED_CREDITS,
+  MAX_WRAPPED_CREDIT_LENGTH,
   WRAPPED_ART_GROUPS,
   WRAPPED_ART_KEYING_DEFAULTS,
+  WRAPPED_ART_SECTIONS,
   isWrappedArtGroup,
   isWrappedArtSection,
   maxWrappedArt,
@@ -19,7 +24,10 @@ import {
   type WrappedArtGroup,
   type WrappedArtImage,
   type WrappedArtKeying,
+  type WrappedArtCredits,
+  type WrappedArtSection,
   type WrappedArtSet,
+  type WrappedCredit,
 } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingos, wrappedArt } from "../db/schema";
@@ -68,6 +76,55 @@ export function parseGroup(value: unknown): WrappedArtGroup {
   return value;
 }
 
+/** A section (never "side"): what credits belong to. */
+export function parseSection(value: unknown): WrappedArtSection {
+  if (!isWrappedArtSection(value)) throw new ServiceError(404, "No such Wrapped art category");
+  return value;
+}
+
+/**
+ * One credit from a client or an import, checked and trimmed: an empty role reads as none. Null (or a blank name and
+ * role) is no credit.
+ */
+export function normalizeCredit(input: unknown): WrappedCredit | null {
+  if (input === null || input === undefined) return null;
+  if (typeof input !== "object" || Array.isArray(input)) throw new ServiceError(400, "A credit must be a name and a role");
+  const entry = input as Partial<Record<keyof WrappedCredit, unknown>>;
+  const name = typeof entry.name === "string" ? entry.name.trim() : "";
+  const role = typeof entry.role === "string" ? entry.role.trim() : "";
+  if (!name && !role) return null;
+  if (!name) throw new ServiceError(400, `The credit "${role}" needs a name`);
+  if (name.length > MAX_WRAPPED_CREDIT_LENGTH || role.length > MAX_WRAPPED_CREDIT_LENGTH) throw new ServiceError(400, `Credit names and roles are at most ${MAX_WRAPPED_CREDIT_LENGTH} characters`);
+  return { name, role: role || null };
+}
+
+/** A category's additional credits from a client or an import: each checked as normalizeCredit, blank rows dropped, order kept. */
+export function normalizeCredits(input: unknown): WrappedCredit[] {
+  if (!Array.isArray(input)) throw new ServiceError(400, "credits must be an array");
+  const credits = input.map(normalizeCredit).filter((c): c is WrappedCredit => c !== null);
+  if (credits.length > MAX_WRAPPED_CREDITS) throw new ServiceError(400, `At most ${MAX_WRAPPED_CREDITS} credits per category`);
+  return credits;
+}
+
+/** The additional credits a bingo row holds. Tolerant: a bad column, or a bad category in it, reads as none. */
+export function parseAdditionalCredits(json: string | null | undefined): WrappedArtCredits {
+  const credits: WrappedArtCredits = {};
+  let value: unknown;
+  try {
+    value = JSON.parse(json ?? "{}");
+  } catch {
+    return credits;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return credits;
+  for (const section of WRAPPED_ART_SECTIONS) {
+    const list = (value as Record<string, unknown>)[section];
+    if (!Array.isArray(list)) continue;
+    const valid = list.filter((c): c is WrappedCredit => !!c && typeof c === "object" && typeof (c as WrappedCredit).name === "string" && (c as WrappedCredit).name !== "");
+    if (valid.length > 0) credits[section] = valid.map((c) => ({ name: c.name, role: typeof c.role === "string" && c.role ? c.role : null }));
+  }
+  return credits;
+}
+
 const hex = (c: { r: number; g: number; b: number }) => `#${[c.r, c.g, c.b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 
 function toImage(row: Row): WrappedArtImage {
@@ -78,8 +135,13 @@ function toImage(row: Row): WrappedArtImage {
     frames: [row.frame1Url, row.frame2Url],
     keying: row.keyTolerance !== null && row.keySoftness !== null ? { tolerance: row.keyTolerance, softness: row.keySoftness } : null,
     keyColor: row.keyColor,
+    credit: creditOf(row),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+function creditOf(row: Row): WrappedCredit | null {
+  return row.creditName && row.section !== "side" ? { name: row.creditName, role: row.creditRole || null } : null;
 }
 
 /** A Bingo's images (optionally one group's), in story order: group by group, each in its own order. */
@@ -100,13 +162,19 @@ export function listArt(db: Queryable, bingoId: string): WrappedArtImage[] {
   return rows(db, bingoId).map(toImage);
 }
 
-/** The frames the story shows: each section's Category images, and the side pool. */
+/** A Bingo's additional credits, by category. */
+export function additionalCredits(db: Queryable, bingoId: string): WrappedArtCredits {
+  const row = db.select({ json: bingos.wrappedArtCreditsJson }).from(bingos).where(eq(bingos.id, bingoId)).get();
+  return parseAdditionalCredits(row?.json);
+}
+
+/** What the story shows: each section's Category images with their credits, each category's additional credits, and the side pool. */
 export function artSet(db: Queryable, bingoId: string): WrappedArtSet {
-  const set: WrappedArtSet = { sections: {}, side: [] };
+  const set: WrappedArtSet = { sections: {}, additionalCredits: additionalCredits(db, bingoId), side: [] };
   for (const r of rows(db, bingoId)) {
     const frames: [string, string] = [r.frame1Url, r.frame2Url];
     if (r.section === "side") set.side.push(frames);
-    else if (isWrappedArtSection(r.section)) (set.sections[r.section] ??= []).push(frames);
+    else if (isWrappedArtSection(r.section)) (set.sections[r.section] ??= []).push({ frames, credit: creditOf(r) });
   }
   return set;
 }
@@ -292,12 +360,52 @@ export function reorderArt(db: Db, bingo: Bingo, group: WrappedArtGroup, ids: un
   });
 }
 
+/** Sets or clears one Category image's credit (never a side image's). */
+export function setArtCredit(db: Db, bingo: Bingo, id: string, input: unknown): WrappedArtImage {
+  const credit = normalizeCredit(input);
+  return db.transaction((tx) => {
+    const row = image(tx, bingo.id, id);
+    if (row.section === "side" && credit) throw new ServiceError(400, "Side images don't carry credits");
+    const updated = tx.update(wrappedArt).set({ creditName: credit?.name ?? null, creditRole: credit?.role ?? null }).where(eq(wrappedArt.id, row.id)).returning().get();
+    audit(tx, { action: "wrapped.art_credit_set", bingoId: bingo.id, entity: entity(bingo), details: { section: row.section, name: credit?.name ?? null } });
+    return toImage(updated);
+  });
+}
+
+/** Replaces a category's additional credits (ones with no image), in the order given. */
+export function setAdditionalCredits(db: Db, bingo: Bingo, section: WrappedArtSection, input: unknown): WrappedArtCredits {
+  const credits = normalizeCredits(input);
+  return db.transaction((tx) => {
+    const all = additionalCredits(tx, bingo.id);
+    if (credits.length > 0) all[section] = credits;
+    else delete all[section];
+    tx.update(bingos).set({ wrappedArtCreditsJson: JSON.stringify(all) }).where(eq(bingos.id, bingo.id)).run();
+    audit(tx, { action: "wrapped.credits_set", bingoId: bingo.id, entity: entity(bingo), details: { section, count: credits.length } });
+    return all;
+  });
+}
+
+/** An imported image: what renderArt made, and its credit. */
+export type ImportedArt = RenderedValues & { credit?: WrappedCredit | null };
+
 /** An import's art: each group given replaces that group's images (those a new Bingo copied from the previous one). */
-export function replaceGroups(tx: Queryable, bingoId: string, groups: ReadonlyMap<WrappedArtGroup, RenderedValues[]>): void {
+export function replaceGroups(tx: Queryable, bingoId: string, groups: ReadonlyMap<WrappedArtGroup, ImportedArt[]>): void {
   if (groups.size === 0) return;
   tx.delete(wrappedArt).where(and(eq(wrappedArt.bingoId, bingoId), inArray(wrappedArt.section, [...groups.keys()]))).run();
   const at = clockNow();
-  for (const [group, images] of groups) images.forEach((art, sortOrder) => tx.insert(wrappedArt).values({ bingoId, section: group, sortOrder, ...values(art, at) }).run());
+  for (const [group, images] of groups) {
+    images.forEach((art, sortOrder) => {
+      const credit = group === "side" ? null : (art.credit ?? null);
+      tx.insert(wrappedArt).values({ bingoId, section: group, sortOrder, ...values(art, at), creditName: credit?.name ?? null, creditRole: credit?.role ?? null }).run();
+    });
+  }
+}
+
+/** An import's additional credits: each category given replaces that category's (those a new Bingo copied). */
+export function replaceAdditionalCredits(tx: Queryable, bingoId: string, credits: WrappedArtCredits): void {
+  const all = { ...additionalCredits(tx, bingoId), ...credits };
+  for (const section of WRAPPED_ART_SECTIONS) if (all[section]?.length === 0) delete all[section];
+  tx.update(bingos).set({ wrappedArtCreditsJson: JSON.stringify(all) }).where(eq(bingos.id, bingoId)).run();
 }
 
 /** Every row of a Bingo's art goes with the Bingo (the files stay: another Bingo may show them). */
@@ -307,11 +415,11 @@ export function deleteBingoArt(tx: Queryable, bingoId: string): void {
 
 /**
  * A new Bingo starts with the previous Bingo's art: the newest other Bingo (never a generated test Bingo). Its rows
- * are copied, pointing at the same files. Returns how many sections were copied.
+ * are copied, pointing at the same files, credits and additional credits included. Returns how many images were copied.
  */
 export function copyFromPreviousBingo(tx: Queryable, bingoId: string): number {
   const previous = tx
-    .select({ id: bingos.id })
+    .select({ id: bingos.id, credits: bingos.wrappedArtCreditsJson })
     .from(bingos)
     .where(and(not(eq(bingos.id, bingoId)), not(like(bingos.slug, `${TESTDATA_PREFIX}%`))))
     .orderBy(desc(bingos.createdAt), desc(sql`rowid`))
@@ -321,6 +429,7 @@ export function copyFromPreviousBingo(tx: Queryable, bingoId: string): number {
   const copied = rows(tx, previous.id);
   const at = clockNow();
   for (const { id: _id, bingoId: _from, updatedAt: _at, ...row } of copied) tx.insert(wrappedArt).values({ ...row, bingoId, updatedAt: at }).run();
+  tx.update(bingos).set({ wrappedArtCreditsJson: JSON.stringify(parseAdditionalCredits(previous.credits)) }).where(eq(bingos.id, bingoId)).run();
   return copied.length;
 }
 

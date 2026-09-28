@@ -1,20 +1,24 @@
 import type { WrappedModeratorModel } from "../../../headless/types";
 import { OsrsCaption } from "../../../core/wrapped/OsrsCaption";
 import { Reveal, WrappedScene } from "../../../core/wrapped/Scene";
-import { WrappedHeading, WrappedSectionArt, WrappedStat } from "../../../core/wrapped/WrappedParts";
+import { WrappedCategoryArt, WrappedHeading, WrappedStat } from "../../../core/wrapped/WrappedParts";
 
 export function WrappedModerator({ section }: { section: WrappedModeratorModel }) {
-  // Their name goes on the middle image (or stands on its own without art), in OSRS's font.
-  const named = Math.floor((section.art.length - 1) / 2);
+  // Their name goes on the middle image, in place of any credit on it (or stands on its own without art), in OSRS's font.
+  const images = section.art.images;
+  const named = Math.floor((images.length - 1) / 2);
   return (
     <WrappedScene steps={3}>
       <Reveal step={0}>
-        {section.art.length > 0 ? (
-          <WrappedSectionArt art={section.art.map((art, i) => (i === named ? { art, name: section.name } : art))} />
+        {images.length > 0 ? (
+          <WrappedCategoryArt art={{ ...section.art, images: images.map((image, i) => (i === named ? { ...image, name: section.name } : image)) }} />
         ) : (
-          <div className="mb-6 text-center">
-            <OsrsCaption size="md">{section.name}</OsrsCaption>
-          </div>
+          <>
+            <div className="mb-6 text-center">
+              <OsrsCaption size="md">{section.name}</OsrsCaption>
+            </div>
+            <WrappedCategoryArt art={section.art} />
+          </>
         )}
         <WrappedHeading kicker="Your reviews">{section.reviewedLabel} reviewed</WrappedHeading>
       </Reveal>

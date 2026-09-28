@@ -1,4 +1,4 @@
-import { MAX_WRAPPED_CREDITS, MAX_WRAPPED_CREDIT_LENGTH, type AchievementKey, type CutMode, type ExclusivityRule, type WrappedCredit } from "@bingo/shared";
+import type { AchievementKey, CutMode, ExclusivityRule } from "@bingo/shared";
 import { now as clockNow } from "../clock";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -82,11 +82,12 @@ export function getBingoBySlug(db: Db, slug: string) {
 // sends a bingo (or a list of them) to a client goes through this first;
 // routes that only need the row server-side (requireBingo, stage/board
 // checks, the WOM sync itself) use the raw row from getBingoBySlug instead.
-export function toPublicBingo<T extends { womGroupVerificationCode: string | null; exclusivityRulesJson: string; wrappedCreditsJson: string; draftOrderLockedUntil?: Date | null }>(
+export function toPublicBingo<T extends { womGroupVerificationCode: string | null; exclusivityRulesJson: string; wrappedCreditsJson: string; wrappedArtCreditsJson?: string; draftOrderLockedUntil?: Date | null }>(
   bingo: T,
-): Omit<T, "womGroupVerificationCode" | "exclusivityRulesJson" | "wrappedCreditsJson" | "draftOrderLockedUntil"> & { exclusivityRules: ExclusivityRule[]; wrappedCredits: WrappedCredit[] } {
-  const { womGroupVerificationCode: _womGroupVerificationCode, draftOrderLockedUntil: _draftOrderLockedUntil, exclusivityRulesJson, wrappedCreditsJson, ...rest } = bingo;
-  return { ...rest, exclusivityRules: parseExclusivityRules(exclusivityRulesJson), wrappedCredits: parseWrappedCredits(wrappedCreditsJson) };
+): Omit<T, "womGroupVerificationCode" | "exclusivityRulesJson" | "wrappedCreditsJson" | "wrappedArtCreditsJson" | "draftOrderLockedUntil"> & { exclusivityRules: ExclusivityRule[] } {
+  // wrappedCreditsJson is unused (#281), and a category's additional credits go out with the Wrapped art instead.
+  const { womGroupVerificationCode: _womGroupVerificationCode, draftOrderLockedUntil: _draftOrderLockedUntil, exclusivityRulesJson, wrappedCreditsJson: _wrappedCreditsJson, wrappedArtCreditsJson: _wrappedArtCreditsJson, ...rest } = bingo;
+  return { ...rest, exclusivityRules: parseExclusivityRules(exclusivityRulesJson) };
 }
 
 /**
@@ -144,34 +145,6 @@ export function normalizeExclusivityRules(input: unknown): ExclusivityRule[] {
     const id = typeof rule.id === "string" && rule.id.trim() ? rule.id.trim() : crypto.randomUUID();
     return { id, label, itemNames, scope: rule.scope };
   });
-}
-
-/** The Credits a bingo row holds (CONTEXT.md). Tolerant like parseExclusivityRules: a bad column reads as none. */
-export function parseWrappedCredits(json: string | null | undefined): WrappedCredit[] {
-  if (!json) return [];
-  try {
-    const value: unknown = JSON.parse(json);
-    return Array.isArray(value) ? (value as WrappedCredit[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-/** Validates and cleans Credits from a client or an import: trims, drops blank rows, an empty role reads as none. Order is kept. */
-export function normalizeWrappedCredits(input: unknown): WrappedCredit[] {
-  if (!Array.isArray(input)) throw new ServiceError(400, "wrappedCredits must be an array");
-  const credits: WrappedCredit[] = [];
-  for (const raw of input as unknown[]) {
-    const entry = (raw ?? {}) as Partial<Record<keyof WrappedCredit, unknown>>;
-    const name = typeof entry.name === "string" ? entry.name.trim() : "";
-    const role = typeof entry.role === "string" ? entry.role.trim() : "";
-    if (!name && !role) continue;
-    if (!name) throw new ServiceError(400, `Credits entry "${role}" needs a name`);
-    if (name.length > MAX_WRAPPED_CREDIT_LENGTH || role.length > MAX_WRAPPED_CREDIT_LENGTH) throw new ServiceError(400, `Credits names and roles are at most ${MAX_WRAPPED_CREDIT_LENGTH} characters`);
-    credits.push({ name, role: role || null });
-  }
-  if (credits.length > MAX_WRAPPED_CREDITS) throw new ServiceError(400, `At most ${MAX_WRAPPED_CREDITS} Credits entries`);
-  return credits;
 }
 
 // "Play has started": what team names and player ratings lock on. Mirrors isBoardLocked
@@ -456,7 +429,6 @@ export interface UpdateBingoSettingsParams {
   bonusPotAmount?: number;
   rulesMarkdown?: string | null;
   exclusivityRules?: ExclusivityRule[];
-  wrappedCredits?: WrappedCredit[];
   sealedTiles?: boolean;
   hideRules?: boolean;
   signupOpensAt?: Date | null;
@@ -493,10 +465,9 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
     if (params.womGroupId != null && !/^\d+$/.test(params.womGroupId)) {
       throw new ServiceError(400, "WOM group ID must be a number");
     }
-    const { exclusivityRules, wrappedCredits, achievements: _achievements, ...columns } = params;
+    const { exclusivityRules, achievements: _achievements, ...columns } = params;
     const set: Partial<typeof bingos.$inferInsert> = { ...columns };
     if (exclusivityRules !== undefined) set.exclusivityRulesJson = JSON.stringify(normalizeExclusivityRules(exclusivityRules));
-    if (wrappedCredits !== undefined) set.wrappedCreditsJson = JSON.stringify(normalizeWrappedCredits(wrappedCredits));
     const updated = tx.update(bingos).set(set).where(eq(bingos.id, bingoId)).returning().get();
 
     const changes = diffFields(existing, updated, { only: Object.keys(set) as (keyof typeof existing)[], redact: ["womGroupVerificationCode"] });

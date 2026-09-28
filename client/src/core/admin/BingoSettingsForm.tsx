@@ -14,7 +14,6 @@ import { Switch } from "../ui/Switch";
 import { ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { THEME_KEYS } from "../../themes/keys";
 import { ExclusiveItemsSection } from "./ExclusiveItemsSection";
-import { WrappedCreditsSection } from "./WrappedCreditsSection";
 
 function toLocalInput(iso: string | null): string {
   if (!iso) return "";
@@ -63,7 +62,6 @@ export function BingoSettingsForm({
     sealedTiles: bingo.sealedTiles,
     hideRules: bingo.hideRules,
     exclusivityRules: bingo.exclusivityRules as ExclusivityRule[],
-    wrappedCredits: bingo.wrappedCredits ?? [],
     signupOpensAt: toLocalInput(bingo.signupOpensAt),
     draftScheduledAt: toLocalInput(bingo.draftScheduledAt),
     revealScheduledAt: toLocalInput(bingo.revealScheduledAt),
@@ -123,7 +121,6 @@ export function BingoSettingsForm({
         sealedTiles: form.sealedTiles,
         hideRules: form.hideRules,
         exclusivityRules: form.exclusivityRules,
-        wrappedCredits: form.wrappedCredits,
         signupOpensAt: fromLocalInput(form.signupOpensAt) as never,
         draftScheduledAt: fromLocalInput(form.draftScheduledAt) as never,
         revealScheduledAt: fromLocalInput(form.revealScheduledAt) as never,
@@ -339,10 +336,6 @@ export function BingoSettingsForm({
         <p className="text-sm text-on-surface-muted">
           On, Wrapped publishes itself once the bingo is finished and no submission is pending (as the last one is reviewed). Off, it stays hidden until a mod publishes it from the mod panel.
         </p>
-      </Section>
-
-      <Section title="Wrapped credits">
-        <WrappedCreditsSection credits={form.wrappedCredits} onChange={(wrappedCredits) => setForm({ ...form, wrappedCredits })} />
       </Section>
 
       <Section title="Exclusive items">
