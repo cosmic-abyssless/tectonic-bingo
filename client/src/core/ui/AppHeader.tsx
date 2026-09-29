@@ -13,7 +13,7 @@ import { ConnectedAppsDialog } from "./ConnectedAppsDialog";
 import { useIsPhone } from "./useMediaQuery";
 import { PulseDot } from "./Card";
 import { PlainHeaderMenu, type HeaderMenuEntry, type HeaderMenuGroup } from "./headerMenu";
-import { ArrowLeftIcon, PhoneIcon } from "./icons";
+import { ArrowLeftIcon } from "./icons";
 import { useOptionalSlot } from "../../themes/context";
 import { avatarUrl, displayName } from "./user";
 
@@ -109,23 +109,19 @@ export function AppHeader({
       id: "account",
       label: "Account",
       items: [
+        { kind: "colorScheme", id: "color-scheme", value: colorScheme, onChange: setColorScheme },
         ...(!phone
           ? [
               {
                 id: "phone-login",
                 text: "Log in on your phone",
-                label: (
-                  <span className="flex items-center gap-2">
-                    <PhoneIcon size={14} />
-                    Log in on your phone
-                  </span>
-                ),
+                label: "Log in on your phone",
+                wikiIcon: "Mobile minimenu icon",
                 onAction: () => setPhoneLoginOpen(true),
               },
             ]
           : []),
-        { kind: "colorScheme", id: "color-scheme", value: colorScheme, onChange: setColorScheme },
-        { id: "logout", text: "Log out", label: "Log out", onAction: logout },
+        { id: "logout", text: "Log out", label: "Log out", wikiIcon: "Logout", onAction: logout },
       ],
     },
   ];

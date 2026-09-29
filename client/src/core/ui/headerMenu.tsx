@@ -86,7 +86,7 @@ export function ColorSchemeRadios({
     <RadioGroup ref={groupRef} aria-label="Color scheme" orientation="horizontal" value={value} onChange={(v) => onChange(v as ColorSchemeChoice)} className={`flex w-full gap-0.5 p-0.5 ${className}`}>
       {COLOR_SCHEME_OPTIONS.map(({ value: optionValue, label, icon: Icon }) => (
         <RadioField key={optionValue} value={optionValue} aria-label={label} className="flex-1">
-          <RadioButton className={`flex cursor-default items-center justify-center py-1 outline-none transition-opacity hovered:opacity-70 focus-visible:ring-2 focus-visible:ring-accent ${segmentClassName}`}>
+          <RadioButton className={`flex cursor-pointer items-center justify-center py-1 outline-none transition-opacity hovered:opacity-70 focus-visible:ring-2 focus-visible:ring-accent ${segmentClassName}`}>
             <Icon size={14} />
           </RadioButton>
         </RadioField>
