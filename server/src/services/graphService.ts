@@ -187,11 +187,14 @@ export function leafDescendants(rootId: string, childrenOf: Map<string, string[]
 
 type NodeRow = typeof nodes.$inferInsert;
 
-// SUM's children must all be ITEM kind, same as ITEM/MANUAL having no
-// children — documented invariants, not runtime-enforced here (consistent
-// with how the ITEM/MANUAL-have-no-children invariant is handled today: the
-// admin UI is the only writer and always builds valid shapes).
+// SUM's children must all be ITEM kind: the engine only adds up its Items' claimed quantities, so a condition inside a
+// SUM would silently count for nothing. Enforced here, on every node written (fresh or reconciled), because the editor
+// once let one through. ITEM/MANUAL having no children is still only a documented invariant: nothing builds that shape.
 function nodeFields(bingoId: string, input: GraphNodeInput): Omit<NodeRow, "id"> {
+  if (input.kind === "SUM" && (input.children ?? []).some((c) => c.kind !== "ITEM")) {
+    const name = input.label ? `"${input.label}"` : "A total";
+    throw new ServiceError(400, `${name} ("N in total from") can only be made of Items. Take the condition out of it first.`);
+  }
   return {
     bingoId,
     kind: input.kind,

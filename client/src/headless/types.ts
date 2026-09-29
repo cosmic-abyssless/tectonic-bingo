@@ -949,6 +949,11 @@ interface WrappedShareCardBase {
   fileName: string;
   /** The OSRS Coins icon, for every GP figure on the card; draw the figure without it if it fails to load. */
   coinsIconUrl: string;
+  /**
+   * A still of the Bingo's Wrapped art (the first frame of a sticker) for a theme that decorates its cards with it:
+   * the card's own section's first Category image (You, Team), else a side image. Null when the Bingo has no art.
+   */
+  artUrl: string | null;
 }
 
 /** The viewer's own card, titled with their name. */

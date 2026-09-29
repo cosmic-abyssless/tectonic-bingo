@@ -67,9 +67,9 @@ function SharedMark({ tasks }: { tasks: string[] }) {
 }
 
 // One primary "+ Item" action plus a caret revealing the less-common adds
-// (a new nested condition, or a reference to something that already exists
-// elsewhere on the tile) — keeps a GroupNode's header to two controls
-// instead of up to four separate buttons.
+// (a whole item group, or a reference to something that already exists
+// elsewhere on the tile) — keeps a GroupNode's add row to two controls
+// instead of up to five separate buttons.
 function SplitAddButton({ primaryLabel, onPrimary, options }: { primaryLabel: string; onPrimary: () => void; options: { label: string; onClick: () => void }[] }) {
   return (
     <div className="inline-flex shrink-0 overflow-hidden rounded-md border border-outline-strong">
@@ -98,11 +98,14 @@ function SplitAddButton({ primaryLabel, onPrimary, options }: { primaryLabel: st
 // booleans over children, COUNT needs a minimum number of complete children,
 // SUM needs a summed quantity across ITEM children. One dropdown, one set of
 // children (items or nested composites) — no separate "item row" shape.
-const GROUP_KINDS: { kind: NodeKind; label: string }[] = [
-  { kind: "ALL", label: "Complete all of" },
-  { kind: "ANY", label: "Complete any one of" },
-  { kind: "COUNT", label: "Complete at least N of" },
-  { kind: "SUM", label: "N in total from" },
+// Worded so a condition's heading reads as its rule, with the number typed in
+// where it's read ("at least [2] of", "[3] in total from", see RuleControls):
+// the list shows each kind whole, the closed dropdown only its own words.
+const GROUP_KINDS: { kind: NodeKind; label: string; selectedLabel?: string }[] = [
+  { kind: "ALL", label: "all of" },
+  { kind: "ANY", label: "any one of" },
+  { kind: "COUNT", label: "at least … of", selectedLabel: "at least" },
+  { kind: "SUM", label: "… in total from", selectedLabel: "in total from" },
 ];
 
 function updateAt(root: GraphNodeInput, path: Path, fn: (node: GraphNodeInput) => GraphNodeInput): GraphNodeInput {
@@ -191,8 +194,19 @@ function DragHandle({ path, label }: { path: Path; label: string }) {
 // A place a dragged row can go: index `index` of the condition at `parent`. A strip the height of the gap between rows,
 // with a line across it while a drag is over it; its hit area reaches a little into the rows either side during a drag,
 // so it doesn't take pixel-perfect aim. With `children` (an empty condition's "no requirements yet"), that's the spot.
+// With `or` (between an ANY's options), the gap holds the player checklist's "OR" divider and is still a drop spot.
 // Focusable (though never in the tab order): a keyboard drag moves focus from spot to spot, and `label` says where each is.
-function DropGap({ parent, index, label, children }: { parent: Path; index: number; label: string; children?: ReactNode }) {
+// The tree line (see GroupNode): it runs 6px in from the heading's start, children sit 20px right of it, and each branch
+// meets its child's first row (32px tall) at its middle. The line is drawn per child (the part beside it) and per drop
+// spot between children, so it stops at the last child's branch rather than running on past it.
+const TREE_LINE_OFFSET = "ml-1.5";
+const TREE_INDENT = "ml-1.5 pl-5";
+const TREE_BRANCH =
+  "relative pl-5 before:absolute before:left-0 before:top-0 before:w-0 before:border-l-2 before:border-outline after:absolute after:left-0 after:top-[15px] after:w-4 after:border-t-2 after:border-outline";
+const TREE_BRANCH_THROUGH = "before:bottom-0";
+const TREE_BRANCH_LAST = "before:h-[17px]";
+
+function DropGap({ parent, index, label, or, onTreeLine, children }: { parent: Path; index: number; label: string; or?: boolean; onTreeLine?: boolean; children?: ReactNode }) {
   const [current, moves] = useMoves();
   const ref = useRef<HTMLDivElement>(null);
   const { dropProps, isDropTarget } = useDrop({
@@ -209,7 +223,7 @@ function DropGap({ parent, index, label, children }: { parent: Path; index: numb
         role="button"
         tabIndex={-1}
         aria-label={label}
-        className={`mb-2 rounded-md border border-dashed px-2 py-1.5 outline-none ${isDropTarget ? "border-accent bg-accent/10" : open ? "border-outline-strong" : "border-transparent"}`}
+        className={`my-1.5 rounded-md border border-dashed px-2 py-1.5 outline-none ${isDropTarget ? "border-accent bg-accent/10" : open ? "border-outline-strong" : "border-transparent"}`}
       >
         {children}
       </div>
@@ -222,8 +236,15 @@ function DropGap({ parent, index, label, children }: { parent: Path; index: numb
       role="button"
       tabIndex={-1}
       aria-label={label}
-      className={`relative h-1.5 outline-none ${open ? "z-10 before:absolute before:inset-x-0 before:-inset-y-2 before:content-['']" : ""}`}
+      className={`relative outline-none ${onTreeLine ? "border-l-2 border-outline" : ""} ${or ? `flex items-center gap-2 py-1 text-[11px] uppercase tracking-wide text-on-surface-muted ${onTreeLine ? "pl-3" : ""}` : "h-1.5"} ${open ? "z-10 before:absolute before:inset-x-0 before:-inset-y-2 before:content-['']" : ""}`}
     >
+      {or && (
+        <>
+          <span className="h-px w-4 bg-outline-strong" />
+          or
+          <span className="h-px w-4 bg-outline-strong" />
+        </>
+      )}
       {isDropTarget && <div className="pointer-events-none absolute inset-x-0 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-accent" />}
     </div>
   );
@@ -354,6 +375,7 @@ function GroupNode(props: NodeProps) {
   const sharedWithTasks = isShared ? Array.from(new Set((existingConditions ?? []).filter((c) => c.id === node.id).map((c) => c.taskLabel))) : [];
   const [addingItem, setAddingItem] = useState(false);
   const [newItemName, setNewItemName] = useState("");
+  const [pickingGroup, setPickingGroup] = useState(false);
   const [pickingExisting, setPickingExisting] = useState(false);
   const [pickingExistingCondition, setPickingExistingCondition] = useState(false);
   // Offer a leaf/condition already on this group only once — re-adding the
@@ -379,9 +401,9 @@ function GroupNode(props: NodeProps) {
     setAddingItem(false);
   }
   // The same search box surfaces item groups by name (ItemSearchInput merges
-  // them into its dropdown). Picking one drops every member in as its own
-  // sibling item row — a one-time expansion, not a live reference
-  // (docs/item-quantity-model.md §6).
+  // them into its dropdown), as does "+ Item group" on its own. Picking one
+  // drops every member in as its own sibling item row — a one-time
+  // expansion, not a live reference (docs/item-quantity-model.md §6).
   function commitNewItemGroup(group: ItemGroup) {
     addMany(path, group.itemNames.map((itemName): GraphNodeInput => ({ kind: "ITEM", itemName })));
   }
@@ -396,65 +418,73 @@ function GroupNode(props: NodeProps) {
     await onSaveAsGroup!(names);
   }
 
+  // A total ("N in total from") only adds up Items, so it offers no conditions to add (the server refuses them too).
+  const holdsConditions = node.kind !== "SUM";
+
+  // Heading row (the rule, with its number), then its children on a tree line (a branch to each, the line stopping at
+  // the last), then the add row, indented with the children: the same order at every level, the task's own included.
   return (
-    <div className={`${isRoot ? "" : "border-l-2 border-outline pl-3"} ${dragging ? "opacity-40" : ""}`}>
-      <div className="mb-2 flex flex-wrap items-center gap-2">
+    <div className={dragging ? "opacity-40" : undefined}>
+      <div className="flex min-h-8 flex-wrap items-center gap-2">
         {!isRoot && <DragHandle path={path} label={conditionName} />}
-        {isShared && <SharedMark tasks={sharedWithTasks} />}
         {ownLabel && (
-          <span className="num shrink-0 text-xs text-on-surface-subtle" title="Shown in this task's own tree, and in other tasks' &quot;+ existing condition&quot; picker once saved">
-            Condition {ownLabel}
+          <span className="num shrink-0 text-xs text-on-surface-subtle" title={`Condition ${ownLabel}: shown in this task's own tree, and in other tasks' "+ existing condition" picker once saved`}>
+            <span className="sr-only">Condition </span>
+            {ownLabel}
           </span>
         )}
-        <Select
-          aria-label="Requirement kind"
-          value={node.kind}
-          onChange={(value) => {
-            const kind = value as NodeKind;
-            update(path, (n) => ({
-              ...n,
-              kind,
-              minCount: kind === "COUNT" ? n.minCount ?? 1 : undefined,
-              quantity: kind === "SUM" ? n.quantity ?? 1 : undefined,
-            }));
-          }}
-          size="sm"
-          className="w-auto!"
-          options={GROUP_KINDS.map((k) => ({ value: k.kind, label: k.label }))}
-        />
-        {node.kind === "COUNT" && (
-          <input
-            aria-label="Minimum count"
-            type="number"
-            min={1}
-            defaultValue={node.minCount ?? 1}
-            onBlur={(e) => update(path, (n) => ({ ...n, minCount: Math.max(1, Number(e.target.value) || 1) }))}
-            className={`${controlClass("sm")} num w-16`}
-          />
-        )}
-        {node.kind === "SUM" && (
-          <input
-            aria-label="Target quantity"
-            type="number"
-            min={1}
-            defaultValue={node.quantity ?? 1}
-            onBlur={(e) => update(path, (n) => ({ ...n, quantity: Math.max(1, Number(e.target.value) || 1) }))}
-            className={`${controlClass("sm")} num w-16`}
-          />
-        )}
+        {isShared && <SharedMark tasks={sharedWithTasks} />}
+        <RuleControls node={node} path={path} update={update} />
+        {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${conditionName}` : `Remove ${conditionName}`} what="condition" onPress={() => remove(path)} className="ml-auto" />}
+      </div>
+      {children.length === 0 ? (
+        <div className={TREE_INDENT}>
+          <DropGap parent={path} index={0} label={`Into ${conditionName}`}>
+            <p className="text-xs text-on-surface-subtle">No requirements yet — add {holdsConditions ? "an item or a condition" : "an item"}.</p>
+          </DropGap>
+        </div>
+      ) : (
+        // A drop spot before, between and after the rows; between an ANY's options it's also the "OR". The tree line
+        // runs down the list's left edge: through the drop spots before each child, and into each child as its branch.
+        <div role="list" className={TREE_LINE_OFFSET}>
+          {children.map((child, i) => (
+            // Keyed by id where there is one, so a row's own state (an open picker, an unsaved number) moves with it.
+            // Inputs are uncontrolled (save on blur); a new row's key includes length so removing a sibling remounts the rest.
+            <Fragment key={child.id ?? `new-${i}-${children.length}`}>
+              <DropGap parent={path} index={i} label={`Before ${rowName(child, conditionLabels)}`} or={node.kind === "ANY" && i > 0} onTreeLine />
+              <div role="listitem" className={`${TREE_BRANCH} ${i === children.length - 1 ? TREE_BRANCH_LAST : TREE_BRANCH_THROUGH}`}>
+                {child.kind === "ITEM" ? <ItemLeafRow {...props} node={child} path={[...path, i]} /> : <GroupNode {...props} node={child} path={[...path, i]} />}
+              </div>
+            </Fragment>
+          ))}
+          <DropGap parent={path} index={children.length} label={`At the end of ${conditionName}`} />
+        </div>
+      )}
+      <div className={`flex flex-wrap items-center gap-2 ${TREE_INDENT}`}>
         <SplitAddButton
           primaryLabel="Item"
           onPrimary={() => setAddingItem((v) => !v)}
           options={[
-            { label: "Condition", onClick: () => add(path, NEW_GROUP) },
+            ...(itemGroups.length > 0 ? [{ label: "Item group", onClick: () => setPickingGroup((v) => !v) }] : []),
             ...(pickableLeaves.length > 0 ? [{ label: "Existing item", onClick: () => setPickingExisting((v) => !v) }] : []),
-            ...(pickableConditions.length > 0 ? [{ label: "Existing condition", onClick: () => setPickingExistingCondition((v) => !v) }] : []),
+            ...(holdsConditions && pickableConditions.length > 0 ? [{ label: "Existing condition", onClick: () => setPickingExistingCondition((v) => !v) }] : []),
           ]}
         />
-        {!isRoot && <RemoveButton shared={isShared} label={isShared ? "Unlink condition" : "Remove group"} what="condition" onPress={() => remove(path)} className="ml-auto" />}
+        {holdsConditions && (
+          <div className="inline-flex shrink-0 overflow-hidden rounded-md border border-outline-strong">
+            <Button variant="ghost" size="sm" onPress={() => add(path, NEW_GROUP)} aria-label={`Add a condition to ${conditionName}`} className="rounded-none border-0">
+              <PlusIcon size={12} /> Condition
+            </Button>
+          </div>
+        )}
+        {canSaveAsGroup && (
+          <Button variant="ghost" size="sm" onPress={saveAsGroup}>
+            Save these names as a new group…
+          </Button>
+        )}
       </div>
       {addingItem && (
-        <div className="mb-2 max-w-xs">
+        <div className="mt-2 max-w-xs">
           <ItemSearchInput
             value={newItemName}
             onChange={setNewItemName}
@@ -467,8 +497,22 @@ function GroupNode(props: NodeProps) {
           />
         </div>
       )}
+      {pickingGroup && (
+        <div className="mt-2 max-w-xs">
+          <SearchableSelect
+            value=""
+            options={itemGroups.map((g) => ({ id: g.id, label: g.name }))}
+            placeholder="Search item groups…"
+            onChange={(id) => {
+              const group = itemGroups.find((g) => g.id === id);
+              if (group) commitNewItemGroup(group);
+              setPickingGroup(false);
+            }}
+          />
+        </div>
+      )}
       {pickingExisting && (
-        <div className="mb-2 max-w-xs">
+        <div className="mt-2 max-w-xs">
           <SearchableSelect
             value=""
             options={pickableLeaves.map((l) => ({ id: l.id, label: l.itemName, group: l.taskLabel }))}
@@ -482,7 +526,7 @@ function GroupNode(props: NodeProps) {
         </div>
       )}
       {pickingExistingCondition && (
-        <div className="mb-2 max-w-xs">
+        <div className="mt-2 max-w-xs">
           <SearchableSelect
             value=""
             options={pickableConditions.map((c) => ({ id: c.id, label: c.label, group: c.taskLabel }))}
@@ -495,31 +539,70 @@ function GroupNode(props: NodeProps) {
           />
         </div>
       )}
-      {children.length === 0 ? (
-        <DropGap parent={path} index={0} label={`Into ${conditionName}`}>
-          <p className="text-xs text-on-surface-subtle">No requirements yet — add an item or a condition.</p>
-        </DropGap>
-      ) : (
-        // A drop spot before, between and after the rows; the first sits in the header's bottom margin.
-        <div role="list" className="-mt-1.5">
-          {children.map((child, i) => (
-            // Keyed by id where there is one, so a row's own state (an open picker, an unsaved number) moves with it.
-            // Inputs are uncontrolled (save on blur); a new row's key includes length so removing a sibling remounts the rest.
-            <Fragment key={child.id ?? `new-${i}-${children.length}`}>
-              <DropGap parent={path} index={i} label={`Before ${rowName(child, conditionLabels)}`} />
-              <div role="listitem">
-                {child.kind === "ITEM" ? <ItemLeafRow {...props} node={child} path={[...path, i]} /> : <GroupNode {...props} node={child} path={[...path, i]} />}
-              </div>
-            </Fragment>
-          ))}
-          <DropGap parent={path} index={children.length} label={`At the end of ${conditionName}`} />
-        </div>
+    </div>
+  );
+}
+
+// A condition's rule, the way its heading reads: "all of", "any one of", "at least [2] of", "[3] in total from". The
+// dropdown changes the kind; the number is typed in where it's read.
+function RuleControls({ node, path, update }: Pick<NodeProps, "node" | "path" | "update">) {
+  const kind = (
+    <Select
+      aria-label="Requirement kind"
+      value={node.kind}
+      onChange={(value) => {
+        const kind = value as NodeKind;
+        update(path, (n) => ({
+          ...n,
+          kind,
+          minCount: kind === "COUNT" ? n.minCount ?? 1 : undefined,
+          quantity: kind === "SUM" ? n.quantity ?? 1 : undefined,
+        }));
+      }}
+      size="sm"
+      className="w-auto!"
+      // A total only adds up Items: a condition holding other conditions can't become one until they're taken out.
+      options={GROUP_KINDS.map((k) =>
+        k.kind === "SUM" && node.kind !== "SUM" && (node.children ?? []).some((c) => c.kind !== "ITEM")
+          ? { value: k.kind, label: `${k.label} (Items only)`, selectedLabel: k.selectedLabel, disabled: true }
+          : { value: k.kind, label: k.label, selectedLabel: k.selectedLabel },
       )}
-      {canSaveAsGroup && (
-        <Button variant="ghost" size="sm" onPress={saveAsGroup} className="-ml-2.5">
-          Save these names as a new group…
-        </Button>
-      )}
+    />
+  );
+  if (node.kind === "SUM") {
+    return (
+      <>
+        <NumberInput label="Target quantity" value={node.quantity} onSave={(quantity) => update(path, (n) => ({ ...n, quantity }))} />
+        {kind}
+      </>
+    );
+  }
+  if (node.kind === "COUNT") {
+    return (
+      <>
+        {kind}
+        <NumberInput label="Minimum count" value={node.minCount} onSave={(minCount) => update(path, (n) => ({ ...n, minCount }))} />
+        <span className="text-xs text-on-surface-muted">of</span>
+      </>
+    );
+  }
+  return kind;
+}
+
+// Saves on blur (or Enter), at least 1.
+function NumberInput({ label, value, onSave }: { label: string; value?: number | null; onSave: (value: number) => void }) {
+  return (
+    // controlClass is w-full, so the wrapper sets the width.
+    <div className="w-14 shrink-0">
+      <input
+        aria-label={label}
+        type="number"
+        min={1}
+        defaultValue={value ?? 1}
+        onBlur={(e) => onSave(Math.max(1, Number(e.target.value) || 1))}
+        onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+        className={`${controlClass("sm")} num`}
+      />
     </div>
   );
 }

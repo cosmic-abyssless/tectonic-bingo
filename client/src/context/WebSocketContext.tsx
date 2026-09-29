@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { BroadcastEvent } from "@bingo/shared";
 import { useAuth } from "./AuthContext";
+import { keyMentions, otherBingoSlugs } from "../api/bingoScope";
 
 type Listener = (event: BroadcastEvent) => void;
 
@@ -19,101 +20,105 @@ export type StatsResult = "ok" | "failed";
 const STATS_RESULT_MS = 3000;
 
 function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
+  // Only this event's bingo: a tab on another bingo would otherwise refetch its own board, progress and counts on
+  // every write anywhere (e.g. a test data run next to it).
+  const others = "bingoId" in event ? otherBingoSlugs(queryClient.getQueriesData({ queryKey: ["bingo"] }), event.bingoId) : new Set<string>();
+  const invalidate = (queryKey: readonly unknown[]) => queryClient.invalidateQueries({ queryKey, predicate: (query) => !keyMentions(query.queryKey, others) });
   switch (event.type) {
     case "submission_created":
     case "submission_reviewed":
-      queryClient.invalidateQueries({ queryKey: ["teamProgress"] });
-      queryClient.invalidateQueries({ queryKey: ["teamSubmissions"] });
-      queryClient.invalidateQueries({ queryKey: ["modSubmissions"] });
-      queryClient.invalidateQueries({ queryKey: ["pendingCount"] });
+      invalidate(["teamProgress"]);
+      invalidate(["teamSubmissions"]);
+      invalidate(["modSubmissions"]);
+      invalidate(["pendingCount"]);
       // Wrapped can't be published while anything is pending, and may publish itself as the last one is reviewed.
-      queryClient.invalidateQueries({ queryKey: ["wrapped"] });
+      invalidate(["wrapped"]);
       break;
     case "gp_values_updated":
-      queryClient.invalidateQueries({ queryKey: ["teamSubmissions"] });
-      queryClient.invalidateQueries({ queryKey: ["modSubmissions"] });
-      queryClient.invalidateQueries({ queryKey: ["stats"] });
+      invalidate(["teamSubmissions"]);
+      invalidate(["modSubmissions"]);
+      invalidate(["stats"]);
       break;
     case "stage_changed":
-      queryClient.invalidateQueries({ queryKey: ["bingo"] });
-      queryClient.invalidateQueries({ queryKey: ["board"] });
+      invalidate(["bingo"]);
+      invalidate(["board"]);
       // Finishing can publish Wrapped (its "Publish when the Bingo finishes" setting).
-      queryClient.invalidateQueries({ queryKey: ["wrapped"] });
+      invalidate(["wrapped"]);
       // Voting opens with Live and closes on Finishing.
-      queryClient.invalidateQueries({ queryKey: ["superlatives"] });
+      invalidate(["superlatives"]);
       break;
     case "wrapped_published":
-      queryClient.invalidateQueries({ queryKey: ["wrapped"] });
+      invalidate(["wrapped"]);
       // The shell's wrappedPublished: the Board's "Your Bingo Wrapped" banner.
-      queryClient.invalidateQueries({ queryKey: ["bingo"] });
+      invalidate(["bingo"]);
       break;
     case "team_updated":
-      queryClient.invalidateQueries({ queryKey: ["bingo"] });
+      invalidate(["bingo"]);
       // The scouting/draft room lists teams from draft state.
-      queryClient.invalidateQueries({ queryKey: ["draftState"] });
+      invalidate(["draftState"]);
       // Who can vote, and a removed Player's votes, change with the Team.
-      queryClient.invalidateQueries({ queryKey: ["superlatives"] });
+      invalidate(["superlatives"]);
       break;
     case "bingo_changed":
-      queryClient.invalidateQueries({ queryKey: ["bingo"] });
-      queryClient.invalidateQueries({ queryKey: ["board"] });
+      invalidate(["bingo"]);
+      invalidate(["board"]);
       // A board edit made while live re-scores every team, so everyone's progress moves too.
-      queryClient.invalidateQueries({ queryKey: ["teamProgress"] });
-      queryClient.invalidateQueries({ queryKey: ["teamSubmissions"] });
-      queryClient.invalidateQueries({ queryKey: ["adminLines"] });
-      queryClient.invalidateQueries({ queryKey: ["adminQuestions"] });
-      queryClient.invalidateQueries({ queryKey: ["adminMods"] });
-      queryClient.invalidateQueries({ queryKey: ["bingoMods"] });
-      queryClient.invalidateQueries({ queryKey: ["adminCaptainCandidates"] });
+      invalidate(["teamProgress"]);
+      invalidate(["teamSubmissions"]);
+      invalidate(["adminLines"]);
+      invalidate(["adminQuestions"]);
+      invalidate(["adminMods"]);
+      invalidate(["bingoMods"]);
+      invalidate(["adminCaptainCandidates"]);
       // Team count and the draft cuts setting decide who is cut (the draft cuts preview is under signupRoster).
-      queryClient.invalidateQueries({ queryKey: ["mySignup"] });
-      queryClient.invalidateQueries({ queryKey: ["signupRoster"] });
-      queryClient.invalidateQueries({ queryKey: ["draftState"] });
+      invalidate(["mySignup"]);
+      invalidate(["signupRoster"]);
+      invalidate(["draftState"]);
       // Superlative categories added, renamed or deleted (deleting drops its votes), or a Player removed from a Team.
-      queryClient.invalidateQueries({ queryKey: ["superlatives"] });
+      invalidate(["superlatives"]);
       break;
     case "draft_started":
     case "draft_order_shuffled":
     case "draft_order_set":
     case "draft_pick":
     case "draft_pick_undone":
-      queryClient.invalidateQueries({ queryKey: ["draftState"] });
+      invalidate(["draftState"]);
       // A drafted player now has a team, so their bingo shell's myTeam changes.
-      queryClient.invalidateQueries({ queryKey: ["bingo"] });
+      invalidate(["bingo"]);
       break;
     case "draft_rating_changed":
-      queryClient.invalidateQueries({ queryKey: ["draftState"] });
+      invalidate(["draftState"]);
       break;
     case "tile_interest_changed":
-      queryClient.invalidateQueries({ queryKey: ["teamProgress"] });
+      invalidate(["teamProgress"]);
       break;
     case "submission_reactions_changed":
-      queryClient.invalidateQueries({ queryKey: ["teamSubmissions"] });
+      invalidate(["teamSubmissions"]);
       break;
     case "signup_changed":
       // Signups, pairings, and who is eligible to captain all move together.
-      queryClient.invalidateQueries({ queryKey: ["signupRoster"] });
-      queryClient.invalidateQueries({ queryKey: ["mySignup"] });
-      queryClient.invalidateQueries({ queryKey: ["myPairing"] });
-      queryClient.invalidateQueries({ queryKey: ["partnerCandidates"] });
-      queryClient.invalidateQueries({ queryKey: ["unpairedSignups"] });
-      queryClient.invalidateQueries({ queryKey: ["adminCaptainCandidates"] });
+      invalidate(["signupRoster"]);
+      invalidate(["mySignup"]);
+      invalidate(["myPairing"]);
+      invalidate(["partnerCandidates"]);
+      invalidate(["unpairedSignups"]);
+      invalidate(["adminCaptainCandidates"]);
       // Leads scouting the pool see new/withdrawn signups and pairs live.
-      queryClient.invalidateQueries({ queryKey: ["draftState"] });
+      invalidate(["draftState"]);
       // CA / WOM snapshots land after the fire-and-forget fetch (and with them, account types).
-      queryClient.invalidateQueries({ queryKey: ["playerProfile"] });
-      queryClient.invalidateQueries({ queryKey: ["accountTypes"] });
+      invalidate(["playerProfile"]);
+      invalidate(["accountTypes"]);
       break;
     case "audit_appended":
-      queryClient.invalidateQueries({ queryKey: ["auditLog"] });
-      queryClient.invalidateQueries({ queryKey: ["teamActivity"] });
+      invalidate(["auditLog"]);
+      invalidate(["teamActivity"]);
       break;
     case "superlative_votes_changed":
-      queryClient.invalidateQueries({ queryKey: ["superlatives"] });
+      invalidate(["superlatives"]);
       break;
     case "bug_report_changed":
-      queryClient.invalidateQueries({ queryKey: ["adminBugReports"] });
-      queryClient.invalidateQueries({ queryKey: ["myBugReports"] });
+      invalidate(["adminBugReports"]);
+      invalidate(["myBugReports"]);
       break;
   }
 }

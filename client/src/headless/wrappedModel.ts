@@ -454,12 +454,18 @@ const COINS_ICON = "Coins 10000";
 export function shareCards(data: MyWrappedResponse, opts: WrappedStoryOptions, slug: string, person: (u: AvatarUser) => WrappedPersonModel): WrappedShareCardModel[] {
   const { bingo, player } = data;
   if (!player) return [];
+  // Each card's art: its own section's first Category image, else a side image (the Team card a different one from
+  // the Player card's where there are two).
+  const sectionArt = (section: WrappedArtSection) => data.art?.sections?.[section]?.[0]?.frames[0];
+  const side = (data.art?.side ?? []).map((f) => f[0]);
+  const cardArt = { player: sectionArt("you") ?? side[0] ?? null, team: sectionArt("team") ?? side[1] ?? side[0] ?? null };
   const base = (kind: WrappedShareCardModel["kind"], label: string) => ({
     key: kind,
     label,
     bingoName: bingo.bingoName,
     fileName: `${slug}-wrapped-${kind}.png`,
     coinsIconUrl: wikiIconUrl(COINS_ICON)!,
+    artUrl: cardArt[kind],
   });
   const cardDrop = (d: WrappedDrop): WrappedShareCardDropModel => ({
     key: `${d.submissionId}:${d.itemName}`,

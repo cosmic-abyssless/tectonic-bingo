@@ -1,5 +1,5 @@
 import { now as clockNow } from "../clock";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import {
   playerName,
@@ -17,7 +17,7 @@ import {
   type ValuedAs,
 } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { claims, nodes, submissionReactions, submissions, submissionScreenshots, teamMembers, teamNodeState, teams, tiles, users } from "../db/schema";
+import { claims, nodeEdges, nodes, submissionReactions, submissions, submissionScreenshots, teamMembers, teamNodeState, teams, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { findAncestorIds, getNodeTree, getNodeTrees, submitGateBlock } from "./graphService";
 import { conflictMessage, conflictsForClaims } from "./exclusivityService";
@@ -42,6 +42,33 @@ export function tileForLeaf(db: Db | Tx, leafId: string, tileByNodeId: Map<strin
     if (tile) return tile;
   }
   return null;
+}
+
+// tileForLeaf for many leaves of one bingo: the board's edges are read once and each walk up happens in memory,
+// instead of a query per level per leaf (which made listing every submission take most of a second).
+function tileFinder(db: Db, bingoId: string, tileByNodeId: Map<string, typeof tiles.$inferSelect>): (leafId: string) => typeof tiles.$inferSelect | null {
+  const edges = db
+    .select({ parentId: nodeEdges.parentId, childId: nodeEdges.childId })
+    .from(nodeEdges)
+    .innerJoin(nodes, eq(nodeEdges.childId, nodes.id))
+    .where(eq(nodes.bingoId, bingoId))
+    .all();
+  const parentsOf = new Map<string, string[]>();
+  for (const e of edges) parentsOf.set(e.childId, [...(parentsOf.get(e.childId) ?? []), e.parentId]);
+  const memo = new Map<string, typeof tiles.$inferSelect | null>();
+  return (leafId) => {
+    if (!memo.has(leafId)) {
+      const seen = new Set<string>([leafId]);
+      let frontier = [leafId];
+      while (frontier.length > 0) {
+        const next = frontier.flatMap((id) => parentsOf.get(id) ?? []).filter((id) => !seen.has(id));
+        next.forEach((id) => seen.add(id));
+        frontier = next;
+      }
+      memo.set(leafId, [...seen].map((id) => tileByNodeId.get(id)).find(Boolean) ?? null);
+    }
+    return memo.get(leafId)!;
+  };
 }
 
 export type CreateSubmissionParams = {
@@ -498,12 +525,12 @@ function proofChecksFor(drop: SubmissionDetails, tile: Tile, proofs: SubmissionD
 
 type Tile = typeof tiles.$inferSelect & { node: GraphNode };
 
-export function getAllSubmissionsForBingo(db: Db, bingoId: string): ModSubmissionRow[] {
+export function getAllSubmissionsForBingo(db: Db, bingoId: string, status?: (typeof submissions.$inferSelect)["status"]): ModSubmissionRow[] {
   const rows = db
     .select({ submission: submissions, team: { id: teams.id, name: teams.name, color: teams.color } })
     .from(submissions)
     .innerJoin(teams, eq(submissions.teamId, teams.id))
-    .where(eq(teams.bingoId, bingoId))
+    .where(status ? and(eq(teams.bingoId, bingoId), eq(submissions.status, status)) : eq(teams.bingoId, bingoId))
     .all();
 
   const details = attachDetails(db, rows.map((r) => r.submission));
@@ -512,12 +539,25 @@ export function getAllSubmissionsForBingo(db: Db, bingoId: string): ModSubmissio
   const leafById = new Map(leafRows.map((l): [string, ClaimedLeaf] => [l.id, { id: l.id, kind: l.kind, label: l.label, valuedAs: valuedAsOf(l) }]));
 
   const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
-  const tileByNodeId = new Map(tileRows.map((t) => [t.nodeId, t]));
+  const tileOf = tileFinder(db, bingoId, new Map(tileRows.map((t) => [t.nodeId, t])));
   const tileById = new Map(tileRows.map((t) => [t.id, t]));
   // Which Tiles and Tasks need a Proof screenshot, and which leaves sit under each Task, come from the node trees.
   const trees = getNodeTrees(db, tileRows.map((t) => t.nodeId));
   const withNode = (tile: typeof tiles.$inferSelect): Tile => ({ ...tile, node: trees.get(tile.nodeId)! });
-  const proofs = details.filter((d) => !isDrop(d.submission));
+  // A drop's Proof checks look at its Player's Proof screenshots whatever their status, so a list filtered by status
+  // (pending, say) still reads every Proof screenshot of the bingo.
+  const proofs = status
+    ? attachDetails(
+        db,
+        db
+          .select({ submission: submissions })
+          .from(submissions)
+          .innerJoin(teams, eq(submissions.teamId, teams.id))
+          .where(and(eq(teams.bingoId, bingoId), eq(submissions.kind, "proof")))
+          .all()
+          .map((r) => r.submission),
+      )
+    : details.filter((d) => !isDrop(d.submission));
 
   return rows.map((r, i) => {
     const d = details[i]!;
@@ -529,17 +569,25 @@ export function getAllSubmissionsForBingo(db: Db, bingoId: string): ModSubmissio
     const claimedNodeIds = [...new Set(d.claims.map((c) => c.nodeId))];
     const leaves = claimedNodeIds.map((id) => leafById.get(id)!).filter(Boolean);
     const firstLeafId = claimedNodeIds[0];
-    const tile = firstLeafId ? tileForLeaf(db, firstLeafId, tileByNodeId) : null;
+    const tile = firstLeafId ? tileOf(firstLeafId) : null;
     return { ...d, leaves, tile: tile!, team: r.team, proofTaskLabel: null, proofChecks: tile ? proofChecksFor(d, withNode(tile), proofs) : [] };
   });
 }
 
 export function getPendingSubmissions(db: Db, bingoId: string) {
-  return getAllSubmissionsForBingo(db, bingoId).filter((row) => row.submission.status === "pending");
+  return getAllSubmissionsForBingo(db, bingoId, "pending");
 }
 
+// Counted in SQL: the mod badge polls this, so it must not build every submission's details just to count them.
 export function getPendingCount(db: Db, bingoId: string): number {
-  return getPendingSubmissions(db, bingoId).length;
+  return (
+    db
+      .select({ n: count() })
+      .from(submissions)
+      .innerJoin(teams, eq(submissions.teamId, teams.id))
+      .where(and(eq(teams.bingoId, bingoId), eq(submissions.status, "pending")))
+      .get()?.n ?? 0
+  );
 }
 
 export function getSubmissionById(db: Db, submissionId: string) {

@@ -7,7 +7,7 @@ import * as schema from "../db/schema";
 import { bingos, stageTransitions, submissions } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createTask, createTile, deleteTask, deleteTile, getBoardTiles, updateNode, updateTile } from "./boardService";
-import { createSubmission, getAllSubmissionsForBingo, getPendingCount, setSubmissionReaction } from "./submissionService";
+import { createSubmission, getAllSubmissionsForBingo, getPendingCount, getPendingSubmissions, setSubmissionReaction } from "./submissionService";
 import { approveSubmission, rejectSubmission, undoSubmissionReview } from "./scoringService";
 import { getContributionCounts, getTeamCredits, getTitleFacts } from "./statsService";
 import { getTeamProgress } from "./teamService";
@@ -181,6 +181,15 @@ describe("a drop's Proof screenshot flags", () => {
     const late = drop(fx, fx.tome.id, "Tome of fire", { at: 30 });
     expect(row(fx, late.id).proofChecks[0]!.flag).toBeNull();
     expect(PROOF_FLAG_LABELS).toEqual({ missing: "No approved Proof screenshot", before: "Submitted before the Proof screenshot" });
+  });
+
+  it("still sees the approved proof when only pending Submissions are listed", () => {
+    const fx = seed();
+    approve(fx, proof(fx, fx.wt.id, { at: 10 }).id);
+    const d = drop(fx, fx.tome.id, "Tome of fire", { at: 30 });
+    const pending = getPendingSubmissions(db, fx.bingo.id);
+    expect(pending.map((r) => r.submission.id)).toEqual([d.id]);
+    expect(pending[0]!.proofChecks[0]!.flag).toBeNull();
   });
 
   it("is per Player: a teammate's proof doesn't count", () => {

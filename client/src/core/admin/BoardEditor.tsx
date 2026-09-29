@@ -127,7 +127,7 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
         </div>
       </div>
 
-      <TileEditorPanel slug={slug} tile={selectedTile} categories={categories} locked={locked} onClose={() => setSelectedTileId(null)} />
+      <TileEditorPanel slug={slug} themeKey={bingo.theme} tile={selectedTile} categories={categories} locked={locked} onClose={() => setSelectedTileId(null)} />
     </div>
     </ExclusiveItemsProvider>
   );

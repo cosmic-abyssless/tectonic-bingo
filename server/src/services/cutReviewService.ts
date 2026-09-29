@@ -124,14 +124,23 @@ export function getCutReviewPreview(db: Db, bingo: Bingo): CutReviewPreview {
   // The plan's own changes, scored like any edited list: with a Team pick open, the range over every pick.
   const { cutPlayersMax, pickOptions } = cutPlanner.scoreChanges(input, proposed.changes);
   const plan = { ...proposed, cutPlayersMax, pickOptions };
-  const stored = db.select({ cutReviewFingerprint: bingos.cutReviewFingerprint }).from(bingos).where(eq(bingos.id, bingo.id)).get()?.cutReviewFingerprint;
   return {
     plan,
     avoidableCount: plan.cutPlayersNow - plan.cutPlayers,
     unavoidableCount: plan.cutPlayers,
-    reviewed: !!stored && stored === fingerprintOf(input),
+    reviewed: isReviewed(db, bingo, input),
     pool,
   };
+}
+
+function isReviewed(db: Db, bingo: Bingo, input: CutPlannerInput): boolean {
+  const stored = db.select({ cutReviewFingerprint: bingos.cutReviewFingerprint }).from(bingos).where(eq(bingos.id, bingo.id)).get()?.cutReviewFingerprint;
+  return !!stored && stored === fingerprintOf(input);
+}
+
+// How many players the roster cuts as it stands: one scoring, without planCutChanges' search (which is the slow part).
+function cutPlayersNow(input: CutPlannerInput): number {
+  return cutPlanner.scoreChanges(input, []).cutPlayersNow;
 }
 
 /** How many players an (admin-edited) change list would leave cut, validated against the current pool. */
@@ -181,8 +190,8 @@ export function applyCutReview(db: Db, bingo: Bingo, changes: AppliedCutChange[]
   return db.transaction((tx) => {
     // Before any change, purely for the audit entry's "how many were cut before this review" — not the plan's
     // hypothetical optimum, the roster's actual count as it stood.
-    const before = getCutReviewPreview(tx, bingo);
-    const cutPlayersBefore = before.plan.cutPlayersNow;
+    const before = loadCutReview(tx, bingo);
+    const cutPlayersBefore = cutPlayersNow(before.input);
     const applied = describeChanges(before.pool, changes);
     let teamChanges = 0;
     // Pairings and splits first, the Team change last — the order they're scored in (cutPlanner.resolveChanges), so a
@@ -206,12 +215,12 @@ export function applyCutReview(db: Db, bingo: Bingo, changes: AppliedCutChange[]
       }
     }
 
-    const fingerprint = currentCutReviewFingerprint(tx, bingo);
-    tx.update(bingos).set({ cutReviewFingerprint: fingerprint }).where(eq(bingos.id, bingo.id)).run();
+    const after = buildCutReviewInput(tx, bingo);
+    tx.update(bingos).set({ cutReviewFingerprint: fingerprintOf(after) }).where(eq(bingos.id, bingo.id)).run();
 
     // The roster's actual cut count now that every change has been made (not a further hypothetical optimum —
     // that's what the *next* getCutReviewPreview call is for, once the client refetches).
-    const cutPlayersAfter = getCutReviewPreview(tx, bingo).plan.cutPlayersNow;
+    const cutPlayersAfter = cutPlayersNow(after);
     audit(tx, {
       action: "draft.cut_review_applied",
       bingoId: bingo.id,
@@ -230,7 +239,10 @@ export function applyCutReview(db: Db, bingo: Bingo, changes: AppliedCutChange[]
  * even if every change ends up dropped (a deliberate "keep these cuts", which still satisfies this).
  */
 export function assertCutReviewSatisfied(db: Db, bingo: Bingo): void {
-  const preview = getCutReviewPreview(db, bingo);
-  if (preview.avoidableCount <= 0 || preview.reviewed) return;
+  // Reviewed first: it's cheap, and it settles it without running the planner's search.
+  const input = buildCutReviewInput(db, bingo);
+  if (isReviewed(db, bingo, input)) return;
+  const plan = cutPlanner.planCutChanges(input);
+  if (plan.cutPlayersNow - plan.cutPlayers <= 0) return;
   throw new ServiceError(400, "Some cuts can be avoided. Review cuts before moving into the Draft.", "cut_review_required");
 }

@@ -106,8 +106,12 @@ target (say `signup`), the later dates are simply scheduled in the future.
    the draft, and captains pick in turn a minute or so apart, favouring better players,
    with the admin stepping in for a few picks. (To try the pick-order ceremony yourself,
    leave the bingo at `--stage captains` and move it to the draft stage in the mod panel.)
-4. **Reveal**: teams get names and members raise hands on the parts they mean to do.
-5. **Live**: an hourly simulation (see below), then, for `complete`, the mods clear the
+4. **Reveal**: teams get names and members raise hands on the parts they mean to do. The Admin adds the
+   **Superlative** categories ("Team MVP", "Team Spirit", "The Grinder") unless the board brought its own.
+5. **Live**: an hourly simulation (see below), with each Team voting on its Superlatives along the way: about 4 in
+   5 Players vote (not the run's own player, whose ballot is left to them), most in every category, the odd one
+   changing their mind later, and a Team tends to agree on a favourite, so most categories have a clear winner and
+   the odd one a tie. Then, for `complete`, the mods clear the
    queue and an admin completes the bingo. Every player on a team is then given made-up
    **Wise Old Man snapshots** up to the end of the run (see below), so Grinder, the luck
    Titles (Spoon, Dry, Clutch) and the achievements that read WOM have something to judge.

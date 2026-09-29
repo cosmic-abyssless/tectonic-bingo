@@ -364,6 +364,28 @@ describe("share cards", () => {
     }
   });
 
+  it("gives each card its own section's art, else a side image, a different one for each card where there are two", () => {
+    const frames = (name: string): [string, string] => [`/${name}-1.webp`, `/${name}-2.webp`];
+    const piece = (name: string) => ({ frames: frames(name), credit: null });
+    const artOf = (art: MyWrappedResponse["art"]) => cardsOf(response(scored(), { art })).map((c) => [c.kind, c.artUrl]);
+    expect(artOf({ sections: { you: [piece("you"), piece("you2")], team: [piece("team")] }, additionalCredits: {}, side: [frames("side")] })).toEqual([
+      ["player", "/you-1.webp"],
+      ["team", "/team-1.webp"],
+    ]);
+    expect(artOf({ sections: {}, additionalCredits: {}, side: [frames("s1"), frames("s2")] })).toEqual([
+      ["player", "/s1-1.webp"],
+      ["team", "/s2-1.webp"],
+    ]);
+    expect(artOf({ sections: {}, additionalCredits: {}, side: [frames("s1")] })).toEqual([
+      ["player", "/s1-1.webp"],
+      ["team", "/s1-1.webp"],
+    ]);
+    expect(artOf({ sections: {}, additionalCredits: {}, side: [] })).toEqual([
+      ["player", null],
+      ["team", null],
+    ]);
+  });
+
   it("badges the Team's rank and the Bingo's apart, and only the Team's in Wrapped published before the Bingo's was stored", () => {
     expect(playerCard().pointsShare).toEqual({ shareLabel: "42.13", teamPercentLabel: "34% of Team", teamRankLabel: "Team #1 of 8", bingoRankLabel: "Bingo #3 of 42" });
     expect(playerCard({ bingoRank: undefined, bingoPlayers: undefined }).pointsShare).toMatchObject({ teamRankLabel: "Team #1 of 8", bingoRankLabel: null });
