@@ -85,12 +85,13 @@ export function AppHeader({
       label: "Site",
       items: [
         // The same people who get the board's All bingos arrow: "/" bounces everyone else to the latest bingo.
-        ...(user?.isAdmin || devMode ? [{ id: "all-bingos", text: "All bingos", label: "All bingos", current: onBingoList, onAction: () => navigate("/") }] : []),
+        ...(user?.isAdmin || devMode ? [{ id: "all-bingos", text: "All bingos", label: "All bingos", wikiIcon: "Grid Master icon", current: onBingoList, onAction: () => navigate("/") }] : []),
         ...(user?.isAdmin
           ? [
               {
                 id: "site-admin",
                 text: "Site admin",
+                wikiIcon: "Settings",
                 label: (
                   <span className="relative pr-3">
                     Site admin
@@ -100,7 +101,7 @@ export function AppHeader({
                 current: onSiteAdmin,
                 onAction: () => navigate("/admin"),
               },
-              { id: "connected-apps", text: "Connected apps", label: "Connected apps", onAction: () => setConnectedAppsOpen(true) },
+              { id: "connected-apps", text: "Connected apps", label: "Connected apps", wikiIcon: "Account Management - Links icon", onAction: () => setConnectedAppsOpen(true) },
             ]
           : []),
       ],
