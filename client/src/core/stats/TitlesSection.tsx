@@ -1,4 +1,4 @@
-import { TITLE_GROUPS, type ContributionCount, type PickedTitle } from "@bingo/shared";
+import { NOT_RECORDED_HISTORICAL, TITLE_GROUPS, type ContributionCount, type PickedTitle } from "@bingo/shared";
 import { PlayerName } from "../tectonic/PlayerName";
 import { HEADING_FONT } from "../ui/Card";
 import { EyeOffIcon, InfoIcon } from "../ui/icons";
@@ -34,7 +34,7 @@ export function TitlesSection({
       {groups.map(({ group, titles }) => (
           <TitleGroupBox key={group} group={group}>
             <ul className="divide-y divide-[var(--title-rule)]">
-              {titles.map(({ title, requirement, holders }) => (
+              {titles.map(({ title, requirement, holders, notRecorded }) => (
                 <li
                   key={title.id}
                   // Stacked on a phone; name, quip and holders side by side from sm up.
@@ -59,7 +59,9 @@ export function TitlesSection({
                   </div>
                   <p className="min-w-0 truncate text-xs italic text-on-surface-subtle">{title.flavour}</p>
                   <div className="min-w-0">
-                    {holders.length === 0 ? (
+                    {notRecorded ? (
+                      <p className="text-xs text-on-surface-muted">{NOT_RECORDED_HISTORICAL}</p>
+                    ) : holders.length === 0 ? (
                       <p className="text-xs text-on-surface-muted">
                         No one yet · <span className="text-on-surface-subtle">{requirement}</span>
                       </p>
@@ -81,7 +83,7 @@ export function TitlesSection({
                         })}
                       </ul>
                     )}
-                    {title.source === "wom" && <WomFreshness picked={holders} womReadAt={womReadAt} />}
+                    {title.source === "wom" && !notRecorded && <WomFreshness picked={holders} womReadAt={womReadAt} />}
                   </div>
                 </li>
               ))}

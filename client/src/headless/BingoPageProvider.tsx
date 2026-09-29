@@ -214,6 +214,7 @@ export function BingoPageProvider({
     canPickTeam,
     canViewStats,
     canRewind: canRewindOf(shell),
+    canViewDraft: !!historical?.draft,
     // Wrapped is made at the end of a Bingo, never recorded: not for a Historical one.
     wrapped: { canOpen: bingo.stage === "complete" && !bingo.historical && (shell.wrappedPublished || isMod), preview: !shell.wrappedPublished },
     canScout,

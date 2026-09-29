@@ -24,6 +24,17 @@ export interface HistoricalRecorded {
   womSnapshots: boolean;
 }
 
+/**
+ * Whether a Title can't be judged for a Historical Bingo because its data was never recorded: the Wise Old Man-based
+ * ones without snapshots, and Overachiever (Achievements are off for every Historical Bingo). Such a Title shows
+ * NOT_RECORDED_HISTORICAL, never a holder picked from partial data. Always false for any other Bingo (`recorded` null).
+ */
+export function titleNotRecorded(title: { id: string; source: "bingo" | "wom" }, recorded: HistoricalRecorded | null): boolean {
+  if (!recorded) return false;
+  if (title.source === "wom") return !recorded.womSnapshots;
+  return title.id === "overachiever";
+}
+
 /** One Team's final place, as recorded, and its points when they're known. */
 export interface HistoricalStanding {
   teamId: string;

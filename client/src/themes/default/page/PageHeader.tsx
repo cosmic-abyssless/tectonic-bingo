@@ -67,6 +67,11 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
           Rewind
         </Button>
       )}
+      {page.canViewDraft && (
+        <Button size="sm" variant="ghost" onPress={page.actions.goToDraft}>
+          Draft
+        </Button>
+      )}
       {page.isMod && (
         <Button size="sm" onPress={page.actions.goToMod}>
           Mod panel

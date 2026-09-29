@@ -80,6 +80,8 @@ export interface GridContext {
   canWithdraw: boolean;
   /** Who's on a Team: during the Draft they can't be withdrawn (a drafted Player waits for Remove from Team). */
   onTeam: ReadonlySet<string>;
+  /** A Historical Bingo: its Draft is over, so a Cut signup was cut rather than will be. */
+  historical: boolean;
   /** Pairings can change (mods pair or unpair from the Partner cell): any stage before the draft. */
   canPair: boolean;
   statsRefreshing: ReadonlySet<string>;
@@ -220,7 +222,7 @@ const StatusCell = memo(function StatusCell({ data, context }: CustomCellRendere
   return (
     <div className="flex h-full items-center gap-1" title={canWithdraw ? `Click (or press Enter) to withdraw ${data.signup.rsn}` : undefined}>
       <Badge tone={active ? "ok" : "neutral"}>{busy ? "withdrawing…" : data.signup.status}</Badge>
-      {data.cut && <Badge tone="warn">will be cut</Badge>}
+      {data.cut && <Badge tone="warn">{context.historical ? "cut" : "will be cut"}</Badge>}
       {canWithdraw && <XIcon size={12} className="ml-auto shrink-0 text-on-surface-subtle" aria-hidden />}
     </div>
   );
@@ -374,6 +376,12 @@ const TimezoneCell = memo(function TimezoneCell({ data }: CustomCellRendererProp
   return <EditableCellValue prompt="Set timezone">{data.signup.timezone ? formatTimeZone(data.signup.timezone) : null}</EditableCellValue>;
 });
 
+/** The timezone as text, for a roster that can't be edited. */
+const TimezoneText = memo(function TimezoneText({ data }: CustomCellRendererProps<RosterRow, string, GridContext>) {
+  if (!data?.signup.timezone) return <span className="text-on-surface-subtle">—</span>;
+  return <>{formatTimeZone(data.signup.timezone)}</>;
+});
+
 // A popup with the same searchable picker as the signup form — ~420 zones is too many for agSelectCellEditor's plain
 // list. Picking one ends the edit (readOnlyEdit → cellEditRequest → setTimezone). stopEditing waits a render so AG
 // reads the picked value, not the one it opened with.
@@ -440,6 +448,7 @@ export function SignupRosterGrid({
   questions,
   isDuo,
   showTier,
+  readOnly = false,
   collectedByOptions,
   doesRowPassFilters,
   onDisplayedCountChange,
@@ -451,6 +460,8 @@ export function SignupRosterGrid({
   questions: SignupQuestion[];
   isDuo: boolean;
   showTier: boolean;
+  /** A Historical Bingo's roster: nothing to edit or look up again (no timezone edits, refresh or buy-in). */
+  readOnly?: boolean;
   collectedByOptions: { id: string; label: string }[];
   /** The buy-in/pair filter chips, as one predicate — see SignupRoster's matchesBuyin/matchesPair. */
   doesRowPassFilters: (row: RosterRow) => boolean;
@@ -529,10 +540,10 @@ export function SignupRosterGrid({
         // West to east by current UTC offset, not alphabetically by zone name; not set sorts first, so sorting
         // ascending puts the ones still to fill in at the top.
         comparator: (a: string, b: string) => (a ? timeZoneOffsetMinutes(a) : -Infinity) - (b ? timeZoneOffsetMinutes(b) : -Infinity) || a.localeCompare(b),
-        cellRenderer: TimezoneCell,
+        cellRenderer: readOnly ? TimezoneText : TimezoneCell,
         // The raw zone name ("America/New_York") on hover — the cell itself shows the friendlier city + offset.
         tooltip: (p: TooltipCallbackParams<RosterRow, string>) => usefulTooltip(p, p.data?.signup.timezone ?? ""),
-        editable: true,
+        editable: !readOnly,
         cellEditor: TimezoneEditor,
         cellEditorPopup: true,
         cellEditorPopupPosition: "under",
@@ -564,7 +575,7 @@ export function SignupRosterGrid({
         // Everything the cell shows, "will be cut" included: the grid only redraws a cell whose value changed, so with
         // the status alone a refetch that only changes who's cut (a Cut review applied, a Team added) left the badge
         // stale. Search still matches the status alone.
-        valueGetter: (p) => (p.data ? `${p.data.signup.status}${p.data.cut ? " (will be cut)" : ""}` : undefined),
+        valueGetter: (p) => (p.data ? `${p.data.signup.status}${p.data.cut ? (p.context.historical ? " (cut)" : " (will be cut)") : ""}` : undefined),
         getQuickFilterText: (p) => p.data?.signup.status ?? "",
         cellRenderer: StatusCell,
         cellClass: (p) => (withdrawable(p.context, p.data) ? "cursor-pointer" : ""),
@@ -576,7 +587,7 @@ export function SignupRosterGrid({
         suppressKeyboardEvent: (p) => p.editing && ["Enter", "Tab"].includes(p.event.key),
         width: 150,
       },
-      {
+      !readOnly && {
         colId: "refresh",
         headerName: "Refresh",
         headerTooltip: "Look a player's stats up again (Enter on the cell does it too)",
@@ -608,7 +619,7 @@ export function SignupRosterGrid({
       },
       { colId: "ehb", headerName: "EHB", valueGetter: (p) => p.data?.womStats?.ehb ?? -1, cellRenderer: EhbCell, cellClass: "num", tooltip: false, width: 90 },
       { colId: "ehp", headerName: "EHP", valueGetter: (p) => p.data?.womStats?.ehp ?? -1, cellRenderer: EhpCell, cellClass: "num", tooltip: false, width: 90 },
-      {
+      !readOnly && {
         colId: "buyin",
         headerName: "Buy-in received",
         valueGetter: (p) => !!p.data?.signup.buyinReceivedAt,
@@ -627,7 +638,7 @@ export function SignupRosterGrid({
         },
         width: 130,
       },
-      {
+      !readOnly && {
         colId: "collectedBy",
         headerName: "Collected by",
         valueGetter: (p) => p.data?.collectedByUser?.id ?? "",
@@ -682,7 +693,7 @@ export function SignupRosterGrid({
     // collectedByRefData/collectedByOptions/unpairedActive deliberately excluded — read via the
     // refs above instead, precisely so their (frequent) changes don't force columnDefs to a new identity. See
     // that comment for why a new columnDefs identity is the actual problem being avoided here.
-  }, [questions, isDuo, showTier]);
+  }, [questions, isDuo, showTier, readOnly]);
 
   // A cell's tooltip is its formatted value, a header's its name, but only when they'd tell you something: text cut
   // off, or detail the cell doesn't show (the exact signup time, the CA points behind a tier). See gridTooltips.ts,

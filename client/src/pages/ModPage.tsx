@@ -250,7 +250,8 @@ export function ModPage() {
         )}
       </main>
 
-      <Dialog isOpen={showNotifPrompt} onClose={dismissNotifPrompt}>
+      {/* Nothing new ever arrives for a Historical Bingo. */}
+      <Dialog isOpen={showNotifPrompt && !historical} onClose={dismissNotifPrompt}>
         <DialogHeader title="Enable notifications?" onClose={dismissNotifPrompt} />
         <div className="space-y-4 p-5">
           <p className="text-sm leading-relaxed text-on-surface-muted">

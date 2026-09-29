@@ -14,6 +14,8 @@ export interface BingoHeaderModel {
   canViewStats: boolean;
   /** Rewind (CONTEXT.md) exists only once the bingo is Finished (see canRewind). */
   canRewind: boolean;
+  /** A Historical Bingo that recorded its Draft links to its (read-only) Draft room; any other Bingo reaches it by stage. */
+  canViewDraft: boolean;
   /** Submissions waiting for a mod (mods only; 0 otherwise). */
   pendingCount: number;
   /** The bingo's rules, or "" when it has none (then there's no Rules button, unless rulesComeLater). */
@@ -56,6 +58,7 @@ export function useBingoHeader(slug: string): BingoHeaderModel | null {
     isMod: shell.isMod,
     canViewStats: canViewStats(shell),
     canRewind: canRewind(shell),
+    canViewDraft: !!shell.historical?.draft,
     historical: shell.bingo.historical,
     pendingCount: pending?.count ?? 0,
     rulesMarkdown: shell.bingo.rulesMarkdown ?? "",

@@ -12,6 +12,7 @@ import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { richHistoricalBundle, SAMPLE_BUNDLE } from "../testUtils/fixtures/richHistoricalBundle";
 import { importHistoricalBundle } from "./historicalImportService";
+import { getCutUserIds, getDraftState } from "./draftService";
 
 vi.mock("../ws", () => ({ broadcast: vi.fn() }));
 
@@ -273,6 +274,14 @@ describe("importing a rich bundle", () => {
     const nameOf = new Map(teams.map((t) => [t.id, t.name]));
     expect(picks.map((p) => [p.pickNumber, nameOf.get(p.teamId)])).toEqual([[1, "Sea Snakes"], [2, "Lava Dragons"], [3, "Rock Crabs"], [4, "Rock Crabs"], [5, "Lava Dragons"]]);
     expect(picks[1]).toMatchObject({ userId: userIdOf("100000000000000002"), pickedByUserId: userIdOf("100000000000000001"), createdAt: new Date("2024-02-28T20:00:00Z") });
+  });
+
+  it("shows the Draft as over: its picks as recorded, nobody left to pick, and the Cut signups", async () => {
+    const { bingo } = await importIt();
+    const state = getDraftState(db, bingo, { includeAnswers: false });
+    expect(state).toMatchObject({ pool: [], currentPick: null, draftStarted: true, orderLockedUntil: null, cutCount: 2 });
+    expect(state.picks.map((p) => p.pickNumber)).toEqual([1, 2, 3, 4, 5]);
+    expect([...getCutUserIds(db, bingo)].sort()).toEqual([userIdOf("100000000000000031"), userIdOf("100000000000000032")].sort());
   });
 
   it("audits the rich sections too", async () => {

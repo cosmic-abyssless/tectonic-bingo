@@ -282,6 +282,13 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
   const pool = hideCut ? fullPool.filter((u) => !u.cut) : fullPool;
   const cutCount = hideCut ? fullPool.filter((u) => u.cut).reduce((n, u) => n + u.entries.length, 0) : 0;
 
+  // A Historical Bingo's Draft (CONTEXT.md) is over and read-only: its picks as recorded, nobody left to pick, and
+  // everyone who signed up and wasn't drafted counted as cut.
+  if (fresh.historical) {
+    const undrafted = fullPool.reduce((n, u) => n + u.entries.length, 0);
+    return { teams: orderedTeams, picks, pool: [], draftStarted: pickRows.length > 0, orderReady, orderLockedUntil: null, currentPick: null, shares, cutCount: undrafted };
+  }
+
   let currentPick: DraftState["currentPick"] = null;
   const available = fullPool.filter((u) => !u.cut);
   if (draftStarted && orderReady && lockExpired && available.length > 0) {
@@ -296,6 +303,11 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
 
 // User ids of undrafted signups cut from the draft as things stand. Used by the roster and the signup page.
 export function getCutUserIds(db: Db, bingo: Bingo): Set<string> {
+  // A Historical Bingo's Draft is over: its Cut signups are whoever signed up and wasn't drafted onto a Team.
+  if (bingo.historical) {
+    const drafted = getDraftedUserIds(db, bingo.id);
+    return new Set(db.select({ userId: signups.userId }).from(signups).where(and(eq(signups.bingoId, bingo.id), eq(signups.status, "active"))).all().map((s) => s.userId).filter((id) => !drafted.has(id)));
+  }
   const { pool } = getDraftState(db, bingo, { includeAnswers: false });
   return new Set(pool.filter((u) => u.cut).flatMap((u) => u.entries.map((e) => e.user.id)));
 }

@@ -49,6 +49,7 @@ export function Masthead({
   const menuEntries: HeaderMenuEntry[] = [
     ...(header.canViewStats ? [{ id: "stats", text: "Stats", label: "Stats", onAction: () => navigate(`/b/${slug}/stats`) }] : []),
     ...(header.canRewind ? [{ id: "rewind", text: "Rewind", label: "Rewind", onAction: () => navigate(`/b/${slug}/rewind`) }] : []),
+    ...(header.canViewDraft ? [{ id: "draft", text: "Draft", label: "Draft", onAction: () => navigate(`/b/${slug}/draft`) }] : []),
     ...(header.isMod
       ? [
           {
@@ -118,6 +119,11 @@ export function Masthead({
         {header.canRewind && (
           <ComicButton size="sm" href={`/b/${slug}/rewind`}>
             Rewind
+          </ComicButton>
+        )}
+        {header.canViewDraft && (
+          <ComicButton size="sm" href={`/b/${slug}/draft`}>
+            Draft
           </ComicButton>
         )}
         {header.isMod && (

@@ -363,6 +363,8 @@ export interface BingoPageModel {
   canViewStats: boolean;
   /** Rewind (CONTEXT.md) exists only for a Finished Bingo, for everyone who can view it. */
   canRewind: boolean;
+  /** A Historical Bingo that recorded its Draft links to its (read-only) Draft room. */
+  canViewDraft: boolean;
   /**
    * Wrapped (CONTEXT.md), for a Finished Bingo: open to everyone once a Moderator publishes it, and to Moderators before
    * that as a preview (the banner says so).
