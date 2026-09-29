@@ -35,6 +35,5 @@ export function comicVars(c: ComicColors): CSSProperties {
     "--comic-red": c.RED,
     "--comic-halftone-ink": c.HALFTONE,
     "--comic-ray": c.RAY,
-    "--comic-shade-ink": c.SHADE,
   } as CSSProperties;
 }
