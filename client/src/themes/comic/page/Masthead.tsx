@@ -19,6 +19,7 @@ export function Masthead({
   onShowRules,
   submissions,
   team,
+  titleAside,
   children,
 }: {
   slug: string;
@@ -31,6 +32,8 @@ export function Masthead({
   /** The board's viewed team: its summary, in the ☰ menu as "Team overview". */
   team?: { onShow: () => void };
   /** After the Mod panel (the board's Submit). */
+  /** Beside the title (the board's Codeword banner while Live). */
+  titleAside?: ReactNode;
   children?: ReactNode;
 }) {
   const { colors } = useComic();
@@ -57,6 +60,7 @@ export function Masthead({
         </span>
       }
       menuEntries={menuEntries}
+      titleAside={titleAside}
       {...comicHeaderProps()}
     >
       {/* The Mod panel, then (on the board) Submit. */}

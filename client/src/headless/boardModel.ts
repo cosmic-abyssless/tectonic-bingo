@@ -58,7 +58,7 @@ export function toCategoryModel(category: TileCategory): CategoryModel {
   return { id: category.id, label: category.label, color: category.colorHex, sortOrder: category.sortOrder };
 }
 
-export function toTeamModel(team: TeamWithMembers, myTeamId: string | null, viewerUserId: string, stage: Stage): TeamModel {
+export function toTeamModel(team: TeamWithMembers, myTeamId: string | null, viewerUserId: string, stage: Stage, isMod = false): TeamModel {
   const isLead = team.members.some((m) => m.user.id === viewerUserId && (m.isCaptain || m.isCoCaptain));
   return {
     id: team.id,
@@ -69,6 +69,7 @@ export function toTeamModel(team: TeamWithMembers, myTeamId: string | null, view
     isLead,
     // Mirrors the captain rename route: names freeze once the bingo is live.
     canRename: isLead && !isBoardLocked(stage),
+    codeword: team.id === myTeamId || isMod ? team.codeword : null,
   };
 }
 

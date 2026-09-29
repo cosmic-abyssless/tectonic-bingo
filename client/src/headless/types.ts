@@ -64,6 +64,8 @@ export interface TeamModel {
   isLead: boolean;
   /** Leads only, and only until the bingo goes live (matches the rename endpoint). */
   canRename: boolean;
+  /** The team's Codeword (CONTEXT.md), for its own Players and for mods (who can submit for any team); null otherwise. */
+  codeword: string | null;
 }
 
 export interface UserModel {
@@ -417,9 +419,13 @@ export interface BingoPageModel {
   tileInterest: { toggle(tileId: string, taskId: string): void };
   /** Emoji reactions on the viewed team's submissions: canReact when it's the viewer's own team and the bingo isn't Finished. toggle() puts the viewer's on or takes it off. */
   reactions: { canReact: boolean; toggle(submissionId: string, emoji: SubmissionReaction): void };
+  /** The viewer's own team's Codeword while the bingo is Live (the header's banner); null otherwise. */
+  codeword: string | null;
 }
 
 export interface SubmissionFlowModel {
+  /** The Codeword every screenshot for this team must show: the team being submitted to. */
+  codeword: string | null;
   /**
    * Who the drop belongs to. A player can post for a teammate (a drop on mobile, posted from a PC); a mod posting
    * to a team they aren't on must pick one of its players. The player picked is credited, the poster is recorded.

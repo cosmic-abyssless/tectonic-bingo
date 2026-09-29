@@ -10,6 +10,7 @@ import { CaptionBox } from "../ui/CaptionBox";
  */
 export function SubmissionModal({ flow }: { flow: SubmissionFlowModel }) {
   const ScreenshotDropzone = useSlot("ScreenshotDropzone");
+  const CodewordBanner = useSlot("CodewordBanner");
   const AnalysisPanel = useSlot("AnalysisPanel");
   const SubmitterPicker = useSlot("SubmitterPicker");
   const TilePicker = useSlot("TilePicker");
@@ -30,6 +31,8 @@ export function SubmissionModal({ flow }: { flow: SubmissionFlowModel }) {
       />
 
       <div className="relative space-y-5 p-5">
+        {/* Before the screenshot is taken: what it has to show. */}
+        {flow.codeword && <CodewordBanner codeword={flow.codeword} />}
         <ScreenshotDropzone screenshot={flow.screenshot} />
         <AnalysisPanel analysis={flow.analysis} />
 

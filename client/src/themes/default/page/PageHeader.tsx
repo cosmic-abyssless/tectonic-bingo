@@ -9,6 +9,7 @@ import { ModPanelButton } from "./ModPanelButton";
 
 export function PageHeader({ page }: { page: BingoPageModel }) {
   const TeamSelector = useSlot("TeamSelector");
+  const CodewordBanner = useSlot("CodewordBanner");
   const menuEntries = useBingoMenuEntries(page.slug, useBingoHeader(page.slug), {
     // A Historical Bingo with no Tasks recorded has no Submissions to show.
     submissions: page.teamSelector.selectedId && page.stageView !== "historical"
@@ -47,6 +48,7 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
         )
       }
       menuEntries={menuEntries}
+      titleAside={page.codeword ? <CodewordBanner codeword={page.codeword} /> : undefined}
       controls={page.canPickTeam && page.teams.length > 0 && <TeamSelector selector={page.teamSelector} />}
     >
       {page.isMod && <ModPanelButton slug={page.slug} pendingCount={page.pendingCount} />}
