@@ -33,6 +33,8 @@ export function canMove(root: GraphNodeInput, from: Path, toParent: Path, toInde
   const node = nodeAt(root, from);
   const parent = nodeAt(root, toParent);
   if (!node || !parent || parent.kind === "ITEM") return false;
+  // A total ("N in total from") only adds up Items: a condition dropped into one would count for nothing.
+  if (parent.kind === "SUM" && node.kind !== "ITEM") return false;
   const fromParent = from.slice(0, -1);
   const fromIndex = from[from.length - 1]!;
   const sameParent = fromParent.length === toParent.length && startsWith(toParent, fromParent);

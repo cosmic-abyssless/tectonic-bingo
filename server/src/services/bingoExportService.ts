@@ -12,6 +12,7 @@ import {
   CUT_MODES,
   isWrappedArtGroup,
   isWrappedArtSection,
+  MAX_SUPERLATIVE_CATEGORIES,
   type BingoExportDocument,
   type ExportNode,
   type ExportWrappedArt,
@@ -99,6 +100,8 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
       submitGateLocalId: null,
       allowsPreLoad: node.allowsPreLoad,
       valuedAs: node.valuedAs,
+      requiresProof: node.requiresProof,
+      proofNote: node.proofNote,
       children: [],
     };
     flatNodes.push({ exportNode, graphNode: node });
@@ -122,6 +125,8 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
     // The tile's own node is an ALL wrapper: never exported itself, but its points are the
     // full-completion bonus, and its children are the tasks.
     bonusPoints: t.node.points,
+    requiresProof: t.requiresProof,
+    proofNote: t.proofNote,
     ...imageField(t.imageUrl),
     tasks: t.node.children.map(buildExportNode),
   }));
@@ -276,6 +281,8 @@ function toGraphNodeInput(node: ExportNode): GraphNodeInput {
     itemName: node.itemName,
     allowsPreLoad: node.allowsPreLoad,
     valuedAs: node.valuedAs ?? null,
+    requiresProof: node.requiresProof ?? false,
+    proofNote: node.proofNote ?? null,
     // A `reuse` stub isn't created (it is an already-created node's other parent linking to it,
     // done after creation: see the linking step in importBingo).
     children: node.children.filter((c) => !c.reuse).map(toGraphNodeInput),
@@ -423,6 +430,8 @@ export function importBingo(
         hasFreezePeriod: t.hasFreezePeriod,
         freezeDurationMinutes: t.freezeDurationMinutes,
         notes: t.notes,
+        requiresProof: t.requiresProof ?? false,
+        proofNote: t.proofNote ?? null,
         imageUrl: imageUrls?.get(tileIndex) ?? null,
       });
       if (t.bonusPoints) boardService.updateTileBonusPoints(tx, tile.id, t.bonusPoints);
@@ -473,8 +482,9 @@ export function importBingo(
       signupService.createQuestion(tx, { bingoId: bingo.id, prompt: q.prompt, helperText: q.helperText ?? null, type: q.type, optionsJson: q.optionsJson, allowOther: q.allowOther ?? false, multiplePicks: q.multiplePicks ?? false, maxPicks: q.maxPicks ?? null, required: q.required, sortOrder: q.sortOrder, visibility: q.visibility ?? "captains" });
     }
 
-    // Superlative categories (CONTEXT.md): absent in older files, none to create. Votes never travel with an export.
-    for (const c of doc.superlativeCategories ?? []) {
+    // Superlative categories (CONTEXT.md): absent in older files, none to create. Votes never travel with an export. A
+    // file from before the cap of 3 brings only its first 3, in their order.
+    for (const c of [...(doc.superlativeCategories ?? [])].sort((a, b) => a.sortOrder - b.sortOrder).slice(0, MAX_SUPERLATIVE_CATEGORIES)) {
       superlativeService.createCategory(tx, { bingoId: bingo.id, name: c.name });
     }
 

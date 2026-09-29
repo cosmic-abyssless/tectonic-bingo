@@ -38,6 +38,8 @@ function toGraphNode(id: string, ctx: TreeCtx): GraphNode {
     submitGateNodeId: row.submitGateNodeId,
     allowsPreLoad: row.allowsPreLoad,
     valuedAs: valuedAsOf(row),
+    requiresProof: row.requiresProof,
+    proofNote: row.proofNote,
     children: childIds.map((cid) => toGraphNode(cid, ctx)),
   };
 }
@@ -185,11 +187,14 @@ export function leafDescendants(rootId: string, childrenOf: Map<string, string[]
 
 type NodeRow = typeof nodes.$inferInsert;
 
-// SUM's children must all be ITEM kind, same as ITEM/MANUAL having no
-// children — documented invariants, not runtime-enforced here (consistent
-// with how the ITEM/MANUAL-have-no-children invariant is handled today: the
-// admin UI is the only writer and always builds valid shapes).
+// SUM's children must all be ITEM kind: the engine only adds up its Items' claimed quantities, so a condition inside a
+// SUM would silently count for nothing. Enforced here, on every node written (fresh or reconciled), because the editor
+// once let one through. ITEM/MANUAL having no children is still only a documented invariant: nothing builds that shape.
 function nodeFields(bingoId: string, input: GraphNodeInput): Omit<NodeRow, "id"> {
+  if (input.kind === "SUM" && (input.children ?? []).some((c) => c.kind !== "ITEM")) {
+    const name = input.label ? `"${input.label}"` : "A total";
+    throw new ServiceError(400, `${name} ("N in total from") can only be made of Items. Take the condition out of it first.`);
+  }
   return {
     bingoId,
     kind: input.kind,
@@ -204,7 +209,19 @@ function nodeFields(bingoId: string, input: GraphNodeInput): Omit<NodeRow, "id">
     submitGateNodeId: input.submitGateNodeId ?? null,
     allowsPreLoad: input.allowsPreLoad ?? false,
     ...valuedAsFields(input),
+    ...proofFields(input),
   };
+}
+
+// A Proof screenshot requirement (CONTEXT.md) with its optional note. Whether the node is a Task, and whether its
+// Tile already requires one Tile-wide, is boardService's to check.
+const PROOF_NOTE_MAX = 200;
+
+function proofFields(input: GraphNodeInput): Pick<NodeRow, "requiresProof" | "proofNote"> {
+  if (!input.requiresProof) return { requiresProof: false, proofNote: null };
+  const proofNote = input.proofNote?.trim() || null;
+  if (proofNote && proofNote.length > PROOF_NOTE_MAX) throw new ServiceError(400, `The Proof screenshot note must be at most ${PROOF_NOTE_MAX} characters`);
+  return { requiresProof: true, proofNote };
 }
 
 // Only an ITEM leaf can be Valued as something; anything else drops it.
@@ -313,6 +330,10 @@ function deleteNodeForce(tx: Tx, id: string): void {
   const claimed = claimsOn(tx, id);
   if (claimed > 0) {
     throw new ServiceError(409, `Can't remove "${nodeName(tx, id)}": ${claimed} submission claim${claimed === 1 ? "" : "s"} refer to it. Edit it instead of removing it.`);
+  }
+  const proofs = tx.select({ id: submissions.id }).from(submissions).where(eq(submissions.proofTaskId, id)).all().length;
+  if (proofs > 0) {
+    throw new ServiceError(409, `Can't remove "${nodeName(tx, id)}": ${proofs} Proof screenshot${proofs === 1 ? "" : "s"} were posted for it. Edit it instead of removing it.`);
   }
   // Derived or soft references: a team's completed-node rows are recomputed after the edit, and a
   // raised hand on a task that no longer exists means nothing.

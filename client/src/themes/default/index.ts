@@ -50,6 +50,7 @@ import { AnalysisPanel } from "./submission/AnalysisPanel";
 import { TilePicker } from "./submission/TilePicker";
 import { SubmitterPicker } from "./submission/SubmitterPicker";
 import { TaskPicker } from "./submission/TaskPicker";
+import { ProofPicker } from "./submission/ProofPicker";
 import { RequirementPicker } from "./submission/RequirementPicker";
 import { StagedClaimsList } from "./submission/StagedClaimsList";
 import { RewindPageLayout } from "./rewind/RewindPageLayout";
@@ -152,6 +153,7 @@ export const defaultTheme: ThemeDefinition = {
     SubmitterPicker,
     TilePicker,
     TaskPicker,
+    ProofPicker,
     RequirementPicker,
     StagedClaimsList,
   },

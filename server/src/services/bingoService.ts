@@ -32,6 +32,8 @@ import {
   tileCategories,
   tileInterests,
   submissionReactions,
+  superlativeCategories,
+  superlativeVotes,
   tiles,
   users,
   womPastCompetitions,
@@ -336,6 +338,9 @@ export function deleteBingo(db: Db, bingoId: string): void {
     tx.delete(pickRatings).where(inArray(pickRatings.teamId, teamIds)).run();
     tx.delete(tileInterests).where(inArray(tileInterests.teamId, teamIds)).run();
     tx.delete(teamMembers).where(inArray(teamMembers.teamId, teamIds)).run();
+    const categoryIds = tx.select({ id: superlativeCategories.id }).from(superlativeCategories).where(eq(superlativeCategories.bingoId, bingoId));
+    tx.delete(superlativeVotes).where(inArray(superlativeVotes.categoryId, categoryIds)).run();
+    tx.delete(superlativeCategories).where(eq(superlativeCategories.bingoId, bingoId)).run();
     tx.delete(teams).where(eq(teams.bingoId, bingoId)).run();
     tx.delete(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).run();
     tx.delete(signups).where(eq(signups.bingoId, bingoId)).run();

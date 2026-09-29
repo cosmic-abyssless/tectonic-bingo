@@ -45,6 +45,9 @@ export interface ExportNode {
   allowsPreLoad: boolean;
   /** Absent in files exported before Valued as existed. */
   valuedAs?: { itemName: string; divisor: number; source?: string | null } | null;
+  /** A Task's own Proof screenshot requirement (CONTEXT.md) and its note. Absent in older files: none. */
+  requiresProof?: boolean;
+  proofNote?: string | null;
   /**
    * A node can have several parents (one requirement counting toward two tasks). It is
    * written out in full at the first place it is met, and everywhere else as a stub with
@@ -87,6 +90,9 @@ export interface ExportTile {
    * older files, meaning no bonus.
    */
   bonusPoints?: number;
+  /** A Tile-wide Proof screenshot requirement (CONTEXT.md) and its note. Absent in older files: none. */
+  requiresProof?: boolean;
+  proofNote?: string | null;
   /** Present only when the export included images and this tile has one. */
   image?: ExportImage;
   tasks: ExportNode[];

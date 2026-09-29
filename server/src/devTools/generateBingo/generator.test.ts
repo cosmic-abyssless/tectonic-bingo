@@ -5,9 +5,10 @@ import { isBlankAnswer, parseChoiceAnswer, parseChoices, parseMemberPicks, type 
 import { answerQuestions } from "./answers";
 import { DIFFICULTY, buildBoard, deadlockedParts, difficultyOf, planSubmissions, type Claim, type PartModel } from "./board";
 import { OptionsError, defaultSlug, normalizeOptions } from "./options";
-import { chooseMods, makePlayers, pairUp, playingProbability } from "./people";
+import { chooseMods, makePlayers, pairUp, playingProbability, type Player } from "./people";
 import { Rng } from "./rng";
 import { chooseCaptains, runInOrder } from "./setup";
+import { DEFAULT_CATEGORIES, planVotes } from "./superlatives";
 import { DAY, HOUR, TARGET_STAGES, buildTimeline, runLimit } from "./timeline";
 
 describe("Rng", () => {
@@ -220,7 +221,7 @@ function toNode(t: ExportTask): GraphNode {
     minCount: t.minCount ?? null, quantity: t.quantity ?? null, itemName: t.itemName ?? null,
     pointsGateNodeId: t.pointsGateLocalId ? `n${t.pointsGateLocalId}` : null,
     submitGateNodeId: t.submitGateLocalId ? `n${t.submitGateLocalId}` : null,
-    allowsPreLoad: false, valuedAs: null, children: (t.children ?? []).map(toNode),
+    allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: (t.children ?? []).map(toNode),
   };
 }
 
@@ -318,7 +319,7 @@ describe("deadlockedParts", () => {
 });
 
 describe("claimable on a board with shared items", () => {
-  const item = (id: string, itemName: string): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, children: [] });
+  const item = (id: string, itemName: string): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: [] });
   const part = (id: string, label: string, kind: GraphNode["kind"], children: GraphNode[], gate: string | null = null): GraphNode => ({ ...item(id, ""), kind, label, itemName: null, points: 10, submitGateNodeId: gate, children });
   const tile = (children: GraphNode[]): Tile => ({ id: "t", name: "PETS", boardRow: 0, boardCol: 0, hasFreezePeriod: false, freezeDurationMinutes: 0, node: part("root", "", "ALL", children) }) as unknown as Tile;
 
@@ -347,7 +348,7 @@ describe("claimable on a board with shared items", () => {
 });
 
 describe("exclusive items on the board", () => {
-  const item = (id: string, itemName: string): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, children: [] });
+  const item = (id: string, itemName: string): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: [] });
   const part = (id: string, label: string, children: GraphNode[]): GraphNode => ({ ...item(id, ""), kind: "SUM", label, itemName: null, quantity: 1, points: 10, children });
   const tile = (id: string, name: string, col: number, parts: GraphNode[]): Tile => ({ id, name, boardRow: 0, boardCol: col, hasFreezePeriod: false, freezeDurationMinutes: 0, node: { ...part(`${id}-root`, "", parts), kind: "ALL" } }) as unknown as Tile;
   const tiles = [tile("zul", "ZULRAH", 0, [part("z1", "Page 1", [item("zul-snake", "Pet snakeling")])]), tile("pets", "PETS", 1, [part("p1", "Page 1", [item("pets-snake", "Pet snakeling"), item("pets-nid", "Nid")])])];
@@ -457,5 +458,68 @@ describe("answerQuestions", () => {
     const player = players[7]!;
     expect(answerQuestions(QUESTIONS, player, new Rng(5))).toEqual(answerQuestions(QUESTIONS, player, new Rng(5)));
     expect(answerQuestions([], player, new Rng(5))).toEqual([]);
+  });
+});
+
+describe("planVotes", () => {
+  const T0 = new Date("2026-03-01T12:00:00Z");
+  const until = new Date(T0.getTime() + 9 * DAY);
+  const categories = DEFAULT_CATEGORIES.map((name, i) => ({ id: `c${i}`, name }));
+  const teams = () => {
+    const players: Player[] = makePlayers(new Rng(3), 42, "testdata-x").map((p, i) => ({ ...p, userId: `u${i}` }));
+    players[0]!.isMe = true;
+    return [0, 1, 2].map((t) => ({ members: players.slice(t * 14, t * 14 + 14) }));
+  };
+
+  it("has at most 3 default categories, since each Team's share card fits 3", () => {
+    expect(DEFAULT_CATEGORIES.length).toBeLessThanOrEqual(3);
+  });
+
+  it("votes only for teammates, never for yourself, within the window, and leaves the run's own player to vote", () => {
+    const ts = teams();
+    const votes = planVotes(ts, categories, T0, until, new Rng(7));
+    expect(votes.length).toBeGreaterThan(0);
+    for (const v of votes) {
+      const team = ts.find((t) => t.members.includes(v.voter))!;
+      expect(team.members.map((p) => p.userId)).toContain(v.nomineeUserId);
+      expect(v.nomineeUserId).not.toBe(v.voter.userId);
+      expect(v.at.getTime()).toBeGreaterThanOrEqual(T0.getTime());
+      expect(v.at.getTime()).toBeLessThanOrEqual(until.getTime());
+      expect(v.voter.isMe).toBe(false);
+      expect(categories.map((c) => c.id)).toContain(v.categoryId);
+    }
+  });
+
+  it("has most Players vote but not all, and the odd one change their mind later", () => {
+    const ts = teams();
+    const votes = planVotes(ts, categories, T0, until, new Rng(7));
+    const voters = new Set(votes.map((v) => v.voter.index));
+    expect(voters.size).toBeGreaterThan(42 * 0.6);
+    expect(voters.size).toBeLessThan(42);
+    const byBallot = new Map<string, Date[]>();
+    for (const v of votes) byBallot.set(`${v.voter.index}:${v.categoryId}`, [...(byBallot.get(`${v.voter.index}:${v.categoryId}`) ?? []), v.at]);
+    const changed = [...byBallot.values()].filter((times) => times.length === 2);
+    expect(changed.length).toBeGreaterThan(0);
+    expect(changed.every(([first, second]) => second!.getTime() > first!.getTime())).toBe(true);
+  });
+
+  it("lands most categories on a clear favourite", () => {
+    const ts = teams();
+    const votes = planVotes(ts, categories, T0, until, new Rng(7));
+    let clear = 0;
+    for (const team of ts) {
+      for (const c of categories) {
+        const tally = new Map<string, number>();
+        for (const v of votes.filter((v) => v.categoryId === c.id && team.members.includes(v.voter))) tally.set(v.nomineeUserId, (tally.get(v.nomineeUserId) ?? 0) + 1);
+        const counts = [...tally.values()].sort((a, b) => b - a);
+        if (counts[0]! >= 3 && counts[0]! > (counts[1] ?? 0)) clear++;
+      }
+    }
+    expect(clear).toBeGreaterThanOrEqual(5);
+  });
+
+  it("plans the same votes for a seed", () => {
+    const strip = (vs: ReturnType<typeof planVotes>) => vs.map((v) => [v.at.toISOString(), v.voter.index, v.categoryId, v.nomineeUserId]);
+    expect(strip(planVotes(teams(), categories, T0, until, new Rng(11)))).toEqual(strip(planVotes(teams(), categories, T0, until, new Rng(11))));
   });
 });

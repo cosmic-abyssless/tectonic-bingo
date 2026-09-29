@@ -212,7 +212,39 @@ export interface CreateTileParams {
   hasFreezePeriod?: boolean;
   freezeDurationMinutes?: number;
   notes?: string | null;
+  requiresProof?: boolean;
+  proofNote?: string | null;
 }
+
+// A Proof screenshot requirement (CONTEXT.md) is on a whole Tile or on individual Tasks, never both.
+const PROOF_NOTE_MAX = 200;
+
+// The Tile's own requirement fields, normalised: a note only while it's required.
+function tileProofFields(params: { requiresProof?: boolean; proofNote?: string | null }): { requiresProof?: boolean; proofNote?: string | null } {
+  if (params.requiresProof === undefined && params.proofNote === undefined) return {};
+  const proofNote = params.proofNote?.trim() || null;
+  if (proofNote && proofNote.length > PROOF_NOTE_MAX) throw new ServiceError(400, `The Proof screenshot note must be at most ${PROOF_NOTE_MAX} characters`);
+  if (params.requiresProof === false) return { requiresProof: false, proofNote: null };
+  return { ...(params.requiresProof !== undefined ? { requiresProof: params.requiresProof } : {}), ...(params.proofNote !== undefined ? { proofNote } : {}) };
+}
+
+// Turning on a Tile-wide requirement replaces its Tasks' own.
+function clearTaskProofs(tx: Tx, tile: typeof tiles.$inferSelect): void {
+  if (!tile.requiresProof) return;
+  const taskIds = tx.select({ childId: nodeEdges.childId }).from(nodeEdges).where(eq(nodeEdges.parentId, tile.nodeId)).all().map((e) => e.childId);
+  if (taskIds.length) tx.update(schema.nodes).set({ requiresProof: false, proofNote: null }).where(inArray(schema.nodes.id, taskIds)).run();
+}
+
+// Only a Task itself (the root of `input`) can require one, and only while its Tile doesn't Tile-wide. A Task shared
+// into another Task's requirement (same node) keeps its own flag there.
+function assertTaskProof(tx: Tx, tile: typeof tiles.$inferSelect | null, input: GraphNodeInput): void {
+  const taskIds = new Set(tile ? tx.select({ childId: nodeEdges.childId }).from(nodeEdges).where(eq(nodeEdges.parentId, tile.nodeId)).all().map((e) => e.childId) : []);
+  const nested = (node: GraphNodeInput): boolean => (node.children ?? []).some((c) => (c.requiresProof && !(c.id && taskIds.has(c.id))) || nested(c));
+  if (nested(input)) throw new ServiceError(400, "Only a Task can require a Proof screenshot");
+  if (input.requiresProof && !tile) throw new ServiceError(400, "Only a Task can require a Proof screenshot");
+  if (input.requiresProof && tile?.requiresProof) throw new ServiceError(400, "This Tile already requires a Proof screenshot Tile-wide");
+}
+
 // A tile's node is a plain ALL root — its tasks (children) carry the task
 // points, and the tile completes once every task does. Its own `points`
 // default to 0 (no bonus); see updateTileBonusPoints for the optional
@@ -257,7 +289,7 @@ export function createTile(db: Db, params: CreateTileParams) {
       .get();
     if (existing) throw new ServiceError(409, `A tile already exists at row ${params.boardRow}, col ${params.boardCol}`);
     const nodeId = insertSubtree(tx, params.bingoId, { kind: "ALL" });
-    const tile = tx.insert(tiles).values({ ...params, nodeId }).returning().get();
+    const tile = tx.insert(tiles).values({ ...params, ...tileProofFields(params), nodeId }).returning().get();
     syncTileLines(tx, tile);
     audit(tx, {
       action: "tile.created",
@@ -272,7 +304,8 @@ export function updateTile(db: Db, id: string, params: Partial<Omit<CreateTilePa
   return db.transaction((tx) => {
     const existing = tx.select().from(tiles).where(eq(tiles.id, id)).get();
     if (!existing) throw new ServiceError(404, "Tile not found");
-    const updated = tx.update(tiles).set(params).where(eq(tiles.id, id)).returning().get();
+    const updated = tx.update(tiles).set({ ...params, ...tileProofFields(params) }).where(eq(tiles.id, id)).returning().get();
+    if (updated.requiresProof && !existing.requiresProof) clearTaskProofs(tx, updated);
     if (updated.boardRow !== existing.boardRow || updated.boardCol !== existing.boardCol) syncTileLines(tx, updated);
 
     const changes = diffFields(existing, updated, { only: Object.keys(params) as (keyof typeof existing)[] });
@@ -318,6 +351,8 @@ export function deleteTile(db: Db, id: string): void {
       markAuditedNoop();
       return;
     }
+    const proofs = tx.select({ id: submissions.id }).from(submissions).where(eq(submissions.proofTileId, id)).all().length;
+    if (proofs > 0) throw new ServiceError(409, `Can't delete "${tile.name}": ${proofs} Proof screenshot${proofs === 1 ? "" : "s"} were posted for it`);
     const taskCount = tx.select({ id: nodeEdges.id }).from(nodeEdges).where(eq(nodeEdges.parentId, tile.nodeId)).all().length;
     tx.delete(tileInterests).where(eq(tileInterests.tileId, id)).run();
     tx.delete(tiles).where(eq(tiles.id, id)).run(); // must precede deleting the node it FKs to
@@ -342,6 +377,7 @@ export function createTask(db: Db, tileId: string, input: GraphNodeInput, sortOr
   return db.transaction((tx) => {
     const tile = tx.select().from(tiles).where(eq(tiles.id, tileId)).get();
     if (!tile) throw new ServiceError(404, "Tile not found");
+    assertTaskProof(tx, tile, input);
     const order = sortOrder ?? tx.select({ id: nodeEdges.id }).from(nodeEdges).where(eq(nodeEdges.parentId, tile.nodeId)).all().length;
     const taskNodeId = insertSubtree(tx, tile.bingoId, input);
     tx.insert(nodeEdges).values({ parentId: tile.nodeId, childId: taskNodeId, sortOrder: order }).run();
@@ -362,6 +398,7 @@ export function updateNode(db: Db, id: string, input: GraphNodeInput) {
     if (!existing) throw new ServiceError(404, "Node not found");
     const before = getNodeTree(tx, id);
     const tile = tileForTaskNode(tx, id);
+    assertTaskProof(tx, tile, input);
     replaceSubtree(tx, id, existing.bingoId, input);
     const after = getNodeTree(tx, id)!;
     audit(tx, {

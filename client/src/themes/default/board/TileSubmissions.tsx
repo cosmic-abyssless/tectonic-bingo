@@ -13,7 +13,7 @@ export function TileSubmissions({ submissions }: { submissions: SubmissionModel[
           <p className="mt-2 text-xs font-medium text-on-surface-muted">{s.taskLabels.join(" + ")}</p>
           <SubmissionRow
             detail={s.detail}
-            footer={<ReactionBar className="mt-1.5" reactions={s.reactions} canReact={reactions.canReact} onToggle={(emoji) => reactions.toggle(s.id, emoji)} />}
+            footer={s.isProof ? undefined : <ReactionBar className="mt-1.5" reactions={s.reactions} canReact={reactions.canReact} onToggle={(emoji) => reactions.toggle(s.id, emoji)} />}
           />
         </div>
       ))}

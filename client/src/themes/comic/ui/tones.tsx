@@ -1,6 +1,7 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { ComicColors } from "../board/colors";
 import { COMIC_FONT } from "../font";
+import { shadeHalftone } from "../fx/halftoneSheet";
 import { useComic } from "./useComic";
 
 /**
@@ -57,16 +58,43 @@ function luminance(color: string): number | null {
 }
 
 /**
- * Printed shading: faint dots of `ink`, fading in from `from` (a percentage of the width) towards the right edge. Lay it
- * as the first child of a `relative` box, with the content after it in its own `relative` wrapper so it paints above.
+ * Printed shading: a halftone of `ink`, nothing up to `from` (a percentage of the width), then dots growing towards the
+ * right edge. Lay it as the first child of a `relative` box, with the content after it in its own `relative` wrapper so
+ * it paints above. The dots are drawn for the box's width (to the nearest 16px), so they stay round at any size.
  */
 export function PrintedShade({ ink, strength = 30, from = 35 }: { ink: string; strength?: number; from?: number }) {
-  const mask = `linear-gradient(to right, transparent ${from}%, currentColor)`;
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = ref.current!;
+    const measure = () => setWidth(Math.ceil(el.clientWidth / 16) * 16);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const dots = width > 0 ? shadeHalftone(width, from) : null;
+  const mask = dots?.url ? `url("${dots.url}")` : undefined;
+  const maskSize = dots ? `${width}px ${dots.height}px` : undefined;
   return (
     <div
+      ref={ref}
       aria-hidden
-      className="comic-shade pointer-events-none absolute inset-0"
-      style={{ "--comic-shade-ink": `color-mix(in srgb, ${ink} ${strength}%, transparent)`, maskImage: mask, WebkitMaskImage: mask } as CSSProperties}
+      className="pointer-events-none absolute inset-0"
+      style={{
+        backgroundColor: `color-mix(in srgb, ${ink} ${strength}%, transparent)`,
+        maskImage: mask,
+        WebkitMaskImage: mask,
+        maskSize,
+        WebkitMaskSize: maskSize,
+        maskRepeat: "repeat-y",
+        WebkitMaskRepeat: "repeat-y",
+        maskPosition: "right top",
+        WebkitMaskPosition: "right top",
+        // Nothing until its dots are drawn: unmasked, it would be a solid block of ink.
+        visibility: mask ? undefined : "hidden",
+      }}
     />
   );
 }

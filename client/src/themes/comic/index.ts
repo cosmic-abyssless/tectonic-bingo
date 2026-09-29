@@ -44,9 +44,11 @@ import { ScreenshotDropzone } from "./submission/ScreenshotDropzone";
 import { AnalysisPanel } from "./submission/AnalysisPanel";
 import { TilePicker, RequirementPicker, SubmitterPicker } from "./submission/Pickers";
 import { TaskPicker } from "./submission/TaskPicker";
+import { ProofPicker } from "./submission/ProofPicker";
 import { StagedClaimsList } from "./submission/StagedClaimsList";
 import { RewindPopup } from "./rewind/RewindPopup";
 import { WrappedBanner } from "./wrapped/WrappedBanner";
+import { WrappedShareCard } from "./wrapped/WrappedShareCard";
 // The theme's shared classes (comic-press, comic-rays, comic-halftone, the
 // dialog keyframes…). Was imported on feat/mico-work but dropped when that
 // work landed on main, leaving every one of them unstyled.
@@ -180,10 +182,12 @@ const comicTheme: ThemeDefinition = {
     SubmitterPicker,
     TilePicker,
     TaskPicker,
+    ProofPicker,
     RequirementPicker,
     StagedClaimsList,
     RewindPopup,
     WrappedBanner,
+    WrappedShareCard,
   },
 };
 

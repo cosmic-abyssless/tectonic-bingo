@@ -28,6 +28,7 @@ import { useEdgeSwipe } from "./useEdgeSwipe";
 import { fling, stopFling } from "./dragScroll";
 import { PageColorsContext, useComic } from "../ui/useComic";
 import { CaptionBox } from "../ui/CaptionBox";
+import { ProofNeeded } from "./ProofNeeded";
 import {
   BASE_DEPTH,
   baseShadow,
@@ -120,12 +121,14 @@ export function TileModal({
   onClose,
   onSubmit,
   onToggleInterest,
+  onPostProof,
 }: {
   tile: TileModel | null;
   isOpen: boolean;
   onClose: () => void;
   onSubmit?: (taskId?: string) => void;
   onToggleInterest?: (taskId: string) => void;
+  onPostProof?: (taskId?: string) => void;
 }) {
   return (
     // mode="wait": switching straight from one tile to another (via the
@@ -141,6 +144,8 @@ export function TileModal({
           onClose={onClose}
           onSubmit={tile.progress.allComplete ? undefined : onSubmit}
           onToggleInterest={tile.progress.allComplete ? undefined : onToggleInterest}
+          // Posting a Proof screenshot follows Submit: not on a finished or frozen issue.
+          onPostProof={tile.progress.allComplete || tile.freeze.isFrozen ? undefined : onPostProof}
         />
       )}
     </AnimatePresence>
@@ -833,11 +838,13 @@ function FlyingBook({
   onClose,
   onSubmit,
   onToggleInterest,
+  onPostProof,
 }: {
   tile: TileModel;
   onClose: () => void;
   onSubmit?: (taskId?: string) => void;
   onToggleInterest?: (taskId: string) => void;
+  onPostProof?: (taskId?: string) => void;
 }) {
   const [isPresent, safeToRemove] = usePresence();
   const [scope, animate] = useAnimate<HTMLDivElement>();
@@ -1299,6 +1306,7 @@ function FlyingBook({
                 onClose={onClose}
                 onSubmit={onSubmit}
                 onToggleInterest={onToggleInterest}
+                onPostProof={onPostProof}
               />
             </div>
           </AriaDialog>
@@ -1323,6 +1331,7 @@ function TileDetails({
   onClose,
   onSubmit,
   onToggleInterest,
+  onPostProof,
 }: {
   ref: Ref<HTMLDivElement>;
   tile: TileModel;
@@ -1341,6 +1350,7 @@ function TileDetails({
   onClose: () => void;
   onSubmit?: (taskId?: string) => void;
   onToggleInterest?: (taskId: string) => void;
+  onPostProof?: (taskId?: string) => void;
 }) {
   const TaskPanel = useSlot("TaskPanel");
   const tokens = useThemeTokens();
@@ -1373,6 +1383,7 @@ function TileDetails({
       }}
       onSubmit={onSubmit}
       onToggleInterest={onToggleInterest ? () => onToggleInterest(ordered[0]?.task.id ?? "") : undefined}
+      onPostProof={onPostProof && tile.proof ? () => onPostProof() : undefined}
     />,
     ...ordered.map(({ task, number }) => (
       <TaskPage
@@ -1384,6 +1395,7 @@ function TileDetails({
         TaskPanel={TaskPanel}
         onSubmit={onSubmit}
         onToggleInterest={onToggleInterest}
+        onPostProof={onPostProof && task.proof && task.available ? () => onPostProof(task.id) : undefined}
       />
     )),
     <SubmissionsPage key="submissions" submissions={tile.submissions} colors={page} />,
@@ -1807,6 +1819,7 @@ function SummaryPage({
   onOpenArt,
   onSubmit,
   onToggleInterest,
+  onPostProof,
   compact = false,
 }: {
   tile: TileModel;
@@ -1821,6 +1834,8 @@ function SummaryPage({
   onOpenArt: (trigger: HTMLElement) => void;
   onSubmit?: () => void;
   onToggleInterest?: () => void;
+  /** Posting the Tile-wide Proof screenshot (tile.proof). */
+  onPostProof?: () => void;
 }) {
   const { progress, freeze } = tile;
   // The height left for the artwork between the contents and the button (its box is flex-1 on a page that fills the
@@ -1914,6 +1929,8 @@ function SummaryPage({
           </div>
         </>
       )}
+
+      {tile.proof && <ProofNeeded proof={tile.proof} onPost={onPostProof} />}
 
       {/* Parts (table of contents) */}
       {ordered.length > 0 && (
@@ -2019,15 +2036,18 @@ function TaskPage({
   TaskPanel,
   onSubmit,
   onToggleInterest,
+  onPostProof,
 }: {
   tile: TileModel;
   task: TaskModel;
   /** The task's own number (its place in the tile's task list), whatever page it's on. */
   number: number;
   colors: ComicColors;
-  TaskPanel: React.ComponentType<{ task: TaskModel }>;
+  TaskPanel: React.ComponentType<{ task: TaskModel; onPostProof?: () => void }>;
   onSubmit?: (taskId?: string) => void;
   onToggleInterest?: (taskId: string) => void;
+  /** Posting this part's own Proof screenshot (task.proof). */
+  onPostProof?: () => void;
 }) {
   const { interest } = task;
   const canClaim = !!onToggleInterest && interest.canToggle;
@@ -2100,7 +2120,7 @@ function TaskPage({
 
       {/* Main Task Requirements & Checklist */}
       <div className="flex-1">
-        <TaskPanel task={task} />
+        <TaskPanel task={task} onPostProof={onPostProof} />
       </div>
 
       {/* (The approved / pending / locked stamp is the one TaskPanel draws

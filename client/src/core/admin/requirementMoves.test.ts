@@ -59,6 +59,16 @@ describe("canMove", () => {
     expect(canMove(tree(), [1], [], 3)).toBe(true);
   });
 
+  it("refuses a condition into a SUM, which only adds up Items, but lets an Item in", () => {
+    // ALL
+    //   SUM (a)
+    //   ANY (b)
+    //   c
+    const withSum: GraphNodeInput = { kind: "ALL", children: [{ kind: "SUM", quantity: 2, children: [item("a")] }, { kind: "ANY", children: [item("b")] }, item("c")] };
+    expect(canMove(withSum, [1], [0], 1)).toBe(false);
+    expect(canMove(withSum, [2], [0], 1)).toBe(true);
+  });
+
   it("refuses a condition into itself or anything inside it", () => {
     expect(canMove(tree(), [2], [2], 0)).toBe(false);
     const nested: GraphNodeInput = { kind: "ALL", children: [{ kind: "ANY", children: [{ kind: "ALL", children: [] }] }] };

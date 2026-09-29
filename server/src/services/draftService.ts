@@ -158,8 +158,12 @@ export function markCuts(
   insertionOrder: Map<string, number>,
 ): DraftShares | null {
   if (cutMode === "none" || teamCount < 2) return null;
+  // Each unit's keys worked out once, not per comparison: the Cut review planner calls this thousands of times.
   const newestFirst = (list: DraftUnit[]) =>
-    [...list].sort((a, b) => signedUpAt(b) - signedUpAt(a) || insertionRank(b, insertionOrder) - insertionRank(a, insertionOrder));
+    list
+      .map((unit) => ({ unit, at: signedUpAt(unit), rank: insertionRank(unit, insertionOrder) }))
+      .sort((a, b) => b.at - a.at || b.rank - a.rank)
+      .map((k) => k.unit);
   const pairs = units.filter(isPair);
   const singles = units.filter((u) => !isPair(u));
   const shares = {

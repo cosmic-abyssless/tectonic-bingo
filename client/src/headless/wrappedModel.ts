@@ -18,6 +18,7 @@ import type {
   WrappedModel,
   WrappedModeratorModel,
   WrappedPersonModel,
+  WrappedPlayerCardModel,
   WrappedSectionArtModel,
   WrappedSectionModel,
   WrappedShareCardDropModel,
@@ -36,8 +37,6 @@ export interface WrappedStoryOptions {
   /** When the Bingo started and ended (ms), for the intro's dates and the charts' span. */
   startsAt: number | null;
   endsAt: number | null;
-  /** The site as the share cards' footer names it ("tectonic.bingo"). */
-  siteLabel: string;
   /** Whether the viewer reached the Outro on an earlier visit (WrappedModel.outroReachedBefore). */
   outroReachedBefore?: boolean;
 }
@@ -103,8 +102,25 @@ export function rejectionBanter(rate: number): string {
  * number they fell short of: below it, they just see their own.
  */
 export function aboveAverage(value: number, average: number | undefined): string | null {
+  const times = timesAverage(value, average);
+  return times && `${times} the average Player`;
+}
+
+/** "2.3×", only when they clearly beat the average (by a fifth); else null. */
+function timesAverage(value: number, average: number | undefined): string | null {
   if (!average || average <= 0 || value < average * 1.2) return null;
-  return `${(value / average).toLocaleString(undefined, { maximumFractionDigits: 1 })}× the average Player`;
+  return timesLabel(value / average);
+}
+
+/** A ratio to an average: "2.3×", "0.4×", and "<0.1×" for a sliver that would round to "0×". */
+function timesLabel(ratio: number): string {
+  return ratio > 0 && ratio < 0.05 ? "<0.1×" : `${ratio.toLocaleString(undefined, { maximumFractionDigits: 1 })}×`;
+}
+
+/** A part of a whole (0–1) as a whole percent, "<1%" for a sliver that would round to "0%"; null at none. */
+export function wholePercent(fraction: number): string | null {
+  if (!(fraction > 0)) return null;
+  return fraction < 0.005 ? "<1%" : `${Math.round(fraction * 100)}%`;
 }
 
 /** A per-kill drop rate as Players write it: "1/512". */
@@ -230,7 +246,8 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
     const you: WrappedYouModel = {
       kind: "you",
       art: art("you"),
-      submissions: y.submissions > 0 ? { countLabel: plural(y.submissions, "Submission"), comparison: aboveAverage(y.submissions, y.bingoAverageSubmissions) } : null,
+      // Against the average either way: below it just says they had a slow Bingo.
+    submissions: y.submissions > 0 ? { countLabel: plural(y.submissions, "Submission"), comparison: aboveAverage(y.submissions, y.bingoAverageSubmissions) } : null,
       points:
         y.pointsShare > 0
           ? {
@@ -423,50 +440,84 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
   };
 }
 
-/** Most Titles, and top drops, a Player card shows. */
+/** Most Titles, and Superlatives, a share card shows. */
 const CARD_TITLES = 3;
-const CARD_DROPS = 3;
+const CARD_SUPERLATIVES = 3;
+/** The wiki's icon of a stack of coins, beside every GP figure on a card. */
+const COINS_ICON = "Coins 10000";
 
 /**
- * The share cards the story ends on (WrappedOutroModel.cards): a Player's Player, Team and Bingo cards, anyone else's
- * Bingo card only, each left out when it has nothing to show. Drops are shown with their item's wiki icon, never a
- * screenshot, so a card never needs one the viewer isn't allowed to see.
+ * The share cards the story ends on (WrappedOutroModel.cards): a Player's Player and Team cards, each left out when it
+ * has nothing to show, and none for anyone else. Drops are shown with their item's wiki icon, never a screenshot, so a
+ * card never needs one the viewer isn't allowed to see.
  */
 export function shareCards(data: MyWrappedResponse, opts: WrappedStoryOptions, slug: string, person: (u: AvatarUser) => WrappedPersonModel): WrappedShareCardModel[] {
   const { bingo, player } = data;
-  const base = (kind: WrappedShareCardModel["kind"], label: string) => ({ key: kind, label, bingoName: bingo.bingoName, siteLabel: opts.siteLabel, fileName: `${slug}-wrapped-${kind}.png` });
-  const cardDrop = (d: WrappedDrop, i = 0): WrappedShareCardDropModel => ({
-    key: `${d.submissionId}:${d.itemName}:${i}`,
+  if (!player) return [];
+  // Each card's art: its own section's first Category image, else a side image (the Team card a different one from
+  // the Player card's where there are two).
+  const sectionArt = (section: WrappedArtSection) => data.art?.sections?.[section]?.[0]?.frames[0];
+  const side = (data.art?.side ?? []).map((f) => f[0]);
+  const cardArt = { player: sectionArt("you") ?? side[0] ?? null, team: sectionArt("team") ?? side[1] ?? side[0] ?? null };
+  const base = (kind: WrappedShareCardModel["kind"], label: string) => ({
+    key: kind,
+    label,
+    bingoName: bingo.bingoName,
+    fileName: `${slug}-wrapped-${kind}.png`,
+    coinsIconUrl: wikiIconUrl(COINS_ICON)!,
+    artUrl: cardArt[kind],
+  });
+  const cardDrop = (d: WrappedDrop): WrappedShareCardDropModel => ({
+    key: `${d.submissionId}:${d.itemName}`,
     itemName: d.itemName,
     iconUrl: wikiIconUrl(d.itemName) ?? null,
     quantityLabel: d.quantity > 1 ? `×${d.quantity.toLocaleString()}` : null,
     gpLabel: d.gpValue !== null && d.gpValue > 0 ? formatGp(d.gpValue) : null,
   });
+  const ofTeam = (fraction: number | undefined) => {
+    const p = fraction === undefined ? null : wholePercent(fraction);
+    return p && `${p} of Team`;
+  };
   const cards: WrappedShareCardModel[] = [];
-  const myTeam = player ? bingo.teams.find((t) => t.teamId === player.teamId) : undefined;
+  const myTeam = bingo.teams.find((t) => t.teamId === player.teamId);
 
-  if (player) {
-    const y = player.you;
-    const teamRank = `#${y.teamRank} of ${y.teamSize} on Team`;
-    const card: WrappedShareCardModel = {
-      ...base("player", "Player card"),
-      kind: "player",
-      name: opts.viewerName,
-      avatarUrl: opts.viewerAvatarUrl,
-      team: myTeam ? { name: myTeam.name, color: myTeam.color } : null,
-      partnerLabel: player.duo ? `with ${displayName(player.duo.partner)}` : null,
-      pickLabel: y.draft ? `Pick #${y.draft.pickNumber}` : null,
-      pointsShare:
-        y.pointsShare > 0
-          ? { shareLabel: share(y.pointsShare), rankLabel: y.bingoRank && y.bingoPlayers ? `#${y.bingoRank} of ${y.bingoPlayers} · ${teamRank}` : teamRank }
-          : null,
-      dropValueLabel: y.gpGained > 0 ? formatGp(y.gpGained) : null,
-      titles: y.titles.slice(0, CARD_TITLES).map((t) => ({ id: t.id, name: t.name })),
-      topDrops: y.topDrops.filter((d) => d.gpValue !== null && d.gpValue > 0).slice(0, CARD_DROPS).map((d, i) => cardDrop(d, i)),
-      driestStreak: y.driestStreak && y.driestStreak.kills > 0 ? { boss: y.driestStreak.boss, killsLabel: plural(y.driestStreak.kills, "kill"), chanceLabel: formatOneIn(y.driestStreak.oneIn) } : null,
-    };
-    const { pointsShare, dropValueLabel, titles, pickLabel, topDrops, driestStreak } = card;
-    if (pointsShare || dropValueLabel || titles.length || pickLabel || topDrops.length || driestStreak) cards.push(card);
+  const y = player.you;
+  const top = y.topDrops.find((d) => d.gpValue !== null && d.gpValue > 0) ?? null;
+  const luckiest = y.luckiestDrop;
+  const luck = luckiest && dropLuck(luckiest.luckOneIn, luckiest.luckKills);
+  const topIsLuckiest = !!top && !!luckiest && top.submissionId === luckiest.submissionId && top.itemName === luckiest.itemName;
+  const ehb = y.wom?.ehb ?? 0;
+  const playerCard: WrappedPlayerCardModel = {
+    ...base("player", "Player card"),
+    kind: "player",
+    name: opts.viewerName,
+    avatarUrl: opts.viewerAvatarUrl,
+    team: myTeam ? { name: myTeam.name, color: myTeam.color } : null,
+    partnerLabel: player.duo ? `with ${displayName(player.duo.partner)}` : null,
+    // The round the draft used for the pick: a Duo is one pick, so both halves share it.
+    draftLabel: y.draft ? `Pick #${y.draft.pickNumber} · Round ${Math.ceil(y.draft.pickNumber / Math.max(1, bingo.teams.length))}` : player.captain ? "Captain" : null,
+    pointsShare:
+      y.pointsShare > 0
+        ? {
+            shareLabel: share(y.pointsShare),
+            teamPercentLabel: ofTeam(y.teamPointsFraction),
+            teamRankLabel: `Team #${y.teamRank} of ${y.teamSize}`,
+            bingoRankLabel: y.bingoRank && y.bingoPlayers ? `Bingo #${y.bingoRank} of ${y.bingoPlayers}` : null,
+          }
+        : null,
+    dropValueLabel: y.gpGained > 0 ? formatGp(y.gpGained) : null,
+    // Against the average either way: below it just says they had a slow Bingo.
+    submissions: y.submissions > 0 ? { countLabel: y.submissions.toLocaleString(), comparisonLabel: y.bingoAverageSubmissions > 0 ? `${timesLabel(y.submissions / y.bingoAverageSubmissions)} avg` : null } : null,
+    achievementsLabel: y.achievements.length > 0 ? y.achievements.length.toLocaleString() : null,
+    ehbLabel: y.wom && ehb > 0 ? ehb.toLocaleString(undefined, { maximumFractionDigits: 1 }) : null,
+    titles: y.titles.slice(0, CARD_TITLES).map((t) => ({ id: t.id, name: t.name })),
+    topDrop: top ? { ...cardDrop(top), isLuckiest: topIsLuckiest, luckLabel: topIsLuckiest && luck ? luck.chanceLabel : null } : null,
+    luckiestDrop: luckiest && luck && !topIsLuckiest ? { ...cardDrop(luckiest), luckLabel: luck.chanceLabel } : null,
+    driestStreak: y.driestStreak && y.driestStreak.kills > 0 ? { boss: y.driestStreak.boss, killsLabel: plural(y.driestStreak.kills, "kill"), chanceLabel: formatOneIn(y.driestStreak.oneIn) } : null,
+  };
+  const p = playerCard;
+  if (p.pointsShare || p.dropValueLabel || p.submissions || p.achievementsLabel || p.ehbLabel || p.titles.length || p.draftLabel || p.topDrop || p.luckiestDrop || p.driestStreak) {
+    cards.push(playerCard);
   }
 
   if (myTeam) {
@@ -480,25 +531,13 @@ export function shareCards(data: MyWrappedResponse, opts: WrappedStoryOptions, s
       pointsLabel: myTeam.points.toLocaleString(),
       tilesCompleted: myTeam.tilesCompleted,
       linesCompleted: myTeam.linesCompleted,
-      mvp: myTeam.mvp ? { person: person(myTeam.mvp.player), shareLabel: share(myTeam.mvp.pointsShare) } : null,
+      dropValueLabel: myTeam.dropValue ? formatGp(myTeam.dropValue) : null,
+      mvp: myTeam.mvp ? { person: person(myTeam.mvp.player), shareLabel: share(myTeam.mvp.pointsShare), teamPercentLabel: ofTeam(myTeam.mvp.teamPointsFraction) } : null,
       biggestDrop: myTeam.biggestDrop ? { ...cardDrop(myTeam.biggestDrop), player: myTeam.biggestDrop.player ? person(myTeam.biggestDrop.player) : null } : null,
+      // Stored in the Bingo's category order, winnerless ones already left out; a Bingo from before the cap of 3 can
+      // have more, and the card shows the first 3 (the story still shows every one).
+      superlatives: (myTeam.superlatives ?? []).slice(0, CARD_SUPERLATIVES).map((s) => ({ category: s.category, winners: s.winners.map(person) })),
     });
   }
-
-  const winners = bingo.teams.filter((t) => t.placement === 1);
-  const rarest = bingo.rarestDrop && dropLuck(bingo.rarestDrop.luckOneIn, bingo.rarestDrop.luckKills);
-  const steal = bingo.biggestSteal;
-  const bingoCard: WrappedShareCardModel = {
-    ...base("bingo", "Bingo card"),
-    kind: "bingo",
-    winners: winners.map((t) => ({ name: t.name, color: t.color })),
-    winnerPointsLabel: winners[0] ? winners[0].points.toLocaleString() : null,
-    totalGpLabel: bingo.totalGp > 0 ? formatGp(bingo.totalGp) : null,
-    submissionsLabel: bingo.totalSubmissions > 0 ? bingo.totalSubmissions.toLocaleString() : null,
-    rarestDrop:
-      bingo.rarestDrop && rarest ? { ...cardDrop(bingo.rarestDrop), player: bingo.rarestDrop.player ? person(bingo.rarestDrop.player) : null, chanceLabel: rarest.chanceLabel } : null,
-    steal: steal ? { person: person(steal.player), pickLabel: `Pick #${steal.pickNumber}`, rankLabel: ordinal(steal.rank), placesBeatenLabel: plural(steal.placesBeaten, "place") } : null,
-  };
-  if (bingoCard.winners.length || bingoCard.totalGpLabel || bingoCard.submissionsLabel || bingoCard.rarestDrop || bingoCard.steal) cards.push(bingoCard);
   return cards;
 }

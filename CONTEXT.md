@@ -32,8 +32,9 @@ The current lifecycle phase of a Bingo. Transitions move forward through a fixed
 A unique, secret text phrase generated for a Bingo (or a stage of it) that players must show in their verification screenshots (e.g. spoken in public chat, or in a clan chat message) to prove the screenshot was taken during this specific Bingo.
 
 ### Pre-load
-A task or requirement that players are permitted to prepare before the Bingo goes `live` (or before a specific gate opens), such as obtaining a clue scroll or gathering a secondary ingredient, but not completing the final step.
+A task or requirement that players are permitted to prepare before the Bingo goes `live` (or before a specific gate opens), without completing the final step. The usual case is pre-loading a chest: finishing a run before the Bingo starts and opening the chest once it's Live (common for the Corrupted Gauntlet).
 - **Rules:** Must be explicitly enabled on the specific Part/Task (`allowsPreLoad`).
+- **Not:** A screenshot. Pre-load has nothing to do with the Proof screenshot, which proves a starting state.
 
 ---
 
@@ -189,6 +190,7 @@ A delay configured on a Tile: for its duration after the Bingo starts, no Team c
 ### Submission
 A single proof package submitted by a player on behalf of their Team to claim completion of one or more Tasks on a Tile.
 - **Composition:** Contains one or more Screenshots and associated Claims.
+- **Kinds:** A drop (the usual kind, with its Claims) or a **Proof screenshot** (no Claims; see Proof screenshot). Both are posted and reviewed the same way.
 - **Status:** `pending` → `approved` | `rejected`.
 - **Reviewer:** Must be reviewed by a Moderator (or Admin/Site Admin).
 - **Feedback:** Rejections must include reviewer notes so the team knows what went wrong.
@@ -202,8 +204,18 @@ An emoji a Player leaves on a Submission of their own Team, from a fixed set of 
 
 ### Screenshot
 An image attached to a Submission proving in-game completion.
-- **Types:** Main drop screenshot, pre-screenshot (for pre-loaded tasks), bank screenshot, collection log screenshot, other.
+- **Types:** Main drop screenshot, bank screenshot, collection log screenshot, other.
 - **Verification:** Scanned for the Bingo's Codeword and item name via OCR/text-matching; verified by a human Moderator during review.
+
+### Proof screenshot
+A screenshot of a Tile's starting state that a Player posts before their drops on that Tile count, such as an empty supply cart at Wintertodt, an empty pool at Tempoross or an empty rift at Guardians of the Rift. It proves the loot that follows was earned during the Bingo, not carried in.
+- **Rules:**
+  - **Where required:** an Admin requires one on a whole Tile or on individual Tasks (a Tile mixing Wintertodt and Tempoross needs a different one per Task), never both on the same Tile. The requirement can carry a note on what to show.
+  - **What it is:** a kind of Submission. It's posted through the same Submit flow (for yourself or a teammate) and only while the Bingo is Live, and reviewed in the same queue (approved or rejected, with the usual Codeword check).
+  - **How long it counts:** each Player needs their own, once per requirement for the whole Bingo, and any approved one counts.
+  - **Missing ones:** a drop without an approved Proof screenshot from its Player can still be submitted, but it's flagged in review, and so is a drop submitted before the Proof screenshot.
+  - **Not a drop:** it has no Claims or points, and isn't counted in Stats, Titles, drop value, Rewind, Wrapped or Achievements. It can't be reacted to.
+- **Not:** A Submission's drop screenshot (which proves the drop itself), and not Pre-load.
 
 ### Claim
 The specific allocation of a single drop or achievement within a Submission to a single leaf Task.
@@ -307,7 +319,7 @@ A just-for-fun milestone a Player earns during a Bingo, e.g. "Strong start: subm
 ### Superlative
 An award within a Team, voted by its Players, e.g. "Team MVP", "Team Spirit", "The Grinder".
 - **Rules:** Each Team votes on its own members and gets its own winners. The categories are set per Bingo by an Admin. Only Players on the Team vote, never for themselves; Duo partners and Captains can be voted for like anyone else. Votes are secret: nobody, Moderators and Admins included, sees who voted for whom.
-- **Voting:** Open for the whole of Live, closing when the Bingo is Finished. A Player picks one teammate per category, can skip a category, and can change their votes until voting closes, so the votes can follow how the Bingo goes. Players added to the Team mid-Live can vote and be voted for from then on; a Player removed from it loses their votes and the votes cast for them. The categories can be added, renamed or deleted at any time; renaming keeps the votes, deleting removes them. A Bingo with no categories has no Superlatives.
+- **Voting:** Open for the whole of Live, closing when the Bingo is Finished. A Player picks one teammate per category, can skip a category, and can change their votes until voting closes, so the votes can follow how the Bingo goes. Players added to the Team mid-Live can vote and be voted for from then on; a Player removed from it loses their votes and the votes cast for them. The categories can be added, renamed or deleted at any time, up to 3 per Bingo so every one fits on the Team's share card; renaming keeps the votes, deleting removes them. A Bingo with no categories has no Superlatives.
 - **Results:** Only the winners are shown, never vote counts or runners-up; Admins alone can see the counts, once voting has closed. **Turnout** (how many of each Team's Players have voted, in any, every and each category) is Admin-only too but visible at any time, live, since it says nothing about who voted or for whom. A tie is shared by everyone tied; a category with no votes has no winner. Hidden from everyone until Wrapped is published, then revealed there: a Player's Team section shows their Team's Superlatives, and the Bingo-wide part lists every Team's winners.
 - **Not:** A Title. Titles are computed from stats; Superlatives are voted.
 
@@ -338,7 +350,8 @@ A scrolling story of a Finished Bingo, told from one Player's point of view: You
 - **Publishing:** Hidden until a Moderator publishes it, which leaves time for the wrap-up with the Players. Refused while any Submission is pending, so it's never missing drops still in the review queue. A Bingo can be set to publish it on its own once it is Finished and nothing is pending (off by default). Publishing fixes its numbers: they don't change afterwards unless a Moderator publishes it again.
 - **Wrapped art:** Decorative in-game character cut-outs, drawn as stickers on torn paper. They don't represent the Players; they just suit the story. **Category images** are any number per section, side by side above its heading (a Team's three, a Duo's two); **side images** are one pool, shown large beside the sections in turn on wide screens. Admins upload them per Bingo, one character per image, as a transparent PNG or a screenshot on one solid colour (keyed out on upload), and a new Bingo starts with a copy of the previous Bingo's. Unlike the numbers, publishing doesn't fix them.
 - **Credits:** People an Admin names in Wrapped (board design, art, moderating and so on), each a name with an optional role. Free text, independent of who holds the Admin or Moderator role. A credit either belongs to one Category image, its name captioned on the art in OSRS's in-game font, or is one of a category's **additional credits** (no image), listed in order under that category's images. Every category works the same way; the **Moderators** category (distinct from a Moderator's own section) credits who moderated the Bingo in The Bingo's "Behind the scenes". A Moderator's own section captions its middle image with their name instead. Exported with the art and copied to a new Bingo with it; like the art, publishing doesn't fix them.
-- **Share cards:** Images at the end of Wrapped to share and compare (portrait 4:5, 1080×1350), each with Copy image, Download and, where the browser can share files, Share. A Player gets three: the **Player card** (their Points share with its rank in the Bingo and on their Team, Drop value, Titles, pick, top drops), the **Team card** (placement, points, Tiles and lines, MVP, biggest drop) and the **Bingo card** (the winner, totals, the rarest drop, the biggest Steal); anyone else gets the Bingo card. Their contents are fixed: a Player can't choose what goes on one, and a card with nothing to show is left out. Drops show their item's icon, never a screenshot. Made only in the viewer's browser, never on the server. In a Moderator's preview every card is watermarked "Preview".
+- **Share cards:** Images at the end of Wrapped to share and compare (portrait 4:5, 1080×1350), each with Copy image, Download and, where the browser can share files, Share. A Player gets two: the **Player card** (their Points share and its percentage of the Team's points, its rank on their Team and in the Bingo, Drop value, approved Submissions against the Bingo average, Achievements earned, EHB gained, up to 3 Titles, their pick and its round (or "Captain"), their top drop and luckiest drop, their driest streak) and the **Team card** (placement, points, Tiles and lines, Drop value, the MVP, up to 3 Superlatives, the biggest drop). Anyone else gets none. Their contents are fixed: a Player can't choose what goes on one, and a field or card with nothing to show is left out. Drops show their item's icon, never a screenshot, and GP always has the coins icon. Made only in the viewer's browser, never on the server. In a Moderator's preview every card is watermarked "Preview".
+- **MVP:** The Player with the highest Points share on a Team. Computed, never voted. **Not:** a Superlative, even one a Team names "Team MVP", nor a Title.
 - **Avoid:** Recap for this feature alone (Recap is the family it belongs to).
 
 ### Steal

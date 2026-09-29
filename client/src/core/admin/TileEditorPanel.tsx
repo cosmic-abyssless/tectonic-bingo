@@ -48,15 +48,30 @@ function existingConditionsExcluding(tasks: GraphNode[], excludeTaskIndex: numbe
     );
 }
 
-export function TileEditorPanel({ slug, tile, categories, locked, onClose }: { slug: string; tile: Tile | null; categories: TileCategory[]; locked: boolean; onClose: () => void }) {
+// `themeKey` is the bingo's own theme, for its tasks' "Preview for Players".
+export function TileEditorPanel({
+  slug,
+  themeKey,
+  tile,
+  categories,
+  locked,
+  onClose,
+}: {
+  slug: string;
+  themeKey: string;
+  tile: Tile | null;
+  categories: TileCategory[];
+  locked: boolean;
+  onClose: () => void;
+}) {
   return (
     <Dialog isOpen={tile !== null} onClose={onClose} size="lg">
-      {tile && <TileEditor slug={slug} tile={tile} categories={categories} locked={locked} onClose={onClose} />}
+      {tile && <TileEditor slug={slug} themeKey={themeKey} tile={tile} categories={categories} locked={locked} onClose={onClose} />}
     </Dialog>
   );
 }
 
-function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string; tile: Tile; categories: TileCategory[]; locked: boolean; onClose: () => void }) {
+function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slug: string; themeKey: string; tile: Tile; categories: TileCategory[]; locked: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -108,6 +123,12 @@ function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string;
   const categoryValue = pendingCategory?.tileId === tile.id ? pendingCategory.value : (tile.categoryId ?? "");
   const [bonusEnabled, setBonusEnabled] = useState(tile.node.points > 0);
   const [bonusDraft, setBonusDraft] = useState(tile.node.points || 25);
+  // A Proof screenshot (CONTEXT.md) for the whole Tile: turning it on replaces the Tasks' own (the server clears them).
+  const [proofTileWide, setProofTileWide] = useState(tile.requiresProof);
+  async function updateProofTileWide(requiresProof: boolean) {
+    setProofTileWide(requiresProof);
+    await patch({ requiresProof });
+  }
   async function updateBonusPoints(points: number) {
     setBonusEnabled(points > 0);
     if (points > 0) setBonusDraft(points);
@@ -187,6 +208,18 @@ function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string;
                 <Input type="number" className="num w-32" defaultValue={bonusDraft} onBlur={(e) => updateBonusPoints(Number(e.target.value) || 0)} />
               </Field>
             )}
+            <label
+              title="Each player posts a screenshot of the tile's starting state before their drops on it count. Replaces any per-task Proof screenshots."
+              className="col-span-2 flex h-10 items-center gap-2 text-sm text-on-surface-muted"
+            >
+              <input type="checkbox" checked={proofTileWide} onChange={(e) => updateProofTileWide(e.target.checked)} className="size-4 accent-accent" />
+              Proof screenshot for the whole tile
+            </label>
+            {proofTileWide && (
+              <Field label="Proof screenshot message" hint="Optional, shown to Players as written, e.g. Show an empty supply cart before your drops count." className="col-span-2">
+                <Input defaultValue={tile.proofNote ?? ""} maxLength={200} onBlur={(e) => patch({ proofNote: e.target.value || null })} />
+              </Field>
+            )}
           </div>
         </div>
 
@@ -204,12 +237,14 @@ function TileEditor({ slug, tile, categories, locked, onClose }: { slug: string;
               <TaskEditor
                 key={task.id}
                 slug={slug}
+                themeKey={themeKey}
                 tileId={tile.id}
                 task={task}
                 previousTaskId={tile.node.children[i - 1]?.id}
                 existingLeaves={existingLeavesExcluding(tile.node.children, i)}
                 existingConditions={existingConditionsExcluding(tile.node.children, i)}
                 sharedNodeIds={sharedNodeIds}
+                tileRequiresProof={proofTileWide}
                 onDelete={() => deleteTask(task)}
               />
             ))}

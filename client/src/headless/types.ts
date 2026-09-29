@@ -3,7 +3,24 @@
 // never a raw Tile, TeamNodeState[], SubmissionDetails[], or LeafClaimMaps.
 // See docs/headless-theming-plan.md §2.
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
-import type { AuditCategory, AuditTone, ContributionCount, DraftState, NodeKind, NodeStatus, PickedTitle, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus, WrappedArtFrames } from "@bingo/shared";
+import type {
+  AuditCategory,
+  AuditTone,
+  ContributionCount,
+  DraftState,
+  NodeKind,
+  NodeStatus,
+  PickedTitle,
+  ProofStatus,
+  SignificanceTier,
+  Stage,
+  StageMilestone,
+  SubmissionDetails,
+  SubmissionKind,
+  SubmissionReaction,
+  SubmissionStatus,
+  WrappedArtFrames,
+} from "@bingo/shared";
 import type { PlaybackSpeed } from "./rewindModel";
 
 export interface ActivityEntryModel {
@@ -84,6 +101,14 @@ export interface RequirementNodeModel {
   children: RequirementNodeModel[];
 }
 
+/** A Proof screenshot requirement (CONTEXT.md): on a whole Tile (TileModel.proof) or one Task (TaskModel.proof). */
+export interface ProofModel {
+  /** The Admin's message, shown whole ("Show an empty supply cart before your drops count."), when they wrote one. */
+  note: string | null;
+  /** The viewer's own standing: any approved one counts. Null when the viewer isn't on the viewed team. */
+  status: ProofStatus | null;
+}
+
 export interface TaskModel {
   id: string;
   label: string | null;
@@ -95,6 +120,8 @@ export interface TaskModel {
   kind: NodeKind;
   isManual: boolean;
   allowsPreLoad: boolean;
+  /** This Task's own Proof screenshot requirement; null when it has none (or the Tile's is Tile-wide). */
+  proof: ProofModel | null;
   status: NodeStatus;
   complete: boolean;
   locked: boolean;
@@ -122,8 +149,10 @@ export interface SubmissionModel {
   timeAgo: string;
   /** The first screenshot's original URL — views derive the thumb/full variant they need (api/imageVariants). */
   thumbnailUrl: string | null;
-  /** claimsSummary() — e.g. "2× Bruma torch, Vorki". */
+  /** claimsSummary() — e.g. "2× Bruma torch, Vorki"; "Proof screenshot" for a proof one. */
   summary: string;
+  /** A Proof screenshot (CONTEXT.md), not a drop: it can't be reacted to. */
+  isProof: boolean;
   submittedBy: string | null;
   reviewerNotes: string | null;
   tileId: string | null;
@@ -177,6 +206,8 @@ export interface TileModel {
     remainingMs: number;
   };
   tasks: TaskModel[];
+  /** The Tile-wide Proof screenshot requirement; null when there is none (a Task may still have its own). */
+  proof: ProofModel | null;
   /** groupSubmissionsByTile() output for this tile, newest first. */
   submissions: SubmissionModel[];
   /** Search miss. */
@@ -355,7 +386,18 @@ export interface BingoPageModel {
   pointBreakdown: { open: boolean; show(): void; hide(): void };
   drawer: { open: boolean; show(): void; hide(): void };
   /** show() also hides the drawer. initialFile seeds/replaces the flow's screenshot (drag-drop/paste-to-submit) — re-passing a new File while already open feeds it into the still-mounted flow. initialTaskId preselects a part of that tile (per-part Submit buttons). */
-  submit: { open: boolean; initialTileId: string | undefined; initialTaskId: string | undefined; initialFile: File | undefined; show(tileId?: string, file?: File, taskId?: string): void; hide(): void };
+  submit: {
+    open: boolean;
+    initialTileId: string | undefined;
+    initialTaskId: string | undefined;
+    initialFile: File | undefined;
+    /** "proof" when opened to post a Proof screenshot (showProof). */
+    initialKind: SubmissionKind | undefined;
+    show(tileId?: string, file?: File, taskId?: string): void;
+    /** Opens the flow on this Tile (and Task, for a per-Task requirement) with "Proof screenshot" already chosen. */
+    showProof(tileId: string, taskId?: string): void;
+    hide(): void;
+  };
   /** logout lives in core AppHeader's own user menu, not here. */
   actions: { goHome(): void; goToStats(): void; goToRewind(): void; goToWrapped(): void; goToMod(): void; goToDraft(): void };
   /** Raise/lower the viewer's hand for one part (task) of a tile on their own team. No-op unless task.interest.canToggle. */
@@ -424,6 +466,24 @@ export interface SubmissionFlowModel {
     pickerKey: string;
   };
   quantity: { visible: boolean; value: number; max: number; needed: number; set(n: number): void };
+  /**
+   * Drop or Proof screenshot (CONTEXT.md). "proof" is offered only where the picked Tile (or Task, when the requirement
+   * is per-Task) needs one; choosing it hides the item picking, since a proof has no claims.
+   */
+  kind: {
+    value: SubmissionKind;
+    available: boolean;
+    select(kind: SubmissionKind): void;
+    /** What the proof is for: the Tile's name, or the Task's label for a per-Task requirement. */
+    label: string | null;
+    /** The Admin's message, shown whole, when they wrote one. */
+    note: string | null;
+  };
+  /**
+   * A drop on a Tile/Task whose requirement the picked Player has no Proof screenshot for (none, or only rejected
+   * ones): "You haven't posted a Proof screenshot for this tile yet". It still submits; post() switches to posting one.
+   */
+  proofWarning: { message: string; post(): void } | null;
   staged: { items: { label: string }[]; remove(index: number): void; canStageCurrent: boolean; stageCurrent(): void };
   submit: { isValid: boolean; isSubmitting: boolean; isAnalyzing: boolean; error: string | null; run(): Promise<void> };
   close(): void;
@@ -856,15 +916,15 @@ export interface WrappedOutroModel {
   art: WrappedSectionArtModel;
   bingoName: string;
   /**
-   * The share cards to end on, in order (CONTEXT.md "Wrapped"): a Player gets their Player, Team and Bingo cards,
-   * anyone else the Bingo card only. A card with nothing to show is left out, so this can be empty.
+   * The share cards, before the way out (CONTEXT.md "Wrapped"): a Player gets their Player and Team cards, anyone else
+   * none. A card with nothing to show is left out, so this can be empty.
    */
   cards: WrappedShareCardModel[];
 }
 
 // Wrapped's share cards: images made in the viewer's browser (never on the server) from these display-ready values,
-// through the WrappedShareCard slot. Every card is portrait 4:5 and has the Bingo's name and the site in its footer.
-// Their contents are fixed: a Player can't pick what goes on one. A field without data is null (or an empty list).
+// through the WrappedShareCard slot. Every card is portrait 4:5, headed by the Bingo's name. Their contents are fixed: a
+// Player can't pick what goes on one. A field without data is null (or an empty list).
 
 /** A drop on a share card: shown with its item's wiki icon, never a Submission screenshot. */
 export interface WrappedShareCardDropModel {
@@ -874,7 +934,7 @@ export interface WrappedShareCardDropModel {
   iconUrl: string | null;
   /** "×3" for more than one, else null. */
   quantityLabel: string | null;
-  /** "12.3m"; null for an item with no Drop value. */
+  /** "12.3m"; null for an item with no Drop value. Drawn with the Coins icon (`coinsIconUrl`). */
   gpLabel: string | null;
 }
 
@@ -883,11 +943,17 @@ interface WrappedShareCardBase {
   key: string;
   /** "Player card": the card's name, for its buttons and the image's alt text. */
   label: string;
-  /** The Bingo's name and the site ("tectonic.bingo"), for every card's footer. */
+  /** For the card's header. */
   bingoName: string;
-  siteLabel: string;
   /** What the downloaded (or shared) PNG is called. */
   fileName: string;
+  /** The OSRS Coins icon, for every GP figure on the card; draw the figure without it if it fails to load. */
+  coinsIconUrl: string;
+  /**
+   * A still of the Bingo's Wrapped art (the first frame of a sticker) for a theme that decorates its cards with it:
+   * the card's own section's first Category image (You, Team), else a side image. Null when the Bingo has no art.
+   */
+  artUrl: string | null;
 }
 
 /** The viewer's own card, titled with their name. */
@@ -898,20 +964,29 @@ export interface WrappedPlayerCardModel extends WrappedShareCardBase {
   team: { name: string; color: string | null } | null;
   /** "with Zezima", for a Duo; else null. */
   partnerLabel: string | null;
-  /** "Pick #7" when they were drafted; null otherwise (not drafted, or no Draft). */
-  pickLabel: string | null;
+  /** "Pick #7 · Round 2" (a Duo's halves share their pick), "Captain" for a Captain, else null. */
+  draftLabel: string | null;
   /**
-   * Their Points share and its ranks: "#3 of 42 · #1 of 8 on Team" (tied Players share a rank). Only the Team rank for
-   * Wrapped published before the Bingo-wide one was stored. Null when they scored nothing.
+   * Their Points share, its part of the Team's points ("34% of Team", "<1% of Team"; null at none) and its ranks, as
+   * separate badges: "Team #1 of 8" and "Bingo #3 of 42" (tied Players share a rank; the Bingo's is null in Wrapped
+   * published before it was stored). Null when they scored nothing.
    */
-  pointsShare: { shareLabel: string; rankLabel: string } | null;
+  pointsShare: { shareLabel: string; teamPercentLabel: string | null; teamRankLabel: string; bingoRankLabel: string | null } | null;
   /** Their Total drop value ("1.2b"), labelled just "Drop value" on the card; null for none. */
   dropValueLabel: string | null;
-  /** Titles they held, at most 3. */
+  /** Approved Submissions ("48") against the Bingo average, above or below it ("2.1× avg", "0.5× avg"). Null at none. */
+  submissions: { countLabel: string; comparisonLabel: string | null } | null;
+  /** How many Achievements they earned; null for none. */
+  achievementsLabel: string | null;
+  /** EHB gained ("312.4"), only with Wise Old Man data; else null. */
+  ehbLabel: string | null;
+  /** The first 3 Titles they held, in Title priority order. */
   titles: { id: string; name: string }[];
-  /** Their most valuable drops, at most 3, highest first. */
-  topDrops: WrappedShareCardDropModel[];
-  /** Their driest streak, for a card with room for it. */
+  /** Their most valuable drop; `isLuckiest` when it's also their luckiest, then carrying its `luckLabel`. */
+  topDrop: (WrappedShareCardDropModel & { isLuckiest: boolean; luckLabel: string | null }) | null;
+  /** Their luckiest drop and how rare its luck was ("1 in 5,000"); null when it's the top drop (or they had none). */
+  luckiestDrop: (WrappedShareCardDropModel & { luckLabel: string }) | null;
+  /** Their driest streak: the first thing left out when the card runs out of room. */
   driestStreak: { boss: string; killsLabel: string; chanceLabel: string } | null;
 }
 
@@ -925,25 +1000,16 @@ export interface WrappedTeamCardModel extends WrappedShareCardBase {
   pointsLabel: string;
   tilesCompleted: number;
   linesCompleted: number;
-  mvp: { person: WrappedPersonModel; shareLabel: string } | null;
+  /** Its Players' Drop value added up ("3.4b"); null at none, and in Wrapped published before it was stored. */
+  dropValueLabel: string | null;
+  /** The computed MVP (never a Superlative), with "34% of Team" (null in Wrapped published before it was stored). */
+  mvp: { person: WrappedPersonModel; shareLabel: string; teamPercentLabel: string | null } | null;
   biggestDrop: (WrappedShareCardDropModel & { player: WrappedPersonModel | null }) | null;
+  /** Up to 3, in the Bingo's category order, each with its winners (several for a tie); a category with no winner left out. */
+  superlatives: { category: string; winners: WrappedPersonModel[] }[];
 }
 
-export interface WrappedBingoCardModel extends WrappedShareCardBase {
-  kind: "bingo";
-  /** The winning Team, or every Team tied for first (and their points); empty (and null) without any Teams. */
-  winners: { name: string; color: string | null }[];
-  winnerPointsLabel: string | null;
-  /** The Drop value of every approved Claim ("5.2b"), and how many approved Submissions; each null at nothing. */
-  totalGpLabel: string | null;
-  submissionsLabel: string | null;
-  /** The drop with the best Luck, and who got it: "1 in 90,000". */
-  rarestDrop: (WrappedShareCardDropModel & { player: WrappedPersonModel | null; chanceLabel: string }) | null;
-  /** The draft's biggest Steal (CONTEXT.md), if there was one. */
-  steal: { person: WrappedPersonModel; pickLabel: string; rankLabel: string; placesBeatenLabel: string } | null;
-}
-
-export type WrappedShareCardModel = WrappedPlayerCardModel | WrappedTeamCardModel | WrappedBingoCardModel;
+export type WrappedShareCardModel = WrappedPlayerCardModel | WrappedTeamCardModel;
 
 export type WrappedSectionModel = WrappedIntroModel | WrappedYouModel | WrappedDuoModel | WrappedCaptainModel | WrappedModeratorModel | WrappedTeamModel | WrappedBingoModel | WrappedOutroModel;
 export type WrappedSectionKind = WrappedSectionModel["kind"];

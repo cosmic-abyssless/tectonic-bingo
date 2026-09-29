@@ -32,6 +32,7 @@ import { now as clockNow } from "../clock";
 import { ServiceError } from "./errors";
 import * as statsService from "./statsService";
 import * as rewindService from "./rewindService";
+import { dropsOnly } from "./submissionKinds";
 import { getBingoTitleSettings } from "./titleSettingsService";
 import { getEarnedAchievements } from "./achievementService";
 import { bossGainsOf, gainsOf, loadTimelines } from "./womReadService";
@@ -199,12 +200,13 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
   const picked = pickTitles(titleFacts, { now: finishedAt ?? clockNow(), liveAt, endedAt: finishedAt }, titleSettings);
   const rewind = rewindService.getRewind(db, bingo);
 
-  // Every review of the Bingo's Submissions (approved or rejected), by whoever made it: a Moderator or an Admin.
+  // Every review of the Bingo's drop Submissions (approved or rejected), by whoever made it: a Moderator or an Admin.
+  // Proof screenshots are left out of Wrapped, reviews included.
   const reviews = teamRows.length
     ? db
         .select({ reviewerId: submissions.reviewedByUserId, status: submissions.status, submittedAt: submissions.submittedAt, reviewedAt: submissions.reviewedAt })
         .from(submissions)
-        .where(and(inArray(submissions.teamId, teamRows.map((t) => t.id)), inArray(submissions.status, ["approved", "rejected"]), isNotNull(submissions.reviewedByUserId), isNotNull(submissions.reviewedAt)))
+        .where(and(inArray(submissions.teamId, teamRows.map((t) => t.id)), inArray(submissions.status, ["approved", "rejected"]), isNotNull(submissions.reviewedByUserId), isNotNull(submissions.reviewedAt), dropsOnly))
         .all()
         .map((r) => ({ reviewerId: r.reviewerId!, status: r.status, submittedAt: r.submittedAt, reviewedAt: r.reviewedAt! }))
     : [];
@@ -239,6 +241,7 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
       const mvp = mine.filter((c) => c.pointsShare > 0).sort((a, b) => b.pointsShare - a.pointsShare)[0];
       const gp = mine.filter((c) => c.gpGained > 0).sort((a, b) => b.gpGained - a.gpGained)[0];
       const biggest = drops.filter((d) => d.teamId === team.id && d.gpValue !== null && d.gpValue > 0).sort(byGp)[0];
+      const teamAwardPoints = mvp ? (factsOf.get(mvp.userId)?.teamAwardPoints ?? 0) : 0;
       const superlatives = computeWinners(db, bingoId, team.id)
         .map((w) => ({ category: w.categoryName, winners: w.winnerUserIds.map((id) => userById.get(id)).filter((u): u is AvatarUser => !!u) }))
         .filter((s) => s.winners.length > 0);
@@ -250,8 +253,9 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
         points,
         tilesCompleted: stateRows.filter((r) => r.teamId === team.id && tileNodeIds.has(r.nodeId)).length,
         linesCompleted: stateRows.filter((r) => r.teamId === team.id && lineNodeIds.has(r.nodeId)).length,
-        mvp: mvp ? { player: mvp.user, pointsShare: mvp.pointsShare } : null,
+        mvp: mvp ? { player: mvp.user, pointsShare: mvp.pointsShare, teamPointsFraction: teamAwardPoints > 0 ? mvp.pointsShare / teamAwardPoints : 0 } : null,
         topGpEarner: gp ? { player: gp.user, gpGained: gp.gpGained } : null,
+        dropValue: mine.reduce((sum, c) => sum + c.gpGained, 0),
         biggestDrop: biggest ?? null,
         pointsOverTime: pointsOverTime.filter((p) => p.teamId === team.id).map((p) => ({ at: p.at.toISOString(), points: p.cumulativePoints, source: p.source, label: p.label, delta: p.delta })),
         superlatives,
@@ -400,14 +404,14 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
   return { bingo: bingoData, players };
 }
 
-/** Submissions of the Bingo still waiting for review. */
+/** Drop Submissions of the Bingo still waiting for review. A pending Proof screenshot changes nothing in Wrapped. */
 function pendingCount(db: Db, bingoId: string): number {
   return (
     db
       .select({ n: count() })
       .from(submissions)
       .innerJoin(teams, eq(submissions.teamId, teams.id))
-      .where(and(eq(teams.bingoId, bingoId), eq(submissions.status, "pending")))
+      .where(and(eq(teams.bingoId, bingoId), eq(submissions.status, "pending"), dropsOnly))
       .get()?.n ?? 0
   );
 }

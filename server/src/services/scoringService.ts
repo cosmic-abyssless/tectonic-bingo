@@ -15,13 +15,25 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 // Denormalized labels for a submission.approved/rejected audit entry — the
 // tile a submission targeted and the labels of the specific leaves claimed,
-// resolved fresh since the graph can change after the fact.
-export function describeSubmissionTarget(tx: Tx, bingoId: string, nodeIds: string[]): { tileName: string | null; taskLabels: string[] } {
+// resolved fresh since the graph can change after the fact. A Proof screenshot
+// (no claims) names its own Tile and Task; `proof` spreads its kind into the
+// entry's details, and `label` is the entry's label.
+export function describeSubmissionTarget(
+  tx: Tx,
+  bingoId: string,
+  nodeIds: string[],
+  submission?: Pick<typeof submissions.$inferSelect, "kind" | "proofTileId" | "proofTaskId">,
+): { tileName: string | null; taskLabels: string[]; label: string | null; proof: { kind?: "proof" } } {
+  if (submission?.kind === "proof") {
+    const tileName = submission.proofTileId ? (tx.select({ name: tiles.name }).from(tiles).where(eq(tiles.id, submission.proofTileId)).get()?.name ?? null) : null;
+    const task = submission.proofTaskId ? tx.select({ label: nodes.label }).from(nodes).where(eq(nodes.id, submission.proofTaskId)).get() : undefined;
+    return { tileName, taskLabels: task?.label ? [task.label] : [], label: `Proof screenshot · ${tileName ?? "a tile"}`, proof: { kind: "proof" } };
+  }
   const tileRows = tx.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
   const tileByNodeId = new Map(tileRows.map((t) => [t.nodeId, t]));
   const tileName = nodeIds.length ? (tileForLeaf(tx, nodeIds[0]!, tileByNodeId)?.name ?? null) : null;
   const leafRows = nodeIds.length ? tx.select({ id: nodes.id, label: nodes.label }).from(nodes).where(inArray(nodes.id, nodeIds)).all() : [];
-  return { tileName, taskLabels: leafRows.map((n) => n.label).filter((l): l is string => !!l) };
+  return { tileName, taskLabels: leafRows.map((n) => n.label).filter((l): l is string => !!l), label: tileName, proof: {} };
 }
 
 function lineLabel(line: { lineType: string; lineIndex: number }): string {
@@ -177,13 +189,13 @@ export function approveSubmission(db: Db, params: ApproveSubmissionParams): Appr
 
     const updatedSubmission = tx.select().from(submissions).where(eq(submissions.id, submission.id)).get()!;
 
-    const { tileName, taskLabels } = describeSubmissionTarget(tx, team.bingoId, nodeIds);
+    const { tileName, taskLabels, label, proof } = describeSubmissionTarget(tx, team.bingoId, nodeIds, submission);
     audit(tx, {
       action: "submission.approved",
       bingoId: team.bingoId,
-      entity: { type: "submission", id: submission.id, label: tileName },
+      entity: { type: "submission", id: submission.id, label },
       teamId: submission.teamId,
-      details: { tileName, taskLabels, nodeIds, newlyCompletedNodeIds, pointsDelta, reviewerNotes: params.reviewerNotes ?? null, submittedByUserId: submission.submittedByUserId },
+      details: { ...proof, tileName, taskLabels, nodeIds, newlyCompletedNodeIds, pointsDelta, reviewerNotes: params.reviewerNotes ?? null, submittedByUserId: submission.submittedByUserId },
       actor: { userId: params.reviewedByUserId },
     });
     recordPointChanges(tx, { bingoId: team.bingoId, teamId: submission.teamId, submissionId: submission.id, reviewerUserId: params.reviewedByUserId }, before, after);
@@ -215,13 +227,13 @@ export function rejectSubmission(db: Db, params: RejectSubmissionParams): { subm
     const nodeIds = getSubmissionNodeIds(tx, submission.id);
     const updatedSubmission = tx.select().from(submissions).where(eq(submissions.id, submission.id)).get()!;
 
-    const { tileName, taskLabels } = describeSubmissionTarget(tx, team.bingoId, nodeIds);
+    const { tileName, taskLabels, label, proof } = describeSubmissionTarget(tx, team.bingoId, nodeIds, submission);
     audit(tx, {
       action: "submission.rejected",
       bingoId: team.bingoId,
-      entity: { type: "submission", id: submission.id, label: tileName },
+      entity: { type: "submission", id: submission.id, label },
       teamId: submission.teamId,
-      details: { tileName, taskLabels, nodeIds, reviewerNotes: params.reviewerNotes ?? null, submittedByUserId: submission.submittedByUserId },
+      details: { ...proof, tileName, taskLabels, nodeIds, reviewerNotes: params.reviewerNotes ?? null, submittedByUserId: submission.submittedByUserId },
       actor: { userId: params.reviewedByUserId },
     });
 
@@ -280,13 +292,14 @@ export function undoSubmissionReview(db: Db, params: UndoSubmissionReviewParams)
 
     const updatedSubmission = tx.select().from(submissions).where(eq(submissions.id, submission.id)).get()!;
 
-    const { tileName, taskLabels } = describeSubmissionTarget(tx, team.bingoId, nodeIds);
+    const { tileName, taskLabels, label, proof } = describeSubmissionTarget(tx, team.bingoId, nodeIds, submission);
     audit(tx, {
       action: "submission.review_undone",
       bingoId: team.bingoId,
-      entity: { type: "submission", id: submission.id, label: tileName },
+      entity: { type: "submission", id: submission.id, label },
       teamId: submission.teamId,
       details: {
+        ...proof,
         tileName,
         taskLabels,
         nodeIds,

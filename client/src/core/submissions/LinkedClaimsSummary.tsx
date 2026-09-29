@@ -2,8 +2,9 @@ import { Fragment } from "react";
 import type { Claim } from "@bingo/shared";
 import { WikiItemLink } from "../ui/WikiItemLink";
 
-/** claimsSummary() with each item linked to its wiki page: "2× Bruma torch, Vorki". */
-export function LinkedClaimsSummary({ claims }: { claims: Claim[] }) {
+/** claimsSummary() with each item linked to its wiki page: "2× Bruma torch, Vorki". "Proof screenshot" for a proof one. */
+export function LinkedClaimsSummary({ claims, isProof = false }: { claims: Claim[]; isProof?: boolean }) {
+  if (isProof) return <>Proof screenshot</>;
   const items = claims.filter((c) => c.itemName !== null);
   if (items.length === 0) return <>(no items claimed — judged manually)</>;
   return (

@@ -6,6 +6,9 @@ server/data/*.db
 server/data/*.db-shm
 server/data/*.db-wal
 server/data/*.building
+# Local-only files at the repo root: DB copies, endpoint notes, and raw data pulled from old sites for historical
+# imports (server/scripts/historical/), which includes Players' details and screenshots.
+/data/
 server/uploads/
 server/*.sqlite.bak
 .db-backups

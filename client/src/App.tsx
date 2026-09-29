@@ -16,6 +16,7 @@ import { WrappedPage } from "./pages/WrappedPage";
 import { SiteAdminPage } from "./pages/SiteAdminPage";
 import { ErrorBoundary } from "./core/ui/ErrorBoundary";
 import { PrivacyPage, TermsPage } from "./pages/legal/LegalPage";
+import { useBingoGoneRedirect } from "./headless/useBingoGoneRedirect";
 
 // Admin was folded into the Mod Panel — redirect any old /b/:slug/admin
 // links there. Builds an absolute path explicitly since relative Navigate
@@ -24,6 +25,12 @@ import { PrivacyPage, TermsPage } from "./pages/legal/LegalPage";
 function AdminRedirect() {
   const { slug } = useParams<{ slug: string }>();
   return <Navigate to={`/b/${slug}/mod`} replace />;
+}
+
+// Inside the router, auth and query providers the hook needs; renders nothing.
+function BingoGoneRedirect() {
+  useBingoGoneRedirect();
+  return null;
 }
 
 export default function App() {
@@ -107,6 +114,7 @@ export default function App() {
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          <BingoGoneRedirect />
           <ToastRegion />
         </WebSocketProvider>
       </AuthProvider>

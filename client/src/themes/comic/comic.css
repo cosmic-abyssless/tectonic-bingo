@@ -38,62 +38,34 @@
 
 /* ---- Print effects -------------------------------------------------- */
 
-/* Halftone dot field. Density is controlled by the mask; corners are heavier
- * (vignette) like a cheaply printed page.
+/* Halftone: a layer of ink showing through a mask of dots sized by the tone
+ * (fx/halftoneSheet.ts draws it: bigger dots toward the corners, a vignette like a
+ * cheaply printed page), given inline as the layer's mask-image.
  *
- * The dots are one full-screen SVG pattern image, not a repeating
- * radial-gradient tile: Firefox renders a repeating gradient mask cheaply only
- * while a tile lines up with device pixels. At any other zoom level (a 6px tile
- * at 80% is 4.8 device px) it draws every dot on its own, and redrawing the
- * page behind the tile modal then stalled its opening flight for half a second
- * or more, so the book seemed to pop open (#82). An image is rasterized once. */
+ * The dots are one viewport-sized image, not a repeating radial-gradient
+ * tile: Firefox renders a repeating gradient mask cheaply only while a tile
+ * lines up with device pixels. At any other zoom level (a 6px tile at 80% is
+ * 4.8 device px) it draws every dot on its own, and redrawing the page behind
+ * the tile modal then stalled its opening flight for half a second or more,
+ * so the book seemed to pop open (#82). An image is rasterized once. */
 .comic-halftone {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
   background-color: var(--comic-halftone-ink, #0b0b0d);
-  -webkit-mask-image:
-    radial-gradient(circle at 50% 50%, transparent 0, transparent 30%, #000 100%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpattern id='d' width='6' height='6' patternUnits='userSpaceOnUse'%3E%3Ccircle cx='3' cy='3' r='1.25'/%3E%3C/pattern%3E%3Crect width='100%25' height='100%25' fill='url(%23d)'/%3E%3C/svg%3E");
-  mask-image:
-    radial-gradient(circle at 50% 50%, transparent 0, transparent 30%, #000 100%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpattern id='d' width='6' height='6' patternUnits='userSpaceOnUse'%3E%3Ccircle cx='3' cy='3' r='1.25'/%3E%3C/pattern%3E%3Crect width='100%25' height='100%25' fill='url(%23d)'/%3E%3C/svg%3E");
   -webkit-mask-size: 100% 100%;
   mask-size: 100% 100%;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
-  -webkit-mask-composite: source-in;
-  mask-composite: intersect;
   opacity: var(--comic-halftone-opacity, 0.55);
 }
 
-/* On mobile/small screens, disable expensive full-screen composite halftone & ray rotation */
+/* On mobile/small screens, don't spin the full-screen rays */
 @media (max-width: 767px) {
-  .comic-halftone-fine {
-    display: none !important;
-  }
   .comic-rays-spin {
     animation: none !important;
   }
-}
-
-/* A second, finer rotated layer for real moiré. */
-.comic-halftone-fine {
-  -webkit-mask-image:
-    radial-gradient(ellipse at 50% 40%, transparent 0, transparent 45%, #000 100%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpattern id='d' width='4' height='4' patternUnits='userSpaceOnUse'%3E%3Ccircle cx='2' cy='2' r='0.95'/%3E%3C/pattern%3E%3Crect width='100%25' height='100%25' fill='url(%23d)'/%3E%3C/svg%3E");
-  mask-image:
-    radial-gradient(ellipse at 50% 40%, transparent 0, transparent 45%, #000 100%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpattern id='d' width='4' height='4' patternUnits='userSpaceOnUse'%3E%3Ccircle cx='2' cy='2' r='0.95'/%3E%3C/pattern%3E%3Crect width='100%25' height='100%25' fill='url(%23d)'/%3E%3C/svg%3E");
-  opacity: calc(var(--comic-halftone-opacity, 0.55) * 0.6);
-  transform: rotate(15deg) scale(1.3);
-}
-
-/* Small inline halftone shading, e.g. on a tile cover's lower half. */
-.comic-shade {
-  background-image: radial-gradient(circle, var(--comic-shade-ink, rgba(0, 0, 0, 0.35)) 1px, transparent 1.3px);
-  background-size: 5px 5px;
 }
 
 /* Display lettering: a light fill with a thin outline and a hard drop in the

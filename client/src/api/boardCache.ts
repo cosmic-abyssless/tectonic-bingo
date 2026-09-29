@@ -98,6 +98,17 @@ export function writeBoardCache<T>(userId: string, slug: string, build: string, 
   }
 }
 
+/** Removes this user's copies for one bingo: its board and the page-load parts stored beside it (`<slug>:<part>`). */
+export function removeBoardCacheForSlug(userId: string, slug: string, storage: StorageLike | null = defaultStorage()): void {
+  if (!storage) return;
+  const exact = boardCacheKey(userId, slug);
+  try {
+    for (const key of boardKeys(storage)) if (key === exact || key.startsWith(`${exact}:`)) storage.removeItem(key);
+  } catch {
+    // Nothing to clean up if storage is unavailable.
+  }
+}
+
 /** Removes every persisted board (all users, all schema versions) — used on logout. */
 export function clearBoardCache(storage: StorageLike | null = defaultStorage()): void {
   if (!storage) return;

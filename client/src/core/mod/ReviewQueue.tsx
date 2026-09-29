@@ -18,6 +18,7 @@ import { LinkedClaimsSummary } from "../submissions/LinkedClaimsSummary";
 import { formatGp } from "../ui/gp";
 import { RepriceGpButton } from "./RepriceGpButton";
 import { fullUrl } from "../../api/imageVariants";
+import { ProofChecks, ProofFlagBadges } from "./ProofChecks";
 
 function KeyCap({ children }: { children: React.ReactNode }) {
   return (
@@ -41,9 +42,12 @@ const STATUS_OPTIONS: { key: SubmissionStatus; label: string }[] = [
 // A MANUAL leaf has no separate completion decision — approving its claim IS
 // the decision (rejecting is "not done yet"). See docs/node-graph-model.md §5.
 const isManualRow = (row: ModSubmissionRow) => row.leaves.some((l) => l.kind === "MANUAL");
+// A Proof screenshot (CONTEXT.md): no claims, so no item to match or drop value to show.
+const isProofRow = (row: ModSubmissionRow) => row.submission.kind === "proof";
 
 // Shared between the collapsed row and the expanded review view — see
 // submissionService.recordScreenshotAnalysis for where these get populated.
+// A proof screenshot shows no drop, so only the codeword matters on it.
 function ScreenshotAnalysisBadges({ screenshot }: { screenshot: SubmissionScreenshot }) {
   if (screenshot.scrapeStatus === "completed") {
     return (
@@ -51,9 +55,11 @@ function ScreenshotAnalysisBadges({ screenshot }: { screenshot: SubmissionScreen
         <Badge tone={screenshot.codewordVerified ? "ok" : "warn"}>
           {screenshot.codewordVerified ? "Codeword found" : "Codeword not found"}
         </Badge>
-        <Badge tone={screenshot.detectedItemName ? "ok" : "neutral"}>
-          {screenshot.detectedItemName ? `Item detected: ${screenshot.detectedItemName}` : "No item detected"}
-        </Badge>
+        {screenshot.screenshotType !== "proof" && (
+          <Badge tone={screenshot.detectedItemName ? "ok" : "neutral"}>
+            {screenshot.detectedItemName ? `Item detected: ${screenshot.detectedItemName}` : "No item detected"}
+          </Badge>
+        )}
       </>
     );
   }
@@ -268,6 +274,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
             const isExpanded = expandedId === row.submission.id;
             const canReview = row.submission.status === "pending";
             const isManual = isManualRow(row);
+            const isProof = isProofRow(row);
 
             return (
               <Card key={row.submission.id} className="overflow-hidden">
@@ -281,15 +288,20 @@ export function ReviewQueue({ slug }: { slug: string }) {
 
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                      <span className="text-sm font-semibold text-on-surface">{row.tile.name}</span>
+                      <span className="text-sm font-semibold text-on-surface">
+                        {isProof ? `Proof screenshot · ${row.tile.name}${row.submittedByUser ? ` · ${displayName(row.submittedByUser)}` : ""}` : row.tile.name}
+                      </span>
+                      {row.proofTaskLabel && <Badge>{row.proofTaskLabel}</Badge>}
                       {row.leaves.map((leaf) => (
                         <Badge key={leaf.id}>{leaf.label ?? "Item"}</Badge>
                       ))}
                       <Badge>{row.team.name}</Badge>
                       {isManual && <Badge tone="info">manual</Badge>}
+                      {isProof && <Badge tone="info">starting state</Badge>}
+                      <ProofFlagBadges checks={row.proofChecks ?? []} />
                     </div>
                     <p className="truncate text-sm text-on-surface-muted">
-                      <LinkedClaimsSummary claims={row.claims} />
+                      <LinkedClaimsSummary claims={row.claims} isProof={isProof} />
                       {row.claims.some((c) => c.itemName !== null) && (
                         <>
                           <span className="num" title={claimsGpBreakdown(row.claims, formatGp, new Map(row.leaves.flatMap((l) => (l.valuedAs ? [[l.id, l.valuedAs] as const] : []))))}>
@@ -388,6 +400,14 @@ export function ReviewQueue({ slug }: { slug: string }) {
                     {isManual && (
                       <Notice tone="info">Approving completes this immediately and awards its points — reject instead if it isn't done.</Notice>
                     )}
+
+                    {isProof && (
+                      <Notice tone="info">
+                        A Proof screenshot: the starting state before this player's drops on {row.proofTaskLabel ?? row.tile.name} count. It awards no points.
+                      </Notice>
+                    )}
+
+                    <ProofChecks checks={row.proofChecks ?? []} dropSubmittedAt={row.submission.submittedAt} />
 
                     <Field label="Notes (optional)">
                       <Textarea
