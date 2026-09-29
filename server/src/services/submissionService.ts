@@ -1,13 +1,28 @@
 import { now as clockNow } from "../clock";
 import { and, count, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { playerName, SUBMISSION_REACTION_NAMES, SUBMISSION_REACTIONS, type ClaimInput, type NodeKind, type SubmissionReaction, type SubmissionReactionGroup, type ValuedAs } from "@bingo/shared";
+import {
+  playerName,
+  proofFlag,
+  proofRequirements,
+  isProofFor,
+  SUBMISSION_REACTION_NAMES,
+  SUBMISSION_REACTIONS,
+  type ClaimInput,
+  type GraphNode,
+  type NodeKind,
+  type ProofCheck,
+  type SubmissionReaction,
+  type SubmissionReactionGroup,
+  type ValuedAs,
+} from "@bingo/shared";
 import * as schema from "../db/schema";
 import { claims, nodeEdges, nodes, submissionReactions, submissions, submissionScreenshots, teamMembers, teamNodeState, teams, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
-import { findAncestorIds, submitGateBlock } from "./graphService";
+import { findAncestorIds, getNodeTree, getNodeTrees, submitGateBlock } from "./graphService";
 import { conflictMessage, conflictsForClaims } from "./exclusivityService";
 import { effectiveStartsAt } from "./bingoStart";
+import { isDrop } from "./submissionKinds";
 import { rsnsAcrossBingos } from "./playerNames";
 import { audit, markAuditedNoop } from "../audit/record";
 import { pricer, valuedAsOf } from "./gpValueService";
@@ -56,16 +71,19 @@ function tileFinder(db: Db, bingoId: string, tileByNodeId: Map<string, typeof ti
   };
 }
 
-export interface CreateSubmissionParams {
+export type CreateSubmissionParams = {
   teamId: string;
   /** The player the drop belongs to: credited for it. */
   submittedByUserId: string;
   /** Who uploaded it, when that isn't the same player (see submissionTarget.ts). */
   postedByUserId?: string | null;
-  claims: ClaimInput[];
   screenshotUrl: string;
   now?: Date; // injectable for tests
-}
+} & (
+  | { kind?: "drop"; claims: ClaimInput[] }
+  /** A Proof screenshot (CONTEXT.md): for a Tile, and for one of its Tasks when the requirement is per-Task. */
+  | { kind: "proof"; tileId: string; taskId?: string | null }
+);
 
 // Submissions (and the screenshot analysis that helps write one) only happen while the bingo is live. Analysis
 // matches against every item on the board, so outside live it would reveal which tile holds what.
@@ -78,14 +96,11 @@ export function assertSubmissionsOpen(bingo: Pick<Bingo, "stage">): void {
 // All submission-time gating lives here — the client mirrors these checks
 // for UX, but this is the enforcement.
 export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionParams) {
+  if (params.kind === "proof") return createProofSubmission(db, bingo, params);
   const { submission, achievementHook } = db.transaction((tx) => {
     const now = params.now ?? clockNow();
 
-    assertSubmissionsOpen(bingo);
-    const startsAt = effectiveStartsAt(tx, bingo);
-    if (!startsAt || now < startsAt) {
-      throw new ServiceError(400, "The bingo has not started yet");
-    }
+    const startsAt = assertOpenAt(tx, bingo, now);
     if (params.claims.length === 0) throw new ServiceError(400, "At least one claim is required");
 
     const nodeIds = [...new Set(params.claims.map((c) => c.nodeId))];
@@ -107,13 +122,7 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
       throw new ServiceError(400, "All claims in a submission must belong to the same tile");
     }
     const tile = tileRows.find((t) => t.id === [...tilesTouched][0])!;
-
-    if (tile.hasFreezePeriod) {
-      const unlockAt = new Date(startsAt.getTime() + tile.freezeDurationMinutes * 60_000);
-      if (now < unlockAt) {
-        throw new ServiceError(400, `This tile is frozen until ${unlockAt.toISOString()}`);
-      }
-    }
+    assertNotFrozen(tile, startsAt, now);
 
     // submitGateNodeId: a claim is refused while every route from its item up to the tile passes through a
     // node whose gate this team hasn't completed (see graphService.submitGateBlock: an item shared by two
@@ -199,6 +208,79 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
   achievementService.recordSubmissionsFirstPriced(db, [submission.id]);
 
   return submission;
+}
+
+// The bingo is live and has started by `now`; returns when it started.
+function assertOpenAt(tx: Tx, bingo: Bingo, now: Date): Date {
+  assertSubmissionsOpen(bingo);
+  const startsAt = effectiveStartsAt(tx, bingo);
+  if (!startsAt || now < startsAt) {
+    throw new ServiceError(400, "The bingo has not started yet");
+  }
+  return startsAt;
+}
+
+function assertNotFrozen(tile: typeof tiles.$inferSelect, startsAt: Date, now: Date): void {
+  if (!tile.hasFreezePeriod) return;
+  const unlockAt = new Date(startsAt.getTime() + tile.freezeDurationMinutes * 60_000);
+  if (now < unlockAt) {
+    throw new ServiceError(400, `This tile is frozen until ${unlockAt.toISOString()}`);
+  }
+}
+
+// A Proof screenshot (CONTEXT.md): posted like a drop (for yourself or a teammate, only while live), but with no
+// claims, so no points, gates or exclusive items apply. It's only allowed where a requirement exists: a Tile-wide one
+// (any Task given is ignored), or the named Task's own. Not a drop, so no Achievements hear of it.
+function createProofSubmission(db: Db, bingo: Bingo, params: CreateSubmissionParams & { kind: "proof" }) {
+  return db.transaction((tx) => {
+    const now = params.now ?? clockNow();
+    const startsAt = assertOpenAt(tx, bingo, now);
+
+    const tile = tx.select().from(tiles).where(and(eq(tiles.id, params.tileId), eq(tiles.bingoId, bingo.id))).get();
+    if (!tile) throw new ServiceError(400, "Tile not found");
+    const requirements = proofRequirements({ ...tile, node: getNodeTree(tx, tile.nodeId)! });
+    const requirement = requirements.find((r) => r.taskId === null) ?? requirements.find((r) => r.taskId === (params.taskId ?? null));
+    if (!requirement) {
+      throw new ServiceError(400, params.taskId && requirements.length > 0 ? "This task doesn't need a Proof screenshot" : "This tile doesn't need a Proof screenshot");
+    }
+    assertNotFrozen(tile, startsAt, now);
+
+    const postedByUserId = params.postedByUserId && params.postedByUserId !== params.submittedByUserId ? params.postedByUserId : null;
+    const submission = tx
+      .insert(submissions)
+      .values({
+        teamId: params.teamId,
+        submittedByUserId: params.submittedByUserId,
+        postedByUserId,
+        kind: "proof",
+        proofTileId: tile.id,
+        proofTaskId: requirement.taskId,
+        submittedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    tx.insert(submissionScreenshots).values({ submissionId: submission.id, screenshotType: "proof", storageUrl: params.screenshotUrl, uploadedAt: now }).run();
+
+    audit(tx, {
+      action: "submission.created",
+      bingoId: bingo.id,
+      entity: { type: "submission", id: submission.id, label: `Proof screenshot · ${tile.name}` },
+      teamId: params.teamId,
+      details: {
+        kind: "proof",
+        tileId: tile.id,
+        tileName: tile.name,
+        taskLabels: requirement.taskId ? [requirement.label] : [],
+        claims: [],
+        screenshotUrl: params.screenshotUrl,
+      },
+      actor: { userId: postedByUserId ?? params.submittedByUserId },
+      onBehalfOfUserId: postedByUserId ? params.submittedByUserId : null,
+    });
+    return submission;
+  });
 }
 
 // Runs after createSubmission, once OCR finishes — see routes/bingos.ts.
@@ -327,8 +409,13 @@ export function isSubmissionReaction(value: unknown): value is SubmissionReactio
  */
 export function setSubmissionReaction(db: Db, submissionId: string, userId: string, emoji: SubmissionReaction, reacted: boolean): { teamId: string } {
   const { teamId, achievementHook } = db.transaction((tx) => {
-    const submission = tx.select({ teamId: submissions.teamId, submittedByUserId: submissions.submittedByUserId }).from(submissions).where(eq(submissions.id, submissionId)).get();
+    const submission = tx
+      .select({ teamId: submissions.teamId, submittedByUserId: submissions.submittedByUserId, kind: submissions.kind })
+      .from(submissions)
+      .where(eq(submissions.id, submissionId))
+      .get();
     if (!submission) throw new ServiceError(404, "Submission not found");
+    if (!isDrop(submission)) throw new ServiceError(400, "A Proof screenshot can't be reacted to");
     const member = tx.select({ id: teamMembers.id }).from(teamMembers).where(and(eq(teamMembers.teamId, submission.teamId), eq(teamMembers.userId, userId))).get();
     if (!member) throw new ServiceError(403, "Only the submission's team can react to it");
     const where = and(eq(submissionReactions.submissionId, submissionId), eq(submissionReactions.userId, userId), eq(submissionReactions.emoji, emoji));
@@ -395,9 +482,48 @@ export interface ClaimedLeaf {
 
 export interface ModSubmissionRow extends SubmissionDetails {
   leaves: ClaimedLeaf[];
+  /** The Tile its claims are on; a proof's own Tile. */
   tile: typeof tiles.$inferSelect;
   team: Pick<typeof teams.$inferSelect, "id" | "name" | "color">;
+  /** A proof only: its Task's label, when the requirement is per-Task. */
+  proofTaskLabel: string | null;
+  /** A drop only: one per Proof screenshot requirement its claims fall under, with its Player's proofs and flag. */
+  proofChecks: ProofCheck[];
 }
+
+// Every node id under a Task, itself included.
+function subtreeIds(node: GraphNode, into = new Set<string>()): Set<string> {
+  into.add(node.id);
+  for (const child of node.children) subtreeIds(child, into);
+  return into;
+}
+
+// A drop's Proof screenshot checks (CONTEXT.md "Proof screenshot"): for each requirement its claimed leaves fall
+// under (the Tile-wide one, or each claimed Task's own), its Player's proofs for it and whether the drop is flagged.
+function proofChecksFor(drop: SubmissionDetails, tile: Tile, proofs: SubmissionDetails[]): ProofCheck[] {
+  const requirements = proofRequirements(tile);
+  if (requirements.length === 0) return [];
+  const leafIds = new Set(drop.claims.map((c) => c.nodeId));
+  const touched = requirements.filter((r) => r.taskId === null || [...subtreeIds(tile.node.children.find((t) => t.id === r.taskId)!)].some((id) => leafIds.has(id)));
+  return touched.map((requirement) => {
+    const own = proofs
+      .filter((p) => p.submission.submittedByUserId === drop.submission.submittedByUserId && isProofFor(p.submission, requirement))
+      .sort((a, b) => a.submission.submittedAt.getTime() - b.submission.submittedAt.getTime());
+    const approvedAt = own.filter((p) => p.submission.status === "approved").map((p) => p.submission.submittedAt.getTime());
+    return {
+      requirement,
+      proofs: own.map((p) => ({
+        submissionId: p.submission.id,
+        status: p.submission.status,
+        submittedAt: p.submission.submittedAt.toISOString(),
+        screenshotUrl: p.screenshots[0]?.storageUrl ?? null,
+      })),
+      flag: proofFlag(drop.submission.submittedAt.getTime(), approvedAt),
+    };
+  });
+}
+
+type Tile = typeof tiles.$inferSelect & { node: GraphNode };
 
 export function getAllSubmissionsForBingo(db: Db, bingoId: string, status?: (typeof submissions.$inferSelect)["status"]): ModSubmissionRow[] {
   const rows = db
@@ -414,14 +540,37 @@ export function getAllSubmissionsForBingo(db: Db, bingoId: string, status?: (typ
 
   const tileRows = db.select().from(tiles).where(eq(tiles.bingoId, bingoId)).all();
   const tileOf = tileFinder(db, bingoId, new Map(tileRows.map((t) => [t.nodeId, t])));
+  const tileById = new Map(tileRows.map((t) => [t.id, t]));
+  // Which Tiles and Tasks need a Proof screenshot, and which leaves sit under each Task, come from the node trees.
+  const trees = getNodeTrees(db, tileRows.map((t) => t.nodeId));
+  const withNode = (tile: typeof tiles.$inferSelect): Tile => ({ ...tile, node: trees.get(tile.nodeId)! });
+  // A drop's Proof checks look at its Player's Proof screenshots whatever their status, so a list filtered by status
+  // (pending, say) still reads every Proof screenshot of the bingo.
+  const proofs = status
+    ? attachDetails(
+        db,
+        db
+          .select({ submission: submissions })
+          .from(submissions)
+          .innerJoin(teams, eq(submissions.teamId, teams.id))
+          .where(and(eq(teams.bingoId, bingoId), eq(submissions.kind, "proof")))
+          .all()
+          .map((r) => r.submission),
+      )
+    : details.filter((d) => !isDrop(d.submission));
 
   return rows.map((r, i) => {
     const d = details[i]!;
+    if (!isDrop(d.submission)) {
+      const tile = tileById.get(d.submission.proofTileId!)!;
+      const task = d.submission.proofTaskId ? trees.get(tile.nodeId)?.children.find((t) => t.id === d.submission.proofTaskId) : undefined;
+      return { ...d, leaves: [], tile, team: r.team, proofTaskLabel: task ? (task.label ?? tile.name) : null, proofChecks: [] };
+    }
     const claimedNodeIds = [...new Set(d.claims.map((c) => c.nodeId))];
     const leaves = claimedNodeIds.map((id) => leafById.get(id)!).filter(Boolean);
     const firstLeafId = claimedNodeIds[0];
     const tile = firstLeafId ? tileOf(firstLeafId) : null;
-    return { ...d, leaves, tile: tile!, team: r.team };
+    return { ...d, leaves, tile: tile!, team: r.team, proofTaskLabel: null, proofChecks: tile ? proofChecksFor(d, withNode(tile), proofs) : [] };
   });
 }
 

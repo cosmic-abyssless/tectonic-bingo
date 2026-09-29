@@ -20,7 +20,7 @@ export function SubmissionRow({ detail, footer }: { detail: SubmissionDetails; f
           <span className="text-xs text-on-surface-subtle">{timeAgo(submission.submittedAt)}</span>
         </div>
         <p className="truncate text-sm text-on-surface">
-          <LinkedClaimsSummary claims={claims} />
+          <LinkedClaimsSummary claims={claims} isProof={submission.kind === "proof"} />
         </p>
         {submittedByUser && (
           <p className="mt-0.5 text-xs text-on-surface-subtle">

@@ -88,13 +88,14 @@ export function changeSubmissionAttribution(db: Db, bingo: Bingo, params: { subm
       .get();
 
     const nodeIds = tx.select({ nodeId: claims.nodeId }).from(claims).where(eq(claims.submissionId, submission.id)).all().map((c) => c.nodeId);
-    const { tileName, taskLabels } = describeSubmissionTarget(tx, bingo.id, nodeIds);
+    const { tileName, taskLabels, label, proof } = describeSubmissionTarget(tx, bingo.id, nodeIds, submission);
     audit(tx, {
       action: "submission.attribution_changed",
       bingoId: bingo.id,
-      entity: { type: "submission", id: submission.id, label: tileName },
+      entity: { type: "submission", id: submission.id, label },
       teamId: team.id,
       details: {
+        ...proof,
         tileName,
         taskLabels,
         fromUserId: submission.submittedByUserId,

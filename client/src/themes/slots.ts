@@ -203,8 +203,12 @@ export interface ThemeSlots {
     onClose: () => void;
     onSubmit?: (taskId?: string) => void;
     onToggleInterest?: (taskId: string) => void;
+    // Opens the Submit flow on posting a Proof screenshot (CONTEXT.md): for the Tile (no taskId) or one Task.
+    onPostProof?: (taskId?: string) => void;
   }>;
-  TaskPanel: ComponentType<{ task: TaskModel }>;
+  // onPostProof: opens the Submit flow on posting a Proof screenshot for the Task (see TaskModel.proof); absent when
+  // the viewer can't submit.
+  TaskPanel: ComponentType<{ task: TaskModel; onPostProof?: () => void }>;
   RequirementTree: ComponentType<{ node: RequirementNodeModel; root?: boolean }>;
   TileSubmissions: ComponentType<{ submissions: SubmissionModel[] }>;
 
@@ -281,6 +285,9 @@ export interface ThemeSlots {
   SubmitterPicker: ComponentType<{ submitter: SubmissionFlowModel["submitter"] }>;
   TilePicker: ComponentType<{ tile: SubmissionFlowModel["tile"] }>;
   TaskPicker: ComponentType<{ task: SubmissionFlowModel["task"] }>;
+  // Drop or Proof screenshot (CONTEXT.md), where the picked Tile or Task needs one; and the warning on a drop whose
+  // Player hasn't posted theirs yet, with a way to post it. Renders nothing when neither applies.
+  ProofPicker: ComponentType<{ kind: SubmissionFlowModel["kind"]; warning: SubmissionFlowModel["proofWarning"] }>;
   RequirementPicker: ComponentType<{ requirement: SubmissionFlowModel["requirement"]; quantity: SubmissionFlowModel["quantity"] }>;
   StagedClaimsList: ComponentType<{ staged: SubmissionFlowModel["staged"] }>;
 }

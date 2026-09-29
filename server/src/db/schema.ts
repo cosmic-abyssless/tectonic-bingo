@@ -578,14 +578,18 @@ export const nodes = sqliteTable('nodes', {
   // requirementNodes.parentId.
   pointsGateNodeId: text('points_gate_node_id'), // this node's points stay 0 until the gate node completes too
   submitGateNodeId: text('submit_gate_node_id'), // submissions targeting a leaf under this node are rejected until the gate node completes
-  allowsPreLoad: integer('allows_pre_load', { mode: 'boolean' }).notNull().default(false),
+  allowsPreLoad: integer('allows_pre_load', { mode: 'boolean' }).notNull().default(false), // display hint (CONTEXT.md "Pre-load")
   // ITEM only, optional (CONTEXT.md "Valued as"): claims on this leaf get their Drop value from this item ÷ divisor
   // instead of their own item's price, e.g. a DT2 page's Gold ring valued as Magus vestige ÷ 3. Both set or both null.
   valuedAsItemName: text('valued_as_item_name'),
   valuedAsDivisor: integer('valued_as_divisor'),
   // Optional, with Valued as: where these claims come from ("Vardorvis"), shown next to the item so players see why
   // an ordinary-looking item has a value.
-  valuedAsSource: text('valued_as_source'), // display hint: player may submit an empty-state screenshot beforehand
+  valuedAsSource: text('valued_as_source'),
+  // A Task (a tile node's direct child) that needs a Proof screenshot (CONTEXT.md) from each Player before their drops
+  // on it count. Never set on a Task whose Tile requires one Tile-wide (tiles.requiresProof). The note says what to show.
+  requiresProof: integer('requires_proof', { mode: 'boolean' }).notNull().default(false),
+  proofNote: text('proof_note'),
 });
 
 // A node may have several parents (DAG). sortOrder is scoped to one parent —
@@ -627,6 +631,10 @@ export const tiles = sqliteTable('tiles', {
   hasFreezePeriod: integer('has_freeze_period', { mode: 'boolean' }).notNull().default(false),
   freezeDurationMinutes: integer('freeze_duration_minutes').notNull().default(0),
   notes: text('notes'),
+  // A Proof screenshot (CONTEXT.md) required Tile-wide: each Player needs an approved one before their drops on the Tile
+  // count. When set, no Task of the Tile has its own (nodes.requiresProof). The note says what to show.
+  requiresProof: integer('requires_proof', { mode: 'boolean' }).notNull().default(false),
+  proofNote: text('proof_note'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 }, (t) => [
   uniqueIndex('tiles_bingo_position_unq').on(t.bingoId, t.boardRow, t.boardCol),
@@ -678,6 +686,12 @@ export const submissions = sqliteTable('submissions', {
   // Set only when someone else uploaded the screenshot for that player (a teammate at a PC for a drop on mobile, or a
   // mod). Null means the player posted it themselves. The audit log's actor is whoever posted.
   postedByUserId: text('posted_by_user_id').references(() => users.id),
+  // CONTEXT.md "Submission" kinds: a drop (with its Claims) or a Proof screenshot (no Claims, no points). Anything
+  // counting drops filters to `drop` through submissionKinds.ts.
+  kind: text('kind', { enum: ['drop', 'proof'] }).notNull().default('drop'),
+  // A proof only: the Tile it's for, and the Task when the requirement is per-Task (null when it's Tile-wide).
+  proofTileId: text('proof_tile_id').references(() => tiles.id),
+  proofTaskId: text('proof_task_id').references(() => nodes.id),
   status: text('status', {
     enum: ['pending', 'approved', 'rejected'],
   }).notNull().default('pending'),
@@ -702,13 +716,13 @@ export const submissionReactions = sqliteTable('submission_reactions', {
   index('submission_reactions_submission_idx').on(t.submissionId),
 ]);
 
-// One submission can have multiple screenshots (main + pre-screenshot, bank,
-// etc.). The scrape_* fields are populated by the AI screenshot-analysis job.
+// One submission can have multiple screenshots (main, bank, etc.; a Proof
+// screenshot's is `proof`). The scrape_* fields are populated by the AI screenshot-analysis job.
 export const submissionScreenshots = sqliteTable('submission_screenshots', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   submissionId: text('submission_id').notNull().references(() => submissions.id),
   screenshotType: text('screenshot_type', {
-    enum: ['main', 'pre_screenshot', 'bank', 'collection_log', 'other'],
+    enum: ['main', 'proof', 'bank', 'collection_log', 'other'],
   }).notNull().default('main'),
   storageUrl: text('storage_url').notNull(),
   scrapeStatus: text('scrape_status', {

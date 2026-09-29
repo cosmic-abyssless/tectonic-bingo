@@ -114,12 +114,13 @@ function leafToTileMap(tiles: Tile[]): Map<string, string> {
 }
 
 // For display only (e.g. TileModal's "past submissions" list) — a submission
-// belongs to a tile if any of its claims target a leaf under that tile.
+// belongs to a tile if any of its claims target a leaf under that tile, and a
+// Proof screenshot (no claims) to its own tile.
 export function groupSubmissionsByTile(tiles: Tile[], submissions: SubmissionDetails[]): Map<string, SubmissionDetails[]> {
   const leafToTile = leafToTileMap(tiles);
   const map = new Map<string, SubmissionDetails[]>();
   for (const s of submissions) {
-    const tileIds = new Set(s.claims.map((c) => leafToTile.get(c.nodeId)).filter((id): id is string => !!id));
+    const tileIds = new Set(s.submission.kind === "proof" ? [s.submission.proofTileId!] : s.claims.map((c) => leafToTile.get(c.nodeId)).filter((id): id is string => !!id));
     for (const tileId of tileIds) {
       const list = map.get(tileId) ?? [];
       list.push(s);

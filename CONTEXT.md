@@ -27,8 +27,9 @@ The current lifecycle phase of a Bingo. Transitions move forward through a fixed
 A unique, secret text phrase generated for a Bingo (or a stage of it) that players must show in their verification screenshots (e.g. spoken in public chat, or in a clan chat message) to prove the screenshot was taken during this specific Bingo.
 
 ### Pre-load
-A task or requirement that players are permitted to prepare before the Bingo goes `live` (or before a specific gate opens), such as obtaining a clue scroll or gathering a secondary ingredient, but not completing the final step.
+A task or requirement that players are permitted to prepare before the Bingo goes `live` (or before a specific gate opens), without completing the final step. The usual case is pre-loading a chest: finishing a run before the Bingo starts and opening the chest once it's Live (common for the Corrupted Gauntlet).
 - **Rules:** Must be explicitly enabled on the specific Part/Task (`allowsPreLoad`).
+- **Not:** A screenshot. Pre-load has nothing to do with the Proof screenshot, which proves a starting state.
 
 ---
 
@@ -184,6 +185,7 @@ A delay configured on a Tile: for its duration after the Bingo starts, no Team c
 ### Submission
 A single proof package submitted by a player on behalf of their Team to claim completion of one or more Tasks on a Tile.
 - **Composition:** Contains one or more Screenshots and associated Claims.
+- **Kinds:** A drop (the usual kind, with its Claims) or a **Proof screenshot** (no Claims; see Proof screenshot). Both are posted and reviewed the same way.
 - **Status:** `pending` → `approved` | `rejected`.
 - **Reviewer:** Must be reviewed by a Moderator (or Admin/Site Admin).
 - **Feedback:** Rejections must include reviewer notes so the team knows what went wrong.
@@ -197,8 +199,18 @@ An emoji a Player leaves on a Submission of their own Team, from a fixed set of 
 
 ### Screenshot
 An image attached to a Submission proving in-game completion.
-- **Types:** Main drop screenshot, pre-screenshot (for pre-loaded tasks), bank screenshot, collection log screenshot, other.
+- **Types:** Main drop screenshot, bank screenshot, collection log screenshot, other.
 - **Verification:** Scanned for the Bingo's Codeword and item name via OCR/text-matching; verified by a human Moderator during review.
+
+### Proof screenshot
+A screenshot of a Tile's starting state that a Player posts before their drops on that Tile count, such as an empty supply cart at Wintertodt, an empty pool at Tempoross or an empty rift at Guardians of the Rift. It proves the loot that follows was earned during the Bingo, not carried in.
+- **Rules:**
+  - **Where required:** an Admin requires one on a whole Tile or on individual Tasks (a Tile mixing Wintertodt and Tempoross needs a different one per Task), never both on the same Tile. The requirement can carry a note on what to show.
+  - **What it is:** a kind of Submission. It's posted through the same Submit flow (for yourself or a teammate) and only while the Bingo is Live, and reviewed in the same queue (approved or rejected, with the usual Codeword check).
+  - **How long it counts:** each Player needs their own, once per requirement for the whole Bingo, and any approved one counts.
+  - **Missing ones:** a drop without an approved Proof screenshot from its Player can still be submitted, but it's flagged in review, and so is a drop submitted before the Proof screenshot.
+  - **Not a drop:** it has no Claims or points, and isn't counted in Stats, Titles, drop value, Rewind, Wrapped or Achievements. It can't be reacted to.
+- **Not:** A Submission's drop screenshot (which proves the drop itself), and not Pre-load.
 
 ### Claim
 The specific allocation of a single drop or achievement within a Submission to a single leaf Task.

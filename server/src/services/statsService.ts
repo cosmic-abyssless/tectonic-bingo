@@ -6,6 +6,7 @@ import * as schema from "../db/schema";
 import { bingoLines, bingos, claims, draftPicks, nodeEdges, nodes, stageTransitions, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
 import { findAncestorIds, getFullGraph } from "./graphService";
 import { applyExclusivity } from "./exclusivityService";
+import { dropsOnly } from "./submissionKinds";
 import { creditAwards, type AwardCredit, type CreditClaim } from "./pointsShare";
 import { rsnsInBingo } from "./playerNames";
 import { effectiveStartsAt, endedAt } from "./bingoStart";
@@ -266,7 +267,7 @@ export function getContributionCounts(db: Db, bingoId: string, shares = getPoint
   const rows = db
     .select({ userId: submissions.submittedByUserId, teamId: submissions.teamId })
     .from(submissions)
-    .where(and(inArray(submissions.teamId, teamIds), eq(submissions.status, "approved")))
+    .where(and(inArray(submissions.teamId, teamIds), eq(submissions.status, "approved"), dropsOnly))
     .all();
   for (const r of rows) {
     submissionCounts.set(r.userId, (submissionCounts.get(r.userId) ?? 0) + 1);
@@ -523,7 +524,7 @@ export function getTitleFacts(
   const approvedAt = stamp();
   const rejectedAt = stamp();
   const postedAt = stamp();
-  for (const sub of db.select().from(submissions).where(inArray(submissions.teamId, teamIds)).all()) {
+  for (const sub of db.select().from(submissions).where(and(inArray(submissions.teamId, teamIds), dropsOnly)).all()) {
     // The poster counts only when they're on the Team (a Moderator posting for a Team isn't one of its Players).
     const postedByTeammate = sub.postedByUserId && sub.postedByUserId !== sub.submittedByUserId && teamByUser.get(sub.postedByUserId) === sub.teamId;
     if (sub.status === "approved") {

@@ -55,7 +55,7 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
             </div>
           )}
           <p className="text-sm leading-snug" style={{ color: colors.INK }}>
-            <LinkedClaimsSummary claims={submission.detail.claims} />
+            <LinkedClaimsSummary claims={submission.detail.claims} isProof={submission.isProof} />
           </p>
           <p className="mt-1 text-xs italic" style={{ color: colors.INK_SUBTLE }}>
             {"— "}
@@ -74,7 +74,9 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
         </p>
       )}
 
-      <ReactionBar className="mt-2" reactions={submission.reactions} canReact={reactions.canReact} onToggle={(emoji) => reactions.toggle(submission.id, emoji)} />
+      {!submission.isProof && (
+        <ReactionBar className="mt-2" reactions={submission.reactions} canReact={reactions.canReact} onToggle={(emoji) => reactions.toggle(submission.id, emoji)} />
+      )}
     </article>
   );
 }

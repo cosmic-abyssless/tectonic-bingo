@@ -3,13 +3,14 @@ import type { TaskModel } from "../../../headless/types";
 import { Badge } from "../../../core/ui/Card";
 import { CheckIcon, LockIcon } from "../../../core/ui/icons";
 import { useSlot } from "../../context";
+import { ProofNeeded } from "./ProofNeeded";
 
 function Check() {
   return <CheckIcon size={12} className="shrink-0 text-ok" aria-label="complete" />;
 }
 
 // A task is just a node that's a direct child of its tile's node.
-export function TaskPanel({ task }: { task: TaskModel }) {
+export function TaskPanel({ task, onPostProof }: { task: TaskModel; onPostProof?: () => void }) {
   const RequirementTree = useSlot("RequirementTree");
 
   return (
@@ -36,6 +37,8 @@ export function TaskPanel({ task }: { task: TaskModel }) {
       </div>
 
       <p className="mb-3 text-sm leading-relaxed text-on-surface-muted">{task.description}</p>
+
+      {task.proof && <ProofNeeded proof={task.proof} onPost={task.available ? onPostProof : undefined} className="mb-3" />}
 
       {!task.isManual && task.tree && <RequirementTree node={task.tree} root />}
 
