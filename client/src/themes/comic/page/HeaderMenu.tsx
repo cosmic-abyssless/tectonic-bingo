@@ -12,7 +12,8 @@ const ROW = "flex items-center gap-2 px-3 py-2.5 text-lg uppercase outline-none"
 
 /**
  * The comic theme's ☰ menu (the HeaderMenu slot), at the masthead's far right: Bangers rows ruled off from each other,
- * the highlighted one yellow, and a heavy ink line between the groups. The popover portals to body, so the theme vars
+ * the highlighted one yellow, and a heavy ink line between the groups. The viewer's row on top isn't a button, so it
+ * isn't drawn like one: plain text on the page's paper, sunk below the raised rows. The popover portals to body, so the theme vars
  * are re-applied on it — same treatment as TeamSelector.
  */
 export function HeaderMenu({ viewer, groups, hasUnseen }: HeaderMenuProps) {
@@ -34,7 +35,7 @@ export function HeaderMenu({ viewer, groups, hasUnseen }: HeaderMenuProps) {
         {/* min-h-0: a menu taller than the room the popover gets scrolls instead of spilling out (see PlainMenu). */}
         <AriaMenu className="min-h-0 overflow-y-auto outline-none">
           <MenuSection aria-label="You">
-            <Header className={`${ROW} normal-case`} style={{ color: colors.INK, fontFamily: COMIC_FONT, letterSpacing: "0.04em" }}>
+            <Header className="flex items-center gap-2 px-3 py-2.5 text-sm font-semibold" style={{ background: colors.PAPER, color: colors.INK_BODY }}>
               <img src={viewer.avatarUrl} alt="" className="size-7 rounded-full border-2" style={{ borderColor: colors.LINE }} />
               <span className="truncate">{viewer.name}</span>
             </Header>
@@ -53,8 +54,10 @@ export function HeaderMenu({ viewer, groups, hasUnseen }: HeaderMenuProps) {
                       textValue={item.text}
                       isDisabled={item.current}
                       onAction={item.onAction}
-                      className={`${ROW} cursor-pointer disabled:cursor-default focus:bg-[var(--comic-yellow)] hovered:bg-[var(--comic-yellow)] focus:text-[var(--comic-on-yellow)] hovered:text-[var(--comic-on-yellow)]`}
-                      style={{ color: colors.INK, borderColor: colors.RULE, fontFamily: COMIC_FONT, letterSpacing: "0.04em" }}
+                      className={`${ROW} cursor-pointer text-[var(--comic-ink)] disabled:cursor-default focus:bg-[var(--comic-yellow)] hovered:bg-[var(--comic-yellow)] focus:text-[var(--comic-on-yellow)] hovered:text-[var(--comic-on-yellow)]`}
+                      // The ink colour is a class, not inline, so the highlight's on-yellow text can win over it (in dark mode the
+                      // ink is light, and would sit on the yellow unreadably).
+                      style={{ borderColor: colors.RULE, fontFamily: COMIC_FONT, letterSpacing: "0.04em" }}
                     >
                       {item.label}
                       {item.badge}

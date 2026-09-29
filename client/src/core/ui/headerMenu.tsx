@@ -125,15 +125,16 @@ export function PlainHeaderMenu({ viewer, groups, hasUnseen }: HeaderMenuProps) 
         {hasUnseen && <PulseDot className="-right-0.5 -top-0.5" />}
       </IconButton>
       <Menu popoverClassName="min-w-56">
+        {/* The viewer's row isn't clickable, so it's a band of its own at the top rather than another row. */}
         <MenuSection aria-label="You">
-          <Header className="flex items-center gap-2 px-2.5 py-1.5 text-sm font-semibold text-on-surface">
+          <Header className="-mx-1 -mt-1 flex items-center gap-2 rounded-t-md bg-background px-3.5 py-2.5 text-sm font-semibold text-on-surface">
             <img src={viewer.avatarUrl} alt="" className="size-6 rounded-full" />
             <span className="truncate">{viewer.name}</span>
           </Header>
         </MenuSection>
-        {groups.map((group) => (
+        {groups.map((group, i) => (
           <Fragment key={group.id}>
-            <Separator className="my-1 h-px border-none bg-outline" />
+            <Separator className={`${i === 0 ? "-mx-1 mb-1" : "my-1"} h-px border-none bg-outline`} />
             <MenuSection aria-label={group.label}>
               {group.items.map((item) =>
                 isColorSchemeItem(item) ? (
