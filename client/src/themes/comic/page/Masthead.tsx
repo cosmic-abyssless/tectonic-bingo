@@ -31,8 +31,8 @@ export function Masthead({
   onShowRules: () => void;
   /** The board's submissions drawer, in the ☰ menu with the viewed team's pending count. */
   submissions?: { pending: number; onShow: () => void };
-  /** The board's viewed team: its summary, in the ☰ menu under the team's name. */
-  team?: { name: string; onShow: () => void };
+  /** The board's viewed team: its summary, in the ☰ menu as "Team overview". */
+  team?: { onShow: () => void };
   /** After the Mod panel (the board's Submit). */
   children?: ReactNode;
 }) {

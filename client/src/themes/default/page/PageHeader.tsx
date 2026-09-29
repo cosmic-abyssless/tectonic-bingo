@@ -22,7 +22,7 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
           onShow: page.drawer.show,
         }
       : undefined,
-    team: page.viewing.team ? { name: page.viewing.team.name, onShow: page.teamInfo.show } : undefined,
+    team: page.viewing.team ? { onShow: page.teamInfo.show } : undefined,
     onShowRules: page.rules.show,
   });
 

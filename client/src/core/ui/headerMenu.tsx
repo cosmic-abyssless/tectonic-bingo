@@ -4,6 +4,7 @@ import { IconButton } from "./Button";
 import { PulseDot } from "./Card";
 import { Menu, MenuItem, MenuTrigger } from "./Menu";
 import { CheckIcon, MenuIcon, MonitorIcon, MoonIcon, SunIcon } from "./icons";
+import { WikiIcon } from "./ItemIcon";
 
 // The header's ☰ menu (AppHeader): what goes in it, and core's own drawing of it. A theme draws its own through the
 // HeaderMenu slot.
@@ -15,6 +16,8 @@ export interface HeaderMenuEntry {
   text: string;
   /** Navigation goes through the router's navigate (react-aria's `href` would reload the page). */
   onAction: () => void;
+  /** An OSRS wiki icon's name ("Inventory"), drawn before the label. */
+  wikiIcon?: string;
   /** Rendered after the label (e.g. a pending count). */
   badge?: ReactNode;
   /** The page you're on: drawn with a check mark, and not clickable. */
@@ -142,6 +145,7 @@ export function PlainHeaderMenu({ viewer, groups, hasUnseen }: HeaderMenuProps) 
                 ) : (
                   // The current page isn't disabled-looking: it's where you are, not something you can't do.
                   <MenuItem key={item.id} id={item.id} textValue={item.text} isDisabled={item.current} onAction={item.onAction} className="disabled:opacity-100!">
+                    {item.wikiIcon && <WikiIcon name={item.wikiIcon} />}
                     {item.label}
                     {item.badge}
                     {item.current && <CheckIcon className="ml-auto" />}

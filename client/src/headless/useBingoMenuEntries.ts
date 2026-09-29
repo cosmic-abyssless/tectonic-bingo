@@ -8,8 +8,8 @@ import type { BingoHeaderModel } from "./useBingoHeader";
 export interface BoardMenuActions {
   /** The submissions drawer, with the viewed team's pending count as the badge. */
   submissions?: { badge?: ReactNode; onShow: () => void };
-  /** The viewed team's summary (TeamInfoDialog, as the TeamBanner opens it), labelled with the team's name. */
-  team?: { name: string; onShow: () => void };
+  /** The viewed team's summary (TeamInfoDialog, as the TeamBanner opens it), as "Team overview". */
+  team?: { onShow: () => void };
   /** The Rules dialog; shown only when the bingo has rules (or they come later). */
   onShowRules?: () => void;
 }
@@ -30,16 +30,16 @@ export function useBingoMenuEntries(slug: string, header: BingoHeaderModel | nul
   const goTo = (to: string) => () => navigate(`/b/${slug}/${to}`);
   const hasRules = !!header.rulesMarkdown || header.rulesComeLater;
   const entries: HeaderMenuEntry[] = [];
-  if (board.submissions) entries.push({ id: "submissions", text: "Submissions", label: "Submissions", badge: board.submissions.badge, onAction: board.submissions.onShow });
-  if (board.team) entries.push({ id: "team", text: board.team.name, label: board.team.name, onAction: board.team.onShow });
-  if (board.onShowRules && hasRules) entries.push({ id: "rules", text: "Rules", label: "Rules", onAction: board.onShowRules });
-  if (header.canViewStats) entries.push({ id: "stats", text: "Stats", label: "Stats", current: page === "stats", onAction: goTo("stats") });
+  if (board.submissions) entries.push({ id: "submissions", text: "Submissions", label: "Submissions", wikiIcon: "Inventory", badge: board.submissions.badge, onAction: board.submissions.onShow });
+  if (board.team) entries.push({ id: "team", text: "Team overview", label: "Team overview", wikiIcon: "Chat-channel", onAction: board.team.onShow });
+  if (board.onShowRules && hasRules) entries.push({ id: "rules", text: "Rules", label: "Rules", wikiIcon: "Book of Knowledge", onAction: board.onShowRules });
+  if (header.canViewStats) entries.push({ id: "stats", text: "Stats", label: "Stats", wikiIcon: "Skills icon", current: page === "stats", onAction: goTo("stats") });
   if (header.canRewind) entries.push({ id: "rewind", text: "Rewind", label: "Rewind", current: page === "rewind", onAction: goTo("rewind") });
   if (header.draftRoom) {
     const label = header.draftRoom === "draft" ? "Draft room" : "Scouting room";
     entries.push({ id: "draft", text: label, label, current: page === "draft", onAction: goTo("draft") });
   }
   if (header.canOpenWrapped) entries.push({ id: "wrapped", text: "Wrapped", label: "Wrapped", current: page === "wrapped", onAction: goTo("wrapped") });
-  if (achievementsEligible && openAchievements) entries.push({ id: "achievements", text: "Achievements", label: "Achievements", onAction: openAchievements });
+  if (achievementsEligible && openAchievements) entries.push({ id: "achievements", text: "Achievements", label: "Achievements", wikiIcon: "Achievement Diaries icon", onAction: openAchievements });
   return entries;
 }

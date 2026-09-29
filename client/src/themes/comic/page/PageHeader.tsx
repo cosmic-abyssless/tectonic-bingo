@@ -25,7 +25,7 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
       // (The team — identity, roster, and for mods the switcher — lives in the TeamBanner under the search box; the ☰
       // menu opens the same summary.)
       submissions={page.teamSelector.selectedId ? { pending: page.viewing.pendingSubmissionCount, onShow: page.drawer.show } : undefined}
-      team={page.viewing.team ? { name: page.viewing.team.name, onShow: page.teamInfo.show } : undefined}
+      team={page.viewing.team ? { onShow: page.teamInfo.show } : undefined}
     >
       {/* On phones Submit lives beside the team banner instead. */}
       {page.canSubmit && <SubmitButton onPress={() => page.submit.show()} className="max-md:hidden" />}
