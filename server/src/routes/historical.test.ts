@@ -5,6 +5,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import express, { type Router } from "express";
 import type { AddressInfo } from "net";
 import type { Server } from "http";
+import fs from "fs";
+import path from "path";
 import { eq } from "drizzle-orm";
 import { NOT_RECORDED_HISTORICAL, type BingoShellResponse, type HistoricalBingoResponse } from "@bingo/shared";
 import * as schema from "../db/schema";
@@ -18,6 +20,15 @@ vi.mock("../ocr", () => ({
   analyzeSubmissionScreenshot: vi.fn(),
 }));
 vi.mock("../ws", () => ({ broadcast: vi.fn() }));
+const uploads = vi.hoisted(() => ({ dir: "" }));
+vi.mock("../config", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../config")>();
+  const fs = await import("fs");
+  const os = await import("os");
+  const path = await import("path");
+  uploads.dir = fs.mkdtempSync(path.join(os.tmpdir(), "historical-routes-"));
+  return { ...real, UPLOADS_DIR: uploads.dir };
+});
 vi.mock("../db", async () => {
   const { createTestDb } = await import("../testUtils/testDb");
   return { ...createTestDb(), DB_PATH: ":memory:", BUSY_TIMEOUT_MS: 0 };
@@ -63,6 +74,7 @@ beforeAll(async () => {
 
 afterAll(() => {
   server.close();
+  fs.rmSync(uploads.dir, { recursive: true, force: true });
 });
 
 function wipe() {
@@ -207,5 +219,31 @@ describe("what a Historical Bingo shows", () => {
     db.insert(schema.bingos).values({ slug: "current", name: "Current", boardRows: 3, boardCols: 3, createdByUserId: admin.id, stage: "live", createdAt: new Date("2020-01-01") }).run();
     const res = await call(clanMember, "GET", "/api/bingos");
     expect((res.body.bingos as { slug: string }[]).map((b) => b.slug)).toEqual(["current", "hist"]);
+  });
+});
+
+describe("Site admin → Import historical Bingo", () => {
+  const bundle = () => JSON.parse(fs.readFileSync(path.join(__dirname, "../testUtils/fixtures/sample-historical-bundle.json"), "utf8")) as Record<string, unknown>;
+
+  it("imports a bundle as a read-only Historical Bingo", async () => {
+    const res = await call(admin, "POST", "/api/admin/historical-bingos", bundle());
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ bingo: { slug: "sample-historical-2024", stage: "complete", historical: true }, usersCreated: 9 });
+    const shell = (await call(clanMember, "GET", "/api/bingos/sample-historical-2024")).body as unknown as BingoShellResponse;
+    expect(shell.teams.map((t) => t.name)).toEqual(expect.arrayContaining(["Lava Dragons", "Sea Snakes", "Rock Crabs"]));
+    expect((await call(admin, "PATCH", "/api/bingos/sample-historical-2024/admin/settings", { name: "x" })).status).toBe(409);
+  });
+
+  it("says what's wrong with a bad bundle, all of it", async () => {
+    const bad = bundle();
+    (bad.teams as { captain: string | null }[])[0]!.captain = null;
+    (bad.bingo as { slug: string }).slug = "hist";
+    const res = await call(admin, "POST", "/api/admin/historical-bingos", bad);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('The bundle has 2 problems:\n- Team "Lava Dragons": no Captain\n- bingo.slug: "hist" is taken. To import it again, delete that Bingo first');
+  });
+
+  it("is for Site Admins only", async () => {
+    expect((await call(clanMember, "POST", "/api/admin/historical-bingos", bundle())).status).toBe(403);
   });
 });

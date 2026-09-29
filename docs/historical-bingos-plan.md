@@ -66,7 +66,7 @@ Historical imports have their own format, script and upload.
    - fetches the WOM competition (participants, teams, gains);
    - cross-checks Teams against it;
    - enforces the Discord-id-or-`unknown` and Captain rules;
-   - writes an **import bundle**: JSON plus the images;
+   - writes an **import bundle**: one JSON file with the images inside it (`shared/src/historicalBundle.ts`);
    - prints a report of what mapped, what's `unknown`, and any mismatches with WOM.
 3. **Check it locally:** import the bundle into the local DB and look at it in the browser.
 4. **Import to production:** upload the bundle through **Site admin → Import historical Bingo**. The server

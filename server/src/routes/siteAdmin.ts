@@ -6,6 +6,7 @@ import { isAdminDiscordId, UPLOADS_DIR } from "../config";
 import { db } from "../db";
 import * as bingoService from "../services/bingoService";
 import * as bingoExportService from "../services/bingoExportService";
+import * as historicalImportService from "../services/historicalImportService";
 import * as itemGroupService from "../services/itemGroupService";
 import * as pieceValueService from "../services/pieceValueService";
 import * as titleSettingsService from "../services/titleSettingsService";
@@ -62,6 +63,15 @@ router.post(
     }
     const bingo = await bingoExportService.importBingoWithImages(db, document, { slug, name, createdByUserId: req.user!.id }, UPLOADS_DIR);
     res.status(201).json({ bingo: bingoService.toPublicBingo(bingo) });
+  }),
+);
+
+// Site admin → Import historical Bingo (#311): a historical bundle (shared/src/historicalBundle.ts) as the body.
+router.post(
+  "/historical-bingos",
+  asyncHandler(async (req, res) => {
+    const { bingo, usersCreated } = await historicalImportService.importHistoricalBundle(db, req.body, { createdByUserId: req.user!.id, uploadsDir: UPLOADS_DIR });
+    res.status(201).json({ bingo: bingoService.toPublicBingo(bingo), usersCreated });
   }),
 );
 

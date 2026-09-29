@@ -88,6 +88,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "POST /api/admin/bingos": ["bingo.created"],
   "POST /api/admin/bingos/import": ["bingo.created", "settings.updated", "category.created", "tile.created", "task.created", "line.generated", "line.updated", "question.created"],
   "DELETE /api/admin/bingos/:id": ["bingo.deleted"],
+  "POST /api/admin/historical-bingos": ["bingo.historical_imported"],
   "PATCH /api/admin/users/:id": ["user.admin_changed", "mcp.connection_revoked"],
   "DELETE /api/admin/mcp-connections/:id": ["mcp.connection_revoked"],
   "POST /api/admin/item-groups": ["item_group.created"],

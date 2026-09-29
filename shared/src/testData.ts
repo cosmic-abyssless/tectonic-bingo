@@ -2,9 +2,21 @@
 // data tab shows it. Dev mode only (dev-login on: local servers and staging, never production). See
 // docs/generate-bingo.md.
 
-/** Where a generated bingo is left. */
-export type TestDataStage = "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
-export const TEST_DATA_STAGES: readonly TestDataStage[] = ["signup", "captains", "draft", "reveal", "live", "complete"];
+/**
+ * Where a generated bingo is left. "historical" isn't a Stage: it makes a Historical Bingo (CONTEXT.md) instead,
+ * imported from a generated historical bundle through Site admin → Import historical Bingo's endpoint.
+ */
+export type TestDataStage = "signup" | "captains" | "draft" | "reveal" | "live" | "complete" | "historical";
+export const TEST_DATA_STAGES: readonly TestDataStage[] = ["signup", "captains", "draft", "reveal", "live", "complete", "historical"];
+export const TEST_DATA_STAGE_LABEL: Record<TestDataStage, string> = {
+  signup: "Signups open",
+  captains: "Signups closed",
+  draft: "Draft",
+  reveal: "Board revealed",
+  live: "Live",
+  complete: "Finished",
+  historical: "Historical (imported)",
+};
 
 export interface TestDataOptions {
   stage: TestDataStage;

@@ -1,5 +1,5 @@
 import type {
-  AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, ItemGroup, McpConnection, PieceValue, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
+  AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, HistoricalBundle, ItemGroup, McpConnection, PieceValue, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
   PickableMembersResponse, Signup, TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtCredits, WrappedArtGroup, WrappedArtImage, WrappedArtKeying, WrappedArtSection, WrappedCredit,
 } from "@bingo/shared";
 import { api } from "./client";
@@ -19,6 +19,10 @@ export function deleteBingo(id: string) {
 // never overwrites an existing one.
 export function importBingo(payload: { slug: string; name?: string; document: BingoExportDocument }) {
   return api.post<{ bingo: Bingo }>("/api/admin/bingos/import", payload);
+}
+// Site admin → Import historical Bingo: a historical bundle (shared/src/historicalBundle.ts) in, a Historical Bingo out.
+export function importHistoricalBingo(bundle: HistoricalBundle) {
+  return api.post<{ bingo: Bingo; usersCreated: number }>("/api/admin/historical-bingos", bundle);
 }
 export function setUserAdmin(userId: string, isAdmin: boolean) {
   return api.patch<{ user: User }>(`/api/admin/users/${userId}`, { isAdmin });

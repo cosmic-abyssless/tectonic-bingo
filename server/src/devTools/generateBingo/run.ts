@@ -12,6 +12,7 @@ import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, handEvents,
 import { Simulation, describe, newPartState, type SimTeam } from "./simulate";
 import { ensureCategories, planVotes } from "./superlatives";
 import { HOUR, buildTimeline, fmt, runLimit, type Timeline } from "./timeline";
+import { runHistorical } from "./historical";
 
 /** The board to build the bingo from: another bingo on the same server (exported through the real endpoint), or a document. */
 export type BoardSource = { kind: "bingo"; slug: string } | { kind: "document"; document: BingoExportDocument };
@@ -60,34 +61,49 @@ export function playerCount(options: GenerateOptions): number {
   return options.teams * options.teamSize + 4;
 }
 
+/** The dev account given with --me, as a Player (they need to have logged in to this server once). */
+async function findMe(api: Api, discordId: string, index: number): Promise<Player> {
+  const users = (await api.as(null).get<{ users: DevUser[] }>("/auth/dev-users")).users;
+  const me = users.find((u) => u.discordId === discordId);
+  if (!me) throw new Error(`No user with discordId ${discordId} (they need to have logged in to this server once)`);
+  return {
+    index, discordId: me.discordId, name: `Dev ${me.discordUsername.slice(0, 8)}`, discordName: me.discordUsername, userId: me.id, skill: 0.6, activity: 3, offset: -5,
+    isMe: true, isMod: false, reviewWindows: [], partnerIndex: null, signupAt: null,
+  };
+}
+
+async function boardDocument(input: RunInput): Promise<BingoExportDocument> {
+  if (input.board.kind === "document") return input.board.document;
+  input.log(`copying the board of ${input.board.slug}`);
+  return input.api.as(input.adminDiscordId).get<BingoExportDocument>(`/api/bingos/${input.board.slug}/admin/export`);
+}
+
 export async function runGenerate(input: RunInput): Promise<RunResult> {
   const { api, adminDiscordId, options, log } = input;
   const now = input.now ?? new Date();
-  const tl = buildTimeline(options.stage, { now, progress: options.progress, days: options.days });
   const rng = new Rng(options.seed);
   const slug = options.slug;
-  const count = playerCount(options);
   const result: RunResult = { slug, problems: [] };
+
+  // A Historical Bingo isn't played: it's imported, ended long ago (historical.ts).
+  if (options.stage === "historical") {
+    log(`slug ${slug}, seed ${options.seed}, ${options.teams} teams of ${options.teamSize}, historical`);
+    const document = await boardDocument(input);
+    const me = options.me ? await findMe(api, options.me, options.teams * options.teamSize - 1) : null;
+    await runHistorical({ api, adminDiscordId, options, document, rng, me, now, log });
+    return result;
+  }
+
+  const tl = buildTimeline(options.stage, { now, progress: options.progress, days: options.days });
+  const count = playerCount(options);
 
   log(`slug ${slug}, seed ${options.seed}, ${count} players, ${options.teams} teams of ~${options.teamSize}${options.stage === "live" ? `, ${Math.round(options.progress * 100)}% through` : ""}`);
   for (const line of describeTimeline(tl)) log(line);
 
-  const document =
-    input.board.kind === "document"
-      ? input.board.document
-      : await api.as(adminDiscordId).get<BingoExportDocument>(`/api/bingos/${input.board.slug}/admin/export`);
-  if (input.board.kind === "bingo") log(`copying the board of ${input.board.slug}`);
+  const document = await boardDocument(input);
 
   const players = makePlayers(rng.fork("people"), count - (options.me ? 1 : 0), slug);
-  if (options.me) {
-    const users = (await api.as(null).get<{ users: DevUser[] }>("/auth/dev-users")).users;
-    const me = users.find((u) => u.discordId === options.me);
-    if (!me) throw new Error(`No user with discordId ${options.me} (they need to have logged in to this server once)`);
-    players.push({
-      index: players.length, discordId: me.discordId, name: `Dev ${me.discordUsername.slice(0, 8)}`, discordName: me.discordUsername, userId: me.id, skill: 0.6, activity: 3, offset: -5,
-      isMe: true, isMod: false, reviewWindows: [], partnerIndex: null, signupAt: null,
-    });
-  }
+  if (options.me) players.push(await findMe(api, options.me, players.length));
   // A solo bingo refuses pairing requests, so its players sign up alone. A duo bingo's Teams are each led by a pair.
   const duo = document.bingo.signupMode === "duo";
   const pairs = duo ? pairUp(players, rng.fork("pairs"), 0.6, options.teams) : [];

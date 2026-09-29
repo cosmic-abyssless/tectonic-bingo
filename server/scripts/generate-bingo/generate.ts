@@ -20,6 +20,11 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
   if (args.dryRun) {
+    if (args.stage === "historical") {
+      log(`slug ${args.slug}, seed ${args.seed}, ${args.teams} teams of ${args.teamSize}, a Historical Bingo imported from a made-up bundle`);
+      log("--dry-run: nothing was sent");
+      return;
+    }
     const tl = buildTimeline(args.stage, { now: new Date(), progress: args.progress, days: args.days });
     log(`slug ${args.slug}, seed ${args.seed}, ${playerCount(args)} players, ${args.teams} teams of ~${args.teamSize}`);
     for (const line of describeTimeline(tl)) log(line);

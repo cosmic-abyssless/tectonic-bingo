@@ -61,7 +61,7 @@ The teardown script takes the same `--base` and `--basic-auth`.
 
 | option | default | meaning |
 |---|---|---|
-| `--stage` | `live` | where to leave the bingo: `signup`, `captains`, `draft` (mid-draft), `reveal`, `live`, `complete` |
+| `--stage` | `live` | where to leave the bingo: `signup`, `captains`, `draft` (mid-draft), `reveal`, `live`, `complete`; or `historical` for a Historical Bingo (below) |
 | `--progress` | `0.5` | live only: how far through the event we are, 0.02-1 |
 | `--days` | `9` | length of the event |
 | `--teams` | `6` | |
@@ -155,6 +155,21 @@ target (say `signup`), the later dates are simply scheduled in the future.
   the kills. Snapshots come every few hours plus one shortly after each drop, from a baseline
   before the start. The simulation hands out rare drops more often than real play would, so
   Spoon's luckiest players read luckier than a real bingo's.
+
+### `--stage historical`
+
+A Historical Bingo (`CONTEXT.md`) isn't played here, so nothing above happens. The run makes a historical
+bundle the way `server/scripts/historical/` would from an old site's records (`historical.ts`) and uploads it
+through the real Site admin → Import historical Bingo endpoint:
+- the board's Tiles, each with its picture (a plain one when the board has none), its points and its Tasks
+  as rules; an empty cell gets a Tile of its own;
+- `--teams` Teams of `--team-size` made-up Players, about one in ten of whom has "left the clan", each
+  Team with a Captain and sometimes a co-captain; `--me` goes on the first Team;
+- standings (points known about two runs in three), a Wise Old Man competition with every Player's gains,
+  and one to three `unknown` Players who show only there;
+- dates some weeks to a year ago, `--days` long.
+
+The server accepts the made-up Discord ids only in dev mode. `--progress` and `--mods` don't apply.
 
 ## PETS and SLAYER BOSSES (pages that share their items)
 
