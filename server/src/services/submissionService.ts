@@ -17,7 +17,7 @@ import {
   type ValuedAs,
 } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { claims, nodeEdges, nodes, submissionReactions, submissions, submissionScreenshots, teamMembers, teamNodeState, teams, tiles, users } from "../db/schema";
+import { bingos, claims, nodeEdges, nodes, submissionReactions, submissions, submissionScreenshots, teamMembers, teamNodeState, teams, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { findAncestorIds, getNodeTree, getNodeTrees, submitGateBlock } from "./graphService";
 import { conflictMessage, conflictsForClaims } from "./exclusivityService";
@@ -416,6 +416,9 @@ export function setSubmissionReaction(db: Db, submissionId: string, userId: stri
       .get();
     if (!submission) throw new ServiceError(404, "Submission not found");
     if (!isDrop(submission)) throw new ServiceError(400, "A Proof screenshot can't be reacted to");
+    // Reactions close with the Bingo (CONTEXT.md "Reaction"): Rewind shows them as they were when it ended.
+    const bingo = tx.select({ stage: bingos.stage }).from(teams).innerJoin(bingos, eq(bingos.id, teams.bingoId)).where(eq(teams.id, submission.teamId)).get();
+    if (bingo?.stage === "complete") throw new ServiceError(409, "Reactions are closed: the Bingo is over");
     const member = tx.select({ id: teamMembers.id }).from(teamMembers).where(and(eq(teamMembers.teamId, submission.teamId), eq(teamMembers.userId, userId))).get();
     if (!member) throw new ServiceError(403, "Only the submission's team can react to it");
     const where = and(eq(submissionReactions.submissionId, submissionId), eq(submissionReactions.userId, userId), eq(submissionReactions.emoji, emoji));

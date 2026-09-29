@@ -200,7 +200,7 @@ A single proof package submitted by a player on behalf of their Team to claim co
 
 ### Reaction
 An emoji a Player leaves on a Submission of their own Team, from a fixed set of five (🔥 🎉 😂 💀 👀).
-- **Rules:** Only members of the Submission's Team can react, to a Submission in any status (their own included). Each Player can leave each emoji once per Submission, and can take it back. Seen by the Team and Moderators only, except in Rewind, which shows them to everyone once the Bingo is Finished.
+- **Rules:** Only members of the Submission's Team can react, to a Submission in any status (their own included), until the Bingo is Finished: then Reactions are closed, and none can be added or taken back. Each Player can leave each emoji once per Submission, and can take it back. Seen by the Team and Moderators only, except in Rewind, which shows them to everyone once the Bingo is Finished.
 
 ### Screenshot
 An image attached to a Submission proving in-game completion.
