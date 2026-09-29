@@ -103,7 +103,7 @@ export interface RequirementNodeModel {
 
 /** A Proof screenshot requirement (CONTEXT.md): on a whole Tile (TileModel.proof) or one Task (TaskModel.proof). */
 export interface ProofModel {
-  /** What to show ("an empty supply cart"), when the Admin wrote one. */
+  /** The Admin's message, shown whole ("Show an empty supply cart before your drops count."), when they wrote one. */
   note: string | null;
   /** The viewer's own standing: any approved one counts. Null when the viewer isn't on the viewed team. */
   status: ProofStatus | null;
@@ -476,7 +476,7 @@ export interface SubmissionFlowModel {
     select(kind: SubmissionKind): void;
     /** What the proof is for: the Tile's name, or the Task's label for a per-Task requirement. */
     label: string | null;
-    /** What to show ("an empty supply cart"). */
+    /** The Admin's message, shown whole, when they wrote one. */
     note: string | null;
   };
   /**

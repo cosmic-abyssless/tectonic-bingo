@@ -16,6 +16,9 @@ export const PROOF_STATUS_TONE: Record<ProofStatus, "warn" | "info" | "ok" | "da
   rejected: "danger",
 };
 
+/** The alert's message when the Admin didn't write one: theirs is shown whole, in its place. */
+export const DEFAULT_PROOF_MESSAGE = "Before your drops count, post a screenshot of the starting state.";
+
 /** Whether to offer posting one: not while one is approved or waiting for review. Null (a Moderator) always can. */
 export function canPostProof(status: ProofStatus | null): boolean {
   return status !== "approved" && status !== "pending";

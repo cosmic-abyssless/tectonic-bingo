@@ -2,11 +2,11 @@ import type { ProofModel } from "../../../headless/types";
 import { Badge } from "../../../core/ui/Card";
 import { Button } from "../../../core/ui/Button";
 import { ImageIcon } from "../../../core/ui/icons";
-import { canPostProof, PROOF_STATUS_TEXT, PROOF_STATUS_TONE } from "../../../core/board/proof";
+import { canPostProof, DEFAULT_PROOF_MESSAGE, PROOF_STATUS_TEXT, PROOF_STATUS_TONE } from "../../../core/board/proof";
 
 /**
- * "Proof screenshot needed" (CONTEXT.md "Proof screenshot"): on a Tile (Tile-wide) or one Task. Shows the Admin's note
- * on what to show, the viewer's own status, and a button opening the Submit flow on posting one.
+ * "Proof screenshot needed" (CONTEXT.md "Proof screenshot"): on a Tile (Tile-wide) or one Task. Shows the Admin's message
+ * (or a default one), the viewer's own status, and a button opening the Submit flow on posting one.
  */
 export function ProofNeeded({ proof, onPost, className }: { proof: ProofModel; onPost?: () => void; className?: string }) {
   const approved = proof.status === "approved";
@@ -17,7 +17,7 @@ export function ProofNeeded({ proof, onPost, className }: { proof: ProofModel; o
         <ImageIcon size={16} className={`mt-0.5 shrink-0 ${approved ? "text-ok" : "text-warn"}`} />
         <div className="min-w-0">
           <p className="font-medium text-on-surface">Proof screenshot needed</p>
-          <p className="text-xs text-on-surface-muted">{proof.note ? `Before your drops count, show ${proof.note}.` : "Before your drops count, show the starting state."}</p>
+          <p className="text-xs text-on-surface-muted">{proof.note ?? DEFAULT_PROOF_MESSAGE}</p>
         </div>
       </div>
       {(proof.status || showPost) && (

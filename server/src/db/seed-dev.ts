@@ -120,7 +120,7 @@ async function main() {
       tasks: [
         // "Any one unique" = SUM(1) over one leaf per name — the jar is just
         // one more leaf, no wildcard needed (see docs/item-quantity-model.md §7).
-        { label: 'Part A', points: 25, description: 'Obtain your first Cerberus unique.', proofNote: 'your empty loot key chest', requirement: sum(1, CERB_UNIQUES) },
+        { label: 'Part A', points: 25, description: 'Obtain your first Cerberus unique.', proofNote: 'Show your empty loot key chest before your drops count.', requirement: sum(1, CERB_UNIQUES) },
         { label: 'Part B', points: 40, description: 'Obtain another Cerberus unique.', submitRequiresPrevious: true, requirement: sum(1, CERB_UNIQUES) },
       ],
     },
@@ -165,7 +165,7 @@ async function main() {
       ],
     },
     {
-      row: 2, col: 1, categoryIndex: 2, name: 'Wintertodt', proofNote: 'an empty supply crate',
+      row: 2, col: 1, categoryIndex: 2, name: 'Wintertodt', proofNote: 'Show an empty supply crate before your drops count.',
       tasks: [{
         label: 'Part A', points: 20, description: 'Obtain any two of: Bruma torch, Pyromancer hood, Warm gloves.',
         requirement: { kind: 'COUNT', minCount: 2, children: ['Bruma torch', 'Pyromancer hood', 'Warm gloves'].map((n) => item(n)) },

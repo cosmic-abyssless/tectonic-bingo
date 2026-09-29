@@ -216,7 +216,7 @@ function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slu
               Proof screenshot for the whole tile
             </label>
             {proofTileWide && (
-              <Field label="Proof screenshot: what to show" hint="Optional, e.g. an empty supply cart" className="col-span-2">
+              <Field label="Proof screenshot message" hint="Optional, shown to Players as written, e.g. Show an empty supply cart before your drops count." className="col-span-2">
                 <Input defaultValue={tile.proofNote ?? ""} maxLength={200} onBlur={(e) => patch({ proofNote: e.target.value || null })} />
               </Field>
             )}

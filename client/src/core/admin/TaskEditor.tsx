@@ -174,7 +174,7 @@ export function TaskEditor({
           </div>
 
           {!tileRequiresProof && task.requiresProof && (
-            <Field label="Proof screenshot: what to show" hint="Optional, e.g. an empty pool">
+            <Field label="Proof screenshot message" hint="Optional, shown to Players as written, e.g. Show an empty pool before your drops count.">
               <Input key={`proof-note-${task.id}`} defaultValue={task.proofNote ?? ""} maxLength={200} onBlur={(e) => patch({ proofNote: e.target.value || null })} />
             </Field>
           )}

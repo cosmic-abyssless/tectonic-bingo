@@ -45,9 +45,9 @@ export function ProofPicker({ kind, warning }: { kind: SubmissionFlowModel["kind
 
       {kind.value === "proof" && (
         <CaptionBox tone="blue" title="Proof screenshot">
+          {kind.note && <p className="mb-1 text-sm">{kind.note}</p>}
           <p className="text-sm">
-            The starting state for <span className="font-semibold">{kind.label}</span>
-            {kind.note ? `: show ${kind.note}` : ""}, before your drops. Get the codeword in, same as any screenshot.
+            The starting state for <span className="font-semibold">{kind.label}</span>, before your drops. Get the codeword in, same as any screenshot.
           </p>
         </CaptionBox>
       )}

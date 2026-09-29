@@ -36,9 +36,9 @@ export function ProofChecks({ checks, dropSubmittedAt }: { checks: ProofCheck[];
         <div key={check.requirement.taskId ?? "tile"} className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-1.5 text-sm">
             <span className="font-medium text-on-surface">{check.requirement.label}</span>
-            {check.requirement.note && <span className="text-on-surface-muted">(show {check.requirement.note})</span>}
             {check.flag ? <Badge tone="warn">{PROOF_FLAG_LABELS[check.flag]}</Badge> : <Badge tone="ok">Proof screenshot approved first</Badge>}
           </div>
+          {check.requirement.note && <p className="text-xs text-on-surface-muted">{check.requirement.note}</p>}
           {check.proofs.length === 0 ? (
             <p className="text-xs text-on-surface-subtle">This player hasn't posted one.</p>
           ) : (
