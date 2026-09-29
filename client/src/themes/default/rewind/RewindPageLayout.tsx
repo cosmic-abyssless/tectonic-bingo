@@ -49,7 +49,6 @@ export function RewindPageLayout() {
   return (
     <div className="min-h-dvh bg-background text-on-surface">
       <AppHeader
-        back={{ to: `/b/${rewind.slug}`, label: "Back to bingo" }}
         title="Rewind"
         subtitle={rewind.bingoName}
         menuEntries={menuEntries}

@@ -1,12 +1,13 @@
 import { Fragment, useRef, type FocusEvent, type ReactNode, type RefObject } from "react";
-import { Header, MenuSection, RadioButton, RadioField, RadioGroup, Separator } from "react-aria-components";
-import { IconButton } from "./Button";
+import { MenuSection, RadioButton, RadioField, RadioGroup, Separator } from "react-aria-components";
+import { Button, IconButton } from "./Button";
 import { PulseDot } from "./Card";
 import { Menu, MenuItem, MenuTrigger } from "./Menu";
 import { CheckIcon, MenuIcon, MonitorIcon, MoonIcon, SunIcon } from "./icons";
 import { WikiIcon } from "./ItemIcon";
 
-// The header's ☰ menu (AppHeader): what goes in it, and core's own drawing of it. A theme draws its own through the
+// The header's two menus (AppHeader): the ☰ at the left, for getting around, and the viewer's avatar and name at the
+// right, for their account. What goes in them, and core's own drawing of them; a theme draws its own through the
 // HeaderMenu slot.
 
 export interface HeaderMenuEntry {
@@ -40,7 +41,7 @@ export function isColorSchemeItem(item: HeaderMenuItem): item is HeaderMenuColor
   return "kind" in item && item.kind === "colorScheme";
 }
 
-/** One group of the menu (This Bingo, Site, Account), drawn after the viewer's row with a divider before each. */
+/** One group of a menu (This Bingo, Site; Account), with a divider between each. */
 export interface HeaderMenuGroup {
   id: string;
   /** Names the group for screen readers; not shown. */
@@ -48,13 +49,27 @@ export interface HeaderMenuGroup {
   items: HeaderMenuItem[];
 }
 
+/**
+ * What opens the menu: the ☰ (the navigation, at the header's left; hasUnseen puts a dot on it when a Site admin has
+ * bug reports they haven't seen), or the viewer's avatar and name (their account, at the right; named the way the
+ * page names them).
+ */
+export type HeaderMenuTrigger = { kind: "nav"; hasUnseen: boolean } | { kind: "account"; name: string; avatarUrl: string };
+
 export interface HeaderMenuProps {
-  /** The non-interactive row at the top: who's signed in, named the way the page names them. */
-  viewer: { name: string; avatarUrl: string };
+  trigger: HeaderMenuTrigger;
   /** In order, never empty. */
   groups: HeaderMenuGroup[];
-  /** A dot on the ☰ button: a Site admin has bug reports they haven't seen. */
-  hasUnseen: boolean;
+}
+
+/** The account menu's button, the same in every theme: the viewer's avatar, and their name from `sm` up. */
+export function AccountMenuButton({ name, avatarUrl }: { name: string; avatarUrl: string }) {
+  return (
+    <Button variant="ghost" size="sm" aria-label="Account menu" className="pl-1.5">
+      <img src={avatarUrl} alt="" className="size-6 rounded-full" />
+      <span className="hidden sm:inline">{name}</span>
+    </Button>
+  );
 }
 
 const COLOR_SCHEME_OPTIONS = [
@@ -119,25 +134,22 @@ function PlainColorSchemeRow({ item }: { item: HeaderMenuColorScheme }) {
   );
 }
 
-/** Core's ☰ menu, in the core Menu: the default theme's, and the one on pages outside any theme (mod panel, site admin). */
-export function PlainHeaderMenu({ viewer, groups, hasUnseen }: HeaderMenuProps) {
+/** Core's header menus, in the core Menu: the default theme's, and the ones on pages outside any theme (mod panel, site admin). */
+export function PlainHeaderMenu({ trigger, groups }: HeaderMenuProps) {
   return (
     <MenuTrigger>
-      <IconButton label={hasUnseen ? "Menu (new bug reports)" : "Menu"} size="sm" className="relative">
-        <MenuIcon />
-        {hasUnseen && <PulseDot className="-right-0.5 -top-0.5" />}
-      </IconButton>
-      <Menu popoverClassName="min-w-56">
-        {/* The viewer's row isn't clickable, so it's a band of its own at the top rather than another row. */}
-        <MenuSection aria-label="You">
-          <Header className="-mx-1 -mt-1 flex items-center gap-2 rounded-t-md bg-background px-3.5 py-2.5 text-sm font-semibold text-on-surface">
-            <img src={viewer.avatarUrl} alt="" className="size-6 rounded-full" />
-            <span className="truncate">{viewer.name}</span>
-          </Header>
-        </MenuSection>
+      {trigger.kind === "nav" ? (
+        <IconButton label={trigger.hasUnseen ? "Menu (new bug reports)" : "Menu"} size="sm" className="relative shrink-0">
+          <MenuIcon />
+          {trigger.hasUnseen && <PulseDot className="-right-0.5 -top-0.5" />}
+        </IconButton>
+      ) : (
+        <AccountMenuButton name={trigger.name} avatarUrl={trigger.avatarUrl} />
+      )}
+      <Menu popoverClassName="min-w-56" placement={trigger.kind === "nav" ? "bottom start" : "bottom end"}>
         {groups.map((group, i) => (
           <Fragment key={group.id}>
-            <Separator className={`${i === 0 ? "-mx-1 mb-1" : "my-1"} h-px border-none bg-outline`} />
+            {i > 0 && <Separator className="my-1 h-px border-none bg-outline" />}
             <MenuSection aria-label={group.label}>
               {group.items.map((item) =>
                 isColorSchemeItem(item) ? (

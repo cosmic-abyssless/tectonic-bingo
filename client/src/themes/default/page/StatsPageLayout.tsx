@@ -8,7 +8,7 @@ export function StatsPageLayout({ slug, bingoName }: { slug: string; bingoName: 
   const menuEntries = useBingoMenuEntries(slug, header);
   return (
     <div className="min-h-dvh bg-background text-on-surface">
-      <AppHeader back={{ to: `/b/${slug}`, label: "Back to bingo" }} title="Stats" subtitle={bingoName} menuEntries={menuEntries}>
+      <AppHeader title="Stats" subtitle={bingoName} menuEntries={menuEntries}>
         {header?.isMod && <ModPanelButton slug={slug} pendingCount={header.pendingCount} />}
       </AppHeader>
       <StatsView slug={slug} />

@@ -15,7 +15,6 @@ import { comicHeaderProps } from "./headerStyle";
 export function Masthead({
   slug,
   header,
-  back,
   status,
   onShowRules,
   submissions,
@@ -24,8 +23,6 @@ export function Masthead({
 }: {
   slug: string;
   header: BingoHeaderModel;
-  /** Where the back arrow goes; by default the list of every bingo, for those who can see it. */
-  back?: { to: string; label: string };
   /** What the caption box says, if not the stage (the board's "3 days left"). */
   status?: ReactNode;
   onShowRules: () => void;
@@ -45,7 +42,6 @@ export function Masthead({
 
   return (
     <AppHeader
-      back={back ?? (header.canSeeAllBingos ? { to: "/", label: "All bingos" } : undefined)}
       title={header.name}
       subtitle={
         <span className="inline-flex items-center gap-1.5">

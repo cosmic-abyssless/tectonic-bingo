@@ -1,7 +1,7 @@
 import { Fragment } from "react";
-import { Header, Menu as AriaMenu, MenuItem as AriaMenuItem, MenuSection, MenuTrigger, Popover, Separator } from "react-aria-components";
+import { Menu as AriaMenu, MenuItem as AriaMenuItem, MenuSection, MenuTrigger, Popover, Separator } from "react-aria-components";
 import { PulseDot } from "../../../core/ui/Card";
-import { ColorSchemeRadios, isColorSchemeItem, useColorSchemeRowFocus, type HeaderMenuColorScheme, type HeaderMenuProps } from "../../../core/ui/headerMenu";
+import { AccountMenuButton, ColorSchemeRadios, isColorSchemeItem, useColorSchemeRowFocus, type HeaderMenuColorScheme, type HeaderMenuProps } from "../../../core/ui/headerMenu";
 import { CheckIcon, MenuIcon } from "../../../core/ui/icons";
 import { WikiIcon } from "../../../core/ui/ItemIcon";
 import { COMIC_FONT } from "../font";
@@ -12,38 +12,35 @@ import { useComic } from "../ui/useComic";
 const ROW = "flex items-center gap-2 px-3 py-2.5 text-lg uppercase outline-none";
 
 /**
- * The comic theme's ☰ menu (the HeaderMenu slot), at the masthead's far right: Bangers rows ruled off from each other,
- * the highlighted one yellow, and a heavy ink line between the groups. The viewer's row on top isn't a button, so it
- * isn't drawn like one: on the page's paper, sunk below the raised rows. The popover portals to body, so the theme vars
- * are re-applied on it — same treatment as TeamSelector.
+ * The comic theme's header menus (the HeaderMenu slot): the ☰ at the masthead's far left and the account menu at its
+ * far right. Bangers rows ruled off from each other, the highlighted one yellow, and a heavy ink line between the
+ * groups. The popover portals to body, so the theme vars are re-applied on it — same treatment as TeamSelector.
  */
-export function HeaderMenu({ viewer, groups, hasUnseen }: HeaderMenuProps) {
+export function HeaderMenu({ trigger, groups }: HeaderMenuProps) {
   const { colors } = useComic();
   const portalVars = useThemeVarsInPortal();
 
   return (
     <MenuTrigger>
-      <ComicIconButton label={hasUnseen ? "Menu (new bug reports)" : "Menu"} className="relative size-9">
-        <MenuIcon />
-        {hasUnseen && <PulseDot className="-right-1 -top-1" />}
-      </ComicIconButton>
+      {trigger.kind === "nav" ? (
+        <ComicIconButton label={trigger.hasUnseen ? "Menu (new bug reports)" : "Menu"} className="relative size-9 shrink-0">
+          <MenuIcon />
+          {trigger.hasUnseen && <PulseDot className="-right-1 -top-1" />}
+        </ComicIconButton>
+      ) : (
+        <AccountMenuButton name={trigger.name} avatarUrl={trigger.avatarUrl} />
+      )}
       <Popover
-        placement="bottom end"
+        placement={trigger.kind === "nav" ? "bottom start" : "bottom end"}
         offset={8}
         style={{ ...portalVars, background: colors.PAPER_RAISED, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.SHADOW}` }}
         className="comic-panel-pop z-[60] flex min-w-56 flex-col overflow-hidden rounded-md border-[3px] outline-none"
       >
         {/* min-h-0: a menu taller than the room the popover gets scrolls instead of spilling out (see PlainMenu). */}
         <AriaMenu className="min-h-0 overflow-y-auto outline-none">
-          <MenuSection aria-label="You">
-            <Header className={`${ROW} normal-case`} style={{ background: colors.PAPER, color: colors.INK, fontFamily: COMIC_FONT, letterSpacing: "0.04em" }}>
-              <img src={viewer.avatarUrl} alt="" className="size-7 rounded-full border-2" style={{ borderColor: colors.LINE }} />
-              <span className="truncate">{viewer.name}</span>
-            </Header>
-          </MenuSection>
-          {groups.map((group) => (
+          {groups.map((group, i) => (
             <Fragment key={group.id}>
-              <Separator className="h-[3px] border-none" style={{ background: colors.LINE }} />
+              {i > 0 && <Separator className="h-[3px] border-none" style={{ background: colors.LINE }} />}
               <MenuSection aria-label={group.label} className="divide-y-2" style={{ borderColor: colors.RULE }}>
                 {group.items.map((item) =>
                   isColorSchemeItem(item) ? (

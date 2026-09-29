@@ -65,7 +65,6 @@ export function WrappedPageLayout() {
   return (
     <div className="min-h-dvh bg-background text-on-surface">
       <AppHeader
-        back={{ to: `/b/${wrapped.slug}`, label: "Back to bingo" }}
         title="Wrapped"
         subtitle={wrapped.publishedLabel ?? wrapped.bingoName}
         menuEntries={menuEntries}

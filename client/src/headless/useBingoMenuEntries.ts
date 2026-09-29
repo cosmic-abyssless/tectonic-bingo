@@ -15,7 +15,8 @@ export interface BoardMenuActions {
 }
 
 /**
- * The "This Bingo" group of the header's ☰ menu (AppHeader's menuEntries), in order: Submissions, the team, Rules,
+ * The "This Bingo" group of the header's ☰ menu (AppHeader's menuEntries), in order: the Board (the way back to it, the
+ * ☰ having taken the back arrow's place), Submissions, the team, Rules,
  * Stats, Rewind, the Draft or Scouting room, Wrapped and Achievements. Each shows only when it applies, and the page
  * you're on (stats, Rewind, the draft room, Wrapped) shows as current. Achievements come from the page's
  * AchievementsProvider, where there is one.
@@ -39,6 +40,8 @@ export function useBingoMenuEntries(slug: string, header: BingoHeaderModel | nul
   const showTeam = board.team?.onShow ?? (!onBoard && header.hasTeam ? openOnBoard("team") : undefined);
   const showRules = board.onShowRules ?? (!onBoard ? openOnBoard("rules") : undefined);
   const entries: HeaderMenuEntry[] = [];
+  // In the Draft stage the board sends everyone who can get into the Draft room straight back to it.
+  if (!(header.stage === "draft" && header.draftRoom === "draft")) entries.push({ id: "board", text: "Board", label: "Board", wikiIcon: "Teleport to House icon (mobile)", current: onBoard, onAction: () => navigate(`/b/${slug}`) });
   if (showSubmissions) entries.push({ id: "submissions", text: "Submissions", label: "Submissions", wikiIcon: "Inventory", badge: board.submissions?.badge, onAction: showSubmissions });
   if (showTeam) entries.push({ id: "team", text: "Team overview", label: "Team overview", wikiIcon: "Chat-channel", onAction: showTeam });
   if (showRules && hasRules) entries.push({ id: "rules", text: "Rules", label: "Rules", wikiIcon: "Book of Knowledge", onAction: showRules });

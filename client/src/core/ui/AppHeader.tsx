@@ -18,10 +18,11 @@ import { useOptionalSlot } from "../../themes/context";
 import { avatarUrl, displayName } from "./user";
 
 /**
- * Top bar shared by every page: optional back link, title/subtitle, then at the right the page's controls, the dev
- * account switcher, the page's actions (`children`: Mod panel, Submit), the bug report button and the ☰ menu. The menu
- * holds all the navigation and the account: the viewer, the page's own entries (`menuEntries`, a bingo page's "This
- * Bingo" group), the site's pages and the account's actions.
+ * Top bar shared by every page: the ☰ menu and the title/subtitle at the left, then at the right the page's controls,
+ * the dev account switcher, the page's actions (`children`: Mod panel, Submit), the bug report button and the account
+ * menu (the viewer's avatar and name). The ☰ holds the navigation: the page's own entries (`menuEntries`, a bingo
+ * page's "This Bingo" group) and the site's pages. The account menu holds the colour scheme, Connected apps (admins),
+ * Log in on your phone and Log out.
  */
 export function AppHeader({
   back,
@@ -34,6 +35,7 @@ export function AppHeader({
   titleClassName,
   style,
 }: {
+  /** A way back for a page whose ☰ would be empty (a legal page, for someone signed out or not an admin). */
   back?: { to: string; label: string };
   title: ReactNode;
   subtitle?: ReactNode;
@@ -78,7 +80,8 @@ export function AppHeader({
   const HeaderMenu = useOptionalSlot("HeaderMenu") ?? PlainHeaderMenu;
   const { hasUnseen: hasNewReportsForAdmin } = useBugReportsUnseen(user?.isAdmin ? allReports?.bugReports : undefined, ADMIN_BUG_REPORTS_SEEN_KEY, { newOnly: true });
 
-  const allGroups: HeaderMenuGroup[] = [
+  // The ☰, at the left: getting around.
+  const navGroups: HeaderMenuGroup[] = [
     { id: "bingo", label: "This Bingo", items: menuEntries ?? [] },
     {
       id: "site",
@@ -101,16 +104,19 @@ export function AppHeader({
                 current: onSiteAdmin,
                 onAction: () => navigate("/admin"),
               },
-              { id: "connected-apps", text: "Connected apps", label: "Connected apps", wikiIcon: "Account Management - Links icon", onAction: () => setConnectedAppsOpen(true) },
             ]
           : []),
       ],
     },
+  ].filter((group) => group.items.length > 0);
+  // The viewer's account, behind their avatar and name at the right.
+  const accountGroups: HeaderMenuGroup[] = [
     {
       id: "account",
       label: "Account",
       items: [
         { kind: "colorScheme", id: "color-scheme", value: colorScheme, onChange: setColorScheme },
+        ...(user?.isAdmin ? [{ id: "connected-apps", text: "Connected apps", label: "Connected apps", wikiIcon: "Account Management - Links icon", onAction: () => setConnectedAppsOpen(true) }] : []),
         ...(!phone
           ? [
               {
@@ -126,7 +132,7 @@ export function AppHeader({
       ],
     },
   ];
-  const groups = allGroups.filter((group) => group.items.length > 0);
+  const hasNav = !!user && navGroups.length > 0;
 
   return (
     <header className={`sticky top-0 z-20 border-b-[length:var(--control-border-width,1px)] border-outline bg-surface/90 backdrop-blur ${className ?? ""}`} style={style}>
@@ -134,10 +140,14 @@ export function AppHeader({
         {/* The title takes the row's slack and truncates, down to a floor; past that the actions wrap onto a row of
             their own rather than squeezing the title to nothing. */}
         <div className="flex min-w-32 flex-1 basis-0 items-center gap-2">
-          {back && (
+          {hasNav ? (
+            <HeaderMenu trigger={{ kind: "nav", hasUnseen: hasNewReportsForAdmin }} groups={navGroups} />
+          ) : (
+            back && (
             <Link to={back.to} aria-label={back.label} className="hit-40 relative flex size-8 shrink-0 items-center justify-center rounded-md text-on-surface-muted transition-colors hover:bg-surface-hover hover:text-on-surface">
               <ArrowLeftIcon />
             </Link>
+            )
           )}
           <div className="min-w-0 leading-tight">
             {/* Themeable via --font-heading/--font-heading-weight — both no-ops outside a themed page */}
@@ -169,7 +179,7 @@ export function AppHeader({
               <BugReportDialog isOpen={bugReportOpen} onClose={() => setBugReportOpen(false)} />
             </>
           )}
-          {user && <HeaderMenu viewer={{ name: myRsn || displayName(user), avatarUrl: avatarUrl(user) }} groups={groups} hasUnseen={hasNewReportsForAdmin} />}
+          {user && <HeaderMenu trigger={{ kind: "account", name: myRsn || displayName(user), avatarUrl: avatarUrl(user) }} groups={accountGroups} />}
         </div>
         {user && <PhoneLoginDialog isOpen={phoneLoginOpen} onClose={() => setPhoneLoginOpen(false)} />}
         {user?.isAdmin && <ConnectedAppsDialog isOpen={connectedAppsOpen} onClose={() => setConnectedAppsOpen(false)} />}
