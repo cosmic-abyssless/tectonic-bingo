@@ -16,6 +16,7 @@ import {
   ModalOverlay,
 } from "react-aria-components";
 import type { SubmissionModel, TaskModel, TileModel } from "../../../headless/types";
+import { useTutorial } from "../../../headless";
 import { SubmissionBubble } from "./SubmissionBubble";
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ClockIcon, HandIcon, LockIcon, XIcon } from "../../../core/ui/icons";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
@@ -1356,6 +1357,23 @@ function TileDetails({
   const tokens = useThemeTokens();
   const { pageCount, innerLeaves } = bookShape(tile, single);
   const ordered = orderTasks(tile);
+  // The Tutorial (CONTEXT.md) points at things on the Tile's pages: turn to the one it's pointing at (the contents,
+  // or the first Part with the hand or Submit it wants), since it can only point at a page that's showing.
+  const tutorialTargets = useTutorial()?.step?.targets ?? [];
+  const partPage = (position: number) => (position < 0 ? -1 : position + 1);
+  const tutorialPage = tutorialTargets.includes("tile-parts")
+    ? 0
+    : tutorialTargets.includes("task-interest") && onToggleInterest
+      ? partPage(ordered.findIndex(({ task }) => task.interest.canToggle))
+      : tutorialTargets.includes("part-submit") && onSubmit && !tile.freeze.isFrozen
+        ? partPage(ordered.findIndex(({ task }) => task.available))
+        : -1;
+  useEffect(() => {
+    // Page 0 is the contents; Part `position` is page position + 1 (see onGoToTask below).
+    if (tutorialPage === 0) onFlipTo(0);
+    else if (tutorialPage > 0) onFlipTo(single ? tutorialPage : Math.floor(tutorialPage / 2));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tutorialPage]);
   // What's printed on the pages is drawn in the page stock, not the surrounding theme.
   const page = tilePageColors(colors, tile.freeze.isFrozen);
 
@@ -1458,6 +1476,7 @@ function TileDetails({
     // and the pan wrapper below is two pages wide, shifted to the half in view.
     <div
       ref={ref}
+      data-tutorial="tile-parts"
       className="relative [container-type:inline-size]"
       style={{ ["--bw" as string]: single ? "100cqw" : "50cqw" }}
     >
@@ -2019,6 +2038,7 @@ function SummaryPage({
       {onSubmit && (
         <ComicButton
           variant="primary"
+          data-tutorial={freeze.isFrozen ? undefined : "tile-submit"}
           onPress={() => onSubmit()}
         >
           Submit
@@ -2087,6 +2107,7 @@ function TaskPage({
               <ComicButton
                 variant="primary"
                 isDisabled={submitDisabled}
+                data-tutorial={submitDisabled ? undefined : "part-submit"}
                 onPress={() => onSubmit(task.id)}
               >
                 Submit
@@ -2099,6 +2120,7 @@ function TaskPage({
                   <ComicButton
                     variant={interest.mine ? "yellow" : "secondary"}
                     aria-pressed={interest.mine}
+                    data-tutorial="task-interest"
                     onPress={() => onToggleInterest!(task.id)}
                   >
                     <HandIcon size={16} fill={interest.mine ? "currentColor" : "none"} />

@@ -18,6 +18,7 @@ export function CodewordBanner({ codeword }: { codeword: string }) {
   return (
     <TextTooltip text="Copy codeword">
       <AriaButton
+        data-tutorial="codeword"
         aria-label="Copy codeword"
         onPress={copy}
         className="relative inline-flex max-w-full shrink-0 cursor-pointer items-center gap-2 overflow-hidden border-2 px-2.5 py-1 transition-[filter] hovered:brightness-110 pressed:brightness-95"

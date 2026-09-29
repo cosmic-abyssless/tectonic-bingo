@@ -14,4 +14,7 @@ export type * from "./types";
 export { useRewindModel } from "./RewindProvider";
 export { useWrappedModel } from "./WrappedProvider";
 export { useBingoMenuEntries } from "./useBingoMenuEntries";
+export { useTutorial } from "./useTutorial";
+export type { TutorialModel } from "./useTutorial";
+export type { TutorialStep, TutorialTarget } from "./tutorial";
 export type { BoardMenuActions } from "./useBingoMenuEntries";

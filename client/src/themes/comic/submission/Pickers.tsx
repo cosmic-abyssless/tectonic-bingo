@@ -8,7 +8,7 @@ import { ComicField } from "./ComicField";
 export function SubmitterPicker({ submitter }: { submitter: SubmissionFlowModel["submitter"] }) {
   if (!submitter.visible) return null;
   return (
-    <ComicField label="Submitting for" hint={submitterHint(submitter)}>
+    <ComicField label="Submitting for" hint={submitterHint(submitter)} tutorial="submit-submitter">
       <SearchableSelect value={submitter.selectedId} options={submitter.options} placeholder={submitter.required ? `Pick a player on ${submitter.teamName}…` : "Search teammates…"} onChange={submitter.select} />
     </ComicField>
   );
@@ -16,7 +16,7 @@ export function SubmitterPicker({ submitter }: { submitter: SubmissionFlowModel[
 
 export function TilePicker({ tile }: { tile: SubmissionFlowModel["tile"] }) {
   return (
-    <ComicField label="Tile">
+    <ComicField label="Tile" tutorial="submit-tile">
       <SearchableSelect value={tile.selectedId} options={tile.options} placeholder="Search tiles…" onChange={tile.select} />
     </ComicField>
   );
@@ -27,7 +27,7 @@ export function RequirementPicker({ requirement, quantity }: { requirement: Subm
   if (!requirement.visible) return null;
   return (
     <>
-      <ComicField label="Requirement">
+      <ComicField label="Requirement" tutorial="submit-requirement">
         <SearchableSelect
           key={requirement.pickerKey}
           value={requirement.selectedId}

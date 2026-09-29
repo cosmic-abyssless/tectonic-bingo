@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { SubmissionKind } from "@bingo/shared";
 import { useSubmissionFlow } from "./useSubmissionFlow";
+import { useTutorialSubmitSeed } from "./useTutorial";
 import type { SubmissionFlowModel } from "./types";
 
 // Mounted only while the submission flow is open (see BoardPageLayout) —
@@ -25,6 +26,15 @@ export function SubmissionFlowHost({
   onSuccess: () => void;
   children: (flow: SubmissionFlowModel) => ReactNode;
 }) {
-  const flow = useSubmissionFlow({ initialTileId, initialTaskId, initialFile, initialKind, onClose, onSuccess });
+  // Opened during the Tutorial (CONTEXT.md), it starts on the Tile the Player opened there, so there's something to show.
+  const seed = useTutorialSubmitSeed();
+  const flow = useSubmissionFlow({
+    initialTileId: initialTileId ?? seed?.tileId,
+    initialTaskId: initialTileId ? initialTaskId : seed?.taskId,
+    initialFile,
+    initialKind,
+    onClose,
+    onSuccess,
+  });
   return children(flow);
 }

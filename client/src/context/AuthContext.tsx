@@ -6,10 +6,14 @@ import { clearBoardCache } from "../api/boardCache";
 interface AuthState {
   user: User | null;
   loading: boolean;
+  /** /api/me has been asked on this load: `user` is the server's record (or, if it couldn't be asked, the cached one stands). */
+  confirmed: boolean;
   devMode: boolean;
   /** Only admins listed in the server's ADMIN_DISCORD_IDS may grant site admin. */
   canGrantAdmin: boolean;
   logout: () => Promise<void>;
+  /** Replaces the viewer's record with a fresher one the server sent back (e.g. after marking the Tutorial seen). */
+  updateUser: (user: User) => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -22,6 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [devMode, setDevMode] = useState(cached?.devMode ?? false);
   const [canGrantAdmin, setCanGrantAdmin] = useState(cached?.canGrantAdmin ?? false);
   const [loading, setLoading] = useState(!cached);
+  const [confirmed, setConfirmed] = useState(false);
 
   useEffect(() => {
     fetch("/api/me", { credentials: "include" })
@@ -39,7 +44,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         if (!cached) setUser(null);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setConfirmed(true);
+      });
     // Runs once, on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -52,7 +60,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  return <AuthContext.Provider value={{ user, loading, devMode, canGrantAdmin, logout }}>{children}</AuthContext.Provider>;
+  const updateUser = (next: User) => {
+    setUser(next);
+    writeAuthCache(__BUILD_ID__, { user: next, devMode, canGrantAdmin });
+  };
+
+  return <AuthContext.Provider value={{ user, loading, confirmed, devMode, canGrantAdmin, logout, updateUser }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthState {

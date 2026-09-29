@@ -1052,3 +1052,16 @@ export interface WrappedModel {
   /** `outroReached` remembers, for next time, that the viewer got to the Outro. */
   actions: { goToBoard(): void; goToRewind(): void; outroReached(): void };
 }
+
+/** The Tutorial's explanation card for the current step (the TutorialCard slot draws it; core places it). */
+export interface TutorialCardModel {
+  title: string;
+  lines: string[];
+  /** Which of the Tutorial's steps this is, and how many there are ("3 of 9"). */
+  number: number;
+  count: number;
+  /** "Start" on the welcome, "Finish" on the last step, "Next" otherwise; null on a step that waits for the Player to click. */
+  primary: { label: "Start" | "Next" | "Finish"; onPress(): void } | null;
+  /** Skip, on every step. */
+  onSkip(): void;
+}

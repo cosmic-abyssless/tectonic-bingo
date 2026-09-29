@@ -13,6 +13,7 @@ export function CodewordBanner({ codeword }: { codeword: string }) {
   return (
     <TextTooltip text="Copy codeword">
       <AriaButton
+        data-tutorial="codeword"
         aria-label="Copy codeword"
         onPress={copy}
         className="inline-flex max-w-full shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-info/30 bg-info/5 px-2 py-1 text-xs text-info transition-colors hovered:bg-info/10 pressed:bg-info/15"

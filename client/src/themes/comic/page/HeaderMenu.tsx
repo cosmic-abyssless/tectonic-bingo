@@ -16,14 +16,14 @@ const ROW = "flex items-center gap-2 px-3 py-2.5 text-lg uppercase outline-none"
  * far right. Bangers rows ruled off from each other, the highlighted one yellow, and a heavy ink line between the
  * groups. The popover portals to body, so the theme vars are re-applied on it — same treatment as TeamSelector.
  */
-export function HeaderMenu({ trigger, groups }: HeaderMenuProps) {
+export function HeaderMenu({ trigger, groups, isOpen, onOpenChange }: HeaderMenuProps) {
   const { colors } = useComic();
   const portalVars = useThemeVarsInPortal();
 
   return (
-    <MenuTrigger>
+    <MenuTrigger isOpen={isOpen} onOpenChange={onOpenChange}>
       {trigger.kind === "nav" ? (
-        <ComicIconButton label={trigger.hasUnseen ? "Menu (new bug reports)" : "Menu"} className="relative size-9 shrink-0">
+        <ComicIconButton label={trigger.hasUnseen ? "Menu (new bug reports)" : "Menu"} className="relative size-9 shrink-0" data-tutorial="menu">
           <MenuIcon />
           {trigger.hasUnseen && <PulseDot className="-right-1 -top-1" />}
         </ComicIconButton>
@@ -52,6 +52,7 @@ export function HeaderMenu({ trigger, groups }: HeaderMenuProps) {
                       textValue={item.text}
                       isDisabled={item.current}
                       onAction={item.onAction}
+                      data-tutorial={item.tutorial}
                       className={`${ROW} cursor-pointer text-[var(--comic-ink)] disabled:cursor-default focus:bg-[var(--comic-yellow)] hovered:bg-[var(--comic-yellow)] focus:text-[var(--comic-on-yellow)] hovered:text-[var(--comic-on-yellow)]`}
                       // The ink colour is a class, not inline, so the highlight's on-yellow text can win over it (in dark mode the
                       // ink is light, and would sit on the yellow unreadably).

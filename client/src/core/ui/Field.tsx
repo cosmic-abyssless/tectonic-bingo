@@ -32,10 +32,25 @@ export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
 export const FieldLabelContext = createContext<string | null>(null);
 
 /** Labelled control. Use `as="div"` when the content isn't a single form control (button groups, lists). */
-export function Field({ label, hint, children, className, as: Tag = "label" }: { label: ReactNode; hint?: ReactNode; children: ReactNode; className?: string; as?: "label" | "div" }) {
+export function Field({
+  label,
+  hint,
+  children,
+  className,
+  as: Tag = "label",
+  tutorial,
+}: {
+  label: ReactNode;
+  hint?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  as?: "label" | "div";
+  /** Marks the field for the Tutorial to point at (its data-tutorial attribute). */
+  tutorial?: string;
+}) {
   const labelId = useId();
   return (
-    <Tag className={`block ${className ?? ""}`}>
+    <Tag className={`block ${className ?? ""}`} data-tutorial={tutorial}>
       <span id={labelId} className="mb-1.5 block text-xs font-medium text-on-surface-muted">
         {label}
       </span>

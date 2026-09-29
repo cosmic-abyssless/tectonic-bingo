@@ -1,0 +1,211 @@
+import type { Stage, Tile } from "@bingo/shared";
+
+// The Tutorial (CONTEXT.md): its steps and how they move, as plain data and a reducer, so the rules are testable
+// without a Board. useTutorial.tsx wires them to the page; core's TutorialOverlay draws them.
+
+/**
+ * What a step points at: the value of a `data-tutorial` attribute on the real element, in both themes. The overlay
+ * highlights the first one that's on screen.
+ */
+export type TutorialTarget =
+  | "team-banner"
+  | "board"
+  | "tile-parts"
+  | "task-interest"
+  | "part-submit"
+  | "tile-submit"
+  | "submit"
+  | "submit-screenshot"
+  | "submit-tile"
+  | "submit-requirement"
+  | "submit-submitter"
+  | "codeword"
+  | "submit-proof"
+  | "menu"
+  | "menu-submissions"
+  | "menu-rules"
+  | "menu-stats"
+  | "menu-tutorial";
+
+/** What a ✋ step waits for the Player to open, and what a step explains while it's open. */
+export type TutorialOpening = "tile" | "submit" | "menu";
+
+export interface TutorialStep {
+  id: string;
+  /** Its place among the Tutorial's steps (1 to TUTORIAL_STEP_COUNT); a step shown a piece at a time repeats it. */
+  number: number;
+  title: string;
+  lines: string[];
+  /** In order of preference: the first with an element on screen is highlighted. Empty for a step that points at nothing. */
+  targets: TutorialTarget[];
+  /** Highlights every element of its target that's on screen, together (the Tile and Part pickers). */
+  all: boolean;
+  /** ✋: moves on only when the Player opens this by clicking the real element. No Next. */
+  waitsFor: TutorialOpening | null;
+  /** Explains what's open; if the Player closes it, the Tutorial steps back to the step that opens it. */
+  inside: TutorialOpening | null;
+  /** Next closes this (the Tutorial closes it itself). */
+  closes: TutorialOpening | null;
+  /** The highlighted element takes clicks: the ✋ steps, and Task interest, which a Player may choose to mark. */
+  clickable: boolean;
+  /** Passed over when its element isn't there (no teammates to submit for, no Rules, a Tile with nothing to Submit). */
+  optional: boolean;
+}
+
+export const TUTORIAL_STEP_COUNT = 9;
+
+/** What step 4 says about the Tile that was opened, beyond its Parts. */
+export interface TutorialTileFacts {
+  /** It (or one of its Parts) needs a Proof screenshot. */
+  needsProof: boolean;
+  /** A Part's points wait on the Part before it (withheld until that one is done). */
+  pointsWait: boolean;
+}
+
+export function tutorialTileFacts(tile: Tile | null | undefined): TutorialTileFacts {
+  if (!tile) return { needsProof: false, pointsWait: false };
+  const parts = tile.node.children;
+  return { needsProof: tile.requiresProof || parts.some((p) => p.requiresProof), pointsWait: parts.some((p) => !!p.pointsGateNodeId) };
+}
+
+type StepInput = Pick<TutorialStep, "id" | "number" | "title" | "lines"> & Partial<Omit<TutorialStep, "id" | "number" | "title" | "lines">>;
+
+function step(input: StepInput): TutorialStep {
+  return { targets: [], all: false, waitsFor: null, inside: null, closes: null, optional: false, ...input, clickable: input.clickable ?? !!input.waitsFor };
+}
+
+/** Every step, in order. Only step 4's lines change, with the Tile that was opened. */
+export function tutorialSteps(tile: TutorialTileFacts): TutorialStep[] {
+  return [
+    step({ id: "welcome", number: 1, title: "Welcome to your Board", lines: ["A quick look around: your Team, the Tiles, and how to Submit."] }),
+    step({ id: "team", number: 2, title: "Your Team", lines: ["Your Team and its points. Pressing the points shows where they came from."], targets: ["team-banner"] }),
+    step({ id: "open-tile", number: 3, title: "Open a Tile", lines: ["Each Tile is a goal for your Team. Click any Tile to open it."], targets: ["board"], waitsFor: "tile" }),
+    step({
+      id: "tile-parts",
+      number: 4,
+      title: "Inside the Tile",
+      lines: [
+        "A Tile has one or more Parts, each worth its own points.",
+        "The checklist shows what each Part needs.",
+        ...(tile.needsProof ? ["This Tile needs a Proof screenshot: a screenshot of where you start, posted before your drops count."] : []),
+        ...(tile.pointsWait ? ["A Part's points here wait on the Part before it: they're held back until that one is done."] : []),
+      ],
+      targets: ["tile-parts"],
+      inside: "tile",
+    }),
+    step({
+      id: "task-interest",
+      number: 4,
+      title: "Task interest",
+      lines: ["Raise your hand on a Part to let your team know what you're going for. It's optional."],
+      targets: ["task-interest"],
+      inside: "tile",
+      clickable: true,
+      optional: true,
+    }),
+    step({
+      id: "tile-submit",
+      number: 5,
+      title: "Submit from here",
+      lines: ["Got it? Submit it straight from the Tile."],
+      targets: ["part-submit", "tile-submit"],
+      inside: "tile",
+      closes: "tile",
+      optional: true,
+    }),
+    step({ id: "open-submit", number: 6, title: "Submit", lines: ["Or Submit from the Board, any time. Click Submit."], targets: ["submit"], waitsFor: "submit" }),
+    step({
+      id: "submit-screenshot",
+      number: 7,
+      title: "Your screenshot",
+      lines: ["Your screenshot goes here.", "Pasting one (Ctrl+V) or dragging one anywhere on the Board opens Submit too."],
+      targets: ["submit-screenshot"],
+      inside: "submit",
+    }),
+    step({ id: "submit-tile", number: 7, title: "Tile and Part", lines: ["Which Tile it's for, and which Part."], targets: ["submit-tile"], all: true, inside: "submit", optional: true }),
+    step({ id: "submit-requirement", number: 7, title: "What you got", lines: ["Then what you got."], targets: ["submit-requirement"], inside: "submit", optional: true }),
+    step({ id: "submit-submitter", number: 7, title: "Submitting for", lines: ["Posting a teammate's drop? Pick them here."], targets: ["submit-submitter"], inside: "submit", optional: true }),
+    step({ id: "submit-codeword", number: 7, title: "Your Codeword", lines: ["Your Team's Codeword must be in every screenshot."], targets: ["codeword"], inside: "submit", optional: true }),
+    step({
+      id: "submit-proof",
+      number: 7,
+      title: "Proof screenshot",
+      lines: ["Where a Tile needs one, post your Proof screenshot here, before your drops."],
+      targets: ["submit-proof"],
+      inside: "submit",
+      optional: true,
+    }),
+    step({
+      id: "submit-review",
+      number: 7,
+      title: "Reviewed by a Moderator",
+      lines: ["You can also Submit from the Submissions drawer.", "A Moderator reviews every Submission."],
+      inside: "submit",
+      closes: "submit",
+    }),
+    step({ id: "open-menu", number: 8, title: "The ☰ menu", lines: ["Everything else is in the ☰ menu. Click it to open it."], targets: ["menu"], waitsFor: "menu" }),
+    step({ id: "menu-submissions", number: 8, title: "Submissions", lines: ["Your Team's Submissions, and how their review went."], targets: ["menu-submissions"], inside: "menu", optional: true }),
+    step({ id: "menu-rules", number: 8, title: "Rules", lines: ["The Bingo's Rules."], targets: ["menu-rules"], inside: "menu", optional: true }),
+    step({ id: "menu-stats", number: 8, title: "Stats", lines: ["How your Team, and everyone else, are doing."], targets: ["menu-stats"], inside: "menu", optional: true }),
+    step({ id: "menu-tutorial", number: 8, title: "Tutorial", lines: ["This walk through, whenever you want it again."], targets: ["menu-tutorial"], inside: "menu", closes: "menu", optional: true }),
+    step({ id: "done", number: 9, title: "Done", lines: ["You're set. Good luck!", "You can replay this any time from ☰ → Tutorial."] }),
+  ];
+}
+
+export interface TutorialState {
+  active: boolean;
+  index: number;
+  /** Replayed from the ☰ menu: finishing or skipping it records nothing. */
+  replay: boolean;
+  /** The way the Player last moved, so a step with nothing to point at is passed over in the same direction. */
+  direction: 1 | -1;
+  /** The Tile opened at step 3, for step 4's lines and for the Submit flow at step 7. */
+  tileId: string | null;
+}
+
+export const TUTORIAL_IDLE: TutorialState = { active: false, index: 0, replay: false, direction: 1, tileId: null };
+
+export type TutorialAction =
+  | { type: "start"; replay: boolean }
+  | { type: "next" }
+  | { type: "back" }
+  /** The current (optional) step's element isn't there. */
+  | { type: "pass" }
+  | { type: "end" }
+  /** Something the Tutorial can wait for is open (the Tile modal carries the Tile's id). */
+  | { type: "opened"; what: TutorialOpening; tileId?: string | null }
+  | { type: "closed"; what: TutorialOpening };
+
+/** How the Tutorial moves between `steps`. Moving past the last step, or skipping, ends it. */
+export function tutorialReducer(steps: TutorialStep[], state: TutorialState, action: TutorialAction): TutorialState {
+  if (action.type === "start") return { ...TUTORIAL_IDLE, active: true, replay: action.replay };
+  if (!state.active) return state;
+  const current = steps[state.index];
+  const goTo = (index: number, direction: 1 | -1): TutorialState =>
+    index >= steps.length ? { ...state, active: false } : { ...state, index: Math.max(0, index), direction };
+  switch (action.type) {
+    case "end":
+      return { ...state, active: false };
+    case "next":
+      return current?.waitsFor ? state : goTo(state.index + 1, 1);
+    case "back":
+      return goTo(state.index - 1, -1);
+    case "pass":
+      return current?.optional ? goTo(state.index + state.direction, state.direction) : state;
+    case "opened":
+      if (current?.waitsFor !== action.what) return state;
+      return { ...goTo(state.index + 1, 1), ...(action.what === "tile" ? { tileId: action.tileId ?? null } : {}) };
+    case "closed": {
+      if (current?.inside !== action.what) return state;
+      // Back to the step that opens it.
+      let opener = state.index - 1;
+      while (opener >= 0 && steps[opener].waitsFor !== action.what) opener--;
+      return opener < 0 ? state : goTo(opener, 1);
+    }
+  }
+}
+
+/** Starts on its own the first time a Player sees their own Team's Board while the Bingo is Live. */
+export function tutorialAutoStarts({ stage, onOwnTeamBoard, seen }: { stage: Stage; onOwnTeamBoard: boolean; seen: boolean }): boolean {
+  return stage === "live" && onOwnTeamBoard && !seen;
+}

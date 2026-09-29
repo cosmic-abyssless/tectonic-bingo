@@ -6,6 +6,7 @@ import { PageLoading, PageError } from "../themes/default/page/PageStates";
 import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { AchievementsProvider } from "../core/achievements/AchievementsProvider";
 import { useRememberTheme } from "../themes/rememberedTheme";
+import { TutorialOverlay } from "../core/tutorial/TutorialOverlay";
 
 export function BingoPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -36,6 +37,8 @@ function ThemedSurface({ slug }: { slug: string }) {
       <AchievementsProvider slug={slug}>
         <PlayerProfileProvider slug={slug}>
           <BoardPageSlot />
+          {/* The Tutorial (CONTEXT.md), over the Board and its dialogs while it runs. */}
+          <TutorialOverlay />
         </PlayerProfileProvider>
       </AchievementsProvider>
     </ThemeProvider>

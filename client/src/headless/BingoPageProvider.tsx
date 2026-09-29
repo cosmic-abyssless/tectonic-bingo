@@ -14,6 +14,7 @@ import { tileSearchMatcher, useTileSearch } from "./useTileSearch";
 import { toastQueue } from "../core/ui/Toast";
 import { usePageEvents } from "./usePageEvents";
 import { BoardProvider } from "./BoardProvider";
+import { TutorialProvider } from "./useTutorial";
 import type { BingoPageModel, StageView, TeamModel } from "./types";
 
 // Internal escape hatch: only useSubmissionFlow.ts (which needs raw
@@ -129,6 +130,9 @@ export function BingoPageProvider({
     if (openOnArrival === "rules") {
       setRulesOpen(true);
       if (eligibleForOpens) recordOpened.mutate({ kind: "rules" });
+    } else if (openOnArrival === "tutorial") {
+      // TutorialProvider's to start (and drop), once the viewer's Team Board is showing.
+      return;
     } else if (openOnArrival === "submissions" || openOnArrival === "team") {
       if (!viewingTeamId) return;
       if (openOnArrival === "submissions") setDrawerOpen(true);
@@ -327,7 +331,7 @@ export function BingoPageProvider({
           locks={locks}
           sealed={sealed}
         >
-          {children}
+          <TutorialProvider>{children}</TutorialProvider>
         </BoardProvider>
       </BingoPageContext.Provider>
     </BingoPageRawContext.Provider>

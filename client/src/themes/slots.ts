@@ -27,6 +27,7 @@ import type {
   TeamSelectorModel,
   TileModel,
   TileSearchModel,
+  TutorialCardModel,
   WrappedBingoModel,
   WrappedCaptainModel,
   WrappedDuoModel,
@@ -118,6 +119,10 @@ export interface ThemeSlots {
   // Where the team's points come from, opened from the point total on the banner. Open while `team` is set; reads its data with usePointBreakdown().
   PointBreakdownDialog: ComponentType<{ team: TeamModel | null; onClose: () => void }>;
   SubmissionsDrawer: ComponentType<{ isOpen: boolean; submissions: SubmissionModel[]; onClose: () => void; onSubmit?: () => void }>;
+  // The Tutorial's explanation card (CONTEXT.md "Tutorial"): the step's title and lines, "3 of 9", Next (card.primary,
+  // absent on a step that waits for the Player to click) and Skip. The theme draws only the card: core's
+  // TutorialOverlay sizes (its width), places and dims around it, and portals it to body above the dialogs.
+  TutorialCard: ComponentType<{ card: TutorialCardModel }>;
 
   // The frame + header the core dialogs (bug report, player profile) are
   // built from, so a theme can dress them without reimplementing them. Read

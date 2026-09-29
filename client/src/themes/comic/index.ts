@@ -21,6 +21,7 @@ import { TeamBanner } from "./page/TeamBanner";
 import { TeamSelector, TeamBadge } from "./page/TeamSelector";
 import { PageHeader } from "./page/PageHeader";
 import { SubmissionsDrawer } from "./page/SubmissionsDrawer";
+import { TutorialCard } from "./tutorial/TutorialCard";
 import { RulesDialog } from "./page/RulesDialog";
 import { TeamInfoDialog } from "./page/TeamInfoDialog";
 import { PointBreakdownDialog } from "./page/PointBreakdownDialog";
@@ -156,6 +157,7 @@ const comicTheme: ThemeDefinition = {
     TileModal,
     PageHeader,
     SubmissionsDrawer,
+    TutorialCard,
     RulesDialog,
     TeamInfoDialog,
     PointBreakdownDialog,

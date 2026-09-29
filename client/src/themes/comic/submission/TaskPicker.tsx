@@ -11,7 +11,7 @@ export function TaskPicker({ task }: { task: SubmissionFlowModel["task"] }) {
   return (
     <>
       {task.options.length > 1 && (
-        <ComicField label="Part" as="div">
+        <ComicField label="Part" as="div" tutorial="submit-tile">
           <div className="flex flex-wrap gap-2">
             {task.options.map((option, i) => {
               const active = task.selectedId === option.id;
