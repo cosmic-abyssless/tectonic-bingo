@@ -37,7 +37,7 @@ export function useBingoMenuEntries(slug: string, header: BingoHeaderModel | nul
   if (header.canRewind) entries.push({ id: "rewind", text: "Rewind", label: "Rewind", wikiIcon: "Agility icon", current: page === "rewind", onAction: goTo("rewind") });
   if (header.draftRoom) {
     const label = header.draftRoom === "draft" ? "Draft room" : "Scouting room";
-    entries.push({ id: "draft", text: label, label, current: page === "draft", onAction: goTo("draft") });
+    entries.push({ id: "draft", text: label, label, wikiIcon: "Spyglass", current: page === "draft", onAction: goTo("draft") });
   }
   if (header.canOpenWrapped) entries.push({ id: "wrapped", text: "Wrapped", label: "Wrapped", wikiIcon: "Present", current: page === "wrapped", onAction: goTo("wrapped") });
   if (achievementsEligible && openAchievements) entries.push({ id: "achievements", text: "Achievements", label: "Achievements", wikiIcon: "Achievement Diaries icon", onAction: openAchievements });
