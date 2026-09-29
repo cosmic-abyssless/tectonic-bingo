@@ -207,7 +207,8 @@ function shownRect(el: HTMLElement, overlay: HTMLElement): ShownRect {
   const x = Math.min(Math.max(r.left + r.width / 2, 0), window.innerWidth - 1);
   const onTop = (y: number) => {
     const hit = document.elementsFromPoint(x, y).find((h) => !overlay.contains(h));
-    return !!hit && el.contains(hit);
+    // Something it's inside counts too: the hit test passes over it while it takes no clicks (see isShown).
+    return !!hit && (el.contains(hit) || hit.contains(el));
   };
   if (!onTop(top + 1)) {
     let y = top;
@@ -249,9 +250,11 @@ function isShown(el: HTMLElement, overlay: HTMLElement): boolean {
   // Scrolled away, off the window or out of the dialog it's in: it's there (it gets scrolled to) unless it's hidden.
   if (right <= left || bottom <= top || scrolledAway(el)) return el.checkVisibility?.({ visibilityProperty: true }) ?? true;
   // On screen: whatever's on top at its middle has to be it (not a page stacked over it, or a dialog's backdrop), or
-  // its dialog's sticky header, which scrolling it to the middle brings it out from under.
+  // its dialog's sticky header, which scrolling it to the middle brings it out from under. Or something it's inside: a
+  // hit test passes over what doesn't take clicks (the comic Tile's book, until it has landed), finding what holds it,
+  // and nothing is over it then either.
   const topmost = topmostAt(el, overlay);
-  return !!topmost && (el.contains(topmost) || underStickyHeader(el, topmost));
+  return !!topmost && (el.contains(topmost) || topmost.contains(el) || underStickyHeader(el, topmost));
 }
 
 /** What's on top at the middle of the part of the element in the window, the overlay aside. */
