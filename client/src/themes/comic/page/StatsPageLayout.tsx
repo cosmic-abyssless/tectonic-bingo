@@ -1,22 +1,18 @@
-import { useAchievementsEligible, useOpenAchievements } from "../../../core/achievements/AchievementsProvider";
+import { useBingoHeader, useBingoMenuEntries } from "../../../headless";
 import { AppHeader } from "../../../core/ui/AppHeader";
-import { MenuItem } from "../../../core/ui/Menu";
 import { StatsView } from "../../../core/stats/StatsView";
 import { ComicPage } from "../fx/ComicPage";
 import { comicHeaderProps } from "./headerStyle";
+import { ModPanelLink } from "./Masthead";
 
 export function StatsPageLayout({ slug, bingoName }: { slug: string; bingoName: string }) {
-  const achievementsEligible = useAchievementsEligible();
-  const openAchievements = useOpenAchievements();
+  const header = useBingoHeader(slug);
+  const menuEntries = useBingoMenuEntries(slug, header);
   return (
     <ComicPage>
-      <AppHeader
-        back={{ to: `/b/${slug}`, label: "Back to bingo" }}
-        title="Stats"
-        subtitle={bingoName}
-        menuItems={achievementsEligible && openAchievements ? <MenuItem id="achievements" onAction={openAchievements}>Achievements</MenuItem> : undefined}
-        {...comicHeaderProps()}
-      />
+      <AppHeader back={{ to: `/b/${slug}`, label: "Back to bingo" }} title="Stats" subtitle={bingoName} menuEntries={menuEntries} {...comicHeaderProps()}>
+        {header?.isMod && <ModPanelLink slug={slug} pendingCount={header.pendingCount} />}
+      </AppHeader>
       <StatsView slug={slug} />
     </ComicPage>
   );

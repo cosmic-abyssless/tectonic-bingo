@@ -13,3 +13,5 @@ export type { BingoHeaderModel } from "./useBingoHeader";
 export type * from "./types";
 export { useRewindModel } from "./RewindProvider";
 export { useWrappedModel } from "./WrappedProvider";
+export { useBingoMenuEntries } from "./useBingoMenuEntries";
+export type { BoardMenuActions } from "./useBingoMenuEntries";

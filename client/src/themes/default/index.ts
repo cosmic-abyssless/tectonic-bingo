@@ -2,6 +2,7 @@ import type { ThemeDefinition } from "../registry";
 import { BugReportButton } from "../../core/ui/BugReportButton";
 import { PlainButton } from "../../core/ui/Button";
 import { PlainMenu, PlainMenuItem } from "../../core/ui/Menu";
+import { PlainHeaderMenu } from "../../core/ui/headerMenu";
 import { PlainNotice } from "../../core/ui/Card";
 import { PlainPanel } from "../../core/ui/Panel";
 import { PlainTitleChip, PlainTitleGroupBox } from "../../core/stats/TitleChrome";
@@ -127,6 +128,7 @@ export const defaultTheme: ThemeDefinition = {
     DialogHeader,
     PickerFrame: Picker,
     BugReportButton,
+    HeaderMenu: PlainHeaderMenu,
     Button: PlainButton,
     Menu: PlainMenu,
     MenuItem: PlainMenuItem,

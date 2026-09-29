@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion, useReducedMotion, useScroll } from "motion/react";
 import type { WrappedArtFrames } from "@bingo/shared";
-import { useWrappedModel } from "../../../headless";
+import { useBingoHeader, useBingoMenuEntries, useWrappedModel } from "../../../headless";
 import type { WrappedSectionModel } from "../../../headless/types";
 import { AppHeader } from "../../../core/ui/AppHeader";
 import { Badge } from "../../../core/ui/Card";
@@ -10,6 +10,7 @@ import { ChevronDownIcon } from "../../../core/ui/icons";
 import { WRAPPED_CARDS_ID } from "../../../core/wrapped/ShareCards";
 import { StickerArt } from "../../../core/wrapped/StickerArt";
 import { useSlot } from "../../context";
+import { ModPanelButton } from "../page/ModPanelButton";
 
 /**
  * Wrapped's page: the story's sections one after another, each through its own slot, under a thin bar that fills as
@@ -21,6 +22,8 @@ export function WrappedPageLayout() {
   const { scrollYProgress } = useScroll();
   const active = useActiveSection(wrapped.sections.map((s) => s.id));
   const reduceMotion = useReducedMotion();
+  const header = useBingoHeader(wrapped.slug);
+  const menuEntries = useBingoMenuEntries(wrapped.slug, header);
   const { outroReached } = wrapped.actions;
   useEffect(() => {
     if (active === "outro") outroReached();
@@ -61,8 +64,14 @@ export function WrappedPageLayout() {
 
   return (
     <div className="min-h-dvh bg-background text-on-surface">
-      <AppHeader back={{ to: `/b/${wrapped.slug}`, label: "Back to bingo" }} title="Wrapped" subtitle={wrapped.publishedLabel ?? wrapped.bingoName}>
-        {wrapped.preview && <Badge tone="warn">Preview</Badge>}
+      <AppHeader
+        back={{ to: `/b/${wrapped.slug}`, label: "Back to bingo" }}
+        title="Wrapped"
+        subtitle={wrapped.publishedLabel ?? wrapped.bingoName}
+        menuEntries={menuEntries}
+        controls={wrapped.preview && <Badge tone="warn">Preview</Badge>}
+      >
+        {header?.isMod && <ModPanelButton slug={wrapped.slug} pendingCount={header.pendingCount} />}
       </AppHeader>
       <motion.div aria-hidden className="fixed inset-x-0 top-0 z-50 h-1 origin-left bg-on-surface" style={{ scaleX: scrollYProgress }} />
 

@@ -1,20 +1,30 @@
-import type { BingoPageModel } from "../../../headless/types";
+import { useBingoHeader, useBingoMenuEntries, type BingoPageModel } from "../../../headless";
 import { useAuth } from "../../../context/AuthContext";
-import { useAchievementsEligible, useOpenAchievements } from "../../../core/achievements/AchievementsProvider";
 import { AppHeader } from "../../../core/ui/AppHeader";
 import { Button } from "../../../core/ui/Button";
 import { Badge } from "../../../core/ui/Card";
 import { CountdownTimer } from "../../../core/ui/CountdownTimer";
-import { MenuItem } from "../../../core/ui/Menu";
-import { RewindIcon, UsersIcon } from "../../../core/ui/icons";
 import { useSlot } from "../../context";
+import { ModPanelButton } from "./ModPanelButton";
 
 export function PageHeader({ page }: { page: BingoPageModel }) {
   const { user, devMode } = useAuth();
   const TeamSelector = useSlot("TeamSelector");
-  const TeamBadge = useSlot("TeamBadge");
-  const achievementsEligible = useAchievementsEligible();
-  const openAchievements = useOpenAchievements();
+  const menuEntries = useBingoMenuEntries(page.slug, useBingoHeader(page.slug), {
+    submissions: page.teamSelector.selectedId
+      ? {
+          badge:
+            page.viewing.pendingSubmissionCount > 0 ? (
+              <Badge tone="warn" className="num -my-1">
+                {page.viewing.pendingSubmissionCount}
+              </Badge>
+            ) : undefined,
+          onShow: page.drawer.show,
+        }
+      : undefined,
+    team: page.viewing.team ? { name: page.viewing.team.name, onShow: page.teamInfo.show } : undefined,
+    onShowRules: page.rules.show,
+  });
 
   return (
     <AppHeader
@@ -32,55 +42,10 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
           page.bingo.stageLabel
         )
       }
-      menuItems={achievementsEligible && openAchievements ? <MenuItem id="achievements" onAction={openAchievements}>Achievements</MenuItem> : undefined}
+      menuEntries={menuEntries}
+      controls={page.canPickTeam && page.teams.length > 0 && <TeamSelector selector={page.teamSelector} />}
     >
-      {page.canPickTeam && page.teams.length > 0 && (
-        <>
-          <TeamSelector selector={page.teamSelector} />
-          {page.viewing.team && (
-            <Button size="sm" aria-label={`${page.viewing.team.name} roster`} className="px-2" onPress={page.teamInfo.show}>
-              <UsersIcon />
-            </Button>
-          )}
-        </>
-      )}
-      {!page.canPickTeam && page.myTeam && <TeamBadge team={page.myTeam} onPress={page.teamInfo.show} />}
-      {(page.bingo.rulesMarkdown || page.bingo.rulesComeLater) && (
-        <Button size="sm" variant="ghost" onPress={page.rules.show}>
-          Rules
-        </Button>
-      )}
-      {page.canViewStats && (
-        <Button size="sm" variant="ghost" onPress={page.actions.goToStats}>
-          Stats
-        </Button>
-      )}
-      {page.canRewind && (
-        <Button size="sm" variant="ghost" onPress={page.actions.goToRewind}>
-          <RewindIcon />
-          Rewind
-        </Button>
-      )}
-      {page.isMod && (
-        <Button size="sm" onPress={page.actions.goToMod}>
-          Mod panel
-          {page.pendingCount > 0 && (
-            <Badge tone="warn" className="num -my-1">
-              {page.pendingCount}
-            </Badge>
-          )}
-        </Button>
-      )}
-      {page.teamSelector.selectedId && (
-        <Button size="sm" onPress={page.drawer.show}>
-          Submissions
-          {page.viewing.pendingSubmissionCount > 0 && (
-            <Badge tone="warn" className="num -my-1">
-              {page.viewing.pendingSubmissionCount}
-            </Badge>
-          )}
-        </Button>
-      )}
+      {page.isMod && <ModPanelButton slug={page.slug} pendingCount={page.pendingCount} />}
       {page.canSubmit && (
         <Button size="sm" variant="primary" onPress={() => page.submit.show()}>
           Submit

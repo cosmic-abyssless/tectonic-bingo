@@ -24,7 +24,6 @@ import { AppHeader } from "../core/ui/AppHeader";
 import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { Button } from "../core/ui/Button";
 import { Dialog, DialogHeader } from "../core/ui/Dialog";
-import { MenuItem } from "../core/ui/Menu";
 import { usePreference } from "../core/ui/preferences";
 import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 import { useUrlParam } from "../core/ui/useUrlParam";
@@ -135,12 +134,15 @@ export function ModPage() {
         back={{ to: `/b/${slug}`, label: "Back to bingo" }}
         title="Mod panel"
         subtitle={shell.bingo.name}
-        menuItems={
-          <MenuItem id="outOfStageTabs" className="justify-between" onAction={() => setOutOfStageTabs(outOfStageTabs === "hide" ? "dim" : "hide")}>
-            Out-of-stage tabs
-            <span className="text-xs text-on-surface-subtle">{outOfStageTabs === "hide" ? "Hidden" : "Dimmed"}</span>
-          </MenuItem>
-        }
+        menuEntries={[
+          {
+            id: "outOfStageTabs",
+            text: "Out-of-stage tabs",
+            label: "Out-of-stage tabs",
+            badge: <span className="ml-auto pl-3 text-xs text-on-surface-subtle">{outOfStageTabs === "hide" ? "Hidden" : "Dimmed"}</span>,
+            onAction: () => setOutOfStageTabs(outOfStageTabs === "hide" ? "dim" : "hide"),
+          },
+        ]}
       />
 
       {/* Full width now (was max-w-6xl on the whole <main>) — but only the Signups tab actually wants that (its
