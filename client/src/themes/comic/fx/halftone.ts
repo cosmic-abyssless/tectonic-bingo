@@ -32,7 +32,8 @@ export function halftoneUrl(key: string, sheet: HalftoneSheet): string | null {
   return url;
 }
 
-function drawHalftone({ width, height, step, tone, color = "#000", scale = 1 }: HalftoneSheet): string | null {
+/** The sheet as a PNG data URL, drawn now and not kept; null where there's no canvas to draw on (tests). */
+export function drawHalftone({ width, height, step, tone, color = "#000", scale = 1 }: HalftoneSheet): string | null {
   if (typeof document === "undefined") return null;
   const canvas = document.createElement("canvas");
   canvas.width = Math.ceil(width * scale);
@@ -55,4 +56,36 @@ function drawHalftone({ width, height, step, tone, color = "#000", scale = 1 }: 
   }
   ctx.fill();
   return canvas.toDataURL("image/png");
+}
+
+/**
+ * The page's printed vignette, the size of the viewport: nothing in the middle, dots growing towards the corners. A
+ * mask (black dots), for a layer of the halftone ink. The height is rounded up to 80px, so a phone's address bar
+ * sliding in and out doesn't redraw it (the mask stretches the few pixels instead). Only the latest size is kept.
+ */
+let screen: { key: string; url: string | null } | null = null;
+export function screenHalftone(): string | null {
+  if (typeof window === "undefined") return null;
+  const width = window.innerWidth;
+  const height = Math.ceil(window.innerHeight / 80) * 80;
+  const scale = window.devicePixelRatio || 1;
+  const key = `${width}x${height}@${scale}`;
+  if (screen?.key !== key) {
+    // A corner is 1 away from the middle; the dots start 30% of the way out and reach a little over half tone there.
+    const reach = Math.hypot(width, height) / 2;
+    const tone: HalftoneTone = (x, y) => 0.55 * ((Math.hypot(x - width / 2, y - height / 2) / reach - 0.3) / 0.7);
+    screen = { key, url: drawHalftone({ width, height, step: 6, tone, scale }) };
+  }
+  return screen.url;
+}
+
+/**
+ * A printed shade for a box `width` wide: nothing up to `from` (a percentage of the width), then dots growing to the
+ * right edge, never quite closing up. A mask one screen period tall, to repeat down the box.
+ */
+export function shadeHalftone(width: number, from: number): { url: string | null; height: number } {
+  const step = 5;
+  const scale = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+  const tone: HalftoneTone = (x) => 0.5 * ((x / width - from / 100) / (1 - from / 100));
+  return { url: halftoneUrl(`shade:${width}:${from}@${scale}`, { width, height: step, step, tone, scale }), height: step };
 }

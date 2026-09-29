@@ -5,6 +5,7 @@ import { useThemeTokens } from "../../context";
 import { tokensToCssVars } from "../../tokens";
 import { XIcon } from "../../../core/ui/icons";
 import { COMIC_FONT } from "../font";
+import { halftoneLayerStyle, useScreenHalftone } from "../fx/Halftone";
 import { ComicBurstRays } from "./ComicBurst";
 import { ComicIconButton } from "./ComicButton";
 import { isDarkPaper, PrintedShade, toneColors, type ToneOrColor } from "./tones";
@@ -41,6 +42,7 @@ export function ComicBackdrop({ className }: { className?: string }) {
   const { colors } = useComic();
   const reduceMotion = useReducedMotion();
   const stacked = useModalDepth() > 0;
+  const dots = useScreenHalftone();
   return (
     <div aria-hidden className={`pointer-events-none absolute inset-0 overflow-hidden ${className ?? ""}`}>
       <div className="absolute inset-0" style={{ background: colors.SCRIM, opacity: stacked ? 0.55 : 0.7 }} />
@@ -49,7 +51,7 @@ export function ComicBackdrop({ className }: { className?: string }) {
           <div className="absolute inset-0 flex items-center justify-center">
             <ComicBurstRays reduceMotion={!!reduceMotion} />
           </div>
-          <div className="comic-halftone" style={{ position: "absolute", ["--comic-halftone-ink" as string]: colors.YELLOW, ["--comic-halftone-opacity" as string]: 0.18 } as CSSProperties} />
+          {dots && <div className="comic-halftone" style={halftoneLayerStyle(dots, { position: "absolute", ["--comic-halftone-ink" as string]: colors.YELLOW, ["--comic-halftone-opacity" as string]: 0.18 } as CSSProperties)} />}
         </>
       )}
     </div>
