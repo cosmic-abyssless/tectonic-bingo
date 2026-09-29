@@ -2,7 +2,7 @@
 // teams and play the bingo to the target stage, every write through the real endpoints at spoofed times.
 // Driven by the in-server job (job.ts, started from the site admin's Test data tab) and by the CLI
 // (scripts/generate-bingo/generate.ts). See docs/generate-bingo.md.
-import type { BingoExportDocument } from "@bingo/shared";
+import { isHistoricalTestDataStage, type BingoExportDocument } from "@bingo/shared";
 import { buildBoard } from "./board";
 import type { Api } from "./client";
 import type { GenerateOptions } from "./options";
@@ -86,8 +86,8 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   const result: RunResult = { slug, problems: [] };
 
   // A Historical Bingo isn't played: it's imported, ended long ago (historical.ts).
-  if (options.stage === "historical") {
-    log(`slug ${slug}, seed ${options.seed}, ${options.teams} teams of ${options.teamSize}, historical`);
+  if (isHistoricalTestDataStage(options.stage)) {
+    log(`slug ${slug}, seed ${options.seed}, ${options.teams} teams of ${options.teamSize}, ${options.stage}`);
     const document = await boardDocument(input);
     const me = options.me ? await findMe(api, options.me, options.teams * options.teamSize - 1) : null;
     await runHistorical({ api, adminDiscordId, options, document, rng, me, now, log });

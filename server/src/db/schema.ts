@@ -744,7 +744,10 @@ export const submissionScreenshots = sqliteTable('submission_screenshots', {
   screenshotType: text('screenshot_type', {
     enum: ['main', 'proof', 'bank', 'collection_log', 'other'],
   }).notNull().default('main'),
+  // Empty while a Historical Bingo's (CONTEXT.md) screenshot is still to be uploaded (see historicalKey).
   storageUrl: text('storage_url').notNull(),
+  // A Historical Bingo's only: the screenshot's key in its import bundle, which the upload that attaches the file names.
+  historicalKey: text('historical_key'),
   scrapeStatus: text('scrape_status', {
     enum: ['pending', 'processing', 'completed', 'failed'],
   }).notNull().default('pending'),

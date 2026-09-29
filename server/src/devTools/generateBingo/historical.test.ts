@@ -87,3 +87,82 @@ describe("a generated historical bundle", () => {
     }
   });
 });
+
+// `--stage historical-rich` (historicalRich.ts): a board with every kind of requirement, a withheld Task, Proof
+// screenshots and Lines.
+const node = (localId: number, kind: string, extra: Record<string, unknown> = {}) => ({ ...task(localId, `Node ${localId}`, 0), kind, itemName: null, ...extra });
+const richDocument = {
+  ...document,
+  tiles: document.tiles.map((t, i) =>
+    i === 0
+      ? {
+          ...t, requiresProof: true, proofNote: "Kill count", hasFreezePeriod: true, freezeDurationMinutes: 30,
+          tasks: [
+            node(101, "ANY", { label: "Any unique", points: 10, children: [task(102, "Head", 0), task(103, "Visage", 0)] }),
+            { ...task(104, "Necklace", 20), pointsGateLocalId: 101 },
+          ],
+        }
+      : i === 1
+        ? {
+            ...t,
+            tasks: [
+              node(111, "SUM", { label: "Five fangs", points: 15, quantity: 5, children: [task(112, "Tanzanite fang", 0), task(113, "Magic fang", 0)] }),
+              node(114, "COUNT", { label: "Two of three", points: 10, minCount: 2, children: [task(115, "Ahrim's hood", 0), task(116, "Dharok's axe", 0), node(117, "MANUAL", { label: "A clue" })] }),
+              node(118, "MANUAL", { label: "Clan call", points: 5, requiresProof: true, proofNote: "Everyone in shot" }),
+            ],
+          }
+        : t,
+  ),
+  lines: [{ lineType: "row", lineIndex: 0, points: 50 }, { lineType: "diagonal", lineIndex: 0, points: 40 }],
+} as unknown as BingoExportDocument;
+
+function richBundleFor(seed: number, withMe = false) {
+  const options = normalizeOptions({ stage: "historical-rich", slug: "testdata-rich", seed, teams: 4, teamSize: 5 });
+  return buildHistoricalBundle({ options, document: richDocument, rng: new Rng(seed), me: withMe ? me : null, now });
+}
+
+describe("a generated rich historical bundle", () => {
+  it("passes the bundle checks for any seed", async () => {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      expect(validateHistoricalBundle(await richBundleFor(seed, seed % 2 === 0), { devDiscordIds: true }).problems).toEqual([]);
+    }
+  });
+
+  it("has the board's Tasks, Lines, Signups with Cut signups, a Draft and Submissions", async () => {
+    const bundle = await richBundleFor(9);
+    expect(bundle.version).toBe(2);
+    const first = bundle.tiles.find((t) => t.boardRow === 0 && t.boardCol === 0)!;
+    expect(first).toMatchObject({ points: 5, freezeMinutes: 30, requiresProof: true, proofNote: "Kill count" });
+    expect(first.tasks!.map((t) => [t.kind, t.label, t.points, t.withholdUntilPrevious])).toEqual([["ANY", "Any unique", 10, false], ["ITEM", "Necklace", 20, true]]);
+    expect(bundle.tiles.find((t) => t.boardRow === 0 && t.boardCol === 1)!.tasks!.map((t) => t.kind)).toEqual(["SUM", "COUNT", "MANUAL"]);
+    expect(bundle.lines).toEqual([{ type: "row", index: 0, points: 50 }, { type: "diagonal", index: 0, points: 40 }]);
+    expect(bundle.signups!.entries.filter((e) => e.cut)).toHaveLength(2);
+    expect(bundle.draft!.picks.length).toBe(bundle.players.length - bundle.teams.reduce((n, t) => n + 1 + (t.coCaptain ? 1 : 0), 0));
+    const statuses = new Set(bundle.submissions!.map((s) => `${s.kind ?? "drop"} ${s.status}`));
+    expect([...statuses].sort()).toEqual(["drop approved", "drop rejected", "proof approved"]);
+  });
+
+  it("makes the same people as a sparse one, and is the same for a seed", async () => {
+    const sparse = await bundleFor(11);
+    const rich = await richBundleFor(11);
+    expect(rich.players.map((p) => p.rsn)).toEqual(sparse.players.map((p) => p.rsn.replace("testdata-hist", "testdata-rich")));
+    expect(JSON.stringify(await richBundleFor(11))).toBe(JSON.stringify(rich));
+  });
+
+  it("imports, and the engine scores it", async () => {
+    const { db, sqlite } = createTestDb();
+    const uploadsDir = fs.mkdtempSync(path.join(os.tmpdir(), "generated-historical-"));
+    try {
+      vi.stubEnv("DEV_LOGIN_ENABLED", "true");
+      vi.stubEnv("NODE_ENV", "development");
+      const admin = db.insert(schema.users).values({ discordId: "admin", discordUsername: "admin" }).returning().get();
+      const { scoring } = await importHistoricalBundle(db, await richBundleFor(5, true), { createdByUserId: admin.id, uploadsDir });
+      expect(scoring!.teams).toHaveLength(4);
+      expect(scoring!.teams.some((t) => t.total > 0)).toBe(true);
+      for (const t of scoring!.teams) expect(t.perDay.reduce((n, d) => n + d.points, 0)).toBe(t.total);
+    } finally {
+      sqlite.close();
+      fs.rmSync(uploadsDir, { recursive: true, force: true });
+    }
+  });
+});

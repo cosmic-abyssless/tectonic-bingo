@@ -68,7 +68,7 @@ function GenerateForm({ running, onStarted }: { running: boolean; onStarted: () 
         <Field label="Copy the board of" hint="Its tiles, lines, rules and signup questions. Nothing else is copied.">
           <Select value={source} onChange={setFrom} options={sources.map((b) => ({ value: b.slug, label: `${b.name} (${b.slug})` }))} />
         </Field>
-        <Field label="Leave it at" hint={stage === "draft" ? "Halfway through the draft." : stage === "historical" ? "A read-only Historical Bingo with this board's Tiles, imported from a made-up bundle." : undefined}>
+        <Field label="Leave it at" hint={STAGE_HINT[stage]}>
           <Select value={stage} onChange={(s) => setStage(s as TestDataStage)} options={TEST_DATA_STAGES.map((s) => ({ value: s, label: TEST_DATA_STAGE_LABEL[s] }))} />
         </Field>
         {stage === "live" && (
@@ -179,6 +179,12 @@ function TestBingoRow({ bingo, busy }: { bingo: TestDataBingo; busy: boolean }) 
     </li>
   );
 }
+
+const STAGE_HINT: Partial<Record<TestDataStage, string>> = {
+  draft: "Halfway through the draft.",
+  historical: "A read-only Historical Bingo with this board's Tiles, imported from a made-up bundle.",
+  "historical-rich": "A read-only Historical Bingo with this board's Tiles and Tasks, and made-up Submissions, Signups and a Draft, imported from a bundle.",
+};
 
 export function TestDataPanel() {
   const queryClient = useQueryClient();

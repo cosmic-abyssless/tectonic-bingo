@@ -7,9 +7,11 @@
 // transaction, so the Tile images are written first and deleted again if the import fails.
 import { and, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { validateHistoricalBundle, type HistoricalBundle } from "@bingo/shared";
+import { validateHistoricalBundle, type GraphNodeInput, type HistoricalBundle, type HistoricalBundleNode, type HistoricalBundleTask, type HistoricalImportScoring } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { bingos, historicalStandings, nodes, signups, teamMembers, teams, tiles, users, womPastCompetitions } from "../db/schema";
+import {
+  bingoLines, bingos, claims, draftPicks, historicalStandings, nodeEdges, nodes, signupAnswers, signupQuestions, signups, submissionScreenshots, submissions, teamMembers, teamNodeState, teams, tiles, users, womPastCompetitions,
+} from "../db/schema";
 import { audit } from "../audit/record";
 import { now as clockNow } from "../clock";
 import { isDevModeActive } from "../devMode";
@@ -17,6 +19,8 @@ import { ServiceError } from "./errors";
 import { decodeExportImage, removeFiles, storeTileImage, type DecodedImage } from "./exportImages";
 import { parseCompetitionSummary } from "./pastWomCompetitionService";
 import { generateCodeword, nextTeamColor } from "./teamService";
+import { insertSubtree } from "./graphService";
+import { rebuildTeamState } from "./scoringService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -24,6 +28,8 @@ export interface HistoricalImportResult {
   bingo: typeof bingos.$inferSelect;
   /** Players who had no user yet, so one was made for them. */
   usersCreated: number;
+  /** A rich Bingo's scoring, recomputed by the engine from its Submissions; null for a sparse one. */
+  scoring: HistoricalImportScoring | null;
 }
 
 /** A bundle that failed its checks: every problem, one per line, so the Site Admin can fix them all in one go. */
@@ -107,12 +113,14 @@ export function writeHistoricalBingo(db: Db, bundle: HistoricalBundle, imageUrls
     const at = clockNow();
     const startsAt = new Date(bundle.bingo.startsAt);
     const endsAt = new Date(bundle.bingo.endsAt);
+    const cutSignups = (bundle.signups?.entries ?? []).filter((e) => e.cut);
 
     // Users: found by Discord id. An existing user is left as they are; a new one is named from the clan's records,
-    // or by the RSN they played under when they've left the clan (and then locked out like any non-member).
+    // or by the RSN they played under when they've left the clan (and then locked out like any non-member). Cut
+    // signups bring their own RSN and clan name.
     let usersCreated = 0;
     const userIdByDiscordId = new Map<string, string>();
-    for (const p of bundle.players) {
+    for (const p of [...bundle.players, ...cutSignups.map((e) => ({ discordId: e.discordId, rsn: e.rsn!, clan: e.clan ?? null }))]) {
       const existing = tx.select({ id: users.id }).from(users).where(eq(users.discordId, p.discordId)).get();
       if (existing) {
         userIdByDiscordId.set(p.discordId, existing.id);
@@ -126,6 +134,7 @@ export function writeHistoricalBingo(db: Db, bundle: HistoricalBundle, imageUrls
       userIdByDiscordId.set(p.discordId, created.id);
       usersCreated++;
     }
+    const userOf = (discordId: string) => userIdByDiscordId.get(discordId)!;
 
     const bingo = tx
       .insert(bingos)
@@ -147,41 +156,116 @@ export function writeHistoricalBingo(db: Db, bundle: HistoricalBundle, imageUrls
       .returning()
       .get();
 
-    // A Signup per Player, under the RSN they played this Bingo with.
-    for (const p of bundle.players) {
-      tx.insert(signups).values({ bingoId: bingo.id, userId: userIdByDiscordId.get(p.discordId)!, rsn: p.rsn.trim(), createdAt: startsAt }).run();
-    }
+    writeSignups(tx, bingo.id, bundle, userOf, startsAt);
 
     // Teams: the Captain and co-captain lead, the rest are members.
     const teamIdByName = new Map<string, string>();
+    const captainOf = new Map<string, string>(); // Team id → Captain's user id
     const codewords = new Set<string>();
+    const draftOrder = (bundle.draft?.order ?? []).map((n) => n.trim().toLowerCase());
     for (const t of bundle.teams) {
       let codeword = generateCodeword();
       for (let n = 2; codewords.has(codeword); n++) codeword = `${generateCodeword()}-${n}`;
       codewords.add(codeword);
+      const position = draftOrder.indexOf(t.name.trim().toLowerCase());
       const team = tx
         .insert(teams)
-        .values({ bingoId: bingo.id, captainUserId: userIdByDiscordId.get(t.captain)!, name: t.name.trim(), codeword, color: t.color ?? nextTeamColor(tx, bingo.id), createdAt: at, updatedAt: at })
+        .values({
+          bingoId: bingo.id, captainUserId: userOf(t.captain), name: t.name.trim(), codeword, color: t.color ?? nextTeamColor(tx, bingo.id),
+          draftOrder: position >= 0 ? position + 1 : null, createdAt: at, updatedAt: at,
+        })
         .returning({ id: teams.id })
         .get();
       teamIdByName.set(t.name.trim().toLowerCase(), team.id);
+      captainOf.set(team.id, userOf(t.captain));
       for (const discordId of t.players) {
-        tx.insert(teamMembers)
-          .values({ teamId: team.id, userId: userIdByDiscordId.get(discordId)!, isCaptain: discordId === t.captain, isCoCaptain: discordId === t.coCaptain, joinedAt: startsAt })
-          .run();
+        tx.insert(teamMembers).values({ teamId: team.id, userId: userOf(discordId), isCaptain: discordId === t.captain, isCoCaptain: discordId === t.coCaptain, joinedAt: startsAt }).run();
+      }
+    }
+    const teamId = (name: string) => teamIdByName.get(name.trim().toLowerCase())!;
+
+    // Tiles: a picture each; its points, when known, are its own node's (with Tasks, the bonus for all of them).
+    const nodeIdByKey = new Map<string, string>();
+    const tileIdAt = new Map<string, { id: string; nodeId: string }>();
+    const manualCompletions: { nodeId: string; completions: NonNullable<HistoricalBundleTask["completions"]> }[] = [];
+    let hasTasks = false;
+    for (const t of bundle.tiles) {
+      const node = tx.insert(nodes).values({ bingoId: bingo.id, kind: "ALL", points: t.points ?? 0 }).returning({ id: nodes.id }).get();
+      const tile = tx
+        .insert(tiles)
+        .values({
+          bingoId: bingo.id, nodeId: node.id, name: t.name.trim(), imageUrl: imageUrls.get(t.image) ?? null, boardRow: t.boardRow, boardCol: t.boardCol, rulesText: t.rules?.trim() || null,
+          hasFreezePeriod: !!t.freezeMinutes, freezeDurationMinutes: t.freezeMinutes ?? 0, requiresProof: t.requiresProof === true, proofNote: t.requiresProof ? t.proofNote?.trim() || null : null, createdAt: at,
+        })
+        .returning({ id: tiles.id })
+        .get();
+      tileIdAt.set(`${t.boardRow},${t.boardCol}`, { id: tile.id, nodeId: node.id });
+      let previous: string | null = null;
+      for (const [i, task] of (t.tasks ?? []).entries()) {
+        hasTasks = true;
+        const input = { ...toGraphInput(task, nodeIdByKey), description: task.description ?? null, pointsGateNodeId: task.withholdUntilPrevious ? previous : null, requiresProof: task.requiresProof === true, proofNote: task.proofNote ?? null };
+        const taskNodeId = insertSubtree(tx, bingo.id, input);
+        tx.insert(nodeEdges).values({ parentId: node.id, childId: taskNodeId, sortOrder: i }).run();
+        if (task.kind === "MANUAL" && task.completions?.length) manualCompletions.push({ nodeId: taskNodeId, completions: task.completions });
+        previous = taskNodeId;
       }
     }
 
-    // Tiles: a picture each, no Tasks. Its points, when known, are its own node's.
-    for (const t of bundle.tiles) {
-      const node = tx.insert(nodes).values({ bingoId: bingo.id, kind: "ALL", points: t.points ?? 0 }).returning({ id: nodes.id }).get();
-      tx.insert(tiles)
-        .values({ bingoId: bingo.id, nodeId: node.id, name: t.name.trim(), imageUrl: imageUrls.get(t.image) ?? null, boardRow: t.boardRow, boardCol: t.boardCol, rulesText: t.rules?.trim() || null, createdAt: at })
-        .run();
+    // Lines: an ALL over their Tiles' nodes, whose points are the Line bonus.
+    for (const l of bundle.lines ?? []) {
+      const nodeId = insertSubtree(tx, bingo.id, { kind: "ALL", points: l.points });
+      lineCells(l, bundle.bingo.boardRows, bundle.bingo.boardCols).forEach((c, i) => {
+        const tile = tileIdAt.get(`${c.boardRow},${c.boardCol}`);
+        if (tile) tx.insert(nodeEdges).values({ parentId: nodeId, childId: tile.nodeId, sortOrder: i }).run();
+      });
+      tx.insert(bingoLines).values({ bingoId: bingo.id, nodeId, lineType: l.type, lineIndex: l.index }).run();
+    }
+
+    // Submissions, reviewed when they were, by nobody recorded. Screenshots wait for their upload (#320).
+    for (const sub of bundle.submissions ?? []) {
+      const kind = sub.kind ?? "drop";
+      const proofTile = kind === "proof" && sub.proof ? tileIdAt.get(`${sub.proof.boardRow},${sub.proof.boardCol}`) : undefined;
+      const submittedAt = new Date(sub.submittedAt);
+      const row = tx
+        .insert(submissions)
+        .values({
+          teamId: teamId(sub.team), submittedByUserId: userOf(sub.player), kind, proofTileId: proofTile?.id ?? null, proofTaskId: kind === "proof" && sub.proof?.task ? nodeIdByKey.get(sub.proof.task)! : null,
+          status: sub.status, submittedAt, reviewedAt: new Date(sub.reviewedAt), reviewedByUserId: null, createdAt: submittedAt, updatedAt: new Date(sub.reviewedAt),
+        })
+        .returning({ id: submissions.id })
+        .get();
+      if (sub.screenshot) {
+        tx.insert(submissionScreenshots).values({ submissionId: row.id, screenshotType: kind === "proof" ? "proof" : "main", storageUrl: "", historicalKey: sub.screenshot, uploadedAt: submittedAt }).run();
+      }
+      for (const c of kind === "drop" ? (sub.claims ?? []) : []) {
+        tx.insert(claims).values({ submissionId: row.id, nodeId: nodeIdByKey.get(c.leaf)!, itemName: c.item?.trim() || null, quantity: c.quantity }).run();
+      }
+    }
+    // A MANUAL Task given to a Team: an approved claim on it, credited to the Team's Captain, with no screenshot.
+    for (const { nodeId, completions } of manualCompletions) {
+      for (const c of completions) {
+        const when = new Date(c.at);
+        const team = teamId(c.team);
+        const row = tx
+          .insert(submissions)
+          .values({ teamId: team, submittedByUserId: captainOf.get(team)!, status: "approved", submittedAt: when, reviewedAt: when, createdAt: when, updatedAt: when })
+          .returning({ id: submissions.id })
+          .get();
+        tx.insert(claims).values({ submissionId: row.id, nodeId, itemName: null, quantity: 1 }).run();
+      }
+    }
+
+    // The Draft: every pick, made by its Team's Captain.
+    if (bundle.draft) {
+      const draftAt = new Date(bundle.draft.at);
+      for (const p of bundle.draft.picks) {
+        const team = teamId(p.team);
+        tx.insert(draftPicks).values({ bingoId: bingo.id, pickNumber: p.pick, teamId: team, userId: userOf(p.player), pickedByUserId: captainOf.get(team)!, createdAt: draftAt }).run();
+      }
     }
 
     for (const s of bundle.standings) {
-      tx.insert(historicalStandings).values({ bingoId: bingo.id, teamId: teamIdByName.get(s.team.trim().toLowerCase())!, place: s.place, points: s.points ?? null }).run();
+      tx.insert(historicalStandings).values({ bingoId: bingo.id, teamId: teamId(s.team), place: s.place, points: s.points ?? null }).run();
     }
 
     // The WOM competition. Its row may already be here (added by hand, or left detached when an earlier import of
@@ -196,6 +280,13 @@ export function writeHistoricalBingo(db: Db, bundle: HistoricalBundle, imageUrls
         .get();
       if (existing) tx.update(womPastCompetitions).set(values).where(eq(womPastCompetitions.id, existing.id)).run();
       else tx.insert(womPastCompetitions).values({ ...values, guildId: currentGuildId(), womId: bundle.wom.competitionId, addedByUserId: createdByUserId, createdAt: at }).run();
+    }
+
+    // Scoring, recomputed by the same engine a live Bingo uses, from the approved Claims: never taken from the old site.
+    let scoring: HistoricalImportScoring | null = null;
+    if (hasTasks) {
+      for (const id of teamIdByName.values()) rebuildTeamState(tx, id);
+      scoring = scoringOf(tx, bundle, bingo.id, teamId, startsAt, endsAt);
     }
 
     audit(tx, {
@@ -214,10 +305,105 @@ export function writeHistoricalBingo(db: Db, bundle: HistoricalBundle, imageUrls
           unknownPlayers: bundle.unknownPlayers.length,
           standings: bundle.standings.length,
           womCompetition: bundle.wom !== null,
+          ...(hasTasks || bundle.submissions || bundle.signups || bundle.draft
+            ? {
+                tasks: bundle.tiles.reduce((n, t) => n + (t.tasks?.length ?? 0), 0),
+                lines: bundle.lines?.length ?? 0,
+                submissions: bundle.submissions?.length ?? 0,
+                signups: bundle.signups?.entries.length ?? 0,
+                cutSignups: cutSignups.length,
+                draftPicks: bundle.draft?.picks.length ?? 0,
+              }
+            : {}),
         },
       },
     });
 
-    return { bingo, usersCreated };
+    return { bingo, usersCreated, scoring };
   });
+}
+
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+/** A bundle node as the graph's input, each with a fresh id recorded by its key (for Claims and Proof screenshots). */
+function toGraphInput(n: HistoricalBundleNode, idByKey: Map<string, string>): GraphNodeInput {
+  const id = crypto.randomUUID();
+  if (n.key) idByKey.set(n.key, id);
+  const base = { id, label: n.label?.trim() || null, points: n.points ?? 0 };
+  switch (n.kind) {
+    case "ITEM":
+      return { ...base, kind: "ITEM", itemName: n.item.trim() };
+    case "MANUAL":
+      return { ...base, kind: "MANUAL" };
+    case "COUNT":
+      return { ...base, kind: "COUNT", minCount: n.min, children: n.children.map((c) => toGraphInput(c, idByKey)) };
+    case "SUM":
+      return { ...base, kind: "SUM", quantity: n.quantity, children: n.children.map((c) => toGraphInput(c, idByKey)) };
+    default:
+      return { ...base, kind: n.kind, children: n.children.map((c) => toGraphInput(c, idByKey)) };
+  }
+}
+
+/** A Line's Tiles, by position: given for a custom Line, worked out for the rest. */
+function lineCells(l: NonNullable<HistoricalBundle["lines"]>[number], rows: number, cols: number): { boardRow: number; boardCol: number }[] {
+  if (l.type === "custom") return l.cells ?? [];
+  if (l.type === "row") return Array.from({ length: cols }, (_, c) => ({ boardRow: l.index, boardCol: c }));
+  if (l.type === "column") return Array.from({ length: rows }, (_, r) => ({ boardRow: r, boardCol: l.index }));
+  return Array.from({ length: rows }, (_, i) => ({ boardRow: i, boardCol: l.index === 0 ? i : cols - 1 - i }));
+}
+
+/**
+ * Signups: with a rich bundle's `signups`, its questions (as text, seen by Captains and up) and every entry at its
+ * time with its answers, Cut signups included; otherwise one per Player at the start. A Player's Signup carries the RSN
+ * they played under (`players`); a Cut signup's own.
+ */
+function writeSignups(tx: Tx, bingoId: string, bundle: HistoricalBundle, userOf: (discordId: string) => string, startsAt: Date): void {
+  const rsnOf = new Map(bundle.players.map((p) => [p.discordId, p.rsn.trim()]));
+  if (!bundle.signups) {
+    for (const p of bundle.players) tx.insert(signups).values({ bingoId, userId: userOf(p.discordId), rsn: p.rsn.trim(), createdAt: startsAt }).run();
+    return;
+  }
+  const questionId = new Map<string, string>();
+  bundle.signups.questions.forEach((q, i) => {
+    const row = tx.insert(signupQuestions).values({ bingoId, prompt: q.prompt.trim(), type: q.type, sortOrder: i, visibility: "captains" }).returning({ id: signupQuestions.id }).get();
+    questionId.set(q.key, row.id);
+  });
+  for (const e of bundle.signups.entries) {
+    const signup = tx
+      .insert(signups)
+      .values({ bingoId, userId: userOf(e.discordId), rsn: e.cut ? e.rsn!.trim() : rsnOf.get(e.discordId)!, timezone: e.timezone, createdAt: new Date(e.signedUpAt) })
+      .returning({ id: signups.id })
+      .get();
+    for (const [key, value] of Object.entries(e.answers)) {
+      if (value.trim()) tx.insert(signupAnswers).values({ signupId: signup.id, questionId: questionId.get(key)!, value }).run();
+    }
+  }
+}
+
+/**
+ * Each Team's recomputed total and its points by day (UTC), start to end, for the converter to check against the old
+ * site's. Points a Task withheld until the one before it count on the day that one completed, as Rewind has them.
+ */
+function scoringOf(tx: Tx, bundle: HistoricalBundle, bingoId: string, teamId: (name: string) => string, startsAt: Date, endsAt: Date): HistoricalImportScoring {
+  const day = (d: Date) => d.toISOString().slice(0, 10);
+  const days: string[] = [];
+  for (let d = new Date(Date.UTC(startsAt.getUTCFullYear(), startsAt.getUTCMonth(), startsAt.getUTCDate())); d <= endsAt; d = new Date(d.getTime() + 86_400_000)) days.push(day(d));
+  const gateOf = new Map(
+    tx.select({ id: nodes.id, gate: nodes.pointsGateNodeId }).from(nodes).where(eq(nodes.bingoId, bingoId)).all().filter((n) => n.gate).map((n) => [n.id, n.gate!]),
+  );
+  return {
+    teams: bundle.teams.map((t) => {
+      const rows = tx.select({ nodeId: teamNodeState.nodeId, completedAt: teamNodeState.completedAt, points: teamNodeState.pointsAwarded }).from(teamNodeState).where(eq(teamNodeState.teamId, teamId(t.name))).all();
+      const completedAt = new Map(rows.map((r) => [r.nodeId, r.completedAt]));
+      const byDay = new Map<string, number>();
+      for (const r of rows) {
+        if (!r.points) continue;
+        const gate = gateOf.has(r.nodeId) ? completedAt.get(gateOf.get(r.nodeId)!) : undefined;
+        const when = day(gate && gate > r.completedAt ? gate : r.completedAt);
+        byDay.set(when, (byDay.get(when) ?? 0) + r.points);
+      }
+      const allDays = [...new Set([...days, ...byDay.keys()])].sort();
+      return { team: t.name, total: rows.reduce((n, r) => n + r.points, 0), perDay: allDays.map((date) => ({ date, points: byDay.get(date) ?? 0 })) };
+    }),
+  };
 }

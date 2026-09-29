@@ -61,7 +61,7 @@ The teardown script takes the same `--base` and `--basic-auth`.
 
 | option | default | meaning |
 |---|---|---|
-| `--stage` | `live` | where to leave the bingo: `signup`, `captains`, `draft` (mid-draft), `reveal`, `live`, `complete`; or `historical` for a Historical Bingo (below) |
+| `--stage` | `live` | where to leave the bingo: `signup`, `captains`, `draft` (mid-draft), `reveal`, `live`, `complete`; or `historical` / `historical-rich` for a Historical Bingo (below) |
 | `--progress` | `0.5` | live only: how far through the event we are, 0.02-1 |
 | `--days` | `9` | length of the event |
 | `--teams` | `6` | |
@@ -170,6 +170,20 @@ through the real Site admin → Import historical Bingo endpoint:
 - dates some weeks to a year ago, `--days` long.
 
 The server accepts the made-up Discord ids only in dev mode. `--progress` and `--mods` don't apply.
+
+### `--stage historical-rich`
+
+The same, with the sections a rich bundle adds (`historicalRich.ts`), as the converter would read them off an old
+site that recorded its drops:
+- each Tile's Tasks with their requirement trees (a reused requirement is left out), Freeze and Proof screenshot
+  settings, the board's Lines, and "Withhold points until previous" where a Task's points wait on the one before;
+- Signups with answers to two questions, plus about one Cut signup per ten Players;
+- a Draft in snake order: the Captains and co-captains lead, and the Teams are the picks;
+- each Team completes some Tasks (and part of others) through approved drops with their Claims, a few rejected on
+  the way, with Proof screenshots where they're required; MANUAL Tasks are given to Teams directly.
+
+The screenshots are left pending (nothing is uploaded). The import's response has the engine's scores, which the
+run prints.
 
 ## PETS and SLAYER BOSSES (pages that share their items)
 

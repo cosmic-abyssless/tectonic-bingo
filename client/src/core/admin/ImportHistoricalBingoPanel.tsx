@@ -12,6 +12,22 @@ import { Notice } from "../ui/Card";
  * (server/scripts/historical/) becomes a new, read-only Historical Bingo. The file is checked here first, so its
  * problems show before the upload; the server checks it again, with what only it knows (a taken slug, say).
  */
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** A rich bundle's sections (version 2), or null for a sparse one. */
+function richSummary(bundle: HistoricalBundle): string | null {
+  const tasks = bundle.tiles.reduce((n, t) => n + (t.tasks?.length ?? 0), 0);
+  const cut = bundle.signups?.entries.filter((e) => e.cut).length ?? 0;
+  const parts = [
+    tasks > 0 && plural(tasks, "Task"),
+    bundle.lines?.length && plural(bundle.lines.length, "Line"),
+    bundle.submissions?.length && plural(bundle.submissions.length, "Submission"),
+    bundle.signups && `${plural(bundle.signups.entries.length, "Signup")}${cut > 0 ? ` (${cut} cut)` : ""}`,
+    bundle.draft && `a Draft of ${plural(bundle.draft.picks.length, "pick")}`,
+  ].filter((p): p is string => typeof p === "string");
+  return parts.length > 0 ? parts.join(", ") : null;
+}
+
 export function ImportHistoricalBingoPanel() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -55,7 +71,6 @@ export function ImportHistoricalBingoPanel() {
     }
   }
 
-  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
   return (
     <div className="max-w-md space-y-4">
@@ -80,6 +95,7 @@ export function ImportHistoricalBingoPanel() {
             {bundle.unknownPlayers.length > 0 && `, ${bundle.unknownPlayers.length} unknown`}
             {bundle.wom ? ", a Wise Old Man competition" : ""}
           </p>
+          {richSummary(bundle) && <p className="text-xs text-on-surface-subtle">{richSummary(bundle)}</p>}
         </div>
       )}
       {problems.length > 0 && (

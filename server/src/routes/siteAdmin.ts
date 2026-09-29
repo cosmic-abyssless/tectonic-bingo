@@ -70,8 +70,8 @@ router.post(
 router.post(
   "/historical-bingos",
   asyncHandler(async (req, res) => {
-    const { bingo, usersCreated } = await historicalImportService.importHistoricalBundle(db, req.body, { createdByUserId: req.user!.id, uploadsDir: UPLOADS_DIR });
-    res.status(201).json({ bingo: bingoService.toPublicBingo(bingo), usersCreated });
+    const { bingo, usersCreated, scoring } = await historicalImportService.importHistoricalBundle(db, req.body, { createdByUserId: req.user!.id, uploadsDir: UPLOADS_DIR });
+    res.status(201).json({ bingo: bingoService.toPublicBingo(bingo), usersCreated, scoring });
   }),
 );
 

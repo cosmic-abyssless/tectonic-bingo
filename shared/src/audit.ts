@@ -58,7 +58,11 @@ export interface AuditDetailsMap {
     slug: string;
     name: string;
     source: string;
-    counts: { tiles: number; teams: number; players: number; usersCreated: number; unknownPlayers: number; standings: number; womCompetition: boolean };
+    counts: {
+      tiles: number; teams: number; players: number; usersCreated: number; unknownPlayers: number; standings: number; womCompetition: boolean;
+      /** A rich bundle's (version 2) sections. */
+      tasks?: number; lines?: number; submissions?: number; signups?: number; cutSignups?: number; draftPicks?: number;
+    };
   };
 
   "user.admin_changed": { isAdmin: { before: boolean; after: boolean }; source: "admin_panel" | "env_bootstrap" };

@@ -3,11 +3,13 @@
 // docs/generate-bingo.md.
 
 /**
- * Where a generated bingo is left. "historical" isn't a Stage: it makes a Historical Bingo (CONTEXT.md) instead,
- * imported from a generated historical bundle through Site admin → Import historical Bingo's endpoint.
+ * Where a generated bingo is left. "historical" and "historical-rich" aren't Stages: they make a Historical Bingo
+ * (CONTEXT.md) instead, imported from a generated historical bundle through Site admin → Import historical Bingo's
+ * endpoint: a sparse one (Tiles, Teams and standings), or a rich one with Tasks, Submissions, Signups and the Draft.
  */
-export type TestDataStage = "signup" | "captains" | "draft" | "reveal" | "live" | "complete" | "historical";
-export const TEST_DATA_STAGES: readonly TestDataStage[] = ["signup", "captains", "draft", "reveal", "live", "complete", "historical"];
+export type TestDataStage = "signup" | "captains" | "draft" | "reveal" | "live" | "complete" | "historical" | "historical-rich";
+export const TEST_DATA_STAGES: readonly TestDataStage[] = ["signup", "captains", "draft", "reveal", "live", "complete", "historical", "historical-rich"];
+export const isHistoricalTestDataStage = (stage: TestDataStage): stage is "historical" | "historical-rich" => stage === "historical" || stage === "historical-rich";
 export const TEST_DATA_STAGE_LABEL: Record<TestDataStage, string> = {
   signup: "Signups open",
   captains: "Signups closed",
@@ -16,6 +18,7 @@ export const TEST_DATA_STAGE_LABEL: Record<TestDataStage, string> = {
   live: "Live",
   complete: "Finished",
   historical: "Historical (imported)",
+  "historical-rich": "Historical, rich (imported)",
 };
 
 export interface TestDataOptions {

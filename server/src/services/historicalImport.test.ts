@@ -87,7 +87,7 @@ describe("checking a bundle", () => {
   });
 
   it("refuses an unknown version, and anything that isn't a bundle", async () => {
-    expect(await problemsOf({ ...sample(), version: 2 })).toEqual(["Unknown bundle version 2: this site reads version 1"]);
+    expect(await problemsOf({ ...sample(), version: 3 })).toEqual(["Unknown bundle version 3: this site reads versions 1 and 2"]);
     expect(await problemsOf({ ...sample(), format: "tectonic-bingo-export" })).toEqual(['This isn\'t a historical Bingo bundle (its format isn\'t "tectonic-bingo-historical")']);
   });
 

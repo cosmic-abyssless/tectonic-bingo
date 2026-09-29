@@ -4,9 +4,10 @@
 // (their pictures, points and Task names as rules); the people are made up like any run's, a few of them "left the
 // clan", with Captains, standings, a Wise Old Man competition and an unknown Player or two.
 import sharp from "sharp";
-import { HISTORICAL_BUNDLE_FORMAT, HISTORICAL_BUNDLE_VERSION, type BingoExportDocument, type ExportImage, type ExportNode, type HistoricalBundle } from "@bingo/shared";
+import { HISTORICAL_BUNDLE_FORMAT, HISTORICAL_BUNDLE_VERSION, type BingoExportDocument, type ExportImage, type ExportNode, type HistoricalBundle, type HistoricalImportScoring } from "@bingo/shared";
 import type { Api } from "./client";
 import type { GenerateOptions } from "./options";
+import { addRichSections } from "./historicalRich";
 import { makePlayers, type Player } from "./people";
 import type { Rng } from "./rng";
 import { DAY, fmt } from "./timeline";
@@ -50,7 +51,11 @@ export async function buildHistoricalBundle(input: Omit<HistoricalRunInput, "api
   const startsAt = new Date(endsAt.getTime() - options.days * DAY);
 
   const count = options.teams * options.teamSize - (me ? 1 : 0);
-  const people = [...makePlayers(rng.fork("people"), count, options.slug), ...(me ? [me] : [])];
+  const rich = options.stage === "historical-rich";
+  // A rich Bingo also had signups that weren't drafted: made after everyone else, so the rest are the same either way.
+  const made = makePlayers(rng.fork("people"), count + (rich ? Math.max(1, Math.round(count / 10)) : 0), options.slug);
+  const cut = made.slice(count);
+  const people = [...made.slice(0, count), ...(me ? [me] : [])];
   // A few made-up Players have left the clan since; the dev account is always in it.
   const leftRng = rng.fork("left");
   const players = people.map((p) => ({ discordId: p.discordId, rsn: p.name, clan: p.isMe || !leftRng.chance(0.1) ? { name: p.discordName } : null }));
@@ -101,7 +106,7 @@ export async function buildHistoricalBundle(input: Omit<HistoricalRunInput, "api
   const name = `Historical ${options.slug.slice("testdata-".length)}`;
   const competitionId = 2_000_000_000 + (options.seed % 100_000_000);
 
-  return {
+  const bundle: HistoricalBundle = {
     format: HISTORICAL_BUNDLE_FORMAT,
     version: HISTORICAL_BUNDLE_VERSION,
     source: `the test data generator (seed ${options.seed})`,
@@ -123,12 +128,21 @@ export async function buildHistoricalBundle(input: Omit<HistoricalRunInput, "api
     wom: { competitionId, data: { id: competitionId, title: name, metric: "ehb", type: "team", startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), participations } },
     images,
   };
+  if (rich) addRichSections(bundle, { document, rng: rng.fork("rich"), startsAt, endsAt, cut });
+  return bundle;
 }
 
 /** Makes the bundle and imports it through the real endpoint. */
 export async function runHistorical(input: HistoricalRunInput): Promise<void> {
   const bundle = await buildHistoricalBundle(input);
   input.log(`a Historical Bingo, ${fmt(new Date(bundle.bingo.startsAt))} to ${fmt(new Date(bundle.bingo.endsAt))}: ${bundle.teams.length} Teams, ${bundle.players.length} Players (${bundle.players.filter((p) => !p.clan).length} left the clan), ${bundle.unknownPlayers.length} unknown`);
-  const { usersCreated } = await input.api.as(input.adminDiscordId).post<{ usersCreated: number }>("/api/admin/historical-bingos", bundle);
+  if (bundle.submissions) {
+    const tasks = bundle.tiles.reduce((n, t) => n + (t.tasks?.length ?? 0), 0);
+    input.log(`rich: ${tasks} Tasks, ${bundle.lines?.length ?? 0} Lines, ${bundle.submissions.length} Submissions, ${bundle.signups!.entries.filter((e) => e.cut).length} Cut signups, ${bundle.draft!.picks.length} draft picks`);
+  }
+  const { usersCreated, scoring } = await input.api
+    .as(input.adminDiscordId)
+    .post<{ usersCreated: number; scoring: HistoricalImportScoring | null }>("/api/admin/historical-bingos", bundle);
   input.log(`imported ${bundle.bingo.slug} through Site admin → Import historical Bingo (${usersCreated} new users)`);
+  if (scoring) input.log(`scored by the engine: ${scoring.teams.map((t) => `${t.team} ${t.total}`).join(", ")}`);
 }

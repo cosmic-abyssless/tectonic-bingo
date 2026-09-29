@@ -228,7 +228,7 @@ describe("Site admin → Import historical Bingo", () => {
   it("imports a bundle as a read-only Historical Bingo", async () => {
     const res = await call(admin, "POST", "/api/admin/historical-bingos", bundle());
     expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({ bingo: { slug: "sample-historical-2024", stage: "complete", historical: true }, usersCreated: 9 });
+    expect(res.body).toMatchObject({ bingo: { slug: "sample-historical-2024", stage: "complete", historical: true }, usersCreated: 9, scoring: null });
     const shell = (await call(clanMember, "GET", "/api/bingos/sample-historical-2024")).body as unknown as BingoShellResponse;
     expect(shell.teams.map((t) => t.name)).toEqual(expect.arrayContaining(["Lava Dragons", "Sea Snakes", "Rock Crabs"]));
     expect((await call(admin, "PATCH", "/api/bingos/sample-historical-2024/admin/settings", { name: "x" })).status).toBe(409);
