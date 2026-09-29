@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { TEST_DATA_STAGES, STAGE_LABEL, type TestDataBingo, type TestDataJob, type TestDataStage } from "@bingo/shared";
+import { TEST_DATA_STAGES, TEST_DATA_STAGE_LABEL, STAGE_LABEL, type Stage, type TestDataBingo, type TestDataJob, type TestDataStage } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
 import { queryKeys, useBingos } from "../../api/queries";
 import * as devApi from "../../api/devApi";
@@ -68,8 +68,8 @@ function GenerateForm({ running, onStarted }: { running: boolean; onStarted: () 
         <Field label="Copy the board of" hint="Its tiles, lines, rules and signup questions. Nothing else is copied.">
           <Select value={source} onChange={setFrom} options={sources.map((b) => ({ value: b.slug, label: `${b.name} (${b.slug})` }))} />
         </Field>
-        <Field label="Leave it at" hint={stage === "draft" ? "Halfway through the draft." : undefined}>
-          <Select value={stage} onChange={(s) => setStage(s as TestDataStage)} options={TEST_DATA_STAGES.map((s) => ({ value: s, label: STAGE_LABEL[s] }))} />
+        <Field label="Leave it at" hint={STAGE_HINT[stage]}>
+          <Select value={stage} onChange={(s) => setStage(s as TestDataStage)} options={TEST_DATA_STAGES.map((s) => ({ value: s, label: TEST_DATA_STAGE_LABEL[s] }))} />
         </Field>
         {stage === "live" && (
           <Field label="How far through the event (%)">
@@ -124,7 +124,7 @@ function JobStatus({ job, exists }: { job: TestDataJob; exists: boolean }) {
         <Badge tone={STATUS_TONE[job.status]}>{job.status === "running" ? "Running" : job.status === "done" ? "Done" : "Failed"}</Badge>
         <span className="font-mono text-on-surface">{job.slug}</span>
         <span className="text-on-surface-muted">
-          · {STAGE_LABEL[job.options.stage]} · board from {job.boardFrom} · seed {job.options.seed} · started by {job.startedBy}
+          · {TEST_DATA_STAGE_LABEL[job.options.stage]} · board from {job.boardFrom} · seed {job.options.seed} · started by {job.startedBy}
         </span>
         {job.status === "done" && exists && (
           <Link to={`/b/${job.slug}`} className="font-medium text-accent underline">
@@ -168,7 +168,7 @@ function TestBingoRow({ bingo, busy }: { bingo: TestDataBingo; busy: boolean }) 
           </Link>
           <div className="text-xs text-on-surface-muted">
             {/* Its created date is backdated with the rest of its history, so it's shown as that, not as when it was made. */}
-            {STAGE_LABEL[bingo.stage as TestDataStage] ?? bingo.stage} · history from {new Date(bingo.createdAt).toLocaleDateString()}
+            {STAGE_LABEL[bingo.stage as Stage] ?? bingo.stage} · history from {new Date(bingo.createdAt).toLocaleDateString()}
           </div>
         </div>
         <Button variant="ghost" size="sm" className="text-danger shrink-0" onPress={tearDown} isDisabled={removing || busy}>
@@ -179,6 +179,12 @@ function TestBingoRow({ bingo, busy }: { bingo: TestDataBingo; busy: boolean }) 
     </li>
   );
 }
+
+const STAGE_HINT: Partial<Record<TestDataStage, string>> = {
+  draft: "Halfway through the draft.",
+  historical: "A read-only Historical Bingo with this board's Tiles, imported from a made-up bundle.",
+  "historical-rich": "A read-only Historical Bingo with this board's Tiles and Tasks, and made-up Submissions, Signups and a Draft, imported from a bundle.",
+};
 
 export function TestDataPanel() {
   const queryClient = useQueryClient();

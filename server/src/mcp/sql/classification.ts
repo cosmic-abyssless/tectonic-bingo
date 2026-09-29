@@ -88,6 +88,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
       publish_wrapped_on_finish: "",
       wrapped_credits_json: "Unused",
       wrapped_art_credits_json: "",
+      historical: "1 for a Historical Bingo: run on another site before this one and imported, read-only",
     },
   },
   bingo_moderators: {
@@ -232,6 +233,10 @@ export const SQL_TABLES: Record<string, TableClass> = {
     note: "Where each Player's snapshot reads stand.",
     columns: { id: "", bingo_id: "", user_id: "", rsn: "", read_at: TS, read_through: TS, last_error: "", last_error_at: TS },
   },
+  historical_standings: {
+    note: "Final places (and points, when known) of a Historical Bingo's Teams, as recorded on the old site.",
+    columns: { id: "", bingo_id: "", team_id: "", place: "1 is first", points: "Null when the old site didn't record them" },
+  },
   wom_past_competitions: {
     note: "Final results of Wise Old Man competitions, kept after WOM's own record changes.",
     columns: {
@@ -313,6 +318,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
       notes: "",
       requires_proof: "Each Player needs an approved Proof screenshot for the whole Tile",
       proof_note: "What the Proof screenshot should show",
+      rules_text: "A Historical Bingo's Tile rules, as written on the old site",
       created_at: TS,
     },
   },
@@ -355,7 +361,8 @@ export const SQL_TABLES: Record<string, TableClass> = {
       id: "",
       submission_id: "",
       screenshot_type: "main, proof (a Proof screenshot's), bank, collection_log or other",
-      storage_url: "",
+      storage_url: "Empty while a Historical Bingo's screenshot waits for its upload",
+      historical_key: "A Historical Bingo's screenshot: its key in the imported bundle",
       scrape_status: "",
       extracted_text: "OCR text",
       codeword_verified: "",

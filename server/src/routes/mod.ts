@@ -8,6 +8,7 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { db } from "../db";
 import * as schema from "../db/schema";
 import * as bingoService from "../services/bingoService";
+import * as historicalService from "../services/historicalService";
 import * as submissionService from "../services/submissionService";
 import { changeSubmissionAttribution } from "../services/submissionTarget";
 import * as signupService from "../services/signupService";
@@ -242,6 +243,7 @@ router.post(
 router.get(
   "/signups",
   asyncHandler(async (req, res) => {
+    historicalService.assertRecorded(db, req.bingo!, "signupRoster");
     const cut = draftService.getCutUserIds(db, req.bingo!);
     const roster = signupService.getAllSignups(db, req.bingo!.id, signupService.answerViewerFor(req.user!.isAdmin, true));
     const [tectonic] = await Promise.all([
@@ -287,6 +289,7 @@ router.get(
 router.get(
   "/audit-log",
   asyncHandler(async (req, res) => {
+    historicalService.assertRecorded(db, req.bingo!, null);
     const q = req.query as Record<string, string | undefined>;
     const filters: AuditLogFilters = {
       action: q.action ? (q.action.split(",") as AuditAction[]) : undefined,

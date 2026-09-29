@@ -1,0 +1,55 @@
+# A sample sparse Bingo, for the tests and for trying the script (README.md). The Discord ids are made up.
+name: Spring Bingo 2024 (sample)
+slug: sample-historical-2024
+description: A sample historical Bingo
+start: 2024-03-01T18:00:00Z
+end: 2024-03-15T18:00:00Z
+rows: 3
+cols: 3
+womCompetitionId: 424242
+rules: |
+  ## Rules
+
+  - Drops count from the start time.
+  - Every screenshot shows the team codeword.
+
+teams:
+  - name: Lava Dragons
+    color: "#e74c3c"
+    captain: Magma Mike
+    players:
+      - { rsn: Magma Mike, discordId: "100000000000000001" }
+      - { rsn: Cinder, discordId: "100000000000000002" }
+      - { rsn: Old Flame, discordId: "100000000000000003" }
+  - name: Sea Snakes
+    color: "#3498db"
+    captain: Tidecaller
+    coCaptain: Brine
+    players:
+      - { rsn: Tidecaller, discordId: "100000000000000011" }
+      - { rsn: Brine, discordId: "100000000000000012" }
+      - { rsn: Kelp Lord, discordId: "100000000000000013" }
+  - name: Rock Crabs
+    captain: Shellshock
+    players:
+      - { rsn: Shellshock, discordId: "100000000000000021" }
+      - { rsn: Pebble, discordId: "100000000000000022" }
+      - { rsn: Boulder, discordId: "100000000000000023" }
+      - { rsn: Ghost Rider, discordId: unknown }
+
+standings:
+  - { team: Sea Snakes, place: 1, points: 145 }
+  - { team: Lava Dragons, place: 2, points: 120 }
+  - { team: Rock Crabs, place: 3 }
+
+# Optional, per position. A Tile left out here is named after its position.
+tiles:
+  r1c1: { name: Vorkath, points: 5, rules: Any unique drop from Vorkath. }
+  r1c2: { name: Zulrah, points: 10, rules: Any unique drop from Zulrah. }
+  r1c3: { name: Barrows, points: 15, rules: Any unique drop from Barrows. }
+  r2c1: { name: Corporeal Beast, points: 5, rules: Any unique drop from Corporeal Beast. }
+  r2c2: { name: Chambers of Xeric }
+  r2c3: { name: Nex, points: 15, rules: Any unique drop from Nex. }
+  r3c1: { name: Wintertodt, points: 5, rules: Any unique drop from Wintertodt. }
+  r3c2: { name: Tempoross, points: 10, rules: Any unique drop from Tempoross. }
+  r3c3: { name: Slayer, points: 15, rules: Any unique drop from Slayer. }

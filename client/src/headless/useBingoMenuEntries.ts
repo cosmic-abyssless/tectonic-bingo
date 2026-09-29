@@ -35,7 +35,7 @@ export function useBingoMenuEntries(slug: string, header: BingoHeaderModel | nul
   const goTo = (to: string) => () => navigate(`/b/${slug}/${to}`);
   const openOnBoard = (open: "submissions" | "team" | "rules") => () => navigate(`/b/${slug}?open=${open}`);
   const hasRules = !!header.rulesMarkdown || header.rulesComeLater;
-  const showSubmissions = board.submissions?.onShow ?? (!onBoard && header.hasTeam ? openOnBoard("submissions") : undefined);
+  const showSubmissions = board.submissions?.onShow ?? (!onBoard && header.hasTeam && header.hasTeamBoards ? openOnBoard("submissions") : undefined);
   const showTeam = board.team?.onShow ?? (!onBoard && header.hasTeam ? openOnBoard("team") : undefined);
   const showRules = board.onShowRules ?? (!onBoard ? openOnBoard("rules") : undefined);
   const entries: HeaderMenuEntry[] = [];

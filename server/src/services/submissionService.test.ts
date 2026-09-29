@@ -531,6 +531,15 @@ describe("setSubmissionReaction", () => {
     expect(JSON.parse(rows[1]!.details)).toMatchObject({ reaction: "skull", ownSubmission: true });
   });
 
+  it("closes when the bingo is Finished: no new reactions, and none taken back", () => {
+    const { bingo, teamId, captainUserId, submissionId } = reactable();
+    setSubmissionReaction(db, submissionId, captainUserId, "🔥", true);
+    db.update(schema.bingos).set({ stage: "complete" }).where(eq(schema.bingos.id, bingo.id)).run();
+    expect(() => setSubmissionReaction(db, submissionId, captainUserId, "🎉", true)).toThrow(expect.objectContaining({ status: 409 }));
+    expect(() => setSubmissionReaction(db, submissionId, captainUserId, "🔥", false)).toThrow(expect.objectContaining({ status: 409 }));
+    expect(getTeamSubmissions(db, teamId)[0]!.reactions.map((g) => g.emoji)).toEqual(["🔥"]);
+  });
+
   it("goes with the bingo when it's deleted", () => {
     const { bingo, captainUserId, submissionId } = reactable();
     setSubmissionReaction(db, submissionId, captainUserId, "💀", true);

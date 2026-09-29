@@ -21,6 +21,7 @@ import bingosRouter from "./routes/bingos";
 import modRouter from "./routes/mod";
 import adminRouter from "./routes/admin";
 import siteAdminRouter from "./routes/siteAdmin";
+import historicalScreenshotsRouter from "./routes/historicalScreenshots";
 import osrsItemsRouter from "./routes/osrsItems";
 import bugReportsRouter from "./routes/bugReports";
 import { errorHandler } from "./middleware/errorHandler";
@@ -189,6 +190,8 @@ app.use("/api/me", meRouter);
 app.use("/api/admin", siteAdminRouter);
 app.use("/api/bingos", requireGuildMember, bingosRouter);
 app.use("/api/bingos/:slug/mod", requireGuildMember, modRouter);
+// Ahead of the admin router: a Historical Bingo's screenshot uploads, the one write it takes.
+app.use("/api/bingos/:slug/admin/historical", requireGuildMember, historicalScreenshotsRouter);
 app.use("/api/bingos/:slug/admin", requireGuildMember, adminRouter);
 app.use("/api/osrs-items", osrsItemsRouter);
 // Dev-only tooling (test data generator): only exists while dev mode is on.

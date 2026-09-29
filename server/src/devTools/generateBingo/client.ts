@@ -110,4 +110,11 @@ export class Session {
     form.append("screenshot", new Blob([new Uint8Array(SCREENSHOT)], { type: "image/png" }), "screenshot.png");
     return this.send<T>("POST", urlPath, form, {}, opts);
   }
+
+  /** The placeholder screenshot on its own, as multipart (a Historical Bingo's screenshot uploads). */
+  uploadScreenshot<T>(urlPath: string, opts: CallOptions = {}): Promise<T> {
+    const form = new FormData();
+    form.append("screenshot", new Blob([new Uint8Array(SCREENSHOT)], { type: "image/png" }), "screenshot.png");
+    return this.send<T>("POST", urlPath, form, {}, opts);
+  }
 }

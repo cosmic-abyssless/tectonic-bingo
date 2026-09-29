@@ -112,8 +112,8 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
   }, [atEnd]);
   const closingTitles = useMemo(() => {
     if (!stats) return null;
-    return { titles: pickStatsTitles(stats, closingRows(stats.titleFacts, teamId)), contributions: closingRows(stats.contributions, teamId) };
-  }, [stats, teamId]);
+    return { titles: pickStatsTitles(stats, closingRows(stats.titleFacts, teamId), page.historical), contributions: closingRows(stats.contributions, teamId) };
+  }, [stats, teamId, page.historical]);
 
   const allItems = (allTeams ? prepared?.allItems : teamId && prepared?.itemsByTeam.get(teamId)) || EMPTY_ITEMS;
   const items = useMemo(() => visibleItems(allItems, showRejected), [allItems, showRejected]);

@@ -62,7 +62,7 @@ export function StatsView({ slug }: { slug: string }) {
   }, [stats, visibleTeams, selectedTeams]);
 
   // Titles go to the best among the Players shown: a Team's own Carry with one Team selected, the Bingo's otherwise.
-  const titles = useMemo(() => (stats && filtered ? pickStatsTitles(stats, filtered.titleFacts) : []), [stats, filtered]);
+  const titles = useMemo(() => (stats && filtered ? pickStatsTitles(stats, filtered.titleFacts, shell?.historical ?? null) : []), [stats, filtered, shell?.historical]);
   const titlesByPlayer = useMemo(() => titlesByHolder(titles), [titles]);
 
   if (error) return <div className="py-24 text-center text-sm text-on-surface-muted">{error.message}</div>;

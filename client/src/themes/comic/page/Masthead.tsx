@@ -48,8 +48,16 @@ export function Masthead({
       back={back ?? (header.canSeeAllBingos ? { to: "/", label: "All bingos" } : undefined)}
       title={header.name}
       subtitle={
-        <span className="inline-flex items-center border-2 px-1.5 py-px text-xs uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.06em", borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK }}>
-          {status ?? header.stageLabel}
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-flex items-center border-2 px-1.5 py-px text-xs uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.06em", borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK }}>
+            {status ?? header.stageLabel}
+          </span>
+          {/* A Historical Bingo (CONTEXT.md): a second caption box, in the comic's yellow. */}
+          {header.historical && (
+            <span className="inline-flex items-center border-2 px-1.5 py-px text-xs uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.06em", borderColor: colors.LINE, background: colors.YELLOW, color: colors.ON_YELLOW }}>
+              Historical
+            </span>
+          )}
         </span>
       }
       menuEntries={menuEntries}

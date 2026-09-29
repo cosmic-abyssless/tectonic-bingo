@@ -53,6 +53,20 @@ export type FieldChanges<T> = { before: Partial<T>; after: Partial<T> };
 export interface AuditDetailsMap {
   "bingo.created": { slug: string; name: string; theme: string; boardRows: number; boardCols: number; source: "form" | "import" };
   "bingo.deleted": { slug: string; name: string; stage: Stage; counts: { teams: number; signups: number; submissions: number } };
+  /** A Historical Bingo (CONTEXT.md) imported from a bundle. `source`: what the bundle was made from. */
+  "bingo.historical_imported": {
+    slug: string;
+    name: string;
+    source: string;
+    counts: {
+      tiles: number; teams: number; players: number; usersCreated: number; unknownPlayers: number; standings: number; womCompetition: boolean;
+      /** A rich bundle's (version 2) sections. */
+      tasks?: number; lines?: number; submissions?: number; signups?: number; cutSignups?: number; draftPicks?: number;
+    };
+  };
+
+  /** The last of a Historical Bingo's pending screenshots was attached (one entry for them all, not one each). */
+  "bingo.historical_screenshots_attached": { slug: string; name: string; screenshots: number };
 
   "user.admin_changed": { isAdmin: { before: boolean; after: boolean }; source: "admin_panel" | "env_bootstrap" };
 
@@ -395,6 +409,20 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Bingo deleted",
     label: (i) => `${actor(i)} deleted the bingo "${i.details.name}"`,
+  },
+  "bingo.historical_imported": {
+    category: "bingo",
+    tone: "ok",
+    visibility: "mods",
+    title: "Historical Bingo imported",
+    label: (i) => `${actor(i)} imported the historical Bingo "${i.details.name}" from ${i.details.source}`,
+  },
+  "bingo.historical_screenshots_attached": {
+    category: "bingo",
+    tone: "ok",
+    visibility: "mods",
+    title: "Historical screenshots attached",
+    label: (i) => `${actor(i)} attached the last of the historical Bingo "${i.details.name}"'s ${i.details.screenshots} screenshots`,
   },
   "user.admin_changed": {
     category: "moderation",

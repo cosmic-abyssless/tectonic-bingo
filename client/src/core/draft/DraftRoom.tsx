@@ -177,7 +177,9 @@ export function DraftRoom({ slug }: { slug: string }) {
   const canAct = !!state.currentPick && (isAdmin || isMyTurn);
   // Before the draft stage the room is a scouting view: leads (and mods)
   // browse and rate signups; nothing can start or be picked yet.
-  const scouting = shell.bingo.stage !== "draft";
+  // A Historical Bingo's Draft is over and read-only: its recorded picks, and no pool.
+  const historical = shell.bingo.historical;
+  const scouting = shell.bingo.stage !== "draft" && !historical;
   const poolCount = state.pool.reduce((n, u) => n + u.entries.length, 0);
   const lockMs = state.orderLockedUntil ? Math.max(0, new Date(state.orderLockedUntil).getTime() - Date.now()) : 0;
   const revealing = lockMs > 0;
@@ -293,7 +295,17 @@ export function DraftRoom({ slug }: { slug: string }) {
   ));
 
   // The state of the draft above everything else: scouting, the pre-draft setup, revealing, started, complete.
-  const status =
+  const status = historical ? (
+    <Notice tone="info">
+      The Draft as it was recorded: <span className="num">{state.picks.length}</span> pick{state.picks.length === 1 ? "" : "s"}, after the Captains and co-captains.
+      {state.cutCount > 0 && (
+        <>
+          {" "}
+          <span className="num">{state.cutCount}</span> signup{state.cutCount === 1 ? " was" : "s were"} cut.
+        </>
+      )}
+    </Notice>
+  ) :
     scouting ? (
       <Notice tone="info">
         Scouting. Signups are {shell.bingo.stage === "signup" ? "still open" : "closed"} — the draft starts once the mods move the bingo to the draft stage.
@@ -437,7 +449,7 @@ export function DraftRoom({ slug }: { slug: string }) {
         poolCount={poolCount}
         poolGlow={poolGlow}
         isMyTurn={isMyTurn}
-        lead={isLead || isMod}
+        lead={(isLead || isMod) && !historical}
         pool={
           <DraftPoolList
             pool={state.pool}
@@ -546,7 +558,7 @@ export function DraftRoom({ slug }: { slug: string }) {
 
       {/* The one thing that actually breaks out of max-w-5xl above (while "Full width" is on) — everything else in
           this component (the status cards, the teams row, the pick/clan-API notices) stays reading-width. */}
-      <div className={`mt-6 w-full px-6 pb-6 ${poolWidth === "narrow" ? "mx-auto max-w-5xl" : ""}`}>{poolPanel(null)}</div>
+      {!historical && <div className={`mt-6 w-full px-6 pb-6 ${poolWidth === "narrow" ? "mx-auto max-w-5xl" : ""}`}>{poolPanel(null)}</div>}
     </div>
   );
 }

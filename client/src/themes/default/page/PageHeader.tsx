@@ -4,6 +4,7 @@ import { AppHeader } from "../../../core/ui/AppHeader";
 import { Button } from "../../../core/ui/Button";
 import { Badge } from "../../../core/ui/Card";
 import { CountdownTimer } from "../../../core/ui/CountdownTimer";
+import { HistoricalBadge } from "../../../core/historical/HistoricalBadge";
 import { useSlot } from "../../context";
 import { ModPanelButton } from "./ModPanelButton";
 
@@ -11,7 +12,8 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
   const { user, devMode } = useAuth();
   const TeamSelector = useSlot("TeamSelector");
   const menuEntries = useBingoMenuEntries(page.slug, useBingoHeader(page.slug), {
-    submissions: page.teamSelector.selectedId
+    // A Historical Bingo with no Tasks recorded has no Submissions to show.
+    submissions: page.teamSelector.selectedId && page.stageView !== "historical"
       ? {
           badge:
             page.viewing.pendingSubmissionCount > 0 ? (
@@ -38,6 +40,11 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
           <>
             <CountdownTimer target={page.bingo.endsAt} /> remaining
           </>
+        ) : page.bingo.historical ? (
+          <span className="inline-flex items-center gap-1.5">
+            {page.bingo.stageLabel}
+            <HistoricalBadge />
+          </span>
         ) : (
           page.bingo.stageLabel
         )

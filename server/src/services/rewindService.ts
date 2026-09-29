@@ -233,7 +233,7 @@ export function getRewind(db: Db, bingo: typeof schema.bingos.$inferSelect): Rew
         submittedAt: d.submission.submittedAt.toISOString(),
         player: d.submittedByUser,
         tileId: firstLeaf ? (tileOfNode.get(firstLeaf) ?? null) : null,
-        screenshotUrl: (d.screenshots.find((s) => s.screenshotType === "main") ?? d.screenshots[0])?.storageUrl ?? null,
+        screenshotUrl: (d.screenshots.find((s) => s.screenshotType === "main") ?? d.screenshots[0])?.storageUrl || null, // A Historical Bingo's pending screenshot has none yet.
         claims,
         gpValue: signals.gpValue ?? null,
         reactions,

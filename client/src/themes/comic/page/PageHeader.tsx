@@ -23,8 +23,8 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
       }
       onShowRules={page.rules.show}
       // (The team — identity, roster, and for mods the switcher — lives in the TeamBanner under the search box; the ☰
-      // menu opens the same summary.)
-      submissions={page.teamSelector.selectedId ? { pending: page.viewing.pendingSubmissionCount, onShow: page.drawer.show } : undefined}
+      // menu opens the same summary.) A Historical Bingo with no Tasks recorded has no Submissions to show.
+      submissions={page.teamSelector.selectedId && page.stageView !== "historical" ? { pending: page.viewing.pendingSubmissionCount, onShow: page.drawer.show } : undefined}
       team={page.viewing.team ? { onShow: page.teamInfo.show } : undefined}
     >
       {/* On phones Submit lives beside the team banner instead. */}

@@ -8,6 +8,7 @@ import type {
   AuditTone,
   ContributionCount,
   DraftState,
+  HistoricalRecorded,
   NodeKind,
   NodeStatus,
   PickedTitle,
@@ -149,6 +150,8 @@ export interface SubmissionModel {
   timeAgo: string;
   /** The first screenshot's original URL — views derive the thumb/full variant they need (api/imageVariants). */
   thumbnailUrl: string | null;
+  /** A Historical Bingo's screenshot still to be uploaded: shown as SCREENSHOT_NOT_UPLOADED, with no picture. */
+  screenshotPending: boolean;
   /** claimsSummary() — e.g. "2× Bruma torch, Vorki"; "Proof screenshot" for a proof one. */
   summary: string;
   /** A Proof screenshot (CONTEXT.md), not a drop: it can't be reacted to. */
@@ -177,6 +180,8 @@ export interface TileModel {
   id: string;
   name: string;
   imageUrl: string | null;
+  /** A Historical Bingo's (CONTEXT.md) own rules for the Tile, as the old site gave them; null otherwise. */
+  rulesText: string | null;
   row: number;
   col: number;
   /**
@@ -290,7 +295,11 @@ export interface PointBreakdownModel {
 
 // Exact branch order: signup -> notPart -> planning|captains -> draft -> !viewingTeamId -> board.
 // "notPart": someone who can't see the bingo (not a Player, Moderator or Admin; CONTEXT.md "Player") once signups close.
-export type StageView = "signup" | "notPart" | "planning" | "captains" | "draft" | "noTeam" | "board";
+/**
+ * "historical": a Historical Bingo (CONTEXT.md) that recorded no Tasks, so there's no Team board to show: the page is
+ * its picture board, standings, Teams and Wise Old Man leaderboard (core/historical's HistoricalBingoView).
+ */
+export type StageView = "signup" | "notPart" | "planning" | "captains" | "draft" | "noTeam" | "board" | "historical";
 
 export interface TileSearchModel {
   query: string;
@@ -332,7 +341,11 @@ export interface BingoPageModel {
     endsAt: number | null;
     boardRows: number;
     boardCols: number;
+    /** A Historical Bingo (CONTEXT.md): imported, always Finished and read-only; its header carries a Historical badge. */
+    historical: boolean;
   };
+  /** What a Historical Bingo recorded, per feature (what isn't there says "Not recorded for historical Bingos"); null for any other Bingo. */
+  historical: HistoricalRecorded | null;
   milestone: StageMilestone | null;
   user: UserModel;
   isMod: boolean;
@@ -402,7 +415,7 @@ export interface BingoPageModel {
   actions: { goHome(): void; goToStats(): void; goToRewind(): void; goToWrapped(): void; goToMod(): void; goToDraft(): void };
   /** Raise/lower the viewer's hand for one part (task) of a tile on their own team. No-op unless task.interest.canToggle. */
   tileInterest: { toggle(tileId: string, taskId: string): void };
-  /** Emoji reactions on the viewed team's submissions: canReact when it's the viewer's own team. toggle() puts the viewer's on or takes it off. */
+  /** Emoji reactions on the viewed team's submissions: canReact when it's the viewer's own team and the bingo isn't Finished. toggle() puts the viewer's on or takes it off. */
   reactions: { canReact: boolean; toggle(submissionId: string, emoji: SubmissionReaction): void };
 }
 
