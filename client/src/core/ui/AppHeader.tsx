@@ -15,14 +15,15 @@ import { PulseDot } from "./Card";
 import { PlainHeaderMenu, type HeaderMenuEntry, type HeaderMenuGroup } from "./headerMenu";
 import { ArrowLeftIcon } from "./icons";
 import { useOptionalSlot } from "../../themes/context";
+import { useOpenProfile } from "../tectonic/PlayerName";
 import { avatarUrl, displayName } from "./user";
 
 /**
  * Top bar shared by every page: the ☰ menu and the title/subtitle at the left, then at the right the page's controls,
  * the dev account switcher, the page's actions (`children`: Mod panel, Submit), the bug report button and the account
  * menu (the viewer's avatar and name). The ☰ holds the navigation: the page's own entries (`menuEntries`, a bingo
- * page's "This Bingo" group) and the site's pages. The account menu holds the colour scheme, Connected apps (admins),
- * Log in on your phone and Log out.
+ * page's "This Bingo" group) and the site's pages. The account menu holds the colour scheme, the viewer's Profile
+ * (inside a bingo), Connected apps (admins), Log in on your phone and Log out.
  */
 export function AppHeader({
   back,
@@ -66,6 +67,8 @@ export function AppHeader({
   const [connectedAppsOpen, setConnectedAppsOpen] = useState(false);
   const phone = useIsPhone();
   const [colorScheme, setColorScheme] = useColorSchemePreference();
+  // The viewer's own player profile, on the pages of a bingo that can show one (under PlayerProfileProvider).
+  const openProfile = useOpenProfile();
   // Fetched here (not gated on the dialog being open) so the pulse dot can show without opening it —
   // BugReportDialog's own useMyBugReports call shares this same cached query.
   const { data: myReports } = useMyBugReports(!!user?.inGuild);
@@ -116,6 +119,7 @@ export function AppHeader({
       label: "Account",
       items: [
         { kind: "colorScheme", id: "color-scheme", value: colorScheme, onChange: setColorScheme },
+        ...(user && openProfile ? [{ id: "profile", text: "Profile", label: "Profile", wikiIcon: "Worn Equipment", onAction: () => openProfile(user.id) }] : []),
         ...(user?.isAdmin ? [{ id: "connected-apps", text: "Connected apps", label: "Connected apps", wikiIcon: "Account Management - Links icon", onAction: () => setConnectedAppsOpen(true) }] : []),
         ...(!phone
           ? [
