@@ -13,6 +13,9 @@ const CARD_WIDTH = 352;
 // How long an optional step waits for its element (a Tile's page turning to it, the Submit flow's fields mounting)
 // before passing over it.
 const WAIT_MS = 1500;
+// The same, inside a Submit flow or ☰ the last step was already in: nothing there is still to come (no pages turn), so
+// an element that isn't there by now won't be (the Proof screenshot choice, on a Tile that doesn't need one).
+const WAIT_IN_OPEN_MS = 150;
 /**
  * How long the element has to hold still before its highlight and the card show: a Tile's book flies in, a dialog grows,
  * and following every frame of that made the card jump about. Past SETTLE_MAX_MS it shows wherever the element is.
@@ -43,11 +46,16 @@ export function TutorialOverlay() {
   const tutorial = useTutorial();
   // The card's height on the last step, for scrolling a step's element clear of it before its own card is up.
   const lastCardHeight = useRef(0);
+  // Which step came before this one, and what it was inside (see WAIT_IN_OPEN_MS).
+  const steps = useRef<{ id: string | null; inside: TutorialStep["inside"]; before: TutorialStep["inside"] }>({ id: null, inside: null, before: null });
   if (!tutorial?.active || !tutorial.step || !tutorial.card) return null;
-  return createPortal(<TutorialLayer key={tutorial.step.id} tutorial={tutorial} step={tutorial.step} lastCardHeight={lastCardHeight} />, document.body);
+  const step = tutorial.step;
+  if (steps.current.id !== step.id) steps.current = { id: step.id, inside: step.inside, before: steps.current.inside };
+  const alreadyOpen = (step.inside === "submit" || step.inside === "menu") && steps.current.before === step.inside;
+  return createPortal(<TutorialLayer key={step.id} tutorial={tutorial} step={step} lastCardHeight={lastCardHeight} waitMs={alreadyOpen ? WAIT_IN_OPEN_MS : WAIT_MS} />, document.body);
 }
 
-function TutorialLayer({ tutorial, step, lastCardHeight }: { tutorial: TutorialModel; step: TutorialStep; lastCardHeight: RefObject<number> }) {
+function TutorialLayer({ tutorial, step, lastCardHeight, waitMs }: { tutorial: TutorialModel; step: TutorialStep; lastCardHeight: RefObject<number>; waitMs: number }) {
   const TutorialCard = useSlot("TutorialCard");
   const tokens = useThemeTokens();
   const phone = useIsPhone();
@@ -112,7 +120,7 @@ function TutorialLayer({ tutorial, step, lastCardHeight }: { tutorial: TutorialM
           settledRef.current = true;
           setSettled(true);
         }
-        if (!seen.current && step.optional && performance.now() - started.current > WAIT_MS) {
+        if (!seen.current && step.optional && performance.now() - started.current > waitMs) {
           pass.current();
           return;
         }
