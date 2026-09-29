@@ -183,6 +183,13 @@ A completed sequence of Tiles across the Board (row, column, diagonal, or custom
 A delay configured on a Tile: for its duration after the Bingo starts, no Team can submit to that Tile.
 - **Rules:** It runs from the moment the Bingo counts as started, once, for every Team. It isn't tied to any Team completing the Tile.
 
+### Tutorial
+A short, skippable walk through the Board for a Player: their Team, opening a Tile, what it needs, Task interest, Submitting, and the ☰ menu.
+- **When:** Once per account, the first time a Player sees their own Team's Board in a Live Bingo. Finishing or skipping it counts as seen, on every device. Anyone can replay it from the ☰ menu; replaying never changes that.
+- **Who:** Players, on their own Team's Board. Not a Moderator or Admin looking at a Board they don't play on.
+- **Steps:** Some wait for the Player to click the real thing (open a Tile, open Submit, open the ☰ menu), which then opens as usual; the rest only point things out. Nothing is ever Submitted: the Tutorial shows the Submit flow's inputs and every way into it, then closes it itself. Only those opens are asked for: marking Task interest and the ☰ menu's entries are shown, never required, so an Achievement they lead to stays a reward for choosing to. What's opened during the Tutorial counts like any other open.
+- **Avoid:** Tour, onboarding.
+
 ---
 
 ## Submissions & Scoring
