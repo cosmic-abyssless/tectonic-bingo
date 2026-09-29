@@ -3,7 +3,7 @@ import type { WrappedPlayerCardModel, WrappedShareCardDropModel, WrappedShareCar
 import { CardImage } from "../../../core/wrapped/ShareCards";
 import { getColors, TECTONIC_LOGO } from "../board/colors";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
-import { halftoneUrl } from "../fx/halftone";
+import { halftoneUrl } from "../fx/halftoneSheet";
 import { burstPoints } from "../ui/Burst";
 
 // The comic theme's share cards (#315): each a comic book cover. A masthead with the Bingo's name, the Team's colour

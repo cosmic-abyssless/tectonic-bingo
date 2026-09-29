@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { ComicColors } from "../board/colors";
 import { COMIC_FONT } from "../font";
-import { shadeHalftone } from "../fx/halftone";
+import { shadeHalftone } from "../fx/halftoneSheet";
 import { useComic } from "./useComic";
 
 /**

@@ -39,7 +39,7 @@
 /* ---- Print effects -------------------------------------------------- */
 
 /* Halftone: a layer of ink showing through a mask of dots sized by the tone
- * (fx/halftone.ts draws it: bigger dots toward the corners, a vignette like a
+ * (fx/halftoneSheet.ts draws it: bigger dots toward the corners, a vignette like a
  * cheaply printed page), given inline as the layer's mask-image.
  *
  * The dots are one viewport-sized image, not a repeating radial-gradient
