@@ -100,7 +100,6 @@ export function tutorialSteps(tile: TutorialTileFacts): TutorialStep[] {
       lines: ["Raise your hand on a Part to let your team know what you're going for. It's optional."],
       targets: ["task-interest"],
       inside: "tile",
-      clickable: true,
       optional: true,
     }),
     step({
@@ -161,9 +160,11 @@ export interface TutorialState {
   direction: 1 | -1;
   /** The Tile opened at step 3, for step 4's lines and for the Submit flow at step 7. */
   tileId: string | null;
+  /** The steps passed over this time through (nothing to point at), which don't take up a sub-step number. */
+  passed: number[];
 }
 
-export const TUTORIAL_IDLE: TutorialState = { active: false, index: 0, replay: false, direction: 1, tileId: null };
+export const TUTORIAL_IDLE: TutorialState = { active: false, index: 0, replay: false, direction: 1, tileId: null, passed: [] };
 
 export type TutorialAction =
   | { type: "start"; replay: boolean }
@@ -192,7 +193,7 @@ export function tutorialReducer(steps: TutorialStep[], state: TutorialState, act
     case "back":
       return goTo(state.index - 1, -1);
     case "pass":
-      return current?.optional ? goTo(state.index + state.direction, state.direction) : state;
+      return current?.optional ? { ...goTo(state.index + state.direction, state.direction), passed: [...state.passed, state.index] } : state;
     case "opened":
       if (current?.waitsFor !== action.what) return state;
       return { ...goTo(state.index + 1, 1), ...(action.what === "tile" ? { tileId: action.tileId ?? null } : {}) };
@@ -204,6 +205,21 @@ export function tutorialReducer(steps: TutorialStep[], state: TutorialState, act
       return opener < 0 ? state : goTo(opener, 1);
     }
   }
+}
+
+/**
+ * The step's number on its card. Steps that share a number are its sub-steps, numbered on from .1 ("7.1", "7.2"), except
+ * a first one that waits for a click, which opens them and keeps the plain number ("8", then "8.1"). Steps passed over
+ * (nothing to point at) take no number, so the ones shown run on without gaps.
+ */
+export function tutorialStepLabel(steps: TutorialStep[], index: number, passed: number[]): string {
+  const step = steps[index];
+  const group = steps.map((s, i) => ({ s, i })).filter(({ s }) => s.number === step.number);
+  if (group.length === 1) return String(step.number);
+  const opener = group[0].s.waitsFor ? group[0].i : null;
+  if (index === opener) return String(step.number);
+  const sub = group.filter(({ i }) => i !== opener && i <= index && (i === index || !passed.includes(i))).length;
+  return `${step.number}.${sub}`;
 }
 
 /** Starts on its own the first time a Player sees their own Team's Board while the Bingo is Live. */

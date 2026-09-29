@@ -5,7 +5,7 @@ import { NavMenuControlContext } from "../core/ui/headerMenu";
 import { useUrlParam } from "../core/ui/useUrlParam";
 import { useBingoPageRaw, useBingoPage } from "./BingoPageProvider";
 import { useTileModel } from "./BoardProvider";
-import { TUTORIAL_IDLE, TUTORIAL_STEP_COUNT, tutorialAutoStarts, tutorialReducer, tutorialSteps, tutorialTileFacts, type TutorialAction, type TutorialOpening, type TutorialState, type TutorialStep } from "./tutorial";
+import { TUTORIAL_IDLE, TUTORIAL_STEP_COUNT, tutorialAutoStarts, tutorialReducer, tutorialStepLabel, tutorialSteps, tutorialTileFacts, type TutorialAction, type TutorialOpening, type TutorialState, type TutorialStep } from "./tutorial";
 import type { TutorialCardModel } from "./types";
 
 /**
@@ -132,9 +132,11 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
       ? {
           title: step.title,
           lines: step.lines,
-          number: step.number,
+          label: tutorialStepLabel(steps, state.index, state.passed),
           count: TUTORIAL_STEP_COUNT,
           primary: step.waitsFor ? null : { label: state.index === 0 ? "Start" : isLast ? "Finish" : "Next", onPress: next },
+          waitsForClick: !!step.waitsFor,
+          skipLabel: state.index === 0 ? "Skip" : "Exit",
           onSkip: end,
         }
       : null,

@@ -1057,11 +1057,14 @@ export interface WrappedModel {
 export interface TutorialCardModel {
   title: string;
   lines: string[];
-  /** Which of the Tutorial's steps this is, and how many there are ("3 of 9"). */
-  number: number;
+  /** Which of the Tutorial's steps this is ("3", or a sub-step's "7.2"), and how many steps there are ("7.2 of 9"). */
+  label: string;
   count: number;
   /** "Start" on the welcome, "Finish" on the last step, "Next" otherwise; null on a step that waits for the Player to click. */
   primary: { label: "Start" | "Next" | "Finish"; onPress(): void } | null;
-  /** Skip, on every step. */
+  /** The step waits for the Player to click what's highlighted: the card says it's their turn, in place of Next. */
+  waitsForClick: boolean;
+  /** Leaving it, on every step: "Skip" on the welcome, "Exit" once it's under way. */
+  skipLabel: "Skip" | "Exit";
   onSkip(): void;
 }

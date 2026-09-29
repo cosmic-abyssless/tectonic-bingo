@@ -146,7 +146,12 @@ function TutorialLayer({ tutorial, step, lastCardHeight, waitMs }: { tutorial: T
       {hole ? (
         <>
           {/* The dimming, cut around the element, and its outline. */}
-          <div className="absolute rounded-md" style={{ ...boxStyle(hole), boxShadow: `0 0 0 200vmax ${dim}`, outline: "2px solid var(--color-accent)" }} />
+          {/* A step that waits for a click gets a pulsing warn-coloured outline (index.css), so it doesn't read like the steps
+              that only point something out. */}
+          <div
+            className={`absolute rounded-md ${step.waitsFor ? "tutorial-click-target" : ""}`}
+            style={{ ...boxStyle(hole), boxShadow: `0 0 0 200vmax ${dim}`, ...(step.waitsFor ? {} : { outline: "2px solid var(--color-accent)" }) }}
+          />
           {/* Everything but the element takes (and drops) the clicks; the element too, unless the step lets it be clicked. */}
           {blockers(hole, view, step.clickable).map((b, i) => (
             <div key={i} className="pointer-events-auto absolute" style={boxStyle(b)} />

@@ -41,6 +41,14 @@ export const SwapIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** A pointer clicking: the Tutorial's "your turn, click it". */
+export const PointerClickIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 6l2.5 8 1.25-3.25L13 9.5z" />
+    <path d="M5 2.5v1.25M2.5 5h1.25M3.25 3.25l.9.9M7.75 3.25l-.9.9" />
+  </Svg>
+);
+
 export const XIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M4 4l8 8M12 4l-8 8" />

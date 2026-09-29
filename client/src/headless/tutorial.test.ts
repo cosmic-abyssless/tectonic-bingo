@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode, Tile } from "@bingo/shared";
-import { TUTORIAL_IDLE, TUTORIAL_STEP_COUNT, tutorialAutoStarts, tutorialReducer, tutorialSteps, tutorialTileFacts, type TutorialAction, type TutorialState } from "./tutorial";
+import { TUTORIAL_IDLE, TUTORIAL_STEP_COUNT, tutorialAutoStarts, tutorialReducer, tutorialStepLabel, tutorialSteps, tutorialTileFacts, type TutorialAction, type TutorialState } from "./tutorial";
 
 // CONTEXT.md "Tutorial" (#345): its steps, and how Start / Next / Skip and the real opens and closes move it.
 
@@ -31,10 +31,22 @@ describe("the Tutorial's steps", () => {
     ]);
   });
 
-  it("let only the clicked-for element, and Task interest, take a click", () => {
-    expect(steps.filter((s) => s.clickable).map((s) => s.id)).toEqual(["open-tile", "task-interest", "open-submit", "open-menu"]);
-    // Task interest is pointed at, never waited for.
+  it("let only the clicked-for element take a click: Task interest is pointed at, not pressed", () => {
+    expect(steps.filter((s) => s.clickable).map((s) => s.id)).toEqual(["open-tile", "open-submit", "open-menu"]);
     expect(steps[at("task-interest")].waitsFor).toBeNull();
+  });
+
+  it("number a step's sub-steps on from .1, with the click that opens them keeping the plain number", () => {
+    const label = (id: string, passed: string[] = []) => tutorialStepLabel(steps, at(id), passed.map(at));
+    expect([label("welcome"), label("open-tile"), label("tile-submit"), label("done")]).toEqual(["1", "3", "5", "9"]);
+    expect([label("tile-parts"), label("task-interest")]).toEqual(["4.1", "4.2"]);
+    expect([label("submit-screenshot"), label("submit-tile"), label("submit-review")]).toEqual(["7.1", "7.2", "7.7"]);
+    expect([label("open-menu"), label("menu-submissions"), label("menu-tutorial")]).toEqual(["8", "8.1", "8.4"]);
+  });
+
+  it("don't count a step passed over: the ones shown run on without a gap", () => {
+    expect(tutorialStepLabel(steps, at("submit-review"), [at("submit-proof")])).toBe("7.6");
+    expect(tutorialStepLabel(steps, at("menu-stats"), [at("menu-rules")])).toBe("8.2");
   });
 
   it("never point at the Submit flow's own submit button", () => {
