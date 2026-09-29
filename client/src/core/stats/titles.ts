@@ -1,4 +1,4 @@
-import { pickTitles, type PickedTitle, type PlayerTitleFacts, type StatsResponse, type TitleContext, type TitleGroup } from "@bingo/shared";
+import { pickTitles, titleNotRecorded, type HistoricalRecorded, type PickedTitle, type PlayerTitleFacts, type StatsResponse, type TitleContext, type TitleGroup } from "@bingo/shared";
 
 /** The moments Titles are judged at (On Fire's window), from the stats response and the viewer's clock. */
 export function titleContextOf(stats: Pick<StatsResponse, "titleContext">, now = new Date()): TitleContext {
@@ -6,9 +6,12 @@ export function titleContextOf(stats: Pick<StatsResponse, "titleContext">, now =
   return { now, liveAt: liveAt ? new Date(liveAt) : null, endedAt: endedAt ? new Date(endedAt) : null };
 }
 
-/** Every Title's holders among the Players in `pool` (the ones the team filter shows). */
-export function pickStatsTitles(stats: Pick<StatsResponse, "titleContext" | "titleSettings">, pool: PlayerTitleFacts[]): PickedTitle[] {
-  return pickTitles(pool, titleContextOf(stats), stats.titleSettings);
+/**
+ * Every Title's holders among the Players in `pool` (the ones the team filter shows). `recorded`: a Historical Bingo's
+ * (the shell's `historical`), whose Titles judged on data it never recorded have no holders and say so.
+ */
+export function pickStatsTitles(stats: Pick<StatsResponse, "titleContext" | "titleSettings">, pool: PlayerTitleFacts[], recorded: HistoricalRecorded | null = null): PickedTitle[] {
+  return pickTitles(pool, titleContextOf(stats), stats.titleSettings).map((p) => (titleNotRecorded(p.title, recorded) ? { ...p, holders: [], notRecorded: true } : p));
 }
 
 /**

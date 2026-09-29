@@ -8,7 +8,7 @@ import { useHasPassed } from "../core/ui/useHasPassed";
 import { toCategoryModel, toTeamModel, buildSubmissionModels, sealedBoardAsTiles } from "./boardModel";
 import { lockedLeaves, type ExclusiveLocks } from "../core/board/exclusivity";
 import { useViewingTeam } from "./useViewingTeam";
-import { canViewStats as canViewStatsOf } from "./useBingoHeader";
+import { canRewind as canRewindOf, canViewStats as canViewStatsOf } from "./useBingoHeader";
 import { tileSearchMatcher, useTileSearch } from "./useTileSearch";
 import { toastQueue } from "../core/ui/Toast";
 import { usePageEvents } from "./usePageEvents";
@@ -130,8 +130,10 @@ export function BingoPageProvider({
   const interests = progressData?.interests ?? EMPTY_INTERESTS;
   const teamSubmissions = submissionsData?.submissions ?? EMPTY_SUBMISSIONS;
 
+  // A Historical Bingo (CONTEXT.md): what it recorded decides what's shown. With no Tasks there are no Team boards.
+  const historical = shell.historical;
   // Mods can look at any team's board; once the bingo is Finished, so can everyone (read-only).
-  const canPickTeam = isMod || bingo.stage === "complete";
+  const canPickTeam = (isMod || bingo.stage === "complete") && (!historical || historical.tasks);
   const isViewingOtherTeam = canPickTeam && !!viewingTeamId && viewingTeamId !== myTeam?.id;
   // Mods can submit for the team they are viewing too (naming the player it is for), so this doesn't depend on whose team it is.
   const canSubmit = bingo.stage === "live" && hasStarted && !!viewingTeamId;
@@ -156,7 +158,9 @@ export function BingoPageProvider({
           ? bingo.stage
           : bingo.stage === "draft"
             ? "draft"
-            : !viewingTeamId
+            : historical && !historical.tasks
+              ? "historical"
+              : !viewingTeamId
               ? "noTeam"
               : "board";
 
@@ -195,7 +199,9 @@ export function BingoPageProvider({
       endsAt: bingo.endsAt ? new Date(bingo.endsAt).getTime() : null,
       boardRows: bingo.boardRows,
       boardCols: bingo.boardCols,
+      historical: bingo.historical,
     },
+    historical,
     milestone: nextMilestone(bingo),
     user: { displayName: myTeamModel?.members.find((m) => m.id === user.id)?.displayName ?? displayName(user), avatarUrl: avatarUrl(user) },
     isMod,
@@ -207,8 +213,10 @@ export function BingoPageProvider({
     removedFromTeam: shell.viewer.removedFromTeam ?? null,
     canPickTeam,
     canViewStats,
-    canRewind: bingo.stage === "complete",
-    wrapped: { canOpen: bingo.stage === "complete" && (shell.wrappedPublished || isMod), preview: !shell.wrappedPublished },
+    canRewind: canRewindOf(shell),
+    canViewDraft: !!historical?.draft,
+    // Wrapped is made at the end of a Bingo, never recorded: not for a Historical one.
+    wrapped: { canOpen: bingo.stage === "complete" && !bingo.historical && (shell.wrappedPublished || isMod), preview: !shell.wrappedPublished },
     canScout,
     draft: { state: draftState ?? null, isLoading: draftLoading },
     viewing: {

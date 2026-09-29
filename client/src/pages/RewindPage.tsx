@@ -8,6 +8,7 @@ import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { AchievementsProvider } from "../core/achievements/AchievementsProvider";
 import { useEscapeBack } from "../core/ui/useEscapeBack";
 import { useRememberTheme } from "../themes/rememberedTheme";
+import { NotRecordedPage } from "../core/historical/NotRecorded";
 
 /** Rewind (CONTEXT.md): /b/:slug/rewind?at=<ms>&team=<id>. Only for a Finished Bingo; any other stage goes to its board. */
 export function RewindPage() {
@@ -23,6 +24,14 @@ export function RewindPage() {
 function ThemedSurface({ slug }: { slug: string }) {
   const page = useBingoPage();
   useRememberTheme(slug, page.themeKey);
+  // A Historical Bingo (CONTEXT.md) without Submissions has nothing to play back.
+  if (page.historical && !page.historical.submissions) {
+    return (
+      <ThemeProvider themeKey={page.themeKey} fallback={<PageLoading />}>
+        <NotRecordedPage slug={slug} title="Rewind" bingoName={page.bingo.name} />
+      </ThemeProvider>
+    );
+  }
   if (!page.canRewind) return <Navigate to={`/b/${slug}`} replace />;
   return (
     <ThemeProvider themeKey={page.themeKey} fallback={<PageLoading />}>

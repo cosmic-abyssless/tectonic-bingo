@@ -171,7 +171,24 @@ export const bingos = sqliteTable('bingos', {
   // Credits (CONTEXT.md): each Wrapped art category's additional credits (ones with no image), a JSON object of
   // WrappedCredit arrays keyed by section. Parsed by wrappedArtService.parseAdditionalCredits.
   wrappedArtCreditsJson: text('wrapped_art_credits_json').notNull().default('{}'),
+  // Historical Bingo (CONTEXT.md, docs/historical-bingos-plan.md): a past Bingo run on another website, imported so its
+  // history lives here. Always Finished and read-only (requireBingo refuses every write to it); what it never recorded
+  // shows as not recorded (historicalService.getRecorded). Set only by the historical importer.
+  historical: integer('historical', { mode: 'boolean' }).notNull().default(false),
 });
+
+// A Historical Bingo's final standings, as the old site or the maintainers recorded them: one row per Team, its place
+// and its points when they're known. A Bingo run here has none (its standings come from scoring).
+export const historicalStandings = sqliteTable('historical_standings', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  teamId: text('team_id').notNull().references(() => teams.id),
+  place: integer('place').notNull(),
+  points: integer('points'),
+}, (t) => [
+  uniqueIndex('historical_standings_team_unq').on(t.teamId),
+  index('historical_standings_bingo_idx').on(t.bingoId),
+]);
 
 // Mod is per-bingo, not a global flag — fixes v1's single global isModerator.
 export const bingoModerators = sqliteTable('bingo_moderators', {
@@ -635,6 +652,9 @@ export const tiles = sqliteTable('tiles', {
   // count. When set, no Task of the Tile has its own (nodes.requiresProof). The note says what to show.
   requiresProof: integer('requires_proof', { mode: 'boolean' }).notNull().default(false),
   proofNote: text('proof_note'),
+  // A Historical Bingo's (CONTEXT.md) own rules for this Tile, as the old site gave them: plain text shown in the Tile's
+  // dialog. Null on every Bingo run here, whose Tiles say what they take through their Tasks.
+  rulesText: text('rules_text'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 }, (t) => [
   uniqueIndex('tiles_bingo_position_unq').on(t.bingoId, t.boardRow, t.boardCol),
@@ -724,7 +744,10 @@ export const submissionScreenshots = sqliteTable('submission_screenshots', {
   screenshotType: text('screenshot_type', {
     enum: ['main', 'proof', 'bank', 'collection_log', 'other'],
   }).notNull().default('main'),
+  // Empty while a Historical Bingo's (CONTEXT.md) screenshot is still to be uploaded (see historicalKey).
   storageUrl: text('storage_url').notNull(),
+  // A Historical Bingo's only: the screenshot's key in its import bundle, which the upload that attaches the file names.
+  historicalKey: text('historical_key'),
   scrapeStatus: text('scrape_status', {
     enum: ['pending', 'processing', 'completed', 'failed'],
   }).notNull().default('pending'),

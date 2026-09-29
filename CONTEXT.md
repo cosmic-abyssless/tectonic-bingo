@@ -12,6 +12,11 @@ A single OSRS clan bingo competition, run from start to finish across a set of l
 - **Rules:** Has its own board, rules, participants, teams, moderators, and pot. Scoped by a unique slug.
 - **Not:** A tournament, a season.
 
+### Historical Bingo
+A past Bingo run on another website before this one, imported so its history lives here too. Always Finished and read-only, and marked **Historical** wherever it appears, so Players expect less detail.
+- **Rules:** Holds only what the old site recorded: at least its dates, rules, Tiles (a picture each), Teams with their Captains and Players, final standings, and its Wise Old Man competition. Players are named by the RSN they played under then. Anything it never recorded (the Draft, signups, the audit log, Achievements, Wrapped, Rewind, Titles, Tile completion) is shown as not recorded, never as zero or empty.
+- **Players:** A past Player is found by their Discord id, whether or not they have logged in here; one who has left the clan is still shown, but can't open the site. A Player whose Discord id isn't known appears only in the Wise Old Man leaderboard.
+
 ### Stage
 The current lifecycle phase of a Bingo. Transitions move forward through a fixed sequence. The name in bold is the canonical one, used in UI copy, discussion and this glossary; the code value is engineering-only.
 1. **Planning** (`planning`) — Admin configures board, tiles, rules, signup questions. Hidden from everyone but Moderators and Admins, and not listed.

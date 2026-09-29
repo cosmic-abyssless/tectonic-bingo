@@ -51,6 +51,7 @@ describe("route coverage", () => {
     const { default: modRouter } = await import("../routes/mod");
     const { default: adminRouter } = await import("../routes/admin");
     const { default: siteAdminRouter } = await import("../routes/siteAdmin");
+    const { default: historicalScreenshotsRouter } = await import("../routes/historicalScreenshots");
     const { default: bugReportsRouter } = await import("../routes/bugReports");
     const { default: devRouter } = await import("../routes/dev");
     const { default: clientErrorsRouter } = await import("../routes/clientErrors");
@@ -63,6 +64,7 @@ describe("route coverage", () => {
       ...routesFor(bingosRouter, "/api/bingos"),
       ...routesFor(modRouter, "/api/bingos/:slug/mod"),
       ...routesFor(adminRouter, "/api/bingos/:slug/admin"),
+      ...routesFor(historicalScreenshotsRouter, "/api/bingos/:slug/admin/historical"),
       ...routesFor(siteAdminRouter, "/api/admin"),
       ...routesFor(bugReportsRouter, "/api/bug-reports"),
       ...routesFor(devRouter, "/api/dev"),

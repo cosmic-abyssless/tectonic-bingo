@@ -1,0 +1,1 @@
+ALTER TABLE `submission_screenshots` ADD `historical_key` text;

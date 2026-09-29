@@ -84,10 +84,15 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   // Cut review scoring (POST .../admin/cut-review/score) is a read-only calculation (auditSkip), not listed here.
   "POST /api/bingos/:slug/admin/cut-review/apply": ["pairing.admin_paired", "pairing.unpaired", "team.created", "team.deleted", "draft.cut_review_applied"],
 
+  // routes/historicalScreenshots.ts, mounted at /api/bingos/:slug/admin/historical. No entry per screenshot: one when
+  // the last pending one is attached.
+  "POST /api/bingos/:slug/admin/historical/screenshots/:key": ["bingo.historical_screenshots_attached"],
+
   // routes/siteAdmin.ts, mounted at /api/admin
   "POST /api/admin/bingos": ["bingo.created"],
   "POST /api/admin/bingos/import": ["bingo.created", "settings.updated", "category.created", "tile.created", "task.created", "line.generated", "line.updated", "question.created"],
   "DELETE /api/admin/bingos/:id": ["bingo.deleted"],
+  "POST /api/admin/historical-bingos": ["bingo.historical_imported"],
   "PATCH /api/admin/users/:id": ["user.admin_changed", "mcp.connection_revoked"],
   "DELETE /api/admin/mcp-connections/:id": ["mcp.connection_revoked"],
   "POST /api/admin/item-groups": ["item_group.created"],

@@ -43,6 +43,7 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
       notes: null,
       requiresProof: false,
       proofNote: null,
+      rulesText: null,
       createdAt: new Date().toISOString(),
       node: previewGraphNode(bingo.id, { kind: "ALL" }),
     };

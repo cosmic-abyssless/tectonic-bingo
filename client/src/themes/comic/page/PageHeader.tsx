@@ -27,7 +27,7 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
       }
       onShowRules={page.rules.show}
       // (The team — identity, roster, and for mods the switcher — lives in the TeamBanner under the search box, not up here.)
-      submissions={page.teamSelector.selectedId ? { pending: page.viewing.pendingSubmissionCount, onShow: page.drawer.show } : undefined}
+      submissions={page.teamSelector.selectedId && page.stageView !== "historical" ? { pending: page.viewing.pendingSubmissionCount, onShow: page.drawer.show } : undefined}
       menuItems={achievementsEligible && openAchievements ? <MenuItem id="achievements" onAction={openAchievements}>Achievements</MenuItem> : undefined}
       extraMenuEntries={achievementsEligible && openAchievements ? [{ id: "achievements", text: "Achievements", label: "Achievements", onAction: openAchievements }] : []}
     >

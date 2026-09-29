@@ -151,6 +151,12 @@ const FILTER_OPTIONS: Record<FilterKey, { key: string; label: string }[]> = {
   ],
 };
 
+// A Historical Bingo's Draft is over: who was drafted, and who signed up and wasn't (a Cut signup).
+const HISTORICAL_DRAFT_OPTIONS = [
+  { key: "in", label: "Drafted" },
+  { key: "cut", label: "Cut" },
+];
+
 // `pending`: the Discord ids with a pending pairing request either way. The roster only carries each player's own
 // outgoing request, so who's been asked comes from everyone else's.
 function filterValue(entry: RosterEntry, key: FilterKey, pending: ReadonlySet<string>): string {
@@ -231,8 +237,10 @@ export function SignupRoster({ slug }: { slug: string }) {
   const withdrawnCount = roster.length - activeCount;
   const cutCount = roster.filter((r) => r.cut).length;
   const cutMode = bingoData?.bingo.cutMode;
+  // A Historical Bingo's Cut signups are recorded: whoever signed up and wasn't drafted.
+  const historical = !!bingoData?.bingo.historical;
   // Who's cut only means something once there are two teams to split the players across.
-  const cutsApply = !!cutMode && cutMode !== "none" && (bingoData?.teams.length ?? 0) >= 2;
+  const cutsApply = historical ? cutCount > 0 : !!cutMode && cutMode !== "none" && (bingoData?.teams.length ?? 0) >= 2;
   // Before the Draft, a Cut review may avoid some of those cuts (CONTEXT.md "Avoidable cut"): the notice says so, and
   // Admins get to open it from there.
   const reviewApplies = cutsApply && cutCount > 0 && (stage === "signup" || stage === "captains");
@@ -251,7 +259,7 @@ export function SignupRoster({ slug }: { slug: string }) {
   // brings in.
   // `attention`: a yellow dot on the filter, and on its `optionKey` option, saying `text`.
   const filterSelect = (key: FilterKey, label: string, attention?: { text: string; optionKey: string }) => {
-    const options = FILTER_OPTIONS[key];
+    const options = key === "draft" && historical ? HISTORICAL_DRAFT_OPTIONS : FILTER_OPTIONS[key];
     return (
       <MultiSelect
         label={label}
@@ -316,8 +324,8 @@ export function SignupRoster({ slug }: { slug: string }) {
   const refreshStats = useRefreshSignupStats(slug);
   const setTimezone = useSetSignupTimezone(slug);
   const gridContext = useMemo<GridContext>(
-    () => ({ search, partnerRsnMap, canWithdraw, onTeam, canPair: stage === "planning" || stage === "signup" || stage === "captains", statsRefreshing, statsResults, currentUserId: me?.id ?? null, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, openProfile }),
-    [search, partnerRsnMap, canWithdraw, onTeam, stage, statsRefreshing, statsResults, me, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, openProfile],
+    () => ({ search, partnerRsnMap, canWithdraw, onTeam, historical, canPair: stage === "planning" || stage === "signup" || stage === "captains", statsRefreshing, statsResults, currentUserId: me?.id ?? null, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, openProfile }),
+    [search, partnerRsnMap, canWithdraw, onTeam, historical, stage, statsRefreshing, statsResults, me, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, openProfile],
   );
 
   // ColumnPicker's own option list — every colId the grid can show except # and RSN, neither of which is
@@ -365,7 +373,7 @@ export function SignupRoster({ slug }: { slug: string }) {
     // full-width sibling instead of being capped by the narrow block's own max-width.
     <>
       <div className="mx-auto w-full max-w-6xl space-y-4">
-        {(collectorBreakdown.byMod.length > 0 || collectorBreakdown.uncollected > 0) && (
+        {!historical && (collectorBreakdown.byMod.length > 0 || collectorBreakdown.uncollected > 0) && (
           <div className="rounded-lg border border-outline p-3">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-on-surface-muted">Buy-ins held</p>
             <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-sm text-on-surface-muted">
@@ -400,7 +408,7 @@ export function SignupRoster({ slug }: { slug: string }) {
           <Notice tone="warn" icon={<AlertIcon />} iconAlign="center">
             <span className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <strong>
-                <span className="num">{cutCount}</span> player{cutCount === 1 ? "" : "s"} will be cut.{cutState === "avoidable" && " Some cuts can be avoided."}
+                <span className="num">{cutCount}</span> player{cutCount === 1 ? "" : "s"} {historical ? (cutCount === 1 ? "was" : "were") : "will be"} cut.{cutState === "avoidable" && " Some cuts can be avoided."}
               </strong>
               {cutState === "avoidable" && me?.isAdmin && (
                 <Button size="sm" onPress={() => setReviewingCuts(true)}>
@@ -438,10 +446,10 @@ export function SignupRoster({ slug }: { slug: string }) {
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div className="flex flex-wrap items-center gap-2">
               {filterSelect("status", "Status")}
-              {filterSelect("buyin", "Buy-in")}
+              {!historical && filterSelect("buyin", "Buy-in")}
               {isDuo && filterSelect("pair", "Pairing")}
               {filterSelect("region", "Timezone")}
-              {cutsApply && filterSelect("draft", "Draft", cutState === "cut" ? { text: `${cutCount} signup${cutCount === 1 ? "" : "s"} will be cut`, optionKey: "cut" } : undefined)}
+              {cutsApply && filterSelect("draft", "Draft", cutState === "cut" ? { text: `${cutCount} signup${cutCount === 1 ? "" : "s"} ${historical ? (cutCount === 1 ? "was" : "were") : "will be"} cut`, optionKey: "cut" } : undefined)}
               {!isDefaultFilters(selected) && (
                 <Button size="sm" variant="ghost" onPress={() => setSelected(DEFAULT_SELECTED)}>
                   Reset filters
@@ -469,6 +477,7 @@ export function SignupRoster({ slug }: { slug: string }) {
             questions={questions}
             isDuo={isDuo}
             showTier={showTier}
+            readOnly={historical}
             collectedByOptions={collectedByOptions}
             doesRowPassFilters={doesRowPassFilters}
             onDisplayedCountChange={setDisplayedCount}

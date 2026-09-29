@@ -8,6 +8,7 @@ import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { AchievementsProvider } from "../core/achievements/AchievementsProvider";
 import { useEscapeBack } from "../core/ui/useEscapeBack";
 import { useRememberTheme } from "../themes/rememberedTheme";
+import { NotRecordedPage } from "../core/historical/NotRecorded";
 
 /** Wrapped (CONTEXT.md): /b/:slug/wrapped. Once it's published, or as a Moderator's preview before that; anyone else goes to the board. */
 export function WrappedPage() {
@@ -23,6 +24,14 @@ export function WrappedPage() {
 function ThemedSurface({ slug }: { slug: string }) {
   const page = useBingoPage();
   useRememberTheme(slug, page.themeKey);
+  // A Historical Bingo (CONTEXT.md) never has a Wrapped: it's made at the end of a Bingo, not recorded.
+  if (page.bingo.historical) {
+    return (
+      <ThemeProvider themeKey={page.themeKey} fallback={<PageLoading />}>
+        <NotRecordedPage slug={slug} title="Wrapped" bingoName={page.bingo.name} />
+      </ThemeProvider>
+    );
+  }
   if (!page.wrapped.canOpen) return <Navigate to={`/b/${slug}`} replace />;
   return (
     <ThemeProvider themeKey={page.themeKey} fallback={<PageLoading />}>

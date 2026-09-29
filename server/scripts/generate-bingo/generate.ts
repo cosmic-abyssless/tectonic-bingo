@@ -4,7 +4,7 @@
 // See docs/generate-bingo.md.
 import fs from "node:fs";
 import path from "node:path";
-import type { BingoExportDocument } from "@bingo/shared";
+import { isHistoricalTestDataStage, type BingoExportDocument } from "@bingo/shared";
 import type { GenerateJob } from "../../src/devTools/generateBingo/job";
 import { describeTimeline, playerCount } from "../../src/devTools/generateBingo/run";
 import { buildTimeline } from "../../src/devTools/generateBingo/timeline";
@@ -20,6 +20,11 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
   if (args.dryRun) {
+    if (isHistoricalTestDataStage(args.stage)) {
+      log(`slug ${args.slug}, seed ${args.seed}, ${args.teams} teams of ${args.teamSize}, a Historical Bingo imported from a made-up ${args.stage === "historical-rich" ? "rich" : "sparse"} bundle`);
+      log("--dry-run: nothing was sent");
+      return;
+    }
     const tl = buildTimeline(args.stage, { now: new Date(), progress: args.progress, days: args.days });
     log(`slug ${args.slug}, seed ${args.seed}, ${playerCount(args)} players, ${args.teams} teams of ~${args.teamSize}`);
     for (const line of describeTimeline(tl)) log(line);

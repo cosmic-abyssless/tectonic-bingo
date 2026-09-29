@@ -528,6 +528,8 @@ export interface PickedTitle {
   requirement: string;
   /** Who holds it (one Player; see pickTitles for ties); empty when nobody qualifies. */
   holders: TitleHolder[];
+  /** A Historical Bingo never recorded what it's judged on (titleNotRecorded): no holders, and it says so. */
+  notRecorded?: boolean;
 }
 
 // Values that differ only by floating-point noise (fractions of Points share) are a tie.

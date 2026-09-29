@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { SubmissionStatus } from "@bingo/shared";
+import { SCREENSHOT_NOT_UPLOADED, type SubmissionStatus } from "@bingo/shared";
 import { useBingoPage } from "../../../headless";
 import type { SubmissionModel } from "../../../headless/types";
 import { ReactionBar } from "../../../core/submissions/ReactionBar";
@@ -92,7 +92,7 @@ export function SubmissionsDrawer({
         <ul className="divide-y divide-outline">
           {shown.map((s) => (
             <li key={s.id} className="flex items-start gap-4 px-5 py-4 transition-colors hover:bg-surface-hover">
-              <ScreenshotThumb url={s.thumbnailUrl ?? undefined} />
+              <ScreenshotThumb url={s.thumbnailUrl ?? undefined} pending={s.screenshotPending} />
 
               <div className="min-w-0 flex-1">
                 <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -110,6 +110,7 @@ export function SubmissionsDrawer({
                     {s.detail.postedByUser && <> (posted by <PlayerName userId={s.detail.postedByUser.id}>{displayName(s.detail.postedByUser)}</PlayerName>)</>}
                   </p>
                 )}
+                {s.screenshotPending && <p className="mt-0.5 text-xs italic text-on-surface-subtle">{SCREENSHOT_NOT_UPLOADED}</p>}
                 {s.reviewerNotes && <p className="mt-0.5 truncate text-xs text-warn">{s.reviewerNotes}</p>}
                 {!s.isProof && <ReactionBar className="mt-1.5" reactions={s.reactions} canReact={reactions.canReact} onToggle={(emoji) => reactions.toggle(s.id, emoji)} />}
               </div>

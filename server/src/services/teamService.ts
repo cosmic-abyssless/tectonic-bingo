@@ -233,7 +233,7 @@ export function createPointAdjustment(db: Db, params: CreatePointAdjustmentParam
 const CODEWORD_ADJECTIVES = ["crimson", "azure", "verdant", "amber", "shadow", "silver", "obsidian", "golden", "frost", "ember", "cobalt", "violet"];
 const CODEWORD_NOUNS = ["falcon", "wolf", "raven", "tiger", "serpent", "phoenix", "griffin", "panther", "hawk", "lynx", "kraken", "wyvern"];
 
-function generateCodeword(): string {
+export function generateCodeword(): string {
   const adj = CODEWORD_ADJECTIVES[Math.floor(Math.random() * CODEWORD_ADJECTIVES.length)];
   const noun = CODEWORD_NOUNS[Math.floor(Math.random() * CODEWORD_NOUNS.length)];
   return `${adj}-${noun}`;
@@ -243,7 +243,7 @@ function generateCodeword(): string {
 // and wrap once all eight are taken. Admins can still recolour later.
 const TEAM_PALETTE = ["#e74c3c", "#3498db", "#2ecc71", "#f1c40f", "#9b59b6", "#e67e22", "#1abc9c", "#ec407a"];
 
-function nextTeamColor(db: Db, bingoId: string): string {
+export function nextTeamColor(db: Db, bingoId: string): string {
   const used = db.select({ color: teams.color }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.color);
   return TEAM_PALETTE.find((c) => !used.includes(c)) ?? TEAM_PALETTE[used.length % TEAM_PALETTE.length];
 }

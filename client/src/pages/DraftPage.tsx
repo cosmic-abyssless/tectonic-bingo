@@ -4,6 +4,7 @@ import { useBingo } from "../api/queries";
 import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { PageLoading } from "../themes/default/page/PageStates";
 import { useRememberTheme } from "../themes/rememberedTheme";
+import { NotRecordedPage } from "../core/historical/NotRecorded";
 import { ThemeProvider } from "../themes/ThemeProvider";
 import { useSlot } from "../themes/context";
 
@@ -22,7 +23,8 @@ export function DraftPage() {
   return (
     <ThemeProvider themeKey={shell.bingo.theme} fallback={<PageLoading />}>
       <PlayerProfileProvider slug={slug!}>
-        <DraftPageSlot slug={slug!} bingoName={shell.bingo.name} isMod={shell.isMod} />
+        {/* A Historical Bingo (CONTEXT.md) without draft picks has no Draft room. */}
+        {shell.historical && !shell.historical.draft ? <NotRecordedPage slug={slug!} title="Draft" bingoName={shell.bingo.name} /> : <DraftPageSlot slug={slug!} bingoName={shell.bingo.name} isMod={shell.isMod} />}
       </PlayerProfileProvider>
     </ThemeProvider>
   );

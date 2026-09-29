@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TITLE_SETTINGS, oneIn, pickTitles, shortGp, TITLES, titlesByHolder, titlesHeldBy, type LuckFacts, type PlayerTitleFacts, type TitleAwardFact, type TitleContext, type TitleId } from "@bingo/shared";
+import { DEFAULT_TITLE_SETTINGS, oneIn, pickTitles, shortGp, TITLES, titlesByHolder, titlesHeldBy, titleNotRecorded, type LuckFacts, type PlayerTitleFacts, type TitleAwardFact, type TitleContext, type TitleId } from "@bingo/shared";
 
 const HOUR = 60 * 60 * 1000;
 const LIVE_AT = new Date("2026-01-01T00:00:00Z");
@@ -267,5 +267,20 @@ describe("titlesByHolder and titlesHeldBy", () => {
     expect(titlesByHolder(picked).get("a")?.map((t) => t.id)).toEqual(["carry", "butterfingers", "collector"]);
     expect(titlesHeldBy(picked, "a").map((p) => p.title.id)).toEqual(["carry", "butterfingers", "collector"]);
     expect(titlesByHolder(picked).has("b")).toBe(false);
+  });
+});
+
+describe("titleNotRecorded", () => {
+  const recorded = { tasks: true, submissions: true, signupRoster: true, draft: true, womSnapshots: false };
+  const byId = (id: TitleId) => TITLES.find((t) => t.id === id)!;
+
+  it("marks a Historical Bingo's Wise Old Man Titles without snapshots, and Overachiever", () => {
+    expect(TITLES.filter((t) => titleNotRecorded(t, recorded)).map((t) => t.id).sort()).toEqual([...TITLES.filter((t) => t.source === "wom").map((t) => t.id), "overachiever"].sort());
+    expect(titleNotRecorded(byId("grinder"), { ...recorded, womSnapshots: true })).toBe(false);
+    expect(titleNotRecorded(byId("carry"), recorded)).toBe(false);
+  });
+
+  it("never marks any other Bingo's", () => {
+    expect(TITLES.some((t) => titleNotRecorded(t, null))).toBe(false);
   });
 });

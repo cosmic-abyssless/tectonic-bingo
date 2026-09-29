@@ -15,6 +15,7 @@ import type { AchievementCount } from "./achievements.ts";
 import type { PlayerTitleFacts, TitleSettings } from "./titles.ts";
 import type { TimeZoneRegion } from "./timezone.ts";
 import type { ProofCheck, SubmissionKind } from "./proof.ts";
+import type { HistoricalRecorded } from "./historical.ts";
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
@@ -162,6 +163,8 @@ export interface Bingo {
   sealedTiles: boolean;
   /** During Board revealed, the rules text is held back from Players and Captains. See areRulesHidden. */
   hideRules: boolean;
+  /** A Historical Bingo (CONTEXT.md): imported from another website, always Finished and read-only. See historical.ts. */
+  historical: boolean;
 }
 
 /**
@@ -363,6 +366,8 @@ export interface TileBase {
   requiresProof: boolean;
   /** What the Proof screenshot should show ("an empty supply cart"). */
   proofNote: string | null;
+  /** A Historical Bingo's own rules for the Tile, as the old site gave them (plain text); null otherwise. */
+  rulesText: string | null;
   createdAt: string;
 }
 
@@ -391,12 +396,23 @@ export interface Submission {
   updatedAt: string;
 }
 
+/** What a Historical Bingo's Submission shows in place of a screenshot that's still to be uploaded. */
+export const SCREENSHOT_NOT_UPLOADED = "Screenshot not uploaded yet";
+
+/** A Historical Bingo's screenshot that was imported but whose file isn't uploaded yet (#320). */
+export function isScreenshotPending(s: { storageUrl: string } | undefined): boolean {
+  return s !== undefined && s.storageUrl === "";
+}
+
 export interface SubmissionScreenshot {
   id: string;
   submissionId: string;
   /** `proof` is a Proof screenshot's (CONTEXT.md). */
   screenshotType: "main" | "proof" | "bank" | "collection_log" | "other";
+  /** Empty while a Historical Bingo's screenshot is still to be uploaded (isScreenshotPending). */
   storageUrl: string;
+  /** A Historical Bingo's only: the screenshot's key in its import bundle. */
+  historicalKey?: string | null;
   scrapeStatus: "pending" | "processing" | "completed" | "failed";
   extractedText: string | null;
   codewordVerified: boolean | null;
@@ -564,6 +580,8 @@ export interface BingoShellResponse {
   viewer: BingoViewerAccess;
   /** A Finished Bingo's Wrapped (CONTEXT.md) has been published: the Board's "Your Bingo Wrapped" banner. */
   wrappedPublished: boolean;
+  /** A Historical Bingo's (CONTEXT.md) recorded features, deciding what's shown and what's "not recorded"; null for any other Bingo. */
+  historical: HistoricalRecorded | null;
 }
 
 /**
@@ -1409,6 +1427,8 @@ export * from "./audit.ts";
 export * from "./auditCondense.ts";
 export * from "./bingoExport.ts";
 export * from "./exclusivity.ts";
+export * from "./historical.ts";
+export * from "./historicalBundle.ts";
 export * from "./names.ts";
 export * from "./proof.ts";
 export * from "./rewind.ts";
