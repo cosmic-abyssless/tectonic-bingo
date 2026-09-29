@@ -6,6 +6,7 @@ import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { AchievementsProvider } from "../core/achievements/AchievementsProvider";
 import { PageLoading } from "../themes/default/page/PageStates";
 import { useRememberTheme } from "../themes/rememberedTheme";
+import { NotRecordedPage } from "../core/historical/NotRecorded";
 import { ThemeProvider } from "../themes/ThemeProvider";
 import { useSlot } from "../themes/context";
 import type { BingoShellResponse } from "@bingo/shared";
@@ -26,7 +27,8 @@ export function StatsPage() {
       {/* Outside PlayerProfileProvider — see BingoPage.tsx's ThemedSurface for why. */}
       <AchievementsProvider slug={slug!}>
         <PlayerProfileProvider slug={slug!}>
-          <StatsPageSlot slug={slug!} bingoName={shell.bingo.name} />
+          {/* A Historical Bingo (CONTEXT.md) without Submissions has no Stats. */}
+          {shell.historical && !shell.historical.submissions ? <NotRecordedPage slug={slug!} title="Stats" bingoName={shell.bingo.name} /> : <StatsPageSlot slug={slug!} bingoName={shell.bingo.name} />}
         </PlayerProfileProvider>
       </AchievementsProvider>
     </ThemeProvider>

@@ -3,6 +3,7 @@ import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
 import { useScreenshotCapture } from "../../../headless/useScreenshotCapture";
 import { ScreenshotDropOverlay } from "../../../core/ui/ScreenshotDropOverlay";
 import { SealedTilesNotice } from "../../../core/board/SealedTilesNotice";
+import { HistoricalBingoView } from "../../../core/historical/HistoricalBingoView";
 import { useSlot } from "../../context";
 import { ComicPage } from "../fx/ComicPage";
 import { SubmitButton } from "./SubmitButton";
@@ -54,6 +55,8 @@ export function BoardPageLayout() {
             milestone={page.milestone}
             onOpenDraft={page.actions.goToDraft}
           />
+        ) : page.stageView === "historical" && page.historical ? (
+          <HistoricalBingoView slug={page.slug} board={board} teams={page.teams} recorded={page.historical} />
         ) : page.stageView === "noTeam" ? (
           <NoTeamStage selector={page.teamSelector} />
         ) : (

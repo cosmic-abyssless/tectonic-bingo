@@ -50,6 +50,7 @@ import * as achievementService from "./achievementService";
 import * as wrappedArtService from "./wrappedArtService";
 import { assertCutReviewSatisfied } from "./cutReviewService";
 import { assertTeamsLedByPairs } from "./teamService";
+import { assertNotHistorical, deleteHistoricalRows } from "./historicalService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -59,6 +60,8 @@ export type Stage = (typeof STAGE_ORDER)[number];
 // Newest first — the bingo list page redirects non-admins straight to
 // bingos[0] as the "default" bingo (issue #3: simpler than an env var,
 // since there's realistically only ever one active bingo at a time).
+// Historical Bingos (CONTEXT.md) come after every other, newest start first: one imported today is still years old,
+// and must never become the Bingo players land on.
 // The list is for picking a bingo, so it never carries the rules text or the exclusive item lists (which need
 // the board revealed; see toViewerBingo). A Planning bingo is left out for anyone but its Moderators and Admins
 // (CONTEXT.md "Stage"), so nobody else is redirected to one either; every other stage is listed to every clan member.
@@ -72,6 +75,7 @@ export function listBingos(db: Db, viewer: { id: string; isAdmin: boolean }) {
     .orderBy(desc(bingos.createdAt))
     .all()
     .filter((b) => b.stage !== "planning" || !modOf || modOf.has(b.id))
+    .sort((a, b) => Number(a.historical) - Number(b.historical) || (a.historical ? (b.startsAt?.getTime() ?? 0) - (a.startsAt?.getTime() ?? 0) : 0))
     .map((b) => toViewerBingo(b, false));
 }
 
@@ -254,6 +258,8 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
     const bingo = tx.select().from(bingos).where(eq(bingos.id, params.bingoId)).get();
     if (!bingo) throw new ServiceError(404, "Bingo not found");
 
+    // A Historical Bingo (CONTEXT.md) is always Finished.
+    assertNotHistorical(bingo, "its stage can't change");
     if (params.toStage === bingo.stage) {
       throw new ServiceError(400, `Bingo is already in the "${bingo.stage}" stage`);
     }
@@ -338,6 +344,7 @@ export function deleteBingo(db: Db, bingoId: string): void {
     tx.delete(pickRatings).where(inArray(pickRatings.teamId, teamIds)).run();
     tx.delete(tileInterests).where(inArray(tileInterests.teamId, teamIds)).run();
     tx.delete(teamMembers).where(inArray(teamMembers.teamId, teamIds)).run();
+    deleteHistoricalRows(tx, bingoId);
     const categoryIds = tx.select({ id: superlativeCategories.id }).from(superlativeCategories).where(eq(superlativeCategories.bingoId, bingoId));
     tx.delete(superlativeVotes).where(inArray(superlativeVotes.categoryId, categoryIds)).run();
     tx.delete(superlativeCategories).where(eq(superlativeCategories.bingoId, bingoId)).run();

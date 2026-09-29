@@ -10,7 +10,7 @@ const node = (over: Partial<GraphNode> & Pick<GraphNode, "id" | "kind">): GraphN
 
 const tile = (id: string, over: Partial<Tile>, tasks: GraphNode[]): Tile => ({
   id, bingoId: "b", nodeId: `${id}-node`, name: id.toUpperCase(), imageUrl: null, categoryId: null, boardRow: 0, boardCol: 0,
-  hasFreezePeriod: false, freezeDurationMinutes: 0, notes: null, requiresProof: false, proofNote: null, createdAt: "",
+  hasFreezePeriod: false, freezeDurationMinutes: 0, notes: null, requiresProof: false, proofNote: null, rulesText: null, createdAt: "",
   node: node({ id: `${id}-node`, kind: "ALL", children: tasks }), ...over,
 });
 

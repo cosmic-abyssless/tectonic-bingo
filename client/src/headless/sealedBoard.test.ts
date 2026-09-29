@@ -75,6 +75,7 @@ describe("tileSearchMatcher", () => {
     notes: null,
     requiresProof: false,
     proofNote: null,
+    rulesText: null,
     createdAt: "",
     node: node({ id: "n", kind: "ALL", children: [node({ id: "p", kind: "ITEM", description: "Kill the snake", itemName: "Tanzanite fang" })] }),
   };

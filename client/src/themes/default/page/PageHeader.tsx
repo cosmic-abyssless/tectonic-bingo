@@ -5,6 +5,7 @@ import { AppHeader } from "../../../core/ui/AppHeader";
 import { Button } from "../../../core/ui/Button";
 import { Badge } from "../../../core/ui/Card";
 import { CountdownTimer } from "../../../core/ui/CountdownTimer";
+import { HistoricalBadge } from "../../../core/historical/HistoricalBadge";
 import { MenuItem } from "../../../core/ui/Menu";
 import { RewindIcon, UsersIcon } from "../../../core/ui/icons";
 import { useSlot } from "../../context";
@@ -28,6 +29,11 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
           <>
             <CountdownTimer target={page.bingo.endsAt} /> remaining
           </>
+        ) : page.bingo.historical ? (
+          <span className="inline-flex items-center gap-1.5">
+            {page.bingo.stageLabel}
+            <HistoricalBadge />
+          </span>
         ) : (
           page.bingo.stageLabel
         )
@@ -71,7 +77,7 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
           )}
         </Button>
       )}
-      {page.teamSelector.selectedId && (
+      {page.teamSelector.selectedId && page.stageView !== "historical" && (
         <Button size="sm" onPress={page.drawer.show}>
           Submissions
           {page.viewing.pendingSubmissionCount > 0 && (

@@ -46,7 +46,7 @@ export function sealedBoardAsTiles(board: SealedBoardResponse, bingoId: string):
     children: [],
   });
   const nodeIdOf = (tileId: string) => `sealed:${tileId}`;
-  const tiles = board.tiles.map((t) => ({ ...t, bingoId, nodeId: nodeIdOf(t.id), notes: null, requiresProof: false, proofNote: null, createdAt: "", node: emptyNode(nodeIdOf(t.id)) }));
+  const tiles = board.tiles.map((t) => ({ ...t, bingoId, nodeId: nodeIdOf(t.id), notes: null, requiresProof: false, proofNote: null, rulesText: null, createdAt: "", node: emptyNode(nodeIdOf(t.id)) }));
   const lines = board.lines.map((l) => {
     const node = emptyNode(`sealed:${l.id}`);
     return { id: l.id, bingoId, nodeId: node.id, lineType: l.lineType, lineIndex: l.lineIndex, node: { ...node, children: l.tileIds.map((id) => emptyNode(nodeIdOf(id))) } };
@@ -336,6 +336,7 @@ export function buildTileModelsStatic(args: {
       id: tile.id,
       name: tile.name,
       imageUrl: tile.imageUrl,
+      rulesText: tile.rulesText ?? null,
       row: tile.boardRow,
       col: tile.boardCol,
       sealed,

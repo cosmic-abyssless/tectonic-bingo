@@ -569,6 +569,7 @@ describe("every column is accounted for", () => {
         "wrappedCreditsJson", // replaced by per-image and per-category credits (#281), kept only until the column is dropped
         "wrappedArtCreditsJson", // exported beside the Wrapped art, as the document's wrappedArtCredits
         "achievementsEnabled", // the master switch isn't carried — an import always starts with it on (achievementKeys carries the per-key switches instead)
+        "historical", // a Historical Bingo is made by the historical importer, never from a template
       ],
     );
   });
@@ -579,7 +580,7 @@ describe("every column is accounted for", () => {
     const tile = exportBingo(db, bingo.id, { uploadsDir: uploads.dir }).tiles.find((t) => t.name === "Tile A")!;
     // categoryLocalId is categoryId; image is imageUrl (the file itself); bonusPoints is the tile's own node's points; tasks are its node's children.
     const renamed: Record<string, string> = { categoryLocalId: "categoryId", image: "imageUrl" };
-    accounted(schema.tiles, Object.keys(tile).map((k) => renamed[k] ?? k), ["id", "bingoId", "nodeId", "createdAt"], ["bonusPoints", "tasks"]);
+    accounted(schema.tiles, Object.keys(tile).map((k) => renamed[k] ?? k), ["id", "bingoId", "nodeId", "createdAt", "rulesText"], ["bonusPoints", "tasks"]); // rulesText: only a Historical Bingo's Tiles have it
     expect(Object.keys(tile)).toEqual(expect.arrayContaining(["bonusPoints", "tasks"]));
   });
 

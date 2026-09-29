@@ -8,6 +8,7 @@ import type {
   AuditTone,
   ContributionCount,
   DraftState,
+  HistoricalRecorded,
   NodeKind,
   NodeStatus,
   PickedTitle,
@@ -177,6 +178,8 @@ export interface TileModel {
   id: string;
   name: string;
   imageUrl: string | null;
+  /** A Historical Bingo's (CONTEXT.md) own rules for the Tile, as the old site gave them; null otherwise. */
+  rulesText: string | null;
   row: number;
   col: number;
   /**
@@ -290,7 +293,11 @@ export interface PointBreakdownModel {
 
 // Exact branch order: signup -> notPart -> planning|captains -> draft -> !viewingTeamId -> board.
 // "notPart": someone who can't see the bingo (not a Player, Moderator or Admin; CONTEXT.md "Player") once signups close.
-export type StageView = "signup" | "notPart" | "planning" | "captains" | "draft" | "noTeam" | "board";
+/**
+ * "historical": a Historical Bingo (CONTEXT.md) that recorded no Tasks, so there's no Team board to show: the page is
+ * its picture board, standings, Teams and Wise Old Man leaderboard (core/historical's HistoricalBingoView).
+ */
+export type StageView = "signup" | "notPart" | "planning" | "captains" | "draft" | "noTeam" | "board" | "historical";
 
 export interface TileSearchModel {
   query: string;
@@ -332,7 +339,11 @@ export interface BingoPageModel {
     endsAt: number | null;
     boardRows: number;
     boardCols: number;
+    /** A Historical Bingo (CONTEXT.md): imported, always Finished and read-only; its header carries a Historical badge. */
+    historical: boolean;
   };
+  /** What a Historical Bingo recorded, per feature (what isn't there says "Not recorded for historical Bingos"); null for any other Bingo. */
+  historical: HistoricalRecorded | null;
   milestone: StageMilestone | null;
   user: UserModel;
   isMod: boolean;

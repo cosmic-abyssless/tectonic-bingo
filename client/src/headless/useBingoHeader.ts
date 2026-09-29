@@ -12,7 +12,7 @@ export interface BingoHeaderModel {
   stageLabel: string;
   isMod: boolean;
   canViewStats: boolean;
-  /** Rewind (CONTEXT.md) exists only once the bingo is Finished. */
+  /** Rewind (CONTEXT.md) exists only once the bingo is Finished (see canRewind). */
   canRewind: boolean;
   /** Submissions waiting for a mod (mods only; 0 otherwise). */
   pendingCount: number;
@@ -22,6 +22,8 @@ export interface BingoHeaderModel {
   rulesComeLater: boolean;
   /** A site admin (or a dev-mode session) gets a way back to the list of every bingo. */
   canSeeAllBingos: boolean;
+  /** A Historical Bingo (CONTEXT.md): the header carries a Historical badge. */
+  historical: boolean;
 }
 
 /** What the Rules dialog says while the rules are held back (Hide rules, during Board revealed). */
@@ -31,8 +33,14 @@ export const RULES_COME_LATER = "The rules will be posted at a later date.";
  * Players see their own team's stats while the bingo is live and everyone's once it's over (the stats endpoint 403s
  * otherwise); mods see them throughout.
  */
-export function canViewStats(shell: Pick<BingoShellResponse, "bingo" | "isMod" | "myTeam">): boolean {
+export function canViewStats(shell: Pick<BingoShellResponse, "bingo" | "isMod" | "myTeam" | "historical">): boolean {
+  if (shell.historical && !shell.historical.submissions) return false;
   return shell.isMod || shell.bingo.stage === "complete" || (shell.bingo.stage === "live" && !!shell.myTeam);
+}
+
+/** Rewind (CONTEXT.md) exists only once the bingo is Finished, and for a Historical Bingo only when it recorded Submissions. */
+export function canRewind(shell: Pick<BingoShellResponse, "bingo" | "historical">): boolean {
+  return shell.bingo.stage === "complete" && (!shell.historical || shell.historical.submissions);
 }
 
 /** Null while the bingo is loading. */
@@ -47,7 +55,8 @@ export function useBingoHeader(slug: string): BingoHeaderModel | null {
     stageLabel: STAGE_LABEL[shell.bingo.stage],
     isMod: shell.isMod,
     canViewStats: canViewStats(shell),
-    canRewind: shell.bingo.stage === "complete",
+    canRewind: canRewind(shell),
+    historical: shell.bingo.historical,
     pendingCount: pending?.count ?? 0,
     rulesMarkdown: shell.bingo.rulesMarkdown ?? "",
     rulesComeLater: !shell.isMod && areRulesHidden(shell.bingo),
