@@ -29,6 +29,7 @@ export function AppHeader({
   back,
   title,
   subtitle,
+  titleAside,
   menuEntries,
   controls,
   children,
@@ -40,6 +41,8 @@ export function AppHeader({
   back?: { to: string; label: string };
   title: ReactNode;
   subtitle?: ReactNode;
+  /** Beside the title (the board's Codeword banner); on a phone, a row of its own under the bar. */
+  titleAside?: ReactNode;
   /** The page's own ☰ entries, each only where it applies (see headless useBingoMenuEntries for a bingo page's). */
   menuEntries?: HeaderMenuEntry[];
   /** What the page shows up here that isn't an action (the default theme's team picker), before the actions. */
@@ -160,7 +163,11 @@ export function AppHeader({
             </div>
             {subtitle && <div className="truncate text-xs text-on-surface-muted">{subtitle}</div>}
           </div>
+          {/* Right of the title from md up; on a phone there's no room beside it, so it gets a row of its own below. */}
+          {titleAside && <div className="ml-2 flex shrink-0 items-center max-md:hidden">{titleAside}</div>}
         </div>
+
+        {titleAside && <div className="flex min-w-0 basis-full items-center md:hidden max-md:order-last">{titleAside}</div>}
 
         {/* On a phone the page's controls take a row of their own under the bar, so the actions stay beside the title. */}
         {controls && <div className="flex items-center gap-2 max-md:order-last max-md:basis-full">{controls}</div>}

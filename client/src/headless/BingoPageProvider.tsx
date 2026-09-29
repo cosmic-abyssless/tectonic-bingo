@@ -183,7 +183,7 @@ export function BingoPageProvider({
               ? "noTeam"
               : "board";
 
-  const teamModels = teams.map((t) => toTeamModel(t, myTeam?.id ?? null, user.id, bingo.stage));
+  const teamModels = teams.map((t) => toTeamModel(t, myTeam?.id ?? null, user.id, bingo.stage, isMod));
   // shell.myTeam is the bare row; the roster lives on the matching entry in shell.teams.
   const myTeamModel = teamModels.find((t) => t.isMine) ?? null;
   // Shared with the header of the pages around the board (useBingoHeader), which shows the same way in.
@@ -298,6 +298,8 @@ export function BingoPageProvider({
         setReaction.mutate({ teamId: myTeam.id, submissionId, emoji, user, reacted: !reactors.some((u) => u.id === user.id) });
       },
     },
+    // Only while Live: shown any earlier, it would let a screenshot be staged before the bingo starts.
+    codeword: bingo.stage === "live" ? (myTeamModel?.codeword ?? null) : null,
   };
 
   const raw: BingoPageRaw = { slug, bingo, tiles, categories: categoriesRaw, nodeStates, teamSubmissions, viewingTeam: viewingTeamModel, viewerId: user.id, locks };

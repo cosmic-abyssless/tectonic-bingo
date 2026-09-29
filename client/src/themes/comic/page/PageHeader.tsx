@@ -1,11 +1,13 @@
 import { useBingoHeader, type BingoPageModel } from "../../../headless";
 import { CountdownTimer } from "../../../core/ui/CountdownTimer";
+import { useSlot } from "../../context";
 import { Masthead } from "./Masthead";
 import { SubmitButton } from "./SubmitButton";
 
 /** The board's masthead: the shared one (Masthead), with the time left while live, Submissions and the team in its ☰ menu, and Submit. */
 export function PageHeader({ page }: { page: BingoPageModel }) {
   const header = useBingoHeader(page.slug);
+  const CodewordBanner = useSlot("CodewordBanner");
   if (!header) return null;
   return (
     <Masthead
@@ -24,6 +26,7 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
       onShowRules={page.rules.show}
       // (The team — identity, roster, and for mods the switcher — lives in the TeamBanner under the search box; the ☰
       // menu opens the same summary.) A Historical Bingo with no Tasks recorded has no Submissions to show.
+      titleAside={page.codeword ? <CodewordBanner codeword={page.codeword} /> : undefined}
       submissions={page.teamSelector.selectedId && page.stageView !== "historical" ? { pending: page.viewing.pendingSubmissionCount, onShow: page.drawer.show } : undefined}
       team={page.viewing.team ? { onShow: page.teamInfo.show } : undefined}
     >

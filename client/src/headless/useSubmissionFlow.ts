@@ -340,6 +340,7 @@ export function useSubmissionFlow({
   const analysisStatus: SubmissionFlowModel["analysis"]["status"] = analyzeScreenshot.isPending ? "analyzing" : analysisFailed ? "failed" : analysis ? "done" : "idle";
 
   return {
+    codeword: viewingTeam?.codeword ?? null,
     submitter: {
       visible: !onViewingTeam || submitterOptions.length > 1,
       required: !onViewingTeam,

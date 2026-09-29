@@ -102,6 +102,8 @@ export interface ThemeSlots {
   // Player once signups are closed) — the way into the scouting room before the draft. `isLead`: the viewer leads a
   // team, so rates players there; everyone else only looks.
   ScoutBanner: ComponentType<{ onOpen: () => void; isLead: boolean }>;
+  /** The team's Codeword (CONTEXT.md), which every screenshot must show: beside the board's title while Live, and in the Submit flow. */
+  CodewordBanner: ComponentType<{ codeword: string }>;
   DraftStage: ComponentType<{ draft: BingoPageModel["draft"]; milestone: StageMilestone | null; onOpenDraft: () => void }>;
   // No team picked yet, for whoever can pick one (page.canPickTeam: mods, and everyone once the bingo is Finished).
   // `selector` lets a theme list the teams right on this screen instead of pointing at a menu.

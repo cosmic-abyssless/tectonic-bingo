@@ -26,6 +26,7 @@ import { TeamBanner } from "./page/TeamBanner";
 import { PlanningStage } from "./page/PlanningStage";
 import { SignupStage } from "./page/SignupStage";
 import { ScoutBanner } from "./page/ScoutBanner";
+import { CodewordBanner } from "./page/CodewordBanner";
 import { OnTheClockBanner } from "./draft/OnTheClockBanner";
 import { DraftStage } from "./page/DraftStage";
 import { NoTeamStage } from "./page/NoTeamStage";
@@ -117,6 +118,7 @@ export const defaultTheme: ThemeDefinition = {
     PlanningStage,
     SignupStage,
     ScoutBanner,
+    CodewordBanner,
     DraftStage,
     NoTeamStage,
     NotPartStage,
