@@ -91,7 +91,8 @@ function TutorialLayer({ tutorial, step, lastCardHeight }: { tutorial: TutorialM
 
   const showCard = found || !step.optional || step.targets.length === 0;
   const card = tutorial.card!;
-  const cardStyle = placeCard(hole, view, phone);
+  // Inside the ☰ the card goes beside the menu: below an entry, it would cover the entries still to come.
+  const cardStyle = placeCard(hole, view, phone, step.inside === "menu");
   const dim = "color-mix(in srgb, var(--color-scrim) 55%, transparent)";
 
   return (
@@ -264,8 +265,11 @@ function blockers(hole: Box, view: { width: number; height: number }, clickable:
   ];
 }
 
-/** On a phone, across the bottom of the screen. Otherwise beside the element: below it, above it, or to a side, whichever fits. */
-function placeCard(hole: Box | null, view: { width: number; height: number; cardHeight: number }, phone: boolean): CSSProperties {
+/**
+ * On a phone, across the bottom of the screen. Otherwise beside the element: below it, above it, or to a side, whichever
+ * fits first (the sides first when `sideFirst`).
+ */
+function placeCard(hole: Box | null, view: { width: number; height: number; cardHeight: number }, phone: boolean, sideFirst = false): CSSProperties {
   if (phone) return { left: EDGE, right: EDGE, bottom: EDGE };
   const width = Math.min(CARD_WIDTH, view.width - 2 * EDGE);
   const height = view.cardHeight;
@@ -273,10 +277,12 @@ function placeCard(hole: Box | null, view: { width: number; height: number; card
   if (!hole) return { width, left: (view.width - width) / 2, top: Math.max(EDGE, (view.height - height) / 2) };
   const centredLeft = clamp(hole.left + hole.width / 2 - width / 2, EDGE, view.width - EDGE - width);
   const besideTop = clamp(hole.top, EDGE, view.height - EDGE - height);
-  if (hole.top + hole.height + GAP + height <= view.height - EDGE) return { width, left: centredLeft, top: hole.top + hole.height + GAP };
-  if (hole.top - GAP - height >= EDGE) return { width, left: centredLeft, top: hole.top - GAP - height };
-  if (hole.left + hole.width + GAP + width <= view.width - EDGE) return { width, left: hole.left + hole.width + GAP, top: besideTop };
-  if (hole.left - GAP - width >= EDGE) return { width, left: hole.left - GAP - width, top: besideTop };
+  const below = hole.top + hole.height + GAP + height <= view.height - EDGE ? { width, left: centredLeft, top: hole.top + hole.height + GAP } : null;
+  const above = hole.top - GAP - height >= EDGE ? { width, left: centredLeft, top: hole.top - GAP - height } : null;
+  const right = hole.left + hole.width + GAP + width <= view.width - EDGE ? { width, left: hole.left + hole.width + GAP, top: besideTop } : null;
+  const left = hole.left - GAP - width >= EDGE ? { width, left: hole.left - GAP - width, top: besideTop } : null;
+  const fits = (sideFirst ? [right, left, below, above] : [below, above, right, left]).find(Boolean);
+  if (fits) return fits;
   // Nowhere beside it (the whole Board, on a small window): over its bottom edge.
   return { width, left: centredLeft, top: view.height - EDGE - height };
 }

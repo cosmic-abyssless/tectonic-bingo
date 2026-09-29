@@ -146,7 +146,7 @@ export function tutorialSteps(tile: TutorialTileFacts): TutorialStep[] {
     step({ id: "open-menu", number: 8, title: "The ☰ menu", lines: ["Everything else is in the ☰ menu. Click it to open it."], targets: ["menu"], waitsFor: "menu" }),
     step({ id: "menu-submissions", number: 8, title: "Submissions", lines: ["Your Team's Submissions, and how their review went."], targets: ["menu-submissions"], inside: "menu", optional: true }),
     step({ id: "menu-rules", number: 8, title: "Rules", lines: ["The Bingo's Rules."], targets: ["menu-rules"], inside: "menu", optional: true }),
-    step({ id: "menu-stats", number: 8, title: "Stats", lines: ["How your Team, and everyone else, are doing."], targets: ["menu-stats"], inside: "menu", optional: true }),
+    step({ id: "menu-stats", number: 8, title: "Stats", lines: ["How your Team is doing, and every Team once the Bingo is over."], targets: ["menu-stats"], inside: "menu", optional: true }),
     step({ id: "menu-tutorial", number: 8, title: "Tutorial", lines: ["This walk through, whenever you want it again."], targets: ["menu-tutorial"], inside: "menu", closes: "menu", optional: true }),
     step({ id: "done", number: 9, title: "Done", lines: ["You're set. Good luck!", "You can replay this any time from ☰ → Tutorial."] }),
   ];
