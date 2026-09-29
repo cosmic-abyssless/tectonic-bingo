@@ -34,12 +34,12 @@ export function useBingoMenuEntries(slug: string, header: BingoHeaderModel | nul
   if (board.team) entries.push({ id: "team", text: "Team overview", label: "Team overview", wikiIcon: "Chat-channel", onAction: board.team.onShow });
   if (board.onShowRules && hasRules) entries.push({ id: "rules", text: "Rules", label: "Rules", wikiIcon: "Book of Knowledge", onAction: board.onShowRules });
   if (header.canViewStats) entries.push({ id: "stats", text: "Stats", label: "Stats", wikiIcon: "Skills icon", current: page === "stats", onAction: goTo("stats") });
-  if (header.canRewind) entries.push({ id: "rewind", text: "Rewind", label: "Rewind", current: page === "rewind", onAction: goTo("rewind") });
+  if (header.canRewind) entries.push({ id: "rewind", text: "Rewind", label: "Rewind", wikiIcon: "Agility icon", current: page === "rewind", onAction: goTo("rewind") });
   if (header.draftRoom) {
     const label = header.draftRoom === "draft" ? "Draft room" : "Scouting room";
     entries.push({ id: "draft", text: label, label, current: page === "draft", onAction: goTo("draft") });
   }
-  if (header.canOpenWrapped) entries.push({ id: "wrapped", text: "Wrapped", label: "Wrapped", current: page === "wrapped", onAction: goTo("wrapped") });
+  if (header.canOpenWrapped) entries.push({ id: "wrapped", text: "Wrapped", label: "Wrapped", wikiIcon: "Present", current: page === "wrapped", onAction: goTo("wrapped") });
   if (achievementsEligible && openAchievements) entries.push({ id: "achievements", text: "Achievements", label: "Achievements", wikiIcon: "Achievement Diaries icon", onAction: openAchievements });
   return entries;
 }
