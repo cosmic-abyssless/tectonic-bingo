@@ -178,7 +178,8 @@ export type TutorialAction =
 
 /** How the Tutorial moves between `steps`. Moving past the last step, or skipping, ends it. */
 export function tutorialReducer(steps: TutorialStep[], state: TutorialState, action: TutorialAction): TutorialState {
-  if (action.type === "start") return { ...TUTORIAL_IDLE, active: true, replay: action.replay };
+  // Already running (it started on its own as the ☰ asked for a replay): it carries on as it is.
+  if (action.type === "start") return state.active ? state : { ...TUTORIAL_IDLE, active: true, replay: action.replay };
   if (!state.active) return state;
   const current = steps[state.index];
   const goTo = (index: number, direction: 1 | -1): TutorialState =>

@@ -42,7 +42,7 @@ describe("the Tutorial's steps", () => {
     expect(flowSteps.map((s) => s.targets).flat()).toEqual(["submit-screenshot", "submit-tile", "submit-requirement", "submit-submitter", "codeword", "submit-proof"]);
   });
 
-  it("close the Tile at 5 and the Submit flow at the end of 7 themselves", () => {
+  it("close the Tile at 5, the Submit flow at the end of 7 and the ☰ at the end of 8 themselves", () => {
     expect(steps.filter((s) => s.closes).map((s) => [s.id, s.closes])).toEqual([
       ["tile-submit", "tile"],
       ["submit-review", "submit"],
@@ -123,6 +123,10 @@ describe("moving through the Tutorial", () => {
 
   it("remembers a replay, so finishing it records nothing", () => {
     expect(run([{ type: "start", replay: true }, { type: "end" }])).toMatchObject({ active: false, replay: true });
+  });
+
+  it("carries on as it is when asked to start while it's running (a replay asked for as it starts on its own)", () => {
+    expect(run([{ type: "start", replay: false }, { type: "next" }, { type: "start", replay: true }])).toMatchObject({ active: true, index: 1, replay: false });
   });
 });
 
