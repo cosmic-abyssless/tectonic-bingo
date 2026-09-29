@@ -396,12 +396,23 @@ export interface Submission {
   updatedAt: string;
 }
 
+/** What a Historical Bingo's Submission shows in place of a screenshot that's still to be uploaded. */
+export const SCREENSHOT_NOT_UPLOADED = "Screenshot not uploaded yet";
+
+/** A Historical Bingo's screenshot that was imported but whose file isn't uploaded yet (#320). */
+export function isScreenshotPending(s: { storageUrl: string } | undefined): boolean {
+  return s !== undefined && s.storageUrl === "";
+}
+
 export interface SubmissionScreenshot {
   id: string;
   submissionId: string;
   /** `proof` is a Proof screenshot's (CONTEXT.md). */
   screenshotType: "main" | "proof" | "bank" | "collection_log" | "other";
+  /** Empty while a Historical Bingo's screenshot is still to be uploaded (isScreenshotPending). */
   storageUrl: string;
+  /** A Historical Bingo's only: the screenshot's key in its import bundle. */
+  historicalKey?: string | null;
   scrapeStatus: "pending" | "processing" | "completed" | "failed";
   extractedText: string | null;
   codewordVerified: boolean | null;

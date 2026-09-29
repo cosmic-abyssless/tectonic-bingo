@@ -1,7 +1,7 @@
 // Pure builders that turn raw server shapes into the view models in
 // ./types.ts. No React, no hooks — safe to call from anywhere, including
 // providers and (if ever wanted) tests. See docs/headless-theming-plan.md §2.
-import { isBoardLocked, proofStatus, type BoardLine, type GraphNode, type NodeStatus, type PointAdjustment, type ProofStatus, type SealedBoardResponse, type Stage, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
+import { isBoardLocked, isScreenshotPending, proofStatus, type BoardLine, type GraphNode, type NodeStatus, type PointAdjustment, type ProofStatus, type SealedBoardResponse, type Stage, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { summarizeTileProgress, getFreezeUnlockAt, groupSubmissionsByTile, type TileProgressSummary } from "../core/board/tileProgress";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete, type LeafClaimMaps } from "../core/board/taskClaims";
 import { collectLeaves, conditionHeading } from "../core/board/requirementTree";
@@ -247,7 +247,8 @@ export function buildSubmissionModels(tiles: Tile[], submissions: SubmissionDeta
       status: detail.submission.status,
       submittedAt: detail.submission.submittedAt,
       timeAgo: timeAgo(detail.submission.submittedAt),
-      thumbnailUrl: detail.screenshots[0]?.storageUrl ?? null,
+      thumbnailUrl: detail.screenshots[0]?.storageUrl || null,
+      screenshotPending: isScreenshotPending(detail.screenshots[0]),
       summary: submissionSummary(detail),
       isProof: kind === "proof",
       submittedBy: detail.submittedByUser ? displayName(detail.submittedByUser) : null,

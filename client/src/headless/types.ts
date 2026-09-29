@@ -150,6 +150,8 @@ export interface SubmissionModel {
   timeAgo: string;
   /** The first screenshot's original URL — views derive the thumb/full variant they need (api/imageVariants). */
   thumbnailUrl: string | null;
+  /** A Historical Bingo's screenshot still to be uploaded: shown as SCREENSHOT_NOT_UPLOADED, with no picture. */
+  screenshotPending: boolean;
   /** claimsSummary() — e.g. "2× Bruma torch, Vorki"; "Proof screenshot" for a proof one. */
   summary: string;
   /** A Proof screenshot (CONTEXT.md), not a drop: it can't be reacted to. */

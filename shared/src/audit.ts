@@ -65,6 +65,9 @@ export interface AuditDetailsMap {
     };
   };
 
+  /** The last of a Historical Bingo's pending screenshots was attached (one entry for them all, not one each). */
+  "bingo.historical_screenshots_attached": { slug: string; name: string; screenshots: number };
+
   "user.admin_changed": { isAdmin: { before: boolean; after: boolean }; source: "admin_panel" | "env_bootstrap" };
 
   "item_group.created": { name: string; itemCount: number };
@@ -413,6 +416,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Historical Bingo imported",
     label: (i) => `${actor(i)} imported the historical Bingo "${i.details.name}" from ${i.details.source}`,
+  },
+  "bingo.historical_screenshots_attached": {
+    category: "bingo",
+    tone: "ok",
+    visibility: "mods",
+    title: "Historical screenshots attached",
+    label: (i) => `${actor(i)} attached the last of the historical Bingo "${i.details.name}"'s ${i.details.screenshots} screenshots`,
   },
   "user.admin_changed": {
     category: "moderation",

@@ -182,8 +182,9 @@ site that recorded its drops:
 - each Team completes some Tasks (and part of others) through approved drops with their Claims, a few rejected on
   the way, with Proof screenshots where they're required; MANUAL Tasks are given to Teams directly.
 
-The screenshots are left pending (nothing is uploaded). The import's response has the engine's scores, which the
-run prints.
+The import's response has the engine's scores, which the run prints. Then the run uploads the screenshots one at
+a time through the real Site admin endpoint (`POST /api/bingos/:slug/admin/historical/screenshots/:key`), as the
+converter would, leaving about one in ten pending so the Bingo shows "Screenshot not uploaded yet" too.
 
 ## PETS and SLAYER BOSSES (pages that share their items)
 

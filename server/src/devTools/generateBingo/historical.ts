@@ -145,4 +145,20 @@ export async function runHistorical(input: HistoricalRunInput): Promise<void> {
     .post<{ usersCreated: number; scoring: HistoricalImportScoring | null }>("/api/admin/historical-bingos", bundle);
   input.log(`imported ${bundle.bingo.slug} through Site admin → Import historical Bingo (${usersCreated} new users)`);
   if (scoring) input.log(`scored by the engine: ${scoring.teams.map((t) => `${t.team} ${t.total}`).join(", ")}`);
+  if (bundle.submissions) await uploadScreenshots(input, bundle.bingo.slug);
+}
+
+/**
+ * A rich Bingo's screenshots, uploaded one at a time as the converter would, resuming from the status. About one in
+ * ten is left pending, so a generated Bingo shows "Screenshot not uploaded yet" too.
+ */
+async function uploadScreenshots(input: HistoricalRunInput, slug: string): Promise<void> {
+  const admin = input.api.as(input.adminDiscordId);
+  const base = `/api/bingos/${slug}/admin/historical/screenshots`;
+  const { pendingKeys } = await admin.get<{ pendingKeys: string[] }>(base);
+  const skipRng = input.rng.fork("screenshots");
+  const keys = pendingKeys.filter(() => !skipRng.chance(0.1));
+  for (const key of keys) await admin.uploadScreenshot(`${base}/${encodeURIComponent(key)}`);
+  const status = await admin.get<{ pending: number; attached: number }>(base);
+  input.log(`uploaded ${keys.length} screenshots one at a time (${status.attached} attached, ${status.pending} left pending)`);
 }

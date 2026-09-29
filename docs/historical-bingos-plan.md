@@ -167,6 +167,14 @@ A single 1 GB upload is fragile. The import goes in two steps:
 2. The local script **uploads the screenshots one at a time** to an Admin endpoint that attaches each to its Submission.
    It's resumable, it skips screenshots already attached, and it goes through the normal upload pipeline.
 
+The endpoint (#320), for Site Admins:
+- `POST /api/bingos/:slug/admin/historical/screenshots/:key`, with the image as the multipart field `screenshot`. It
+  answers 201 when attached, 200 with `alreadyAttached: true` for a key already attached (nothing is stored), 404 for a
+  key the Bingo's bundle didn't have, 415 for a file that isn't an image, and 413 over the 5 MB upload limit.
+- `GET /api/bingos/:slug/admin/historical/screenshots`: `{ pending, attached, pendingKeys }`, to resume from.
+- One audit entry, "Historical screenshots attached", when the last pending one is attached. Until then a Submission
+  shows "Screenshot not uploaded yet".
+
 ### Work items (Tier 2)
 
 1. **Bundle format and importer, extended for rich Bingos** (public, generic):

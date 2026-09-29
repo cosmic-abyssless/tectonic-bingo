@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { SubmissionDetails } from "@bingo/shared";
+import { isScreenshotPending, SCREENSHOT_NOT_UPLOADED, type SubmissionDetails } from "@bingo/shared";
 import { SubmissionStatusBadge } from "../ui/StatusBadge";
 import { timeAgo } from "../ui/time";
 import { displayName } from "../ui/user";
@@ -13,7 +13,7 @@ export function SubmissionRow({ detail, footer }: { detail: SubmissionDetails; f
 
   return (
     <div className="flex items-start gap-3 border-b border-outline py-2.5 last:border-0">
-      <ScreenshotThumb url={screenshots[0]?.storageUrl} size="sm" />
+      <ScreenshotThumb url={screenshots[0]?.storageUrl} size="sm" pending={isScreenshotPending(screenshots[0])} />
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex flex-wrap items-center gap-2">
           <SubmissionStatusBadge status={submission.status} />
@@ -28,6 +28,7 @@ export function SubmissionRow({ detail, footer }: { detail: SubmissionDetails; f
             {postedByUser && <> (posted by <PlayerName userId={postedByUser.id}>{displayName(postedByUser)}</PlayerName>)</>}
           </p>
         )}
+        {isScreenshotPending(screenshots[0]) && <p className="mt-0.5 text-xs italic text-on-surface-subtle">{SCREENSHOT_NOT_UPLOADED}</p>}
         {submission.reviewerNotes && <p className="mt-0.5 truncate text-xs text-warn">{submission.reviewerNotes}</p>}
         {footer}
       </div>
