@@ -141,8 +141,8 @@ export function BingoPageProvider({
   // board isn't visible to players before that) until the bingo is over,
   // and not by anyone while the Tiles are sealed (the server refuses it).
   const canToggleInterest = !!myTeam && viewingTeamId === myTeam.id && (bingo.stage === "reveal" || bingo.stage === "live") && !areTilesSealed(bingo);
-  // Reactions are for teammates: on your own team's submissions, at any stage they're shown.
-  const canReact = !!myTeam && viewingTeamId === myTeam.id;
+  // Reactions are for teammates: on your own team's submissions, until the bingo is Finished (then they're closed).
+  const canReact = !!myTeam && viewingTeamId === myTeam.id && bingo.stage !== "complete";
   const canViewStats = canViewStatsOf(shell);
 
   // Exact branch order as the old BingoPage.tsx: signup -> planning|captains

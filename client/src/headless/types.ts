@@ -417,7 +417,7 @@ export interface BingoPageModel {
   actions: { goHome(): void; goToStats(): void; goToRewind(): void; goToWrapped(): void; goToMod(): void; goToDraft(): void };
   /** Raise/lower the viewer's hand for one part (task) of a tile on their own team. No-op unless task.interest.canToggle. */
   tileInterest: { toggle(tileId: string, taskId: string): void };
-  /** Emoji reactions on the viewed team's submissions: canReact when it's the viewer's own team. toggle() puts the viewer's on or takes it off. */
+  /** Emoji reactions on the viewed team's submissions: canReact when it's the viewer's own team and the bingo isn't Finished. toggle() puts the viewer's on or takes it off. */
   reactions: { canReact: boolean; toggle(submissionId: string, emoji: SubmissionReaction): void };
 }
 
