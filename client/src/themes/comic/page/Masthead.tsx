@@ -55,7 +55,7 @@ export function Masthead({
       menuEntries={menuEntries}
       {...comicHeaderProps()}
     >
-      {/* The mod panel sits well away from Submit so it isn't hit by accident. */}
+      {/* The Mod panel, then (on the board) Submit. */}
       {header.isMod && <ModPanelLink slug={slug} pendingCount={header.pendingCount} />}
       {children}
     </AppHeader>
