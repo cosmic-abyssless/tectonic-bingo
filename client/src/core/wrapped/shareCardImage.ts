@@ -35,7 +35,8 @@ export async function renderShareCard(node: HTMLElement): Promise<Blob> {
     width: SHARE_CARD_WIDTH,
     height: SHARE_CARD_HEIGHT,
     pixelRatio: SHARE_CARD_PIXEL_RATIO,
-    skipFonts: true,
+    // PROTOTYPE (#315): a card that uses web fonts (the comic one) has them embedded.
+    skipFonts: !node.querySelector("[data-embed-fonts]"),
     imagePlaceholder: BLANK_IMAGE,
     // An image that isn't ready (still being copied into a data URL, or never loaded) is left out, never fetched.
     filter: (el) => !(el instanceof HTMLImageElement) || (el.complete && el.naturalWidth > 0 && el.src.startsWith("data:")),
