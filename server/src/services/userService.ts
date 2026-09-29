@@ -1,4 +1,4 @@
-import { eq, inArray, like, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, like, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { users } from "../db/schema";
@@ -8,6 +8,7 @@ import { userLabel } from "../audit/describe";
 import { withRsn } from "./playerNames";
 import { revokeAllForUser } from "../mcp/connections";
 import { getAuditContext } from "../audit/context";
+import { now } from "../clock";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -75,4 +76,11 @@ export function setUserAdmin(db: Db, userId: string, isAdmin: boolean) {
     if (!isAdmin) revokeAllForUser(tx, userId, getAuditContext()?.actorUserId ?? null);
     return updated;
   });
+}
+
+// The account finished or skipped the Tutorial (CONTEXT.md). Kept at the first time: seeing it again (on a device
+// that hadn't heard yet) changes nothing.
+export function markTutorialSeen(db: Db, userId: string) {
+  db.update(users).set({ tutorialSeenAt: now() }).where(and(eq(users.id, userId), isNull(users.tutorialSeenAt))).run();
+  return getUserById(db, userId);
 }

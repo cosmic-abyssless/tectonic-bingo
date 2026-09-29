@@ -20,6 +20,9 @@ export const users = sqliteTable('users', {
   // Site admins can create bingos and grant mod/admin to others from the admin
   // panel. Bootstrapped via the ADMIN_DISCORD_IDS env var on login.
   isAdmin: integer('is_admin', { mode: 'boolean' }).notNull().default(false),
+  // When the account finished or skipped the Tutorial (CONTEXT.md); null until then. Per account, so it's seen on
+  // every device; replaying it from the ☰ menu never changes it.
+  tutorialSeenAt: integer('tutorial_seen_at', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
