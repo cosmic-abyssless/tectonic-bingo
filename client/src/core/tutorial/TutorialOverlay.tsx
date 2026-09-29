@@ -13,6 +13,17 @@ const CARD_WIDTH = 352;
 // How long an optional step waits for its element (a Tile's page turning to it, the Submit flow's fields mounting)
 // before passing over it.
 const WAIT_MS = 1500;
+/**
+ * How long the element has to hold still before its highlight and the card show: a Tile's book flies in, a dialog grows,
+ * and following every frame of that made the card jump about. Past SETTLE_MAX_MS it shows wherever the element is.
+ */
+const SETTLE_MS = 150;
+const SETTLE_MAX_MS = 1200;
+/**
+ * Once shown, how long the element may go missing (the comic book lays a see-through layer over it for a moment after it
+ * lands) before the highlight drops. A step that ends because its dialog closed is replaced by its own logic, not this.
+ */
+const GRACE_MS = 1000;
 
 interface Box {
   top: number;
@@ -51,6 +62,12 @@ function TutorialLayer({ tutorial, step, lastCardHeight }: { tutorial: TutorialM
   // When the step started, and whether its element has turned up: kept across the effect running again (StrictMode).
   const started = useRef(performance.now());
   const seen = useRef(false);
+  // Holding still: where the element last was, since when, and when it was last seen (see SETTLE_MS, GRACE_MS).
+  const [settled, setSettled] = useState(false);
+  const settledRef = useRef(false);
+  const candidate = useRef<Box | null>(null);
+  const stillSince = useRef(0);
+  const lastSeen = useRef(0);
 
   // Follows the element every frame: the page scrolls, a Tile's book flies in and turns its pages, dialogs grow. (And
   // measures the card, to place it.)
@@ -73,9 +90,28 @@ function TutorialLayer({ tutorial, step, lastCardHeight }: { tutorial: TutorialM
         const top = r.coveredTop ? r.top : r.top - PAD;
         const bottom = r.coveredBottom ? r.bottom : r.bottom + PAD;
         const next = { top, left: r.left - PAD, width: r.right - r.left + 2 * PAD, height: bottom - top };
-        setHole((h) => (h && Math.abs(h.top - next.top) < 0.5 && Math.abs(h.left - next.left) < 0.5 && Math.abs(h.width - next.width) < 0.5 && Math.abs(h.height - next.height) < 0.5 ? h : next));
+        const now = performance.now();
+        lastSeen.current = now;
+        if (!candidate.current || !sameBox(candidate.current, next)) {
+          candidate.current = next;
+          stillSince.current = now;
+        }
+        if (!settledRef.current && (now - stillSince.current >= SETTLE_MS || now - started.current >= SETTLE_MAX_MS)) {
+          settledRef.current = true;
+          setSettled(true);
+        }
+        if (settledRef.current) setHole((h) => (h && sameBox(h, next) ? h : next));
+      } else if (settledRef.current && performance.now() - lastSeen.current < GRACE_MS) {
+        // Missing for a moment: keep the highlight where it was.
       } else {
         setHole(null);
+        // Gone before it held still: its wait starts over when it's back.
+        if (!settledRef.current) candidate.current = null;
+        // Never turned up (or never held still): show the card anyway, over the dimmed page, as before.
+        if (!settledRef.current && performance.now() - started.current >= SETTLE_MAX_MS) {
+          settledRef.current = true;
+          setSettled(true);
+        }
         if (!seen.current && step.optional && performance.now() - started.current > WAIT_MS) {
           pass.current();
           return;
@@ -89,7 +125,9 @@ function TutorialLayer({ tutorial, step, lastCardHeight }: { tutorial: TutorialM
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A step with an element waits for it to hold still (SETTLE_MS); the card is measured meanwhile, just not shown.
   const showCard = found || !step.optional || step.targets.length === 0;
+  const cardReady = settled || step.targets.length === 0;
   const card = tutorial.card!;
   // Inside the ☰ the card goes beside the menu: below an entry, it would cover the entries still to come.
   const cardStyle = placeCard(hole, view, phone, step.inside === "menu");
@@ -111,7 +149,7 @@ function TutorialLayer({ tutorial, step, lastCardHeight }: { tutorial: TutorialM
       )}
 
       {showCard && (
-        <div ref={cardRef} role="dialog" aria-label={card.title} className="pointer-events-auto absolute" style={cardStyle}>
+        <div ref={cardRef} role="dialog" aria-label={card.title} className="pointer-events-auto absolute" style={{ ...cardStyle, visibility: cardReady ? undefined : "hidden" }}>
           <TutorialCard card={card} />
         </div>
       )}
@@ -180,6 +218,10 @@ function bounds(rects: ShownRect[]): ShownRect {
     coveredTop: rects.some((r) => r.top === top && r.coveredTop),
     coveredBottom: rects.some((r) => r.bottom === bottom && r.coveredBottom),
   };
+}
+
+function sameBox(a: Box, b: Box): boolean {
+  return Math.abs(a.top - b.top) < 0.5 && Math.abs(a.left - b.left) < 0.5 && Math.abs(a.width - b.width) < 0.5 && Math.abs(a.height - b.height) < 0.5;
 }
 
 function isShown(el: HTMLElement, overlay: HTMLElement): boolean {
