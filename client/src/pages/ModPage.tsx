@@ -1,6 +1,7 @@
 import { useEscapeBack } from "../core/ui/useEscapeBack";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useBingoHeader, useBingoMenuEntries } from "../headless";
 import type { Key } from "react-aria-components";
 import { STAGE_ORDER, type Stage } from "@bingo/shared";
 import { useBingo } from "../api/queries";
@@ -85,6 +86,8 @@ export function ModPage() {
   const stage = shell?.bingo.stage;
   const [urlTab, setUrlTab] = useUrlParam("tab");
   const [outOfStageTabs, setOutOfStageTabs] = usePreference("outOfStageTabs");
+  // The same "This Bingo" entries as every other page of the bingo, then the panel's own setting.
+  const bingoMenuEntries = useBingoMenuEntries(slug ?? "", useBingoHeader(slug ?? ""));
 
   const visibleTabs = useMemo(() => {
     if (!stage) return [];
@@ -135,6 +138,7 @@ export function ModPage() {
         title="Mod panel"
         subtitle={shell.bingo.name}
         menuEntries={[
+          ...bingoMenuEntries,
           {
             id: "outOfStageTabs",
             text: "Out-of-stage tabs",

@@ -30,6 +30,8 @@ export interface BingoHeaderModel {
   draftRoom: "draft" | "scouting" | null;
   /** Wrapped (CONTEXT.md) can be opened: published, or a Moderator's preview. Same as the board's wrapped.canOpen. */
   canOpenWrapped: boolean;
+  /** The viewer plays on a team: away from the board, the ☰ menu's Submissions and Team overview open theirs there. */
+  hasTeam: boolean;
 }
 
 /** What the Rules dialog says while the rules are held back (Hide rules, during Board revealed). */
@@ -37,10 +39,10 @@ export const RULES_COME_LATER = "The rules will be posted at a later date.";
 
 /**
  * Players see their own team's stats while the bingo is live and everyone's once it's over (the stats endpoint 403s
- * otherwise); mods see them throughout.
+ * otherwise); mods see every team's from Live on. Before Live there's nothing to show, so nobody gets the way in.
  */
 export function canViewStats(shell: Pick<BingoShellResponse, "bingo" | "isMod" | "myTeam">): boolean {
-  return shell.isMod || shell.bingo.stage === "complete" || (shell.bingo.stage === "live" && !!shell.myTeam);
+  return shell.bingo.stage === "complete" || (shell.bingo.stage === "live" && (shell.isMod || !!shell.myTeam));
 }
 
 /**
@@ -75,5 +77,6 @@ export function useBingoHeader(slug: string): BingoHeaderModel | null {
     canSeeAllBingos: !!user?.isAdmin || devMode,
     draftRoom: shell.bingo.stage === "draft" ? (draftState ? "draft" : null) : canScout(shell, user?.id) ? "scouting" : null,
     canOpenWrapped: shell.bingo.stage === "complete" && (shell.wrappedPublished || shell.isMod),
+    hasTeam: !!shell.myTeam,
   };
 }

@@ -1,5 +1,6 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import { useUrlParam } from "../core/ui/useUrlParam";
 import { STAGE_LABEL, areRulesHidden, areTilesSealed, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type SubmissionKind, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { useBingo, useBoard, useDraftState, usePendingCount, useRecordAchievementOpened, useSetSubmissionReaction, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
@@ -119,6 +120,24 @@ export function BingoPageProvider({
   const matchTile = useMemo(() => tileSearchMatcher(sealed, shellCategories), [sealed, shellCategories]);
   const search = useTileSearch(tiles, matchTile, openTileTracked);
   const exclusivityRules = shell?.bingo.exclusivityRules;
+  // The ☰ menu on the pages around the board opens the board's own dialogs by coming here with ?open= (see
+  // useBingoMenuEntries). Submissions and Team overview wait for the viewer's team to be picked; the param is dropped
+  // once it has done its job.
+  const [openOnArrival, setOpenOnArrival] = useUrlParam("open");
+  useEffect(() => {
+    if (!openOnArrival || !shell) return;
+    if (openOnArrival === "rules") {
+      setRulesOpen(true);
+      if (eligibleForOpens) recordOpened.mutate({ kind: "rules" });
+    } else if (openOnArrival === "submissions" || openOnArrival === "team") {
+      if (!viewingTeamId) return;
+      if (openOnArrival === "submissions") setDrawerOpen(true);
+      else setTeamInfoOpen(true);
+    }
+    setOpenOnArrival(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openOnArrival, shell, viewingTeamId]);
+
   const locks = useMemo(() => lockedLeaves(exclusivityRules ?? [], tiles, submissionsData?.submissions ?? EMPTY_SUBMISSIONS), [exclusivityRules, tiles, submissionsData]);
 
   if (!user) return null;
