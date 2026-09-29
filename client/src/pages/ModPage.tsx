@@ -1,6 +1,7 @@
 import { useEscapeBack } from "../core/ui/useEscapeBack";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useBingoHeader, useBingoMenuEntries } from "../headless";
 import type { Key } from "react-aria-components";
 import { STAGE_ORDER, type Stage } from "@bingo/shared";
 import { useBingo } from "../api/queries";
@@ -26,7 +27,6 @@ import { Button } from "../core/ui/Button";
 import { Notice } from "../core/ui/Card";
 import { InfoIcon } from "../core/ui/icons";
 import { Dialog, DialogHeader } from "../core/ui/Dialog";
-import { MenuItem } from "../core/ui/Menu";
 import { usePreference } from "../core/ui/preferences";
 import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 import { useUrlParam } from "../core/ui/useUrlParam";
@@ -88,6 +88,8 @@ export function ModPage() {
   const stage = shell?.bingo.stage;
   const [urlTab, setUrlTab] = useUrlParam("tab");
   const [outOfStageTabs, setOutOfStageTabs] = usePreference("outOfStageTabs");
+  // The same "This Bingo" entries as every other page of the bingo, then the panel's own setting.
+  const bingoMenuEntries = useBingoMenuEntries(slug ?? "", useBingoHeader(slug ?? ""));
 
   const historical = shell?.historical ?? null;
   const visibleTabs = useMemo(() => {
@@ -135,44 +137,48 @@ export function ModPage() {
   };
 
   return (
-    <div className="min-h-dvh bg-background text-on-surface">
-      <AppHeader
-        back={{ to: `/b/${slug}`, label: "Back to bingo" }}
-        title="Mod panel"
-        subtitle={shell.bingo.name}
-        menuItems={
-          <MenuItem id="outOfStageTabs" className="justify-between" onAction={() => setOutOfStageTabs(outOfStageTabs === "hide" ? "dim" : "hide")}>
-            Out-of-stage tabs
-            <span className="text-xs text-on-surface-subtle">{outOfStageTabs === "hide" ? "Hidden" : "Dimmed"}</span>
-          </MenuItem>
-        }
-      />
+    // Around the header too: its account menu opens the viewer's own profile.
+    <PlayerProfileProvider slug={slug}>
+      <div className="min-h-dvh bg-background text-on-surface">
+        <AppHeader
+          title="Mod panel"
+          subtitle={shell.bingo.name}
+          menuEntries={[
+            ...bingoMenuEntries,
+            {
+              id: "outOfStageTabs",
+              text: "Out-of-stage tabs",
+              label: "Out-of-stage tabs",
+              badge: <span className="ml-auto pl-3 text-xs text-on-surface-subtle">{outOfStageTabs === "hide" ? "Hidden" : "Dimmed"}</span>,
+              onAction: () => setOutOfStageTabs(outOfStageTabs === "hide" ? "dim" : "hide"),
+            },
+          ]}
+        />
 
-      {/* Full width now (was max-w-6xl on the whole <main>) — but only the Signups tab actually wants that (its
-          table benefits from the extra room the same way the draft pool's does). Everything else — the stage
-          stepper, the tab list itself, and every other tab's content — keeps the old reading width via NARROW,
-          since a settings form or a stage stepper spanning the full page would be awkward, not useful. */}
-      <main className="w-full space-y-6 px-6 py-6">
-        {historical ? (
-          <div className={NARROW}>
-            <Notice tone="info" icon={<InfoIcon size={14} />}>
-              <strong>A historical Bingo is read-only.</strong> It was imported from another website: its stage, Board, Teams and settings can't be changed here. A Site Admin can delete it from Site admin.
-            </Notice>
-          </div>
-        ) : (
-          <div className={NARROW}>
-            <StageControls slug={slug} bingo={shell.bingo} canChange={isAdmin} />
-          </div>
-        )}
-        {shell.bingo.stage === "complete" && !historical && (
-          <div className={NARROW}>
-            <WrappedControls slug={slug} />
-          </div>
-        )}
+        {/* Full width now (was max-w-6xl on the whole <main>) — but only the Signups tab actually wants that (its
+            table benefits from the extra room the same way the draft pool's does). Everything else — the stage
+            stepper, the tab list itself, and every other tab's content — keeps the old reading width via NARROW,
+            since a settings form or a stage stepper spanning the full page would be awkward, not useful. */}
+        <main className="w-full space-y-6 px-6 py-6">
+          {historical ? (
+            <div className={NARROW}>
+              <Notice tone="info" icon={<InfoIcon size={14} />}>
+                <strong>A historical Bingo is read-only.</strong> It was imported from another website: its stage, Board, Teams and settings can't be changed here. A Site Admin can delete it from Site admin.
+              </Notice>
+            </div>
+          ) : (
+            <div className={NARROW}>
+              <StageControls slug={slug} bingo={shell.bingo} canChange={isAdmin} />
+            </div>
+          )}
+          {shell.bingo.stage === "complete" && !historical && (
+            <div className={NARROW}>
+              <WrappedControls slug={slug} />
+            </div>
+          )}
 
-        {/* A sparse Historical Bingo recorded nothing a tab lists: the notice above is all there is. */}
-        {visibleTabs.length > 0 && (
-          <PlayerProfileProvider slug={slug}>
+          {/* A sparse Historical Bingo recorded nothing a tab lists: the notice above is all there is. */}
+          {visibleTabs.length > 0 && (
             <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key))}>
               <div className={NARROW}>
                 <TabList>
@@ -246,33 +252,33 @@ export function ModPage() {
                 </>
               )}
             </Tabs>
-          </PlayerProfileProvider>
-        )}
-      </main>
+          )}
+        </main>
 
-      {/* Nothing new ever arrives for a Historical Bingo. */}
-      <Dialog isOpen={showNotifPrompt && !historical} onClose={dismissNotifPrompt}>
-        <DialogHeader title="Enable notifications?" onClose={dismissNotifPrompt} />
-        <div className="space-y-4 p-5">
-          <p className="text-sm leading-relaxed text-on-surface-muted">
-            Get a browser notification whenever a new submission arrives for review, even if this tab is in the background.
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onPress={dismissNotifPrompt}>
-              No thanks
-            </Button>
-            <Button
-              variant="primary"
-              onPress={async () => {
-                dismissNotifPrompt();
-                await Notification.requestPermission();
-              }}
-            >
-              Enable
-            </Button>
+        {/* Nothing new ever arrives for a Historical Bingo. */}
+        <Dialog isOpen={showNotifPrompt && !historical} onClose={dismissNotifPrompt}>
+          <DialogHeader title="Enable notifications?" onClose={dismissNotifPrompt} />
+          <div className="space-y-4 p-5">
+            <p className="text-sm leading-relaxed text-on-surface-muted">
+              Get a browser notification whenever a new submission arrives for review, even if this tab is in the background.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onPress={dismissNotifPrompt}>
+                No thanks
+              </Button>
+              <Button
+                variant="primary"
+                onPress={async () => {
+                  dismissNotifPrompt();
+                  await Notification.requestPermission();
+                }}
+              >
+                Enable
+              </Button>
+            </div>
           </div>
-        </div>
-      </Dialog>
-    </div>
+        </Dialog>
+      </div>
+    </PlayerProfileProvider>
   );
 }

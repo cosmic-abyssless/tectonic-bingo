@@ -363,8 +363,6 @@ export interface BingoPageModel {
   canViewStats: boolean;
   /** Rewind (CONTEXT.md) exists only for a Finished Bingo, for everyone who can view it. */
   canRewind: boolean;
-  /** A Historical Bingo that recorded its Draft links to its (read-only) Draft room. */
-  canViewDraft: boolean;
   /**
    * Wrapped (CONTEXT.md), for a Finished Bingo: open to everyone once a Moderator publishes it, and to Moderators before
    * that as a preview (the banner says so).
@@ -395,7 +393,7 @@ export interface BingoPageModel {
    */
   sealed: { forMe: boolean; forPlayers: boolean };
   rules: { open: boolean; show(): void; hide(): void };
-  /** Roster of `viewing.team` (TeamBadge press for players, roster button beside TeamSelector for mods → TeamInfoDialog). */
+  /** Roster of `viewing.team` (the comic TeamBanner, or the team entry in the header's ☰ menu → TeamInfoDialog). */
   teamInfo: { open: boolean; show(): void; hide(): void };
   /** The point breakdown of `viewing.team` (pressing the point total on the board → PointBreakdownDialog). */
   pointBreakdown: { open: boolean; show(): void; hide(): void };
@@ -413,7 +411,7 @@ export interface BingoPageModel {
     showProof(tileId: string, taskId?: string): void;
     hide(): void;
   };
-  /** logout lives in core AppHeader's own user menu, not here. */
+  /** logout lives in core AppHeader's own ☰ menu, not here. */
   actions: { goHome(): void; goToStats(): void; goToRewind(): void; goToWrapped(): void; goToMod(): void; goToDraft(): void };
   /** Raise/lower the viewer's hand for one part (task) of a tile on their own team. No-op unless task.interest.canToggle. */
   tileInterest: { toggle(tileId: string, taskId: string): void };

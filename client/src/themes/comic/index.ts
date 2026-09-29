@@ -29,6 +29,7 @@ import { NotPartStage } from "./page/NotPartStage";
 import { PlanningStage } from "./page/PlanningStage";
 import { ScoutBanner } from "./page/ScoutBanner";
 import { BugReportButton } from "./page/BugReportButton";
+import { HeaderMenu } from "./page/HeaderMenu";
 import { ThemedButton } from "./ui/ThemedButton";
 import { ComicMenu, ComicMenuItem } from "./ui/ComicMenu";
 import { ComicNotice, ComicPanel } from "./ui/ComicPanel";
@@ -163,6 +164,7 @@ const comicTheme: ThemeDefinition = {
     ScoutBanner,
     SignupStage,
     BugReportButton,
+    HeaderMenu,
     Button: ThemedButton,
     Menu: ComicMenu,
     MenuItem: ComicMenuItem,

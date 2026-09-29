@@ -1,9 +1,10 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useBoardModel, useRewindModel } from "../../../headless";
+import { useBingoHeader, useBingoMenuEntries, useBoardModel, useRewindModel } from "../../../headless";
 import type { TileModel } from "../../../headless/types";
 import { AppHeader } from "../../../core/ui/AppHeader";
 import { UsersIcon } from "../../../core/ui/icons";
 import { useSlot } from "../../context";
+import { ModPanelButton } from "../page/ModPanelButton";
 
 /**
  * Rewind's page: the viewed Team's Board at the moment being viewed, every Team's score beside it (under it on a
@@ -15,6 +16,8 @@ export function RewindPageLayout() {
   const rewind = useRewindModel();
   const board = useBoardModel();
   const reduceMotion = useReducedMotion();
+  const header = useBingoHeader(rewind.slug);
+  const menuEntries = useBingoMenuEntries(rewind.slug, header);
 
   const TeamSelector = useSlot("TeamSelector");
   const BoardGrid = useSlot("BoardGrid");
@@ -45,8 +48,13 @@ export function RewindPageLayout() {
 
   return (
     <div className="min-h-dvh bg-background text-on-surface">
-      <AppHeader back={{ to: `/b/${rewind.slug}`, label: "Back to bingo" }} title="Rewind" subtitle={rewind.bingoName}>
-        {rewind.teamSelector.teams.length > 0 && <TeamSelector selector={rewind.teamSelector} />}
+      <AppHeader
+        title="Rewind"
+        subtitle={rewind.bingoName}
+        menuEntries={menuEntries}
+        controls={rewind.teamSelector.teams.length > 0 && <TeamSelector selector={rewind.teamSelector} />}
+      >
+        {header?.isMod && <ModPanelButton slug={rewind.slug} pendingCount={header.pendingCount} />}
       </AppHeader>
 
       <main className="mx-auto grid max-w-6xl gap-4 px-3 py-4 pb-44 sm:px-6 sm:py-6 sm:pb-40 lg:grid-cols-[minmax(0,1fr)_15rem]">

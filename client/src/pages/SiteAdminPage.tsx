@@ -339,7 +339,7 @@ export function SiteAdminPage() {
 
   return (
     <div className="min-h-dvh bg-background text-on-surface">
-      <AppHeader back={{ to: "/", label: "All bingos" }} title="Site admin" />
+      <AppHeader title="Site admin" />
       <main className="py-6">
         <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key))}>
           <div className={NARROW}>

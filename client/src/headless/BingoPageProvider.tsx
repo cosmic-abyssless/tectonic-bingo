@@ -1,5 +1,6 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import { useUrlParam } from "../core/ui/useUrlParam";
 import { STAGE_LABEL, areRulesHidden, areTilesSealed, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type SubmissionKind, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { useBingo, useBoard, useDraftState, usePendingCount, useRecordAchievementOpened, useSetSubmissionReaction, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
@@ -8,7 +9,7 @@ import { useHasPassed } from "../core/ui/useHasPassed";
 import { toCategoryModel, toTeamModel, buildSubmissionModels, sealedBoardAsTiles } from "./boardModel";
 import { lockedLeaves, type ExclusiveLocks } from "../core/board/exclusivity";
 import { useViewingTeam } from "./useViewingTeam";
-import { canRewind as canRewindOf, canViewStats as canViewStatsOf } from "./useBingoHeader";
+import { canRewind as canRewindOf, canScout as canScoutOf, canViewStats as canViewStatsOf } from "./useBingoHeader";
 import { tileSearchMatcher, useTileSearch } from "./useTileSearch";
 import { toastQueue } from "../core/ui/Toast";
 import { usePageEvents } from "./usePageEvents";
@@ -119,6 +120,24 @@ export function BingoPageProvider({
   const matchTile = useMemo(() => tileSearchMatcher(sealed, shellCategories), [sealed, shellCategories]);
   const search = useTileSearch(tiles, matchTile, openTileTracked);
   const exclusivityRules = shell?.bingo.exclusivityRules;
+  // The ☰ menu on the pages around the board opens the board's own dialogs by coming here with ?open= (see
+  // useBingoMenuEntries). Submissions and Team overview wait for the viewer's team to be picked; the param is dropped
+  // once it has done its job.
+  const [openOnArrival, setOpenOnArrival] = useUrlParam("open");
+  useEffect(() => {
+    if (!openOnArrival || !shell) return;
+    if (openOnArrival === "rules") {
+      setRulesOpen(true);
+      if (eligibleForOpens) recordOpened.mutate({ kind: "rules" });
+    } else if (openOnArrival === "submissions" || openOnArrival === "team") {
+      if (!viewingTeamId) return;
+      if (openOnArrival === "submissions") setDrawerOpen(true);
+      else setTeamInfoOpen(true);
+    }
+    setOpenOnArrival(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openOnArrival, shell, viewingTeamId]);
+
   const locks = useMemo(() => lockedLeaves(exclusivityRules ?? [], tiles, submissionsData?.submissions ?? EMPTY_SUBMISSIONS), [exclusivityRules, tiles, submissionsData]);
 
   if (!user) return null;
@@ -167,10 +186,8 @@ export function BingoPageProvider({
   const teamModels = teams.map((t) => toTeamModel(t, myTeam?.id ?? null, user.id, bingo.stage));
   // shell.myTeam is the bare row; the roster lives on the matching entry in shell.teams.
   const myTeamModel = teamModels.find((t) => t.isMine) ?? null;
-  // Captains get picked while signups are open (#39), so leads scout ahead; once Signups are closed every Player can
-  // look through them too (CONTEXT.md "Scouting").
-  const canScout =
-    (bingo.stage === "signup" && (isMod || !!myTeamModel?.isLead)) || (bingo.stage === "captains" && (isMod || !!myTeamModel?.isLead || shell.viewer.canSee));
+  // Shared with the header of the pages around the board (useBingoHeader), which shows the same way in.
+  const canScout = canScoutOf(shell, user.id);
   const viewingTeamModel = teamModels.find((t) => t.id === viewingTeamId) ?? null;
 
   const openSubmit = (tileId?: string, file?: File, taskId?: string) => {
@@ -214,7 +231,6 @@ export function BingoPageProvider({
     canPickTeam,
     canViewStats,
     canRewind: canRewindOf(shell),
-    canViewDraft: !!historical?.draft,
     // Wrapped is made at the end of a Bingo, never recorded: not for a Historical one.
     wrapped: { canOpen: bingo.stage === "complete" && !bingo.historical && (shell.wrappedPublished || isMod), preview: !shell.wrappedPublished },
     canScout,
