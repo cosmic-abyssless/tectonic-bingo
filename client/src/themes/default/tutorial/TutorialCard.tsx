@@ -8,14 +8,15 @@ import { PointerClickIcon } from "../../../core/ui/icons";
  */
 export function TutorialCard({ card }: { card: TutorialCardModel }) {
   return (
-    <div className="rounded-md border border-outline bg-surface-raised p-4 text-on-surface shadow-pop">
+    // The welcome (large) gets a bigger heading and text, and more room.
+    <div className={`rounded-md border border-outline bg-surface-raised text-on-surface shadow-pop ${card.large ? "p-6" : "p-4"}`}>
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-semibold">{card.title}</h2>
+        <h2 className={card.large ? "text-xl font-semibold" : "text-sm font-semibold"}>{card.title}</h2>
         <span className="num shrink-0 text-xs text-on-surface-muted">
           {card.label} of {card.count}
         </span>
       </div>
-      <div className="mt-1.5 space-y-1 text-sm text-on-surface-muted">
+      <div className={`space-y-1 text-on-surface-muted ${card.large ? "mt-2.5 text-base" : "mt-1.5 text-sm"}`}>
         {card.lines.map((line) => (
           <p key={line}>{line}</p>
         ))}

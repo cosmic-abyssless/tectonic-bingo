@@ -10,6 +10,8 @@ const PAD = 6;
 const GAP = 12;
 const EDGE = 16;
 const CARD_WIDTH = 352;
+/** The welcome's card, which names the Bingo. */
+const LARGE_CARD_WIDTH = 480;
 // How long an optional step waits for its element (a Tile's page turning to it, the Submit flow's fields mounting)
 // before passing over it.
 const WAIT_MS = 1500;
@@ -138,7 +140,7 @@ function TutorialLayer({ tutorial, step, lastCardHeight, waitMs }: { tutorial: T
   const cardReady = settled || step.targets.length === 0;
   const card = tutorial.card!;
   // Inside the ☰ the card goes beside the menu: below an entry, it would cover the entries still to come.
-  const cardStyle = placeCard(hole, view, phone, step.inside === "menu");
+  const cardStyle = placeCard(hole, view, phone, step.inside === "menu", step.large ? LARGE_CARD_WIDTH : CARD_WIDTH);
   const dim = "color-mix(in srgb, var(--color-scrim) 55%, transparent)";
 
   return (
@@ -324,9 +326,9 @@ function blockers(hole: Box, view: { width: number; height: number }, clickable:
  * On a phone, across the bottom of the screen. Otherwise beside the element: below it, above it, or to a side, whichever
  * fits first (the sides first when `sideFirst`).
  */
-function placeCard(hole: Box | null, view: { width: number; height: number; cardHeight: number }, phone: boolean, sideFirst = false): CSSProperties {
+function placeCard(hole: Box | null, view: { width: number; height: number; cardHeight: number }, phone: boolean, sideFirst = false, cardWidth = CARD_WIDTH): CSSProperties {
   if (phone) return { left: EDGE, right: EDGE, bottom: EDGE };
-  const width = Math.min(CARD_WIDTH, view.width - 2 * EDGE);
+  const width = Math.min(cardWidth, view.width - 2 * EDGE);
   const height = view.cardHeight;
   const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(n, max));
   if (!hole) return { width, left: (view.width - width) / 2, top: Math.max(EDGE, (view.height - height) / 2) };

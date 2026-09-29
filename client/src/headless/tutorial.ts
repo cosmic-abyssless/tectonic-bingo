@@ -48,6 +48,8 @@ export interface TutorialStep {
   closes: TutorialOpening | null;
   /** The highlighted element takes clicks: the ✋ steps, and Task interest, which a Player may choose to mark. */
   clickable: boolean;
+  /** Drawn larger (the welcome). */
+  large: boolean;
   /** Passed over when its element isn't there (no teammates to submit for, no Rules, a Tile with nothing to Submit). */
   optional: boolean;
 }
@@ -71,13 +73,13 @@ export function tutorialTileFacts(tile: Tile | null | undefined): TutorialTileFa
 type StepInput = Pick<TutorialStep, "id" | "number" | "title" | "lines"> & Partial<Omit<TutorialStep, "id" | "number" | "title" | "lines">>;
 
 function step(input: StepInput): TutorialStep {
-  return { targets: [], all: false, waitsFor: null, inside: null, closes: null, optional: false, ...input, clickable: input.clickable ?? !!input.waitsFor };
+  return { targets: [], all: false, waitsFor: null, inside: null, closes: null, optional: false, large: false, ...input, clickable: input.clickable ?? !!input.waitsFor };
 }
 
 /** Every step, in order. Only step 4's lines change, with the Tile that was opened. */
-export function tutorialSteps(tile: TutorialTileFacts): TutorialStep[] {
+export function tutorialSteps(tile: TutorialTileFacts, bingoName: string): TutorialStep[] {
   return [
-    step({ id: "welcome", number: 1, title: "Welcome to your Board", lines: ["A quick look around: your Team, the Tiles, and how to Submit."] }),
+    step({ id: "welcome", number: 1, title: `Welcome to ${bingoName}!`, lines: ["This short tutorial will show you around: your Team, the Tiles, and how to Submit."], large: true }),
     step({ id: "team", number: 2, title: "Your Team", lines: ["Your Team and its points. Pressing the points shows where they came from."], targets: ["team-banner"] }),
     step({ id: "open-tile", number: 3, title: "Open a Tile", lines: ["Each Tile is a goal for your Team. Click any Tile to open it."], targets: ["board"], waitsFor: "tile" }),
     step({

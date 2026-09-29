@@ -9,14 +9,15 @@ const node = (id: string, over: Partial<GraphNode> = {}) =>
 const tile = (parts: GraphNode[], over: Partial<Tile> = {}) => ({ id: "t", requiresProof: false, node: node("root", { children: parts }), ...over }) as Tile;
 
 const plain = { needsProof: false, pointsWait: false };
-const steps = tutorialSteps(plain);
+const steps = tutorialSteps(plain, "Tectonic's Comics Bingo");
 const at = (id: string) => steps.findIndex((s) => s.id === id);
 const run = (actions: TutorialAction[], from: TutorialState = TUTORIAL_IDLE) => actions.reduce((s, a) => tutorialReducer(steps, s, a), from);
 const on = (id: string, over: Partial<TutorialState> = {}): TutorialState => ({ ...TUTORIAL_IDLE, active: true, index: at(id), ...over });
 
 describe("the Tutorial's steps", () => {
   it("run from Welcome (1) to Done (9) in order", () => {
-    expect(steps[0]).toMatchObject({ id: "welcome", number: 1, targets: [] });
+    expect(steps[0]).toMatchObject({ id: "welcome", number: 1, targets: [], title: "Welcome to Tectonic's Comics Bingo!", large: true });
+    expect(steps.filter((s) => s.large).map((s) => s.id)).toEqual(["welcome"]);
     expect(steps.at(-1)).toMatchObject({ id: "done", number: 9, targets: [] });
     expect(steps.map((s) => s.number)).toEqual([...steps.map((s) => s.number)].sort((a, b) => a - b));
     expect(new Set(steps.map((s) => s.number)).size).toBe(TUTORIAL_STEP_COUNT);
@@ -64,7 +65,7 @@ describe("the Tutorial's steps", () => {
 });
 
 describe("step 4, inside the Tile", () => {
-  const lines = (facts: { needsProof: boolean; pointsWait: boolean }) => tutorialSteps(facts)[at("tile-parts")].lines;
+  const lines = (facts: { needsProof: boolean; pointsWait: boolean }) => tutorialSteps(facts, "Tectonic's Comics Bingo")[at("tile-parts")].lines;
 
   it("says what a Tile's Parts are, and nothing more for a plain Tile", () => {
     expect(lines(tutorialTileFacts(tile([node("a"), node("b")])))).toHaveLength(2);

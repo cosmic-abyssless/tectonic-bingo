@@ -16,18 +16,20 @@ export function TutorialCard({ card }: { card: TutorialCardModel }) {
   const portalVars = useThemeVarsInPortal();
   return (
     <div style={portalVars}>
+      {/* The welcome (large) is lettered bigger, in a roomier box. */}
       <CaptionBox
         tone="yellow"
+        className={card.large ? "px-5 py-4" : undefined}
         title={
           <span className="flex items-baseline justify-between gap-3">
-            {card.title}
+            <span className={card.large ? "text-3xl leading-tight" : undefined}>{card.title}</span>
             <span className="num shrink-0 text-sm" style={{ color: colors.INK_SUBTLE }}>
               {card.label} of {card.count}
             </span>
           </span>
         }
       >
-        <div className="space-y-1 text-sm">
+        <div className={`space-y-1 ${card.large ? "mt-2 text-base" : "text-sm"}`}>
           {card.lines.map((line) => (
             <p key={line}>{line}</p>
           ))}

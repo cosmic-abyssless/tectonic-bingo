@@ -65,7 +65,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
   const tileOpen = page.openTile.id !== null;
   const tileId = state.tileId ?? page.openTile.id;
   const facts = tutorialTileFacts(tiles.find((t) => t.id === tileId));
-  const steps = useMemo(() => tutorialSteps(facts), [facts.needsProof, facts.pointsWait]); // eslint-disable-line react-hooks/exhaustive-deps
+  const steps = useMemo(() => tutorialSteps(facts, page.bingo.name), [facts.needsProof, facts.pointsWait, page.bingo.name]); // eslint-disable-line react-hooks/exhaustive-deps
   const dispatch = (action: TutorialAction) => setState((s) => tutorialReducer(steps, s, action));
   const step = state.active ? (steps[state.index] ?? null) : null;
 
@@ -136,6 +136,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
           count: TUTORIAL_STEP_COUNT,
           primary: step.waitsFor ? null : { label: state.index === 0 ? "Start" : isLast ? "Finish" : "Next", onPress: next },
           waitsForClick: !!step.waitsFor,
+          large: step.large,
           skipLabel: state.index === 0 ? "Skip" : "Exit",
           onSkip: end,
         }

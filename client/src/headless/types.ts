@@ -1064,6 +1064,8 @@ export interface TutorialCardModel {
   primary: { label: "Start" | "Next" | "Finish"; onPress(): void } | null;
   /** The step waits for the Player to click what's highlighted: the card says it's their turn, in place of Next. */
   waitsForClick: boolean;
+  /** Drawn larger: the welcome, naming the Bingo. */
+  large: boolean;
   /** Leaving it, on every step: "Skip" on the welcome, "Exit" once it's under way. */
   skipLabel: "Skip" | "Exit";
   onSkip(): void;
