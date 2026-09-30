@@ -12,6 +12,11 @@ A single OSRS clan bingo competition, run from start to finish across a set of l
 - **Rules:** Has its own board, rules, participants, teams, moderators, and pot. Scoped by a unique slug.
 - **Not:** A tournament, a season.
 
+### Historical Bingo
+A past Bingo run on another website before this one, imported so its history lives here too. Always Finished and read-only, and marked **Historical** wherever it appears, so Players expect less detail.
+- **Rules:** Holds only what the old site recorded: at least its dates, rules, Tiles (a picture each), Teams with their Captains and Players, final standings, and its Wise Old Man competition. Players are named by the RSN they played under then. Anything it never recorded (the Draft, signups, the audit log, Achievements, Wrapped, Rewind, Titles, Tile completion) is shown as not recorded, never as zero or empty.
+- **Players:** A past Player is found by their Discord id, whether or not they have logged in here; one who has left the clan is still shown, but can't open the site. A Player whose Discord id isn't known appears only in the Wise Old Man leaderboard.
+
 ### Stage
 The current lifecycle phase of a Bingo. Transitions move forward through a fixed sequence. The name in bold is the canonical one, used in UI copy, discussion and this glossary; the code value is engineering-only.
 1. **Planning** (`planning`) — Admin configures board, tiles, rules, signup questions. Hidden from everyone but Moderators and Admins, and not listed.
@@ -24,11 +29,13 @@ The current lifecycle phase of a Bingo. Transitions move forward through a fixed
 - **Avoid:** "captains stage" in discussion or UI copy. It is the code value for Signups closed and reads as if it were about the Captain role.
 
 ### Codeword
-A unique, secret text phrase generated for a Bingo (or a stage of it) that players must show in their verification screenshots (e.g. spoken in public chat, or in a clan chat message) to prove the screenshot was taken during this specific Bingo.
+A unique, secret text phrase generated for each Team in a Bingo that players must show in their verification screenshots (e.g. spoken in public chat, or in a clan chat message) to prove the screenshot was taken during this specific Bingo.
+- **Who sees it:** A Player sees their own Team's, only while the Bingo is Live (any earlier would let a screenshot be staged before the start): beside the Board's title and in the Submit flow. Moderators see the Codeword of whichever Team they're submitting for or reviewing.
 
 ### Pre-load
-A task or requirement that players are permitted to prepare before the Bingo goes `live` (or before a specific gate opens), such as obtaining a clue scroll or gathering a secondary ingredient, but not completing the final step.
+A task or requirement that players are permitted to prepare before the Bingo goes `live` (or before a specific gate opens), without completing the final step. The usual case is pre-loading a chest: finishing a run before the Bingo starts and opening the chest once it's Live (common for the Corrupted Gauntlet).
 - **Rules:** Must be explicitly enabled on the specific Part/Task (`allowsPreLoad`).
+- **Not:** A screenshot. Pre-load has nothing to do with the Proof screenshot, which proves a starting state.
 
 ---
 
@@ -89,7 +96,7 @@ A signup left out of the Draft so that every Team comes out the same shape. Pair
   - **Pairs + singles** (`even`; "Even teams" in a solo Bingo) — pairs and singles are each split evenly; the remainder of each is cut.
   - **Pairs only** (`pairs_only`, duo Bingos only) — only pairs are drafted, split evenly; every single is cut. Mods can pair singles up by hand to keep them in.
   - **No cuts** (`none`) — everyone is drafted, in any order; Teams may end up different sizes.
-- **Share:** What every Team drafts under the setting, e.g. "1 pair and 1 single". Captains pick in any order, but a Team that has its share of pairs can't take another pair (likewise singles).
+- **Share:** What every Team drafts under the setting, e.g. "1 pair and 1 single". A Team that has its share of pairs can't take another pair (likewise singles). In a duo Bingo the pairs come first (see Draft).
 - **Avoidable cut:** A Player who is cut as things stand but wouldn't be if the changes a Cut review proposes were made.
 - **Unavoidable cut:** A Player who would still be cut after every change a Cut review can propose. The cut warnings count only these; while any cut is avoidable they say "Some cuts can be avoided" and point to the Cut review.
 
@@ -102,6 +109,7 @@ A plan for cutting as few Players as possible before the Draft, which an admin l
 ### Draft
 The structured selection process during the `draft` stage where Captains take turns selecting Players (or Duos) onto their Teams.
 - **Mechanics:** Snake draft or linear, divided into rounds.
+- **Pairs first:** In a duo Bingo, a Team can't draft a single while there's still a pair it may take: once every pair is drafted (or the Team has its share of pairs), singles open. Every Team gets one pick a round, so with pairs first they all reach their share together. It holds for Admins picking for a Team too.
 
 - **Draft room:** The page where the Draft happens. Captains and Moderators enter it once signups are open; every Player can watch once the Draft stage begins (Cut signups can't).
 - **On the clock:** The Team whose Captain is picking now. Shown to everyone as who is currently picking, with the round and pick number; the Captain on the clock also gets a stronger cue that it is their turn. There is no pick timer.
@@ -177,6 +185,13 @@ A completed sequence of Tiles across the Board (row, column, diagonal, or custom
 A delay configured on a Tile: for its duration after the Bingo starts, no Team can submit to that Tile.
 - **Rules:** It runs from the moment the Bingo counts as started, once, for every Team. It isn't tied to any Team completing the Tile.
 
+### Tutorial
+A short, skippable walk through the Board for a Player: their Team, opening a Tile, what it needs, Task interest, Submitting, and the ☰ menu.
+- **When:** Once per account, the first time a Player sees their own Team's Board in a Live Bingo. Finishing or skipping it counts as seen, on every device. Anyone can replay it from the ☰ menu; replaying never changes that.
+- **Who:** Players, on their own Team's Board. Not a Moderator or Admin looking at a Board they don't play on.
+- **Steps:** Some wait for the Player to click the real thing (open a Tile, open Submit, open the ☰ menu), which then opens as usual; the rest only point things out. Nothing is ever Submitted: the Tutorial shows the Submit flow's inputs and every way into it, then closes it itself. Only those opens are asked for: marking Task interest and the ☰ menu's entries are shown, never required, so an Achievement they lead to stays a reward for choosing to. What's opened during the Tutorial counts like any other open.
+- **Avoid:** Tour, onboarding.
+
 ---
 
 ## Submissions & Scoring
@@ -184,6 +199,7 @@ A delay configured on a Tile: for its duration after the Bingo starts, no Team c
 ### Submission
 A single proof package submitted by a player on behalf of their Team to claim completion of one or more Tasks on a Tile.
 - **Composition:** Contains one or more Screenshots and associated Claims.
+- **Kinds:** A drop (the usual kind, with its Claims) or a **Proof screenshot** (no Claims; see Proof screenshot). Both are posted and reviewed the same way.
 - **Status:** `pending` → `approved` | `rejected`.
 - **Reviewer:** Must be reviewed by a Moderator (or Admin/Site Admin).
 - **Feedback:** Rejections must include reviewer notes so the team knows what went wrong.
@@ -193,12 +209,22 @@ A single proof package submitted by a player on behalf of their Team to claim co
 
 ### Reaction
 An emoji a Player leaves on a Submission of their own Team, from a fixed set of five (🔥 🎉 😂 💀 👀).
-- **Rules:** Only members of the Submission's Team can react, to a Submission in any status (their own included). Each Player can leave each emoji once per Submission, and can take it back. Seen by the Team and Moderators only, except in Rewind, which shows them to everyone once the Bingo is Finished.
+- **Rules:** Only members of the Submission's Team can react, to a Submission in any status (their own included), until the Bingo is Finished: then Reactions are closed, and none can be added or taken back. Each Player can leave each emoji once per Submission, and can take it back. Seen by the Team and Moderators only, except in Rewind, which shows them to everyone once the Bingo is Finished.
 
 ### Screenshot
 An image attached to a Submission proving in-game completion.
-- **Types:** Main drop screenshot, pre-screenshot (for pre-loaded tasks), bank screenshot, collection log screenshot, other.
+- **Types:** Main drop screenshot, bank screenshot, collection log screenshot, other.
 - **Verification:** Scanned for the Bingo's Codeword and item name via OCR/text-matching; verified by a human Moderator during review.
+
+### Proof screenshot
+A screenshot of a Tile's starting state that a Player posts before their drops on that Tile count, such as an empty supply cart at Wintertodt, an empty pool at Tempoross or an empty rift at Guardians of the Rift. It proves the loot that follows was earned during the Bingo, not carried in.
+- **Rules:**
+  - **Where required:** an Admin requires one on a whole Tile or on individual Tasks (a Tile mixing Wintertodt and Tempoross needs a different one per Task), never both on the same Tile. The requirement can carry a note on what to show.
+  - **What it is:** a kind of Submission. It's posted through the same Submit flow (for yourself or a teammate) and only while the Bingo is Live, and reviewed in the same queue (approved or rejected, with the usual Codeword check).
+  - **How long it counts:** each Player needs their own, once per requirement for the whole Bingo, and any approved one counts.
+  - **Missing ones:** a drop without an approved Proof screenshot from its Player can still be submitted, but it's flagged in review, and so is a drop submitted before the Proof screenshot.
+  - **Not a drop:** it has no Claims or points, and isn't counted in Stats, Titles, drop value, Rewind, Wrapped or Achievements. It can't be reacted to.
+- **Not:** A Submission's drop screenshot (which proves the drop itself), and not Pre-load.
 
 ### Claim
 The specific allocation of a single drop or achievement within a Submission to a single leaf Task.

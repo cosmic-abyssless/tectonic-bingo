@@ -52,7 +52,7 @@ interface RawCompetition {
   participations?: unknown[];
 }
 
-function parseCompetitionSummary(raw: unknown): { title: string; metric: string; startsAt: Date; endsAt: Date; participantCount: number } {
+export function parseCompetitionSummary(raw: unknown): { title: string; metric: string; startsAt: Date; endsAt: Date; participantCount: number } {
   const c = (raw ?? {}) as RawCompetition;
   const startsAt = typeof c.startsAt === "string" ? new Date(c.startsAt) : new Date();
   const endsAt = typeof c.endsAt === "string" ? new Date(c.endsAt) : new Date();

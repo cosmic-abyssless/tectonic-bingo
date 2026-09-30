@@ -20,6 +20,9 @@ export const users = sqliteTable('users', {
   // Site admins can create bingos and grant mod/admin to others from the admin
   // panel. Bootstrapped via the ADMIN_DISCORD_IDS env var on login.
   isAdmin: integer('is_admin', { mode: 'boolean' }).notNull().default(false),
+  // When the account finished or skipped the Tutorial (CONTEXT.md); null until then. Per account, so it's seen on
+  // every device; replaying it from the ☰ menu never changes it.
+  tutorialSeenAt: integer('tutorial_seen_at', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
@@ -171,7 +174,24 @@ export const bingos = sqliteTable('bingos', {
   // Credits (CONTEXT.md): each Wrapped art category's additional credits (ones with no image), a JSON object of
   // WrappedCredit arrays keyed by section. Parsed by wrappedArtService.parseAdditionalCredits.
   wrappedArtCreditsJson: text('wrapped_art_credits_json').notNull().default('{}'),
+  // Historical Bingo (CONTEXT.md, docs/historical-bingos-plan.md): a past Bingo run on another website, imported so its
+  // history lives here. Always Finished and read-only (requireBingo refuses every write to it); what it never recorded
+  // shows as not recorded (historicalService.getRecorded). Set only by the historical importer.
+  historical: integer('historical', { mode: 'boolean' }).notNull().default(false),
 });
+
+// A Historical Bingo's final standings, as the old site or the maintainers recorded them: one row per Team, its place
+// and its points when they're known. A Bingo run here has none (its standings come from scoring).
+export const historicalStandings = sqliteTable('historical_standings', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  teamId: text('team_id').notNull().references(() => teams.id),
+  place: integer('place').notNull(),
+  points: integer('points'),
+}, (t) => [
+  uniqueIndex('historical_standings_team_unq').on(t.teamId),
+  index('historical_standings_bingo_idx').on(t.bingoId),
+]);
 
 // Mod is per-bingo, not a global flag — fixes v1's single global isModerator.
 export const bingoModerators = sqliteTable('bingo_moderators', {
@@ -578,14 +598,18 @@ export const nodes = sqliteTable('nodes', {
   // requirementNodes.parentId.
   pointsGateNodeId: text('points_gate_node_id'), // this node's points stay 0 until the gate node completes too
   submitGateNodeId: text('submit_gate_node_id'), // submissions targeting a leaf under this node are rejected until the gate node completes
-  allowsPreLoad: integer('allows_pre_load', { mode: 'boolean' }).notNull().default(false),
+  allowsPreLoad: integer('allows_pre_load', { mode: 'boolean' }).notNull().default(false), // display hint (CONTEXT.md "Pre-load")
   // ITEM only, optional (CONTEXT.md "Valued as"): claims on this leaf get their Drop value from this item ÷ divisor
   // instead of their own item's price, e.g. a DT2 page's Gold ring valued as Magus vestige ÷ 3. Both set or both null.
   valuedAsItemName: text('valued_as_item_name'),
   valuedAsDivisor: integer('valued_as_divisor'),
   // Optional, with Valued as: where these claims come from ("Vardorvis"), shown next to the item so players see why
   // an ordinary-looking item has a value.
-  valuedAsSource: text('valued_as_source'), // display hint: player may submit an empty-state screenshot beforehand
+  valuedAsSource: text('valued_as_source'),
+  // A Task (a tile node's direct child) that needs a Proof screenshot (CONTEXT.md) from each Player before their drops
+  // on it count. Never set on a Task whose Tile requires one Tile-wide (tiles.requiresProof). The note says what to show.
+  requiresProof: integer('requires_proof', { mode: 'boolean' }).notNull().default(false),
+  proofNote: text('proof_note'),
 });
 
 // A node may have several parents (DAG). sortOrder is scoped to one parent —
@@ -627,6 +651,13 @@ export const tiles = sqliteTable('tiles', {
   hasFreezePeriod: integer('has_freeze_period', { mode: 'boolean' }).notNull().default(false),
   freezeDurationMinutes: integer('freeze_duration_minutes').notNull().default(0),
   notes: text('notes'),
+  // A Proof screenshot (CONTEXT.md) required Tile-wide: each Player needs an approved one before their drops on the Tile
+  // count. When set, no Task of the Tile has its own (nodes.requiresProof). The note says what to show.
+  requiresProof: integer('requires_proof', { mode: 'boolean' }).notNull().default(false),
+  proofNote: text('proof_note'),
+  // A Historical Bingo's (CONTEXT.md) own rules for this Tile, as the old site gave them: plain text shown in the Tile's
+  // dialog. Null on every Bingo run here, whose Tiles say what they take through their Tasks.
+  rulesText: text('rules_text'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 }, (t) => [
   uniqueIndex('tiles_bingo_position_unq').on(t.bingoId, t.boardRow, t.boardCol),
@@ -678,6 +709,12 @@ export const submissions = sqliteTable('submissions', {
   // Set only when someone else uploaded the screenshot for that player (a teammate at a PC for a drop on mobile, or a
   // mod). Null means the player posted it themselves. The audit log's actor is whoever posted.
   postedByUserId: text('posted_by_user_id').references(() => users.id),
+  // CONTEXT.md "Submission" kinds: a drop (with its Claims) or a Proof screenshot (no Claims, no points). Anything
+  // counting drops filters to `drop` through submissionKinds.ts.
+  kind: text('kind', { enum: ['drop', 'proof'] }).notNull().default('drop'),
+  // A proof only: the Tile it's for, and the Task when the requirement is per-Task (null when it's Tile-wide).
+  proofTileId: text('proof_tile_id').references(() => tiles.id),
+  proofTaskId: text('proof_task_id').references(() => nodes.id),
   status: text('status', {
     enum: ['pending', 'approved', 'rejected'],
   }).notNull().default('pending'),
@@ -702,15 +739,18 @@ export const submissionReactions = sqliteTable('submission_reactions', {
   index('submission_reactions_submission_idx').on(t.submissionId),
 ]);
 
-// One submission can have multiple screenshots (main + pre-screenshot, bank,
-// etc.). The scrape_* fields are populated by the AI screenshot-analysis job.
+// One submission can have multiple screenshots (main, bank, etc.; a Proof
+// screenshot's is `proof`). The scrape_* fields are populated by the AI screenshot-analysis job.
 export const submissionScreenshots = sqliteTable('submission_screenshots', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   submissionId: text('submission_id').notNull().references(() => submissions.id),
   screenshotType: text('screenshot_type', {
-    enum: ['main', 'pre_screenshot', 'bank', 'collection_log', 'other'],
+    enum: ['main', 'proof', 'bank', 'collection_log', 'other'],
   }).notNull().default('main'),
+  // Empty while a Historical Bingo's (CONTEXT.md) screenshot is still to be uploaded (see historicalKey).
   storageUrl: text('storage_url').notNull(),
+  // A Historical Bingo's only: the screenshot's key in its import bundle, which the upload that attaches the file names.
+  historicalKey: text('historical_key'),
   scrapeStatus: text('scrape_status', {
     enum: ['pending', 'processing', 'completed', 'failed'],
   }).notNull().default('pending'),

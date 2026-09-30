@@ -3,7 +3,25 @@
 // never a raw Tile, TeamNodeState[], SubmissionDetails[], or LeafClaimMaps.
 // See docs/headless-theming-plan.md §2.
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
-import type { AuditCategory, AuditTone, ContributionCount, DraftState, NodeKind, NodeStatus, PickedTitle, SignificanceTier, Stage, StageMilestone, SubmissionDetails, SubmissionReaction, SubmissionStatus, WrappedArtFrames } from "@bingo/shared";
+import type {
+  AuditCategory,
+  AuditTone,
+  ContributionCount,
+  DraftState,
+  HistoricalRecorded,
+  NodeKind,
+  NodeStatus,
+  PickedTitle,
+  ProofStatus,
+  SignificanceTier,
+  Stage,
+  StageMilestone,
+  SubmissionDetails,
+  SubmissionKind,
+  SubmissionReaction,
+  SubmissionStatus,
+  WrappedArtFrames,
+} from "@bingo/shared";
 import type { PlaybackSpeed } from "./rewindModel";
 
 export interface ActivityEntryModel {
@@ -46,6 +64,8 @@ export interface TeamModel {
   isLead: boolean;
   /** Leads only, and only until the bingo goes live (matches the rename endpoint). */
   canRename: boolean;
+  /** The team's Codeword (CONTEXT.md), for its own Players and for mods (who can submit for any team); null otherwise. */
+  codeword: string | null;
 }
 
 export interface UserModel {
@@ -84,6 +104,14 @@ export interface RequirementNodeModel {
   children: RequirementNodeModel[];
 }
 
+/** A Proof screenshot requirement (CONTEXT.md): on a whole Tile (TileModel.proof) or one Task (TaskModel.proof). */
+export interface ProofModel {
+  /** The Admin's message, shown whole ("Show an empty supply cart before your drops count."), when they wrote one. */
+  note: string | null;
+  /** The viewer's own standing: any approved one counts. Null when the viewer isn't on the viewed team. */
+  status: ProofStatus | null;
+}
+
 export interface TaskModel {
   id: string;
   label: string | null;
@@ -95,6 +123,8 @@ export interface TaskModel {
   kind: NodeKind;
   isManual: boolean;
   allowsPreLoad: boolean;
+  /** This Task's own Proof screenshot requirement; null when it has none (or the Tile's is Tile-wide). */
+  proof: ProofModel | null;
   status: NodeStatus;
   complete: boolean;
   locked: boolean;
@@ -122,8 +152,12 @@ export interface SubmissionModel {
   timeAgo: string;
   /** The first screenshot's original URL — views derive the thumb/full variant they need (api/imageVariants). */
   thumbnailUrl: string | null;
-  /** claimsSummary() — e.g. "2× Bruma torch, Vorki". */
+  /** A Historical Bingo's screenshot still to be uploaded: shown as SCREENSHOT_NOT_UPLOADED, with no picture. */
+  screenshotPending: boolean;
+  /** claimsSummary() — e.g. "2× Bruma torch, Vorki"; "Proof screenshot" for a proof one. */
   summary: string;
+  /** A Proof screenshot (CONTEXT.md), not a drop: it can't be reacted to. */
+  isProof: boolean;
   submittedBy: string | null;
   reviewerNotes: string | null;
   tileId: string | null;
@@ -148,6 +182,8 @@ export interface TileModel {
   id: string;
   name: string;
   imageUrl: string | null;
+  /** A Historical Bingo's (CONTEXT.md) own rules for the Tile, as the old site gave them; null otherwise. */
+  rulesText: string | null;
   row: number;
   col: number;
   /**
@@ -177,6 +213,8 @@ export interface TileModel {
     remainingMs: number;
   };
   tasks: TaskModel[];
+  /** The Tile-wide Proof screenshot requirement; null when there is none (a Task may still have its own). */
+  proof: ProofModel | null;
   /** groupSubmissionsByTile() output for this tile, newest first. */
   submissions: SubmissionModel[];
   /** Search miss. */
@@ -259,7 +297,11 @@ export interface PointBreakdownModel {
 
 // Exact branch order: signup -> notPart -> planning|captains -> draft -> !viewingTeamId -> board.
 // "notPart": someone who can't see the bingo (not a Player, Moderator or Admin; CONTEXT.md "Player") once signups close.
-export type StageView = "signup" | "notPart" | "planning" | "captains" | "draft" | "noTeam" | "board";
+/**
+ * "historical": a Historical Bingo (CONTEXT.md) that recorded no Tasks, so there's no Team board to show: the page is
+ * its picture board, standings, Teams and Wise Old Man leaderboard (core/historical's HistoricalBingoView).
+ */
+export type StageView = "signup" | "notPart" | "planning" | "captains" | "draft" | "noTeam" | "board" | "historical";
 
 export interface TileSearchModel {
   query: string;
@@ -301,7 +343,11 @@ export interface BingoPageModel {
     endsAt: number | null;
     boardRows: number;
     boardCols: number;
+    /** A Historical Bingo (CONTEXT.md): imported, always Finished and read-only; its header carries a Historical badge. */
+    historical: boolean;
   };
+  /** What a Historical Bingo recorded, per feature (what isn't there says "Not recorded for historical Bingos"); null for any other Bingo. */
+  historical: HistoricalRecorded | null;
   milestone: StageMilestone | null;
   user: UserModel;
   isMod: boolean;
@@ -349,22 +395,37 @@ export interface BingoPageModel {
    */
   sealed: { forMe: boolean; forPlayers: boolean };
   rules: { open: boolean; show(): void; hide(): void };
-  /** Roster of `viewing.team` (TeamBadge press for players, roster button beside TeamSelector for mods → TeamInfoDialog). */
+  /** Roster of `viewing.team` (the comic TeamBanner, or the team entry in the header's ☰ menu → TeamInfoDialog). */
   teamInfo: { open: boolean; show(): void; hide(): void };
   /** The point breakdown of `viewing.team` (pressing the point total on the board → PointBreakdownDialog). */
   pointBreakdown: { open: boolean; show(): void; hide(): void };
   drawer: { open: boolean; show(): void; hide(): void };
   /** show() also hides the drawer. initialFile seeds/replaces the flow's screenshot (drag-drop/paste-to-submit) — re-passing a new File while already open feeds it into the still-mounted flow. initialTaskId preselects a part of that tile (per-part Submit buttons). */
-  submit: { open: boolean; initialTileId: string | undefined; initialTaskId: string | undefined; initialFile: File | undefined; show(tileId?: string, file?: File, taskId?: string): void; hide(): void };
-  /** logout lives in core AppHeader's own user menu, not here. */
+  submit: {
+    open: boolean;
+    initialTileId: string | undefined;
+    initialTaskId: string | undefined;
+    initialFile: File | undefined;
+    /** "proof" when opened to post a Proof screenshot (showProof). */
+    initialKind: SubmissionKind | undefined;
+    show(tileId?: string, file?: File, taskId?: string): void;
+    /** Opens the flow on this Tile (and Task, for a per-Task requirement) with "Proof screenshot" already chosen. */
+    showProof(tileId: string, taskId?: string): void;
+    hide(): void;
+  };
+  /** logout lives in core AppHeader's own ☰ menu, not here. */
   actions: { goHome(): void; goToStats(): void; goToRewind(): void; goToWrapped(): void; goToMod(): void; goToDraft(): void };
   /** Raise/lower the viewer's hand for one part (task) of a tile on their own team. No-op unless task.interest.canToggle. */
   tileInterest: { toggle(tileId: string, taskId: string): void };
-  /** Emoji reactions on the viewed team's submissions: canReact when it's the viewer's own team. toggle() puts the viewer's on or takes it off. */
+  /** Emoji reactions on the viewed team's submissions: canReact when it's the viewer's own team and the bingo isn't Finished. toggle() puts the viewer's on or takes it off. */
   reactions: { canReact: boolean; toggle(submissionId: string, emoji: SubmissionReaction): void };
+  /** The viewer's own team's Codeword while the bingo is Live (the header's banner); null otherwise. */
+  codeword: string | null;
 }
 
 export interface SubmissionFlowModel {
+  /** The Codeword every screenshot for this team must show: the team being submitted to. */
+  codeword: string | null;
   /**
    * Who the drop belongs to. A player can post for a teammate (a drop on mobile, posted from a PC); a mod posting
    * to a team they aren't on must pick one of its players. The player picked is credited, the poster is recorded.
@@ -424,6 +485,24 @@ export interface SubmissionFlowModel {
     pickerKey: string;
   };
   quantity: { visible: boolean; value: number; max: number; needed: number; set(n: number): void };
+  /**
+   * Drop or Proof screenshot (CONTEXT.md). "proof" is offered only where the picked Tile (or Task, when the requirement
+   * is per-Task) needs one; choosing it hides the item picking, since a proof has no claims.
+   */
+  kind: {
+    value: SubmissionKind;
+    available: boolean;
+    select(kind: SubmissionKind): void;
+    /** What the proof is for: the Tile's name, or the Task's label for a per-Task requirement. */
+    label: string | null;
+    /** The Admin's message, shown whole, when they wrote one. */
+    note: string | null;
+  };
+  /**
+   * A drop on a Tile/Task whose requirement the picked Player has no Proof screenshot for (none, or only rejected
+   * ones): "You haven't posted a Proof screenshot for this tile yet". It still submits; post() switches to posting one.
+   */
+  proofWarning: { message: string; post(): void } | null;
   staged: { items: { label: string }[]; remove(index: number): void; canStageCurrent: boolean; stageCurrent(): void };
   submit: { isValid: boolean; isSubmitting: boolean; isAnalyzing: boolean; error: string | null; run(): Promise<void> };
   close(): void;
@@ -1003,4 +1082,22 @@ export interface WrappedModel {
   outroReachedBefore: boolean;
   /** `outroReached` remembers, for next time, that the viewer got to the Outro. */
   actions: { goToBoard(): void; goToRewind(): void; outroReached(): void };
+}
+
+/** The Tutorial's explanation card for the current step (the TutorialCard slot draws it; core places it). */
+export interface TutorialCardModel {
+  title: string;
+  lines: string[];
+  /** Which of the Tutorial's steps this is ("3", or a sub-step's "7.2"), and how many steps there are ("7.2 of 9"). */
+  label: string;
+  count: number;
+  /** "Start" on the welcome, "Finish" on the last step, "Next" otherwise; null on a step that waits for the Player to click. */
+  primary: { label: "Start" | "Next" | "Finish"; onPress(): void } | null;
+  /** The step waits for the Player to click what's highlighted: the card says it's their turn, in place of Next. */
+  waitsForClick: boolean;
+  /** Drawn larger: the welcome, naming the Bingo. */
+  large: boolean;
+  /** Leaving it, on every step: "Skip" on the welcome, "Exit" once it's under way. */
+  skipLabel: "Skip" | "Exit";
+  onSkip(): void;
 }

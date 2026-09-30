@@ -4,6 +4,7 @@ import { useBingos } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { AppHeader } from "../core/ui/AppHeader";
 import { Badge, EmptyState } from "../core/ui/Card";
+import { HistoricalBadge } from "../core/historical/HistoricalBadge";
 import { ChevronRightIcon, GridIcon } from "../core/ui/icons";
 
 export function BingoList() {
@@ -41,6 +42,7 @@ export function BingoList() {
                   <p className="truncate text-sm font-medium text-on-surface">{bingo.name}</p>
                   {bingo.description && <p className="mt-0.5 truncate text-sm text-on-surface-muted">{bingo.description}</p>}
                 </div>
+                {bingo.historical && <HistoricalBadge />}
                 <Badge tone={bingo.stage === "live" ? "ok" : "neutral"}>{STAGE_LABEL[bingo.stage]}</Badge>
                 <ChevronRightIcon className="shrink-0 text-on-surface-subtle" />
               </Link>

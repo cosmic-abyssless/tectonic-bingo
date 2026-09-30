@@ -1,13 +1,20 @@
+import { SCREENSHOT_NOT_UPLOADED } from "@bingo/shared";
 import { ImageIcon } from "../ui/icons";
 import { thumbUrl } from "../../api/imageVariants";
 
 const SIZE = { sm: "size-12", md: "size-14" } as const;
 
-/** Screenshot thumbnail that opens the full image in a new tab; placeholder when none. */
-export function ScreenshotThumb({ url, size = "md" }: { url?: string; size?: keyof typeof SIZE }) {
-  if (!url) {
+/**
+ * Screenshot thumbnail that opens the full image in a new tab; placeholder when none. `pending`: a Historical Bingo's
+ * screenshot still to be uploaded, which says so rather than showing a broken picture.
+ */
+export function ScreenshotThumb({ url, size = "md", pending = false }: { url?: string; size?: keyof typeof SIZE; pending?: boolean }) {
+  if (!url || pending) {
     return (
-      <div className={`${SIZE[size]} flex shrink-0 items-center justify-center rounded-md border border-outline bg-background text-on-surface-subtle`} aria-hidden>
+      <div
+        className={`${SIZE[size]} flex shrink-0 items-center justify-center rounded-md border border-outline bg-background text-on-surface-subtle ${pending ? "border-dashed" : ""}`}
+        {...(pending ? { role: "img", "aria-label": SCREENSHOT_NOT_UPLOADED, title: SCREENSHOT_NOT_UPLOADED } : { "aria-hidden": true })}
+      >
         <ImageIcon size={14} />
       </div>
     );

@@ -38,3 +38,6 @@ infra/*.tfplan
 # Board exports (the settings page's Export): big, with tile images embedded. Keep a local copy at the repo root
 # for generate-bingo and the real-board test (docs/generate-bingo.md).
 *-bingo-export.json
+
+# Historical Bingo bundles made by server/scripts/historical (uploaded, not committed)
+*.historical.json

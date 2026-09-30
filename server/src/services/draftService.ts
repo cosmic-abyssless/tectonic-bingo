@@ -1,7 +1,7 @@
 import { now as clockNow } from "../clock";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { playerName, type AnswerViewer, type CutMode, type DraftCutPreview, type DraftShares } from "@bingo/shared";
+import { PAIRS_FIRST_MESSAGE, playerName, type AnswerViewer, type CutMode, type DraftCutPreview, type DraftShares, type DraftTakes } from "@bingo/shared";
 import { visibleQuestionIds } from "./signupService";
 import * as schema from "../db/schema";
 import { bingos, draftPicks, pickRatings, signupAnswers, signups, teamMembers, teams, tileInterests, users } from "../db/schema";
@@ -119,7 +119,7 @@ export interface DraftState {
   orderReady: boolean;
   orderLockedUntil: string | null;
   // takes: what the team on the clock may still draft (see teamTakes).
-  currentPick: { pickNumber: number; round: number; teamId: string; takes: { pairs: boolean; singles: boolean } } | null;
+  currentPick: { pickNumber: number; round: number; teamId: string; takes: DraftTakes } | null;
   // What every team drafts; null with no cuts or fewer than two teams (see markCuts).
   shares: DraftShares | null;
   // Signups left out of `pool` because they were cut (see hideCut in getDraftState); 0 when they are shown or none were.
@@ -181,10 +181,14 @@ export function markCuts(
 // always holds exactly what the teams still need, so the team on the clock always has something to take; if a mid-draft
 // change (a new team, a switched mode) ever leaves it with nothing it may take, it takes whatever is left rather than
 // stalling the draft.
-function teamTakes(shares: DraftShares | null, has: { pairs: number; singles: number }, available: DraftUnit[]): { pairs: boolean; singles: boolean } {
-  if (!shares) return { pairs: true, singles: true };
-  const takes = { pairs: has.pairs < shares.pairs, singles: has.singles < shares.singles };
-  return available.some((u) => (isPair(u) ? takes.pairs : takes.singles)) ? takes : { pairs: true, singles: true };
+//
+// In a duo Bingo pairs come first (CONTEXT.md "Pairs first"): while a pair the team may take is still available, it
+// can't take a single. Every team gets one pick a round, so they all reach their share of pairs together.
+function teamTakes(shares: DraftShares | null, has: { pairs: number; singles: number }, available: DraftUnit[], duo: boolean): DraftTakes {
+  let takes = shares ? { pairs: has.pairs < shares.pairs, singles: has.singles < shares.singles } : { pairs: true, singles: true };
+  if (!available.some((u) => (isPair(u) ? takes.pairs : takes.singles))) takes = { pairs: true, singles: true };
+  const pairsFirst = duo && takes.singles && takes.pairs && available.some(isPair);
+  return { pairs: takes.pairs, singles: takes.singles && !pairsFirst, pairsFirst };
 }
 
 function signedUpAt(unit: DraftUnit): number {
@@ -282,13 +286,20 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
   const pool = hideCut ? fullPool.filter((u) => !u.cut) : fullPool;
   const cutCount = hideCut ? fullPool.filter((u) => u.cut).reduce((n, u) => n + u.entries.length, 0) : 0;
 
+  // A Historical Bingo's Draft (CONTEXT.md) is over and read-only: its picks as recorded, nobody left to pick, and
+  // everyone who signed up and wasn't drafted counted as cut.
+  if (fresh.historical) {
+    const undrafted = fullPool.reduce((n, u) => n + u.entries.length, 0);
+    return { teams: orderedTeams, picks, pool: [], draftStarted: pickRows.length > 0, orderReady, orderLockedUntil: null, currentPick: null, shares, cutCount: undrafted };
+  }
+
   let currentPick: DraftState["currentPick"] = null;
   const available = fullPool.filter((u) => !u.cut);
   if (draftStarted && orderReady && lockExpired && available.length > 0) {
     const pickNumber = nextPickNumber(db, bingoId);
     const round = Math.ceil(pickNumber / orderedTeams.length);
     const teamId = orderedTeams[pickOrderTeamIndex(orderedTeams.length, pickNumber)]!.id;
-    currentPick = { pickNumber, round, teamId, takes: teamTakes(shares, draftedByTeam.get(teamId) ?? { pairs: 0, singles: 0 }, available) };
+    currentPick = { pickNumber, round, teamId, takes: teamTakes(shares, draftedByTeam.get(teamId) ?? { pairs: 0, singles: 0 }, available, fresh.signupMode === "duo") };
   }
 
   return { teams: orderedTeams, picks, pool, draftStarted, orderReady, orderLockedUntil, currentPick, shares, cutCount };
@@ -296,6 +307,11 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
 
 // User ids of undrafted signups cut from the draft as things stand. Used by the roster and the signup page.
 export function getCutUserIds(db: Db, bingo: Bingo): Set<string> {
+  // A Historical Bingo's Draft is over: its Cut signups are whoever signed up and wasn't drafted onto a Team.
+  if (bingo.historical) {
+    const drafted = getDraftedUserIds(db, bingo.id);
+    return new Set(db.select({ userId: signups.userId }).from(signups).where(and(eq(signups.bingoId, bingo.id), eq(signups.status, "active"))).all().map((s) => s.userId).filter((id) => !drafted.has(id)));
+  }
   const { pool } = getDraftState(db, bingo, { includeAnswers: false });
   return new Set(pool.filter((u) => u.cut).flatMap((u) => u.entries.map((e) => e.user.id)));
 }
@@ -464,14 +480,16 @@ export function makePick(db: Db, params: MakePickParams) {
       if (alreadyDrafted) throw new ServiceError(400, "That player has already been drafted");
     }
 
-    // Cut signups are never drafted, and a team only takes a pair (or a single) while it's short of its share.
+    // Cut signups are never drafted, a team only takes a pair (or a single) while it's short of its share, and in a duo
+    // bingo it takes no single while there's a pair it may take.
     const state = getDraftState(tx, bingo, { includeAnswers: false });
     const unit = state.pool.find((u) => u.entries.some((e) => e.user.id === pickedUserId));
     if (!unit || unit.cut) {
       const pairsOnly = !!unit && !isPair(unit) && bingo.cutMode === "pairs_only";
       throw new ServiceError(400, pairsOnly ? "Singles aren't drafted in this bingo (pairs only)" : "That signup is cut from the draft: they don't split evenly across the teams");
     }
-    const takes = state.currentPick?.takes ?? { pairs: true, singles: true };
+    const takes = state.currentPick?.takes ?? { pairs: true, singles: true, pairsFirst: false };
+    if (!isPair(unit) && takes.pairsFirst) throw new ServiceError(400, PAIRS_FIRST_MESSAGE);
     if (state.shares && (isPair(unit) ? !takes.pairs : !takes.singles)) {
       const count = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`;
       const { pairs, singles } = state.shares;

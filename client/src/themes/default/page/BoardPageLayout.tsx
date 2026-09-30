@@ -3,6 +3,7 @@ import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
 import { useScreenshotCapture } from "../../../headless/useScreenshotCapture";
 import { ScreenshotDropOverlay } from "../../../core/ui/ScreenshotDropOverlay";
 import { SealedTilesNotice } from "../../../core/board/SealedTilesNotice";
+import { HistoricalBingoView } from "../../../core/historical/HistoricalBingoView";
 import { useSlot } from "../../context";
 
 export function BoardPageLayout() {
@@ -44,6 +45,8 @@ export function BoardPageLayout() {
           <PlanningStage stage={page.stageView} />
         ) : page.stageView === "draft" ? (
           <DraftStage draft={page.draft} milestone={page.milestone} onOpenDraft={page.actions.goToDraft} />
+        ) : page.stageView === "historical" && page.historical ? (
+          <HistoricalBingoView slug={page.slug} board={board} teams={page.teams} recorded={page.historical} />
         ) : page.stageView === "noTeam" ? (
           <NoTeamStage selector={page.teamSelector} />
         ) : (
@@ -62,7 +65,14 @@ export function BoardPageLayout() {
       <ScreenshotDropOverlay visible={dragActive} />
 
       {page.submit.open && (
-        <SubmissionFlowHost initialTileId={page.submit.initialTileId} initialTaskId={page.submit.initialTaskId} initialFile={page.submit.initialFile} onClose={page.submit.hide} onSuccess={() => {}}>
+        <SubmissionFlowHost
+          initialTileId={page.submit.initialTileId}
+          initialTaskId={page.submit.initialTaskId}
+          initialFile={page.submit.initialFile}
+          initialKind={page.submit.initialKind}
+          onClose={page.submit.hide}
+          onSuccess={() => {}}
+        >
           {(flow) => <SubmissionModal flow={flow} />}
         </SubmissionFlowHost>
       )}
@@ -81,6 +91,7 @@ export function BoardPageLayout() {
         onClose={page.openTile.close}
         onToggleInterest={modalTile?.interest.canToggle ? (taskId) => page.tileInterest.toggle(modalTile.id, taskId) : undefined}
         onSubmit={page.canSubmit ? (taskId) => page.submit.show(page.openTile.id ?? undefined, undefined, taskId) : undefined}
+        onPostProof={page.canSubmit && modalTile ? (taskId) => page.submit.showProof(modalTile.id, taskId) : undefined}
       />
     </div>
   );

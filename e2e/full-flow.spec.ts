@@ -423,7 +423,8 @@ test("full bingo lifecycle", async ({ page, browser }) => {
   await test.step("p3 sees the rejection and points are unchanged", async () => {
     await loginAs(page, "e2e-p3");
     await page.goto(`/b/${SLUG}`);
-    await page.getByRole("button", { name: "Submissions" }).click();
+    await page.getByRole("button", { name: /^Menu/ }).click();
+    await page.getByRole("menuitem", { name: "Submissions" }).click();
     await expect(page.getByText("Rejected", { exact: true })).toBeVisible();
     await expect(page.getByText("Screenshot doesn't show the kill count.")).toBeVisible();
     await page.getByRole("button", { name: "Close" }).click();

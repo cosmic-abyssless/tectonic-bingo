@@ -14,7 +14,7 @@ export function ScreenshotDropzone({ screenshot }: { screenshot: SubmissionFlowM
   const { colors } = useComic();
   const has = !!screenshot.previewUrl;
   return (
-    <ComicField label="Screenshot" as="div">
+    <ComicField label="Screenshot" as="div" tutorial="submit-screenshot">
       <button
         type="button"
         onClick={screenshot.openFilePicker}

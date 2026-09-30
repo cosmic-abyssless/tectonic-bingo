@@ -578,12 +578,12 @@ describe("duo mode", () => {
   });
 
   it("lets the co-captain pick for the team", () => {
-    const { bingo, teamA, co1, solo } = setupDuo();
+    const { bingo, teamA, co1, p1 } = setupDuo();
     // Make sure team A is on the clock regardless of the shuffle.
     db.update(schema.teams).set({ draftOrder: 1 }).where(eq(schema.teams.id, teamA.id)).run();
     db.update(schema.teams).set({ draftOrder: 2 }).where(and(eq(schema.teams.bingoId, bingo.id), ne(schema.teams.id, teamA.id))).run();
-    const picks = makePick(db, { bingo, pickedUserId: solo.id, actingUserId: co1.id, actingIsAdmin: false });
-    expect(picks).toHaveLength(1);
+    const picks = makePick(db, { bingo, pickedUserId: p1.id, actingUserId: co1.id, actingIsAdmin: false });
+    expect(picks).toHaveLength(2);
     expect(picks[0]!.teamId).toBe(teamA.id);
   });
 });
@@ -710,16 +710,72 @@ describe("cuts", () => {
       const { bingo, first, second, pairs, singles, pick } = setupDuoPool("even", { pairs: 2, singles: 2 });
       expect(getDraftState(db, bingo, { includeAnswers: false }).shares).toEqual({ pairs: 1, singles: 1 });
       expect(cutIds(bingo).size).toBe(0);
-      // Any order: the first team takes its single first, the second its pair; the second (picking again, the snake)
-      // may then only take a single.
-      pick(singles[0]!.id, first);
-      pick(pairs[0]!.id, second);
-      expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick).toMatchObject({ teamId: second.id, takes: { pairs: false, singles: true } });
-      expect(() => pick(pairs[1]!.id, second)).toThrow(`${second.name} already has its 1 pair: every team drafts 1 pair and 1 single`);
-      pick(singles[1]!.id, second);
-      expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick).toMatchObject({ teamId: first.id, takes: { pairs: true, singles: false } });
-      pick(pairs[1]!.id, first);
+      // Pairs first: each team takes its pair, and only then the singles open.
+      pick(pairs[0]!.id, first);
+      pick(pairs[1]!.id, second);
+      expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick).toMatchObject({ teamId: second.id, takes: { pairs: false, singles: true, pairsFirst: false } });
+      pick(singles[0]!.id, second);
+      expect(() => pick(singles[1]!.id, second)).toThrow(/not your team's turn/);
+      pick(singles[1]!.id, first);
       expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick).toBeNull();
+    });
+
+    describe("pairs first", () => {
+      const PAIRS_FIRST = "Pairs are drafted first: singles open once every pair is taken.";
+
+      for (const cutMode of ["even", "none"] as const) {
+        it(`${cutMode}: refuses a single while a pair remains, for a Captain and for an Admin`, () => {
+          const { bingo, first, second, pairs, singles, pick } = setupDuoPool(cutMode, { pairs: 2, singles: 2 });
+          expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick!.takes).toEqual({ pairs: true, singles: false, pairsFirst: true });
+          expect(() => pick(singles[0]!.id, first)).toThrow(PAIRS_FIRST);
+          const admin = seedUser("site-admin");
+          expect(() => makePick(db, { bingo, pickedUserId: singles[0]!.id, actingUserId: admin.id, actingIsAdmin: true })).toThrow(PAIRS_FIRST);
+          pick(pairs[0]!.id, first);
+          expect(() => pick(singles[0]!.id, second)).toThrow(PAIRS_FIRST);
+          pick(pairs[1]!.id, second);
+          // Every pair drafted: singles are open, as before.
+          expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick!.takes).toMatchObject({ singles: true, pairsFirst: false });
+          pick(singles[0]!.id, second);
+          pick(singles[1]!.id, first);
+          expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick).toBeNull();
+        });
+      }
+
+      it("a single the refusal left behind stays undrafted, and the pick stays with the same team", () => {
+        const { bingo, first, singles, pick } = setupDuoPool("even", { pairs: 2, singles: 2 });
+        expect(() => pick(singles[0]!.id, first)).toThrow(PAIRS_FIRST);
+        const state = getDraftState(db, bingo, { includeAnswers: false });
+        expect(state.picks).toHaveLength(0);
+        expect(state.currentPick).toMatchObject({ pickNumber: 1, teamId: first.id });
+      });
+
+      it("a Team that has its share of pairs may take a single while others don't have theirs", () => {
+        // Each team drafts 2 pairs and 1 single. A Draft under way when the rule shipped: the second team already has
+        // both its pairs (set up directly), the first none, and the second is on the clock (pick 3 of the snake).
+        const { bingo, first, second, pairs, singles, pick } = setupDuoPool("even", { pairs: 4, singles: 2 });
+        pairs.slice(0, 2).forEach((p, i) => {
+          for (const userId of [p.id, p.partner.id]) {
+            db.insert(schema.draftPicks).values({ bingoId: bingo.id, pickNumber: i + 1, teamId: second.id, userId, pickedByUserId: second.captainUserId }).run();
+            db.insert(schema.teamMembers).values({ teamId: second.id, userId, isCaptain: false }).run();
+          }
+        });
+        expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick).toMatchObject({ teamId: second.id, takes: { pairs: false, singles: true, pairsFirst: false } });
+        pick(singles[0]!.id, second);
+        // The first team still has pairs to take, so it may not take a single.
+        expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick).toMatchObject({ teamId: first.id, takes: { pairs: true, singles: false, pairsFirst: true } });
+        expect(() => pick(singles[1]!.id, first)).toThrow(PAIRS_FIRST);
+      });
+
+      it("solo bingos are unaffected", () => {
+        const bingo = seedBingo({ cutMode: "none" });
+        const [c1, c2] = [seedCaptain(bingo.id, "c1"), seedCaptain(bingo.id, "c2")];
+        createTeam(db, { bingoId: bingo.id, captainUserId: c1.id, name: "A" });
+        createTeam(db, { bingoId: bingo.id, captainUserId: c2.id, name: "B" });
+        const p = seedUser("p");
+        db.insert(schema.signups).values({ bingoId: bingo.id, userId: p.id, rsn: "p" }).run();
+        beginDraft(bingo);
+        expect(getDraftState(db, bingo, { includeAnswers: false }).currentPick!.takes).toEqual({ pairs: true, singles: true, pairsFirst: false });
+      });
     });
 
     it("pairs + singles: cuts the newest pairs and the newest singles that don't split evenly", () => {
@@ -741,7 +797,7 @@ describe("cuts", () => {
       expect(() => makePick(db, { bingo, pickedUserId: singles[0]!.id, actingUserId: first.captainUserId, actingIsAdmin: false })).toThrow(/pairs only/i);
     });
 
-    it("no cuts: anyone, any order", () => {
+    it("no cuts: anyone, once the pairs are drafted", () => {
       const { bingo, first, second, pairs, singles, pick } = setupDuoPool("none", { pairs: 1, singles: 2 });
       pick(pairs[0]!.id, first);
       pick(singles[0]!.id, second);

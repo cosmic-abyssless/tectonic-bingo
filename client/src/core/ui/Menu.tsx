@@ -8,6 +8,8 @@ export type MenuFrameProps<T extends object = object> = MenuProps<T> & {
   /** Open and close without the pop animation (pickers, which open and close often). */
   instant?: boolean;
   popoverClassName?: string;
+  /** Which way it opens from its button: "bottom end" (the default) lines its right edge up with the button's. */
+  placement?: "bottom start" | "bottom end";
 };
 
 export type MenuItemVariant = "option" | "action";
@@ -45,12 +47,12 @@ export function useMenuListRef() {
 }
 
 /** The unthemed menu: a raised surface with a hairline border. */
-export function PlainMenu<T extends object>({ instant, popoverClassName = "", ...props }: MenuFrameProps<T>) {
+export function PlainMenu<T extends object>({ instant, popoverClassName = "", placement = "bottom end", ...props }: MenuFrameProps<T>) {
   const listRef = useMenuListRef();
 
   return (
     <Popover
-      placement="bottom end"
+      placement={placement}
       offset={6}
       shouldSkipAnimation={instant}
       className={`${instant ? "" : "overlay-panel"} flex min-w-44 flex-col rounded-md border border-outline bg-surface-raised p-1 shadow-pop outline-none ${popoverClassName}`}

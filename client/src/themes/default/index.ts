@@ -2,6 +2,7 @@ import type { ThemeDefinition } from "../registry";
 import { BugReportButton } from "../../core/ui/BugReportButton";
 import { PlainButton } from "../../core/ui/Button";
 import { PlainMenu, PlainMenuItem } from "../../core/ui/Menu";
+import { PlainHeaderMenu } from "../../core/ui/headerMenu";
 import { PlainNotice } from "../../core/ui/Card";
 import { PlainPanel } from "../../core/ui/Panel";
 import { PlainTitleChip, PlainTitleGroupBox } from "../../core/stats/TitleChrome";
@@ -25,12 +26,14 @@ import { TeamBanner } from "./page/TeamBanner";
 import { PlanningStage } from "./page/PlanningStage";
 import { SignupStage } from "./page/SignupStage";
 import { ScoutBanner } from "./page/ScoutBanner";
+import { CodewordBanner } from "./page/CodewordBanner";
 import { OnTheClockBanner } from "./draft/OnTheClockBanner";
 import { DraftStage } from "./page/DraftStage";
 import { NoTeamStage } from "./page/NoTeamStage";
 import { NotPartStage } from "./page/NotPartStage";
 import { RulesDialog } from "./page/RulesDialog";
 import { SubmissionsDrawer } from "./page/SubmissionsDrawer";
+import { TutorialCard } from "./tutorial/TutorialCard";
 import { TeamInfoDialog } from "../../core/teams/TeamInfoDialog";
 import { PointBreakdownDialog } from "../../core/teams/PointBreakdownDialog";
 import { Dialog, DialogHeader } from "../../core/ui/Dialog";
@@ -50,6 +53,7 @@ import { AnalysisPanel } from "./submission/AnalysisPanel";
 import { TilePicker } from "./submission/TilePicker";
 import { SubmitterPicker } from "./submission/SubmitterPicker";
 import { TaskPicker } from "./submission/TaskPicker";
+import { ProofPicker } from "./submission/ProofPicker";
 import { RequirementPicker } from "./submission/RequirementPicker";
 import { StagedClaimsList } from "./submission/StagedClaimsList";
 import { RewindPageLayout } from "./rewind/RewindPageLayout";
@@ -117,17 +121,20 @@ export const defaultTheme: ThemeDefinition = {
     PlanningStage,
     SignupStage,
     ScoutBanner,
+    CodewordBanner,
     DraftStage,
     NoTeamStage,
     NotPartStage,
     RulesDialog,
     SubmissionsDrawer,
+    TutorialCard,
     TeamInfoDialog,
     PointBreakdownDialog,
     DialogFrame: Dialog,
     DialogHeader,
     PickerFrame: Picker,
     BugReportButton,
+    HeaderMenu: PlainHeaderMenu,
     Button: PlainButton,
     Menu: PlainMenu,
     MenuItem: PlainMenuItem,
@@ -154,6 +161,7 @@ export const defaultTheme: ThemeDefinition = {
     SubmitterPicker,
     TilePicker,
     TaskPicker,
+    ProofPicker,
     RequirementPicker,
     StagedClaimsList,
   },

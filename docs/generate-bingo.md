@@ -61,7 +61,7 @@ The teardown script takes the same `--base` and `--basic-auth`.
 
 | option | default | meaning |
 |---|---|---|
-| `--stage` | `live` | where to leave the bingo: `signup`, `captains`, `draft` (mid-draft), `reveal`, `live`, `complete` |
+| `--stage` | `live` | where to leave the bingo: `signup`, `captains`, `draft` (mid-draft), `reveal`, `live`, `complete`; or `historical` / `historical-rich` for a Historical Bingo (below) |
 | `--progress` | `0.5` | live only: how far through the event we are, 0.02-1 |
 | `--days` | `9` | length of the event |
 | `--teams` | `6` | |
@@ -155,6 +155,38 @@ target (say `signup`), the later dates are simply scheduled in the future.
   the kills. Snapshots come every few hours plus one shortly after each drop, from a baseline
   before the start. The simulation hands out rare drops more often than real play would, so
   Spoon's luckiest players read luckier than a real bingo's.
+
+### `--stage historical`
+
+A Historical Bingo (`CONTEXT.md`) isn't played here, so nothing above happens. The run makes a historical
+bundle the way `server/scripts/historical/` would from an old site's records (`historical.ts`) and uploads it
+through the real Site admin → Import historical Bingo endpoint:
+- the board's Tiles, each with its picture (a plain one when the board has none), its points and its Tasks
+  as rules; an empty cell gets a Tile of its own;
+- `--teams` Teams of `--team-size` made-up Players, about one in ten of whom has "left the clan", each
+  Team with a Captain and sometimes a co-captain; `--me` goes on the first Team;
+- standings (points known about two runs in three), a Wise Old Man competition with every Player's gains,
+  and one to three `unknown` Players who show only there. Every Player carries their account's Wise Old Man
+  id, and the first one's account has been renamed since ("<name> Now" in the competition), so the
+  leaderboard shows it connecting by id, under the name they played as;
+- dates some weeks to a year ago, `--days` long.
+
+The server accepts the made-up Discord ids only in dev mode. `--progress` and `--mods` don't apply.
+
+### `--stage historical-rich`
+
+The same, with the sections a rich bundle adds (`historicalRich.ts`), as the converter would read them off an old
+site that recorded its drops:
+- each Tile's Tasks with their requirement trees (a reused requirement is left out), Freeze and Proof screenshot
+  settings, the board's Lines, and "Withhold points until previous" where a Task's points wait on the one before;
+- Signups with answers to two questions, plus about one Cut signup per ten Players;
+- a Draft in snake order: the Captains and co-captains lead, and the Teams are the picks;
+- each Team completes some Tasks (and part of others) through approved drops with their Claims, a few rejected on
+  the way, with Proof screenshots where they're required; MANUAL Tasks are given to Teams directly.
+
+The import's response has the engine's scores, which the run prints. Then the run uploads the screenshots one at
+a time through the real Site admin endpoint (`POST /api/bingos/:slug/admin/historical/screenshots/:key`), as the
+converter would, leaving about one in ten pending so the Bingo shows "Screenshot not uploaded yet" too.
 
 ## PETS and SLAYER BOSSES (pages that share their items)
 

@@ -1,6 +1,7 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { STAGE_LABEL, areRulesHidden, areTilesSealed, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
+import { useUrlParam } from "../core/ui/useUrlParam";
+import { STAGE_LABEL, areRulesHidden, areTilesSealed, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type SubmissionKind, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { useBingo, useBoard, useDraftState, usePendingCount, useRecordAchievementOpened, useSetSubmissionReaction, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { displayName, avatarUrl } from "../core/ui/user";
@@ -8,11 +9,12 @@ import { useHasPassed } from "../core/ui/useHasPassed";
 import { toCategoryModel, toTeamModel, buildSubmissionModels, sealedBoardAsTiles } from "./boardModel";
 import { lockedLeaves, type ExclusiveLocks } from "../core/board/exclusivity";
 import { useViewingTeam } from "./useViewingTeam";
-import { canViewStats as canViewStatsOf } from "./useBingoHeader";
+import { canRewind as canRewindOf, canScout as canScoutOf, canViewStats as canViewStatsOf } from "./useBingoHeader";
 import { tileSearchMatcher, useTileSearch } from "./useTileSearch";
 import { toastQueue } from "../core/ui/Toast";
 import { usePageEvents } from "./usePageEvents";
 import { BoardProvider } from "./BoardProvider";
+import { TutorialProvider } from "./useTutorial";
 import type { BingoPageModel, StageView, TeamModel } from "./types";
 
 // Internal escape hatch: only useSubmissionFlow.ts (which needs raw
@@ -101,6 +103,7 @@ export function BingoPageProvider({
   const [submitInitialTileId, setSubmitInitialTileId] = useState<string | undefined>(undefined);
   const [submitInitialTaskId, setSubmitInitialTaskId] = useState<string | undefined>(undefined);
   const [submitInitialFile, setSubmitInitialFile] = useState<File | undefined>(undefined);
+  const [submitInitialKind, setSubmitInitialKind] = useState<SubmissionKind | undefined>(undefined);
 
   // Achievements' "Tile opened" / "Rules opened" signal (CONTEXT.md "Achievement"): fire-and-forget, and only while
   // the bingo is Live and the viewer is on a team — the server ignores an ineligible caller anyway, but there's no
@@ -118,6 +121,27 @@ export function BingoPageProvider({
   const matchTile = useMemo(() => tileSearchMatcher(sealed, shellCategories), [sealed, shellCategories]);
   const search = useTileSearch(tiles, matchTile, openTileTracked);
   const exclusivityRules = shell?.bingo.exclusivityRules;
+  // The ☰ menu on the pages around the board opens the board's own dialogs by coming here with ?open= (see
+  // useBingoMenuEntries). Submissions and Team overview wait for the viewer's team to be picked; the param is dropped
+  // once it has done its job.
+  const [openOnArrival, setOpenOnArrival] = useUrlParam("open");
+  useEffect(() => {
+    if (!openOnArrival || !shell) return;
+    if (openOnArrival === "rules") {
+      setRulesOpen(true);
+      if (eligibleForOpens) recordOpened.mutate({ kind: "rules" });
+    } else if (openOnArrival === "tutorial") {
+      // TutorialProvider's to start (and drop), once the viewer's Team Board is showing.
+      return;
+    } else if (openOnArrival === "submissions" || openOnArrival === "team") {
+      if (!viewingTeamId) return;
+      if (openOnArrival === "submissions") setDrawerOpen(true);
+      else setTeamInfoOpen(true);
+    }
+    setOpenOnArrival(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openOnArrival, shell, viewingTeamId]);
+
   const locks = useMemo(() => lockedLeaves(exclusivityRules ?? [], tiles, submissionsData?.submissions ?? EMPTY_SUBMISSIONS), [exclusivityRules, tiles, submissionsData]);
 
   if (!user) return null;
@@ -129,8 +153,10 @@ export function BingoPageProvider({
   const interests = progressData?.interests ?? EMPTY_INTERESTS;
   const teamSubmissions = submissionsData?.submissions ?? EMPTY_SUBMISSIONS;
 
+  // A Historical Bingo (CONTEXT.md): what it recorded decides what's shown. With no Tasks there are no Team boards.
+  const historical = shell.historical;
   // Mods can look at any team's board; once the bingo is Finished, so can everyone (read-only).
-  const canPickTeam = isMod || bingo.stage === "complete";
+  const canPickTeam = (isMod || bingo.stage === "complete") && (!historical || historical.tasks);
   const isViewingOtherTeam = canPickTeam && !!viewingTeamId && viewingTeamId !== myTeam?.id;
   // Mods can submit for the team they are viewing too (naming the player it is for), so this doesn't depend on whose team it is.
   const canSubmit = bingo.stage === "live" && hasStarted && !!viewingTeamId;
@@ -138,8 +164,8 @@ export function BingoPageProvider({
   // board isn't visible to players before that) until the bingo is over,
   // and not by anyone while the Tiles are sealed (the server refuses it).
   const canToggleInterest = !!myTeam && viewingTeamId === myTeam.id && (bingo.stage === "reveal" || bingo.stage === "live") && !areTilesSealed(bingo);
-  // Reactions are for teammates: on your own team's submissions, at any stage they're shown.
-  const canReact = !!myTeam && viewingTeamId === myTeam.id;
+  // Reactions are for teammates: on your own team's submissions, until the bingo is Finished (then they're closed).
+  const canReact = !!myTeam && viewingTeamId === myTeam.id && bingo.stage !== "complete";
   const canViewStats = canViewStatsOf(shell);
 
   // Exact branch order as the old BingoPage.tsx: signup -> planning|captains
@@ -155,25 +181,30 @@ export function BingoPageProvider({
           ? bingo.stage
           : bingo.stage === "draft"
             ? "draft"
-            : !viewingTeamId
+            : historical && !historical.tasks
+              ? "historical"
+              : !viewingTeamId
               ? "noTeam"
               : "board";
 
-  const teamModels = teams.map((t) => toTeamModel(t, myTeam?.id ?? null, user.id, bingo.stage));
+  const teamModels = teams.map((t) => toTeamModel(t, myTeam?.id ?? null, user.id, bingo.stage, isMod));
   // shell.myTeam is the bare row; the roster lives on the matching entry in shell.teams.
   const myTeamModel = teamModels.find((t) => t.isMine) ?? null;
-  // Captains get picked while signups are open (#39), so leads scout ahead; once Signups are closed every Player can
-  // look through them too (CONTEXT.md "Scouting").
-  const canScout =
-    (bingo.stage === "signup" && (isMod || !!myTeamModel?.isLead)) || (bingo.stage === "captains" && (isMod || !!myTeamModel?.isLead || shell.viewer.canSee));
+  // Shared with the header of the pages around the board (useBingoHeader), which shows the same way in.
+  const canScout = canScoutOf(shell, user.id);
   const viewingTeamModel = teamModels.find((t) => t.id === viewingTeamId) ?? null;
 
   const openSubmit = (tileId?: string, file?: File, taskId?: string) => {
     setSubmitInitialTileId(tileId);
     setSubmitInitialTaskId(tileId ? taskId : undefined);
     setSubmitInitialFile(file);
+    setSubmitInitialKind(undefined);
     setDrawerOpen(false);
     setSubmitOpen(true);
+  };
+  const openProof = (tileId: string, taskId?: string) => {
+    openSubmit(tileId, undefined, taskId);
+    setSubmitInitialKind("proof");
   };
 
   const pageModel: BingoPageModel = {
@@ -189,7 +220,9 @@ export function BingoPageProvider({
       endsAt: bingo.endsAt ? new Date(bingo.endsAt).getTime() : null,
       boardRows: bingo.boardRows,
       boardCols: bingo.boardCols,
+      historical: bingo.historical,
     },
+    historical,
     milestone: nextMilestone(bingo),
     user: { displayName: myTeamModel?.members.find((m) => m.id === user.id)?.displayName ?? displayName(user), avatarUrl: avatarUrl(user) },
     isMod,
@@ -201,8 +234,9 @@ export function BingoPageProvider({
     removedFromTeam: shell.viewer.removedFromTeam ?? null,
     canPickTeam,
     canViewStats,
-    canRewind: bingo.stage === "complete",
-    wrapped: { canOpen: bingo.stage === "complete" && (shell.wrappedPublished || isMod), preview: !shell.wrappedPublished },
+    canRewind: canRewindOf(shell),
+    // Wrapped is made at the end of a Bingo, never recorded: not for a Historical one.
+    wrapped: { canOpen: bingo.stage === "complete" && !bingo.historical && (shell.wrappedPublished || isMod), preview: !shell.wrappedPublished },
     canScout,
     draft: { state: draftState ?? null, isLoading: draftLoading },
     viewing: {
@@ -234,12 +268,15 @@ export function BingoPageProvider({
       initialTileId: submitInitialTileId,
       initialTaskId: submitInitialTaskId,
       initialFile: submitInitialFile,
+      initialKind: submitInitialKind,
       show: openSubmit,
+      showProof: openProof,
       hide: () => {
         setSubmitOpen(false);
         setSubmitInitialTileId(undefined);
         setSubmitInitialTaskId(undefined);
         setSubmitInitialFile(undefined);
+        setSubmitInitialKind(undefined);
       },
     },
     actions: {
@@ -265,6 +302,8 @@ export function BingoPageProvider({
         setReaction.mutate({ teamId: myTeam.id, submissionId, emoji, user, reacted: !reactors.some((u) => u.id === user.id) });
       },
     },
+    // Only while Live: shown any earlier, it would let a screenshot be staged before the bingo starts.
+    codeword: bingo.stage === "live" ? (myTeamModel?.codeword ?? null) : null,
   };
 
   const raw: BingoPageRaw = { slug, bingo, tiles, categories: categoriesRaw, nodeStates, teamSubmissions, viewingTeam: viewingTeamModel, viewerId: user.id, locks };
@@ -286,12 +325,13 @@ export function BingoPageProvider({
           canToggleInterest={canToggleInterest}
           interests={interests}
           viewerUserId={user.id}
+          viewerOnTeam={!!viewingTeamModel?.members.some((m) => m.id === user.id)}
           totalPoints={progressData?.totalPoints ?? null}
           adjustments={progressData?.adjustments ?? EMPTY_ADJUSTMENTS}
           locks={locks}
           sealed={sealed}
         >
-          {children}
+          <TutorialProvider>{children}</TutorialProvider>
         </BoardProvider>
       </BingoPageContext.Provider>
     </BingoPageRawContext.Provider>

@@ -4,6 +4,7 @@ import { Button } from "../../../core/ui/Button";
 export function TeamBanner({ team, isOtherTeam, totalPoints, onOpenPoints }: { team: TeamModel; isOtherTeam: boolean; totalPoints: number | null; onOpenPoints?: () => void }) {
   return (
     <div
+      data-tutorial="team-banner"
       className="flex h-10 items-center justify-between gap-4 rounded-md border border-outline bg-surface px-3"
       style={team.color ? { borderColor: `${team.color}99` } : undefined}
     >

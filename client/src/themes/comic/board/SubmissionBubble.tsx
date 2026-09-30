@@ -1,3 +1,4 @@
+import { SCREENSHOT_NOT_UPLOADED } from "@bingo/shared";
 import { useBingoPage } from "../../../headless";
 import type { SubmissionModel } from "../../../headless/types";
 import { ReactionBar } from "../../../core/submissions/ReactionBar";
@@ -34,7 +35,11 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
             <img src={thumbUrl(submission.thumbnailUrl)} alt="Submission screenshot" className="block size-14 object-cover" />
           </a>
         ) : (
-          <div className="flex size-14 shrink-0 -rotate-3 items-center justify-center border-[3px]" style={{ borderColor: colors.LINE, color: colors.INK_SUBTLE, background: colors.PAPER }} aria-hidden>
+          <div
+            className={`flex size-14 shrink-0 -rotate-3 items-center justify-center border-[3px] ${submission.screenshotPending ? "border-dashed" : ""}`}
+            style={{ borderColor: colors.LINE, color: colors.INK_SUBTLE, background: colors.PAPER }}
+            {...(submission.screenshotPending ? { role: "img", "aria-label": SCREENSHOT_NOT_UPLOADED, title: SCREENSHOT_NOT_UPLOADED } : { "aria-hidden": true })}
+          >
             <ImageIcon size={16} />
           </div>
         )}
@@ -55,7 +60,7 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
             </div>
           )}
           <p className="text-sm leading-snug" style={{ color: colors.INK }}>
-            <LinkedClaimsSummary claims={submission.detail.claims} />
+            <LinkedClaimsSummary claims={submission.detail.claims} isProof={submission.isProof} />
           </p>
           <p className="mt-1 text-xs italic" style={{ color: colors.INK_SUBTLE }}>
             {"— "}
@@ -64,6 +69,11 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
             {", "}
             {submission.timeAgo}
           </p>
+          {submission.screenshotPending && (
+            <p className="mt-1 text-xs italic" style={{ color: colors.INK_SUBTLE }}>
+              {SCREENSHOT_NOT_UPLOADED}
+            </p>
+          )}
         </div>
       </div>
 
@@ -74,7 +84,9 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
         </p>
       )}
 
-      <ReactionBar className="mt-2" reactions={submission.reactions} canReact={reactions.canReact} onToggle={(emoji) => reactions.toggle(submission.id, emoji)} />
+      {!submission.isProof && (
+        <ReactionBar className="mt-2" reactions={submission.reactions} canReact={reactions.canReact} onToggle={(emoji) => reactions.toggle(submission.id, emoji)} />
+      )}
     </article>
   );
 }

@@ -29,6 +29,7 @@ import * as statsService from "../services/statsService";
 import * as rewindService from "../services/rewindService";
 import * as wrappedService from "../services/wrappedService";
 import * as superlativeService from "../services/superlativeService";
+import * as historicalService from "../services/historicalService";
 import { isOcrEnabled, analyzeSubmissionScreenshot } from "../ocr";
 import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
 import { getTectonicMembership, matchRsn } from "../services/tectonicMembership";
@@ -91,7 +92,20 @@ router.get(
       hasSignups: signupService.hasAnySignup(db, bingo.id),
       viewer,
       wrappedPublished: bingo.stage === "complete" && wrappedService.isPublished(db, bingo.id),
+      historical: historicalService.recordedFor(db, bingo),
     });
+  }),
+);
+
+// A Historical Bingo's (CONTEXT.md) standings, Wise Old Man leaderboard and what it recorded: what it shows besides
+// its board. 404 for any other Bingo.
+router.get(
+  "/:slug/historical",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  asyncHandler(async (req, res) => {
+    res.json(historicalService.getHistoricalBingo(db, req.bingo!));
   }),
 );
 
@@ -119,6 +133,7 @@ router.get(
   requireBingoViewer,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
+    historicalService.assertRecorded(db, bingo, "submissions");
     const isMod = req.bingoAccess!.isMod;
     const seesEveryTeam = isMod || bingo.stage === "complete";
     const myTeam = seesEveryTeam ? null : teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
@@ -139,6 +154,7 @@ router.get(
   requireBingoViewer,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
+    historicalService.assertRecorded(db, bingo, "submissions");
     const rewind = rewindService.getRewind(db, bingo);
     const myTeamId = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id)?.id ?? null;
     res.json(rewindService.hideScreenshots(rewind, { isMod: req.bingoAccess!.isMod, myTeamId, showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished }));
@@ -149,6 +165,8 @@ router.get(
 // Bingo reads the stored copy (their own Player Wrapped, if they played, and the Bingo-wide one). Before that, only
 // Moderators get it, as a live preview; everyone else a 404 "wrapped_not_published".
 function wrappedViewer(req: Request): wrappedService.WrappedViewer {
+  // Wrapped is made at the end of a Bingo, not recorded: never for a Historical one.
+  historicalService.assertRecorded(db, req.bingo!, null);
   return { userId: req.user!.id, isMod: req.bingoAccess!.isMod, myTeamId: teamService.getUserTeamForBingo(db, req.bingo!.id, req.user!.id)?.id ?? null };
 }
 
@@ -303,7 +321,10 @@ router.post(
   upload.single("screenshot"),
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
-    const { claims: claimsRaw, teamId, forUserId } = req.body as { claims?: string; teamId?: string; forUserId?: string };
+    // kind "proof" is a Proof screenshot (CONTEXT.md): for tileId, and taskId when the requirement is per-Task; no claims.
+    const { claims: claimsRaw, teamId, forUserId, kind, tileId, taskId } = req.body as {
+      claims?: string; teamId?: string; forUserId?: string; kind?: string; tileId?: string; taskId?: string;
+    };
     // Your own team, for yourself or a teammate; a mod may name another team, and then the player it is for.
     let target;
     try {
@@ -315,23 +336,29 @@ router.post(
     const team = target.team;
     if (!req.file) throw new ServiceError(400, "Screenshot is required");
 
-    let claims: ClaimInput[];
-    try {
-      claims = claimsRaw ? JSON.parse(claimsRaw) : [];
-    } catch {
+    if (kind !== undefined && kind !== "drop" && kind !== "proof") {
       fs.unlinkSync(req.file.path);
-      throw new ServiceError(400, "claims must be valid JSON");
+      throw new ServiceError(400, 'kind must be "drop" or "proof"');
+    }
+    if (kind === "proof" && !tileId) {
+      fs.unlinkSync(req.file.path);
+      throw new ServiceError(400, "tileId is required for a Proof screenshot");
+    }
+
+    let claims: ClaimInput[] = [];
+    if (kind !== "proof") {
+      try {
+        claims = claimsRaw ? JSON.parse(claimsRaw) : [];
+      } catch {
+        fs.unlinkSync(req.file.path);
+        throw new ServiceError(400, "claims must be valid JSON");
+      }
     }
 
     let submission;
     try {
-      submission = submissionService.createSubmission(db, bingo, {
-        teamId: team.id,
-        submittedByUserId: target.submittedByUserId,
-        postedByUserId: target.postedByUserId,
-        claims,
-        screenshotUrl: `/uploads/${req.file.filename}`,
-      });
+      const common = { teamId: team.id, submittedByUserId: target.submittedByUserId, postedByUserId: target.postedByUserId, screenshotUrl: `/uploads/${req.file.filename}` };
+      submission = submissionService.createSubmission(db, bingo, kind === "proof" ? { ...common, kind, tileId: tileId!, taskId: taskId || null } : { ...common, claims });
     } catch (err) {
       fs.unlinkSync(req.file.path);
       throw err;
@@ -643,6 +670,7 @@ router.get(
   requireBingo,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
+    historicalService.assertRecorded(db, bingo, "draft");
     const { isMod, canSee } = getBingoAccess(db, bingo, req.user!);
     const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
     const isLead = !!myTeam && teamService.isTeamLead(db, myTeam.id, req.user!.id);
@@ -863,6 +891,7 @@ router.get(
   requireBingo,
   requireBingoViewer,
   asyncHandler(async (req, res) => {
+    historicalService.assertRecorded(db, req.bingo!, null);
     res.json(achievementService.getMyAchievements(db, req.bingo!, req.user!.id));
   }),
 );

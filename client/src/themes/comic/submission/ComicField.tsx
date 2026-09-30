@@ -12,16 +12,19 @@ export function ComicField({
   children,
   className,
   as: Tag = "label",
+  tutorial,
 }: {
   label: ReactNode;
   hint?: ReactNode;
   children: ReactNode;
   className?: string;
   as?: "label" | "div";
+  /** Marks the field for the Tutorial to point at (its data-tutorial attribute). */
+  tutorial?: string;
 }) {
   const { colors } = useComic();
   return (
-    <Tag className={`block ${className ?? ""}`}>
+    <Tag className={`block ${className ?? ""}`} data-tutorial={tutorial}>
       <span
         // Overlaps the control's own 3px top border (-mb) so the tab reads as
         // a folder tab attached to the field, not a caption floating above it.

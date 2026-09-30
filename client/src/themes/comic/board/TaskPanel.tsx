@@ -6,13 +6,14 @@ import { COMIC_FONT } from "../font";
 import { CaptionBox, InkTag } from "../ui/CaptionBox";
 import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
+import { ProofNeeded } from "./ProofNeeded";
 
 /**
  * One task ("part") of an issue, laid out like a story page: a big title,
  * the brief in body copy, the requirement checklist, and a yellow caption
  * for notes. Renders inside a BookPage in the tile modal.
  */
-export function TaskPanel({ task }: { task: TaskModel }) {
+export function TaskPanel({ task, onPostProof }: { task: TaskModel; onPostProof?: () => void }) {
   const RequirementTree = useSlot("RequirementTree");
   const { colors } = useComic();
 
@@ -72,6 +73,8 @@ export function TaskPanel({ task }: { task: TaskModel }) {
           {statusStamp && <Stamp kind={statusStamp} size="sm" rotate={-6} className="shrink-0" />}
         </div>
       )}
+
+      {task.proof && <ProofNeeded proof={task.proof} onPost={onPostProof} className="mb-4" />}
 
       {!task.isManual && task.tree && (
         <CaptionBox tone="paper" title="Checklist">

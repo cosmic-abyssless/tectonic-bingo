@@ -16,7 +16,8 @@ const AchievementsEligibleContext = createContext(false);
  */
 export function AchievementsProvider({ slug, children }: { slug: string; children: ReactNode }) {
   const { data: shell } = useBingo(slug);
-  const eligible = !!shell?.myTeam && !!shell?.bingo.achievementsEnabled;
+  // Achievements are never recorded for a Historical Bingo (CONTEXT.md).
+  const eligible = !!shell?.myTeam && !!shell?.bingo.achievementsEnabled && !shell?.bingo.historical;
 
   const [param, setParam] = useUrlParam(ACHIEVEMENTS_PARAM);
   const close = useClearUrlParams([ACHIEVEMENTS_PARAM]);

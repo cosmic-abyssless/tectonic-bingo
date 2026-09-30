@@ -19,6 +19,7 @@ import { bingoLines, nodes, teamPointAdjustments, teams, tiles } from "../db/sch
 import { awardedPoints, evaluateGraph, type ApprovedClaim, type EngineNode } from "./engine";
 import { getFullGraph } from "./graphService";
 import { applyExclusivity } from "./exclusivityService";
+import { isDrop } from "./submissionKinds";
 import { getTeamSubmissions, type SubmissionDetails } from "./submissionService";
 import { effectiveStartsAt, endedAt, lastWentLiveAt } from "./bingoStart";
 import { loadTimelines } from "./womReadService";
@@ -145,9 +146,10 @@ export function getRewind(db: Db, bingo: typeof schema.bingos.$inferSelect): Rew
     }
   }
 
-  // Approved and rejected only: a pending Submission never happened as far as the Finished Bingo is concerned.
+  // Approved and rejected drops only: a pending Submission never happened as far as the Finished Bingo is concerned,
+  // and a Proof screenshot isn't a drop.
   const detailsByTeam = new Map<string, SubmissionDetails[]>(
-    teamRows.map((t) => [t.id, getTeamSubmissions(db, t.id).filter((d) => d.submission.status !== "pending")]),
+    teamRows.map((t) => [t.id, getTeamSubmissions(db, t.id).filter((d) => d.submission.status !== "pending" && isDrop(d.submission))]),
   );
   
   // Replay each Team: the Claims the real scoring kept (exclusivity is decided by approval order, as it was), on the
@@ -231,7 +233,7 @@ export function getRewind(db: Db, bingo: typeof schema.bingos.$inferSelect): Rew
         submittedAt: d.submission.submittedAt.toISOString(),
         player: d.submittedByUser,
         tileId: firstLeaf ? (tileOfNode.get(firstLeaf) ?? null) : null,
-        screenshotUrl: (d.screenshots.find((s) => s.screenshotType === "main") ?? d.screenshots[0])?.storageUrl ?? null,
+        screenshotUrl: (d.screenshots.find((s) => s.screenshotType === "main") ?? d.screenshots[0])?.storageUrl || null, // A Historical Bingo's pending screenshot has none yet.
         claims,
         gpValue: signals.gpValue ?? null,
         reactions,

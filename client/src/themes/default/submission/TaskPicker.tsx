@@ -7,7 +7,7 @@ export function TaskPicker({ task }: { task: SubmissionFlowModel["task"] }) {
   return (
     <>
       {task.options.length > 1 && (
-        <Field label="Task" as="div">
+        <Field label="Task" as="div" tutorial="submit-tile">
           <div className="flex overflow-hidden rounded-md border border-outline-strong">
             {task.options.map((option, i) => (
               <button

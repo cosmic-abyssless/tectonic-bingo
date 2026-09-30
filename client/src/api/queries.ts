@@ -1,7 +1,7 @@
 import { queryOptions, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  AccountTypesResponse, AchievementKey, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
-  MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
+  AccountTypesResponse, AchievementKey, HistoricalBingoResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
+  MeResponse, MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, CutReviewPreview, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   MyWrappedResponse, PickRating, PlayerProfile, RewindResponse, StatsResponse, WrappedState, SubmissionReaction, SubmissionReactionGroup, SuperlativeBallotResponse, SuperlativeTeamTally, SuperlativeTeamTurnout, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
 } from "@bingo/shared";
@@ -41,6 +41,7 @@ export const queryKeys = {
   playerProfile: (slug: string, userId: string) => ["playerProfile", slug, userId] as const,
   accountTypes: (slug: string) => ["accountTypes", slug] as const,
   stats: (slug: string) => ["stats", slug] as const,
+  historical: (slug: string) => ["historical", slug] as const,
   rewind: (slug: string) => ["rewind", slug] as const,
   wrappedState: (slug: string) => ["wrapped", "state", slug] as const,
   myWrapped: (slug: string) => ["wrapped", "me", slug] as const,
@@ -583,6 +584,16 @@ export function useRenameTeam(slug: string) {
 }
 
 // `enabled` lets a caller that only sometimes may see stats (the player profile) skip the 403.
+// A Historical Bingo's (CONTEXT.md) standings and Wise Old Man leaderboard. It never changes, so it isn't refetched on focus.
+export function useHistorical(slug: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.historical(slug ?? ""),
+    queryFn: () => api.get<HistoricalBingoResponse>(`/api/bingos/${slug}/historical`),
+    enabled: !!slug && enabled,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useStats(slug: string | undefined, enabled = true) {
   return useQuery({
     queryKey: queryKeys.stats(slug ?? ""),
@@ -769,6 +780,15 @@ export function useMarkAchievementPopupsShown(slug: string) {
 }
 
 /** Fire-and-forget signal that a Tile's details, the Rules, or the Stats page were opened (always 204; the server ignores ineligible callers). */
+// The Tutorial (CONTEXT.md) was finished or skipped: recorded on the account, so it doesn't start again on any device.
+export function useMarkTutorialSeen() {
+  const { updateUser } = useAuth();
+  return useMutation({
+    mutationFn: () => api.post<MeResponse>("/api/me/tutorial-seen"),
+    onSuccess: ({ user }) => updateUser(user),
+  });
+}
+
 export function useRecordAchievementOpened(slug: string) {
   return useMutation({
     mutationFn: (payload: { kind: "tile"; tileId: string } | { kind: "rules" } | { kind: "stats" }) => api.post<void>(`/api/bingos/${slug}/achievements/opened`, payload),

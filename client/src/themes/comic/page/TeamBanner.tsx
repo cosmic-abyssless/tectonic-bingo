@@ -41,6 +41,7 @@ export function TeamBanner({
   const strip = (
     <div
       ref={stripRef}
+      data-tutorial="team-banner"
       className="flex h-10 w-full items-stretch overflow-hidden rounded-md border-[3px] md:w-auto"
       style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.SHADOW}`, color: colors.INK }}
     >

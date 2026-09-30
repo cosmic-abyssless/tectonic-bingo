@@ -1,0 +1,130 @@
+{
+  "id": 424242,
+  "title": "Spring Bingo 2024",
+  "metric": "ehb",
+  "type": "team",
+  "startsAt": "2024-03-01T18:00:00.000Z",
+  "endsAt": "2024-03-15T18:00:00.000Z",
+  "participations": [
+    {
+      "player": {
+        "username": "magma_mike",
+        "displayName": "Magma Mike"
+      },
+      "teamName": "Lava Dragons",
+      "progress": {
+        "start": 0,
+        "end": 0,
+        "gained": 160
+      }
+    },
+    {
+      "player": {
+        "username": "cinder",
+        "displayName": "Cinder"
+      },
+      "teamName": "Lava Dragons",
+      "progress": {
+        "start": 0,
+        "end": 0,
+        "gained": 141.5
+      }
+    },
+    {
+      "player": {
+        "username": "old_flame",
+        "displayName": "Old Flame"
+      },
+      "teamName": "Lava Dragons",
+      "progress": {
+        "start": 0,
+        "end": 0,
+        "gained": 123
+      }
+    },
+    {
+      "player": {
+        "username": "tidecaller",
+        "displayName": "Tidecaller"
+      },
+      "teamName": "Sea Snakes",
+      "progress": {
+        "start": 0,
+        "end": 0,
+        "gained": 135
+      }
+    },
+    {
+      "player": {
+        "username": "brine",
+        "displayName": "Brine"
+      },
+      "teamName": "Sea Snakes",
+      "progress": {
+        "start": 0,
+        "end": 0,
+        "gained": 116.5
+      }
+    },
+    {
+      "player": {
+        "username": "kelp_lord",
+        "displayName": "Kelp Lord"
+      },
+      "teamName": "Sea Snakes",
+      "progress": {
+        "start": 0,
+        "end": 0,
+        "gained": 98
+      }
+    },
+    {
+      "player": {
+        "username": "shellshock",
+        "displayName": "Shellshock"
+      },
+      "teamName": "Rock Crabs",
+      "progress": {
+        "start": 0,
+        "end": 0,
+        "gained": 110
+      }
+    },
+    {
+      "player": {
+        "username": "pebble",
+        "displayName": "Pebble"
+      },
+      "teamName": "Rock Crabs",
+      "progress": {
+        "start": 0,
+        "end": 0,
+        "gained": 91.5
+      }
+    },
+    {
+      "player": {
+        "username": "boulder",
+        "displayName": "Boulder"
+      },
+      "teamName": "Rock Crabs",
+      "progress": {
+        "start": 0,
+        "end": 0,
+        "gained": 73
+      }
+    },
+    {
+      "player": {
+        "username": "ghost_rider",
+        "displayName": "Ghost Rider"
+      },
+      "teamName": "Rock Crabs",
+      "progress": {
+        "start": 0,
+        "end": 0,
+        "gained": 37.25
+      }
+    }
+  ]
+}

@@ -16,7 +16,7 @@ export function DraftPageLayout({ slug }: { slug: string; bingoName: string; isM
   return (
     <ComicPage>
       {header && (
-        <Masthead slug={slug} header={header} back={header.stage === "draft" ? undefined : { to: `/b/${slug}`, label: "Back to bingo" }} onShowRules={() => setRulesOpen(true)} />
+        <Masthead slug={slug} header={header} onShowRules={() => setRulesOpen(true)} />
       )}
       <DraftRoom slug={slug} />
       <RulesDialog isOpen={rulesOpen} markdown={header?.rulesMarkdown ?? ""} onClose={() => setRulesOpen(false)} />

@@ -13,7 +13,7 @@ export function RequirementPicker({
 
   return (
     <>
-      <Field label="Which requirement are you submitting for?">
+      <Field label="Which requirement are you submitting for?" tutorial="submit-requirement">
         <SearchableSelect
           key={requirement.pickerKey}
           value={requirement.selectedId}

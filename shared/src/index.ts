@@ -14,6 +14,8 @@ import type { AuditVisibility } from "./audit.ts";
 import type { AchievementCount } from "./achievements.ts";
 import type { PlayerTitleFacts, TitleSettings } from "./titles.ts";
 import type { TimeZoneRegion } from "./timezone.ts";
+import type { ProofCheck, SubmissionKind } from "./proof.ts";
+import type { HistoricalRecorded } from "./historical.ts";
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
@@ -84,6 +86,8 @@ export interface User {
   /** Was a member of the clan's Discord server at last login. */
   inGuild: boolean;
   isAdmin: boolean;
+  /** When the account finished or skipped the Tutorial (CONTEXT.md); null until then. */
+  tutorialSeenAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -161,6 +165,8 @@ export interface Bingo {
   sealedTiles: boolean;
   /** During Board revealed, the rules text is held back from Players and Captains. See areRulesHidden. */
   hideRules: boolean;
+  /** A Historical Bingo (CONTEXT.md): imported from another website, always Finished and read-only. See historical.ts. */
+  historical: boolean;
 }
 
 /**
@@ -292,10 +298,17 @@ export interface GraphNode {
   pointsGateNodeId: string | null;
   /** Submissions targeting a leaf under this node are rejected until the gate node completes for the team. */
   submitGateNodeId: string | null;
-  /** Display hint: player may submit an empty-state screenshot beforehand. */
+  /** Display hint (CONTEXT.md "Pre-load"): Players may prepare it before the Bingo is Live, e.g. pre-load a chest. */
   allowsPreLoad: boolean;
   /** ITEM only (CONTEXT.md "Valued as"): claims here are priced as this item ÷ divisor, not as their own item. */
   valuedAs: ValuedAs | null;
+  /**
+   * A Task only (a tile node's direct child): each Player needs an approved Proof screenshot (CONTEXT.md) for it before
+   * their drops on it count. Never set when its Tile requires one Tile-wide. See proof.ts.
+   */
+  requiresProof: boolean;
+  /** What the Proof screenshot should show ("an empty supply cart"). */
+  proofNote: string | null;
   /** In parent-relative sortOrder. Empty for leaves. */
   children: GraphNode[];
 }
@@ -320,6 +333,8 @@ export interface GraphNodeInput {
   submitGateNodeId?: string | null;
   allowsPreLoad?: boolean;
   valuedAs?: ValuedAs | null;
+  requiresProof?: boolean;
+  proofNote?: string | null;
   children?: GraphNodeInput[];
 }
 
@@ -349,6 +364,12 @@ export interface TileBase {
   hasFreezePeriod: boolean;
   freezeDurationMinutes: number;
   notes: string | null;
+  /** A Proof screenshot (CONTEXT.md) required Tile-wide; its Tasks then have none of their own. See proof.ts. */
+  requiresProof: boolean;
+  /** What the Proof screenshot should show ("an empty supply cart"). */
+  proofNote: string | null;
+  /** A Historical Bingo's own rules for the Tile, as the old site gave them (plain text); null otherwise. */
+  rulesText: string | null;
   createdAt: string;
 }
 
@@ -363,6 +384,11 @@ export interface Submission {
   submittedByUserId: string;
   /** Who uploaded it, when that isn't the same player: a teammate at a PC, or a mod. */
   postedByUserId: string | null;
+  /** A drop, or a Proof screenshot (no claims, no points). See proof.ts. */
+  kind: SubmissionKind;
+  /** A proof only: its Tile, and its Task when the requirement is per-Task. */
+  proofTileId: string | null;
+  proofTaskId: string | null;
   status: SubmissionStatus;
   submittedAt: string;
   reviewedAt: string | null;
@@ -372,11 +398,23 @@ export interface Submission {
   updatedAt: string;
 }
 
+/** What a Historical Bingo's Submission shows in place of a screenshot that's still to be uploaded. */
+export const SCREENSHOT_NOT_UPLOADED = "Screenshot not uploaded yet";
+
+/** A Historical Bingo's screenshot that was imported but whose file isn't uploaded yet (#320). */
+export function isScreenshotPending(s: { storageUrl: string } | undefined): boolean {
+  return s !== undefined && s.storageUrl === "";
+}
+
 export interface SubmissionScreenshot {
   id: string;
   submissionId: string;
-  screenshotType: "main" | "pre_screenshot" | "bank" | "collection_log" | "other";
+  /** `proof` is a Proof screenshot's (CONTEXT.md). */
+  screenshotType: "main" | "proof" | "bank" | "collection_log" | "other";
+  /** Empty while a Historical Bingo's screenshot is still to be uploaded (isScreenshotPending). */
   storageUrl: string;
+  /** A Historical Bingo's only: the screenshot's key in its import bundle. */
+  historicalKey?: string | null;
   scrapeStatus: "pending" | "processing" | "completed" | "failed";
   extractedText: string | null;
   codewordVerified: boolean | null;
@@ -463,8 +501,13 @@ export interface ClaimedLeaf {
 
 export interface ModSubmissionRow extends SubmissionDetails {
   leaves: ClaimedLeaf[];
+  /** The Tile its claims are on; a proof's own Tile. */
   tile: TileBase;
   team: Pick<Team, "id" | "name" | "color">;
+  /** A proof only: its Task's label, when the requirement is per-Task. */
+  proofTaskLabel: string | null;
+  /** A drop only: one per Proof screenshot requirement its claims fall under, with its Player's proofs and flag. */
+  proofChecks: ProofCheck[];
 }
 
 // Derived cache: one row per node currently COMPLETE for a team (see
@@ -539,6 +582,8 @@ export interface BingoShellResponse {
   viewer: BingoViewerAccess;
   /** A Finished Bingo's Wrapped (CONTEXT.md) has been published: the Board's "Your Bingo Wrapped" banner. */
   wrappedPublished: boolean;
+  /** A Historical Bingo's (CONTEXT.md) recorded features, deciding what's shown and what's "not recorded"; null for any other Bingo. */
+  historical: HistoricalRecorded | null;
 }
 
 /**
@@ -1159,6 +1204,17 @@ export interface PickRating {
 }
 export const MAX_RATING_STARS = 3;
 
+// What the team on the clock may still draft: a team that has its share of pairs (or singles) can't take another, and
+// in a duo Bingo it can't take a single while there's still a pair it may take (pairsFirst says that is why singles
+// are closed). Both true with no cuts in a solo Bingo.
+export interface DraftTakes {
+  pairs: boolean;
+  singles: boolean;
+  pairsFirst: boolean;
+}
+
+export const PAIRS_FIRST_MESSAGE = "Pairs are drafted first: singles open once every pair is taken.";
+
 export interface DraftState {
   teams: DraftTeam[]; // sorted by draftOrder once pick order is set
   picks: DraftPick[]; // a pair shares one pickNumber across two rows
@@ -1167,9 +1223,7 @@ export interface DraftState {
   orderReady: boolean; // ≥2 teams with a dense draftOrder 1..N
   // ISO timestamp until which picks are blocked after a shuffle. Null if unlocked.
   orderLockedUntil: string | null;
-  // takes: what the team on the clock may still draft; a team that has its share of pairs (or singles) can't take
-  // another. Both true with no cuts.
-  currentPick: { pickNumber: number; round: number; teamId: string; takes: { pairs: boolean; singles: boolean } } | null;
+  currentPick: { pickNumber: number; round: number; teamId: string; takes: DraftTakes } | null;
   // What every team drafts; null with no cuts or fewer than two teams.
   shares: DraftShares | null;
   // Signups cut from the draft, once signups have closed. They are not in `pool`.
@@ -1384,7 +1438,10 @@ export * from "./audit.ts";
 export * from "./auditCondense.ts";
 export * from "./bingoExport.ts";
 export * from "./exclusivity.ts";
+export * from "./historical.ts";
+export * from "./historicalBundle.ts";
 export * from "./names.ts";
+export * from "./proof.ts";
 export * from "./rewind.ts";
 export * from "./superlative.ts";
 export * from "./wrapped.ts";

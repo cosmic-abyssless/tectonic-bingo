@@ -1,6 +1,6 @@
 // The draft pool's sorting and searching, shared by the desktop table (DraftPoolGrid) and the phone list
 // (DraftPoolList): what a column sorts on, what a search matches, and how a duo pair ranks against a solo player.
-import { formatSignupAnswer, formatTimeZone, timeZoneOffsetMinutes, type DraftPoolEntry, type DraftUnit, type PickRating, type SignupQuestion } from "@bingo/shared";
+import { formatSignupAnswer, formatTimeZone, timeZoneOffsetMinutes, PAIRS_FIRST_MESSAGE, type DraftPoolEntry, type DraftTakes, type DraftUnit, type PickRating, type SignupQuestion } from "@bingo/shared";
 import { formatCaTier, formatWomStat } from "../signup/caStats";
 import { compareSortValues } from "../ui/tableSort";
 import { discordName } from "../ui/user";
@@ -72,12 +72,16 @@ export function unitSortValue(unit: DraftUnit, key: PoolSortKey, ratings: PoolRa
 }
 
 /** What the team on the clock may still draft (DraftState.currentPick.takes); null: anything. */
-export type Takes = { pairs: boolean; singles: boolean } | null;
+export type Takes = DraftTakes | null;
 
-/** Why this unit can't be drafted right now, or null if it can: it's cut, or the team on the clock has its share. */
+/**
+ * Why this unit can't be drafted right now, or null if it can: it's cut, pairs come first (a duo Bingo with a pair the
+ * team on the clock may still take), or the team on the clock has its share.
+ */
 export function takesBlock(unit: DraftUnit, takes: Takes): string | null {
   if (unit.cut) return "Will be cut from the draft";
   const isPair = unit.entries.length > 1;
+  if (!isPair && takes?.pairsFirst) return PAIRS_FIRST_MESSAGE;
   if (takes && !(isPair ? takes.pairs : takes.singles)) return `The team on the clock already has its ${isPair ? "pairs" : "singles"}`;
   return null;
 }

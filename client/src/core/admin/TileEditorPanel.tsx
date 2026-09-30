@@ -123,6 +123,12 @@ function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slu
   const categoryValue = pendingCategory?.tileId === tile.id ? pendingCategory.value : (tile.categoryId ?? "");
   const [bonusEnabled, setBonusEnabled] = useState(tile.node.points > 0);
   const [bonusDraft, setBonusDraft] = useState(tile.node.points || 25);
+  // A Proof screenshot (CONTEXT.md) for the whole Tile: turning it on replaces the Tasks' own (the server clears them).
+  const [proofTileWide, setProofTileWide] = useState(tile.requiresProof);
+  async function updateProofTileWide(requiresProof: boolean) {
+    setProofTileWide(requiresProof);
+    await patch({ requiresProof });
+  }
   async function updateBonusPoints(points: number) {
     setBonusEnabled(points > 0);
     if (points > 0) setBonusDraft(points);
@@ -202,6 +208,18 @@ function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slu
                 <Input type="number" className="num w-32" defaultValue={bonusDraft} onBlur={(e) => updateBonusPoints(Number(e.target.value) || 0)} />
               </Field>
             )}
+            <label
+              title="Each player posts a screenshot of the tile's starting state before their drops on it count. Replaces any per-task Proof screenshots."
+              className="col-span-2 flex h-10 items-center gap-2 text-sm text-on-surface-muted"
+            >
+              <input type="checkbox" checked={proofTileWide} onChange={(e) => updateProofTileWide(e.target.checked)} className="size-4 accent-accent" />
+              Proof screenshot for the whole tile
+            </label>
+            {proofTileWide && (
+              <Field label="Proof screenshot message" hint="Optional, shown to Players as written, e.g. Show an empty supply cart before your drops count." className="col-span-2">
+                <Input defaultValue={tile.proofNote ?? ""} maxLength={200} onBlur={(e) => patch({ proofNote: e.target.value || null })} />
+              </Field>
+            )}
           </div>
         </div>
 
@@ -226,6 +244,7 @@ function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slu
                 existingLeaves={existingLeavesExcluding(tile.node.children, i)}
                 existingConditions={existingConditionsExcluding(tile.node.children, i)}
                 sharedNodeIds={sharedNodeIds}
+                tileRequiresProof={proofTileWide}
                 onDelete={() => deleteTask(task)}
               />
             ))}

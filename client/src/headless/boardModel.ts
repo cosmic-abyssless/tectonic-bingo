@@ -1,14 +1,14 @@
 // Pure builders that turn raw server shapes into the view models in
 // ./types.ts. No React, no hooks — safe to call from anywhere, including
 // providers and (if ever wanted) tests. See docs/headless-theming-plan.md §2.
-import { isBoardLocked, type BoardLine, type GraphNode, type NodeStatus, type PointAdjustment, type SealedBoardResponse, type Stage, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
+import { isBoardLocked, isScreenshotPending, proofStatus, type BoardLine, type GraphNode, type NodeStatus, type PointAdjustment, type ProofStatus, type SealedBoardResponse, type Stage, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { summarizeTileProgress, getFreezeUnlockAt, groupSubmissionsByTile, type TileProgressSummary } from "../core/board/tileProgress";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete, type LeafClaimMaps } from "../core/board/taskClaims";
 import { collectLeaves, conditionHeading } from "../core/board/requirementTree";
 import { leafLabel } from "../core/board/labels";
 import { NO_LOCKS, lockTag, type ExclusiveLocks } from "../core/board/exclusivity";
 import { wikiIconUrl } from "../api/wikiIcons";
-import { claimsSummary } from "../core/submissions/claimsSummary";
+import { submissionSummary } from "../core/submissions/claimsSummary";
 import { timeAgo } from "../core/ui/time";
 import { avatarUrl, displayName } from "../core/ui/user";
 import type { BoardModel, CategoryModel, LineModel, RequirementNodeModel, SubmissionModel, TaskModel, TeamModel, TileModel } from "./types";
@@ -41,10 +41,12 @@ export function sealedBoardAsTiles(board: SealedBoardResponse, bingoId: string):
     submitGateNodeId: null,
     allowsPreLoad: false,
     valuedAs: null,
+    requiresProof: false,
+    proofNote: null,
     children: [],
   });
   const nodeIdOf = (tileId: string) => `sealed:${tileId}`;
-  const tiles = board.tiles.map((t) => ({ ...t, bingoId, nodeId: nodeIdOf(t.id), notes: null, createdAt: "", node: emptyNode(nodeIdOf(t.id)) }));
+  const tiles = board.tiles.map((t) => ({ ...t, bingoId, nodeId: nodeIdOf(t.id), notes: null, requiresProof: false, proofNote: null, rulesText: null, createdAt: "", node: emptyNode(nodeIdOf(t.id)) }));
   const lines = board.lines.map((l) => {
     const node = emptyNode(`sealed:${l.id}`);
     return { id: l.id, bingoId, nodeId: node.id, lineType: l.lineType, lineIndex: l.lineIndex, node: { ...node, children: l.tileIds.map((id) => emptyNode(nodeIdOf(id))) } };
@@ -56,7 +58,7 @@ export function toCategoryModel(category: TileCategory): CategoryModel {
   return { id: category.id, label: category.label, color: category.colorHex, sortOrder: category.sortOrder };
 }
 
-export function toTeamModel(team: TeamWithMembers, myTeamId: string | null, viewerUserId: string, stage: Stage): TeamModel {
+export function toTeamModel(team: TeamWithMembers, myTeamId: string | null, viewerUserId: string, stage: Stage, isMod = false): TeamModel {
   const isLead = team.members.some((m) => m.user.id === viewerUserId && (m.isCaptain || m.isCoCaptain));
   return {
     id: team.id,
@@ -67,6 +69,7 @@ export function toTeamModel(team: TeamWithMembers, myTeamId: string | null, view
     isLead,
     // Mirrors the captain rename route: names freeze once the bingo is live.
     canRename: isLead && !isBoardLocked(stage),
+    codeword: team.id === myTeamId || isMod ? team.codeword : null,
   };
 }
 
@@ -174,7 +177,16 @@ export function buildRequirementTree(
 // without `canToggle` (that depends on the viewer's team/stage, patched in by
 // finalizeTileModels) so the static half stays viewer-agnostic apart from
 // `mine`.
-export function buildTaskModels(tile: Tile, summary: TileProgressSummary, maps: LeafClaimMaps, interestsByTask: ReadonlyMap<string, TileInterest[]>, viewerUserId: string, locks: ExclusiveLocks = NO_LOCKS): StaticTaskModel[] {
+// `proofStatusOf` is the viewer's standing on a Task's own Proof screenshot requirement (null when not on the team).
+export function buildTaskModels(
+  tile: Tile,
+  summary: TileProgressSummary,
+  maps: LeafClaimMaps,
+  interestsByTask: ReadonlyMap<string, TileInterest[]>,
+  viewerUserId: string,
+  locks: ExclusiveLocks = NO_LOCKS,
+  proofStatusOf: (taskId: string) => ProofStatus | null = () => null,
+): StaticTaskModel[] {
   const tasks = tile.node.children;
   return tasks.map((task) => {
     const gate = task.submitGateNodeId ? tasks.find((t) => t.id === task.submitGateNodeId) : undefined;
@@ -192,6 +204,7 @@ export function buildTaskModels(tile: Tile, summary: TileProgressSummary, maps: 
       kind: task.kind,
       isManual,
       allowsPreLoad: task.allowsPreLoad,
+      proof: !tile.requiresProof && task.requiresProof ? { note: task.proofNote || null, status: proofStatusOf(task.id) } : null,
       status: summary.statusByNodeId.get(task.id) ?? "not_started",
       complete,
       locked,
@@ -223,15 +236,22 @@ export function buildSubmissionModels(tiles: Tile[], submissions: SubmissionDeta
   const sorted = [...submissions].sort((a, b) => new Date(b.submission.submittedAt).getTime() - new Date(a.submission.submittedAt).getTime());
 
   return sorted.map((detail) => {
-    const infos = [...new Set(detail.claims.map((c) => c.nodeId))].map((id) => taskLookup.get(id)).filter((i): i is { tile: Tile; taskLabel: string } => !!i);
-    const taskLabels = [...new Set(infos.map((i) => i.taskLabel))];
+    const { kind, proofTileId, proofTaskId } = detail.submission;
+    // A Proof screenshot has no claims: it names its own Tile, and its Task when the requirement is per-Task.
+    const proofTile = kind === "proof" ? tiles.find((t) => t.id === proofTileId) : undefined;
+    const infos = proofTile
+      ? [{ tile: proofTile, taskLabel: proofTile.node.children.find((t) => t.id === proofTaskId)?.label ?? "" }]
+      : [...new Set(detail.claims.map((c) => c.nodeId))].map((id) => taskLookup.get(id)).filter((i): i is { tile: Tile; taskLabel: string } => !!i);
+    const taskLabels = [...new Set(infos.map((i) => i.taskLabel))].filter((l) => l || !proofTile);
     return {
       id: detail.submission.id,
       status: detail.submission.status,
       submittedAt: detail.submission.submittedAt,
       timeAgo: timeAgo(detail.submission.submittedAt),
-      thumbnailUrl: detail.screenshots[0]?.storageUrl ?? null,
-      summary: claimsSummary(detail.claims),
+      thumbnailUrl: detail.screenshots[0]?.storageUrl || null,
+      screenshotPending: isScreenshotPending(detail.screenshots[0]),
+      summary: submissionSummary(detail),
+      isProof: kind === "proof",
       submittedBy: detail.submittedByUser ? displayName(detail.submittedByUser) : null,
       reviewerNotes: detail.submission.reviewerNotes,
       tileId: infos[0]?.tile.id ?? null,
@@ -284,10 +304,14 @@ export function buildTileModelsStatic(args: {
   bingoStartsAt: string | null;
   interests: TileInterest[];
   viewerUserId: string;
+  /** The viewer is on the team whose board this is: only then is their Proof screenshot status shown. */
+  viewerOnTeam?: boolean;
   locks?: ExclusiveLocks;
   sealed?: boolean;
 }): StaticTileModel[] {
-  const { tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId, locks = NO_LOCKS, sealed = false } = args;
+  const { tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId, viewerOnTeam = false, locks = NO_LOCKS, sealed = false } = args;
+  const submissionRows = teamSubmissions.map((d) => d.submission);
+  const proofStatusOf = (tileId: string, taskId: string | null): ProofStatus | null => (viewerOnTeam ? proofStatus(submissionRows, viewerUserId, { tileId, taskId }) : null);
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const claimMaps = buildLeafClaimMaps(teamSubmissions);
 
@@ -306,7 +330,7 @@ export function buildTileModelsStatic(args: {
     const summary = summarizeTileProgress(tile, nodeStates, teamSubmissions);
     const freezeUnlocksAt = getFreezeUnlockAt(bingoStartsAt, tile);
     const submissionIds = submissionIdsByTile.get(tile.id);
-    const tasks = buildTaskModels(tile, summary, claimMaps, interestsByTask, viewerUserId, locks);
+    const tasks = buildTaskModels(tile, summary, claimMaps, interestsByTask, viewerUserId, locks, (taskId) => proofStatusOf(tile.id, taskId));
     const people = new Map<string, { id: string; displayName: string }>();
     for (const task of tasks) for (const p of task.interest.people) if (!people.has(p.id)) people.set(p.id, p);
 
@@ -314,6 +338,7 @@ export function buildTileModelsStatic(args: {
       id: tile.id,
       name: tile.name,
       imageUrl: tile.imageUrl,
+      rulesText: tile.rulesText ?? null,
       row: tile.boardRow,
       col: tile.boardCol,
       sealed,
@@ -334,6 +359,7 @@ export function buildTileModelsStatic(args: {
         status: summary.statusByNodeId.get(task.id) ?? "not_started",
       })),
       tasks,
+      proof: tile.requiresProof ? { note: tile.proofNote || null, status: proofStatusOf(tile.id, null) } : null,
       submissions: submissionIds ? allSubmissionModels.filter((s) => submissionIds.has(s.id)) : [],
       freezeUnlocksAt,
       hasFreezePeriod: tile.hasFreezePeriod,
@@ -406,15 +432,16 @@ export function buildBoard(args: {
   canToggleInterest: boolean;
   interests: TileInterest[];
   viewerUserId: string;
+  viewerOnTeam?: boolean;
   totalPoints: number | null;
   adjustments: PointAdjustment[];
   locks?: ExclusiveLocks;
   sealed?: boolean;
   prev: ReadonlyMap<string, TileModel>;
 }): BoardModel {
-  const { tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, totalPoints, adjustments, locks, sealed = false, prev } = args;
+  const { tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, viewerOnTeam, totalPoints, adjustments, locks, sealed = false, prev } = args;
 
-  const staticTiles = buildTileModelsStatic({ tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId, locks, sealed });
+  const staticTiles = buildTileModelsStatic({ tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId, viewerOnTeam, locks, sealed });
   const finalized = finalizeTileModels(staticTiles, now, matchIds, canSubmit, canToggleInterest, prev);
 
   const grid: (TileModel | null)[][] = Array.from({ length: bingoRows }, () => Array.from({ length: bingoCols }, () => null));

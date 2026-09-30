@@ -19,7 +19,7 @@ export function BoardGrid({
   const PreStartBanner = useSlot("PreStartBanner");
 
   return (
-    <div className="w-full">
+    <div data-tutorial="board" className="w-full">
       {board.preStart.isPreStart && board.preStart.startsAt !== null && <PreStartBanner startsAt={board.preStart.startsAt} />}
 
       <div className="overflow-x-auto">

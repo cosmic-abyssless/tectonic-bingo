@@ -5,7 +5,7 @@ import { ImageIcon } from "../../../core/ui/icons";
 
 export function ScreenshotDropzone({ screenshot }: { screenshot: SubmissionFlowModel["screenshot"] }) {
   return (
-    <Field label="Screenshot" as="div">
+    <Field label="Screenshot" as="div" tutorial="submit-screenshot">
       <button
         type="button"
         onClick={screenshot.openFilePicker}

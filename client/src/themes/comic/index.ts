@@ -21,6 +21,7 @@ import { TeamBanner } from "./page/TeamBanner";
 import { TeamSelector, TeamBadge } from "./page/TeamSelector";
 import { PageHeader } from "./page/PageHeader";
 import { SubmissionsDrawer } from "./page/SubmissionsDrawer";
+import { TutorialCard } from "./tutorial/TutorialCard";
 import { RulesDialog } from "./page/RulesDialog";
 import { TeamInfoDialog } from "./page/TeamInfoDialog";
 import { PointBreakdownDialog } from "./page/PointBreakdownDialog";
@@ -28,7 +29,9 @@ import { NoTeamStage } from "./page/NoTeamStage";
 import { NotPartStage } from "./page/NotPartStage";
 import { PlanningStage } from "./page/PlanningStage";
 import { ScoutBanner } from "./page/ScoutBanner";
+import { CodewordBanner } from "./page/CodewordBanner";
 import { BugReportButton } from "./page/BugReportButton";
+import { HeaderMenu } from "./page/HeaderMenu";
 import { ThemedButton } from "./ui/ThemedButton";
 import { ComicMenu, ComicMenuItem } from "./ui/ComicMenu";
 import { ComicNotice, ComicPanel } from "./ui/ComicPanel";
@@ -44,6 +47,7 @@ import { ScreenshotDropzone } from "./submission/ScreenshotDropzone";
 import { AnalysisPanel } from "./submission/AnalysisPanel";
 import { TilePicker, RequirementPicker, SubmitterPicker } from "./submission/Pickers";
 import { TaskPicker } from "./submission/TaskPicker";
+import { ProofPicker } from "./submission/ProofPicker";
 import { StagedClaimsList } from "./submission/StagedClaimsList";
 import { RewindPopup } from "./rewind/RewindPopup";
 import { WrappedBanner } from "./wrapped/WrappedBanner";
@@ -153,6 +157,7 @@ const comicTheme: ThemeDefinition = {
     TileModal,
     PageHeader,
     SubmissionsDrawer,
+    TutorialCard,
     RulesDialog,
     TeamInfoDialog,
     PointBreakdownDialog,
@@ -160,8 +165,10 @@ const comicTheme: ThemeDefinition = {
     NotPartStage,
     PlanningStage,
     ScoutBanner,
+    CodewordBanner,
     SignupStage,
     BugReportButton,
+    HeaderMenu,
     Button: ThemedButton,
     Menu: ComicMenu,
     MenuItem: ComicMenuItem,
@@ -181,6 +188,7 @@ const comicTheme: ThemeDefinition = {
     SubmitterPicker,
     TilePicker,
     TaskPicker,
+    ProofPicker,
     RequirementPicker,
     StagedClaimsList,
     RewindPopup,

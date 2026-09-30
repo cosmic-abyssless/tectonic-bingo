@@ -43,7 +43,8 @@ for (const file of migrationFiles) {
   sqlite.exec(sql.replace(/--> statement-breakpoint/g, ""));
 }
 
-const insertUser = sqlite.prepare("INSERT INTO users (id, discord_id, discord_username, is_admin) VALUES (?, ?, ?, ?)");
+// Seen the Tutorial already: it would start over the Live Board and hold every click the flows below make there.
+const insertUser = sqlite.prepare("INSERT INTO users (id, discord_id, discord_username, is_admin, tutorial_seen_at) VALUES (?, ?, ?, ?, unixepoch())");
 insertUser.run(crypto.randomUUID(), E2E_ADMIN, "e2e_admin", 1);
 for (const [i, discordId] of E2E_PLAYERS.entries()) {
   insertUser.run(crypto.randomUUID(), discordId, `e2e_player_${i + 1}`, 0);

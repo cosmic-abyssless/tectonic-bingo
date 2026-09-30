@@ -17,6 +17,7 @@ import { TestDataPanel } from "../core/admin/TestDataPanel";
 import { BugReportsPanel } from "../core/admin/BugReportsPanel";
 import { SiteAuditLog } from "../core/admin/SiteAuditLog";
 import { McpConnectionsList } from "../core/admin/McpConnectionsList";
+import { ImportHistoricalBingoPanel } from "../core/admin/ImportHistoricalBingoPanel";
 import { displayName } from "../core/ui/user";
 import { AppHeader } from "../core/ui/AppHeader";
 import { ADMIN_BUG_REPORTS_SEEN_KEY, useBugReportsUnseen } from "../core/ui/bugReportsUnseen";
@@ -247,10 +248,10 @@ function BingosList() {
   );
 }
 
-// Bingos (the list) plus the two ways to add a new one — Create and Import
+// Bingos (the list) plus the ways to add a new one — Create and Import
 // both land on the same list, so they live as sub-tabs here rather than
 // their own top-level sections.
-const BINGOS_SECTIONS = ["bingos", "create", "import"] as const;
+const BINGOS_SECTIONS = ["bingos", "create", "import", "import-historical"] as const;
 
 function BingosPanel() {
   const [tab, setTab] = useUrlTab("section", BINGOS_SECTIONS, "bingos");
@@ -260,6 +261,7 @@ function BingosPanel() {
         <Tab id="bingos">Bingos</Tab>
         <Tab id="create">Create</Tab>
         <Tab id="import">Import</Tab>
+        <Tab id="import-historical">Import historical</Tab>
       </TabList>
       <TabPanel id="bingos">
         <BingosList />
@@ -269,6 +271,9 @@ function BingosPanel() {
       </TabPanel>
       <TabPanel id="import">
         <ImportBingoPanel />
+      </TabPanel>
+      <TabPanel id="import-historical">
+        <ImportHistoricalBingoPanel />
       </TabPanel>
     </Tabs>
   );
@@ -334,7 +339,7 @@ export function SiteAdminPage() {
 
   return (
     <div className="min-h-dvh bg-background text-on-surface">
-      <AppHeader back={{ to: "/", label: "All bingos" }} title="Site admin" />
+      <AppHeader title="Site admin" />
       <main className="py-6">
         <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key))}>
           <div className={NARROW}>

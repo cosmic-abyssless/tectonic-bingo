@@ -1,6 +1,7 @@
 import type { ComponentType, ReactNode } from "react";
 import type { ButtonProps } from "../core/ui/Button";
 import type { MenuFrameProps, MenuRowProps } from "../core/ui/Menu";
+import type { HeaderMenuProps } from "../core/ui/headerMenu";
 import type { NoticeProps } from "../core/ui/Card";
 import type { PanelProps } from "../core/ui/Panel";
 import type { TeamRosterProps } from "../core/draft/TeamRoster";
@@ -27,6 +28,7 @@ import type {
   TeamSelectorModel,
   TileModel,
   TileSearchModel,
+  TutorialCardModel,
   WrappedBingoModel,
   WrappedCaptainModel,
   WrappedDuoModel,
@@ -102,6 +104,8 @@ export interface ThemeSlots {
   // Player once signups are closed) — the way into the scouting room before the draft. `isLead`: the viewer leads a
   // team, so rates players there; everyone else only looks.
   ScoutBanner: ComponentType<{ onOpen: () => void; isLead: boolean }>;
+  /** The team's Codeword (CONTEXT.md), which every screenshot must show: beside the board's title while Live, and in the Submit flow. */
+  CodewordBanner: ComponentType<{ codeword: string }>;
   DraftStage: ComponentType<{ draft: BingoPageModel["draft"]; milestone: StageMilestone | null; onOpenDraft: () => void }>;
   // No team picked yet, for whoever can pick one (page.canPickTeam: mods, and everyone once the bingo is Finished).
   // `selector` lets a theme list the teams right on this screen instead of pointing at a menu.
@@ -116,6 +120,10 @@ export interface ThemeSlots {
   // Where the team's points come from, opened from the point total on the banner. Open while `team` is set; reads its data with usePointBreakdown().
   PointBreakdownDialog: ComponentType<{ team: TeamModel | null; onClose: () => void }>;
   SubmissionsDrawer: ComponentType<{ isOpen: boolean; submissions: SubmissionModel[]; onClose: () => void; onSubmit?: () => void }>;
+  // The Tutorial's explanation card (CONTEXT.md "Tutorial"): the step's title and lines, "3 of 9", Next (card.primary,
+  // absent on a step that waits for the Player to click) and Skip. The theme draws only the card: core's
+  // TutorialOverlay sizes (its width), places and dims around it, and portals it to body above the dialogs.
+  TutorialCard: ComponentType<{ card: TutorialCardModel }>;
 
   // The frame + header the core dialogs (bug report, player profile) are
   // built from, so a theme can dress them without reimplementing them. Read
@@ -164,6 +172,11 @@ export interface ThemeSlots {
   // The header's report-a-bug button (AppHeader). Read with useOptionalSlot: the header also shows on pages outside
   // any ThemeProvider, which fall back to core's BugReportButton.
   BugReportButton: ComponentType<{ onPress: () => void; hasUnseen: boolean }>;
+  // The header's ☰ menu (AppHeader), at its far right: its button (with a dot while hasUnseen) and the menu it opens,
+  // the viewer's row on top, then each group in order with a divider before it. An entry marked current is the page
+  // you're on: a check mark, not clickable. The colour-scheme item is drawn with core's ColorSchemeRadios. Read with
+  // useOptionalSlot: pages outside any ThemeProvider fall back to core's PlainHeaderMenu.
+  HeaderMenu: ComponentType<HeaderMenuProps>;
 
   // Menu chrome for ColumnPicker / MultiSelect / SingleSelect. Props are
   // inlined so this file does not import Picker (that would cycle through
@@ -204,8 +217,12 @@ export interface ThemeSlots {
     onClose: () => void;
     onSubmit?: (taskId?: string) => void;
     onToggleInterest?: (taskId: string) => void;
+    // Opens the Submit flow on posting a Proof screenshot (CONTEXT.md): for the Tile (no taskId) or one Task.
+    onPostProof?: (taskId?: string) => void;
   }>;
-  TaskPanel: ComponentType<{ task: TaskModel }>;
+  // onPostProof: opens the Submit flow on posting a Proof screenshot for the Task (see TaskModel.proof); absent when
+  // the viewer can't submit.
+  TaskPanel: ComponentType<{ task: TaskModel; onPostProof?: () => void }>;
   RequirementTree: ComponentType<{ node: RequirementNodeModel; root?: boolean }>;
   TileSubmissions: ComponentType<{ submissions: SubmissionModel[] }>;
 
@@ -287,6 +304,9 @@ export interface ThemeSlots {
   SubmitterPicker: ComponentType<{ submitter: SubmissionFlowModel["submitter"] }>;
   TilePicker: ComponentType<{ tile: SubmissionFlowModel["tile"] }>;
   TaskPicker: ComponentType<{ task: SubmissionFlowModel["task"] }>;
+  // Drop or Proof screenshot (CONTEXT.md), where the picked Tile or Task needs one; and the warning on a drop whose
+  // Player hasn't posted theirs yet, with a way to post it. Renders nothing when neither applies.
+  ProofPicker: ComponentType<{ kind: SubmissionFlowModel["kind"]; warning: SubmissionFlowModel["proofWarning"] }>;
   RequirementPicker: ComponentType<{ requirement: SubmissionFlowModel["requirement"]; quantity: SubmissionFlowModel["quantity"] }>;
   StagedClaimsList: ComponentType<{ staged: SubmissionFlowModel["staged"] }>;
 }

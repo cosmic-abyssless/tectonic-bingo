@@ -1,6 +1,7 @@
 import { useEscapeBack } from "../core/ui/useEscapeBack";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useBingoHeader, useBingoMenuEntries } from "../headless";
 import type { Key } from "react-aria-components";
 import { STAGE_ORDER, type Stage } from "@bingo/shared";
 import { useBingo } from "../api/queries";
@@ -23,8 +24,9 @@ import { WrappedArtManager } from "../core/admin/WrappedArtManager";
 import { AppHeader } from "../core/ui/AppHeader";
 import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { Button } from "../core/ui/Button";
+import { Notice } from "../core/ui/Card";
+import { InfoIcon } from "../core/ui/icons";
 import { Dialog, DialogHeader } from "../core/ui/Dialog";
-import { MenuItem } from "../core/ui/Menu";
 import { usePreference } from "../core/ui/preferences";
 import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 import { useUrlParam } from "../core/ui/useUrlParam";
@@ -86,13 +88,18 @@ export function ModPage() {
   const stage = shell?.bingo.stage;
   const [urlTab, setUrlTab] = useUrlParam("tab");
   const [outOfStageTabs, setOutOfStageTabs] = usePreference("outOfStageTabs");
+  // The same "This Bingo" entries as every other page of the bingo, then the panel's own setting.
+  const bingoMenuEntries = useBingoMenuEntries(slug ?? "", useBingoHeader(slug ?? ""));
 
+  const historical = shell?.historical ?? null;
   const visibleTabs = useMemo(() => {
     if (!stage) return [];
+    // A Historical Bingo (CONTEXT.md) is read-only: only the lists of what it recorded, whatever the stage says.
+    if (historical) return TABS.filter((t) => (t.key === "submissions" && historical.submissions) || (t.key === "signups" && historical.signupRoster)).map((t) => ({ ...t, dimmed: false }));
     const allowed = TABS.filter((t) => !t.adminOnly || isAdmin).map((t) => ({ ...t, dimmed: isOutOfStage(t, stage) }));
     const current = allowed.filter((t) => !t.dimmed);
     return outOfStageTabs === "hide" ? current : [...current, ...allowed.filter((t) => t.dimmed)];
-  }, [stage, isAdmin, outOfStageTabs]);
+  }, [stage, isAdmin, outOfStageTabs, historical]);
 
   // The tab is in the URL (?tab=...) so a link opens it. Without one, or with one this mod can't see (an admin-only
   // tab, or one the stage has moved past), it's the stage's natural landing tab; Settings is the fallback since it's
@@ -130,132 +137,148 @@ export function ModPage() {
   };
 
   return (
-    <div className="min-h-dvh bg-background text-on-surface">
-      <AppHeader
-        back={{ to: `/b/${slug}`, label: "Back to bingo" }}
-        title="Mod panel"
-        subtitle={shell.bingo.name}
-        menuItems={
-          <MenuItem id="outOfStageTabs" className="justify-between" onAction={() => setOutOfStageTabs(outOfStageTabs === "hide" ? "dim" : "hide")}>
-            Out-of-stage tabs
-            <span className="text-xs text-on-surface-subtle">{outOfStageTabs === "hide" ? "Hidden" : "Dimmed"}</span>
-          </MenuItem>
-        }
-      />
+    // Around the header too: its account menu opens the viewer's own profile.
+    <PlayerProfileProvider slug={slug}>
+      <div className="min-h-dvh bg-background text-on-surface">
+        <AppHeader
+          title="Mod panel"
+          subtitle={shell.bingo.name}
+          menuEntries={[
+            ...bingoMenuEntries,
+            {
+              id: "outOfStageTabs",
+              text: "Out-of-stage tabs",
+              label: "Out-of-stage tabs",
+              badge: <span className="ml-auto pl-3 text-xs text-on-surface-subtle">{outOfStageTabs === "hide" ? "Hidden" : "Dimmed"}</span>,
+              onAction: () => setOutOfStageTabs(outOfStageTabs === "hide" ? "dim" : "hide"),
+            },
+          ]}
+        />
 
-      {/* Full width now (was max-w-6xl on the whole <main>) — but only the Signups tab actually wants that (its
-          table benefits from the extra room the same way the draft pool's does). Everything else — the stage
-          stepper, the tab list itself, and every other tab's content — keeps the old reading width via NARROW,
-          since a settings form or a stage stepper spanning the full page would be awkward, not useful. */}
-      <main className="w-full space-y-6 px-6 py-6">
-        <div className={NARROW}>
-          <StageControls slug={slug} bingo={shell.bingo} canChange={isAdmin} />
-        </div>
-        {shell.bingo.stage === "complete" && (
-          <div className={NARROW}>
-            <WrappedControls slug={slug} />
-          </div>
-        )}
-
-        <PlayerProfileProvider slug={slug}>
-          <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key))}>
+        {/* Full width now (was max-w-6xl on the whole <main>) — but only the Signups tab actually wants that (its
+            table benefits from the extra room the same way the draft pool's does). Everything else — the stage
+            stepper, the tab list itself, and every other tab's content — keeps the old reading width via NARROW,
+            since a settings form or a stage stepper spanning the full page would be awkward, not useful. */}
+        <main className="w-full space-y-6 px-6 py-6">
+          {historical ? (
             <div className={NARROW}>
-              <TabList>
-                {visibleTabs.map((t) => (
-                  <Tab key={t.key} id={t.key} dimmed={t.dimmed}>
-                    {t.label}
-                  </Tab>
-                ))}
-              </TabList>
+              <Notice tone="info" icon={<InfoIcon size={14} />}>
+                <strong>A historical Bingo is read-only.</strong> It was imported from another website: its stage, Board, Teams and settings can't be changed here. A Site Admin can delete it from Site admin.
+              </Notice>
             </div>
-            <TabPanel id="submissions">
-              <div className={NARROW}>
-                <ReviewQueue slug={slug} />
-              </div>
-            </TabPanel>
-            <TabPanel id="signups">
-              <SignupRoster slug={slug} />
-            </TabPanel>
-            <TabPanel id="audit">
-              <div className={NARROW}>
-                <AuditLog slug={slug} />
-              </div>
-            </TabPanel>
-            {isAdmin && (
-              <>
-                <TabPanel id="settings">
-                  <div className={NARROW}>
-                    <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} hasSignups={shell.hasSignups} />
-                  </div>
-                </TabPanel>
-                <TabPanel id="achievements">
-                  <div className={NARROW}>
-                    <AchievementsManager slug={slug} bingo={shell.bingo} />
-                  </div>
-                </TabPanel>
-                <TabPanel id="board">
-                  <div className={NARROW}>
-                    <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />
-                  </div>
-                </TabPanel>
-                <TabPanel id="lines">
-                  <div className={NARROW}>
-                    <LineEditor slug={slug} />
-                  </div>
-                </TabPanel>
-                <TabPanel id="questions">
-                  <div className={NARROW}>
-                    <QuestionBuilder slug={slug} />
-                  </div>
-                </TabPanel>
-                <TabPanel id="superlatives">
-                  <div className={NARROW}>
-                    <SuperlativesManager slug={slug} bingo={shell.bingo} />
-                  </div>
-                </TabPanel>
-                <TabPanel id="teams">
-                  <div className={NARROW}>
-                    <TeamManager slug={slug} />
-                  </div>
-                </TabPanel>
-                <TabPanel id="mods">
-                  <div className={NARROW}>
-                    <ModsManager slug={slug} />
-                  </div>
-                </TabPanel>
-                <TabPanel id="wrapped-art">
-                  <div className={`${NARROW} space-y-8`}>
-                    <WrappedArtManager slug={slug} />
-                  </div>
-                </TabPanel>
-              </>
-            )}
-          </Tabs>
-        </PlayerProfileProvider>
-      </main>
+          ) : (
+            <div className={NARROW}>
+              <StageControls slug={slug} bingo={shell.bingo} canChange={isAdmin} />
+            </div>
+          )}
+          {shell.bingo.stage === "complete" && !historical && (
+            <div className={NARROW}>
+              <WrappedControls slug={slug} />
+            </div>
+          )}
 
-      <Dialog isOpen={showNotifPrompt} onClose={dismissNotifPrompt}>
-        <DialogHeader title="Enable notifications?" onClose={dismissNotifPrompt} />
-        <div className="space-y-4 p-5">
-          <p className="text-sm leading-relaxed text-on-surface-muted">
-            Get a browser notification whenever a new submission arrives for review, even if this tab is in the background.
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onPress={dismissNotifPrompt}>
-              No thanks
-            </Button>
-            <Button
-              variant="primary"
-              onPress={async () => {
-                dismissNotifPrompt();
-                await Notification.requestPermission();
-              }}
-            >
-              Enable
-            </Button>
+          {/* A sparse Historical Bingo recorded nothing a tab lists: the notice above is all there is. */}
+          {visibleTabs.length > 0 && (
+            <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key))}>
+              <div className={NARROW}>
+                <TabList>
+                  {visibleTabs.map((t) => (
+                    <Tab key={t.key} id={t.key} dimmed={t.dimmed}>
+                      {t.label}
+                    </Tab>
+                  ))}
+                </TabList>
+              </div>
+              <TabPanel id="submissions">
+                <div className={NARROW}>
+                  <ReviewQueue slug={slug} />
+                </div>
+              </TabPanel>
+              <TabPanel id="signups">
+                <SignupRoster slug={slug} />
+              </TabPanel>
+              <TabPanel id="audit">
+                <div className={NARROW}>
+                  <AuditLog slug={slug} />
+                </div>
+              </TabPanel>
+              {isAdmin && !historical && (
+                <>
+                  <TabPanel id="settings">
+                    <div className={NARROW}>
+                      <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} hasSignups={shell.hasSignups} />
+                    </div>
+                  </TabPanel>
+                  <TabPanel id="achievements">
+                    <div className={NARROW}>
+                      <AchievementsManager slug={slug} bingo={shell.bingo} />
+                    </div>
+                  </TabPanel>
+                  <TabPanel id="board">
+                    <div className={NARROW}>
+                      <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />
+                    </div>
+                  </TabPanel>
+                  <TabPanel id="lines">
+                    <div className={NARROW}>
+                      <LineEditor slug={slug} />
+                    </div>
+                  </TabPanel>
+                  <TabPanel id="questions">
+                    <div className={NARROW}>
+                      <QuestionBuilder slug={slug} />
+                    </div>
+                  </TabPanel>
+                  <TabPanel id="superlatives">
+                    <div className={NARROW}>
+                      <SuperlativesManager slug={slug} bingo={shell.bingo} />
+                    </div>
+                  </TabPanel>
+                  <TabPanel id="teams">
+                    <div className={NARROW}>
+                      <TeamManager slug={slug} />
+                    </div>
+                  </TabPanel>
+                  <TabPanel id="mods">
+                    <div className={NARROW}>
+                      <ModsManager slug={slug} />
+                    </div>
+                  </TabPanel>
+                  <TabPanel id="wrapped-art">
+                    <div className={`${NARROW} space-y-8`}>
+                      <WrappedArtManager slug={slug} />
+                    </div>
+                  </TabPanel>
+                </>
+              )}
+            </Tabs>
+          )}
+        </main>
+
+        {/* Nothing new ever arrives for a Historical Bingo. */}
+        <Dialog isOpen={showNotifPrompt && !historical} onClose={dismissNotifPrompt}>
+          <DialogHeader title="Enable notifications?" onClose={dismissNotifPrompt} />
+          <div className="space-y-4 p-5">
+            <p className="text-sm leading-relaxed text-on-surface-muted">
+              Get a browser notification whenever a new submission arrives for review, even if this tab is in the background.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onPress={dismissNotifPrompt}>
+                No thanks
+              </Button>
+              <Button
+                variant="primary"
+                onPress={async () => {
+                  dismissNotifPrompt();
+                  await Notification.requestPermission();
+                }}
+              >
+                Enable
+              </Button>
+            </div>
           </div>
-        </div>
-      </Dialog>
-    </div>
+        </Dialog>
+      </div>
+    </PlayerProfileProvider>
   );
 }

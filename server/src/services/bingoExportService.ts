@@ -100,6 +100,8 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
       submitGateLocalId: null,
       allowsPreLoad: node.allowsPreLoad,
       valuedAs: node.valuedAs,
+      requiresProof: node.requiresProof,
+      proofNote: node.proofNote,
       children: [],
     };
     flatNodes.push({ exportNode, graphNode: node });
@@ -123,6 +125,8 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
     // The tile's own node is an ALL wrapper: never exported itself, but its points are the
     // full-completion bonus, and its children are the tasks.
     bonusPoints: t.node.points,
+    requiresProof: t.requiresProof,
+    proofNote: t.proofNote,
     ...imageField(t.imageUrl),
     tasks: t.node.children.map(buildExportNode),
   }));
@@ -277,6 +281,8 @@ function toGraphNodeInput(node: ExportNode): GraphNodeInput {
     itemName: node.itemName,
     allowsPreLoad: node.allowsPreLoad,
     valuedAs: node.valuedAs ?? null,
+    requiresProof: node.requiresProof ?? false,
+    proofNote: node.proofNote ?? null,
     // A `reuse` stub isn't created (it is an already-created node's other parent linking to it,
     // done after creation: see the linking step in importBingo).
     children: node.children.filter((c) => !c.reuse).map(toGraphNodeInput),
@@ -424,6 +430,8 @@ export function importBingo(
         hasFreezePeriod: t.hasFreezePeriod,
         freezeDurationMinutes: t.freezeDurationMinutes,
         notes: t.notes,
+        requiresProof: t.requiresProof ?? false,
+        proofNote: t.proofNote ?? null,
         imageUrl: imageUrls?.get(tileIndex) ?? null,
       });
       if (t.bonusPoints) boardService.updateTileBonusPoints(tx, tile.id, t.bonusPoints);

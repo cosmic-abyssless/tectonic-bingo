@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { useComic } from "../ui/useComic";
-import { screenHalftone } from "./halftone";
+import { screenHalftone } from "./halftoneSheet";
 
 /**
  * The viewport's halftone vignette (screenHalftone) as a mask image, drawn again once a resize settles. Null until
