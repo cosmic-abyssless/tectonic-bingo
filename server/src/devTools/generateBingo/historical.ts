@@ -13,6 +13,8 @@ import type { Rng } from "./rng";
 import { DAY, fmt } from "./timeline";
 
 const TEAM_NAMES = ["Lava Dragons", "Sea Snakes", "Rock Crabs", "Moss Giants", "Ice Trolls", "Cave Krakens", "Dust Devils", "Fire Giants", "Hill Giants", "Sand Crabs", "Ogresses", "Wyrms"];
+/** Made-up Wise Old Man player ids, well clear of real ones. */
+const WOM_PLAYER_ID_BASE = 3_000_000_000;
 const TILE_COLORS = ["#8e44ad", "#16a085", "#7f8c8d", "#c0392b", "#2980b9", "#d35400", "#27ae60", "#2c3e50", "#b7950b"];
 
 export interface HistoricalRunInput {
@@ -58,7 +60,7 @@ export async function buildHistoricalBundle(input: Omit<HistoricalRunInput, "api
   const people = [...made.slice(0, count), ...(me ? [me] : [])];
   // A few made-up Players have left the clan since; the dev account is always in it.
   const leftRng = rng.fork("left");
-  const players = people.map((p) => ({ discordId: p.discordId, rsn: p.name, clan: p.isMe || !leftRng.chance(0.1) ? { name: p.discordName } : null }));
+  const players: HistoricalBundle["players"] = people.map((p) => ({ discordId: p.discordId, rsn: p.name, clan: p.isMe || !leftRng.chance(0.1) ? { name: p.discordName } : null }));
 
   const order = rng.fork("teams").shuffle(people.filter((p) => !p.isMe));
   if (me) order.unshift(me);
@@ -99,10 +101,15 @@ export async function buildHistoricalBundle(input: Omit<HistoricalRunInput, "api
   const participations = [
     ...teams.flatMap((t) => t.players.map((id) => ({ rsn: players.find((p) => p.discordId === id)!.rsn, team: t.name }))),
     ...unknownPlayers.map((rsn) => ({ rsn, team: gainRng.pick(teamNames) })),
-  ].map(({ rsn, team }) => {
+  ].map(({ rsn, team }, i) => {
     const gained = Math.round(gainRng.between(2, 180) * 100) / 100;
-    return { player: { username: rsn.toLowerCase().replace(/\s+/g, "_"), displayName: rsn }, teamName: team, progress: { start: 0, end: gained, gained } };
+    // The first Player's account has been renamed since the Bingo: only its Wise Old Man id still connects it to them.
+    const current = i === 0 ? `${rsn} Now` : rsn;
+    return { player: { id: WOM_PLAYER_ID_BASE + i, username: current.toLowerCase().replace(/\s+/g, "_"), displayName: current }, teamName: team, progress: { start: 0, end: gained, gained } };
   });
+  // Each Player's account id: the one listed under the name they played under (the first's, under its old name).
+  const womIdOf = new Map(participations.map((p, i) => [i === 0 ? p.player.displayName.replace(/ Now$/, "") : p.player.displayName, p.player.id]));
+  for (const p of players) p.womId = womIdOf.get(p.rsn) ?? null;
   const name = `Historical ${options.slug.slice("testdata-".length)}`;
   const competitionId = 2_000_000_000 + (options.seed % 100_000_000);
 

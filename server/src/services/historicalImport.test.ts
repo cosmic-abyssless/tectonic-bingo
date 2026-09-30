@@ -213,6 +213,34 @@ describe("importing a bundle", () => {
     expect(shown.wom?.players.find((p) => p.rsn === "Ghost Rider")).toMatchObject({ user: null, teamName: "Rock Crabs" });
   });
 
+  it("finds a Player on the Wise Old Man leaderboard by their account, even one renamed since", async () => {
+    const bundle = sample();
+    const player = bundle.players[0]!;
+    player.womId = 777;
+    // The competition lists the account under the name it has now, not the one it had in the Bingo.
+    const row = (bundle.wom!.data as { participations: { player: { id?: number; username: string; displayName: string } }[] }).participations.find(
+      (p) => p.player.displayName.toLowerCase() === player.rsn.toLowerCase(),
+    )!;
+    row.player = { id: 777, username: "renamed_since", displayName: "Renamed Since" };
+    const { bingo } = await importHistoricalBundle(db, bundle, { createdByUserId: admin.id, uploadsDir });
+
+    const signup = db.select().from(schema.signups).where(eq(schema.signups.rsn, player.rsn)).get()!;
+    expect(signup.womId).toBe("777");
+    const shown = getHistoricalBingo(db, bingo).wom!.players;
+    expect(shown.find((p) => p.rsn === player.rsn)).toMatchObject({ user: expect.objectContaining({ rsn: player.rsn }) });
+    expect(shown.some((p) => p.rsn === "Renamed Since")).toBe(false);
+  });
+
+  it("refuses a Wise Old Man account id that isn't one, or that two Players share", async () => {
+    const bundle = sample();
+    bundle.players[0]!.womId = 1.5;
+    bundle.players[1]!.womId = 5;
+    bundle.players[2]!.womId = 5;
+    const problems = await problemsOf(bundle);
+    expect(problems.some((p) => p.includes("womId must be a Wise Old Man player id"))).toBe(true);
+    expect(problems.some((p) => p.includes("Wise Old Man player 5 is"))).toBe(true);
+  });
+
   it("re-links the Wise Old Man competition when a deleted import is imported again", async () => {
     const first = await importHistoricalBundle(db, sample(), { createdByUserId: admin.id, uploadsDir });
     deleteBingo(db, first.bingo.id);

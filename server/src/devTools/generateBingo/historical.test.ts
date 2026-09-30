@@ -67,7 +67,16 @@ describe("a generated historical bundle", () => {
   it("puts the dev account on the first Team, in the clan", async () => {
     const bundle = await bundleFor(3, true);
     expect(bundle.teams[0]!.players).toContain("dev-me");
-    expect(bundle.players.find((p) => p.discordId === "dev-me")).toEqual({ discordId: "dev-me", rsn: "Dev me", clan: { name: "me" } });
+    expect(bundle.players.find((p) => p.discordId === "dev-me")).toEqual({ discordId: "dev-me", rsn: "Dev me", clan: { name: "me" }, womId: expect.any(Number) });
+  });
+
+  it("gives every Player their Wise Old Man account, one of them renamed since, which only its id connects", async () => {
+    const bundle = await bundleFor(5);
+    const participations = (bundle.wom!.data as { participations: { player: { id: number; displayName: string } }[] }).participations;
+    expect(bundle.players.every((p) => typeof p.womId === "number")).toBe(true);
+    const renamed = participations.filter((w) => !bundle.players.some((p) => p.rsn === w.player.displayName) && !bundle.unknownPlayers.includes(w.player.displayName));
+    expect(renamed).toHaveLength(1);
+    expect(bundle.players.some((p) => p.womId === renamed[0]!.player.id)).toBe(true);
   });
 
   it("imports as a Historical Bingo on a dev server, and is refused elsewhere", async () => {
