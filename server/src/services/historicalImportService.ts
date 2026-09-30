@@ -238,7 +238,7 @@ export function writeHistoricalBingo(db: Db, bundle: HistoricalBundle, imageUrls
         tx.insert(submissionScreenshots).values({ submissionId: row.id, screenshotType: kind === "proof" ? "proof" : "main", storageUrl: "", historicalKey: sub.screenshot, uploadedAt: submittedAt }).run();
       }
       for (const c of kind === "drop" ? (sub.claims ?? []) : []) {
-        tx.insert(claims).values({ submissionId: row.id, nodeId: nodeIdByKey.get(c.leaf)!, itemName: c.item?.trim() || null, quantity: c.quantity }).run();
+        tx.insert(claims).values({ submissionId: row.id, nodeId: nodeIdByKey.get(c.leaf)!, itemName: c.item?.trim() || null, quantity: c.quantity, gpValue: c.value ?? null }).run();
       }
     }
     // A MANUAL Task given to a Team: an approved claim on it, credited to the Team's Captain, with no screenshot.

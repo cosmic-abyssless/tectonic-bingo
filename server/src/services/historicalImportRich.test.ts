@@ -84,6 +84,20 @@ describe("checking a rich bundle", () => {
     ]);
   });
 
+  it("checks Drop values: whole GP, and none on a MANUAL leaf", () => {
+    const b = rich();
+    const [s0, s1] = b.submissions!;
+    s0!.claims![0]!.value = 1_500_000;
+    s0!.claims![1]!.value = -5;
+    s1!.claims![0]!.value = 2.5;
+    b.submissions!.push({ key: "sea-call", team: "Sea Snakes", player: s0!.player, submittedAt: s0!.submittedAt, reviewedAt: s0!.reviewedAt, status: "approved", screenshot: null, claims: [{ leaf: "zul-call", item: null, quantity: 1, value: 0 }] });
+    expect(problemsOf(b)).toEqual([
+      'Submission "sea-1" claims[1]: value must be a whole number of GP',
+      'Submission "sea-2" claims[0]: value must be a whole number of GP',
+      'Submission "sea-call" claims[0]: a MANUAL leaf has no Drop value',
+    ]);
+  });
+
   it("checks Proof screenshot settings and MANUAL completions", () => {
     const b = rich();
     tasksOf(b, 0, 2)[0]!.requiresProof = true;
@@ -192,6 +206,17 @@ describe("importing a rich bundle", () => {
     const [sum, call] = children(zulrah.nodeId);
     expect(sum).toMatchObject({ kind: "SUM", quantity: 3, points: 15 });
     expect(call).toMatchObject({ kind: "MANUAL", description: "Kill Zulrah on a clan call", requiresProof: true, proofNote: "The whole team in one screenshot" });
+  });
+
+  it("keeps the Drop values the bundle brings, leaving the others to today's prices", async () => {
+    const b = rich();
+    b.submissions!.find((s) => s.key === "sea-2")!.claims![0]!.value = 4_200_000;
+    const { bingo } = await importIt(b);
+    const valueOf = (item: string) =>
+      db.select({ gpValue: schema.claims.gpValue }).from(schema.claims).innerJoin(schema.submissions, eq(schema.claims.submissionId, schema.submissions.id))
+        .where(and(eq(schema.submissions.teamId, teamIdOf(bingo.id, "Sea Snakes")), eq(schema.claims.itemName, item))).get()!.gpValue;
+    expect(valueOf("Tanzanite fang")).toBe(4_200_000);
+    expect(valueOf("Vorkath's head")).toBeNull();
   });
 
   it("puts a reused leaf in its second place too, so one Claim counts toward both Tasks", async () => {

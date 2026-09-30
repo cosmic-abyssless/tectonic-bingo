@@ -151,6 +151,10 @@ describe("a generated rich historical bundle", () => {
     expect(bundle.draft!.picks.length).toBe(bundle.players.length - bundle.teams.reduce((n, t) => n + 1 + (t.coCaptain ? 1 : 0), 0));
     const statuses = new Set(bundle.submissions!.map((s) => `${s.kind ?? "drop"} ${s.status}`));
     expect([...statuses].sort()).toEqual(["drop approved", "drop rejected", "proof approved"]);
+    // Drop values as they were then on some drops; the rest are left to today's prices.
+    const drops = bundle.submissions!.flatMap((s) => s.claims ?? []).filter((c) => c.item);
+    expect(drops.some((c) => typeof c.value === "number" && c.value > 0)).toBe(true);
+    expect(drops.some((c) => c.value === undefined)).toBe(true);
   });
 
   it("makes the same people as a sparse one, and is the same for a seed", async () => {

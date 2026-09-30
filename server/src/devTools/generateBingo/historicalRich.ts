@@ -180,6 +180,15 @@ export function addRichSections(bundle: HistoricalBundle, { document, rng, start
 
   // Submissions: each Team completes some Tasks (some only in part), a drop or two rejected on the way.
   const playRng = rng.fork("play");
+  // Drop values as the old site's time priced them, made up: each item one price, on about two drops in three. The rest
+  // are priced at today's prices when imported.
+  const valueRng = rng.fork("values");
+  const unitPrice = new Map<string, number>();
+  const valued = (claim: Claim): Claim => {
+    if (!claim.item || !valueRng.chance(2 / 3)) return claim;
+    if (!unitPrice.has(claim.item)) unitPrice.set(claim.item, valueRng.int(1_000, 20_000_000));
+    return { ...claim, value: unitPrice.get(claim.item)! * claim.quantity };
+  };
   const submissions: HistoricalBundleSubmission[] = [];
   const at = (from: number) => new Date(from + playRng.float() * (start + span - 3 * HOUR - from));
   const submit = (team: HistoricalBundle["teams"][number], when: Date, status: "approved" | "rejected", rest: Partial<HistoricalBundleSubmission>) => {
@@ -198,7 +207,7 @@ export function addRichSections(bundle: HistoricalBundle, { document, rng, start
         if (done) (task.completions ??= []).push({ team: team.name, at: at(start).toISOString() });
         continue;
       }
-      const claims = satisfy(task, playRng, written);
+      const claims = satisfy(task, playRng, written).map(valued);
       const made = done ? claims : claims.slice(0, playRng.chance(0.4) ? 1 : 0);
       let last = start;
       for (const claim of made) {

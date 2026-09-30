@@ -184,8 +184,9 @@ site that recorded its drops:
   Tile whose second Task is an ANY, COUNT or SUM also offers an item of its first, so one drop of it completes both;
 - Signups with answers to two questions, plus about one Cut signup per ten Players;
 - a Draft in snake order: the Captains and co-captains lead, and the Teams are the picks;
-- each Team completes some Tasks (and part of others) through approved drops with their Claims, a few rejected on
-  the way, with Proof screenshots where they're required; MANUAL Tasks are given to Teams directly.
+- each Team completes some Tasks (and part of others) through approved drops with their Claims (about two in three
+  with a made-up Drop value from the time, the rest priced at today's prices on import), a few rejected on the way,
+  with Proof screenshots where they're required; MANUAL Tasks are given to Teams directly.
 
 The import's response has the engine's scores, which the run prints. Then the run uploads the screenshots one at
 a time through the real Site admin endpoint (`POST /api/bingos/:slug/admin/historical/screenshots/:key`), as the

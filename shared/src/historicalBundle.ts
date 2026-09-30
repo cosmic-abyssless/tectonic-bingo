@@ -130,8 +130,12 @@ export interface HistoricalBundleSubmission {
   status: "approved" | "rejected";
   /** Its screenshot's key, uploaded afterwards (pending until then); null when there was none. Unique in the bundle. */
   screenshot: string | null;
-  /** A drop only: what it counts toward, each on an ITEM (with that leaf's item) or MANUAL (no item) leaf by `key`. */
-  claims?: { leaf: string; item: string | null; quantity: number }[];
+  /**
+   * A drop only: what it counts toward, each on an ITEM (with that leaf's item) or MANUAL (no item) leaf by `key`.
+   * `value`: an ITEM Claim's Drop value in GP (CONTEXT.md) at the time, kept as it is; without one, it's priced at
+   * today's prices like any Claim that has none.
+   */
+  claims?: { leaf: string; item: string | null; quantity: number; value?: number }[];
   /** A Proof screenshot only: the Tile, and the Task when the requirement is the Task's own. */
   proof?: { boardRow: number; boardCol: number; task: string | null };
 }
@@ -592,6 +596,10 @@ function checkRich(input: Record<string, unknown>, add: (p: string) => void, ctx
               const leaf = isText(c.leaf) ? leaves.get(c.leaf) : undefined;
               if (!leaf) return add(`${cw}: ${JSON.stringify(c.leaf)} isn't the key of an ITEM or MANUAL leaf`);
               if (leaf.kind === "MANUAL" && c.item !== null && c.item !== undefined) add(`${cw}: a MANUAL leaf takes no item`);
+              if (c.value !== undefined) {
+                if (leaf.kind === "MANUAL") add(`${cw}: a MANUAL leaf has no Drop value`);
+                else if (!isWhole(c.value, 0)) add(`${cw}: value must be a whole number of GP`);
+              }
               if (leaf.kind === "ITEM" && (!isText(c.item) || c.item.trim().toLowerCase() !== leaf.item!.toLowerCase())) {
                 add(`${cw}: its leaf "${String(c.leaf)}" accepts ${leaf.item}, not ${JSON.stringify(c.item)}`);
               }
