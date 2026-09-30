@@ -1,7 +1,6 @@
-import { Link, Navigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { STAGE_LABEL } from "@bingo/shared";
 import { useBingos } from "../api/queries";
-import { useAuth } from "../context/AuthContext";
 import { AppHeader } from "../core/ui/AppHeader";
 import { Badge, EmptyState } from "../core/ui/Card";
 import { HistoricalBadge } from "../core/historical/HistoricalBadge";
@@ -9,17 +8,6 @@ import { ChevronRightIcon, GridIcon } from "../core/ui/icons";
 
 export function BingoList() {
   const { data, isLoading, error } = useBingos();
-  const { user, devMode } = useAuth();
-
-  // No env var for "the default bingo" (issue #3) — there's realistically
-  // only ever one active bingo, so players land straight on the most
-  // recently created one (bingos is newest-first — see listBingos) instead
-  // of picking from a list. Admins still see the list, since they're the
-  // ones who'd actually have several bingos to manage at once. Dev login
-  // also keeps the list so you can hop between bingos without bouncing.
-  if (!isLoading && !user?.isAdmin && !devMode && data?.bingos.length) {
-    return <Navigate to={`/b/${data.bingos[0]!.slug}`} replace />;
-  }
 
   return (
     <div className="min-h-dvh">
