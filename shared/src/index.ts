@@ -1204,6 +1204,17 @@ export interface PickRating {
 }
 export const MAX_RATING_STARS = 3;
 
+// What the team on the clock may still draft: a team that has its share of pairs (or singles) can't take another, and
+// in a duo Bingo it can't take a single while there's still a pair it may take (pairsFirst says that is why singles
+// are closed). Both true with no cuts in a solo Bingo.
+export interface DraftTakes {
+  pairs: boolean;
+  singles: boolean;
+  pairsFirst: boolean;
+}
+
+export const PAIRS_FIRST_MESSAGE = "Pairs are drafted first: singles open once every pair is taken.";
+
 export interface DraftState {
   teams: DraftTeam[]; // sorted by draftOrder once pick order is set
   picks: DraftPick[]; // a pair shares one pickNumber across two rows
@@ -1212,9 +1223,7 @@ export interface DraftState {
   orderReady: boolean; // ≥2 teams with a dense draftOrder 1..N
   // ISO timestamp until which picks are blocked after a shuffle. Null if unlocked.
   orderLockedUntil: string | null;
-  // takes: what the team on the clock may still draft; a team that has its share of pairs (or singles) can't take
-  // another. Both true with no cuts.
-  currentPick: { pickNumber: number; round: number; teamId: string; takes: { pairs: boolean; singles: boolean } } | null;
+  currentPick: { pickNumber: number; round: number; teamId: string; takes: DraftTakes } | null;
   // What every team drafts; null with no cuts or fewer than two teams.
   shares: DraftShares | null;
   // Signups cut from the draft, once signups have closed. They are not in `pool`.
