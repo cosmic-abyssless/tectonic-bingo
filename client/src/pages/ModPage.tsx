@@ -94,8 +94,12 @@ export function ModPage() {
   const historical = shell?.historical ?? null;
   const visibleTabs = useMemo(() => {
     if (!stage) return [];
-    // A Historical Bingo (CONTEXT.md) is read-only: only the lists of what it recorded, whatever the stage says.
-    if (historical) return TABS.filter((t) => (t.key === "submissions" && historical.submissions) || (t.key === "signups" && historical.signupRoster)).map((t) => ({ ...t, dimmed: false }));
+    // A Historical Bingo (CONTEXT.md) is read-only: only the lists of what it recorded, whatever the stage says, and for
+    // Admins its Board where it recorded Tasks (locked, as a Finished Bingo's is), to check how the old rules came across.
+    if (historical)
+      return TABS.filter(
+        (t) => (t.key === "submissions" && historical.submissions) || (t.key === "signups" && historical.signupRoster) || (t.key === "board" && historical.tasks && isAdmin),
+      ).map((t) => ({ ...t, dimmed: false }));
     const allowed = TABS.filter((t) => !t.adminOnly || isAdmin).map((t) => ({ ...t, dimmed: isOutOfStage(t, stage) }));
     const current = allowed.filter((t) => !t.dimmed);
     return outOfStageTabs === "hide" ? current : [...current, ...allowed.filter((t) => t.dimmed)];
@@ -202,6 +206,14 @@ export function ModPage() {
                   <AuditLog slug={slug} />
                 </div>
               </TabPanel>
+              {/* Offered on a Historical Bingo too, where it recorded Tasks (the tab list above decides), and locked there. */}
+              {isAdmin && (
+                <TabPanel id="board">
+                  <div className={NARROW}>
+                    <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />
+                  </div>
+                </TabPanel>
+              )}
               {isAdmin && !historical && (
                 <>
                   <TabPanel id="settings">
@@ -212,11 +224,6 @@ export function ModPage() {
                   <TabPanel id="achievements">
                     <div className={NARROW}>
                       <AchievementsManager slug={slug} bingo={shell.bingo} />
-                    </div>
-                  </TabPanel>
-                  <TabPanel id="board">
-                    <div className={NARROW}>
-                      <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />
                     </div>
                   </TabPanel>
                   <TabPanel id="lines">

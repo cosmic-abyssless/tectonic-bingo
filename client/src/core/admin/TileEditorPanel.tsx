@@ -61,7 +61,8 @@ export function TileEditorPanel({
   themeKey: string;
   tile: Tile | null;
   categories: TileCategory[];
-  locked: boolean;
+  /** Why the board can't be edited, or null when it can. */
+  locked: string | null;
   onClose: () => void;
 }) {
   return (
@@ -71,7 +72,7 @@ export function TileEditorPanel({
   );
 }
 
-function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slug: string; themeKey: string; tile: Tile; categories: TileCategory[]; locked: boolean; onClose: () => void }) {
+function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slug: string; themeKey: string; tile: Tile; categories: TileCategory[]; locked: string | null; onClose: () => void }) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -150,85 +151,87 @@ function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slu
   return (
     <>
       <DialogHeader title={tile.name} subtitle={`Row ${tile.boardRow}, Col ${tile.boardCol}`} onClose={onClose} />
-      {/* A disabled fieldset inertly disables every control inside it,
-          including the nested task/requirement editors. */}
-      <fieldset disabled={locked} className="min-w-0 space-y-5 px-5 pb-5 disabled:opacity-60">
+      <div className="min-w-0 space-y-5 px-5 pb-5">
         {locked && (
           <Notice tone="warn" icon={<LockIcon />}>
-            The board is locked because the bingo is complete. Step the stage back to edit it.
+            {locked}
           </Notice>
         )}
         {error && <Notice tone="danger">{error}</Notice>}
 
-        <div className="flex items-start gap-4">
-          <button
-            type="button"
-            aria-label="Upload tile image"
-            onClick={() => fileInputRef.current?.click()}
-            className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-outline-strong bg-background text-on-surface-subtle transition-colors hover:border-on-surface/60 hover:text-on-surface-muted disabled:cursor-not-allowed"
-          >
-            {tile.imageUrl ? <img src={thumbUrl(tile.imageUrl)} alt="" className="size-full object-contain" /> : uploading ? <span className="text-xs">…</span> : <ImageIcon size={20} />}
-          </button>
-          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadImage(e.target.files[0])} />
-
-          <div className="grid flex-1 grid-cols-2 gap-3">
-            <Field label="Name" className="col-span-2">
-              <Input defaultValue={tile.name} onBlur={(e) => patch({ name: e.target.value })} />
-            </Field>
-            <Field label="Category">
-              <Select
-                value={categoryValue}
-                onChange={(value) => {
-                  setPendingCategory({ tileId: tile.id, value });
-                  void patch({ categoryId: value || null });
-                }}
-                options={[{ value: "", label: "None" }, ...categories.map((c) => ({ value: c.id, label: c.label }))]}
-              />
-            </Field>
-            <label className="mt-6 flex h-10 items-center gap-2 text-sm text-on-surface-muted">
-              <input type="checkbox" defaultChecked={tile.hasFreezePeriod} onChange={(e) => patch({ hasFreezePeriod: e.target.checked })} className="size-4 accent-accent" />
-              Freeze period
-            </label>
-            {tile.hasFreezePeriod && (
-              <Field label="Freeze duration (minutes)" className="col-span-2">
-                <Input type="number" className="num w-32" defaultValue={tile.freezeDurationMinutes} onBlur={(e) => patch({ freezeDurationMinutes: Number(e.target.value) || 0 })} />
-              </Field>
-            )}
-            <label className="mt-6 flex h-10 items-center gap-2 text-sm text-on-surface-muted">
-              <input
-                type="checkbox"
-                checked={bonusEnabled}
-                onChange={(e) => updateBonusPoints(e.target.checked ? bonusDraft : 0)}
-                className="size-4 accent-accent"
-              />
-              Bonus for full completion
-            </label>
-            {bonusEnabled && (
-              <Field label="Bonus points">
-                <Input type="number" className="num w-32" defaultValue={bonusDraft} onBlur={(e) => updateBonusPoints(Number(e.target.value) || 0)} />
-              </Field>
-            )}
-            <label
-              title="Each player posts a screenshot of the tile's starting state before their drops on it count. Replaces any per-task Proof screenshots."
-              className="col-span-2 flex h-10 items-center gap-2 text-sm text-on-surface-muted"
+        {/* Locked, a disabled fieldset inertly disables every control inside it. The tasks sit between two of them, so
+            each still opens to be looked through, disabling its own controls (TaskEditor). */}
+        <fieldset disabled={!!locked} className="min-w-0 disabled:opacity-60">
+          <div className="flex items-start gap-4">
+            <button
+              type="button"
+              aria-label="Upload tile image"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-outline-strong bg-background text-on-surface-subtle transition-colors hover:border-on-surface/60 hover:text-on-surface-muted disabled:cursor-not-allowed"
             >
-              <input type="checkbox" checked={proofTileWide} onChange={(e) => updateProofTileWide(e.target.checked)} className="size-4 accent-accent" />
-              Proof screenshot for the whole tile
-            </label>
-            {proofTileWide && (
-              <Field label="Proof screenshot message" hint="Optional, shown to Players as written, e.g. Show an empty supply cart before your drops count." className="col-span-2">
-                <Input defaultValue={tile.proofNote ?? ""} maxLength={200} onBlur={(e) => patch({ proofNote: e.target.value || null })} />
+              {tile.imageUrl ? <img src={thumbUrl(tile.imageUrl)} alt="" className="size-full object-contain" /> : uploading ? <span className="text-xs">…</span> : <ImageIcon size={20} />}
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadImage(e.target.files[0])} />
+
+            <div className="grid flex-1 grid-cols-2 gap-3">
+              <Field label="Name" className="col-span-2">
+                <Input defaultValue={tile.name} onBlur={(e) => patch({ name: e.target.value })} />
               </Field>
-            )}
+              <Field label="Category">
+                <Select
+                  value={categoryValue}
+                  onChange={(value) => {
+                    setPendingCategory({ tileId: tile.id, value });
+                    void patch({ categoryId: value || null });
+                  }}
+                  options={[{ value: "", label: "None" }, ...categories.map((c) => ({ value: c.id, label: c.label }))]}
+                />
+              </Field>
+              <label className="mt-6 flex h-10 items-center gap-2 text-sm text-on-surface-muted">
+                <input type="checkbox" defaultChecked={tile.hasFreezePeriod} onChange={(e) => patch({ hasFreezePeriod: e.target.checked })} className="size-4 accent-accent" />
+                Freeze period
+              </label>
+              {tile.hasFreezePeriod && (
+                <Field label="Freeze duration (minutes)" className="col-span-2">
+                  <Input type="number" className="num w-32" defaultValue={tile.freezeDurationMinutes} onBlur={(e) => patch({ freezeDurationMinutes: Number(e.target.value) || 0 })} />
+                </Field>
+              )}
+              <label className="mt-6 flex h-10 items-center gap-2 text-sm text-on-surface-muted">
+                <input
+                  type="checkbox"
+                  checked={bonusEnabled}
+                  onChange={(e) => updateBonusPoints(e.target.checked ? bonusDraft : 0)}
+                  className="size-4 accent-accent"
+                />
+                Bonus for full completion
+              </label>
+              {bonusEnabled && (
+                <Field label="Bonus points">
+                  <Input type="number" className="num w-32" defaultValue={bonusDraft} onBlur={(e) => updateBonusPoints(Number(e.target.value) || 0)} />
+                </Field>
+              )}
+              <label
+                title="Each player posts a screenshot of the tile's starting state before their drops on it count. Replaces any per-task Proof screenshots."
+                className="col-span-2 flex h-10 items-center gap-2 text-sm text-on-surface-muted"
+              >
+                <input type="checkbox" checked={proofTileWide} onChange={(e) => updateProofTileWide(e.target.checked)} className="size-4 accent-accent" />
+                Proof screenshot for the whole tile
+              </label>
+              {proofTileWide && (
+                <Field label="Proof screenshot message" hint="Optional, shown to Players as written, e.g. Show an empty supply cart before your drops count." className="col-span-2">
+                  <Input defaultValue={tile.proofNote ?? ""} maxLength={200} onBlur={(e) => patch({ proofNote: e.target.value || null })} />
+                </Field>
+              )}
+            </div>
           </div>
-        </div>
+        </fieldset>
 
         <div>
           <div className="mb-2 flex items-center justify-between">
             <p className="text-sm font-medium text-on-surface">
               Tasks <span className="num text-on-surface-subtle">({tile.node.children.length})</span>
             </p>
-            <Button size="sm" onPress={addTask}>
+            <Button size="sm" onPress={addTask} isDisabled={!!locked}>
               <PlusIcon size={14} /> Add task
             </Button>
           </div>
@@ -245,20 +248,23 @@ function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slu
                 existingConditions={existingConditionsExcluding(tile.node.children, i)}
                 sharedNodeIds={sharedNodeIds}
                 tileRequiresProof={proofTileWide}
+                locked={!!locked}
                 onDelete={() => deleteTask(task)}
               />
             ))}
           </div>
         </div>
 
-        <Field label="Notes (admin-only)">
-          <Input defaultValue={tile.notes ?? ""} onBlur={(e) => patch({ notes: e.target.value || null })} />
-        </Field>
+        <fieldset disabled={!!locked} className="min-w-0 space-y-5 disabled:opacity-60">
+          <Field label="Notes (admin-only)">
+            <Input defaultValue={tile.notes ?? ""} onBlur={(e) => patch({ notes: e.target.value || null })} />
+          </Field>
 
-        <Button variant="danger" size="sm" onPress={deleteTile}>
-          Delete tile
-        </Button>
-      </fieldset>
+          <Button variant="danger" size="sm" onPress={deleteTile}>
+            Delete tile
+          </Button>
+        </fieldset>
+      </div>
     </>
   );
 }
