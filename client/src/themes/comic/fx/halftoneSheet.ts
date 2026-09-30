@@ -40,22 +40,62 @@ export function drawHalftone({ width, height, step, tone, color = "#000", scale 
   canvas.height = Math.ceil(height * scale);
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
-  ctx.scale(scale, scale);
+  const coverage = halftoneCoverage({ width, height, step, tone, scale });
+  const image = ctx.createImageData(canvas.width, canvas.height);
+  for (let i = 0; i < coverage.length; i++) image.data[i * 4 + 3] = coverage[i]!;
+  ctx.putImageData(image, 0, 0);
+  // The dots are the alpha; fill them with the colour (which may be translucent itself).
+  ctx.globalCompositeOperation = "source-in";
   ctx.fillStyle = color;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/png");
+}
+
+/**
+ * The sheet's dots as one byte of coverage per device pixel, row by row. Each pixel is inked by how far it sits inside
+ * its dot's edge, rather than by filling arcs: a canvas's antialiasing gives a small dot noticeably more or less ink
+ * than its area (a whole ring of equal dots at once, so a smooth tone came out in bands, #332).
+ */
+export function halftoneCoverage({ width, height, step, tone, scale = 1 }: Omit<HalftoneSheet, "color">): Uint8ClampedArray {
+  const cols = Math.ceil(width * scale);
+  const rows = Math.ceil(height * scale);
+  const out = new Uint8ClampedArray(cols * rows);
   // A full dot reaches a little past half the diagonal gap, so the darkest tone closes up the way print does.
   const maxRadius = step * 0.62;
-  ctx.beginPath();
   // Staggered rows half a step apart: a square grid turned 45°.
   for (let row = 0, y = 0; y <= height + step; row++, y += step / 2) {
     for (let x = row % 2 ? step / 2 : 0; x <= width + step; x += step) {
-      const r = maxRadius * Math.min(1, Math.max(0, tone(x, y)));
-      if (r < 0.3) continue;
-      ctx.moveTo(x + r, y);
-      ctx.arc(x, y, r, 0, 2 * Math.PI);
+      const r = maxRadius * Math.min(1, Math.max(0, tone(x, y))) * scale;
+      if (r <= 0) continue;
+      // In device pixels from here on; a pixel's coverage is its centre's depth inside the edge, over one pixel.
+      const cx = x * scale;
+      const cy = y * scale;
+      const x0 = Math.max(0, Math.floor(cx - r - 0.5));
+      const x1 = Math.min(cols - 1, Math.ceil(cx + r - 0.5));
+      const y0 = Math.max(0, Math.floor(cy - r - 0.5));
+      const y1 = Math.min(rows - 1, Math.ceil(cy + r - 0.5));
+      const depth = (px: number, py: number) => {
+        const dx = px + 0.5 - cx;
+        const dy = py + 0.5 - cy;
+        return Math.min(1, Math.max(0, r - Math.sqrt(dx * dx + dy * dy) + 0.5));
+      };
+      // That overshoots a dot under a pixel or two across (up to half again its area), so the dot's ink is scaled
+      // to its true area: the faintest tones are all small dots.
+      let total = 0;
+      for (let py = y0; py <= y1; py++) for (let px = x0; px <= x1; px++) total += depth(px, py);
+      if (total === 0) continue;
+      const toArea = (Math.PI * r * r) / total;
+      for (let py = y0; py <= y1; py++) {
+        for (let px = x0; px <= x1; px++) {
+          const ink = Math.min(1, depth(px, py) * toArea) * 255;
+          const i = py * cols + px;
+          // Neighbours overlap only once the tone closes up; the fuller of the two wins.
+          if (ink > out[i]!) out[i] = ink;
+        }
+      }
     }
   }
-  ctx.fill();
-  return canvas.toDataURL("image/png");
+  return out;
 }
 
 /**
