@@ -226,7 +226,8 @@ export async function runDraft(ctx: Ctx, players: Player[], seeds: TeamSeed[], o
 
   let picks = 0;
   while (state.currentPick && picks < stopAt) {
-    // Only what the team on the clock may take: once it has its share of pairs (or singles), not another.
+    // Only what the team on the clock may take: once it has its share of pairs (or singles), not another, and in a duo
+    // bingo no single while there is still a pair it may take (pairs first).
     const { takes } = state.currentPick;
     const units = state.pool.filter((u) => !u.cut && (u.entries.length > 1 ? takes.pairs : takes.singles));
     if (units.length === 0) break;
