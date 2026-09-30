@@ -1280,6 +1280,8 @@ export interface ContributionAward {
   awardPoints: number;
   points: number;
   fraction: number;
+  /** When the award was earned (ISO): its Points share is credited then. */
+  at: string;
   claims: ContributionClaim[];
   /** Line bonuses: the tiles of the line this player had a share of. */
   viaTiles?: string[];

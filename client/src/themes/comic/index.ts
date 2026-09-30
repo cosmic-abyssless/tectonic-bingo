@@ -113,6 +113,9 @@ const comicChromeLight = {
   warn: "#92400e",
   danger: "#b91c1c",
   info: "#1d4ed8",
+  // The default chart yellow (#eda100) all but vanishes on the yellow page (1.4:1); a dark gold keeps that series
+  // visible and still clear of its neighbours for colour-blind viewers.
+  chartYellow: "#8a6200",
   // Button/AppHeader's borders default to a hairline 1px; bumped up
   // here so the header rule and every button read as bold comic ink
   // outlines instead of a thin app-chrome line.

@@ -183,6 +183,8 @@ export interface ContributionAward {
   awardPoints: number;
   points: number;
   fraction: number;
+  /** When the award was earned: the node's completion, which is when its Points share is credited. */
+  at: Date;
   claims: ContributionClaim[];
   /** Line bonuses: the tiles of the line this player had a share of. */
   viaTiles?: string[];
@@ -285,8 +287,16 @@ export function getContributionCounts(db: Db, bingoId: string, shares = getPoint
   const leafRows = nodeIds.length ? db.select({ id: nodes.id, label: nodes.label, itemName: nodes.itemName }).from(nodes).where(inArray(nodes.id, nodeIds)).all() : [];
   const leafById = new Map(leafRows.map((n) => [n.id, n]));
   const tileNameByNodeId = new Map(db.select({ nodeId: tiles.nodeId, name: tiles.name }).from(tiles).where(eq(tiles.bingoId, bingoId)).all().map((t) => [t.nodeId, t.name]));
+  const completedAt = new Map(
+    db
+      .select({ teamId: teamNodeState.teamId, nodeId: teamNodeState.nodeId, completedAt: teamNodeState.completedAt })
+      .from(teamNodeState)
+      .where(inArray(teamNodeState.teamId, teamIds))
+      .all()
+      .map((r) => [`${r.teamId}:${r.nodeId}`, r.completedAt]),
+  );
 
-  const awardsFor = (credits: AwardCredit[]): ContributionAward[] =>
+  const awardsFor = (teamId: string, credits: AwardCredit[]): ContributionAward[] =>
     credits
       .map((credit) => {
         const share = credit.shares[0]!;
@@ -298,6 +308,7 @@ export function getContributionCounts(db: Db, bingoId: string, shares = getPoint
           awardPoints: credit.points,
           points: share.points,
           fraction: share.fraction,
+          at: completedAt.get(`${teamId}:${credit.nodeId}`)!,
           claims: share.claims.map((c) => {
             const leaf = leafById.get(c.nodeId);
             return { submissionId: c.submissionId, label: c.itemName ?? leaf?.itemName ?? leaf?.label ?? "Task", quantity: c.quantity };
@@ -314,7 +325,8 @@ export function getContributionCounts(db: Db, bingoId: string, shares = getPoint
 
   return userIds
     .map((userId) => {
-      const awards = awardsFor(shares.get(userId)?.credits ?? []);
+      const share = shares.get(userId);
+      const awards = share ? awardsFor(share.teamId, share.credits) : [];
       return {
         userId,
         user: userById.get(userId)!,
