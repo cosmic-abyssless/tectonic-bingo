@@ -56,6 +56,7 @@ import { RewindPageLayout } from "./rewind/RewindPageLayout";
 import { RewindTimeline } from "./rewind/RewindTimeline";
 import { RewindControls } from "./rewind/RewindControls";
 import { RewindScoreboard } from "./rewind/RewindScoreboard";
+import { RewindLog } from "./rewind/RewindLog";
 import { RewindPopup } from "./rewind/RewindPopup";
 import { RewindClosing } from "./rewind/RewindClosing";
 import { RewindTileMarkers } from "./rewind/RewindTileMarkers";
@@ -85,6 +86,7 @@ export const defaultTheme: ThemeDefinition = {
     RewindTimeline,
     RewindControls,
     RewindScoreboard,
+    RewindLog,
     RewindPopup,
     RewindClosing,
     RewindTileMarkers,

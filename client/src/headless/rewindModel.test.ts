@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode, RewindResponse, RewindSubmission, SignificanceTier, Tile } from "@bingo/shared";
-import { adjustmentsAt, boardStateAt, closingRows, countUpTo, formatOneIn, playbackHolds, PLAYBACK, PLAYBACK_SPEEDS, playsAt, prepareRewind, SKIP_MINOR_FROM_SPEED, standoutOf, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems } from "./rewindModel";
+import { adjustmentsAt, boardStateAt, closingRows, countUpTo, formatOneIn, itemsLine, playbackHolds, PLAYBACK, PLAYBACK_SPEEDS, playsAt, prepareRewind, SKIP_MINOR_FROM_SPEED, standoutOf, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems } from "./rewindModel";
 import { buildTileModelsStatic } from "./boardModel";
 
 const MIN = 60_000;
@@ -282,5 +282,19 @@ describe("standoutOf", () => {
     // A pet: no Drop value, so a little Luck wins even though it's weak.
     expect(standoutOf(withClaim(null, 12))?.kind).toBe("luck");
     expect(standoutOf(withClaim(null, null))).toBeNull();
+  });
+});
+
+describe("itemsLine", () => {
+  const claims = (...entries: [string, number][]) => entries.map(([label, quantity], i) => ({ id: `c${i}`, nodeId: "n", label, itemName: label, quantity, gpValue: null, luckOneIn: null, luckKills: null }));
+
+  it("names the first item, its quantity when more than one, and how many more there are", () => {
+    expect(itemsLine(claims(["Tanzanite fang", 1]))).toBe("Tanzanite fang");
+    expect(itemsLine(claims(["Zulrah's scales", 1200]))).toBe(`Zulrah's scales ×${(1200).toLocaleString()}`);
+    expect(itemsLine(claims(["Tanzanite fang", 1], ["Magic fang", 1], ["Onyx", 1]))).toBe("Tanzanite fang +2 more");
+  });
+
+  it("says so when there are no items", () => {
+    expect(itemsLine([])).toBe("No items");
   });
 });

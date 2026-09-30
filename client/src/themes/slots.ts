@@ -15,6 +15,7 @@ import type {
   RequirementNodeModel,
   RewindClosingModel,
   RewindControlsModel,
+  RewindLogModel,
   RewindPopupModel,
   RewindScoreboardModel,
   RewindTileTeamsModel,
@@ -219,6 +220,11 @@ export interface ThemeSlots {
   RewindControls: ComponentType<{ controls: RewindControlsModel }>;
   // Every Team's points at the moment being viewed (whatever Team's Board is shown); pressing one shows its Board.
   RewindScoreboard: ComponentType<{ scoreboard: RewindScoreboardModel }>;
+  // Every Submission up to the moment being viewed, newest first, one compact line each (Player, items, Tile, Drop
+  // value, time, tier; its Team in the All Teams view; rejected ones stamped). Pressing one jumps there and shows its
+  // popup (log.jumpTo). Sits under the scoreboard; on a wide screen the page bounds its height, so it should shrink to
+  // fit and scroll within it.
+  RewindLog: ComponentType<{ log: RewindLogModel }>;
   // One Submission's popup: the Player it's credited to, their Team, its items with Drop value (and Luck when known),
   // a thumbnail of its main screenshot, its Reactions and what it completed. size "big" (a huge Submission) or
   // "small" (a notable one). A rejected one is greyed out and stamped "Rejected". The theme draws only the card (its

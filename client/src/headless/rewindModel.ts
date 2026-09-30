@@ -240,6 +240,14 @@ function baseHolds(tiers: SignificanceTier[], minMinorMs: number): number[] {
   return tiers.map((t) => (t === "minor" ? minMinorMs : holdMs[t] * restScale));
 }
 
+/** A Submission's items in one line, for the log: "Tanzanite fang", "Zulrah's scales ×120", "Tanzanite fang +2 more". */
+export function itemsLine(claims: RewindSubmission["claims"]): string {
+  const first = claims[0];
+  if (!first) return "No items";
+  const head = first.quantity > 1 ? `${first.label} ×${first.quantity.toLocaleString()}` : first.label;
+  return claims.length > 1 ? `${head} +${claims.length - 1} more` : head;
+}
+
 /** "1 in 1,234" (rounded to something readable). */
 export function formatOneIn(oneIn: number): string {
   const rounded = oneIn >= 100 ? Math.round(oneIn / 10) * 10 : Math.round(oneIn);
