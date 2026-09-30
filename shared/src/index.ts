@@ -279,7 +279,8 @@ export type NodeKind = "ALL" | "ANY" | "COUNT" | "SUM" | "ITEM" | "MANUAL";
 //
 // ITEM is a single-name leaf: complete as soon as one approved claim targets
 // it. Quantity always lives one level up — SUM sums approved-claim
-// quantities across its ITEM children against its own `quantity` target;
+// quantities across its ITEM children (each times the child's `countsAs`)
+// against its own `quantity` target;
 // COUNT counts how many children are complete (also how "N distinct names"
 // is expressed — COUNT(N) over N single-name leaves — see
 // docs/item-quantity-model.md).
@@ -294,6 +295,11 @@ export interface GraphNode {
   minCount: number | null; // COUNT only
   quantity: number | null; // SUM only
   itemName: string | null; // ITEM only
+  /**
+   * ITEM only (CONTEXT.md "Counts as"): inside a SUM, a claim of quantity q on this Item adds q × countsAs to the
+   * SUM's total. Whole, from 1; 1 everywhere else (ANY/ALL/COUNT and a lone ITEM ignore it).
+   */
+  countsAs: number;
   /** This node's points stay 0 until the gate node also completes for the team. */
   pointsGateNodeId: string | null;
   /** Submissions targeting a leaf under this node are rejected until the gate node completes for the team. */
@@ -329,6 +335,8 @@ export interface GraphNodeInput {
   minCount?: number;
   quantity?: number;
   itemName?: string | null;
+  /** ITEM only, defaults to 1. See GraphNode.countsAs. */
+  countsAs?: number;
   pointsGateNodeId?: string | null;
   submitGateNodeId?: string | null;
   allowsPreLoad?: boolean;

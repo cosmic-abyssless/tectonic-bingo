@@ -481,6 +481,44 @@ describe("lines", () => {
   });
 });
 
+describe("Counts as", () => {
+  function withWeightedItem() {
+    const seeded = seedFullBingo();
+    createTask(db, seeded.tileB.id, { kind: "SUM", label: "Pages", points: 20, quantity: 200, children: [{ kind: "ITEM", itemName: "Burnt page" }, { kind: "ITEM", itemName: "Pyromancer garb", countsAs: 25 }] }, 1);
+    return seeded;
+  }
+  const weights = (tasks: { label: string | null; children: { itemName: string | null; countsAs?: number }[] }[]) => tasks.find((t) => t.label === "Pages")!.children.map((c) => [c.itemName, c.countsAs]);
+
+  it("round-trips an Item's Counts as through export and import", () => {
+    const { bingo, admin } = withWeightedItem();
+    const doc = exportBingo(db, bingo.id);
+    expect(weights(doc.tiles.find((t) => t.name === "Tile B")!.tasks)).toEqual([["Burnt page", 1], ["Pyromancer garb", 25]]);
+    const imported = importBingo(db, doc, { slug: "weighted-target", createdByUserId: admin.id });
+    const tile = getBoardTiles(db, imported.id).find((t) => t.name === "Tile B")!;
+    expect(weights(tile.node.children)).toEqual([["Burnt page", 1], ["Pyromancer garb", 25]]);
+  });
+
+  it("reads a file exported before Counts as existed as 1", () => {
+    const { bingo, admin } = withWeightedItem();
+    const doc = JSON.parse(JSON.stringify(exportBingo(db, bingo.id))) as BingoExportDocument;
+    const strip = (n: { countsAs?: number; children: unknown[] }) => {
+      delete n.countsAs;
+      n.children.forEach((c) => strip(c as typeof n));
+    };
+    for (const t of doc.tiles) t.tasks.forEach(strip);
+    const imported = importBingo(db, doc, { slug: "unweighted-target", createdByUserId: admin.id });
+    expect(weights(getBoardTiles(db, imported.id).find((t) => t.name === "Tile B")!.node.children)).toEqual([["Burnt page", 1], ["Pyromancer garb", 1]]);
+  });
+
+  it("refuses an Item counting as less than 1, leaving no partial bingo", () => {
+    const { bingo, admin } = withWeightedItem();
+    const doc = JSON.parse(JSON.stringify(exportBingo(db, bingo.id))) as BingoExportDocument;
+    doc.tiles.find((t) => t.name === "Tile B")!.tasks.find((t) => t.label === "Pages")!.children[1]!.countsAs = 0;
+    expect(() => importBingo(db, doc, { slug: "bad-weight", createdByUserId: admin.id })).toThrow(/Counts as/);
+    expect(getBingoBySlug(db, "bad-weight")).toBeUndefined();
+  });
+});
+
 describe("nodes shared between parents", () => {
   it("are exported once, then referred back to by the same localId", () => {
     const { bingo } = seedFullBingo();

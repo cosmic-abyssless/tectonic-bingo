@@ -7,7 +7,7 @@ import path from "path";
 import { and, eq, inArray } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { validateHistoricalBundle, type HistoricalBundle, type HistoricalBundleTask } from "@bingo/shared";
+import { validateHistoricalBundle, type HistoricalBundle, type HistoricalBundleNode, type HistoricalBundleTask } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { richHistoricalBundle, SAMPLE_BUNDLE } from "../testUtils/fixtures/richHistoricalBundle";
@@ -65,6 +65,61 @@ describe("checking a rich bundle", () => {
       'tiles[1] "Zulrah" tasks[1]: min 3 is more than its 1 children',
       'tiles[1] "Zulrah" tasks[1]: only a MANUAL Task has completions',
       'tiles[2] "Barrows" tasks[0]: the first Task can\'t withhold its points until the one before it',
+    ]);
+  });
+
+  it("checks reused leaves: written earlier, the same kind, once per parent, and never a Task", () => {
+    const b = rich();
+    const [any] = tasksOf(b, 0, 0) as [HistoricalBundleTask & { children: HistoricalBundleNode[] }];
+    any.children.push({ kind: "ITEM", key: "zul-fang", reuse: true }, { kind: "ITEM", key: "vork-head", reuse: true });
+    const [sum] = tasksOf(b, 0, 1) as [HistoricalBundleTask & { children: HistoricalBundleNode[] }];
+    sum.children.push({ kind: "MANUAL", key: "vork-visage", reuse: true });
+    tasksOf(b, 0, 2).push({ kind: "ITEM", key: "vork-head", reuse: true, label: "Vorkath's head", points: 5 } as HistoricalBundleTask);
+    expect(problemsOf(b)).toEqual([
+      'tiles[0] "Vorkath" tasks[0].children[2]: "zul-fang" isn\'t a leaf written earlier in the bundle',
+      'tiles[0] "Vorkath" tasks[0].children[3]: "vork-head" is already one of its children',
+      'tiles[1] "Zulrah" tasks[0]: a SUM\'s children must all be ITEMs',
+      'tiles[1] "Zulrah" tasks[0].children[2]: "vork-visage" is an ITEM, not "MANUAL"',
+      'tiles[2] "Barrows" tasks[1]: a Task can\'t be a reused leaf',
+    ]);
+  });
+
+  it("checks Valued as: an item and a divisor from 1, with a short source", () => {
+    const b = rich();
+    const [any] = tasksOf(b, 0, 0) as [HistoricalBundleTask & { children: HistoricalBundleNode[] }];
+    Object.assign(any.children[0]!, { valuedAs: { itemName: "Magus vestige", divisor: 3, source: "Duke Sucellus" } });
+    Object.assign(any.children[1]!, { valuedAs: { itemName: "Magus vestige", divisor: 0 } });
+    Object.assign(tasksOf(b, 0, 2)[0]!, { valuedAs: { itemName: "Ahrim's staff", divisor: 1, source: "x".repeat(41) } });
+    expect(problemsOf(b)).toEqual([
+      'tiles[0] "Vorkath" tasks[0].children[1]: valuedAs must be { itemName, divisor } with a divisor from 1',
+      'tiles[2] "Barrows" tasks[0]: valuedAs.source must be text of at most 40 characters',
+    ]);
+  });
+
+  it("checks Counts as: a whole number from 1", () => {
+    const b = rich();
+    const [sum] = tasksOf(b, 0, 1) as [HistoricalBundleTask & { children: HistoricalBundleNode[] }];
+    Object.assign(sum.children[0]!, { countsAs: 25 });
+    expect(problemsOf(b)).toEqual([]);
+    Object.assign(sum.children[0]!, { countsAs: 0 });
+    Object.assign(sum.children[1]!, { countsAs: 2.5 });
+    expect(problemsOf(b)).toEqual([
+      'tiles[1] "Zulrah" tasks[0].children[0]: countsAs must be a whole number from 1',
+      'tiles[1] "Zulrah" tasks[0].children[1]: countsAs must be a whole number from 1',
+    ]);
+  });
+
+  it("checks Drop values: whole GP, and none on a MANUAL leaf", () => {
+    const b = rich();
+    const [s0, s1] = b.submissions!;
+    s0!.claims![0]!.value = 1_500_000;
+    s0!.claims![1]!.value = -5;
+    s1!.claims![0]!.value = 2.5;
+    b.submissions!.push({ key: "sea-call", team: "Sea Snakes", player: s0!.player, submittedAt: s0!.submittedAt, reviewedAt: s0!.reviewedAt, status: "approved", screenshot: null, claims: [{ leaf: "zul-call", item: null, quantity: 1, value: 0 }] });
+    expect(problemsOf(b)).toEqual([
+      'Submission "sea-1" claims[1]: value must be a whole number of GP',
+      'Submission "sea-2" claims[0]: value must be a whole number of GP',
+      'Submission "sea-call" claims[0]: a MANUAL leaf has no Drop value',
     ]);
   });
 
@@ -176,6 +231,66 @@ describe("importing a rich bundle", () => {
     const [sum, call] = children(zulrah.nodeId);
     expect(sum).toMatchObject({ kind: "SUM", quantity: 3, points: 15 });
     expect(call).toMatchObject({ kind: "MANUAL", description: "Kill Zulrah on a clan call", requiresProof: true, proofNote: "The whole team in one screenshot" });
+  });
+
+  it("sets up an item's Valued as", async () => {
+    const b = rich();
+    const [sum] = tasksOf(b, 0, 1) as [HistoricalBundleTask & { children: HistoricalBundleNode[] }];
+    Object.assign(sum.children[1]!, { valuedAs: { itemName: "Magus vestige", divisor: 3, source: "Duke Sucellus" } });
+    const { bingo } = await importIt(b);
+    const magic = db.select().from(schema.nodes).where(and(eq(schema.nodes.bingoId, bingo.id), eq(schema.nodes.itemName, "Magic fang"))).get()!;
+    expect(magic).toMatchObject({ valuedAsItemName: "Magus vestige", valuedAsDivisor: 3, valuedAsSource: "Duke Sucellus" });
+    const fang = db.select().from(schema.nodes).where(and(eq(schema.nodes.bingoId, bingo.id), eq(schema.nodes.itemName, "Tanzanite fang"))).get()!;
+    expect(fang).toMatchObject({ valuedAsItemName: null, valuedAsDivisor: null });
+  });
+
+  it("sets up an item's Counts as, and scores its SUM with it", async () => {
+    const b = rich();
+    const [sum] = tasksOf(b, 0, 1) as [HistoricalBundleTask & { children: HistoricalBundleNode[] }];
+    Object.assign(sum.children[0]!, { countsAs: 2 });
+    const { bingo, scoring } = await importIt(b);
+    const countsAsOf = (item: string) => db.select().from(schema.nodes).where(and(eq(schema.nodes.bingoId, bingo.id), eq(schema.nodes.itemName, item))).get()!.countsAs;
+    expect([countsAsOf("Tanzanite fang"), countsAsOf("Magic fang")]).toEqual([2, 1]);
+    // Lava Dragons' 2 Tanzanite fangs on the 5th now make 4 of the 3 fangs: the Task completes then, not with the Magic
+    // fang on the 6th. The Claim keeps its real quantity.
+    const days = scoring!.teams.find((t) => t.team === "Lava Dragons")!.perDay.filter((d) => d.points > 0).map((d) => [d.date, d.points]);
+    expect(days).toEqual([["2024-03-04", 35], ["2024-03-05", 15], ["2024-03-07", 20]]);
+    const quantities = db.select({ quantity: schema.claims.quantity }).from(schema.claims).where(eq(schema.claims.itemName, "Tanzanite fang")).all().map((c) => c.quantity);
+    expect(quantities.sort()).toEqual([2, 3, 3]);
+  });
+
+  it("keeps the Drop values the bundle brings, leaving the others to today's prices", async () => {
+    const b = rich();
+    b.submissions!.find((s) => s.key === "sea-2")!.claims![0]!.value = 4_200_000;
+    const { bingo } = await importIt(b);
+    const valueOf = (item: string) =>
+      db.select({ gpValue: schema.claims.gpValue }).from(schema.claims).innerJoin(schema.submissions, eq(schema.claims.submissionId, schema.submissions.id))
+        .where(and(eq(schema.submissions.teamId, teamIdOf(bingo.id, "Sea Snakes")), eq(schema.claims.itemName, item))).get()!.gpValue;
+    expect(valueOf("Tanzanite fang")).toBe(4_200_000);
+    expect(valueOf("Vorkath's head")).toBeNull();
+  });
+
+  it("puts a reused leaf in its second place too, so one Claim counts toward both Tasks", async () => {
+    const b = rich();
+    Object.assign(b.tiles.find((t) => t.boardRow === 1 && t.boardCol === 0)!, {
+      points: null,
+      tasks: [{ kind: "ANY", key: "any-unique", label: "Any Vorkath unique, again", points: 7, children: [{ kind: "ITEM", key: "vork-head", reuse: true }, { kind: "ITEM", key: "vork-visage", reuse: true }] }],
+    });
+    expect(problemsOf(b)).toEqual([]);
+    const { bingo, scoring } = await importIt(b);
+    // Sea Snakes' Vorkath's head and Lava Dragons' Draconic visage each complete it as well: 7 more, from the same Claims.
+    expect(scoring!.teams.map((t) => [t.team, t.total])).toEqual([
+      ["Lava Dragons", 77],
+      ["Sea Snakes", 132],
+      ["Rock Crabs", 5],
+    ]);
+    const nodeOf = (name: string) => db.select().from(schema.tiles).where(and(eq(schema.tiles.bingoId, bingo.id), eq(schema.tiles.boardRow, name === "Vorkath" ? 0 : 1), eq(schema.tiles.boardCol, 0))).get()!.nodeId;
+    const children = (parentId: string) => db.select().from(schema.nodeEdges).where(eq(schema.nodeEdges.parentId, parentId)).orderBy(schema.nodeEdges.sortOrder).all().map((e) => e.childId);
+    const [vorkathAny] = children(nodeOf("Vorkath"));
+    const [again] = children(nodeOf("other"));
+    expect(children(again!)).toEqual(children(vorkathAny!));
+    // No Claim was copied for the second place: the drops' own, and the two MANUAL completions.
+    expect(db.select().from(schema.claims).all()).toHaveLength(b.submissions!.reduce((n, s) => n + (s.claims?.length ?? 0), 0) + 2);
   });
 
   it("recomputes the scores from the approved Submissions: withheld points, rejected drops, MANUAL Tasks and Lines", async () => {

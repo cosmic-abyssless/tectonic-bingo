@@ -203,8 +203,8 @@ export function writeHistoricalBingo(db: Db, bundle: HistoricalBundle, imageUrls
       let previous: string | null = null;
       for (const [i, task] of (t.tasks ?? []).entries()) {
         hasTasks = true;
-        const input = { ...toGraphInput(task, nodeIdByKey), description: task.description ?? null, pointsGateNodeId: task.withholdUntilPrevious ? previous : null, requiresProof: task.requiresProof === true, proofNote: task.proofNote ?? null };
-        const taskNodeId = insertSubtree(tx, bingo.id, input);
+        const settings = { description: task.description ?? null, pointsGateNodeId: task.withholdUntilPrevious ? previous : null, requiresProof: task.requiresProof === true, proofNote: task.proofNote ?? null };
+        const taskNodeId = insertBundleNode(tx, bingo.id, task, nodeIdByKey, settings);
         tx.insert(nodeEdges).values({ parentId: node.id, childId: taskNodeId, sortOrder: i }).run();
         if (task.kind === "MANUAL" && task.completions?.length) manualCompletions.push({ nodeId: taskNodeId, completions: task.completions });
         previous = taskNodeId;
@@ -238,7 +238,7 @@ export function writeHistoricalBingo(db: Db, bundle: HistoricalBundle, imageUrls
         tx.insert(submissionScreenshots).values({ submissionId: row.id, screenshotType: kind === "proof" ? "proof" : "main", storageUrl: "", historicalKey: sub.screenshot, uploadedAt: submittedAt }).run();
       }
       for (const c of kind === "drop" ? (sub.claims ?? []) : []) {
-        tx.insert(claims).values({ submissionId: row.id, nodeId: nodeIdByKey.get(c.leaf)!, itemName: c.item?.trim() || null, quantity: c.quantity }).run();
+        tx.insert(claims).values({ submissionId: row.id, nodeId: nodeIdByKey.get(c.leaf)!, itemName: c.item?.trim() || null, quantity: c.quantity, gpValue: c.value ?? null }).run();
       }
     }
     // A MANUAL Task given to a Team: an approved claim on it, credited to the Team's Captain, with no screenshot.
@@ -325,23 +325,30 @@ export function writeHistoricalBingo(db: Db, bundle: HistoricalBundle, imageUrls
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
-/** A bundle node as the graph's input, each with a fresh id recorded by its key (for Claims and Proof screenshots). */
-function toGraphInput(n: HistoricalBundleNode, idByKey: Map<string, string>): GraphNodeInput {
-  const id = crypto.randomUUID();
+/**
+ * Creates a bundle node and its subtree, recording each node's id by its key (for Claims, Proof screenshots and the
+ * stubs that reuse a leaf). A stub isn't created: the leaf written earlier is linked in again, so a Claim on it counts
+ * toward both of its Tasks. `settings`: a Task's own, on its root.
+ */
+function insertBundleNode(tx: Tx, bingoId: string, n: HistoricalBundleNode, idByKey: Map<string, string>, settings: Partial<GraphNodeInput> = {}): string {
+  if ("reuse" in n) return idByKey.get(n.key)!;
+  const base = { ...settings, label: n.label?.trim() || null, points: n.points ?? 0 };
+  const input: GraphNodeInput =
+    n.kind === "ITEM"
+      ? { ...base, kind: "ITEM", itemName: n.item.trim(), countsAs: n.countsAs ?? 1, valuedAs: n.valuedAs ? { itemName: n.valuedAs.itemName.trim(), divisor: n.valuedAs.divisor, source: n.valuedAs.source?.trim() || null } : null }
+      : n.kind === "MANUAL"
+        ? { ...base, kind: "MANUAL" }
+        : n.kind === "COUNT"
+          ? { ...base, kind: "COUNT", minCount: n.min }
+          : n.kind === "SUM"
+            ? { ...base, kind: "SUM", quantity: n.quantity }
+            : { ...base, kind: n.kind };
+  const id = insertSubtree(tx, bingoId, input);
   if (n.key) idByKey.set(n.key, id);
-  const base = { id, label: n.label?.trim() || null, points: n.points ?? 0 };
-  switch (n.kind) {
-    case "ITEM":
-      return { ...base, kind: "ITEM", itemName: n.item.trim() };
-    case "MANUAL":
-      return { ...base, kind: "MANUAL" };
-    case "COUNT":
-      return { ...base, kind: "COUNT", minCount: n.min, children: n.children.map((c) => toGraphInput(c, idByKey)) };
-    case "SUM":
-      return { ...base, kind: "SUM", quantity: n.quantity, children: n.children.map((c) => toGraphInput(c, idByKey)) };
-    default:
-      return { ...base, kind: n.kind, children: n.children.map((c) => toGraphInput(c, idByKey)) };
-  }
+  ("children" in n ? n.children : []).forEach((c, i) => {
+    tx.insert(nodeEdges).values({ parentId: id, childId: insertBundleNode(tx, bingoId, c, idByKey), sortOrder: i }).run();
+  });
+  return id;
 }
 
 /** A Line's Tiles, by position: given for a custom Line, worked out for the rest. */

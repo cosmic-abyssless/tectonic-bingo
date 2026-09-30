@@ -3,7 +3,7 @@ import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { isBlankAnswer, parseChoiceAnswer, parseChoices, parseMemberPicks, type GraphNode, type SignupQuestion, type Tile } from "@bingo/shared";
 import { answerQuestions } from "./answers";
-import { DIFFICULTY, buildBoard, deadlockedParts, difficultyOf, planSubmissions, type Claim, type PartModel } from "./board";
+import { DIFFICULTY, buildBoard, deadlockedParts, difficultyOf, itemToWeigh, planSubmissions, type Claim, type PartModel } from "./board";
 import { OptionsError, defaultSlug, normalizeOptions } from "./options";
 import { chooseMods, makePlayers, pairUp, playingProbability, type Player } from "./people";
 import { Rng } from "./rng";
@@ -205,6 +205,7 @@ interface ExportTask {
   minCount?: number | null;
   quantity?: number | null;
   itemName?: string | null;
+  countsAs?: number;
   submitGateLocalId?: number | null;
   pointsGateLocalId?: number | null;
   children?: ExportTask[];
@@ -218,7 +219,7 @@ const EXPORT_PATH = path.resolve(__dirname, "../../../../tectonic-comics-bingo-e
 function toNode(t: ExportTask): GraphNode {
   return {
     id: `n${t.localId}`, bingoId: "b", kind: t.kind, label: t.label ?? null, description: null, notes: null, points: t.points ?? 0,
-    minCount: t.minCount ?? null, quantity: t.quantity ?? null, itemName: t.itemName ?? null,
+    minCount: t.minCount ?? null, quantity: t.quantity ?? null, itemName: t.itemName ?? null, countsAs: t.countsAs ?? 1,
     pointsGateNodeId: t.pointsGateLocalId ? `n${t.pointsGateLocalId}` : null,
     submitGateNodeId: t.submitGateLocalId ? `n${t.submitGateLocalId}` : null,
     allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: (t.children ?? []).map(toNode),
@@ -286,8 +287,7 @@ describe.skipIf(!fs.existsSync(EXPORT_PATH))("the real board", () => {
         expect(new Set(submission.map((c) => c.nodeId)).size).toBe(submission.length);
         expect(submission.every((c) => part.leafIds.includes(c.nodeId))).toBe(true);
       }
-      const total = (list: Claim[]) => list.reduce((sum, c) => sum + (c.quantity ?? 1), 0);
-      if (part.node.kind === "SUM") expect(total(claims), `${part.tileName} ${part.label}`).toBe(part.node.quantity);
+      if (part.node.kind === "SUM") expect(weightedTotal(part.node, claims), `${part.tileName} ${part.label}`).toBe(part.node.quantity);
       if (part.node.kind === "COUNT") expect(new Set(claims.map((c) => c.nodeId)).size).toBe(part.node.minCount);
     }
   });
@@ -301,6 +301,43 @@ describe.skipIf(!fs.existsSync(EXPORT_PATH))("the real board", () => {
     expect(difficultyOf("TOB ISSUE 2", 1)).toEqual({ effort: 40, eligible: 0.12 });
     expect(difficultyOf("SLAYER BOSSES", 0).eligible).toBeGreaterThan(0.9);
     expect(difficultyOf("Some new tile", 0)).toEqual({ effort: 5, eligible: 0.7 });
+  });
+});
+
+// A SUM's total from planned claims, each item's quantity times what it counts as.
+function weightedTotal(sum: GraphNode, claims: Claim[]) {
+  const weight = new Map(sum.children.map((c) => [c.id, c.countsAs]));
+  return claims.reduce((total, c) => total + (c.quantity ?? 1) * (weight.get(c.nodeId) ?? 1), 0);
+}
+
+describe("an Item that counts as more than one", () => {
+  const item = (id: string, itemName: string, countsAs = 1): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, countsAs, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: [] });
+  const sum = (id: string, quantity: number, children: GraphNode[]): GraphNode => ({ ...item(id, ""), kind: "SUM", itemName: null, quantity, children });
+
+  it("needs fewer drops, and plans just enough to reach the total", () => {
+    const pages = sum("pages", 200, [item("page", "Burnt page"), item("garb", "Pyromancer garb", 25)]);
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const claims = planSubmissions(pages, new Rng(seed)).flat();
+      const total = weightedTotal(pages, claims);
+      expect(total).toBeGreaterThanOrEqual(200);
+      // Nothing past the drop that reached it.
+      expect(total - (claims.at(-1)!.quantity ?? 1) * (claims.at(-1)!.nodeId === "garb" ? 25 : 1)).toBeLessThan(200);
+    }
+    // Only garb: 8 of them.
+    const onlyGarb = sum("garb-only", 200, [item("garb", "Pyromancer garb", 25)]);
+    expect(weightedTotal(onlyGarb, planSubmissions(onlyGarb, new Rng(3)).flat())).toBe(200);
+    expect(planSubmissions(onlyGarb, new Rng(3)).flat().reduce((n, c) => n + (c.quantity ?? 1), 0)).toBe(8);
+  });
+
+  it("is given to the last Item of the first SUM over two or more Items, unless the board already has one", () => {
+    const small = sum("small", 2, [item("a", "A"), item("b", "B")]);
+    const pages = sum("pages", 200, [item("page", "Burnt page"), item("torch", "Bruma torch")]);
+    const task = { ...sum("task", 1, []), kind: "ALL" as const, label: "Page 1", children: [small, pages] };
+    expect(itemToWeigh([item("lone", "Lone")])).toBeNull();
+    const pick = itemToWeigh([item("lone", "Lone"), task])!;
+    expect([pick.task.id, pick.item.id, pick.countsAs]).toEqual(["task", "torch", 25]);
+    expect(itemToWeigh([{ ...task, children: [small, sum("pages", 12, [item("page", "Burnt page"), item("torch", "Bruma torch")])] }])!.countsAs).toBe(3);
+    expect(itemToWeigh([task, sum("other", 10, [item("x", "X", 2), item("y", "Y")])])).toBeNull();
   });
 });
 
@@ -319,7 +356,7 @@ describe("deadlockedParts", () => {
 });
 
 describe("claimable on a board with shared items", () => {
-  const item = (id: string, itemName: string): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: [] });
+  const item = (id: string, itemName: string): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, countsAs: 1, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: [] });
   const part = (id: string, label: string, kind: GraphNode["kind"], children: GraphNode[], gate: string | null = null): GraphNode => ({ ...item(id, ""), kind, label, itemName: null, points: 10, submitGateNodeId: gate, children });
   const tile = (children: GraphNode[]): Tile => ({ id: "t", name: "PETS", boardRow: 0, boardCol: 0, hasFreezePeriod: false, freezeDurationMinutes: 0, node: part("root", "", "ALL", children) }) as unknown as Tile;
 
@@ -348,7 +385,7 @@ describe("claimable on a board with shared items", () => {
 });
 
 describe("exclusive items on the board", () => {
-  const item = (id: string, itemName: string): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: [] });
+  const item = (id: string, itemName: string): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, countsAs: 1, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: [] });
   const part = (id: string, label: string, children: GraphNode[]): GraphNode => ({ ...item(id, ""), kind: "SUM", label, itemName: null, quantity: 1, points: 10, children });
   const tile = (id: string, name: string, col: number, parts: GraphNode[]): Tile => ({ id, name, boardRow: 0, boardCol: col, hasFreezePeriod: false, freezeDurationMinutes: 0, node: { ...part(`${id}-root`, "", parts), kind: "ALL" } }) as unknown as Tile;
   const tiles = [tile("zul", "ZULRAH", 0, [part("z1", "Page 1", [item("zul-snake", "Pet snakeling")])]), tile("pets", "PETS", 1, [part("p1", "Page 1", [item("pets-snake", "Pet snakeling"), item("pets-nid", "Nid")])])];

@@ -65,6 +65,14 @@ a sum of raw claimed quantities across siblings.
   `SUM`'s children are always `ITEM` leaves — flat, not recursive — so summing never needs
   to reach through nested composites. (If a real need for `SUM`-of-`SUM` shows up later,
   it's a small, isolated extension; not worth the complexity up front.)
+- **Weights: an `ITEM` can "count as" N inside a `SUM`** (CONTEXT.md "Counts as", added
+  2026-09-30). `nodes.counts_as`, a whole number from 1, default 1, only meaningful on an
+  `ITEM` that is a `SUM`'s child: a claim of quantity q on it adds q × N to the `SUM`'s
+  total (Wintertodt's "200 burnt pages", where a Pyromancer garb counts as 25). The claim
+  keeps the real quantity, so Drop value, Stats and Achievements are unchanged; the engine,
+  Points share, open Items, the board's progress and the Submit flow's "still open" check
+  all total in weighted units. It lives on the leaf (one value, even for a shared leaf),
+  not on the edge, and `ALL`/`ANY`/`COUNT` and a lone `ITEM` ignore it.
 - **`COUNT` absorbs what `distinctItems` used to do.** "K'ril: 2 distinct uniques" is
   `COUNT(2)` over 3 single-name `ITEM` leaves — one leaf per known unique — instead of one
   leaf with `quantity: 2, distinctItems: true`. No flag needed; it falls out of node kind +
@@ -146,7 +154,8 @@ case "SUM": {
   // children are ITEM leaves. Merge every child's claims into one list sorted by
   // reviewedAt; complete when the running total first reaches node.quantity.
   // completedAt = reviewedAt of the claim that tipped it over (mirrors today's ITEM logic,
-  // just gathering claims from several leaves instead of one).
+  // just gathering claims from several leaves instead of one). Each claim adds its
+  // quantity × its leaf's countsAs (the weights note in §2).
   // value = Σ children's value (so a SUM could itself be a SUM's child, if ever needed).
 }
 // COUNT/ALL/ANY/MANUAL: unchanged from node-graph-model.md §4.

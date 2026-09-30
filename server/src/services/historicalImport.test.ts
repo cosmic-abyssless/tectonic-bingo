@@ -13,6 +13,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { checkHistoricalBundle, HistoricalBundleError, importHistoricalBundle } from "./historicalImportService";
 import { getHistoricalBingo } from "./historicalService";
 import { deleteBingo } from "./bingoService";
+import { endedAt } from "./bingoStart";
 
 const failAudit = vi.hoisted(() => ({ on: false }));
 vi.mock("../audit/record", async (importOriginal) => {
@@ -139,6 +140,12 @@ describe("importing a bundle", () => {
     expect(bingo).toMatchObject({ slug: "sample-historical-2024", name: "Spring Bingo 2024 (sample)", stage: "complete", historical: true, achievementsEnabled: false, boardRows: 3, boardCols: 3 });
     expect(bingo.startsAt?.toISOString()).toBe("2024-03-01T18:00:00.000Z");
     expect(usersCreated).toBe(9);
+  });
+
+  it("ended at its end date, though it never moved to Finished here (On Fire's window, Wrapped, Rewind)", async () => {
+    const { bingo } = await importHistoricalBundle(db, sample(), { createdByUserId: admin.id, uploadsDir });
+    expect(endedAt(db, bingo)).toEqual(bingo.endsAt);
+    expect(bingo.endsAt?.toISOString()).toBe(new Date(SAMPLE.bingo.endsAt).toISOString());
   });
 
   it("creates new users: clan members from the clan's records, others by RSN and locked out", async () => {

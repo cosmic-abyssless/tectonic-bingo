@@ -74,6 +74,33 @@ describe("creditAwards", () => {
     expect(u2.claims[0]!.quantity).toBe(20);
   });
 
+  it("splits a SUM by weighted contribution when an Item counts as more than one", () => {
+    const g = graph([
+      { id: "pages", kind: "SUM", quantity: 200, points: 40, children: ["page", "garb"] },
+      { id: "page", kind: "ITEM" },
+      { id: "garb", kind: "ITEM", countsAs: 25 },
+    ]);
+    // u1's 150 pages, then u2's 4 garb pieces (100) of which only 50 were still needed: 2 pieces' worth.
+    const claims = [claim("page", "u1", 1, 150), claim("garb", "u2", 2, 4), claim("garb", "u3", 3, 1)];
+    const credits = creditAwards({ ...g, claims, awards: [{ nodeId: "pages", points: 40 }], tileNodeIds: new Set(), lineNodeIds: new Set() });
+    expect(totals(credits)).toEqual({ u1: 30, u2: 10 });
+    // What counted is shown in real items, not in pages.
+    expect(credits[0]!.shares.find((s) => s.userId === "u2")!.claims[0]!.quantity).toBe(2);
+    expect(credits[0]!.closedBy).toEqual(["u2"]);
+  });
+
+  it("rounds a partly used weighted claim up to whole items", () => {
+    const g = graph([
+      { id: "pages", kind: "SUM", quantity: 30, points: 30, children: ["page", "garb"] },
+      { id: "page", kind: "ITEM" },
+      { id: "garb", kind: "ITEM", countsAs: 25 },
+    ]);
+    // 20 pages, then one garb (25) of which 10 were needed.
+    const credits = creditAwards({ ...g, claims: [claim("page", "u1", 1, 20), claim("garb", "u2", 2, 1)], awards: [{ nodeId: "pages", points: 30 }], tileNodeIds: new Set(), lineNodeIds: new Set() });
+    expect(totals(credits)).toEqual({ u1: 20, u2: 10 });
+    expect(credits[0]!.shares.find((s) => s.userId === "u2")!.claims[0]!.quantity).toBe(1);
+  });
+
   it("gives nothing for a duplicate drop approved after the item was already done", () => {
     const g = graph([{ id: "item", kind: "ITEM", points: 5 }]);
     const credits = creditAwards({ ...g, claims: [claim("item", "u1", 1), claim("item", "u2", 2)], awards: [{ nodeId: "item", points: 5 }], tileNodeIds: new Set(), lineNodeIds: new Set() });

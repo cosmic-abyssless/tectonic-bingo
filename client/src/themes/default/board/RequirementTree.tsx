@@ -4,6 +4,7 @@ import { CheckIcon } from "../../../core/ui/icons";
 import { ItemIcon } from "../../../core/ui/ItemIcon";
 import { WikiItemLink } from "../../../core/ui/WikiItemLink";
 import { itemNameOf } from "../../../headless/requirementItems";
+import { countsAsLabel } from "../../../core/board/labels";
 
 function Check() {
   return <CheckIcon size={12} className="shrink-0 text-ok" aria-label="complete" />;
@@ -27,12 +28,19 @@ function LeafRow({ node }: { node: RequirementNodeModel }) {
       <span className={node.lockedBy ? "text-on-surface-subtle" : undefined}>
         <ItemIcon url={iconUrl} className={iconClass(node.dim)} />
         {itemNameOf(node) ? <WikiItemLink name={itemNameOf(node)!} /> : node.label}
+        {node.kind === "SUM" && <CountsAs countsAs={node.items[0]?.countsAs} />}
         {node.quantity && <span className="num ml-1.5 text-xs font-medium">×{node.quantity}</span>}
         {node.lockedBy && <span className="ml-1.5 text-xs text-warn">{node.lockedBy}</span>}
       </span>
       {node.complete && <Check />}
     </li>
   );
+}
+
+// "· counts as 25" after an item that adds more than one to its SUM's total (CONTEXT.md "Counts as"); nothing at 1.
+function CountsAs({ countsAs }: { countsAs: number | undefined }) {
+  const label = countsAsLabel(countsAs);
+  return label ? <span className="ml-1.5 text-xs text-on-surface-subtle">· {label}</span> : null;
 }
 
 function iconClass(dim: boolean) {
@@ -54,6 +62,7 @@ function SumItemRows({ node }: { node: RequirementNodeModel }) {
     <li key={item.name} className={`text-sm ${node.dim || item.lockedBy ? "text-on-surface-subtle" : "text-on-surface"}`}>
       <ItemIcon url={item.iconUrl} className={iconClass(node.dim || !!item.lockedBy)} />
       <WikiItemLink name={item.name} />
+      <CountsAs countsAs={item.countsAs} />
       <span className={`num ml-1.5 text-xs font-medium ${item.count > 0 ? "text-ok" : "text-on-surface-subtle"}`}>×{item.count}</span>
       {item.lockedBy && <span className="ml-1.5 text-xs text-warn">{item.lockedBy}</span>}
     </li>

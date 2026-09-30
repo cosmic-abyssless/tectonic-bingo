@@ -40,6 +40,8 @@ export interface ExportNode {
   minCount: number | null;
   quantity: number | null;
   itemName: string | null;
+  /** An ITEM's Counts as (CONTEXT.md); 1 on every other kind. Absent in files exported before Counts as existed: 1. */
+  countsAs?: number;
   pointsGateLocalId: number | null;
   submitGateLocalId: number | null;
   allowsPreLoad: boolean;

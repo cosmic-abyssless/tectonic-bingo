@@ -19,6 +19,11 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
   const [error, setError] = useState<string | null>(null);
   // Mirrors the server's assertBoardEditable gate: editable through live, locked once complete.
   const locked = isBoardEditingLocked(bingo.stage);
+  const lockedReason = !locked
+    ? null
+    : bingo.historical
+      ? "This is a Historical Bingo, imported from another website: its Board can be looked through but not changed."
+      : "The board is locked because the bingo is complete. Step the stage back to edit it.";
   const live = bingo.stage === "live";
 
   const grid = new Map<string, Tile>();
@@ -70,9 +75,9 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
   return (
     <ExclusiveItemsProvider value={bingo.exclusivityRules}>
     <div className="space-y-6">
-      {locked && (
+      {lockedReason && (
         <Notice tone="warn" icon={<LockIcon />}>
-          The board is locked because the bingo is complete. Step the stage back to edit it.
+          {lockedReason}
         </Notice>
       )}
       {live && (
@@ -128,7 +133,7 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
         </div>
       </div>
 
-      <TileEditorPanel slug={slug} themeKey={bingo.theme} tile={selectedTile} categories={categories} locked={locked} onClose={() => setSelectedTileId(null)} />
+      <TileEditorPanel slug={slug} themeKey={bingo.theme} tile={selectedTile} categories={categories} locked={lockedReason} onClose={() => setSelectedTileId(null)} />
     </div>
     </ExclusiveItemsProvider>
   );

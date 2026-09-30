@@ -52,6 +52,7 @@ export function describeTaskNode(node: GraphNode): TaskSnapshot {
     minCount: node.minCount,
     quantity: node.quantity,
     itemName: node.itemName,
+    ...(node.countsAs && node.countsAs !== 1 ? { countsAs: node.countsAs } : {}),
     ...(node.valuedAs ? { valuedAs: `${describeValuedAs(node.valuedAs)}${node.valuedAs.source ? ` (${node.valuedAs.source})` : ""}` } : {}),
     children: node.children.map(describeTaskNode),
   };
