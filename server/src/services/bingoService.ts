@@ -1,6 +1,6 @@
 import type { AchievementKey, CutMode, ExclusivityRule } from "@bingo/shared";
 import { now as clockNow } from "../clock";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import {
@@ -39,6 +39,7 @@ import {
   womPastCompetitions,
   womReads,
   womSnapshots,
+  wrappedArt,
 } from "../db/schema";
 import { ServiceError } from "./errors";
 import { freezeTitleSettings, unfreezeTitleSettings } from "./titleSettingsService";
@@ -53,6 +54,7 @@ import { assertTeamsLedByPairs } from "./teamService";
 import { assertNotHistorical, deleteHistoricalRows } from "./historicalService";
 
 type Db = BetterSQLite3Database<typeof schema>;
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export const STAGE_ORDER = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"] as const;
 export type Stage = (typeof STAGE_ORDER)[number];
@@ -302,10 +304,46 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
 
 // Removes a bingo and everything hanging off it. The schema has no ON DELETE
 // CASCADE, so children are deleted leaf-first in one transaction.
-export function deleteBingo(db: Db, bingoId: string): void {
-  db.transaction((tx) => {
+/** Every /uploads/ file a Bingo's rows point at: its Tile pictures, Submission and Proof screenshots, and Wrapped art. */
+function uploadUrlsOf(tx: Tx, bingoId: string): Set<string> {
+  const teamIds = tx.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId));
+  const submissionIds = tx.select({ id: submissions.id }).from(submissions).where(inArray(submissions.teamId, teamIds));
+  const urls = [
+    ...tx.select({ url: tiles.imageUrl }).from(tiles).where(eq(tiles.bingoId, bingoId)).all().map((t) => t.url),
+    ...tx.select({ url: submissionScreenshots.storageUrl }).from(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, submissionIds)).all().map((s) => s.url),
+    ...tx.select().from(wrappedArt).where(eq(wrappedArt.bingoId, bingoId)).all().flatMap((a) => [a.originalUrl, a.frame1Url, a.frame2Url]),
+  ];
+  // A Historical Bingo's screenshot still waiting for its upload has no file yet ("").
+  return new Set(urls.filter((u): u is string => !!u?.startsWith("/uploads/")));
+}
+
+/** Of `urls`, the ones no row of any Bingo points at: a new Bingo's Wrapped art shares the previous one's files. */
+function unreferencedUploads(tx: Tx, urls: Set<string>): string[] {
+  if (urls.size === 0) return [];
+  const list = [...urls];
+  const used = new Set<string | null>([
+    ...tx.select({ url: tiles.imageUrl }).from(tiles).where(inArray(tiles.imageUrl, list)).all().map((t) => t.url),
+    ...tx.select({ url: submissionScreenshots.storageUrl }).from(submissionScreenshots).where(inArray(submissionScreenshots.storageUrl, list)).all().map((s) => s.url),
+    ...tx
+      .select()
+      .from(wrappedArt)
+      .where(or(inArray(wrappedArt.originalUrl, list), inArray(wrappedArt.frame1Url, list), inArray(wrappedArt.frame2Url, list)))
+      .all()
+      .flatMap((a) => [a.originalUrl, a.frame1Url, a.frame2Url]),
+  ]);
+  return list.filter((u) => !used.has(u));
+}
+
+/**
+ * Deletes a Bingo and every row that hangs off it. Returns `files`: the /uploads/ URLs only this Bingo used (its Tile
+ * pictures, screenshots and Wrapped art that no other Bingo points at), for the caller to remove from disk
+ * (uploadFiles.removeUploads) once the delete has gone through, so a failed delete never loses a file.
+ */
+export function deleteBingo(db: Db, bingoId: string): { files: string[] } {
+  return db.transaction((tx) => {
     const bingo = tx.select().from(bingos).where(eq(bingos.id, bingoId)).get();
     if (!bingo) throw new ServiceError(404, "Bingo not found");
+    const urls = uploadUrlsOf(tx, bingoId);
 
     const teamIds = tx.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId));
     const submissionIds = tx.select({ id: submissions.id }).from(submissions).where(inArray(submissions.teamId, teamIds));
@@ -371,6 +409,7 @@ export function deleteBingo(db: Db, bingoId: string): void {
     // the bingo the same way the audit log does, not get swept up with it.
     tx.update(womPastCompetitions).set({ bingoId: null }).where(eq(womPastCompetitions.bingoId, bingoId)).run();
     tx.delete(bingos).where(eq(bingos.id, bingoId)).run();
+    return { files: unreferencedUploads(tx, urls) };
   });
 }
 

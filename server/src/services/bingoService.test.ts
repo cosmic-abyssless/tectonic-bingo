@@ -466,6 +466,29 @@ describe("deleteBingo", () => {
     expect(() => deleteBingo(db, "nope")).toThrow(ServiceError);
   });
 
+  it("returns the files only it used: its Tile pictures, screenshots and Wrapped art that no other Bingo points at", () => {
+    const bingo = seedBingo({ stage: "complete" });
+    const other = db.insert(schema.bingos).values({ slug: "other", name: "Other", boardRows: 3, boardCols: 3, createdByUserId: bingo.createdByUserId }).returning().get();
+    const [player] = db.insert(schema.users).values({ discordId: "player", discordUsername: "player" }).returning().all();
+    const tile = createTile(db, { bingoId: bingo.id, name: "T", boardRow: 0, boardCol: 0 });
+    db.update(schema.tiles).set({ imageUrl: "/uploads/tiles/mine.png" }).where(eq(schema.tiles.id, tile.id)).run();
+    db.insert(schema.signups).values({ bingoId: bingo.id, userId: player.id, rsn: "player" }).run();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: player.id });
+    const submission = db.insert(schema.submissions).values({ teamId: team.id, submittedByUserId: player.id }).returning().get();
+    db.insert(schema.submissionScreenshots).values([
+      { submissionId: submission.id, storageUrl: "/uploads/drop.png" },
+      // A Historical Bingo's screenshot still waiting for its upload has no file.
+      { submissionId: submission.id, storageUrl: "", historicalKey: "shot-1" },
+    ]).run();
+    // The other Bingo started with copies of this one's Wrapped art, pointing at the same files.
+    const art = (bingoId: string, name: string) => ({ bingoId, section: "side", originalUrl: `/uploads/wrapped-art/${name}.png`, frame1Url: `/uploads/wrapped-art/${name}-1.webp`, frame2Url: `/uploads/wrapped-art/${name}-2.webp`, updatedAt: new Date() });
+    db.insert(schema.wrappedArt).values([art(bingo.id, "shared"), art(other.id, "shared"), art(bingo.id, "own")]).run();
+
+    const { files } = deleteBingo(db, bingo.id);
+
+    expect(files.sort()).toEqual(["/uploads/drop.png", "/uploads/tiles/mine.png", "/uploads/wrapped-art/own-1.webp", "/uploads/wrapped-art/own-2.webp", "/uploads/wrapped-art/own.png"]);
+  });
+
   it("detaches (not deletes) a past WOM competition row instead of leaving a dangling FK", () => {
     const bingo = seedBingo({ stage: "complete" });
     const competition = db

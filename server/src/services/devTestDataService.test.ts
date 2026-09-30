@@ -10,7 +10,8 @@ import { createTestDb } from "../testUtils/testDb";
 import { createBingo } from "./bingoService";
 import { createTile, createTask } from "./boardService";
 import { ServiceError } from "./errors";
-import { createTestUser, fillFakeStats, listTestDataBingos, removeUploads, teardownTestBingo, uploadFilePaths } from "./devTestDataService";
+import { createTestUser, fillFakeStats, listTestDataBingos, teardownTestBingo } from "./devTestDataService";
+import { removeUploads, uploadFilePaths } from "./uploadFiles";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;

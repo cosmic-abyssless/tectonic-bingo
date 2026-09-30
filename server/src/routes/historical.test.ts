@@ -148,11 +148,18 @@ describe("a Historical Bingo is read-only", () => {
     expect(() => advanceStage(db, { bingoId: fixture.bingo.id, toStage: "live", changedByUserId: admin.id })).toThrow(/read-only/);
   });
 
-  it("can still be deleted by a Site Admin, standings and all", async () => {
+  it("can still be deleted by a Site Admin, standings, pictures and all", async () => {
+    // One of its Tiles' pictures on disk, with its thumb and full variants: they go with it.
+    fs.mkdirSync(path.join(uploads.dir, "tiles"), { recursive: true });
+    const names = ["deleted.png", "deleted-thumb.webp", "deleted-full.webp"];
+    for (const name of names) fs.writeFileSync(path.join(uploads.dir, "tiles", name), "x");
+    db.update(schema.tiles).set({ imageUrl: "/uploads/tiles/deleted.png" }).where(eq(schema.tiles.bingoId, fixture.bingo.id)).run();
+
     const res = await call(admin, "DELETE", `/api/admin/bingos/${fixture.bingo.id}`);
     expect(res.status).toBe(204);
     expect(db.select().from(schema.bingos).all()).toHaveLength(0);
     expect(db.select().from(schema.historicalStandings).all()).toHaveLength(0);
+    for (const name of names) expect(fs.existsSync(path.join(uploads.dir, "tiles", name))).toBe(false);
   });
 
   it("leaves a normal Bingo's writes alone", async () => {

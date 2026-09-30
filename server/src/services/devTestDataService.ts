@@ -1,17 +1,13 @@
 // Dev-only helpers behind /api/dev (routes/dev.ts): make the throwaway users the test data generator
 // signs up, list the bingos it made, and tear one down. Everything here is fenced to the "testdata-"
 // prefix so it can never touch a real bingo or user. See docs/generate-bingo-plan.md.
-import fs from "node:fs";
-import path from "node:path";
 import { and, eq, inArray, like, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { auditLog, bingoModerators, bingos, signups, submissionScreenshots, submissions, teamMembers, teams, tiles, users, womPastCompetitions } from "../db/schema";
+import { auditLog, bingoModerators, bingos, signups, teamMembers, teams, users, womPastCompetitions } from "../db/schema";
 import { now as clockNow } from "../clock";
 import { ServiceError } from "./errors";
 import { deleteBingo } from "./bingoService";
-import { removeFiles } from "./exportImages";
-import { FULL_SUFFIX, THUMB_SUFFIX, VARIANT_EXT } from "./imageService";
 import { fakePlayerStats } from "./fakePlayerStats";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -73,7 +69,7 @@ export function fillFakeStats(db: Db, slug: string): { signups: number } {
 }
 
 export interface TeardownResult {
-  /** The /uploads/... URLs of the tile images and submission screenshots the bingo owned, for the caller to unlink. */
+  /** The /uploads/... URLs only this bingo used (deleteBingo), for the caller to unlink. */
   urls: string[];
   /** Test users removed because nothing else uses them. */
   usersDeleted: number;
@@ -90,14 +86,6 @@ export function teardownTestBingo(db: Db, slug: string): TeardownResult {
   if (!bingo) throw new ServiceError(404, "Bingo not found");
 
   const teamIds = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingo.id)).all().map((t) => t.id);
-  const urls = new Set<string>();
-  for (const t of db.select({ url: tiles.imageUrl }).from(tiles).where(eq(tiles.bingoId, bingo.id)).all()) if (t.url) urls.add(t.url);
-  if (teamIds.length > 0) {
-    const submissionIds = db.select({ id: submissions.id }).from(submissions).where(inArray(submissions.teamId, teamIds)).all().map((s) => s.id);
-    if (submissionIds.length > 0) {
-      for (const s of db.select({ url: submissionScreenshots.storageUrl }).from(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, submissionIds)).all()) urls.add(s.url);
-    }
-  }
 
   const candidateIds = new Set<string>();
   for (const s of db.select({ id: signups.userId }).from(signups).where(eq(signups.bingoId, bingo.id)).all()) candidateIds.add(s.id);
@@ -106,7 +94,7 @@ export function teardownTestBingo(db: Db, slug: string): TeardownResult {
   // purpose), so a mocked one (issue #133) needs deleting here or it lingers as an orphan forever.
   const pastCompetitionIds = db.select({ id: womPastCompetitions.id }).from(womPastCompetitions).where(eq(womPastCompetitions.bingoId, bingo.id)).all().map((c) => c.id);
 
-  deleteBingo(db, bingo.id);
+  const { files } = deleteBingo(db, bingo.id);
   db.delete(auditLog).where(eq(auditLog.bingoId, bingo.id)).run();
   if (pastCompetitionIds.length > 0) db.delete(womPastCompetitions).where(inArray(womPastCompetitions.id, pastCompetitionIds)).run();
 
@@ -128,28 +116,5 @@ export function teardownTestBingo(db: Db, slug: string): TeardownResult {
       // Something we didn't think of still points at this user; leaving one throwaway row is harmless.
     }
   }
-  return { urls: [...urls], usersDeleted };
-}
-
-/** The files on disk behind /uploads/... URLs: each original plus its thumb/full variants. Anything outside uploadsDir is ignored. */
-export function uploadFilePaths(uploadsDir: string, urls: string[]): string[] {
-  const root = path.resolve(uploadsDir);
-  const files: string[] = [];
-  for (const url of urls) {
-    if (!url.startsWith("/uploads/")) continue;
-    const original = path.resolve(root, `.${path.posix.normalize(url.slice("/uploads".length))}`);
-    if (!original.startsWith(root + path.sep)) continue;
-    const ext = path.extname(original);
-    const base = original.slice(0, original.length - ext.length);
-    files.push(original, `${base}${THUMB_SUFFIX}${VARIANT_EXT}`, `${base}${FULL_SUFFIX}${VARIANT_EXT}`);
-  }
-  return files;
-}
-
-/** Removes the files behind the given upload URLs; missing files are fine. Returns how many were actually present. */
-export function removeUploads(uploadsDir: string, urls: string[]): number {
-  const files = uploadFilePaths(uploadsDir, urls);
-  const present = files.filter((f) => fs.existsSync(f)).length;
-  removeFiles(files);
-  return present;
+  return { urls: files, usersDeleted };
 }
