@@ -66,6 +66,8 @@ export interface ThemeTokens {
      *  to `revert` when unset, i.e. whatever the element's own class would
      *  set (its normal, non-heading-font weight). */
     headingWeight: string;
+    /** The 4th chart series colour (a yellow): a theme whose background is yellow needs a darker one to see it. */
+    chartYellow: string;
   }>;
 }
 
@@ -128,6 +130,7 @@ export function tokensToCssVars(tokens: ThemeTokens): CSSProperties {
     borderWidth: "--control-border-width",
     headingFont: "--font-heading",
     headingWeight: "--font-heading-weight",
+    chartYellow: "--color-chart-4",
   };
   if (tokens.chrome) {
     for (const [key, value] of Object.entries(tokens.chrome)) {

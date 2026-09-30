@@ -88,6 +88,20 @@
   font-display: swap;
 }
 
+/* Categorical chart series (one per Player on the Points share chart), in fixed order. Validated for colour-blind
+   separation against each scheme's background; stepped for dark below, not flipped. Outside @theme because only
+   inline SVG uses them, and Tailwind leaves out @theme variables no utility class uses. */
+:root {
+  --color-chart-1: #2a78d6;
+  --color-chart-2: #eb6834;
+  --color-chart-3: #1baf7a;
+  --color-chart-4: #eda100;
+  --color-chart-5: #e87ba4;
+  --color-chart-6: #008300;
+  --color-chart-7: #4a3aa7;
+  --color-chart-8: #e34948;
+}
+
 @media (prefers-color-scheme: dark) {
   :root:not([data-color-scheme="light"]) {
     --color-background: #09090b;
@@ -113,6 +127,14 @@
     --color-danger: #f87171;
     --color-info: #60a5fa;
     --color-beta: #c084fc;
+    --color-chart-1: #3987e5;
+    --color-chart-2: #d95926;
+    --color-chart-3: #199e70;
+    --color-chart-4: #c98500;
+    --color-chart-5: #d55181;
+    --color-chart-6: #008300;
+    --color-chart-7: #9085e9;
+    --color-chart-8: #e66767;
     color-scheme: dark;
   }
 }
@@ -140,6 +162,14 @@
   --color-danger: #f87171;
   --color-info: #60a5fa;
   --color-beta: #c084fc;
+  --color-chart-1: #3987e5;
+  --color-chart-2: #d95926;
+  --color-chart-3: #199e70;
+  --color-chart-4: #c98500;
+  --color-chart-5: #d55181;
+  --color-chart-6: #008300;
+  --color-chart-7: #9085e9;
+  --color-chart-8: #e66767;
   color-scheme: dark;
 }
 

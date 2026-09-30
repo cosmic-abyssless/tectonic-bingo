@@ -212,6 +212,16 @@ describe("getContributionCounts", () => {
     expect(counts[0]!.userId).toBe(fx.memberUserId);
   });
 
+  it("dates each award by when its node completed", () => {
+    const fx = seedFixture();
+    const task = addTask(fx.tileId, { points: 20 });
+    submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId);
+
+    const [state] = db.select().from(schema.teamNodeState).where(eq(schema.teamNodeState.nodeId, task.id)).all();
+    const member = getContributionCounts(db, fx.bingoId).find((c) => c.userId === fx.memberUserId)!;
+    expect(member.awards[0]!.at).toEqual(state!.completedAt);
+  });
+
   it("sends only the avatar fields on top of the minimal user", () => {
     const fx = seedFixture();
     db.update(schema.users).set({ discordAvatar: "abc123" }).where(eq(schema.users.id, fx.memberUserId)).run();

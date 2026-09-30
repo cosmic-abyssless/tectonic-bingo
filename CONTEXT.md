@@ -263,7 +263,7 @@ A Player's portion of their Team's points, credited from the Claims that complet
 - **Not:** A count of Submissions. Many easy Claims don't beat one Claim that completed a raid Part.
 
 ### Stats
-The Bingo's stats page: points over time, the timeline, top contributors (ranked by Points share) and tile completion.
+The Bingo's stats page: points over time, each Player's Points share over time (the top five and you, to start), the timeline, top contributors (ranked by Points share) and tile completion.
 - **Rules:** Moderators see every Team at every stage. While the Bingo is Live a Player sees only their own Team; once it is Finished everyone sees every Team. "First to complete" events are shown to Moderators throughout and to Players only once the Bingo is Finished.
 
 ### Title

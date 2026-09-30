@@ -8,6 +8,7 @@ import { Panel } from "../ui/Panel";
 import { ContributorsTable } from "./ContributorsTable";
 import { GpGained } from "./GpGained";
 import { PointsChart } from "./PointsChart";
+import { PointsShareChart } from "./PointsShareChart";
 import { TileCompletion } from "./TileCompletion";
 import { TimelineTable } from "./TimelineTable";
 import { pickStatsTitles } from "./titles";
@@ -81,6 +82,10 @@ export function StatsView({ slug }: { slug: string }) {
 
       <Section title="Points over time">
         <PointsChart points={filtered.pointsOverTime} teams={filtered.teams} />
+      </Section>
+
+      <Section title="Points share over time">
+        <PointsShareChart contributions={filtered.contributions} teams={filtered.teams} />
       </Section>
 
       <Section title="Timeline">
