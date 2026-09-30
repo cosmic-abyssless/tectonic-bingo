@@ -15,7 +15,7 @@ export function ProofPicker({ kind, warning }: { kind: SubmissionFlowModel["kind
   return (
     <>
       {kind.available && (
-        <ComicField label="What does it show?" as="div">
+        <ComicField label="What does it show?" as="div" tutorial="submit-proof">
           <div className="flex flex-wrap gap-2">
             {KINDS.map(([value, label]) => {
               const active = kind.value === value;

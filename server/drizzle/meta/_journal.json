@@ -358,6 +358,13 @@
       "when": 1790649281165,
       "tag": "0052_historical_screenshots",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "6",
+      "when": 1790704526923,
+      "tag": "0053_tutorial_seen",
+      "breakpoints": true
     }
   ]
 }

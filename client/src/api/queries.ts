@@ -1,7 +1,7 @@
 import { queryOptions, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AccountTypesResponse, AchievementKey, HistoricalBingoResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
-  MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
+  MeResponse, MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, CutReviewPreview, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   MyWrappedResponse, PickRating, PlayerProfile, RewindResponse, StatsResponse, WrappedState, SubmissionReaction, SubmissionReactionGroup, SuperlativeBallotResponse, SuperlativeTeamTally, SuperlativeTeamTurnout, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
 } from "@bingo/shared";
@@ -780,6 +780,15 @@ export function useMarkAchievementPopupsShown(slug: string) {
 }
 
 /** Fire-and-forget signal that a Tile's details, the Rules, or the Stats page were opened (always 204; the server ignores ineligible callers). */
+// The Tutorial (CONTEXT.md) was finished or skipped: recorded on the account, so it doesn't start again on any device.
+export function useMarkTutorialSeen() {
+  const { updateUser } = useAuth();
+  return useMutation({
+    mutationFn: () => api.post<MeResponse>("/api/me/tutorial-seen"),
+    onSuccess: ({ user }) => updateUser(user),
+  });
+}
+
 export function useRecordAchievementOpened(slug: string) {
   return useMutation({
     mutationFn: (payload: { kind: "tile"; tileId: string } | { kind: "rules" } | { kind: "stats" }) => api.post<void>(`/api/bingos/${slug}/achievements/opened`, payload),

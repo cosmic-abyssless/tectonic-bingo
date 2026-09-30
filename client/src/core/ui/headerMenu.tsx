@@ -1,4 +1,4 @@
-import { Fragment, useRef, type FocusEvent, type ReactNode, type RefObject } from "react";
+import { createContext, Fragment, useRef, type FocusEvent, type ReactNode, type RefObject } from "react";
 import { MenuSection, RadioButton, RadioField, RadioGroup, Separator } from "react-aria-components";
 import { Button, IconButton } from "./Button";
 import { PulseDot } from "./Card";
@@ -23,6 +23,8 @@ export interface HeaderMenuEntry {
   badge?: ReactNode;
   /** The page you're on: drawn with a check mark, and not clickable. */
   current?: boolean;
+  /** Marks the row for the Tutorial to point at (its data-tutorial attribute). */
+  tutorial?: string;
 }
 
 export type ColorSchemeChoice = "light" | "dark" | "system";
@@ -60,7 +62,16 @@ export interface HeaderMenuProps {
   trigger: HeaderMenuTrigger;
   /** In order, never empty. */
   groups: HeaderMenuGroup[];
+  /** Open state, when something outside controls it (the ☰, on a Bingo page: see NavMenuControlContext). */
+  isOpen?: boolean;
+  onOpenChange?: (isOpen: boolean) => void;
 }
+
+/**
+ * The ☰'s open state, held by a Bingo page (the Tutorial waits for the Player to open it, then closes it). AppHeader
+ * hands it to the HeaderMenu slot; without it the menu keeps its own. The ☰'s button carries data-tutorial="menu".
+ */
+export const NavMenuControlContext = createContext<{ isOpen: boolean; onOpenChange: (isOpen: boolean) => void } | null>(null);
 
 /** The account menu's button, the same in every theme: the viewer's avatar, and their name from `sm` up. */
 export function AccountMenuButton({ name, avatarUrl }: { name: string; avatarUrl: string }) {
@@ -135,11 +146,11 @@ function PlainColorSchemeRow({ item }: { item: HeaderMenuColorScheme }) {
 }
 
 /** Core's header menus, in the core Menu: the default theme's, and the ones on pages outside any theme (mod panel, site admin). */
-export function PlainHeaderMenu({ trigger, groups }: HeaderMenuProps) {
+export function PlainHeaderMenu({ trigger, groups, isOpen, onOpenChange }: HeaderMenuProps) {
   return (
-    <MenuTrigger>
+    <MenuTrigger isOpen={isOpen} onOpenChange={onOpenChange}>
       {trigger.kind === "nav" ? (
-        <IconButton label={trigger.hasUnseen ? "Menu (new bug reports)" : "Menu"} size="sm" className="relative shrink-0">
+        <IconButton label={trigger.hasUnseen ? "Menu (new bug reports)" : "Menu"} size="sm" className="relative shrink-0" data-tutorial="menu">
           <MenuIcon />
           {trigger.hasUnseen && <PulseDot className="-right-0.5 -top-0.5" />}
         </IconButton>
@@ -156,7 +167,7 @@ export function PlainHeaderMenu({ trigger, groups }: HeaderMenuProps) {
                   <PlainColorSchemeRow key={item.id} item={item} />
                 ) : (
                   // The current page isn't disabled-looking: it's where you are, not something you can't do.
-                  <MenuItem key={item.id} id={item.id} textValue={item.text} isDisabled={item.current} onAction={item.onAction} className="disabled:opacity-100!">
+                  <MenuItem key={item.id} id={item.id} textValue={item.text} isDisabled={item.current} onAction={item.onAction} className="disabled:opacity-100!" data-tutorial={item.tutorial}>
                     {item.wikiIcon && <WikiIcon name={item.wikiIcon} />}
                     {item.label}
                     {item.badge}

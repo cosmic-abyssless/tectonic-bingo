@@ -53,7 +53,7 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
     >
       {page.isMod && <ModPanelButton slug={page.slug} pendingCount={page.pendingCount} />}
       {page.canSubmit && (
-        <Button size="sm" variant="primary" onPress={() => page.submit.show()}>
+        <Button size="sm" variant="primary" onPress={() => page.submit.show()} data-tutorial="submit">
           Submit
         </Button>
       )}

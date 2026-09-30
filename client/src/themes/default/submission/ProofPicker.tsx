@@ -12,7 +12,7 @@ export function ProofPicker({ kind, warning }: { kind: SubmissionFlowModel["kind
   return (
     <>
       {kind.available && (
-        <Field label="What does it show?" as="div">
+        <Field label="What does it show?" as="div" tutorial="submit-proof">
           <div className="flex overflow-hidden rounded-md border border-outline-strong">
             {KINDS.map(([value, label], i) => (
               <button

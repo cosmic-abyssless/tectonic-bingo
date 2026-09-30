@@ -212,6 +212,17 @@
   .tile-flash { animation: tile-flash 520ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 }
 
+/* The Tutorial's highlight on a step that waits for a click (core/tutorial/TutorialOverlay): a thicker outline in the
+   warn colour that pulses outward, so it reads as "press this" rather than just "look here". Still with reduced motion. */
+@keyframes tutorial-click-pulse {
+  0%, 100% { outline-offset: 0; }
+  50% { outline-offset: 5px; }
+}
+.tutorial-click-target { outline: 3px solid var(--color-warn); }
+@media (prefers-reduced-motion: no-preference) {
+  .tutorial-click-target { animation: tutorial-click-pulse 1.2s ease-in-out infinite; }
+}
+
 /* A Rewind popup's countdown while playing: fills over its hold (duration set inline). It tells the viewer Play is
    still going, so it runs even with reduced motion. */
 @keyframes rewind-hold { from { transform: scaleX(0); } to { transform: scaleX(1); } }

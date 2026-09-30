@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `tutorial_seen_at` integer;

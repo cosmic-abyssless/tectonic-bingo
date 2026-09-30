@@ -33,6 +33,7 @@ import { NoTeamStage } from "./page/NoTeamStage";
 import { NotPartStage } from "./page/NotPartStage";
 import { RulesDialog } from "./page/RulesDialog";
 import { SubmissionsDrawer } from "./page/SubmissionsDrawer";
+import { TutorialCard } from "./tutorial/TutorialCard";
 import { TeamInfoDialog } from "../../core/teams/TeamInfoDialog";
 import { PointBreakdownDialog } from "../../core/teams/PointBreakdownDialog";
 import { Dialog, DialogHeader } from "../../core/ui/Dialog";
@@ -124,6 +125,7 @@ export const defaultTheme: ThemeDefinition = {
     NotPartStage,
     RulesDialog,
     SubmissionsDrawer,
+    TutorialCard,
     TeamInfoDialog,
     PointBreakdownDialog,
     DialogFrame: Dialog,

@@ -7,7 +7,7 @@ import { ComicButton } from "../ui/ComicButton";
  */
 export function SubmitButton({ onPress, className }: { onPress: () => void; className?: string }) {
   return (
-    <ComicButton size="sm" variant="primary" tilt={1.5} sfx={{ text: "SUBMIT!", size: 130 }} onPress={onPress} className={className}>
+    <ComicButton size="sm" variant="primary" tilt={1.5} sfx={{ text: "SUBMIT!", size: 130 }} onPress={onPress} className={className} data-tutorial="submit">
       Submit
     </ComicButton>
   );

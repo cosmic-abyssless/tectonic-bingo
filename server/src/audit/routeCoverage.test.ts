@@ -55,6 +55,7 @@ describe("route coverage", () => {
     const { default: bugReportsRouter } = await import("../routes/bugReports");
     const { default: devRouter } = await import("../routes/dev");
     const { default: clientErrorsRouter } = await import("../routes/clientErrors");
+    const { default: meRouter } = await import("../routes/me");
     const { createMcpRouter } = await import("../mcp/router");
     const { db } = await import("../db");
     const { AUDITED_ROUTES } = await import("./routePolicy");
@@ -69,6 +70,7 @@ describe("route coverage", () => {
       ...routesFor(bugReportsRouter, "/api/bug-reports"),
       ...routesFor(devRouter, "/api/dev"),
       ...routesFor(clientErrorsRouter, "/api/client-errors"),
+      ...routesFor(meRouter, "/api/me"),
     ];
 
     const unmapped = routes.filter((r) => !r.skipped && !(r.key in AUDITED_ROUTES)).map((r) => r.key);

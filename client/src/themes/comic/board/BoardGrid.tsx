@@ -105,7 +105,7 @@ export function BoardGrid({
     // side padding) with no gaps between tiles, so the books get every pixel
     // there is. From `sm` up it's centered and no wider than fits the window
     // (see useFitWidth), so the whole board is on screen without scrolling.
-    <div className="relative w-full max-sm:-mx-3 max-sm:w-auto sm:mx-auto" style={{ maxWidth: fitWidth ?? undefined }}>
+    <div data-tutorial="board" className="relative w-full max-sm:-mx-3 max-sm:w-auto sm:mx-auto" style={{ maxWidth: fitWidth ?? undefined }}>
       {/* Fades the page's halftone dots out toward the board's own center —
           a circle behind the grid, painted in the page's own background
           color and masked out toward the edges. `closest-side` sizes the

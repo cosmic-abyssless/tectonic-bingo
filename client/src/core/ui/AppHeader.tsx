@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useContext, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useMatch, useNavigate } from "react-router-dom";
 import { useBingo, useMyBugReports } from "../../api/queries";
 import { useBugReports } from "../../api/adminQueries";
@@ -12,7 +12,7 @@ import { PhoneLoginDialog } from "./PhoneLoginDialog";
 import { ConnectedAppsDialog } from "./ConnectedAppsDialog";
 import { useIsPhone } from "./useMediaQuery";
 import { PulseDot } from "./Card";
-import { PlainHeaderMenu, type HeaderMenuEntry, type HeaderMenuGroup } from "./headerMenu";
+import { NavMenuControlContext, PlainHeaderMenu, type HeaderMenuEntry, type HeaderMenuGroup } from "./headerMenu";
 import { ArrowLeftIcon } from "./icons";
 import { useOptionalSlot } from "../../themes/context";
 import { useOpenProfile } from "../tectonic/PlayerName";
@@ -84,6 +84,8 @@ export function AppHeader({
   // get core's.
   const BugButton = useOptionalSlot("BugReportButton") ?? BugReportButton;
   const HeaderMenu = useOptionalSlot("HeaderMenu") ?? PlainHeaderMenu;
+  // A Bingo page holds the ☰'s open state (its Tutorial opens and closes it with the Player); elsewhere it's the menu's own.
+  const navMenuControl = useContext(NavMenuControlContext);
   const { hasUnseen: hasNewReportsForAdmin } = useBugReportsUnseen(user?.isAdmin ? allReports?.bugReports : undefined, ADMIN_BUG_REPORTS_SEEN_KEY, { newOnly: true });
 
   // The ☰, at the left: getting around.
@@ -148,7 +150,7 @@ export function AppHeader({
             their own rather than squeezing the title to nothing. */}
         <div className="flex min-w-32 flex-1 basis-0 items-center gap-2">
           {hasNav ? (
-            <HeaderMenu trigger={{ kind: "nav", hasUnseen: hasNewReportsForAdmin }} groups={navGroups} />
+            <HeaderMenu trigger={{ kind: "nav", hasUnseen: hasNewReportsForAdmin }} groups={navGroups} isOpen={navMenuControl?.isOpen} onOpenChange={navMenuControl?.onOpenChange} />
           ) : (
             back && (
             <Link to={back.to} aria-label={back.label} className="hit-40 relative flex size-8 shrink-0 items-center justify-center rounded-md text-on-surface-muted transition-colors hover:bg-surface-hover hover:text-on-surface">
