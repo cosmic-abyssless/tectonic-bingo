@@ -1,4 +1,4 @@
-import type { Claim, SubmissionDetails } from "@bingo/shared";
+import type { Claim, GraphNode, SubmissionDetails } from "@bingo/shared";
 
 export interface LeafClaimMaps {
   /** Approved claims grouped by requirement leaf node id. */
@@ -32,6 +32,14 @@ export function buildLeafClaimMaps(teamSubmissions: SubmissionDetails[]): LeafCl
 export function itemLeafValue(nodeId: string, maps: LeafClaimMaps): number {
   const approved = maps.approvedByNode.get(nodeId) ?? [];
   return approved.reduce((sum, c) => sum + c.quantity, 0);
+}
+
+/**
+ * A SUM's running total, mirroring the server's engine: each child Item's quantity (from `valueOf`, the real number of
+ * items) times what it counts as (CONTEXT.md "Counts as"), so one Pyromancer garb adds 25 to "200 burnt pages".
+ */
+export function sumTotal(sum: Pick<GraphNode, "children">, valueOf: (nodeId: string) => number): number {
+  return sum.children.reduce((total, child) => total + valueOf(child.id) * (child.countsAs ?? 1), 0);
 }
 
 /** Whether an ITEM/MANUAL leaf has at least one approved claim — mirrors the engine's `value >= 1`. */

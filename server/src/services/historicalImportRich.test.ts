@@ -96,6 +96,19 @@ describe("checking a rich bundle", () => {
     ]);
   });
 
+  it("checks Counts as: a whole number from 1", () => {
+    const b = rich();
+    const [sum] = tasksOf(b, 0, 1) as [HistoricalBundleTask & { children: HistoricalBundleNode[] }];
+    Object.assign(sum.children[0]!, { countsAs: 25 });
+    expect(problemsOf(b)).toEqual([]);
+    Object.assign(sum.children[0]!, { countsAs: 0 });
+    Object.assign(sum.children[1]!, { countsAs: 2.5 });
+    expect(problemsOf(b)).toEqual([
+      'tiles[1] "Zulrah" tasks[0].children[0]: countsAs must be a whole number from 1',
+      'tiles[1] "Zulrah" tasks[0].children[1]: countsAs must be a whole number from 1',
+    ]);
+  });
+
   it("checks Drop values: whole GP, and none on a MANUAL leaf", () => {
     const b = rich();
     const [s0, s1] = b.submissions!;
@@ -229,6 +242,21 @@ describe("importing a rich bundle", () => {
     expect(magic).toMatchObject({ valuedAsItemName: "Magus vestige", valuedAsDivisor: 3, valuedAsSource: "Duke Sucellus" });
     const fang = db.select().from(schema.nodes).where(and(eq(schema.nodes.bingoId, bingo.id), eq(schema.nodes.itemName, "Tanzanite fang"))).get()!;
     expect(fang).toMatchObject({ valuedAsItemName: null, valuedAsDivisor: null });
+  });
+
+  it("sets up an item's Counts as, and scores its SUM with it", async () => {
+    const b = rich();
+    const [sum] = tasksOf(b, 0, 1) as [HistoricalBundleTask & { children: HistoricalBundleNode[] }];
+    Object.assign(sum.children[0]!, { countsAs: 2 });
+    const { bingo, scoring } = await importIt(b);
+    const countsAsOf = (item: string) => db.select().from(schema.nodes).where(and(eq(schema.nodes.bingoId, bingo.id), eq(schema.nodes.itemName, item))).get()!.countsAs;
+    expect([countsAsOf("Tanzanite fang"), countsAsOf("Magic fang")]).toEqual([2, 1]);
+    // Lava Dragons' 2 Tanzanite fangs on the 5th now make 4 of the 3 fangs: the Task completes then, not with the Magic
+    // fang on the 6th. The Claim keeps its real quantity.
+    const days = scoring!.teams.find((t) => t.team === "Lava Dragons")!.perDay.filter((d) => d.points > 0).map((d) => [d.date, d.points]);
+    expect(days).toEqual([["2024-03-04", 35], ["2024-03-05", 15], ["2024-03-07", 20]]);
+    const quantities = db.select({ quantity: schema.claims.quantity }).from(schema.claims).where(eq(schema.claims.itemName, "Tanzanite fang")).all().map((c) => c.quantity);
+    expect(quantities.sort()).toEqual([2, 3, 3]);
   });
 
   it("keeps the Drop values the bundle brings, leaving the others to today's prices", async () => {

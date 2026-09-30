@@ -86,7 +86,10 @@ target (say `signup`), the later dates are simply scheduled in the future.
 
 ## What it does
 
-1. Imports the board and sets the dates (signups open, draft, reveal, start, end).
+1. Imports the board and sets the dates (signups open, draft, reveal, start, end). Unless the board already has an
+   Item that **counts as** more than one (CONTEXT.md "Counts as"), the admin then gives one such a weight in the
+   Task's PATCH, as the board editor would: the last Item of the first SUM over two or more Items with a total of at
+   least 3 counts as a quarter of that total (from 2, at most 25). Drops of it count for that much, so it takes fewer.
 2. **Signups** (through the real endpoint), front-loaded over the signup window, with
    about 60% of players pairing up as duos (request, then accept). Each player fills in the
    board's signup questions (read from the imported bingo, so whatever is added is answered):
@@ -178,11 +181,13 @@ The server accepts the made-up Discord ids only in dev mode. `--progress` and `-
 The same, with the sections a rich bundle adds (`historicalRich.ts`), as the converter would read them off an old
 site that recorded its drops:
 - each Tile's Tasks with their requirement trees (a reused group is left out; a reused item or MANUAL stays shared;
-  an item's Valued as comes along),
+  an item's Valued as and Counts as come along),
   Freeze and Proof screenshot settings, the board's Lines, and "Withhold points until previous" where a Task's points
   wait on the one before;
 - an item that counts toward two Tasks, as an old site's drop could: unless the board already shares one, the first
   Tile whose second Task is an ANY, COUNT or SUM also offers an item of its first, so one drop of it completes both;
+- an item that counts as more than one: unless the board already has one, the same pick as a live run's (the last
+  item of the first SUM over two or more items with a total of at least 3), so its SUM's drops count it that way;
 - Signups with answers to two questions, plus about one Cut signup per ten Players;
 - a Draft in snake order: the Captains and co-captains lead, and the Teams are the picks;
 - each Team completes some Tasks (and part of others) through approved drops with their Claims (about two in three

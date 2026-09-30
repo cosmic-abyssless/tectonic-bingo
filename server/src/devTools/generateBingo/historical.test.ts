@@ -159,6 +159,19 @@ describe("a generated rich historical bundle", () => {
     expect(drops.some((c) => c.value === undefined)).toBe(true);
   });
 
+  it("gives one Item of a SUM a Counts as when the board has none, and otherwise carries the board's", async () => {
+    const sumOf = (bundle: Awaited<ReturnType<typeof richBundleFor>>) =>
+      (bundle.tiles.find((t) => t.boardRow === 0 && t.boardCol === 1)!.tasks![0] as { children: { item?: string; countsAs?: number }[] }).children.map((c) => [c.item, c.countsAs]);
+    expect(sumOf(await richBundleFor(9))).toEqual([["Tanzanite fang", undefined], ["Magic fang", 2]]);
+
+    const weighted = structuredClone(richDocument);
+    (weighted.tiles[1]!.tasks[0]!.children[0] as { countsAs?: number }).countsAs = 3;
+    const options = normalizeOptions({ stage: "historical-rich", slug: "testdata-rich", seed: 9, teams: 4, teamSize: 5 });
+    const bundle = await buildHistoricalBundle({ options, document: weighted, rng: new Rng(9), me: null, now });
+    expect(sumOf(bundle)).toEqual([["Tanzanite fang", 3], ["Magic fang", undefined]]);
+    expect(validateHistoricalBundle(bundle, { devDiscordIds: true }).problems).toEqual([]);
+  });
+
   it("makes the same people as a sparse one, and is the same for a seed", async () => {
     const sparse = await bundleFor(11);
     const rich = await richBundleFor(11);

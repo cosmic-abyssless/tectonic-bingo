@@ -31,7 +31,7 @@ function toNode(n: ExportNode, written: Written): (HistoricalBundleNode & Keyed)
   const leaf = (node: HistoricalBundleNode & Keyed) => (written.set(node.key, node), node);
   switch (n.kind) {
     case "ITEM":
-      return n.itemName ? leaf({ ...base, kind: "ITEM", item: n.itemName, ...(n.valuedAs ? { valuedAs: n.valuedAs } : {}) }) : null;
+      return n.itemName ? leaf({ ...base, kind: "ITEM", item: n.itemName, ...(n.valuedAs ? { valuedAs: n.valuedAs } : {}), ...(n.countsAs && n.countsAs !== 1 ? { countsAs: n.countsAs } : {}) }) : null;
     case "MANUAL":
       return leaf({ ...base, kind: "MANUAL" });
     case "SUM": {
@@ -60,16 +60,43 @@ function satisfy(n: HistoricalBundleNode & Partial<Keyed>, rng: Rng, written: Wr
     case "COUNT":
       return rng.shuffle(n.children).slice(0, n.min).flatMap((c) => satisfy(c, rng, written));
     case "SUM": {
-      // The quantity, spread over its items.
+      // The quantity, spread over its items, one drop at a time: an item that counts as N adds N (CONTEXT.md "Counts
+      // as"), so it takes fewer drops.
       const counts = new Map<HistoricalBundleNode, number>();
-      for (let i = 0; i < n.quantity; i++) {
+      for (let remaining = n.quantity; remaining > 0; ) {
         const c = rng.pick(n.children);
         counts.set(c, (counts.get(c) ?? 0) + 1);
+        remaining -= countsAs(c, written);
       }
       return [...counts].map(([c, quantity]) => ({ ...satisfy(c, rng, written)[0]!, quantity }));
     }
     default:
       return n.children.flatMap((c) => satisfy(c, rng, written));
+  }
+}
+
+/** What one drop of a SUM's item adds to its total (a stub's, from the leaf written earlier). */
+function countsAs(n: HistoricalBundleNode, written: Written): number {
+  const leaf = "reuse" in n ? written.get(n.key) : n;
+  return leaf && leaf.kind === "ITEM" && !("reuse" in leaf) ? (leaf.countsAs ?? 1) : 1;
+}
+
+/**
+ * An item that counts as more than one (CONTEXT.md "Counts as"), as an old site's "N in total" sometimes had: unless the
+ * board already has one, the last item of the first SUM over two or more items with a total of at least 3 counts as a
+ * quarter of that total (from 2, at most 25), as the live generator does (board.ts's itemToWeigh).
+ */
+function weighAnItem(tiles: HistoricalBundle["tiles"]): void {
+  const walk = (n: HistoricalBundleNode): HistoricalBundleNode[] => [n, ...("children" in n ? n.children.flatMap(walk) : [])];
+  const nodes = tiles.flatMap((t) => (t.tasks ?? []).flatMap(walk));
+  if (nodes.some((n) => n.kind === "ITEM" && !("reuse" in n) && (n.countsAs ?? 1) !== 1)) return;
+  for (const n of nodes) {
+    if (n.kind !== "SUM" || "reuse" in n || n.quantity < 3) continue;
+    const items = n.children.filter((c) => c.kind === "ITEM" && !("reuse" in c));
+    const last = items[items.length - 1];
+    if (items.length < 2 || !last || last.kind !== "ITEM" || "reuse" in last) continue;
+    last.countsAs = Math.min(25, Math.max(2, Math.floor(n.quantity / 4)));
+    return;
   }
 }
 
@@ -144,6 +171,7 @@ export function addRichSections(bundle: HistoricalBundle, { document, rng, start
     });
   }
   shareALeaf(bundle.tiles);
+  weighAnItem(bundle.tiles);
   bundle.lines = document.lines.map((l) => ({ type: l.lineType, index: l.lineIndex, points: l.points }));
 
   // The Draft: the Captains (and some co-captains) lead, everyone else is picked in snake order, which makes the Teams.

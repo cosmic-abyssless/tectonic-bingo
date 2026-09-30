@@ -8,7 +8,7 @@ import type { Api } from "./client";
 import type { GenerateOptions } from "./options";
 import { chooseMods, makePlayers, pairUp, type Player } from "./people";
 import { Rng, clamp } from "./rng";
-import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, handEvents, importBingo, nameTeamEvents, runDraft, runInOrder, runSignups, setStage, type Ctx } from "./setup";
+import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, handEvents, importBingo, nameTeamEvents, runDraft, runInOrder, runSignups, setStage, weighAnItem, type Ctx } from "./setup";
 import { Simulation, describe, newPartState, type SimTeam } from "./simulate";
 import { ensureCategories, planVotes } from "./superlatives";
 import { HOUR, buildTimeline, fmt, runLimit, type Timeline } from "./timeline";
@@ -125,6 +125,7 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   };
 
   await importBingo(ctx, document, `Test data ${slug.slice("testdata-".length)}`);
+  await weighAnItem(ctx, new Date(tl.createdAt.getTime() + 10 * 60_000));
   await setStage(ctx, "signup", tl.signupOpensAt);
   await runSignups(ctx, players, pairs);
   const { signups: filled } = await api.as(adminDiscordId).post<{ signups: number }>(`/api/dev/bingos/${slug}/fake-stats`, undefined, { at: tl.captainsAt });

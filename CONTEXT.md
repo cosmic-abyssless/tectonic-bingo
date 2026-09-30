@@ -170,10 +170,16 @@ The recursive structure inside a Part or Task defining how objectives combine:
   - `ALL` — "Complete all of"
   - `ANY` — "Complete any one of"
   - `COUNT` — "Complete at least N of" (e.g., any 2 out of 5)
-  - `SUM` — "N in total from" (e.g., 500 total kill count or secondary ingredients)
+  - `SUM` — "N in total from" (e.g., 500 total kill count or secondary ingredients). An Item in it can count as more than one (see Counts as).
 - **Leaves:**
   - `ITEM` — An in-game item drop, tracked by OSRS item name and quantity.
   - `MANUAL` — An objective manually judged/verified by a Moderator.
+
+### Counts as
+How much one of an Item adds to the total of the SUM ("N in total from") it's in, when it's worth more than one of what's being totalled.
+- **Rules:** A whole number from 1; 1 unless set. It only matters inside a SUM: in ALL, ANY or COUNT, or as a Task on its own, an Item is done at one, whatever it counts as. The Submit flow still asks for the real number of items, and the SUM's progress counts each of them as that many. An Item shared by two parents counts as the same everywhere. Drop value, Stats and Achievements use the real quantity. Shown to Players next to the Item when it isn't 1 ("Pyromancer garb · counts as 25").
+- **Example:** Wintertodt's "200 burnt pages" is 200 in total from Burnt page (counts as 1) and the Pyromancer pieces, Bruma torch and Tome of fire (each counts as 25). One Pyromancer garb is submitted as 1 and adds 25 to the 200.
+- **Not:** A Drop value or Valued as. Counts as changes how far a drop moves a Task, never what it's worth in GP.
 
 ### Category
 A grouping label applied to Tiles (or rows/columns) to organize the Board thematically (e.g. "PvM", "Skilling", "Minigames", "Wilderness").
@@ -253,7 +259,7 @@ A manual grant or deduction of points applied to a Team by a Moderator or Admin,
 
 ### Points share
 A Player's portion of their Team's points, credited from the Claims that completed each award.
-- **Rules:** Each award (a Task, Part or Tile bonus) is split between the Players whose approved Claims were on the path that completed it, weighted by quantity: ALL counts every child, ANY the first child to complete, COUNT N the first N, SUM N and item quantities in approval order, capped at what was still needed. Claims approved after the award, or on branches that didn't decide it, earn nothing. A Tile bonus, and each Tile's equal part of a Line bonus, go to Players by their share of that Tile. Point Adjustments are left out. Shown to two decimal places.
+- **Rules:** Each award (a Task, Part or Tile bonus) is split between the Players whose approved Claims were on the path that completed it, weighted by quantity: ALL counts every child, ANY the first child to complete, COUNT N the first N, SUM N and item quantities (each times what its Item counts as) in approval order, capped at what was still needed. Claims approved after the award, or on branches that didn't decide it, earn nothing. A Tile bonus, and each Tile's equal part of a Line bonus, go to Players by their share of that Tile. Point Adjustments are left out. Shown to two decimal places.
 - **Not:** A count of Submissions. Many easy Claims don't beat one Claim that completed a raid Part.
 
 ### Stats

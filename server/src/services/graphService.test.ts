@@ -167,6 +167,48 @@ describe("a SUM holds only Items", () => {
   });
 });
 
+describe("Counts as", () => {
+  const pages = (countsAs: unknown): GraphNodeInput => ({
+    kind: "SUM",
+    quantity: 200,
+    children: [{ kind: "ITEM", itemName: "Burnt page" }, { kind: "ITEM", itemName: "Pyromancer garb", countsAs: countsAs as number }],
+  });
+
+  it("keeps an Item's Counts as, defaults it to 1, and hands it to the engine", () => {
+    const bingo = seedBingo();
+    const rootId = db.transaction((tx) => insertSubtree(tx, bingo.id, pages(25)));
+    expect(getNodeTree(db, rootId)!.children.map((c) => c.countsAs)).toEqual([1, 25]);
+    expect(getNodeTree(db, rootId)!.countsAs).toBe(1);
+    expect(getFullGraph(db, bingo.id).engineNodes.find((n) => n.itemName === "Pyromancer garb")!.countsAs).toBe(25);
+  });
+
+  it("changes it in place on an edit, keeping the Item's id", () => {
+    const bingo = seedBingo();
+    const rootId = db.transaction((tx) => insertSubtree(tx, bingo.id, pages(25)));
+    const before = getNodeTree(db, rootId)!;
+    const garb = before.children[1]!;
+    db.transaction((tx) =>
+      replaceSubtree(tx, rootId, bingo.id, { id: rootId, kind: "SUM", quantity: 200, children: [{ id: before.children[0]!.id, kind: "ITEM", itemName: "Burnt page" }, { id: garb.id, kind: "ITEM", itemName: "Pyromancer garb", countsAs: 10 }] }),
+    );
+    const after = getNodeTree(db, rootId)!.children[1]!;
+    expect(after).toMatchObject({ id: garb.id, countsAs: 10 });
+  });
+
+  it("refuses anything but a whole number from 1", () => {
+    const bingo = seedBingo();
+    for (const bad of [0, -1, 2.5, "3"]) {
+      expect(() => db.transaction((tx) => insertSubtree(tx, bingo.id, pages(bad)))).toThrow(/Counts as must be a whole number of at least 1/);
+    }
+    expect(db.select().from(nodes).all()).toHaveLength(0);
+  });
+
+  it("stores 1 on anything that isn't an Item", () => {
+    const bingo = seedBingo();
+    const rootId = db.transaction((tx) => insertSubtree(tx, bingo.id, { ...pages(25), countsAs: 5 }));
+    expect(getNodeTree(db, rootId)!.countsAs).toBe(1);
+  });
+});
+
 describe("deleteSubtree / deleteNode", () => {
   it("deleteSubtree removes every descendant not shared elsewhere", () => {
     const bingo = seedBingo();

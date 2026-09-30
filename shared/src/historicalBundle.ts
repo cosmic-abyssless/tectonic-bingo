@@ -87,11 +87,13 @@ export interface HistoricalBundleTile {
  * toward each. A Task itself is never a stub.
  *
  * An ITEM's `valuedAs` (CONTEXT.md "Valued as"): its Claims' Drop value is that item's price ÷ divisor instead of their
- * own, as the leaf is set up here, e.g. a DT2 boss's Gold ring as that boss's vestige ÷ 3.
+ * own, as the leaf is set up here, e.g. a DT2 boss's Gold ring as that boss's vestige ÷ 3. Its `countsAs` (CONTEXT.md
+ "Counts as", a whole number from 1, absent = 1): inside a SUM, a Claim of quantity q on it adds q × countsAs to the
+ SUM's total, e.g. a Pyromancer garb counting as 25 burnt pages.
  */
 export type HistoricalBundleNode =
   | { kind: "ITEM" | "MANUAL"; key: string; reuse: true }
-  | { kind: "ITEM"; key?: string; item: string; label?: string | null; points?: number; valuedAs?: { itemName: string; divisor: number; source?: string | null } | null }
+  | { kind: "ITEM"; key?: string; item: string; label?: string | null; points?: number; valuedAs?: { itemName: string; divisor: number; source?: string | null } | null; countsAs?: number }
   | { kind: "MANUAL"; key?: string; label?: string | null; points?: number }
   | { kind: "COUNT"; key?: string; min: number; label?: string | null; points?: number; children: HistoricalBundleNode[] }
   | { kind: "SUM"; key?: string; quantity: number; label?: string | null; points?: number; children: HistoricalBundleNode[] }
@@ -461,6 +463,7 @@ function checkRich(input: Record<string, unknown>, add: (p: string) => void, ctx
           if (!isRecord(v) || !isText(v.itemName) || !isWhole(v.divisor, 1)) add(`${where}: valuedAs must be { itemName, divisor } with a divisor from 1`);
           else if (!optionalText(v.source) || (isText(v.source) && v.source.trim().length > VALUED_AS_SOURCE_MAX)) add(`${where}: valuedAs.source must be text of at most ${VALUED_AS_SOURCE_MAX} characters`);
         }
+        if (n.countsAs !== undefined && !isWhole(n.countsAs, 1)) add(`${where}: countsAs must be a whole number from 1`);
         if (!isText(n.item)) add(`${where}: an ITEM needs its item`);
         else if (isText(n.key)) leaves.set(n.key, { kind: "ITEM", item: n.item.trim() });
         return;

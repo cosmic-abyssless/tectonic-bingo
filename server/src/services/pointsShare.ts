@@ -1,4 +1,4 @@
-import { evaluateGraph, type ApprovedClaim, type EngineNode, type NodeResult } from "./engine";
+import { countsAsOf, evaluateGraph, type ApprovedClaim, type EngineNode, type NodeResult } from "./engine";
 
 // Points share (CONTEXT.md): who on a team earned each award, from the Claims that completed it. Pure, like
 // the engine it replays: the caller hands in the same graph and (exclusivity-filtered) approved claims the
@@ -16,7 +16,10 @@ export interface CreditedClaim {
   submissionId: string;
   nodeId: string;
   itemName: string | null;
-  /** How much of the claim counted: a SUM's last claim only counts for what was still needed. */
+  /**
+   * How much of the claim counted, in real items (the Claim's own quantity, not Counts as units): a SUM's last claim
+   * only counts for what was still needed, rounded up to whole items when its Item counts as more than 1.
+   */
   quantity: number;
   reviewedAt: Date;
 }
@@ -98,14 +101,18 @@ export function creditAwards(input: {
         break;
       }
       case "SUM": {
+        // Shared out in the SUM's own units: a claim adds its quantity times its Item's Counts as, so one Pyromancer
+        // garb (counts as 25) earns 25 of a 200-page SUM. What's shown as counted stays in real items, though (the
+        // Stats list the claim as "1× Pyromancer garb"), so the units used are turned back into whole items.
         const target = node.quantity ?? 1;
         let needed = target;
         for (const c of (childrenOf.get(nodeId) ?? []).flatMap((id) => claimsByNode.get(id) ?? []).sort(byReview)) {
           if (needed <= 0) break;
-          const used = Math.min(c.quantity, needed);
+          const weight = countsAsOf(byId.get(c.nodeId));
+          const used = Math.min(c.quantity * weight, needed);
           needed -= used;
           out.set(c.claimId, (out.get(c.claimId) ?? 0) + used / target);
-          count(c.claimId, used);
+          count(c.claimId, Math.min(c.quantity, Math.ceil(used / weight)));
         }
         break;
       }

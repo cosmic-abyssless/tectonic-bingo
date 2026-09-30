@@ -1,9 +1,9 @@
 // Everything before the bingo goes live, driven through the real endpoints at spoofed times: the import, the
 // users and their signups, duo pairings, captains, the draft, team names and raised hands.
-import type { BingoExportDocument, BoardResponse, DraftState, DraftUnit, ExclusivityRule, SignupQuestion, TeamWithMembers } from "@bingo/shared";
+import type { BingoExportDocument, BoardResponse, DraftState, DraftUnit, ExclusivityRule, GraphNode, GraphNodeInput, SignupQuestion, TeamWithMembers } from "@bingo/shared";
 import { answerQuestions } from "./answers";
 import type { Api } from "./client";
-import type { BoardInfo, PartModel } from "./board";
+import { itemToWeigh, type BoardInfo, type PartModel } from "./board";
 import type { Player } from "./people";
 import type { Rng } from "./rng";
 import { HOUR, MINUTE, fmt, type Timeline } from "./timeline";
@@ -63,6 +63,30 @@ export async function importBingo(ctx: Ctx, document: BingoExportDocument, name:
     { at: plus(tl.createdAt, 5 * MINUTE) },
   );
   ctx.log(`imported ${ctx.slug} (created ${fmt(tl.createdAt)}, starts ${fmt(tl.startsAt)}, ends ${fmt(tl.endsAt)})`);
+}
+
+/** A Task as the board editor sends it back: every field and child as loaded, ids and all, so nothing else changes. */
+function asInput(node: GraphNode): GraphNodeInput {
+  return {
+    id: node.id, kind: node.kind, label: node.label, description: node.description, notes: node.notes, points: node.points,
+    minCount: node.minCount ?? undefined, quantity: node.quantity ?? undefined, itemName: node.itemName ?? undefined, countsAs: node.countsAs,
+    pointsGateNodeId: node.pointsGateNodeId, submitGateNodeId: node.submitGateNodeId, allowsPreLoad: node.allowsPreLoad, valuedAs: node.valuedAs,
+    requiresProof: node.requiresProof, proofNote: node.proofNote, children: node.children.map(asInput),
+  };
+}
+
+/**
+ * Gives one Item inside a SUM a Counts as (CONTEXT.md), as an Admin would in the board editor, so every generated Bingo
+ * has one to show even when the board it was made from has none (see board.ts's itemToWeigh for which).
+ */
+export async function weighAnItem(ctx: Ctx, at: Date): Promise<void> {
+  const board = await fetchBoard(ctx);
+  const tasks = [...board.tiles].sort((a, b) => a.boardRow - b.boardRow || a.boardCol - b.boardCol).flatMap((t) => t.node.children);
+  const pick = itemToWeigh(tasks);
+  if (!pick) return;
+  const withWeight = (n: GraphNodeInput): GraphNodeInput => (n.id === pick.item.id ? { ...n, countsAs: pick.countsAs } : { ...n, children: n.children?.map(withWeight) });
+  await ctx.api.as(ctx.admin).patch(path(ctx, `/admin/tasks/${pick.task.id}`), withWeight(asInput(pick.task)), { at });
+  ctx.log(`${pick.item.itemName} counts as ${pick.countsAs} in "${pick.task.label}"`);
 }
 
 /**

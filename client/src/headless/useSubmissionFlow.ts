@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, proofRequirementFor, proofStatus, type ClaimInput, type GraphNode, type ScreenshotAnalysis, type SubmissionKind } from "@bingo/shared";
 import { useAnalyzeScreenshot, useCreateSubmission } from "../api/queries";
-import { buildLeafClaimMaps, itemLeafValue, leafComplete } from "../core/board/taskClaims";
+import { buildLeafClaimMaps, itemLeafValue, leafComplete, sumTotal } from "../core/board/taskClaims";
 import { collectLeaves, collectLeavesWithAncestors } from "../core/board/requirementTree";
 import { leafLabel } from "../core/board/labels";
 import { lockReason } from "../core/board/exclusivity";
@@ -98,8 +98,8 @@ export function useSubmissionFlow({
   // Approved + already-staged-this-screenshot quantity for one leaf.
   const leafPendingValue = (nodeId: string) =>
     itemLeafValue(nodeId, claimMaps) + stagedClaims.filter((s) => s.claim.nodeId === nodeId).reduce((sum, s) => sum + (s.claim.quantity ?? 1), 0);
-  const sumProgress = (sum: GraphNode) => sum.children.reduce((total, child) => total + leafPendingValue(child.id), 0);
-  const sumStillOpen = (sum: GraphNode) => sumProgress(sum) < (sum.quantity ?? 1);
+  // Each item times what it counts as (CONTEXT.md "Counts as"), as the server totals it.
+  const sumStillOpen = (sum: GraphNode) => sumTotal(sum, leafPendingValue) < (sum.quantity ?? 1);
   // "Completed" here means server-confirmed (an approved claim already
   // satisfied it, and rescoring landed a teamNodeState row) — a still-pending
   // sibling claim doesn't hide the rest, since a mod could yet reject it.
@@ -128,6 +128,7 @@ export function useSubmissionFlow({
   const selectedLeafAncestors = selectedLeaf ? taskLeaves.find((tl) => tl.leaf.id === selectedLeaf.id)?.ancestors : undefined;
   const selectedLeafParent = selectedLeafAncestors?.[selectedLeafAncestors.length - 1];
   const enclosingSum = selectedLeafParent?.kind === "SUM" ? selectedLeafParent : undefined;
+  const selectedCountsAs = enclosingSum ? (selectedLeaf?.countsAs ?? 1) : 1;
 
   // Auto-select the task when there's exactly one available.
   useEffect(() => {
@@ -413,8 +414,9 @@ export function useSubmissionFlow({
     quantity: {
       visible: !!selectedLeaf && !!enclosingSum && !isProof,
       value: submissionQty,
-      max: enclosingSum?.quantity ?? 1,
+      max: Math.max(1, Math.ceil((enclosingSum?.quantity ?? 1) / selectedCountsAs)),
       needed: enclosingSum?.quantity ?? 1,
+      countsAs: selectedCountsAs,
       set: (n) => setSubmissionQty(Math.max(1, n)),
     },
     kind: {

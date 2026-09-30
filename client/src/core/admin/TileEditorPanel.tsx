@@ -24,7 +24,7 @@ function existingLeavesExcluding(tasks: GraphNode[], excludeTaskIndex: number): 
     .flatMap((task) =>
       collectLeaves(task)
         .filter((leaf) => leaf.kind === "ITEM" && leaf.itemName)
-        .map((leaf) => ({ id: leaf.id, itemName: leaf.itemName!, taskLabel: task.label ?? "Task" })),
+        .map((leaf) => ({ id: leaf.id, itemName: leaf.itemName!, countsAs: leaf.countsAs, taskLabel: task.label ?? "Task" })),
     );
 }
 

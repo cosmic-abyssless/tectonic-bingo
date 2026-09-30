@@ -3,7 +3,7 @@
 // providers and (if ever wanted) tests. See docs/headless-theming-plan.md §2.
 import { isBoardLocked, isScreenshotPending, proofStatus, type BoardLine, type GraphNode, type NodeStatus, type PointAdjustment, type ProofStatus, type SealedBoardResponse, type Stage, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { summarizeTileProgress, getFreezeUnlockAt, groupSubmissionsByTile, type TileProgressSummary } from "../core/board/tileProgress";
-import { buildLeafClaimMaps, itemLeafValue, leafComplete, type LeafClaimMaps } from "../core/board/taskClaims";
+import { buildLeafClaimMaps, itemLeafValue, leafComplete, sumTotal, type LeafClaimMaps } from "../core/board/taskClaims";
 import { collectLeaves, conditionHeading } from "../core/board/requirementTree";
 import { leafLabel } from "../core/board/labels";
 import { NO_LOCKS, lockTag, type ExclusiveLocks } from "../core/board/exclusivity";
@@ -37,6 +37,7 @@ export function sealedBoardAsTiles(board: SealedBoardResponse, bingoId: string):
     minCount: null,
     quantity: null,
     itemName: null,
+    countsAs: 1,
     pointsGateNodeId: null,
     submitGateNodeId: null,
     allowsPreLoad: false,
@@ -116,11 +117,11 @@ export function buildRequirementTree(
 
   if (node.kind === "SUM") {
     const target = node.quantity ?? 1;
-    const progress = node.children.reduce((sum, child) => sum + itemLeafValue(child.id, maps), 0);
+    const progress = sumTotal(node, (id) => itemLeafValue(id, maps));
     const complete = progress >= target;
     const items = node.children
       .filter((child) => !!child.itemName)
-      .map((child) => ({ name: child.itemName!, iconUrl: wikiIconUrl(child.itemName!) ?? null, count: itemLeafValue(child.id, maps), lockedBy: lockOf(child.id) }));
+      .map((child) => ({ name: child.itemName!, iconUrl: wikiIconUrl(child.itemName!) ?? null, count: itemLeafValue(child.id, maps), countsAs: child.countsAs ?? 1, lockedBy: lockOf(child.id) }));
     // Over several items it's a group ("5 in total from", one row per item); over one it stays a single row.
     const isGroup = items.length > 1;
     return {

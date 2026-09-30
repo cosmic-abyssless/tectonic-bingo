@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Claim, ExclusivityConflict, GraphNode, SubmissionDetails } from "@bingo/shared";
-import { buildLeafClaimMaps } from "../core/board/taskClaims";
+import { buildLeafClaimMaps, sumTotal } from "../core/board/taskClaims";
+import { countsAsLabel, sumQuantityHint } from "../core/board/labels";
+import { previewGraphNode, toGraphNodeInput } from "../core/board/requirementTree";
 import { buildRequirementTree } from "./boardModel";
 
 const node = (over: Partial<GraphNode> & Pick<GraphNode, "id" | "kind">): GraphNode =>
-  ({ bingoId: "b", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName: null, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: [], ...over }) as GraphNode;
+  ({ bingoId: "b", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName: null, countsAs: 1, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: [], ...over }) as GraphNode;
 
 const sub = (id: string, status: "approved" | "pending" | "rejected", claims: Pick<Claim, "nodeId" | "quantity">[]): SubmissionDetails =>
   ({
@@ -38,6 +40,62 @@ describe("buildRequirementTree: SUM items", () => {
     const tree = buildRequirementTree(sum, maps, new Map())!;
     expect(tree.items.map((i) => i.count)).toEqual([0, 0, 0]);
     expect(tree.submitted).toBe(true);
+  });
+});
+
+describe("buildRequirementTree: Counts as", () => {
+  // Wintertodt's "200 burnt pages": a page counts as 1, a Pyromancer garb as 25.
+  const pages = node({
+    id: "pages",
+    kind: "SUM",
+    quantity: 200,
+    children: [node({ id: "page", kind: "ITEM", itemName: "Burnt page" }), node({ id: "garb", kind: "ITEM", itemName: "Pyromancer garb", countsAs: 25 })],
+  });
+
+  it("counts each item times what it counts as toward the total, and lists the real number received", () => {
+    const maps = buildLeafClaimMaps([sub("s1", "approved", [{ nodeId: "page", quantity: 30 }, { nodeId: "garb", quantity: 2 }]), sub("s2", "pending", [{ nodeId: "garb", quantity: 1 }])]);
+    const tree = buildRequirementTree(pages, maps, new Map())!;
+    expect(tree.progress).toEqual({ current: 80, target: 200 });
+    expect(tree.complete).toBe(false);
+    expect(tree.items.map((i) => [i.name, i.count, i.countsAs])).toEqual([
+      ["Burnt page", 30, 1],
+      ["Pyromancer garb", 2, 25],
+    ]);
+  });
+
+  it("completes on 8 items that each count as 25", () => {
+    const maps = buildLeafClaimMaps([sub("s1", "approved", [{ nodeId: "garb", quantity: 8 }])]);
+    const tree = buildRequirementTree(pages, maps, new Map())!;
+    expect(tree.progress).toEqual({ current: 200, target: 200 });
+    expect(tree.complete).toBe(true);
+  });
+
+  it("keeps it on a single-item SUM's row", () => {
+    const kits = node({ id: "kits", kind: "SUM", quantity: 4, children: [node({ id: "dust", kind: "ITEM", itemName: "Metamorphic dust", countsAs: 2 })] });
+    const tree = buildRequirementTree(kits, buildLeafClaimMaps([sub("s1", "approved", [{ nodeId: "dust", quantity: 1 }])]), new Map())!;
+    expect(tree.isLeaf).toBe(true);
+    expect(tree.items[0]!.countsAs).toBe(2);
+    expect(tree.progress).toEqual({ current: 2, target: 4 });
+  });
+
+  it("totals what's approved plus what's staged the same way in the Submit flow", () => {
+    const pending: Record<string, number> = { page: 190, garb: 1 };
+    expect(sumTotal(pages, (id) => pending[id] ?? 0)).toBe(215);
+  });
+
+  it("goes back to the server with the rest of the Task when the board editor saves it, and shows in its preview", () => {
+    const input = toGraphNodeInput(pages);
+    expect(input.children!.map((c) => c.countsAs)).toEqual([1, 25]);
+    const preview = previewGraphNode("b", { ...input, children: [input.children![0]!, { ...input.children![1]!, countsAs: 10 }, { kind: "ITEM", itemName: "Bruma torch" }] });
+    expect(preview.children.map((c) => c.countsAs)).toEqual([1, 10, 1]);
+  });
+
+  it("is shown only when it isn't 1", () => {
+    expect(countsAsLabel(25)).toBe("counts as 25");
+    expect(countsAsLabel(1)).toBeNull();
+    expect(countsAsLabel(undefined)).toBeNull();
+    expect(sumQuantityHint({ needed: 200, countsAs: 25 })).toBe("Each counts as 25 · 200 needed in total");
+    expect(sumQuantityHint({ needed: 5, countsAs: 1 })).toBe("5 needed in total");
   });
 });
 
