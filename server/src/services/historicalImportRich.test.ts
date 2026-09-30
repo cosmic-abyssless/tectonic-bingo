@@ -7,7 +7,7 @@ import path from "path";
 import { and, eq, inArray } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { validateHistoricalBundle, type HistoricalBundle, type HistoricalBundleTask } from "@bingo/shared";
+import { validateHistoricalBundle, type HistoricalBundle, type HistoricalBundleNode, type HistoricalBundleTask } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { richHistoricalBundle, SAMPLE_BUNDLE } from "../testUtils/fixtures/richHistoricalBundle";
@@ -65,6 +65,22 @@ describe("checking a rich bundle", () => {
       'tiles[1] "Zulrah" tasks[1]: min 3 is more than its 1 children',
       'tiles[1] "Zulrah" tasks[1]: only a MANUAL Task has completions',
       'tiles[2] "Barrows" tasks[0]: the first Task can\'t withhold its points until the one before it',
+    ]);
+  });
+
+  it("checks reused leaves: written earlier, the same kind, once per parent, and never a Task", () => {
+    const b = rich();
+    const [any] = tasksOf(b, 0, 0) as [HistoricalBundleTask & { children: HistoricalBundleNode[] }];
+    any.children.push({ kind: "ITEM", key: "zul-fang", reuse: true }, { kind: "ITEM", key: "vork-head", reuse: true });
+    const [sum] = tasksOf(b, 0, 1) as [HistoricalBundleTask & { children: HistoricalBundleNode[] }];
+    sum.children.push({ kind: "MANUAL", key: "vork-visage", reuse: true });
+    tasksOf(b, 0, 2).push({ kind: "ITEM", key: "vork-head", reuse: true, label: "Vorkath's head", points: 5 } as HistoricalBundleTask);
+    expect(problemsOf(b)).toEqual([
+      'tiles[0] "Vorkath" tasks[0].children[2]: "zul-fang" isn\'t a leaf written earlier in the bundle',
+      'tiles[0] "Vorkath" tasks[0].children[3]: "vork-head" is already one of its children',
+      'tiles[1] "Zulrah" tasks[0]: a SUM\'s children must all be ITEMs',
+      'tiles[1] "Zulrah" tasks[0].children[2]: "vork-visage" is an ITEM, not "MANUAL"',
+      'tiles[2] "Barrows" tasks[1]: a Task can\'t be a reused leaf',
     ]);
   });
 
@@ -176,6 +192,29 @@ describe("importing a rich bundle", () => {
     const [sum, call] = children(zulrah.nodeId);
     expect(sum).toMatchObject({ kind: "SUM", quantity: 3, points: 15 });
     expect(call).toMatchObject({ kind: "MANUAL", description: "Kill Zulrah on a clan call", requiresProof: true, proofNote: "The whole team in one screenshot" });
+  });
+
+  it("puts a reused leaf in its second place too, so one Claim counts toward both Tasks", async () => {
+    const b = rich();
+    Object.assign(b.tiles.find((t) => t.boardRow === 1 && t.boardCol === 0)!, {
+      points: null,
+      tasks: [{ kind: "ANY", key: "any-unique", label: "Any Vorkath unique, again", points: 7, children: [{ kind: "ITEM", key: "vork-head", reuse: true }, { kind: "ITEM", key: "vork-visage", reuse: true }] }],
+    });
+    expect(problemsOf(b)).toEqual([]);
+    const { bingo, scoring } = await importIt(b);
+    // Sea Snakes' Vorkath's head and Lava Dragons' Draconic visage each complete it as well: 7 more, from the same Claims.
+    expect(scoring!.teams.map((t) => [t.team, t.total])).toEqual([
+      ["Lava Dragons", 77],
+      ["Sea Snakes", 132],
+      ["Rock Crabs", 5],
+    ]);
+    const nodeOf = (name: string) => db.select().from(schema.tiles).where(and(eq(schema.tiles.bingoId, bingo.id), eq(schema.tiles.boardRow, name === "Vorkath" ? 0 : 1), eq(schema.tiles.boardCol, 0))).get()!.nodeId;
+    const children = (parentId: string) => db.select().from(schema.nodeEdges).where(eq(schema.nodeEdges.parentId, parentId)).orderBy(schema.nodeEdges.sortOrder).all().map((e) => e.childId);
+    const [vorkathAny] = children(nodeOf("Vorkath"));
+    const [again] = children(nodeOf("other"));
+    expect(children(again!)).toEqual(children(vorkathAny!));
+    // No Claim was copied for the second place: the drops' own, and the two MANUAL completions.
+    expect(db.select().from(schema.claims).all()).toHaveLength(b.submissions!.reduce((n, s) => n + (s.claims?.length ?? 0), 0) + 2);
   });
 
   it("recomputes the scores from the approved Submissions: withheld points, rejected drops, MANUAL Tasks and Lines", async () => {

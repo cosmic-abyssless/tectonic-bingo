@@ -81,8 +81,13 @@ export interface HistoricalBundleTile {
  * A node of a Task's requirement tree (CONTEXT.md "Requirement Tree"): ITEM leaves under COUNT (at least `min`
  * different ones complete) or SUM (`quantity` in total, over ITEM leaves only), ALL and ANY; or a MANUAL leaf a
  * Moderator marks done. `key`: unique in the bundle, for the Claims (and Proof screenshots) that point at it.
+ *
+ * A leaf can count toward two Tasks (a drop the old site counted for both): it is written in full once, and anywhere
+ * later as a stub with its `key` and `reuse: true`, which puts that same leaf there too, so one Claim on it counts
+ * toward each. A Task itself is never a stub.
  */
 export type HistoricalBundleNode =
+  | { kind: "ITEM" | "MANUAL"; key: string; reuse: true }
   | { kind: "ITEM"; key?: string; item: string; label?: string | null; points?: number }
   | { kind: "MANUAL"; key?: string; label?: string | null; points?: number }
   | { kind: "COUNT"; key?: string; min: number; label?: string | null; points?: number; children: HistoricalBundleNode[] }
@@ -425,6 +430,16 @@ function checkRich(input: Record<string, unknown>, add: (p: string) => void, ctx
   function checkNode(n: unknown, where: string, depth: number): void {
     if (!isRecord(n)) return add(`${where}: must be an object`);
     if (depth > 8) return add(`${where}: nested too deep`);
+    if (n.reuse !== undefined) {
+      // A stub: a leaf written in full earlier, put here too.
+      if (n.reuse !== true) return add(`${where}: reuse must be true`);
+      if (depth === 0) return add(`${where}: a Task can't be a reused leaf`);
+      if (!isText(n.key)) return add(`${where}: a reused leaf needs the key it was written under`);
+      const leaf = leaves.get(n.key);
+      if (!leaf) return add(`${where}: "${n.key}" isn't a leaf written earlier in the bundle`);
+      if (n.kind !== leaf.kind) add(`${where}: "${n.key}" is ${leaf.kind === "ITEM" ? "an ITEM" : "a MANUAL"}, not ${JSON.stringify(n.kind)}`);
+      return;
+    }
     claimKey(n.key, where);
     if (n.points !== undefined && !isWhole(n.points, 0)) add(`${where}: points must be a whole number`);
     if (!optionalText(n.label)) add(`${where}: label must be text`);
@@ -452,7 +467,13 @@ function checkRich(input: Record<string, unknown>, add: (p: string) => void, ctx
         return add(`${where}: kind must be ITEM, MANUAL, COUNT, SUM, ALL or ANY`);
     }
     if (!children || children.length === 0) return add(`${where}: a ${String(n.kind)} needs children`);
-    children.forEach((c: unknown, i) => checkNode(c, `${where}.children[${i}]`, depth + 1));
+    const childKeys = new Set<string>();
+    children.forEach((c: unknown, i) => {
+      checkNode(c, `${where}.children[${i}]`, depth + 1);
+      if (!isRecord(c) || !isText(c.key)) return;
+      if (childKeys.has(c.key)) add(`${where}.children[${i}]: "${c.key}" is already one of its children`);
+      childKeys.add(c.key);
+    });
   }
 
   // Tiles: Tasks, Freeze and Proof screenshots.

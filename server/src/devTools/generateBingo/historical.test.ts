@@ -144,6 +144,8 @@ describe("a generated rich historical bundle", () => {
     expect(first).toMatchObject({ points: 5, freezeMinutes: 30, requiresProof: true, proofNote: "Kill count" });
     expect(first.tasks!.map((t) => [t.kind, t.label, t.points, t.withholdUntilPrevious])).toEqual([["ANY", "Any unique", 10, false], ["ITEM", "Necklace", 20, true]]);
     expect(bundle.tiles.find((t) => t.boardRow === 0 && t.boardCol === 1)!.tasks!.map((t) => t.kind)).toEqual(["SUM", "COUNT", "MANUAL"]);
+    // An item of the first Task also counts toward the second, as an old site's drop could.
+    expect((bundle.tiles.find((t) => t.boardRow === 0 && t.boardCol === 1)!.tasks![1] as { children: unknown[] }).children).toContainEqual({ kind: "ITEM", key: "n112", reuse: true });
     expect(bundle.lines).toEqual([{ type: "row", index: 0, points: 50 }, { type: "diagonal", index: 0, points: 40 }]);
     expect(bundle.signups!.entries.filter((e) => e.cut)).toHaveLength(2);
     expect(bundle.draft!.picks.length).toBe(bundle.players.length - bundle.teams.reduce((n, t) => n + 1 + (t.coCaptain ? 1 : 0), 0));
